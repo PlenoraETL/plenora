@@ -13,7 +13,7 @@
  *
  * Route: /arricchisci/:projectId
  */
-import React, { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { addEdge, useReactFlow, ReactFlowProvider, MarkerType } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -177,9 +177,36 @@ const ArricchisciEditorContent = () => {
 
 
   // Aggiorna availableColumns in ResultNode e CaricanNode
+  // Fingerprint stabile dei campi che devono triggerare il refresh di
+  // `availableColumns` sui result/carica nodes. Pre-fix (P0 frontend-pages
+  // #1): deps = [setNodes] significava firing ONLY al mount; il cambio
+  // di `output_mapping` su un nodo api_enrich (utente che configura il
+  // mapping output) NON ri-firrava l'effect → ResultNode esponeva colonne
+  // stale finche' l'utente non triggerava manualmente un re-render.
+  // Post-fix: dep su un fingerprint JSON-derivato che cambia quando
+  // cambia uno dei mapping rilevanti (sources cols + api_enrich
+  // output_mapping). Il loop nodes->effect e' evitato perche' il
+  // fingerprint NON include `availableColumns` (campo che l'effect
+  // scrive), solo gli input.
+  const availableColumnsFingerprint = useMemo(() => {
+    const relevant = nodes.map(n => {
+      if (n.type === 'project_source' || n.type === 'file_source') {
+        return { id: n.id, type: n.type, cols: n.data?.columns };
+      }
+      if (n.type === 'api_enrich') {
+        return { id: n.id, type: n.type, output_mapping: n.data?.output_mapping };
+      }
+      return null;
+    }).filter(Boolean);
+    return JSON.stringify(relevant);
+  }, [nodes]);
+
   useEffect(() => {
     // NOTA: 'nodes' rimosso dalle dipendenze intenzionalmente per evitare loop React.
     // Tutto il calcolo avviene dentro la callback di setNodes (snapshot aggiornato).
+    // La dep `availableColumnsFingerprint` triggera il refresh quando
+    // input rilevanti cambiano (source cols / api_enrich output_mapping),
+    // senza catturare modifiche a campi scritti dall'effect stesso.
     setNodes(nds => {
       const resultNode = nds.find(n => n.type === 'result');
       if (!resultNode) return nds;
@@ -211,9 +238,7 @@ const ArricchisciEditorContent = () => {
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // 'nodes' volutamente assente: il calcolo avviene dentro la callback di
-    // setNodes (snapshot React aggiornato) per evitare il loop nodes->effect.
-  }, [setNodes]);
+  }, [setNodes, availableColumnsFingerprint]);
 
   // NOTA: le colonne dei nodi source vengono aggiornate direttamente
   // dai nodi stessi tramite useCanvasStore.getState().updateNodeData

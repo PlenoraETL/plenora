@@ -25,11 +25,22 @@ class ScheduleFailure(BaseModel):
 
 
 class WorkerDetail(BaseModel):
+    """Stato del singolo worker Celery esposto in `GET /admin/system-status`.
+
+    `hostname` e `pid` rivelano la topologia interna del cluster
+    (es. `celery@ip-10-0-1-42`, PID 12345) e sono utili a un admin
+    compromesso per lateral movement / forensic mapping.
+    Pre-fix (P1 admin-api): serializzati in chiaro nel payload API.
+    Post-fix: `Field(exclude=True)` come fatto per `DiskStatus.path`/
+    `usage_path` (stesso pattern). Restano disponibili internamente
+    al servizio per logging/troubleshooting ma NON finiscono nel
+    payload pubblico via `model_dump(exclude_unset=True)`.
+    """
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    hostname: str
-    pid: int | None = None
+    hostname: str = Field(exclude=True)
+    pid: int | None = Field(default=None, exclude=True)
     pool_size: int | None = None
     child_processes: int
     active_tasks: int

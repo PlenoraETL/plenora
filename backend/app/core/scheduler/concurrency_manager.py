@@ -229,31 +229,44 @@ class ConcurrencyManager:
         recovery veloce su SIGKILL, e il worker rinfresca periodicamente
         finche' sta lavorando.
 
-        Race safety: se il lock e' stato rilasciato tra due chiamate,
-        ritorna False (il caller sa che non deve piu' rinfrescare).
+        Race safety:
+        Pre-fix: `_get(lock_key)` faceva un check con side-effect (DELETE
+        se scaduto), poi un UPDATE separato non-condizionale. Finestra
+        TOCTOU tra il check e l'UPDATE:
+          1. heartbeat A: `_get` vede lock ancora vivo (1ms before expiry)
+          2. lock scade naturalmente
+          3. worker B: `try_acquire` -> `_set_nx` con WHERE expires_at <= now()
+             -> aquisisce il lock (atomico, ok)
+          4. heartbeat A: UPDATE non-condizionale sovrascrive il lock di B
+             con il proprio TTL → due worker pensano di possedere il lock,
+             entrambi scrivono sul target CARICA.
+        Post-fix: UPDATE atomico con `WHERE expires_at > now()`. Se il
+        lock e' scaduto o e' stato preso da un altro worker (expires_at
+        diverso ma "vivo" per quel worker), rowcount = 0 e ritorna False.
+        Il caller sa che non possiede piu' il lock e abortisce la run.
 
         Args:
             schedule_id: lo schedule il cui lock va rinfrescato.
             ttl_seconds: override opzionale del TTL (default LOCK_TTL_SECONDS).
 
         Returns:
-            True se il lock era vivo ed e' stato rinfrescato;
-            False se il lock non esiste piu' (race o gia' rilasciato).
+            True se il lock era vivo (`expires_at > now()`) ed e' stato
+            rinfrescato atomicamente; False se il lock non esiste piu'
+            o e' stato preso da un altro worker.
         """
         lock_key = f"scheduler:lock:{schedule_id}"
-        # _get fa anche auto-cleanup se scaduto: se ritorna None, il
-        # lock e' morto e non dobbiamo ri-crearlo da zero
-        if self._get(lock_key) is None:
-            return False
-
         ttl = ttl_seconds if ttl_seconds is not None else LOCK_TTL_SECONDS
         new_expires = (
             datetime.now(timezone.utc) + timedelta(seconds=ttl)
         ).isoformat()
 
         try:
+            # UPDATE atomico: rinfresca SOLO se il lock e' ancora vivo.
+            # Il check `expires_at > now()` e' nella stessa statement
+            # del SET, quindi non c'e' finestra di race fra check e set.
             cur = db.execute(
-                "UPDATE scheduler_locks SET expires_at = %s WHERE key = %s",
+                "UPDATE scheduler_locks SET expires_at = %s "
+                "WHERE key = %s AND expires_at > now()",
                 (new_expires, lock_key),
             )
             rowcount = getattr(cur, "rowcount", 0) or 0

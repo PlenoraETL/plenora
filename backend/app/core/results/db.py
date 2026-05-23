@@ -160,16 +160,31 @@ def get_latest_result_row(
 ) -> Optional[ResultMetadataRow]:
     """Return latest typed result metadata for a project."""
     def _read(active_session: PgSession) -> Optional[ResultMetadataRow]:
+        # Pre-fix (P0 data integrity): SELECT NON includeva `storage_key`.
+        # I result salvati con STORAGE_POLICY=object_storage hanno
+        # data=NULL nella tabella `results` e il blob su MinIO/S3
+        # referenziato da storage_key. Senza la colonna nella SELECT,
+        # `ResultMetadataRow.from_mapping` settava storage_key=None,
+        # i caller downstream pensavano fosse un result BYTEA e
+        # tentavano di leggere `data` → NULL → `get_result_as_bytes`
+        # ritornava None silenziosamente. Risultato: TUTTI i result
+        # sopra `RESULT_S3_THRESHOLD_BYTES` erano illeggibili via
+        # `get_latest_result_row`. Allineato a `list_result_rows`
+        # (riga 141) che gia' includeva storage_key.
         if group_id:
             row = active_session.fetchone(
-                "SELECT id, project_id, group_id, filename, format, size_bytes, rows_count, created_at "
-                "FROM results WHERE project_id = %s AND group_id = %s ORDER BY created_at DESC LIMIT 1",
+                "SELECT id, project_id, group_id, filename, format, size_bytes, "
+                "rows_count, created_at, storage_key "
+                "FROM results WHERE project_id = %s AND group_id = %s "
+                "ORDER BY created_at DESC LIMIT 1",
                 (project_id, group_id),
             )
         else:
             row = active_session.fetchone(
-                "SELECT id, project_id, group_id, filename, format, size_bytes, rows_count, created_at "
-                "FROM results WHERE project_id = %s ORDER BY created_at DESC LIMIT 1",
+                "SELECT id, project_id, group_id, filename, format, size_bytes, "
+                "rows_count, created_at, storage_key "
+                "FROM results WHERE project_id = %s "
+                "ORDER BY created_at DESC LIMIT 1",
                 (project_id,),
             )
         if row is None:

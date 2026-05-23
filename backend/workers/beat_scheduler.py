@@ -514,7 +514,17 @@ class PlenoraBeatScheduler(Scheduler):
                         schedule=schedule,
                         kwargs={
                             "schedule_id": sid,
-                            **scheduled_run_kwargs(triggered_by="cron"),
+                            "triggered_by": "cron",
+                            # Pre-fix: `**scheduled_run_kwargs(triggered_by="cron")`
+                            # pre-calcolava `scheduled_for=now()` al sync-time
+                            # (ogni 60s). Cosmi e' una stringa frozen dentro
+                            # entry.kwargs, riusata a ogni tick Celery — la
+                            # idempotency key CARICA `schedule-{id}-{scheduled_for}-carica`
+                            # restava costante fra tick consecutivi, e il
+                            # secondo tick veniva marked SKIPPED_IDEMPOTENT.
+                            # Post-fix: scheduled_for NON viene cached qui.
+                            # schedule_pipeline_task lo determina al ricevimento
+                            # del task (a tick-time) usando datetime.now().
                         },
                         app=self.app,
                         last_run_at=last_run_at or self.app.now(),
@@ -537,7 +547,10 @@ class PlenoraBeatScheduler(Scheduler):
                             schedule=schedule,
                             kwargs={
                                 "schedule_id": sid,
-                                **scheduled_run_kwargs(triggered_by="cron"),
+                                "triggered_by": "cron",
+                                # scheduled_for determinato a tick-time
+                                # dal task wrapper (vedi nota sopra a
+                                # riga ~515 sull'entry-creation path).
                             },
                             app=self.app,
                             last_run_at=entry.last_run_at,

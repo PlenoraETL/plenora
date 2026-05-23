@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends
 
 from app.core.admin_system_status import service
 from app.core.auth.dependencies import require_superadmin
+from app.observability.audit_action import audit_action
 from app.shared.contracts.auth import CurrentUser
 
 
@@ -15,6 +16,7 @@ router = APIRouter(prefix="/admin/system-status", tags=["admin-system-status"])
 
 
 @router.get("", summary="Aggregato stato sistema per dashboard admin")
+@audit_action(action="admin.system_status.read")
 def get_system_status(
     _user: CurrentUser = Depends(require_superadmin),
 ) -> Mapping[str, object]:

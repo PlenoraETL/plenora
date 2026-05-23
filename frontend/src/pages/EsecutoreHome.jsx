@@ -109,14 +109,31 @@ function EsecutoreHome() {
 
   // Hook che la wizard chiama dopo un download riuscito.
   // Per l'esecutore: cleanup completo del task (privacy GDPR).
+  // Pre-fix (P0 contracts-flows): un cleanup parziale (HTTP 207 dal BE)
+  // o un network error veniva silenziato — il claim GDPR "nessuna
+  // traccia dell'esecuzione" risultava violato senza segnalazione UI.
+  // Post-fix: legge `partialCleanup` dal return strutturato e mostra
+  // toast all'utente in caso di problemi, per trasparenza.
   const handleAfterDownload = useCallback(async (taskId) => {
     try {
-      await cleanupTaskCompletely(taskId);
+      const result = await cleanupTaskCompletely(taskId);
+      if (result?.partialCleanup) {
+        const detail = result.networkError
+          ? 'errore di rete durante la richiesta di cleanup'
+          : `step falliti: ${(result.failedSteps || []).join(', ') || 'sconosciuti'}`;
+        toast.warning(
+          `Cleanup post-download parziale (${detail}). ` +
+          `Alcuni dati dell'esecuzione potrebbero richiedere intervento ` +
+          `dell'amministratore per la rimozione completa.`,
+          8000,
+        );
+      }
     } catch (e) {
-      // Best-effort, non blocchiamo l'utente
+      // Catch ridondante: cleanupTaskCompletely non solleva mai
+      // (cattura internamente), ma manteniamo per sicurezza.
       console.warn('Cleanup post-download fallito:', e);
     }
-  }, []);
+  }, [toast]);
 
   return (
     <div className="esh">

@@ -85,24 +85,46 @@ export const downloadTaskOutput = async (taskId, filename = null) => {
  * @returns {Promise<void>}
  */
 export const cleanupTaskCompletely = async (taskId) => {
+  // Return shape:
+  //   { partialCleanup: false, ...data }      # 200 OK pulito
+  //   { partialCleanup: true, failedSteps, ...data }  # 207 alcuni step falliti
+  //   { partialCleanup: true, networkError: true, ...}  # eccezione richiesta
+  //
+  // Pre-fix (P0 contracts-flows): 207 era ignored solo con console.warn.
+  // Il claim GDPR "nessuna traccia dell'esecuzione" del ruolo esecutore
+  // veniva VIOLATO silenziosamente — l'utente vedeva "download
+  // completato + cleanup OK" mentre alcuni step lasciavano dati residui
+  // (es. delete_log_runs fallito = log persistito sul server).
+  //
+  // Post-fix: la funzione ritorna sempre un oggetto strutturato col
+  // flag `partialCleanup`. Il caller (EsecutoreHome.handleAfterDownload)
+  // puo' mostrare un toast/banner di trasparenza all'utente: "Cleanup
+  // completato parzialmente, alcuni dati possono richiedere intervento
+  // manuale dell'amministratore".
   try {
     const response = await http.delete(`/tasks/${taskId}/full-cleanup`);
-    // Il BE ritorna 207 Multi-Status quando uno o piu' step di cleanup
-    // best-effort falliscono (delete_result, unlink_output_file,
-    // delete_log_runs, celery_forget). Axios tratta 207 come success,
-    // quindi senza questo check il claim "nessuna traccia sull'esecuzione"
-    // del ruolo esecutore (GDPR) sarebbe violato silenziosamente.
     if (response.status === 207) {
       const failedSteps = response.data?.failed_steps || [];
       console.warn(
         '[cleanupTaskCompletely] cleanup parziale (HTTP 207):',
         { taskId, failedSteps, partialStatus: response.data?.status },
       );
+      return {
+        partialCleanup: true,
+        failedSteps,
+        ...response.data,
+      };
     }
-    return response.data;
+    return {
+      partialCleanup: false,
+      ...response.data,
+    };
   } catch (e) {
-    // Best-effort: il cleanup è una pulizia "soft", non blocca la UX
     console.warn('[cleanupTaskCompletely] errore cleanup:', e?.message || e);
-    return null;
+    return {
+      partialCleanup: true,
+      networkError: true,
+      errorMessage: e?.message || String(e),
+    };
   }
 };

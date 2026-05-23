@@ -65,11 +65,19 @@ def schedule_pipeline_task(
     # idempotency non scattava → scrittura duplicata sul DB di
     # destinazione.
     if scheduled_for is None:
+        # Post-fix beat_scheduler: per i tick `cron` scheduled_for NON
+        # viene cached al sync-time (vedi nota in beat_scheduler.py:515).
+        # Lo determiniamo qui usando il tick time effettivo. Per
+        # `catchup`/`manual` invece il dispatcher canonico DEVE passare
+        # scheduled_for esplicito (lineage logico): un None su quei
+        # path indica un bug nel dispatcher, manteniamo il warning.
         scheduled_for = datetime.now(timezone.utc).isoformat()
-        logger.warning(
-            f"[GESTITO] schedule_task {schedule_id}: scheduled_for None — "
-            f"dispatcher non canonico? Fallback a now()={scheduled_for}."
-        )
+        if triggered_by != "cron":
+            logger.warning(
+                f"[GESTITO] schedule_task {schedule_id}: scheduled_for None "
+                f"con triggered_by={triggered_by!r} — dispatcher non canonico? "
+                f"Fallback a now()={scheduled_for}."
+            )
 
     logger.info(
         f"Task schedule avviato: {schedule_id} "

@@ -18,6 +18,20 @@ import { downloadBlob } from '../utils/downloadBlob';
  * @returns {Promise<Object>} Progetto creato
  */
 export const createProject = async (name, description = '', type = 'estrai', connectionId = null) => {
+  // Pre-fix (P0 contracts-flows): la sequenza POST + PUT canvas era
+  // dual-call non idempotente. Se POST riusciva (progetto in DB) ma
+  // PUT canvas falliva per timeout/network, la funzione sollevava
+  // un'eccezione — l'utente pensava che la creazione fosse fallita
+  // e riprovava, generando un duplicato nel DB (POST /projects non
+  // ha guard di idempotency).
+  //
+  // Post-fix: la PUT canvas e' best-effort, errore propagato come
+  // flag `canvasInitFailed` nella response invece di sollevare. Il
+  // caller vede che il progetto esiste e puo' guidare l'utente
+  // all'editor per completare manualmente. NB: il canvas vuoto e'
+  // l'inizializzazione di default — il BE crea gia' un canvas vuoto
+  // su POST /projects, quindi la PUT e' veramente best-effort di
+  // assicurazione, non un dato critico.
   const response = await http.post('/projects', {
     name,
     description,
@@ -27,7 +41,18 @@ export const createProject = async (name, description = '', type = 'estrai', con
 
   if (type === 'estrai' && connectionId) {
     const projectId = response.data.metadata.id;
-    await http.put(`/projects/${projectId}/canvas`, { nodes: [], edges: [] });
+    try {
+      await http.put(`/projects/${projectId}/canvas`, { nodes: [], edges: [] });
+    } catch (canvasErr) {
+      console.warn(
+        '[createProject] canvas init best-effort fallito per projectId=' +
+        projectId + ': ' + (canvasErr?.message || canvasErr) +
+        ' — il progetto E\' stato creato; il canvas verra' +
+        ' inizializzato al primo accesso editor.'
+      );
+      response.data.canvasInitFailed = true;
+      response.data.canvasInitError = canvasErr?.message || String(canvasErr);
+    }
   }
 
   return response.data;

@@ -35,6 +35,22 @@ _SECRET_NEEDLES = (
     "ENDPOINT",
 )
 
+
+# Chiavi `*_URL` necessitano di trattamento dedicato: contengono spesso
+# credenziali embedded (es. `postgresql://user:pwd@host:5432/db`) e
+# topologia di rete interna. Pre-fix (P1 admin-api):
+# `_is_secret_key("DATABASE_URL") → False` (nessuna needle nel nome) +
+# `_redact_url(value)` no-op su URL senza credentials embedded → host:port
+# interno esposto. Post-fix: redaction strutturata `_redact_url_strict`
+# che preserva solo lo `scheme` + il `path` (db name / Redis DB number)
+# e maschera netloc completo. L'admin distingue Postgres vs Redis ma
+# NON vede host/port/credentials.
+_URL_REDACT_KEYS = (
+    "DATABASE_URL",
+    "CELERY_BROKER_URL",
+    "CELERY_RESULT_BACKEND",
+)
+
 _CONFIG_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "Deployment",
@@ -173,10 +189,42 @@ def _redact_url(value: str) -> str:
     return urlunsplit(redacted)
 
 
+def _redact_url_strict(value: str) -> str:
+    """Redaction full: maschera netloc completo, preserva scheme + path.
+
+    Usata per chiavi in `_URL_REDACT_KEYS` (DATABASE_URL, broker, etc.)
+    dove anche `host:port` interno e' info da non leakare. Esempi:
+        postgresql://user:pwd@db.internal:5432/plenora → postgresql://<redacted>/plenora
+        redis://:secret@redis.internal:6379/0 → redis://<redacted>/0
+        amqp://celery:pwd@rabbit:5672/vhost → amqp://<redacted>/vhost
+    """
+    try:
+        parts = urlsplit(value)
+    except Exception:
+        return "<redacted>"
+    if not parts.scheme:
+        return "<redacted>"
+    redacted = SplitResult(
+        scheme=parts.scheme,
+        netloc="<redacted>",
+        path=parts.path,
+        query="",  # query string puo' contenere credentials in URL OAuth
+        fragment="",
+    )
+    return urlunsplit(redacted)
+
+
 def _serialize_value(key: str, value: Any) -> object:
     if value is None:
         return None
     if _is_secret_key(key):
+        return "<redacted>"
+    # Chiavi URL-sensitive: redaction strict che maschera netloc anche
+    # quando l'URL non ha credenziali embedded (es. `postgresql://
+    # internal-pg:5432/db` esponeva host:port interni pre-fix).
+    if key.upper() in _URL_REDACT_KEYS:
+        if isinstance(value, str) and "://" in value:
+            return _redact_url_strict(value)
         return "<redacted>"
     if isinstance(value, str) and "://" in value:
         return _redact_url(value)

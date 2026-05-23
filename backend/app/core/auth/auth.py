@@ -277,17 +277,30 @@ def get_me(current_user: CurrentUser = Depends(get_current_user)):
 @audit_action(action="auth.change_password")
 def change_password(
     data: ChangePasswordRequest,
+    request: Request,
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """
     Cambia la propria password. Richiede di conoscere la password attuale.
     Qualsiasi utente autenticato (incluso viewer) può cambiare la propria.
+
+    Rate limit (P1 security-auth): pre-fix endpoint senza throttle.
+    Un attaccante con JWT valido (token leak o sessione rubata) poteva
+    brute-forzare `old_password` senza freno: nessun limit per IP/utente,
+    nessun lockout. Post-fix: stesso rate limit del login (IP-based)
+    + record di failed attempts per scenari di tentativo brute-force.
     """
+    client_ip = get_client_ip(request)
+    _check_rate_limit(client_ip)
+
     user = db.get_user(current_user.user_id)
     if not user:
         _disclosure.raise_disclosure(_disclosure.user_not_found())
 
     if not verify_password(data.old_password, user.password_hash):
+        # Failed attempt count come per login → trigger rate limit
+        # progressive sui tentativi successivi dallo stesso IP.
+        _record_failed_login(client_ip)
         raise HTTPException(status_code=400, detail="Password attuale errata")
 
     if len(data.new_password) < 12:

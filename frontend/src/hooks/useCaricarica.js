@@ -114,6 +114,12 @@ export function useCaricarica(projectId, options = {}) {
       if (onBeforeExecute) {
         await onBeforeExecute();
       }
+      // mountedRef guard post-await: se il componente si e' smontato
+      // durante onBeforeExecute (utente naviga via, ~secondi), NON
+      // continuiamo. Pre-fix sessione precedente: il `_waitTaskTerminal`
+      // (fino a 90s) poteva continuare a girare e poi setIsExecuting
+      // su componente smontato → React warning + memory leak.
+      if (!mountedRef.current) return;
 
       // 2. Esegui la query per generare output fresco
       setProgressMessage('Esecuzione query...');
@@ -126,9 +132,12 @@ export function useCaricarica(projectId, options = {}) {
       // stale/vuoti. Post-fix: polling sincrono fino a status terminale
       // prima di passare al task CARICA.
       const executeResp = await executeProjectQuery(projectId);
+      if (!mountedRef.current) return;
       if (executeResp?.task_id) {
         setProgressMessage('Attesa esecuzione query...');
         const executeFinal = await _waitTaskTerminal(executeResp.task_id);
+        // Guard post-polling (puo' essere durato fino a 90s)
+        if (!mountedRef.current) return;
         const executeStatus = String(executeFinal?.status || '').toLowerCase();
         if (executeStatus !== 'success') {
           throw new Error(
@@ -151,6 +160,7 @@ export function useCaricarica(projectId, options = {}) {
           output_format: config.output_format || config.format || 'csv',
           carica_node_data: config
         });
+      if (!mountedRef.current) return;
 
       if (taskResult.task_id) {
         setTaskId(taskResult.task_id);
@@ -229,6 +239,10 @@ export function useCaricarica(projectId, options = {}) {
 
     } catch (error) {
       console.error('[useCaricarica] Errore:', error);
+      // mountedRef guard nel catch: l'errore puo' arrivare dopo un await
+      // lungo (es. _waitTaskTerminal timeout). Se il componente si e'
+      // smontato nel frattempo, NON tocchiamo setState.
+      if (!mountedRef.current) return;
       setIsExecuting(false);
       setTaskStatus('failure');
       setResult({
@@ -236,7 +250,7 @@ export function useCaricarica(projectId, options = {}) {
         message: error.message || 'Errore durante il caricamento'
       });
     }
-  }, [projectId, onBeforeExecute, getCanvas, startPolling]);
+  }, [projectId, onBeforeExecute, getCanvas, startPolling, mountedRef]);
 
   /**
    * Annulla il task

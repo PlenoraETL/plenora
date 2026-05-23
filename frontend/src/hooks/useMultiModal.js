@@ -14,7 +14,7 @@
  * modals.closeAll();           // Chiude tutte
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 
 /**
  * Hook per gestire multiple modali
@@ -46,6 +46,45 @@ export function useMultiModal(modalNames = []) {
   }, [namesKey]);
 
   const [modals, setModals] = useState(initialState);
+
+  // Sync incrementale di `modals` su cambio di `modalNames`.
+  // Pre-fix (P0 frontend-hooks #2): `useState(initialState)` cattura
+  // solo il primo render. Se `modalNames` cambiava (es. feature flag
+  // dinamico che aggiunge un modale dopo il mount), il nuovo nome
+  // restava `undefined` in `modals` → `isOpen('newName')` ritornava
+  // false ma `open('newName')` produceva uno state shape inconsistente.
+  // Inoltre `closeAll`/`openExclusive` resettavano allo stato vecchio
+  // perdendo eventuali nomi aggiunti.
+  // Post-fix: useEffect reconciler che AGGIUNGE le chiavi mancanti
+  // (default false) e RIMUOVE quelle non piu' in modalNames, senza
+  // toccare lo stato delle chiavi gia' presenti. Pattern Go-friendly:
+  // diff esplicito + merge, no abuso di setState identity.
+  useEffect(() => {
+    setModals(prev => {
+      const names = new Set(modalNames);
+      const next = {};
+      let changed = false;
+      // Aggiungi/preserva
+      for (const name of modalNames) {
+        if (name in prev) {
+          next[name] = prev[name];
+        } else {
+          next[name] = false;
+          changed = true;
+        }
+      }
+      // Rimuovi quelli non piu' presenti
+      for (const oldKey of Object.keys(prev)) {
+        if (!names.has(oldKey)) {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // namesKey copre la semantica di modalNames come dep — string
+    // primitiva stabile, no churn per new array identity.
+  }, [namesKey]);
 
   /**
    * Apre una modale specifica

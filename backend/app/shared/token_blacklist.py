@@ -147,7 +147,23 @@ def blacklist_jti(jti: str, ttl_seconds: int) -> bool:
 
 
 def is_jti_blacklisted(jti: Optional[str]) -> bool:
-    """True se `jti` e' presente in blacklist. Fail-open su Redis giu'."""
+    """True se `jti` e' presente in blacklist. Fail-open su Redis giu'.
+
+    SECURITY TRADE-OFF: il fail-open e' deliberato. Far ritornare True
+    (token bloccato) su Redis down causerebbe DoS totale: TUTTI i token
+    diventerebbero invalidi finche' Redis non torna su. Il prezzo del
+    fail-open e' che durante un'outage Redis i token gia' revocati via
+    logout tornano validi per il loro TTL residuo.
+
+    Mitigation:
+      1. Log `[SECURITY]` a livello ERROR (non WARNING) per visibilita'
+         operativa — un'outage prolungata e' security-relevant.
+      2. Metric `read_fail` + `last_ok` timestamp esposti via
+         `get_blacklist_status` → dashboard admin mostra
+         "blacklist inoperante da X minuti".
+      3. Pre-fix (P1 security-auth): log solo a WARNING, facile da
+         missare nel rumore generale. Post-fix: ERROR + tag SECURITY.
+    """
     if not jti:
         # Empty jti is not a real blacklist lookup.
         return False
@@ -161,7 +177,12 @@ def is_jti_blacklisted(jti: Optional[str]) -> bool:
         _record_metric("read_ok", mark_ok=True)
         return result
     except Exception as e:
-        logger.warning("Redis blacklist read failed (jti=%s): %s", jti, e)
+        logger.error(
+            "[SECURITY] Redis blacklist read failed — fail-open attivo "
+            "(token revocati restano accettati fino a TTL): jti=%s, "
+            "error=%s: %s",
+            jti, type(e).__name__, e,
+        )
         _record_metric("read_fail")
         return False
 
