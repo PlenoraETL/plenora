@@ -103,6 +103,37 @@ def try_acquire_manual_backup_lock(
         return cast(ManualBackupLockRow | None, dict(row) if row else None)
 
 
+def refresh_manual_backup_lock(
+    *, owner_token: str, ttl_seconds: int
+) -> bool:
+    """Estendi expires_at del lock se il caller ne e' ancora owner.
+
+    Heartbeat-based liveness: invece di tenere il lock con un TTL
+    enorme (precedentemente 7200s = 2h) che lasciava lock orfani per
+    ore quando un worker Celery crashava, riduciamo TTL a un valore
+    breve e il task in esecuzione estende `expires_at` periodicamente.
+    Se il worker muore, l'estensione si ferma, TTL scade in ≤TTL
+    secondi, e il prossimo `try_acquire_manual_backup_lock` riacquisisce
+    via clausola `WHERE expires_at <= now()`.
+
+    L'UPDATE include `owner_token = %s` nel WHERE per evitare che un
+    thread heartbeat zombi rinnovi un lock di cui non e' piu' owner
+    (es. dopo un takeover). Ritorna True se la riga e' stata refreshata,
+    False se il lock non esiste piu' o e' di un altro owner.
+    """
+    with unit_of_work() as session:
+        cur = session.execute(
+            """
+            UPDATE admin_backup_manual_locks
+            SET expires_at = now() + (%s * interval '1 second'),
+                updated_at = now()
+            WHERE lock_name = %s AND owner_token = %s
+            """,
+            (ttl_seconds, MANUAL_BACKUP_LOCK_NAME, owner_token),
+        )
+    return bool(getattr(cur, "rowcount", 0))
+
+
 def release_manual_backup_lock(*, owner_token: str | None = None) -> bool:
     with unit_of_work() as session:
         if owner_token is None:

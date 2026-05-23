@@ -133,7 +133,16 @@ BUCKET = _resolve_backup_bucket_env() or "plenora-backup-112011134642-eu-south-1
 REGION = settings.get("AWS_REGION", "eu-south-1")
 
 # Lock distribuito Postgres per evitare trigger concorrenti via API.
-MANUAL_LOCK_TTL_SEC = 7200  # 2 ore: se un backup e' in corso, il lock scade dopo 2h
+# Pre-fix: TTL = 7200s (2h). Sufficiente a coprire un backup lungo ma se
+# il worker Celery crashava (OOM, kill -9, disconnect broker) il lock
+# restava orfano per 2h prima di sbloccarsi via TTL → ogni superadmin
+# che provava a triggerare un backup nel frattempo riceveva "gia' in
+# corso". Post-fix: TTL breve (300s = 5min) + heartbeat dal task Celery
+# che estende `expires_at` ogni 120s. Se il worker muore, l'heartbeat
+# si ferma, TTL scade in ≤5min, il prossimo try_acquire riacquisisce.
+# Blast radius su worker morto: da 2h a 5min.
+MANUAL_LOCK_TTL_SEC = 300
+MANUAL_LOCK_HEARTBEAT_SEC = 120
 
 
 # ── S3: lista backup ────────────────────────────────────────────────────────

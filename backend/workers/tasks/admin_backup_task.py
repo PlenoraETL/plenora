@@ -2,12 +2,71 @@
 
 from __future__ import annotations
 
+import threading
+
 from workers.celery_app import celery_app
 from app.config import settings
-from app.core.admin_backups.backup_run_store import release_manual_backup_lock
+from app.core.admin_backups.backup_run_store import (
+    refresh_manual_backup_lock,
+    release_manual_backup_lock,
+)
+from app.core.admin_backups.service import (
+    MANUAL_LOCK_HEARTBEAT_SEC,
+    MANUAL_LOCK_TTL_SEC,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _start_lock_heartbeat(owner_token: str) -> tuple[threading.Event, threading.Thread]:
+    """Avvia un thread che estende periodicamente il lock backup.
+
+    Pattern allineato a `execution_manager._start_lock_heartbeat` per
+    gli scheduler_locks: TTL breve (5min) + refresh ogni 120s. Se il
+    worker Celery muore (OOM/kill/disconnect), il thread si ferma con
+    il processo, l'expires_at non viene piu' rinnovato, e il lock
+    scade entro TTL invece di restare orfano per ore.
+
+    Ritorna (stop_event, thread) cosi' il caller (try/finally) puo'
+    fermare il thread in modo pulito a fine task.
+    """
+    stop_event = threading.Event()
+
+    def _heartbeat_loop() -> None:
+        while not stop_event.wait(MANUAL_LOCK_HEARTBEAT_SEC):
+            try:
+                ok = refresh_manual_backup_lock(
+                    owner_token=owner_token,
+                    ttl_seconds=MANUAL_LOCK_TTL_SEC,
+                )
+                if not ok:
+                    # Lock perso (es. takeover dopo TTL scaduto durante
+                    # blip DB). Smetto di refreshare per evitare di
+                    # rinnovare un lock di cui non sono piu' owner.
+                    logger.warning(
+                        "manual backup heartbeat: lock non piu' "
+                        "posseduto da owner_token=%s, stop heartbeat",
+                        owner_token[:8],
+                    )
+                    return
+            except Exception:
+                # Errori DB transient: lascia che il prossimo tick
+                # heartbeat riprovi. Se il problema persiste, il TTL
+                # scade naturalmente.
+                logger.warning(
+                    "manual backup heartbeat refresh fallito (retry al "
+                    "prossimo tick)",
+                    exc_info=True,
+                )
+
+    thread = threading.Thread(
+        target=_heartbeat_loop,
+        name="manual-backup-lock-heartbeat",
+        daemon=True,
+    )
+    thread.start()
+    return stop_event, thread
 
 
 @celery_app.task(
@@ -22,6 +81,7 @@ logger = get_logger(__name__)
 def run_manual_backup_task(self, *, owner_token: str) -> dict[str, object]:
     """Run the existing backup job inside a worker, not the API process."""
 
+    stop_heartbeat, heartbeat_thread = _start_lock_heartbeat(owner_token)
     exit_code = 0
     try:
         from scripts import backup_db
@@ -43,6 +103,14 @@ def run_manual_backup_task(self, *, owner_token: str) -> dict[str, object]:
         logger.error("Backup manuale fallito con exit_code=%s", exit_code)
         raise RuntimeError(f"manual_backup_failed:{exit_code}") from exc
     finally:
+        # Ferma il thread heartbeat prima del release: evita una race
+        # in cui un tick heartbeat rinnova il lock subito dopo che
+        # release_manual_backup_lock ha eliminato la riga (riga
+        # ricreata "zombie" via UPDATE WHERE owner_token = %s che
+        # colpirebbe 0 righe → rowcount 0 → safe; ma meglio fermare
+        # prima per chiarezza).
+        stop_heartbeat.set()
+        heartbeat_thread.join(timeout=5)
         try:
             release_manual_backup_lock(owner_token=owner_token)
         except Exception:
