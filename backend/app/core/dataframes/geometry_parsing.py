@@ -90,7 +90,9 @@ def parse_geometry_series(series: pd.Series) -> pd.Series:
     sample = non_null.iloc[0]
 
     if hasattr(sample, "geom_type"):
-        return series
+        if non_null.map(lambda value: hasattr(value, "geom_type")).all():
+            return series
+        return series.apply(parse_geometry)
 
     if isinstance(sample, (bytes, memoryview)):
         try:
