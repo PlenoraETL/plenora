@@ -660,6 +660,17 @@ class ExecutionManager:
             op="carica"
         )
 
+        project_id = config.pipeline.project_id
+        # N15: carica_run_id deterministico per idempotency su replay
+        # dello stesso tick scheduled. None per cron senza
+        # scheduled_for (guard no-op). Calcolato fuori dal try cosi'
+        # e' visibile anche nell'except per chiudere la run come
+        # "failed".
+        carica_run_id = (
+            f"schedule-{config.id}-{scheduled_for}-carica"
+            if scheduled_for else None
+        )
+
         try:
             # Risoluzione artefatto centralizzata via PipelineArtifact +
             # ArtifactResolver. Ordine di preferenza
@@ -673,8 +684,6 @@ class ExecutionManager:
                 ArtifactResolutionError,
                 PipelineArtifact,
             )
-
-            project_id = config.pipeline.project_id
 
             artifact = PipelineArtifact.from_executor_result(
                 pipeline_result, project_id=project_id
@@ -729,10 +738,42 @@ class ExecutionManager:
 
             carica_executor = CaricaExecutor(connection_service=self._get_connection_service())
 
-            carica_run_id = (
-                f"schedule-{config.id}-{scheduled_for}-carica"
-                if scheduled_for else None
-            )
+            # Registra la run intermediate PRIMA dell'execute.
+            # Pre-fix: lo scheduler passava un `carica_run_id`
+            # deterministico ma non creava mai la riga su
+            # `intermediate.runs` ne' la chiudeva → al replay dello
+            # stesso scheduled tick, `CaricaExecutor.
+            # is_already_completed(run_id)` trovava `get_run() is None`
+            # e ritornava False, quindi l'executor riscriveva le
+            # stesse righe (test e2e
+            # `scheduler-carica-runtime.spec.js::idempotency` falliva).
+            # Post-fix: open prima e close dopo, cosi' al secondo tick
+            # il guard scatta e l'executor torna SKIPPED_IDEMPOTENT
+            # (`rows_written=0`, status `completed`).
+            if carica_run_id:
+                try:
+                    from app.core.intermediate import (
+                        run_lifecycle as intermediate_run_lifecycle,
+                        runs_db as intermediate_runs_db,
+                    )
+                    if intermediate_runs_db.get_run(carica_run_id) is None:
+                        intermediate_run_lifecycle.create_run(
+                            run_id=carica_run_id,
+                            canvas_id=project_id,
+                            group_id=f"schedule-{config.id}-carica",
+                            user_id=None,
+                        )
+                except Exception as _ie:
+                    # Fail-open: se l'apertura della run intermediate
+                    # esplode, non blocco la scrittura. L'unico effetto
+                    # collaterale e' che il guard idempotency non
+                    # scattera' al replay (comportamento pre-fix), ma
+                    # la run principale procede.
+                    logger.warning(
+                        f"Intermediate: apertura run CARICA fallita "
+                        f"(non bloccante) per {carica_run_id}: {_ie}",
+                        op="execution_manager._execute_carica",
+                    )
 
             write_result = carica_executor.execute(
                 df=df,
@@ -750,6 +791,27 @@ class ExecutionManager:
                 WriteStatus.PARTIAL,
                 WriteStatus.SKIPPED_IDEMPOTENT,
             )
+
+            # Chiudi la run intermediate per il guard idempotency.
+            # Su SKIPPED_IDEMPOTENT lo status era gia' "completed" dal
+            # primo tick: questo update e' no-op semantico ma resta
+            # coerente. Su failure marchiamo "failed" cosi' il replay
+            # successivo riprova invece di skippare.
+            if carica_run_id:
+                try:
+                    from app.core.intermediate import (
+                        runs_db as intermediate_runs_db,
+                    )
+                    intermediate_runs_db.update_run(
+                        carica_run_id,
+                        status="completed" if success else "failed",
+                    )
+                except Exception as _ue:
+                    logger.warning(
+                        f"Intermediate: chiusura run CARICA fallita "
+                        f"(non bloccante) per {carica_run_id}: {_ue}",
+                        op="execution_manager._execute_carica",
+                    )
 
             if not success:
                 error_msg = write_result.error_message or f"Scrittura fallita: {write_result.status.value}"
@@ -776,6 +838,27 @@ class ExecutionManager:
 
         except Exception as e:
             logger.error(f"[GESTITO] Errore CARICA scheduler: {e}", op="carica", exc_info=True)
+            # Marcatura best-effort della run come failed: se il
+            # crash e' arrivato dopo create_run ma prima
+            # dell'update_run di chiusura, la riga resta "running" e
+            # nessun guard scatterebbe al replay. Marcandola "failed"
+            # il replay del prossimo tick riprova (e non skippa).
+            # Se la run non era mai stata creata, l'UPDATE colpisce 0
+            # righe → no-op silente, comportamento corretto.
+            if carica_run_id:
+                try:
+                    from app.core.intermediate import (
+                        runs_db as intermediate_runs_db,
+                    )
+                    intermediate_runs_db.update_run(
+                        carica_run_id, status="failed"
+                    )
+                except Exception as _ue:
+                    logger.warning(
+                        f"Intermediate: marcatura run CARICA failed "
+                        f"fallita (non bloccante) per {carica_run_id}: {_ue}",
+                        op="execution_manager._execute_carica",
+                    )
             # intent: boundary CARICA scheduler / outcome: fail-closed sanitizzato
             return {
                 "success": False,
