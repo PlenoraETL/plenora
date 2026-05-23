@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, Optional
+
+import pandas as pd
 
 from app.core.dataframes.tabular import make_unique_column_names
+from app.utils.logger import get_logger
 
 from .models import OutputColumn, OutputColumnType, OutputContract
+
+logger = get_logger(__name__)
 
 
 def _field(obj: Any, key: str, default: Any = None) -> Any:
@@ -221,11 +226,68 @@ def node_columns_from_contract(
     return out
 
 
+_LOGICAL_TYPE_COMPATIBLE_DTYPES: dict[str, tuple] = {
+    "string": ("object", "string", "category"),
+    "integer": (
+        "int8", "int16", "int32", "int64",
+        "Int8", "Int16", "Int32", "Int64",
+        "uint8", "uint16", "uint32", "uint64",
+        "UInt8", "UInt16", "UInt32", "UInt64",
+    ),
+    "number": (
+        "float16", "float32", "float64",
+        "Float32", "Float64",
+        "int8", "int16", "int32", "int64",
+        "Int8", "Int16", "Int32", "Int64",
+        "uint8", "uint16", "uint32", "uint64",
+        "UInt8", "UInt16", "UInt32", "UInt64",
+    ),
+    "boolean": ("bool", "boolean", "object"),
+    "datetime": ("object",),
+    "geometry": ("object", "geometry"),
+}
+
+
+def _dtype_compatible_with_logical(dtype: Any, logical: str) -> bool:
+    """Return True when the pandas dtype satisfies the contract logical type.
+
+    `string`, `boolean`, `geometry` accettano `object` perche' pandas
+    rappresenta queste tipologie via dtype generico. `datetime` accetta
+    `object` perche' molti adapter (CSV, JSON) restituiscono str ISO che
+    il consumer puo' convertire; il dtype dedicato `datetime64[ns]` viene
+    matchato sotto via `is_datetime64_any_dtype`. `number` accetta
+    qualsiasi numerico inclusi gli interi (un consumer che si aspetta
+    `number` accetta `integer` come sottoinsieme — promotion safe).
+    Per i tipi `integer`/`number` NON accettiamo `float64` quando il
+    contratto dice `integer` esplicito, perche' il round-trip parquet
+    su NaN puo' degradare Int64→float64 con perdita di precisione su
+    valori > 2^53.
+    """
+    if logical == "datetime":
+        try:
+            if pd.api.types.is_datetime64_any_dtype(dtype):
+                return True
+        except (TypeError, ValueError):
+            pass
+    if logical == "geometry":
+        # GeoPandas geometry dtype non sempre disponibile come tipo
+        # comparabile via stringa; fallback al name attribute.
+        dtype_name = getattr(dtype, "name", str(dtype))
+        if dtype_name == "geometry":
+            return True
+    compatible = _LOGICAL_TYPE_COMPATIBLE_DTYPES.get(logical)
+    if not compatible:
+        # Logical sconosciuto → compatibilita' permissiva (no warning).
+        return True
+    return str(dtype) in compatible
+
+
 def ensure_dataframe_matches_contract(
     *,
     dataframe_columns: Any,
     node_columns: list[dict[str, Any]],
     source_project_id: str,
+    dataframe: Optional[pd.DataFrame] = None,
 ) -> None:
     """Fail when the materialized project data does not match its contract.
 
@@ -235,16 +297,51 @@ def ensure_dataframe_matches_contract(
 
     A mismatch means the upstream artifact is stale or corrupt and must not be
     silently consumed by downstream projects.
+
+    Type drift: se `dataframe` e' passato, verifica anche che i dtype
+    delle colonne visibili siano compatibili coi logical type del
+    contratto. Mismatch emette `logger.warning` (non raise) — il caller
+    riceve comunque il DataFrame, ma il drift e' tracciato per debug.
+    Soft-fail e' intenzionale: pipeline storiche con tipi divergenti
+    (es. Int64 degradato a float64 dal round-trip parquet) non
+    devono crashare ma essere riportate ai maintainer per fix
+    incrementali.
     """
     available = {str(col) for col in dataframe_columns}
-    visible_names = [
-        str(col.get("name") or "")
+    visible_columns = [
+        col
         for col in node_columns
         if isinstance(col, dict) and col.get("visible", True) and col.get("name")
     ]
+    visible_names = [str(col.get("name") or "") for col in visible_columns]
     missing_names = [name for name in visible_names if name not in available]
     if missing_names:
         raise ValueError(
             "artifact sorgente non allineato a output_contract: "
             f"progetto={source_project_id} colonne mancanti {missing_names}"
+        )
+
+    if dataframe is None:
+        return
+
+    type_mismatches: list[str] = []
+    for col in visible_columns:
+        name = str(col.get("name") or "")
+        if name not in dataframe.columns:
+            continue
+        logical = _logical_type(col.get("type"))
+        if not logical:
+            continue
+        dtype = dataframe[name].dtype
+        if not _dtype_compatible_with_logical(dtype, logical):
+            type_mismatches.append(f"{name}({dtype} != {logical})")
+
+    if type_mismatches:
+        logger.warning(
+            "[OutputContract] type drift su artifact sorgente "
+            "project_id=%s: %s. La pipeline prosegue ma il consumer "
+            "downstream potrebbe ricevere dtype divergenti dal "
+            "contratto. Verifica il writer (parquet engine, dtype "
+            "coercion) del progetto sorgente.",
+            source_project_id, ", ".join(type_mismatches),
         )

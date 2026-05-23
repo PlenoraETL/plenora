@@ -85,6 +85,7 @@ def load_project_source_artifact(
         dataframe_columns=df.columns,
         node_columns=node_columns or [],
         source_project_id=source_project_id,
+        dataframe=df,
     )
     data = filter_visible_columns(df, node_columns)
     data, renamed_columns = rename_duplicate_columns(data)

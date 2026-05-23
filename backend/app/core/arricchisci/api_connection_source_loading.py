@@ -323,6 +323,7 @@ class ApiConnectionSourceLoadingMixin:
             dataframe_columns=df.columns,
             node_columns=node_columns,
             source_project_id=source_project_id,
+            dataframe=df,
         )
         df = filter_visible_columns(df, node_columns)
 

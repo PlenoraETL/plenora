@@ -14,7 +14,7 @@ import time as _t
 from datetime import datetime, timezone, timedelta
 from datetime import datetime as _dt, timedelta as _td, timezone as _tz
 from pathlib import Path as _Path
-from typing import Optional
+from typing import Any, Optional
 from celery.beat import Scheduler, ScheduleEntry
 from celery.utils.log import get_logger
 from app.core.scheduler.job_dispatcher import (
@@ -507,7 +507,8 @@ class PlenoraBeatScheduler(Scheduler):
         """Carica/aggiorna gli schedule attivi dal DB."""
         try:
             rows = _pg_fetchall(
-                "SELECT id, name, cron_expression, project_id, is_enabled, last_run FROM schedules WHERE is_enabled = TRUE"
+                "SELECT id, name, cron_expression, project_id, is_enabled, "
+                "last_run, config FROM schedules WHERE is_enabled = TRUE"
             )
 
             current_ids = set()
@@ -520,6 +521,19 @@ class PlenoraBeatScheduler(Scheduler):
                 schedule = self._parse_cron(row["cron_expression"])
                 if schedule is None:
                     continue
+
+                # Pre-fix (P2 orchestration): `crontab()` di Celery
+                # interpreta i cron nella timezone globale dell'app
+                # (Europe/Rome in celery_app.py). Uno schedule con
+                # `config.schedule.timezone` diversa veniva emesso
+                # all'ora di Europe/Rome, non della tz richiesta —
+                # silenziosamente. Modificare `_parse_cron` per essere
+                # tz-aware tramite `nowfun` e' rischioso (signature
+                # crontab non stabilizzata cross-versione Celery).
+                # Soluzione pragmatica: warning loud al sync-time
+                # quando rileviamo timezone divergente — il problema
+                # esce dai log piuttosto che restare invisibile.
+                self._warn_if_timezone_divergent(sid, row.get("config"))
 
                 last_run_at = self._parse_dt(row.get("last_run"))
 
@@ -584,6 +598,44 @@ class PlenoraBeatScheduler(Scheduler):
 
         except Exception as e:
             logger.error(f"[CRASH] Errore sync schedule dal DB: {e}", exc_info=True)
+
+    def _warn_if_timezone_divergent(self, schedule_id: str, config: Any) -> None:
+        """Loud warning se schedule.timezone diverge da Celery beat tz.
+
+        Pre-fix il mismatch era silente: lo schedule veniva emesso
+        all'ora di Europe/Rome anche se l'utente configurava un'altra
+        timezone. Il fix profondo richiederebbe `crontab(nowfun=...)`,
+        ma cambiare l'engine cron a runtime e' fuori scope per un P2.
+        Questo helper trasforma il bug invisibile in un warning loud
+        cosi' chi vede log noti il problema e configuri il beat
+        scheduler con la tz corretta (oppure normalizzi i cron alla
+        tz globale).
+        """
+        try:
+            cfg = config if isinstance(config, dict) else (
+                json.loads(config) if isinstance(config, str) else None
+            )
+            if not cfg:
+                return
+            schedule_section = cfg.get("schedule") or {}
+            tz_name = schedule_section.get("timezone")
+            if not tz_name:
+                return
+            beat_tz = str(getattr(self.app.conf, "timezone", "")) or "UTC"
+            if tz_name != beat_tz:
+                logger.warning(
+                    "[Scheduler] schedule %s configurato con "
+                    "timezone='%s' ma Celery beat tz='%s' — il cron "
+                    "verra' interpretato in '%s', NON in '%s'. "
+                    "Allineare la timezone Celery oppure normalizzare "
+                    "l'espressione cron a '%s'.",
+                    schedule_id, tz_name, beat_tz, beat_tz, tz_name, beat_tz,
+                )
+        except Exception as exc:
+            logger.debug(
+                "[Scheduler] timezone-divergence check fallito per %s: %s",
+                schedule_id, exc,
+            )
 
     def _parse_cron(self, cron_expr: str) -> Optional[object]:
         """Parsa espressione cron in un oggetto schedule Celery."""
