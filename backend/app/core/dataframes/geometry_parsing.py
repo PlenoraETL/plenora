@@ -122,15 +122,14 @@ def parse_geometry_series(series: pd.Series) -> pd.Series:
             return series.apply(parse_geometry)
 
     if looks_like_wkb_hex(sample_str):
-        try:
-            values = series.map(
-                lambda v: None if pd.isna(v) or v == "" or v == "None" else str(v).strip()
-            ).to_numpy()
-            parsed = shapely.from_wkb(values, hex=True, on_invalid="raise")
-            return pd.Series(parsed, index=series.index, dtype="object")
-        except Exception as e:
-            logger.debug("parse_geometry_series: WKB hex fast path fallito: %s", e)
-            return series.apply(parse_geometry)
+        # Benchmark su codice reale: WKB hex vettoriale rendeva 1.19x
+        # sui punti e 0.91x (regressione) sui poligoni, a fronte di un
+        # ramo semanticamente delicato per via di EWKB/SRID e dei
+        # fallback in `parse_wkb_hex`. Tradeoff non vale: per WKB hex
+        # restiamo sul per-row `parse_geometry` che gestisce tutti i
+        # casi (WKB standard, EWKB con SRID, EWKB con flag SRID
+        # zeroato) tramite lo stesso try-cascade dello scalar.
+        return series.apply(parse_geometry)
 
     return series.apply(parse_geometry)
 
