@@ -52,6 +52,24 @@ const ProjectSourceNode = ({ id, data }) => {
 
       const contractColumns = projectData.output_contract?.columns || [];
       if (contractColumns.length > 0) {
+        // Pre-fix (P1 contracts-schemas): `col.type?.logical || 'string'`
+        // maschera silenziosamente un drift BE: se il BE rinomina la
+        // chiave (es. da `type.logical` a `data_type`) o cambia la
+        // shape, TUTTE le colonne ricadono al default 'string' senza
+        // alcun warning → quando il BE evolve schema, i nodi mostrano
+        // tipi sbagliati ovunque ma il bug e' invisibile.
+        // Post-fix: log warn aggregato (1 per render) quando >=1 colonna
+        // ha mancanza del campo, cosi' il drift e' visibile in devtools.
+        const _missingLogicalCount = contractColumns
+          .filter(col => col.status !== 'removed' && col.status !== 'deleted')
+          .filter(col => !col?.type?.logical).length;
+        if (_missingLogicalCount > 0) {
+          console.warn(
+            `[ProjectSourceNode] Drift schema BE: ${_missingLogicalCount}/${contractColumns.length} ` +
+            `colonne nel output_contract senza 'type.logical'. ` +
+            `Fallback a 'string' applicato. Verifica shape backend.`
+          );
+        }
         columnsWithTypes = contractColumns
           .filter(col => col.status !== 'removed' && col.status !== 'deleted')
           .map(col => {

@@ -116,6 +116,13 @@ const startCaricaPolling = useCallback((caricaTask) => {
     if (caricaRefs.current[task_id]) {
       clearInterval(caricaRefs.current[task_id]);
     }
+    // mountedRef guard PRIMA del setInterval. Pre-fix (P1 frontend-hooks):
+    // startCaricaPolling poteva essere chiamato da una callback async di
+    // un createTask che risolveva DOPO che il componente si era smontato
+    // → setInterval registrava un poll su componente unmounted. Il cleanup
+    // useEffect alla riga 50-53 lo cancellava, ma il primo `poll()` sync
+    // sotto poteva girare prima del cleanup → setState post-unmount.
+    if (!mountedRef.current) return;
     poll();
     caricaRefs.current[task_id] = setInterval(poll, pollInterval);
   }, [pollInterval, mountedRef]);

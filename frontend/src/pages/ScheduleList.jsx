@@ -104,8 +104,20 @@ function ScheduleList() {
   const [tick,           setTick]           = useState(0);
   const pollingRef = useRef(null);
   const tickRef    = useRef(null);
+  // Generation counter per scartare response stale dopo cambio projectFilter.
+  // Pre-fix (P1 contracts-flows): se l'utente cambiava filter mentre una
+  // listSchedules in volo non era ancora arrivata, la response stale
+  // (filter precedente) sovrascriveva setSchedules dopo che la nuova
+  // listSchedules era partita. Pattern equivalente a AbortController
+  // ma Go-friendly: monotonic counter int condiviso.
+  const requestGenRef = useRef(0);
 
-  useEffect(() => { loadData(); return () => stopPolling(); }, [projectFilter]);
+  useEffect(() => {
+    // Bump generation: tutte le response in volo precedenti diventano stale.
+    requestGenRef.current += 1;
+    loadData();
+    return () => stopPolling();
+  }, [projectFilter]);
 
   useEffect(() => {
     const runningIds = new Set(schedules.filter(s => s.runtime?.status === 'running' || s.runtime?.status === 'queued').map(s => s.id));
@@ -134,7 +146,16 @@ function ScheduleList() {
     if (tickRef.current)    { clearInterval(tickRef.current);    tickRef.current    = null; }
   };
   const refreshData = async () => {
-    try { const d = await listSchedules(projectFilter); setSchedules(d.schedules || []); }
+    const myGen = requestGenRef.current;
+    try {
+      const d = await listSchedules(projectFilter);
+      // Scarta response stale: se projectFilter e' cambiato durante
+      // l'await, l'effect ha incrementato requestGenRef e questa
+      // response e' obsoleta — non sovrascrivere setSchedules con
+      // dati del filter precedente.
+      if (myGen !== requestGenRef.current) return;
+      setSchedules(d.schedules || []);
+    }
     catch (err) {
       console.error('[ScheduleList] refresh fallito:', err);
       // Sessione scaduta o accesso revocato: fermare il polling evita
@@ -147,6 +168,7 @@ function ScheduleList() {
     }
   };
   const loadData = async () => {
+    const myGen = requestGenRef.current;
     try {
       setLoading(true);
       const [sd, hd] = await Promise.all([
@@ -159,6 +181,8 @@ function ScheduleList() {
           return { status: 'unknown', message: 'Non raggiungibile' };
         }),
       ]);
+      // Scarta response stale: vedi requestGenRef in refreshData.
+      if (myGen !== requestGenRef.current) return;
       setSchedules(sd.schedules || []);
       setBeatHealth(hd);
       const init = {};

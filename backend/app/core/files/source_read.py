@@ -95,13 +95,22 @@ def load_dataframe(
         df, gdf = load_by_format(tmp_path, file_source.format, use_layer, use_sheet)
         return df, gdf
     finally:
-
+        # Pre-fix (P1 etl-sources): l'ordine era:
+        #   1. del df, gdf
+        #   2. gc.collect()           ← prima del cleanup
+        #   3. _cleanup_temp_path
+        # Su worker memory-constrained con GeoDataFrame grandi (shp/gdb
+        # con geometrie complesse), il gc.collect tentava di liberare la
+        # memoria del GeoDataFrame PRIMA che la tmp dir + file shp/dbf/shx
+        # fossero stati rilasciati — picco di memoria spurious.
+        # Post-fix: cleanup FS PRIMA, gc.collect DOPO. La memoria di df/gdf
+        # viene rilasciata in modo deterministico dopo che la tmp e' libera.
+        _cleanup_temp_path(tmp_path, file_source.format, logger=logger)
         try:
             del df, gdf
         except NameError:
             pass
         gc.collect()
-        _cleanup_temp_path(tmp_path, file_source.format, logger=logger)
 
 
 def get_layers_info(

@@ -56,30 +56,59 @@ export function useProjectListData() {
     reloadIdRef.current = myId;
     try {
       setLoading(true);
-      const [
-        projectsData,
-        connectionsData,
-        apiConnData,
-        filesData,
-        schedulesData,
-        arcgisData,
-        eseguibiliData,
-        dataSourcesData,
-      ] = await Promise.all([
+      // Pre-fix (P1 contracts-flows): `Promise.all` + 3 fetch senza
+      // `.catch()` (listProjects/listConnections/listApiConnections) →
+      // se UNO dei 3 falliva, l'intero Promise.all rejected, scartando
+      // ANCHE i risultati degli altri 5 che avevano gia' completato.
+      // Tutto-o-niente fragile su failure transient di un singolo servizio.
+      // Post-fix: `Promise.allSettled` + handling per-servizio con
+      // fallback canonico. I dati available restano, partial-failure
+      // visibili via toast.warning aggregato.
+      const results = await Promise.allSettled([
         listProjects(),
         listConnections(),
         listApiConnections(),
-        getFiles().catch(() => ({ files: [] })),
-        listSchedules().catch(() => ({ schedules: [], total: 0 })),
-        listFeatureConnections().catch(() => ({ connections: [] })),
-        listEseguibili().catch(() => []),
-        listDataSources().catch(() => []),
+        getFiles(),
+        listSchedules(),
+        listFeatureConnections(),
+        listEseguibili(),
+        listDataSources(),
       ]);
 
       // Cancel guard: se nel frattempo un altro reload e' stato avviato
       // (myId != reloadIdRef.current) OPPURE il componente e' smontato,
       // i risultati di questa invocazione sono stale → scarta.
       if (!mountedRef.current || reloadIdRef.current !== myId) return;
+
+      const [
+        projectsRes,
+        connectionsRes,
+        apiConnRes,
+        filesRes,
+        schedulesRes,
+        arcgisRes,
+        eseguibiliRes,
+        dataSourcesRes,
+      ] = results;
+
+      const projectsData = projectsRes.status === 'fulfilled' ? projectsRes.value : { projects: [] };
+      const connectionsData = connectionsRes.status === 'fulfilled' ? connectionsRes.value : { connections: [] };
+      const apiConnData = apiConnRes.status === 'fulfilled' ? apiConnRes.value : { api_connections: [] };
+      const filesData = filesRes.status === 'fulfilled' ? filesRes.value : { files: [] };
+      const schedulesData = schedulesRes.status === 'fulfilled' ? schedulesRes.value : { schedules: [], total: 0 };
+      const arcgisData = arcgisRes.status === 'fulfilled' ? arcgisRes.value : { connections: [] };
+      const eseguibiliData = eseguibiliRes.status === 'fulfilled' ? eseguibiliRes.value : [];
+      const dataSourcesData = dataSourcesRes.status === 'fulfilled' ? dataSourcesRes.value : [];
+
+      // Segnaliamo all'utente le fetch fallite (toast.warning aggregato)
+      const failedServices = results
+        .map((r, i) => r.status === 'rejected'
+          ? ['progetti', 'connessioni', 'API', 'file', 'schedule', 'ArcGIS', 'eseguibili', 'datasources'][i]
+          : null)
+        .filter(Boolean);
+      if (failedServices.length > 0) {
+        toast.warning(`Alcuni dati non caricati: ${failedServices.join(', ')}`);
+      }
 
       const projectsList = projectsData.projects || [];
       setProjects(projectsList);

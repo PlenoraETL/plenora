@@ -168,6 +168,7 @@ class DataSourceService:
                 success=False,
                 message=f"Data Source '{ds_id}' non trovato",
             )
+        backend = None
         try:
             backend = create_backend(config)
             result = backend.test_connection()
@@ -177,15 +178,36 @@ class DataSourceService:
                 details=result.get("details"),
             )
         # Provider exceptions can include URLs, tokens, credentials, or internal paths.
+        # Pre-fix (P1 connections): f"{e}" propagava raw l'eccezione che poteva
+        # includere credenziali (es. ftplib auth failure con username/password
+        # nel messaggio, paramiko SSHException con host+key snippet). Allineato
+        # al pattern di `connections/service.py:_test_*` (sessioni precedenti):
+        # logghiamo solo type(e).__name__, exc_info=True per traceback debug.
         except Exception as e:
             logger.error(
-                f"[GESTITO] Errore test connessione {ds_id}: {e}",
+                "[GESTITO] Errore test connessione %s: %s",
+                ds_id, type(e).__name__,
                 exc_info=True,
             )
             return DataSourceTestResult(
                 success=False,
                 message="Impossibile testare la connessione: riprova piu' tardi",
             )
+        finally:
+            # Pre-fix (P1 connections): test_connection apriva una connessione
+            # via `create_backend(config)` ma NON la chiudeva esplicitamente.
+            # Su backend con stateful socket (FTP/SFTP/SharePoint), questo
+            # accumulava handle aperte verso il server esterno + risorse
+            # locali fino al GC. Cleanup best-effort: chiamiamo disconnect()
+            # se il backend lo espone (interfaccia DataSource).
+            if backend is not None and hasattr(backend, "disconnect"):
+                try:
+                    backend.disconnect()
+                except Exception as cleanup_err:
+                    logger.warning(
+                        "[GESTITO] disconnect post-test fallito per %s: %s",
+                        ds_id, type(cleanup_err).__name__,
+                    )
 
     def list_files(
         self,

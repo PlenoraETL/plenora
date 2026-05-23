@@ -59,6 +59,8 @@ export default function DataSourceManager() {
   const [saving,        setSaving]        = useState(false);
   const [formError,     setFormError]     = useState(null);
   const [testingId,     setTestingId]     = useState(null);
+  // P1 frontend-pages: anti double-submit su DELETE Data Source.
+  const [deletingId,    setDeletingId]    = useState(null);
   const [testResults,   setTestResults]   = useState({});
   const [browserDs,     setBrowserDs]     = useState(null);
   const [browserFiles,  setBrowserFiles]  = useState([]);
@@ -126,7 +128,13 @@ export default function DataSourceManager() {
     finally { setTestingId(null); }
   };
 
+  // Pre-fix (P1 frontend-pages): handleDelete async senza disabling
+  // del bottone → utente puo' cliccare "Elimina" piu' volte mentre
+  // l'API e' in corso, generando N DELETE concorrenti sullo stesso ID.
+  // Post-fix: deletingId flag che disabilita il bottone durante l'await.
   const handleDelete = async id => {
+    if (deletingId === id) return;  // guard re-entrancy
+    setDeletingId(id);
     try {
       await deleteDataSource(id);
       setConfirmDelete(null);
@@ -142,6 +150,8 @@ export default function DataSourceManager() {
         return;
       }
       toast.error(`Errore: ${e.message}`);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -482,8 +492,18 @@ export default function DataSourceManager() {
             <div className="dsm__confirm-text">Sei sicuro di voler eliminare <strong>{confirmDelete.name}</strong>?</div>
             <div className="dsm__confirm-warn">⚠️ Verranno eliminati anche i dati di scan state associati.</div>
             <div className="dsm__confirm-actions">
-              <button type="button" className="dsm__btn dsm__btn--ghost" onClick={() => setConfirmDelete(null)}>Annulla</button>
-              <button type="button" className="dsm__btn dsm__btn--danger" onClick={() => handleDelete(confirmDelete.id)}>Elimina</button>
+              <button
+                type="button"
+                className="dsm__btn dsm__btn--ghost"
+                onClick={() => setConfirmDelete(null)}
+                disabled={deletingId === confirmDelete.id}
+              >Annulla</button>
+              <button
+                type="button"
+                className="dsm__btn dsm__btn--danger"
+                onClick={() => handleDelete(confirmDelete.id)}
+                disabled={deletingId === confirmDelete.id}
+              >{deletingId === confirmDelete.id ? 'Eliminazione…' : 'Elimina'}</button>
             </div>
           </div>
         </div>

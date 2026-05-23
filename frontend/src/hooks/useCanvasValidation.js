@@ -168,7 +168,15 @@ export function useCanvasValidation(nodes, edges, options = {}) {
     }, debounceMs);
 
     return () => clearTimeout(timeoutId);
-  }, [nodesFingerprint, edgesFingerprint, validateOnChange, debounceMs, validate, nodes.length]);
+    // Pre-fix (P1 frontend-hooks): `nodes.length` era nelle deps insieme
+    // a `nodesFingerprint`. Ridondante: `nodesFingerprint` e' costruito
+    // da `nodes.map(validationNodeFingerprint).sort().join(',')` quindi
+    // cambia ogni volta che cambia la length (e tutti gli altri field
+    // rilevanti). Includere `nodes.length` separato non aggiunge segnale
+    // ma duplica la dep. Rimosso per chiarezza — il check `nodes.length
+    // === 0` nel body usa il valore corrente del render, non la dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodesFingerprint, edgesFingerprint, validateOnChange, debounceMs, validate]);
 
   const getNodeStyle = useCallback((nodeId) => {
     if (state.disconnectedNodeIds.includes(nodeId)) {

@@ -45,6 +45,7 @@
 import { useState, useEffect } from 'react';
 import useCanvasStore from '../../../store/useCanvasStore';
 import { useToast } from '../../../hooks/useToast';
+import { useMountedRef } from '../../../hooks/useMountedRef';
 import { toastApiError } from '../../../utils/toastApiError';
 import {
   listImdfBundles,
@@ -58,6 +59,10 @@ export function useImdfBundles({ isImdfMode }) {
   const setLastTaskResult = useCanvasStore(s => s.setLastTaskResult);
   const toast = useToast();
   const imdfData = lastTaskResult?.imdf || null;
+
+  // Mounted guard per setState dopo await async (P1 frontend-hooks).
+  // Pattern condiviso con altri hook async via useMountedRef.
+  const mountedRef = useMountedRef();
 
   const [bundles, setBundles] = useState([]);
   const [loadingBundles, setLoadingBundles] = useState(false);
@@ -146,9 +151,14 @@ export function useImdfBundles({ isImdfMode }) {
   const handleDeleteBundle = async (tid) => {
     try {
       await deleteImdfBundle(tid);
+      // mountedRef guard post-await: pre-fix (P1 frontend-hooks)
+      // l'await poteva risolvere dopo unmount → setBundles/setSelectedBundleId
+      // setState su componente smontato.
+      if (!mountedRef.current) return;
       setBundles(prev => prev.filter(b => b.task_id !== tid));
       if (selectedBundleId === tid) setSelectedBundleId(null);
     } catch (e) {
+      if (!mountedRef.current) return;
       console.error('deleteImdfBundle:', e);
       toastApiError(toast, e, 'Errore cancellazione bundle');
     }

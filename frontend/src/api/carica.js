@@ -56,11 +56,21 @@ export const getCaricaTables = async (connId, schema) => {
 
 /**
  * Calcola un auto-mapping tra colonne sorgente e colonne di destinazione.
+ *
+ * Pre-fix (P1 contracts-schemas): il JSDoc documentava `target_conn_id`/
+ * `target_schema`/`target_table` ma il BE `AutoMappingRequest` (vedi
+ * `core/carica/router.py:58`) accetta `connection_id`/`schema_name`/
+ * `table_name`. Qualunque nuovo caller basato sul JSDoc avrebbe inviato
+ * field ignorati silenziosamente dal BE → mapping calcolato su
+ * connection vuota. Allineato ai nomi reali del modello BE.
+ *
  * @param {Object} payload
- * @param {string[]} payload.source_columns   - Colonne output della pipeline
- * @param {string}   payload.target_conn_id   - ID connessione destinazione
- * @param {string}   payload.target_schema    - Schema destinazione
- * @param {string}   payload.target_table     - Tabella destinazione
+ * @param {Array<{name, type}>} payload.source_columns - Colonne output pipeline
+ * @param {string}   payload.connection_id  - ID connessione destinazione
+ * @param {string}   payload.schema_name    - Schema destinazione (default 'public')
+ * @param {string}   payload.table_name     - Tabella destinazione
+ * @param {string}   [payload.project_id]   - Project context (opzionale)
+ * @param {number}   [payload.srid]         - SRID geometrico (default 4326)
  * @returns {Promise<Object>} { mappings: Array<{source_column, dest_column, dest_type, is_geometry, srid, is_primary_key, skip}>, suggested_match_columns, existing_columns }
  */
 export const postCaricaAutoMapping = async (payload) => {

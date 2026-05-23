@@ -54,7 +54,10 @@ export const cancelTask = async (taskId) => {
  * @param {string}   payload.project_id           - ID progetto
  * @param {Object}   payload.canvas               - **REQUIRED** Canvas serializzato {nodes, edges}
  * @param {string}   [payload.output_format]      - 'csv' | 'parquet' | ... default 'csv'
- * @param {Object}   [payload.carica_node_data]   - Config nodo CARICA (per task_type='carica')
+ * @param {Object}   [payload.carica_node_data]   - **REQUIRED se task_type==='carica'**
+ *                                                  Config nodo CARICA (mapping colonne, mode, target).
+ *                                                  Il BE risponde 400 se task_type='carica' e questo
+ *                                                  campo manca (vedi orchestrator/router.py:324-325).
  * @param {Object}   [payload.options]            - Opzioni runtime
  * @returns {Promise<{task_id: string}>}
  */
@@ -66,6 +69,16 @@ export const createTask = async (payload) => {
     throw new Error(
       'createTask: payload.canvas e\' required (shape {nodes, edges}). ' +
       'Il caller deve fornire il canvas serializzato del progetto.'
+    );
+  }
+  // Pre-fix (P1 contracts-schemas): `carica_node_data` Optional BE
+  // ma il router risponde 400 condizionale quando task_type='carica'.
+  // Caller che ometteva il campo per task carica facevano roundtrip
+  // inutile. Fail-fast client-side allineato al check BE.
+  if (payload.task_type === 'carica' && !payload.carica_node_data) {
+    throw new Error(
+      'createTask: payload.carica_node_data e\' required quando ' +
+      'task_type === "carica" (mapping colonne + target DB).'
     );
   }
   const response = await http.post('/tasks', payload);

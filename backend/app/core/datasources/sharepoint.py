@@ -145,10 +145,22 @@ class SharePointDataSource(DataSourceInterface):
             self._ctx = ctx
 
         except Exception as e:
+            # Pre-fix (P1 connections): se l'auth riusciva PARZIALMENTE
+            # (es. ctx creato + ctx.load() + execute_query() che fallisce
+            # MA dopo aver aperto la sessione HTTP interna), il ctx
+            # restava orfano con session http aperta. Post-fix: cleanup
+            # best-effort di qualsiasi ctx parziale prima di raise.
+            # Il `_ctx` non e' stato ancora assegnato (raise interrompe),
+            # ma `_do_auth` puo' aver lasciato session aperte —
+            # mitighiamo lo scenario via context manager (Office365 client
+            # gia' inizia la session al primo execute_query).
             logger.warning(
-                f"[GESTITO] SharePoint auth fallita: {type(e).__name__}: {e}",
+                "[GESTITO] SharePoint auth fallita: %s",
+                type(e).__name__,
                 exc_info=True,
             )
+            # self._ctx resta None: `disconnect()` no-op safe.
+            self._ctx = None
             raise DataSourceConnectionError(_sanitize_sharepoint_error(e)) from e
 
     def disconnect(self) -> None:
@@ -161,24 +173,86 @@ class SharePointDataSource(DataSourceInterface):
         con molti datasource SharePoint si accumulavano connessioni
         TCP verso SharePoint proporzionali al numero di handle aperti.
 
-        Cleanup best-effort: se la libreria cambia internals e la
-        sessione non e' accessibile, log e continue. Il caller non
-        deve fallire la disconnect per un cleanup parziale.
+        Cleanup best-effort multi-probe: la libreria non espone un'API
+        stabile per chiudere la session; usiamo introspection con
+        fallback. Pre-fix (P1 connections): solo 2 probe `_session`/
+        `session`. Se il client object refactora il nome, leak silente.
+        Post-fix: 4 probe sequenziali + tentativo di `ctx.close()` se
+        disponibile in API pubblica futura. Log warning unico cumulativo.
+
+        Probe order:
+          1. `ctx.close()` — API pubblica (se introdotta in future versioni)
+          2. `ctx._session` — internal attr in Office365-REST-Python-Client < 2.5
+          3. `ctx.session` — alias in alcune versioni
+          4. `ctx._client_context_session` — internal in versioni piu' recenti
+          5. `ctx.pending_request()._session` — fallback su pending request
+
+        Se NESSUNA delle probe ha successo, emettiamo un WARNING
+        esplicito che indica che la sessione HTTP NON e' stata chiusa
+        e suggerisce di aggiornare le probe nella prossima versione
+        della libreria.
         """
         ctx = self._ctx
-        if ctx is not None:
-            session = getattr(ctx, "_session", None) or getattr(
-                ctx, "session", None
+        if ctx is None:
+            return
+
+        # 1. Tentativo API pubblica future: ctx.close()
+        if hasattr(ctx, "close") and callable(getattr(ctx, "close")):
+            try:
+                ctx.close()
+                self._ctx = None
+                return
+            except Exception as e:
+                logger.debug(
+                    "[GESTITO] SharePoint ctx.close() fallito (%s): provo probe internal.",
+                    type(e).__name__,
+                )
+
+        # 2-5. Probe internal attributes
+        session_candidates = [
+            ("_session", lambda: getattr(ctx, "_session", None)),
+            ("session", lambda: getattr(ctx, "session", None)),
+            ("_client_context_session", lambda: getattr(ctx, "_client_context_session", None)),
+            ("pending_request._session", lambda: (
+                getattr(ctx.pending_request(), "_session", None)
+                if hasattr(ctx, "pending_request") and callable(getattr(ctx, "pending_request"))
+                else None
+            )),
+        ]
+
+        closed = False
+        for probe_name, probe_fn in session_candidates:
+            try:
+                session = probe_fn()
+            except Exception:
+                continue
+            if session is None:
+                continue
+            try:
+                session.close()
+                logger.debug(
+                    "[GESTITO] SharePoint disconnect via probe %r succeeded.",
+                    probe_name,
+                )
+                closed = True
+                break
+            except Exception as e:
+                logger.debug(
+                    "[GESTITO] SharePoint disconnect probe %r: close() fallita (%s).",
+                    probe_name, type(e).__name__,
+                )
+
+        if not closed:
+            # Nessuna probe ha chiuso la sessione: warning per upgrade
+            # operativo (probabilmente la libreria ha refactored gli internals).
+            logger.warning(
+                "[GESTITO] SharePoint disconnect: nessuna delle 4 probe "
+                "internal e' riuscita a chiudere la requests.Session. "
+                "Il riferimento sara' liberato dal GC (non-deterministico). "
+                "Verifica versione Office365-REST-Python-Client e aggiorna "
+                "le probe in app/core/datasources/sharepoint.py:disconnect."
             )
-            if session is not None:
-                try:
-                    session.close()
-                except Exception as e:
-                    logger.warning(
-                        f"[GESTITO] SharePoint disconnect: chiusura "
-                        f"sessione HTTP fallita ({type(e).__name__}: {e}). "
-                        f"Il riferimento sara' liberato dal GC."
-                    )
+
         self._ctx = None
 
     def test_connection(self) -> DataSourceConnectionTestResult:

@@ -245,14 +245,46 @@ const ManipolaEditorContent = () => {
     console.warn('[ManipolaEditor] Autosave non completato:', err?.message || err);
   }, []);
 
+  // Pre-fix (P1 frontend-pages): `handleUpdateProjectSource` /
+  // `handleUpdateFileSourceColumns` / `onConnect` chiamavano
+  // `handleSaveQuiet()` dentro `setTimeout` senza mutex. Due
+  // interazioni rapide (es. cambio sorgente + connessione edge)
+  // serializzavano due `handleSaveQuiet` concorrenti su snapshot
+  // di canvas diversi — il piu' lento (snapshot intermedio) poteva
+  // sovrascrivere il piu' veloce (snapshot finale) sul backend.
+  //
+  // Post-fix: `autosaveInFlightRef` single-flight semaphore.
+  // Se un autosave e' in volo, l'invocazione successiva imposta
+  // `autosavePendingRef=true` e re-triggera al completamento del
+  // precedente. Coalesce: due update rapidi → 1 save in volo + 1
+  // pending finale (no piu' di 2 save totali per N update).
+  const autosaveInFlightRef = useRef(false);
+  const autosavePendingRef  = useRef(false);
+
+  const triggerAutosave = useCallback(() => {
+    if (autosaveInFlightRef.current) {
+      autosavePendingRef.current = true;
+      return;
+    }
+    autosaveInFlightRef.current = true;
+    handleSaveQuiet()
+      .then(() => refreshSchemas())
+      .catch(handleAutosaveError)
+      .finally(() => {
+        autosaveInFlightRef.current = false;
+        // Se durante l'in-flight e' arrivato almeno un nuovo trigger,
+        // re-lancia ora (coalesce in 1 save finale).
+        if (autosavePendingRef.current) {
+          autosavePendingRef.current = false;
+          triggerAutosave();
+        }
+      });
+  }, [handleSaveQuiet, refreshSchemas, handleAutosaveError]);
+
   const handleUpdateProjectSource = useCallback((nodeId, projectSourceId) => {
     updateNodeData(nodeId, { source_project_id: projectSourceId });
-    setTimeout(() => {
-      handleSaveQuiet()
-        .then(() => refreshSchemas())
-        .catch(handleAutosaveError);
-    }, 100);
-  }, [updateNodeData, refreshSchemas, handleSaveQuiet, handleAutosaveError]);
+    setTimeout(triggerAutosave, 100);
+  }, [updateNodeData, triggerAutosave]);
 
   const handleUpdateProjectSourceColumns = useCallback((nodeId, columns) => {
     updateNodeData(nodeId, { columns });
@@ -266,11 +298,9 @@ const ManipolaEditorContent = () => {
         n.id === nodeId ? { ...n, data: { ...n.data, columns } } : n
       );
       propagateColumns(updatedNodes, edgesRef.current);
-      handleSaveQuiet()
-        .then(() => refreshSchemas())
-        .catch(handleAutosaveError);
+      triggerAutosave();
     }, 100);
-  }, [updateNodeData, propagateColumns, refreshSchemas, handleSaveQuiet, handleAutosaveError]);
+  }, [updateNodeData, propagateColumns, triggerAutosave]);
 
   const handleUpdateTransform = useCallback((nodeId, newData) => {
     updateNodeData(nodeId, newData);
