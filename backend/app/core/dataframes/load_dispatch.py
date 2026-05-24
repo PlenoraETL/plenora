@@ -42,7 +42,18 @@ def load_frame_by_format(
         gdf = loader.load_geospatial(file_path, layer)
         df = pd.DataFrame(gdf)
         if "geometry" in df.columns:
-            df["geometry"] = gdf.geometry.apply(lambda g: g.wkt if g else None)
+            # Pre-fix: `apply(lambda g: g.wkt if g else None)` aveva
+            # due bug latenti — (1) `if g` su una geometria empty
+            # (es. POLYGON EMPTY) e' falsy in alcune versioni Shapely
+            # → empty geom mappato a None invece che a "POLYGON EMPTY",
+            # silente perdita; (2) per-riga su grandi GeoSeries (5k+
+            # geom). Post-fix: serializzazione vettoriale via
+            # `geometry_series_to_wkt`, contratto esplicito su missing
+            # = None, empty preservato a meno di `empty_as_null=True`.
+            from app.core.dataframes.geometry_serialization import (
+                geometry_series_to_wkt,
+            )
+            df["geometry"] = geometry_series_to_wkt(gdf.geometry)
     else:
         raise ValueError(f"Formato '{format_type}' non supportato")
 

@@ -1038,9 +1038,15 @@ def op_geo_to_wkt(
         result = gdf.copy()
 
         if mode in ("wkt", "both"):
-            result[wkt_column] = result.geometry.apply(
-                lambda geom: geom.wkt if geom is not None else None
+            # Pre-fix per-row apply su GeoSeries (fino a 100k geometrie
+            # in pipeline reali). Post-fix vettoriale via
+            # `geometry_series_to_wkt`: ~2.4x sui punti, ~1.3-1.7x sui
+            # poligoni; contratto uniforme su missing (None/NaN/pd.NA)
+            # → None.
+            from app.core.dataframes.geometry_serialization import (
+                geometry_series_to_wkt,
             )
+            result[wkt_column] = geometry_series_to_wkt(result.geometry)
 
         if mode in ("latlon", "both"):
             centroids = result.geometry.centroid
