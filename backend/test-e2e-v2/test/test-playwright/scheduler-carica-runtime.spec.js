@@ -442,7 +442,7 @@ test('Scheduler CARICA DB runtime: failed write is reported in task, runtime and
     expect(latestLog.triggered_by).toBe('manual');
     expect(latestLog.error_message).toMatch(/match|CARICA|fallita|failed/i);
     expect((latestLog.steps || []).some(step => step.step === 'OUTPUT' && step.status === 'success')).toBeTruthy();
-    expect((latestLog.steps || []).some(step => step.step === 'CARICA' && step.status === 'success')).toBeTruthy();
+    expect((latestLog.steps || []).some(step => step.step === 'CARICA' && step.status === 'success')).toBeFalsy();
   } finally {
     await deleteSchedules(api, createdSchedules);
     await deleteProjects(api, createdProjects);
@@ -451,11 +451,6 @@ test('Scheduler CARICA DB runtime: failed write is reported in task, runtime and
 });
 
 test('Scheduler CARICA idempotency: same scheduled tick does not append duplicate rows', async ({ api }) => {
-  test.fail(
-    true,
-    'Backend bug: scheduler passes a deterministic CARICA run_id, but that run_id is not persisted as completed, so same-tick replay appends again.',
-  );
-
   const createdProjects = [];
   const createdConnections = [];
   const createdSchedules = [];

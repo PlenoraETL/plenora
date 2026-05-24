@@ -275,7 +275,7 @@
         {
           "id": "scheduler_carica_same_tick_idempotency_runtime",
           "title": "Scheduler CARICA same-tick idempotency runtime",
-          "status": "planned",
+          "status": "covered",
           "required": false,
           "covers": ["runtime replay of the same scheduled_for tick must not append duplicate rows"],
           "evidence": {
