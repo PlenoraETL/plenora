@@ -1,11 +1,8 @@
-"""
-Smoke contract:
-"""
+"""Smoke contract for `create_multi_layer_from_upload` (RAM-only, Phase4)."""
 
 from __future__ import annotations
 
 import io
-import os
 import zipfile as _zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,15 +30,12 @@ def fake_logger():
 
 
 @pytest.fixture
-def collaborators(fake_logger, tmp_path):
-    """Set base di collaborator. I test sostituiscono i singoli mock."""
+def collaborators(fake_logger):
+    """Collaborator RAM-only — niente piu' load_by_format / safe_extractall."""
 
     def gen_id(name):
         return f"file_{name}"
 
-    # build_file_source factory: ritorna oggetto con attributo `id`
-    # accessibile (e layer/sheet via getattr) -> compatibile col logger
-    # Current contract che fa `fs.id` e `getattr(fs, 'layer', None)`.
     def _build_fs(**kw):
         return type("FS", (), kw)()
 
@@ -49,9 +43,6 @@ def collaborators(fake_logger, tmp_path):
         "generate_file_id": MagicMock(side_effect=gen_id),
         "time_now": MagicMock(return_value=datetime(2026, 5, 2, tzinfo=timezone.utc)),
         "detect_format": MagicMock(return_value="gpkg"),
-        "load_by_format": MagicMock(
-            return_value=(pd.DataFrame({"id": [1, 2]}), None)
-        ),
         "column_builder_from_df": MagicMock(
             return_value=[type("C", (), {"name": "id", "type": "int"})()]
         ),
@@ -61,11 +52,6 @@ def collaborators(fake_logger, tmp_path):
         "db_save_file_sources_batch": MagicMock(),
         "delete_blob": MagicMock(),
         "build_file_source": MagicMock(side_effect=_build_fs),
-        "cleanup_dir": MagicMock(),
-        "cleanup_file": MagicMock(),
-        "safe_extractall": MagicMock(),
-        "zip_slip_error": RuntimeError,
-        "temp_dir": str(tmp_path),
         "default_group": "default_grp",
         "logger": fake_logger,
         "mime_validate": MagicMock(return_value=None),
@@ -80,15 +66,29 @@ def _create_multi(
     *,
     layers_config=None,
     group_id="g1",
+    load_return=(pd.DataFrame({"id": [1, 2]}), None),
+    load_side_effect=None,
 ):
     from app.core.files.multi_layer_upload import create_multi_layer_from_upload
 
-    return create_multi_layer_from_upload(
-        io.BytesIO(content), filename, name,
-        layers_config=THREE_LAYERS if layers_config is None else layers_config,
-        group_id=group_id,
-        **collaborators,
+    patcher = patch(
+        "app.core.dataframes.load_dispatch.load_by_format_bytes",
     )
+    mock_lbf = patcher.start()
+    if load_side_effect is not None:
+        mock_lbf.side_effect = load_side_effect
+    else:
+        mock_lbf.return_value = load_return
+    try:
+        result = create_multi_layer_from_upload(
+            io.BytesIO(content), filename, name,
+            layers_config=THREE_LAYERS if layers_config is None else layers_config,
+            group_id=group_id,
+            **collaborators,
+        )
+        return result, mock_lbf
+    finally:
+        patcher.stop()
 
 
 def _builds(collaborators):
@@ -99,10 +99,10 @@ def _batch_rows(collaborators):
     return collaborators["db_save_file_sources_batch"].call_args.args[0]
 
 
-def _zip_bytes(filename="placeholder.txt", content=b"hi"):
+def _zip_bytes(inner_name="placeholder.txt", content=b"hi"):
     buf = io.BytesIO()
     with _zipfile.ZipFile(buf, "w") as z:
-        z.writestr(filename, content)
+        z.writestr(inner_name, content)
     return buf.getvalue()
 
 
@@ -114,7 +114,6 @@ def _service_with_multi_layer_collaborators():
     svc._detect_format = MagicMock(return_value="gpkg")
     svc._time = MagicMock()
     svc._time.now = MagicMock(return_value=datetime.now(timezone.utc))
-    svc._load_by_format = MagicMock(return_value=(pd.DataFrame({"a": [1]}), None))
     svc._column_builder = MagicMock()
     svc._column_builder.from_dataframe = MagicMock(return_value=[])
     svc._dispatch_blob_storage = MagicMock(
@@ -141,7 +140,6 @@ def test_empty_layers_config_raises_value_error(collaborators, empty_value):
     collaborators["dispatch_blob_storage"].assert_not_called()
     collaborators["db_save_file_sources_batch"].assert_not_called()
     collaborators["delete_blob"].assert_not_called()
-    collaborators["load_by_format"].assert_not_called()
 
 
 # 2. MIME block prima di parse/dispatch/save_batch
@@ -158,7 +156,6 @@ def test_mime_block_short_circuits_before_any_layer_processing(collaborators):
             layers_config=THREE_LAYERS[:2],
         )
 
-    collaborators["load_by_format"].assert_not_called()
     collaborators["dispatch_blob_storage"].assert_not_called()
     collaborators["db_save_file_sources_batch"].assert_not_called()
     collaborators["delete_blob"].assert_not_called()
@@ -174,30 +171,26 @@ def test_mime_block_short_circuits_before_any_layer_processing(collaborators):
 def test_xlsx_multi_sheet_creates_n_file_sources_with_sheet_field(collaborators):
     collaborators["detect_format"].return_value = "xlsx"
 
-    out = _create_multi(
+    out, mock_lbf = _create_multi(
         collaborators, b"fake xlsx", "data.xlsx", "Workbook",
         layers_config=[{"sheet": "Sheet1"}, {"sheet": "Sheet2"}],
     )
 
     assert len(out) == 2
-    # E1: dispatch chiamato UNA volta
     assert collaborators["dispatch_blob_storage"].call_count == 1
-    # E3: save_batch chiamato UNA volta con N row
     assert collaborators["db_save_file_sources_batch"].call_count == 1
     rows_arg = _batch_rows(collaborators)
     assert len(rows_arg) == 2
-    # build_file_source: per XLSX -> sheet valorizzato, layer None
     builds = _builds(collaborators)
     assert builds[0]["sheet"] == "Sheet1"
     assert builds[0]["layer"] is None
     assert builds[1]["sheet"] == "Sheet2"
     assert builds[1]["layer"] is None
-    # load_by_format: per XLSX -> layer arg = None, sheet arg = valore
-    load_calls = collaborators["load_by_format"].call_args_list
-    assert load_calls[0].args[2] is None
-    assert load_calls[0].args[3] == "Sheet1"
-    assert load_calls[1].args[2] is None
-    assert load_calls[1].args[3] == "Sheet2"
+    load_calls = mock_lbf.call_args_list
+    assert load_calls[0].kwargs["layer"] is None
+    assert load_calls[0].kwargs["sheet"] == "Sheet1"
+    assert load_calls[1].kwargs["layer"] is None
+    assert load_calls[1].kwargs["sheet"] == "Sheet2"
 
 
 # 4. GPKG multi-layer -> N FileSource, layer valorizzato + CRS detection
@@ -209,17 +202,15 @@ def test_gpkg_multi_layer_creates_n_file_sources_with_layer_and_crs(collaborator
     fake_gdf = MagicMock()
     fake_gdf.crs = MagicMock()
     fake_gdf.crs.to_epsg = MagicMock(return_value=4326)
-    collaborators["load_by_format"].return_value = (
-        pd.DataFrame({"id": [1]}), fake_gdf,
-    )
 
-    out = _create_multi(
+    out, mock_lbf = _create_multi(
         collaborators, b"fake gpkg", "data.gpkg", "Geo",
         layers_config=[
             {"layer": "roads"},
             {"layer": "buildings"},
             {"layer": "rivers"},
         ],
+        load_return=(pd.DataFrame({"id": [1]}), fake_gdf),
     )
 
     assert len(out) == 3
@@ -227,33 +218,30 @@ def test_gpkg_multi_layer_creates_n_file_sources_with_layer_and_crs(collaborator
     assert [b["layer"] for b in builds] == ["roads", "buildings", "rivers"]
     assert all(b["sheet"] is None for b in builds)
     assert all(b["crs"] == "EPSG:4326" for b in builds)
-    load_calls = collaborators["load_by_format"].call_args_list
-    assert [c.args[2] for c in load_calls] == ["roads", "buildings", "rivers"]
-    assert all(c.args[3] is None for c in load_calls)
+    load_calls = mock_lbf.call_args_list
+    assert [c.kwargs["layer"] for c in load_calls] == [
+        "roads", "buildings", "rivers",
+    ]
+    assert all(c.kwargs["sheet"] is None for c in load_calls)
 
 
-# 5. ZIP unwrap .gpkg -> parse usa extracted path
+# 5. ZIP unwrap .gpkg -> parse usa inner bytes
 
 
-def test_zip_unwrap_finds_gpkg_and_uses_extracted_path(collaborators):
+def test_zip_unwrap_finds_gpkg_and_uses_inner_bytes(collaborators):
     collaborators["detect_format"].side_effect = ["zip", "gpkg"]
 
-    def fake_extract(z, dest):
-        target = Path(dest) / "inner.gpkg"
-        target.write_bytes(b"inner gpkg bytes")
-
-    collaborators["safe_extractall"].side_effect = fake_extract
+    inner_gpkg_bytes = b"inner gpkg payload"
+    zip_payload = _zip_bytes("inner.gpkg", inner_gpkg_bytes)
 
     _create_multi(
-        collaborators, _zip_bytes(), "bundle.zip", "Pack",
+        collaborators, zip_payload, "bundle.zip", "Pack",
         layers_config=[{"layer": "L1"}],
     )
 
-    collaborators["safe_extractall"].assert_called_once()
-    load_args = collaborators["load_by_format"].call_args.args
-    assert load_args[0].name == "inner.gpkg"
     build_kwargs = collaborators["build_file_source"].call_args.kwargs
     assert build_kwargs["format"] == "gpkg"
+    assert build_kwargs["original_filename"] == "inner.gpkg"
 
 
 # 6. BadZipFile -> ValueError, no save_batch
@@ -273,16 +261,16 @@ def test_bad_zip_file_raises_value_error_no_save_batch(collaborators):
     collaborators["delete_blob"].assert_not_called()
 
 
-# 7. ZipSlipError -> ValueError, no save_batch
+# 7. ZIP senza file riconosciuti -> ValueError
 
 
-def test_zip_slip_error_raises_value_error_no_save_batch(collaborators):
-    collaborators["detect_format"].return_value = "zip"
-    collaborators["safe_extractall"].side_effect = RuntimeError("/etc/passwd traversal")
+def test_zip_with_unsupported_content_raises_value_error(collaborators):
+    collaborators["detect_format"].side_effect = ["zip"]
+    zip_payload = _zip_bytes("readme.txt", b"no gpkg here")
 
-    with pytest.raises(ValueError, match="path traversal"):
+    with pytest.raises(ValueError, match="ZIP non riconosciuto"):
         _create_multi(
-            collaborators, _zip_bytes(), "evil.zip", "Evil",
+            collaborators, zip_payload, "junk.zip", "Junk",
             layers_config=[{"layer": "L1"}],
         )
 
@@ -295,23 +283,21 @@ def test_zip_slip_error_raises_value_error_no_save_batch(collaborators):
 
 def test_parse_failure_per_layer_continues_with_empty_columns(collaborators):
     collaborators["detect_format"].return_value = "gpkg"
-    # 1# layer parse OK, 2# fallisce, 3# parse OK
-    collaborators["load_by_format"].side_effect = [
-        (pd.DataFrame({"a": [1]}), None),
-        RuntimeError("parser exploded layer 2"),
-        (pd.DataFrame({"a": [2, 3]}), None),
-    ]
 
-    out = _create_multi(
+    out, _mock_lbf = _create_multi(
         collaborators, b"fake gpkg", "data.gpkg", "Multi",
         layers_config=[
             {"layer": "ok1"},
             {"layer": "broken"},
             {"layer": "ok3"},
         ],
+        load_side_effect=[
+            (pd.DataFrame({"a": [1]}), None),
+            RuntimeError("parser exploded layer 2"),
+            (pd.DataFrame({"a": [2, 3]}), None),
+        ],
     )
 
-    # 3 FileSource creati nonostante il fail del 2# (soft preserve)
     assert len(out) == 3
     warning_calls = [
         c.args[0] for c in collaborators["logger"].warning.call_args_list
@@ -321,7 +307,6 @@ def test_parse_failure_per_layer_continues_with_empty_columns(collaborators):
     builds = _builds(collaborators)
     assert builds[1]["columns"] == []
     assert builds[1]["row_count"] == 0
-    # E3: tutti i 3 row inviati nello stesso save_batch (1 sola call)
     assert collaborators["db_save_file_sources_batch"].call_count == 1
     assert len(_batch_rows(collaborators)) == 3
 
@@ -360,18 +345,19 @@ def test_safe_layer_name_sanitization_replaces_spaces_and_dashes(collaborators):
     builds = _builds(collaborators)
     assert builds[0]["name"] == "Pack_my_layer_name"
     assert builds[1]["name"] == "Pack_another_one_with_spaces"
-    fid_calls = [c.args[0] for c in collaborators["generate_file_id"].call_args_list]
+    fid_calls = [
+        c.args[0] for c in collaborators["generate_file_id"].call_args_list
+    ]
     assert fid_calls == ["Pack_my_layer_name", "Pack_another_one_with_spaces"]
 
 
-# 11. FileSourceService delega coi collaborator core (E3)
+# 11. FileSourceService delega coi collaborator core (RAM-only)
 
 
-def test_file_source_service_multi_layer_delegates_with_save_batch_and_delete_blob():
-    """`FileSourceService.create_multi_layer_from_upload` invoca
-    app.core.files.multi_layer_upload con i collaborator del service.
-    Verifica E3: passa db_save_file_sources_batch + delete_blob; verifica
-    cleanup_file=os.unlink (asimmetria preservata)."""
+def test_file_source_service_multi_layer_delegates_with_ram_only_collaborators():
+    """Service facade delega al modulo core con i collaborator RAM-only.
+    Verifica che i collaborator legacy (load_by_format / safe_extractall /
+    cleanup_*) NON siano piu' iniettati."""
     svc = _service_with_multi_layer_collaborators()
     fake_result = [MagicMock()]
     with patch(
@@ -392,22 +378,22 @@ def test_file_source_service_multi_layer_delegates_with_save_batch_and_delete_bl
     assert kwargs["generate_file_id"] is svc._generate_file_id
     assert kwargs["time_now"] is svc._time.now
     assert kwargs["detect_format"] is svc._detect_format
-    assert kwargs["load_by_format"] is svc._load_by_format
     assert kwargs["column_builder_from_df"] is svc._column_builder.from_dataframe
     assert kwargs["dispatch_blob_storage"] is svc._dispatch_blob_storage
-    # E3: nuovo callback batch + delete_blob
     assert callable(kwargs["db_save_file_sources_batch"])
     assert callable(kwargs["delete_blob"])
-    # E3: il vecchio callback single-row NON deve essere passato.
-    assert "db_save_file_source" not in kwargs
     assert callable(kwargs["build_file_source"])
-    assert kwargs["cleanup_file"] is os.unlink
-    assert kwargs["cleanup_dir"] is not os.unlink
-    assert callable(kwargs["safe_extractall"])
-    assert isinstance(kwargs["zip_slip_error"], type)
-    assert isinstance(kwargs["temp_dir"], (str, Path))
     assert isinstance(kwargs["default_group"], str)
     assert kwargs["logger"] is svc._logger
+    # Collaborator legacy non piu' iniettati post-RAM-only.
+    for legacy in (
+        "load_by_format", "cleanup_dir", "cleanup_file",
+        "safe_extractall", "zip_slip_error", "temp_dir",
+        "db_save_file_source",
+    ):
+        assert legacy not in kwargs, (
+            f"collaborator legacy {legacy} ancora iniettato dal service"
+        )
 
 
 # 11b. BE-DELETE-001: _delete_blob short-circuit on object_storage_enabled()
@@ -415,8 +401,7 @@ def test_file_source_service_multi_layer_delegates_with_save_batch_and_delete_bl
 
 def _capture_delete_blob_callback():
     """Helper: costruisce il service, intercetta `_impl` e ritorna il
-    callback `delete_blob` realmente passato dal facade. Permette di
-    testare la closure in isolamento senza eseguire il batch reale."""
+    callback `delete_blob` realmente passato dal facade."""
     svc = _service_with_multi_layer_collaborators()
     captured = {}
     with patch(
@@ -432,16 +417,12 @@ def _capture_delete_blob_callback():
 
 
 def test_delete_blob_short_circuits_when_object_storage_disabled():
-    """BE-DELETE-001 + BE-GO-READY-STORAGE-ENGINE-002: se
-    object_storage_enabled() ritorna False, il callback _delete_blob
-    NON chiama get_runtime_object_storage e logga un debug strutturato
-    `event=storage_compensating_delete_skipped` (non error). Edge case
-    patologico (capability disabilitata tra dispatch e cleanup) reso
-    esplicito."""
+    """BE-DELETE-001 + BE-GO-READY-STORAGE-ENGINE-002."""
     svc, delete_blob = _capture_delete_blob_callback()
 
     with patch(
-        "app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=False,
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
+        return_value=False,
     ), patch(
         "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
     ) as mock_get_storage:
@@ -455,19 +436,18 @@ def test_delete_blob_short_circuits_when_object_storage_disabled():
     assert "domain=file_source_multi_layer" in rendered
     assert "skip_reason=capability_disabled" in rendered
     assert "file-sources/batch_x/data.gpkg" in rendered
-    # NON deve emettere warning/error (no falso orfano)
     svc._logger.warning.assert_not_called()
     svc._logger.error.assert_not_called()
 
 
 def test_delete_blob_calls_storage_when_object_storage_enabled():
-    """BE-DELETE-001: caso nominale (capability ON) -> chiama
-    get_runtime_object_storage().delete(key) come prima del fix."""
+    """BE-DELETE-001 caso nominale (capability ON)."""
     svc, delete_blob = _capture_delete_blob_callback()
 
     fake_storage = MagicMock()
     with patch(
-        "app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=True,
+        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
+        return_value=True,
     ), patch(
         "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         return_value=fake_storage,
@@ -481,45 +461,33 @@ def test_delete_blob_calls_storage_when_object_storage_enabled():
 
 
 def test_zip_unwrap_gdb_directory_uses_original_zip_blob(collaborators):
-    """MULTI-GDB-001 fix: per GDB-in-ZIP il path estratto e' una directory
-    .gdb (non un file). Previous behavior: tmp_path.read_bytes() su directory
-    sollevava IsADirectoryError. Current contract: per format='gdb' conserviamo
-    il ZIP originale come blob."""
+    """MULTI-GDB-001 fix RAM-only: per GDB-in-ZIP il blob salvato resta lo
+    ZIP originale; pyogrio /vsizip legge la directory .gdb senza materializzare."""
     collaborators["detect_format"].side_effect = ["zip", "gdb"]
 
-    def fake_extract(z, dest):
-        gdb_dir = Path(dest) / "geodatabase.gdb"
-        gdb_dir.mkdir()
-        (gdb_dir / "a00000001.gdbtable").write_bytes(b"gdb internal")
+    # Costruiamo un ZIP che contiene una "directory" .gdb (entry con / dentro)
+    buf = io.BytesIO()
+    with _zipfile.ZipFile(buf, "w") as z:
+        z.writestr("geodatabase.gdb/a00000001.gdbtable", b"gdb internal")
+    zip_bytes = buf.getvalue()
 
-    collaborators["safe_extractall"].side_effect = fake_extract
-
-    zip_bytes = _zip_bytes(content=b"placeholder content")
-
-    out = _create_multi(
+    out, _mock_lbf = _create_multi(
         collaborators, zip_bytes, "geodatabase.zip", "Geo",
         layers_config=[{"layer": "feature_class_1"}],
     )
 
     assert len(out) == 1
 
-    # Dispatch riceve gli STESSI bytes del ZIP originale, NON i bytes di
-    # un file dentro la dir .gdb.
     dispatch_args = collaborators["dispatch_blob_storage"].call_args.args
     assert dispatch_args[1] == zip_bytes, (
-        "MULTI-GDB-001 fix: per GDB il blob salvato deve essere il ZIP "
-        "originale, non un file dentro la directory .gdb"
+        "MULTI-GDB-001 fix RAM-only: per GDB il blob salvato deve essere "
+        "il ZIP originale (pyogrio legge /vsizip)"
     )
-
-    load_args = collaborators["load_by_format"].call_args.args
-    assert load_args[0].name == "geodatabase.gdb"
-    assert load_args[0].is_dir(), "Path passato a load_by_format deve essere la dir .gdb"
 
     build_kwargs = collaborators["build_file_source"].call_args.kwargs
     assert build_kwargs["format"] == "gdb"
     assert build_kwargs["layer"] == "feature_class_1"
     assert build_kwargs["sheet"] is None
-    assert build_kwargs["original_filename"] == "geodatabase.gdb"
     assert build_kwargs["file_size"] == len(zip_bytes)
 
 
@@ -528,8 +496,7 @@ def test_zip_unwrap_gdb_directory_uses_original_zip_blob(collaborators):
 
 def test_multi_layer_uses_single_dispatch_with_batch_id_storage_key(collaborators):
     """3 layer -> dispatch_blob_storage chiamato 1 volta PRIMA del batch
-    save. Argomenti: file_id e storage_key_id sono entrambi un `batch_*`
-    opaque id (non legati ad alcun file_id specifico del layer)."""
+    save. Argomenti: file_id e storage_key_id sono entrambi un `batch_*`."""
     collaborators["detect_format"].return_value = "gpkg"
 
     _create_multi(collaborators, b"shared blob")
@@ -540,16 +507,14 @@ def test_multi_layer_uses_single_dispatch_with_batch_id_storage_key(collaborator
     call = collaborators["dispatch_blob_storage"].call_args
     file_id_arg = call.args[0]
     storage_key_id_kwarg = call.kwargs.get("storage_key_id")
-    assert file_id_arg.startswith("batch_"), (
-        f"E1 expected opaque batch_id, got {file_id_arg!r}"
-    )
+    assert file_id_arg.startswith("batch_")
     assert storage_key_id_kwarg == file_id_arg
     assert not file_id_arg.startswith("file_")
 
 
 def test_n_save_batch_rows_share_same_storage_key(collaborators):
-    """Object_storage path: le N row del batch ricevono lo stesso storage_key
-    e file_id distinti per ciascuna row."""
+    """Object_storage path: N row del batch condividono storage_key,
+    file_id distinti per ciascuna row."""
     collaborators["detect_format"].return_value = "gpkg"
     shared_kwargs = {
         "data": None,
@@ -573,8 +538,7 @@ def test_n_save_batch_rows_share_same_storage_key(collaborators):
 
 
 def test_dispatch_failure_before_loop_no_save_batch_no_cleanup(collaborators):
-    """E1: dispatch fallisce PRE-LOOP -> 0 save_batch chiamato; nessun
-    delete_blob (lo storage_key e' opaco al caller in caso di fail)."""
+    """E1: dispatch fallisce PRE-LOOP -> 0 save_batch."""
     collaborators["detect_format"].return_value = "gpkg"
     collaborators["dispatch_blob_storage"].side_effect = RuntimeError(
         "S3 dispatch down"
@@ -587,16 +551,13 @@ def test_dispatch_failure_before_loop_no_save_batch_no_cleanup(collaborators):
     collaborators["db_save_file_sources_batch"].assert_not_called()
     collaborators["delete_blob"].assert_not_called()
     collaborators["build_file_source"].assert_not_called()
-    collaborators["cleanup_file"].assert_called()
 
 
 # 14. BE-HARDEN-001C E3: batch save all-or-nothing + cleanup compensativo
 
 
 def test_batch_save_called_once_with_n_rows_in_object_storage_mode(collaborators):
-    """E3 happy path: 3 layer -> 1 sola chiamata a db_save_file_sources_batch
-    con 3 row formate correttamente (file_id, group_id, name, original_filename,
-    fmt, metadata, data, storage_key, size_bytes)."""
+    """E3 happy path: 3 layer -> 1 sola chiamata a save_batch."""
     collaborators["detect_format"].return_value = "gpkg"
 
     _create_multi(collaborators, b"blob")
@@ -609,15 +570,12 @@ def test_batch_save_called_once_with_n_rows_in_object_storage_mode(collaborators
         "metadata", "data", "storage_key", "size_bytes",
     }
     for r in rows_arg:
-        assert required_keys.issubset(r.keys()), (
-            f"row mancante chiavi attese: row={r}"
-        )
+        assert required_keys.issubset(r.keys())
 
 
 def test_batch_save_failure_triggers_compensating_blob_cleanup(collaborators):
     """E3 rollback: save_batch solleva (rollback DB atomico, 0 row).
-    Se shared storage_key e' valorizzato -> delete_blob(shared_key) chiamato
-    best-effort. La eccezione DB originale propaga inalterata."""
+    delete_blob(shared_key) best-effort. La eccezione DB propaga inalterata."""
     collaborators["detect_format"].return_value = "gpkg"
     shared_kwargs = {
         "data": None,
@@ -632,20 +590,15 @@ def test_batch_save_failure_triggers_compensating_blob_cleanup(collaborators):
     with pytest.raises(RuntimeError, match="DB transaction rolled back"):
         _create_multi(collaborators)
 
-    # Cleanup compensativo eseguito col shared storage_key
     collaborators["delete_blob"].assert_called_once_with(
         "file-sources/batch_abc/data.gpkg",
     )
-    # Save batch tentato 1 volta (e fallito atomicamente)
     assert collaborators["db_save_file_sources_batch"].call_count == 1
 
 
 def test_batch_save_failure_in_bytea_mode_no_blob_cleanup_attempted(collaborators):
-    """E3 rollback in BYTEA mode (storage_key=None): save_batch fallisce ->
-    NESSUN delete_blob chiamato (non c'e' blob remoto da pulire). DB error
-    propaga normalmente."""
+    """E3 rollback in BYTEA mode (storage_key=None): NESSUN delete_blob."""
     collaborators["detect_format"].return_value = "gpkg"
-    # Default fixture e' gia' BYTEA: data=b"raw", storage_key=None
     collaborators["db_save_file_sources_batch"].side_effect = RuntimeError(
         "DB constraint violation"
     )
@@ -660,9 +613,9 @@ def test_batch_save_failure_in_bytea_mode_no_blob_cleanup_attempted(collaborator
 
 
 def test_batch_save_failure_with_cleanup_failure_logs_orphan_event(collaborators):
-    """E3 double-failure: save_batch fallisce + delete_blob a sua volta
-    fallisce -> log strutturato `event=orphan_blob_cleanup_failed` emesso,
-    eccezione DB ORIGINALE propaga (NON mascherata da cleanup error)."""
+    """E3 double-failure: save_batch fallisce + delete_blob fallisce ->
+    log strutturato `event=orphan_blob_cleanup_failed`, eccezione DB
+    ORIGINALE propaga inalterata."""
     collaborators["detect_format"].return_value = "gpkg"
     shared_kwargs = {
         "data": None,
@@ -681,8 +634,9 @@ def test_batch_save_failure_with_cleanup_failure_logs_orphan_event(collaborators
             layers_config=[{"layer": "L1"}, {"layer": "L2"}],
         )
 
-    # Log error strutturato emesso col contesto del batch_id e dell'errore
-    error_calls = [c.args[0] for c in collaborators["logger"].error.call_args_list]
+    error_calls = [
+        c.args[0] for c in collaborators["logger"].error.call_args_list
+    ]
     orphan_logs = [m for m in error_calls if "event=orphan_blob_cleanup_failed" in m]
     assert len(orphan_logs) == 1
     msg = orphan_logs[0]

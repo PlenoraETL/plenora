@@ -111,67 +111,20 @@ def test_load_dataframe_json_coerces_numeric_columns(tmp_path):
     assert df["label"].dtype == "object"
 
 
-# Path 3: temp_file_for context manager
+# Path 3: post-Phase4 — temp_file_for / temp_file_for_cm tombstoned.
+# Il leak storico e' impossibile by-construction perche' source_blob
+# non materializza piu' nulla su disco: i consumer (source_read,
+# upload, multi_layer_upload) lavorano direttamente su bytes.
 
-def test_temp_file_for_cm_yields_path_and_unlinks(tmp_path):
-    """temp_file_for_cm cancella il tempfile al with-exit
-    deterministicamente."""
+def test_temp_file_for_tombstone_post_phase4():
+    """source_blob non espone piu' temp_file_for / temp_file_for_cm.
+    Il bug di leak su tempfile e' stato eliminato by-design migrando
+    a RAM-only — niente disco = niente leak."""
     from app.core.files import source_blob
 
-    blob_data = b"fake-csv-content"
-    captured_path = None
-
-    def _db_get(file_id, include_data):
-        return {"format": "csv", "original_filename": "test.csv"}
-
-    def _get_blob(file_id, group_id):
-        return blob_data
-
-    def _mkdtemp(dir=None):
-        return tmp_path / "shp_extract"
-
-    def _safe_extract(zip_archive, target):
-        pass
-
-    def _rmtree_safe(path):
-        import shutil
-        shutil.rmtree(path, ignore_errors=True)
-
-    class _SilentLogger:
-        def warning(self, *a, **kw): pass
-        def error(self, *a, **kw): pass
-        def info(self, *a, **kw): pass
-        def debug(self, *a, **kw): pass
-
-    with source_blob.temp_file_for_cm(
-        "file-1",
-        db_get_file_source=_db_get,
-        get_blob_from_db=_get_blob,
-        temp_dir=str(tmp_path),
-        mkdtemp_writable=_mkdtemp,
-        safe_extractall=_safe_extract,
-        rmtree_safe=_rmtree_safe,
-        logger=_SilentLogger(),
-    ) as path:
-        assert path is not None
-        assert path.exists()
-        assert path.read_bytes() == blob_data
-        captured_path = path
-
-    # ANTI-REGRESSION: il tempfile DEVE essere cancellato al with-exit
-    assert not captured_path.exists(), (
-        "temp_file_for_cm NON ha cancellato il tempfile al with-exit. "
-        "Senza cleanup deterministico, l'uso del CM non elimina il leak."
+    assert not hasattr(source_blob, "temp_file_for"), (
+        "temp_file_for resta presente: refactor RAM-only incompleto."
     )
-
-
-def test_temp_file_for_atexit_registry_registered():
-    """Architectural lint: temp_file_for legacy registra atexit cleanup
-    per safety net su orphan tempfile."""
-    from app.core.files import source_blob
-
-    src = inspect.getsource(source_blob.temp_file_for)
-    assert "_register_tempfile_atexit_cleanup" in src, (
-        "temp_file_for deve registrare il tempfile in atexit registry "
-        "come safety net (caller cleanup non garantito)"
+    assert not hasattr(source_blob, "temp_file_for_cm"), (
+        "temp_file_for_cm resta presente: refactor RAM-only incompleto."
     )

@@ -1,14 +1,14 @@
 metadata:
   generated_at: '2026-05-25'
-  baseline_total: 81
+  baseline_total: 72
   by_pattern:
-    tempfile_named_temp_file: 12
     df_to_csv_path: 11
-    safe_extractall: 9
-    tempfile_mkdtemp: 7
+    tempfile_named_temp_file: 8
     df_to_excel_path: 7
     df_to_json_path: 6
     df_to_file_path: 6
+    safe_extractall: 6
+    tempfile_mkdtemp: 5
     df_to_parquet_path: 4
     path_write_text: 4
     path_write_bytes: 4
@@ -22,10 +22,10 @@ metadata:
     Phase5-export-csv-xlsx: 22
     unassigned: 15
     Phase5-legacy-path-export: 13
-    Phase4-upload-file-source: 11
     Phase6-imdf: 9
     Phase5-results-download: 5
     Phase5-scheduler-archive: 3
+    Phase4-upload-file-source: 2
     Phase7-backup-restore: 2
     Phase4-rest-file-enrichment: 1
   note: 'Auto-generated dal sweep filesystem-pattern. Aggiungere motivo/target/replacement quando si migra. Il contract test
@@ -184,30 +184,6 @@ allowed_callsites:
   snippet: df.to_csv(final_path, index=False, encoding="utf-8")
   phase: Phase5-export-csv-xlsx
   status: active-legacy
-- file: app/core/files/multi_layer_upload.py
-  line: 90
-  pattern: tempfile_named_temp_file
-  snippet: tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=temp_dir)
-  phase: Phase4-upload-file-source
-  status: active-legacy
-- file: app/core/files/multi_layer_upload.py
-  line: 104
-  pattern: safe_extractall
-  snippet: safe_extractall(z, zip_tmp_dir)
-  phase: Phase4-upload-file-source
-  status: active-legacy
-- file: app/core/files/preview_temp.py
-  line: 108
-  pattern: tempfile_named_temp_file
-  snippet: 'with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=settings.TEMP_DIR) as tmp:'
-  phase: Phase4-upload-file-source
-  status: active-legacy
-- file: app/core/files/preview_temp.py
-  line: 120
-  pattern: tempfile_mkdtemp
-  snippet: tmp_dir = Path(tempfile.mkdtemp(dir=settings.TEMP_DIR))
-  phase: Phase4-upload-file-source
-  status: active-legacy
 - file: app/core/files/service_deps.py
   line: 113
   pattern: path_write_text
@@ -220,18 +196,6 @@ allowed_callsites:
   snippet: safe_extract_zip_path(zip_path, dest_dir)
   phase: unassigned
   status: active-legacy
-- file: app/core/files/source_blob.py
-  line: 138
-  pattern: safe_extractall
-  snippet: safe_extractall(zip_archive, tmp_dir)
-  phase: Phase4-upload-file-source
-  status: active-legacy
-- file: app/core/files/source_blob.py
-  line: 161
-  pattern: tempfile_named_temp_file
-  snippet: temporary_file = tempfile.NamedTemporaryFile(
-  phase: Phase4-upload-file-source
-  status: active-legacy
 - file: app/core/files/source_loading.py
   line: 97
   pattern: path_write_bytes
@@ -242,24 +206,6 @@ allowed_callsites:
   line: 238
   pattern: path_write_bytes
   snippet: tmp_path.write_bytes(raw if isinstance(raw, bytes) else bytes(raw))
-  phase: Phase4-upload-file-source
-  status: active-legacy
-- file: app/core/files/upload.py
-  line: 19
-  pattern: tempfile_mkdtemp
-  snippet: return Path(tempfile.mkdtemp(dir=dir))
-  phase: Phase4-upload-file-source
-  status: active-legacy
-- file: app/core/files/upload.py
-  line: 79
-  pattern: tempfile_named_temp_file
-  snippet: tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=temp_dir)
-  phase: Phase4-upload-file-source
-  status: active-legacy
-- file: app/core/files/upload.py
-  line: 111
-  pattern: safe_extractall
-  snippet: safe_extractall(z, zip_tmp_dir)
   phase: Phase4-upload-file-source
   status: active-legacy
 - file: app/core/imdf/loader.py

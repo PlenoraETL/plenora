@@ -110,92 +110,21 @@ def test_extract_imdf_zip_does_not_cleanup_caller_provided_dest(tmp_path):
 # Fix 3: api_connector._rest_file _cleanup_tmp on error path
 
 
-# Fix bonus: file_service._temp_file_for branch SHP/GDB cleanup
+# Post-Phase4 (RAM-only): _temp_file_for + branch SHP/GDB rimossi.
+# Il leak su tmp_dir e' impossibile by-construction perche' il service
+# non scrive mai blob su disco. Tombstone esplicito per anti-regressione.
 
 
-def test_temp_file_for_cleans_up_tmp_dir_when_zip_extraction_fails(tmp_path):
-    """Previous behavior: il branch SHP/GDB di `_temp_file_for` faceva mkdtemp +
-    try/except che logga errore senza cleanup. Una qualsiasi exception
-    di safe_extractall lasciava la tmp dir su disco. Ora cleanup
-    garantito su entrambi i path errore (exception + nessun shp/gdb
-    trovato)."""
+def test_temp_file_for_tombstone_post_phase4():
+    """`FileSourceService._temp_file_for` e' stato rimosso (Phase4 RAM-only).
+    I consumer leggono il blob via `_get_blob_from_db` e poi delegano
+    a parser bytes-first (load_by_format_bytes / list_vector_layers)."""
     from app.core.files.service import FileSourceService
-    from app.config import settings
 
-    svc = FileSourceService.__new__(FileSourceService)
-    # Mock minimo: logger e dipendenze richieste
-    import logging
-    svc._logger = logging.getLogger(__name__)
-
-    # Patch _get_blob_from_db / get_file_source per restituire un blob
-    # non-zip (fallisce safe_extractall) con format="shp"
-    fake_meta = {"format": "shp", "original_filename": "test.shp"}
-    fake_blob = b"not a zip at all"
-
-    temp_root = Path(settings.TEMP_DIR)
-    before = {d.name for d in temp_root.iterdir() if d.is_dir()}
-
-    # N1: _temp_file_for ora chiama _assert_visible. Bypass con sentinel
-    # superadmin per isolare il test sul lifecycle temp â€” il guard
-    # cross-tenant e' testato altrove.
-    from app.core.files.service import FileSourceService
-    with patch.object(svc, "_get_blob_from_db", return_value=fake_blob), \
-         patch("app.core.files.db.get_file_source", return_value=fake_meta), \
-         patch.object(svc, "_assert_visible", return_value=None):
-        result = svc._temp_file_for(
-            "fs-1", expected_group_id=FileSourceService.SUPERADMIN_BYPASS,
-        )
-
-    assert result is None, "blob non-zip deve causare return None"
-
-    after = {d.name for d in temp_root.iterdir() if d.is_dir()}
-    new_dirs = after - before
-    assert not new_dirs, (
-        f"_temp_file_for deve cleanup tmp_dir su zip extraction error, "
-        f"ma sono rimaste: {new_dirs}"
-    )
-
-
-def test_temp_file_for_cleans_up_tmp_dir_when_no_shp_inside_valid_zip(tmp_path):
-    """Caso edge: zip valido ma senza .shp/.gdb dentro â†’ return None
-    e cleanup. Previous behavior: il fall-through al `return None` lasciava la
-    tmp_dir creata."""
-    import zipfile as _zipfile
-    import io
-    from app.core.files.service import FileSourceService
-    from app.config import settings
-
-    svc = FileSourceService.__new__(FileSourceService)
-    import logging
-    svc._logger = logging.getLogger(__name__)
-
-    # Costruiamo un zip valido che NON contiene shp/gdb
-    buf = io.BytesIO()
-    with _zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr("readme.txt", "no shapefile here")
-    fake_blob = buf.getvalue()
-
-    fake_meta = {"format": "shp", "original_filename": "test.shp"}
-
-    temp_root = Path(settings.TEMP_DIR)
-    before = {d.name for d in temp_root.iterdir() if d.is_dir()}
-
-    # N1: stesso bypass del test sopra
-    from app.core.files.service import FileSourceService
-    with patch.object(svc, "_get_blob_from_db", return_value=fake_blob), \
-         patch("app.core.files.db.get_file_source", return_value=fake_meta), \
-         patch.object(svc, "_assert_visible", return_value=None):
-        result = svc._temp_file_for(
-            "fs-1", expected_group_id=FileSourceService.SUPERADMIN_BYPASS,
-        )
-
-    assert result is None, "zip senza .shp deve causare return None"
-
-    after = {d.name for d in temp_root.iterdir() if d.is_dir()}
-    new_dirs = after - before
-    assert not new_dirs, (
-        f"_temp_file_for deve cleanup tmp_dir quando zip non contiene "
-        f".shp/.gdb, ma sono rimaste: {new_dirs}"
+    assert not hasattr(FileSourceService, "_temp_file_for"), (
+        "FileSourceService._temp_file_for resta presente: refactor "
+        "RAM-only incompleto. Rimuoverlo elimina by-construction il "
+        "leak su tmp_dir nei branch SHP/GDB."
     )
 
 

@@ -23,7 +23,6 @@ from app.core.files.multi_layer_upload import (
 from app.core.files.preview_temp import preview_file_temp as _preview_file_temp
 from app.core.files.raw_upload import create_raw_from_upload as _create_raw_from_upload
 from app.core.files.source_blob import get_blob_from_db as _read_blob_from_db
-from app.core.files.source_blob import temp_file_for
 from app.core.files import source_metadata as _source_metadata
 from app.core.files.source_read import get_layers_info as _read_layers_info
 from app.core.files.source_read import get_preview as _read_preview
@@ -31,7 +30,6 @@ from app.core.files.source_read import FileSourceLayersPayload, FileSourcePrevie
 from app.core.files.preview_temp import FilePreviewTempPayload
 from app.core.files.source_read import load_dataframe as _read_dataframe
 from app.core.files.storage_dispatch import BlobDispatchResult, dispatch_blob_storage
-from app.core.files.upload import mkdtemp_writable
 from app.core.files.service_deps import (  # noqa: F401 (public domain export)
     LoggerProtocol,
     FileSystemProtocol,
@@ -50,7 +48,6 @@ from app.core.files.helpers import (  # noqa: F401 (public domain export)
 )
 from app.shared.resources.file_cleanup import rmtree_safe
 from app.infrastructure.storage import compensation as storage_compensation
-from app.utils.zip_safe import ZipSlipError, safe_extractall
 
 # Non-blocking GDAL compatibility warning for newer GeoPackage user_version.
 warnings.filterwarnings("ignore", message=".*GeoPackage user_version.*may only be partially supported.*")
@@ -322,23 +319,6 @@ class FileSourceService:
             logger=self._logger,
         )
 
-    def _temp_file_for(
-        self, file_id: str, expected_group_id: str = None,
-    ) -> Optional[Path]:
-        from app.config import settings
-
-        return temp_file_for(
-            file_id,
-            expected_group_id=expected_group_id,
-            db_get_file_source=files_db.get_file_source,
-            get_blob_from_db=self._get_blob_from_db,
-            temp_dir=settings.TEMP_DIR,
-            mkdtemp_writable=mkdtemp_writable,
-            safe_extractall=safe_extractall,
-            rmtree_safe=rmtree_safe,
-            logger=self._logger,
-        )
-
     def get_file_source(self, file_id: str) -> Optional[FileSource]:
         return _source_metadata.get_file_source(
             file_id,
@@ -387,17 +367,10 @@ class FileSourceService:
             generate_file_id=self._generate_file_id,
             time_now=self._time.now,
             detect_format=self._detect_format,
-            list_layers=self.list_layers,
-            list_sheets=self.list_sheets,
-            load_by_format=self._load_by_format,
             column_builder_from_df=self._column_builder.from_dataframe,
             dispatch_blob_storage=self._dispatch_blob_storage,
             db_save_file_source=files_db.save_file_source,
             build_file_source=lambda **kw: FileSource(**kw),
-            cleanup=rmtree_safe,
-            safe_extractall=safe_extractall,
-            zip_slip_error=ZipSlipError,
-            temp_dir=settings.TEMP_DIR,
             default_group=settings.DEFAULT_GROUP,
             logger=self._logger,
         )
@@ -450,17 +423,11 @@ class FileSourceService:
             generate_file_id=self._generate_file_id,
             time_now=self._time.now,
             detect_format=self._detect_format,
-            load_by_format=self._load_by_format,
             column_builder_from_df=self._column_builder.from_dataframe,
             dispatch_blob_storage=self._dispatch_blob_storage,
             db_save_file_sources_batch=files_db.save_file_sources_batch,
             delete_blob=_delete_blob,
             build_file_source=lambda **kw: FileSource(**kw),
-            cleanup_dir=rmtree_safe,
-            cleanup_file=os.unlink,    # NON rmtree_safe - preserva asimmetria
-            safe_extractall=safe_extractall,
-            zip_slip_error=ZipSlipError,
-            temp_dir=settings.TEMP_DIR,
             default_group=settings.DEFAULT_GROUP,
             logger=self._logger,
         )
@@ -481,8 +448,7 @@ class FileSourceService:
             expected_group_id=expected_group_id,
             assert_visible=self._assert_visible,
             get_file_source=self.get_file_source,
-            temp_file_for=self._temp_file_for,
-            load_by_format=self._load_by_format,
+            get_blob=self._get_blob_from_db,
             logger=self._logger,
         )
 
@@ -516,9 +482,7 @@ class FileSourceService:
             expected_group_id=expected_group_id,
             assert_visible=self._assert_visible,
             get_file_source=self.get_file_source,
-            temp_file_for=self._temp_file_for,
-            list_layers=self.list_layers,
-            list_sheets=self.list_sheets,
+            get_blob=self._get_blob_from_db,
             logger=self._logger,
         )
 

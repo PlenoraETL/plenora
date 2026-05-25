@@ -1,30 +1,30 @@
 """
 Portable read/preview orchestration for FileSourceService.
 
-This module keeps DB/security-bound read workflows out of the large
-FileSourceService implementation. Callers pass side-effect collaborators
-explicitly so the storage artifact read boundary remains testable.
+Post-Phase4 refactor: bytes-first. Le funzioni `load_dataframe` /
+`get_layers_info` consumano il blob direttamente in RAM via
+`load_by_format_bytes` / `list_vector_layers` / `list_excel_sheets_from_bytes`,
+senza piu' materializzare temp file via `temp_file_for`.
+
+Il blob viene fornito dal caller come `get_blob` callable (firma
+`(file_id, expected_group_id) -> Optional[bytes]`), tipicamente
+`FileSourceService._get_blob_from_db`.
 """
 
 from __future__ import annotations
 
 import gc
 
-from pathlib import Path
 from typing import Any, Callable, Optional, Tuple
 from typing_extensions import TypedDict
 
 from app.core.dataframes.tabular import dataframe_preview_records
 from app.core.files.models import FileSourceLayersResponse, FileSourcePreview
-from app.shared.resources.file_cleanup import rmtree_safe
 
 
 AssertVisible = Callable[[str, str], None]
 GetFileSource = Callable[[str], Any]
-TempFileFor = Callable[[str, Optional[str]], Optional[Path]]
-LoadByFormat = Callable[[Path, str, Optional[str], Optional[str]], Tuple[Any, Optional[Any]]]
-ListLayers = Callable[[Path], list[str]]
-ListSheets = Callable[[Path], list[str]]
+GetBlob = Callable[[str, Optional[str]], Optional[bytes]]
 
 
 class FileSourceLayersPayload(TypedDict):
@@ -47,23 +47,6 @@ class FileSourcePreviewPayload(TypedDict):
     preview_count: int
 
 
-def _cleanup_temp_path(tmp_path: Path, format_type: str, *, logger: Any) -> None:
-    if format_type in ("shp", "gdb"):
-        try:
-            rmtree_safe(tmp_path.parent, logger=logger)
-        except Exception as e:
-            logger.debug(
-                f"cleanup load_dataframe tmp_dir fallito ({tmp_path.parent}): {e}"
-            )
-    else:
-        try:
-            rmtree_safe(tmp_path, logger=logger)
-        except Exception as e:
-            logger.debug(
-                f"cleanup load_dataframe tmp fallito ({tmp_path}): {e}"
-            )
-
-
 def load_dataframe(
     file_id: str,
     *,
@@ -72,40 +55,37 @@ def load_dataframe(
     expected_group_id: Optional[str] = None,
     assert_visible: AssertVisible,
     get_file_source: GetFileSource,
-    temp_file_for: TempFileFor,
-    load_by_format: LoadByFormat,
+    get_blob: GetBlob,
     logger: Any,
 ) -> Tuple[Any, Optional[Any]]:
-    """Load a persisted file source into a DataFrame.
+    """Load a persisted file source into a DataFrame (RAM-only).
 
     Visibility remains fail-closed: callers inject the same
-    FileSourceService._assert_visible callback used before separation.
+    `FileSourceService._assert_visible` callback.
     """
+    from app.core.dataframes.load_dispatch import load_by_format_bytes
+
     assert_visible(file_id, expected_group_id or "")
     file_source = get_file_source(file_id)
     if not file_source:
         raise ValueError(f"File source '{file_id}' non trovato")
-    tmp_path = temp_file_for(file_id, expected_group_id)
-    if not tmp_path:
+
+    blob = get_blob(file_id, expected_group_id)
+    if not blob:
         raise ValueError(f"Nessun dato trovato per '{file_id}'")
 
     try:
         use_layer = layer or file_source.layer
         use_sheet = sheet or file_source.sheet
-        df, gdf = load_by_format(tmp_path, file_source.format, use_layer, use_sheet)
+        df, gdf = load_by_format_bytes(
+            blob, file_source.format,
+            layer=use_layer, sheet=use_sheet,
+        )
         return df, gdf
     finally:
-        # Pre-fix (P1 etl-sources): l'ordine era:
-        #   1. del df, gdf
-        #   2. gc.collect()           ← prima del cleanup
-        #   3. _cleanup_temp_path
-        # Su worker memory-constrained con GeoDataFrame grandi (shp/gdb
-        # con geometrie complesse), il gc.collect tentava di liberare la
-        # memoria del GeoDataFrame PRIMA che la tmp dir + file shp/dbf/shx
-        # fossero stati rilasciati — picco di memoria spurious.
-        # Post-fix: cleanup FS PRIMA, gc.collect DOPO. La memoria di df/gdf
-        # viene rilasciata in modo deterministico dopo che la tmp e' libera.
-        _cleanup_temp_path(tmp_path, file_source.format, logger=logger)
+        # gc.collect() conservato: GeoDataFrame grandi su worker
+        # memory-constrained beneficiano della liberazione esplicita,
+        # anche se non ci sono piu' tempfile da rimuovere.
         try:
             del df, gdf
         except NameError:
@@ -119,30 +99,33 @@ def get_layers_info(
     expected_group_id: Optional[str] = None,
     assert_visible: AssertVisible,
     get_file_source: GetFileSource,
-    temp_file_for: TempFileFor,
-    list_layers: ListLayers,
-    list_sheets: ListSheets,
+    get_blob: GetBlob,
     logger: Any,
 ) -> FileSourceLayersPayload:
-    """Return layer/sheet metadata for a persisted file source."""
+    """Return layer/sheet metadata for a persisted file source (RAM-only)."""
+    from app.core.dataframes.load_dispatch import list_excel_sheets_from_bytes
+    from app.core.io.geospatial import list_vector_layers
+
     assert_visible(file_id, expected_group_id or "")
     file_source = get_file_source(file_id)
     if not file_source:
         raise ValueError(f"File source '{file_id}' non trovato")
 
-    layers = []
-    sheets = []
+    layers: list[str] = []
+    sheets: list[str] = []
     if file_source.format in ["gdb", "gpkg", "xlsx"]:
-        tmp_path = temp_file_for(file_id, expected_group_id)
-        if tmp_path:
+        blob = get_blob(file_id, expected_group_id)
+        if blob:
             try:
                 if file_source.format in ["gdb", "gpkg"]:
-                    layers = list_layers(tmp_path)
+                    layers = list_vector_layers(blob)
                 elif file_source.format == "xlsx":
-                    sheets = list_sheets(tmp_path)
-            finally:
-                cleanup_format = "gdb" if file_source.format == "gdb" else file_source.format
-                _cleanup_temp_path(tmp_path, cleanup_format, logger=logger)
+                    sheets = list_excel_sheets_from_bytes(blob)
+            except Exception as e:
+                logger.debug(
+                    f"get_layers_info inspect fallito per {file_id} "
+                    f"(fmt={file_source.format}): {e}"
+                )
 
     try:
         return FileSourceLayersResponse(
@@ -206,11 +189,8 @@ def get_preview(
 
 __all__ = [
     "AssertVisible",
+    "GetBlob",
     "GetFileSource",
-    "LoadByFormat",
-    "ListLayers",
-    "ListSheets",
-    "TempFileFor",
     "get_layers_info",
     "get_preview",
     "load_dataframe",

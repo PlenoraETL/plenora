@@ -1,14 +1,15 @@
-"""
-Smoke contract: estrazione create_from_upload.
+"""Smoke contract: estrazione create_from_upload (RAM-only, Phase4).
 
-Verifica le invarianti minime del refactor:
+Verifica le invarianti del refactor RAM-only:
+  - Nessun temp file su disco (no cleanup, no temp_dir, no safe_extractall).
+  - Schema inference via `load_by_format_bytes` (bytes -> df/gdf).
+  - Layer/sheet listing via `list_vector_layers` / `list_excel_sheets_from_bytes`.
 """
 
 from __future__ import annotations
 
 import io
 from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -32,20 +33,15 @@ def fake_logger():
 
 
 @pytest.fixture
-def collaborators(fake_logger, tmp_path):
-    """Set base di collaborator. I test sostituiscono i singoli mock
-    necessari per esercitare branch specifici."""
+def collaborators(fake_logger):
+    """Set base di collaborator RAM-only. I test sostituiscono i singoli
+    mock necessari per esercitare branch specifici."""
     fake_dto = MagicMock()
     fake_dto.model_dump = MagicMock(return_value={"k": "v"})
     return {
         "generate_file_id": MagicMock(return_value="file_abc"),
         "time_now": MagicMock(return_value=datetime(2026, 5, 2, tzinfo=timezone.utc)),
         "detect_format": MagicMock(return_value="csv"),
-        "list_layers": MagicMock(return_value=[]),
-        "list_sheets": MagicMock(return_value=[]),
-        "load_by_format": MagicMock(
-            return_value=(pd.DataFrame({"id": [1, 2, 3]}), None)
-        ),
         "column_builder_from_df": MagicMock(
             return_value=[type("C", (), {"name": "id", "type": "int"})()]
         ),
@@ -54,30 +50,36 @@ def collaborators(fake_logger, tmp_path):
         ),
         "db_save_file_source": MagicMock(),
         "build_file_source": MagicMock(return_value=fake_dto),
-        "cleanup": MagicMock(),
-        "safe_extractall": MagicMock(),
-        "zip_slip_error": RuntimeError,  # placeholder type per zip slip
-        "temp_dir": str(tmp_path),
         "default_group": "default_grp",
         "logger": fake_logger,
     }
 
 
-# 1. Happy path tabular CSV
+# 1. Happy path tabular CSV — RAM-only, niente filesystem
 
 
-def test_happy_path_csv_calls_parse_dispatch_db_save_and_cleanup(collaborators):
-    from app.core.files.upload import create_from_upload
+def test_happy_path_csv_calls_parse_dispatch_db_save(collaborators):
+    from app.core.files import upload as upload_mod
 
-    out = create_from_upload(
-        io.BytesIO(b"id\n1\n2\n3\n"), "data.csv", "MyData",
-        group_id="grp1",
-        **collaborators,
-    )
+    with patch.object(
+        upload_mod,
+        "load_by_format_bytes",
+        create=True,
+    ):
+        # Patch su load_dispatch (modulo origine) per intercettare la chiamata
+        with patch(
+            "app.core.dataframes.load_dispatch.load_by_format_bytes",
+            return_value=(pd.DataFrame({"id": [1, 2, 3]}), None),
+        ) as mock_lbf:
+            out = upload_mod.create_from_upload(
+                io.BytesIO(b"id\n1\n2\n3\n"), "data.csv", "MyData",
+                group_id="grp1",
+                **collaborators,
+            )
 
     # Pipeline chiamata
     collaborators["detect_format"].assert_called_once_with("data.csv")
-    collaborators["load_by_format"].assert_called_once()
+    mock_lbf.assert_called_once()
     collaborators["column_builder_from_df"].assert_called_once()
     collaborators["dispatch_blob_storage"].assert_called_once()
     collaborators["db_save_file_source"].assert_called_once()
@@ -89,8 +91,6 @@ def test_happy_path_csv_calls_parse_dispatch_db_save_and_cleanup(collaborators):
     assert db_kwargs["data"] == b"raw"
     assert db_kwargs["storage_key"] is None
     assert db_kwargs["size_bytes"] == 3
-    # Cleanup tmp file (non zip_tmp_dir su csv)
-    assert collaborators["cleanup"].call_count >= 1
     # DTO ritornato
     assert out is collaborators["build_file_source"].return_value
     collaborators["logger"].info.assert_called_once()
@@ -100,29 +100,32 @@ def test_happy_path_csv_calls_parse_dispatch_db_save_and_cleanup(collaborators):
 
 
 def test_happy_path_gpkg_single_layer_autopicks_and_detects_crs(collaborators):
-    from app.core.files.upload import create_from_upload
+    from app.core.files import upload as upload_mod
 
     collaborators["detect_format"].return_value = "gpkg"
-    collaborators["list_layers"].return_value = ["only_layer"]
 
-    # Costruisci un GeoDataFrame-like con .crs.to_epsg() = 4326
     fake_gdf = MagicMock()
     fake_gdf.crs = MagicMock()
     fake_gdf.crs.to_epsg = MagicMock(return_value=4326)
     fake_df = pd.DataFrame({"id": [1]})
-    collaborators["load_by_format"].return_value = (fake_df, fake_gdf)
 
-    create_from_upload(
-        io.BytesIO(b"fake gpkg"), "data.gpkg", "Geo",
-        group_id="g1",
-        **collaborators,
-    )
+    with patch(
+        "app.core.io.geospatial.list_vector_layers",
+        return_value=["only_layer"],
+    ) as mock_list, patch(
+        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        return_value=(fake_df, fake_gdf),
+    ) as mock_lbf:
+        upload_mod.create_from_upload(
+            io.BytesIO(b"fake gpkg"), "data.gpkg", "Geo",
+            group_id="g1",
+            **collaborators,
+        )
 
-    # list_layers chiamato + auto-pick del singolo layer
-    collaborators["list_layers"].assert_called_once()
-    load_args = collaborators["load_by_format"].call_args.args
-    # signature: (path, format, layer, sheet) -> layer == "only_layer"
-    assert load_args[2] == "only_layer"
+    # list_vector_layers chiamato + auto-pick del singolo layer
+    mock_list.assert_called_once()
+    # load_by_format_bytes(layer="only_layer", ...)
+    assert mock_lbf.call_args.kwargs["layer"] == "only_layer"
     # CRS = "EPSG:4326" propagato al DTO via build_file_source kwargs
     build_kwargs = collaborators["build_file_source"].call_args.kwargs
     assert build_kwargs["crs"] == "EPSG:4326"
@@ -130,20 +133,23 @@ def test_happy_path_gpkg_single_layer_autopicks_and_detects_crs(collaborators):
 
 def test_geo_crs_fallback_to_authority_when_no_epsg(collaborators):
     """Se gdf.crs.to_epsg() ritorna None, fallback a to_authority()."""
-    from app.core.files.upload import create_from_upload
+    from app.core.files import upload as upload_mod
 
     collaborators["detect_format"].return_value = "geojson"
     fake_gdf = MagicMock()
     fake_gdf.crs = MagicMock()
     fake_gdf.crs.to_epsg = MagicMock(return_value=None)
     fake_gdf.crs.to_authority = MagicMock(return_value=("ESRI", "102100"))
-    collaborators["load_by_format"].return_value = (pd.DataFrame({"a": [1]}), fake_gdf)
 
-    create_from_upload(
-        io.BytesIO(b"x"), "data.geojson", "Geo",
-        group_id="g1",
-        **collaborators,
-    )
+    with patch(
+        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        return_value=(pd.DataFrame({"a": [1]}), fake_gdf),
+    ):
+        upload_mod.create_from_upload(
+            io.BytesIO(b"x"), "data.geojson", "Geo",
+            group_id="g1",
+            **collaborators,
+        )
 
     build_kwargs = collaborators["build_file_source"].call_args.kwargs
     assert build_kwargs["crs"] == "ESRI:102100"
@@ -154,23 +160,26 @@ def test_geo_crs_fallback_to_authority_when_no_epsg(collaborators):
 
 def test_mime_block_short_circuits_before_parse_dispatch_db(collaborators):
     """mime_validate solleva MimeMismatchError -> ValueError, no side effect
-    persistente (parse/dispatch/db_save NON chiamati). Cleanup temp ESEGUITO."""
-    from app.core.files.upload import create_from_upload
+    persistente (parse/dispatch/db_save NON chiamati)."""
+    from app.core.files import upload as upload_mod
     from app.utils.mime_validator import MimeMismatchError
 
     mime = MagicMock(side_effect=MimeMismatchError("executable detected"))
 
-    with pytest.raises(ValueError, match="executable detected"):
-        create_from_upload(
-            io.BytesIO(b"MZ\x90\x00 fake"),
-            "trojan.csv", "Trojan",
-            group_id="g1",
-            mime_validate=mime,
-            **collaborators,
-        )
+    with patch(
+        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+    ) as mock_lbf:
+        with pytest.raises(ValueError, match="executable detected"):
+            upload_mod.create_from_upload(
+                io.BytesIO(b"MZ\x90\x00 fake"),
+                "trojan.csv", "Trojan",
+                group_id="g1",
+                mime_validate=mime,
+                **collaborators,
+            )
 
     # PRE-side-effect: parse / dispatch / db_save NON chiamati
-    collaborators["load_by_format"].assert_not_called()
+    mock_lbf.assert_not_called()
     collaborators["dispatch_blob_storage"].assert_not_called()
     collaborators["db_save_file_source"].assert_not_called()
     collaborators["build_file_source"].assert_not_called()
@@ -178,26 +187,25 @@ def test_mime_block_short_circuits_before_parse_dispatch_db(collaborators):
     collaborators["logger"].warning.assert_called_once()
     msg = collaborators["logger"].warning.call_args[0][0]
     assert "create_from_upload bloccato (MIME)" in msg
-    # Cleanup tmp temp comunque chiamato (best-effort)
-    collaborators["cleanup"].assert_called()
 
 
 # 4. Parse failure: best-effort, NON aborta il flusso DB save
 
 
 def test_parse_failure_continues_with_empty_columns_and_saves_to_db(collaborators):
-    """load_by_format solleva -> logger.warning, columns=[], row_count=0,
-    MA dispatch e db_save SONO comunque chiamati (preservato byte-per-byte).
-    Cleanup temp esegue."""
-    from app.core.files.upload import create_from_upload
+    """load_by_format_bytes solleva -> logger.warning, columns=[],
+    row_count=0, MA dispatch e db_save SONO comunque chiamati."""
+    from app.core.files import upload as upload_mod
 
-    collaborators["load_by_format"].side_effect = RuntimeError("parser exploded")
-
-    out = create_from_upload(
-        io.BytesIO(b"data"), "data.csv", "BadFile",
-        group_id="g1",
-        **collaborators,
-    )
+    with patch(
+        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        side_effect=RuntimeError("parser exploded"),
+    ):
+        out = upload_mod.create_from_upload(
+            io.BytesIO(b"data"), "data.csv", "BadFile",
+            group_id="g1",
+            **collaborators,
+        )
 
     # Logger warning per il parse failure
     collaborators["logger"].warning.assert_called_once()
@@ -213,8 +221,6 @@ def test_parse_failure_continues_with_empty_columns_and_saves_to_db(collaborator
     assert build_kwargs["columns"] == []
     assert build_kwargs["row_count"] == 0
     assert out is collaborators["build_file_source"].return_value
-    # Cleanup esegue
-    collaborators["cleanup"].assert_called()
 
 
 # 5. Dispatch failure (orphan guard)
@@ -222,58 +228,65 @@ def test_parse_failure_continues_with_empty_columns_and_saves_to_db(collaborator
 
 def test_dispatch_failure_propagates_no_db_save(collaborators):
     """Orphan guard: dispatch_blob_storage solleva -> exception propaga,
-    db_save_file_source NON chiamato, cleanup temp eseguito."""
-    from app.core.files.upload import create_from_upload
+    db_save_file_source NON chiamato."""
+    from app.core.files import upload as upload_mod
 
     collaborators["dispatch_blob_storage"].side_effect = RuntimeError("S3 down")
 
-    with pytest.raises(RuntimeError, match="S3 down"):
-        create_from_upload(
-            io.BytesIO(b"data"), "data.csv", "X",
-            group_id="g1",
-            **collaborators,
-        )
+    with patch(
+        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        return_value=(pd.DataFrame({"id": [1]}), None),
+    ):
+        with pytest.raises(RuntimeError, match="S3 down"):
+            upload_mod.create_from_upload(
+                io.BytesIO(b"data"), "data.csv", "X",
+                group_id="g1",
+                **collaborators,
+            )
 
-    # Build/parse OK PRIMA del dispatch
     collaborators["dispatch_blob_storage"].assert_called_once()
     # DB save NON chiamato (orphan guard)
     collaborators["db_save_file_source"].assert_not_called()
-    # Cleanup esegue (finally)
-    collaborators["cleanup"].assert_called()
 
 
 # 6. DB save failure propaga
 
 
-def test_db_save_failure_propagates_with_cleanup(collaborators):
-    from app.core.files.upload import create_from_upload
+def test_db_save_failure_propagates(collaborators):
+    from app.core.files import upload as upload_mod
 
     collaborators["db_save_file_source"].side_effect = RuntimeError("DB write fail")
 
-    with pytest.raises(RuntimeError, match="DB write fail"):
-        create_from_upload(
-            io.BytesIO(b"data"), "data.csv", "X",
-            group_id="g1",
-            **collaborators,
-        )
+    with patch(
+        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        return_value=(pd.DataFrame({"id": [1]}), None),
+    ):
+        with pytest.raises(RuntimeError, match="DB write fail"):
+            upload_mod.create_from_upload(
+                io.BytesIO(b"data"), "data.csv", "X",
+                group_id="g1",
+                **collaborators,
+            )
 
     # Dispatch chiamato PRIMA del fail
     collaborators["dispatch_blob_storage"].assert_called_once()
-    # Cleanup esegue (finally)
-    collaborators["cleanup"].assert_called()
 
 
 # 7. group_id None -> default_group propagato
 
 
 def test_default_group_used_when_group_id_is_none(collaborators):
-    from app.core.files.upload import create_from_upload
+    from app.core.files import upload as upload_mod
 
-    create_from_upload(
-        io.BytesIO(b"data"), "data.csv", "X",
-        group_id=None,
-        **collaborators,
-    )
+    with patch(
+        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        return_value=(pd.DataFrame({"id": [1]}), None),
+    ):
+        upload_mod.create_from_upload(
+            io.BytesIO(b"data"), "data.csv", "X",
+            group_id=None,
+            **collaborators,
+        )
 
     # DTO + DB save: stesso group_id (default_grp)
     build_kwargs = collaborators["build_file_source"].call_args.kwargs
@@ -295,9 +308,6 @@ def test_file_source_service_create_from_upload_delegates_to_core_module():
     svc._detect_format = MagicMock(return_value="csv")
     svc._time = MagicMock()
     svc._time.now = MagicMock(return_value=datetime.now(timezone.utc))
-    svc.list_layers = MagicMock(return_value=[])
-    svc.list_sheets = MagicMock(return_value=[])
-    svc._load_by_format = MagicMock(return_value=(pd.DataFrame({"a": [1]}), None))
     svc._column_builder = MagicMock()
     svc._column_builder.from_dataframe = MagicMock(return_value=[])
     svc._dispatch_blob_storage = MagicMock(
@@ -319,22 +329,19 @@ def test_file_source_service_create_from_upload_delegates_to_core_module():
     assert out is fake_dto
     mock_impl.assert_called_once()
     kwargs = mock_impl.call_args.kwargs
-    # Verifica che i 17 collaborator siano passati col binding corretto
+    # Verifica che i collaborator RAM-only siano passati col binding corretto
     assert kwargs["generate_file_id"] is svc._generate_file_id
     assert kwargs["time_now"] is svc._time.now
     assert kwargs["detect_format"] is svc._detect_format
-    assert kwargs["list_layers"] is svc.list_layers
-    assert kwargs["list_sheets"] is svc.list_sheets
-    assert kwargs["load_by_format"] is svc._load_by_format
     assert kwargs["column_builder_from_df"] is svc._column_builder.from_dataframe
     assert kwargs["dispatch_blob_storage"] is svc._dispatch_blob_storage
     assert callable(kwargs["db_save_file_source"])
     assert callable(kwargs["build_file_source"])
-    assert callable(kwargs["cleanup"])
-    assert callable(kwargs["safe_extractall"])
-    assert isinstance(kwargs["zip_slip_error"], type)
-    # temp_dir: il service passa settings.TEMP_DIR che puo' essere
-    # str o Path (entrambi accettati da tempfile.NamedTemporaryFile).
-    assert isinstance(kwargs["temp_dir"], (str, Path))
     assert isinstance(kwargs["default_group"], str)
     assert kwargs["logger"] is svc._logger
+    # Collaborator legacy NON piu' iniettati (verifica esplicita del cut)
+    for legacy in (
+        "list_layers", "list_sheets", "load_by_format",
+        "cleanup", "safe_extractall", "zip_slip_error", "temp_dir",
+    ):
+        assert legacy not in kwargs, f"collaborator legacy {legacy} ancora iniettato"

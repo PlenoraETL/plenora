@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -16,6 +17,61 @@ from app.core.dataframes.ports import (
 
 
 _GEOSPATIAL_FORMATS = ("geojson", "gpkg", "shp", "gdb")
+_ZIP_LIKE_FORMATS = ("zip",)
+
+
+def load_by_format_bytes(
+    data: bytes,
+    format_type: str,
+    layer: Optional[str] = None,
+    sheet: Optional[str] = None,
+) -> Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+    """RAM-only dispatch da bytes — non passa per filesystem.
+
+    Equivalente bytes-first di `load_by_format`: usa
+    `_load_dataframe_from_bytes` (frame_io) per i formati tabulari +
+    `read_vector_bytes` (io.geospatial) per i formati vector. Per ZIP
+    delega a `_load_dataframe_from_bytes(..., format_hint="zip")` che
+    a sua volta usa pyogrio /vsizip per shapefile/gdb e
+    zipfile+dispatch per single-file zippato.
+
+    Ritorna `(df, gdf)`: gdf e' un GeoDataFrame quando il formato e'
+    spaziale, altrimenti None. df e' sempre un DataFrame pandas (per
+    i geospatial e' la versione tabular del gdf con geometry serial-
+    izzata via geometry_series_to_wkt).
+    """
+    from app.core.dataframes.frame_io import _load_dataframe_from_bytes
+
+    gdf: Optional[pd.DataFrame] = None
+
+    if format_type in _GEOSPATIAL_FORMATS or format_type in _ZIP_LIKE_FORMATS:
+        # _load_dataframe_from_bytes per gpkg/shp/zip/gdb passa via
+        # pyogrio (vector bytes nativi) e ritorna GeoDataFrame.
+        gdf = _load_dataframe_from_bytes(
+            data, format_hint=format_type, sheet=sheet, layer=layer,
+        )
+        df = pd.DataFrame(gdf)
+        if "geometry" in df.columns:
+            from app.core.dataframes.geometry_serialization import (
+                geometry_series_to_wkt,
+            )
+            df["geometry"] = geometry_series_to_wkt(gdf.geometry)
+        return df, gdf
+
+    df = _load_dataframe_from_bytes(
+        data, format_hint=format_type, sheet=sheet, layer=layer,
+    )
+    return df, None
+
+
+def list_excel_sheets_from_bytes(data: bytes) -> list[str]:
+    """List worksheet names in an XLSX file from bytes (no filesystem)."""
+    from openpyxl import load_workbook
+    wb = load_workbook(BytesIO(data), read_only=True, data_only=True)
+    try:
+        return list(wb.sheetnames)
+    finally:
+        wb.close()
 
 
 def load_frame_by_format(
@@ -87,6 +143,8 @@ __all__ = [
     "FrameIOEngine",
     "LoadedFrame",
     "LoggerProtocol",
+    "list_excel_sheets_from_bytes",
     "load_by_format",
+    "load_by_format_bytes",
     "load_frame_by_format",
 ]

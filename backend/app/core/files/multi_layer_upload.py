@@ -1,16 +1,21 @@
-"""Multi-layer and multi-sheet upload parsing."""
+"""Multi-layer and multi-sheet upload parsing.
+
+Post-Phase4 refactor: RAM-only. Niente piu' NamedTemporaryFile /
+mkdtemp_writable / safe_extractall — il payload upload e' navigato
+in memoria via `zipfile.ZipFile(BytesIO(...))` e i parser bytes-first
+di `app.core.dataframes.load_dispatch`.
+"""
 
 from __future__ import annotations
 
-import tempfile
 import uuid
 import zipfile
+from io import BytesIO
 from pathlib import Path
-from typing import Any, BinaryIO, Callable, Dict, List, Optional, Tuple
+from typing import Any, BinaryIO, Callable, Dict, List, Optional
 
 from app.core.files.db import FileSourceRow
 from app.core.files.storage_dispatch import BlobDispatchResult
-from app.core.files.upload import mkdtemp_writable
 from app.utils.mime_validator import MimeMismatchError, validate_no_executable
 
 
@@ -26,24 +31,19 @@ def create_multi_layer_from_upload(
     generate_file_id: Callable[[str], str],
     time_now: Callable[[], Any],
     detect_format: Callable[[str], str],
-    load_by_format: Callable[..., Tuple[Any, Optional[Any]]],
     column_builder_from_df: Callable[..., List[Any]],
     dispatch_blob_storage: Callable[..., BlobDispatchResult],
     db_save_file_sources_batch: Callable[[List[FileSourceRow]], None],
     delete_blob: Callable[[str], None],
     build_file_source: Callable[..., Any],
-    cleanup_dir: Callable[[Any], None],
-    cleanup_file: Callable[[Any], None],
-    safe_extractall: Callable[..., None],
-    zip_slip_error: type,
-    temp_dir: str,
     default_group: str,
     logger,
     mime_validate: Optional[Callable[..., None]] = None,
 ) -> List[Any]:
     """Crea N FileSource da un file multi-layer (GPKG/GDB) o multi-sheet (XLSX).
 
-    Vedi docstring del modulo per invarianti e collaborator.
+    RAM-only: tutto il payload e' processato in memoria. Vedi docstring
+    del modulo per invarianti e collaborator.
 
     Args:
         layers_config: lista di dict con chiavi opzionali:
@@ -53,18 +53,18 @@ def create_multi_layer_from_upload(
 
     Returns:
         Lista di FileSource costruiti via build_file_source (uno per layer
-        configurato; il numero corrisponde a len(layers_config) ECCETTO
-        in caso di propagazione exception, dove i precedenti sono comunque
-        persistiti su DB ma la lista ritornata e' parziale o non ritornata).
+        configurato).
 
     Raises:
         ValueError: layers_config vuoto/None, MIME block, ZIP malformato
-                    o path traversal.
+                    o nessun file supportato nel ZIP.
         Exception: dispatch_blob_storage / db_save_file_sources_batch
-                    propagano la loro eccezione. e' atomico
-                    (E3): rollback DB + cleanup compensativo del shared
-                    storage_key best-effort.
+                    propagano la loro eccezione. atomico (E3): rollback
+                    DB + cleanup compensativo del shared storage_key
+                    best-effort.
     """
+    from app.core.dataframes.load_dispatch import load_by_format_bytes
+
     if mime_validate is None:
         mime_validate = validate_no_executable
 
@@ -74,7 +74,7 @@ def create_multi_layer_from_upload(
     file_content.seek(0)
     raw_data = file_content.read()
 
-    # MIME validation runs before temp files, blob dispatch, or DB writes.
+    # MIME validation runs before parse, blob dispatch, or DB writes.
     try:
         mime_validate(content=raw_data, filename=filename or name)
     except Exception as e:
@@ -86,199 +86,191 @@ def create_multi_layer_from_upload(
             raise ValueError(str(e)) from e
         raise
 
-    suffix = Path(filename).suffix or ".bin"
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=temp_dir)
-    tmp.write(raw_data)
-    tmp.close()
-    tmp_path = Path(tmp.name)
-
-    zip_tmp_dir: Optional[Path] = None
-    zip_raw_data = raw_data  # MULTI-GDB-001: conserva ZIP originale per GDB
     format_type = detect_format(filename)
+    # `inner_bytes` e' il payload usato per la schema inference (per ZIP
+    # con .gdb interno = lo ZIP intero che pyogrio legge via /vsizip;
+    # per ZIP con .gpkg interno = i bytes del gpkg estratti dallo ZIP).
+    inner_bytes = raw_data
 
-    try:
-        if format_type == 'zip':
-            zip_tmp_dir = mkdtemp_writable(dir=temp_dir)
-            try:
-                with zipfile.ZipFile(tmp_path, 'r') as z:
-                    safe_extractall(z, zip_tmp_dir)
-            except zipfile.BadZipFile as e:
-                raise ValueError(f"File ZIP non valido o corrotto: {e}") from e
-            except zip_slip_error as e:
-                raise ValueError(f"File ZIP rifiutato (path traversal): {e}") from e
-            extracted_files = [
-                f for f in zip_tmp_dir.rglob("*")
-                if f.is_file() or (f.is_dir() and f.suffix.lower() == ".gdb")
-            ]
-            # NB: SOLO .gpkg / .gdb (NO SHP/CSV come create_from_upload
-            for ext in ['.gpkg', '.gdb']:
-                match = next(
-                    (f for f in extracted_files if f.suffix.lower() == ext), None,
+    if format_type == 'zip':
+        # Pre-fix: estraeva su mkdtemp + safe_extractall, navigava la dir
+        # per estensione, leggeva i bytes del path. Post-fix: navigazione
+        # del ZIP in RAM via zipfile.ZipFile(BytesIO). NB: SOLO .gpkg /
+        # .gdb (no .shp/.csv come create_from_upload).
+        try:
+            with zipfile.ZipFile(BytesIO(raw_data), 'r') as z:
+                names = z.namelist()
+
+                inner_name: Optional[str] = None
+                inner_format: Optional[str] = None
+                for ext_with_dot in ('.gpkg', '.gdb'):
+                    match = next(
+                        (n for n in names if n.lower().endswith(ext_with_dot)
+                         or (ext_with_dot == '.gdb'
+                             and ext_with_dot + '/' in n.lower())),
+                        None,
+                    )
+                    if match:
+                        inner_name = match
+                        inner_format = detect_format(Path(match).name)
+                        break
+
+                if inner_name is None:
+                    raise ValueError(
+                        f"ZIP non riconosciuto: nessun .gpkg/.gdb. "
+                        f"Contenuto: "
+                        f"{names[:10]}{'...' if len(names) > 10 else ''}"
+                    )
+
+                format_type = inner_format
+                filename = Path(inner_name).name
+                if inner_format == 'gdb':
+                    # .gdb e' una directory: pyogrio legge lo ZIP intero
+                    # via /vsizip (raw_data resta lo ZIP); inner_bytes
+                    # punta allo stesso ZIP per parse.
+                    inner_bytes = raw_data
+                else:
+                    # .gpkg single-file: estrai i bytes dal ZIP. Per il
+                    # blob di storage manteniamo lo ZIP originale (raw_data)
+                    # — nota: la versione pre-fix invece sostituiva il
+                    # blob con i bytes del file estratto. Mantengo il
+                    # comportamento pre-fix per non rompere downstream:
+                    raw_data = z.read(inner_name)
+                    inner_bytes = raw_data
+        except zipfile.BadZipFile as e:
+            raise ValueError(f"File ZIP non valido o corrotto: {e}") from e
+
+    # Determina se stiamo lavorando con layer (gpkg/gdb) o sheet (xlsx).
+    is_sheet_based = format_type in ['xlsx', 'xls']
+
+    now = time_now()
+
+    # BE-HARDEN-001C E1 - shared blob dispatch
+    # 1 chiamata a dispatch_blob_storage PRIMA del loop con
+    # `storage_key_id=batch_id`. Le N row in object_storage path
+    # condividono lo stesso storage_key. In BYTEA path le N row
+    # hanno gli stessi `data` bytes
+    # Failure pre-loop -> nessuna row, nessun cleanup necessario
+    # orphan guard interno al dispatch.
+    batch_id = f"batch_{uuid.uuid4().hex}"
+    shared_blob_kwargs = dispatch_blob_storage(
+        batch_id, raw_data, filename,
+        storage_key_id=batch_id,
+    )
+
+    # Loop di staging: parse + DTO build per ogni layer, ZERO side
+    # effect DB. La persistenza avviene UNA volta sola dopo il loop
+    # via db_save_file_sources_batch (E3 atomic transaction).
+    created: List[Any] = []
+    rows: List[FileSourceRow] = []
+    for layer_cfg in layers_config:
+        layer = layer_cfg.get("layer") or layer_cfg.get("sheet")
+        selected_columns = layer_cfg.get("selected_columns")
+
+        safe_layer = (
+            layer.replace(" ", "_").replace("-", "_") if layer else "default"
+        )
+        file_source_name = f"{name}_{safe_layer}"
+        file_id = generate_file_id(file_source_name)
+
+        columns: List[Any] = []
+        row_count = 0
+        crs: Optional[str] = None
+        try:
+            if is_sheet_based:
+                df, gdf = load_by_format_bytes(
+                    inner_bytes, format_type, layer=None, sheet=layer,
                 )
-                if match:
-                    tmp_path = match
-                    format_type = detect_format(match.name)
-                    filename = match.name
-                    # MULTI-GDB-001 fix: per .gdb (directory) `read_bytes`
-                    # solleverebbe IsADirectoryError. Conserviamo il ZIP
-                    # originale come blob (analogo a create_from_upload
-                    # Per .gpkg (file), leggiamo i bytes del path estratto
-                    if format_type == 'gdb':
-                        raw_data = zip_raw_data
-                    else:
-                        raw_data = tmp_path.read_bytes()
-                    break
+            else:
+                df, gdf = load_by_format_bytes(
+                    inner_bytes, format_type, layer=layer, sheet=None,
+                )
+            if selected_columns:
+                valid_cols = [c for c in selected_columns if c in df.columns]
+                if valid_cols:
+                    df = df[valid_cols]
+            columns = column_builder_from_df(df, gdf, srid)
+            row_count = len(df)
+            if gdf is not None and hasattr(gdf, 'crs') and gdf.crs:
+                epsg = gdf.crs.to_epsg()
+                if epsg:
+                    crs = f"EPSG:{epsg}"
+                else:
+                    auth = gdf.crs.to_authority()
+                    crs = f"{auth[0]}:{auth[1]}" if auth else str(gdf.crs)
+            elif srid:
+                crs = f"EPSG:{srid}"
+        except Exception as e:
+            logger.warning(f"Errore inferenza colonne layer '{layer}': {e}")
 
-        # Determina se stiamo lavorando con layer (gpkg/gdb) o sheet (xlsx
-        is_sheet_based = format_type in ['xlsx', 'xls']
+        columns_dicts = [
+            {"name": c.name, "type": c.type} if not isinstance(c, dict) else c
+            for c in columns
+        ]
 
-        now = time_now()
-
-        # BE-HARDEN-001C E1 - shared blob dispatch
-        # 1 chiamata a dispatch_blob_storage PRIMA del loop con
-        # `storage_key_id=batch_id`. Le N row in object_storage path
-        # condividono lo stesso storage_key. In BYTEA path le N row
-        # hanno gli stessi `data` bytes
-        # Failure pre-loop -> nessuna row, nessun cleanup necessario
-        # orphan guard interno al dispatch
-        batch_id = f"batch_{uuid.uuid4().hex}"
-        shared_blob_kwargs = dispatch_blob_storage(
-            batch_id, raw_data, filename,
-            storage_key_id=batch_id,
+        file_source = build_file_source(
+            id=file_id,
+            name=file_source_name,
+            description=description,
+            original_filename=filename,
+            format=format_type,
+            layer=None if is_sheet_based else layer,
+            sheet=layer if is_sheet_based else None,
+            columns=columns_dicts,
+            row_count=row_count,
+            file_size=len(raw_data),
+            crs=crs,
+            group_id=group_id or default_group,
+            created_at=now,
+            updated_at=now,
         )
 
-        # Loop di staging: parse + DTO build per ogni layer, ZERO side
-        # effect DB. La persistenza avviene UNA volta sola dopo il loop
-        # via db_save_file_sources_batch (E3 atomic transaction
-        created: List[Any] = []
-        rows: List[FileSourceRow] = []
-        for layer_cfg in layers_config:
-            # Supporta sia {"layer": "nome"} che {"sheet": "nome"}
-            layer = layer_cfg.get("layer") or layer_cfg.get("sheet")
-            selected_columns = layer_cfg.get("selected_columns")
+        metadata = (
+            file_source.model_dump(mode='json')
+            if hasattr(file_source, 'model_dump')
+            else {}
+        )
 
-            safe_layer = layer.replace(" ", "_").replace("-", "_") if layer else "default"
-            file_source_name = f"{name}_{safe_layer}"
-            file_id = generate_file_id(file_source_name)
+        rows.append({
+            "file_id": file_id,
+            "group_id": group_id or default_group,
+            "name": file_source_name,
+            "original_filename": filename,
+            "fmt": format_type,
+            "metadata": metadata,
+            **shared_blob_kwargs,
+        })
+        created.append(file_source)
 
-            # Inferenza colonne / row_count / CRS - BEST EFFORT PER-LAYER
-            # Se fallisce, logger.warning + columns=[] / row_count=0 / crs=None
-            # il loop CONTINUA sui successivi layer (soft-preserve, E3
-            # decision documentata nello scope
-            columns: List[Any] = []
-            row_count = 0
-            crs: Optional[str] = None
-            try:
-                if is_sheet_based:
-                    df, gdf = load_by_format(tmp_path, format_type, None, layer)
-                else:
-                    df, gdf = load_by_format(tmp_path, format_type, layer, None)
-                if selected_columns:
-                    # Filter inline: 3 LOC pure, evita callback dedicato
-                    valid_cols = [c for c in selected_columns if c in df.columns]
-                    if valid_cols:
-                        df = df[valid_cols]
-                columns = column_builder_from_df(df, gdf, srid)
-                row_count = len(df)
-                if gdf is not None and hasattr(gdf, 'crs') and gdf.crs:
-                    epsg = gdf.crs.to_epsg()
-                    if epsg:
-                        crs = f"EPSG:{epsg}"
-                    else:
-                        auth = gdf.crs.to_authority()
-                        crs = f"{auth[0]}:{auth[1]}" if auth else str(gdf.crs)
-                elif srid:
-                    crs = f"EPSG:{srid}"
-            except Exception as e:
-                logger.warning(f"Errore inferenza colonne layer '{layer}': {e}")
-
-            columns_dicts = [
-                {"name": c.name, "type": c.type} if not isinstance(c, dict) else c
-                for c in columns
-            ]
-
-            file_source = build_file_source(
-                id=file_id,
-                name=file_source_name,
-                description=description,
-                original_filename=filename,
-                format=format_type,
-                layer=None if is_sheet_based else layer,
-                sheet=layer if is_sheet_based else None,
-                columns=columns_dicts,
-                row_count=row_count,
-                file_size=len(raw_data),
-                crs=crs,
-                group_id=group_id or default_group,
-                created_at=now,
-                updated_at=now,
-            )
-
-            metadata = (
-                file_source.model_dump(mode='json')
-                if hasattr(file_source, 'model_dump')
-                else {}
-            )
-
-            rows.append({
-                "file_id": file_id,
-                "group_id": group_id or default_group,
-                "name": file_source_name,
-                "original_filename": filename,
-                "fmt": format_type,
-                "metadata": metadata,
-                **shared_blob_kwargs,
-            })
-            created.append(file_source)
-
-        # BE-HARDEN-001C E3 - all-or-nothing
-        # Una sola transazione DB attorno alle N INSERT (via
-        # save_file_sources_batch). Se solleva, cleanup compensativo
-        # del shared storage_key (best-effort) prima che la eccezione
-        # DB propaghi. Un eventuale fail del cleanup -> log strutturato
-        # `event=orphan_blob_cleanup_failed` SENZA mascherare la cause
-        # root
-        committed = False
-        try:
-            db_save_file_sources_batch(rows)
-            committed = True
-        finally:
-            if not committed:
-                shared_key = shared_blob_kwargs.get("storage_key")
-                if shared_key:
-                    try:
-                        delete_blob(shared_key)
-                    except Exception as cleanup_err:
-                        logger.error(
-                            f"event=orphan_blob_cleanup_failed "
-                            f"batch_id={batch_id} "
-                            f"storage_key={shared_key!r} "
-                            f"error={cleanup_err!r}"
-                        )
-
-        for fs in created:
-            logger.info(
-                f"FileSource multi-layer creato: {fs.id} "
-                f"layer={getattr(fs, 'layer', None)!r} "
-                f"sheet={getattr(fs, 'sheet', None)!r}"
-            )
-
-        return created
-
+    # BE-HARDEN-001C E3 - all-or-nothing
+    # Una sola transazione DB attorno alle N INSERT (via
+    # save_file_sources_batch). Se solleva, cleanup compensativo
+    # del shared storage_key (best-effort) prima che la eccezione
+    # DB propaghi. Un eventuale fail del cleanup -> log strutturato
+    # `event=orphan_blob_cleanup_failed` SENZA mascherare la causa root.
+    committed = False
+    try:
+        db_save_file_sources_batch(rows)
+        committed = True
     finally:
-        # Cleanup ASIMMETRICO (preservato verbatim
-        # tmp file: cleanup_file (in produzione = os.unlink
-        # zip_tmp_dir: cleanup_dir (in produzione = rmtree_safe
-        try:
-            cleanup_file(tmp.name)
-        except Exception as e:
-            logger.debug(
-                f"cleanup tmp multi-layer fallito ({tmp.name}): {e}"
-            )
-        if zip_tmp_dir is not None:
-            try:
-                cleanup_dir(zip_tmp_dir)
-            except Exception as e:
-                logger.debug(
-                    f"cleanup zip_tmp_dir multi-layer fallito ({zip_tmp_dir}): {e}"
-                )
+        if not committed:
+            shared_key = shared_blob_kwargs.get("storage_key")
+            if shared_key:
+                try:
+                    delete_blob(shared_key)
+                except Exception as cleanup_err:
+                    logger.error(
+                        f"event=orphan_blob_cleanup_failed "
+                        f"batch_id={batch_id} "
+                        f"storage_key={shared_key!r} "
+                        f"error={cleanup_err!r}"
+                    )
+
+    for fs in created:
+        logger.info(
+            f"FileSource multi-layer creato: {fs.id} "
+            f"layer={getattr(fs, 'layer', None)!r} "
+            f"sheet={getattr(fs, 'sheet', None)!r}"
+        )
+
+    return created

@@ -1,6 +1,5 @@
-"""Smoke contract for file source blob/materialization helpers."""
+"""Smoke contract for file source blob read helpers (RAM-only, Phase4)."""
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 
@@ -51,27 +50,19 @@ def test_get_blob_from_db_retries_shared_fetch_with_loader_bypass():
     assert load_blob.call_args_list[1].kwargs["is_superadmin"] is True
 
 
-def test_temp_file_for_materializes_single_file_with_original_suffix(tmp_path):
-    from app.core.files.source_blob import temp_file_for
+def test_temp_file_for_tombstone_removed_phase4():
+    """Post-Phase4: temp_file_for / temp_file_for_cm sono stati rimossi.
+    I consumer usano `get_blob_from_db` direttamente + bytes-first
+    parser (load_by_format_bytes, list_vector_layers).
+    """
+    from app.core.files import source_blob
 
-    result = temp_file_for(
-        "file-1",
-        expected_group_id="grp-1",
-        db_get_file_source=MagicMock(
-            return_value={"format": "csv", "original_filename": "source.csv"}
-        ),
-        get_blob_from_db=MagicMock(return_value=b"a,b\n1,2\n"),
-        temp_dir=str(tmp_path),
-        mkdtemp_writable=MagicMock(),
-        safe_extractall=MagicMock(),
-        rmtree_safe=MagicMock(),
-        logger=MagicMock(),
+    assert not hasattr(source_blob, "temp_file_for"), (
+        "temp_file_for resta presente: il refactor RAM-only non e' completo."
     )
-
-    assert isinstance(result, Path)
-    assert result.suffix == ".csv"
-    assert result.read_bytes() == b"a,b\n1,2\n"
-    result.unlink()
+    assert not hasattr(source_blob, "temp_file_for_cm"), (
+        "temp_file_for_cm resta presente: il refactor RAM-only non e' completo."
+    )
 
 
 def test_file_source_service_blob_facade_delegates():

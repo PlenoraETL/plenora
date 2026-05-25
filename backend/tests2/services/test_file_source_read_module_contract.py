@@ -1,5 +1,4 @@
-"""
-Smoke contract: file source read orchestration.
+"""Smoke contract: file source read orchestration (RAM-only, Phase4).
 
 The module under test is go-ready: every side-effect/collaborator is passed
 """
@@ -40,45 +39,44 @@ def _file_source(fmt="csv", *, layer=None, sheet=None, columns=None):
     )
 
 
-def test_load_dataframe_uses_explicit_collaborators_and_cleans_temp(tmp_path):
+def test_load_dataframe_uses_explicit_collaborators_bytes_first():
     from app.core.files.source_read import load_dataframe
 
-    tmp_file = tmp_path / "source.csv"
-    tmp_file.write_text("city\nRome\n", encoding="utf-8")
     df = pd.DataFrame({"city": ["Rome"]})
     logger = MagicMock()
     assert_visible = MagicMock()
     get_file_source = MagicMock(return_value=_file_source("csv"))
-    temp_file_for = MagicMock(return_value=tmp_file)
-    load_by_format = MagicMock(return_value=(df, None))
+    get_blob = MagicMock(return_value=b"city\nRome\n")
 
-    with patch("app.shared.resources.file_cleanup.rmtree_safe") as cleanup:
+    with patch(
+        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        return_value=(df, None),
+    ) as load_by_format_bytes:
         result_df, result_gdf = load_dataframe(
             "file-1",
             expected_group_id="grp-1",
             assert_visible=assert_visible,
             get_file_source=get_file_source,
-            temp_file_for=temp_file_for,
-            load_by_format=load_by_format,
+            get_blob=get_blob,
             logger=logger,
         )
 
     assert result_df is df
     assert result_gdf is None
     assert_visible.assert_called_once_with("file-1", "grp-1")
-    temp_file_for.assert_called_once_with("file-1", "grp-1")
-    load_by_format.assert_called_once_with(tmp_file, "csv", None, None)
-    cleanup.assert_called_once_with(tmp_file, logger=logger)
+    get_blob.assert_called_once_with("file-1", "grp-1")
+    load_by_format_bytes.assert_called_once_with(
+        b"city\nRome\n", "csv", layer=None, sheet=None,
+    )
 
 
-def test_load_dataframe_prefers_explicit_layer_and_sheet(tmp_path):
+def test_load_dataframe_prefers_explicit_layer_and_sheet():
     from app.core.files.source_read import load_dataframe
 
-    tmp_file = tmp_path / "source.xlsx"
-    tmp_file.write_text("x", encoding="utf-8")
-    load_by_format = MagicMock(return_value=(pd.DataFrame({"x": [1]}), None))
-
-    with patch("app.shared.resources.file_cleanup.rmtree_safe"):
+    with patch(
+        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        return_value=(pd.DataFrame({"x": [1]}), None),
+    ) as load_by_format_bytes:
         load_dataframe(
             "file-1",
             layer="explicit-layer",
@@ -86,15 +84,17 @@ def test_load_dataframe_prefers_explicit_layer_and_sheet(tmp_path):
             expected_group_id="grp-1",
             assert_visible=MagicMock(),
             get_file_source=MagicMock(
-                return_value=_file_source("xlsx", layer="stored-layer", sheet="stored-sheet")
+                return_value=_file_source(
+                    "xlsx", layer="stored-layer", sheet="stored-sheet",
+                ),
             ),
-            temp_file_for=MagicMock(return_value=tmp_file),
-            load_by_format=load_by_format,
+            get_blob=MagicMock(return_value=b"xlsx-bytes"),
             logger=MagicMock(),
         )
 
-    load_by_format.assert_called_once_with(
-        tmp_file, "xlsx", "explicit-layer", "explicit-sheet"
+    load_by_format_bytes.assert_called_once_with(
+        b"xlsx-bytes", "xlsx",
+        layer="explicit-layer", sheet="explicit-sheet",
     )
 
 
@@ -107,62 +107,70 @@ def test_load_dataframe_raises_when_metadata_is_missing():
             expected_group_id="grp-1",
             assert_visible=MagicMock(),
             get_file_source=MagicMock(return_value=None),
-            temp_file_for=MagicMock(),
-            load_by_format=MagicMock(),
+            get_blob=MagicMock(),
             logger=MagicMock(),
         )
 
 
-def test_get_layers_info_lists_geospatial_layers_and_cleans_temp(tmp_path):
+def test_load_dataframe_raises_when_blob_missing():
+    from app.core.files.source_read import load_dataframe
+
+    with pytest.raises(ValueError, match="Nessun dato trovato"):
+        load_dataframe(
+            "file-1",
+            expected_group_id="grp-1",
+            assert_visible=MagicMock(),
+            get_file_source=MagicMock(return_value=_file_source("csv")),
+            get_blob=MagicMock(return_value=None),
+            logger=MagicMock(),
+        )
+
+
+def test_get_layers_info_lists_geospatial_layers_bytes_first():
     from app.core.files.source_read import get_layers_info
 
-    tmp_file = tmp_path / "source.gpkg"
-    tmp_file.write_text("x", encoding="utf-8")
     logger = MagicMock()
-    list_layers = MagicMock(return_value=["roads", "buildings"])
+    get_blob = MagicMock(return_value=b"gpkg-bytes")
 
-    with patch("app.shared.resources.file_cleanup.rmtree_safe") as cleanup:
+    with patch(
+        "app.core.io.geospatial.list_vector_layers",
+        return_value=["roads", "buildings"],
+    ) as list_vector_layers:
         result = get_layers_info(
             "file-1",
             expected_group_id="grp-1",
             assert_visible=MagicMock(),
             get_file_source=MagicMock(return_value=_file_source("gpkg")),
-            temp_file_for=MagicMock(return_value=tmp_file),
-            list_layers=list_layers,
-            list_sheets=MagicMock(),
+            get_blob=get_blob,
             logger=logger,
         )
 
     plain = _plain(result)
     assert plain["layers"] == ["roads", "buildings"]
     assert plain["sheets"] == []
-    list_layers.assert_called_once_with(tmp_file)
-    cleanup.assert_called_once_with(tmp_file, logger=logger)
+    list_vector_layers.assert_called_once_with(b"gpkg-bytes")
 
 
-def test_get_layers_info_lists_excel_sheets(tmp_path):
+def test_get_layers_info_lists_excel_sheets_bytes_first():
     from app.core.files.source_read import get_layers_info
 
-    tmp_file = tmp_path / "source.xlsx"
-    tmp_file.write_text("x", encoding="utf-8")
-    list_sheets = MagicMock(return_value=["Sheet1", "Sheet2"])
-
-    with patch("app.shared.resources.file_cleanup.rmtree_safe"):
+    with patch(
+        "app.core.dataframes.load_dispatch.list_excel_sheets_from_bytes",
+        return_value=["Sheet1", "Sheet2"],
+    ) as list_sheets:
         result = get_layers_info(
             "file-1",
             expected_group_id="grp-1",
             assert_visible=MagicMock(),
             get_file_source=MagicMock(return_value=_file_source("xlsx")),
-            temp_file_for=MagicMock(return_value=tmp_file),
-            list_layers=MagicMock(),
-            list_sheets=list_sheets,
+            get_blob=MagicMock(return_value=b"xlsx-bytes"),
             logger=MagicMock(),
         )
 
     plain = _plain(result)
     assert plain["layers"] == []
     assert plain["sheets"] == ["Sheet1", "Sheet2"]
-    list_sheets.assert_called_once_with(tmp_file)
+    list_sheets.assert_called_once_with(b"xlsx-bytes")
 
 
 def test_get_preview_normalizes_numpy_and_nan_values():
@@ -200,19 +208,20 @@ def test_get_preview_normalizes_numpy_and_nan_values():
     assert plain["rows"] == [{"city": "Rome", "score": 7, "ok": True}]
 
 
-def test_file_source_service_load_dataframe_facade_delegates(tmp_path):
+def test_file_source_service_load_dataframe_facade_delegates():
     from app.core.files.service import FileSourceService
 
     svc = FileSourceService.__new__(FileSourceService)
     svc._assert_visible = MagicMock()
     svc.get_file_source = MagicMock()
-    svc._temp_file_for = MagicMock()
-    svc._load_by_format = MagicMock()
+    svc._get_blob_from_db = MagicMock()
     svc._logger = MagicMock()
 
     with patch("app.core.files.source_read.load_dataframe") as delegated:
         delegated.return_value = (pd.DataFrame({"x": [1]}), None)
-        svc.load_dataframe("file-1", layer="l", sheet="s", expected_group_id="grp-1")
+        svc.load_dataframe(
+            "file-1", layer="l", sheet="s", expected_group_id="grp-1",
+        )
 
     delegated.assert_called_once_with(
         "file-1",
@@ -221,8 +230,7 @@ def test_file_source_service_load_dataframe_facade_delegates(tmp_path):
         expected_group_id="grp-1",
         assert_visible=svc._assert_visible,
         get_file_source=svc.get_file_source,
-        temp_file_for=svc._temp_file_for,
-        load_by_format=svc._load_by_format,
+        get_blob=svc._get_blob_from_db,
         logger=svc._logger,
     )
 
@@ -236,7 +244,9 @@ def test_file_source_service_get_preview_facade_delegates():
 
     with patch("app.core.files.source_read.get_preview") as delegated:
         delegated.return_value = {"rows": []}
-        result = svc.get_preview("file-1", limit=5, expected_group_id="grp-1")
+        result = svc.get_preview(
+            "file-1", limit=5, expected_group_id="grp-1",
+        )
 
     assert result == {"rows": []}
     assert delegated.call_args.kwargs["limit"] == 5
