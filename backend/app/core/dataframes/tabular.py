@@ -328,24 +328,64 @@ def sanitize_for_json(rows: JsonRows) -> JsonRows:
 
 
 def _rest_json_safe_value(value: object) -> JsonPrimitive:
-    if value is None or isinstance(value, (str, int, float, bool)):
+    """Normalize one row value to a JSON-safe REST scalar.
+
+    Gestisce i tipi che `itertuples` puo' emettere direttamente
+    (senza la conversione automatica che `df.to_dict(orient=
+    "records")` applicava upfront): numpy scalars (np.int64,
+    np.float64, np.bool_), pandas missing (pd.NA / NaT / NaN),
+    pandas Timestamp. Tutti i missing -> None; numpy primitives ->
+    Python builtin equivalente; timestamp -> ISO string.
+    """
+    if value is None:
+        return None
+    # pd.NA / NaT / pd.isna su scalar nullable
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    # Python primitives veloci
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (str, int, float)):
         if isinstance(value, float) and value != value:
             return None
         return value
+    # numpy scalars (itertuples emette nativi su nullable
+    # Int64/boolean/float64)
+    if isinstance(value, np.bool_):
+        return bool(value)
+    if isinstance(value, np.integer):
+        return int(value)
+    if isinstance(value, np.floating):
+        f = float(value)
+        return None if f != f else f
+    # pandas/numpy datetime
+    if isinstance(value, (pd.Timestamp, np.datetime64)):
+        s = str(value)
+        return None if s == "NaT" else s
     return str(value)
 
 
-def dataframe_to_rest_records(df: pd.DataFrame) -> RestRecords:
-    """Return records safe for generic REST JSON payloads."""
-    records: list[RestRecord] = []
-    for raw_record in df.to_dict(orient="records"):
-        records.append(
-            {
-                str(key): _rest_json_safe_value(value)
-                for key, value in raw_record.items()
-            }
-        )
-    return tuple(records)
+def iter_dataframe_rest_records(df: pd.DataFrame) -> Iterator[RestRecord]:
+    """Yield records safe for generic REST JSON payloads, lazy.
+
+    Lazy/streaming alternative al precedente materialized
+    `dataframe_to_rest_records`: itera row-by-row via
+    `itertuples(index=False, name=None)` e yielda un `RestRecord`
+    normalizzato per riga senza mai materializzare la lista intera.
+    Memoria: O(1) per yield invece di O(N) upfront (pre-fix
+    `df.to_dict(orient="records")` allocava tutta la lista prima
+    ancora che il caller iterasse). Su DataFrame con 100k+ righe
+    questa era la voce di costo dominante della scrittura REST.
+    """
+    columns = [str(col) for col in df.columns]
+    for row in df.itertuples(index=False, name=None):
+        yield {
+            col: _rest_json_safe_value(value)
+            for col, value in zip(columns, row)
+        }
 
 
 def dataframe_preview_records(df: pd.DataFrame, limit: int) -> JsonRows:
@@ -1149,7 +1189,7 @@ __all__ = [
     "dataframe_records",
     "dataframe_row_by_index",
     "dataframe_row_dict",
-    "dataframe_to_rest_records",
+    "iter_dataframe_rest_records",
     "coerce_datetime_series",
     "coerce_numeric_series",
     "duplicate_row_count",

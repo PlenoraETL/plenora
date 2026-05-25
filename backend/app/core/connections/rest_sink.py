@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Mapping, Protocol, Sequence
+from typing import Iterable, Iterator, Mapping, Protocol, Sequence
 
 
 RestScalar = str | int | float | bool | None
@@ -149,23 +149,29 @@ class RestFeatureSink:
         self._config = config
         self._http_client = http_client
 
-    def write_records(self, records: Sequence[RestRecord]) -> RestSinkWriteResult:
-        """Write records through the injected HTTP client."""
-        if not records:
-            return RestSinkWriteResult(
-                success=True,
-                attempted_count=0,
-                written_count=0,
-                failed_count=0,
-                batches=(),
-            )
+    def write_records(self, records: Iterable[RestRecord]) -> RestSinkWriteResult:
+        """Write records through the injected HTTP client.
 
+        Accepts any `Iterable[RestRecord]` (incluso generator lazy
+        come `iter_dataframe_rest_records`). Niente early-return su
+        empty: se l'iterable non yielda nulla, `_iter_batches` non
+        yielda batch, il risultato finale e' attempted=0, success=
+        True, batches=() — semantica preservata, niente fast path.
+        `attempted_count` viene accumulato batch-per-batch invece di
+        `len(records)` upfront (incompatibile con generator).
+        Eccezioni emesse durante l'iterazione del generator
+        propagano al caller (rest_write_boundary le mappa a
+        write_error); HTTP fail invece sono catturati da
+        `_send_batch` e producono batch fallito senza fermare gli
+        altri batch.
+        """
         batch_results: list[RestSinkBatchResult] = []
+        attempted_count = 0
         for batch in self._iter_batches(records):
+            attempted_count += len(batch)
             batch_results.append(self._send_batch(batch))
 
         written_count = sum(result.sent_count for result in batch_results if result.success)
-        attempted_count = len(records)
         failed_count = attempted_count - written_count
         return RestSinkWriteResult(
             success=failed_count == 0,
@@ -218,12 +224,29 @@ class RestFeatureSink:
             request=request,
         )
 
-    def _iter_batches(self, records: Sequence[RestRecord]) -> list[Sequence[RestRecord]]:
+    def _iter_batches(self, records: Iterable[RestRecord]) -> Iterator[list[RestRecord]]:
+        """Yield batches lazily — ogni batch e' una list materializzata.
+
+        Lazy sui record (no `len(records)` upfront), ma ogni batch
+        yielded e' una `list[RestRecord]` concreta perche'
+        `_send_batch`, `build_payload` e la validazione PER_RECORD
+        (`len(mapped_records) != 1`) hanno bisogno di una sequenza
+        random-access.
+        """
         if self._config.batch_mode == RestSinkBatchMode.PER_RECORD:
-            return [[record] for record in records]
+            for record in records:
+                yield [record]
+            return
 
         size = self._config.batch_size
-        return [records[index : index + size] for index in range(0, len(records), size)]
+        batch: list[RestRecord] = []
+        for record in records:
+            batch.append(record)
+            if len(batch) >= size:
+                yield batch
+                batch = []
+        if batch:
+            yield batch
 
     def _map_record(self, record: RestRecord) -> RestJsonObject:
         mapping = self._config.body_mapping

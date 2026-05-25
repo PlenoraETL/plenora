@@ -200,3 +200,103 @@ def test_rest_sink_validates_required_fields_and_safe_defaults() -> None:
 
     with pytest.raises(ValueError, match="batch_size"):
         RestSinkConfig(url="https://api.example.test/features", batch_size=0)
+
+
+def test_rest_sink_accepts_lazy_generator_input() -> None:
+    """write_records accetta `Iterable[RestRecord]`, non solo Sequence.
+    Verifica che un generator (no len, no random access) produca lo
+    stesso payload e attempted_count corretto via accumulo per batch."""
+    client = FakeHttpClient(
+        responses=[
+            RestSinkHttpResponse(status_code=201),
+            RestSinkHttpResponse(status_code=201),
+        ]
+    )
+    config = RestSinkConfig(
+        url="https://api.example.test/features",
+        batch_mode=RestSinkBatchMode.BATCH,
+        batch_size=2,
+    )
+
+    def gen():
+        for i in (1, 2, 3):
+            yield {"id": i}
+
+    result = RestFeatureSink(config, client).write_records(gen())
+
+    assert result.success is True
+    assert result.attempted_count == 3
+    assert result.written_count == 3
+    assert len(client.requests) == 2
+    assert client.requests[0].json == {"records": [{"id": 1}, {"id": 2}]}
+    assert client.requests[1].json == {"records": [{"id": 3}]}
+
+
+def test_rest_sink_empty_iterable_produces_zero_attempted_no_request() -> None:
+    """Iterable vuoto (anche generator): niente early-return,
+    `_iter_batches` non yielda nulla, attempted=0 / batches=() /
+    success=True."""
+    client = FakeHttpClient()
+    config = RestSinkConfig(
+        url="https://api.example.test/features",
+        batch_mode=RestSinkBatchMode.BATCH,
+    )
+
+    result = RestFeatureSink(config, client).write_records(iter(()))
+
+    assert result.success is True
+    assert result.attempted_count == 0
+    assert result.written_count == 0
+    assert result.failed_count == 0
+    assert result.batches == ()
+    assert client.requests == []
+
+
+def test_rest_sink_per_record_mode_with_generator() -> None:
+    """PER_RECORD su generator produce 1 request per record yielded,
+    nessuna materializzazione upfront."""
+    client = FakeHttpClient(
+        responses=[
+            RestSinkHttpResponse(status_code=204),
+            RestSinkHttpResponse(status_code=204),
+        ]
+    )
+    config = RestSinkConfig(
+        url="https://api.example.test/rows",
+        batch_mode=RestSinkBatchMode.PER_RECORD,
+        success_statuses=(204,),
+    )
+
+    def gen():
+        yield {"id": 1}
+        yield {"id": 2}
+
+    result = RestFeatureSink(config, client).write_records(gen())
+
+    assert result.success is True
+    assert result.attempted_count == 2
+    assert result.written_count == 2
+    assert [req.json for req in client.requests] == [{"id": 1}, {"id": 2}]
+
+
+def test_rest_sink_generator_exception_propagates_to_caller() -> None:
+    """Se il GENERATOR di record esplode mentre produce, write_records
+    deve propagare l'eccezione al caller (no RestSinkWriteResult
+    parziale). Il caller boundary lo mappera' a write_error."""
+    client = FakeHttpClient(
+        responses=[RestSinkHttpResponse(status_code=201)]
+    )
+    config = RestSinkConfig(
+        url="https://api.example.test/features",
+        batch_mode=RestSinkBatchMode.BATCH,
+        batch_size=2,
+    )
+
+    class BoomRecords:
+        def __iter__(self):
+            yield {"id": 1}
+            yield {"id": 2}
+            raise RuntimeError("downstream pandas read exploded")
+
+    with pytest.raises(RuntimeError, match="downstream pandas read exploded"):
+        RestFeatureSink(config, client).write_records(BoomRecords())

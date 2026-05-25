@@ -98,7 +98,7 @@ def test_files_dataframe_io_reexports_tabular_helpers_from_dataframes_boundary()
     assert dataframe_io.drop_duplicate_rows_reset_index is tabular.drop_duplicate_rows_reset_index
     assert dataframe_io.empty_dataframe is tabular.empty_dataframe
     assert dataframe_io.dataframe_preview_records is tabular.dataframe_preview_records
-    assert dataframe_io.dataframe_to_rest_records is tabular.dataframe_to_rest_records
+    assert dataframe_io.iter_dataframe_rest_records is tabular.iter_dataframe_rest_records
     assert dataframe_io.drop_rows_reset_index is tabular.drop_rows_reset_index
     assert dataframe_io.empty_object_series is tabular.empty_object_series
     assert dataframe_io.false_boolean_series is tabular.false_boolean_series
@@ -147,10 +147,10 @@ def test_files_dataframe_io_reexports_tabular_helpers_from_dataframes_boundary()
     assert dataframe_io.window_function_values is tabular.window_function_values
 
 
-def test_dataframe_to_rest_records_normalizes_rest_payload_values() -> None:
+def test_iter_dataframe_rest_records_normalizes_rest_payload_values() -> None:
     import math
     import pandas as pd
-    from app.core.dataframes.tabular import dataframe_to_rest_records
+    from app.core.dataframes.tabular import iter_dataframe_rest_records
 
     df = pd.DataFrame(
         [
@@ -158,9 +158,94 @@ def test_dataframe_to_rest_records_normalizes_rest_payload_values() -> None:
         ]
     )
 
-    assert dataframe_to_rest_records(df) == (
+    # Materializzo qui solo per assert: in produzione il consumer
+    # itera lazy.
+    assert tuple(iter_dataframe_rest_records(df)) == (
         {"id": 1, "name": "Alpha", "score": None, "when": "2026-01-02 00:00:00"},
     )
+
+
+def test_iter_dataframe_rest_records_handles_nullable_pandas_dtypes() -> None:
+    """Contract su NaN, pd.NA, nullable Int64, nullable boolean,
+    timestamp. Tutti i missing devono normalizzare a `None` nel
+    payload REST; i tipi nullable pandas non devono leak come
+    `<NA>` o `pd.NA`."""
+    import math
+    import pandas as pd
+    from app.core.dataframes.tabular import iter_dataframe_rest_records
+
+    df = pd.DataFrame(
+        {
+            "id": pd.array([1, 2, None], dtype="Int64"),
+            "flag": pd.array([True, None, False], dtype="boolean"),
+            "score": [math.nan, 1.5, None],
+            "name": ["a", None, "c"],
+            "when": pd.to_datetime(["2026-01-01", None, "2026-01-03"]),
+        }
+    )
+
+    records = list(iter_dataframe_rest_records(df))
+    assert len(records) == 3
+
+    # Row 0: tutti popolati tranne score=NaN
+    assert records[0]["id"] == 1
+    assert records[0]["flag"] is True
+    assert records[0]["score"] is None  # NaN -> None
+    assert records[0]["name"] == "a"
+    assert records[0]["when"] == "2026-01-01 00:00:00"
+
+    # Row 1: flag=pd.NA, name=None, when=NaT, score=1.5
+    assert records[1]["id"] == 2
+    assert records[1]["flag"] is None  # pd.NA -> None
+    assert records[1]["score"] == 1.5
+    assert records[1]["name"] is None
+    assert records[1]["when"] is None  # NaT -> None
+
+    # Row 2: id=pd.NA, score=None
+    assert records[2]["id"] is None  # pd.NA -> None
+    assert records[2]["flag"] is False
+    assert records[2]["score"] is None
+    assert records[2]["name"] == "c"
+    assert records[2]["when"] == "2026-01-03 00:00:00"
+
+
+def test_iter_dataframe_rest_records_is_lazy_generator() -> None:
+    """Verifica architetturale: iter_dataframe_rest_records ritorna
+    un Iterator, non una collection materializzata. Pre-fix
+    `dataframe_to_rest_records` allocava `tuple(...)` upfront."""
+    import inspect
+    import pandas as pd
+    from app.core.dataframes.tabular import iter_dataframe_rest_records
+
+    df = pd.DataFrame([{"id": 1}, {"id": 2}])
+    result = iter_dataframe_rest_records(df)
+
+    # Iterator/generator, non list/tuple
+    assert hasattr(result, "__next__")
+    assert not isinstance(result, (list, tuple))
+
+    # Architectural: il pattern `to_dict(orient="records")`
+    # materializza tutto in lista upfront -> vietato nel body
+    # (la docstring puo' citarlo come riferimento storico al pre-fix).
+    import ast
+    src = inspect.getsource(iter_dataframe_rest_records)
+    tree = ast.parse(src)
+    func_def = tree.body[0]
+    assert isinstance(func_def, ast.FunctionDef)
+    # Strip docstring
+    body_nodes = (
+        func_def.body[1:]
+        if (func_def.body and isinstance(func_def.body[0], ast.Expr)
+            and isinstance(func_def.body[0].value, ast.Constant))
+        else func_def.body
+    )
+    body_src = "\n".join(ast.unparse(n) for n in body_nodes)
+    assert "to_dict" not in body_src, (
+        "regressione lazy: iter_dataframe_rest_records non deve "
+        "usare df.to_dict nel body (materializza upfront), deve "
+        "iterare via itertuples"
+    )
+    assert "itertuples" in body_src
 
 
 def test_tabular_business_helpers_preserve_dataframe_semantics() -> None:

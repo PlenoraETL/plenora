@@ -3,17 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from app.core.connections.rest_sink import (
     RestFeatureSink,
-    RestRecord,
     RestSinkBatchResult,
     RestSinkConfig,
     RestSinkHttpClient,
     RestSinkWriteResult,
 )
-from app.core.dataframes.tabular import dataframe_to_rest_records
+from app.core.dataframes.tabular import iter_dataframe_rest_records
 from app.shared.contracts.payloads import ObjectMap
 from app.utils.logger import get_logger
 
@@ -80,8 +79,9 @@ def execute_carica_rest_write(
     """Write a CARICA DataFrame through the typed REST sink."""
     total_rows = len(df)
     try:
-        records = cast(tuple[RestRecord, ...], dataframe_to_rest_records(df))
-        write_result = RestFeatureSink(config, http_client).write_records(records)
+        write_result = RestFeatureSink(config, http_client).write_records(
+            iter_dataframe_rest_records(df)
+        )
     except Exception as exc:
         logger.error("[GESTITO] Errore scrittura REST CARICA: %s", exc, exc_info=True)
         message = _redact_secret_values(str(exc), config)
