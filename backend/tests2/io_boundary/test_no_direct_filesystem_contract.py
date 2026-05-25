@@ -304,19 +304,117 @@ def _scan_excluded_findings() -> list[tuple[str, int, str, str]]:
     return findings
 
 
-def test_report_disk_usage_inside_boundary() -> None:
-    """Report informativo (NON fa fallire il gate): elenca i pattern
-    filesystem ancora presenti DENTRO il boundary (file/dir esclusi
-    dal contract test principale).
+# BOUNDARY FROZEN (2026-05-25, refactor_io_storage_ram_only.md
+# §"Boundary congelato"): snapshot per-file delle entries by-design
+# all'interno del boundary I/O. Il test ratchet sotto compara il
+# report corrente a questo snapshot; deviazioni in qualunque direzione
+# falliscono richiedendo aggiornamento contestuale del doc.
+#
+# Come aggiornare:
+#   1. Modifica deliberata che cambia uno di questi count?
+#   2. Aggiorna sia questo dict sia la sezione "Boundary congelato" nel
+#      doc con il NUOVO razionale.
+#   3. Run `python scripts/_gen_io_allowlist.py` per rigenerare baseline.
+#
+# Path normalizzato con forward slash; le entries esatte (line/pattern)
+# non sono congelate — solo il count per-file. Aggiunte/rimozioni di
+# callsite all'interno di un file fanno cambiare il count e devono
+# essere intenzionali.
+_BOUNDARY_FROZEN_SNAPSHOT: dict[str, int] = {
+    # Boundary primitives (intentional disk capability)
+    "app/core/io/materialize.py": 3,
+    "app/core/io/geospatial.py": 1,
+    "app/core/results/temp_paths.py": 2,
+    "app/utils/zip_safe.py": 3,
+    "app/core/files/service_deps.py": 2,
+    "app/core/results/blob_writer.py": 1,
+    # IMDF subsystem (format-as-directory + cache hydration)
+    "app/core/imdf/loader.py": 3,
+    "app/core/imdf/persist.py": 3,
+    "app/core/imdf/storage.py": 3,
+    # Scripts one-off tooling
+    "scripts/backup_db.py": 1,
+    "scripts/test_restore.py": 1,
+    "scripts/export_openapi_manifest.py": 1,
+    "scripts/imdf_real_e2e_check.py": 2,
+}
 
-    Obiettivo: distinguere "zero offender fuori boundary" (gate
-    principale) da "uso disco residuo dentro boundary" (questo
-    report). Ogni nuova migrazione che chiude un pattern interno
-    permette di rimuovere l'eccezione corrispondente da
-    `EXCLUDE_PREFIXES` / `EXCLUDE_FILES` / `EXCLUDED_ROOTS`.
 
-    Output stampato come summary; il test passa sempre. Esegui:
-        pytest tests2/io_boundary/test_no_direct_filesystem_contract.py::test_report_disk_usage_inside_boundary -s
+def test_report_inside_boundary_frozen() -> None:
+    """Ratchet bidirezionale sul boundary congelato.
+
+    A differenza del precedente `test_report_disk_usage_inside_boundary`
+    (informativo, ora rinominato `_print` e mantenuto come print-only),
+    questo test enforce che il count per-file matchi esattamente lo
+    `_BOUNDARY_FROZEN_SNAPSHOT` dichiarato sopra.
+
+    Il razionale e' nel doc `refactor_io_storage_ram_only.md` sezione
+    "Boundary congelato". Modifiche deliberate del count richiedono
+    aggiornamento contestuale del doc + dello snapshot qui.
+    """
+    findings = _scan_excluded_findings()
+    by_file: dict[str, int] = {}
+    for f in findings:
+        by_file[f[0]] = by_file.get(f[0], 0) + 1
+
+    expected = _BOUNDARY_FROZEN_SNAPSHOT
+    actual = by_file
+
+    missing = sorted(set(expected) - set(actual))
+    unexpected = sorted(set(actual) - set(expected))
+    diff_counts = sorted(
+        f for f in set(expected) & set(actual)
+        if expected[f] != actual[f]
+    )
+
+    if not (missing or unexpected or diff_counts):
+        return  # snapshot matches exactly
+
+    lines = ["Boundary frozen snapshot mismatch."]
+    if unexpected:
+        lines.append("")
+        lines.append(
+            "  NUOVI file con disk usage inside-boundary (NON congelati):"
+        )
+        for f in unexpected:
+            lines.append(f"    + {f}: {actual[f]} entries")
+        lines.append(
+            "    -> Aggiungerli al doc 'Boundary congelato' con razionale,"
+        )
+        lines.append(
+            "       poi aggiungerli a `_BOUNDARY_FROZEN_SNAPSHOT`."
+        )
+    if missing:
+        lines.append("")
+        lines.append(
+            "  File congelati ma senza disk usage attuale (regressione del freeze):"
+        )
+        for f in missing:
+            lines.append(f"    - {f}: era {expected[f]} entries, ora 0")
+        lines.append(
+            "    -> Confermare la rimozione nel doc e dropparli dallo snapshot."
+        )
+    if diff_counts:
+        lines.append("")
+        lines.append("  Count divergente:")
+        for f in diff_counts:
+            lines.append(
+                f"    {f}: snapshot={expected[f]}, attuale={actual[f]}"
+            )
+        lines.append(
+            "    -> Aggiornare doc + snapshot se la modifica e' deliberata."
+        )
+    pytest.fail("\n".join(lines))
+
+
+def test_report_inside_boundary_print() -> None:
+    """Report stampato (NON fa fallire il gate): summary per-file dei
+    pattern filesystem residui dentro il boundary. Lo enforcement vive
+    nel test `test_report_inside_boundary_frozen` sopra; questo resta
+    come print utility per il debug post-modifica.
+
+    Esegui:
+        pytest tests2/io_boundary/test_no_direct_filesystem_contract.py::test_report_inside_boundary_print -s
     """
     findings = _scan_excluded_findings()
     if not findings:

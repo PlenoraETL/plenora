@@ -180,29 +180,47 @@ def phase_for(filepath: str, pattern: str = "") -> str:
     return "unassigned"
 
 
+# BOUNDARY FROZEN (2026-05-25, refactor_io_storage_ram_only.md §"Boundary
+# congelato"): le directory/file qui sotto sono dichiarati by-design come
+# detentori della capability filesystem. Il report
+# `test_report_inside_boundary_frozen` enforce il count per-file: una
+# modifica deliberata richiede aggiornamento contestuale del doc + del
+# frozen-snapshot nel test.
 _BOUNDARY_DIRS = (
+    # `app/core/io/`: layer materializer + helper geospaziali. Casa di
+    # `temporary_path_from_bytes` (escape hatch tracciato) e dei wrapper
+    # tempdir per librerie path-only (driver legacy GDAL).
     "app/core/io/",
+    # `app/core/storage/`: storage backend abstraction. Manipola path
+    # nei flussi che richiedono streaming upload/download (multipart S3).
     "app/core/storage/",
-    # IMDF subsystem: bundle cache locale + S3 backing, HTTP endpoints
-    # servono i bundle estratti come file statici. Architettura on-disk
-    # by design (OGC IMDF e' format-as-directory).
+    # `app/core/imdf/`: OGC IMDF format-as-directory subsystem. Bundle
+    # `.gdb` letto da pyogrio via filesystem; cache hydration on-demand
+    # per publish/validate-publish. IMDF-5+ migrera' publish a
+    # storage-direct quando il design pyogrio-from-zip sara' chiuso.
     "app/core/imdf/",
 )
 # File singoli che fanno parte del boundary I/O ma non vivono in
 # `app/core/io/`. Sono primitive che esistono PER fornire la capability
-# filesystem al resto del codice in modo controllato. Esigere che NON
-# chiamino tempfile / write_bytes / extractall sarebbe meta-circolare.
+# filesystem al resto del codice in modo controllato.
 _BOUNDARY_FILES = (
-    "app/utils/zip_safe.py",  # safe_extractall + zip bomb guard impl
-    "app/core/results/temp_paths.py",  # path-only adapter primitives
-    "app/core/files/service_deps.py",  # DefaultFileSystem path adapter
-    # Resource engine loader: post-Phase5 supporta solo mode="bytes"
-    # (path-mode rimosso). Resta nel boundary per coerenza storica e
-    # come ancora per la categorizzazione legitimate-cache.
+    # zip-bomb-safe extract primitives. Implementation del guard
+    # ZIP_MAX_UNCOMPRESSED_BYTES + `safe_extractall`.
+    "app/utils/zip_safe.py",
+    # Centralized tempdir/tempfile helper per result streaming
+    # (eseguibili hydration, analyze upload). Path-only adapter.
+    "app/core/results/temp_paths.py",
+    # `DefaultFileSystem.extract_zip` path adapter consumato dall'upload
+    # pipeline. File-by-file extract con visibility check.
+    "app/core/files/service_deps.py",
+    # ResultBlobLoader: post-Phase5 supporta solo mode="bytes"
+    # (path-mode rimosso). Resta nel boundary per coerenza storica
+    # (era il punto di materializzazione tempfile pre-Phase5) e come
+    # ancora per la classification legitimate-cache.
     "app/core/resources/loaders/result_blob.py",
-    # Result blob storage entry point: streaming upload path-based per
-    # query streaming output (multipart-friendly per file da GB-scale).
-    # I caller bytes-first usano `save_result_blob_from_bytes`.
+    # `save_result_blob(path)` streaming upload multipart-friendly per
+    # query output GB-scale. I caller bounded (`save_result_blob_from_bytes`)
+    # girano gia' RAM-first.
     "app/core/results/blob_writer.py",
 )
 # Top-level roots di codice escluso dal sweep applicativo: gli script
