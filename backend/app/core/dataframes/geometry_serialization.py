@@ -23,35 +23,46 @@ from __future__ import annotations
 
 import pandas as pd
 import shapely
+from shapely.geometry.base import BaseGeometry
 
 
 def geometry_series_to_wkt(
     series: pd.Series,
     *,
     empty_as_null: bool = False,
+    preserve_non_geometry: bool = False,
 ) -> pd.Series:
     """Convert a GeoSeries / object Series of Shapely geometries to WKT.
 
     Args:
-        series: Serie di geometrie Shapely. Valori non-Shapely sollevano
-            su `shapely.to_wkt`; per gli usi tipici (GeoSeries da
-            geopandas o object Series con geom Shapely) il vincolo e'
-            soddisfatto. Missing (`None`, `NaN`, `pd.NA`) sono
-            normalizzati a `None`.
+        series: Serie di geometrie Shapely. Valori non-Shapely
+            sollevano su `shapely.to_wkt` a meno che
+            `preserve_non_geometry=True`. Missing (`None`, `NaN`,
+            `pd.NA`) sono sempre normalizzati a `None`.
         empty_as_null: se `True`, geometrie vuote (es. `POLYGON
             EMPTY`, `GEOMETRYCOLLECTION EMPTY`) sono emesse come
             `None` invece che come stringa WKT "*EMPTY*". Utile per
             export che trattano l'empty come assenza dati.
+        preserve_non_geometry: se `True`, i valori non-Shapely
+            non-missing sono lasciati invariati nell'output invece di
+            essere passati a `shapely.to_wkt` (che esploderebbe).
+            Usato dalla normalizzazione delle "geometry-like columns"
+            secondarie pre-export OGR, dove una stessa colonna puo'
+            contenere mix Shapely + altro (string, dict GeoJSON
+            residuo). Per i Shapely il fast path vettoriale resta
+            attivo; per gli altri si applica la passthrough sentinel.
 
     Returns:
         `pd.Series` con stesso index, dtype `object`, dove ogni
-        valore e' o una stringa WKT o `None`.
+        valore e' o una stringa WKT, o il valore originale (se
+        `preserve_non_geometry=True` e non-Shapely), o `None`.
 
     Contract: ne' input ne' output mutano nessun caller.
     """
     values: list = []
     valid: list[bool] = []
-    for value in series.to_numpy(copy=False):
+    non_geom_passthrough: dict[int, object] = {}
+    for idx, value in enumerate(series.to_numpy(copy=False)):
         try:
             missing = value is None or pd.isna(value)
         except (TypeError, ValueError):
@@ -63,9 +74,21 @@ def geometry_series_to_wkt(
         if missing:
             values.append(None)
             valid.append(False)
-        else:
-            values.append(value)
-            valid.append(True)
+            continue
+
+        if preserve_non_geometry and not isinstance(value, BaseGeometry):
+            # Passthrough: il valore originale viene reinserito
+            # nell'output dopo `to_wkt`. A `to_wkt` passiamo `None`
+            # (no-op safe) cosi' il vettoriale non esplode su tipi
+            # estranei. `valid=False` per non far parte di `is_empty`
+            # check se `empty_as_null=True`.
+            values.append(None)
+            valid.append(False)
+            non_geom_passthrough[idx] = value
+            continue
+
+        values.append(value)
+        valid.append(True)
 
     out = pd.Series(
         shapely.to_wkt(values, rounding_precision=-1, trim=True),
@@ -82,7 +105,18 @@ def geometry_series_to_wkt(
             shapely.is_empty(values), index=series.index
         )
 
-    return out.where(mask, None)
+    out = out.where(mask, None)
+
+    # Riposiziona i passthrough non-Shapely al loro indice originale.
+    if non_geom_passthrough:
+        index_arr = series.index
+        for pos, raw in non_geom_passthrough.items():
+            out.iat[pos] = raw
+        # `iat` accede per posizione assoluta — sicuro anche con index
+        # custom (stringhe/datetime/multiindex).
+        del index_arr
+
+    return out
 
 
 __all__ = ["geometry_series_to_wkt"]

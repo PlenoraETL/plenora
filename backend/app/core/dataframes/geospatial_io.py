@@ -261,8 +261,19 @@ def _converti_geometrie_secondarie_in_wkt(gdf):
         if not col_data.empty:
             primo_valido = col_data.iloc[0]
             if isinstance(primo_valido, BaseGeometry):
-                gdf[col] = col_data.apply(
-                    lambda x: x.wkt if isinstance(x, BaseGeometry) else x
+                # Pre-fix: `apply(lambda x: x.wkt if BaseGeometry
+                # else x)` per-riga. Post-fix: serializzazione
+                # vettoriale via `geometry_series_to_wkt` con
+                # `preserve_non_geometry=True` per mantenere il
+                # comportamento del lambda originale (caso edge:
+                # serie geometry-like che contiene mix Shapely +
+                # altro). Centralizza l'ultimo path WKT residuo
+                # rimasto fuori dalla single source of truth.
+                from app.core.dataframes.geometry_serialization import (
+                    geometry_series_to_wkt,
+                )
+                gdf[col] = geometry_series_to_wkt(
+                    col_data, preserve_non_geometry=True
                 )
 
         # Rinomina se il nome collide con i nomi-tipo di geometry,
