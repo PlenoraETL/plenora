@@ -184,19 +184,14 @@ def publish_imdf(
             detail=f"mode non valido: {request.mode}. Valori validi: replace, append, upsert, update",
         )
 
-    # Path traversal guard sull'id (resta utile per i fallback locali).
+    # Path traversal guard sull'id.
     _safe_bundle_dir(request.bundle_task_id)
 
-    # IMDF-4 step 3: bundle check + ACL storage-first (niente hydrate
-    # locale per il solo group ownership check). Fallback: se meta non
-    # esiste su storage, prova la cache locale per i bundle pre-IMDF-3.
+    # IMDF-4 step 4: bundle check + ACL solo da storage. Post-tombstone
+    # il fallback locale (`_hydrate_local_cache + read_metadata`) e'
+    # rimosso: i bundle pre-IMDF-3 senza meta su storage falliscono
+    # 404 e richiedono re-upload.
     meta = _imdf_storage.get_meta_only(request.bundle_task_id)
-    if meta is None:
-        _hydrate_local_cache(request.bundle_task_id)
-        local_bundle_dir = _safe_bundle_dir(request.bundle_task_id)
-        if local_bundle_dir.exists() and local_bundle_dir.is_dir():
-            meta = _imdf_bundle_store.read_metadata(local_bundle_dir)
-
     if meta is None:
         raise HTTPException(
             status_code=404,
@@ -261,19 +256,13 @@ def validate_publish_endpoint(
             status_code=400,
             detail=f"mode non valido: {request.mode}. Valori validi: replace, append, upsert, update",
         )
-    # Path traversal guard sull'id (resta utile per i fallback locali).
+    # Path traversal guard sull'id.
     _safe_bundle_dir(request.bundle_task_id)
-    # IMDF-4 step 3: ACL check storage-first. Se il meta non esiste su
-    # storage, fallback su cache locale (bundle pre-IMDF-3). Bundle
-    # totalmente assente: il validator emettera' BUNDLE_MISSING nel
-    # report (no early-return qui per simmetria con la logica current
-    # — il validator e' l'oracolo del missing bundle).
+    # IMDF-4 step 4: ACL check solo da storage (no fallback locale).
+    # Bundle totalmente assente: il validator emettera' BUNDLE_MISSING
+    # nel report — no early-return qui per simmetria con la logica
+    # current (il validator e' l'oracolo del missing bundle).
     _val_meta = _imdf_storage.get_meta_only(request.bundle_task_id)
-    if _val_meta is None:
-        _hydrate_local_cache(request.bundle_task_id)
-        _val_bundle_dir = _safe_bundle_dir(request.bundle_task_id)
-        if _val_bundle_dir.exists() and _val_bundle_dir.is_dir():
-            _val_meta = _imdf_bundle_store.read_metadata(_val_bundle_dir)
     if _val_meta is not None:
         _bundle_access.assert_bundle_group_access_from_meta(
             _val_meta, current_user, request.bundle_task_id, logger=logger,
@@ -313,19 +302,13 @@ def get_bundle_metadata(
     cache locale solo se il meta su storage manca (bundle legacy in zip
     layout, hydrated dal `_hydrate_local_cache`).
     """
-    # Path traversal guard sull'id (resta utile anche per il fallback locale).
+    # Path traversal guard sull'id.
     _safe_bundle_dir(bundle_task_id)
 
-    # 1. Read meta dal canonical state (storage). Niente filesystem.
+    # IMDF-4 step 4: lettura solo da storage. Post-tombstone il fallback
+    # legacy (`_hydrate_local_cache + bundle_dir.rglob`) e' rimosso.
+    # Bundle pre-IMDF-3 senza layout per-file su storage falliscono 404.
     meta = _imdf_storage.get_meta_only(bundle_task_id)
-
-    if meta is None:
-        # Fallback legacy: bundle pre-IMDF-3 ancora in zip layout o senza
-        # meta su storage. Hydrate la cache locale e leggi meta dal disco.
-        _hydrate_local_cache(bundle_task_id)
-        bundle_dir = _safe_bundle_dir(bundle_task_id)
-        if bundle_dir.exists() and bundle_dir.is_dir():
-            meta = _imdf_bundle_store.read_metadata(bundle_dir)
 
     if meta is None:
         raise HTTPException(
@@ -336,20 +319,16 @@ def get_bundle_metadata(
             },
         )
 
-    # 2. Group ownership check direttamente sul meta (storage-first).
     _bundle_access.assert_bundle_group_access_from_meta(
         meta, current_user, bundle_task_id, logger=logger,
     )
 
     site_id: Optional[str] = meta.get("site_id") or None
 
-    # 3. Read manifest / validation / renderers direct-from-storage.
     manifest   = _imdf_storage.read_manifest(bundle_task_id)
     validation = _imdf_storage.read_validation(bundle_task_id)
     renderers  = _imdf_storage.read_renderers(bundle_task_id)
 
-    # 4. Lista file individuali da storage. Permette anche di derivare
-    #    i nomi dei geojson sotto site_id senza scansionare il filesystem.
     storage_files = _imdf_storage.list_bundle_file_entries(bundle_task_id)
     files_list: List[JsonObject] = []
     geojson_layers: Dict[str, Any] = {}
@@ -366,51 +345,6 @@ def get_bundle_metadata(
             obj = _imdf_storage.read_geojson(bundle_task_id, rel)
             if obj is not None:
                 geojson_layers[layer_name] = obj
-
-    # 5. Fallback se storage e' vuoto (bundle legacy zip-layout). In quel
-    #    caso il `_hydrate_local_cache` sopra ha gia' estratto i file su
-    #    disco — leggiamo da li' come compat. Niente shape change per il
-    #    frontend.
-    if not files_list and not manifest and not validation:
-        bundle_dir = _safe_bundle_dir(bundle_task_id)
-        if bundle_dir.exists() and bundle_dir.is_dir():
-            for f in sorted(bundle_dir.rglob("*")):
-                if f.is_file():
-                    try:
-                        files_list.append({
-                            "path": str(f.relative_to(bundle_dir)).replace("\\", "/"),
-                            "size": f.stat().st_size,
-                        })
-                    except Exception as _fe:
-                        logger.debug(
-                            f"files_list skip {f.name}: {type(_fe).__name__}: {_fe}"
-                        )
-            if manifest is None:
-                p = bundle_dir / "manifest.json"
-                if p.exists():
-                    try:
-                        manifest = _json.loads(p.read_text(encoding="utf-8"))
-                    except Exception as e:
-                        logger.warning(f"legacy manifest read {p}: {e}")
-            if validation is None:
-                p = bundle_dir / "validation.json"
-                if p.exists():
-                    try:
-                        validation = _json.loads(p.read_text(encoding="utf-8"))
-                    except Exception as e:
-                        logger.warning(f"legacy validation read {p}: {e}")
-            if renderers is None:
-                renderers = _imdf_bundle_store.read_renderers(bundle_dir)
-            if site_id:
-                imdf_dir = bundle_dir / site_id
-                if imdf_dir.exists():
-                    for gj in sorted(imdf_dir.glob("*.geojson")):
-                        try:
-                            geojson_layers[gj.stem] = _json.loads(
-                                gj.read_text(encoding="utf-8")
-                            )
-                        except Exception as e:
-                            logger.warning(f"legacy geojson {gj.name}: {e}")
 
     return {
         "site_id":       site_id,
@@ -607,19 +541,21 @@ def delete_bundle(
     bundle_task_id: str,
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Cancella una cartella bundle IMDF dal disco.
+    """Cancella un bundle IMDF da storage canonico + cache locale.
+
+    IMDF-4 step 4: ACL check storage-first (no hydrate locale per
+    leggere meta). Bundle pre-IMDF-3 senza meta su storage falliscono
+    404 — il delete di cache locale eventualmente presente puo' essere
+    fatto manualmente da admin.
 
     - Validazione path-traversal via `_safe_bundle_dir`
-    - Verifica group access via `_assert_bundle_group_access` (fail-closed
-      sui bundle legacy senza metadata)
-    - 404 se il bundle non esiste
-    - Rimozione ricorsiva della directory
+    - Verifica group access via `assert_bundle_group_access_from_meta`
+    - 404 se il bundle non esiste su storage
+    - Rimozione da storage + cleanup cache locale
     """
     bundle_dir = _safe_bundle_dir(bundle_task_id)
-    # R2 multi-host: hydrate per check metadata group-access
-    # se il bundle e' solo su S3 e non nella cache locale del nodo corrente
-    _hydrate_local_cache(bundle_task_id)
-    if not bundle_dir.exists() or not bundle_dir.is_dir():
+    meta = _imdf_storage.get_meta_only(bundle_task_id)
+    if meta is None:
         raise HTTPException(
             status_code=404,
             detail={
@@ -627,7 +563,9 @@ def delete_bundle(
                 "message": f"Bundle '{bundle_task_id}' non trovato",
             },
         )
-    _assert_bundle_group_access(bundle_dir, current_user)
+    _bundle_access.assert_bundle_group_access_from_meta(
+        meta, current_user, bundle_task_id, logger=logger,
+    )
     try:
         _imdf_bundle_store.delete_bundle(
             task_id=bundle_task_id,

@@ -96,40 +96,31 @@ def _write_bundle(dir_path: Path, site_id: str = "SITE01"):
     )
 
 
-# save_bundle
+# Tombstone (IMDF-4 step 4): il legacy `save_bundle(task_id, local_dir,
+# meta)` zip-based e' stato rimosso. Sostituito da `save_bundle_files`
+# (writer RAM-first IMDF-3 introdotto in persist_imdf_bundle).
 
 
-def test_save_bundle_uploads_zip_and_meta(fake_storage, fake_settings, tmp_path):
+def test_save_bundle_legacy_tombstoned():
+    """IMDF-4 step 4: tentativo di chiamare `save_bundle` legacy ->
+    AttributeError (function rimossa). Anti-regression."""
     from app.core.imdf import storage as st
 
-    local = tmp_path / "mybundle"
-    _write_bundle(local)
-    result = st.save_bundle("task-1", local)
-
-    assert result["zip_key"] == "imdf-bundles/task-1.zip"
-    assert result["meta_key"] == "imdf-bundles/task-1.meta.json"
-    assert "imdf-bundles/task-1.zip" in fake_storage.objects
-    assert "imdf-bundles/task-1.meta.json" in fake_storage.objects
-
-    # Verifica che il zip contenga il file (check estraibilita')
-    zip_bytes = fake_storage.objects["imdf-bundles/task-1.zip"]
-    with zipfile.ZipFile(BytesIO(zip_bytes)) as zf:
-        names = zf.namelist()
-        assert "plenora_metadata.json" in names
-        assert any(n.endswith("building.geojson") for n in names)
-
-    # Verifica meta
-    meta_bytes = fake_storage.objects["imdf-bundles/task-1.meta.json"]
-    meta = json.loads(meta_bytes.decode("utf-8"))
-    assert meta["project_id"] == "proj-1"
+    assert not hasattr(st, "save_bundle"), (
+        "save_bundle legacy deve essere rimosso post-IMDF-4 step 4 "
+        "(writer zip-based pre-IMDF-3). Usa save_bundle_files (RAM-first)."
+    )
 
 
-def test_save_bundle_rejects_missing_dir(fake_storage, fake_settings, tmp_path):
-    from app.core.imdf import storage as st
-
-    missing = tmp_path / "nope"
-    with pytest.raises(FileNotFoundError):
-        st.save_bundle("task-1", missing)
+def _seed_files_layout(fake_storage, task_id: str, meta: dict, files: dict[str, bytes]):
+    """Helper: popola il fake_storage col layout IMDF-3 (files/* +
+    meta.json) per simulare un bundle persisted via save_bundle_files."""
+    import json as _json
+    fake_storage.objects[f"imdf-bundles/{task_id}.meta.json"] = (
+        _json.dumps(meta).encode("utf-8")
+    )
+    for name, data in files.items():
+        fake_storage.objects[f"imdf-bundles/{task_id}/files/{name}"] = data
 
 
 # ensure_local_bundle
@@ -148,21 +139,32 @@ def test_ensure_local_bundle_cache_hit(fake_storage, fake_settings, tmp_path):
     assert not fake_storage.upload_calls  # nessun I/O su storage
 
 
-def test_ensure_local_bundle_cache_miss_downloads(fake_storage, fake_settings, tmp_path):
-    """Cache miss: scarica zip da S3, extract, ritorna local path."""
+def test_ensure_local_bundle_cache_miss_hydrates_from_files_layout(fake_storage, fake_settings, tmp_path):
+    """Cache miss: scarica i file individuali sotto `{task_id}/files/*`
+    da storage (layout IMDF-3) ed estrae nella cache locale.
+
+    Post IMDF-4 step 4: il fallback zip-based legacy e' rimosso, quindi
+    questo test usa direttamente il files layout."""
     from app.core.imdf import storage as st
 
-    # Prepara un zip su fake storage (simula bundle generato da altro nodo)
-    source = tmp_path / "source_bundle"
-    _write_bundle(source)
-    st.save_bundle("task-1", source)
+    _seed_files_layout(
+        fake_storage,
+        task_id="task-1",
+        meta={"project_id": "proj-1", "site_id": "SITE01"},
+        files={
+            "plenora_metadata.json": json.dumps({"project_id": "proj-1", "site_id": "SITE01"}).encode("utf-8"),
+            "SITE01/building.geojson": json.dumps(
+                {"type": "FeatureCollection", "features": []}
+            ).encode("utf-8"),
+        },
+    )
 
-    # Wipe cache locale
+    # Wipe cache locale.
     import shutil
     shutil.rmtree(fake_settings / "task-1", ignore_errors=True)
     assert not (fake_settings / "task-1").exists()
 
-    # Ensure -> deve scaricare
+    # Ensure -> scarica files individuali.
     result = st.ensure_local_bundle("task-1")
     assert result.exists()
     assert (result / "plenora_metadata.json").exists()
@@ -182,9 +184,11 @@ def test_ensure_local_bundle_not_found_raises(fake_storage, fake_settings):
 def test_get_meta_only_reads_without_downloading_zip(fake_storage, fake_settings, tmp_path):
     from app.core.imdf import storage as st
 
-    source = tmp_path / "source"
-    _write_bundle(source)
-    st.save_bundle("task-1", source)
+    _seed_files_layout(
+        fake_storage, "task-1",
+        meta={"project_id": "proj-1", "site_id": "SITE01"},
+        files={},
+    )
 
     meta = st.get_meta_only("task-1")
     assert meta is not None
@@ -202,15 +206,19 @@ def test_get_meta_only_missing_returns_none(fake_storage, fake_settings):
 
 
 def test_list_task_ids_returns_only_meta(fake_storage, fake_settings, tmp_path):
-    """Il listing conta ogni task UNA volta, non 2 (zip + meta)."""
+    """Il listing conta ogni task UNA volta tramite il meta.json key."""
     from app.core.imdf import storage as st
 
-    source1 = tmp_path / "s1"
-    source2 = tmp_path / "s2"
-    _write_bundle(source1)
-    _write_bundle(source2, site_id="SITE02")
-    st.save_bundle("task-a", source1)
-    st.save_bundle("task-b", source2)
+    _seed_files_layout(
+        fake_storage, "task-a",
+        meta={"project_id": "proj-1", "site_id": "S1"},
+        files={},
+    )
+    _seed_files_layout(
+        fake_storage, "task-b",
+        meta={"project_id": "proj-1", "site_id": "S2"},
+        files={},
+    )
 
     ids = st.list_task_ids()
     assert sorted(ids) == ["task-a", "task-b"]
@@ -231,20 +239,25 @@ def test_delete_bundle_removes_s3_and_local(fake_storage, fake_settings, tmp_pat
     delete chiamati."""
     from app.core.imdf import storage as st
 
-    source = tmp_path / "s1"
-    _write_bundle(source)
-    st.save_bundle("task-1", source)
+    _seed_files_layout(
+        fake_storage, "task-1",
+        meta={"project_id": "proj-1", "site_id": "S1"},
+        files={
+            "plenora_metadata.json": b"{}",
+            "S1/building.geojson": b"{}",
+        },
+    )
     # Warm cache locale
     local = fake_settings / "task-1"
     _write_bundle(local)
 
     count = st.delete_bundle("task-1")
-    # Fixed keys (meta + legacy zip + gdb zip) sempre tentati = 3.
-    # `files/*` non popolato (save_bundle legacy non li scrive), quindi
-    # i list_objects ritornano 0 → totale 3.
-    assert count == 3
-    assert "imdf-bundles/task-1.zip" not in fake_storage.objects
+    # Fixed keys (meta + legacy zip + gdb zip) sempre tentati = 3,
+    # piu' i 2 file individuali = 5.
+    assert count == 5
     assert "imdf-bundles/task-1.meta.json" not in fake_storage.objects
+    assert "imdf-bundles/task-1/files/plenora_metadata.json" not in fake_storage.objects
+    assert "imdf-bundles/task-1/files/S1/building.geojson" not in fake_storage.objects
     assert not local.exists()
 
 
@@ -260,13 +273,16 @@ def test_delete_bundle_idempotent_when_nothing(fake_storage, fake_settings):
 def test_delete_bundle_can_skip_local_cleanup(fake_storage, fake_settings, tmp_path):
     from app.core.imdf import storage as st
 
-    source = tmp_path / "s1"
-    _write_bundle(source)
-    st.save_bundle("task-1", source)
+    _seed_files_layout(
+        fake_storage, "task-1",
+        meta={"project_id": "proj-1", "site_id": "S1"},
+        files={},
+    )
     local = fake_settings / "task-1"
     _write_bundle(local)
 
     count = st.delete_bundle("task-1", cleanup_local=False)
 
+    # 3 fixed keys + 0 files (questo seed non ha files individuali).
     assert count == 3
     assert local.exists()

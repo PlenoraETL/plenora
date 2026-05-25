@@ -348,66 +348,11 @@ def list_bundle_file_entries(task_id: str) -> List[JsonObject]:
     return out
 
 
-def save_bundle(task_id: str, local_dir: Path, meta: Optional[JsonObject] = None) -> StringMap:
-    """Zippa `local_dir` (bundle estratto dal worker) e carica su S3.
-
-    Upload anche il `plenora_metadata.json` separatamente come
-    `{task_id}.meta.json` per list endpoint veloci (no download zip).
-
-    Args:
-        task_id: id univoco per l'oggetto S3
-        local_dir: cartella gia' popolata dal persist locale
-        meta: dict di metadata (se None, lo legge da `plenora_metadata.json`
-            nella dir)
-
-    Returns:
-        dict con chiavi:
-          - zip_key: key S3 dello zip
-          - meta_key: key S3 del meta
-
-    Raises:
-        FileNotFoundError: local_dir non esiste
-        OSError: zip/upload fallito (propagato)
-    """
-    if not local_dir.exists() or not local_dir.is_dir():
-        raise FileNotFoundError(f"Bundle dir non trovata: {local_dir}")
-
-    # Leggi meta se non fornito (usa file scritto dal persist step precedente
-    if meta is None:
-        meta_path = local_dir / "plenora_metadata.json"
-        if meta_path.exists():
-            try:
-                meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            except Exception as e:
-                logger.warning(f"[{task_id}] meta parse fallito: {e}; upload senza meta.json")
-                meta = None
-
-    storage = _storage()
-
-    # Build ZIP in-memory via BytesIO, upload diretto via upload_bytes.
-    # I bundle IMDF tipici sono 20-100MB; entrano in RAM senza problemi.
-    zip_buf = io.BytesIO()
-    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
-        for p in local_dir.rglob("*"):
-            if p.is_file():
-                arcname = p.relative_to(local_dir)
-                zf.write(p, arcname=str(arcname))
-    zip_bytes = zip_buf.getvalue()
-
-    zk = _zip_key(task_id)
-    storage.upload_bytes(zip_bytes, zk)
-    logger.info(
-        f"[{task_id}] imdf bundle zip uploaded: {zk} ({len(zip_bytes)} bytes)"
-    )
-
-    # Meta JSON separato (se disponibile) — utile per list veloce
-    mk = _meta_key(task_id)
-    if meta is not None:
-        meta_bytes = json.dumps(meta, indent=2).encode("utf-8")
-        storage.upload_bytes(meta_bytes, mk)
-        logger.info(f"[{task_id}] imdf meta uploaded: {mk}")
-
-    return {"zip_key": _zip_key(task_id), "meta_key": mk}
+# Tombstone (IMDF-4 step 4): legacy `save_bundle(task_id, local_dir,
+# meta)` rimosso. Era il writer zip-based pre-IMDF-3 (zippa local_dir +
+# upload). Zero caller in produzione. La writer entry-point canonica e'
+# `save_bundle_files` (IMDF-3). Tentativi di chiamarla post-tombstone
+# falliscono con AttributeError.
 
 
 # Read (endpoint side
@@ -460,29 +405,15 @@ def ensure_local_bundle(task_id: str) -> Path:
         logger.debug(f"[{task_id}] gdb zip probe failed: {e}")
 
     if not file_objects and not has_gdb:
-        # Fallback compat con bundle persistiti con `save_bundle` legacy
-        # (zip monolitico). Permette di leggere bundle creati prima di
-        # IMDF-3 senza forzare un re-upload.
-        zk = _zip_key(task_id)
-        try:
-            obj = storage.get_object_stream(zk)
-        except Exception as e:
-            logger.warning(
-                f"[{task_id}] imdf storage hydration failed "
-                f"(no files-layout, no legacy zip): {e}"
-            )
-            raise FileNotFoundError(
-                f"Bundle {task_id} non presente su storage "
-                f"(prefix={prefix} vuoto, no _gdb.zip, no {zk})"
-            )
-        zip_bytes = b"".join(obj.get("body", []))
-        local.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as zf:
-            safe_extractall(zf, local)
-        logger.info(
-            f"[{task_id}] imdf bundle hydrated from storage (legacy zip layout) -> {local}"
+        # Tombstone (IMDF-4 step 4): il fallback legacy zip-based su
+        # `_zip_key(task_id)` e' stato rimosso. Bundle pre-IMDF-3 con
+        # layout zip monolitico non sono piu' idratabili — richiedono
+        # re-upload via `persist_imdf_bundle` per essere accessibili.
+        raise FileNotFoundError(
+            f"Bundle {task_id} non presente su storage "
+            f"(prefix={prefix} vuoto, no _gdb.zip). Layout legacy "
+            f"zip-based non piu' supportato (IMDF-4 step 4)."
         )
-        return local
 
     local.mkdir(parents=True, exist_ok=True)
 

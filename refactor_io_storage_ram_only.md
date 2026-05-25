@@ -2235,9 +2235,9 @@ ogni persistenza passa da DB/S3/MinIO/local-dev policy
 Stato dopo Phase5 (ResultBlobLoader path-mode rimosso) + REST connector
 bytes-first + IMDF-1..4 (loader bytes / bundle.files / persist storage-direct
 / GET metadata + list storage-first / validator+publish con scoped .gdb
-hydration).
+hydration / legacy fallback tombstoned).
 
-Il report `test_report_inside_boundary_frozen` segnala **28 entries
+Il report `test_report_inside_boundary_frozen` segnala **27 entries
 su 13 file** all'interno del boundary I/O. Questi residui sono
 intenzionali e classificati per categoria. Non vanno inseguiti: se
 qualcuno li tocca, deve aggiornare contestualmente questa sezione
@@ -2273,7 +2273,7 @@ shape per i path che richiedono GDAL/pyogrio.
 |---|---|---|
 | `app/core/imdf/loader.py` | 3 | `extract_imdf_zip` + `extract_imdf_zip_bytes`: `tempfile.mkdtemp` per la dir di estrazione (richiesta da pyogrio). `safe_extractall` per zip-bomb-safety. |
 | `app/core/imdf/persist.py` | 3 | `persist_imdf_bundle_to_disk` legacy (write_bytes + write_text + shutil.move). La funzione canonica IMDF-3 `persist_imdf_bundle` va su storage; il legacy resta per tooling/test finche' non migrano. |
-| `app/core/imdf/storage.py` | 5 | `ensure_local_bundle` hydration `path.write_bytes` (per-file layout) + `safe_extractall` (legacy zip fallback) + `hydrate_gdb_to_temp` `tempfile.mkdtemp` + `safe_extractall` (IMDF-4 step 3: scoped .gdb hydration per validator/publish, no persistent cache). |
+| `app/core/imdf/storage.py` | 4 | `ensure_local_bundle` hydration `path.write_bytes` + `safe_extractall` (.gdb extract da per-file layout) + `hydrate_gdb_to_temp` `tempfile.mkdtemp` + `safe_extractall` (IMDF-4 step 3: scoped .gdb hydration per validator/publish). Post IMDF-4 step 4 tombstone: legacy zip fallback rimosso. |
 
 **Policy**: questi file restano filesystem-aware finche' il subsystem
 publish/validate non viene migrato (IMDF-5+). Tombstone del legacy
@@ -2309,15 +2309,19 @@ non richiedono aggiornamento di questa sezione.
 
 Le seguenti aree restano target attivi di migrazione (non by-design):
 
-- `/imdf/publish`, `/imdf/validate-publish` — ACL ora storage-first
-  (meta read da storage; ensure_local_bundle solo fallback). Il
-  validator + publish task usano `hydrate_gdb_to_temp` (scoped temp
-  con cleanup) come primary; il fallback `ensure_local_bundle`
-  resta per bundle pre-IMDF-3. Future: valutare pyogrio over
-  `/vsizip/_gdb.zip` per eliminare la temp dir.
-- `/imdf/bundles` list — storage-first dopo IMDF-4 step 2; resta
-  union con cache locale come fallback.
-- IMDF legacy `_zip_key` fallback in `ensure_local_bundle` — tombstone
-  appena prodotto accetta il break compat.
+- Pyogrio over `/vsizip/_gdb.zip` (zero-disk .gdb read): possibile
+  ottimizzazione futura. Eliminerebbe le 2 entries di
+  `hydrate_gdb_to_temp` (`tempfile.mkdtemp` + `safe_extractall`).
+  Richiede valutazione driver behavior + cap di lettura sequenziale.
 - `persist_imdf_bundle_to_disk` legacy — rimovibile quando test/script
-  migrano a `persist_imdf_bundle`.
+  (`imdf_real_e2e_check.py`, `test_imdf_persist_bundle_contract.py`,
+  `test_plenora_metadata_schema.py`) migrano a `persist_imdf_bundle`.
+
+Aree tombstoned (post IMDF-4 step 4, no piu' fallback legacy):
+- `storage.save_bundle(task_id, local_dir, meta)` legacy zip writer.
+- `ensure_local_bundle` zip-based fallback (downloadava `{task_id}.zip`).
+- Router `/publish` / `/validate-publish` / `GET /bundles/{id}` /
+  `DELETE` fallback `_hydrate_local_cache + read_metadata`.
+- Validator + publish task fallback `ensure_local_bundle + find_gdb_dir`.
+- Bundle pre-IMDF-3 senza `_gdb.zip` su storage richiedono re-upload
+  via `persist_imdf_bundle` per essere processabili.

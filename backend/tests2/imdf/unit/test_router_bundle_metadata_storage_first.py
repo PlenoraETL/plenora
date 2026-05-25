@@ -175,55 +175,26 @@ def test_get_bundle_metadata_forbids_cross_tenant_via_meta_acl(monkeypatch):
     assert exc_info.value.status_code == 403
 
 
-def test_get_bundle_metadata_legacy_fallback_hydrates_local(monkeypatch, tmp_path):
-    """Bundle pre-IMDF-3 (zip layout, no meta su storage): l'endpoint
-    deve idratare la cache locale e leggere meta + componenti dal
-    filesystem come compat path."""
+def test_get_bundle_metadata_legacy_fallback_removed_post_tombstone(monkeypatch):
+    """IMDF-4 step 4 tombstone: il fallback legacy (cache locale +
+    `bundle_dir.rglob`) e' rimosso. Bundle pre-IMDF-3 senza meta su
+    storage -> 404 BUNDLE_NOT_FOUND. Richiede re-upload via
+    `persist_imdf_bundle` per essere accessibili."""
     from app.core.imdf import router as router_mod
     from app.core.imdf import storage as st_mod
-    from app.core.imdf import bundle_store as bs_mod
+    from fastapi import HTTPException
 
-    # Storage: niente meta.
     monkeypatch.setattr(st_mod, "get_meta_only", lambda tid: None)
     monkeypatch.setattr(st_mod, "read_manifest", lambda tid: None)
     monkeypatch.setattr(st_mod, "read_validation", lambda tid: None)
     monkeypatch.setattr(st_mod, "read_renderers", lambda tid: None)
     monkeypatch.setattr(st_mod, "list_bundle_file_entries", lambda tid: [])
 
-    # Hydrate: simuliamo write su settings.IMDF_BUNDLES_DIR/{task_id}/.
-    bundle_dir = tmp_path / "task-legacy"
-    bundle_dir.mkdir(parents=True)
-    (bundle_dir / "plenora_metadata.json").write_text(
-        json.dumps(_FAKE_META), encoding="utf-8"
-    )
-    (bundle_dir / "manifest.json").write_text(
-        json.dumps({"legacy": True}), encoding="utf-8"
-    )
-
-    # Patch settings.IMDF_BUNDLES_DIR sul tmp_path.
-    import app.config as config_mod
-    fake_settings = SimpleNamespace(
-        IMDF_BUNDLES_DIR=tmp_path,
-        IMDF_BUNDLE_TTL_HOURS=48,
-    )
-    monkeypatch.setattr(config_mod, "settings", fake_settings)
-    monkeypatch.setattr(router_mod, "settings", fake_settings)
-
-    # _hydrate_local_cache no-op (gia' on-disk).
-    monkeypatch.setattr(router_mod, "_hydrate_local_cache", lambda tid: None)
-    # Override bundle_store.read_metadata per leggere dal nostro tmp.
-    monkeypatch.setattr(bs_mod, "read_renderers", lambda d: None)
-
-    _bypass_acl(monkeypatch)
-
-    out = router_mod.get_bundle_metadata(
-        "task-legacy", current_user=_fake_current_user(),
-    )
-    # Legacy fallback ha trovato meta + manifest sul disco.
-    assert out["site_id"] == "SITE_X"
-    assert out["manifest"] == {"legacy": True}
-    # Files list popolata dal rglob legacy.
-    assert any(f["path"] == "manifest.json" for f in out["files"])
+    with pytest.raises(HTTPException) as exc_info:
+        router_mod.get_bundle_metadata(
+            "task-legacy", current_user=_fake_current_user(),
+        )
+    assert exc_info.value.status_code == 404
 
 
 def test_storage_read_helpers_use_read_bundle_file_bytes(monkeypatch):

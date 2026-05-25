@@ -331,10 +331,12 @@ _BOUNDARY_FROZEN_SNAPSHOT: dict[str, int] = {
     # IMDF subsystem (format-as-directory + cache hydration)
     "app/core/imdf/loader.py": 3,
     "app/core/imdf/persist.py": 3,
-    # storage.py: 3 dal layout per-file + 2 da `hydrate_gdb_to_temp`
-    # (IMDF-4 step 3: tmp mkdtemp + safe_extractall per scoped .gdb dir
-    # consumata da validator/publish post-IMDF-3 storage layout).
-    "app/core/imdf/storage.py": 5,
+    # storage.py post-IMDF-4 step 4 tombstone (legacy zip fallback rimosso):
+    # 1 path_write_bytes (ensure_local_bundle files-layout hydration)
+    # + 1 safe_extractall (ensure_local_bundle .gdb extract)
+    # + 1 tempfile_mkdtemp + 1 safe_extractall (hydrate_gdb_to_temp).
+    # save_bundle legacy + legacy zip fallback safe_extractall rimossi.
+    "app/core/imdf/storage.py": 4,
     # Scripts one-off tooling
     "scripts/backup_db.py": 1,
     "scripts/test_restore.py": 1,

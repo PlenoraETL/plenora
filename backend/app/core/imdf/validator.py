@@ -133,60 +133,33 @@ def validate_publish(
         _add_top_issue("error", "INVALID_MODE", f"Modalita' '{mode}' non supportata")
         return report
 
-    # IMDF-4 step 3: hydration del .gdb storage-first. Primary path:
-    # scarica solo `_gdb.zip` da storage in temp dir scoped al call.
-    # Fallback: legacy `ensure_local_bundle` (full bundle hydration in
-    # `IMDF_BUNDLES_DIR` persistent cache) per bundle pre-IMDF-3 ancora
-    # in zip layout.
+    # IMDF-4 step 3+4: hydration del .gdb storage-first scoped al call.
+    # Post-tombstone (step 4) il fallback legacy `ensure_local_bundle +
+    # find_gdb_dir` e' rimosso: i bundle senza `_gdb.zip` su storage
+    # sono dichiarati GDB_MISSING.
     from app.core.imdf import storage as imdf_storage
-    bundle_layers: Optional[Dict[str, Any]] = None
-    gdb_handle = None
     try:
         gdb_handle = imdf_storage.hydrate_gdb_to_temp(bundle_task_id)
     except Exception as e:
-        # hydrate_gdb_to_temp probe ok ma extract fallito: degrada al
-        # fallback legacy (potrebbe esserci ancora un .gdb in cache locale).
-        logger.warning(
-            f"[{bundle_task_id}] hydrate_gdb_to_temp failed (degrade to legacy): {e}"
-        )
+        _add_top_issue("error", "GDB_LOAD_FAILED", f"Hydration GDB fallita: {e}")
+        return report
 
-    if gdb_handle is not None:
+    if gdb_handle is None:
+        _add_top_issue(
+            "error", "BUNDLE_MISSING",
+            f"Bundle '{bundle_task_id}' senza .gdb su storage "
+            f"(o bundle pre-IMDF-3 non piu' supportato)."
+        )
+        return report
+
+    try:
         try:
             bundle_layers = load_imdf_layers(gdb_handle.gdb_path)
         except Exception as e:
             _add_top_issue("error", "GDB_LOAD_FAILED", f"Caricamento GDB fallito: {e}")
             return report
-        finally:
-            gdb_handle.cleanup()
-    else:
-        # Legacy fallback: full bundle hydration.
-        try:
-            bundle_dir = bundle_store.ensure_local_bundle(bundle_task_id)
-        except ValueError:
-            _add_top_issue(
-                "error", "INVALID_BUNDLE_ID",
-                f"bundle_task_id '{bundle_task_id}' malformato "
-                "(ammessi solo alfanumerico, '-', '_')"
-            )
-            return report
-        except FileNotFoundError:
-            _add_top_issue(
-                "error", "BUNDLE_MISSING",
-                f"Bundle '{bundle_task_id}' non trovato (potrebbe essere scaduto: "
-                f"TTL {settings.IMDF_BUNDLE_TTL_HOURS}h)"
-            )
-            return report
-
-        gdb_path = bundle_store.find_gdb_dir(bundle_dir)
-        if gdb_path is None:
-            _add_top_issue("error", "GDB_MISSING", f"Nessun .gdb trovato in {bundle_dir}")
-            return report
-
-        try:
-            bundle_layers = load_imdf_layers(gdb_path)
-        except Exception as e:
-            _add_top_issue("error", "GDB_LOAD_FAILED", f"Caricamento GDB fallito: {e}")
-            return report
+    finally:
+        gdb_handle.cleanup()
 
     layers_present = [n for n in LAYER_ORDER if n in bundle_layers and len(bundle_layers[n]) > 0]
     if not layers_present:
