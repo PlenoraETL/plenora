@@ -416,14 +416,20 @@ def list_bundles(
     project_id: Optional[str] = None,
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Lista i bundle IMDF disponibili su disco con metadata base.
+    """Lista i bundle IMDF disponibili con metadata base.
+
+    IMDF-4: storage-first symmetrico a GET /bundles/{id}. La fonte di
+    verita' e' object storage (`imdf.storage.list_task_ids`); il meta
+    per-bundle e' letto via `imdf.storage.get_meta_only(task_id)`.
+    Niente piu' `bundles_dir.iterdir()` + per-task `read_metadata` dal
+    filesystem locale per il path normale. La cache locale resta una
+    fallback union per i bundle pre-IMDF-3 ancora solo su disco
+    (es. ambienti dev con storage off).
 
     Args:
         project_id: se valorizzato, filtra solo i bundle generati per quel
-            progetto (letto da plenora_metadata.json dentro ogni bundle).
+            progetto (letto da plenora_metadata dentro ogni bundle).
     """
-    bundles_dir = settings.IMDF_BUNDLES_DIR
-
     # Precarico i progetti visibili all'utente (per filtrare i bundle di
     # altri gruppi). superadmin vede tutto → skip del check
     # Fail-CLOSED: in caso di errore ACL rispondiamo 500 senza servire
@@ -446,50 +452,65 @@ def list_bundles(
                 detail="Errore verifica ACL bundle IMDF",
             )
 
-    # R2 multi-host: union task_id da local cache + S3 (fonte di verita'
-    # Un nodo senza cache locale vede comunque i bundle generati da altri nodi
+    # Storage-first: task_id list da object storage (fonte di verita').
+    # Fallback union con cache locale per i bundle pre-IMDF-3 ancora
+    # solo on-disk (dev senza S3 / bundle legacy mai migrati).
     task_ids_set: set = set()
+    try:
+        task_ids_set.update(_imdf_bundle_store.list_task_ids())
+    except Exception as e:
+        logger.warning(
+            f"list_bundles: storage lookup fallito (uso solo cache locale): {e}"
+        )
+    bundles_dir = settings.IMDF_BUNDLES_DIR
     if bundles_dir.exists():
         for entry in bundles_dir.iterdir():
             if entry.is_dir():
                 task_ids_set.add(entry.name)
-    try:
-        task_ids_set.update(_imdf_bundle_store.list_task_ids())
-    except Exception as e:
-        logger.warning(f"list_bundles: S3 lookup fallito (mostro solo cache locale): {e}")
 
     if not task_ids_set:
         return []
 
-    # Ordino: prima per mtime local (veloce), fallback per nome. I bundle solo-S3
-    # senza local cache finiscono in coda ordinati per nome
-    def _sort_key(tid: str) -> tuple:
-        local_path = bundles_dir / tid
-        try:
-            return (0, -local_path.stat().st_mtime)
-        except OSError:
-            return (1, tid)
-    sorted_task_ids = sorted(task_ids_set, key=_sort_key)
-
+    # Ordino: i bundle con saved_at piu' recente in testa. Per chi non ha
+    # saved_at, fallback alphabetico stabile. saved_at viene letto dal
+    # meta in storage; e' indipendente dalla cache locale (multi-host safe).
     out: List[ImdfBundleSummary] = []
     now = _t.time()
     legacy_skipped = 0
     acl_skipped = 0
-    for task_id in sorted_task_ids:
-        entry = bundles_dir / task_id
-        entry_local_exists = entry.is_dir()
-        try:
-            # Leggi plenora_metadata.json: prima da local cache (fast
-            # poi fallback a S3 (multi-host: bundle generato su altro nodo
-            meta: Dict[str, Any] = _imdf_bundle_store.read_metadata(entry) or {}
-            if not meta:
-                try:
-                    _meta_from_s3 = _imdf_bundle_store.read_remote_metadata(task_id)
-                    if _meta_from_s3:
-                        meta = _meta_from_s3
-                except Exception as _e:
-                    logger.debug(f"list_bundles: S3 meta read failed for {task_id}: {_e}")
 
+    # Pre-fetch meta per ogni task_id (single round-trip per bundle).
+    # In ambiente prod questo e' O(N) GETs su storage; cache locale
+    # cortocircuita il path quando disponibile.
+    meta_by_task: Dict[str, Dict[str, Any]] = {}
+    for tid in task_ids_set:
+        local_entry = bundles_dir / tid
+        cached_meta = (
+            _imdf_bundle_store.read_metadata(local_entry)
+            if local_entry.is_dir() else None
+        )
+        if cached_meta:
+            meta_by_task[tid] = cached_meta
+            continue
+        try:
+            remote = _imdf_storage.get_meta_only(tid)
+        except Exception as e:
+            logger.debug(f"list_bundles: storage meta read fail {tid}: {e}")
+            remote = None
+        meta_by_task[tid] = remote or {}
+
+    def _sort_key(tid: str) -> tuple:
+        m = meta_by_task.get(tid) or {}
+        saved_at = m.get("saved_at") or ""
+        # saved_at vuoto -> alla fine, ordinato per task_id
+        return (0, -1 * len(saved_at), saved_at) if saved_at else (1, 0, tid)
+    sorted_task_ids = sorted(task_ids_set, key=_sort_key)
+
+    for task_id in sorted_task_ids:
+        try:
+            meta = meta_by_task.get(task_id) or {}
+            entry = bundles_dir / task_id
+            entry_local_exists = entry.is_dir()
             bundle_pid = meta.get("project_id")
 
             # ACL: escludi bundle di progetti non visibili all'utente
@@ -499,10 +520,8 @@ def list_bundles(
                     acl_skipped += 1
                     continue
 
-            # Filtro project_id — se il filtro e' attivo, richiediamo che
-            # il bundle abbia un project_id noto e matchi. Bundle legacy
-            # senza plenora_metadata.json (project_id=None) vengono skippati
-            # e il conteggio finale viene loggato una sola volta
+            # Filtro project_id — bundle legacy senza meta vengono skippati
+            # quando il filtro e' attivo.
             if project_id:
                 if not bundle_pid:
                     legacy_skipped += 1
@@ -510,53 +529,29 @@ def list_bundles(
                 if bundle_pid != project_id:
                     continue
 
-            # Size: calcolabile solo se in cache locale. Altrimenti None
-            # mostrato come "—" dal frontend
+            # Size: calcolabile solo se in cache locale (storage non
+            # espone size del bundle aggregato). Su solo-storage resta 0.
             size_bytes = (
                 sum(f.stat().st_size for f in entry.rglob("*") if f.is_file())
                 if entry_local_exists else None
             )
 
-            # Fallback per bundle senza plenora_metadata (vecchi). Le euristiche
-            # richiedono accesso locale ai file; su S3-only resta il valore meta
             has_gdb = meta.get("has_gdb")
             if has_gdb is None and entry_local_exists:
-                has_gdb = any(p.is_dir() and p.suffix == ".gdb" for p in entry.iterdir())
+                # Legacy bundle senza meta: fallback iterdir locale.
+                has_gdb = any(
+                    p.is_dir() and p.suffix == ".gdb" for p in entry.iterdir()
+                )
 
-            # D3 commit 3 (R3): site_id letto solo da meta (scritto da persist
-            # dal valore autoritativo di loader.ImdfBundle.site_id). Fallback
-            # iterdir rimosso: nessuna scansione cross-node; bundle senza
-            # site_id in meta -> site_id=None nella response
             site_id = meta.get("site_id")
 
-            # Counts layer IMDF: preferenza ai valori scritti in metadata
-            # al save time — disponibili anche su S3-only). Fallback counting
-            # lazy dei .geojson solo se local cache c'e'
             building_count = meta.get("building_count")
             level_count    = meta.get("level_count")
             unit_count     = meta.get("unit_count")
-            if (building_count is None or level_count is None or unit_count is None) \
-                    and site_id and entry_local_exists:
-                site_dir = entry / site_id
-                if site_dir.is_dir():
-                    def _count_features(p: Path) -> Optional[int]:
-                        try:
-                            if not p.exists():
-                                return None
-                            data = _json.loads(p.read_text(encoding="utf-8"))
-                            feats = data.get("features")
-                            return len(feats) if isinstance(feats, list) else None
-                        except Exception as _e:
-                            logger.warning(f"list_bundles: count {p.name} fallito: {_e}")
-                            return None
-                    if building_count is None:
-                        building_count = _count_features(site_dir / "building.geojson")
-                    if level_count is None:
-                        level_count = _count_features(site_dir / "level.geojson")
-                    if unit_count is None:
-                        unit_count = _count_features(site_dir / "unit.geojson")
 
-            # age_hours: da mtime locale se c'e', altrimenti None
+            # age_hours: da mtime locale se c'e', altrimenti None.
+            # saved_at del meta sarebbe la fonte canonica; lasciamo
+            # mtime per backward-compat finche' il FE non legge saved_at.
             age_hours = (
                 round((now - entry.stat().st_mtime) / 3600, 2)
                 if entry_local_exists else None
@@ -581,7 +576,7 @@ def list_bundles(
     if legacy_skipped > 0:
         logger.info(
             f"list_bundles: skippati {legacy_skipped} bundle legacy senza "
-            f"plenora_metadata.json (filter project_id='{project_id}')"
+            f"plenora_metadata (filter project_id='{project_id}')"
         )
     if acl_skipped > 0:
         logger.info(
