@@ -17,6 +17,7 @@ from typing import Optional, Union
 
 import pandas as pd
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.tabular import (
     _compact_whole_number_floats,
     _read_csv_safe,
@@ -269,7 +270,7 @@ def _coerce_json_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
     if cols_to_convert:
         # Lazy copy: solo se ci sono modifiche reali, evita allocazione
         # di un DF intero quando nessuna colonna e' candidate.
-        out = df.copy()
+        out = copy_frame_for_update(df)
         for col, converted in cols_to_convert:
             out[col] = converted
     return out

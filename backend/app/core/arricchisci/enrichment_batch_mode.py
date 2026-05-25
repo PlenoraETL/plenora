@@ -11,6 +11,7 @@ from typing import Any, List, Optional, Tuple
 
 import requests
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.tabular import iter_dataframe_indexed_rows
 from app.infrastructure.http.session import get_shared_session
 from app.utils.logger import get_logger
@@ -48,7 +49,7 @@ class EnrichmentBatchModeMixin:
         - Invia singola richiesta per batch
         - Mappa risposte alle righe originali
         """
-        result_df = df.copy()
+        result_df = copy_frame_for_update(df)
         stats = EnrichmentStats(total_rows=len(df))
         errors: List[RowError] = []
 

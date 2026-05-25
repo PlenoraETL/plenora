@@ -7,6 +7,7 @@ Keeps transformation behavior isolated from orchestration callers.
 import time as _time
 from typing import Any, List, Optional
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     dataframe_preview_records,
@@ -870,7 +871,7 @@ class ManipolaExecutor:
 
 
         # Inizia con il primo DataFrame
-        result = inputs[0].copy()
+        result = copy_frame_for_update(inputs[0])
 
         # Multi-join sequenziale: ogni step `merge_dataframes` puo' inflate
         # l'output rispetto agli input se le chiavi non sono unique
@@ -913,7 +914,7 @@ class ManipolaExecutor:
 
         # Merge sequenziale con gli altri
         for idx, df in enumerate(inputs[1:], start=2):
-            df_copy = df.copy()
+            df_copy = copy_frame_for_update(df)
 
             # Trova colonne duplicate (non-chiave
             result_cols = set(result.columns) - set(join_keys)

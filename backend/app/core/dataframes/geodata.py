@@ -10,6 +10,7 @@ from typing import Optional, Any
 import pandas as pd
 import geopandas as gpd
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.geometry_parsing import (
     GEOMETRY_COLUMN_NAMES,
     WKT_PREFIXES,
@@ -271,7 +272,7 @@ def to_geodataframe(
     # avrebbe poi divergeva dai metadati canvas (che mantengono il nome
     # originale, es. "geom"), facendo fallire il salvataggio GeoJSON con
     # `set_geometry("geom")` -> "Unknown column geom".
-    df_copia = df.copy()
+    df_copia = copy_frame_for_update(df)
     df_copia[geom_column] = geometrie.values
     gdf = gpd.GeoDataFrame(df_copia, geometry=geom_column, crs=crs_rilevato)
 

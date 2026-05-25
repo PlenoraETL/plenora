@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence
 
 from app.core.carica.models import ColumnMapping
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.tabular import (
     geometry_series_columns_to_wkt,
     mixed_numeric_string_object_columns,
@@ -46,7 +47,7 @@ def convert_geoseries_columns_to_wkt(df: Any, logger) -> Any:
 
 def prepare_dataframe(df: Any, logger) -> Any:
     """Prepare a DataFrame for database writes without writer state."""
-    prepared = df.copy()
+    prepared = copy_frame_for_update(df)
     prepared = fix_mixed_type_columns(prepared, logger)
     return convert_geoseries_columns_to_wkt(prepared, logger)
 

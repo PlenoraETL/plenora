@@ -11,6 +11,7 @@ from typing import Dict, Any, List, Mapping, MutableMapping, Optional, Protocol,
 
 from app.core.projects.canvas_models import CanvasState
 from app.utils.logger import get_logger, append_step
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.geodata import extract_srid_from_column_type
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.schema import series_to_canvas_type
@@ -121,7 +122,7 @@ def _dedup_dataframe_columns_for_serialization(
 
     # Il costruttore righe/colonne conserva l'ordine; assegniamo direttamente
     # la nuova lista per rinominare anche colonne duplicate.
-    df_renamed = df.copy()
+    df_renamed = copy_frame_for_update(df)
     df_renamed.columns = new_columns
 
     # NOTE: visibili: uno per coppia rinominata + log server-side aggregato

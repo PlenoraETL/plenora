@@ -11,6 +11,7 @@ from typing import Any, Optional
 
 import requests
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.tabular import (
     dataframe_first_row_dict,
     dataframe_from_records,
@@ -561,7 +562,7 @@ class ApiConnectionGeneratorEnricherMixin:
         enrichment_service.py / EnrichmentExecutor.
         """
 
-        result_df = df.copy()
+        result_df = copy_frame_for_update(df)
 
         endpoint = api_config.get('endpoint', {})
         url = endpoint.get('url', '')

@@ -11,6 +11,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, List, Optional, Tuple
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.tabular import (
     append_record_rows,
     dataframe_row_by_index,
@@ -64,7 +65,7 @@ class EnrichmentExecutionEnginesMixin:
         self,
         df: Any,
     ) -> Tuple[Any, EnrichmentStats, List[RowError], int, float]:
-        result_df = df.copy()
+        result_df = copy_frame_for_update(df)
         stats = EnrichmentStats(total_rows=len(df))
         errors: List[RowError] = []
 

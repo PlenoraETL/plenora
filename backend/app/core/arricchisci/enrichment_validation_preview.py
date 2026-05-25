@@ -9,6 +9,7 @@ from __future__ import annotations
 import time
 from typing import Any, List
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.tabular import (
     dataframe_head_records,
     null_row_indices_for_columns,
@@ -132,7 +133,7 @@ class EnrichmentValidationPreviewMixin:
         if len(df) > sample_size:
             sample_df = sample_dataframe(df, n=sample_size, random_state=42)
         else:
-            sample_df = df.copy()
+            sample_df = copy_frame_for_update(df)
 
         # Calcola combinazioni uniche per stimare chiamate API
         unique_combinations = self._count_unique_combinations(df)
