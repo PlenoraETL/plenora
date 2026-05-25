@@ -6,8 +6,8 @@ Chiude R2 del multi-host audit: i bundle IMDF non vivono piu' solo su
 
 from __future__ import annotations
 
+import io
 import json
-import tempfile
 import zipfile
 from pathlib import Path
 from typing import List, Optional
@@ -91,43 +91,28 @@ def save_bundle(task_id: str, local_dir: Path, meta: Optional[JsonObject] = None
 
     storage = _storage()
 
-    # Zip su tempfile sul worker (safe: worker ha il suo filesystem
-    with tempfile.NamedTemporaryFile(
-        prefix=f"imdf_{task_id}_", suffix=".zip", delete=False
-    ) as tmp:
-        tmp_zip = Path(tmp.name)
-    try:
-        with zipfile.ZipFile(tmp_zip, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
-            for p in local_dir.rglob("*"):
-                if p.is_file():
-                    arcname = p.relative_to(local_dir)
-                    zf.write(p, arcname=str(arcname))
+    # Build ZIP in-memory via BytesIO, upload diretto via upload_bytes.
+    # I bundle IMDF tipici sono 20-100MB; entrano in RAM senza problemi.
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+        for p in local_dir.rglob("*"):
+            if p.is_file():
+                arcname = p.relative_to(local_dir)
+                zf.write(p, arcname=str(arcname))
+    zip_bytes = zip_buf.getvalue()
 
-        zk = _zip_key(task_id)
-        storage.upload(tmp_zip, zk)
-        logger.info(f"[{task_id}] imdf bundle zip uploaded: {zk} ({tmp_zip.stat().st_size} bytes)")
-    finally:
-        try:
-            tmp_zip.unlink()
-        except OSError as _ue:
-            logger.debug(f"[{task_id}] tmp_zip unlink skipped: {type(_ue).__name__}: {_ue}")
+    zk = _zip_key(task_id)
+    storage.upload_bytes(zip_bytes, zk)
+    logger.info(
+        f"[{task_id}] imdf bundle zip uploaded: {zk} ({len(zip_bytes)} bytes)"
+    )
 
     # Meta JSON separato (se disponibile) — utile per list veloce
     mk = _meta_key(task_id)
     if meta is not None:
-        with tempfile.NamedTemporaryFile(
-            prefix=f"imdf_{task_id}_", suffix=".meta.json", delete=False, mode="w", encoding="utf-8"
-        ) as tmp_meta:
-            json.dump(meta, tmp_meta, indent=2)
-            tmp_meta_path = Path(tmp_meta.name)
-        try:
-            storage.upload(tmp_meta_path, mk)
-            logger.info(f"[{task_id}] imdf meta uploaded: {mk}")
-        finally:
-            try:
-                tmp_meta_path.unlink()
-            except OSError as _ue:
-                logger.debug(f"[{task_id}] tmp_meta unlink skipped: {type(_ue).__name__}: {_ue}")
+        meta_bytes = json.dumps(meta, indent=2).encode("utf-8")
+        storage.upload_bytes(meta_bytes, mk)
+        logger.info(f"[{task_id}] imdf meta uploaded: {mk}")
 
     return {"zip_key": _zip_key(task_id), "meta_key": mk}
 
@@ -158,39 +143,32 @@ def ensure_local_bundle(task_id: str) -> Path:
     if local.exists() and any(local.iterdir()):
         return local
 
-    # Cache miss: tentativo di hydration da S3
+    # Cache miss: hydration RAM-first da S3 via get_object_stream.
     storage = _storage()
     zk = _zip_key(task_id)
 
-    # Download zip su tempfile locale, poi extract
-    with tempfile.NamedTemporaryFile(
-        prefix=f"imdf_hydrate_{task_id}_", suffix=".zip", delete=False
-    ) as tmp:
-        tmp_zip = Path(tmp.name)
-
     try:
-        try:
-            storage.download(zk, tmp_zip)
-        except Exception as e:
-            # Tipicamente NoSuchKey dal client S3 → bundle inesistente
-            logger.warning(f"[{task_id}] imdf storage hydration failed: {e}")
-            raise FileNotFoundError(f"Bundle {task_id} non presente su storage: {e}")
+        obj = storage.get_object_stream(zk)
+    except Exception as e:
+        # Tipicamente NoSuchKey dal client S3 → bundle inesistente
+        logger.warning(f"[{task_id}] imdf storage hydration failed: {e}")
+        raise FileNotFoundError(
+            f"Bundle {task_id} non presente su storage: {e}"
+        )
 
-        local.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(tmp_zip, "r") as zf:
-            # safe_extractall: zip slip + zip bomb pre-extract
-            # I bundle IMDF tipici sono ~20-100MB, ben sotto i 500MB
-            # default. Override possibile via ZIP_MAX_UNCOMPRESSED_BYTES
-            # se in futuro emergono bundle "grandi venue" (aeroporti
-            safe_extractall(zf, local)
+    # Body e' un iteratore di chunks; lo concateniamo in RAM.
+    zip_bytes = b"".join(obj.get("body", []))
 
-        logger.info(f"[{task_id}] imdf bundle hydrated from storage -> {local}")
-        return local
-    finally:
-        try:
-            tmp_zip.unlink()
-        except OSError as _ue:
-            logger.debug(f"[{task_id}] tmp_zip unlink (hydrate) skipped: {type(_ue).__name__}: {_ue}")
+    local.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as zf:
+        # safe_extractall: zip slip + zip bomb pre-extract.
+        # I bundle IMDF tipici sono ~20-100MB, ben sotto i 500MB
+        # default. Override possibile via ZIP_MAX_UNCOMPRESSED_BYTES
+        # se emergono bundle "grandi venue" (aeroporti).
+        safe_extractall(zf, local)
+
+    logger.info(f"[{task_id}] imdf bundle hydrated from storage -> {local}")
+    return local
 
 
 def get_meta_only(task_id: str) -> Optional[JsonObject]:
