@@ -23,7 +23,7 @@ from app.core.artifacts import (
 )
 from app.core.dataframes.frame_io import save_dataframe_to_bytes
 from app.core.files.source_loading import assert_file_source_group_access
-from app.core.files.source_loading import resolve_file_source_id_path
+from app.core.files.source_loading import resolve_file_source_id_bytes
 # File-source path materialization lives in the files domain boundary.
 # This mixin owns ctx extraction and REST-file orchestration.
 from app.core.arricchisci._api_connection_helpers import _nd
@@ -300,10 +300,11 @@ class ApiConnectionRestFileMixin:
                             f"Campo file extra '{name}' richiesto ma non configurato sul nodo",
                         )
                     continue
-                extra_path = self._resolve_file_source_id_path(fs_id, ctx=ctx)
-                if not extra_path:
+                extra_resolved = self._resolve_file_source_id_bytes(
+                    fs_id, ctx=ctx,
+                )
+                if not extra_resolved:
                     if required:
-                        # B3-B.5b rewrite #4/8: forward-ref classe → self
                         return files, data, self._rest_file_error(
                             "file_source_not_found",
                             f"Campo file extra '{name}': file_source '{fs_id}' non trovato "
@@ -314,10 +315,10 @@ class ApiConnectionRestFileMixin:
                         f"non risolvibile, saltato"
                     )
                     continue
-                ep = Path(extra_path)
-                fh = open(ep, 'rb')
-                opened_handles.append(fh)
-                files[name] = (ep.name, fh, 'application/octet-stream')
+                extra_bytes, extra_filename = extra_resolved
+                files[name] = (
+                    extra_filename, extra_bytes, 'application/octet-stream',
+                )
 
             else:
                 logger.warning(
@@ -771,37 +772,36 @@ class ApiConnectionRestFileMixin:
         current_group_id = _extract_file_source_group_id(self, ctx)
         assert_file_source_group_access(file_source_id, current_group_id)
 
-    def _resolve_file_source_id_path(
+    def _resolve_file_source_id_bytes(
         self,
         file_source_id: str,
         *,
         ctx: Optional[ArricchisciExecutionContext] = None,
-    ) -> Optional[str]:
-        """Materializza il blob di un file_source su filesystem come cache.
+    ) -> Optional[tuple[bytes, str]]:
+        """Risolve un file_source_id in `(bytes, filename)` RAM-only.
 
-        DB e' sempre source of truth. Questa funzione estrae il blob dal
-        DB in una cache locale (`{FILES_DIR}/{file_source_id}/{filename}`)
-        perche' fiona/GDAL lavorano con path fisici. Il file in cache
-        puo' essere eliminato in qualsiasi momento — viene ricreato al
-        prossimo accesso.
-
-        Flusso:
-          1. Check cache: se il file esiste in cache con il nome atteso
-             (da DB metadata), usalo
-          2. Altrimenti estrai il blob dal DB, scrivi in modo atomico
-             (.tmp + os.replace) per evitare race tra worker concorrenti
+        Post-Phase5: il blob viene letto direttamente da DB / object
+        storage senza materializzare cache locale. Il caller
+        (`_build_files_for_post`) lo consuma via `requests.post(files=...)`
+        come tuple, niente file handle.
 
         SECURITY: cross-tenant group check prima di qualsiasi lookup.
-        Senza questo, un canvas con `file_source_id` di un altro tenant
-        verrebbe materializzato su disco / estratto dal blob.
 
         Restituisce None se il file_source non esiste o e' vuoto.
         """
         current_group_id = _extract_file_source_group_id(self, ctx)
-        return resolve_file_source_id_path(
+        return resolve_file_source_id_bytes(
             file_source_id,
             expected_group_id=current_group_id,
         )
+
+    # Backward-compat alias: storicamente questo metodo ritornava un path
+    # str della cache locale; post-Phase5 ritorna `(bytes, filename)`.
+    # Conservato come alias del nuovo metodo bytes per non rompere i test
+    # che lo patchano via `monkeypatch.setattr(service,
+    # "_resolve_file_source_id_path", ...)`. Nuovo codice usa
+    # `_resolve_file_source_id_bytes`.
+    _resolve_file_source_id_path = _resolve_file_source_id_bytes
 
     def _resolve_file_source_path(
         self,
@@ -810,13 +810,17 @@ class ApiConnectionRestFileMixin:
         target_node_id: str,
         *,
         ctx: Optional[ArricchisciExecutionContext] = None,
-    ) -> Optional[str]:
-        """
-        Risolve il path originale del file dal nodo file_source collegato.
+    ) -> Optional[tuple[bytes, str] | str]:
+        """Risolve la sorgente file collegata al target node.
 
-        Cerca il nodo sorgente collegato via edge al target_node_id.
-        Se è un file_source, trova il file originale nel file system.
-        Se è un project_source, trova l'ultimo output del progetto.
+        Returns:
+            - file_source: `(bytes, filename)` tuple via `resolve_file_source_id_bytes`.
+            - project_source: path string via `SourceLoader.resolve_project_path`
+              (path-only adapter per workflow ArcGIS-like).
+            - None se nessuna sorgente collegata.
+
+        Il caller (`_build_files_for_post`) accetta gia' entrambe le shape
+        (linea 272 `isinstance(input_path, tuple)`).
 
         `ctx` e' il solo boundary di sicurezza per il group_id.
         Se il contesto manca, i branch file_source/project_source
@@ -833,7 +837,7 @@ class ApiConnectionRestFileMixin:
 
         if source_node.get('type') == 'file_source':
             file_source_id = _nd(source_node, 'file_source_id')
-            return self._resolve_file_source_id_path(file_source_id, ctx=ctx)
+            return self._resolve_file_source_id_bytes(file_source_id, ctx=ctx)
 
         elif source_node.get('type') == 'project_source':
             source_project_id = _nd(source_node, 'source_project_id')

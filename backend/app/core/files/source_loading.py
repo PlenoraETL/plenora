@@ -1,13 +1,12 @@
-"""File-source path materialization boundary.
+"""File-source bytes resolution boundary (RAM-only).
 
-This module owns the reusable ``file_source_id -> filesystem path`` workflow:
-tenant visibility, metadata/blob lookup, and atomic cache writes. Domain
-callers pass only the file source id and the already-resolved tenant context.
+Post-refactor: il file_source si risolve in `(bytes, filename)` direttamente
+da DB / object storage. Niente piu' cache locale su `{FILES_DIR}/{file_source_id}/`.
+Il caller (REST connector) consuma i bytes via `requests.post(files=...)`.
 """
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -21,7 +20,6 @@ from app.utils.logger import get_logger
 
 
 GetFileSource = Callable[[str, bool], Optional[JsonObject]]
-GetFileSourceDir = Callable[[str], Path]
 VisibilityCheck = Callable[..., bool]
 
 logger = get_logger(__name__)
@@ -35,12 +33,6 @@ def _default_get_file_source(
         file_source_id,
         include_data=include_data,
     )
-
-
-def _default_get_file_source_dir(file_source_id: str) -> Path:
-    from app.config import settings
-
-    return settings.get_file_source_dir(file_source_id)
 
 
 def assert_file_source_group_access(
@@ -91,15 +83,14 @@ def _expected_filename(row_meta: dict[str, Any]) -> str:
 
     Pre-fix (CVE-grade P0): ritornava `row_meta["original_filename"]` raw.
     Un record DB con `original_filename = "../../../etc/passwd"` (creato da
-    upload malformato o DB corrotto) costruiva un path `source_dir / "../../../etc/passwd"`
-    che, su filesystem, usciva dalla `source_dir`. La validazione
-    `assert_path_within` arrivava DOPO il primo `target.is_file()` (riga
-    136) e DOPO `tmp_path.write_bytes()` (riga 185), permettendo sia READ
-    sia WRITE arbitrari fuori dalla source_dir.
+    upload malformato o DB corrotto) componeva un path che usciva dalla
+    source_dir, esponendo sia READ che WRITE arbitrari sotto FILES_DIR.
 
     Post-fix: `Path(raw).name` taglia qualunque directory component,
     indipendentemente da `..`, `/`, `\\`, separatori URL-encoded, ecc.
-    Backstop: l'`assert_path_within` rimane come defense-in-depth a valle.
+    Post-Phase5 il path-cache e' stato eliminato (la funzione ritorna
+    bytes), quindi il rischio path-traversal non esiste piu' by-design;
+    il normalizer resta come defense-in-depth sul filename ritornato.
     """
     raw = (
         row_meta.get("original_filename")
@@ -122,19 +113,33 @@ def _expected_filename(row_meta: dict[str, Any]) -> str:
     return basename
 
 
-def resolve_file_source_id_path(
+def resolve_file_source_id_bytes(
     file_source_id: str,
     *,
     expected_group_id: Optional[str],
     get_file_source: GetFileSource = _default_get_file_source,
-    get_file_source_dir: GetFileSourceDir = _default_get_file_source_dir,
     visibility_check: Optional[VisibilityCheck] = None,
-) -> Optional[str]:
-    """Materialize a file-source blob into the stable file-source cache.
+    **_legacy_kwargs: Any,
+) -> Optional[tuple[bytes, str]]:
+    """Risolve un file_source_id in `(bytes, filename)` RAM-only.
 
-    Returns ``None`` only for legitimate data absence: missing metadata row or
-    empty blob. DB/FS failures raise ``FileSourceResolutionError`` with the
-    original exception chained.
+    Returns:
+        `(blob_bytes, expected_filename)` se il file_source esiste e ha
+        contenuto. `None` se metadata manca o blob vuoto.
+
+    Raises:
+        ValueError (via `assert_file_source_group_access`) su cross-tenant.
+        `FileSourceResolutionError` su fault DB / object storage.
+
+    Sostituisce la vecchia `resolve_file_source_id_path` che persisteva
+    il blob su `{FILES_DIR}/{file_source_id}/{filename}` come cache
+    locale. Il caller (REST connector) consuma i bytes direttamente in
+    `requests.post(files=...)`, niente cache disco — trade-off: re-fetch
+    da DB / object storage ad ogni invocazione (accettabile per il
+    profilo Plenora: tipicamente una POST per file_source per task).
+
+    `**_legacy_kwargs` swallow per backward-compat con test che ancora
+    passano `get_file_source_dir=...` (no-op nel path bytes-first).
     """
     if not file_source_id:
         return None
@@ -159,17 +164,6 @@ def resolve_file_source_id_path(
         return None
 
     expected_name = _expected_filename(row_meta)
-    source_dir = get_file_source_dir(file_source_id)
-    target = source_dir / expected_name
-    # Defense-in-depth: `_expected_filename` ora ritorna solo basename
-    # via `Path.name`, ma manteniamo l'assert come backstop per i casi
-    # edge in cui il `get_file_source_dir` ritorni un path-like esotico
-    # o per future regressioni del normalizer. Anti-regression P0 path
-    # traversal etl-sources cluster 5.
-    from app.shared.resources.path_policy import assert_path_within
-    assert_path_within(target, [source_dir])
-    if target.is_file():
-        return str(target.resolve())
 
     try:
         row_full = get_file_source(file_source_id, True)
@@ -185,30 +179,16 @@ def resolve_file_source_id_path(
         return None
 
     raw = row_full.get("data")
-    # In STORAGE_POLICY=hybrid/object_storage il blob non e' in BYTEA
-    # ma su S3/MinIO referenziato da `storage_key`. La query precedente
-    # ritorna sempre la riga (anche con data=NULL); per recuperare il
-    # blob serve il loader storage-aware. Senza questo fallback i
-    # caller (rest_file connector, materialize) ricevevano None e
-    # fallivano con "nessun file di input collegato".
+    # STORAGE_POLICY=hybrid/object_storage: blob su S3/MinIO via
+    # `storage_key`. Fallback al loader storage-aware quando data=NULL.
     if not raw and row_full.get("storage_key"):
         try:
             from app.core.resources.file_source_blob_access import (
                 load_file_source_blob_bytes,
             )
 
-            # Pre-fix (CVE-grade P0): `is_superadmin=expected_group_id is None`
-            # significa: "se nessun tenant e' stato specificato, leggi il blob
-            # come superadmin (no group_id filter)". Combinato con un guard
-            # `assert_file_source_group_access` che fallisce solo se
-            # `expected_group_id` e' falsy, la sequenza era:
-            #   1. expected_group_id=None -> guard solleva ValueError -> OK
-            # MA se un caller esterno bypassava il guard (es. iniezione
-            # diretta o refactor che chiama questa funzione skip-step), il
-            # blob veniva letto in modalita' superadmin: bypass cross-tenant.
-            # Post-fix: `is_superadmin=False` fisso. Il superadmin non ha
-            # ruolo in questo path di cache: chi e' superadmin passa per
-            # un endpoint admin dedicato, non per `resolve_file_source_id_path`.
+            # `is_superadmin=False` fisso (cross-tenant guard upstream).
+            # Il loader applica gia' il filtro SQL su group_id.
             raw = load_file_source_blob_bytes(
                 file_source_id=file_source_id,
                 expected_group_id=expected_group_id or "",
@@ -224,43 +204,21 @@ def resolve_file_source_id_path(
 
     if not raw:
         return None
-    try:
-        source_dir.mkdir(parents=True, exist_ok=True)
-        out_path = source_dir / expected_name
-        tmp_path = source_dir / f".{expected_name}.{os.getpid()}.tmp"
-        # Defense-in-depth pre-write: stesso assert del read path sopra
-        # — protegge anche il `write_bytes` se per qualche reason
-        # `expected_name` arrivasse non-normalizzato (es. monkeypatch in
-        # un test che bypassa _expected_filename, o futuro refactor).
-        assert_path_within(out_path, [source_dir])
-        assert_path_within(tmp_path, [source_dir])
-        try:
-            tmp_path.write_bytes(raw if isinstance(raw, bytes) else bytes(raw))
-            os.replace(str(tmp_path), str(out_path))
-        finally:
-            if tmp_path.exists():
-                try:
-                    tmp_path.unlink()
-                except Exception as tmp_err:
-                    logger.debug(
-                        "resolve_file_source_id_path: unlink tmp_path "
-                        f"best-effort fallito: {tmp_err}"
-                    )
-    except OSError as exc:
-        raise FileSourceResolutionError(
-            file_source_id=file_source_id,
-            cause="materialization",
-            reason="scrittura cache file_source su filesystem fallita",
-            original_error=exc,
-        ) from exc
 
-    logger.debug(
-        f"file_source {file_source_id}: blob materializzato in cache -> {out_path}"
-    )
-    return str(out_path.resolve())
+    blob_bytes = raw if isinstance(raw, bytes) else bytes(raw)
+    return blob_bytes, expected_name
+
+
+# Backward-compat alias: il nome `resolve_file_source_id_path` storicamente
+# ritornava un path str di una cache locale. Post-Phase5 il path-cache e'
+# stato eliminato; la funzione ritorna `(bytes, filename)`. Tenuto come
+# alias per non rompere i test esistenti che importano il nome vecchio —
+# i caller di produzione devono migrare a `resolve_file_source_id_bytes`.
+resolve_file_source_id_path = resolve_file_source_id_bytes
 
 
 __all__ = [
     "assert_file_source_group_access",
+    "resolve_file_source_id_bytes",
     "resolve_file_source_id_path",
 ]

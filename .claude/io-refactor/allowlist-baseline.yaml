@@ -1,13 +1,12 @@
 metadata:
   generated_at: '2026-05-25'
-  baseline_total: 28
+  baseline_total: 26
   by_pattern:
     tempfile_named_temp_file: 7
     tempfile_mkdtemp: 5
     path_write_text: 4
     storage_upload_path: 3
     safe_extractall: 3
-    path_write_bytes: 2
     fileresponse: 2
     shutil_move: 1
     shutil_copy: 1
@@ -17,7 +16,6 @@ metadata:
     Phase5-results-download: 3
     Phase5-scheduler-archive: 3
     Phase-scripts-utility: 3
-    Phase4-upload-file-source: 2
     Phase7-backup-restore: 2
     Phase4-rest-file-enrichment: 1
   note: 'Auto-generated dal sweep filesystem-pattern. Aggiungere motivo/target/replacement quando si migra. Il contract test
@@ -27,7 +25,7 @@ metadata:
     deve essere vuota (criterio in refactor_io_storage_ram_only.md sezione ''Criterio di fine refactor'').'
 allowed_callsites:
 - file: app/core/arricchisci/api_connection_rest_file.py
-  line: 585
+  line: 586
   pattern: tempfile_mkdtemp
   snippet: tmp_exec_dir = Path(tempfile.mkdtemp(prefix="plenora_exec_"))
   phase: Phase4-rest-file-enrichment
@@ -49,18 +47,6 @@ allowed_callsites:
   pattern: safe_extractall
   snippet: safe_extract_zip_path(zip_path, dest_dir)
   phase: unassigned
-  status: legitimate-cache
-- file: app/core/files/source_loading.py
-  line: 97
-  pattern: path_write_bytes
-  snippet: 136) e DOPO `tmp_path.write_bytes()` (riga 185), permettendo sia READ
-  phase: Phase4-upload-file-source
-  status: legitimate-cache
-- file: app/core/files/source_loading.py
-  line: 238
-  pattern: path_write_bytes
-  snippet: tmp_path.write_bytes(raw if isinstance(raw, bytes) else bytes(raw))
-  phase: Phase4-upload-file-source
   status: legitimate-cache
 - file: app/core/imdf/loader.py
   line: 121
