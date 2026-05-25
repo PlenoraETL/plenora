@@ -11,14 +11,15 @@ from __future__ import annotations
 import uuid
 import zipfile
 from io import BytesIO
-from pathlib import Path
 from typing import Any, BinaryIO, Callable, Dict, List, Optional
 
 from app.core.files.db import FileSourceRow
 from app.core.files.storage_dispatch import BlobDispatchResult
-from app.core.files.upload import _pick_inner_member
 from app.utils.mime_validator import MimeMismatchError, validate_no_executable
-from app.utils.zip_safe import validate_zip_bomb_limits
+from app.utils.zip_safe import (
+    pick_zip_member_by_extension,
+    validate_zip_bomb_limits,
+)
 
 
 _MULTI_LAYER_INNER_EXTENSIONS = ('.gpkg', '.gdb')
@@ -102,15 +103,17 @@ def create_multi_layer_from_upload(
         # per estensione, leggeva i bytes del path. Post-fix: navigazione
         # del ZIP in RAM via zipfile.ZipFile(BytesIO). NB: SOLO .gpkg /
         # .gdb (no .shp/.csv come create_from_upload).
+        outer_filename = filename
         try:
             with zipfile.ZipFile(BytesIO(raw_data), 'r') as z:
                 # SAFETY: zip bomb guard prima di `z.read()`.
                 validate_zip_bomb_limits(z)
 
                 names = z.namelist()
-                inner_name, inner_format, inner_display = _pick_inner_member(
-                    names, detect_format,
+                inner_name, inner_format, inner_display = pick_zip_member_by_extension(
+                    names,
                     extensions=_MULTI_LAYER_INNER_EXTENSIONS,
+                    detect_format=detect_format,
                 )
 
                 if inner_name is None:
@@ -135,6 +138,19 @@ def create_multi_layer_from_upload(
                     # comportamento pre-fix per non rompere downstream:
                     raw_data = z.read(inner_name)
                     inner_bytes = raw_data
+                    # SAFETY: ri-valida MIME sull'inner file (defense-in-depth
+                    # contro ZIP-with-trojan-inside).
+                    try:
+                        mime_validate(
+                            content=inner_bytes, filename=inner_display,
+                        )
+                    except MimeMismatchError as e:
+                        logger.warning(
+                            f"create_multi_layer_from_upload bloccato "
+                            f"(MIME inner): zip={outer_filename!r} "
+                            f"inner={inner_display!r}: {e}"
+                        )
+                        raise ValueError(str(e)) from e
         except zipfile.BadZipFile as e:
             raise ValueError(f"File ZIP non valido o corrotto: {e}") from e
 

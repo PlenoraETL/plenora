@@ -12,13 +12,14 @@ from __future__ import annotations
 import logging
 import zipfile
 from io import BytesIO
-from pathlib import Path
 from typing import BinaryIO, Optional
 from typing_extensions import TypedDict
 
-from app.core.files.upload import _pick_inner_member
 from app.utils.mime_validator import MimeMismatchError, validate_no_executable
-from app.utils.zip_safe import validate_zip_bomb_limits
+from app.utils.zip_safe import (
+    pick_zip_member_by_extension,
+    validate_zip_bomb_limits,
+)
 
 
 _PREVIEW_INNER_EXTENSIONS = ('.gpkg', '.gdb', '.shp')
@@ -112,9 +113,10 @@ def preview_file_temp(
                 validate_zip_bomb_limits(z)
 
                 names = z.namelist()
-                inner_name, inner_format, _inner_display = _pick_inner_member(
-                    names, format_detector.detect,
+                inner_name, inner_format, inner_display = pick_zip_member_by_extension(
+                    names,
                     extensions=_PREVIEW_INNER_EXTENSIONS,
+                    detect_format=format_detector.detect,
                 )
 
                 if inner_name is None:
@@ -130,6 +132,17 @@ def preview_file_temp(
                     inner_bytes = raw_data
                 else:
                     inner_bytes = z.read(inner_name)
+                    # SAFETY: defense-in-depth MIME su inner file.
+                    try:
+                        validate_no_executable(
+                            content=inner_bytes, filename=inner_display,
+                        )
+                    except MimeMismatchError as e:
+                        logger.warning(
+                            f"preview_file_temp bloccato (MIME inner): "
+                            f"zip={filename!r} inner={inner_display!r}: {e}"
+                        )
+                        raise ValueError(str(e)) from e
         except zipfile.BadZipFile as e:
             raise ValueError(f"File ZIP non valido o corrotto: {e}") from e
 

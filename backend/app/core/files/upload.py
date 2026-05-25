@@ -19,72 +19,15 @@ from typing import Any, BinaryIO, Callable, List, Optional
 
 from app.core.files.storage_dispatch import BlobDispatchResult
 from app.utils.mime_validator import MimeMismatchError
-from app.utils.zip_safe import validate_zip_bomb_limits
+from app.utils.zip_safe import (
+    pick_zip_member_by_extension,
+    validate_zip_bomb_limits,
+)
 
 
 _SUPPORTED_INNER_EXTENSIONS = (
     '.shp', '.gpkg', '.gdb', '.geojson', '.csv', '.xlsx',
 )
-
-
-def _pick_inner_member(
-    names: list[str],
-    detect_format: Callable[[str], str],
-    extensions: tuple[str, ...] = _SUPPORTED_INNER_EXTENSIONS,
-) -> tuple[Optional[str], Optional[str], str]:
-    """Sceglie l'inner file da un ZIP per priorita' di estensione.
-
-    Args:
-        names: lista member del ZIP (`z.namelist()`).
-        detect_format: callback che traduce filename -> format string.
-        extensions: lista di estensioni con punto in ordine di
-            priorita' (es. `('.shp', '.gpkg', '.gdb', ...)`). Il
-            caller restringe il match a soli formati supportati per
-            il flow chiamante.
-
-    Returns `(inner_name, inner_format, display_name)`:
-      - `inner_name`: il path member nello ZIP (usato per `z.read(...)`)
-        oppure per individuare la dir `.gdb`.
-      - `inner_format`: il formato derivato dall'estensione.
-      - `display_name`: il filename "pulito" da mostrare al caller
-        (basename per file singoli; per `.gdb` e' il nome della dir
-        es. `mygdb.gdb`, NON il file interno `a00000001.gdbtable`).
-
-    Pre-fix: per `.gdb` derivavamo `inner_format` da `Path(match).name`
-    dove `match` era `"mygdb.gdb/a00000001.gdbtable"`; `name` ritornava
-    `"a00000001.gdbtable"` e `detect_format()` falliva. Post-fix: per
-    il caso `.gdb/` deriviamo `inner_format='gdb'` esplicitamente e
-    `display_name` dalla dir, indipendentemente dal file interno
-    matchato.
-    """
-    for ext in extensions:
-        if ext == '.gdb':
-            # `.gdb/` come segmento di path (directory) — restituiamo
-            # il nome della dir, NON del file interno.
-            gdb_match = next(
-                (n for n in names if '.gdb/' in n.lower()
-                 or n.lower().endswith('.gdb')),
-                None,
-            )
-            if gdb_match:
-                # Estrai la basename della dir .gdb dal path.
-                # "venue/mygdb.gdb/a00000001.gdbtable" -> "mygdb.gdb"
-                # "mygdb.gdb/a00000001.gdbtable" -> "mygdb.gdb"
-                # "mygdb.gdb" (entry dir senza trailing /) -> "mygdb.gdb"
-                lowered = gdb_match.lower()
-                if '.gdb/' in lowered:
-                    idx = lowered.index('.gdb/')
-                    head = gdb_match[: idx + len('.gdb')]
-                    display = head.split('/')[-1].split('\\')[-1]
-                else:
-                    display = Path(gdb_match).name
-                return gdb_match, 'gdb', display
-            continue
-        match = next((n for n in names if n.lower().endswith(ext)), None)
-        if match:
-            display = Path(match).name
-            return match, detect_format(display), display
-    return None, None, ""
 
 
 def create_from_upload(
@@ -155,6 +98,7 @@ def create_from_upload(
         # file estratto. Post-fix: zipfile.ZipFile(BytesIO) naviga
         # in RAM, e per shapefile/gdb pyogrio gestisce direttamente
         # lo ZIP via /vsizip (vedi `_load_dataframe_from_bytes`).
+        outer_filename = filename
         try:
             with zipfile.ZipFile(BytesIO(raw_data), 'r') as z:
                 # SAFETY: zip bomb guard PRIMA di qualunque `z.read()`.
@@ -164,8 +108,10 @@ def create_from_upload(
                 validate_zip_bomb_limits(z)
 
                 names = z.namelist()
-                inner_name, inner_format, inner_display = _pick_inner_member(
-                    names, detect_format,
+                inner_name, inner_format, inner_display = pick_zip_member_by_extension(
+                    names,
+                    extensions=_SUPPORTED_INNER_EXTENSIONS,
+                    detect_format=detect_format,
                 )
 
                 if inner_name is None:
@@ -183,6 +129,21 @@ def create_from_upload(
                 else:
                     # Single-file in ZIP: estrai i bytes dell'inner file.
                     inner_bytes = z.read(inner_name)
+                    # SAFETY: ri-valida MIME sull'inner file. L'outer ZIP
+                    # e' gia' passato per `mime_validate` sopra, ma un
+                    # ZIP innocuo puo' contenere un .csv-named-but-PE.
+                    if mime_validate is not None:
+                        try:
+                            mime_validate(
+                                content=inner_bytes, filename=inner_display,
+                            )
+                        except MimeMismatchError as e:
+                            logger.warning(
+                                f"create_from_upload bloccato (MIME inner): "
+                                f"zip={outer_filename!r} "
+                                f"inner={inner_display!r}: {e}"
+                            )
+                            raise ValueError(str(e)) from e
         except zipfile.BadZipFile as e:
             raise ValueError(f"File ZIP non valido o corrotto: {e}") from e
 

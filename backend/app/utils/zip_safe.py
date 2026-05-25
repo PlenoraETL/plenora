@@ -6,7 +6,7 @@ e contro zip bomb (size cap pre-extract + file count + compression ratio).
 
 import zipfile
 from pathlib import Path
-from typing import Union
+from typing import Callable, Optional, Union
 
 from app.environment import get_env
 from app.shared.resources.path_policy import assert_path_within
@@ -163,3 +163,57 @@ def safe_extract_zip_path(zip_path: Union[str, Path],
     """Apre il file ZIP e lo estrae con safe_extractall."""
     with zipfile.ZipFile(zip_path, 'r') as zf:
         safe_extractall(zf, dest_dir)
+
+
+def pick_zip_member_by_extension(
+    names: list[str],
+    extensions: tuple[str, ...],
+    detect_format: Callable[[str], str],
+) -> tuple[Optional[str], Optional[str], str]:
+    """Sceglie un member dello ZIP per priorita' di estensione.
+
+    Usato dai flow RAM-only che navigano lo ZIP via `zipfile.ZipFile(
+    BytesIO(...))` per selezionare il primo file rilevante senza
+    estrarre tutto. Caso speciale `.gdb`: la GDB e' una directory
+    multi-file dentro lo ZIP (es. `mygdb.gdb/a00000001.gdbtable`); il
+    `format` corretto e' `'gdb'` e il `display_name` e' il nome
+    della directory `.gdb`, NON del file interno matchato.
+
+    Args:
+        names: lista member del ZIP (`z.namelist()`).
+        extensions: lista di estensioni con punto in ordine di
+            priorita' (es. `('.shp', '.gpkg', '.gdb', '.csv')`).
+        detect_format: callback che traduce filename -> format string
+            (usato per file singoli; per `.gdb` ignorato in favore
+            di `'gdb'` esplicito).
+
+    Returns `(inner_name, inner_format, display_name)`:
+      - `inner_name`: il path member nello ZIP (usato per `z.read(...)`)
+        oppure per individuare la dir `.gdb`. `None` se nessun match.
+      - `inner_format`: il formato derivato dall'estensione. `None`
+        se nessun match.
+      - `display_name`: il filename "pulito" da mostrare al caller.
+        Stringa vuota se nessun match.
+    """
+    for ext in extensions:
+        if ext == '.gdb':
+            gdb_match = next(
+                (n for n in names if '.gdb/' in n.lower()
+                 or n.lower().endswith('.gdb')),
+                None,
+            )
+            if gdb_match:
+                lowered = gdb_match.lower()
+                if '.gdb/' in lowered:
+                    idx = lowered.index('.gdb/')
+                    head = gdb_match[: idx + len('.gdb')]
+                    display = head.split('/')[-1].split('\\')[-1]
+                else:
+                    display = Path(gdb_match).name
+                return gdb_match, 'gdb', display
+            continue
+        match = next((n for n in names if n.lower().endswith(ext)), None)
+        if match:
+            display = Path(match).name
+            return match, detect_format(display), display
+    return None, None, ""
