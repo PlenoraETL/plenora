@@ -86,9 +86,16 @@ def _validate_member(member_name: str, dest_root: Path, dest_dir: Path) -> None:
         ) from e
 
 
-def _validate_bomb_limits(zf: zipfile.ZipFile) -> None:
+def validate_zip_bomb_limits(zf: zipfile.ZipFile) -> None:
     """Controlli zip bomb PRE-extract: scansiona l'infolist senza
     toccare il disco. Solleva ZipBombError alla prima violazione.
+
+    Usato sia dal flow path-based (`safe_extractall`) sia dai caller
+    RAM-only che navigano lo ZIP via `zipfile.ZipFile(BytesIO(...))`:
+    DEVONO chiamare questa funzione PRIMA di leggere member arbitrari
+    (`z.read(name)`), altrimenti un attacker puo' decompress-bomb il
+    processo (es. `z.read("evil.txt")` su un member da 10 GB
+    uncompressed).
     """
     max_total, max_single, max_files, max_ratio = _get_caps()
 
@@ -145,7 +152,7 @@ def safe_extractall(zf: zipfile.ZipFile, dest_dir: Union[str, Path]) -> None:
     # Controllo bomb PRIMA di toccare il disco — se fallisce, dest_dir
     # resta vuota (il caller la crea solo qui dentro via mkdir sopra
     # ma se preesisteva non la tocchiamo
-    _validate_bomb_limits(zf)
+    validate_zip_bomb_limits(zf)
     for member in zf.infolist():
         _validate_member(member.filename, dest_root, dest_dir)
         zf.extract(member, dest_dir)

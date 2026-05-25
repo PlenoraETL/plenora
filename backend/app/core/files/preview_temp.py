@@ -16,7 +16,12 @@ from pathlib import Path
 from typing import BinaryIO, Optional
 from typing_extensions import TypedDict
 
+from app.core.files.upload import _pick_inner_member
 from app.utils.mime_validator import MimeMismatchError, validate_no_executable
+from app.utils.zip_safe import validate_zip_bomb_limits
+
+
+_PREVIEW_INNER_EXTENSIONS = ('.gpkg', '.gdb', '.shp')
 
 
 _logger_module = logging.getLogger(__name__)
@@ -103,20 +108,14 @@ def preview_file_temp(
     if format_type == 'zip':
         try:
             with zipfile.ZipFile(BytesIO(raw_data), 'r') as z:
+                # SAFETY: zip bomb guard prima di `z.read()`.
+                validate_zip_bomb_limits(z)
+
                 names = z.namelist()
-                inner_name: Optional[str] = None
-                inner_format: Optional[str] = None
-                for ext_with_dot in ('.gpkg', '.gdb', '.shp'):
-                    match = next(
-                        (n for n in names if n.lower().endswith(ext_with_dot)
-                         or (ext_with_dot == '.gdb'
-                             and ext_with_dot + '/' in n.lower())),
-                        None,
-                    )
-                    if match:
-                        inner_name = match
-                        inner_format = format_detector.detect(Path(match).name)
-                        break
+                inner_name, inner_format, _inner_display = _pick_inner_member(
+                    names, format_detector.detect,
+                    extensions=_PREVIEW_INNER_EXTENSIONS,
+                )
 
                 if inner_name is None:
                     raise ValueError(

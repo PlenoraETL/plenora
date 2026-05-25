@@ -20,6 +20,16 @@ _GEOSPATIAL_FORMATS = ("geojson", "gpkg", "shp", "gdb")
 _ZIP_LIKE_FORMATS = ("zip",)
 
 
+def _normalize_format(format_type: Optional[str]) -> str:
+    """Normalizza alias di formato (case + sinonimi noti)."""
+    if not format_type:
+        return ""
+    f = format_type.strip().lower().lstrip(".")
+    if f == "geopackage":
+        return "gpkg"
+    return f
+
+
 def load_by_format_bytes(
     data: bytes,
     format_type: str,
@@ -38,28 +48,34 @@ def load_by_format_bytes(
     Ritorna `(df, gdf)`: gdf e' un GeoDataFrame quando il formato e'
     spaziale, altrimenti None. df e' sempre un DataFrame pandas (per
     i geospatial e' la versione tabular del gdf con geometry serial-
-    izzata via geometry_series_to_wkt).
+    izzata via geometry_series_to_wkt — la colonna nel df ha lo stesso
+    nome della geometria attiva del gdf, NON necessariamente "geometry").
     """
     from app.core.dataframes.frame_io import _load_dataframe_from_bytes
 
+    fmt = _normalize_format(format_type)
     gdf: Optional[pd.DataFrame] = None
 
-    if format_type in _GEOSPATIAL_FORMATS or format_type in _ZIP_LIKE_FORMATS:
+    if fmt in _GEOSPATIAL_FORMATS or fmt in _ZIP_LIKE_FORMATS:
         # _load_dataframe_from_bytes per gpkg/shp/zip/gdb passa via
         # pyogrio (vector bytes nativi) e ritorna GeoDataFrame.
         gdf = _load_dataframe_from_bytes(
-            data, format_hint=format_type, sheet=sheet, layer=layer,
+            data, format_hint=fmt, sheet=sheet, layer=layer,
         )
         df = pd.DataFrame(gdf)
-        if "geometry" in df.columns:
+        # Active geometry column name puo' essere != "geometry" (es. "geom",
+        # "the_geom"). Usiamo `gdf.geometry.name` per individuarla nel df.
+        geom_col = getattr(gdf, "geometry", None)
+        geom_col_name = geom_col.name if geom_col is not None else None
+        if geom_col_name and geom_col_name in df.columns:
             from app.core.dataframes.geometry_serialization import (
                 geometry_series_to_wkt,
             )
-            df["geometry"] = geometry_series_to_wkt(gdf.geometry)
+            df[geom_col_name] = geometry_series_to_wkt(gdf.geometry)
         return df, gdf
 
     df = _load_dataframe_from_bytes(
-        data, format_hint=format_type, sheet=sheet, layer=layer,
+        data, format_hint=fmt, sheet=sheet, layer=layer,
     )
     return df, None
 
@@ -97,19 +113,22 @@ def load_frame_by_format(
     elif format_type in _GEOSPATIAL_FORMATS:
         gdf = loader.load_geospatial(file_path, layer)
         df = pd.DataFrame(gdf)
-        if "geometry" in df.columns:
-            # Pre-fix: `apply(lambda g: g.wkt if g else None)` aveva
-            # due bug latenti — (1) `if g` su una geometria empty
-            # (es. POLYGON EMPTY) e' falsy in alcune versioni Shapely
-            # → empty geom mappato a None invece che a "POLYGON EMPTY",
-            # silente perdita; (2) per-riga su grandi GeoSeries (5k+
-            # geom). Post-fix: serializzazione vettoriale via
-            # `geometry_series_to_wkt`, contratto esplicito su missing
-            # = None, empty preservato a meno di `empty_as_null=True`.
+        # Pre-fix: `apply(lambda g: g.wkt if g else None)` aveva
+        # due bug latenti — (1) `if g` su una geometria empty
+        # (es. POLYGON EMPTY) e' falsy in alcune versioni Shapely
+        # → empty geom mappato a None invece che a "POLYGON EMPTY",
+        # silente perdita; (2) per-riga su grandi GeoSeries (5k+
+        # geom). Post-fix: serializzazione vettoriale via
+        # `geometry_series_to_wkt`, contratto esplicito su missing
+        # = None, empty preservato a meno di `empty_as_null=True`.
+        # Active geometry column name puo' essere != "geometry".
+        geom_col = getattr(gdf, "geometry", None)
+        geom_col_name = geom_col.name if geom_col is not None else None
+        if geom_col_name and geom_col_name in df.columns:
             from app.core.dataframes.geometry_serialization import (
                 geometry_series_to_wkt,
             )
-            df["geometry"] = geometry_series_to_wkt(gdf.geometry)
+            df[geom_col_name] = geometry_series_to_wkt(gdf.geometry)
     else:
         raise ValueError(f"Formato '{format_type}' non supportato")
 

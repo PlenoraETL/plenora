@@ -16,7 +16,12 @@ from typing import Any, BinaryIO, Callable, Dict, List, Optional
 
 from app.core.files.db import FileSourceRow
 from app.core.files.storage_dispatch import BlobDispatchResult
+from app.core.files.upload import _pick_inner_member
 from app.utils.mime_validator import MimeMismatchError, validate_no_executable
+from app.utils.zip_safe import validate_zip_bomb_limits
+
+
+_MULTI_LAYER_INNER_EXTENSIONS = ('.gpkg', '.gdb')
 
 
 def create_multi_layer_from_upload(
@@ -99,21 +104,14 @@ def create_multi_layer_from_upload(
         # .gdb (no .shp/.csv come create_from_upload).
         try:
             with zipfile.ZipFile(BytesIO(raw_data), 'r') as z:
-                names = z.namelist()
+                # SAFETY: zip bomb guard prima di `z.read()`.
+                validate_zip_bomb_limits(z)
 
-                inner_name: Optional[str] = None
-                inner_format: Optional[str] = None
-                for ext_with_dot in ('.gpkg', '.gdb'):
-                    match = next(
-                        (n for n in names if n.lower().endswith(ext_with_dot)
-                         or (ext_with_dot == '.gdb'
-                             and ext_with_dot + '/' in n.lower())),
-                        None,
-                    )
-                    if match:
-                        inner_name = match
-                        inner_format = detect_format(Path(match).name)
-                        break
+                names = z.namelist()
+                inner_name, inner_format, inner_display = _pick_inner_member(
+                    names, detect_format,
+                    extensions=_MULTI_LAYER_INNER_EXTENSIONS,
+                )
 
                 if inner_name is None:
                     raise ValueError(
@@ -123,7 +121,7 @@ def create_multi_layer_from_upload(
                     )
 
                 format_type = inner_format
-                filename = Path(inner_name).name
+                filename = inner_display
                 if inner_format == 'gdb':
                     # .gdb e' una directory: pyogrio legge lo ZIP intero
                     # via /vsizip (raw_data resta lo ZIP); inner_bytes
