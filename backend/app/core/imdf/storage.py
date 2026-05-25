@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
+import tempfile
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
@@ -224,6 +227,94 @@ def read_geojson(task_id: str, relative_name: str) -> Optional[JsonObject]:
         # Defensive: gli IMDF GeoJSON hanno sempre estensione esplicita.
         return None
     return _read_bundle_json(task_id, relative_name)
+
+
+@dataclass
+class GdbHandle:
+    """Handle scoped a un .gdb estratto su temp dir worker-local.
+
+    Restituito da `hydrate_gdb_to_temp`. Il caller MUST chiamare
+    `cleanup()` (o usare il context manager) dopo aver finito di
+    consumare `gdb_path` con pyogrio.
+    """
+    gdb_path: Path
+    temp_root: Path
+
+    def cleanup(self) -> None:
+        if self.temp_root and self.temp_root.exists():
+            shutil.rmtree(self.temp_root, ignore_errors=True)
+
+    def __enter__(self) -> "GdbHandle":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.cleanup()
+
+
+def hydrate_gdb_to_temp(task_id: str) -> Optional[GdbHandle]:
+    """Idrata solo il `.gdb` di un bundle in una temp dir worker-scoped.
+
+    Pensato per validator + publish task che richiedono il File
+    Geodatabase su filesystem (pyogrio `list_layers` / `read_dataframe`)
+    SENZA forzare la hydration dell'intero bundle nel local cache
+    persistent (`IMDF_BUNDLES_DIR`).
+
+    Layout target su storage (post-IMDF-3): ``{PREFIX}/{task_id}/_gdb.zip``.
+    Lo zip contiene un singolo top-level `{site_id}.gdb/` directory
+    (vedi `persist._zip_gdb_dir_to_bytes`).
+
+    Returns:
+        `GdbHandle` con `gdb_path` puntato alla `.gdb/` dir estratta e
+        `temp_root` per il cleanup. `None` se il bundle non ha `.gdb`
+        su storage (puo' essere un bundle senza .gdb oppure pre-IMDF-3
+        ancora in layout zip legacy).
+
+    Raises:
+        Propaga errori del backend storage solo se la chiamata e'
+        per un bundle che SI ATTENDE abbia `.gdb`. Per il probe
+        "esiste o no" il caller dovrebbe consultare prima il
+        `meta.has_gdb`.
+    """
+    if not object_storage_enabled():
+        return None
+    storage = _storage()
+    gdb_key = _gdb_zip_key(task_id)
+
+    # Probe esistenza via list_objects (evita exception on missing key).
+    try:
+        objs = storage.list_objects(gdb_key)
+        has_gdb = any(o.get("key") == gdb_key for o in objs)
+    except Exception as e:
+        logger.debug(f"[{task_id}] hydrate_gdb_to_temp probe failed: {e}")
+        return None
+    if not has_gdb:
+        return None
+
+    # Download .gdb zip → extract a temp scoped al caller.
+    temp_root = Path(tempfile.mkdtemp(prefix="plenora_imdf_gdb_"))
+    try:
+        stream = storage.get_object_stream(gdb_key)
+        gdb_bytes = b"".join(stream.get("body", []))
+        with zipfile.ZipFile(io.BytesIO(gdb_bytes), "r") as zf:
+            safe_extractall(zf, temp_root)
+        # Trova la .gdb dir dentro temp_root (top-level).
+        gdb_dir: Optional[Path] = None
+        for entry in temp_root.iterdir():
+            if entry.is_dir() and entry.suffix == ".gdb":
+                gdb_dir = entry
+                break
+        if gdb_dir is None:
+            logger.warning(
+                f"[{task_id}] _gdb.zip estratto ma nessuna .gdb dir "
+                f"trovata in {temp_root}"
+            )
+            shutil.rmtree(temp_root, ignore_errors=True)
+            return None
+        return GdbHandle(gdb_path=gdb_dir, temp_root=temp_root)
+    except Exception as e:
+        logger.warning(f"[{task_id}] hydrate_gdb_to_temp extract failed: {e}")
+        shutil.rmtree(temp_root, ignore_errors=True)
+        raise
 
 
 def list_bundle_file_entries(task_id: str) -> List[JsonObject]:

@@ -65,52 +65,79 @@ def execute_imdf_publish_task(
     try:
         _update_progress(self, 2, "Risoluzione bundle IMDF...")
 
-        try:
-            bundle_dir = bundle_store.ensure_local_bundle(bundle_task_id)
-        except ValueError:
-            msg = (
-                f"bundle_task_id '{bundle_task_id}' malformato "
-                "(ammessi solo alfanumerico + '-' '_')"
-            )
-            logger.error(f"[Task {task_id}] {msg}")
-            return {
-                "success": False,
-                "task_id": task_id,
-                "bundle_task_id": bundle_task_id,
-                "error": msg,
-                "elapsed_time": round(time.time() - started_at, 2),
-            }
-        except FileNotFoundError:
-            msg = (
-                f"Bundle IMDF '{bundle_task_id}' non trovato (ne' local ne' S3). "
-                f"Potrebbe essere scaduto (TTL {settings.IMDF_BUNDLE_TTL_HOURS}h)."
-            )
-            logger.error(f"[Task {task_id}] {msg}")
-            return {
-                "success": False,
-                "task_id": task_id,
-                "bundle_task_id": bundle_task_id,
-                "error": msg,
-                "elapsed_time": round(time.time() - started_at, 2),
-            }
+        # IMDF-4 step 3: hydration del .gdb storage-first (no full bundle
+        # cache hydration). Primary path: `imdf.storage.hydrate_gdb_to_temp`
+        # scarica solo `_gdb.zip` in temp dir scoped al task con cleanup
+        # automatico. Fallback: `ensure_local_bundle` per bundle
+        # pre-IMDF-3 ancora in zip layout legacy.
+        from app.core.imdf import storage as imdf_storage
+        from app.core.imdf.loader import load_imdf_layers
 
-        gdb_path = bundle_store.find_gdb_dir(bundle_dir)
-        if gdb_path is None:
-            msg = f"Nessun File Geodatabase (.gdb) trovato in {bundle_dir}"
-            logger.error(f"[Task {task_id}] {msg}")
-            return {
-                "success": False,
-                "task_id": task_id,
-                "bundle_task_id": bundle_task_id,
-                "error": msg,
-                "elapsed_time": round(time.time() - started_at, 2),
-            }
+        gdb_handle = None
+        bundle_dir = None
+        try:
+            gdb_handle = imdf_storage.hydrate_gdb_to_temp(bundle_task_id)
+        except Exception as e:
+            logger.warning(
+                f"[Task {task_id}] hydrate_gdb_to_temp failed "
+                f"(degrade to legacy): {e}"
+            )
+
+        if gdb_handle is None:
+            # Legacy fallback: full bundle hydration.
+            try:
+                bundle_dir = bundle_store.ensure_local_bundle(bundle_task_id)
+            except ValueError:
+                msg = (
+                    f"bundle_task_id '{bundle_task_id}' malformato "
+                    "(ammessi solo alfanumerico + '-' '_')"
+                )
+                logger.error(f"[Task {task_id}] {msg}")
+                return {
+                    "success": False,
+                    "task_id": task_id,
+                    "bundle_task_id": bundle_task_id,
+                    "error": msg,
+                    "elapsed_time": round(time.time() - started_at, 2),
+                }
+            except FileNotFoundError:
+                msg = (
+                    f"Bundle IMDF '{bundle_task_id}' non trovato (ne' local ne' storage). "
+                    f"Potrebbe essere scaduto (TTL {settings.IMDF_BUNDLE_TTL_HOURS}h)."
+                )
+                logger.error(f"[Task {task_id}] {msg}")
+                return {
+                    "success": False,
+                    "task_id": task_id,
+                    "bundle_task_id": bundle_task_id,
+                    "error": msg,
+                    "elapsed_time": round(time.time() - started_at, 2),
+                }
+            gdb_path = bundle_store.find_gdb_dir(bundle_dir)
+            if gdb_path is None:
+                msg = f"Nessun File Geodatabase (.gdb) trovato in {bundle_dir}"
+                logger.error(f"[Task {task_id}] {msg}")
+                return {
+                    "success": False,
+                    "task_id": task_id,
+                    "bundle_task_id": bundle_task_id,
+                    "error": msg,
+                    "elapsed_time": round(time.time() - started_at, 2),
+                }
+        else:
+            gdb_path = gdb_handle.gdb_path
 
         _update_progress(self, 8, "Caricamento layer IMDF dal GDB...")
 
-        from app.core.imdf.loader import load_imdf_layers
-        gdf_layers = load_imdf_layers(gdb_path)
-        total_features = sum(len(gdf) for gdf in gdf_layers.values())
+        try:
+            gdf_layers = load_imdf_layers(gdb_path)
+            total_features = sum(len(gdf) for gdf in gdf_layers.values())
+        finally:
+            # Post-pyogrio load: i GeoDataFrame sono in memoria, possiamo
+            # rilasciare la temp dir del .gdb. Il fallback legacy lascia
+            # `bundle_dir` nella cache persistent (politica current).
+            if gdb_handle is not None:
+                gdb_handle.cleanup()
         logger.info(
             f"[Task {task_id}] GDB caricato: {len(gdf_layers)} layer, "
             f"{total_features} features totali"
@@ -124,7 +151,12 @@ def execute_imdf_publish_task(
         renderers_data = None
         apply_renderers = bool(publisher_config.get("apply_renderers"))
         if apply_renderers:
-            renderers_data = bundle_store.read_renderers(bundle_dir)
+            # Storage-first read dei renderers (post-IMDF-3 sempre in
+            # `{PREFIX}/{task_id}/files/renderers.json`); fallback su
+            # bundle_dir legacy se hydrated.
+            renderers_data = imdf_storage.read_renderers(bundle_task_id)
+            if renderers_data is None and bundle_dir is not None:
+                renderers_data = bundle_store.read_renderers(bundle_dir)
 
         connection_id = publisher_config.get("connection_id")
         if not connection_id:

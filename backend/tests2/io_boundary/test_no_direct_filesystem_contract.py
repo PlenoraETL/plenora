@@ -331,7 +331,10 @@ _BOUNDARY_FROZEN_SNAPSHOT: dict[str, int] = {
     # IMDF subsystem (format-as-directory + cache hydration)
     "app/core/imdf/loader.py": 3,
     "app/core/imdf/persist.py": 3,
-    "app/core/imdf/storage.py": 3,
+    # storage.py: 3 dal layout per-file + 2 da `hydrate_gdb_to_temp`
+    # (IMDF-4 step 3: tmp mkdtemp + safe_extractall per scoped .gdb dir
+    # consumata da validator/publish post-IMDF-3 storage layout).
+    "app/core/imdf/storage.py": 5,
     # Scripts one-off tooling
     "scripts/backup_db.py": 1,
     "scripts/test_restore.py": 1,

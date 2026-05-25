@@ -184,9 +184,20 @@ def publish_imdf(
             detail=f"mode non valido: {request.mode}. Valori validi: replace, append, upsert, update",
         )
 
-    # Validazione bundle_task_id + path traversal guard
-    bundle_dir = _safe_bundle_dir(request.bundle_task_id)
-    if not bundle_dir.exists() or not bundle_dir.is_dir():
+    # Path traversal guard sull'id (resta utile per i fallback locali).
+    _safe_bundle_dir(request.bundle_task_id)
+
+    # IMDF-4 step 3: bundle check + ACL storage-first (niente hydrate
+    # locale per il solo group ownership check). Fallback: se meta non
+    # esiste su storage, prova la cache locale per i bundle pre-IMDF-3.
+    meta = _imdf_storage.get_meta_only(request.bundle_task_id)
+    if meta is None:
+        _hydrate_local_cache(request.bundle_task_id)
+        local_bundle_dir = _safe_bundle_dir(request.bundle_task_id)
+        if local_bundle_dir.exists() and local_bundle_dir.is_dir():
+            meta = _imdf_bundle_store.read_metadata(local_bundle_dir)
+
+    if meta is None:
         raise HTTPException(
             status_code=404,
             detail={
@@ -198,9 +209,10 @@ def publish_imdf(
                 ),
             },
         )
-    # Verifica group ownership: l'utente deve avere accesso al progetto
-    # che ha generato questo bundle
-    _assert_bundle_group_access(bundle_dir, current_user)
+
+    _bundle_access.assert_bundle_group_access_from_meta(
+        meta, current_user, request.bundle_task_id, logger=logger,
+    )
 
     publisher_config = {
         "connection_id":   request.connection_id,
@@ -249,20 +261,23 @@ def validate_publish_endpoint(
             status_code=400,
             detail=f"mode non valido: {request.mode}. Valori validi: replace, append, upsert, update",
         )
-    # Validazione path traversal (l'helper solleva 400 se malformato
-    # Non serve verificare exists qui: il validator gestisce il caso bundle
-    # mancante come BUNDLE_MISSING nel report
-    _val_bundle_dir = _safe_bundle_dir(request.bundle_task_id)
-    # R2 multi-host: hydrate cache locale da S3 se necessario (D3 commit 2
-    # parita' con /publish e /bundles/{id}). Fix bundle solo-S3 ->
-    # BUNDLE_MISSING falso-positivo. Hydrate failure resta silent (warning
-    # in _hydrate_local_cache); il report mantiene BUNDLE_MISSING come
-    # error code unico (R5: nessun HYDRATE_FAILED
-    _hydrate_local_cache(request.bundle_task_id)
-    # Verifica group ownership (skip se il bundle non esiste ancora: in
-    # quel caso il validator restituira' BUNDLE_MISSING nel report
-    if _val_bundle_dir.exists() and _val_bundle_dir.is_dir():
-        _assert_bundle_group_access(_val_bundle_dir, current_user)
+    # Path traversal guard sull'id (resta utile per i fallback locali).
+    _safe_bundle_dir(request.bundle_task_id)
+    # IMDF-4 step 3: ACL check storage-first. Se il meta non esiste su
+    # storage, fallback su cache locale (bundle pre-IMDF-3). Bundle
+    # totalmente assente: il validator emettera' BUNDLE_MISSING nel
+    # report (no early-return qui per simmetria con la logica current
+    # — il validator e' l'oracolo del missing bundle).
+    _val_meta = _imdf_storage.get_meta_only(request.bundle_task_id)
+    if _val_meta is None:
+        _hydrate_local_cache(request.bundle_task_id)
+        _val_bundle_dir = _safe_bundle_dir(request.bundle_task_id)
+        if _val_bundle_dir.exists() and _val_bundle_dir.is_dir():
+            _val_meta = _imdf_bundle_store.read_metadata(_val_bundle_dir)
+    if _val_meta is not None:
+        _bundle_access.assert_bundle_group_access_from_meta(
+            _val_meta, current_user, request.bundle_task_id, logger=logger,
+        )
     try:
         report = validate_publish(
             bundle_task_id=request.bundle_task_id,
