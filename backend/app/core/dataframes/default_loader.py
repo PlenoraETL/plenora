@@ -102,19 +102,3 @@ class DefaultDataLoader:
         except Exception as e:
             _logger.debug(f"list_sheets probe pandas fallita per {path}: {e}")
             return []
-
-    def save_csv(self, df: pd.DataFrame, path: Path) -> None:
-        # UTF-8 esplicito: contratto leggibile, no ambiguita' su locale server.
-        df.to_csv(path, index=False, encoding="utf-8")
-
-    def save_excel(self, df: pd.DataFrame, path: Path, sheet: str) -> None:
-        df.to_excel(path, index=False, sheet_name=sheet)
-
-    def save_json(self, df: pd.DataFrame, path: Path) -> None:
-        df.to_json(path, orient="records", indent=2)
-
-    def save_geospatial(self, gdf: Any, path: Path, driver: str, layer: Optional[str] = None) -> None:
-        if layer:
-            gdf.to_file(path, driver=driver, layer=layer)
-        else:
-            gdf.to_file(path, driver=driver)

@@ -38,6 +38,43 @@ PATTERNS: tuple[tuple[str, re.Pattern], ...] = (
     ("storage_download_path", re.compile(r"\.download\([^)]*path")),
 )
 
+
+# Buffer hints: se la stessa riga matcha uno di questi, il pattern
+# df_to_xxx scrive su buffer in-memory (BytesIO/StringIO) e NON e' un
+# filesystem write. Il regex coarse `\.to_csv\(` non distingue da solo;
+# i hint sotto restringono il match per evitare false positive.
+_BUFFER_HINTS = re.compile(
+    r"\b(BytesIO|StringIO|io\.BytesIO|io\.StringIO)\b|"
+    r"\.to_(csv|excel|json|parquet)\([^)]*?(buf\b|buffer\b)"
+)
+
+
+def _is_buffer_write(pattern_name: str, line: str) -> bool:
+    """True se il match df_to_xxx scrive su buffer RAM, non su path.
+
+    Three heuristics:
+      1. `BytesIO/StringIO` literal sulla stessa riga.
+      2. Primo arg di `to_xxx(buf, ...)` e' una variabile chiamata
+         `buf*`/`buffer*`.
+      3. Primo arg e' una kwarg (`to_xxx(index=False, ...)`):
+         `df.to_csv()`/`to_json()` senza positional restituisce
+         string/dict, niente disk.
+    """
+    if pattern_name not in (
+        "df_to_csv_path", "df_to_excel_path",
+        "df_to_json_path", "df_to_parquet_path",
+    ):
+        return False
+    if _BUFFER_HINTS.search(line):
+        return True
+    # `df.to_xxx(kwarg=...)` -> no positional, returns value not write.
+    if re.search(
+        r"\.to_(csv|excel|json|parquet)\(\s*[A-Za-z_]\w*\s*=",
+        line,
+    ):
+        return True
+    return False
+
 # Mappa file -> fase di migrazione (refactor_io_storage_ram_only.md).
 PHASE_MAP: dict[str, str] = {
     "arricchisci/api_connection_rest_file.py": "Phase4-rest-file-enrichment",
@@ -89,6 +126,29 @@ PATTERN_PHASE_OVERRIDES: dict[str, str] = {
 }
 
 
+# `legitimate-cache`: callsite che operano su una cache locale deliberata
+# (REST connector file_source cache, scheduler run archive, path-only
+# adapter per librerie che richiedono path). Non sono "leak" di disk
+# write: il disk e' il destination (cache persistente) o il sorgente
+# (path-only library) per design. Non rientrano nel target "lista vuota"
+# del refactor RAM-only.
+_LEGITIMATE_CACHE_FILES: tuple[str, ...] = (
+    "app/core/files/source_loading.py",
+    "app/core/results/temp_paths.py",
+    "app/core/scheduler/artifact_store.py",
+    "app/core/scheduler/router.py",
+    "app/core/results/blob_writer.py",  # storage.upload(path) streaming
+)
+
+
+def _status_for(filepath: str) -> str:
+    norm = filepath.replace("\\", "/")
+    for legit in _LEGITIMATE_CACHE_FILES:
+        if legit in norm:
+            return "legitimate-cache"
+    return "active-legacy"
+
+
 def phase_for(filepath: str, pattern: str = "") -> str:
     if pattern and pattern in PATTERN_PHASE_OVERRIDES:
         return PATTERN_PHASE_OVERRIDES[pattern]
@@ -134,6 +194,8 @@ def scan() -> list[tuple[str, int, str, str]]:
                                 continue
                             for pname, pre in PATTERNS:
                                 if pre.search(line):
+                                    if _is_buffer_write(pname, line):
+                                        break
                                     findings.append((path, i, pname, line.strip()[:100]))
                                     break
                 except (UnicodeDecodeError, OSError):
@@ -190,7 +252,7 @@ def main() -> None:
                 "pattern": f[2],
                 "snippet": f[3],
                 "phase": phase_for(f[0], f[2]),
-                "status": "active-legacy",
+                "status": _status_for(f[0]),
             }
             for f in findings
         ],

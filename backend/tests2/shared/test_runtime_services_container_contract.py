@@ -41,7 +41,6 @@ def _build_runtime_for_contract():
 
     return build_runtime_services(
         settings=SimpleNamespace(DATA_DIR=Path("/tmp/plenora")),
-        save_function=MagicMock(name="save_dataframe"),
     )
 
 
@@ -125,16 +124,14 @@ def test_build_runtime_services_constructs_in_canonical_order():
         construction_order.append("QueryGenerator")
         return generator_instance
 
-    def _QueryExecutor(*, results_dir, save_function):
+    def _QueryExecutor(*, results_dir):
         # Locked: kwargs-only signature.
         construction_order.append("QueryExecutor")
         executor_instance.results_dir = results_dir
-        executor_instance.save_function = save_function
         return executor_instance
 
-    def _FeaturesService(*, save_function):
+    def _FeaturesService():
         construction_order.append("FeaturesService")
-        features_instance.save_function = save_function
         return features_instance
 
     def _EstraiExecutor(*, project_service, executor, generator,
@@ -179,7 +176,6 @@ def test_build_runtime_services_constructs_in_canonical_order():
         return orchestrator_instance
 
     fake_settings = SimpleNamespace(DATA_DIR=Path("/tmp/plenora"))
-    fake_save_fn = MagicMock(name="save_dataframe")
     # BE-GO-READY-BOOTSTRAP-ENGINE-016: the factory imports the
     # canonical singleton from `api_connector` instead of constructing
     # one. Stub it with an identifiable sentinel so the identity
@@ -213,7 +209,6 @@ def test_build_runtime_services_constructs_in_canonical_order():
 
         result = build_runtime_services(
             settings=fake_settings,
-            save_function=fake_save_fn,
         )
 
     # 1. Order: orchestrator MUST be last (it depends on all the others).
@@ -252,10 +247,8 @@ def test_build_runtime_services_constructs_in_canonical_order():
     # a duplicate.
     assert result.datasource_service is datasource_sentinel
 
-    # 4. Wiring assertions: settings + save_function flowed through.
+    # 4. Wiring assertions: settings flowed through.
     assert executor_instance.results_dir == Path("/tmp/plenora") / "temp"
-    assert executor_instance.save_function is fake_save_fn
-    assert features_instance.save_function is fake_save_fn
 
     # 5. The factory MUST NOT also call `ApiConnectionService()` or
     # `DataSourceService()`. Constructing a second instance would
@@ -282,7 +275,7 @@ def test_build_runtime_services_kw_only():
     from app.runtime import build_runtime_services
 
     with pytest.raises(TypeError):
-        build_runtime_services(MagicMock(), MagicMock())  # type: ignore[misc]
+        build_runtime_services(MagicMock())  # type: ignore[misc]
 
 
 # 3. main.py consumes the factory; module-globals re-export from container

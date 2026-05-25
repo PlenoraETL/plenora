@@ -7,7 +7,6 @@ Runs background execution while preserving backend runtime contracts.
 import csv as csv_mod
 import json as json_mod
 import shutil as _shutil
-import tempfile as _tf
 import threading
 import time
 import traceback as _tb
@@ -991,34 +990,26 @@ def execute_enrichment_task(
 
         if is_eseguibile:
             # Eseguibile con output DataFrame → S3 via storage module
-            # save_bytes fa put_object diretto (zero disk) per formati
-            # in-memory-safe. Per fmt fs-only (gpkg/shp) il driver GDAL/OGR
-            # richiede un path: usiamo TemporaryDirectory che garantisce
-            # rmtree al __exit__ (no orphan su SIGKILL mid-run entro il
-            # cleanup OS-level del /tmp
+            # save_bytes fa put_object diretto. Post-Phase5 anche gpkg/shp
+            # passano per bytes-first: gpkg single-file via pyogrio /vsimem,
+            # shp via io.geospatial.write_shapefile_zip_bytes (ZIP buffer
+            # construito dentro il boundary, niente disk per il caller).
             from app.core.eseguibili import storage as _eseg_storage
-            from app.core.dataframes.frame_io import save_dataframe, save_dataframe_to_bytes
+            from app.core.dataframes.frame_io import save_dataframe_to_bytes
             fmt_lower = (final_format or "").lower()
-            if fmt_lower in ("gpkg", "shp"):
-                with _tf.TemporaryDirectory(
-                    prefix="urby_eseg_gpkg_shp_",
-                    ignore_cleanup_errors=True,
-                ) as tmp_dir:
-                    tmp_path = Path(tmp_dir) / final_filename
-                    saved_local = save_dataframe(
-                        df=final_df, output_path=tmp_path, format=final_format,
-                    )
-                    # Bytes → S3 put_object direct. La dir viene pulita
-                    # al __exit__ anche se save_bytes solleva
-                    data_bytes = saved_local.read_bytes()
-                    _eseg_storage.save_bytes(
-                        task_id, saved_local.name, data_bytes,
-                    )
-            else:
-                data_bytes = save_dataframe_to_bytes(final_df, fmt_lower)
-                _eseg_storage.save_bytes(task_id, final_filename, data_bytes)
-            saved_path = Path(final_filename)  # per metadata payload
-            logger.info(f"[Task {task_id}] Output eseguibile (df) su storage: eseguibili-outputs/{task_id}/{final_filename}")
+            data_bytes = save_dataframe_to_bytes(final_df, fmt_lower)
+            # SHP esce zippato: rinomina il filename su storage in `.zip`.
+            storage_filename = (
+                Path(final_filename).with_suffix(".zip").name
+                if fmt_lower == "shp"
+                else final_filename
+            )
+            _eseg_storage.save_bytes(task_id, storage_filename, data_bytes)
+            saved_path = Path(storage_filename)  # per metadata payload
+            logger.info(
+                f"[Task {task_id}] Output eseguibile (df) su storage: "
+                f"eseguibili-outputs/{task_id}/{storage_filename}"
+            )
         else:
             # Arricchisci standard: single entry-point save_pipeline_result
             from app.core.results.pipeline_result import save_pipeline_result

@@ -151,17 +151,14 @@ def test_default_data_loader_load_csv_round_trip(tmp_path: Path):
     assert df.iloc[1]["name"] == "beta"
 
 
-def test_default_data_loader_save_load_csv_round_trip_via_pandas(tmp_path: Path):
-    """Save -> Load garantisce che i delimitatori scelti dal save_csv
-    sono compatibili col detect_sep del load_csv (sniff csv)."""
+def test_default_data_loader_save_methods_tombstone_post_phase5():
+    """Post-Phase5: i metodi `save_*` su DefaultDataLoader sono rimossi
+    (dead code, nessun caller live in app/). Per scrivere DataFrame in
+    output usare `tabular_dataframe_to_bytes` + `storage.save_bytes`."""
     from app.core.files.service_deps import DefaultDataLoader
 
-    loader = DefaultDataLoader()
-    src = pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
-    target = tmp_path / "rt.csv"
-    loader.save_csv(src, target)
-
-    loaded = loader.load_csv(target)
-    assert list(loaded.columns) == ["a", "b"]
-    assert len(loaded) == 3
-    assert loaded.iloc[2]["b"] == "z"
+    for legacy in ("save_csv", "save_excel", "save_json", "save_geospatial"):
+        assert not hasattr(DefaultDataLoader, legacy), (
+            f"DefaultDataLoader.{legacy} ancora presente: refactor "
+            f"RAM-only incompleto."
+        )

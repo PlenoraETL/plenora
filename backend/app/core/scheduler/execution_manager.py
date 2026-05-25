@@ -94,13 +94,11 @@ class ExecutionManager:
         Importato lazy per evitare circular imports e perché i servizi
         richiedono settings già inizializzati.
         """
-        from app.core.dataframes.frame_io import save_dataframe
         from app.runtime.services import build_orchestrator_stack
 
         stack = build_orchestrator_stack(
             settings=settings,
             results_dir=settings.RESULTS_DIR,
-            save_function=save_dataframe,
             connection_service=self._get_connection_service(),
         )
         return stack.orchestrator

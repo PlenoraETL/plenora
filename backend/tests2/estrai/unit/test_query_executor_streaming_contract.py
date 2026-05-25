@@ -182,7 +182,6 @@ def test_execute_streaming_to_file_writes_parquet_chunks(tmp_path, monkeypatch):
 def test_execute_query_streamable_skips_global_dataframe_and_legacy_save(tmp_path):
     executor = QueryExecutor(
         engine_factory=MagicMock(),
-        save_function=MagicMock(side_effect=AssertionError("legacy save must not run")),
         results_dir=tmp_path,
         logger=MagicMock(),
     )

@@ -55,6 +55,33 @@ PATTERNS: tuple[tuple[str, re.Pattern], ...] = (
     ("storage_download_path", re.compile(r"\.download\([^)]*path")),
 )
 
+# Buffer hints: stesso meccanismo del generator script
+# (`scripts/_gen_io_allowlist.py`). Skippa i `df.to_xxx(buf)` su buffer
+# RAM (BytesIO/StringIO), che sono RAM-only by design.
+_BUFFER_HINTS = re.compile(
+    r"\b(BytesIO|StringIO|io\.BytesIO|io\.StringIO)\b|"
+    r"\.to_(csv|excel|json|parquet)\([^)]*?(buf\b|buffer\b)"
+)
+
+
+def _is_buffer_write(pattern_name: str, line: str) -> bool:
+    """True se il match df_to_xxx scrive su buffer RAM, non su path.
+
+    Stessa logica del generator (`scripts/_gen_io_allowlist.py`)."""
+    if pattern_name not in (
+        "df_to_csv_path", "df_to_excel_path",
+        "df_to_json_path", "df_to_parquet_path",
+    ):
+        return False
+    if _BUFFER_HINTS.search(line):
+        return True
+    if re.search(
+        r"\.to_(csv|excel|json|parquet)\(\s*[A-Za-z_]\w*\s*=",
+        line,
+    ):
+        return True
+    return False
+
 
 # Whitelist: directories autorizzate a fare filesystem I/O sono escluse
 # dal sweep (sono il boundary stesso o test/scripts utility).
@@ -133,6 +160,8 @@ def _scan_findings() -> list[tuple[str, int, str, str]]:
                         continue
                     for pname, pre in PATTERNS:
                         if pre.search(line):
+                            if _is_buffer_write(pname, line):
+                                break
                             findings.append((rel_path, i, pname, line.strip()[:120]))
                             break
     return findings

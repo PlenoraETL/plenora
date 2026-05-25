@@ -7,7 +7,7 @@ Keeps provider-specific behavior behind a narrow integration boundary.
 import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import List, Optional, Tuple, Protocol
+from typing import List, Optional, Tuple
 
 from app.config import settings
 from app.utils.logger import get_logger
@@ -93,20 +93,6 @@ def delete_connection_db(connection_id: str) -> bool:
     return arcgis_connection_store.delete_connection(connection_id)
 
 
-# PROTOCOLLI PER DEPENDENCY INJECTION
-
-class SaveFunctionProtocol(Protocol):
-    """Protocollo per la funzione di salvataggio DataFrame — iniettabile per test."""
-    def __call__(
-        self,
-        df: FrameLike,
-        output_path: Path,
-        format: str,
-        geom_column: Optional[str] = None,
-        crs: str = "EPSG:4326"
-    ) -> Path: ...
-
-
 # SERVIZIO PRINCIPALE
 
 class FeaturesService:
@@ -119,22 +105,19 @@ class FeaturesService:
     
     Dependency Injection:
     - client: ArcGISProviderProtocol (mockabile per test)
-    - save_function: salvataggio DataFrame (mockabile per test)
     - arcgis_dir: directory storage connessioni
     - results_dir: directory output risultati
     """
-    
+
     def __init__(
         self,
         client: ArcGISProviderProtocol = None,
-        save_function: SaveFunctionProtocol = None,
         arcgis_dir: Path = None,
         results_dir: Path = None,
     ) -> None:
         self._client = client or create_arcgis_provider()
         self._operations = ArcGISFeatureOperations(self._client)
         self._writer = ArcGISFeatureWriteService(self._client)
-        self._save = save_function or self._salvataggio_default
         self._arcgis_dir = arcgis_dir or settings.ARCGIS_CONNECTIONS_DIR
         self._results_dir = results_dir or Path(settings.RESULTS_DIR)
         
@@ -480,32 +463,6 @@ class FeaturesService:
         conn_info = self._to_connection_info(connection)
         return self._operations.get_layer_crs(conn_info, layer_url, out_sr)
     
-    @staticmethod
-    def _salvataggio_default(
-        df: FrameLike,
-        output_path: Path,
-        format: str,
-        geom_column: Optional[str] = None,
-        crs: str = "EPSG:4326"
-    ) -> Path:
-        """
-        Salvataggio di fallback (formati base).
-        
-        In produzione viene sostituito da app.core.dataframes.frame_io.save_dataframe
-        che supporta anche formati geospaziali (geojson, gpkg, shp).
-        """
-        final_path = output_path.with_suffix(f".{format}")
-        if format == "csv":
-            df.to_csv(final_path, index=False, encoding="utf-8")
-        elif format == "json":
-            df.to_json(final_path, orient="records", indent=2)
-        elif format == "xlsx":
-            df.to_excel(final_path, index=False)
-        else:
-            final_path = output_path.with_suffix(".csv")
-            df.to_csv(final_path, index=False, encoding="utf-8")
-        return final_path
-    
     # SCRITTURA: ADD / UPDATE / DELETE / CREATE SERVICE
     
     def write_features(
@@ -725,14 +682,12 @@ class FeaturesService:
 
 def create_features_service(
     client: ArcGISProviderProtocol = None,
-    save_function: SaveFunctionProtocol = None,
     arcgis_dir: Path = None,
     results_dir: Path = None,
 ) -> FeaturesService:
     """Factory function per creare un FeaturesService con Dependency Injection."""
     return FeaturesService(
         client=client,
-        save_function=save_function,
         arcgis_dir=arcgis_dir,
         results_dir=results_dir,
     )

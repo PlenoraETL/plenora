@@ -832,7 +832,6 @@ def _load_upstream_data(
 
         # Nessun risultato in cache o force_recalculate → riesegui pipeline
 
-        from app.core.dataframes.frame_io import save_dataframe
         from app.runtime.services import build_orchestrator_stack
 
         # Runtime composition owns the executor graph. CARICA must not rely on
@@ -840,7 +839,6 @@ def _load_upstream_data(
         # diverges from the API/data-plane contract wiring.
         orchestrator_stack = build_orchestrator_stack(
             settings=settings,
-            save_function=save_dataframe,
         )
         orchestrator = orchestrator_stack.orchestrator
 

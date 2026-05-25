@@ -18,10 +18,7 @@ from app.core.arricchisci.execution_context import (
 )
 from app.core.arricchisci.types import JsonObject
 from app.core.arricchisci.project_access import load_project_access_context
-from app.core.dataframes.frame_io import (
-    filter_visible_columns,
-    save_dataframe as _save_df,
-)
+from app.core.dataframes.frame_io import filter_visible_columns
 from app.core.output_contract import (
     ensure_dataframe_matches_contract,
     node_columns_from_contract,
@@ -188,7 +185,6 @@ class ApiConnectionSourceLoadingMixin:
             _stack = build_orchestrator_stack(
                 settings=settings,
                 results_dir=settings.DATA_DIR / "temp",
-                save_function=_save_df,
             )
             upstream_result = _stack.orchestrator.execute_pipeline(
                 source_project_id, force_recalculate=force_recalculate

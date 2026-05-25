@@ -35,7 +35,6 @@ class AppFactoryDeps:
     bootstrap: Callable[[], None]
     teardown: Callable[[], None]
     build_runtime_services: Callable[..., Any]
-    save_function: Callable[..., Any] | None = None
 
 
 def _default_deps() -> AppFactoryDeps:
@@ -95,7 +94,6 @@ def create_app(
 
     # These imports are intentionally post-bootstrap. Several modules transitively
     # touch DB/auth/runtime state and must see an initialized process.
-    from app.core.dataframes.frame_io import save_dataframe
     from app.core.projects.exceptions import CanvasCorruptedError
     from app.core.resources.exceptions import MemoryLimitExceededError
     from app.middleware_stack import install_middleware_stack
@@ -288,10 +286,8 @@ def create_app(
             headers=_cors_headers_for(request),
         )
 
-    save_function = getattr(resolved_deps, "save_function", None) or save_dataframe
     runtime_services = resolved_deps.build_runtime_services(
         settings=resolved_settings,
-        save_function=save_function,
     )
     app.state.runtime_services = runtime_services
 

@@ -91,17 +91,6 @@ class LoggerProtocol(Protocol):
     def warning(self, msg: str, *args: Any) -> None: ...
 
 
-class SaveFunctionProtocol(Protocol):
-    """Protocollo per la funzione di salvataggio DataFrame — iniettabile per test."""
-    def __call__(
-        self,
-        df: FrameLike,
-        output_path: Path,
-        format: str,
-        geom_column: Optional[str] = None
-    ) -> Path: ...
-
-
 class QueryPersistenceProtocol(Protocol):
     """Persistence port for extracted query results."""
 
@@ -245,7 +234,6 @@ class QueryExecutor:
 
     Dependency Injection:
         - engine_factory: creazione engine SQLAlchemy (mockabile per test)
-        - save_function: salvataggio DataFrame su file (mockabile per test)
         - logger: logging (NullLogger per test silenziosi)
         - results_dir: directory per i file di output
     """
@@ -253,7 +241,6 @@ class QueryExecutor:
     def __init__(
         self,
         engine_factory: EngineFactoryProtocol = None,
-        save_function: SaveFunctionProtocol = None,
         logger: LoggerProtocol = None,
         results_dir: Path = None,
         result_persistence: QueryPersistenceProtocol = None,
@@ -263,18 +250,16 @@ class QueryExecutor:
         Inizializza l'executor con le dipendenze iniettate.
 
         Tutti i parametri sono opzionali: se non forniti, vengono usati
-        i default (DefaultEngineFactory, NullLogger, salvataggio CSV).
+        i default (DefaultEngineFactory, NullLogger).
 
         Args:
             engine_factory: Factory per SQLAlchemy engines.
-            save_function: Funzione per salvare DataFrame su file.
             logger: Logger per messaggi di info/error/debug.
             results_dir: Directory base per i file di output.
             result_persistence: porta di persistenza Rows/DataFrame -> result blob.
             streaming_writer: porta SQL -> stream/file chunked per CSV/Parquet.
         """
         self._engine_factory = engine_factory or DefaultEngineFactory()
-        self._save = save_function or self._salvataggio_default
         self._logger = logger or NullLogger()
         if results_dir is None:
             from app.config import settings
@@ -286,32 +271,6 @@ class QueryExecutor:
         self._df_builder = DataFrameBuilder
         self._result_persistence = result_persistence or QueryResultPersistence()
         self._streaming_writer = streaming_writer or QueryStreamingWriter()
-
-    @staticmethod
-    def _salvataggio_default(
-        df: FrameLike,
-        output_path: Path,
-        format: str,
-        geom_column: Optional[str] = None
-    ) -> Path:
-        """
-        Salvataggio di fallback — supporta solo formati base (CSV, JSON, XLSX).
-
-        In produzione viene sostituito da app.core.dataframes.frame_io.save_dataframe
-        che supporta anche i formati geospaziali.
-        """
-        final_path = output_path.with_suffix(f".{format}")
-        if format == "csv":
-            df.to_csv(final_path, index=False, encoding="utf-8")
-        elif format == "json":
-            df.to_json(final_path, orient="records", indent=2)
-        elif format == "xlsx":
-            df.to_excel(final_path, index=False)
-        else:
-            # Fallback: salva come CSV
-            final_path = output_path.with_suffix(".csv")
-            df.to_csv(final_path, index=False, encoding="utf-8")
-        return final_path
 
     @property
     def RESULTS_DIR(self) -> Path:
@@ -604,32 +563,14 @@ class QueryExecutor:
 
 def create_executor(
     engine_factory: EngineFactoryProtocol = None,
-    save_function: SaveFunctionProtocol = None,
     results_dir: Path = None,
     logger: LoggerProtocol = None,
     result_persistence: QueryPersistenceProtocol = None,
     streaming_writer: QueryStreamingWriterProtocol = None,
 ) -> QueryExecutor:
-    """
-    Factory function per creare un QueryExecutor con Dependency Injection.
-
-    Tutti i parametri sono opzionali — utile per configurazione
-    flessibile e testing con mock.
-
-    Args:
-        engine_factory: Factory per SQLAlchemy engines.
-        save_function: Funzione per salvare DataFrame.
-        results_dir: Directory base per i file di output.
-        logger: Logger per i messaggi.
-        result_persistence: porta esplicita per salvare result blob.
-        streaming_writer: porta esplicita per stream chunked SQL -> output.
-
-    Returns:
-        Istanza di QueryExecutor configurata.
-    """
+    """Factory function per creare un QueryExecutor con Dependency Injection."""
     return QueryExecutor(
         engine_factory=engine_factory,
-        save_function=save_function,
         results_dir=results_dir,
         logger=logger,
         result_persistence=result_persistence,

@@ -268,12 +268,7 @@ class TestQueryExecutorPropagation:
         """QueryExecutor con engine_factory mock (non usato perche'
         execute_raw e' mockato a sua volta)."""
         from app.db.query_executor import QueryExecutor
-        return QueryExecutor(
-            engine_factory=MagicMock(),
-            save_function=MagicMock(return_value={
-                "result_id": "r-1", "output_filename": "out.json",
-            }),
-        )
+        return QueryExecutor(engine_factory=MagicMock())
 
     def _run_with_spy(self, executor, *, override, settings_mode="metadata_only"):
         """Esegue execute_query con spy completo del chain. Ritorna

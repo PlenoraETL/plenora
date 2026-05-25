@@ -88,7 +88,6 @@ class RuntimeServices:
 def build_orchestrator_stack(
     *,
     settings: Any,
-    save_function: Any,
     results_dir: Any = None,
     connection_service: Any = None,
 ) -> OrchestratorStack:
@@ -115,11 +114,8 @@ def build_orchestrator_stack(
     resolved_results_dir = (
         results_dir if results_dir is not None else settings.DATA_DIR / "temp"
     )
-    query_executor = QueryExecutor(
-        results_dir=resolved_results_dir,
-        save_function=save_function,
-    )
-    features_service = FeaturesService(save_function=save_function)
+    query_executor = QueryExecutor(results_dir=resolved_results_dir)
+    features_service = FeaturesService()
 
     orchestrator = None
 
@@ -165,18 +161,12 @@ def build_orchestrator_stack(
 def build_runtime_services(
     *,
     settings: Any,
-    save_function: Any,
 ) -> RuntimeServices:
     """Construct shared services in dependency order.
 
     Args:
         settings: app `Settings` singleton. Read for
             `DATA_DIR` (composed into the executor's results dir).
-        save_function: dataframe save function injected into
-            `QueryExecutor` and `FeaturesService`. Today this is
-            `app.core.dataframes.frame_io.save_dataframe`; injected to keep
-            the factory dependency-explicit and to allow tests to
-            substitute a stub.
 
     Returns:
         Fully wired `RuntimeServices`. The orchestrator references
@@ -203,7 +193,6 @@ def build_runtime_services(
     database_inspector = DatabaseInspector()
     orchestrator_stack = build_orchestrator_stack(
         settings=settings,
-        save_function=save_function,
         connection_service=connection_service,
     )
 

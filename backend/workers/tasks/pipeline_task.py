@@ -58,13 +58,12 @@ def _build_orchestrator() -> Any:
     from app.core.estrai.executor import EstraiExecutor
     from app.core.manipola.executor import ManipolaExecutor
     from app.core.arricchisci.executor import EnrichExecutor
-    from app.core.dataframes.frame_io import save_dataframe
 
     project_service = ProjectService()
     connection_service = ConnectionService()
     generator = QueryGenerator()
-    executor = create_executor(save_function=save_dataframe)
-    features_service = FeaturesService(save_function=save_dataframe)
+    executor = create_executor()
+    features_service = FeaturesService()
 
     orchestrator = None
 

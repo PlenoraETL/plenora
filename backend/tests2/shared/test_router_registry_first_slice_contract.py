@@ -435,10 +435,7 @@ def test_datasources_binding_uses_runtime_container_singleton_identity():
     from app.runtime import DATASOURCES_BINDING
     from app.runtime.services import build_runtime_services
 
-    def _fake_save(*args, **kwargs):
-        raise AssertionError("save_function should not be called in this test")
-
-    services = build_runtime_services(settings=_settings, save_function=_fake_save)
+    services = build_runtime_services(settings=_settings)
 
     canonical = datasources_svc_mod.datasource_service
     assert services.datasource_service is canonical
@@ -452,10 +449,7 @@ def test_carica_binding_uses_runtime_container_singleton_identity():
     from app.runtime import CARICA_BINDING
     from app.runtime.services import build_runtime_services
 
-    def _fake_save(*args, **kwargs):
-        raise AssertionError("save_function should not be called in this test")
-
-    services = build_runtime_services(settings=_settings, save_function=_fake_save)
+    services = build_runtime_services(settings=_settings)
 
     args = CARICA_BINDING.extract(services)
     assert args == (services.connection_service,)

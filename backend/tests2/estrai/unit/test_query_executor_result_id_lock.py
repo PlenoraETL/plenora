@@ -99,14 +99,10 @@ class TestQueryExecutorEndToEnd:
         fake_columns = ["id", "name"]
 
         mock_engine_factory = MagicMock()
-        mock_save = MagicMock(
-            side_effect=lambda df, output_path, format, **kw: Path(str(output_path))
-        )
         mock_logger = MagicMock()
 
         executor = QueryExecutor(
             engine_factory=mock_engine_factory,
-            save_function=mock_save,
             results_dir=Path("/tmp"),
             logger=mock_logger,
         )
