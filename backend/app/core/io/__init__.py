@@ -14,9 +14,9 @@ responses, guards, metrics.
 
 Contract:
   Fuori da questo package (e dai moduli storage autorizzati) NON e'
-  ammesso usare tempfile/extractall/Path.write/df.to_csv(path)/
-  FileResponse(path)/shutil.copy/storage.upload(local_path).
-  Il contract test (`tests2/io/test_no_direct_filesystem_contract.py`)
+  ammesso usare tempfile, extractall, Path.write, df export su path,
+  FileResponse path-based, shutil.copy, storage upload path-based.
+  Il contract test (`tests2/io_boundary/test_no_direct_filesystem_contract.py`)
   blinda la regola contro nuovi usi.
 """
 
