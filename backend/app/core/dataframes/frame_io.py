@@ -603,49 +603,55 @@ def _carica_da_zip(
     3 callsite identici per shapefile / FileGDB / singolo file.
     Post-fix: pyogrio 0.12+ accetta ZIP bytes nativi e gestisce
     internamente /vsizip. Lettura ZIP-from-bytes -> GeoDataFrame
-    senza extractall e senza temp dir.
+    senza extractall e senza temp dir. La ZipFile e' aperta UNA
+    volta sola via BytesIO, e i cap zip-bomb sono validati prima
+    di qualunque `inner.read()`.
     """
     from app.core.io.geospatial import read_vector_bytes
+    from app.utils.zip_safe import validate_zip_bomb_limits
 
     zip_bytes = zip_path.read_bytes()
 
-    with zipfile.ZipFile(zip_path, "r") as zf:
+    with zipfile.ZipFile(BytesIO(zip_bytes), "r") as zf:
+        # SAFETY: bomb guard PRIMA di qualunque inner.read().
+        validate_zip_bomb_limits(zf)
         contenuto = zf.namelist()
 
-    shp_files = [n for n in contenuto if n.lower().endswith(".shp")]
-    if shp_files:
-        df = read_vector_bytes(zip_bytes, layer=layer)
-        logger.warning(
-            "Shapefile caricato - i nomi colonne potrebbero "
-            "essere troncati a 10 caratteri!"
-        )
-        return df
+        shp_files = [n for n in contenuto if n.lower().endswith(".shp")]
+        if shp_files:
+            df = read_vector_bytes(zip_bytes, layer=layer)
+            logger.warning(
+                "Shapefile caricato - i nomi colonne potrebbero "
+                "essere troncati a 10 caratteri!"
+            )
+            return df
 
-    gdb_entries = [n for n in contenuto if ".gdb/" in n or n.lower().endswith(".gdb")]
-    if gdb_entries:
-        return read_vector_bytes(zip_bytes, layer=layer)
+        gdb_entries = [
+            n for n in contenuto if ".gdb/" in n or n.lower().endswith(".gdb")
+        ]
+        if gdb_entries:
+            return read_vector_bytes(zip_bytes, layer=layer)
 
-    if len(contenuto) == 1:
-        # Singolo file (es. CSV/JSON/Parquet zippato): non possiamo
-        # usare pyogrio (non sono vector). Leggi via zipfile in RAM
-        # + dispatch su `_load_dataframe_from_bytes` per i formati
-        # tabulari supportati.
-        with zipfile.ZipFile(zip_path, "r") as zf:
+        if len(contenuto) == 1:
+            # Singolo file (es. CSV/JSON/Parquet zippato): non possiamo
+            # usare pyogrio (non sono vector). Leggi via zipfile in RAM
+            # + dispatch su `_load_dataframe_from_bytes` per i formati
+            # tabulari supportati.
             inner_name = contenuto[0]
             with zf.open(inner_name) as inner:
                 inner_bytes = inner.read()
-        inner_suffix = Path(inner_name).suffix.lower().lstrip(".")
-        if inner_suffix in _IN_MEMORY_ARTIFACT_FORMATS:
-            return _load_dataframe_from_bytes(
-                inner_bytes,
-                format_hint=inner_suffix,
-                sheet=sheet,
-                layer=layer,
+            inner_suffix = Path(inner_name).suffix.lower().lstrip(".")
+            if inner_suffix in _IN_MEMORY_ARTIFACT_FORMATS:
+                return _load_dataframe_from_bytes(
+                    inner_bytes,
+                    format_hint=inner_suffix,
+                    sheet=sheet,
+                    layer=layer,
+                )
+            raise ValueError(
+                f"ZIP contiene file singolo con estensione non gestita: "
+                f"{inner_name!r}"
             )
-        raise ValueError(
-            f"ZIP contiene file singolo con estensione non gestita: "
-            f"{inner_name!r}"
-        )
 
     anteprima = contenuto[:10]
     suffisso = "..." if len(contenuto) > 10 else ""
