@@ -101,7 +101,7 @@ const ArricchisciEditorContent = () => {
   const { projectId } = useParams();
 
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { screenToFlowPosition } = useReactFlow();
 
   const { theme, setTheme } = useTheme();

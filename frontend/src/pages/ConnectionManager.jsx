@@ -39,7 +39,7 @@ function ConnectionManager() {
   const toast    = useToast();
   const confirmModal = useConfirmModal();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const canvasRef = useRef(null);
   useHexCanvas(canvasRef);
 

@@ -31,7 +31,7 @@ function ProjectList() {
   const confirmModal = useConfirmModal();
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   // Data caricati via hook condiviso (8 fetch parallele + indici manipola).
   const {

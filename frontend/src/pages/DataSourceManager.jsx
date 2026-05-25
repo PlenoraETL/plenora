@@ -46,7 +46,7 @@ const formatDate = (iso) => {
 export default function DataSourceManager() {
   const toast    = useToast();
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const canvasRef = React.useRef(null);
   useHexCanvas(canvasRef);
 

@@ -37,7 +37,7 @@ const MODULE_COLORS = {
 function LogViewer() {
   const navigate     = useNavigate();
   const toast        = useToast();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const canvasRef    = useRef(null);
   useHexCanvas(canvasRef);
 

@@ -84,7 +84,7 @@ const ManipolaEditorContent = () => {
   const { projectId } = useParams();
 
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const { screenToFlowPosition } = useReactFlow();
   const toast = useToast();
 

@@ -47,7 +47,7 @@ const FileManager = () => {
   const navigate     = useNavigate();
   const toast        = useToast();
   const confirmModal = useConfirmModal();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const canvasRef    = useRef(null);
   const fileInputRef = useRef(null);
   useHexCanvas(canvasRef);

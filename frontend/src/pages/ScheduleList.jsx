@@ -86,7 +86,7 @@ function ScheduleList() {
   const confirmModal = useConfirmModal();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const projectFilter = searchParams.get('project_id');
   const canvasRef = useRef(null);
   useHexCanvas(canvasRef);
