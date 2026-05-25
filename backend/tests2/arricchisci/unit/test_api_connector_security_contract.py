@@ -244,11 +244,13 @@ def test_resolve_file_source_path_project_source_ctx_wins_over_stale_singleton(a
     """TE-026 lock: nel branch `project_source` di
     `_resolve_file_source_path`, quando `ctx` e' fornito,
     `ctx.group_id` vince SEMPRE su `svc._current_group_id` stale.
-    `SourceLoader.resolve_project_path` deve ricevere
+    `SourceLoader.resolve_project_file_bytes` deve ricevere
     `expected_group_id=ctx.group_id`, non il valore legacy.
-    Senza questo, un singleton stale (residuo di una run
-    precedente) farebbe attribuire un'eventuale block
-    cross-tenant al group sbagliato — confondendo log e
+
+    Post-Phase5: il loader ritorna `(bytes, filename)` invece di un
+    path (path-mode rimosso). Senza questo, un singleton stale
+    (residuo di una run precedente) farebbe attribuire un'eventuale
+    block cross-tenant al group sbagliato — confondendo log e
     diagnosi."""
     # Stato legacy stale.
     api_service._current_group_id = "stale-grp-A"
@@ -264,12 +266,12 @@ def test_resolve_file_source_path_project_source_ctx_wins_over_stale_singleton(a
     captured = []
 
     class _FakeLoader:
-        def resolve_project_path(self, ref, expected_group_id):
+        def resolve_project_file_bytes(self, ref, expected_group_id):
             captured.append({
                 "project_id": getattr(ref, "project_id", None),
                 "expected_group_id": expected_group_id,
             })
-            return "/tmp/fake/output.bin"
+            return (b"fake-bytes", "project_output.bin")
 
     # Patch del symbol al sito di lazy-import (`from app.core.artifacts
     # import ... SourceLoader`). _resolve_file_source_path importa
@@ -285,9 +287,9 @@ def test_resolve_file_source_path_project_source_ctx_wins_over_stale_singleton(a
         nodes, edges, "tgt", ctx=_ctx(group_id="winner-grp-B"),
     )
 
-    assert result == "/tmp/fake/output.bin"
+    assert result == (b"fake-bytes", "project_output.bin")
     assert len(captured) == 1, (
-        f"Expected 1 SourceLoader.resolve_project_path call; got {len(captured)}"
+        f"Expected 1 SourceLoader.resolve_project_file_bytes call; got {len(captured)}"
     )
     assert captured[0]["expected_group_id"] == "winner-grp-B", (
         f"Expected expected_group_id=winner-grp-B; got "
@@ -317,9 +319,9 @@ def test_resolve_file_source_path_project_source_ctx_with_none_group_does_not_fa
     loader_called = {"count": 0}
 
     class _FakeLoader:
-        def resolve_project_path(self, ref, expected_group_id):
+        def resolve_project_file_bytes(self, ref, expected_group_id):
             loader_called["count"] += 1
-            return "/tmp/should-never-be-returned"
+            return (b"should-never-be-returned", "x.bin")
 
     # api_connection_rest_file fa `from app.core.artifacts import SourceLoader`,
     # quindi il binding va patchato sul consumer.
@@ -333,7 +335,7 @@ def test_resolve_file_source_path_project_source_ctx_with_none_group_does_not_fa
         )
 
     assert loader_called["count"] == 0, (
-        "SourceLoader.resolve_project_path non deve essere chiamato "
+        "SourceLoader.resolve_project_file_bytes non deve essere chiamato "
         "quando ctx.group_id e' None — fail-closed PRIMA di consultare "
         "il singleton legacy."
     )

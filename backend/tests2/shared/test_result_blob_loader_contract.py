@@ -60,17 +60,15 @@ def test_load_rejects_missing_result_id():
 
 
 def test_load_rejects_unsupported_mode():
-    """v1 + 004 supports mode='bytes' AND mode='path'. Other modes
-    (notably 'stream', plus invalid strings like 'json') still
-    fail-closed at construction time. The mode='path' support
-    landed in BE-GO-READY-RESOURCE-ENGINE-004 and is locked by
-    the dedicated path-mode contract test file."""
+    """Post-Phase5: solo `mode='bytes'` supportato. `mode='path'`
+    rimosso (zero production caller); chi necessita di un path
+    filesystem usa `app.core.io.materialize.temporary_path_from_bytes`."""
     from app.core.resources.loaders.result_blob import ResultBlobLoader
 
     ref = make_result_ref()
 
     loader = ResultBlobLoader()
-    for mode in ("stream", "json"):
+    for mode in ("path", "stream", "json"):
         with pytest.raises(ValueError, match="not supported"):
             loader.load(ref, mode=mode)  # type: ignore[arg-type]
 

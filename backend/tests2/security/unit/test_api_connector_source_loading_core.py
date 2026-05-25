@@ -195,8 +195,11 @@ def test_load_source_project_distinguishes_project_not_found_from_cross_tenant()
 def test_resolve_file_source_path_project_branch_passes_through_source_loader():
     """Current contract #boundary, _resolve_file_source_path NON tocca piu'
     ArtifactResolver direttamente: passa per
-    SourceLoader.resolve_project_path che a sua volta delega al
+    SourceLoader.resolve_project_file_bytes che a sua volta delega al
     resolver con expected_group_id propagato.
+
+    Post-Phase5: il metodo ritorna `(bytes, filename)` invece di un
+    path (path-mode rimosso).
 
     Verifichiamo che (a) il loader venga chiamato, (b) con il
     group_id corrente, (c) col project_id estratto dal node.
@@ -219,15 +222,17 @@ def test_resolve_file_source_path_project_branch_passes_through_source_loader():
     with patch(
         "app.core.arricchisci.api_connection_rest_file.SourceLoader",
     ) as loader_cls:
-        loader_cls.return_value.resolve_project_path.return_value = "/tmp/output.csv"
+        loader_cls.return_value.resolve_project_file_bytes.return_value = (
+            b"id,v\n1,foo\n", "project_output.csv",
+        )
         result = svc._resolve_file_source_path(
             nodes, edges, "tgt-1",
             ctx=_ctx_grp(group_id="grp-A"),
         )
 
-    assert result == "/tmp/output.csv"
-    loader_cls.return_value.resolve_project_path.assert_called_once()
-    call_args = loader_cls.return_value.resolve_project_path.call_args
+    assert result == (b"id,v\n1,foo\n", "project_output.csv")
+    loader_cls.return_value.resolve_project_file_bytes.assert_called_once()
+    call_args = loader_cls.return_value.resolve_project_file_bytes.call_args
     # Argomento posizionale: LatestProjectArtifactRef(project_id="proj-1")
     project_ref = call_args.args[0]
     assert project_ref.project_id == "proj-1"

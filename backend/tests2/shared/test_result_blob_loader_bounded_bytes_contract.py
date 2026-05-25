@@ -441,47 +441,23 @@ def test_bytea_under_cap_returns_normally(monkeypatch):
     assert out.data == b"small"
 
 
-# 5. Path mode: oversize aborts BEFORE writing a tempfile
+# 5. Path mode rimossa post-Phase5: tombstone
 
 
-def test_path_mode_oversize_does_not_create_tempfile(monkeypatch, tmp_path):
-    """``mode='path'`` shares the same dispatch as ``mode='bytes'``,
-    so the cap fires BEFORE ``_materialize_to_temp_path`` is
-    invoked. No partial / zero-byte tempfile leaks on oversize."""
-    from app.core.resources.exceptions import MemoryLimitExceededError
+def test_path_mode_rejected_unconditionally():
+    """`mode='path'` rimosso (zero production caller). Il loader rifiuta
+    esplicitamente: chi necessita di un path filesystem usa
+    `app.core.io.materialize.temporary_path_from_bytes` come escape hatch."""
     from app.core.resources.loaders import result_blob as loader_mod
 
-    monkeypatch.setenv("RESOURCE_MAX_BYTES", "10")
-    body = _TrackingBody([b"x" * 100])
-    fake_storage = _FakeStorage(body)
-    monkeypatch.setattr(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
-        lambda: fake_storage,
-    )
-    _, fake_fetch = fake_fetchone(
-        row={"data": None, "storage_key": "results/p/path-oversize.bin"}
-    )
-    monkeypatch.setattr("app.db.pg_connection.fetchone", fake_fetch)
-
-    # Spy on the materializer to PROVE it was not invoked.
-    calls: list[bytes] = []
-
-    real_materialize = loader_mod._materialize_to_temp_path
-
-    def _spy(data: bytes):
-        calls.append(data)
-        return real_materialize(data)
-
-    monkeypatch.setattr(loader_mod, "_materialize_to_temp_path", _spy)
-
+    loader = loader_mod.ResultBlobLoader()
+    # Test che mode='path' raise PRIMA di qualunque DB/storage access:
+    # ref senza configurazione DB/storage e' OK (validation fail-closed
+    # alla mode-check, prima del dispatch). Per safety usiamo make_result_ref
+    # con un result_id presente (non None).
     ref = make_result_ref()
-    with pytest.raises(MemoryLimitExceededError):
-        loader_mod.ResultBlobLoader().load(ref, mode="path")
-
-    assert calls == [], (
-        "path mode must NOT materialize a tempfile when oversize "
-        "fires; the cap is the gate before tempfile allocation."
-    )
+    with pytest.raises(ValueError, match="not supported"):
+        loader.load(ref, mode="path")  # type: ignore[arg-type]
 
 
 # 6. Stream mode honesty: still unsupported, no body read

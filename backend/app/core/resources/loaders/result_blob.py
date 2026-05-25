@@ -5,11 +5,8 @@ Result-blob loader — pilot Resource Engine kind.
 
 from __future__ import annotations
 
-import os as _os
-import tempfile
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Mapping, Optional, Tuple
 
 from app.core.resources.exceptions import MemoryLimitExceededError
@@ -288,144 +285,12 @@ def _dispatch_by_id(
     return data, "db_legacy"
 
 
-# Path-mode helper: write bytes to a stdlib tempfile (anti-god-engine: no
-# settings imports, no domain-specific tempdir resolution; the engine
-# returns a raw stdlib tempfile path and the caller owns its lifecycle
-# via Resource.is_temporary=True
-# Path mode is FALLBACK-ONLY. The default for new consumers is bytes mode
-# in-memory, no tempfile). Path mode exists for callers that
-# unavoidably need a filesystem path (e.g. legacy parsers that take
-# `str` paths only). The temp materialization is idempotent and
-# narrowly scoped: every materialized file carries the
-# ``plenora-result-blob-`` prefix so cleanup helpers can identify and
-# safely target only files this engine produced
-
-
-# Explicit prefix for every tempfile this engine writes. The prefix
-# is the audit/cleanup hook: a cleanup helper that refuses to touch
-# files NOT bearing this prefix is safe even when given an arbitrary
-# Path argument (defense-in-depth against accidental
-# `cleanup_temp_path("/etc/passwd")` calls). Stable string contract
-# changing this prefix is a contract break
-_RESULT_BLOB_TEMP_PREFIX = "plenora-result-blob-"
-
-
-def _materialize_to_temp_path(data: bytes) -> Path:
-    """Write ``data`` to a fresh tempfile and return its Path.
-
-    Stdlib-only: ``tempfile.NamedTemporaryFile(delete=False,
-    prefix=_RESULT_BLOB_TEMP_PREFIX)``. The caller is responsible for
-    cleanup (the loader returns ``Resource(is_temporary=True)`` to
-    signal that contract; ``cleanup_temp_path`` below is the safe
-    helper to do it).
-
-    The ``plenora-result-blob-`` prefix makes every materialized file
-    identifiable in `tempfile.gettempdir` listings (operator audit)
-    and acts as the narrow guard for ``cleanup_temp_path``.
-
-    Cleanup on write failure: the partial tempfile is closed and
-    unlinked best-effort, then the original exception is re-raised.
-    Disk-full / permission / EROFS surface as the original I/O
-    exception, never as a leaked half-written tempfile. (This
-    helper is the typed replacement for the pre-019 resolver
-    shim ``ArtifactResolver._write_temp_blob``, which was deleted
-    in once production callers
-    had all migrated to the registry's path mode.)
-
-    The loader does NOT honor a domain-specific TEMP_DIR (e.g.
-    ``settings.TEMP_DIR``) on purpose: the anti-god-engine rule is
-    that the resource engine has zero ``app.config`` imports.
-    Callers that need a specific tempdir override can either set
-    the stdlib ``TMPDIR`` / ``TEMP`` / ``TMP`` env vars (which
-    ``tempfile`` honors transparently) or copy the result to their
-    preferred root after the loader returns.
-    """
-    tf = tempfile.NamedTemporaryFile(
-        delete=False,
-        prefix=_RESULT_BLOB_TEMP_PREFIX,
-    )
-    path = Path(tf.name)
-    try:
-        tf.write(data)
-    except Exception:
-        try:
-            tf.close()
-        except Exception:
-            pass
-        try:
-            if path.exists():
-                _os.unlink(path)
-        except Exception:
-            pass
-        raise
-    else:
-        tf.close()
-        return path
-
-
-def cleanup_temp_path(path: Path) -> bool:
-    """Best-effort delete of a tempfile materialized by
-    :func:`_materialize_to_temp_path`.
-
-    Narrow, stdlib-only cleanup helper. Refuses to delete anything
-
-    1. The path's basename MUST start with ``plenora-result-blob-``.
-       Without this guard, an accidental
-       ``cleanup_temp_path(Path("/etc/passwd"))`` call could destroy
-       arbitrary files.
-    2. The path's resolved parent MUST be (or be inside) the stdlib
-       tempfile root (``tempfile.gettempdir``). Without this guard,
-       a malicious / drifted prefix on a path outside `/tmp` would
-       still be deletable. The combination of (1) AND (2) is the
-       defense-in-depth contract.
-
-    Returns ``True`` on successful delete, ``False`` on guard
-    rejection or filesystem error. Never raises — the helper is
-    designed for use in worker / cleanup-hook contexts where any
-    exception would surface as a noisy log without aiding recovery.
-
-    Caller contract:
-      - ``Resource(is_temporary=True)`` is a SIGNAL that the caller
-        owns cleanup. This helper is the recommended way to honor
-        that contract.
-      - The helper does NOT scan the tempdir; it only operates on
-        the explicit path passed in. Bulk cleanup (e.g. a beat job
-        sweeping orphaned ``plenora-result-blob-*`` files) is OUT OF
-        SCOPE here — see the audit § "future cleanup sweep".
-    """
-    try:
-        # Defense 1: prefix check on basename
-        name = path.name
-        if not name.startswith(_RESULT_BLOB_TEMP_PREFIX):
-            return False
-
-        # Defense 2: resolved parent must be inside the stdlib
-        # tempdir. We resolve both paths so symlinked tempdirs
-        # macOS uses /private/var/folders) compare correctly
-        try:
-            resolved_parent = path.resolve(strict=False).parent
-        except OSError:
-            return False
-        try:
-            tempdir_resolved = Path(tempfile.gettempdir()).resolve(strict=False)
-        except OSError:
-            return False
-        try:
-            resolved_parent.relative_to(tempdir_resolved)
-        except ValueError:
-            # Parent is NOT under the tempdir — refuse
-            return False
-
-        # Both guards passed; delete (idempotent
-        if not path.exists():
-            return False
-        _os.unlink(path)
-        return True
-    except Exception:
-        return False
-
-
-# ResultBlobLoader — Protocol-compliant fail-closed entry point
+# ResultBlobLoader — Protocol-compliant fail-closed entry point.
+#
+# Post-Phase5: mode="path" rimossa (zero production caller). Il loader
+# materializza solo bytes in-memory; chi ha bisogno di un path filesystem
+# deve usare `app.core.io.materialize.temporary_path_from_bytes` come
+# context manager (escape hatch esplicito al boundary I/O).
 
 
 class ResultBlobLoader:
@@ -450,25 +315,21 @@ class ResultBlobLoader:
                 "ResultBlobLoader.load: ref.result_id required "
                 f"(got {ref.result_id!r})."
             )
-        if mode not in ("bytes", "path"):
-            # bytes (RESOURCE-ENGINE-002) + path (RESOURCE-ENGINE-004
-            # `stream` stays unsupported — adding it requires a
-            # safe Iterator[bytes] passthrough for both BYTEA (already
-            # fully read into memory) and object storage (we currently
-            # consume the stream into a list inside _download_object_storage
-            # Implementing it without re-reading or losing seekability
-            # is non-trivial; deferred to a follow-up stream
+        if mode != "bytes":
+            # Post-Phase5: solo `bytes` supportato. Path mode rimossa
+            # (zero production caller; chi ha bisogno di un path deve
+            # usare `app.core.io.materialize.temporary_path_from_bytes`
+            # come context manager).
             raise ValueError(
                 f"ResultBlobLoader.load: mode={mode!r} not supported. "
-                "v1 supports mode='bytes' and mode='path'; stream is "
-                "deferred to a follow-up stream."
+                "Only mode='bytes' is accepted (path mode removed)."
             )
 
-        # Tenant binding (shared between bytes and path modes
-        # is_superadmin=False -> SQL filter on group_id (fail-closed
-        # a row owned by another group does not return
+        # Tenant binding:
+        # is_superadmin=False -> SQL filter on group_id (fail-closed,
+        # a row owned by another group does not return).
         # is_superadmin=True -> SQL filter skipped; the bypass is
-        # recorded in the audit log for symmetry
+        # recorded in the audit log for symmetry.
         if ref.is_superadmin:
             from app.utils.logger import get_logger
 
@@ -514,39 +375,17 @@ class ResultBlobLoader:
                 + ")"
             )
 
-        if mode == "bytes":
-            # data=None indica una row visibile ma blob non disponibile
-            # per storage remoto disabilitato o download fallito.
-            size = len(data) if data else 0
-            return Resource(
-                kind="result_blob",
-                size_bytes=size,
-                data=data,
-                format_hint=None,
-                is_temporary=False,
-            )
-
-        # mode == "path"
-        # In path mode a None-data Resource is NOT useful: callers
-        # asking for a path want a file they can open. Surface the
-        # "row exists but blob unavailable" case as FileNotFoundError
-        # rather than silently materializing a zero-byte tempfile
-        # that would hide object-storage outages from the caller
-        if data is None:
-            raise FileNotFoundError(
-                f"ResultBlobLoader.load: result_id={ref.result_id!r} "
-                "blob data unavailable (object storage download "
-                "returned None or row carries empty BYTEA). "
-                "mode='path' cannot materialize a missing blob."
-            )
-        tmp_path = _materialize_to_temp_path(data)
+        # mode == "bytes" (l'unico supportato).
+        # data=None indica una row visibile ma blob non disponibile
+        # per storage remoto disabilitato o download fallito.
+        size = len(data) if data else 0
         return Resource(
             kind="result_blob",
-            size_bytes=len(data),
-            path=tmp_path,
+            size_bytes=size,
+            data=data,
             format_hint=None,
-            is_temporary=True,
+            is_temporary=False,
         )
 
 
-__all__ = ["ResultBlobLoader", "cleanup_temp_path"]
+__all__ = ["ResultBlobLoader"]

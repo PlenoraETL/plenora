@@ -200,9 +200,9 @@ _BOUNDARY_FILES = (
     "app/utils/zip_safe.py",  # safe_extractall + zip bomb guard impl
     "app/core/results/temp_paths.py",  # path-only adapter primitives
     "app/core/files/service_deps.py",  # DefaultFileSystem path adapter
-    # Resource engine loader: materializza bytes -> tempfile per i
-    # consumer mode="path" (REST connector resolve_project_path,
-    # ArcGIS write_features). E' infrastructure, non application code.
+    # Resource engine loader: post-Phase5 supporta solo mode="bytes"
+    # (path-mode rimosso). Resta nel boundary per coerenza storica e
+    # come ancora per la categorizzazione legitimate-cache.
     "app/core/resources/loaders/result_blob.py",
     # REST file workflow connector: il connector e' file-centric by
     # design (HTTP multipart upload, response download in workdir,

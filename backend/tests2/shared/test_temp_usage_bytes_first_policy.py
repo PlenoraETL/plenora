@@ -78,17 +78,14 @@ def _scan_callsites(predicate) -> dict[str, list[int]]:
 # requires a real reason the bytes path doesn't work).
 
 _RESOURCE_ENGINE_PATH_MODE_ALLOWLIST: dict[str, str] = {
-    "app/core/artifacts/resolver.py": (
-        "BE-GO-READY-RESOURCE-ENGINE-019: ArtifactResolver. "
-        "_materialize_from_result_id requires a filesystem path "
-        "for downstream pandas/geopandas readers (load_dataframe_"
-        "from_file dispatches by extension; OGR / shapefile / "
-        "geopackage drivers require seekable on-disk paths). "
-        "Path mode is the typed replacement for the resolver's "
-        "pre-019 _write_temp_blob shim; bytes mode would force "
-        "every downstream reader through BytesIO, which the OGR "
-        "/ fiona stack does not support without a tempfile bounce."
-    ),
+    # Post-Phase5: ZERO production callers di `mode="path"`. Il loader
+    # `ResultBlobLoader` rifiuta esplicitamente mode != "bytes". Per
+    # downstream reader che richiedono un path filesystem, usare
+    # `app.core.io.materialize.temporary_path_from_bytes` come escape
+    # hatch al boundary I/O (context manager, cleanup garantito).
+    # ArtifactResolver._materialize_from_result_id ora opera solo in
+    # mode="bytes"; i consumer ArcGIS/REST sono stati migrati a
+    # dataframe-first / (bytes, filename) tuple.
 }
 
 
@@ -200,12 +197,11 @@ def test_resource_engine_canonical_usage_docs_bytes_mode():
 # letting it slip in via "just one more entry".
 
 
-# Previous contract-042 boundary was 0 (zero production path-mode
-# callers). BE-GO-READY-RESOURCE-ENGINE-019 added the FIRST
-# production caller (ArtifactResolver -> registry, mode='path')
-# with a documented rationale (downstream OGR/fiona/geopandas
-# readers require a filesystem path). Snapshot bumped to 1.
-_BATCH_042_ALLOWLIST_SNAPSHOT_SIZE = 1
+# Post-Phase5: snapshot back to 0 — la `ResultBlobLoader.mode="path"`
+# e' stata rimossa, l'`ArtifactResolver` opera solo in mode="bytes",
+# e i 2 consumer downstream (ArcGIS write + REST connector) sono stati
+# migrati a dataframe-first / `(bytes, filename)` tuple.
+_BATCH_042_ALLOWLIST_SNAPSHOT_SIZE = 0
 
 
 def test_resource_engine_path_mode_allowlist_size_snapshot():
@@ -239,33 +235,24 @@ def test_resource_engine_path_mode_allowlist_size_snapshot():
     )
 
 
-def test_resource_engine_loader_marks_path_mode_as_fallback():
-    """Source-bound: the engine's own path-mode tempfile
-    helper (``_materialize_to_temp_path``) docstring MUST
-    label path mode as a fallback / caller-owned-cleanup
-    mode. This is structural deprecation pressure: every
-    contributor reading the loader source sees the
-    "callers should prefer mode='bytes'" signal in-line.
+def test_resource_engine_loader_path_mode_removed_post_phase5():
+    """Post-Phase5: il loader `ResultBlobLoader` non supporta piu'
+    mode="path" (zero production caller; chi necessita di un path
+    filesystem usa `app.core.io.materialize.temporary_path_from_bytes`
+    come escape hatch esplicito).
 
-    The check is structural (substring presence in the
-    materialize-to-temp helper docstring); it does not lock
-    the exact wording. The intent is a stable hint that
-    surfaces during code review of any path-mode change.
+    Source-bound: il loader NON deve piu' definire
+    `_materialize_to_temp_path` (helper rimosso) o accettare
+    `mode="path"` senza rifiutarlo esplicitamente.
     """
     loader = _APP / "core" / "resources" / "loaders" / "result_blob.py"
     text = loader.read_text(encoding="utf-8")
-    # The loader's _materialize_to_temp_path docstring is the
-    # narrow surface that materializes path-mode results.
-    # Require both:
-    #   (a) a "caller-owned cleanup" / "is_temporary=True"
-    #       contract signal (already present Previous contract);
-    #   (b) a "fallback" / "prefer mode='bytes'" hint (added
-    #       by 014).
-    assert "is_temporary=True" in text, (
-        "ResultBlobLoader._materialize_to_temp_path docstring "
-        "must keep the `Resource(is_temporary=True)` caller-"
-        "owned cleanup contract signal. Path-mode tempfiles "
-        "are caller-owned, NOT engine-owned."
+    assert "_materialize_to_temp_path" not in text, (
+        "ResultBlobLoader._materialize_to_temp_path deve essere rimosso "
+        "post-Phase5: path-mode chiuso."
+    )
+    assert 'mode != "bytes"' in text or 'only mode' in text.lower(), (
+        "ResultBlobLoader.load deve rifiutare esplicitamente mode != 'bytes'."
     )
 
 
@@ -366,9 +353,12 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     ),
     # Closed (BE-GO-READY-RESOURCE-ENGINE-023): the resolver's
     # `_write_temp_blob` helper at app/core/artifacts/resolver.py:572
-    # was deleted as dead code. R-021.1 is closed; the typed
-    # replacement is `ResultBlobLoader._materialize_to_temp_path`,
-    # already inventoried below as PATH_REQUIRED_FILE.
+    # was deleted as dead code. R-021.1 is closed.
+    # Closed (Phase5): `ResultBlobLoader._materialize_to_temp_path`
+    # was deleted (path-mode rimosso). Il loader supporta solo
+    # `mode="bytes"`; consumer che vogliono un path usano
+    # `app.core.io.materialize.temporary_path_from_bytes` come
+    # escape hatch esplicito.
     ("app/core/results/temp_paths.py", 46): (
         "PATH_ONLY_ADAPTER",
         "Centralized tempdir helper for path-only adapters. It creates "
@@ -396,17 +386,6 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "DIR_MULTIFILE",
         "IMDF bundle re-cache fallback: same multi-file pattern.",
     ),
-    ("app/core/resources/loaders/result_blob.py", 343): (
-        "PATH_REQUIRED_FILE",
-        "ResultBlobLoader._materialize_to_temp_path (mode='path'): "
-        "the ENGINE'S OWN path-mode tempfile. Caller-owned "
-        "cleanup (is_temporary=True). This is the typed "
-        "replacement for the resolver's _write_temp_blob "
-        "(deleted in BE-GO-READY-RESOURCE-ENGINE-023 once all "
-        "production callers had migrated). Fallback-only: "
-        "callers should prefer mode='bytes'.",
-    ),
-
     ("app/core/dataframes/frame_io.py", 431): (
         "DIR_MULTIFILE",
         "Shapefile zip extraction: SHP is multi-file (shp+shx+"

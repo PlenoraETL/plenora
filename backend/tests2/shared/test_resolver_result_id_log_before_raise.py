@@ -138,9 +138,9 @@ def test_materialize_from_result_id_logs_error_before_raise_on_lookup_failure(
 def test_materialize_from_result_id_logs_error_before_raise_on_blob_read_failure(
     monkeypatch, capture_resolver_logs,
 ):
-    """BE-GO-READY-RESOURCE-ENGINE-019: il blob fetch ora delega a
-    ``default_registry().get(ref, mode='path')``. Il broad-except
-    nel resolver cattura eccezioni NON-FileNotFoundError dal
+    """BE-GO-READY-RESOURCE-ENGINE-019 + Phase5: il blob fetch ora
+    delega a ``default_registry().get(ref, mode='bytes')`` (path-mode
+    rimosso). Il broad-except nel resolver cattura eccezioni NON-FileNotFoundError dal
     registry (fault della libreria PG / driver / I/O di basso
     livello) e le traduce in ``ArtifactResolutionError`` con il
     messaggio canonical "lettura blob ... fallita" + log ERROR

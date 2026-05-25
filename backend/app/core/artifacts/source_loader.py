@@ -240,14 +240,6 @@ class SourceLoader:
         filename = f"project_output.{fmt}"
         return materialized.data, filename
 
-    # Backward-compat alias: nome storico `resolve_project_path` ritornava
-    # path str; post-Phase5 ritorna `(bytes, filename)`. Tenuto per non
-    # rompere i test che patchano il vecchio nome (es.
-    # `test_api_connector_security_contract`,
-    # `test_source_loader_core`). Nuovo codice usa
-    # `resolve_project_file_bytes`.
-    resolve_project_path = resolve_project_file_bytes
-
     def _load_project(
         self,
         project_ref: LatestProjectArtifactRef,

@@ -1,11 +1,18 @@
-"""Sessione 11 P1: source_read cleanup order.
+"""Sessione 11 P1: source_read cleanup order — tombstone post-bytes-first.
 
-Bug coperto:
-- files/source_read.py:96-104 — gc.collect chiamato PRIMA di
-  _cleanup_temp_path. Su worker memory-constrained con GeoDataFrame
-  grandi (shp/gdb), il gc tentava di liberare memoria del GeoDataFrame
+Storico:
+- files/source_read.py:96-104 (vecchio path-mode) — gc.collect chiamato PRIMA
+  di `_cleanup_temp_path`. Su worker memory-constrained con GeoDataFrame
+  grandi (shp/gdb) il gc tentava di liberare memoria del GeoDataFrame
   PRIMA del cleanup FS → picco memoria spurious.
-- Post-fix: cleanup FS PRIMA, gc.collect DOPO.
+- Post-fix Sessione 11: cleanup FS PRIMA, gc.collect DOPO.
+- Post-Phase4 (bytes-first): `load_dataframe` consuma il blob direttamente
+  in RAM via `load_by_format_bytes` / `list_vector_layers`, senza piu'
+  materializzare temp file. `_cleanup_temp_path` non esiste piu' nel
+  codice, quindi il bug originale e' impossibile by-construction.
+
+Questo test resta come tombstone: garantisce che non si torni MAI piu'
+a un pattern path-mode con temp file in `load_dataframe`.
 """
 
 from __future__ import annotations
@@ -18,23 +25,26 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-def test_source_read_finally_block_cleanup_before_gc():
-    """`load_dataframe` finally block: `_cleanup_temp_path` deve precedere
-    `gc.collect()`. Anti-regression."""
+def test_source_read_load_dataframe_is_bytes_first_no_tempfile():
+    """`load_dataframe` post-Phase4: deve consumare il blob in RAM,
+    niente piu' `_cleanup_temp_path`, niente piu' `temp_file_for`
+    nel finally block."""
     from app.core.files import source_read
 
     src = inspect.getsource(source_read.load_dataframe)
-    # Strip commenti per evitare false positive su "Pre-fix: ... gc.collect()"
-    src_no_comments = "\n".join(
-        line for line in src.splitlines() if not line.lstrip().startswith("#")
+
+    assert "_cleanup_temp_path" not in src, (
+        "load_dataframe non deve piu' usare _cleanup_temp_path post-Phase4 "
+        "(bytes-first via load_by_format_bytes). Se torna, e' una regressione "
+        "verso il path-mode che il pattern Sessione 11 doveva proteggere."
     )
-
-    cleanup_idx = src_no_comments.find("_cleanup_temp_path(")
-    gc_idx = src_no_comments.find("gc.collect()")
-
-    assert cleanup_idx >= 0, "_cleanup_temp_path call non trovata"
-    assert gc_idx >= 0, "gc.collect() call non trovata"
-    assert cleanup_idx < gc_idx, (
-        "_cleanup_temp_path deve precedere gc.collect() — pre-fix era "
-        "l'opposto, picco memoria spurious su GeoDataFrame grandi."
+    assert "temp_file_for" not in src, (
+        "load_dataframe non deve materializzare tempfile post-Phase4 "
+        "(bytes-first). Se torna, contraddice il refactor che ha "
+        "eliminato il bounce su disco."
+    )
+    # Conferma che il path nuovo bytes-first sia in uso.
+    assert "load_by_format_bytes" in src, (
+        "load_dataframe deve consumare il blob via load_by_format_bytes "
+        "(bytes-first contract). Se la helper cambia nome, aggiornare qui."
     )

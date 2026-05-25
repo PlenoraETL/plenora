@@ -99,7 +99,7 @@ def _extract_project_source_group_id(
     """+
      variante ctx-strict
     per il branch `project_source` di `_resolve_file_source_path`
-    (chiama `SourceLoader.resolve_project_path` con
+    (chiama `SourceLoader.resolve_project_file_bytes` con
     `expected_group_id`).
 
     Behavior (ctx-strict):
@@ -123,7 +123,7 @@ def _extract_project_source_group_id(
         `test_rest_file_strict_helpers_still_present` scansiona
         per nome funzione.
 
-    Razionale: `SourceLoader.resolve_project_path` accetta
+    Razionale: `SourceLoader.resolve_project_file_bytes` accetta
     `expected_group_id` come tenant binding fail-closed.
     Passare un singleton stale qui significherebbe che un
     canvas cross-tenant con `project_source` referenziando un

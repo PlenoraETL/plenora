@@ -39,7 +39,7 @@ class ArtifactResolver:
     """
 
     def materialize_run(
-        self, ref: RunArtifactRef, *, mode: str = "path",
+        self, ref: RunArtifactRef, *, mode: str = "bytes",
     ) -> MaterializedArtifact:
         """Risolve un RunArtifactRef seguendo l'ordine di preferenza:
         inline_df → result_id (con verify) → output_path (validato).
@@ -48,11 +48,10 @@ class ArtifactResolver:
         None: o materializza, o fallisce hard.
 
         Args:
-            mode: `"path"` (default, backward-compat) materializza il
-                blob su tempfile e popola `MaterializedArtifact.path`.
-                `"bytes"` ritorna `MaterializedArtifact.data` (RAM-only,
-                no tempfile). I caller bytes-first migrati passano
-                `mode="bytes"` esplicito.
+            mode: SOLO `"bytes"` supportato. Post-Phase5 il path mode
+                e' stato rimosso (zero production caller); il
+                ResultBlobLoader rifiuta esplicitamente mode != "bytes".
+                Il parametro resta per stabilita' API.
         """
         if ref.inline_df is not None:
             return MaterializedArtifact(
@@ -86,7 +85,7 @@ class ArtifactResolver:
         *,
         expected_group_id: Optional[str] = None,
         is_superadmin: bool = False,
-        mode: str = "path",
+        mode: str = "bytes",
     ) -> Optional[MaterializedArtifact]:
         """Risolve il latest output di un progetto cross-run.
 
@@ -110,10 +109,9 @@ class ArtifactResolver:
         Ritorna `None` se il progetto esiste ma non ha alcun risultato
         (semantica compatibile con `get_result_as_tempfile`).
 
-         (R-019.1 closure): il blob
-        fetch + tempfile materialization e' delegato a
-        ``default_registry.get(ref, mode='path')`` come in
-        ``_materialize_from_result_id`` (019). Tenant binding:
+         (R-019.1 closure + Phase5): il blob fetch e' delegato a
+        ``default_registry.get(ref, mode='bytes')`` come in
+        ``_materialize_from_result_id``; path-mode rimosso. Tenant binding:
         ``expected_group_id`` per ResourceRef arriva da
         ``row['group_id']`` (la riga `latest` per definizione e' del
         gruppo corretto -- garantito o dal SQL filter di
@@ -208,16 +206,10 @@ class ArtifactResolver:
             ) from e
 
         fmt = row.format or "csv"
-        if mode == "bytes":
-            return MaterializedArtifact(
-                data=resource.data,
-                format=fmt,
-                is_temporary=False,
-            )
         return MaterializedArtifact(
-            path=resource.path,
+            data=resource.data,
             format=fmt,
-            is_temporary=True,
+            is_temporary=False,
         )
 
     def fetch_run_blob(
@@ -332,23 +324,17 @@ class ArtifactResolver:
 
     def _materialize_from_result_id(
         self, *, result_id: str, expected_project_id: str,
-        mode: str = "path",
+        mode: str = "bytes",
     ) -> MaterializedArtifact:
-        """Resolve a `result_id` via the Resource Engine path mode.
+        """Resolve a `result_id` via the Resource Engine.
 
-         (R-PILOT-017.A closure):
-        the blob fetch + tempfile materialization is delegated to
-        ``default_registry.get(ref, mode='path')`` -- the FIRST
-        real production caller of the registry surface. Pre-019
-        the path was a two-step ``db_service.get_result_data`` +
-        ``self._write_temp_blob`` shim; post-019 the loader owns
-        SQL preflight (013), bounded read (010), safe-prefixed
-        tempfile materialization (006), and the cap envelope
-        contract in one place. The resolver continues to own the
-        upstream row lookup (for `format` / `group_id` metadata)
-        and the cross-tenant project_id check (which produces the
-        Italian operator error string the rest of the system
-        depends on).
+        Post-Phase5: solo `mode="bytes"` supportato. Il loader
+        `ResultBlobLoader` rifiuta `mode="path"` (zero production
+        caller; chi necessita di un path filesystem usa
+        `app.core.io.materialize.temporary_path_from_bytes`).
+        Il resolver continua a fornire row metadata lookup (format,
+        group_id) + cross-tenant project_id check; la
+        materializzazione del blob e' delegata al loader bytes-first.
         """
         # ResourceRef + default_registry are top-level imports on
         # this module (see header). That makes the symbols
@@ -435,19 +421,12 @@ class ArtifactResolver:
 
         # Format is row metadata; the loader is byte-level only and
         # does not learn the format. The resolver attaches it to
-        # the MaterializedArtifact for downstream readers
-        # load_dataframe_from_artifact dispatches on format/extension
+        # load_dataframe_from_artifact dispatches on format/extension.
         fmt = row.format or "csv"
-        if mode == "bytes":
-            return MaterializedArtifact(
-                data=resource.data,
-                format=fmt,
-                is_temporary=False,
-            )
         return MaterializedArtifact(
-            path=resource.path,
+            data=resource.data,
             format=fmt,
-            is_temporary=True,
+            is_temporary=False,
         )
 
     def _materialize_from_output_path(

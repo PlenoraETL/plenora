@@ -130,19 +130,20 @@ def test_load_project_uses_materialized_format_hint_for_extensionless_xlsx(tmp_p
     assert out.to_dict("records") == [{"id": 1, "name": "roma"}]
 
 
-# resolve_project_path: variante "ritorna path" del branch project
+# resolve_project_file_bytes: variante "ritorna (bytes, filename)" del branch project
+# Post-Phase5: sostituisce la vecchia resolve_project_path (path-mode rimosso).
 
 
-def test_resolve_project_path_requires_expected_group_id():
+def test_resolve_project_file_bytes_requires_expected_group_id():
     loader = SourceLoader()
     ref = LatestProjectArtifactRef(project_id="proj-1")
     with pytest.raises(ValueError, match="expected_group_id obbligatorio"):
-        loader.resolve_project_path(ref, expected_group_id="")
+        loader.resolve_project_file_bytes(ref, expected_group_id="")
     with pytest.raises(ValueError, match="expected_group_id obbligatorio"):
-        loader.resolve_project_path(ref, expected_group_id=None)  # type: ignore[arg-type]
+        loader.resolve_project_file_bytes(ref, expected_group_id=None)  # type: ignore[arg-type]
 
 
-def test_resolve_project_path_propagates_group_id_to_resolver():
+def test_resolve_project_file_bytes_propagates_group_id_to_resolver():
     """Stesso contratto di _load_project: il group_id deve arrivare
     a materialize_latest, altrimenti il check cross-tenant nel
     resolver e' disabilitato."""
@@ -151,16 +152,17 @@ def test_resolve_project_path_propagates_group_id_to_resolver():
     loader = SourceLoader(artifact_resolver=resolver)
 
     ref = LatestProjectArtifactRef(project_id="proj-1")
-    loader.resolve_project_path(ref, expected_group_id="grp-A")
+    loader.resolve_project_file_bytes(ref, expected_group_id="grp-A")
 
     resolver.materialize_latest.assert_called_once()
     call_args = resolver.materialize_latest.call_args
     assert call_args.kwargs.get("expected_group_id") == "grp-A"
+    assert call_args.kwargs.get("mode") == "bytes"
 
 
-def test_resolve_project_path_blocks_cross_tenant_via_resolver():
+def test_resolve_project_file_bytes_blocks_cross_tenant_via_resolver():
     """End-to-end con resolver reale: cross-tenant solleva
-    SourceLoadingError, NON ritorna silenziosamente un path."""
+    SourceLoadingError, NON ritorna silenziosamente bytes."""
     import app.core.artifacts.db_boundary as artifact_db
     import app.core.results.db as results_db
 
@@ -170,10 +172,10 @@ def test_resolve_project_path_blocks_cross_tenant_via_resolver():
     with patch.object(artifact_db, "get_project_for_artifact", return_value=None), \
          patch.object(results_db, "get_latest_result_row", return_value=None):
         with pytest.raises(SourceLoadingError, match="non trovato"):
-            loader.resolve_project_path(ref, expected_group_id="grp-mine")
+            loader.resolve_project_file_bytes(ref, expected_group_id="grp-mine")
 
 
-def test_resolve_project_path_returns_none_when_no_latest_result():
+def test_resolve_project_file_bytes_returns_none_when_no_latest_result():
     """Sanity: same-group, no result → None, niente eccezione."""
     import app.core.artifacts.db_boundary as artifact_db
     import app.core.results.db as results_db
@@ -184,27 +186,27 @@ def test_resolve_project_path_returns_none_when_no_latest_result():
     with patch.object(artifact_db, "get_project_for_artifact",
                       return_value=object()), \
          patch.object(results_db, "get_latest_result_row", return_value=None):
-        result = loader.resolve_project_path(ref, expected_group_id="grp-mine")
+        result = loader.resolve_project_file_bytes(ref, expected_group_id="grp-mine")
     assert result is None
 
 
-def test_resolve_project_path_returns_path_string_when_materialized():
-    """Sanity: same-group + result presente → ritorna str(path)."""
-    materialized_path = "/tmp/proj-1.csv"
+def test_resolve_project_file_bytes_returns_bytes_tuple_when_materialized():
+    """Sanity: same-group + result presente → ritorna (bytes, filename)."""
     materialized = MaterializedArtifact(
-        path=__import__("pathlib").Path(materialized_path),
+        data=b"id,name\n1,roma\n",
         format="csv",
-        is_temporary=True,
+        is_temporary=False,
     )
     resolver = MagicMock(spec=ArtifactResolver)
     resolver.materialize_latest.return_value = materialized
     loader = SourceLoader(artifact_resolver=resolver)
 
     ref = LatestProjectArtifactRef(project_id="proj-1")
-    result = loader.resolve_project_path(ref, expected_group_id="grp-mine")
+    result = loader.resolve_project_file_bytes(ref, expected_group_id="grp-mine")
     assert result is not None
-    # Su Windows pathlib normalizza / e \, confronto sul nome
-    assert result.endswith("proj-1.csv")
+    data, filename = result
+    assert data == b"id,name\n1,roma\n"
+    assert filename.endswith(".csv")
 
 
 # 4. branch file: visibility check enforced dal loader stesso

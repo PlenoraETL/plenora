@@ -27,45 +27,37 @@ def resolver():
 
 
 # Helpers for the BE-GO-READY-RESOURCE-ENGINE-019 registry boundary tests.
-# The resolver's `_materialize_from_result_id` now delegates blob fetch +
-# tempfile materialization to `default_registry().get(ref, mode='path')`.
-# Tests that previously mocked `db_service.get_result_data` now mock the
-# registry's `get(ref, mode)` surface AS IMPORTED INTO the resolver
-# module so the patch lands at the canonical boundary.
+# Post-Phase5: the resolver's `_materialize_from_result_id` delegates the
+# blob fetch to `default_registry().get(ref, mode='bytes')` (path-mode
+# removed). Tests that previously mocked `db_service.get_result_data` now
+# mock the registry's `get(ref, mode)` surface AS IMPORTED INTO the
+# resolver module so the patch lands at the canonical boundary.
 
 
 def _fake_registry_returning_blob(payload: bytes, *, suffix: str = "") -> tuple[list, object]:
-    """Build a fake registry whose `get(ref, mode)` materializes
-    ``payload`` to a fresh tempfile (mirroring the loader's path-mode
-    contract: prefix `plenora-result-blob-`, returns a Resource with
-    ``path`` set, ``is_temporary=True``).
+    """Build a fake registry whose `get(ref, mode)` returns a bytes-mode
+    Resource carrying ``payload``.
 
-    Returns ``(captured_calls, fake_registry)``. The caller asserts
-    on the captured `(ref, mode)` tuples to verify the resolver's
-    delegation contract; the fake_registry is patched onto
-    ``app.core.artifacts.resolver.default_registry``.
+    Post-Phase5: il `ResultBlobLoader` accetta solo `mode="bytes"` e
+    ritorna `Resource(data=payload, ...)`. La fixture rispecchia la
+    nuova shape — niente piu' tempfile materialization.
+
+    `suffix` resta nella signature per compat con i call site esistenti
+    ma non e' piu' usato (path mode rimosso).
     """
     from app.core.resources import Resource
+
+    del suffix  # path mode rimossa; suffix accettato per compat caller.
 
     captured: list = []
 
     def _get(ref, *, mode):
         captured.append((ref, mode))
-        tf = tempfile.NamedTemporaryFile(
-            delete=False,
-            prefix="plenora-result-blob-",
-            suffix=suffix,
-        )
-        path = Path(tf.name)
-        try:
-            tf.write(payload)
-        finally:
-            tf.close()
         return Resource(
             kind="result_blob",
             size_bytes=len(payload),
-            path=path,
-            is_temporary=True,
+            data=payload,
+            is_temporary=False,
         )
 
     return captured, SimpleNamespace(get=_get)
@@ -178,16 +170,12 @@ def test_materialize_run_inline_df_takes_priority(resolver):
 
 
 def test_materialize_run_result_id_beats_output_path(resolver, monkeypatch):
-    """BE-GO-READY-RESOURCE-ENGINE-019: the resolver delegates the
-    blob fetch + tempfile materialization to
-    ``default_registry().get(ref, mode='path')``. The row metadata
-    (format, group_id, project_id) is still fetched via
-    ``app.core.results.db.get_result_row``.
+    """Post-Phase5: resolver default mode='bytes'. La registry
+    ritorna ``Resource(data=...)``, e ``MaterializedArtifact`` espone
+    i bytes via ``m.data``. ``m.path`` resta None (path-mode rimosso).
     """
     _patch_result_row(monkeypatch, lambda **kw: _result_row(format="csv", **kw))
-    captured, fake_registry = _fake_registry_returning_blob(
-        b"id\n1\n", suffix=".csv",
-    )
+    captured, fake_registry = _fake_registry_returning_blob(b"id\n1\n")
     _patch_registry(monkeypatch, fake_registry)
 
     ref = RunArtifactRef(
@@ -196,15 +184,11 @@ def test_materialize_run_result_id_beats_output_path(resolver, monkeypatch):
         output_path="C:/tmp/legacy.csv",
     )
     with resolver.materialize_run(ref) as m:
-        assert m.path is not None
-        assert m.path.exists()
-        assert m.path.suffix == ".csv"
+        assert m.data == b"id\n1\n"
+        assert m.path is None
         assert m.format == "csv"
-        assert m.is_temporary is True
-        assert m.path.read_bytes() == b"id\n1\n"
-    # cleanup automatico via context manager
-    assert not m.path.exists()
-    _assert_single_blob_call(captured, mode="path")
+        assert m.is_temporary is False
+    _assert_single_blob_call(captured, mode="bytes")
 
 
 def test_materialize_run_rejects_cross_tenant_result_id(resolver, monkeypatch):
@@ -468,30 +452,28 @@ def test_materialize_latest_returns_none_when_no_result(resolver, monkeypatch):
     assert resolver.materialize_latest(ref) is None
 
 
-def test_materialize_latest_writes_tempfile_with_format_suffix(
+def test_materialize_latest_returns_bytes_with_format(
     resolver, monkeypatch
 ):
-    """BE-GO-READY-RESOURCE-ENGINE-021 (R-019.1 closure):
-    `materialize_latest` now delegates blob fetch + tempfile
-    materialization to ``default_registry().get(ref, mode='path')``.
-    Row metadata (group_id, format) still comes from
-    ``app.core.results.db.get_latest_result_row``."""
+    """Post-Phase5: `materialize_latest` ritorna bytes via
+    `MaterializedArtifact.data` (path-mode rimosso). Il format hint
+    arriva da ``app.core.results.db.get_latest_result_row`` e viene
+    propagato a `m.format`."""
     _patch_latest_result_row(
         monkeypatch,
         lambda **kw: _result_row(format="parquet", **kw),
     )
-    captured, fake_registry = _fake_registry_returning_blob(
-        b"PAR1", suffix=".parquet",
-    )
+    captured, fake_registry = _fake_registry_returning_blob(b"PAR1")
     _patch_registry(monkeypatch, fake_registry)
 
     ref = LatestProjectArtifactRef(project_id="proj-1")
     with resolver.materialize_latest(ref) as m:
         assert m is not None
-        assert m.path.suffix == ".parquet"
-        assert m.path.read_bytes() == b"PAR1"
-        assert m.is_temporary is True
-    _assert_single_blob_call(captured, mode="path")
+        assert m.data == b"PAR1"
+        assert m.format == "parquet"
+        assert m.path is None
+        assert m.is_temporary is False
+    _assert_single_blob_call(captured, mode="bytes")
 
 
 @pytest.mark.parametrize(
@@ -652,22 +634,21 @@ def test_materialize_latest_passes_when_group_matches(resolver, monkeypatch):
         monkeypatch,
         lambda **kw: _result_row(group_id="grp-mine", **kw),
     )
-    captured, fake_registry = _fake_registry_returning_blob(
-        b"id\n1\n", suffix=".csv",
-    )
+    captured, fake_registry = _fake_registry_returning_blob(b"id\n1\n")
     _patch_registry(monkeypatch, fake_registry)
 
     ref = LatestProjectArtifactRef(project_id="proj-1")
     m = resolver.materialize_latest(ref, expected_group_id="grp-mine")
     try:
         assert m is not None
-        assert m.path.suffix == ".csv"
+        assert m.data == b"id\n1\n"
+        assert m.format == "csv"
     finally:
         m.cleanup()
     # Non-superadmin path: ResourceRef carries is_superadmin=False
     ref_passed = _assert_single_blob_call(
         captured,
-        mode="path",
+        mode="bytes",
         group_id="grp-mine",
     )
     assert ref_passed.is_superadmin is False
@@ -696,9 +677,7 @@ def test_materialize_latest_superadmin_bypass_cross_tenant(resolver, monkeypatch
         monkeypatch,
         lambda **kw: _result_row(group_id="gruppo_ania", **kw),
     )
-    captured, fake_registry = _fake_registry_returning_blob(
-        b"id\n1\n", suffix=".csv",
-    )
+    captured, fake_registry = _fake_registry_returning_blob(b"id\n1\n")
     _patch_registry(monkeypatch, fake_registry)
 
     ref = LatestProjectArtifactRef(project_id="proj-cross")
@@ -709,7 +688,8 @@ def test_materialize_latest_superadmin_bypass_cross_tenant(resolver, monkeypatch
     )
     try:
         assert m is not None, "superadmin deve poter leggere cross-tenant"
-        assert m.path.suffix == ".csv"
+        assert m.data == b"id\n1\n"
+        assert m.format == "csv"
     finally:
         m.cleanup()
     # Superadmin path: ResourceRef carries is_superadmin=True so
@@ -717,7 +697,7 @@ def test_materialize_latest_superadmin_bypass_cross_tenant(resolver, monkeypatch
     # with the resolver-level project bypass.
     ref_passed = _assert_single_blob_call(
         captured,
-        mode="path",
+        mode="bytes",
         project_id="proj-cross",
         group_id="gruppo_ania",
     )
