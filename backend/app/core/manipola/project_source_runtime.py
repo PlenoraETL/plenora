@@ -167,11 +167,12 @@ def _load_materialized_project_source(
     )
     with materialized as m:
         loaded = load_project_source_artifact(
-            m.path,
             node_columns,
             source_project_id=source_project_id,
             group_id=group_id,
             format_hint=m.format,
+            data=m.data,
+            path=m.path,
         )
     dataframes[node.id] = loaded.data
 
@@ -222,9 +223,13 @@ def load_project_sources(
 
         if not force_recalculate:
             try:
+                # mode="bytes": Post-Phase5 il consumer
+                # `_load_materialized_project_source` accetta data
+                # direttamente, niente tempfile bounce.
                 materialized = ArtifactResolver().materialize_latest(
                     LatestProjectArtifactRef(project_id=source_project_id),
                     expected_group_id=executing_group_id,
+                    mode="bytes",
                 )
             except ArtifactResolutionError as sec_err:
                 log.error(
@@ -338,7 +343,8 @@ def load_project_sources(
                     RunArtifactRef(
                         project_id=source_project_id,
                         output_path=raw_output_path,
-                    )
+                    ),
+                    mode="bytes",
                 )
             except ArtifactResolutionError as resolve_err:
                 log.warning(
@@ -353,6 +359,7 @@ def load_project_sources(
                 materialized = ArtifactResolver().materialize_latest(
                     LatestProjectArtifactRef(project_id=source_project_id),
                     expected_group_id=executing_group_id,
+                    mode="bytes",
                 )
             except ArtifactResolutionError as sec_err:
                 log.error(
@@ -362,7 +369,9 @@ def load_project_sources(
                 )
                 return _cross_tenant_error(source_project_id)
 
-        if materialized is None or materialized.path is None:
+        if materialized is None or (
+            materialized.path is None and materialized.data is None
+        ):
             return {
                 "success": False,
                 "message": f"Risultato upstream non trovato per: {source_project_id}",

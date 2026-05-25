@@ -38,12 +38,21 @@ class ArtifactResolver:
       passato (con bypass `is_superadmin=True` per i ruoli amministratori).
     """
 
-    def materialize_run(self, ref: RunArtifactRef) -> MaterializedArtifact:
+    def materialize_run(
+        self, ref: RunArtifactRef, *, mode: str = "path",
+    ) -> MaterializedArtifact:
         """Risolve un RunArtifactRef seguendo l'ordine di preferenza:
         inline_df → result_id (con verify) → output_path (validato).
 
         Solleva ArtifactResolutionError su ogni fallimento. Non torna
         None: o materializza, o fallisce hard.
+
+        Args:
+            mode: `"path"` (default, backward-compat) materializza il
+                blob su tempfile e popola `MaterializedArtifact.path`.
+                `"bytes"` ritorna `MaterializedArtifact.data` (RAM-only,
+                no tempfile). I caller bytes-first migrati passano
+                `mode="bytes"` esplicito.
         """
         if ref.inline_df is not None:
             return MaterializedArtifact(
@@ -56,6 +65,7 @@ class ArtifactResolver:
             return self._materialize_from_result_id(
                 result_id=ref.result_id,
                 expected_project_id=ref.project_id,
+                mode=mode,
             )
 
         if ref.output_path:
@@ -76,6 +86,7 @@ class ArtifactResolver:
         *,
         expected_group_id: Optional[str] = None,
         is_superadmin: bool = False,
+        mode: str = "path",
     ) -> Optional[MaterializedArtifact]:
         """Risolve il latest output di un progetto cross-run.
 
@@ -172,7 +183,7 @@ class ArtifactResolver:
 
         # intent: boundary / outcome: fail-closed (broad→domain con chain preservata
         try:
-            resource = default_registry().get(result_ref, mode="path")
+            resource = default_registry().get(result_ref, mode=mode)
         except FileNotFoundError:
             # NOTE: legacy semantics: missing / unavailable blob -> None
             # NOT ArtifactResolutionError). The router/UI treats
@@ -197,6 +208,12 @@ class ArtifactResolver:
             ) from e
 
         fmt = row.format or "csv"
+        if mode == "bytes":
+            return MaterializedArtifact(
+                data=resource.data,
+                format=fmt,
+                is_temporary=False,
+            )
         return MaterializedArtifact(
             path=resource.path,
             format=fmt,
@@ -314,7 +331,8 @@ class ArtifactResolver:
     # internals
 
     def _materialize_from_result_id(
-        self, *, result_id: str, expected_project_id: str
+        self, *, result_id: str, expected_project_id: str,
+        mode: str = "path",
     ) -> MaterializedArtifact:
         """Resolve a `result_id` via the Resource Engine path mode.
 
@@ -392,7 +410,7 @@ class ArtifactResolver:
 
         # intent: boundary / outcome: fail-closed (broad→domain con chain preservata
         try:
-            resource = default_registry().get(ref, mode="path")
+            resource = default_registry().get(ref, mode=mode)
         except FileNotFoundError as e:
             # Loader fail-closed: row missing OR cross-tenant OR
             # blob unavailable. Resolver translates to its own
@@ -418,8 +436,14 @@ class ArtifactResolver:
         # Format is row metadata; the loader is byte-level only and
         # does not learn the format. The resolver attaches it to
         # the MaterializedArtifact for downstream readers
-        # load_dataframe_from_file dispatches on format/extension
+        # load_dataframe_from_artifact dispatches on format/extension
         fmt = row.format or "csv"
+        if mode == "bytes":
+            return MaterializedArtifact(
+                data=resource.data,
+                format=fmt,
+                is_temporary=False,
+            )
         return MaterializedArtifact(
             path=resource.path,
             format=fmt,

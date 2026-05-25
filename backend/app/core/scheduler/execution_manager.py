@@ -709,8 +709,11 @@ class ExecutionManager:
                 }
 
             try:
+                # mode="bytes": Post-Phase5 il consumer carica
+                # `m.data` via load_dataframe_from_artifact (no tempfile).
                 materialized = ArtifactResolver().materialize_run(
-                    artifact.to_run_artifact_ref()
+                    artifact.to_run_artifact_ref(),
+                    mode="bytes",
                 )
             except ArtifactResolutionError as e:
                 logger.error(
@@ -723,6 +726,13 @@ class ExecutionManager:
             with materialized as m:
                 if m.df is not None:
                     df = m.df
+                elif m.data is not None:
+                    from app.core.dataframes.frame_io import (
+                        load_dataframe_from_artifact,
+                    )
+                    df = load_dataframe_from_artifact(
+                        data=m.data, format_hint=m.format,
+                    )
                 else:
                     df = load_dataframe_from_file(m.path)
 

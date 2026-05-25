@@ -268,10 +268,10 @@ def test_project_source_artifact_loader_returns_resource_metadata():
         side_effect=_spy_apply,
     ):
         loaded = sl.load_project_source_artifact(
-            Path("ignored.csv"),
             node_columns,
             source_project_id="proj-up",
             group_id="grp-1",
+            path=Path("ignored.csv"),
         )
 
     assert isinstance(loaded, LoadedResource)
@@ -303,12 +303,14 @@ def test_load_project_source_artifact_uses_materialized_format_hint(tmp_path):
         side_effect=lambda data, columns, meta=None: data,
     ):
         loaded = sl.load_project_source_artifact(
-            extensionless,
             node_columns,
             source_project_id="proj-up",
             group_id="grp-1",
             format_hint="xlsx",
+            path=extensionless,
         )
 
-    load_mock.assert_called_once_with(path=extensionless, format_hint="xlsx")
+    load_mock.assert_called_once_with(
+        data=None, path=extensionless, format_hint="xlsx",
+    )
     assert loaded.data.to_dict("records") == [{"id": 1}]

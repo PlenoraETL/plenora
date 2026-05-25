@@ -390,10 +390,14 @@ def _resolve_input_path(
         # gia' garantisce la visibilita', ma passare expected_group_id al
         # resolver mantiene l'invariante cross-tenant uniforme anche se in
         # futuro questa funzione venisse richiamata da un path che salta
-        # il check HTTP
+        # il check HTTP.
+        # mode="path": il caller (`write_features`) passa
+        # `materialized.path` a ArcGISFeatureWriter.write_features(input_path=...)
+        # che usa fiona/pyogrio path-based — legitimate path-only adapter.
         materialized = ArtifactResolver().materialize_latest(
             LatestProjectArtifactRef(project_id=project_id),
             expected_group_id=expected_group_id,
+            mode="path",
         )
         if materialized is not None and materialized.path is not None:
             return materialized

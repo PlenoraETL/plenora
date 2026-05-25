@@ -349,22 +349,29 @@ class RunBlob:
 class MaterializedArtifact:
     """Risultato della risoluzione di un Ref.
 
-    Esattamente uno fra `path` (file su disco) e `df` (DataFrame
-    in memoria) e' valorizzato. Se `is_temporary` e' True, `cleanup`
-    rimuove il file. Usare come context manager per garantire il
-    cleanup anche su errore del caller.
+    Almeno uno fra `data` (bytes in memoria), `path` (file su disco)
+    e `df` (DataFrame in memoria) e' valorizzato. Mode preferito post-
+    Phase5: `data` (bytes-first, niente tempfile bounce). `path` resta
+    per i path-only adapter (REST connector, library che richiedono un
+    path filesystem). `df` per gli inline-df Ref.
+
+    Se `is_temporary` e' True, `cleanup` rimuove il `path` (solo
+    relevant in modalita' path). In modalita' bytes il cleanup e'
+    no-op: i bytes sono in RAM, garbage-collected dal runtime.
+    Context manager safe in entrambe le modalita'.
     """
 
     path: Optional[Path] = None
     df: Any = None
+    data: Optional[bytes] = None
     format: Optional[str] = None
     is_temporary: bool = False
     _cleaned: bool = field(default=False, init=False, repr=False)
 
     def __post_init__(self) -> None:
-        if self.path is None and self.df is None:
+        if self.path is None and self.df is None and self.data is None:
             raise ValueError(
-                "MaterializedArtifact vuoto: serve path oppure df"
+                "MaterializedArtifact vuoto: serve path, df, oppure data"
             )
 
     def cleanup(self) -> None:

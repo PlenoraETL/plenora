@@ -59,9 +59,19 @@ def test_latest_project_ref_requires_project_id():
 # MaterializedArtifact
 
 
-def test_materialized_artifact_requires_path_or_df():
+def test_materialized_artifact_requires_path_df_or_data():
+    """Post-Phase5: MaterializedArtifact accetta `data` (bytes-first)
+    oltre a `path` e `df`. Empty constructor resta vietato."""
     with pytest.raises(ValueError, match="vuoto"):
         MaterializedArtifact()
+
+
+def test_materialized_artifact_accepts_data_only():
+    """Bytes mode: solo `data` valorizzato e' valido. Cleanup no-op."""
+    m = MaterializedArtifact(data=b"id\n1\n", format="csv")
+    assert m.data == b"id\n1\n"
+    assert m.path is None
+    m.cleanup()  # no-op, niente da pulire in bytes mode
 
 
 def test_materialized_artifact_cleanup_removes_temp_file(tmp_path):

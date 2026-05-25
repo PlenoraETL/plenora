@@ -216,10 +216,14 @@ class SourceLoader:
             )
 
         try:
+            # mode="path": resolve_project_path e' chiamato dai path-only
+            # adapter (REST connector) che hanno BISOGNO di un path
+            # filesystem. Non default bytes.
             materialized = self._resolver.materialize_latest(
                 project_ref,
                 expected_group_id=expected_group_id,
                 is_superadmin=is_superadmin,
+                mode="path",
             )
         except ArtifactResolutionError as e:
             logger.error(
@@ -241,10 +245,14 @@ class SourceLoader:
         is_superadmin: bool = False,
     ) -> Any:
         try:
+            # mode="bytes": Post-Phase5 il loader bytes-first va via
+            # `MaterializedArtifact.data` -> `load_dataframe_from_artifact(
+            # data=..., format_hint=...)`. Niente tempfile bounce.
             materialized = self._resolver.materialize_latest(
                 project_ref,
                 expected_group_id=expected_group_id,
                 is_superadmin=is_superadmin,
+                mode="bytes",
             )
         except ArtifactResolutionError as e:
             # Cross-tenant block o progetto inesistente: uniformiamo
@@ -265,7 +273,16 @@ class SourceLoader:
         with materialized as m:
             if m.df is not None:
                 return m.df
-            return load_dataframe_from_artifact(path=m.path, format_hint=m.format)
+            # Post-Phase5: resolver default mode="bytes". Path fallback
+            # solo per i ref legacy che ancora ritornano path (e.g.
+            # output_path branch di RunArtifactRef).
+            if m.data is not None:
+                return load_dataframe_from_artifact(
+                    data=m.data, format_hint=m.format,
+                )
+            return load_dataframe_from_artifact(
+                path=m.path, format_hint=m.format,
+            )
 
 
     def load_with_metadata(

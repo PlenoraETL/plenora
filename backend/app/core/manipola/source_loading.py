@@ -73,28 +73,35 @@ def _metadata_columns_from_node_columns(
 
 
 def load_project_source_artifact(
-    path: Path,
     node_columns: JsonRows | None,
     *,
     source_project_id: str,
     group_id: str,
     format_hint: str | None = None,
+    data: bytes | None = None,
+    path: Path | None = None,
 ) -> LoadedResource:
     """Load one materialized ``project_source`` artifact with metadata.
+
+    Post-Phase5: accetta `data` (bytes, preferito) o `path` (legacy/
+    path-only adapter). Almeno uno DEVE essere fornito. La precedenza
+    e' `data` -> `path`; il caller tipicamente passa il `MaterializedArtifact`
+    .data direttamente, niente piu' tempfile bounce.
 
     The returned ``LoadedResource`` keeps the DataFrame paired with the
     ``ResourceMetadata`` derived at the loader boundary. This preserves the
     legacy DataFrame/CRS behavior while avoiding a second metadata guess in
     ``_applica_crs_da_colonne``.
-
-    Disk dependency is intentionally contained in this adapter because
-    pandas/geopandas loaders still require path-like inputs for some formats.
-    Callers pass resource references; this boundary owns the final
-    materialization step.
     """
     from app.core.manipola.executor import _applica_crs_da_colonne
 
-    df = load_dataframe_from_artifact(path=path, format_hint=format_hint)
+    if data is None and path is None:
+        raise ValueError(
+            "load_project_source_artifact: serve data oppure path"
+        )
+    df = load_dataframe_from_artifact(
+        data=data, path=path, format_hint=format_hint,
+    )
     # Pre-fix (P2 etl-sources): `ensure_dataframe_matches_contract` con
     # `node_columns=[]` produce `visible_names=[]` → nessuna colonna
     # mancante → check passa indipendentemente dal contenuto del DF.
