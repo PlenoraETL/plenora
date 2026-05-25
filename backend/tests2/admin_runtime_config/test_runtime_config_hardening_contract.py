@@ -103,6 +103,49 @@ class TestRuntimeSnapshotHidesTopologyInProd:
         assert "hostname" in topology
         assert "docker_socket_mounted" in topology
 
+    def test_missing_env_treated_as_production(self, monkeypatch):
+        """Gap (commit 1fcb18d9): pre-fix `_is_dev_env` aveva fallback
+        `default="development"` → un deployment privo della variabile
+        `ENVIRONMENT` veniva trattato come dev e la topologia veniva
+        esposta. Post-fix: allowlist positivo, default fail-closed.
+        """
+        monkeypatch.delenv("ENVIRONMENT", raising=False)
+        monkeypatch.delenv("ENV", raising=False)
+        snapshot = service._runtime_snapshot()
+        assert "_dev_topology" not in snapshot, (
+            "regressione fail-OPEN: con ENVIRONMENT/ENV non set, la "
+            "topologia viene esposta. Il default DEVE essere "
+            "production-like (no leak)."
+        )
+
+    @pytest.mark.parametrize("typo_env", [
+        "dev-staging",  # custom non in allowlist
+        "qa",           # env reale ma non riconosciuto
+        "preprod",      # env reale non in dev allowlist
+        " ",            # whitespace only
+    ])
+    def test_unknown_env_value_treated_as_production(
+        self, typo_env, monkeypatch
+    ):
+        """Allowlist positivo: solo `("development", "dev", "test",
+        "local")` attiva il branch dev. Qualunque altro valore
+        (typo, custom env, casing diverso) NON deve esporre la
+        topologia."""
+        monkeypatch.setenv("ENVIRONMENT", typo_env)
+        snapshot = service._runtime_snapshot()
+        assert "_dev_topology" not in snapshot, (
+            f"regressione fail-OPEN: ENVIRONMENT={typo_env!r} non e' "
+            f"in allowlist dev ma la topologia e' stata esposta. "
+            f"Il check deve essere strict-equality."
+        )
+
+    def test_local_env_in_allowlist(self, monkeypatch):
+        """`local` e' allowed (oltre development/dev/test) per dev
+        workstation con override personale."""
+        monkeypatch.setenv("ENVIRONMENT", "local")
+        snapshot = service._runtime_snapshot()
+        assert "_dev_topology" in snapshot
+
 
 class TestRouterHasAuditDecorator:
     """L'endpoint `GET /admin/runtime-config` deve essere coperto da
