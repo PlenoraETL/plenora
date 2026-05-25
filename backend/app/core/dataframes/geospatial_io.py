@@ -9,6 +9,7 @@ from typing import Optional
 
 import pandas as pd
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.geodata import detect_geometry_column, to_geodataframe
 from app.utils.logger import get_logger
 
@@ -48,7 +49,7 @@ def _compact_whole_number_float_properties(gdf):
             non_nan = s.dropna()
             if not non_nan.empty and (non_nan % 1 == 0).all():
                 if out is gdf:
-                    out = gdf.copy()
+                    out = copy_frame_for_update(gdf)
                 try:
                     out[col] = out[col].astype("Int64")
                 except (TypeError, ValueError):
@@ -72,7 +73,7 @@ def _dedup_columns_for_geo_save(df: pd.DataFrame, formato: str) -> pd.DataFrame:
             new_name = col
         new_columns.append(new_name)
         seen.add(new_name)
-    df = df.copy()
+    df = copy_frame_for_update(df)
     df.columns = new_columns
     logger.warning(
         f"Save {formato}: colonne duplicate rinominate "
@@ -130,7 +131,7 @@ def geospatial_dataframe_to_bytes(
             raise ValueError("geojson: serve una colonna geometria")
         gdf = to_geodataframe(df, geom_column, crs)
     else:
-        gdf = df.copy()
+        gdf = copy_frame_for_update(df)
         if geom_column and gdf.geometry.name != geom_column:
             gdf = gdf.set_geometry(geom_column)
     gdf = _converti_geometrie_secondarie_in_wkt(gdf)
@@ -163,7 +164,7 @@ def _salva_formato_geo(
         return _salva_geo_vuoto(df, base_path, formato)
 
     if isinstance(df, gpd.GeoDataFrame):
-        gdf = df.copy()
+        gdf = copy_frame_for_update(df)
 
         if geom_column and geom_column != gdf.geometry.name and geom_column in gdf.columns:
             gdf = _switch_colonna_geometria(gdf, geom_column)
@@ -186,7 +187,7 @@ def _salva_formato_geo(
             if lat_col and lon_col:
                 from shapely.geometry import Point
 
-                df = df.copy()
+                df = copy_frame_for_update(df)
                 lons = pd.to_numeric(df[lon_col], errors="coerce")
                 lats = pd.to_numeric(df[lat_col], errors="coerce")
                 valid = lons.notna() & lats.notna()
