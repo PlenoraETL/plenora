@@ -12,8 +12,6 @@ import decimal
 import json
 from typing import Dict, List, Optional, TypeAlias
 
-from psycopg2.extras import execute_values
-
 from app.db.pg_connection import unit_of_work
 
 NodeMetaRow: TypeAlias = Dict[str, object]
@@ -154,7 +152,6 @@ def write_node_snapshot_atomic(
     artifact_status: Optional[str] = None,
     artifact_error: Optional[str] = None,
     transaction_func=unit_of_work,
-    execute_values_func=execute_values,
 ) -> None:
     """Atomically write `node_rows` plus extended `node_meta`."""
     records = _build_node_row_records(run_id, node_id, rows_to_persist or [])
@@ -165,7 +162,7 @@ def write_node_snapshot_atomic(
     with transaction_func() as conn:
         with conn.cursor() as cur:
             cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
-            _bulk_insert_node_rows(cur, records, execute_values_func=execute_values_func)
+            _bulk_insert_node_rows(cur, records)
             cur.execute(
                 _SQL_UPSERT_NODE_META_EXT,
                 (
@@ -288,28 +285,29 @@ def _from_jsonable_value(value):
 
 
 _SQL_DELETE_NODE_ROWS = "DELETE FROM node_rows WHERE run_id = %s AND node_id = %s"
-_SQL_INSERT_NODE_ROWS_HEAD = (
+_SQL_INSERT_NODE_ROW = (
     "INSERT INTO node_rows (run_id, node_id, row_idx, row_hash, row_data) "
-    "VALUES %s"
+    "VALUES (%s, %s, %s, %s, %s::jsonb)"
 )
-_INSERT_NODE_ROW_TEMPLATE = "(%s, %s, %s, %s, %s::jsonb)"
 
 
-def _bulk_insert_node_rows(
-    cur,
-    records: List[tuple],
-    *,
-    execute_values_func=execute_values,
-) -> None:
+def _bulk_insert_node_rows(cur, records: List[tuple]) -> None:
+    """Bulk insert node_rows via psycopg3 executemany.
+
+    Pre-fix usavamo `psycopg2.extras.execute_values` con template +
+    VALUES %s, perche' execute_values univa N tuple in un singolo
+    INSERT per ridurre i round-trip. psycopg3 ha rimosso
+    execute_values: usiamo `cursor.executemany` su una INSERT
+    parametrizzata, e psycopg3 internamente cache la prepared
+    statement (default `prepare_threshold=5`), riducendo l'overhead
+    di parsing dopo le prime esecuzioni. Per dataset molto grandi
+    (>>10k righe) la migrazione successiva passera' a
+    `cursor.copy(...)` (binary COPY), ma il default executemany
+    e' gia' competitivo sul caso comune.
+    """
     if not records:
         return
-    execute_values_func(
-        cur,
-        _SQL_INSERT_NODE_ROWS_HEAD,
-        records,
-        template=_INSERT_NODE_ROW_TEMPLATE,
-        page_size=1000,
-    )
+    cur.executemany(_SQL_INSERT_NODE_ROW, records)
 
 
 _SQL_UPSERT_NODE_META = (
@@ -355,7 +353,6 @@ def insert_node_rows(
     col_schema: dict,
     *,
     transaction_func=unit_of_work,
-    execute_values_func=execute_values,
 ) -> None:
     """Idempotently bulk insert node rows for one run/node pair."""
     records = _build_node_row_records(run_id, node_id, rows)
@@ -363,7 +360,7 @@ def insert_node_rows(
     with transaction_func() as conn:
         with conn.cursor() as cur:
             cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
-            _bulk_insert_node_rows(cur, records, execute_values_func=execute_values_func)
+            _bulk_insert_node_rows(cur, records)
 
 
 def write_node_atomic(
@@ -377,7 +374,6 @@ def write_node_atomic(
     status: Optional[str] = None,
     error_msg: Optional[str] = None,
     transaction_func=unit_of_work,
-    execute_values_func=execute_values,
 ) -> None:
     """Atomically write legacy `node_rows` plus base `node_meta`."""
     records = _build_node_row_records(run_id, node_id, rows or [])
@@ -395,7 +391,7 @@ def write_node_atomic(
     with transaction_func() as conn:
         with conn.cursor() as cur:
             cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
-            _bulk_insert_node_rows(cur, records, execute_values_func=execute_values_func)
+            _bulk_insert_node_rows(cur, records)
             cur.execute(_SQL_UPSERT_NODE_META, meta_params)
 
 

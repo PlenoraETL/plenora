@@ -210,7 +210,7 @@ class DefaultEngineFactory:
 
         if conn.type in ("postgres", "postgresql"):
             return (
-                f"postgresql+psycopg2://{usr}:{pwd}"
+                f"postgresql+psycopg://{usr}:{pwd}"
                 f"@{conn.host}:{conn.port}/{conn.database}"
             )
         elif conn.type == "mysql":

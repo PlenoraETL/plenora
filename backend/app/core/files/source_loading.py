@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-import psycopg2
+import psycopg
 
 import app.core.files.db as file_sources_db
 from app.core.auth.visibility import is_resource_visible
@@ -147,7 +147,7 @@ def resolve_file_source_id_path(
 
     try:
         row_meta = get_file_source(file_source_id, False)
-    except psycopg2.Error as exc:
+    except psycopg.Error as exc:
         raise FileSourceResolutionError(
             file_source_id=file_source_id,
             cause="lookup",
@@ -173,7 +173,7 @@ def resolve_file_source_id_path(
 
     try:
         row_full = get_file_source(file_source_id, True)
-    except psycopg2.Error as exc:
+    except psycopg.Error as exc:
         raise FileSourceResolutionError(
             file_source_id=file_source_id,
             cause="lookup",

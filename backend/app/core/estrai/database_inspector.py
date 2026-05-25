@@ -76,7 +76,7 @@ class DefaultConnectionFactory:
     Factory di default che usa i driver reali per ogni database.
 
     Driver utilizzati:
-    - PostgreSQL: psycopg2 (timeout 10s)
+    - PostgreSQL: psycopg (timeout 10s)
     - SQL Server: pyodbc con ODBC Driver 18/17 (fallback automatico)
     - MySQL: pymysql (timeout 10s)
     - Oracle: oracledb (preferito) oppure cx_Oracle come fallback
@@ -99,12 +99,12 @@ class DefaultConnectionFactory:
         return metodo(conn)
 
     def _connetti_postgres(self, conn: DatabaseConnection) -> Any:
-        """Connessione PostgreSQL via psycopg2."""
-        import psycopg2
-        return psycopg2.connect(
+        """Connessione PostgreSQL via psycopg (psycopg3)."""
+        import psycopg
+        return psycopg.connect(
             host=conn.host,
             port=conn.port,
-            database=conn.database,
+            dbname=conn.database,
             user=conn.username,
             password=conn.password,
             connect_timeout=10
@@ -818,7 +818,7 @@ class DatabaseInspector:
         """Ispeziona PostgreSQL — include tipo geometria e SRID da PostGIS."""
         return self._esegui_ispezione(
             conn, SQLQueries.POSTGRES_COLUMNS,
-            self._processor.process_postgres_rows, "PostgreSQL (psycopg2)"
+            self._processor.process_postgres_rows, "PostgreSQL (psycopg)"
         )
 
     def _inspect_mssql(self, conn: DatabaseConnection) -> DatabaseSchema:
@@ -906,7 +906,7 @@ class DatabaseInspector:
         """Ispeziona viste PostgreSQL — include tipo geometria e SRID da PostGIS."""
         return self._esegui_ispezione(
             conn, SQLQueries.POSTGRES_VIEW_COLUMNS,
-            self._processor.process_postgres_rows, "PostgreSQL (psycopg2)"
+            self._processor.process_postgres_rows, "PostgreSQL (psycopg)"
         )
 
     def _inspect_mssql_views(self, conn: DatabaseConnection) -> DatabaseSchema:

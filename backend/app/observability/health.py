@@ -476,9 +476,9 @@ def check_bootstrap_complete() -> CheckOutcome:
     sia stato attraversato dal processo web.
 
     consumer del flag tipato `app.bootstrap.is_bootstrapped`. Il flag
-    flippa a True solo dopo che i 4 step canonici (`validate_startup`,
-    `validate_storage_config`, `init_all_dbs`,
-    `_repair_psycopg2_ssl_env`) sono completati senza eccezioni.
+    flippa a True solo dopo che i 3 step canonici (`validate_startup`,
+    `validate_storage_config`, `init_all_dbs`) sono completati senza
+    eccezioni.
 
     Outcome:
       - True quando `is_bootstrapped` ritorna True;

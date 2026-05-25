@@ -6,8 +6,8 @@ import random
 import time
 from typing import Callable, Protocol
 
-import psycopg2
-import psycopg2.errors
+import psycopg
+import psycopg.errors
 
 from app.utils.logger import get_logger
 
@@ -46,8 +46,8 @@ def release_lock_with_retry(
                 release_success = True
                 break
             except (
-                psycopg2.OperationalError,
-                psycopg2.errors.DeadlockDetected,
+                psycopg.OperationalError,
+                psycopg.errors.DeadlockDetected,
             ) as transient_err:
                 last_transient_err = transient_err
                 elapsed = monotonic() - retry_start

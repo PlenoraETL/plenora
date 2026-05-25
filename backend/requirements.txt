@@ -7,7 +7,11 @@ starlette>=0.36.0
 typing_extensions>=4.12.0
 
 # Database
-psycopg2-binary>=2.9.10
+# psycopg 3 (rewrite moderno di psycopg2): API async-native, prepared
+# statements automatici, type adapter system pulito. `[binary]` per
+# wheel precompilate, `psycopg-pool` per il connection pool dedicato.
+psycopg[binary]>=3.2.0
+psycopg-pool>=3.2.0
 sqlalchemy>=2.0.25
 # External DB providers supported by ESTRAI/CARICA integration paths.
 # SQL Server also needs OS-level ODBC libraries and a Microsoft ODBC driver.

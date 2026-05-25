@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-import psycopg2
+import psycopg
 
 from app.core.arricchisci.project_access import load_project_access_context
 from app.core.arricchisci.exceptions import ExecutionContextError
@@ -39,7 +39,7 @@ def build_execution_context(
     """Costruisce un `ArricchisciExecutionContext` con il
     `group_id` letto dal DB.
 
-    Fail-closed su errori `psycopg2.Error`: re-raise come
+    Fail-closed su errori `psycopg.Error`: re-raise come
     `ExecutionContextError` con `original_error` + `__cause__`
     impostati. Stesso contract del legacy
     `canvas_orchestrator.init_execution_context`.
@@ -60,7 +60,7 @@ def build_execution_context(
 
     Raises:
         ExecutionContextError: se il DB lookup fallisce con
-            `psycopg2.Error` (pool exhausted / connection lost /
+            `psycopg.Error` (pool exhausted / connection lost /
             deadlock / query error).
 
     Returns:
@@ -68,7 +68,7 @@ def build_execution_context(
     """
     try:
         project_ctx = load_project_access_context(project_id)
-    except psycopg2.Error as e:
+    except psycopg.Error as e:
         raise ExecutionContextError(
             project_id,
             reason="errore lettura progetto dal DB",

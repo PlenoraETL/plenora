@@ -222,7 +222,7 @@ class ConnectionService:
                 return ConnectionTestResult(success=False, message=f"Tipo '{connection.type}' non supportato")
         except Exception as e:
             # Log con solo type+repr per evitare credential leak: i driver DB
-            # (psycopg2, pyodbc, pymssql) possono includere host/user/password
+            # (psycopg, pyodbc, pymssql) possono includere host/user/password
             # nel str(e) di alcune eccezioni (es. "FATAL: password authentication
             # failed for user 'admin' at host postgres.internal:5432"). exc_info
             # mantiene la traceback completa per il debug operativo, ma il
@@ -236,9 +236,9 @@ class ConnectionService:
 
     def _test_postgres(self, conn):
         try:
-            import psycopg2
-            c = psycopg2.connect(host=conn.host, port=conn.port, database=conn.database,
-                                  user=conn.username, password=conn.password, connect_timeout=5)
+            import psycopg
+            c = psycopg.connect(host=conn.host, port=conn.port, dbname=conn.database,
+                                user=conn.username, password=conn.password, connect_timeout=5)
             try:
                 with c.cursor() as cur:
                     cur.execute("SELECT version();")
@@ -247,7 +247,7 @@ class ConnectionService:
             finally:
                 c.close()
         except ImportError:
-            return ConnectionTestResult(success=False, message="psycopg2 non installato: pip install psycopg2-binary")
+            return ConnectionTestResult(success=False, message="psycopg non installato: pip install psycopg[binary]")
         except Exception:
             return ConnectionTestResult(success=False, message="Errore connessione PostgreSQL")
 

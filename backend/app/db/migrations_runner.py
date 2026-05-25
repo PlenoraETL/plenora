@@ -24,7 +24,7 @@ MIGRATIONS_DIR = _BACKEND_ROOT / "migrations"
 
 
 # Identifier safety: lo schema name viene da env (DB_SCHEMA), quindi non e'
-# input utente, ma applichiamo comunque whitelist + psycopg2 identifier
+# input utente, ma applichiamo comunque whitelist + psycopg identifier
 # quoting per non string-formattare mai identifier SQL
 _SCHEMA_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _PG_UNDEFINED_TABLE = "42P01"
@@ -57,14 +57,14 @@ def ensure_schema(schema: Optional[str] = None) -> str:
 
     Bootstrap clean-install: senza questo step, su DB vuoto il successivo
     `CREATE TABLE <DB_SCHEMA>.schema_migrations` fallisce con
-    `psycopg2.errors.InvalidSchemaName` quando lo schema non esiste.
+    `psycopg.errors.InvalidSchemaName` quando lo schema non esiste.
     Lo schema deve esistere prima della creazione di `schema_migrations`
     e prima delle migration `.sql` che lo referenziano.
 
-    Identifier quoting via `psycopg2.sql.Identifier`: anche se DB_SCHEMA
+    Identifier quoting via `psycopg.sql.Identifier`: anche se DB_SCHEMA
     non viene da input utente, evitiamo string-format di identifier SQL.
     """
-    from psycopg2 import sql as _sql
+    from psycopg import sql as _sql
 
     from app.db.pg_connection import get_connection, put_connection
 
@@ -108,14 +108,14 @@ def _schema_name(schema: Optional[str] = None) -> str:
 
 def _schema_migrations_table(schema: Optional[str] = None):
     """Identifier composto `<schema>.schema_migrations` con quoting sicuro."""
-    from psycopg2 import sql as _sql
+    from psycopg import sql as _sql
 
     return _sql.Identifier(_schema_name(schema), "schema_migrations")
 
 
 def _create_tracking_table_statement(schema: Optional[str] = None):
     """Statement CREATE TABLE per la tracking table nello schema configurato."""
-    from psycopg2 import sql as _sql
+    from psycopg import sql as _sql
 
     return _sql.SQL(
         """
@@ -152,7 +152,7 @@ def _read_applied_migrations() -> tuple[List[str], bool]:
     """
     # Import locale per evitare side-effect al load del modulo
     from app.db.pg_connection import get_connection, put_connection
-    from psycopg2 import sql as _sql
+    from psycopg import sql as _sql
 
     conn = get_connection()
     try:
@@ -286,7 +286,7 @@ def apply_pending_migrations() -> List[str]:
             conn.autocommit = False
             with conn.cursor() as cur:
                 cur.execute(sql)
-                from psycopg2 import sql as _sql
+                from psycopg import sql as _sql
                 cur.execute(
                     _sql.SQL(
                         "INSERT INTO {} (filename) VALUES (%s) "

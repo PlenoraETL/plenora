@@ -50,7 +50,7 @@ def log(level: str, msg: str) -> None:
 
 def _db_connect():
     """Connessione Postgres standalone via DATABASE_URL.
-    Ritorna None se DATABASE_URL assente, psycopg2 non installato o errore di
+    Ritorna None se DATABASE_URL assente, psycopg non installato o errore di
     connessione. Il caller deve essere tollerante: il DB logging e' best-effort,
     non deve mai far fallire il backup.
     """
@@ -58,12 +58,12 @@ def _db_connect():
     if not db_url:
         return None
     try:
-        import psycopg2
+        import psycopg
     except ImportError:
-        log("WARN", "psycopg2 non disponibile: run tracking DB disabilitato")
+        log("WARN", "psycopg non disponibile: run tracking DB disabilitato")
         return None
     try:
-        return psycopg2.connect(db_url)
+        return psycopg.connect(db_url)
     except Exception as e:
         log("WARN", f"db connect fallito (non-fatal): {type(e).__name__}: {e}")
         return None

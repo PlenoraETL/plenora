@@ -4,9 +4,9 @@ import threading
 from dataclasses import dataclass
 from typing import Any, Optional
 
-import psycopg2
-import psycopg2.extras
-import psycopg2.pool
+import psycopg
+from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 from app.environment import get_env
 from app.utils.logger import get_logger
@@ -110,13 +110,46 @@ def _load_pool_config() -> None:
     _IDLE_IN_TRANSACTION_MS = idle_in_transaction_ms
     _POOL_CONFIG_LOADED = True
 
-# ── Pool singleton ──────────────────────────────────────────────────────────
 
-_pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
+def _configure_connection(conn: psycopg.Connection) -> None:
+    """Per-connection setup chiamato dal pool su ogni nuova connection.
+
+    psycopg3 espone `configure` callback come API pulita per applicare
+    SET sessione (search_path, timeout). Pre-psycopg3 il pattern era
+    `options="-c search_path=... -c idle_in_transaction_session_timeout=..."`
+    nella conninfo string. Il callback e' equivalente ma type-safe e
+    debuggabile (errori di SET emergono come `psycopg.errors`).
+
+    `dict_row` settato qui invece di kwargs sulla `ConnectionPool` per
+    chiarezza: tutto il setup per-connection sta in un unico posto.
+    """
+    conn.row_factory = dict_row
+    with conn.cursor() as cur:
+        cur.execute(
+            psycopg.sql.SQL("SET search_path = {schema}, public").format(
+                schema=psycopg.sql.Identifier(_DB_SCHEMA)
+            )
+        )
+        if _IDLE_IN_TRANSACTION_MS > 0:
+            # SET non accetta parameter binding per il valore: deve
+            # essere literal nella query. `psycopg.sql.Literal` quota
+            # safe (anche se `_IDLE_IN_TRANSACTION_MS` e' un int gia'
+            # validato in `_validate_pool_params`).
+            cur.execute(
+                psycopg.sql.SQL(
+                    "SET idle_in_transaction_session_timeout = {ms}"
+                ).format(ms=psycopg.sql.Literal(_IDLE_IN_TRANSACTION_MS))
+            )
+    conn.commit()
+
+
+# Pool singleton
+
+_pool: Optional[ConnectionPool] = None
 _pool_lock = threading.Lock()
 
 
-def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
+def _get_pool() -> ConnectionPool:
     """Lazy-init del pool. Thread-safe via lock.
 
     NB: il pool e' singleton **per-processo**. Multiple uvicorn worker
@@ -128,19 +161,12 @@ def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
         with _pool_lock:
             if _pool is None or _pool.closed:
                 _load_pool_config()
-                # C7: GUC per-connection via startup `options` parameter
-                # c search_path=... → schema predefinito
-                # c idle_in_transaction_session_timeout=Nms → zombie guard
-                opts = [f"-c search_path={_DB_SCHEMA},public"]
-                if _IDLE_IN_TRANSACTION_MS > 0:
-                    opts.append(
-                        f"-c idle_in_transaction_session_timeout="
-                        f"{_IDLE_IN_TRANSACTION_MS}"
-                    )
-                _pool = psycopg2.pool.ThreadedConnectionPool(
-                    _POOL_MIN, _POOL_MAX, _DATABASE_URL,
-                    options=" ".join(opts),
-                    cursor_factory=psycopg2.extras.RealDictCursor,
+                _pool = ConnectionPool(
+                    conninfo=_DATABASE_URL,
+                    min_size=_POOL_MIN,
+                    max_size=_POOL_MAX,
+                    configure=_configure_connection,
+                    open=True,
                 )
                 # Log aggregato stimato per dare visibilita' all'operatore
                 # sulle connessioni PG consumate al picco. Usa la stessa
@@ -160,7 +186,7 @@ def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
                         f"conn (per-process), schema={_DB_SCHEMA}, "
                         f"idle_in_trans_timeout={_IDLE_IN_TRANSACTION_MS}ms, "
                         f"aggregato stimato ~{aggregate_max} conn "
-                        f"({n_proc} proc × {_POOL_MAX}) "
+                        f"({n_proc} proc x {_POOL_MAX}) "
                         f"[uvicorn={uvi} + celery={cel} + beat=1]"
                     )
                 except Exception:
@@ -192,8 +218,8 @@ def put_connection(conn):
 def close_pool():
     """Chiude il pool (shutdown). Chiamare solo allo stop dell'app."""
     global _pool
-    if _pool and not _pool.closed:
-        _pool.closeall()
+    if _pool is not None and not _pool.closed:
+        _pool.close()
         _pool = None
 
 
@@ -204,7 +230,7 @@ def discard_pool_after_fork() -> None:
     master: questi non sono fork-safe (la state crittografica e' condivisa
     col parent) e al primo uso producono ``SSL SYSCALL error: EOF
     detected`` o ``decryption failed or bad record mac``. Chiamare
-    ``closeall()`` qui peggiorerebbe il problema (SSL teardown sui socket
+    ``close()`` qui peggiorerebbe il problema (SSL teardown sui socket
     condivisi col parent), quindi azzeriamo solo il riferimento: il
     prossimo ``_get_pool()`` aprira' connessioni fresh nel PID del child.
 
@@ -227,21 +253,17 @@ def close_connection():
 
 @dataclass(frozen=True)
 class PoolHeadroom:
-    """Snapshot tipato del pool psycopg2 per /ready diagnostic.
+    """Snapshot tipato del pool psycopg per /ready diagnostic.
 
-     incapsula i campi prima esposti
-    via accesso ai simboli privati `_get_pool` / `_POOL_MAX`. Il
-    chiamante (`app.observability.health.check_pool_headroom`) consuma
-    questo dataclass invece di toccare gli internals di psycopg2.
+    psycopg_pool.ConnectionPool.get_stats() espone un'API pubblica per
+    le metriche del pool (pool_size, pool_available, requests_waiting):
+    niente piu' introspezione di attributi privati `_used`/`_pool` come
+    nel pool psycopg2 precedente.
 
     Fields:
         max: dimensione massima del pool (`DB_POOL_MAX`).
-        in_use: numero di connessioni attualmente checked-out
-            (`pool._used`). Best-effort: psycopg2 non espone un'API
-            ufficiale, accediamo all'attribute interno con fallback
-            a 0 se l'introspezione fallisce.
-        free: numero di connessioni idle nel pool (`pool._pool`).
-            Stesso caveat di `in_use`.
+        in_use: numero di connessioni attualmente checked-out.
+        free: numero di connessioni idle nel pool.
     """
 
     max: int
@@ -258,10 +280,9 @@ def get_pool_headroom() -> PoolHeadroom:
     """Public typed accessor sul pool headroom diagnostic.
 
     Lazy-init del pool al primo uso (delegato a `_get_pool`).
-    Best-effort sull'introspezione: usa `getattr(...)` con default
-    vuoto sui due attribute privati di `psycopg2.pool.ThreadedConnectionPool`
-    (`_used`, `_pool`) — psycopg2 non espone API ufficiale per
-    queste counts; ci adattiamo all'invariante del modulo.
+    psycopg_pool.ConnectionPool.get_stats() ritorna un dict con
+    `pool_size` (totale aperto) e `pool_available` (idle): in_use =
+    pool_size - pool_available.
 
     Raises:
         Qualunque errore di lazy-init del pool (DB unreachable,
@@ -270,21 +291,23 @@ def get_pool_headroom() -> PoolHeadroom:
         e mappa a fail-OPEN `(True, "introspection skipped: ...")`.
     """
     pool = _get_pool()
-    in_use = len(getattr(pool, "_used", {}) or {})
-    free = len(getattr(pool, "_pool", []) or [])
-    return PoolHeadroom(max=_POOL_MAX, in_use=in_use, free=free)
+    stats = pool.get_stats()
+    pool_size = int(stats.get("pool_size", 0))
+    pool_available = int(stats.get("pool_available", 0))
+    in_use = max(0, pool_size - pool_available)
+    return PoolHeadroom(max=_POOL_MAX, in_use=in_use, free=pool_available)
 
 
 def _adapt_params(sql: str, params: tuple) -> tuple[str, tuple]:
     """Reject legacy SQLite-style placeholders.
 
     `pg_connection` is the PostgreSQL boundary and must receive native
-    psycopg2 placeholders (`%s`). A global `?` -> `%s` rewrite is unsafe:
+    psycopg placeholders (`%s`). A global `?` -> `%s` rewrite is unsafe:
     it also rewrites literal question marks and PostgreSQL operators.
     """
     if "?" in sql:
         raise ValueError(
-            "pg_connection accepts only native psycopg2 placeholders (%s); "
+            "pg_connection accepts only native psycopg placeholders (%s); "
             "legacy '?' placeholders must be migrated at the caller"
         )
     return sql, params
@@ -447,7 +470,7 @@ def transaction():
     return unit_of_work()
 
 
-# ── Init DB (crea tabelle se non esistono) ──────────────────────────────────
+# Init DB (verifica tabelle)
 
 def init_db():
     """Verifica che le tabelle esistano su PostgreSQL.

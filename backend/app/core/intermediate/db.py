@@ -9,8 +9,6 @@ historical `app.core.intermediate.db` surface.
 
 from typing import Any, Dict, List, Optional, TypeAlias
 
-from psycopg2.extras import execute_values
-
 from app.core.intermediate import runs_db as _runs_db
 from app.core.intermediate import node_snapshots_db as _node_snapshots_db
 from app.core.intermediate import retention as _retention
@@ -237,7 +235,6 @@ def write_node_snapshot_atomic(
         artifact_status=artifact_status,
         artifact_error=artifact_error,
         transaction_func=transaction,
-        execute_values_func=execute_values,
     )
 
 
@@ -265,7 +262,6 @@ def insert_node_rows(
         rows,
         col_schema,
         transaction_func=transaction,
-        execute_values_func=execute_values,
     )
 
 
@@ -290,7 +286,6 @@ def write_node_atomic(
         status=status,
         error_msg=error_msg,
         transaction_func=transaction,
-        execute_values_func=execute_values,
     )
 
 

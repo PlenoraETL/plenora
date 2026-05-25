@@ -54,12 +54,12 @@ def _db_connect():
     if not db_url:
         return None
     try:
-        import psycopg2
+        import psycopg
     except ImportError:
-        log("WARN", "psycopg2 non disponibile: verify run tracking DB disabilitato")
+        log("WARN", "psycopg non disponibile: verify run tracking DB disabilitato")
         return None
     try:
-        return psycopg2.connect(db_url)
+        return psycopg.connect(db_url)
     except Exception as e:
         log("WARN", f"db connect fallito (non-fatal): {type(e).__name__}: {e}")
         return None

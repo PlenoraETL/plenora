@@ -5,15 +5,6 @@ Bootstrap boundary — single explicit init for the FastAPI app.
 
 from __future__ import annotations
 
-import os
-
-
-_PSYCOPG2_SSL_ENV_VARS: tuple[str, ...] = (
-    "REQUESTS_CA_BUNDLE",
-    "SSL_CERT_FILE",
-    "CURL_CA_BUNDLE",
-)
-
 
 _BOOT_COMPLETE: bool = False
 
@@ -40,19 +31,6 @@ def is_bootstrapped() -> bool:
     been crossed at least once in this process".
     """
     return _BOOT_COMPLETE
-
-
-def _repair_psycopg2_ssl_env() -> None:
-    """Pop the three SSL env vars that psycopg2 tends to set.
-
-    Must run AFTER `init_all_dbs`. Pre-init the pop is a no-op:
-    nothing has set those vars yet. Post-init the env may carry
-    stale CA paths that break `requests`/`urllib3` in unrelated code.
-
-    Idempotent (`os.environ.pop(name, None)`).
-    """
-    for name in _PSYCOPG2_SSL_ENV_VARS:
-        os.environ.pop(name, None)
 
 
 def bootstrap() -> None:
@@ -93,17 +71,15 @@ def bootstrap() -> None:
     # implementato
     validate_storage_config()
 
-    # 3. Inizializza database PostgreSQL (pool + tabelle
+    # 3. Inizializza database PostgreSQL (pool + tabelle)
     init_all_dbs()
 
-    # 4. Fix SSL certificate issue caused by PostgreSQL
-    # Deve girare DOPO `init_all_dbs` perche' la pollution dell'env
-    # avviene quando psycopg2 apre la prima connessione
-    _repair_psycopg2_ssl_env()
-
-    # 5. Mark boundary crossed. Set LAST so any exception from
-    # steps 1-4 leaves the flag at its prior value — there is no
-    # path that can flip the flag with an incomplete bootstrap
+    # 4. Mark boundary crossed. Set LAST so any exception from
+    # steps 1-3 leaves the flag at its prior value — there is no
+    # path that can flip the flag con un bootstrap incompleto.
+    # (psycopg3 NON inquina l'env con SSL vars come faceva psycopg2,
+    # quindi la vecchia workaround `_repair_psycopg2_ssl_env` qui non
+    # serve piu' ed e' stata rimossa nello stesso refactor.)
     _BOOT_COMPLETE = True
 
 

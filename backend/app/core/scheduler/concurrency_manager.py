@@ -8,8 +8,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Literal
 from typing_extensions import TypedDict
 
-import psycopg2
-import psycopg2.errors
+import psycopg
+import psycopg.errors
 
 from app.core.scheduler import db
 from app.config import settings
@@ -131,7 +131,7 @@ class ConcurrencyManager:
                 (key, value, expires_at),
             )
             return row is not None
-        except (psycopg2.errors.UniqueViolation, psycopg2.IntegrityError):
+        except (psycopg.errors.UniqueViolation, psycopg.IntegrityError):
             return False  # difensivo: ON CONFLICT dovrebbe evitarlo, ma fallback
 
     def _incr(self, key: str) -> int:

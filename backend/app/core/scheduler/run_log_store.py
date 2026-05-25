@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from psycopg2 import Error as PsycopgError
+from psycopg import Error as PsycopgError
 
 from app.core.scheduler import db as scheduler_db
 from app.utils.logger import get_logger
