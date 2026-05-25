@@ -845,9 +845,10 @@ def execute_enrichment_task(
             # output_kind='imdf', il file zip prodotto e' un IMDF: estraiamo
             # manifest.json + validation.json e li includiamo inline nel task
             # result come `result['imdf']`.
-            # Block IMDF dedicato (Phase6): la zip extraction passa ancora
-            # da un temp path bounce via `temporary_path_from_bytes`. Sara'
-            # migrato a `ZipFile(BytesIO)` quando IMDF diventa bytes-first.
+            # IMDF-1 (Phase6 step 1): `extract_imdf_zip_bytes` apre lo zip
+            # via `ZipFile(BytesIO(...))`, niente piu' bounce su disco lato
+            # caller. La tmp dir interna del bundle resta finche' IMDF-2 non
+            # sposta manifest/validation/renderers/geojson in-memory.
             imdf_metadata: Optional[JsonObject] = None
             has_imdf_upstream = any(
                 (n.get("output_kind") == "imdf" or (n.get("data") or {}).get("output_kind") == "imdf")
@@ -856,15 +857,9 @@ def execute_enrichment_task(
             )
             if has_imdf_upstream and ext == ".zip":
                 try:
-                    from app.core.imdf.loader import extract_imdf_zip
+                    from app.core.imdf.loader import extract_imdf_zip_bytes
                     from app.core.imdf.persist import persist_imdf_bundle_to_disk
-                    from app.core.io.materialize import temporary_path_from_bytes
-                    with temporary_path_from_bytes(
-                        output_bytes,
-                        reason="imdf_zip_extract_legacy_path_api",
-                        suffix=".zip",
-                    ) as _tmp_zip:
-                        bundle = extract_imdf_zip(str(_tmp_zip))
+                    bundle = extract_imdf_zip_bytes(output_bytes)
 
                     bundle_persisted_path = None
                     try:

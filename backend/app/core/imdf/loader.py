@@ -2,10 +2,14 @@
 IMDF loader — estrazione zip + lettura File Geodatabase.
 
 Funzioni pubbliche:
+- `extract_imdf_zip(path)`        — estrae da un path su disco (legacy)
+- `extract_imdf_zip_bytes(data)`  — estrae da bytes (no temp path nel caller)
+- `load_imdf_layers(gdb_path)`    — lettura dei 5 layer dal File Geodatabase
 """
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import shutil
@@ -13,7 +17,7 @@ import tempfile
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from app.core.dataframes.frame_io import load_dataframe_from_file
 from app.shared.contracts.payloads import JsonObject
@@ -93,8 +97,25 @@ class ImdfBundle:
         return {}
 
 
+def _extract_zip_source_to_bundle(
+    zip_source: Union[str, os.PathLike, io.BytesIO], tmp: Path,
+) -> ImdfBundle:
+    """Internal: estrae uno ZipFile-compatible `zip_source` dentro `tmp`
+    e costruisce il bundle indicizzato.
+
+    Il caller e' responsabile della creazione di `tmp` e del cleanup
+    su exception (per le funzioni pubbliche `extract_imdf_zip*` quel
+    cleanup e' fatto dal wrapper, su success la cleanup passa al
+    bundle via `bundle.cleanup`).
+    """
+    with zipfile.ZipFile(zip_source) as z:
+        members = z.namelist()
+        safe_extractall(z, tmp)
+    return _build_bundle_index(tmp, members)
+
+
 def extract_imdf_zip(zip_path: str | os.PathLike, dest_dir: Optional[str | os.PathLike] = None) -> ImdfBundle:
-    """Estrae uno zip IMDF e indicizza i contenuti riconosciuti.
+    """Estrae uno zip IMDF da un path su disco e indicizza i contenuti.
 
     Args:
         zip_path: percorso allo zip IMDF (output di imdf.plenora.it/api/process)
@@ -122,16 +143,48 @@ def extract_imdf_zip(zip_path: str | os.PathLike, dest_dir: Optional[str | os.Pa
     tmp.mkdir(parents=True, exist_ok=True)
 
     try:
-        with zipfile.ZipFile(src) as z:
-            members = z.namelist()
-            safe_extractall(z, tmp)
-        bundle = _build_bundle_index(tmp, members)
+        return _extract_zip_source_to_bundle(src, tmp)
     except Exception:
         if _we_own_tmp:
             shutil.rmtree(tmp, ignore_errors=True)
         raise
 
-    return bundle
+
+def extract_imdf_zip_bytes(data: bytes) -> ImdfBundle:
+    """Estrae uno zip IMDF da bytes in RAM e indicizza i contenuti.
+
+    Variante bytes-first di `extract_imdf_zip`: chiude l'escape hatch
+    `temporary_path_from_bytes` lato caller. Lo zip stesso e' aperto
+    via `ZipFile(BytesIO(data))`, senza materializzare il file zip su
+    disco.
+
+    Internamente la tmp dir resta necessaria SOLO per le componenti
+    estratte che richiedono filesystem (il File Geodatabase `.gdb`
+    e' una directory letta da pyogrio via path). IMDF-2 spostera'
+    anche manifest/validation/renderers/geojson in-memory e
+    introdurra' una nuova shape `ImdfBundle.files: dict[str, bytes]`;
+    IMDF-1 chiude solo il bounce nel caller.
+
+    Args:
+        data: bytes dello zip IMDF.
+
+    Returns:
+        ImdfBundle popolato (tmp_dir-based come `extract_imdf_zip`).
+
+    Raises:
+        ValueError: se `data` e' vuoto o lo zip non e' un IMDF valido.
+    """
+    if not data:
+        raise ValueError("IMDF bytes vuoti")
+
+    tmp = Path(tempfile.mkdtemp(prefix="imdf_"))
+    tmp.mkdir(parents=True, exist_ok=True)
+
+    try:
+        return _extract_zip_source_to_bundle(io.BytesIO(data), tmp)
+    except Exception:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
 
 
 def _build_bundle_index(tmp: Path, members: List[str]) -> "ImdfBundle":
