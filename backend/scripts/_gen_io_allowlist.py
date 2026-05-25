@@ -1,0 +1,174 @@
+"""One-shot generator for .claude/io-refactor/allowlist-baseline.yaml.
+
+Sweep dei pattern filesystem nel backend + workers + scripts,
+classifica per fase di migrazione (vedi refactor_io_storage_ram_only.md),
+emette YAML che il contract test consumera' come allowlist.
+
+Eseguire da `backend/` cwd:
+    python3 scripts/_gen_io_allowlist.py
+"""
+from __future__ import annotations
+
+import os
+import re
+from pathlib import Path
+
+import yaml
+
+PATTERNS: tuple[tuple[str, re.Pattern], ...] = (
+    ("tempfile_named_temp_file", re.compile(r"tempfile\.NamedTemporaryFile\b")),
+    ("tempfile_temp_directory", re.compile(r"tempfile\.TemporaryDirectory\b")),
+    ("tempfile_mkdtemp", re.compile(r"tempfile\.mkdtemp\b")),
+    ("tempfile_mkstemp", re.compile(r"tempfile\.mkstemp\b")),
+    ("tempfile_temporary_file", re.compile(r"tempfile\.TemporaryFile\b")),
+    ("zipfile_extractall", re.compile(r"\.extractall\(")),
+    ("safe_extractall", re.compile(r"safe_extractall\(|safe_extract_zip_path\(")),
+    ("path_write_bytes", re.compile(r"\.write_bytes\(")),
+    ("path_write_text", re.compile(r"\.write_text\(")),
+    ("open_write_mode", re.compile(r"""open\(['"\s][^)]*?,\s*['"][wax]""")),
+    ("fileresponse", re.compile(r"FileResponse\(")),
+    ("shutil_copy", re.compile(r"shutil\.(copy|copyfile|copy2|copytree)\(")),
+    ("shutil_move", re.compile(r"shutil\.move\(")),
+    ("df_to_csv_path", re.compile(r"\.to_csv\(")),
+    ("df_to_excel_path", re.compile(r"\.to_excel\(")),
+    ("df_to_parquet_path", re.compile(r"\.to_parquet\(")),
+    ("df_to_file_path", re.compile(r"\.to_file\(")),
+    ("df_to_json_path", re.compile(r"\.to_json\(")),
+    ("storage_upload_path", re.compile(r"\.upload\([^)]*path")),
+    ("storage_download_path", re.compile(r"\.download\([^)]*path")),
+)
+
+# Mappa file -> fase di migrazione (refactor_io_storage_ram_only.md).
+PHASE_MAP: dict[str, str] = {
+    "arricchisci/api_connection_rest_file.py": "Phase4-rest-file-enrichment",
+    "arricchisci/api_connection_support.py": "Phase4-rest-file-enrichment",
+    "files/upload.py": "Phase4-upload-file-source",
+    "files/source_blob.py": "Phase4-upload-file-source",
+    "files/source_loading.py": "Phase4-upload-file-source",
+    "files/source_read.py": "Phase4-upload-file-source",
+    "files/preview_temp.py": "Phase4-upload-file-source",
+    "files/multi_layer_upload.py": "Phase4-upload-file-source",
+    "dataframes/frame_io.py": "Phase1-dataframe-boundary",
+    "dataframes/geospatial_io.py": "Phase1-dataframe-boundary",
+    "results/result_reader.py": "Phase5-results-download",
+    "results/pipeline_result.py": "Phase5-results-download",
+    "results/blob_writer.py": "Phase5-results-download",
+    "results/temp_paths.py": "Phase5-results-download",
+    "artifacts/resolver.py": "Phase5-results-download",
+    "scheduler/artifact_store.py": "Phase5-scheduler-archive",
+    "scheduler/run_archive_store.py": "Phase5-scheduler-archive",
+    "scheduler/router.py": "Phase5-scheduler-archive",
+    "imdf/": "Phase6-imdf",
+    "workers/tasks/imdf_publish_task.py": "Phase6-imdf",
+    "db/query_executor.py": "Phase5-export-csv-xlsx",
+    "db/query_streaming.py": "Phase5-export-csv-xlsx",
+    "features/features_service.py": "Phase5-export-csv-xlsx",
+    "intermediate/artifact_writer.py": "Phase5-export-csv-xlsx",
+    "workers/tasks/carica_task.py": "Phase5-export-csv-xlsx",
+    "workers/tasks/enrichment_task.py": "Phase4-rest-file-enrichment",
+    "datasources/local.py": "Phase8-datasource-local-dev-only",
+    "scripts/backup_db.py": "Phase7-backup-restore",
+    "scripts/test_restore.py": "Phase7-backup-restore",
+}
+
+
+def phase_for(filepath: str) -> str:
+    norm = filepath.replace("\\", "/")
+    for key, phase in PHASE_MAP.items():
+        if key in norm:
+            return phase
+    return "unassigned"
+
+
+def scan() -> list[tuple[str, int, str, str]]:
+    findings: list[tuple[str, int, str, str]] = []
+    for root in ("app", "workers", "scripts"):
+        for dirpath, dirs, files in os.walk(root):
+            dirs[:] = [d for d in dirs if d != "__pycache__" and not d.startswith(".")]
+            for fname in files:
+                if not fname.endswith(".py"):
+                    continue
+                # Skip lo script generator stesso e i suoi prodotti.
+                if fname == "_gen_io_allowlist.py":
+                    continue
+                path = os.path.join(dirpath, fname)
+                try:
+                    with open(path, encoding="utf-8") as fh:
+                        for i, line in enumerate(fh, 1):
+                            stripped = line.lstrip()
+                            if stripped.startswith("#"):
+                                continue
+                            if stripped.startswith('"""') or stripped.startswith("'''"):
+                                continue
+                            for pname, pre in PATTERNS:
+                                if pre.search(line):
+                                    findings.append((path, i, pname, line.strip()[:100]))
+                                    break
+                except (UnicodeDecodeError, OSError):
+                    continue
+    return findings
+
+
+def main() -> None:
+    findings = scan()
+
+    by_pattern: dict[str, int] = {}
+    by_phase: dict[str, int] = {}
+    for f in findings:
+        by_pattern[f[2]] = by_pattern.get(f[2], 0) + 1
+        p = phase_for(f[0])
+        by_phase[p] = by_phase.get(p, 0) + 1
+
+    print(f"TOTAL findings: {len(findings)}\n")
+    print("BY PATTERN:")
+    for k, v in sorted(by_pattern.items(), key=lambda x: -x[1]):
+        print(f"  {k:35} {v}")
+    print("\nBY PHASE:")
+    for k, v in sorted(by_phase.items(), key=lambda x: -x[1]):
+        print(f"  {k:42} {v}")
+
+    out_path = Path("../.claude/io-refactor/allowlist-baseline.yaml")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    data = {
+        "metadata": {
+            "generated_at": "2026-05-25",
+            "baseline_total": len(findings),
+            "by_pattern": dict(sorted(by_pattern.items(), key=lambda x: -x[1])),
+            "by_phase": dict(sorted(by_phase.items(), key=lambda x: -x[1])),
+            "note": (
+                "Auto-generated dal sweep filesystem-pattern. Aggiungere "
+                "motivo/target/replacement quando si migra. Il contract "
+                "test legge questa lista come allowlist: NUOVI usi fuori "
+                "lista falliscono, ESISTENTI sono tollerati con motivo "
+                "esplicito di fase di migrazione."
+            ),
+            "policy": (
+                "Decrementale: ogni migrazione che chiude un callsite "
+                "DEVE rimuoverlo dalla allowlist. A fine refactor la "
+                "lista deve essere vuota (criterio in "
+                "refactor_io_storage_ram_only.md sezione 'Criterio di "
+                "fine refactor')."
+            ),
+        },
+        "allowed_callsites": [
+            {
+                "file": f[0].replace("\\", "/"),
+                "line": f[1],
+                "pattern": f[2],
+                "snippet": f[3],
+                "phase": phase_for(f[0]),
+                "status": "active-legacy",
+            }
+            for f in findings
+        ],
+    }
+    out_path.write_text(
+        yaml.dump(data, sort_keys=False, allow_unicode=True, width=120),
+        encoding="utf-8",
+    )
+    print(f"\nAllowlist written: {out_path}")
+
+
+if __name__ == "__main__":
+    main()

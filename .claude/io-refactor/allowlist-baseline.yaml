@@ -1,0 +1,545 @@
+metadata:
+  generated_at: '2026-05-25'
+  baseline_total: 85
+  by_pattern:
+    tempfile_named_temp_file: 13
+    safe_extractall: 12
+    df_to_csv_path: 10
+    tempfile_mkdtemp: 7
+    df_to_excel_path: 7
+    df_to_json_path: 6
+    df_to_file_path: 6
+    tempfile_temp_directory: 4
+    df_to_parquet_path: 4
+    path_write_text: 4
+    path_write_bytes: 4
+    storage_upload_path: 3
+    shutil_copy: 2
+    fileresponse: 2
+    shutil_move: 1
+  by_phase:
+    unassigned: 20
+    Phase1-dataframe-boundary: 19
+    Phase5-export-csv-xlsx: 15
+    Phase4-upload-file-source: 11
+    Phase6-imdf: 9
+    Phase5-results-download: 5
+    Phase5-scheduler-archive: 3
+    Phase7-backup-restore: 2
+    Phase4-rest-file-enrichment: 1
+  note: 'Auto-generated dal sweep filesystem-pattern. Aggiungere motivo/target/replacement quando si migra. Il contract test
+    legge questa lista come allowlist: NUOVI usi fuori lista falliscono, ESISTENTI sono tollerati con motivo esplicito di
+    fase di migrazione.'
+  policy: 'Decrementale: ogni migrazione che chiude un callsite DEVE rimuoverlo dalla allowlist. A fine refactor la lista
+    deve essere vuota (criterio in refactor_io_storage_ram_only.md sezione ''Criterio di fine refactor'').'
+allowed_callsites:
+- file: app/core/arricchisci/api_connection_rest_file.py
+  line: 585
+  pattern: tempfile_mkdtemp
+  snippet: tmp_exec_dir = Path(tempfile.mkdtemp(prefix="plenora_exec_"))
+  phase: Phase4-rest-file-enrichment
+  status: active-legacy
+- file: app/core/dataframes/default_loader.py
+  line: 108
+  pattern: df_to_csv_path
+  snippet: df.to_csv(path, index=False, encoding="utf-8")
+  phase: unassigned
+  status: active-legacy
+- file: app/core/dataframes/default_loader.py
+  line: 111
+  pattern: df_to_excel_path
+  snippet: df.to_excel(path, index=False, sheet_name=sheet)
+  phase: unassigned
+  status: active-legacy
+- file: app/core/dataframes/default_loader.py
+  line: 114
+  pattern: df_to_json_path
+  snippet: df.to_json(path, orient="records", indent=2)
+  phase: unassigned
+  status: active-legacy
+- file: app/core/dataframes/default_loader.py
+  line: 118
+  pattern: df_to_file_path
+  snippet: gdf.to_file(path, driver=driver, layer=layer)
+  phase: unassigned
+  status: active-legacy
+- file: app/core/dataframes/default_loader.py
+  line: 120
+  pattern: df_to_file_path
+  snippet: gdf.to_file(path, driver=driver)
+  phase: unassigned
+  status: active-legacy
+- file: app/core/dataframes/frame_io.py
+  line: 333
+  pattern: tempfile_named_temp_file
+  snippet: 'with tempfile.NamedTemporaryFile(delete=False, prefix="plenora-artifact-", suffix=suffix) as tmp:'
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/frame_io.py
+  line: 400
+  pattern: tempfile_named_temp_file
+  snippet: tmp_obj = tempfile.NamedTemporaryFile(
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/frame_io.py
+  line: 408
+  pattern: shutil_copy
+  snippet: shutil.copyfile(artifact_path, tmp_path)
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/frame_io.py
+  line: 620
+  pattern: tempfile_temp_directory
+  snippet: 'with tempfile.TemporaryDirectory() as tmpdir:'
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/frame_io.py
+  line: 621
+  pattern: safe_extractall
+  snippet: safe_extractall(zf, tmpdir)
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/frame_io.py
+  line: 632
+  pattern: tempfile_temp_directory
+  snippet: 'with tempfile.TemporaryDirectory() as tmpdir:'
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/frame_io.py
+  line: 633
+  pattern: safe_extractall
+  snippet: safe_extractall(zf, tmpdir)
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/frame_io.py
+  line: 640
+  pattern: tempfile_temp_directory
+  snippet: 'with tempfile.TemporaryDirectory() as tmpdir:'
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/frame_io.py
+  line: 641
+  pattern: safe_extractall
+  snippet: safe_extractall(zf, tmpdir)
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/frame_io.py
+  line: 673
+  pattern: df_to_csv_path
+  snippet: df.to_csv(final_path, index=False, encoding="utf-8", float_format="%.15g")
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/frame_io.py
+  line: 679
+  pattern: df_to_excel_path
+  snippet: df.to_excel(final_path, index=False)
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/frame_io.py
+  line: 687
+  pattern: df_to_excel_path
+  snippet: df.to_excel(writer, index=False)
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/frame_io.py
+  line: 709
+  pattern: df_to_parquet_path
+  snippet: df.to_parquet(tmp_path, index=False, engine="pyarrow")
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/geospatial_io.py
+  line: 139
+  pattern: df_to_json_path
+  snippet: return gdf.to_json().encode("utf-8")
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/geospatial_io.py
+  line: 217
+  pattern: df_to_file_path
+  snippet: gdf.to_file(final_path, driver="GeoJSON")
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/geospatial_io.py
+  line: 221
+  pattern: df_to_file_path
+  snippet: gdf.to_file(final_path, driver="GPKG", layer=layer_name)
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/geospatial_io.py
+  line: 323
+  pattern: df_to_file_path
+  snippet: gdf_vuoto.to_file(final_path, driver="GPKG", layer=layer_name)
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/geospatial_io.py
+  line: 336
+  pattern: tempfile_temp_directory
+  snippet: 'with tempfile.TemporaryDirectory() as tmpdir:'
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/geospatial_io.py
+  line: 338
+  pattern: df_to_file_path
+  snippet: gdf.to_file(shp_path, driver="ESRI Shapefile")
+  phase: Phase1-dataframe-boundary
+  status: active-legacy
+- file: app/core/dataframes/tabular.py
+  line: 144
+  pattern: df_to_csv_path
+  snippet: df.to_csv(buf, index=False, encoding="utf-8", float_format="%.15g")
+  phase: unassigned
+  status: active-legacy
+- file: app/core/dataframes/tabular.py
+  line: 149
+  pattern: df_to_excel_path
+  snippet: df.to_excel(buf, index=False)
+  phase: unassigned
+  status: active-legacy
+- file: app/core/dataframes/tabular.py
+  line: 166
+  pattern: df_to_parquet_path
+  snippet: df.to_parquet(buf, index=False, engine="pyarrow")
+  phase: unassigned
+  status: active-legacy
+- file: app/core/eseguibili/service.py
+  line: 381
+  pattern: df_to_csv_path
+  snippet: df.to_csv(csv_buffer, index=False, encoding="utf-8")
+  phase: unassigned
+  status: active-legacy
+- file: app/core/eseguibili/storage.py
+  line: 72
+  pattern: storage_upload_path
+  snippet: storage.upload(src_path, key)
+  phase: unassigned
+  status: active-legacy
+- file: app/core/features/features_service.py
+  line: 499
+  pattern: df_to_csv_path
+  snippet: df.to_csv(final_path, index=False, encoding="utf-8")
+  phase: Phase5-export-csv-xlsx
+  status: active-legacy
+- file: app/core/features/features_service.py
+  line: 501
+  pattern: df_to_json_path
+  snippet: df.to_json(final_path, orient="records", indent=2)
+  phase: Phase5-export-csv-xlsx
+  status: active-legacy
+- file: app/core/features/features_service.py
+  line: 503
+  pattern: df_to_excel_path
+  snippet: df.to_excel(final_path, index=False)
+  phase: Phase5-export-csv-xlsx
+  status: active-legacy
+- file: app/core/features/features_service.py
+  line: 506
+  pattern: df_to_csv_path
+  snippet: df.to_csv(final_path, index=False, encoding="utf-8")
+  phase: Phase5-export-csv-xlsx
+  status: active-legacy
+- file: app/core/files/multi_layer_upload.py
+  line: 90
+  pattern: tempfile_named_temp_file
+  snippet: tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=temp_dir)
+  phase: Phase4-upload-file-source
+  status: active-legacy
+- file: app/core/files/multi_layer_upload.py
+  line: 104
+  pattern: safe_extractall
+  snippet: safe_extractall(z, zip_tmp_dir)
+  phase: Phase4-upload-file-source
+  status: active-legacy
+- file: app/core/files/preview_temp.py
+  line: 108
+  pattern: tempfile_named_temp_file
+  snippet: 'with tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=settings.TEMP_DIR) as tmp:'
+  phase: Phase4-upload-file-source
+  status: active-legacy
+- file: app/core/files/preview_temp.py
+  line: 120
+  pattern: tempfile_mkdtemp
+  snippet: tmp_dir = Path(tempfile.mkdtemp(dir=settings.TEMP_DIR))
+  phase: Phase4-upload-file-source
+  status: active-legacy
+- file: app/core/files/service_deps.py
+  line: 113
+  pattern: path_write_text
+  snippet: path.write_text(content, encoding=encoding)
+  phase: unassigned
+  status: active-legacy
+- file: app/core/files/service_deps.py
+  line: 136
+  pattern: safe_extractall
+  snippet: safe_extract_zip_path(zip_path, dest_dir)
+  phase: unassigned
+  status: active-legacy
+- file: app/core/files/source_blob.py
+  line: 138
+  pattern: safe_extractall
+  snippet: safe_extractall(zip_archive, tmp_dir)
+  phase: Phase4-upload-file-source
+  status: active-legacy
+- file: app/core/files/source_blob.py
+  line: 161
+  pattern: tempfile_named_temp_file
+  snippet: temporary_file = tempfile.NamedTemporaryFile(
+  phase: Phase4-upload-file-source
+  status: active-legacy
+- file: app/core/files/source_loading.py
+  line: 97
+  pattern: path_write_bytes
+  snippet: 136) e DOPO `tmp_path.write_bytes()` (riga 185), permettendo sia READ
+  phase: Phase4-upload-file-source
+  status: active-legacy
+- file: app/core/files/source_loading.py
+  line: 238
+  pattern: path_write_bytes
+  snippet: tmp_path.write_bytes(raw if isinstance(raw, bytes) else bytes(raw))
+  phase: Phase4-upload-file-source
+  status: active-legacy
+- file: app/core/files/upload.py
+  line: 19
+  pattern: tempfile_mkdtemp
+  snippet: return Path(tempfile.mkdtemp(dir=dir))
+  phase: Phase4-upload-file-source
+  status: active-legacy
+- file: app/core/files/upload.py
+  line: 79
+  pattern: tempfile_named_temp_file
+  snippet: tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=temp_dir)
+  phase: Phase4-upload-file-source
+  status: active-legacy
+- file: app/core/files/upload.py
+  line: 111
+  pattern: safe_extractall
+  snippet: safe_extractall(z, zip_tmp_dir)
+  phase: Phase4-upload-file-source
+  status: active-legacy
+- file: app/core/imdf/loader.py
+  line: 121
+  pattern: tempfile_mkdtemp
+  snippet: tmp = Path(dest_dir) if dest_dir else Path(tempfile.mkdtemp(prefix="imdf_"))
+  phase: Phase6-imdf
+  status: active-legacy
+- file: app/core/imdf/loader.py
+  line: 127
+  pattern: safe_extractall
+  snippet: safe_extractall(z, tmp)
+  phase: Phase6-imdf
+  status: active-legacy
+- file: app/core/imdf/persist.py
+  line: 85
+  pattern: shutil_move
+  snippet: shutil.move(str(item), str(target))
+  phase: Phase6-imdf
+  status: active-legacy
+- file: app/core/imdf/persist.py
+  line: 126
+  pattern: path_write_text
+  snippet: (root / "plenora_metadata.json").write_text(
+  phase: Phase6-imdf
+  status: active-legacy
+- file: app/core/imdf/storage.py
+  line: 95
+  pattern: tempfile_named_temp_file
+  snippet: with tempfile.NamedTemporaryFile(
+  phase: Phase6-imdf
+  status: active-legacy
+- file: app/core/imdf/storage.py
+  line: 118
+  pattern: tempfile_named_temp_file
+  snippet: with tempfile.NamedTemporaryFile(
+  phase: Phase6-imdf
+  status: active-legacy
+- file: app/core/imdf/storage.py
+  line: 124
+  pattern: storage_upload_path
+  snippet: storage.upload(tmp_meta_path, mk)
+  phase: Phase6-imdf
+  status: active-legacy
+- file: app/core/imdf/storage.py
+  line: 166
+  pattern: tempfile_named_temp_file
+  snippet: with tempfile.NamedTemporaryFile(
+  phase: Phase6-imdf
+  status: active-legacy
+- file: app/core/imdf/storage.py
+  line: 185
+  pattern: safe_extractall
+  snippet: safe_extractall(zf, local)
+  phase: Phase6-imdf
+  status: active-legacy
+- file: app/core/intermediate/artifact_writer.py
+  line: 138
+  pattern: df_to_parquet_path
+  snippet: '`df.to_parquet(buf)` usa `pyarrow` se disponibile, altrimenti'
+  phase: Phase5-export-csv-xlsx
+  status: active-legacy
+- file: app/core/intermediate/artifact_writer.py
+  line: 147
+  pattern: df_to_parquet_path
+  snippet: df.to_parquet(buf, engine="pyarrow", compression="snappy", index=False)
+  phase: Phase5-export-csv-xlsx
+  status: active-legacy
+- file: app/core/resources/loaders/result_blob.py
+  line: 316
+  pattern: tempfile_named_temp_file
+  snippet: 'Stdlib-only: ``tempfile.NamedTemporaryFile(delete=False,'
+  phase: unassigned
+  status: active-legacy
+- file: app/core/resources/loaders/result_blob.py
+  line: 343
+  pattern: tempfile_named_temp_file
+  snippet: tf = tempfile.NamedTemporaryFile(
+  phase: unassigned
+  status: active-legacy
+- file: app/core/results/blob_writer.py
+  line: 173
+  pattern: storage_upload_path
+  snippet: storage.upload(path, storage_key)
+  phase: Phase5-results-download
+  status: active-legacy
+- file: app/core/results/result_reader.py
+  line: 62
+  pattern: path_write_bytes
+  snippet: tmp_path.write_bytes(data)
+  phase: Phase5-results-download
+  status: active-legacy
+- file: app/core/results/result_reader.py
+  line: 129
+  pattern: path_write_bytes
+  snippet: tmp_path.write_bytes(data)
+  phase: Phase5-results-download
+  status: active-legacy
+- file: app/core/results/temp_paths.py
+  line: 46
+  pattern: tempfile_mkdtemp
+  snippet: return Path(tempfile.mkdtemp(prefix=prefix, dir=root))
+  phase: Phase5-results-download
+  status: active-legacy
+- file: app/core/results/temp_paths.py
+  line: 63
+  pattern: tempfile_named_temp_file
+  snippet: tmp = tempfile.NamedTemporaryFile(
+  phase: Phase5-results-download
+  status: active-legacy
+- file: app/core/scheduler/artifact_store.py
+  line: 111
+  pattern: shutil_copy
+  snippet: shutil.copy2(str(src_file), str(dest))
+  phase: Phase5-scheduler-archive
+  status: active-legacy
+- file: app/core/scheduler/router.py
+  line: 399
+  pattern: fileresponse
+  snippet: return FileResponse(
+  phase: Phase5-scheduler-archive
+  status: active-legacy
+- file: app/core/scheduler/router.py
+  line: 423
+  pattern: fileresponse
+  snippet: return FileResponse(
+  phase: Phase5-scheduler-archive
+  status: active-legacy
+- file: app/db/query_executor.py
+  line: 305
+  pattern: df_to_csv_path
+  snippet: df.to_csv(final_path, index=False, encoding="utf-8")
+  phase: Phase5-export-csv-xlsx
+  status: active-legacy
+- file: app/db/query_executor.py
+  line: 307
+  pattern: df_to_json_path
+  snippet: df.to_json(final_path, orient="records", indent=2)
+  phase: Phase5-export-csv-xlsx
+  status: active-legacy
+- file: app/db/query_executor.py
+  line: 309
+  pattern: df_to_excel_path
+  snippet: df.to_excel(final_path, index=False)
+  phase: Phase5-export-csv-xlsx
+  status: active-legacy
+- file: app/db/query_executor.py
+  line: 313
+  pattern: df_to_csv_path
+  snippet: df.to_csv(final_path, index=False, encoding="utf-8")
+  phase: Phase5-export-csv-xlsx
+  status: active-legacy
+- file: app/utils/zip_safe.py
+  line: 137
+  pattern: safe_extractall
+  snippet: 'def safe_extractall(zf: zipfile.ZipFile, dest_dir: Union[str, Path]) -> None:'
+  phase: unassigned
+  status: active-legacy
+- file: app/utils/zip_safe.py
+  line: 154
+  pattern: safe_extractall
+  snippet: 'def safe_extract_zip_path(zip_path: Union[str, Path],'
+  phase: unassigned
+  status: active-legacy
+- file: app/utils/zip_safe.py
+  line: 158
+  pattern: safe_extractall
+  snippet: safe_extractall(zf, dest_dir)
+  phase: unassigned
+  status: active-legacy
+- file: workers/tasks/carica_task.py
+  line: 492
+  pattern: df_to_csv_path
+  snippet: buf.write(df.to_csv(index=False).encode('utf-8'))
+  phase: Phase5-export-csv-xlsx
+  status: active-legacy
+- file: workers/tasks/carica_task.py
+  line: 494
+  pattern: df_to_excel_path
+  snippet: df.to_excel(buf, index=False)
+  phase: Phase5-export-csv-xlsx
+  status: active-legacy
+- file: workers/tasks/carica_task.py
+  line: 496
+  pattern: df_to_json_path
+  snippet: buf.write(df.to_json(orient='records', force_ascii=False).encode('utf-8'))
+  phase: Phase5-export-csv-xlsx
+  status: active-legacy
+- file: workers/tasks/carica_task.py
+  line: 498
+  pattern: df_to_json_path
+  snippet: buf.write(df.to_json(orient='records', force_ascii=False).encode('utf-8'))
+  phase: Phase5-export-csv-xlsx
+  status: active-legacy
+- file: workers/tasks/carica_task.py
+  line: 500
+  pattern: df_to_csv_path
+  snippet: buf.write(df.to_csv(index=False).encode('utf-8'))
+  phase: Phase5-export-csv-xlsx
+  status: active-legacy
+- file: scripts/backup_db.py
+  line: 245
+  pattern: tempfile_mkdtemp
+  snippet: tmp_dir = Path(tempfile.mkdtemp(prefix="plenora_backup_"))
+  phase: Phase7-backup-restore
+  status: active-legacy
+- file: scripts/export_openapi_manifest.py
+  line: 281
+  pattern: path_write_text
+  snippet: output.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+  phase: unassigned
+  status: active-legacy
+- file: scripts/imdf_real_e2e_check.py
+  line: 156
+  pattern: tempfile_named_temp_file
+  snippet: with tempfile.NamedTemporaryFile(
+  phase: unassigned
+  status: active-legacy
+- file: scripts/imdf_real_e2e_check.py
+  line: 179
+  pattern: path_write_text
+  snippet: meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+  phase: unassigned
+  status: active-legacy
+- file: scripts/test_restore.py
+  line: 291
+  pattern: tempfile_mkdtemp
+  snippet: tmp_dir = Path(tempfile.mkdtemp(prefix="plenora_restore_test_"))
+  phase: Phase7-backup-restore
+  status: active-legacy
