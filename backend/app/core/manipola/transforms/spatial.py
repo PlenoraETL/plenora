@@ -7,6 +7,7 @@ Keeps transformation behavior isolated from orchestration callers.
 from typing import List, Optional
 
 from app.utils.logger import get_logger
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.geodata import (
     active_geometry_value_at,
@@ -153,7 +154,7 @@ def op_geo_buffer(
             buffer_gdf = geodataframe_from_geometry_series(buffer_geom, crs=current_geom_crs)
             buffer_geom = buffer_gdf.to_crs(target_crs).geometry
 
-        result = gdf.copy()
+        result = copy_frame_for_update(gdf)
         result[output_column] = buffer_geom.values
 
         mode = "per-row UTM" if use_per_row_utm else f"single-CRS {metric_used or original_crs}"
@@ -205,7 +206,7 @@ def op_geo_centroid(
             centroid_gdf = geodataframe_from_geometry_series(centroids, crs=current_geom_crs)
             centroids = centroid_gdf.to_crs(target_crs).geometry
 
-        result = gdf.copy()
+        result = copy_frame_for_update(gdf)
         result[output_column] = centroids.values
 
         logger.info(f"Centroid completato: output={output_column}")
@@ -246,7 +247,7 @@ def op_geo_area(
         else:
             gdf_projected = gdf
 
-        result = gdf.copy()
+        result = copy_frame_for_update(gdf)
         result[output_column] = gdf_projected.geometry.area
         
         logger.info(f"Area completato: output={output_column}")
@@ -376,7 +377,7 @@ def op_geo_convex_hull(
 
         convex_hulls = gdf.geometry.convex_hull
         
-        result = gdf.copy()
+        result = copy_frame_for_update(gdf)
         result[output_column] = convex_hulls.values
         
         logger.info(f"Convex Hull completato: output={output_column}")
@@ -472,7 +473,7 @@ def op_geo_envelope(
 
         envelopes = gdf.geometry.envelope
         
-        result = gdf.copy()
+        result = copy_frame_for_update(gdf)
         result[output_column] = envelopes.values
         
         logger.info(f"Envelope completato: output={output_column}")
@@ -531,12 +532,12 @@ def op_geo_distance(
         # Unisci tutte le geometrie del right in un unico oggetto per distanza
         if len(right_proj) == 0:
             logger.warning("Distance: right_gdf vuoto, output column = None")
-            result = left_gdf.copy()
+            result = copy_frame_for_update(left_gdf)
             result[output_column] = None
             return result
         right_union = right_proj.geometry.unary_union
 
-        result = left_gdf.copy()
+        result = copy_frame_for_update(left_gdf)
         result[output_column] = left_proj.geometry.distance(right_union)
 
         logger.info(f"Distance completato: output={output_column}")
@@ -660,7 +661,7 @@ def op_geo_length(
         else:
             gdf_projected = gdf
 
-        result = gdf.copy()
+        result = copy_frame_for_update(gdf)
         result[output_column] = gdf_projected.geometry.length
 
         logger.info(f"Length completato: output={output_column}")
@@ -702,7 +703,7 @@ def op_geo_perimeter(
             gdf_projected = gdf
 
         # Per i poligoni, geometry.length restituisce il perimetro
-        result = gdf.copy()
+        result = copy_frame_for_update(gdf)
         result[output_column] = gdf_projected.geometry.length
 
         logger.info(f"Perimeter completato: output={output_column}")
@@ -768,7 +769,7 @@ def op_geo_make_valid(
     """
     try:
         gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
-        result = gdf.copy()
+        result = copy_frame_for_update(gdf)
 
         invalid_count = (~result.geometry.is_valid).sum()
 
@@ -886,7 +887,7 @@ def op_geo_point_on_surface(
     try:
         gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
 
-        result = gdf.copy()
+        result = copy_frame_for_update(gdf)
         result[output_column] = gdf.geometry.representative_point()
 
         logger.info(f"Point on Surface completato: output={output_column}")
@@ -922,7 +923,7 @@ def op_geo_boundary(
     try:
         gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
 
-        result = gdf.copy()
+        result = copy_frame_for_update(gdf)
         result[output_column] = gdf.geometry.boundary
 
         logger.info(f"Boundary completato: output={output_column}")
@@ -992,7 +993,7 @@ def op_geo_voronoi(
                 matched_poly = voronoi_polygons[int(nearest_idx)]
             result_rows.append(matched_poly)
 
-        result = gdf.copy()
+        result = copy_frame_for_update(gdf)
         result[result.geometry.name] = result_rows
 
         logger.info(f"Voronoi completato: {len(result)} poligoni generati")
@@ -1035,7 +1036,7 @@ def op_geo_to_wkt(
     """
     try:
         gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
-        result = gdf.copy()
+        result = copy_frame_for_update(gdf)
 
         if mode in ("wkt", "both"):
             # Pre-fix per-row apply su GeoSeries (fino a 100k geometrie
@@ -1093,7 +1094,7 @@ def op_geo_clean_topology(
     """
     try:
         gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
-        result = gdf.copy()
+        result = copy_frame_for_update(gdf)
         fixed_count = 0
 
         # Step 1: make_valid su tutte le geometrie
@@ -1197,7 +1198,7 @@ def op_geo_bounds_extractor(
     """
     try:
         gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
-        result = gdf.copy()
+        result = copy_frame_for_update(gdf)
 
         bounds = result.geometry.bounds  # DataFrame con minx, miny, maxx, maxy
 
@@ -1240,7 +1241,7 @@ def op_geo_vertex_count(
     """
     try:
         gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
-        result = gdf.copy()
+        result = copy_frame_for_update(gdf)
 
         if HAS_SHAPELY2:
             result[output_column] = shapely.get_num_coordinates(result.geometry)

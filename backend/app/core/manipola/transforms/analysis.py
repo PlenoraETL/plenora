@@ -8,6 +8,7 @@ import json
 
 from typing import Any, List, Optional
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     concat_dataframes,
@@ -54,17 +55,18 @@ def op_sample(
         return df
 
     try:
-        result = df.copy()
-
-        if stratify_column and stratify_column in result.columns:
+        # Pre-fix `df.copy()` non serviva: tutto il path costruisce
+        # `result` ex-novo (sample_rows_reset_index / concat_dataframes
+        # ritornano nuove istanze) e l'input non viene mai mutato.
+        if stratify_column and stratify_column in df.columns:
             # Campionamento stratificato: proporzioni uguali da ogni gruppo
             groups = []
-            for _, group in iter_grouped_dataframes(result, stratify_column):
+            for _, group in iter_grouped_dataframes(df, stratify_column):
                 if fraction is not None:
                     group_n = max(1, int(len(group) * fraction))
                 else:
                     # Proporzione del gruppo rispetto al totale
-                    group_n = max(1, int(n * len(group) / max(len(result), 1)))
+                    group_n = max(1, int(n * len(group) / max(len(df), 1)))
 
                 group_n = min(group_n, len(group))
                 groups.append(sample_dataframe(group, n=group_n, random_state=random_state))
@@ -74,14 +76,14 @@ def op_sample(
             if fraction is not None:
                 fraction = max(0.0, min(1.0, fraction))
                 result = sample_rows_reset_index(
-                    result,
+                    df,
                     frac=fraction,
                     random_state=random_state,
                 )
             else:
-                n = min(n, len(result))
+                n = min(n, len(df))
                 result = sample_rows_reset_index(
-                    result,
+                    df,
                     n=n,
                     random_state=random_state,
                 )
@@ -126,7 +128,7 @@ def op_lookup(
         return df
 
     try:
-        result = df.copy()
+        result = copy_frame_for_update(df)
         target = output_column or column
 
         mapped = result[column].map(mapping)
@@ -175,7 +177,7 @@ def op_bin(
         return df
 
     try:
-        result = df.copy()
+        result = copy_frame_for_update(df)
         target = output_column or f"{column}_bin"
 
         result[target] = cut_numeric_series(
@@ -228,7 +230,7 @@ def op_flatten_json(
         return df
 
     try:
-        result = df.copy()
+        result = copy_frame_for_update(df)
 
         # Parse stringhe JSON in dict
         def parse_json(val):
@@ -332,7 +334,7 @@ def op_statistics(
     prefix = output_prefix if output_prefix else f"{column}_"
 
     try:
-        result = df.copy()
+        result = copy_frame_for_update(df)
 
         if group_by and group_by in df.columns:
             # Statistiche per gruppo

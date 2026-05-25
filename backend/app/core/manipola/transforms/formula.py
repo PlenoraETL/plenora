@@ -6,6 +6,7 @@ gate AST anti-RCE.
 
 import ast as _ast
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     coerce_numeric_series,
@@ -178,7 +179,7 @@ def op_formula(
         logger.warning("Formula vuota")
         return df
 
-    result = df.copy()
+    result = copy_frame_for_update(df)
     formula = formula.strip()
 
     # N4 defense-in-depth: scarta colonne con nome _-prefix/dunder prima di

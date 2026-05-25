@@ -4,6 +4,7 @@ Cluster GEO — costruzione geometria da coordinate (lat/lon o WKT).
 Keeps transformation behavior isolated from orchestration callers.
 """
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.geodata import geodataframe_from_geometry
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import coerce_numeric_series
@@ -45,7 +46,7 @@ def op_geo_from_coords(
     """
     from shapely.geometry import Point
 
-    result = df.copy()
+    result = copy_frame_for_update(df)
 
     try:
         if mode == 'latlon':

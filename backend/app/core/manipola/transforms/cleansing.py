@@ -6,6 +6,7 @@ Keeps transformation behavior isolated from orchestration callers.
 
 from typing import Any
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     coerce_datetime_series,
@@ -124,7 +125,7 @@ def op_fill_na(
             silenziosamente la colonna a object/testo, rompendo le
             aggregazioni e i join numerici a valle.
     """
-    result = df.copy()
+    result = copy_frame_for_update(df)
 
     try:
         if method in ['ffill', 'bfill']:
@@ -186,7 +187,7 @@ def op_replace(
     if not column or column not in df.columns:
         return df
 
-    result = df.copy()
+    result = copy_frame_for_update(df)
 
     try:
         if regex:
@@ -231,7 +232,7 @@ def op_type_cast(
         logger.warning(f"Type Cast: colonna '{column}' non trovata")
         return df
 
-    result = df.copy()
+    result = copy_frame_for_update(df)
 
     try:
         if target_type == 'str':

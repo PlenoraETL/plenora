@@ -8,6 +8,7 @@ anchored in `spatial.py`.
 import sys
 from typing import List
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
 from app.core.manipola.transforms.spatial_helpers import _ensure_active_geometry
 from app.core.dataframes.geodata import (
@@ -312,7 +313,7 @@ def op_geo_count_points_in_polygons(
 
         if len(poly_gdf) == 0 or len(point_gdf) == 0:
             logger.warning(f"CountPointsInPolygons: input vuoto (poly={len(poly_gdf)}, point={len(point_gdf)})")
-            result = poly_gdf.copy()
+            result = copy_frame_for_update(poly_gdf)
             result[count_column] = 0
             return result
 
@@ -321,7 +322,7 @@ def op_geo_count_points_in_polygons(
 
         # Salva indice originale dei poligoni
         poly_idx_col = "__poly_idx__"
-        poly_gdf = poly_gdf.copy()
+        poly_gdf = copy_frame_for_update(poly_gdf)
         poly_gdf[poly_idx_col] = range(len(poly_gdf))
 
         # Spatial join: punti dentro poligoni
@@ -349,7 +350,7 @@ def op_geo_count_points_in_polygons(
             )
 
         # Unisci al GeoDataFrame dei poligoni
-        result = poly_gdf.copy()
+        result = copy_frame_for_update(poly_gdf)
         result = result.join(counts, how="left")
         result[count_column] = result[count_column].fillna(0).astype(int)
 

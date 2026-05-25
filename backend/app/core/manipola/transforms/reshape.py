@@ -6,6 +6,7 @@ Keeps transformation behavior isolated from orchestration callers.
 
 from typing import List, Optional, Union
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     concat_non_null_as_strings,
@@ -105,7 +106,7 @@ def op_pivot(
         logger.warning(f"[GESTITO] Pivot: colonne mancanti: {missing}")
         return df
 
-    result = df.copy()
+    result = copy_frame_for_update(df)
     result[pivot_col] = result[pivot_col].fillna('').astype(str).str.strip()
     try:
         if mapping:
@@ -216,8 +217,8 @@ def op_table_diff(
         logger.warning("Table Diff richiede 2 input")
         return inputs[0] if inputs else empty_dataframe()
 
-    old_df = inputs[0].copy()
-    new_df = inputs[1].copy()
+    old_df = copy_frame_for_update(inputs[0])
+    new_df = copy_frame_for_update(inputs[1])
     sep = separator.strip() if separator else "#"
 
     if isinstance(left_keys, str):

@@ -6,6 +6,7 @@ Keeps transformation behavior isolated from orchestration callers.
 
 from typing import Any
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     coerce_numeric_series,
@@ -52,8 +53,11 @@ def op_filter(
             f"Colonne disponibili: {available}"
         )
 
-    result = df.copy()
-    col = result[column]
+    # Pre-fix: `df.copy()` allocava un'intera copia profonda solo per
+    # consumare `result[column]` in lettura e poi fare
+    # `result[mask].reset_index(drop=True)`. Path read-only puro:
+    # niente modifiche column-level, leggi direttamente da `df`.
+    col = df[column]
 
     # Se la colonna è numerica e il valore è stringa, converti
     if value is not None and is_numeric_series(col):
@@ -98,7 +102,7 @@ def op_filter(
             logger.warning(f"Operatore '{operator}' non supportato")
             return df
 
-        result = result[mask].reset_index(drop=True)
+        result = df[mask].reset_index(drop=True)
         logger.info(f"Filter: {len(df)} -> {len(result)} righe")
         return result
 
@@ -148,7 +152,7 @@ def op_conditional(
         logger.warning("Conditional: nessuna condizione definita")
         return df
 
-    result = df.copy()
+    result = copy_frame_for_update(df)
 
     try:
         # Log diagnostico: valori unici della colonna sorgente

@@ -6,6 +6,7 @@ Keeps transformation behavior isolated from orchestration callers.
 
 from typing import List
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     drop_duplicate_rows_reset_index,
@@ -260,7 +261,7 @@ def op_dedup_advanced(
         return df
 
     try:
-        result = df.copy()
+        result = copy_frame_for_update(df)
         original_len = len(result)
 
         # Ordina prima della deduplicazione se richiesto
@@ -340,7 +341,7 @@ def op_window_function(
         return df
 
     try:
-        result = df.copy()
+        result = copy_frame_for_update(df)
         out_col = output_column if output_column else f"{column}_{function}"
 
         # Ordina se specificato (importante per rank, lag, lead

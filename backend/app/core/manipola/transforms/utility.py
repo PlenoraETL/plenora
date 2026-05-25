@@ -8,6 +8,7 @@ import uuid
 
 from typing import List, Optional
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     coerce_datetime_series,
@@ -47,7 +48,7 @@ def op_add_row_number(
         DataFrame con colonna di numerazione
     """
     try:
-        result = df.copy()
+        result = copy_frame_for_update(df)
 
         # Ordinamento opzionale
         if order_column and order_column in result.columns:
@@ -106,7 +107,7 @@ def op_date_extract(
         return df
 
     try:
-        result = df.copy()
+        result = copy_frame_for_update(df)
 
         # Conversione a datetime
         dt_col = coerce_datetime_series(result[column])
@@ -165,7 +166,7 @@ def op_uuid_generator(
         return df
 
     try:
-        result = df.copy()
+        result = copy_frame_for_update(df)
         result[output_column] = [str(uuid.uuid4()) for _ in range(len(result))]
 
         logger.info(

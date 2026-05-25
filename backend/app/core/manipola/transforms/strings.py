@@ -9,6 +9,7 @@ import unicodedata
 
 from typing import Any, List
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import dataframe_first_column
 from app.core.dataframes.values import is_null_scalar
@@ -50,7 +51,7 @@ def op_string_pad(
         return df
 
     try:
-        result = df.copy()
+        result = copy_frame_for_update(df)
         out_col = output_column if output_column else column
         text_series = result[column].astype(str)
 
@@ -97,7 +98,7 @@ def op_string_length(
         return df
 
     try:
-        result = df.copy()
+        result = copy_frame_for_update(df)
         out_col = output_column if output_column else f"{column}_length"
 
         result[out_col] = result[column].astype(str).str.len()
@@ -153,7 +154,7 @@ def op_string_extract(
             logger.error(f"StringExtract: pattern regex non valido: {regex_err}")
             return df
 
-        result = df.copy()
+        result = copy_frame_for_update(df)
         text_series = result[column].astype(str)
 
         # Controlla se ci sono gruppi nominati
@@ -229,7 +230,7 @@ def op_text_normalize(
         logger.warning(f"Text Normalize: nessuna colonna valida tra {columns}")
         return df
 
-    result = df.copy()
+    result = copy_frame_for_update(df)
 
     def strip_accents(text: Any) -> Any:
         """Rimuovi accenti: è→e, à→a, ü→u"""

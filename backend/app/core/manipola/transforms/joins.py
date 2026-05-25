@@ -9,6 +9,7 @@ import uuid
 import numpy as np
 from typing import List
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     coerce_numeric_series,
@@ -56,8 +57,8 @@ def op_join(
         logger.warning("Join richiede 2 input, ricevuto meno")
         return inputs[0] if inputs else empty_dataframe()
 
-    left_df = inputs[0].copy()
-    right_df = inputs[1].copy()
+    left_df = copy_frame_for_update(inputs[0])
+    right_df = copy_frame_for_update(inputs[1])
 
     # La chiave deve esistere PRIMA di qualsiasi manipolazione (dedup
     # conversione tipi, rename suffissi). Senza questo, la KeyError
@@ -159,7 +160,7 @@ def op_join(
                 new_cols.append(f"{col}_{suffix}_dup")
             else:
                 new_cols.append(f"{col}_{suffix}")
-        df = df.copy()
+        df = copy_frame_for_update(df)
         df.columns = new_cols
         return df
 

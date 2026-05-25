@@ -12,6 +12,7 @@ from typing import Any, Iterable, Iterator, List, Optional
 import numpy as np
 import pandas as pd
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.shared.contracts.payloads import IntMap, JsonObject, JsonRows, StringMap
 from app.utils.logger import get_logger
 
@@ -102,7 +103,7 @@ def _compact_whole_number_floats(df: pd.DataFrame) -> pd.DataFrame:
                 decimals = list(non_nan)
                 if all(v == v.to_integral_value() for v in decimals):
                     if result is df:
-                        result = df.copy()
+                        result = copy_frame_for_update(df)
                     try:
                         result[col] = pd.array(
                             [
@@ -117,7 +118,7 @@ def _compact_whole_number_floats(df: pd.DataFrame) -> pd.DataFrame:
                         )
                 else:
                     if result is df:
-                        result = df.copy()
+                        result = copy_frame_for_update(df)
                     result[col] = s.map(
                         lambda v: None if pd.isna(v) else _compact_decimal(v)
                     )
@@ -127,7 +128,7 @@ def _compact_whole_number_floats(df: pd.DataFrame) -> pd.DataFrame:
             non_nan = s.dropna()
             if not non_nan.empty and (non_nan % 1 == 0).all():
                 if result is df:
-                    result = df.copy()
+                    result = copy_frame_for_update(df)
                 try:
                     result[col] = result[col].astype("Int64")
                 except (TypeError, ValueError):
@@ -212,7 +213,7 @@ def rename_duplicate_columns(
     unique_columns, renames = make_unique_column_names(df.columns)
     if not renames:
         return df, []
-    renamed = df.copy()
+    renamed = copy_frame_for_update(df)
     renamed.columns = unique_columns
     return renamed, renames
 
@@ -749,7 +750,7 @@ def geometry_series_columns_to_wkt(df: pd.DataFrame) -> pd.DataFrame:
         geometry_series_to_wkt,
     )
 
-    out = df.copy()
+    out = copy_frame_for_update(df)
     for col in out.columns:
         if is_geometry_series(out[col]):
             out[col] = geometry_series_to_wkt(out[col])

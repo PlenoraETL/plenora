@@ -10,6 +10,7 @@ import re
 import numpy as np
 from typing import Any, List
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.tabular import empty_object_series
 from app.core.manipola.types import JsonRows
 from app.utils.logger import get_logger
@@ -57,7 +58,7 @@ def op_md5_hash(
     # Ordine alfabetico — deterministico
     valid_columns = sorted(valid_columns)
 
-    result = df.copy()
+    result = copy_frame_for_update(df)
     separator = "\x1f"  # Unit Separator — non appare nei dati reali
 
     try:
@@ -220,7 +221,7 @@ def op_mask_data(
         logger.warning("Mask Data: nessuna configurazione di mascheramento")
         return df
 
-    result = df.copy()
+    result = copy_frame_for_update(df)
 
     for masking in maskings:
         column = masking.get('column', '')

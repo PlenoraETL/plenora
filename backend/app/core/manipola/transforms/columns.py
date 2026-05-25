@@ -9,6 +9,7 @@ from itertools import compress
 import numpy as np
 from typing import List
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.tabular import empty_object_series, join_columns_as_strings
 from app.core.dataframes.ports import FrameLike
 from app.core.manipola.types import JsonRows
@@ -127,17 +128,20 @@ def op_reorder_columns(
         return df
 
     try:
-        result = df.copy()
-
+        # Pre-fix: `df.copy()` allocava una copia profonda solo per fare
+        # poi `result[new_order]` (subset di colonne). Le subset di
+        # colonne di pandas sono gia' nuove DataFrame view-friendly:
+        # niente modifiche column-level, niente bisogno della copy.
         if columns:
-            # Filtra solo colonne che esistono effettivamente
-            valid_cols = [c for c in columns if c in result.columns]
-            # Aggiungi le colonne rimanenti non specificate
-            remaining = [c for c in result.columns if c not in valid_cols]
+            valid_cols = [c for c in columns if c in df.columns]
+            remaining = [c for c in df.columns if c not in valid_cols]
             new_order = valid_cols + remaining
-            result = result[new_order]
+            result = df[new_order]
         elif sort_alphabetical:
-            result = result[sorted(result.columns)]
+            result = df[sorted(df.columns)]
+        else:
+            # Nessuna riordinazione richiesta: ritorna df invariato.
+            result = df
 
         logger.info(f"ReorderColumns completato: {list(result.columns)}")
         return result
@@ -183,7 +187,7 @@ def op_concat_columns(
         logger.warning(f"concat_columns: nessuna colonna valida tra {columns}")
         return df
 
-    result = df.copy()
+    result = copy_frame_for_update(df)
 
     try:
         subset = result[valid_cols]
@@ -256,7 +260,7 @@ def op_split_column(
     if not column or column not in df.columns:
         return df
 
-    result = df.copy()
+    result = copy_frame_for_update(df)
 
     try:
         n_splits = max_splits if max_splits > 0 else None

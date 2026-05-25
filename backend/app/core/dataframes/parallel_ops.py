@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
+from app.core.dataframes.frame_copy import copy_frame_for_update
+
 
 def execute_condition_mask(
     input_df: Any,
@@ -90,7 +92,7 @@ def validate_and_merge_parallel_columns(
     node_results: Dict[str, Any],
 ) -> Any:
     """Merge new columns from parallel node result frames into a copied input frame."""
-    merged = input_df.copy()
+    merged = copy_frame_for_update(input_df)
     for nid in node_ids:
         result_df = node_results.get(nid)
         if result_df is None or not isinstance(result_df, pd.DataFrame):
