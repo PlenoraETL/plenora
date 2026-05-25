@@ -846,7 +846,7 @@ def op_geo_within(
         # Tieni solo le colonne del layer sinistro
         left_columns = list(left_gdf.columns)
         keep_cols = [c for c in left_columns if c in joined.columns]
-        result = joined[keep_cols].copy()
+        result = copy_frame_for_update(joined[keep_cols])
 
         # Rimuovi duplicati (una geometria puÃ² essere within piÃ¹ poligoni sovrapposti
         result = geodataframe_drop_duplicates_reset_index(result)
@@ -1161,7 +1161,7 @@ def op_geo_clean_topology(
             result[geom_col_name] = geometries
 
         # Rimuovi geometrie vuote
-        result = result[~result.geometry.is_empty].copy()
+        result = copy_frame_for_update(result[~result.geometry.is_empty])
 
         logger.info(
             f"CleanTopology completato: {fixed_count} geometrie corrette, "

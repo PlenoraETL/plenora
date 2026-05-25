@@ -246,14 +246,14 @@ def filter_visible_columns(
     raw_names = [c[0] for c in colonne_da_selezionare]
     alias_map = {c[0]: c[1] for c in colonne_da_selezionare if c[0] != c[1]}
 
-    # `.copy()` esplicito per evitare view-vs-copy ambiguity. Pre-fix:
-    # `df[raw_names]` con CoW disabilitato (default pandas < 2.0 e alcuni
-    # deploy attuali) ritornava una view. Qualunque modifica downstream
-    # sul `result` propagava `SettingWithCopyWarning` o mutava silenzio-
-    # samente il `df` originale. Il `rename(columns=...)` non risolveva
-    # perche' opera sullo stesso oggetto. La copia ha costo O(rows) ma
-    # qui i caller sono pipeline nodes che gia' fanno copie a valle.
-    result = df[raw_names].copy()
+    # `copy_frame_for_update` esplicito per evitare view-vs-copy ambiguity.
+    # Pre-fix `df[raw_names]` con CoW disabilitato (default pandas < 2.0)
+    # ritornava una view, e qualunque modifica downstream propagava
+    # `SettingWithCopyWarning` o mutava silenziosamente il `df` originale.
+    # Post-fix: shallow copy esplicita (`deep=False`) → istanza distinta
+    # con buffer condivisi; le modifiche column-level downstream
+    # sostituiscono l'intera Series, niente aliasing reale sul caller.
+    result = copy_frame_for_update(df[raw_names])
     if alias_map:
         result = result.rename(columns=alias_map)
     return result
@@ -722,8 +722,12 @@ def stringify_columns_preserving_nulls(
     scriveva `df[col] = df[col].astype(str)` direttamente sull'oggetto
     ricevuto, corrompendo lo stato del caller (es. executor che ancora
     aveva un riferimento al df pre-stringify per altre operazioni).
+    `copy_frame_for_update` (deep=False) safe qui: dopo
+    `out[col] = out[col].astype(str)` la Series e' nuova e non piu'
+    condivisa, quindi la `out.loc[..., col] = None` agisce solo su
+    out senza propagare al df originale.
     """
-    out = df.copy()
+    out = copy_frame_for_update(df)
     for col in columns:
         mask_null = out[col].isna()
         out[col] = out[col].astype(str)

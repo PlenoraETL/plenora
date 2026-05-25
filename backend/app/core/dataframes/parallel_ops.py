@@ -62,7 +62,7 @@ def merge_split_execution_result(input_df: Any, mask: Any, result_exec: Any) -> 
     if not isinstance(mask, pd.Series):
         return result_exec if isinstance(result_exec, pd.DataFrame) else input_df
 
-    df_skip = input_df[~mask].copy()
+    df_skip = copy_frame_for_update(input_df[~mask])
     if isinstance(result_exec, pd.DataFrame):
         new_cols = [c for c in result_exec.columns if c not in df_skip.columns]
         for c in new_cols:
@@ -73,7 +73,7 @@ def merge_split_execution_result(input_df: Any, mask: Any, result_exec: Any) -> 
 
 def split_execution_frame(input_df: Any, mask: Any) -> Any:
     """Return the frame subset selected for execution."""
-    return input_df[mask].copy() if isinstance(mask, pd.Series) else input_df
+    return copy_frame_for_update(input_df[mask]) if isinstance(mask, pd.Series) else input_df
 
 
 def positional_row_slice(input_df: Any, start: int, end: int) -> Any:
