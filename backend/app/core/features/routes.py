@@ -38,7 +38,6 @@ from app.observability.audit_action import audit_action
 from app.core.auth.resource_access import assert_project_visible
 from app.shared.error_sanitizer import sanitize_http_detail
 from app.core.artifacts import ArtifactResolver, LatestProjectArtifactRef
-from app.core.artifacts.types import MaterializedArtifact
 from app.core.auth.visibility import visible_resource_ids
 from app.utils.logger import get_logger
 
@@ -342,67 +341,62 @@ class CreateServiceRequest(BaseModel):
     column_mappings: List[Dict[str, object]] = Field(default_factory=list)
 
 
-def _resolve_input_path(
+def _resolve_input_dataframe(
     input_path: str,
     project_id: str,
     *,
     expected_group_id: str,
-) -> MaterializedArtifact:
-    """Risolve il path del file di input per write/create-service ArcGIS.
+):
+    """Risolve l'input ArcGIS direttamente in DataFrame (bytes-first).
 
-    Ritorna un `MaterializedArtifact` **context-managed**: il caller
-    DEVE usarlo in un blocco `with` per il cleanup del tempfile sul
-    branch project_id (il resolver materializza il blob DB come
-    `is_temporary=True`). Sul branch whitelist `is_temporary=False`
-    e `__exit__` e' no-op.
+    Post-Phase5: il flow non passa piu' da path / tempfile. Si va da
+    `materialize_latest(..., mode="bytes")` -> `load_dataframe_from_artifact(
+    data=..., format_hint=...)`. I 2 endpoint (`/write`, `/create-service`)
+    usano poi `write_features_from_df` / `create_service_from_df`
+    (entry-point dataframe-based gia' esistenti sul service).
 
-    Dispatcher a 2 strategie:
-      - `project_id` valorizzato → risolve l'ultimo output via
-        `ArtifactResolver.materialize_latest` con tenant binding
-        fail-closed
-      - `input_path` valorizzato → rifiutato. Il filesystem locale non e'
-        una sorgente orizzontalizzabile per API multi-pod.
-      - entrambi vuoti → `ValueError("Specificare project_id o input_path")`
+    Args:
+        input_path: rifiutato (filesystem locale non orizzontalizzabile).
+        project_id: risolve l'ultimo output via resolver.
+        expected_group_id: required, tenant binding fail-closed.
 
-    `expected_group_id` keyword-only required: senza tenant binding
-    il check cross-tenant del resolver sarebbe disabilitato (rifiuta
-    None/blank).
+    Returns:
+        `(df, format_hint)` tuple. `df` puo' essere DataFrame o GeoDataFrame
+        a seconda del format dell'output upstream.
 
-    Security: `input_path` arbitrario dal client viene rifiutato fuori
-    dalla whitelist, altrimenti un utente autenticato potrebbe leggere
-    `/etc/passwd` o `/proc/self/environ` passando il path come parametro.
-
-    Contratto eccezioni:
-      - `input_path UNC non consentito` (UNC paths)
-      - `input_path non consentito: ...` (fuori whitelist)
-      - `input_path non valido: ...` (malformed)
-      - `input_path locale disabilitato: ...` (fallback rimosso)
-      - `Specificare project_id o input_path` (entrambi vuoti)
-      - `FileNotFoundError` (project_id valido, no output)
+    Raises:
+        ValueError: senza tenant binding, input_path locale, o nessun
+            campo valorizzato.
+        FileNotFoundError: project_id valido ma nessun output disponibile.
     """
     if not expected_group_id:
         raise ValueError(
-            "_resolve_input_path: expected_group_id obbligatorio "
+            "_resolve_input_dataframe: expected_group_id obbligatorio "
             "(defense-in-depth)"
         )
     if project_id:
-        # Defense-in-depth: l'ACL a livello router (assert_project_visible
-        # gia' garantisce la visibilita', ma passare expected_group_id al
-        # resolver mantiene l'invariante cross-tenant uniforme anche se in
-        # futuro questa funzione venisse richiamata da un path che salta
-        # il check HTTP.
-        # mode="path": il caller (`write_features`) passa
-        # `materialized.path` a ArcGISFeatureWriter.write_features(input_path=...)
-        # che usa fiona/pyogrio path-based — legitimate path-only adapter.
         materialized = ArtifactResolver().materialize_latest(
             LatestProjectArtifactRef(project_id=project_id),
             expected_group_id=expected_group_id,
-            mode="path",
+            mode="bytes",
         )
-        if materialized is not None and materialized.path is not None:
-            return materialized
-
-        raise FileNotFoundError(f"Nessun output trovato per progetto: {project_id}")
+        if materialized is None:
+            raise FileNotFoundError(
+                f"Nessun output trovato per progetto: {project_id}"
+            )
+        if materialized.df is not None:
+            return materialized.df, materialized.format
+        if materialized.data is not None:
+            from app.core.dataframes.frame_io import (
+                load_dataframe_from_artifact,
+            )
+            df = load_dataframe_from_artifact(
+                data=materialized.data, format_hint=materialized.format,
+            )
+            return df, materialized.format
+        raise FileNotFoundError(
+            f"Nessun output trovato per progetto: {project_id}"
+        )
 
     if input_path:
         raise ValueError(
@@ -437,32 +431,25 @@ async def write_features(request: WriteRequest, current_user: CurrentUser = Depe
     if request.project_id:
         assert_project_visible(request.project_id, current_user)
     try:
-        # `with` garantisce cleanup del tempfile quando il resolver
-        # materializza l'ultimo output dal blob DB: senza questo
-        # ogni chiamata con project_id lascerebbe un file orfano in
-        # TEMP_DIR perche' `_resolve_input_path` perdeva il riferimento
-        # al MaterializedArtifact
-        with _resolve_input_path(
+        df, _fmt = _resolve_input_dataframe(
             request.input_path,
             request.project_id,
             expected_group_id=current_user.group_id,
-        ) as materialized:
-            operation = "upsert" if request.upsert else request.operation
-            result = get_service().write_features(
-                connection_id=request.connection_id,
-                layer_url=request.layer_url,
-                operation=operation,
-                input_path=str(materialized.path),
-                geometry_column=request.geometry_column,
-                object_ids=request.object_ids,
-                where=request.where,
-                source_srid=request.source_srid,
-                batch_size=request.batch_size,
-                match_column=request.match_column,
-                column_mappings=request.column_mappings,
-            )
+        )
+        operation = "upsert" if request.upsert else request.operation
+        result = get_service().write_features_from_df(
+            connection_id=request.connection_id,
+            layer_url=request.layer_url,
+            operation=operation,
+            df=df,
+            geometry_column=request.geometry_column,
+            source_srid=request.source_srid,
+            batch_size=request.batch_size,
+            match_column=request.match_column,
+            column_mappings=request.column_mappings,
+        )
         return result
-        
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except FileNotFoundError as e:
@@ -504,25 +491,22 @@ async def create_service(request: CreateServiceRequest, current_user: CurrentUse
     if request.project_id:
         assert_project_visible(request.project_id, current_user)
     try:
-        # Stesso pattern di write_features: `with` garantisce cleanup
-        # del tempfile sul branch project_id (materialize_latest puo'
-        # ritornare is_temporary=True
-        with _resolve_input_path(
+        df, _fmt = _resolve_input_dataframe(
             request.input_path,
             request.project_id,
             expected_group_id=current_user.group_id,
-        ) as materialized:
-            result = get_service().create_service(
-                connection_id=request.connection_id,
-                service_name=request.service_name,
-                layer_name=request.layer_name,
-                input_path=str(materialized.path),
-                geometry_column=request.geometry_column,
-                source_srid=request.source_srid,
-                column_mappings=request.column_mappings,
-            )
+        )
+        result = get_service().create_service_from_df(
+            connection_id=request.connection_id,
+            service_name=request.service_name,
+            layer_name=request.layer_name,
+            df=df,
+            geometry_column=request.geometry_column,
+            source_srid=request.source_srid,
+            column_mappings=request.column_mappings,
+        )
         return result
-        
+
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except FileNotFoundError as e:

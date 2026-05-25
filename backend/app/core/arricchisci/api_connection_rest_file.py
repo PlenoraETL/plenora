@@ -810,17 +810,19 @@ class ApiConnectionRestFileMixin:
         target_node_id: str,
         *,
         ctx: Optional[ArricchisciExecutionContext] = None,
-    ) -> Optional[tuple[bytes, str] | str]:
-        """Risolve la sorgente file collegata al target node.
+    ) -> Optional[tuple[bytes, str]]:
+        """Risolve la sorgente file collegata al target node (bytes-first).
 
         Returns:
-            - file_source: `(bytes, filename)` tuple via `resolve_file_source_id_bytes`.
-            - project_source: path string via `SourceLoader.resolve_project_path`
-              (path-only adapter per workflow ArcGIS-like).
+            - file_source: `(bytes, filename)` via `resolve_file_source_id_bytes`.
+            - project_source: `(bytes, filename)` via
+              `SourceLoader.resolve_project_file_bytes`.
             - None se nessuna sorgente collegata.
 
-        Il caller (`_build_files_for_post`) accetta gia' entrambe le shape
-        (linea 272 `isinstance(input_path, tuple)`).
+        Il caller (`_build_files_for_post`) consuma il tuple via il check
+        `isinstance(input_path, tuple)` (linea 272) e popola
+        `files[name] = (filename, BytesIO(data), 'application/octet-stream')`
+        per `requests.post(files=...)`.
 
         `ctx` e' il solo boundary di sicurezza per il group_id.
         Se il contesto manca, i branch file_source/project_source
@@ -867,7 +869,10 @@ class ApiConnectionRestFileMixin:
                 )
 
             try:
-                return SourceLoader().resolve_project_path(
+                # Post-Phase5: bytes-first. Il caller `_build_files_for_post`
+                # gia' accetta `tuple(bytes, filename)` come input_path
+                # (vedi isinstance check a riga 272).
+                return SourceLoader().resolve_project_file_bytes(
                     LatestProjectArtifactRef(project_id=source_project_id),
                     expected_group_id=executing_group_id,
                 )

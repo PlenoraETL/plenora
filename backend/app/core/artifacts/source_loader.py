@@ -190,52 +190,63 @@ class SourceLoader:
 
     # branch: project
 
-    def resolve_project_path(
+    def resolve_project_file_bytes(
         self,
         project_ref: LatestProjectArtifactRef,
         *,
         expected_group_id: str,
         is_superadmin: bool = False,
-    ) -> Optional[str]:
-        """Variante di `_load_project` che ritorna il path su disco
-        invece della risorsa frame-like caricata.
+    ) -> Optional[tuple[bytes, str]]:
+        """Risolve l'ultimo output di un progetto come `(bytes, filename)`.
 
-        Pensato per consumer che leggono il file in modo custom (es.
-        file processor rest_file che invia il file a un servizio
-        HTTP). Stesso cross-tenant fail-closed del `load`.
+        Pensato per consumer che inviano il file a un servizio HTTP
+        come multipart (REST file processor connector). Il caller usa
+        i bytes direttamente in `requests.post(files={name: (filename,
+        bytes, mime)})`. Stesso cross-tenant fail-closed del `load`.
 
-        NB: il path ritornato puo' essere un tempfile materializzato
-        dal blob DB e il caller e' responsabile del cleanup. Per
-        cleanup automatico usare `_load_project` oppure
-        `materialize_latest` direttamente in un `with` block.
+        Post-Phase5: sostituisce la vecchia `resolve_project_path` che
+        materializzava un tempfile via mode="path". Adesso il resolver
+        opera in mode="bytes" e il caller consuma i bytes direttamente,
+        eliminando il tempfile bounce.
         """
         if not expected_group_id:
             raise ValueError(
-                "SourceLoader.resolve_project_path: expected_group_id "
+                "SourceLoader.resolve_project_file_bytes: expected_group_id "
                 "obbligatorio (defense-in-depth, niente bypass silente)"
             )
 
         try:
-            # mode="path": resolve_project_path e' chiamato dai path-only
-            # adapter (REST connector) che hanno BISOGNO di un path
-            # filesystem. Non default bytes.
             materialized = self._resolver.materialize_latest(
                 project_ref,
                 expected_group_id=expected_group_id,
                 is_superadmin=is_superadmin,
-                mode="path",
+                mode="bytes",
             )
         except ArtifactResolutionError as e:
             logger.error(
-                f"[SECURITY] resolve_project_path: {project_ref.project_id} "
-                f"non risolvibile per group={expected_group_id}: {e}",
+                f"[SECURITY] resolve_project_file_bytes: "
+                f"{project_ref.project_id} non risolvibile per "
+                f"group={expected_group_id}: {e}",
                 op="source_load",
             )
             raise SourceLoadingError(str(e)) from e
 
-        if materialized is None:
+        if materialized is None or materialized.data is None:
             return None
-        return str(materialized.path) if materialized.path is not None else None
+        # Filename derivato dal format hint (no path-based filename
+        # disponibile in bytes mode; il consumer REST usa questo nome
+        # come filename del part multipart).
+        fmt = materialized.format or "bin"
+        filename = f"project_output.{fmt}"
+        return materialized.data, filename
+
+    # Backward-compat alias: nome storico `resolve_project_path` ritornava
+    # path str; post-Phase5 ritorna `(bytes, filename)`. Tenuto per non
+    # rompere i test che patchano il vecchio nome (es.
+    # `test_api_connector_security_contract`,
+    # `test_source_loader_core`). Nuovo codice usa
+    # `resolve_project_file_bytes`.
+    resolve_project_path = resolve_project_file_bytes
 
     def _load_project(
         self,
