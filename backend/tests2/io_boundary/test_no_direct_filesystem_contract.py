@@ -227,3 +227,35 @@ def test_io_boundary_dir_excluded_from_sweep() -> None:
             f"Il sweep ha trovato un finding dentro app/core/io/ "
             f"(dovrebbe essere escluso): {finding}"
         )
+
+
+def test_no_active_legacy_callsites_remain() -> None:
+    """Exit criterion: zero callsite con status `active-legacy`.
+
+    Quando un nuovo callsite viene aggiunto allo sweep e non viene
+    classificato come `legitimate-cache` o `scripts-utility` nello
+    script generator, questo test fallisce — richiede di:
+      1. Decidere se il callsite va MIGRATO (preferito: bytes-first).
+      2. Oppure se e' un cache pattern intenzionale (aggiungere a
+         `_LEGITIMATE_CACHE_FILES` nel generator con motivazione).
+
+    Anti-regression sul target del refactor RAM-only completato.
+    """
+    allowlist_path = _allowlist_path()
+    if not allowlist_path.exists():
+        pytest.skip("Allowlist baseline non presente")
+    raw = yaml.safe_load(allowlist_path.read_text(encoding="utf-8"))
+    active = [
+        e for e in raw.get("allowed_callsites", [])
+        if e.get("status") == "active-legacy"
+    ]
+    if active:
+        lines = "\n".join(
+            f"  - {e['file']}:{e['line']} [{e['pattern']}] (phase={e['phase']})"
+            for e in active
+        )
+        pytest.fail(
+            f"Trovati {len(active)} callsite con status `active-legacy`. "
+            f"Tutti i callsite residui devono essere `legitimate-cache` "
+            f"o `scripts-utility`:\n{lines}"
+        )

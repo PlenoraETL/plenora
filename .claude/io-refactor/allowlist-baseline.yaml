@@ -1,21 +1,22 @@
 metadata:
   generated_at: '2026-05-25'
-  baseline_total: 31
+  baseline_total: 28
   by_pattern:
     tempfile_named_temp_file: 7
-    safe_extractall: 6
     tempfile_mkdtemp: 5
     path_write_text: 4
     storage_upload_path: 3
+    safe_extractall: 3
     path_write_bytes: 2
     fileresponse: 2
     shutil_move: 1
     shutil_copy: 1
   by_phase:
-    unassigned: 11
     Phase6-imdf: 9
+    unassigned: 5
     Phase5-results-download: 3
     Phase5-scheduler-archive: 3
+    Phase-scripts-utility: 3
     Phase4-upload-file-source: 2
     Phase7-backup-restore: 2
     Phase4-rest-file-enrichment: 1
@@ -30,25 +31,25 @@ allowed_callsites:
   pattern: tempfile_mkdtemp
   snippet: tmp_exec_dir = Path(tempfile.mkdtemp(prefix="plenora_exec_"))
   phase: Phase4-rest-file-enrichment
-  status: active-legacy
+  status: legitimate-cache
 - file: app/core/eseguibili/storage.py
   line: 72
   pattern: storage_upload_path
   snippet: storage.upload(src_path, key)
   phase: unassigned
-  status: active-legacy
+  status: legitimate-cache
 - file: app/core/files/service_deps.py
   line: 113
   pattern: path_write_text
   snippet: path.write_text(content, encoding=encoding)
   phase: unassigned
-  status: active-legacy
+  status: legitimate-cache
 - file: app/core/files/service_deps.py
   line: 136
   pattern: safe_extractall
   snippet: safe_extract_zip_path(zip_path, dest_dir)
   phase: unassigned
-  status: active-legacy
+  status: legitimate-cache
 - file: app/core/files/source_loading.py
   line: 97
   pattern: path_write_bytes
@@ -66,67 +67,67 @@ allowed_callsites:
   pattern: tempfile_mkdtemp
   snippet: tmp = Path(dest_dir) if dest_dir else Path(tempfile.mkdtemp(prefix="imdf_"))
   phase: Phase6-imdf
-  status: active-legacy
+  status: legitimate-cache
 - file: app/core/imdf/loader.py
   line: 127
   pattern: safe_extractall
   snippet: safe_extractall(z, tmp)
   phase: Phase6-imdf
-  status: active-legacy
+  status: legitimate-cache
 - file: app/core/imdf/persist.py
   line: 85
   pattern: shutil_move
   snippet: shutil.move(str(item), str(target))
   phase: Phase6-imdf
-  status: active-legacy
+  status: legitimate-cache
 - file: app/core/imdf/persist.py
   line: 126
   pattern: path_write_text
   snippet: (root / "plenora_metadata.json").write_text(
   phase: Phase6-imdf
-  status: active-legacy
+  status: legitimate-cache
 - file: app/core/imdf/storage.py
   line: 95
   pattern: tempfile_named_temp_file
   snippet: with tempfile.NamedTemporaryFile(
   phase: Phase6-imdf
-  status: active-legacy
+  status: legitimate-cache
 - file: app/core/imdf/storage.py
   line: 118
   pattern: tempfile_named_temp_file
   snippet: with tempfile.NamedTemporaryFile(
   phase: Phase6-imdf
-  status: active-legacy
+  status: legitimate-cache
 - file: app/core/imdf/storage.py
   line: 124
   pattern: storage_upload_path
   snippet: storage.upload(tmp_meta_path, mk)
   phase: Phase6-imdf
-  status: active-legacy
+  status: legitimate-cache
 - file: app/core/imdf/storage.py
   line: 166
   pattern: tempfile_named_temp_file
   snippet: with tempfile.NamedTemporaryFile(
   phase: Phase6-imdf
-  status: active-legacy
+  status: legitimate-cache
 - file: app/core/imdf/storage.py
   line: 185
   pattern: safe_extractall
   snippet: safe_extractall(zf, local)
   phase: Phase6-imdf
-  status: active-legacy
+  status: legitimate-cache
 - file: app/core/resources/loaders/result_blob.py
   line: 316
   pattern: tempfile_named_temp_file
   snippet: 'Stdlib-only: ``tempfile.NamedTemporaryFile(delete=False,'
   phase: unassigned
-  status: active-legacy
+  status: legitimate-cache
 - file: app/core/resources/loaders/result_blob.py
   line: 343
   pattern: tempfile_named_temp_file
   snippet: tf = tempfile.NamedTemporaryFile(
   phase: unassigned
-  status: active-legacy
+  status: legitimate-cache
 - file: app/core/results/blob_writer.py
   line: 179
   pattern: storage_upload_path
@@ -163,51 +164,33 @@ allowed_callsites:
   snippet: return FileResponse(
   phase: Phase5-scheduler-archive
   status: legitimate-cache
-- file: app/utils/zip_safe.py
-  line: 137
-  pattern: safe_extractall
-  snippet: 'def safe_extractall(zf: zipfile.ZipFile, dest_dir: Union[str, Path]) -> None:'
-  phase: unassigned
-  status: active-legacy
-- file: app/utils/zip_safe.py
-  line: 154
-  pattern: safe_extractall
-  snippet: 'def safe_extract_zip_path(zip_path: Union[str, Path],'
-  phase: unassigned
-  status: active-legacy
-- file: app/utils/zip_safe.py
-  line: 158
-  pattern: safe_extractall
-  snippet: safe_extractall(zf, dest_dir)
-  phase: unassigned
-  status: active-legacy
 - file: scripts/backup_db.py
   line: 245
   pattern: tempfile_mkdtemp
   snippet: tmp_dir = Path(tempfile.mkdtemp(prefix="plenora_backup_"))
   phase: Phase7-backup-restore
-  status: active-legacy
+  status: scripts-utility
 - file: scripts/export_openapi_manifest.py
   line: 281
   pattern: path_write_text
   snippet: output.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-  phase: unassigned
-  status: active-legacy
+  phase: Phase-scripts-utility
+  status: scripts-utility
 - file: scripts/imdf_real_e2e_check.py
   line: 156
   pattern: tempfile_named_temp_file
   snippet: with tempfile.NamedTemporaryFile(
-  phase: unassigned
-  status: active-legacy
+  phase: Phase-scripts-utility
+  status: scripts-utility
 - file: scripts/imdf_real_e2e_check.py
   line: 179
   pattern: path_write_text
   snippet: meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
-  phase: unassigned
-  status: active-legacy
+  phase: Phase-scripts-utility
+  status: scripts-utility
 - file: scripts/test_restore.py
   line: 291
   pattern: tempfile_mkdtemp
   snippet: tmp_dir = Path(tempfile.mkdtemp(prefix="plenora_restore_test_"))
   phase: Phase7-backup-restore
-  status: active-legacy
+  status: scripts-utility

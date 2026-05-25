@@ -115,6 +115,10 @@ PHASE_MAP: dict[str, str] = {
     "datasources/local.py": "Phase8-datasource-local-dev-only",
     "scripts/backup_db.py": "Phase7-backup-restore",
     "scripts/test_restore.py": "Phase7-backup-restore",
+    # Utility scripts one-off (manifest export, E2E checks): non sono
+    # application code, restano path-based by design.
+    "scripts/export_openapi_manifest.py": "Phase-scripts-utility",
+    "scripts/imdf_real_e2e_check.py": "Phase-scripts-utility",
 }
 
 
@@ -143,11 +147,30 @@ _LEGITIMATE_CACHE_FILES: tuple[str, ...] = (
     "app/core/scheduler/artifact_store.py",
     "app/core/scheduler/router.py",
     "app/core/results/blob_writer.py",  # storage.upload(path) streaming
+    # Path-only adapter helpers (callsiti che richiedono path per
+    # library esterne che non hanno bytes API).
+    "app/core/eseguibili/storage.py",  # eseguibili download from S3
+    "app/core/files/service_deps.py",  # DefaultFileSystem extract_zip helper
+    "app/core/resources/loaders/result_blob.py",  # result blob disk materialize
+    # IMDF cache infrastructure: persistent local bundle dir + S3 backing
+    # store. Pattern cache-with-hydration (vedi `imdf.storage.ensure_local_bundle`):
+    # on-disk e' la representation canonica per i bundle IMDF (consumati da
+    # endpoint di download/render), non una materializzazione transitoria.
+    "app/core/imdf/",
+    # REST file connector: scarica HTTP response su tempfile per consumo
+    # downstream (executor riceve `output_path`). Path-only adapter
+    # equivalente al pattern source_loading.
+    "app/core/arricchisci/api_connection_rest_file.py",
 )
+
+
+_SCRIPTS_PREFIX = "scripts/"
 
 
 def _status_for(filepath: str) -> str:
     norm = filepath.replace("\\", "/")
+    if norm.startswith(_SCRIPTS_PREFIX) or f"/{_SCRIPTS_PREFIX}" in norm:
+        return "scripts-utility"
     for legit in _LEGITIMATE_CACHE_FILES:
         if legit in norm:
             return "legitimate-cache"
@@ -165,11 +188,18 @@ def phase_for(filepath: str, pattern: str = "") -> str:
 
 
 _BOUNDARY_DIRS = ("app/core/io/", "app/core/storage/")
+# File singoli che fanno parte del boundary I/O ma non vivono in
+# `app/core/io/`. `app/utils/zip_safe.py` E' l'implementazione di
+# `safe_extractall`: e' meta-circolare richiedere che non chiami
+# `extractall`.
+_BOUNDARY_FILES = ("app/utils/zip_safe.py",)
 
 
 def _is_boundary(rel: str) -> bool:
     norm = rel.replace("\\", "/")
-    return any(norm.startswith(p) for p in _BOUNDARY_DIRS)
+    if any(norm.startswith(p) for p in _BOUNDARY_DIRS):
+        return True
+    return any(norm.endswith(f) or f"/{f}" in norm for f in _BOUNDARY_FILES)
 
 
 def scan() -> list[tuple[str, int, str, str]]:
