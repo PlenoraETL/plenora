@@ -59,6 +59,24 @@ def _optional_datetime_or_str(
     row: Mapping[str, object],
     key: str,
 ) -> datetime | str | None:
+    """Accetta sia `datetime` sia ISO `str` per i timestamp project.
+
+    Divergenza intenzionale rispetto al `_optional_datetime` canonico di
+    `tickets/db.py` che ritorna `datetime | None`. Motivo: psycopg2
+    builds storici (pre-rimozione del custom `JSONB_AS_TEXT`
+    typecaster) potevano ritornare `created_at`/`updated_at` come
+    `str` ISO invece che come `datetime` aware, in funzione del
+    binding driver. Il pattern stricter spaccava `from_mapping` su
+    rows legacy.
+
+    Per allineare a `_optional_datetime` canonico bisognerebbe
+    garantire che il binding psycopg2 corrente restituisca SEMPRE
+    `datetime` (verificato ok in produzione attuale ma non testato
+    per ogni driver version supportata). Lasciamo `datetime | str`
+    come back-compat policy esplicita; gli helper a valle che fanno
+    `value.isoformat()` accettano entrambi (i `str` sono no-op se
+    gia' ISO).
+    """
     value = row.get(key)
     if value is None:
         return None

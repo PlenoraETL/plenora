@@ -19,12 +19,41 @@ from app.utils.logger import get_logger
 from app.shared.resources.metadata import LoadedResource, ResourceMetadata
 
 
-__all__ = ["load_file_sources", "load_project_source_artifact"]
+__all__ = [
+    "load_file_sources",
+    "load_project_source_artifact",
+    "normalize_node_columns",
+]
 
 logger = get_logger(__name__)
 
 
 _DEFAULT_LOGGER = get_logger(__name__)
+
+
+def normalize_node_columns(node_columns: Sequence[Any] | None) -> list[dict[str, Any]]:
+    """Normalizza una lista di node columns in dict omogenei.
+
+    Pre-fix: lo stesso for-loop `if isinstance(c, dict): append(c) else
+    append({name/alias/type/visible})` era duplicato in
+    `source_loading.py::load_file_sources` e
+    `datasource_node_loading.py::_load_datasource_node`. Estratto qui
+    come single source of truth: i caller passano la lista raw dal
+    canvas e ottengono dict normalizzati da consegnare a
+    `filter_visible_columns` / `_metadata_columns_from_node_columns`.
+    """
+    out: list[dict[str, Any]] = []
+    for c in node_columns or []:
+        if isinstance(c, dict):
+            out.append(c)
+        else:
+            out.append({
+                "name": getattr(c, "name", ""),
+                "alias": getattr(c, "alias", None),
+                "type": getattr(c, "type", ""),
+                "visible": getattr(c, "visible", True),
+            })
+    return out
 
 
 def _metadata_columns_from_node_columns(
@@ -206,18 +235,7 @@ def load_file_sources(
             {'file_source_id': fid},
         )
 
-        node_columns = _nf(node, 'columns', [])
-        node_columns_normalized = []
-        for c in (node_columns or []):
-            if isinstance(c, dict):
-                node_columns_normalized.append(c)
-            else:
-                node_columns_normalized.append({
-                    "name": getattr(c, "name", ""),
-                    "alias": getattr(c, "alias", None),
-                    "type": getattr(c, "type", ""),
-                    "visible": getattr(c, "visible", True),
-                })
+        node_columns_normalized = normalize_node_columns(_nf(node, 'columns', []))
         _meta_input = _metadata_columns_from_node_columns(node_columns_normalized)
 
         try:

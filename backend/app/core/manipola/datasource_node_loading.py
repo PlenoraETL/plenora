@@ -186,20 +186,10 @@ def load_datasource_nodes(
 
         # Match `load_file_sources`: the node-level columns list
         # drives column visibility / ordering downstream.
-        node_columns = _nf(node, "columns", []) or []
-        node_columns_normalized = []
-        for c in node_columns:
-            if isinstance(c, dict):
-                node_columns_normalized.append(c)
-            else:
-                node_columns_normalized.append(
-                    {
-                        "name": getattr(c, "name", ""),
-                        "alias": getattr(c, "alias", None),
-                        "type": getattr(c, "type", ""),
-                        "visible": getattr(c, "visible", True),
-                    }
-                )
+        from app.core.manipola.source_loading import normalize_node_columns
+        node_columns_normalized = normalize_node_columns(
+            _nf(node, "columns", [])
+        )
         df = filter_visible_columns(df, node_columns_normalized)
 
         dataframes[node.id] = df
