@@ -40,22 +40,37 @@ def hydrate_local_cache(bundle_task_id: str, *, root: Path, logger: Any) -> None
         logger.warning(f"[{bundle_task_id}] hydrate cache fallita (non-fatal): {e}")
 
 
-def assert_bundle_group_access(
-    bundle_dir: Path,
+def assert_bundle_group_access_from_meta(
+    meta: Any,
     current_user: CurrentUser,
+    bundle_task_id: str,
     *,
     logger: Any,
     visible_checker: Any = assert_resource_visible,
 ) -> None:
-    """Verify that the current user can access the project that owns a bundle."""
+    """Variante storage-first del check di group access (IMDF-4).
+
+    A differenza di ``assert_bundle_group_access`` che legge
+    ``plenora_metadata.json`` dalla cartella locale del bundle, questa
+    accetta direttamente il dict del meta gia' caricato dal caller
+    (tipicamente via ``imdf.storage.get_meta_only(task_id)``). Permette
+    agli endpoint di servire le response da storage senza idratare la
+    cache locale per il solo check di ownership.
+
+    Same fail-closed policy:
+      - superadmin -> bypass
+      - meta None / non-dict -> 403
+      - meta senza project_id -> 403
+      - project_id presente ma progetto non in DB -> 404
+      - project_id visible_checker fail -> 403/404 da visible_checker
+    """
     if current_user.role == "superadmin":
         return
 
-    meta = bundle_store.read_metadata(bundle_dir)
     if meta is None:
         logger.warning(
-            f"_assert_bundle_group_access: bundle '{bundle_dir.name}' senza "
-            f"plenora_metadata.json - accesso NEGATO a utente "
+            f"assert_bundle_group_access_from_meta: bundle '{bundle_task_id}' "
+            f"senza plenora_metadata.json - accesso NEGATO a utente "
             f"'{current_user.username}' (fail-closed)"
         )
         raise HTTPException(
@@ -67,7 +82,7 @@ def assert_bundle_group_access(
         bundle_project_id = meta.get("project_id")
     except (AttributeError, TypeError) as e:
         logger.warning(
-            f"plenora_metadata.json illeggibile ({bundle_dir.name}): {e} - "
+            f"plenora_metadata illeggibile ({bundle_task_id}): {e} - "
             f"accesso NEGATO (fail-closed)"
         )
         raise HTTPException(
@@ -77,7 +92,7 @@ def assert_bundle_group_access(
 
     if not bundle_project_id:
         logger.warning(
-            f"plenora_metadata.json senza project_id ({bundle_dir.name}) - "
+            f"plenora_metadata senza project_id ({bundle_task_id}) - "
             f"accesso NEGATO (fail-closed)"
         )
         raise HTTPException(
@@ -99,8 +114,34 @@ def assert_bundle_group_access(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"_assert_bundle_group_access: errore verifica: {e}", exc_info=True)
+        logger.error(
+            f"assert_bundle_group_access_from_meta: errore verifica: {e}",
+            exc_info=True,
+        )
         raise HTTPException(
             status_code=500,
             detail="Errore verifica accesso bundle",
         )
+
+
+def assert_bundle_group_access(
+    bundle_dir: Path,
+    current_user: CurrentUser,
+    *,
+    logger: Any,
+    visible_checker: Any = assert_resource_visible,
+) -> None:
+    """Verify that the current user can access the project that owns a bundle.
+
+    Legacy: legge il meta dalla cartella locale. Per i nuovi endpoint
+    storage-first usa ``assert_bundle_group_access_from_meta`` con il
+    meta gia' caricato da ``imdf.storage.get_meta_only``.
+    """
+    meta = bundle_store.read_metadata(bundle_dir)
+    assert_bundle_group_access_from_meta(
+        meta,
+        current_user,
+        bundle_dir.name,
+        logger=logger,
+        visible_checker=visible_checker,
+    )

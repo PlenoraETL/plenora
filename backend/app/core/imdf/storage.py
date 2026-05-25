@@ -179,6 +179,84 @@ def read_bundle_file_bytes(task_id: str, name: str) -> Optional[bytes]:
     return b"".join(stream.get("body", []))
 
 
+# IMDF-4: storage-first JSON reader helpers
+# Wrappano `read_bundle_file_bytes` decodificando i bytes come JSON. Pensati
+# per i reader HTTP che NON devono piu' idratare la cache locale: vanno
+# direct-from-storage senza il giro `ensure_local_bundle + Path.read_text`.
+# `ensure_local_bundle` resta come fallback legacy (vecchi bundle in zip
+# layout) o per consumer che richiedono .gdb directory (pyogrio).
+
+
+def _read_bundle_json(task_id: str, name: str) -> Optional[JsonObject]:
+    raw = read_bundle_file_bytes(task_id, name)
+    if raw is None:
+        return None
+    try:
+        obj = json.loads(raw.decode("utf-8"))
+    except Exception as e:
+        logger.warning(f"[{task_id}] read_bundle_json {name!r} decode failed: {e}")
+        return None
+    return obj if isinstance(obj, dict) else None
+
+
+def read_manifest(task_id: str) -> Optional[JsonObject]:
+    """Storage-first read del ``manifest.json`` del bundle."""
+    return _read_bundle_json(task_id, "manifest.json")
+
+
+def read_validation(task_id: str) -> Optional[JsonObject]:
+    """Storage-first read del ``validation.json`` del bundle."""
+    return _read_bundle_json(task_id, "validation.json")
+
+
+def read_renderers(task_id: str) -> Optional[JsonObject]:
+    """Storage-first read del ``renderers.json`` del bundle."""
+    return _read_bundle_json(task_id, "renderers.json")
+
+
+def read_geojson(task_id: str, relative_name: str) -> Optional[JsonObject]:
+    """Storage-first read di un GeoJSON del bundle.
+
+    ``relative_name`` e' il path interno, e.g. ``{site_id}/building.geojson``
+    o ``{site_id}/unit.geojson``.
+    """
+    if not relative_name.endswith(".geojson"):
+        # Defensive: gli IMDF GeoJSON hanno sempre estensione esplicita.
+        return None
+    return _read_bundle_json(task_id, relative_name)
+
+
+def list_bundle_file_entries(task_id: str) -> List[JsonObject]:
+    """Lista i file individuali di un bundle su storage (IMDF-4).
+
+    Ritorna una list di dict ``{"path": relative_name, "size": int}``
+    derivata da ``list_objects({PREFIX}/{task_id}/files/)``. ``path`` e'
+    relativo (strip del prefix `files/`) per matchare il layout usato
+    dal frontend (i.e. ``{site_id}/foo.geojson``).
+    Lista vuota se la capability object_storage e' off o nessun file
+    individuale presente (e.g. bundle legacy in zip layout).
+    """
+    if not object_storage_enabled():
+        return []
+    storage = _storage()
+    prefix = _files_prefix(task_id) + "/"
+    try:
+        objs = storage.list_objects(prefix)
+    except Exception as e:
+        logger.debug(f"[{task_id}] list_bundle_file_entries failed: {e}")
+        return []
+    out: List[JsonObject] = []
+    for o in objs:
+        key = o.get("key")
+        if not key or not key.startswith(prefix):
+            continue
+        rel = key[len(prefix):]
+        if not rel:
+            continue
+        out.append({"path": rel, "size": int(o.get("size") or 0)})
+    return out
+
+
 def save_bundle(task_id: str, local_dir: Path, meta: Optional[JsonObject] = None) -> StringMap:
     """Zippa `local_dir` (bundle estratto dal worker) e carica su S3.
 

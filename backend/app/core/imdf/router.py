@@ -23,6 +23,7 @@ from app.observability.audit_action import audit_action
 from app.core.imdf import project_access
 from app.core.imdf import bundle_store as _imdf_bundle_store
 from app.core.imdf import bundle_access as _bundle_access
+from app.core.imdf import storage as _imdf_storage
 from app.core.imdf.validator import validate_publish
 from app.utils.logger import get_logger
 
@@ -287,13 +288,31 @@ def get_bundle_metadata(
     """Ritorna i metadata completi di un bundle IMDF persistito (manifest,
     validation, renderers, geojson, site_id) — stessa struttura che il task
     di enrichment salva in `result.imdf`. Usato dal frontend per rehydratare
-    il canvas store dopo un refresh (altrimenti i modali del nodo result
-    restano vuoti perche' `lastTaskResult` e' in memoria e non persistente).
+    il canvas store dopo un refresh.
+
+    IMDF-4: storage-first. L'endpoint legge meta/manifest/validation/
+    renderers/geojson direttamente da object storage via
+    ``imdf.storage.read_*``. Niente piu' ``ensure_local_bundle`` + scan
+    filesystem per la response normale. Il ``has_gdb``/``has_ifc`` viene
+    dai flag nel meta (scritti da persist al save time). Fallback su
+    cache locale solo se il meta su storage manca (bundle legacy in zip
+    layout, hydrated dal `_hydrate_local_cache`).
     """
-    bundle_dir = _safe_bundle_dir(bundle_task_id)
-    # R2 multi-host: hydrate cache locale da S3 se necessario
-    _hydrate_local_cache(bundle_task_id)
-    if not bundle_dir.exists() or not bundle_dir.is_dir():
+    # Path traversal guard sull'id (resta utile anche per il fallback locale).
+    _safe_bundle_dir(bundle_task_id)
+
+    # 1. Read meta dal canonical state (storage). Niente filesystem.
+    meta = _imdf_storage.get_meta_only(bundle_task_id)
+
+    if meta is None:
+        # Fallback legacy: bundle pre-IMDF-3 ancora in zip layout o senza
+        # meta su storage. Hydrate la cache locale e leggi meta dal disco.
+        _hydrate_local_cache(bundle_task_id)
+        bundle_dir = _safe_bundle_dir(bundle_task_id)
+        if bundle_dir.exists() and bundle_dir.is_dir():
+            meta = _imdf_bundle_store.read_metadata(bundle_dir)
+
+    if meta is None:
         raise HTTPException(
             status_code=404,
             detail={
@@ -301,65 +320,82 @@ def get_bundle_metadata(
                 "message": f"Bundle '{bundle_task_id}' non trovato (forse scaduto)",
             },
         )
-    # Group ownership check
-    _assert_bundle_group_access(bundle_dir, current_user)
 
-    # D3 commit 3 (R3): site_id letto esclusivamente da plenora_metadata.json
-    # scritto da persist dal valore autoritativo di `loader.ImdfBundle.site_id`
-    # Nessuna scansione dir per derivarlo. Bundle senza meta o con meta senza
-    # site_id (legacy malformati) -> response site_id=None, FE gestisce
-    site_id: Optional[str] = None
-    _meta_for_site = _imdf_bundle_store.read_metadata(bundle_dir)
-    if _meta_for_site:
-        site_id = _meta_for_site.get("site_id") or None
+    # 2. Group ownership check direttamente sul meta (storage-first).
+    _bundle_access.assert_bundle_group_access_from_meta(
+        meta, current_user, bundle_task_id, logger=logger,
+    )
 
-    manifest_path = bundle_dir / "manifest.json"
-    validation_path = bundle_dir / "validation.json"
-    imdf_dir = (bundle_dir / site_id) if site_id else None
-    gdb_path = None
-    ifc_path = None
+    site_id: Optional[str] = meta.get("site_id") or None
 
-    # Scan residuo solo per gdb_path/ifc_path (nomi file non nel meta come Path
-    # Branch site_id/imdf_dir rimossa: derivati da meta (D3 commit 3
-    for entry in bundle_dir.iterdir():
-        if entry.is_dir() and entry.suffix == ".gdb":
-            gdb_path = entry
-        elif entry.is_file() and entry.suffix.lower() == ".ifc":
-            ifc_path = entry
+    # 3. Read manifest / validation / renderers direct-from-storage.
+    manifest   = _imdf_storage.read_manifest(bundle_task_id)
+    validation = _imdf_storage.read_validation(bundle_task_id)
+    renderers  = _imdf_storage.read_renderers(bundle_task_id)
 
-    def _read_json(p):
-        try:
-            return _json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
-        except Exception as e:
-            logger.warning(f"read_json {p}: {e}")
-            return None
-
-    manifest   = _read_json(manifest_path)
-    validation = _read_json(validation_path)
-    renderers  = _imdf_bundle_store.read_renderers(bundle_dir)
-
-    # Carica geojson IMDF (ogni layer in un dict
+    # 4. Lista file individuali da storage. Permette anche di derivare
+    #    i nomi dei geojson sotto site_id senza scansionare il filesystem.
+    storage_files = _imdf_storage.list_bundle_file_entries(bundle_task_id)
+    files_list: List[JsonObject] = []
     geojson_layers: Dict[str, Any] = {}
-    if imdf_dir and imdf_dir.exists():
-        for gj in sorted(imdf_dir.glob("*.geojson")):
-            try:
-                geojson_layers[gj.stem] = _json.loads(gj.read_text(encoding="utf-8"))
-            except Exception as e:
-                logger.warning(f"geojson {gj.name}: {e}")
+    site_prefix = f"{site_id}/" if site_id else None
+    for entry in sorted(storage_files, key=lambda e: e["path"]):
+        rel = entry["path"]
+        files_list.append({"path": rel, "size": entry["size"]})
+        if (
+            site_prefix
+            and rel.startswith(site_prefix)
+            and rel.endswith(".geojson")
+        ):
+            layer_name = Path(rel).stem
+            obj = _imdf_storage.read_geojson(bundle_task_id, rel)
+            if obj is not None:
+                geojson_layers[layer_name] = obj
 
-    # Lista file del bundle (come nel task result
-    files_list = []
-    for f in sorted(bundle_dir.rglob("*")):
-        if f.is_file():
-            try:
-                files_list.append({
-                    "path": str(f.relative_to(bundle_dir)).replace("\\", "/"),
-                    "size": f.stat().st_size,
-                })
-            except Exception as _fe:
-                # File sparito tra rglob e stat (cleanup concorrente) o
-                # permessi: skippa il singolo entry, non-fatal per la response
-                logger.debug(f"files_list skip {f.name}: {type(_fe).__name__}: {_fe}")
+    # 5. Fallback se storage e' vuoto (bundle legacy zip-layout). In quel
+    #    caso il `_hydrate_local_cache` sopra ha gia' estratto i file su
+    #    disco — leggiamo da li' come compat. Niente shape change per il
+    #    frontend.
+    if not files_list and not manifest and not validation:
+        bundle_dir = _safe_bundle_dir(bundle_task_id)
+        if bundle_dir.exists() and bundle_dir.is_dir():
+            for f in sorted(bundle_dir.rglob("*")):
+                if f.is_file():
+                    try:
+                        files_list.append({
+                            "path": str(f.relative_to(bundle_dir)).replace("\\", "/"),
+                            "size": f.stat().st_size,
+                        })
+                    except Exception as _fe:
+                        logger.debug(
+                            f"files_list skip {f.name}: {type(_fe).__name__}: {_fe}"
+                        )
+            if manifest is None:
+                p = bundle_dir / "manifest.json"
+                if p.exists():
+                    try:
+                        manifest = _json.loads(p.read_text(encoding="utf-8"))
+                    except Exception as e:
+                        logger.warning(f"legacy manifest read {p}: {e}")
+            if validation is None:
+                p = bundle_dir / "validation.json"
+                if p.exists():
+                    try:
+                        validation = _json.loads(p.read_text(encoding="utf-8"))
+                    except Exception as e:
+                        logger.warning(f"legacy validation read {p}: {e}")
+            if renderers is None:
+                renderers = _imdf_bundle_store.read_renderers(bundle_dir)
+            if site_id:
+                imdf_dir = bundle_dir / site_id
+                if imdf_dir.exists():
+                    for gj in sorted(imdf_dir.glob("*.geojson")):
+                        try:
+                            geojson_layers[gj.stem] = _json.loads(
+                                gj.read_text(encoding="utf-8")
+                            )
+                        except Exception as e:
+                            logger.warning(f"legacy geojson {gj.name}: {e}")
 
     return {
         "site_id":       site_id,
@@ -369,8 +405,8 @@ def get_bundle_metadata(
         "renderers":     renderers,
         "geojson":       geojson_layers,
         "files":         files_list,
-        "has_gdb":       gdb_path is not None,
-        "has_ifc":       ifc_path is not None,
+        "has_gdb":       bool(meta.get("has_gdb")),
+        "has_ifc":       bool(meta.get("has_ifc")),
         "has_renderers": renderers is not None,
     }
 
