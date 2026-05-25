@@ -1,6 +1,6 @@
 metadata:
   generated_at: '2026-05-25'
-  baseline_total: 67
+  baseline_total: 65
   by_pattern:
     df_to_csv_path: 10
     df_to_excel_path: 7
@@ -11,8 +11,8 @@ metadata:
     tempfile_mkdtemp: 5
     df_to_parquet_path: 4
     path_write_text: 4
-    path_write_bytes: 4
     storage_upload_path: 3
+    path_write_bytes: 2
     fileresponse: 2
     tempfile_temp_directory: 1
     shutil_move: 1
@@ -22,7 +22,7 @@ metadata:
     Phase5-legacy-path-export: 13
     unassigned: 11
     Phase6-imdf: 9
-    Phase5-results-download: 5
+    Phase5-results-download: 3
     Phase5-scheduler-archive: 3
     Phase4-upload-file-source: 2
     Phase7-backup-restore: 2
@@ -286,31 +286,19 @@ allowed_callsites:
   phase: unassigned
   status: active-legacy
 - file: app/core/results/blob_writer.py
-  line: 173
+  line: 179
   pattern: storage_upload_path
   snippet: storage.upload(path, storage_key)
   phase: Phase5-results-download
   status: active-legacy
-- file: app/core/results/result_reader.py
-  line: 62
-  pattern: path_write_bytes
-  snippet: tmp_path.write_bytes(data)
-  phase: Phase5-results-download
-  status: active-legacy
-- file: app/core/results/result_reader.py
-  line: 129
-  pattern: path_write_bytes
-  snippet: tmp_path.write_bytes(data)
-  phase: Phase5-results-download
-  status: active-legacy
 - file: app/core/results/temp_paths.py
-  line: 46
+  line: 44
   pattern: tempfile_mkdtemp
   snippet: return Path(tempfile.mkdtemp(prefix=prefix, dir=root))
   phase: Phase5-results-download
   status: active-legacy
 - file: app/core/results/temp_paths.py
-  line: 63
+  line: 61
   pattern: tempfile_named_temp_file
   snippet: tmp = tempfile.NamedTemporaryFile(
   phase: Phase5-results-download

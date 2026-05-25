@@ -76,24 +76,19 @@ def test_result_temp_paths_are_adapter_paths_under_settings_temp_dir(
 ) -> None:
     from app.config import settings
     from app.core.results.temp_paths import (
-        RESULT_CACHE_TEMP_PREFIX,
         RESULT_STREAM_TEMP_PREFIX,
         cleanup_path_only_adapter,
         get_temp_output_path,
-        make_cached_result_path,
     )
 
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
     temp_root = Path(settings.TEMP_DIR)
 
     stream_path = get_temp_output_path("out").with_suffix(".csv")
-    cached_path = make_cached_result_path(".json")
 
     try:
         assert stream_path.parent.name.startswith(RESULT_STREAM_TEMP_PREFIX)
         assert stream_path.resolve().is_relative_to(temp_root.resolve())
-        assert cached_path.name.startswith(RESULT_CACHE_TEMP_PREFIX)
-        assert cached_path.resolve().is_relative_to(temp_root.resolve())
     finally:
         cleanup_path_only_adapter(
             stream_path.parent,

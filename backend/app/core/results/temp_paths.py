@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 import shutil
 import tempfile
@@ -11,7 +10,6 @@ from pathlib import Path
 
 PATH_ONLY_ADAPTER_PREFIX = "plenora-path-only-adapter-"
 RESULT_STREAM_TEMP_PREFIX = "plenora-result-stream-"
-RESULT_CACHE_TEMP_PREFIX = "plenora-result-cache-"
 
 
 def _settings_temp_dir() -> Path:
@@ -118,20 +116,11 @@ def get_temp_output_path(filename: str) -> Path:
     return tmp_dir / safe_name
 
 
-def make_cached_result_path(suffix: str) -> Path:
-    """Return a temp file path for legacy callers that need a materialized result."""
-    return _settings_temp_dir() / (
-        f"{RESULT_CACHE_TEMP_PREFIX}{os.urandom(4).hex()}{_normalize_suffix(suffix)}"
-    )
-
-
 __all__ = [
     "PATH_ONLY_ADAPTER_PREFIX",
-    "RESULT_CACHE_TEMP_PREFIX",
     "RESULT_STREAM_TEMP_PREFIX",
     "cleanup_path_only_adapter",
     "get_temp_output_path",
     "make_path_only_adapter_dir",
-    "make_cached_result_path",
     "write_path_only_adapter_bytes",
 ]

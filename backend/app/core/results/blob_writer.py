@@ -131,7 +131,13 @@ def save_result_blob(
     rows_count: Optional[int] = None,
     group_id: Optional[str] = None,
 ) -> str:
-    """Persist a result file as a DB blob or object-storage backed row."""
+    """Persist a result file as a DB blob or object-storage backed row.
+
+    Path-based entry point: il caller passa un file gia' su disco
+    (typically streamed da una query o downloaded da un REST endpoint).
+    Per object storage usa storage upload path-based come streaming,
+    niente buffering intermedio in RAM.
+    """
     saved = False
     try:
         resolved_group_id = store.resolve_group_id_for_result(project_id, group_id)

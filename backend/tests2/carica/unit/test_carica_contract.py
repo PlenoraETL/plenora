@@ -56,8 +56,7 @@ def test_load_upstream_data_does_not_fallback_to_latest_project_result_after_fai
     # "progetto non trovato in pre-cache" -> il flow procede come previsto
     # dal test (fail-closed su _project_group_id, execute via orchestrator
     # stub).
-    with patch("app.core.results.result_store.get_result_as_tempfile", return_value=None), \
-         patch("app.core.projects.runtime_context.get_project_runtime_context", return_value=None), \
+    with patch("app.core.projects.runtime_context.get_project_runtime_context", return_value=None), \
          patch("app.core.projects.service.ProjectService", return_value=object()), \
          patch("app.core.connections.service.ConnectionService", return_value=object()), \
          patch("app.core.estrai.query_generator.QueryGenerator", return_value=object()), \

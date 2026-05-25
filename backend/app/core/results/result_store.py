@@ -22,7 +22,6 @@ from app.core.results.pipeline_result import (
 )
 from app.core.results.result_reader import (
     get_result_as_bytes,
-    get_result_as_tempfile,
     get_result_info,
 )
 from app.core.results.retention import DEFAULT_RESULTS_RETENTION
@@ -47,7 +46,6 @@ __all__ = [
     "_should_use_object_storage",
     "_storage_policy",
     "get_result_as_bytes",
-    "get_result_as_tempfile",
     "get_result_info",
     "get_temp_output_path",
     "save_pipeline_result",

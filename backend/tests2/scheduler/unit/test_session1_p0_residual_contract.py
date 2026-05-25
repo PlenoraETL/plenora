@@ -96,67 +96,23 @@ def test_schedule_task_computes_scheduled_for_at_tick_time_for_cron():
     )
 
 
-# Path 3: tempfile cleanup deterministico
+# Path 3: post-Phase5 — get_result_as_tempfile* rimosse.
+# Il leak storico e' impossibile by-construction: result_reader non
+# materializza piu' nulla su disco. I consumer usano get_result_as_bytes
+# e delegano a parser bytes-first.
 
-def test_get_result_as_tempfile_cm_yields_path_and_cleans_up(tmp_path, monkeypatch):
-    """get_result_as_tempfile_cm e' un context manager: cancella il
-    tempfile al `with` exit. Pre-fix solo get_result_as_tempfile esisteva,
-    senza cleanup → disk fill."""
+def test_get_result_as_tempfile_tombstone_post_phase5():
+    """`get_result_as_tempfile` e `get_result_as_tempfile_cm` sono
+    state rimosse (Phase5). Nessun caller live in app/ le usava."""
     from app.core.results import result_reader
 
-    # Mock store.get_latest_result_row + get_result_data per fornire dati
-    class _FakeRow:
-        id = "r-1"
-        format = "csv"
-
-    monkeypatch.setattr(
-        "app.core.results.result_reader.store.get_latest_result_row",
-        lambda project_id: _FakeRow(),
+    assert not hasattr(result_reader, "get_result_as_tempfile"), (
+        "get_result_as_tempfile resta presente: refactor RAM-only "
+        "incompleto."
     )
-    monkeypatch.setattr(
-        "app.core.results.result_reader.store.get_result_data",
-        lambda result_id: b"fake-csv-data",
-    )
-    monkeypatch.setattr(
-        "app.core.results.result_reader.make_cached_result_path",
-        lambda suffix: tmp_path / f"result{suffix}",
-    )
-
-    written_path = None
-    with result_reader.get_result_as_tempfile_cm("proj-1") as p:
-        assert p is not None
-        assert p.exists()
-        written_path = p
-
-    # ANTI-REGRESSION: il file DEVE essere cancellato al with-exit
-    assert not written_path.exists(), (
-        "get_result_as_tempfile_cm NON ha cancellato il tempfile al "
-        "with-exit. Senza cleanup, l'uso del context manager non "
-        "elimina il leak."
-    )
-
-
-def test_get_result_as_tempfile_deprecated_warning_emitted(tmp_path, monkeypatch):
-    """get_result_as_tempfile (deprecated) emette DeprecationWarning."""
-    import warnings
-    from app.core.results import result_reader
-
-    monkeypatch.setattr(
-        "app.core.results.result_reader.store.get_latest_result_row",
-        lambda project_id: None,  # nessun result
-    )
-
-    with warnings.catch_warnings(record=True) as captured:
-        warnings.simplefilter("always")
-        result_reader.get_result_as_tempfile("proj-1")
-        deprecation_warnings = [w for w in captured if issubclass(w.category, DeprecationWarning)]
-
-    assert any(
-        "get_result_as_tempfile_cm" in str(w.message)
-        for w in deprecation_warnings
-    ), (
-        "get_result_as_tempfile deve emettere DeprecationWarning che "
-        "indirizza al context manager"
+    assert not hasattr(result_reader, "get_result_as_tempfile_cm"), (
+        "get_result_as_tempfile_cm resta presente: refactor RAM-only "
+        "incompleto."
     )
 
 
