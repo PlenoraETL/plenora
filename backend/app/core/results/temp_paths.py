@@ -118,15 +118,6 @@ def get_temp_output_path(filename: str) -> Path:
     return tmp_dir / safe_name
 
 
-def make_pipeline_fs_temp_dir(data_dir: Path) -> Path:
-    """Create the short-lived directory used by filesystem-only dataframe formats."""
-    temp_parent = Path(data_dir) / "temp"
-    temp_parent.mkdir(parents=True, exist_ok=True)
-    tmp_dir = temp_parent / f"urby_gpkg_shp_{os.getpid()}_{os.urandom(4).hex()}"
-    tmp_dir.mkdir(parents=True, exist_ok=False)
-    return tmp_dir
-
-
 def make_cached_result_path(suffix: str) -> Path:
     """Return a temp file path for legacy callers that need a materialized result."""
     return _settings_temp_dir() / (
@@ -142,6 +133,5 @@ __all__ = [
     "get_temp_output_path",
     "make_path_only_adapter_dir",
     "make_cached_result_path",
-    "make_pipeline_fs_temp_dir",
     "write_path_only_adapter_bytes",
 ]

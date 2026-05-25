@@ -99,6 +99,14 @@ def phase_for(filepath: str, pattern: str = "") -> str:
     return "unassigned"
 
 
+_BOUNDARY_DIRS = ("app/core/io/", "app/core/storage/")
+
+
+def _is_boundary(rel: str) -> bool:
+    norm = rel.replace("\\", "/")
+    return any(norm.startswith(p) for p in _BOUNDARY_DIRS)
+
+
 def scan() -> list[tuple[str, int, str, str]]:
     findings: list[tuple[str, int, str, str]] = []
     for root in ("app", "workers", "scripts"):
@@ -111,6 +119,11 @@ def scan() -> list[tuple[str, int, str, str]]:
                 if fname == "_gen_io_allowlist.py":
                     continue
                 path = os.path.join(dirpath, fname)
+                # Allinea il sweep al contract test: i moduli del boundary
+                # `app/core/io/` e `app/core/storage/` sono autorizzati a
+                # fare disk I/O; non devono apparire nella allowlist.
+                if _is_boundary(path):
+                    continue
                 try:
                     with open(path, encoding="utf-8") as fh:
                         for i, line in enumerate(fh, 1):

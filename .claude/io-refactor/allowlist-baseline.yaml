@@ -1,10 +1,10 @@
 metadata:
   generated_at: '2026-05-25'
-  baseline_total: 72
+  baseline_total: 67
   by_pattern:
-    df_to_csv_path: 11
-    tempfile_named_temp_file: 8
+    df_to_csv_path: 10
     df_to_excel_path: 7
+    tempfile_named_temp_file: 7
     df_to_json_path: 6
     df_to_file_path: 6
     safe_extractall: 6
@@ -13,15 +13,14 @@ metadata:
     path_write_text: 4
     path_write_bytes: 4
     storage_upload_path: 3
-    fileresponse: 3
-    tempfile_mkstemp: 2
+    fileresponse: 2
     tempfile_temp_directory: 1
     shutil_move: 1
     shutil_copy: 1
   by_phase:
-    Phase5-export-csv-xlsx: 22
-    unassigned: 15
+    Phase5-export-csv-xlsx: 21
     Phase5-legacy-path-export: 13
+    unassigned: 11
     Phase6-imdf: 9
     Phase5-results-download: 5
     Phase5-scheduler-archive: 3
@@ -95,37 +94,37 @@ allowed_callsites:
   phase: Phase5-export-csv-xlsx
   status: active-legacy
 - file: app/core/dataframes/geospatial_io.py
-  line: 152
+  line: 145
   pattern: df_to_json_path
   snippet: return gdf.to_json().encode("utf-8")
   phase: Phase5-legacy-path-export
   status: active-legacy
 - file: app/core/dataframes/geospatial_io.py
-  line: 237
+  line: 232
   pattern: df_to_file_path
   snippet: gdf.to_file(final_path, driver="GeoJSON")
   phase: Phase5-legacy-path-export
   status: active-legacy
 - file: app/core/dataframes/geospatial_io.py
-  line: 241
+  line: 236
   pattern: df_to_file_path
   snippet: gdf.to_file(final_path, driver="GPKG", layer=layer_name)
   phase: Phase5-legacy-path-export
   status: active-legacy
 - file: app/core/dataframes/geospatial_io.py
-  line: 343
+  line: 338
   pattern: df_to_file_path
   snippet: gdf_vuoto.to_file(final_path, driver="GPKG", layer=layer_name)
   phase: Phase5-legacy-path-export
   status: active-legacy
 - file: app/core/dataframes/geospatial_io.py
-  line: 356
+  line: 351
   pattern: tempfile_temp_directory
   snippet: 'with tempfile.TemporaryDirectory() as tmpdir:'
   phase: Phase5-legacy-path-export
   status: active-legacy
 - file: app/core/dataframes/geospatial_io.py
-  line: 358
+  line: 353
   pattern: df_to_file_path
   snippet: gdf.to_file(shp_path, driver="ESRI Shapefile")
   phase: Phase5-legacy-path-export
@@ -273,36 +272,6 @@ allowed_callsites:
   pattern: df_to_parquet_path
   snippet: df.to_parquet(buf, engine="pyarrow", compression="snappy", index=False)
   phase: Phase5-export-csv-xlsx
-  status: active-legacy
-- file: app/core/io/materialize.py
-  line: 3
-  pattern: tempfile_named_temp_file
-  snippet: Fuori da questo modulo, i `tempfile.NamedTemporaryFile` / `mkdtemp` /
-  phase: unassigned
-  status: active-legacy
-- file: app/core/io/materialize.py
-  line: 80
-  pattern: tempfile_mkstemp
-  snippet: fd, path_str = tempfile.mkstemp(suffix=suffix, prefix=prefix, dir=temp_dir)
-  phase: unassigned
-  status: active-legacy
-- file: app/core/io/materialize.py
-  line: 105
-  pattern: tempfile_mkstemp
-  snippet: '`None` lascia `tempfile.mkstemp` decidere autonomamente (tipicamente'
-  phase: unassigned
-  status: active-legacy
-- file: app/core/io/__init__.py
-  line: 17
-  pattern: df_to_csv_path
-  snippet: ammesso usare tempfile/extractall/Path.write/df.to_csv(path)/
-  phase: Phase5-export-csv-xlsx
-  status: active-legacy
-- file: app/core/io/__init__.py
-  line: 18
-  pattern: fileresponse
-  snippet: FileResponse(path)/shutil.copy/storage.upload(local_path).
-  phase: unassigned
   status: active-legacy
 - file: app/core/resources/loaders/result_blob.py
   line: 316

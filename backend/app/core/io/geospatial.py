@@ -15,25 +15,24 @@ GDAL 3.13.0):
   - ESRI Shapefile (read-only via ZIP bytes): pyogrio rileva
     automaticamente lo shapefile dentro lo ZIP via `/vsizip`
   - FileGDB (read-only via ZIP bytes): idem
-
-Limite corrente:
-  Lo Shapefile WRITE-to-ZIP-bytes richiede leggere i sidecar da
-  `/vsimem` (`.shp/.shx/.dbf/.prj/.cpg`) per costruire lo ZIP, e
-  pyogrio non espone una `vsi_read` API. Per ora il write di
-  Shapefile-ZIP resta fuori scope; i caller che hanno bisogno di
-  Shapefile output dovrebbero migrare a GPKG (single-file, nessun
-  problema multi-file).
+  - ESRI Shapefile WRITE-as-ZIP-bytes: `write_shapefile_zip_bytes`
+    usa una temp dir interna al boundary per scrivere i sidecar
+    (.shp/.shx/.dbf/.prj/.cpg) e li zippa in bytes. La temp dir
+    e' cleanup-deterministico via `TemporaryDirectory`.
 
 Strategia generale:
   - LETTURA: `read_vector_bytes(data, ...)` per qualunque formato
     vector supportato da OGR.
   - SCRITTURA: `write_vector_bytes(gdf, driver=...)` per formati
-    single-file. Shapefile-ZIP non supportato.
+    single-file; `write_shapefile_zip_bytes(gdf, name)` per SHP.
 """
 
 from __future__ import annotations
 
+import tempfile
+import zipfile
 from io import BytesIO
+from pathlib import Path
 from typing import Any, Optional
 
 
@@ -106,6 +105,44 @@ def write_vector_bytes(
     return buf.getvalue()
 
 
+def write_shapefile_zip_bytes(
+    gdf: Any,
+    *,
+    name: str = "layer",
+) -> bytes:
+    """Serialize a GeoDataFrame as a zipped ESRI Shapefile (bytes).
+
+    Shapefile e' multi-file (.shp/.shx/.dbf/.prj/.cpg) e pyogrio non
+    espone una `vsi_read` API per leggere i sidecar da /vsimem. La
+    soluzione RAM-equivalent: usiamo una `TemporaryDirectory` INTERNA
+    al boundary (consentita: questo modulo e' l'unico autorizzato a
+    fare disk I/O), scriviamo i sidecar via pyogrio, li zippiamo in
+    bytes, cleanup deterministico al with-exit.
+
+    Il caller riceve bytes pronti per object storage / DB BYTEA /
+    StreamingResponse — nessun temp file sopravvive alla chiamata.
+
+    Args:
+        gdf: GeoDataFrame da serializzare.
+        name: nome base dei file (`.shp`/`.shx`/...); default `layer`.
+
+    Returns:
+        `bytes` dello ZIP che contiene i 4-5 sidecar dello Shapefile.
+    """
+    import pyogrio
+
+    with tempfile.TemporaryDirectory(prefix="plenora_shp_") as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        shp_path = tmpdir_path / f"{name}.shp"
+        pyogrio.write_dataframe(gdf, shp_path, driver="ESRI Shapefile")
+
+        zip_buf = BytesIO()
+        with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for sidecar in sorted(tmpdir_path.glob(f"{name}.*")):
+                zf.write(sidecar, sidecar.name)
+        return zip_buf.getvalue()
+
+
 def list_vector_layers(data: bytes) -> list[str]:
     """List layer names available in a multi-layer vector dataset (bytes).
 
@@ -121,5 +158,6 @@ def list_vector_layers(data: bytes) -> list[str]:
 __all__ = [
     "list_vector_layers",
     "read_vector_bytes",
+    "write_shapefile_zip_bytes",
     "write_vector_bytes",
 ]

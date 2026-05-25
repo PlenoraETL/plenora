@@ -1,15 +1,18 @@
-"""Persist dataframe pipeline outputs as result artifacts."""
+"""Persist dataframe pipeline outputs as result artifacts.
+
+Post-Phase5 refactor: bytes-only. Tutti i formati (csv/xlsx/json/parquet
+e geospatial gpkg/shp/geojson) sono serializzati in memoria via
+`save_dataframe_to_bytes`. Lo SHP multi-file e' zippato dentro il
+boundary `io.geospatial.write_shapefile_zip_bytes` (vedi doc del
+boundary), che e' l'unico punto autorizzato a touchare il disco.
+"""
 
 from __future__ import annotations
 
-import shutil
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Optional, TypeAlias
 
-from app.config import settings
 from app.core.results.blob_writer import save_result_blob_from_bytes
-from app.core.results.temp_paths import make_pipeline_fs_temp_dir
 
 
 PipelineResultPayload: TypeAlias = dict[str, str]
@@ -69,45 +72,19 @@ def save_pipeline_result_outcome(
     crs: str = "EPSG:4326",
 ) -> PipelineResultSave:
     """Save a DataFrame as a result artifact through a single entry point."""
-    from app.core.dataframes.frame_io import (
-        save_dataframe,
-        save_dataframe_to_bytes,
-    )
+    from app.core.dataframes.frame_io import save_dataframe_to_bytes
 
     fmt_lower = (output_format or "").lower()
-    filename = f"{filename_stem}.{fmt_lower}"
+    # SHP esce zippato via `io.geospatial.write_shapefile_zip_bytes`;
+    # estensione del result blob diventa `.zip` (extracted by reader).
+    if fmt_lower == "shp":
+        filename = f"{filename_stem}.zip"
+    else:
+        filename = f"{filename_stem}.{fmt_lower}"
 
-    if fmt_lower in ("gpkg", "shp"):
-        tmp_dir = make_pipeline_fs_temp_dir(Path(settings.DATA_DIR))
-        try:
-            tmp_path = tmp_dir / filename
-            saved_path = save_dataframe(df, tmp_path, output_format, geom_column, crs)
-            output_columns = None
-            try:
-                from app.core.dataframes.frame_io import load_dataframe_from_file
-
-                output_columns = [str(col) for col in load_dataframe_from_file(saved_path).columns]
-            except Exception:
-                output_columns = None
-            actual_fmt = saved_path.suffix.lstrip(".") if fmt_lower == "shp" else fmt_lower
-            result_id = save_result_blob_from_bytes(
-                project_id=project_id,
-                data=saved_path.read_bytes(),
-                filename=saved_path.name,
-                fmt=actual_fmt,
-                rows_count=rows_count,
-                group_id=group_id,
-            )
-            output_filename = saved_path.name
-        finally:
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-        return PipelineResultSave(
-            result_id=result_id,
-            output_filename=output_filename,
-            output_columns=output_columns,
-        )
-
-    data = save_dataframe_to_bytes(df, fmt_lower, geom_column=geom_column, crs=crs)
+    data = save_dataframe_to_bytes(
+        df, fmt_lower, geom_column=geom_column, crs=crs,
+    )
     result_id = save_result_blob_from_bytes(
         project_id=project_id,
         data=data,

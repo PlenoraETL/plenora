@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
@@ -160,16 +161,35 @@ def test_save_dataframe_to_bytes_geojson():
     assert len(obj.get("features", [])) == 2
 
 
-def test_save_dataframe_to_bytes_rejects_filesystem_only_formats():
-    """gpkg e shp richiedono filesystem (tool binari / multi-file zip) →
-    il nuovo API NON li accetta in-memory. Il caller fa fallback al
-    path-based save_dataframe se serve questi formati."""
-    from app.core.files.dataframe_io import save_dataframe_to_bytes
+def test_save_dataframe_to_bytes_gpkg_and_shp_now_supported():
+    """Post-Phase5: gpkg e shp sono entrambi serializzabili in-memory.
 
-    df = pd.DataFrame({"id": [1]})
-    for fs_only in ("gpkg", "shp"):
-        with pytest.raises((ValueError, NotImplementedError)):
-            save_dataframe_to_bytes(df, fs_only)
+    - gpkg: single-file SQLite via `pyogrio.write_dataframe(buf, 'GPKG')`
+    - shp: multi-file zippato via
+      `app.core.io.geospatial.write_shapefile_zip_bytes` che usa una
+      TemporaryDirectory INTERNA al boundary `io.geospatial` per
+      scrivere i sidecar e li zippa in RAM.
+    """
+    pytest.importorskip("geopandas")
+    from app.core.files.dataframe_io import save_dataframe_to_bytes
+    from shapely.geometry import Point
+
+    df = pd.DataFrame({
+        "id": [1, 2],
+        "geometry": [Point(9.0, 45.0), Point(9.1, 45.1)],
+    })
+
+    gpkg_bytes = save_dataframe_to_bytes(df, "gpkg", geom_column="geometry")
+    assert isinstance(gpkg_bytes, bytes) and len(gpkg_bytes) > 0
+
+    shp_zip_bytes = save_dataframe_to_bytes(df, "shp", geom_column="geometry")
+    assert isinstance(shp_zip_bytes, bytes) and len(shp_zip_bytes) > 0
+    # Lo ZIP deve contenere almeno .shp + .shx + .dbf + .prj.
+    buf = io.BytesIO(shp_zip_bytes)
+    import zipfile as _zf
+    with _zf.ZipFile(buf) as z:
+        names = {Path(n).suffix.lower() for n in z.namelist()}
+    assert {".shp", ".shx", ".dbf"}.issubset(names)
 
 
 def test_save_result_blob_from_bytes_happy_path(mock_db):

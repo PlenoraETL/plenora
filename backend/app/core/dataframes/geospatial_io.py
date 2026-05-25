@@ -111,22 +111,15 @@ def geospatial_dataframe_to_bytes(
 ) -> bytes:
     """Serialize a DataFrame to bytes for supported geospatial formats.
 
-    Pre-fix: solo `geojson` era supportato; `gpkg` e `shp` rifiutati
-    con messaggio "richiede filesystem (tool binari / multi-file)".
-    Post-fix: con GDAL 3.13.0 unified e pyogrio 0.12+ il GPKG e'
-    serializzabile in RAM via `/vsimem` (gestito internamente da
-    `pyogrio.write_dataframe(buf, driver='GPKG')`). Shapefile resta
-    fuori scope qui (multi-file, richiede /vsimem sidecar read che
-    pyogrio non espone ancora come API Python pubblica) -- migrare
-    a GPKG o usare il path-based `save_geospatial_dataframe`.
+    Formati supportati (tutti RAM-only dal caller's perspective):
+      - `geojson`: single-file, serializzato via `gdf.to_json`.
+      - `gpkg` / `geopackage`: single-file SQLite via pyogrio bytes.
+      - `shp`: multi-file zippato. Il boundary `io.geospatial.
+        write_shapefile_zip_bytes` usa una temp dir INTERNA al
+        modulo per scrivere i sidecar e li zippa; il caller riceve
+        solo lo ZIP di bytes.
     """
-    if formato == "shp":
-        raise ValueError(
-            "Formato 'shp' richiede output multi-file: usa "
-            "save_geospatial_dataframe(path-based) oppure migra a "
-            "'gpkg' (single-file, RAM-only)."
-        )
-    if formato not in ("geojson", "gpkg", "geopackage"):
+    if formato not in ("geojson", "gpkg", "geopackage", "shp"):
         raise ValueError(f"Formato '{formato}' non supportato")
 
     to_geodataframe, detect_geometry_column = _geo_helpers()
@@ -150,11 +143,13 @@ def geospatial_dataframe_to_bytes(
 
     if formato == "geojson":
         return gdf.to_json().encode("utf-8")
+    if formato == "shp":
+        from app.core.io.geospatial import write_shapefile_zip_bytes
+        return write_shapefile_zip_bytes(gdf, name="layer")
     # GPKG/GeoPackage: write via pyogrio bytes (RAM-only).
     # NB: `layer=None` -> pyogrio usa "default" come layer name.
     # Passare "gpkg" come layer name e' vietato da OGR (prefisso
-    # riservato GeoPackage). I caller che vogliono un layer name
-    # specifico devono passare metadata via signature dedicato.
+    # riservato GeoPackage).
     from app.core.io.geospatial import write_vector_bytes
     return write_vector_bytes(gdf, driver="GPKG")
 
