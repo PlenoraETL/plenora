@@ -49,7 +49,11 @@ PHASE_MAP: dict[str, str] = {
     "files/preview_temp.py": "Phase4-upload-file-source",
     "files/multi_layer_upload.py": "Phase4-upload-file-source",
     "dataframes/frame_io.py": "Phase1-dataframe-boundary",
-    "dataframes/geospatial_io.py": "Phase1-dataframe-boundary",
+    # geospatial_io.py: bytes-export e' migrato (geospatial_dataframe_to_bytes
+    # ora supporta GeoJSON/GPKG via pyogrio bytes); restano solo i path-export
+    # legacy (`_salva_formato_geo`, `_salva_shapefile_zippato`, gdf.to_file)
+    # che andranno in Phase5.
+    "dataframes/geospatial_io.py": "Phase5-legacy-path-export",
     "results/result_reader.py": "Phase5-results-download",
     "results/pipeline_result.py": "Phase5-results-download",
     "results/blob_writer.py": "Phase5-results-download",
@@ -72,7 +76,22 @@ PHASE_MAP: dict[str, str] = {
 }
 
 
-def phase_for(filepath: str) -> str:
+# Pattern-aware override: i pattern di EXPORT path-based (CSV/XLSX/
+# Parquet/to_file/to_json) sono sempre Phase5 indipendentemente dal
+# file in cui vivono, perche' la migrazione richiede ridisegnare il
+# flow `payload -> bytes -> storage.save` (vedi documento Fase 5).
+PATTERN_PHASE_OVERRIDES: dict[str, str] = {
+    "df_to_csv_path": "Phase5-export-csv-xlsx",
+    "df_to_excel_path": "Phase5-export-csv-xlsx",
+    "df_to_parquet_path": "Phase5-export-csv-xlsx",
+    "df_to_file_path": "Phase5-legacy-path-export",
+    "df_to_json_path": "Phase5-legacy-path-export",
+}
+
+
+def phase_for(filepath: str, pattern: str = "") -> str:
+    if pattern and pattern in PATTERN_PHASE_OVERRIDES:
+        return PATTERN_PHASE_OVERRIDES[pattern]
     norm = filepath.replace("\\", "/")
     for key, phase in PHASE_MAP.items():
         if key in norm:
@@ -116,7 +135,7 @@ def main() -> None:
     by_phase: dict[str, int] = {}
     for f in findings:
         by_pattern[f[2]] = by_pattern.get(f[2], 0) + 1
-        p = phase_for(f[0])
+        p = phase_for(f[0], f[2])
         by_phase[p] = by_phase.get(p, 0) + 1
 
     print(f"TOTAL findings: {len(findings)}\n")
@@ -157,7 +176,7 @@ def main() -> None:
                 "line": f[1],
                 "pattern": f[2],
                 "snippet": f[3],
-                "phase": phase_for(f[0]),
+                "phase": phase_for(f[0], f[2]),
                 "status": "active-legacy",
             }
             for f in findings

@@ -109,13 +109,24 @@ def geospatial_dataframe_to_bytes(
     geom_column: Optional[str],
     crs: str,
 ) -> bytes:
-    """Serialize a DataFrame to bytes for supported geospatial formats."""
-    if formato != "geojson":
-        if formato in ("gpkg", "shp"):
-            raise ValueError(
-                f"Formato '{formato}' richiede filesystem (tool binari / multi-file). "
-                f"Usa save_dataframe(path-based) invece di save_dataframe_to_bytes."
-            )
+    """Serialize a DataFrame to bytes for supported geospatial formats.
+
+    Pre-fix: solo `geojson` era supportato; `gpkg` e `shp` rifiutati
+    con messaggio "richiede filesystem (tool binari / multi-file)".
+    Post-fix: con GDAL 3.13.0 unified e pyogrio 0.12+ il GPKG e'
+    serializzabile in RAM via `/vsimem` (gestito internamente da
+    `pyogrio.write_dataframe(buf, driver='GPKG')`). Shapefile resta
+    fuori scope qui (multi-file, richiede /vsimem sidecar read che
+    pyogrio non espone ancora come API Python pubblica) -- migrare
+    a GPKG o usare il path-based `save_geospatial_dataframe`.
+    """
+    if formato == "shp":
+        raise ValueError(
+            "Formato 'shp' richiede output multi-file: usa "
+            "save_geospatial_dataframe(path-based) oppure migra a "
+            "'gpkg' (single-file, RAM-only)."
+        )
+    if formato not in ("geojson", "gpkg", "geopackage"):
         raise ValueError(f"Formato '{formato}' non supportato")
 
     to_geodataframe, detect_geometry_column = _geo_helpers()
@@ -125,10 +136,10 @@ def geospatial_dataframe_to_bytes(
     try:
         import geopandas as gpd
     except ImportError:
-        raise ValueError("geopandas non installato: formato geojson non disponibile")
+        raise ValueError("geopandas non installato: formato geospatial non disponibile")
     if not isinstance(df, gpd.GeoDataFrame):
         if not geom_column:
-            raise ValueError("geojson: serve una colonna geometria")
+            raise ValueError(f"{formato}: serve una colonna geometria")
         gdf = to_geodataframe(df, geom_column, crs)
     else:
         gdf = copy_frame_for_update(df)
@@ -136,7 +147,16 @@ def geospatial_dataframe_to_bytes(
             gdf = gdf.set_geometry(geom_column)
     gdf = _converti_geometrie_secondarie_in_wkt(gdf)
     gdf = _compact_whole_number_float_properties(gdf)
-    return gdf.to_json().encode("utf-8")
+
+    if formato == "geojson":
+        return gdf.to_json().encode("utf-8")
+    # GPKG/GeoPackage: write via pyogrio bytes (RAM-only).
+    # NB: `layer=None` -> pyogrio usa "default" come layer name.
+    # Passare "gpkg" come layer name e' vietato da OGR (prefisso
+    # riservato GeoPackage). I caller che vogliono un layer name
+    # specifico devono passare metadata via signature dedicato.
+    from app.core.io.geospatial import write_vector_bytes
+    return write_vector_bytes(gdf, driver="GPKG")
 
 
 def _sanitize_layer_name(name: str) -> str:

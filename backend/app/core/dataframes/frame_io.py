@@ -107,7 +107,16 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 _GEOSPATIAL_FORMATS = {"geojson", "gpkg", "shp"}
-_IN_MEMORY_ARTIFACT_FORMATS = {"csv", "json", "xlsx", "xls", "parquet", "geojson"}
+# Tutti i formati supportati ora sono RAM-feasible grazie a pyogrio
+# 0.12+ con `read_dataframe(bytes)` e GDAL 3.13.0 unified
+# (/vsimem + /vsizip gestiti internamente da pyogrio).
+# `_PATH_BOUND_ARTIFACT_FORMATS` resta per back-compat semantica con
+# i caller che testano `fmt in _PATH_BOUND_ARTIFACT_FORMATS`, ma il
+# branch di lettura ora va sempre attraverso `_load_dataframe_from_bytes`.
+_IN_MEMORY_ARTIFACT_FORMATS = {
+    "csv", "json", "xlsx", "xls", "parquet", "geojson",
+    "gpkg", "geopackage", "shp", "zip", "gdb",
+}
 _PATH_BOUND_ARTIFACT_FORMATS = {"gpkg", "geopackage", "shp", "zip", "gdb"}
 
 __all__ = [
@@ -329,17 +338,15 @@ def _load_dataframe_from_bytes(
                 text = data.decode("utf-8-sig")
             return gpd.read_file(StringIO(text))
     if format_hint in _PATH_BOUND_ARTIFACT_FORMATS:
-        suffix = ".gpkg" if format_hint == "gpkg" else f".{format_hint}"
-        with tempfile.NamedTemporaryFile(delete=False, prefix="plenora-artifact-", suffix=suffix) as tmp:
-            tmp.write(data)
-            tmp_path = Path(tmp.name)
-        try:
-            return load_dataframe_from_file(tmp_path, sheet=sheet, layer=layer)
-        finally:
-            try:
-                tmp_path.unlink()
-            except OSError:
-                pass
+        # Pre-fix: scriveva i bytes su NamedTemporaryFile e poi
+        # delegava a `load_dataframe_from_file(tmp_path)`. Costoso
+        # (disk write + unlink) e fragile (cleanup race su crash).
+        # Post-fix: pyogrio 0.12+ accetta nativamente `bytes` /
+        # `BytesIO` come `path_or_buffer` e gestisce internamente
+        # /vsimem (per single-file) e /vsizip (per shapefile/gdb
+        # ZIP). I formati gpkg/shp/zip/gdb sono ora RAM-only.
+        from app.core.io.geospatial import read_vector_bytes
+        return read_vector_bytes(data, layer=layer)
     raise ValueError(f"Formato artifact non supportato: {format_hint}")
 
 
@@ -388,31 +395,23 @@ def load_dataframe_from_artifact(
 
         return gpd.read_file(artifact_path)
     if fmt in _PATH_BOUND_ARTIFACT_FORMATS:
-        expected_suffix = ".gpkg" if fmt == "gpkg" else f".{fmt}"
-        if fmt != "gdb" and artifact_path.suffix.lower() != expected_suffix:
-            # Pre-fix: `with NamedTemporaryFile(...) as tmp: tmp_path = ...`
-            # creava una finestra in cui il file su disco poteva rimanere
-            # orfano se l'uscita dal `with` falliva tra creazione e
-            # assegnazione di `tmp_path`. Post-fix: creazione esplicita
-            # via NamedTemporaryFile + close immediato, tmp_path catturato
-            # prima del try block — il finally esegue unlink in qualsiasi
-            # caso di errore successivo (shutil.copyfile o load_*).
-            tmp_obj = tempfile.NamedTemporaryFile(
-                delete=False,
-                prefix="plenora-artifact-",
-                suffix=expected_suffix,
-            )
-            tmp_path = Path(tmp_obj.name)
-            tmp_obj.close()
-            try:
-                shutil.copyfile(artifact_path, tmp_path)
-                return load_dataframe_from_file(tmp_path, sheet=sheet, layer=layer)
-            finally:
-                try:
-                    tmp_path.unlink()
-                except OSError:
-                    pass
-        return load_dataframe_from_file(artifact_path, sheet=sheet, layer=layer)
+        # Pre-fix: se il file su disco aveva un suffisso "sbagliato"
+        # (es. `.bin` per un GPKG), copiava su NamedTemporaryFile con
+        # il suffisso corretto perche' `load_dataframe_from_file`
+        # dispatcha per estensione. Post-fix: leggi bytes una volta e
+        # delega a `_load_dataframe_from_bytes` con `format_hint`
+        # esplicito -- niente piu' dipendenza dal suffisso del path.
+        # Eccezione: `gdb` puo' essere una DIRECTORY (`.gdb/`), non
+        # un file singolo: lascia il dispatch path-based al
+        # `load_dataframe_from_file` quando il path e' una dir.
+        if fmt == "gdb" and artifact_path.is_dir():
+            return load_dataframe_from_file(artifact_path, sheet=sheet, layer=layer)
+        return _load_dataframe_from_bytes(
+            artifact_path.read_bytes(),
+            format_hint=fmt,
+            sheet=sheet,
+            layer=layer,
+        )
 
     return load_dataframe_from_file(artifact_path, sheet=sheet, layer=layer)
 
@@ -609,42 +608,60 @@ def _carica_da_zip(
     sheet: Optional[str] = None,
     layer: Optional[str] = None,
 ) -> pd.DataFrame:
-    """Load a DataFrame from a ZIP archive."""
-    import geopandas as gpd
+    """Load a DataFrame from a ZIP archive.
+
+    Pre-fix: estraeva il contenuto ZIP su una temp dir via
+    safe_extractall, quindi caricava il file estratto da disk.
+    3 callsite identici per shapefile / FileGDB / singolo file.
+    Post-fix: pyogrio 0.12+ accetta ZIP bytes nativi e gestisce
+    internamente /vsizip. Lettura ZIP-from-bytes -> GeoDataFrame
+    senza extractall e senza temp dir.
+    """
+    from app.core.io.geospatial import read_vector_bytes
+
+    zip_bytes = zip_path.read_bytes()
 
     with zipfile.ZipFile(zip_path, "r") as zf:
         contenuto = zf.namelist()
 
-        shp_files = [n for n in contenuto if n.lower().endswith(".shp")]
-        if shp_files:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                safe_extractall(zf, tmpdir)
-                shp_path = Path(tmpdir) / shp_files[0]
-                df = gpd.read_file(shp_path)
-                logger.warning(
-                    "Shapefile caricato - i nomi colonne potrebbero "
-                    "essere troncati a 10 caratteri!"
-                )
-            return df
+    shp_files = [n for n in contenuto if n.lower().endswith(".shp")]
+    if shp_files:
+        df = read_vector_bytes(zip_bytes, layer=layer)
+        logger.warning(
+            "Shapefile caricato - i nomi colonne potrebbero "
+            "essere troncati a 10 caratteri!"
+        )
+        return df
 
-        gdb_entries = [n for n in contenuto if ".gdb/" in n or n.lower().endswith(".gdb")]
-        if gdb_entries:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                safe_extractall(zf, tmpdir)
-                gdb_dirs = list(Path(tmpdir).rglob("*.gdb"))
-                if not gdb_dirs:
-                    raise ValueError("FileGDB non trovato nello ZIP")
-                return _carica_filegdb(gdb_dirs[0], layer)
+    gdb_entries = [n for n in contenuto if ".gdb/" in n or n.lower().endswith(".gdb")]
+    if gdb_entries:
+        return read_vector_bytes(zip_bytes, layer=layer)
 
-        if len(contenuto) == 1:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                safe_extractall(zf, tmpdir)
-                file_estratto = Path(tmpdir) / contenuto[0]
-                return load_dataframe_from_file(file_estratto, sheet=sheet, layer=layer)
+    if len(contenuto) == 1:
+        # Singolo file (es. CSV/JSON/Parquet zippato): non possiamo
+        # usare pyogrio (non sono vector). Leggi via zipfile in RAM
+        # + dispatch su `_load_dataframe_from_bytes` per i formati
+        # tabulari supportati.
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            inner_name = contenuto[0]
+            with zf.open(inner_name) as inner:
+                inner_bytes = inner.read()
+        inner_suffix = Path(inner_name).suffix.lower().lstrip(".")
+        if inner_suffix in _IN_MEMORY_ARTIFACT_FORMATS:
+            return _load_dataframe_from_bytes(
+                inner_bytes,
+                format_hint=inner_suffix,
+                sheet=sheet,
+                layer=layer,
+            )
+        raise ValueError(
+            f"ZIP contiene file singolo con estensione non gestita: "
+            f"{inner_name!r}"
+        )
 
-        anteprima = contenuto[:10]
-        suffisso = "..." if len(contenuto) > 10 else ""
-        raise ValueError(f"Formato ZIP non riconosciuto. Contenuto: {anteprima}{suffisso}")
+    anteprima = contenuto[:10]
+    suffisso = "..." if len(contenuto) > 10 else ""
+    raise ValueError(f"Formato ZIP non riconosciuto. Contenuto: {anteprima}{suffisso}")
 
 
 def find_latest_output_file(output_dir: Union[str, Path]) -> Optional[Path]:
