@@ -45,8 +45,28 @@ from app.shared.connections.esri_system_fields import ESRI_SYSTEM_FIELDS_LITERAL
 class ImdfBundle:
     """Indice dei file dentro uno zip IMDF estratto.
 
+    Shape ibrida (IMDF-2):
+      - `files: dict[str, bytes]` — componenti RAM-first (manifest.json,
+        validation.json, renderers.json, geojson). Popolata da
+        `extract_imdf_zip_bytes`; vuota quando il caller usa
+        `extract_imdf_zip(path)` (path-only legacy).
+      - `tmp_dir + *_path` — workspace fisico per i componenti che
+        richiedono filesystem (`.gdb` directory letta da pyogrio,
+        `.ifc`). IMDF-3 spostera' la persistenza di `files` a storage
+        e introdurra' la modalita' `tmp_dir is None` quando il bundle
+        non contiene `.gdb`/`.ifc`.
+
+    Gli accessor `manifest()` / `validation()` / `renderers()` leggono
+    da `files` se popolato, altrimenti fallback su `*_path` su disco.
+    Le properties `has_gdb` / `has_ifc` / `has_renderers` derivano da
+    entrambe le shape e sono il modo canonico per i consumer di
+    interrogare il bundle (sostituiscono il pattern `bundle.X_path is
+    not None`).
+
     `tmp_dir` e' la directory radice dove l'estrazione e' stata fatta. Il
-    chiamante e' responsabile di chiamare `cleanup` quando finito.
+    chiamante e' responsabile di chiamare `cleanup` quando finito. Puo'
+    essere `None` quando il bundle e' puramente in-memory (caso non
+    ancora prodotto da IMDF-2; preparazione per IMDF-3).
 
     Invariant site_id (D3, R4 — ratificato 2026-04-22):
       Il campo `site_id` e' popolato **esclusivamente** da
@@ -65,9 +85,10 @@ class ImdfBundle:
       divergente proibita dall'invariant.
     """
 
-    tmp_dir: Path
+    tmp_dir: Optional[Path]
     # Vedi class docstring "Invariant site_id" (D3, R4
     site_id: str
+    files: Dict[str, bytes] = field(default_factory=dict)
     gdb_path: Optional[Path] = None
     ifc_path: Optional[Path] = None
     manifest_path: Optional[Path] = None
@@ -81,20 +102,72 @@ class ImdfBundle:
         if self.tmp_dir and self.tmp_dir.exists():
             shutil.rmtree(self.tmp_dir, ignore_errors=True)
 
+    @property
+    def has_gdb(self) -> bool:
+        """`.gdb` directory presente nel bundle (richiede filesystem
+        per pyogrio). Derivato dal path-shape: la `.gdb` non e' mai
+        in `files` (e' una directory)."""
+        return self.gdb_path is not None
+
+    @property
+    def has_ifc(self) -> bool:
+        """`.ifc` file presente nel bundle. Path-shape only: l'IFC
+        non e' in `files` (binario potenzialmente grande, lettura
+        on-demand dal consumer)."""
+        return self.ifc_path is not None
+
+    @property
+    def has_renderers(self) -> bool:
+        """`renderers.json` presente — in RAM (`files`) o su disco
+        (`renderers_path`)."""
+        return self.renderers_path is not None or "renderers.json" in self.files
+
+    @property
+    def has_manifest(self) -> bool:
+        return self.manifest_path is not None or "manifest.json" in self.files
+
+    @property
+    def has_validation(self) -> bool:
+        return self.validation_path is not None or "validation.json" in self.files
+
     def manifest(self) -> JsonObject:
+        raw = self.files.get("manifest.json")
+        if raw is not None:
+            return json.loads(raw.decode("utf-8"))
         if self.manifest_path and self.manifest_path.exists():
             return json.loads(self.manifest_path.read_text(encoding="utf-8"))
         return {}
 
     def validation(self) -> JsonObject:
+        raw = self.files.get("validation.json")
+        if raw is not None:
+            return json.loads(raw.decode("utf-8"))
         if self.validation_path and self.validation_path.exists():
             return json.loads(self.validation_path.read_text(encoding="utf-8"))
         return {}
 
     def renderers(self) -> JsonObject:
+        raw = self.files.get("renderers.json")
+        if raw is not None:
+            return json.loads(raw.decode("utf-8"))
         if self.renderers_path and self.renderers_path.exists():
             return json.loads(self.renderers_path.read_text(encoding="utf-8"))
         return {}
+
+
+_RAM_FIRST_MEMBERS: tuple[str, ...] = (
+    "manifest.json",
+    "validation.json",
+    "renderers.json",
+)
+
+
+def _is_geojson_member(name: str) -> bool:
+    """`{site_id}/foo.geojson` — gli IMDF GeoJSON vivono sotto la dir
+    site_id. Filtriamo per estensione + presenza di `/` per evitare
+    di catturare un eventuale `.geojson` al root (non standard).
+    """
+    return name.endswith(".geojson") and "/" in name
 
 
 def _extract_zip_source_to_bundle(
@@ -103,15 +176,35 @@ def _extract_zip_source_to_bundle(
     """Internal: estrae uno ZipFile-compatible `zip_source` dentro `tmp`
     e costruisce il bundle indicizzato.
 
+    IMDF-2: BEFORE l'extract su disco, leggiamo in memoria i membri
+    JSON/geojson e popoliamo `bundle.files`. Cosi' i consumer
+    RAM-first (manifest/validation/renderers accessor + IMDF-3
+    persist verso storage) non devono piu' passare dal filesystem.
+
     Il caller e' responsabile della creazione di `tmp` e del cleanup
     su exception (per le funzioni pubbliche `extract_imdf_zip*` quel
     cleanup e' fatto dal wrapper, su success la cleanup passa al
     bundle via `bundle.cleanup`).
     """
+    files: Dict[str, bytes] = {}
     with zipfile.ZipFile(zip_source) as z:
         members = z.namelist()
+        # In-memory read dei componenti RAM-first PRIMA dell'extract.
+        # Le entry sono tipicamente piccole (manifest/validation/renderers
+        # KB-scale; geojson per-layer fino a MB-scale ma cappato da
+        # RESOURCE_MAX_BYTES upstream nel REST connector).
+        for m in members:
+            if m in _RAM_FIRST_MEMBERS or _is_geojson_member(m):
+                try:
+                    files[m] = z.read(m)
+                except KeyError:
+                    # Member listato in namelist ma non leggibile: skip
+                    # silenzioso, il fallback path-based gestira'.
+                    continue
         safe_extractall(z, tmp)
-    return _build_bundle_index(tmp, members)
+    bundle = _build_bundle_index(tmp, members)
+    bundle.files = files
+    return bundle
 
 
 def extract_imdf_zip(zip_path: str | os.PathLike, dest_dir: Optional[str | os.PathLike] = None) -> ImdfBundle:

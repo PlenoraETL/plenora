@@ -90,9 +90,9 @@ def persist_imdf_bundle_to_disk(
             "task_id":       task_id,
             "site_id":       bundle.site_id,
             "saved_at":      datetime.now(timezone.utc).isoformat(),
-            "has_gdb":       bundle.gdb_path is not None,
-            "has_ifc":       bundle.ifc_path is not None,
-            "has_renderers": bundle.renderers_path is not None,
+            "has_gdb":       bundle.has_gdb,
+            "has_ifc":       bundle.has_ifc,
+            "has_renderers": bundle.has_renderers,
         }
 
         # Validation summary: leggiamo dalla DESTINAZIONE perché il move

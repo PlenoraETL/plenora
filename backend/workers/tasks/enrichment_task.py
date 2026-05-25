@@ -886,9 +886,9 @@ def execute_enrichment_task(
 
                     imdf_metadata = {
                         "site_id":        bundle.site_id,
-                        "has_gdb":        bundle.gdb_path is not None,
-                        "has_ifc":        bundle.ifc_path is not None,
-                        "has_renderers":  bundle.renderers_path is not None,
+                        "has_gdb":        bundle.has_gdb,
+                        "has_ifc":        bundle.has_ifc,
+                        "has_renderers":  bundle.has_renderers,
                         "bundle_task_id": task_id if bundle_persisted_path else None,
                     }
                     logger.info(

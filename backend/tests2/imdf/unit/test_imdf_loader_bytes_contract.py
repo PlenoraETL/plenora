@@ -149,3 +149,108 @@ def test_extract_imdf_zip_bytes_equivalent_to_path_based(tmp_path):
     finally:
         bundle_from_path.cleanup()
         bundle_from_bytes.cleanup()
+
+
+# IMDF-2: shape RAM-first (`bundle.files`)
+
+
+def test_bundle_files_populated_from_zip_members():
+    """IMDF-2: `extract_imdf_zip_bytes` popola `bundle.files` con i
+    membri RAM-first (manifest, validation, renderers, geojson) PRIMA
+    dell'extract su disco. Accessor `manifest()` / `validation()` /
+    `renderers()` leggono dai bytes in memoria, niente filesystem read."""
+    from app.core.imdf.loader import extract_imdf_zip_bytes
+
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr(
+            "manifest.json",
+            json.dumps({"sites": {"S1": {"name": "Site 1"}}}),
+        )
+        z.writestr(
+            "validation.json",
+            json.dumps({"passed": True, "total_errors": 0}),
+        )
+        z.writestr(
+            "renderers.json",
+            json.dumps({"layers": [{"name": "Localita"}]}),
+        )
+        z.writestr(
+            "S1/anchor.geojson",
+            json.dumps({"type": "FeatureCollection", "features": []}),
+        )
+    data = buf.getvalue()
+
+    bundle = extract_imdf_zip_bytes(data)
+    try:
+        # Files dict popolato per i membri RAM-first.
+        assert "manifest.json" in bundle.files
+        assert "validation.json" in bundle.files
+        assert "renderers.json" in bundle.files
+        assert "S1/anchor.geojson" in bundle.files
+        # Accessor che leggono da `files` (no filesystem read).
+        assert bundle.manifest() == {"sites": {"S1": {"name": "Site 1"}}}
+        assert bundle.validation() == {"passed": True, "total_errors": 0}
+        assert bundle.renderers() == {"layers": [{"name": "Localita"}]}
+        # Properties has_* derivate dalla shape ibrida.
+        assert bundle.has_manifest is True
+        assert bundle.has_validation is True
+        assert bundle.has_renderers is True
+        assert bundle.has_gdb is False  # no .gdb in questo zip
+        assert bundle.has_ifc is False  # no .ifc
+    finally:
+        bundle.cleanup()
+
+
+def test_bundle_files_accessor_falls_back_to_filesystem_when_empty(tmp_path):
+    """Path-based `extract_imdf_zip` non popola `bundle.files` per i
+    geojson/manifest? Wait — IMDF-2 ora le popola da entrambi i path
+    (l'extract reader e' condiviso). Questo test pinna il fallback
+    quando `bundle.files` viene svuotato manualmente (es. dopo persist
+    che potrebbe rilasciarli per liberare RAM)."""
+    from app.core.imdf.loader import extract_imdf_zip
+
+    data = _build_minimal_imdf_zip_bytes()
+    zip_on_disk = tmp_path / "imdf.zip"
+    zip_on_disk.write_bytes(data)
+
+    bundle = extract_imdf_zip(str(zip_on_disk))
+    try:
+        # Svuotiamo `files` per simulare il post-persist scenario.
+        bundle.files = {}
+        # Accessor cadde sul fallback filesystem via `manifest_path`.
+        assert bundle.manifest() == {"sites": {"SITE_X": {"name": "Site X"}}}
+        assert bundle.has_manifest is True  # manifest_path popolato
+    finally:
+        bundle.cleanup()
+
+
+def test_bundle_manifest_missing_returns_empty_dict():
+    """Quando il manifest non e' presente in nessuna delle due shape
+    (`files` vuoto + `manifest_path` None), gli accessor ritornano
+    `{}` senza sollevare. Garantisce che i consumer optional-aware
+    (es. metadata builder) possano interrogare il bundle senza
+    pre-check."""
+    from app.core.imdf.loader import ImdfBundle
+
+    bundle = ImdfBundle(tmp_dir=None, site_id="X", files={})
+    assert bundle.manifest() == {}
+    assert bundle.validation() == {}
+    assert bundle.renderers() == {}
+    assert bundle.has_manifest is False
+    assert bundle.has_validation is False
+    assert bundle.has_renderers is False
+    assert bundle.has_gdb is False
+    assert bundle.has_ifc is False
+    # cleanup e' un no-op safe con tmp_dir=None.
+    bundle.cleanup()
+
+
+def test_bundle_tmp_dir_optional_none_cleanup_no_op():
+    """Anti-regression: `cleanup()` con `tmp_dir=None` non solleva.
+    Preparazione per IMDF-3 dove bundle puramente in-memory (no .gdb,
+    no .ifc) potrebbe non avere tmp_dir."""
+    from app.core.imdf.loader import ImdfBundle
+
+    bundle = ImdfBundle(tmp_dir=None, site_id="X")
+    bundle.cleanup()  # no raise
