@@ -52,13 +52,15 @@ _BUFFER_HINTS = re.compile(
 def _is_buffer_write(pattern_name: str, line: str) -> bool:
     """True se il match df_to_xxx scrive su buffer RAM, non su path.
 
-    Three heuristics:
+    Heuristics:
       1. `BytesIO/StringIO` literal sulla stessa riga.
       2. Primo arg di `to_xxx(buf, ...)` e' una variabile chiamata
          `buf*`/`buffer*`.
       3. Primo arg e' una kwarg (`to_xxx(index=False, ...)`):
          `df.to_csv()`/`to_json()` senza positional restituisce
          string/dict, niente disk.
+      4. Empty parens (`to_json()` / `to_xxx()`): returns string/dict,
+         niente disk.
     """
     if pattern_name not in (
         "df_to_csv_path", "df_to_excel_path",
@@ -72,6 +74,9 @@ def _is_buffer_write(pattern_name: str, line: str) -> bool:
         r"\.to_(csv|excel|json|parquet)\(\s*[A-Za-z_]\w*\s*=",
         line,
     ):
+        return True
+    # `df.to_xxx()` (empty parens) -> returns value, niente disk.
+    if re.search(r"\.to_(csv|excel|json|parquet)\(\s*\)", line):
         return True
     return False
 

@@ -291,94 +291,17 @@ def test_save_pipeline_result_rejects_unknown_format():
         )
 
 
-def test_save_pipeline_result_fs_only_fallback_to_filesystem(monkeypatch, tmp_path):
-    """Per gpkg/shp il dispatch interno usa tempfile + save_result_blob.
-    Deve comunque ritornare la stessa shape dict."""
-    from app.core.results.pipeline_result import save_pipeline_result
-    import app.core.results.blob_writer as result_blob_writer
-    import app.core.results.pipeline_result as pipeline_result
-    import app.core.results.store as results_store
-    import app.core.results.db as results_db
-    from types import SimpleNamespace
+def test_save_pipeline_result_path_based_tombstone_post_phase5():
+    """Post-Phase5: `save_dataframe` path-based e' stato rimosso.
+    `save_pipeline_result*` ora usa esclusivamente `save_dataframe_to_bytes`
+    (vedi pipeline_result.py). I test originali che mockavano save_dataframe
+    (path) testavano un flow non piu' esistente."""
+    from app.core.dataframes import frame_io
 
-    # Intercetta il flusso path-based: mock save_dataframe per evitare
-    # dipendenza GDAL/gpkg.
-    def _fake_save_dataframe(df, path, fmt, *a, **kw):
-        from pathlib import Path
-        out = Path(str(path)).with_suffix(f".{fmt}")
-        out.write_bytes(b"fake-gpkg-bytes")
-        return out
-
-    monkeypatch.setattr("app.core.dataframes.frame_io.save_dataframe", _fake_save_dataframe)
-
-    saved_calls = []
-    monkeypatch.setattr(result_blob_writer, "uuid",
-                        SimpleNamespace(uuid4=lambda: "res-fs"))
-    monkeypatch.setattr(results_store, "resolve_group_id_for_result",
-                        lambda project_id, group_id=None: "grp")
-    monkeypatch.setattr(results_db, "save_result_row",
-                        lambda **kw: saved_calls.append(kw))
-    monkeypatch.setattr(result_blob_writer, "apply_results_retention_after_save",
-                        lambda pid: None)
-
-    class _FakeSettings:
-        DATA_DIR = tmp_path
-        @staticmethod
-        def get(key, default=None): return default
-    monkeypatch.setattr(pipeline_result, "settings", _FakeSettings, raising=False)
-
-    df = pd.DataFrame({"a": [1]})
-    result = save_pipeline_result(
-        project_id="p1", df=df, output_format="gpkg",
-        filename_stem="report", rows_count=1,
+    assert not hasattr(frame_io, "save_dataframe"), (
+        "save_dataframe (path) resta presente: refactor RAM-only incompleto."
     )
-    assert result["result_id"] == "res-fs"
-    assert result["output_filename"].endswith(".gpkg")
-
-
-def test_save_pipeline_result_outcome_reports_persisted_fs_columns(monkeypatch, tmp_path):
-    """Path-bound formats expose the physical columns written by OGR."""
-
-    from types import SimpleNamespace
-
-    from app.core.results.pipeline_result import save_pipeline_result_outcome
-    import app.core.results.blob_writer as result_blob_writer
-    import app.core.results.pipeline_result as pipeline_result
-    import app.core.results.store as results_store
-    import app.core.results.db as results_db
-
-    def _fake_save_dataframe(df, path, fmt, *a, **kw):
-        out = Path(str(path)).with_suffix(".zip" if fmt == "shp" else f".{fmt}")
-        out.write_bytes(b"fake-shp-zip")
-        return out
-
-    class _LoadedFrame:
-        columns = ["city_id", "producer_c", "geometry"]
-
-    monkeypatch.setattr("app.core.dataframes.frame_io.save_dataframe", _fake_save_dataframe)
-    monkeypatch.setattr("app.core.dataframes.frame_io.load_dataframe_from_file", lambda path: _LoadedFrame())
-    monkeypatch.setattr(result_blob_writer, "uuid", SimpleNamespace(uuid4=lambda: "res-shp"))
-    monkeypatch.setattr(results_store, "resolve_group_id_for_result", lambda project_id, group_id=None: "grp")
-    monkeypatch.setattr(results_db, "save_result_row", lambda **kw: None)
-    monkeypatch.setattr(result_blob_writer, "apply_results_retention_after_save", lambda pid: None)
-
-    class _FakeSettings:
-        DATA_DIR = tmp_path
-
-        @staticmethod
-        def get(key, default=None):
-            return default
-
-    monkeypatch.setattr(pipeline_result, "settings", _FakeSettings, raising=False)
-
-    outcome = save_pipeline_result_outcome(
-        project_id="p1",
-        df=pd.DataFrame({"city_id": [1], "producer_code": [2001], "geometry": ["POINT (0 0)"]}),
-        output_format="shp",
-        filename_stem="report",
-        rows_count=1,
+    assert not hasattr(frame_io, "save_tabular_dataframe"), (
+        "save_tabular_dataframe (path) resta presente: refactor RAM-only "
+        "incompleto."
     )
-
-    assert outcome.result_id == "res-shp"
-    assert outcome.output_filename == "report.zip"
-    assert outcome.output_columns == ["city_id", "producer_c", "geometry"]

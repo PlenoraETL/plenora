@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, Protocol, Union
+from typing import Any, Optional, Protocol
 
 
 FrameLike = Any
@@ -56,29 +56,3 @@ class FrameIOEngine(Protocol):
     ) -> LoadedFrame: ...
 
 
-class FrameFileIOPort(Protocol):
-    """Path/bytes frame serialization contract."""
-
-    def load_dataframe_from_file(
-        self,
-        file_path: Union[str, Path],
-        sheet: Optional[str] = None,
-        layer: Optional[str] = None,
-    ) -> FrameLike: ...
-
-    def save_dataframe(
-        self,
-        df: FrameLike,
-        output_path: Union[str, Path],
-        format: str = "csv",
-        geom_column: Optional[str] = None,
-        crs: str = "EPSG:4326",
-    ) -> Path: ...
-
-    def save_dataframe_to_bytes(
-        self,
-        df: FrameLike,
-        format: str = "csv",
-        geom_column: Optional[str] = None,
-        crs: str = "EPSG:4326",
-    ) -> bytes: ...

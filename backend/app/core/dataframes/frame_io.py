@@ -188,7 +188,6 @@ __all__ = [
     "empty_dataframe",
     "empty_object_series",
     "false_boolean_series",
-    "save_dataframe",
     "is_bool_series",
     "is_dataframe",
     "is_float_series",
@@ -203,7 +202,6 @@ __all__ = [
     "missing_scalar",
     "normalize_json_records",
     "save_dataframe_to_bytes",
-    "save_tabular_dataframe",
     "object_series",
     "pivot_table_dataframe",
     "tabular_dataframe_to_bytes",
@@ -221,16 +219,6 @@ class DefaultFrameFileIO:
         layer: Optional[str] = None,
     ) -> pd.DataFrame:
         return load_dataframe_from_file(file_path, sheet=sheet, layer=layer)
-
-    def save_dataframe(
-        self,
-        df: pd.DataFrame,
-        output_path: Union[str, Path],
-        format: str = "csv",
-        geom_column: Optional[str] = None,
-        crs: str = "EPSG:4326",
-    ) -> Path:
-        return save_dataframe(df, output_path, format, geom_column, crs)
 
     def save_dataframe_to_bytes(
         self,
@@ -676,99 +664,6 @@ def find_latest_output_file(output_dir: Union[str, Path]) -> Optional[Path]:
         return None
 
     return max(files, key=lambda x: x.stat().st_mtime)
-
-
-def save_tabular_dataframe(df: pd.DataFrame, base_path: Path, formato: str) -> Path:
-    """Save a DataFrame in a non-geospatial format."""
-    df = _compact_whole_number_floats(df)
-    if formato == "csv":
-        final_path = base_path.with_suffix(".csv")
-        # `float_format='%.15g'`: scrive `52000` invece di `52000.0` ma
-        # preserva `45000.5` con i decimali reali. Resta dentro 15 cifre
-        # significative (precisione float64) e non incappa nella
-        # notazione scientifica del semplice `%g` su numeri molto piccoli.
-        df.to_csv(final_path, index=False, encoding="utf-8", float_format="%.15g")
-        return final_path
-
-    if formato == "xlsx":
-        final_path = base_path.with_suffix(".xlsx")
-        try:
-            df.to_excel(final_path, index=False)
-        except Exception as e:
-            logger.info("Excel standard fallito, riprovo con ZIP64: %s", e)
-            with pd.ExcelWriter(
-                final_path,
-                engine="xlsxwriter",
-                engine_kwargs={"options": {"use_zip64": True}},
-            ) as writer:
-                df.to_excel(writer, index=False)
-        return final_path
-
-    if formato == "json":
-        final_path = base_path.with_suffix(".json")
-        records = sanitize_for_json(df.to_dict(orient="records"))
-        with open(final_path, "w", encoding="utf-8") as f:
-            json.dump(records, f, indent=2, default=str, ensure_ascii=False)
-        return final_path
-
-    if formato == "parquet":
-        # Pre-fix: scrittura diretta su `final_path` (non-atomic) +
-        # `to_parquet` senza `engine="pyarrow"` esplicito. Due bug
-        # combinati:
-        #   1. Engine implicito: su install con fastparquet l'Int64
-        #      nullable degrada a float64 silenziosamente.
-        #   2. Non-atomic write: un reader concorrente puo' vedere il
-        #      file parquet in stato parziale durante la scrittura.
-        # Post-fix: write su `.tmp` + rename atomico + engine esplicito.
-        final_path = base_path.with_suffix(".parquet")
-        tmp_path = final_path.with_suffix(".parquet.tmp")
-        try:
-            df.to_parquet(tmp_path, index=False, engine="pyarrow")
-            tmp_path.replace(final_path)
-        except Exception:
-            # Cleanup best-effort del .tmp in caso di errore write/rename
-            try:
-                if tmp_path.exists():
-                    tmp_path.unlink()
-            except OSError:
-                pass
-            raise
-        return final_path
-
-    raise ValueError(f"Formato '{formato}' non supportato")
-
-
-def save_dataframe(
-    df: pd.DataFrame,
-    output_path: Union[str, Path],
-    format: str = "csv",
-    geom_column: Optional[str] = None,
-    crs: str = "EPSG:4326",
-) -> Path:
-    """Save a DataFrame, dispatching explicit file I/O boundaries by format."""
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    base_path = output_path.with_suffix("")
-    formato = format.lower()
-
-    try:
-        if formato in _GEOSPATIAL_FORMATS:
-            from app.core.dataframes.geospatial_io import save_geospatial_dataframe
-
-            final_path = save_geospatial_dataframe(df, base_path, formato, geom_column, crs)
-        else:
-            final_path = save_tabular_dataframe(df, base_path, formato)
-
-        logger.info(f"Salvato: {final_path} ({len(df)} righe)", op="save")
-        return final_path
-
-    except ValueError as e:
-        logger.warning(f"Salvataggio non riuscito {output_path}: {e}")
-        raise
-    except Exception as e:
-        logger.error(f"[CRASH] Errore salvataggio {output_path}: {e}", exc_info=True)
-        raise
 
 
 def save_dataframe_to_bytes(

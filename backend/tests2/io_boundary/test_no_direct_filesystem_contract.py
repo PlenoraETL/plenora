@@ -80,6 +80,8 @@ def _is_buffer_write(pattern_name: str, line: str) -> bool:
         line,
     ):
         return True
+    if re.search(r"\.to_(csv|excel|json|parquet)\(\s*\)", line):
+        return True
     return False
 
 

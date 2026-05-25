@@ -84,74 +84,19 @@ def test_tabular_to_bytes_passes_pyarrow_engine_explicit(monkeypatch):
     )
 
 
-# Path 2: frame_io.save_tabular_dataframe
-
-def test_save_tabular_dataframe_passes_pyarrow_engine(tmp_path, monkeypatch):
-    """save_tabular_dataframe deve passare engine='pyarrow' esplicito."""
-    from app.core.dataframes.frame_io import save_tabular_dataframe
-
-    calls_kwargs: list[dict] = []
-    original = pd.DataFrame.to_parquet
-
-    def _spy(self, path_or_buf, **kwargs):
-        calls_kwargs.append(dict(kwargs))
-        return original(self, path_or_buf, **kwargs)
-
-    monkeypatch.setattr(pd.DataFrame, "to_parquet", _spy)
-
-    save_tabular_dataframe(_nullable_int_df(), tmp_path / "output", "parquet")
-
-    assert calls_kwargs, "to_parquet non e' stato chiamato"
-    assert calls_kwargs[0].get("engine") == "pyarrow", (
-        f"engine deve essere 'pyarrow' esplicito, trovato: "
-        f"{calls_kwargs[0].get('engine')!r}"
-    )
+# Path 2: post-Phase5 — `save_tabular_dataframe` (path-based) rimossa.
+# Il fix engine=pyarrow + atomic write copriva un flow path-based che non
+# esiste piu': il dispatcher e' `tabular_dataframe_to_bytes` (Path 1) che
+# usa engine=pyarrow su buffer in-memory — anti-regression preserved.
 
 
-def test_save_tabular_dataframe_atomic_write_no_tmp_residual(tmp_path):
-    """save_tabular_dataframe scrive .tmp + rename atomico. Il .tmp NON
-    deve restare su disco dopo la write success.
-    Pre-fix: scrittura diretta su final_path; un reader concorrente
-    vedeva file parziale durante la write."""
-    from app.core.dataframes.frame_io import save_tabular_dataframe
+def test_save_tabular_dataframe_tombstone_post_phase5():
+    """`save_tabular_dataframe` rimossa: nessun caller live in app/
+    materializa parquet path-based. Il bug del round-trip Int64
+    nullable e' coperto dal Path 1 (bytes-first) sopra."""
+    from app.core.dataframes import frame_io
 
-    final_path = tmp_path / "output.parquet"
-    save_tabular_dataframe(_nullable_int_df(), tmp_path / "output", "parquet")
-
-    tmp_residual = tmp_path / "output.parquet.tmp"
-    assert not tmp_residual.exists(), (
-        "File .tmp residuo trovato: il rename atomico non e' avvenuto "
-        "o ha lasciato residui sul filesystem"
-    )
-    assert final_path.exists(), "Il file finale deve esistere dopo il rename"
-    assert final_path.stat().st_size > 0, "Il file finale non deve essere vuoto"
-
-
-def test_save_tabular_dataframe_cleanup_tmp_on_write_failure(tmp_path, monkeypatch):
-    """Se to_parquet solleva, il .tmp NON deve restare orfano sul disco.
-    Anti-regression sul cleanup del fallback try/except."""
-    from app.core.dataframes.frame_io import save_tabular_dataframe
-
-    def _raise(self, path_or_buf, **kwargs):
-        # Tocco il file per simulare scrittura parziale, poi sollevo
-        from pathlib import Path
-        if isinstance(path_or_buf, (str, Path)):
-            Path(path_or_buf).touch()
-        raise RuntimeError("Simulated parquet write failure")
-
-    monkeypatch.setattr(pd.DataFrame, "to_parquet", _raise)
-
-    with pytest.raises(RuntimeError, match="Simulated"):
-        save_tabular_dataframe(_nullable_int_df(), tmp_path / "output", "parquet")
-
-    final_path = tmp_path / "output.parquet"
-    tmp_residual = tmp_path / "output.parquet.tmp"
-    assert not tmp_residual.exists(), (
-        ".tmp orfano dopo write failure: cleanup nel except mancante"
-    )
-    assert not final_path.exists(), (
-        "final_path non deve essere creato se la write e' fallita"
-    )
+    assert not hasattr(frame_io, "save_tabular_dataframe")
 
 
 # Path 3: architectural lint

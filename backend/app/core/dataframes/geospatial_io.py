@@ -1,10 +1,12 @@
-"""Geospatial DataFrame export helpers owned by the dataframe boundary."""
+"""Geospatial DataFrame export helpers owned by the dataframe boundary.
 
-import json
-import re
-import tempfile
-import zipfile
-from pathlib import Path
+Post-Phase5 refactor: solo l'entry-point bytes-first
+`geospatial_dataframe_to_bytes` sopravvive. Le funzioni path-based
+(save_geospatial_dataframe, _salva_formato_geo, _salva_shapefile_zippato,
+_salva_geo_vuoto, _switch_colonna_geometria) sono state rimosse —
+nessun caller live in app/. In produzione il flow e' bytes -> storage.
+"""
+
 from typing import Optional
 
 import pandas as pd
@@ -82,27 +84,6 @@ def _dedup_columns_for_geo_save(df: pd.DataFrame, formato: str) -> pd.DataFrame:
     return df
 
 
-def save_geospatial_dataframe(
-    df: pd.DataFrame,
-    base_path: Path,
-    formato: str,
-    geom_column: Optional[str],
-    crs: str,
-) -> Path:
-    """Save a DataFrame in a geospatial filesystem format."""
-    to_geodataframe, detect_geometry_column = _geo_helpers()
-    df = _dedup_columns_for_geo_save(df, formato)
-    return _salva_formato_geo(
-        df,
-        base_path,
-        formato,
-        geom_column,
-        crs,
-        to_geodataframe,
-        detect_geometry_column,
-    )
-
-
 def geospatial_dataframe_to_bytes(
     df: pd.DataFrame,
     formato: str,
@@ -152,108 +133,6 @@ def geospatial_dataframe_to_bytes(
     # riservato GeoPackage).
     from app.core.io.geospatial import write_vector_bytes
     return write_vector_bytes(gdf, driver="GPKG")
-
-
-def _sanitize_layer_name(name: str) -> str:
-    """Sanitize an OGR/GPKG layer name."""
-    sanitized = re.sub(r"[^A-Za-z0-9_]", "_", name)
-    if sanitized and sanitized[0].isdigit():
-        sanitized = "_" + sanitized
-    return sanitized or "layer"
-
-
-def _salva_formato_geo(
-    df: pd.DataFrame,
-    base_path: Path,
-    formato: str,
-    geom_column: Optional[str],
-    crs: str,
-    to_geodataframe,
-    detect_geometry_column,
-) -> Path:
-    """Save a DataFrame as GeoJSON, GPKG, or zipped Shapefile."""
-    import geopandas as gpd
-
-    if len(df) == 0:
-        logger.warning(f"DataFrame vuoto, creazione {formato} vuoto")
-        return _salva_geo_vuoto(df, base_path, formato)
-
-    if isinstance(df, gpd.GeoDataFrame):
-        gdf = copy_frame_for_update(df)
-
-        if geom_column and geom_column != gdf.geometry.name and geom_column in gdf.columns:
-            gdf = _switch_colonna_geometria(gdf, geom_column)
-
-        gdf = _converti_geometrie_secondarie_in_wkt(gdf)
-
-        if gdf.crs is None:
-            gdf = gdf.set_crs(crs)
-
-    else:
-        if geom_column is None:
-            geom_column = detect_geometry_column(df)
-
-        if geom_column is None:
-            lat_col = next((c for c in df.columns if c.lower() in ("lat", "latitude", "lat_wgs84")), None)
-            lon_col = next(
-                (c for c in df.columns if c.lower() in ("lon", "lng", "longitude", "long", "lon_wgs84")),
-                None,
-            )
-            if lat_col and lon_col:
-                from shapely.geometry import Point
-
-                df = copy_frame_for_update(df)
-                lons = pd.to_numeric(df[lon_col], errors="coerce")
-                lats = pd.to_numeric(df[lat_col], errors="coerce")
-                valid = lons.notna() & lats.notna()
-                df["geometry"] = [
-                    Point(lon, lat) if v else None
-                    for lon, lat, v in zip(lons, lats, valid)
-                ]
-                geom_column = "geometry"
-                logger.info(
-                    f"Auto-creata colonna geometry da lat='{lat_col}' lon='{lon_col}' "
-                    f"per salvataggio {formato}"
-                )
-            else:
-                raise ValueError(
-                    f"Nessuna colonna geometria trovata per formato {formato}. "
-                    f"Colonne disponibili: {list(df.columns)}. "
-                    f"Usa CSV o JSON per dati non spaziali."
-                )
-
-        gdf = to_geodataframe(df, geom_column, crs=crs)
-        gdf = _converti_geometrie_secondarie_in_wkt(gdf)
-
-    gdf = _compact_whole_number_float_properties(gdf)
-
-    if formato == "geojson":
-        final_path = base_path.with_suffix(".geojson")
-        gdf.to_file(final_path, driver="GeoJSON")
-    elif formato == "gpkg":
-        final_path = base_path.with_suffix(".gpkg")
-        layer_name = _sanitize_layer_name(base_path.stem)
-        gdf.to_file(final_path, driver="GPKG", layer=layer_name)
-    elif formato == "shp":
-        final_path = _salva_shapefile_zippato(gdf, base_path, df.columns)
-    else:
-        raise ValueError(f"Formato '{formato}' non supportato")
-
-    return final_path
-
-
-def _switch_colonna_geometria(gdf, geom_column: str):
-    """Set a different column as active GeoDataFrame geometry."""
-    from app.core.dataframes.geometry_parsing import parse_geometry_series
-
-    col_data = gdf[geom_column]
-    if col_data.dtype == "object":
-        _non_null = col_data.dropna()
-        primo_valido = _non_null.iloc[0] if not _non_null.empty else None
-        if primo_valido and isinstance(primo_valido, str):
-            gdf[geom_column] = parse_geometry_series(col_data)
-
-    return gdf.set_geometry(geom_column)
 
 
 _GEOMETRY_LIKE_COLUMN_NAMES = {
@@ -315,53 +194,3 @@ def _converti_geometrie_secondarie_in_wkt(gdf):
     return gdf
 
 
-def _salva_geo_vuoto(df: pd.DataFrame, base_path: Path, formato: str) -> Path:
-    """Create an empty but structurally valid geospatial output."""
-    import geopandas as gpd
-
-    if formato == "geojson":
-        final_path = base_path.with_suffix(".geojson")
-        geojson_vuoto = {"type": "FeatureCollection", "features": []}
-        with open(final_path, "w", encoding="utf-8") as f:
-            json.dump(geojson_vuoto, f)
-        return final_path
-
-    gdf_vuoto = gpd.GeoDataFrame(
-        {col: [] for col in df.columns},
-        geometry=[],
-        crs="EPSG:4326",
-    )
-
-    if formato == "gpkg":
-        final_path = base_path.with_suffix(".gpkg")
-        layer_name = _sanitize_layer_name(base_path.stem)
-        gdf_vuoto.to_file(final_path, driver="GPKG", layer=layer_name)
-    elif formato == "shp":
-        final_path = _salva_shapefile_zippato(gdf_vuoto, base_path, df.columns)
-    else:
-        raise ValueError(f"Formato '{formato}' non supportato")
-
-    return final_path
-
-
-def _salva_shapefile_zippato(gdf, base_path: Path, colonne_originali) -> Path:
-    """Save a GeoDataFrame as zipped Shapefile."""
-    nome_shp = base_path.stem
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        shp_path = Path(tmpdir) / f"{nome_shp}.shp"
-        gdf.to_file(shp_path, driver="ESRI Shapefile")
-
-        zip_path = base_path.with_suffix(".zip")
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            for f in Path(tmpdir).glob(f"{nome_shp}.*"):
-                zf.write(f, f.name)
-
-        colonne_lunghe = [c for c in colonne_originali if len(str(c)) > 10]
-        if colonne_lunghe:
-            logger.warning(
-                f"Shapefile: {len(colonne_lunghe)} colonne con nomi > 10 caratteri "
-                f"saranno troncate: {colonne_lunghe[:5]}..."
-            )
-
-    return zip_path

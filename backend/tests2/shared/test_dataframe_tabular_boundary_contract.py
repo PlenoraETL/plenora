@@ -379,9 +379,7 @@ def test_files_dataframe_io_reexports_frame_io_boundary() -> None:
     assert dataframe_io.DefaultFrameFileIO is frame_io.DefaultFrameFileIO
     assert dataframe_io.find_latest_output_file is frame_io.find_latest_output_file
     assert dataframe_io.load_dataframe_from_file is frame_io.load_dataframe_from_file
-    assert dataframe_io.save_dataframe is frame_io.save_dataframe
     assert dataframe_io.save_dataframe_to_bytes is frame_io.save_dataframe_to_bytes
-    assert dataframe_io.save_tabular_dataframe is frame_io.save_tabular_dataframe
 
 
 def test_files_geospatial_io_reexports_dataframe_boundary() -> None:
@@ -391,10 +389,6 @@ def test_files_geospatial_io_reexports_dataframe_boundary() -> None:
     assert (
         files_geospatial.geospatial_dataframe_to_bytes
         is dataframe_geospatial.geospatial_dataframe_to_bytes
-    )
-    assert (
-        files_geospatial.save_geospatial_dataframe
-        is dataframe_geospatial.save_geospatial_dataframe
     )
 
 
