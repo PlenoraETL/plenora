@@ -133,90 +133,32 @@ def save_result_blob(
 ) -> str:
     """Persist a result file as a DB blob or object-storage backed row.
 
-    Path-based entry point: il caller passa un file gia' su disco
-    (typically streamed da una query o downloaded da un REST endpoint).
-    Per object storage usa storage upload path-based come streaming,
-    niente buffering intermedio in RAM.
+    Post-Phase5: thin wrapper su `save_result_blob_from_bytes`. Legge
+    il payload una volta in RAM e delega al path bytes-first (single
+    source of truth: orphan guard, intent tracking, DB blob path
+    dispatch). Lo streaming upload originale e' stato collassato in
+    `upload_bytes(data)` — trade-off RAM vs streaming per result
+    blob bounded by DB cap + S3 threshold.
     """
     saved = False
     try:
-        resolved_group_id = store.resolve_group_id_for_result(project_id, group_id)
-        result_id = str(uuid.uuid4())
-
         try:
-            file_size = path.stat().st_size
+            data = path.read_bytes()
         except OSError as exc:
-            raise ResultSaveError(f"Impossibile leggere dimensione file {path}: {exc}") from exc
+            raise ResultSaveError(
+                f"Impossibile leggere file {path}: {exc}"
+            ) from exc
 
-        policy = storage_policy()
-        use_object_storage = should_use_object_storage(file_size, policy)
-
-        if not use_object_storage:
-            enforce_db_hard_cap(file_size, ctx=f"save_result_blob/{policy}")
-            store.save_result_row(
-                result_id=result_id,
-                project_id=project_id,
-                group_id=resolved_group_id,
-                filename=path.name,
-                fmt=fmt,
-                data=path.read_bytes(),
-                rows_count=rows_count,
-            )
-        else:
-            storage_key = _storage_key(project_id, result_id)
-            upload_intent_id: Optional[str] = None
-            try:
-                from app.infrastructure.storage.cloud_backends import get_runtime_object_storage
-
-                storage = get_runtime_object_storage()
-                upload_intent_id = record_result_upload_intent(
-                    storage_key,
-                    project_id=project_id,
-                    result_id=result_id,
-                    filename=path.name,
-                    size_bytes=file_size,
-                )
-                storage.upload(path, storage_key)
-            except Exception as exc:
-                raise _runtime_storage_upload_error(
-                    exc,
-                    result_id=result_id,
-                    filename=path.name,
-                ) from exc
-
-            try:
-                store.save_result_row(
-                    result_id=result_id,
-                    project_id=project_id,
-                    group_id=resolved_group_id,
-                    filename=path.name,
-                    fmt=fmt,
-                    data=None,
-                    rows_count=rows_count,
-                    storage_key=storage_key,
-                    size_bytes=file_size,
-                )
-                close_result_upload_intent(upload_intent_id)
-            except Exception:
-                cleanup_outcome = cleanup_uploaded_result_blob(
-                    storage,
-                    storage_key,
-                    reason="db_save_failed_after_object_upload",
-                    project_id=project_id,
-                    result_id=result_id,
-                )
-                close_failed_result_upload_intent(
-                    upload_intent_id,
-                    cleanup_outcome=cleanup_outcome,
-                )
-                raise
-            logger.info(
-                f"[FS-4] Result {result_id} su object storage (file-based, "
-                f"policy={policy}, {file_size // (1024 * 1024)} MB): {storage_key}"
-            )
+        result_id = save_result_blob_from_bytes(
+            project_id=project_id,
+            data=data,
+            filename=path.name,
+            fmt=fmt,
+            rows_count=rows_count,
+            group_id=group_id,
+        )
 
         saved = True
-        apply_results_retention_after_save(project_id)
         return result_id
     except ResultSaveError:
         raise

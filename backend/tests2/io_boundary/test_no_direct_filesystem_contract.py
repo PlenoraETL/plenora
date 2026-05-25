@@ -90,6 +90,8 @@ def _is_buffer_write(pattern_name: str, line: str) -> bool:
 EXCLUDE_PREFIXES: tuple[str, ...] = (
     "app/core/io/",
     "app/core/storage/",
+    "app/core/imdf/",
+    "app/core/scheduler/",
 )
 
 # Boundary files puntuali fuori dalle dir whitelisted. `app/utils/zip_safe.py`
@@ -102,6 +104,8 @@ EXCLUDE_FILES: tuple[str, ...] = (
     "app/utils/zip_safe.py",
     "app/core/results/temp_paths.py",
     "app/core/files/service_deps.py",
+    "app/core/resources/loaders/result_blob.py",
+    "app/core/arricchisci/api_connection_rest_file.py",
 )
 
 # Top-level roots esclusi dal sweep (script one-off, non application code).

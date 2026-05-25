@@ -60,6 +60,12 @@ def save_bytes(task_id: str, filename: str, data: bytes) -> str:
 def save(task_id: str, src_path: Path) -> str:
     """Upload del file su object storage, poi delete del local temp.
 
+    Post-Phase5: thin wrapper su `save_bytes`. Legge il contenuto del
+    file una volta in RAM e delega al path bytes-first. Trade-off:
+    streaming upload sostituito da buffered. Per gli eseguibili
+    Plenora il payload e' di solito small-to-medium (REST file
+    workflow output, < RESULT_DB_HARD_CAP); il tradeoff RAM e' accettabile.
+
     Ritorna la key usata (utile per audit/logging).
     """
     if not src_path.exists():
@@ -67,23 +73,21 @@ def save(task_id: str, src_path: Path) -> str:
     if not src_path.is_file():
         raise ValueError(f"Source non e' un file: {src_path}")
 
-    key = _key_for(task_id, src_path.name)
-    storage = _storage()
-    storage.upload(src_path, key)
+    data = src_path.read_bytes()
+    key = save_bytes(task_id, src_path.name, data)
 
-    # Delete eager del local file dopo upload riuscito. Se l'upload fallisce
-    # exception sopra), il file resta su disco per retry manuale
+    # Cleanup eager del local file dopo upload riuscito. Se l'upload
+    # fallisce sopra, il file resta su disco per retry manuale.
     try:
         src_path.unlink()
-        # Cleanup parent directory se vuota (evita accumulo di dir orfane
-        # tipo DATA_DIR/temp/urby_<pid>_<hash>/ che non servono piu'
+        # Cleanup parent dir se vuota (evita accumulo di dir orfane
+        # tipo DATA_DIR/temp/urby_<pid>_<hash>/).
         parent = src_path.parent
         if parent.exists() and not any(parent.iterdir()):
             parent.rmdir()
     except OSError as e:
         logger.warning(f"Cleanup locale fallito per {src_path}: {e}")
 
-    logger.info(f"[storage] eseguibili output uploaded: {key}")
     return key
 
 

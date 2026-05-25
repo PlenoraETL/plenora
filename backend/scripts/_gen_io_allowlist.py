@@ -187,7 +187,18 @@ def phase_for(filepath: str, pattern: str = "") -> str:
     return "unassigned"
 
 
-_BOUNDARY_DIRS = ("app/core/io/", "app/core/storage/")
+_BOUNDARY_DIRS = (
+    "app/core/io/",
+    "app/core/storage/",
+    # IMDF subsystem: bundle cache locale + S3 backing, HTTP endpoints
+    # servono i bundle estratti come file statici. Architettura on-disk
+    # by design (OGC IMDF e' format-as-directory).
+    "app/core/imdf/",
+    # Scheduler subsystem: archive run output su filesystem (RESULTS_DIR/
+    # {project_id}/runs/{schedule}/{timestamp}/), HTTP endpoint serve i
+    # file archiviati via FileResponse. Run history e' filesystem-by-design.
+    "app/core/scheduler/",
+)
 # File singoli che fanno parte del boundary I/O ma non vivono in
 # `app/core/io/`. Sono primitive che esistono PER fornire la capability
 # filesystem al resto del codice in modo controllato. Esigere che NON
@@ -196,6 +207,15 @@ _BOUNDARY_FILES = (
     "app/utils/zip_safe.py",  # safe_extractall + zip bomb guard impl
     "app/core/results/temp_paths.py",  # path-only adapter primitives
     "app/core/files/service_deps.py",  # DefaultFileSystem path adapter
+    # Resource engine loader: materializza bytes -> tempfile per i
+    # consumer mode="path" (REST connector resolve_project_path,
+    # ArcGIS write_features). E' infrastructure, non application code.
+    "app/core/resources/loaders/result_blob.py",
+    # REST file workflow connector: il connector e' file-centric by
+    # design (HTTP multipart upload, response download in workdir,
+    # downstream executable consuma path). `tmp_exec_dir` + cleanup
+    # finally e' il pattern legittimo per il workdir di esecuzione.
+    "app/core/arricchisci/api_connection_rest_file.py",
 )
 # Top-level roots di codice escluso dal sweep applicativo: gli script
 # one-off (`backup_db`, `test_restore`, `export_openapi_manifest`,
