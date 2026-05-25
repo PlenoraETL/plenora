@@ -195,7 +195,15 @@ def test_download_blob_only_run_rejects_cross_project_result(current_user, tmp_p
     assert response.status_code == 404
 
 
-def test_list_runs_returns_archived_runs_with_sizes(current_user, tmp_path):
+def test_list_runs_filesystem_archive_no_longer_supported(current_user, tmp_path):
+    """Post-cleanup: il catalog non legge piu' dal filesystem archive
+    (`RESULTS_DIR/{project_id}/runs/{schedule}/{ts}/`). Le run vecchie
+    archived-only-on-filesystem non appaiono piu' nella lista — solo
+    le run con `result_id` nei `schedule_logs` sono enumerate.
+
+    Sentinel: anche con una run dir filesystem presente, `runs_count == 0`
+    se non c'e' DB log corrispondente.
+    """
     client = _build_client(current_user)
     schedule_id = "schedule_123456789abc"
     project_id = "proj-1"
@@ -214,9 +222,8 @@ def test_list_runs_returns_archived_runs_with_sizes(current_user, tmp_path):
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["runs_count"] == 1
-    assert payload["runs"][0]["timestamp"] == "20260402_060000"
-    assert payload["runs"][0]["files"][0]["name"] == "output.csv"
+    # Filesystem archive ignorato: 0 run (sarebbe 1 col vecchio behavior).
+    assert payload["runs_count"] == 0
 
 
 def test_list_runs_returns_blob_backed_runs_with_sizes(current_user, tmp_path):

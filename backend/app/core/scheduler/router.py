@@ -8,7 +8,7 @@ import json
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import Response
 
 from app.core.auth.dependencies import (
     require_admin,
@@ -384,29 +384,19 @@ async def download_schedule_output(
                     schedule_id=schedule_id,
                     group_id=getattr(_sched_row, "group_id", None),
                 )
-
-            if selected_run.path is None:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Nessun file nella run '{run}'",
-                )
-            out_file = catalog.first_file_in(selected_run.path)
-            if out_file is None:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Nessun file nella run '{run}'",
-                )
-            return FileResponse(
-                path=str(out_file),
-                filename=out_file.name,
-                media_type="application/octet-stream",
-                headers={"Content-Disposition": f'attachment; filename="{out_file.name}"'},
+            # Post-cleanup: i run nuovi passano via `result_id` -> DB/S3.
+                # Le run vecchie su filesystem archive (`RESULTS_DIR/.../runs/`)
+            # non sono piu' supportate dal download endpoint.
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"Nessun result_id per la run '{run}' "
+                    f"(filesystem archive legacy non piu' supportato)"
+                ),
             )
 
-        # Branch 2: senza parametro `run` → latest run archiviata di
-        # QUESTO schedule. Niente `get_latest_result(project_id)`, che
-        # ritornerebbe l'ultimo del progetto includendo anche altri
-        # schedule o esecuzioni manuali (race cross-schedule
+        # Branch 2: senza parametro `run` -> latest run di QUESTO
+        # schedule via DB log + result_id. Niente piu' fallback filesystem.
         latest_run = catalog.latest_run(project_id, schedule_id)
         first_run_file = latest_run.files[0] if latest_run and latest_run.files else None
         if first_run_file is not None and first_run_file.result_id:
@@ -415,16 +405,6 @@ async def download_schedule_output(
                 project_id=project_id,
                 schedule_id=schedule_id,
                 group_id=getattr(_sched_row, "group_id", None),
-            )
-
-        latest_run_dir = catalog.latest_run_dir(project_id, schedule_id)
-        out_file = catalog.first_file_in(latest_run_dir) if latest_run_dir else None
-        if out_file is not None:
-            return FileResponse(
-                path=str(out_file),
-                filename=out_file.name,
-                media_type="application/octet-stream",
-                headers={"Content-Disposition": f'attachment; filename="{out_file.name}"'},
             )
 
         # Blob-only schedules record the exact result_id in the schedule log.

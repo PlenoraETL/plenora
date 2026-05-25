@@ -143,7 +143,6 @@ PATTERN_PHASE_OVERRIDES: dict[str, str] = {
 _LEGITIMATE_CACHE_FILES: tuple[str, ...] = (
     "app/core/files/source_loading.py",
     "app/core/results/temp_paths.py",
-    "app/core/scheduler/router.py",
     "app/core/results/blob_writer.py",  # storage.upload(path) streaming
     # Path-only adapter helpers (callsiti che richiedono path per
     # library esterne che non hanno bytes API).
@@ -192,10 +191,6 @@ _BOUNDARY_DIRS = (
     # servono i bundle estratti come file statici. Architettura on-disk
     # by design (OGC IMDF e' format-as-directory).
     "app/core/imdf/",
-    # Scheduler subsystem: archive run output su filesystem (RESULTS_DIR/
-    # {project_id}/runs/{schedule}/{timestamp}/), HTTP endpoint serve i
-    # file archiviati via FileResponse. Run history e' filesystem-by-design.
-    "app/core/scheduler/",
 )
 # File singoli che fanno parte del boundary I/O ma non vivono in
 # `app/core/io/`. Sono primitive che esistono PER fornire la capability

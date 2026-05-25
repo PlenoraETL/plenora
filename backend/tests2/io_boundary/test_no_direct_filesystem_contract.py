@@ -91,7 +91,6 @@ EXCLUDE_PREFIXES: tuple[str, ...] = (
     "app/core/io/",
     "app/core/storage/",
     "app/core/imdf/",
-    "app/core/scheduler/",
 )
 
 # Boundary files puntuali fuori dalle dir whitelisted. `app/utils/zip_safe.py`

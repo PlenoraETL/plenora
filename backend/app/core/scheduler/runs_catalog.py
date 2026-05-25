@@ -1,4 +1,13 @@
-"""Catalog view for archived executions of a schedule."""
+"""Catalog view for scheduled run history.
+
+Post-cleanup `ScheduleArtifactStore`: il catalog NON legge piu' dal
+filesystem archive (`RESULTS_DIR/{project_id}/runs/{schedule}/{ts}/`).
+Le run sono enumerate dal DB log (`schedule_logs` events
+PIPELINE_COMPLETED / PIPELINE_PARTIAL) + result_id -> DB blob / S3.
+
+Le HTTP download endpoint passano sempre per `result_id`; le run
+storiche archived-only-on-filesystem non sono piu' supportate.
+"""
 
 from __future__ import annotations
 
@@ -9,31 +18,34 @@ from typing import Optional
 from app.core.scheduler.run_archive_store import (
     RunFileInfo,
     RunInfo,
-    ScheduleRunArchiveStore,
     schedule_short,
 )
 from app.core.scheduler.run_log_store import ScheduleRunLogStore
 
 
 class ScheduleRunsCatalog:
-    """Merge filesystem archived runs with DB-only scheduled run logs."""
+    """DB-backed view of scheduled runs.
+
+    Enumera le run dal `schedule_logs` event stream, associa `result_id`
+    quando presente, e ritorna `RunInfo` con file info derivati dalla
+    row `results`. Niente filesystem reads.
+    """
 
     def __init__(
         self,
         results_dir: Optional[Path] = None,
         *,
-        archive_store: ScheduleRunArchiveStore | None = None,
         log_store: ScheduleRunLogStore | None = None,
     ) -> None:
-        self._archive_store = archive_store or ScheduleRunArchiveStore(results_dir)
+        # `results_dir` conservato per backward-compat di costruzione;
+        # non viene piu' usato per filesystem reads. Sara' rimosso quando
+        # i caller / test costruttori saranno aggiornati.
+        del results_dir
         self._log_store = log_store or ScheduleRunLogStore()
 
     @staticmethod
     def _schedule_short(schedule_id: str) -> str:
         return schedule_short(schedule_id)
-
-    def runs_root_for(self, project_id: str, schedule_id: str) -> Path:
-        return self._archive_store.runs_root_for(project_id, schedule_id)
 
     def _result_file_for_log(
         self,
@@ -75,7 +87,6 @@ class ScheduleRunsCatalog:
         entry: dict,
         *,
         project_id: str,
-        schedule_id: str,
     ) -> RunInfo | None:
         ts = entry.get("timestamp_str") or entry.get("timestamp")
         if ts is None:
@@ -90,22 +101,16 @@ class ScheduleRunsCatalog:
         files = (file_info,) if file_info is not None else ()
         return RunInfo(
             timestamp=ts,
-            path=self.runs_root_for(project_id, schedule_id) / ts,
+            path=None,  # Post-cleanup: niente piu' archive path filesystem.
             files=files,
             result_id=result_id,
         )
 
     def list_runs(self, project_id: str, schedule_id: str) -> list[RunInfo]:
-        """List archived runs, newest first, including DB-only runs."""
-        runs = list(self._archive_store.list_runs(project_id, schedule_id))
-        runs_by_timestamp = {run.timestamp: run for run in runs}
-
+        """List run history dal DB log, newest first."""
+        runs_by_timestamp: dict[str, RunInfo] = {}
         for entry in self._log_store.list_completed_runs(schedule_id):
-            run = self._run_info_from_log(
-                entry,
-                project_id=project_id,
-                schedule_id=schedule_id,
-            )
+            run = self._run_info_from_log(entry, project_id=project_id)
             if run is None:
                 continue
             existing = runs_by_timestamp.get(run.timestamp)
@@ -128,8 +133,6 @@ class ScheduleRunsCatalog:
         for run in self.list_runs(project_id, schedule_id):
             if run.timestamp == run_token:
                 return run
-        # Preserve legacy validation/error behavior for filesystem-only archives.
-        self._archive_store.get_run_dir(project_id, schedule_id, run_token)
         raise FileNotFoundError(
             f"Run '{run_token}' non trovata per schedule '{schedule_id}'"
         )
@@ -137,20 +140,6 @@ class ScheduleRunsCatalog:
     def latest_run(self, project_id: str, schedule_id: str) -> Optional[RunInfo]:
         runs = self.list_runs(project_id, schedule_id)
         return runs[0] if runs else None
-
-    def get_run_dir(
-        self,
-        project_id: str,
-        schedule_id: str,
-        run_token: str,
-    ) -> Path:
-        return self._archive_store.get_run_dir(project_id, schedule_id, run_token)
-
-    def latest_run_dir(self, project_id: str, schedule_id: str) -> Optional[Path]:
-        return self._archive_store.latest_run_dir(project_id, schedule_id)
-
-    def first_file_in(self, run_dir: Path) -> Optional[Path]:
-        return self._archive_store.first_file_in(run_dir)
 
 
 __all__ = ["RunFileInfo", "RunInfo", "ScheduleRunsCatalog"]
