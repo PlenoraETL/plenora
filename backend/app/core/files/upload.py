@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import zipfile
 from io import BytesIO
-from pathlib import Path
 from typing import Any, BinaryIO, Callable, List, Optional
 
 from app.core.files.storage_dispatch import BlobDispatchResult
