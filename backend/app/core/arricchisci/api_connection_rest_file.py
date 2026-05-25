@@ -6,8 +6,6 @@ Keeps API enrichment behavior isolated from orchestration callers.
 
 from __future__ import annotations
 
-import shutil as _shutil_cleanup
-import tempfile
 import time
 import time as _time
 
@@ -181,10 +179,11 @@ class ApiConnectionRestFileMixin:
             return response.text[:500] if response.text else ''
 
     @staticmethod
-    def _download_binary_response(
-        response, output_path: Path, start_time: float, timeout: int
+    def _download_binary_response_to_bytes(
+        response, start_time: float, timeout: int, max_bytes: int
     ) -> tuple:
-        """Streaming download del body su file con watchdog wall-clock.
+        """Streaming download del body in memoria con watchdog wall-clock
+        e cap esplicito.
 
         Il parametro `timeout` di `requests.post` copre solo connect/
         first-byte, NON il download del body. Per un server che inizia
@@ -193,32 +192,47 @@ class ApiConnectionRestFileMixin:
         interrompe il download se il totale supera `timeout` secondi
         dall'avvio della chiamata (`start_time`).
 
-        Ritorna `(total_bytes, download_timed_out)`. Chiude sempre
-        la response in un `finally` interno (`response.close` best-effort).
+        Cap: se l'accumulo dei chunk supera `max_bytes`, solleva
+        `MemoryLimitExceededError` (typed signal mappato a 413 dal
+        FastAPI boundary). Il cap protegge il worker da output remoti
+        unbounded e blocca a monte ogni roundtrip verso storage.
+
+        Ritorna `(data: bytes, total_bytes: int, download_timed_out: bool)`.
+        Chiude sempre la response in un `finally` interno
+        (`response.close` best-effort).
         """
+        from app.core.resources.exceptions import MemoryLimitExceededError
 
         total_bytes = 0
         body_deadline = start_time + timeout
         download_timed_out = False
+        buf = io.BytesIO()
         try:
-            with open(output_path, 'wb') as out_fh:
-                for chunk in response.iter_content(chunk_size=65536):
-                    if _time.time() > body_deadline:
-                        download_timed_out = True
-                        break
-                    if chunk:
-                        out_fh.write(chunk)
-                        total_bytes += len(chunk)
+            for chunk in response.iter_content(chunk_size=65536):
+                if _time.time() > body_deadline:
+                    download_timed_out = True
+                    break
+                if not chunk:
+                    continue
+                if total_bytes + len(chunk) > max_bytes:
+                    raise MemoryLimitExceededError(
+                        observed_bytes=total_bytes + len(chunk),
+                        limit_bytes=max_bytes,
+                        path_basename="rest_file_output",
+                        stage="rest_file_output_oversize",
+                    )
+                buf.write(chunk)
+                total_bytes += len(chunk)
         finally:
             try:
                 response.close()
             except Exception as _close_err:
                 logger.debug(
-                    f"_download_binary_response: response.close() best-effort "
-                    f"fallito: {_close_err}"
+                    f"_download_binary_response_to_bytes: response.close() "
+                    f"best-effort fallito: {_close_err}"
                 )
 
-        return total_bytes, download_timed_out
+        return buf.getvalue(), total_bytes, download_timed_out
 
     def _build_rest_file_multipart(
         self,
@@ -485,9 +499,12 @@ class ApiConnectionRestFileMixin:
         in-memory (utile per JSON inline tipo ``styles`` e ``mapping``). Senza
         content_type sono inviati come form-data semplice.
 
-        Ritorna un dict con ``is_file_result=True``, ``output_path``,
-        ``metadata`` cosi' il caller del canvas arricchisci lo tratta come
-        un generico risultato file.
+        Ritorna un dict con ``is_file_result=True``, ``result_id``,
+        ``filename``, ``format``, ``size_bytes``, ``metadata`` cosi' il
+        caller del canvas arricchisci lo tratta come un generico
+        risultato file. Post-Phase5: niente piu' ``output_path`` —
+        l'output e' persistito direttamente come result_blob e i
+        consumer ricaricano i bytes via ``ArtifactResolver.fetch_run_blob``.
         """
         import requests
 
@@ -561,11 +578,6 @@ class ApiConnectionRestFileMixin:
         extra_files_cfg = node_data.get('extra_files') or {}
         opened_handles: list = []
 
-        # Pre-dichiarazione per il finally: se l'eccezione capita prima
-        # del mkdtemp queste variabili devono comunque esistere
-        tmp_exec_dir: Optional[Path] = None
-        _cleanup_tmp = True
-
         try:
             files, data, build_err = self._build_rest_file_multipart(
                 file_fields=file_fields,
@@ -578,22 +590,20 @@ class ApiConnectionRestFileMixin:
             if build_err is not None:
                 return build_err
 
-            # ── 5. Directory temp output ──────────────────────────────────
-            # tmp_exec_dir viene cleanup dal `finally` se _cleanup_tmp
-            # resta True. Sul ramo success lo settiamo a False perche'
-            # restituiamo un output_path al suo interno e il chiamante
-            # e' responsabile del cleanup downstream
-            tmp_exec_dir = Path(tempfile.mkdtemp(prefix="plenora_exec_"))
-            _cleanup_tmp = True
+            # Post-Phase5 (REST output bytes-first): niente piu' tmp_exec_dir.
+            # Lo stream del body va direttamente in memoria (con cap), poi
+            # `save_result_blob_from_bytes` persiste come result_id. Caller
+            # downstream legge il blob via `ArtifactResolver.fetch_run_blob`
+            # — niente piu' `output_path` cross-process.
             output_filename = f"output{output_ext}"
-            output_path = tmp_exec_dir / output_filename
+            fmt = output_ext.lstrip('.') or 'bin'
 
             logger.info(
                 f"REST File Processor: POST {url} "
                 f"files={list(files.keys())} data={list(data.keys())} timeout={timeout}s"
             )
 
-            # ── 6. Chiamata HTTP ──────────────────────────────────────────
+            # ── HTTP call ────────────────────────────────────────────────
             # Pre-fix (P1 etl-sources): `requests.post` SENZA `verify=`
             # esplicito → ignorava silenziosamente l'eventuale flag
             # `verify_ssl=False` sull'auth/api_config. Inconsistente con
@@ -623,9 +633,34 @@ class ApiConnectionRestFileMixin:
                     f"HTTP {response.status_code}: {self._parse_http_error_body(response)}",
                 )
 
-            total_bytes, download_timed_out = self._download_binary_response(
-                response, output_path, start_time, timeout
+            # Cap: RESOURCE_MAX_BYTES (override via env). Lo stesso cap
+            # gia' usato dal Resource Engine per i loader bytes-first.
+            from app.core.resources.resource_caps import (
+                resolve_resource_max_bytes,
             )
+            from app.core.resources.exceptions import MemoryLimitExceededError
+            max_bytes = resolve_resource_max_bytes()
+            try:
+                output_bytes, total_bytes, download_timed_out = (
+                    self._download_binary_response_to_bytes(
+                        response, start_time, timeout, max_bytes,
+                    )
+                )
+            except MemoryLimitExceededError as cap_err:
+                # Cap superato: rest_file output > RESOURCE_MAX_BYTES.
+                # Errore controllato user-visible — il caller orchestrator
+                # propaga come failure user_error.
+                logger.error(
+                    f"[GESTITO] REST File Processor output oversize: "
+                    f"observed={cap_err.observed_bytes} cap={cap_err.limit_bytes} url={url}"
+                )
+                return self._rest_file_error(
+                    "output_too_large",
+                    f"Output del processore remoto supera il cap "
+                    f"RESOURCE_MAX_BYTES ({cap_err.limit_bytes // (1024 * 1024)} MB). "
+                    "Per output di queste dimensioni serve un percorso storage "
+                    "streaming dedicato (non ancora supportato).",
+                )
 
             if download_timed_out:
                 return self._rest_file_error(
@@ -641,13 +676,35 @@ class ApiConnectionRestFileMixin:
                 )
 
             elapsed_ms = (time.time() - start_time) * 1000
-            logger.info(f"REST File Processor: output {output_path} ({total_bytes // 1024} KB, {elapsed_ms:.0f}ms)")
+            logger.info(
+                f"REST File Processor: output {output_filename} "
+                f"({total_bytes // 1024} KB, {elapsed_ms:.0f}ms)"
+            )
 
-            _cleanup_tmp = False  # ramo success: caller gestisce tmp_exec_dir
+            # Persistenza immediata come result_blob. Il resolver downstream
+            # (`ArtifactResolver.fetch_run_blob`) ricarica i bytes verificando
+            # `expected_project_id`. Per rest_file -> rest_file chain
+            # questo significa un round-trip DB/MinIO in piu' rispetto al
+            # passthrough disco precedente, ma evita disco-leak su worker
+            # Celery long-running e uniforma il contratto di scambio
+            # inter-node (sempre result_id, mai path).
+            from app.core.results.blob_writer import save_result_blob_from_bytes
+            result_id = save_result_blob_from_bytes(
+                project_id=project_id,
+                data=output_bytes,
+                filename=output_filename,
+                fmt=fmt,
+                rows_count=0,
+                group_id=(ctx.group_id if ctx is not None else None),
+            )
+
             return {
                 "is_file_result": True,
                 "success": True,
-                "output_path": str(output_path),
+                "result_id": result_id,
+                "filename": output_filename,
+                "format": fmt,
+                "size_bytes": total_bytes,
                 "execution_time_ms": round(elapsed_ms, 1),
                 "metadata": {
                     "method": method,
@@ -686,10 +743,11 @@ class ApiConnectionRestFileMixin:
             )
         except Exception as e:
             # Fix-D safety-net #22c: copre eccezioni inattese dentro il
-            # main try (build multipart, mkdtemp, download response
-            # HTTP path oltre Timeout/RequestException). Messaggio safe
-            # generico per il FE; il dettaglio tecnico resta nel log
-            # logger.error + exc_info=True
+            # main try (build multipart, download response HTTP path
+            # oltre Timeout/RequestException). Messaggio safe generico
+            # per il FE; il dettaglio tecnico resta nel log logger.error
+            # + exc_info=True. Post-Phase5 (REST output bytes-first):
+            # niente piu' `mkdtemp` da safety-net qui.
             # NOTA: i catch narrow #20 (auth prep) e #21 (input resolve
             # sono FUORI da questo try. Eccezioni inattese in quei due
             # step propagano fuori dalla funzione e vengono raccolte
@@ -710,16 +768,6 @@ class ApiConnectionRestFileMixin:
                     logger.debug(
                         f"rest_file: fh.close() best-effort fallito: {_fh_err}"
                     )
-            # Cleanup tmp_exec_dir su tutti i rami errore: senza questo
-            # ogni exception lascerebbe una dir `plenora_exec_*` su disco
-            # con leak progressivo nei worker Celery long-running
-            try:
-                if _cleanup_tmp and tmp_exec_dir is not None and tmp_exec_dir.exists():
-                    _shutil_cleanup.rmtree(tmp_exec_dir, ignore_errors=True)
-            except Exception as _rm_err:
-                logger.debug(
-                    f"rest_file: cleanup tmp_exec_dir best-effort fallito: {_rm_err}"
-                )
             # Cleanup del file temporaneo creato per materializzare un
             # DataFrame upstream (branch api_enrich → rest_file). Solo se
             # e' stato creato qui; non tocchiamo path provenienti da
@@ -901,35 +949,29 @@ class ApiConnectionRestFileMixin:
         *,
         ctx: Optional[ArricchisciExecutionContext] = None,
     ) -> tuple:
-        """Risolve il path di input per un nodo file-processor (rest_file)
-        accettando come predecessore anche un api_enrich o un altro file-processor.
+        """Risolve l'input per un nodo file-processor (rest_file) accettando
+        come predecessore anche un api_enrich o un altro file-processor.
 
         Estende `_resolve_file_source_path` con due branch aggiuntivi quando
         `node_results` è disponibile:
 
-        1. Upstream è un altro file-processor (`is_file_result=True`): riusa
-           direttamente il suo `output_path`, così rest_file→rest_file
-           funziona senza duplicare file su disco.
+        1. Upstream è un altro file-processor (`is_file_result=True`):
+           ricarica i bytes via `ArtifactResolver.fetch_run_blob` dal
+           `result_id` upstream (post-Phase5: niente piu' `output_path`
+           cross-process, lo scambio inter-node passa sempre per il
+           Resource Engine).
         2. Upstream è un api_enrich che ha prodotto un pandas.DataFrame:
-           serializza il DataFrame in un file temporaneo (formato scelto dal
-           nodo, default xlsx) e ritorna quel path. Il caller è responsabile
-           del cleanup.
+           serializza in-memory (bytes-first), ritorna `(bytes, filename)`.
 
-        Ritorna `(input_ref, owns_disk_file)` dove `input_ref` e' una delle seguenti:
-          - `str` (path): file su disco pre-esistente (file_source / upstream
-            file-processor output). NON owned: il caller non deve cancellarlo.
-          - `tuple(bytes, filename)`: DataFrame upstream serializzato
-            in-memory (no disk touch). No cleanup necessario (GC naturale).
-          - `None`: nessun input risolvibile (il caller gestisce required/skip).
+        Ritorna `(input_ref, owns_disk_file)`. `input_ref` puo' essere:
+          - `tuple(bytes, filename)`: caso comune post-Phase5 (rest_file
+            upstream, api_enrich DataFrame, file_source/project_source).
+          - `str` (path): rimane solo per ramificazioni legacy che il
+            fallback `_resolve_file_source_path` potrebbe ancora produrre
+            (oggi tutti i branch ritornano bytes).
+          - `None`: nessun input risolvibile.
 
-        `owns_disk_file`: True solo in casi legacy dove un tempfile e'
-        stato creato e va cancellato. Dopo FS-5 (in-memory refactor del
-        materialize), il branch DataFrame ritorna sempre bytes/False —
-        owns=True resta solo per path backward-compat non usati oggi.
-
-        Se non c'è un upstream utilizzabile via node_results, fa fallback al
-        comportamento classico di `_resolve_file_source_path` (file_source
-        / project_source), con `owns_disk_file=False`.
+        `owns_disk_file`: False sempre post-Phase5 (no tempfile creati qui).
         """
         if node_results is not None:
             input_edge = next((e for e in edges if e.get('target') == target_node_id), None)
@@ -939,47 +981,42 @@ class ApiConnectionRestFileMixin:
                 upstream_type = source_node.get('type') if source_node else None
                 upstream_result = node_results.get(source_id)
 
-                # Branch 1: upstream e' un altro file-processor (rest_file
-                # il cui risultato e' gia' un file su disco
+                # Branch 1: upstream e' un altro file-processor.
+                # Post-Phase5: `result_id` e' il riferimento canonico
+                # (no piu' `output_path`). Ricarichiamo i bytes via
+                # ArtifactResolver con `expected_project_id` per la
+                # verifica cross-tenant fail-closed.
                 if isinstance(upstream_result, dict) and upstream_result.get('is_file_result'):
-                    out_path = upstream_result.get('output_path')
-                    if out_path and Path(out_path).exists():
-                        # Pre-fix (P2 etl-sources): `out_path` proveniva
-                        # da `node_results` (state della run upstream)
-                        # ed era riusato senza validare che fosse dentro
-                        # la trusted tmp root. In pratica i
-                        # file-processor scrivono sempre in
-                        # `tempfile.mkdtemp(prefix="plenora_exec_")`
-                        # cioe' dentro `tempfile.gettempdir()`, ma se in
-                        # futuro un nodo personalizzato scrivesse fuori
-                        # (o `node_results` venisse corrotto) il path
-                        # poteva uscire dalla tmp dir. Post-fix:
-                        # validazione fail-closed con `assert_path_within`
-                        # contro `gettempdir()`. Allineato al pattern di
-                        # `ArtifactResolver._materialize_from_output_path`.
-                        from app.shared.resources.path_policy import (
-                            assert_path_within,
+                    upstream_result_id = upstream_result.get('result_id')
+                    upstream_filename = (
+                        upstream_result.get('filename') or 'upstream_output.bin'
+                    )
+                    if upstream_result_id and ctx is not None and ctx.project_id:
+                        from app.core.artifacts.resolver import ArtifactResolver
+                        from app.core.artifacts.types import (
+                            ArtifactResolutionError,
                         )
                         try:
-                            assert_path_within(
-                                out_path,
-                                [tempfile.gettempdir()],
-                                must_exist=True,
+                            blob = ArtifactResolver().fetch_run_blob(
+                                result_id=upstream_result_id,
+                                expected_project_id=ctx.project_id,
                             )
-                        except ValueError as path_err:
+                        except ArtifactResolutionError as e:
                             logger.error(
-                                f"file-processor input: path upstream "
-                                f"fuori da tmp root, ignorato per "
-                                f"sicurezza ({source_id}): {path_err}"
+                                f"[GESTITO] file-processor input: fetch_run_blob "
+                                f"upstream {source_id} (result_id={upstream_result_id}) "
+                                f"fallito: {e}"
                             )
-                            # Fall-through al branch 2/3 sotto, oppure
-                            # al fallback classico se nessuno matcha.
-                        else:
-                            logger.info(
-                                f"file-processor input: riuso output file del nodo upstream "
-                                f"{source_id} ({out_path})"
-                            )
-                            return str(out_path), False
+                            raise ValueError(
+                                f"Impossibile ricaricare output del nodo upstream "
+                                f"{source_id}: {e}"
+                            ) from e
+                        logger.info(
+                            f"file-processor input: bytes upstream {source_id} "
+                            f"da result_id={upstream_result_id} "
+                            f"({len(blob.data)} bytes, filename={blob.filename})"
+                        )
+                        return (blob.data, blob.filename or upstream_filename), False
 
                 # Branch 2: upstream ha prodotto un DataFrame (api_enrich o simili
                 # FS-5: serializzazione in-memory → bytes. Nessun tempfile

@@ -72,13 +72,15 @@ def _mock_http_response(status_code=200, body_chunks=None, json_body=None, text=
 
 @pytest.fixture
 def rf_env(api_service, tmp_path):
-    """Fixture per _execute_rest_file: patcha collaborator esterni e
-    filesystem (tempfile.mkdtemp → tmp_path/exec_dir).
-    """
-    exec_dir = tmp_path / "exec_dir"
-    exec_dir.mkdir()
+    """Fixture per _execute_rest_file: patcha collaborator esterni.
 
-    # Creo un file di input fittizio cosi' open('rb') funziona
+    Post-Phase5 (REST output bytes-first): niente piu' `tempfile.mkdtemp`
+    da patchare — l'output del processore viene streamato in bytes e
+    persistito via `save_result_blob_from_bytes`. La fixture intercetta
+    quest'ultima per evitare di toccare il DB.
+    """
+    # Creo un file di input fittizio cosi' open('rb') funziona quando
+    # il caller passa un path su disco (file_source legacy path-mode).
     input_file = tmp_path / "input.dxf"
     input_file.write_bytes(b"dxf-content")
 
@@ -93,13 +95,15 @@ def rf_env(api_service, tmp_path):
     with stack:
         mocks = SimpleNamespace(
             svc=api_service,
-            exec_dir=exec_dir,
             input_file=input_file,
             prepare_headers=_po("_prepare_headers", return_value={"Authorization": "Bearer x"}),
             ssrf=_po("_validate_outbound_url", return_value=None),  # None = OK
             resolve_path=_po("_resolve_file_source_path", return_value=str(input_file)),
             resolve_id_path=_po("_resolve_file_source_id_path"),
-            mkdtemp=_p("tempfile.mkdtemp", return_value=str(exec_dir)),
+            save_blob=_p(
+                "app.core.results.blob_writer.save_result_blob_from_bytes",
+                return_value="fake-result-id",
+            ),
             requests_post=_p("requests.post"),
         )
         # Default response: 200, bytes validi
@@ -249,25 +253,25 @@ class TestExecuteRestFileConfigValidation:
     def test_main_flow_unknown_exception_returns_safe_message(self, rf_env):
         """Safety-net contract: eccezioni inattese dentro il main try
         di `_execute_rest_file` (post input resolve, durante build
-        multipart / mkdtemp / download response / resto del path HTTP
-        oltre Timeout e RequestException) cadono nel catch broad che
-        ora restituisce messaggio safe generico. Previous behavior ritornava
-        `str(e)` leakando internals. Il dettaglio tecnico resta nel
-        log (`logger.error [CRASH]` + `exc_info=True`).
+        multipart / download response / persistenza result_blob /
+        resto del path HTTP oltre Timeout e RequestException) cadono
+        nel catch broad che ora restituisce messaggio safe generico.
+        Previous behavior ritornava `str(e)` leakando internals. Il
+        dettaglio tecnico resta nel log (`logger.error [CRASH]` +
+        `exc_info=True`).
 
-        Simulazione via `tempfile.mkdtemp` che solleva RuntimeError --
-        punto INTERNO al main try, diverso dai boundary narrow #20/#21
-        che sono strutturalmente esterni e propagano separatamente
-        (vedi commento al safety-net).
+        Post-Phase5: simulazione via `save_result_blob_from_bytes` che
+        solleva RuntimeError — punto INTERNO al main try (subentra al
+        precedente `tempfile.mkdtemp` ora rimosso).
         """
-        rf_env.mkdtemp.side_effect = RuntimeError("disk allocation failed")
+        rf_env.save_blob.side_effect = RuntimeError("DB write failed")
         cfg = _api_config()
         result = rf_env.svc._execute_rest_file(
             {}, cfg, [], [], "n1", "p1"
         )
         assert result["success"] is False
         assert result["error"] == "Errore interno nel processore file remoto"
-        assert "disk allocation failed" not in result["error"], (
+        assert "DB write failed" not in result["error"], (
             "str(original_exception) non deve comparire nella response FE"
         )
 
@@ -409,6 +413,10 @@ class TestExecuteRestFileDownload:
         assert "vuota" in result["error"]
 
     def test_successful_download_returns_is_file_result(self, rf_env):
+        """Post-Phase5: il connector persiste l'output come `result_id`
+        e ritorna `result_id` / `filename` / `format` / `size_bytes`
+        invece di `output_path`. Il caller downstream usa
+        `ArtifactResolver.fetch_run_blob` per ricaricare i bytes."""
         rf_env.requests_post.return_value = _mock_http_response(
             status_code=200,
             body_chunks=[b"chunk1-", b"chunk2"],
@@ -419,10 +427,24 @@ class TestExecuteRestFileDownload:
         )
         assert result["success"] is True
         assert result["is_file_result"] is True
-        assert str(result["output_path"]).endswith(".zip")
+        assert result["result_id"] == "fake-result-id"
+        assert result["filename"] == "output.zip"
+        assert result["format"] == "zip"
+        assert result["size_bytes"] == len(b"chunk1-chunk2")
+        assert "output_path" not in result, (
+            "post-Phase5: output_path rimosso dal contract"
+        )
         assert result["metadata"]["content_length"] == len(b"chunk1-chunk2")
         assert result["metadata"]["status_code"] == 200
         assert "execution_time_ms" in result
+
+        # save_result_blob_from_bytes invocato con i bytes corretti
+        rf_env.save_blob.assert_called_once()
+        call_kwargs = rf_env.save_blob.call_args.kwargs
+        assert call_kwargs["data"] == b"chunk1-chunk2"
+        assert call_kwargs["filename"] == "output.zip"
+        assert call_kwargs["fmt"] == "zip"
+        assert call_kwargs["project_id"] == "p1"
 
 
 # Section 5: exception handling + tmp cleanup
@@ -449,32 +471,22 @@ class TestExecuteRestFileExceptions:
         assert result["success"] is False
         assert "Errore HTTP" in result["error"]
 
-    def test_tmp_exec_dir_cleanup_on_error_path(self, rf_env):
-        """Su error path (es. empty response), la dir tmp_exec_dir deve
-        essere rimossa dal finally. Senza cleanup, worker long-running
-        accumulerebbero dirs plenora_exec_*."""
+    def test_output_oversize_returns_typed_error(self, rf_env, monkeypatch):
+        """Post-Phase5: lo streaming download in memoria ha un cap esplicito
+        (`RESOURCE_MAX_BYTES`). Output che supera il cap solleva
+        `MemoryLimitExceededError` -> `_rest_file_error("output_too_large")`.
+        Garantisce niente BytesIO illimitato."""
+        # Cap molto basso per forzare l'oversize.
+        import app.core.resources.resource_caps as _caps
+        monkeypatch.setattr(_caps, "resolve_resource_max_bytes", lambda: 5)
+
         rf_env.requests_post.return_value = _mock_http_response(
-            status_code=200, body_chunks=[b""]  # empty → error
+            status_code=200, body_chunks=[b"chunk1-", b"chunk2-too-big"],
         )
         cfg = _api_config()
-        rf_env.svc._execute_rest_file({}, cfg, [], [], "n1", "p1")
-
-        # exec_dir era tmp_path/exec_dir (vedi fixture); dopo l'error path
-        # deve essere stato rimosso dal finally.
-        assert not rf_env.exec_dir.exists(), (
-            "tmp_exec_dir non ripulita dopo error path"
-        )
-
-    def test_tmp_exec_dir_preserved_on_success_path(self, rf_env):
-        """Su success path, tmp_exec_dir NON deve essere rimossa perche'
-        l'output_path restituito punta al suo interno e il caller e'
-        responsabile del cleanup downstream."""
-        rf_env.requests_post.return_value = _mock_http_response(
-            status_code=200, body_chunks=[b"payload"]
-        )
-        cfg = _api_config()
-        rf_env.svc._execute_rest_file({}, cfg, [], [], "n1", "p1")
-
-        assert rf_env.exec_dir.exists(), (
-            "tmp_exec_dir rimossa su success path (cleanup prematuro)"
-        )
+        result = rf_env.svc._execute_rest_file({}, cfg, [], [], "n1", "p1")
+        assert result["success"] is False
+        assert result["error_kind"] == "output_too_large"
+        assert "RESOURCE_MAX_BYTES" in result["error"]
+        # save NON invocato — il cap blocca prima della persistenza.
+        rf_env.save_blob.assert_not_called()

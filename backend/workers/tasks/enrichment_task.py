@@ -6,7 +6,6 @@ Runs background execution while preserving backend runtime contracts.
 
 import csv as csv_mod
 import json as json_mod
-import shutil as _shutil
 import threading
 import time
 import traceback as _tb
@@ -771,35 +770,59 @@ def execute_enrichment_task(
         
         if isinstance(final_result, dict) and final_result.get("is_file_result"):
 
-            src_path = Path(final_result["output_path"]).resolve()
+            # Post-Phase5 (REST output bytes-first): il connector ha gia'
+            # persistito l'output come result_blob e restituisce
+            # `result_id` + `filename` + `format` + `size_bytes`. Carichiamo
+            # i bytes via il resolver per row counting / IMDF extraction
+            # / eseguibili upload. Niente piu' `output_path` cross-process.
+            upstream_result_id = final_result.get("result_id")
+            upstream_filename = final_result.get("filename") or "output.bin"
+            upstream_fmt = final_result.get("format") or "bin"
+            if not upstream_result_id:
+                raise ValueError(
+                    "rest_file: result_id mancante nel risultato "
+                    "(atteso post-Phase5 REST output)"
+                )
+
+            from app.core.artifacts.resolver import ArtifactResolver
+            blob = ArtifactResolver().fetch_run_blob(
+                result_id=upstream_result_id,
+                expected_project_id=project_id,
+            )
+            output_bytes = blob.data
+
             elapsed_time = time.time() - start_time
             update_task_progress(self, 100, "Completato!", task_id=task_id)
 
-            src_ext = src_path.suffix  # es. .csv
+            # Eventuale rename in base a output_filename del nodo Result.
+            # Solo metadata: lo storage del result_blob conserva il
+            # filename originale, ma il task result expone quello richiesto.
+            src_ext = "." + (upstream_fmt or "bin")
+            final_name = upstream_filename
             if output_filename and output_filename != "output":
                 named = Path(output_filename)
                 final_name = named.stem + (named.suffix or src_ext)
-                renamed_path = src_path.parent / final_name
-                src_path.rename(renamed_path)
-                src_path = renamed_path
 
-            ext = src_path.suffix.lower()
+            ext = (Path(final_name).suffix or src_ext).lower()
             rows_count = 0
             try:
-                if src_path.stat().st_size == 0:
+                if len(output_bytes) == 0:
                     raise ValueError("Il file di output è vuoto (0 bytes)")
 
                 if ext == '.csv':
-                    raw = src_path.read_bytes()
-                    text = raw.decode('utf-8-sig')
+                    text = output_bytes.decode('utf-8-sig')
                     rows_found = list(csv_mod.reader(text.splitlines()))
                     if len(rows_found) < 2:
                         raise ValueError("CSV vuoto o senza righe dati")
                     rows_count = len(rows_found) - 1
 
                 elif ext in ('.xlsx', '.xls'):
+                    import io as _io
                     import openpyxl
-                    wb = openpyxl.load_workbook(str(src_path), read_only=True, data_only=True)
+                    wb = openpyxl.load_workbook(
+                        _io.BytesIO(output_bytes),
+                        read_only=True, data_only=True,
+                    )
                     try:
                         ws = wb.active
                         rows_count = max(0, ws.max_row - 1)
@@ -807,24 +830,24 @@ def execute_enrichment_task(
                         wb.close()
 
                 elif ext == '.json':
-                    data = json_mod.loads(src_path.read_bytes())
+                    data = json_mod.loads(output_bytes)
                     rows_count = len(data) if isinstance(data, list) else 1
 
                 elif ext in ('.geojson',):
-                    data = json_mod.loads(src_path.read_bytes())
+                    data = json_mod.loads(output_bytes)
                     features = data.get('features', []) if isinstance(data, dict) else []
                     rows_count = len(features)
 
             except (UnicodeDecodeError, ValueError, Exception) as val_err:
-                src_path.unlink(missing_ok=True)
                 raise ValueError(f"Output non valido ({ext}): {val_err}") from val_err
 
             # Se nel canvas c'e' almeno un nodo api_enrich con
             # output_kind='imdf', il file zip prodotto e' un IMDF: estraiamo
             # manifest.json + validation.json e li includiamo inline nel task
-            # result come `result['imdf']`. Il frontend li mostra nei modali
-            # del nodo Result senza dover rifetchare il file
-            # Sono piccoli (manifest ~10KB, validation ~6KB), inline e' OK
+            # result come `result['imdf']`.
+            # Block IMDF dedicato (Phase6): la zip extraction passa ancora
+            # da un temp path bounce via `temporary_path_from_bytes`. Sara'
+            # migrato a `ZipFile(BytesIO)` quando IMDF diventa bytes-first.
             imdf_metadata: Optional[JsonObject] = None
             has_imdf_upstream = any(
                 (n.get("output_kind") == "imdf" or (n.get("data") or {}).get("output_kind") == "imdf")
@@ -835,15 +858,14 @@ def execute_enrichment_task(
                 try:
                     from app.core.imdf.loader import extract_imdf_zip
                     from app.core.imdf.persist import persist_imdf_bundle_to_disk
-                    bundle = extract_imdf_zip(str(src_path))
+                    from app.core.io.materialize import temporary_path_from_bytes
+                    with temporary_path_from_bytes(
+                        output_bytes,
+                        reason="imdf_zip_extract_legacy_path_api",
+                        suffix=".zip",
+                    ) as _tmp_zip:
+                        bundle = extract_imdf_zip(str(_tmp_zip))
 
-                    # NON serializziamo piu' geojson/manifest/validation/renderers
-                    # nel task result: restano tutti sul filesystem in
-                    # IMDF_BUNDLES_DIR/{task_id}/, il frontend li carica
-                    # on-demand via GET /api/imdf/bundles/{task_id}
-                    # `persist_imdf_bundle_to_disk` garantisce in try/finally
-                    # il cleanup di `bundle.tmp_dir` in OGNI caso (anche
-                    # su errore di move), prevenendo orfani `/tmp/imdf_XXXX/`
                     bundle_persisted_path = None
                     try:
                         _res = persist_imdf_bundle_to_disk(
@@ -854,7 +876,6 @@ def execute_enrichment_task(
                         logger.warning(
                             f"[Task {task_id}] Persistenza bundle fallita: {_persist_e}"
                         )
-                        # cleanup già eseguito dal finally interno di persist
 
                     if bundle_persisted_path:
                         try:
@@ -868,9 +889,6 @@ def execute_enrichment_task(
                                 f"bundle disponibile solo sul nodo corrente): {_save_e}"
                             )
 
-                    # Solo informazioni minime che servono al frontend
-                    # per sapere "esiste un bundle IMDF" + link per fetch
-                    # lazy. I dettagli vengono da GET /api/imdf/bundles/{id}
                     imdf_metadata = {
                         "site_id":        bundle.site_id,
                         "has_gdb":        bundle.gdb_path is not None,
@@ -889,53 +907,46 @@ def execute_enrichment_task(
                     logger.warning(f"[Task {task_id}] Estrazione metadati IMDF fallita: {_imdf_e}")
                     imdf_metadata = {"error": str(_imdf_e)}
 
-            # `result_id` viene generato solo nel ramo arricchisci standard
-            # save su DB). Per gli eseguibili pubblicati il file vive su
-            # disco e si scarica via /api/eseguibili/.../download, quindi
-            # non c'e' result_id da propagare
+            # Routing finale: eseguibili (S3) vs arricchisci (DB result_blob).
             result_id: Optional[str] = None
 
             if is_eseguibile:
                 # Upload su object storage (S3 via cloud_backends). Niente FS
                 # locale persistente: backend+worker multi-host safe. Il
                 # frontend scarica via GET /api/eseguibili/{id}/download/{task_id}
-                # che streamma da S3 e cancella l'oggetto dopo l'invio
+                # che streamma da S3 e cancella l'oggetto dopo l'invio.
+                # Post-Phase5: bytes-first via `save_bytes` (skippa FS).
                 from app.core.eseguibili import storage as _eseg_storage
-                _output_filename = src_path.name
-                _eseg_storage.save(task_id, src_path)
-                # Cleanup directory temporanea dell'executable (plenora_exec_*
-                try:
-                    tmp_parent = src_path.parent
-                    if tmp_parent.name.startswith("plenora_exec_") and tmp_parent.exists():
-                        _shutil.rmtree(tmp_parent, ignore_errors=True)
-                except Exception as e:
-                    logger.debug(f"cleanup temp dir fallito: {type(e).__name__}: {e}")
-                # src_path non punta piu' a un file locale; conserviamo il nome
-                # per il payload del task result (usato come metadata
-                src_path = Path(_output_filename)
-                logger.info(f"[Task {task_id}] Output eseguibile su storage: eseguibili-outputs/{task_id}/{_output_filename}")
-            else:
-                # Flusso arricchisci standard: bounded REST file output ->
-                # read_bytes + save_result_blob_from_bytes (no streaming
-                # path needed; REST timeout + ZIP_MAX_UNCOMPRESSED gia'
-                # cappano la dimensione).
-                from app.core.results.blob_writer import save_result_blob_from_bytes
-                _src_data = src_path.read_bytes()
-                result_id = save_result_blob_from_bytes(
-                    project_id=project_id,
-                    data=_src_data,
-                    filename=src_path.name,
-                    fmt=src_path.suffix.lstrip(".") or "bin",
-                    rows_count=rows_count,
+                _eseg_storage.save_bytes(task_id, final_name, output_bytes)
+                logger.info(
+                    f"[Task {task_id}] Output eseguibile su storage: "
+                    f"eseguibili-outputs/{task_id}/{final_name}"
                 )
-                # Cleanup esplicito del local file post-save.
-                try:
-                    src_path.unlink()
-                except OSError as _e:
-                    logger.debug(
-                        f"[Task {task_id}] cleanup src_path best-effort fallito: {_e}"
+            else:
+                # Flusso arricchisci standard: il connector ha gia' salvato
+                # come result_id. Se l'utente ha specificato un
+                # `output_filename` custom o `rows_count` deve essere
+                # registrato, ri-salviamo con i metadati corretti
+                # (il primo result_blob diventera' orfano — accettabile).
+                # Altrimenti propaghiamo il result_id esistente.
+                if final_name != upstream_filename or rows_count > 0:
+                    from app.core.results.blob_writer import save_result_blob_from_bytes
+                    result_id = save_result_blob_from_bytes(
+                        project_id=project_id,
+                        data=output_bytes,
+                        filename=final_name,
+                        fmt=ext.lstrip(".") or "bin",
+                        rows_count=rows_count,
                     )
-                logger.info(f"[Task {task_id}] File result persistito: {result_id}")
+                    logger.info(
+                        f"[Task {task_id}] File result re-persistito con "
+                        f"rename/rows_count: {result_id}"
+                    )
+                else:
+                    result_id = upstream_result_id
+                    logger.info(
+                        f"[Task {task_id}] File result propagato dal connector: {result_id}"
+                    )
 
             result = {
                 "success": True,
@@ -944,36 +955,39 @@ def execute_enrichment_task(
                 # `result_id` propagato per il download via
                 # `/api/tasks/{task_id}/download` che usa
                 # `task_info.result["result_id"]` (vedi
-                # orchestrator/router.py:580). Senza, 410 Gone
+                # orchestrator/router.py:580). Senza, 410 Gone.
                 "result_id": result_id,
                 "output_type": "file",
-                "output_file": src_path.name,
-                "output_filename": src_path.name,
+                "output_file": final_name,
+                "output_filename": final_name,
 
                 "rows_processed": rows_count,
                 "columns": [],
-                "output_format": src_path.suffix.lstrip("."),
+                "output_format": ext.lstrip("."),
                 "elapsed_time": round(elapsed_time, 2),
                 "completed_at": datetime.now(timezone.utc).isoformat(),
                 "execution_time_ms": final_result.get("execution_time_ms", 0),
                 "enrichment_stats": None,
                 "error_report": None,
-                "message": f"Processamento completato: {src_path.name}",
+                "message": f"Processamento completato: {final_name}",
             }
             if imdf_metadata is not None:
                 result["imdf"] = imdf_metadata
             if is_eseguibile:
                 # URL relativo; il frontend lo compone con il base host
                 result["download_url"] = f"/api/eseguibili/{project_id}/download/{task_id}"
-            
-            logger.info(f"[Task {task_id}] Executable completato in {elapsed_time:.2f}s - {src_path.name}")
+
+            logger.info(
+                f"[Task {task_id}] Executable completato in "
+                f"{elapsed_time:.2f}s - {final_name}"
+            )
 
             if not is_eseguibile:
                 try:
                     carica_info = _trigger_carica_if_present(
                         project_id=project_id,
                         canvas=canvas,
-                        output_format=src_path.suffix.lstrip(".") or "bin",
+                        output_format=ext.lstrip(".") or "bin",
                     )
                     if carica_info:
                         result["carica"] = carica_info

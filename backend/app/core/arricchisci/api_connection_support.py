@@ -6,15 +6,11 @@ Mixin SUPPORT — FIELD_INTROSPECTION + RESULT_BUILDING per
 
 from __future__ import annotations
 
-import shutil
-
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, List, Optional
 
 from app.core.dataframes.values import is_nonempty_dataframe
 from app.utils.logger import get_logger
-from app.core.results.blob_writer import save_result_blob_from_bytes
 from app.core.results.pipeline_result import save_pipeline_result_outcome
 from app.core.arricchisci.types import JsonObject, JsonRows
 
@@ -234,33 +230,32 @@ class ApiConnectionSupportMixin:
         """Costruisce la response dict per un risultato file-based
         (tipicamente `_execute_rest_file` con `is_file_result=True`).
 
-        Persiste il blob + pulisce la dir temporanea `plenora_exec_*` se
-        presente (best-effort).
+        Post-Phase5: `_execute_rest_file` persiste il blob direttamente
+        via `save_result_blob_from_bytes` e ritorna `result_id`,
+        `filename`, `size_bytes`. Niente piu' `output_path` da leggere
+        dal disco; niente piu' `plenora_exec_*` dir da pulire.
 
         Il dict ritornato espone `result_id` (riferimento canonico al
-        blob nel DB results) e `output_filename` per display, ma NON
-        `output_path`/`output_file`: dopo `save_result_blob` il file
-        temp non esiste piu' (vedi `app/core/results/blob_writer.py`),
-        quindi qualunque path emesso sarebbe stale. I consumer
+        blob nel DB results) e `output_filename` per display. I consumer
         downstream usano `result_id` via `PipelineArtifact.artifact_kind
         == "blob"` e l'ArtifactResolver per materializzare dal DB.
         """
-        src_path = Path(final_result['output_path'])
-        src_name = src_path.name
-        # REST file output: bounded by HTTP timeout + ZIP_MAX_UNCOMPRESSED.
-        # Read-once in RAM + bytes-first save: no tempfile bounce per il
-        # consumer; cleanup esplicito del file + dir plenora_exec_*.
-        data = src_path.read_bytes()
-        size_bytes = len(data)
-        result_id = save_result_blob_from_bytes(
-            project_id=project_id,
-            data=data,
-            filename=src_name,
-            fmt=src_path.suffix.lstrip('.') or 'bin',
-            rows_count=0,
-        )
+        del project_id  # persistenza gia' fatta a monte; manteniamo l'arg
+        # nella signature per compat con i caller (`canvas_orchestrator`).
+        result_id = final_result.get('result_id')
+        if not result_id:
+            return {
+                "success": False,
+                "user_error": False,
+                "error": (
+                    "Risultato file processor invalido: "
+                    "result_id mancante (atteso post-Phase5)."
+                ),
+            }
+        src_name = final_result.get('filename') or 'output.bin'
+        size_bytes = int(final_result.get('size_bytes') or 0)
 
-        response = {
+        return {
             "success": True,
             "result_id": result_id,
             "output_type": "file",
@@ -275,23 +270,6 @@ class ApiConnectionSupportMixin:
             "metadata": final_result.get('metadata', {}),
             "message": f"Processamento completato: {src_name} ({size_bytes // 1024} KB)",
         }
-
-        # Cleanup esplicito del local src file + dir tmp dell'executable.
-        try:
-            if src_path.exists():
-                src_path.unlink()
-        except OSError as _e:
-            logger.debug(f"cleanup src_path best-effort fallito: {_e}")
-        try:
-            tmp_dir = src_path.parent
-            if tmp_dir.name.startswith("plenora_exec_"):
-                shutil.rmtree(tmp_dir, ignore_errors=True)
-        except Exception as _cleanup_err:
-            logger.debug(
-                f"cleanup plenora_exec_ dir best-effort fallito: {_cleanup_err}"
-            )
-
-        return response
 
     def _save_and_build_dataframe_response(
         self,

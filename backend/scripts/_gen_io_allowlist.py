@@ -154,10 +154,6 @@ _LEGITIMATE_CACHE_FILES: tuple[str, ...] = (
     # on-disk e' la representation canonica per i bundle IMDF (consumati da
     # endpoint di download/render), non una materializzazione transitoria.
     "app/core/imdf/",
-    # REST file connector: scarica HTTP response su tempfile per consumo
-    # downstream (executor riceve `output_path`). Path-only adapter
-    # equivalente al pattern source_loading.
-    "app/core/arricchisci/api_connection_rest_file.py",
 )
 
 
@@ -204,11 +200,6 @@ _BOUNDARY_FILES = (
     # (path-mode rimosso). Resta nel boundary per coerenza storica e
     # come ancora per la categorizzazione legitimate-cache.
     "app/core/resources/loaders/result_blob.py",
-    # REST file workflow connector: il connector e' file-centric by
-    # design (HTTP multipart upload, response download in workdir,
-    # downstream executable consuma path). `tmp_exec_dir` + cleanup
-    # finally e' il pattern legittimo per il workdir di esecuzione.
-    "app/core/arricchisci/api_connection_rest_file.py",
     # Result blob storage entry point: streaming upload path-based per
     # query streaming output (multipart-friendly per file da GB-scale).
     # I caller bytes-first usano `save_result_blob_from_bytes`.
