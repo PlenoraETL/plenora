@@ -101,7 +101,6 @@ PHASE_MAP: dict[str, str] = {
     "results/blob_writer.py": "Phase5-results-download",
     "results/temp_paths.py": "Phase5-results-download",
     "artifacts/resolver.py": "Phase5-results-download",
-    "scheduler/artifact_store.py": "Phase5-scheduler-archive",
     "scheduler/run_archive_store.py": "Phase5-scheduler-archive",
     "scheduler/router.py": "Phase5-scheduler-archive",
     "imdf/": "Phase6-imdf",
@@ -144,7 +143,6 @@ PATTERN_PHASE_OVERRIDES: dict[str, str] = {
 _LEGITIMATE_CACHE_FILES: tuple[str, ...] = (
     "app/core/files/source_loading.py",
     "app/core/results/temp_paths.py",
-    "app/core/scheduler/artifact_store.py",
     "app/core/scheduler/router.py",
     "app/core/results/blob_writer.py",  # storage.upload(path) streaming
     # Path-only adapter helpers (callsiti che richiedono path per

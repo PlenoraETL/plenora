@@ -52,22 +52,16 @@ def test_schedule_short_strips_prefix_and_truncates():
     assert fn("very_long_id_that_exceeds_12_chars") == "very_long_id"
 
 
-def test_schedule_short_matches_artifact_store_convention():
-    """Convenzione condivisa con `ScheduleArtifactStore._build_archive_dir`.
-    Se questi due sono fuori sync, le runs scritte dall'archive non
-    verranno trovate dal catalog → bug silente."""
-    from app.core.scheduler.artifact_store import ScheduleArtifactStore
-
+def test_schedule_short_convention_owned_by_catalog():
+    """Post-cleanup `ScheduleArtifactStore`: la convenzione `schedule_short`
+    e' ora unica responsabilita' del catalog (`ScheduleRunsCatalog`).
+    ArtifactStore e' stato rimosso (dead code, zero caller produzione)."""
     schedule_id = "schedule_my_long_id_xyz"
     catalog_short = ScheduleRunsCatalog._schedule_short(schedule_id)
-
-    # Controlla che ArtifactStore costruisca lo stesso path
-    store = ScheduleArtifactStore(results_dir=Path("/tmp/whatever"))
-    archive_dir = store._build_archive_dir(
-        Path("/tmp/whatever/proj-1"), schedule_id
-    )
-    # archive_dir = .../proj-1/runs/{short}/{ts}
-    assert archive_dir.parent.name == catalog_short
+    # Senza prefisso "schedule_" comunque tronca a 12
+    assert catalog_short == "my_long_id_x"
+    # Mantenere prefisso solo quando non e' "schedule_"
+    assert ScheduleRunsCatalog._schedule_short("other_x") == "other_x"
 
 
 # runs_root_for
