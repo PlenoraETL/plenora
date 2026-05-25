@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Optional, List
 from workers.celery_app import celery_app
 from app.config import settings
+from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.values import is_dataframe, is_nonempty_dataframe
 from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
@@ -60,7 +61,11 @@ def _merge_batch_parallel_node_results(
             `common_input_df`. Il messaggio cita task_id, node_id,
             len(result_df), len(common_input_df), e cause probabili.
     """
-    merged = common_input_df.copy() if hasattr(common_input_df, "copy") else common_input_df
+    merged = (
+        copy_frame_for_update(common_input_df)
+        if hasattr(common_input_df, "copy")
+        else common_input_df
+    )
     expected_len = len(merged)
     for nid in node_ids:
         nr = node_results.get(nid)
