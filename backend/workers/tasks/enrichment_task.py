@@ -858,38 +858,30 @@ def execute_enrichment_task(
             if has_imdf_upstream and ext == ".zip":
                 try:
                     from app.core.imdf.loader import extract_imdf_zip_bytes
-                    from app.core.imdf.persist import persist_imdf_bundle_to_disk
+                    from app.core.imdf.persist import persist_imdf_bundle
                     bundle = extract_imdf_zip_bytes(output_bytes)
 
-                    bundle_persisted_path = None
+                    # IMDF-3: single-call persistence verso storage canonico.
+                    # `persist_imdf_bundle` orchestra upload bundle.files +
+                    # .gdb zip + meta. Niente piu' local dir intermedio +
+                    # save_bundle separato.
+                    bundle_persisted = False
                     try:
-                        _res = persist_imdf_bundle_to_disk(
+                        persist_imdf_bundle(
                             bundle, task_id=task_id, project_id=project_id,
                         )
-                        bundle_persisted_path = _res["path"]
+                        bundle_persisted = True
                     except Exception as _persist_e:
                         logger.warning(
                             f"[Task {task_id}] Persistenza bundle fallita: {_persist_e}"
                         )
-
-                    if bundle_persisted_path:
-                        try:
-                            from app.core.imdf import storage as _imdf_storage
-                            _imdf_storage.save_bundle(
-                                task_id, Path(_res["path"]), meta=_res["meta"],
-                            )
-                        except Exception as _save_e:
-                            logger.warning(
-                                f"[{task_id}] imdf storage upload fallito (non-fatal, "
-                                f"bundle disponibile solo sul nodo corrente): {_save_e}"
-                            )
 
                     imdf_metadata = {
                         "site_id":        bundle.site_id,
                         "has_gdb":        bundle.has_gdb,
                         "has_ifc":        bundle.has_ifc,
                         "has_renderers":  bundle.has_renderers,
-                        "bundle_task_id": task_id if bundle_persisted_path else None,
+                        "bundle_task_id": task_id if bundle_persisted else None,
                     }
                     logger.info(
                         f"[Task {task_id}] IMDF metadata estratti: "
