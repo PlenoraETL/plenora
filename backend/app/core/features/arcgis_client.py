@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 import json
 import time  # noqa: F401 (legacy monkeypatch compatibility for auth backoff)
-from typing import Dict, Mapping, Optional, Sequence, Tuple
+from typing import Dict, Iterator, Mapping, Optional, Sequence, Tuple
 
 import requests
 
@@ -48,7 +48,10 @@ from app.core.dataframes.geodata import (
     geodataframe_total_bounds,
     is_geodataframe as _is_geodataframe,
 )
-from app.core.dataframes.tabular import iter_dataframe_indexed_rows, non_null_head_values
+from app.core.dataframes.tabular import non_null_head_values
+from app.shared.connections.arcgis_connection import ArcGISConnectionInfo  # noqa: F401
+from app.shared.connections.esri_json import EsriJsonConverter  # noqa: F401
+from app.shared.connections.esri_types import EsriTypeMapper  # noqa: F401
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -67,13 +70,6 @@ __all__ = [
     "time",
 ]
 
-
-# TIPI E PROTOCOLLI
-
-
-from app.shared.connections.arcgis_connection import ArcGISConnectionInfo  # noqa: F401
-from app.shared.connections.esri_json import EsriJsonConverter  # noqa: F401
-from app.shared.connections.esri_types import EsriTypeMapper  # noqa: F401
 
 # CLIENT PRINCIPALE
 
@@ -132,11 +128,30 @@ class ArcGISClient(
             Lista di features in formato Esri JSON:
             [{"attributes": {...}, "geometry": {...}}, ...]
         """
+        features = list(
+            ArcGISClient.iter_dataframe_esri_features(
+                df,
+                geometry_column=geometry_column,
+                srid=srid,
+                operation=operation,
+            )
+        )
+        logger.debug(f"Convertite {len(features)} features (srid={srid})")
+        return features
+
+    @staticmethod
+    def iter_dataframe_esri_features(
+        df,
+        geometry_column: str = "geometry",
+        srid: int = 4326,
+        operation: str = "add",
+    ) -> Iterator[ArcGISJsonObject]:
+        """Yield ESRI JSON features without materializing the full feature list."""
         from app.core.dataframes.values import is_null_scalar
 
         has_geometry = False
         is_geodataframe = False
-        
+
         try:
             if _is_geodataframe(df) and df.geometry is not None:
                 is_geodataframe = True
@@ -145,45 +160,80 @@ class ArcGISClient(
                     srid = df.crs.to_epsg() or srid
         except ImportError:
             pass
-        
-        if not is_geodataframe and geometry_column in df.columns:
+
+        columns = list(df.columns)
+        if not is_geodataframe and geometry_column in columns:
             has_geometry = True
-        
+
+        skip_cols = {geometry_column, "geometry"}
+        if operation in ("add", "create_service"):
+            skip_cols.update(ESRI_OID_FIELDS_LITERAL)
+        attr_positions = [
+            (col, pos)
+            for pos, col in enumerate(columns)
+            if col not in skip_cols
+        ]
+
+        geometry_pos = columns.index(geometry_column) if geometry_column in columns else None
+        geometry_iter = iter(df.geometry) if is_geodataframe else None
         spatial_ref = {"wkid": srid}
-        features = []
-        
-        for idx, row in iter_dataframe_indexed_rows(df):
-            feature = {"attributes": {}}
-            
-            skip_cols = {geometry_column, "geometry"}
-            if operation in ("add", "create_service"):
-                skip_cols.update(ESRI_OID_FIELDS_LITERAL)
-            for col in df.columns:
-                if col in skip_cols:
-                    continue
-                attribute_value = row[col]
+
+        parse_geometry = None
+        if has_geometry and not is_geodataframe:
+            from app.core.dataframes.geometry_parsing import parse_geometry as _parse_geometry
+
+            parse_geometry = _parse_geometry
+
+        for row in df.itertuples(index=False, name=None):
+            attributes = {}
+            for col, pos in attr_positions:
+                attribute_value = row[pos]
                 if is_null_scalar(attribute_value):
-                    feature["attributes"][col] = None
-                elif hasattr(attribute_value, 'item'):  # numpy scalar
-                    feature["attributes"][col] = attribute_value.item()
+                    attributes[col] = None
+                elif hasattr(attribute_value, "item"):
+                    attributes[col] = attribute_value.item()
                 else:
-                    feature["attributes"][col] = attribute_value
-            
+                    attributes[col] = attribute_value
+
+            feature = {"attributes": attributes}
+
             if has_geometry:
                 geom = None
-                if is_geodataframe:
-                    geom = row.geometry
-                elif geometry_column in df.columns and not is_null_scalar(row[geometry_column]):
-                    from app.core.dataframes.geometry_parsing import parse_geometry
-                    geom = parse_geometry(row[geometry_column])
-                
+                if is_geodataframe and geometry_iter is not None:
+                    geom = next(geometry_iter)
+                elif geometry_pos is not None:
+                    raw_geom = row[geometry_pos]
+                    if not is_null_scalar(raw_geom) and parse_geometry is not None:
+                        geom = parse_geometry(raw_geom)
+
                 if geom is not None and not geom.is_empty:
                     feature["geometry"] = ArcGISClient._shapely_to_esri(geom, spatial_ref)
-            
-            features.append(feature)
-        
-        logger.debug(f"Convertite {len(features)} features (has_geometry={has_geometry}, srid={srid})")
-        return features
+
+            yield feature
+
+    @staticmethod
+    def iter_dataframe_esri_feature_batches(
+        df,
+        geometry_column: str = "geometry",
+        srid: int = 4326,
+        operation: str = "add",
+        batch_size: int = 1000,
+    ) -> Iterator[ArcGISJsonList]:
+        """Yield ESRI JSON features in bounded batches."""
+        size = batch_size if batch_size and batch_size > 0 else 1000
+        batch: ArcGISJsonList = []
+        for feature in ArcGISClient.iter_dataframe_esri_features(
+            df,
+            geometry_column=geometry_column,
+            srid=srid,
+            operation=operation,
+        ):
+            batch.append(feature)
+            if len(batch) >= size:
+                yield batch
+                batch = []
+        if batch:
+            yield batch
     
     @staticmethod
     def _shapely_to_esri(geom, spatial_ref: dict) -> ArcGISJsonObject | None:
@@ -569,18 +619,30 @@ class ArcGISClient(
         
         
         layer_url = f"{service_url}/0"
-        features = self.dataframe_to_esri_features(df, geometry_column, srid, operation="create_service")
+        sample_features = self.dataframe_to_esri_features(
+            df.head(1),
+            geometry_column,
+            srid,
+            operation="create_service",
+        )
         
         # Log sample feature per debug
-        if features:
-            sample = features[0]
+        if sample_features:
+            sample = sample_features[0]
             sample_geom = sample.get("geometry", {})
             sample_attrs = list(sample.get("attributes", {}).keys())[:5]
             logger.debug(f"Sample feature — geometry keys: {list(sample_geom.keys()) if sample_geom else 'NONE'}")
             logger.debug(f"Sample feature — geometry snippet: {json.dumps(sample_geom, default=str)[:300]}")
             logger.debug(f"Sample feature — attribute keys (primi 5): {sample_attrs}")
         
-        write_result = self.add_features(conn, layer_url, features)
+        write_result = self.add_dataframe_features(
+            conn,
+            layer_url,
+            df,
+            geometry_column=geometry_column,
+            srid=srid,
+            operation="create_service",
+        )
         
         logger.debug(f"addFeatures result: added={write_result.get('added_count', 0)}, "
                      f"errors={len(write_result.get('errors', []))}")

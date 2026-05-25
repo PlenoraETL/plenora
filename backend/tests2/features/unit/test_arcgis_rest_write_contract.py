@@ -6,6 +6,7 @@ import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pandas as pd
 import pytest
 
 from app.core.features.arcgis_client import ArcGISClient
@@ -114,6 +115,42 @@ def test_add_features_posts_layer_endpoint_and_serialized_features(
     assert call.kwargs["data"]["f"] == "json"
     assert "token" not in call.kwargs["data"]
     assert call.kwargs["extra_headers"] == {"Referer": conn.server_url}
+
+
+def test_add_dataframe_features_streams_dataframe_in_batches(
+    client: ArcGISClient,
+    conn: SimpleNamespace,
+) -> None:
+    client._request_with_token.side_effect = [  # type: ignore[attr-defined]
+        _Response({"addResults": [{"success": True}, {"success": True}]}),
+        _Response({"addResults": [{"success": True}, {"success": True}]}),
+        _Response({"addResults": [{"success": True}]}),
+    ]
+    df = pd.DataFrame(
+        {
+            "SITE_ID": ["A", "B", "C", "D", "E"],
+            "OBJECTID": [10, 11, 12, 13, 14],
+        }
+    )
+
+    result = client.add_dataframe_features(
+        conn,
+        "https://services.example.test/FeatureServer/0",
+        df,
+        batch_size=2,
+    )
+
+    assert result == {"success": True, "added_count": 5, "errors": []}
+    assert client._request_with_token.call_count == 3  # type: ignore[attr-defined]
+    payloads = [
+        json.loads(call.kwargs["data"]["features"])
+        for call in client._request_with_token.call_args_list  # type: ignore[attr-defined]
+    ]
+    assert payloads == [
+        [{"attributes": {"SITE_ID": "A"}}, {"attributes": {"SITE_ID": "B"}}],
+        [{"attributes": {"SITE_ID": "C"}}, {"attributes": {"SITE_ID": "D"}}],
+        [{"attributes": {"SITE_ID": "E"}}],
+    ]
 
 
 def test_update_features_uses_update_results_and_reports_item_errors(

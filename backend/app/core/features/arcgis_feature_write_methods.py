@@ -7,7 +7,7 @@ authentication, schema, and conversion helpers used here.
 
 import json
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 import requests
 
@@ -59,7 +59,7 @@ class ArcGISFeatureWriteMethodsMixin:
         self,
         conn: ArcGISConnectionInfo,
         layer_url: str,
-        features: List[dict],
+        features: Sequence[dict],
         batch_size: int = None,
     ) -> ArcGISJsonObject:
         """Add ESRI JSON features to a layer."""
@@ -75,7 +75,7 @@ class ArcGISFeatureWriteMethodsMixin:
         self,
         conn: ArcGISConnectionInfo,
         layer_url: str,
-        features: List[dict],
+        features: Sequence[dict],
         batch_size: int = None,
     ) -> ArcGISJsonObject:
         """Update ESRI JSON features in a layer."""
@@ -167,19 +167,69 @@ class ArcGISFeatureWriteMethodsMixin:
         conn: ArcGISConnectionInfo,
         layer_url: str,
         operation: ArcGISFeatureEditOperation | str,
-        features: List[dict],
+        features: Sequence[dict],
         batch_size: int = None,
     ) -> ArcGISJsonObject:
         """Execute add/update writes in ArcGIS-compatible batches."""
+        _batch_size = batch_size if batch_size and batch_size > 0 else self.WRITE_BATCH_SIZE
+        batches = (
+            features[i:i + _batch_size]
+            for i in range(0, len(features), _batch_size)
+        )
+        return self._write_feature_batches(
+            conn,
+            layer_url,
+            operation,
+            batches,
+            total_attempted=len(features),
+        )
+
+    def add_dataframe_features(
+        self,
+        conn: ArcGISConnectionInfo,
+        layer_url: str,
+        df,
+        geometry_column: str = "geometry",
+        srid: int = 4326,
+        operation: str = "add",
+        batch_size: int = None,
+    ) -> ArcGISJsonObject:
+        """Convert and add DataFrame rows in bounded batches."""
+        _batch_size = batch_size if batch_size and batch_size > 0 else self.WRITE_BATCH_SIZE
+        return self._write_feature_batches(
+            conn,
+            layer_url,
+            ArcGISFeatureEditOperation.ADD,
+            self.iter_dataframe_esri_feature_batches(
+                df,
+                geometry_column=geometry_column,
+                srid=srid,
+                operation=operation,
+                batch_size=_batch_size,
+            ),
+            total_attempted=len(df),
+        )
+
+    def _write_feature_batches(
+        self,
+        conn: ArcGISConnectionInfo,
+        layer_url: str,
+        operation: ArcGISFeatureEditOperation | str,
+        feature_batches: Iterable[Sequence[dict]],
+        total_attempted: Optional[int] = None,
+    ) -> ArcGISJsonObject:
+        """Execute add/update writes from an iterable of bounded batches."""
         operation = ArcGISFeatureEditOperation(operation)
         referer_headers = {"Referer": conn.server_url}
 
         total_success = 0
+        attempted = 0
         all_errors = []
 
-        _batch_size = batch_size if batch_size and batch_size > 0 else self.WRITE_BATCH_SIZE
-        for i in range(0, len(features), _batch_size):
-            batch = features[i:i + _batch_size]
+        for batch_num, batch in enumerate(feature_batches, start=1):
+            if not batch:
+                continue
+            attempted += len(batch)
             request = ArcGISFeatureBatchWriteRequest(
                 layer_url=layer_url,
                 operation=operation,
@@ -188,7 +238,6 @@ class ArcGISFeatureWriteMethodsMixin:
             data = request.body()
 
             try:
-                batch_num = i // _batch_size + 1
                 logger.debug(
                     f"Batch {batch_num}: invio {len(batch)} features a "
                     f"{request.endpoint()}"
@@ -229,7 +278,8 @@ class ArcGISFeatureWriteMethodsMixin:
                 all_errors.append({"message": str(e)})
 
         count_key = operation.count_key
-        total_attempted = len(features)
+        if total_attempted is None:
+            total_attempted = attempted
         has_errors = len(all_errors) > 0
         write_success = (total_success > 0 or total_attempted == 0) and not has_errors
 
@@ -339,13 +389,14 @@ class ArcGISFeatureWriteMethodsMixin:
             )
 
         layer_url = f"{service_url}/{layer_id}"
-        features = self.dataframe_to_esri_features(
+        write_result = self.add_dataframe_features(
+            conn,
+            layer_url,
             gdf,
-            "geometry",
-            srid,
+            geometry_column="geometry",
+            srid=srid,
             operation="create_service",
         )
-        write_result = self.add_features(conn, layer_url, features)
 
         return AddLayerResult(
             success=write_result.get("added_count", 0) > 0,

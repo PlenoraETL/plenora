@@ -167,6 +167,19 @@ class ArcGISWriteProviderProtocol(Protocol):
         """Add ESRI JSON feature payloads to a layer."""
         ...
 
+    def add_dataframe_features(
+        self,
+        conn: ArcGISConnectionInfo,
+        layer_url: str,
+        df: object,
+        geometry_column: str = "geometry",
+        srid: int = 4326,
+        operation: str = "add",
+        batch_size: Optional[int] = None,
+    ) -> ProviderResult:
+        """Convert and add dataframe rows to a layer in provider-sized batches."""
+        ...
+
     def update_features(
         self,
         conn: ArcGISConnectionInfo,

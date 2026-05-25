@@ -105,6 +105,26 @@ class ArcGISFeatureWriteService:
             geometry_column=geometry_column,
             required_match_column=match_column if operation in ("update", "upsert", "delete") else "",
         )
+
+        if len(mapped.df) == 0:
+            return {
+                "success": False,
+                "message": "Nessuna feature da caricare",
+                "count": 0,
+                "errors": [],
+            }
+
+        if operation == "add":
+            result = self._client.add_dataframe_features(
+                conn_info,
+                layer_url,
+                mapped.df,
+                geometry_column=mapped.geometry_column,
+                operation=operation,
+                batch_size=batch_size,
+            )
+            return self.write_result("Aggiunte", result, "added_count", len(mapped.df))
+
         features = self._client.dataframe_to_esri_features(
             mapped.df,
             geometry_column=mapped.geometry_column,
@@ -118,15 +138,6 @@ class ArcGISFeatureWriteService:
                 "count": 0,
                 "errors": [],
             }
-
-        if operation == "add":
-            result = self._client.add_features(
-                conn_info,
-                layer_url,
-                features,
-                batch_size=batch_size,
-            )
-            return self.write_result("Aggiunte", result, "added_count", len(features))
 
         if operation == "update":
             if match_column:
