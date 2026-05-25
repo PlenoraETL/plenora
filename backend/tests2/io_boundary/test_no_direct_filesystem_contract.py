@@ -92,6 +92,16 @@ EXCLUDE_PREFIXES: tuple[str, ...] = (
     "app/core/storage/",
 )
 
+# Boundary files puntuali fuori dalle dir whitelisted. `app/utils/zip_safe.py`
+# E' l'implementazione di `safe_extractall` / `validate_zip_bomb_limits` /
+# `pick_zip_member_by_extension`: meta-circolare richiedere che non chiami
+# extractall. DEVE essere allineato con `scripts/_gen_io_allowlist.py`
+# (_BOUNDARY_FILES) altrimenti il test segnala "nuovi offender" per
+# findings che il generator non ha mai messo nella allowlist.
+EXCLUDE_FILES: tuple[str, ...] = (
+    "app/utils/zip_safe.py",
+)
+
 
 def _backend_root() -> Path:
     """tests2 e' sotto backend/tests2 — risali alla root backend."""
@@ -127,7 +137,11 @@ def _load_allowlist() -> set[tuple[str, int, str]]:
 
 
 def _is_excluded(rel_path: str) -> bool:
-    return any(rel_path.startswith(p) for p in EXCLUDE_PREFIXES)
+    if any(rel_path.startswith(p) for p in EXCLUDE_PREFIXES):
+        return True
+    return any(
+        rel_path == f or rel_path.endswith(f"/{f}") for f in EXCLUDE_FILES
+    )
 
 
 def _is_skip_line(line: str) -> bool:
