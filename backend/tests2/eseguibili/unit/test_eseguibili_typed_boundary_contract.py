@@ -40,12 +40,15 @@ def _row() -> EseguibileRow:
 
 
 def test_analyze_file_upload_returns_typed_internal_payload(monkeypatch):
+    """Post-Phase5: analyze_file_upload accetta bytes (`file_content`)
+    invece di path. Il dispatch avviene via `_load_dataframe_from_bytes`
+    + `format_hint` derivato dal filename."""
     from app.core.dataframes import frame_io
 
     monkeypatch.setattr(
         frame_io,
-        "load_dataframe_from_file",
-        lambda path: pd.DataFrame(
+        "_load_dataframe_from_bytes",
+        lambda data, *, format_hint, sheet=None, layer=None: pd.DataFrame(
             {
                 "customer_id": [1, 2],
                 "name": ["Ada", None],
@@ -53,10 +56,9 @@ def test_analyze_file_upload_returns_typed_internal_payload(monkeypatch):
         ),
     )
 
-    result = service.analyze_file_upload(_row(), "/tmp/upload.csv", "upload.csv")
+    result = service.analyze_file_upload(_row(), b"customer_id,name\n1,Ada\n2,\n", "upload.csv")
 
     assert isinstance(result, AnalyzeFileUploadResult)
-    assert result.file_path == "/tmp/upload.csv"
     api_payload = result.to_api_dict()
     assert "file_path" not in api_payload
     assert api_payload["row_count"] == 2

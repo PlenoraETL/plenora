@@ -12,10 +12,6 @@ import json
 import uuid
 from typing import Mapping, Optional, Sequence
 
-from app.core.results.temp_paths import (
-    cleanup_path_only_adapter,
-    write_path_only_adapter_bytes,
-)
 from app.utils.logger import get_logger
 
 from . import db as eseguibili_db
@@ -121,26 +117,28 @@ def create_from_project(
 
 def analyze_file_upload(
     eseguibile: eseguibili_db.EseguibileRow,
-    file_path: str,
+    file_content: bytes,
     filename: str,
 ) -> AnalyzeFileUploadResult:
-    """Carica un file temporaneo e ritorna colonne rilevate + auto-mapping.
+    """Carica un file caricato in bytes e ritorna colonne rilevate + auto-mapping.
 
-    Non crea ancora il FileSource definitivo nel DB; il file è su disco temp.
+    Non crea ancora il FileSource definitivo nel DB; il file resta in
+    memoria fino al persist_upload_file_source successivo.
     Il file_id ritornato identifica il file temp per la successiva execute.
 
     Args:
         eseguibile: record eseguibile (per expected_columns)
-        file_path: path del file temp su disco (già scritto)
-        filename: nome originale del file
+        file_content: bytes del file caricato (dal router HTTP)
+        filename: nome originale del file (per format detection + display)
 
     Returns:
         dict con file_id, detected_columns, row_count, auto_mapping, preview_rows
     """
-    from app.core.dataframes.frame_io import load_dataframe_from_file
+    from app.core.dataframes.frame_io import _load_dataframe_from_bytes
     from app.core.dataframes.tabular import dataframe_preview_records, non_null_head_values
 
-    df = load_dataframe_from_file(file_path)
+    fmt = filename.rsplit(".", 1)[1].lower() if "." in filename else "bin"
+    df = _load_dataframe_from_bytes(file_content, format_hint=fmt)
     if df is None or df.empty:
         raise ValueError("Il file caricato è vuoto o non è stato possibile leggerlo")
 
@@ -293,17 +291,21 @@ def execute(
     Returns:
         dict con task_id, project_id (id dell'eseguibile), async flag
     """
-    from app.core.dataframes.frame_io import load_dataframe_from_file
+    from app.core.dataframes.frame_io import (
+        _load_dataframe_from_bytes,
+        load_dataframe_from_file,
+    )
     from app.core.files.service import file_source_service
     from app.core.orchestrator.task_service import task_service
 
     if not file_source_id and not file_path:
         raise ValueError("File sorgente non specificato")
 
-    # 1. Carica DataFrame originale. In produzione il caller passa un
-    # file_source_id: il blob viene idratato da DB/object storage in un temp
-    # locale solo per parsing, senza passare path al worker Celery.
-    temp_input_path: Optional[str] = None
+    # 1. Carica DataFrame originale.
+    # - `file_source_id`: bytes-first via `_load_dataframe_from_bytes`,
+    #   niente piu' tempfile bounce (post-Phase5).
+    # - `file_path`: path-based legitimate (file gia' presente sul
+    #   filesystem dal flow analyze/eseguibili).
     if file_source_id:
         blob = file_source_service.get_blob_bytes(
             file_source_id,
@@ -313,21 +315,12 @@ def execute(
             raise ValueError("File sorgente vuoto o non trovato")
         upload_meta = load_upload_metadata(file_source_id) or {}
         filename = str(upload_meta.get("filename") or "upload.bin")
-        suffix = f".{filename.rsplit('.', 1)[1]}" if "." in filename else ".bin"
-        temp_input_path = str(write_path_only_adapter_bytes(blob, suffix=suffix))
-        source_path = temp_input_path
+        fmt = (
+            filename.rsplit(".", 1)[1].lower() if "." in filename else "bin"
+        )
+        df = _load_dataframe_from_bytes(blob, format_hint=fmt)
     else:
-        source_path = file_path
-
-    try:
-        df = load_dataframe_from_file(source_path)
-    finally:
-        if temp_input_path:
-            if not cleanup_path_only_adapter(temp_input_path):
-                logger.debug(
-                    f"execute: cleanup input idratato fallito per "
-                    f"{temp_input_path}"
-                )
+        df = load_dataframe_from_file(file_path)
     if df is None or df.empty:
         raise ValueError("File sorgente vuoto o illeggibile")
 

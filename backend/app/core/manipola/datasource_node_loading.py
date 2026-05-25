@@ -8,14 +8,10 @@ from typing import Optional
 from app.core.auth.visibility import is_resource_visible
 from app.core.datasources.service import datasource_service
 from app.core.dataframes.frame_io import (
+    _load_dataframe_from_bytes,
     filter_visible_columns,
-    load_dataframe_from_file,
 )
 from app.core.manipola.types import FrameMap, JsonObject
-from app.core.results.temp_paths import (
-    cleanup_path_only_adapter,
-    write_path_only_adapter_bytes,
-)
 from app.utils.logger import get_logger
 
 
@@ -155,23 +151,19 @@ def load_datasource_nodes(
                 ),
             }
 
-        # Materialize at the path-only adapter boundary so
-        # `load_dataframe_from_file` can pick the parser by extension.
+        # Bytes-first parse: `_load_dataframe_from_bytes` dispatcha per
+        # format_hint (post-Phase5, niente piu' tempfile bounce per
+        # questo flow).
         suffix = _suffix_for(node, file_path)
+        fmt = suffix.lstrip(".").lower() or "bin"
+        parse_options = _nf(node, "parse_options") or {}
         try:
-            tmp_path = write_path_only_adapter_bytes(content, suffix=suffix)
-            parse_options = _nf(node, "parse_options") or {}
-            try:
-                df = load_dataframe_from_file(
-                    tmp_path,
-                    sheet=parse_options.get("sheet"),
-                    layer=parse_options.get("layer"),
-                )
-            finally:
-                if not cleanup_path_only_adapter(tmp_path):
-                    log.warning(
-                        f"Cleanup path-only adapter {tmp_path} fallito"
-                    )
+            df = _load_dataframe_from_bytes(
+                content,
+                format_hint=fmt,
+                sheet=parse_options.get("sheet"),
+                layer=parse_options.get("layer"),
+            )
         except Exception as e:
             log.error(
                 f"[GESTITO] datasource_node parse fallito: ds={ds_id} "

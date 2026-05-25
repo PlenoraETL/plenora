@@ -25,10 +25,6 @@ from app.config import settings
 from app.utils.logger import get_logger
 from app.observability.audit_action import audit_action
 from app.core.auth.visibility import visible_resource_ids
-from app.core.results.temp_paths import (
-    cleanup_path_only_adapter,
-    write_path_only_adapter_bytes,
-)
 from app.shared.error_sanitizer import sanitize_http_detail
 from app.shared.upload_guards import enforce_upload_size_limit
 from app.shared import error_codes
@@ -331,7 +327,6 @@ async def analyze_upload(
     # contenuto in RAM, evitando DoS interno credenziato via upload N GB
     enforce_upload_size_limit(file)
 
-    suffix = Path(file.filename).suffix or ".bin"
     try:
         content = await file.read()
         # Block-only mode: il file viene salvato su disk e parsato dal
@@ -354,23 +349,15 @@ async def analyze_upload(
             raise HTTPException(
                 status_code=400, detail=sanitize_http_detail(str(e)),
             )
-        tmp_path = str(write_path_only_adapter_bytes(content, suffix=suffix))
-
         try:
             result = eseguibili_service.analyze_file_upload(
                 eseguibile=record,
-                file_path=tmp_path,
+                file_content=content,
                 filename=file.filename,
             )
         except ValueError as e:
-            # Cleanup file temp se analisi fallisce
-            if not cleanup_path_only_adapter(tmp_path):
-                logger.debug(
-                    f"analyze_upload: cleanup tmp post-ValueError best-effort "
-                    f"fallito per {tmp_path}"
-                )
             # 6.2: sanitize detail (analyze_file_upload puo'
-            # includere path temp + output pyproj/gdal
+            # includere output pyproj/gdal sensibile)
             raise HTTPException(
                 status_code=400, detail=sanitize_http_detail(str(e)),
             )
@@ -385,20 +372,12 @@ async def analyze_upload(
         result = result.model_copy(
             update={"file_id": durable_file_id, "file_path": ""}
         )
-        if not cleanup_path_only_adapter(tmp_path):
-            logger.debug(
-                f"analyze_upload: cleanup tmp post-persist best-effort "
-                f"fallito per {tmp_path}"
-            )
 
         return result.to_api_dict()
 
     except HTTPException:
         raise
     except Exception as e:
-        tmp_path_for_cleanup = locals().get("tmp_path")
-        if tmp_path_for_cleanup:
-            cleanup_path_only_adapter(tmp_path_for_cleanup)
         logger.error(f"[CRASH] Errore analyze upload: {e}", exc_info=True)
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
