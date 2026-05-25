@@ -14,7 +14,7 @@ from typing import Any, List, Optional
 
 from app.core.dataframes.values import is_nonempty_dataframe
 from app.utils.logger import get_logger
-from app.core.results.blob_writer import save_result_blob
+from app.core.results.blob_writer import save_result_blob_from_bytes
 from app.core.results.pipeline_result import save_pipeline_result_outcome
 from app.core.arricchisci.types import JsonObject, JsonRows
 
@@ -247,13 +247,17 @@ class ApiConnectionSupportMixin:
         """
         src_path = Path(final_result['output_path'])
         src_name = src_path.name
-        # Leggi la size PRIMA del save: save_result_blob cancella il
-        # file temp nel finally su success, quindi src_path.stat
-        # dopo la chiamata solleverebbe FileNotFoundError
-        size_bytes = src_path.stat().st_size
-
-        result_id = save_result_blob(
-            project_id, src_path, src_path.suffix.lstrip('.') or 'bin', 0
+        # REST file output: bounded by HTTP timeout + ZIP_MAX_UNCOMPRESSED.
+        # Read-once in RAM + bytes-first save: no tempfile bounce per il
+        # consumer; cleanup esplicito del file + dir plenora_exec_*.
+        data = src_path.read_bytes()
+        size_bytes = len(data)
+        result_id = save_result_blob_from_bytes(
+            project_id=project_id,
+            data=data,
+            filename=src_name,
+            fmt=src_path.suffix.lstrip('.') or 'bin',
+            rows_count=0,
         )
 
         response = {
@@ -272,8 +276,12 @@ class ApiConnectionSupportMixin:
             "message": f"Processamento completato: {src_name} ({size_bytes // 1024} KB)",
         }
 
-        # Cleanup dir tmp dell'executable (solo se il nome combacia con
-        # il pattern `plenora_exec_*`: niente rimozioni di cartelle altrui
+        # Cleanup esplicito del local src file + dir tmp dell'executable.
+        try:
+            if src_path.exists():
+                src_path.unlink()
+        except OSError as _e:
+            logger.debug(f"cleanup src_path best-effort fallito: {_e}")
         try:
             tmp_dir = src_path.parent
             if tmp_dir.name.startswith("plenora_exec_"):

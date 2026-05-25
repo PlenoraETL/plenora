@@ -106,6 +106,7 @@ EXCLUDE_FILES: tuple[str, ...] = (
     "app/core/files/service_deps.py",
     "app/core/resources/loaders/result_blob.py",
     "app/core/arricchisci/api_connection_rest_file.py",
+    "app/core/results/blob_writer.py",
 )
 
 # Top-level roots esclusi dal sweep (script one-off, non application code).
@@ -253,6 +254,88 @@ def test_io_boundary_dir_excluded_from_sweep() -> None:
             f"Il sweep ha trovato un finding dentro app/core/io/ "
             f"(dovrebbe essere escluso): {finding}"
         )
+
+
+def _scan_excluded_findings() -> list[tuple[str, int, str, str]]:
+    """Sweep DEI SOLI file/dir esclusi dal gate principale.
+
+    Rispetto a `_scan_findings`, NON applica `_is_excluded` ne'
+    `EXCLUDED_ROOTS`. Usato dal report informativo per tracciare il
+    "disk usage residuo dentro boundary" come metrica separata.
+    """
+    findings: list[tuple[str, int, str, str]] = []
+    backend = _backend_root()
+    for root_name in ("app", "workers", "scripts"):
+        root = backend / root_name
+        if not root.exists():
+            continue
+        for dirpath, dirs, files in os.walk(root):
+            dirs[:] = [
+                d for d in dirs
+                if d != "__pycache__" and not d.startswith(".")
+            ]
+            for fname in files:
+                if not fname.endswith(".py"):
+                    continue
+                if fname == "_gen_io_allowlist.py":
+                    continue
+                abs_path = Path(dirpath) / fname
+                rel_path = _normalize(str(abs_path.relative_to(backend)))
+                # Includiamo SOLO i file esclusi dal gate principale.
+                in_excluded_root = any(
+                    rel_path.startswith(f"{r}/") for r in EXCLUDED_ROOTS
+                )
+                if not (_is_excluded(rel_path) or in_excluded_root):
+                    continue
+                try:
+                    content = abs_path.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    continue
+                for i, line in enumerate(content.splitlines(), 1):
+                    if _is_skip_line(line):
+                        continue
+                    for pname, pre in PATTERNS:
+                        if pre.search(line):
+                            if _is_buffer_write(pname, line):
+                                break
+                            findings.append(
+                                (rel_path, i, pname, line.strip()[:120]),
+                            )
+                            break
+    return findings
+
+
+def test_report_disk_usage_inside_boundary() -> None:
+    """Report informativo (NON fa fallire il gate): elenca i pattern
+    filesystem ancora presenti DENTRO il boundary (file/dir esclusi
+    dal contract test principale).
+
+    Obiettivo: distinguere "zero offender fuori boundary" (gate
+    principale) da "uso disco residuo dentro boundary" (questo
+    report). Ogni nuova migrazione che chiude un pattern interno
+    permette di rimuovere l'eccezione corrispondente da
+    `EXCLUDE_PREFIXES` / `EXCLUDE_FILES` / `EXCLUDED_ROOTS`.
+
+    Output stampato come summary; il test passa sempre. Esegui:
+        pytest tests2/io_boundary/test_no_direct_filesystem_contract.py::test_report_disk_usage_inside_boundary -s
+    """
+    findings = _scan_excluded_findings()
+    if not findings:
+        print("\n[io_boundary report] zero disk usage inside boundary.")
+        return
+
+    by_file: dict[str, list[tuple[int, str]]] = {}
+    for f in findings:
+        by_file.setdefault(f[0], []).append((f[1], f[2]))
+
+    print(
+        f"\n[io_boundary report] {len(findings)} disk usage residui "
+        f"dentro boundary, distribuiti su {len(by_file)} file:"
+    )
+    for fpath in sorted(by_file):
+        entries = by_file[fpath]
+        patterns = sorted({p for _, p in entries})
+        print(f"  {fpath}: {len(entries)} entries, patterns: {patterns}")
 
 
 def test_no_active_legacy_callsites_remain() -> None:

@@ -133,32 +133,100 @@ def save_result_blob(
 ) -> str:
     """Persist a result file as a DB blob or object-storage backed row.
 
-    Post-Phase5: thin wrapper su `save_result_blob_from_bytes`. Legge
-    il payload una volta in RAM e delega al path bytes-first (single
-    source of truth: orphan guard, intent tracking, DB blob path
-    dispatch). Lo streaming upload originale e' stato collassato in
-    `upload_bytes(data)` — trade-off RAM vs streaming per result
-    blob bounded by DB cap + S3 threshold.
+    Streaming-aware entry point per source ALREADY-ON-DISK (es. query
+    streaming output che ha gia' scritto a tempfile). La dispatch:
+      - DB blob path (size <= cap): read_bytes + save_result_row.
+      - Object storage path: streaming upload path-based, multipart-
+        friendly, niente RAM buffering del file intero.
+
+    Per source IN-MEMORY (REST file output, eseguibili bytes-first)
+    usare direttamente `save_result_blob_from_bytes(data, ...)` per
+    evitare il tempfile bounce.
     """
     saved = False
     try:
+        resolved_group_id = store.resolve_group_id_for_result(project_id, group_id)
+        result_id = str(uuid.uuid4())
+
         try:
-            data = path.read_bytes()
+            file_size = path.stat().st_size
         except OSError as exc:
             raise ResultSaveError(
-                f"Impossibile leggere file {path}: {exc}"
+                f"Impossibile leggere dimensione file {path}: {exc}"
             ) from exc
 
-        result_id = save_result_blob_from_bytes(
-            project_id=project_id,
-            data=data,
-            filename=path.name,
-            fmt=fmt,
-            rows_count=rows_count,
-            group_id=group_id,
-        )
+        policy = storage_policy()
+        use_object_storage = should_use_object_storage(file_size, policy)
+
+        if not use_object_storage:
+            # DB blob path: read_bytes nel cap del DB (size-bounded).
+            enforce_db_hard_cap(file_size, ctx=f"save_result_blob/{policy}")
+            store.save_result_row(
+                result_id=result_id,
+                project_id=project_id,
+                group_id=resolved_group_id,
+                filename=path.name,
+                fmt=fmt,
+                data=path.read_bytes(),
+                rows_count=rows_count,
+            )
+        else:
+            # Object storage: streaming upload path-based (no RAM
+            # buffering del file intero; multipart-friendly per file
+            # da GB-scale streaming-write).
+            storage_key = _storage_key(project_id, result_id)
+            upload_intent_id: Optional[str] = None
+            try:
+                from app.infrastructure.storage.cloud_backends import get_runtime_object_storage
+
+                storage = get_runtime_object_storage()
+                upload_intent_id = record_result_upload_intent(
+                    storage_key,
+                    project_id=project_id,
+                    result_id=result_id,
+                    filename=path.name,
+                    size_bytes=file_size,
+                )
+                storage.upload(path, storage_key)
+            except Exception as exc:
+                raise _runtime_storage_upload_error(
+                    exc, result_id=result_id, filename=path.name,
+                ) from exc
+
+            try:
+                store.save_result_row(
+                    result_id=result_id,
+                    project_id=project_id,
+                    group_id=resolved_group_id,
+                    filename=path.name,
+                    fmt=fmt,
+                    data=None,
+                    rows_count=rows_count,
+                    storage_key=storage_key,
+                    size_bytes=file_size,
+                )
+                close_result_upload_intent(upload_intent_id)
+            except Exception:
+                cleanup_outcome = cleanup_uploaded_result_blob(
+                    storage,
+                    storage_key,
+                    reason="db_save_failed_after_object_upload",
+                    project_id=project_id,
+                    result_id=result_id,
+                )
+                close_failed_result_upload_intent(
+                    upload_intent_id,
+                    cleanup_outcome=cleanup_outcome,
+                )
+                raise
+            logger.info(
+                f"[FS-4] Result {result_id} su object storage "
+                f"(file-based streaming, policy={policy}, "
+                f"{file_size // (1024 * 1024)} MB): {storage_key}"
+            )
 
         saved = True
+        apply_results_retention_after_save(project_id)
         return result_id
     except ResultSaveError:
         raise
@@ -179,7 +247,9 @@ def save_result_blob(
                 if path.parent.exists() and not any(path.parent.iterdir()):
                     path.parent.rmdir()
             except Exception as exc:
-                logger.warning("Cleanup file temp fallito per %s: %s", project_id, exc)
+                logger.warning(
+                    "Cleanup file temp fallito per %s: %s", project_id, exc,
+                )
 
 
 def save_result_blob_from_bytes(

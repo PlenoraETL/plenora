@@ -216,6 +216,10 @@ _BOUNDARY_FILES = (
     # downstream executable consuma path). `tmp_exec_dir` + cleanup
     # finally e' il pattern legittimo per il workdir di esecuzione.
     "app/core/arricchisci/api_connection_rest_file.py",
+    # Result blob storage entry point: streaming upload path-based per
+    # query streaming output (multipart-friendly per file da GB-scale).
+    # I caller bytes-first usano `save_result_blob_from_bytes`.
+    "app/core/results/blob_writer.py",
 )
 # Top-level roots di codice escluso dal sweep applicativo: gli script
 # one-off (`backup_db`, `test_restore`, `export_openapi_manifest`,

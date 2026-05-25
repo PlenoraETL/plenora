@@ -915,14 +915,26 @@ def execute_enrichment_task(
                 src_path = Path(_output_filename)
                 logger.info(f"[Task {task_id}] Output eseguibile su storage: eseguibili-outputs/{task_id}/{_output_filename}")
             else:
-                # Flusso arricchisci standard: salva nel DB
-                from app.core.results.blob_writer import save_result_blob
-                result_id = save_result_blob(
+                # Flusso arricchisci standard: bounded REST file output ->
+                # read_bytes + save_result_blob_from_bytes (no streaming
+                # path needed; REST timeout + ZIP_MAX_UNCOMPRESSED gia'
+                # cappano la dimensione).
+                from app.core.results.blob_writer import save_result_blob_from_bytes
+                _src_data = src_path.read_bytes()
+                result_id = save_result_blob_from_bytes(
                     project_id=project_id,
-                    path=src_path,
+                    data=_src_data,
+                    filename=src_path.name,
                     fmt=src_path.suffix.lstrip(".") or "bin",
                     rows_count=rows_count,
                 )
+                # Cleanup esplicito del local file post-save.
+                try:
+                    src_path.unlink()
+                except OSError as _e:
+                    logger.debug(
+                        f"[Task {task_id}] cleanup src_path best-effort fallito: {_e}"
+                    )
                 logger.info(f"[Task {task_id}] File result persistito: {result_id}")
 
             result = {
