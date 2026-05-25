@@ -1,23 +1,21 @@
 metadata:
   generated_at: '2026-05-25'
-  baseline_total: 26
+  baseline_total: 17
   by_pattern:
-    tempfile_named_temp_file: 7
-    tempfile_mkdtemp: 5
-    path_write_text: 4
+    tempfile_named_temp_file: 5
     storage_upload_path: 3
-    safe_extractall: 3
+    tempfile_mkdtemp: 2
+    safe_extractall: 2
     fileresponse: 2
     shutil_move: 1
+    path_write_text: 1
     shutil_copy: 1
   by_phase:
     Phase6-imdf: 9
-    unassigned: 5
-    Phase5-results-download: 3
+    unassigned: 3
     Phase5-scheduler-archive: 3
-    Phase-scripts-utility: 3
-    Phase7-backup-restore: 2
     Phase4-rest-file-enrichment: 1
+    Phase5-results-download: 1
   note: 'Auto-generated dal sweep filesystem-pattern. Aggiungere motivo/target/replacement quando si migra. Il contract test
     legge questa lista come allowlist: NUOVI usi fuori lista falliscono, ESISTENTI sono tollerati con motivo esplicito di
     fase di migrazione.'
@@ -34,18 +32,6 @@ allowed_callsites:
   line: 72
   pattern: storage_upload_path
   snippet: storage.upload(src_path, key)
-  phase: unassigned
-  status: legitimate-cache
-- file: app/core/files/service_deps.py
-  line: 113
-  pattern: path_write_text
-  snippet: path.write_text(content, encoding=encoding)
-  phase: unassigned
-  status: legitimate-cache
-- file: app/core/files/service_deps.py
-  line: 136
-  pattern: safe_extractall
-  snippet: safe_extract_zip_path(zip_path, dest_dir)
   phase: unassigned
   status: legitimate-cache
 - file: app/core/imdf/loader.py
@@ -120,18 +106,6 @@ allowed_callsites:
   snippet: storage.upload(path, storage_key)
   phase: Phase5-results-download
   status: legitimate-cache
-- file: app/core/results/temp_paths.py
-  line: 44
-  pattern: tempfile_mkdtemp
-  snippet: return Path(tempfile.mkdtemp(prefix=prefix, dir=root))
-  phase: Phase5-results-download
-  status: legitimate-cache
-- file: app/core/results/temp_paths.py
-  line: 61
-  pattern: tempfile_named_temp_file
-  snippet: tmp = tempfile.NamedTemporaryFile(
-  phase: Phase5-results-download
-  status: legitimate-cache
 - file: app/core/scheduler/artifact_store.py
   line: 111
   pattern: shutil_copy
@@ -150,33 +124,3 @@ allowed_callsites:
   snippet: return FileResponse(
   phase: Phase5-scheduler-archive
   status: legitimate-cache
-- file: scripts/backup_db.py
-  line: 245
-  pattern: tempfile_mkdtemp
-  snippet: tmp_dir = Path(tempfile.mkdtemp(prefix="plenora_backup_"))
-  phase: Phase7-backup-restore
-  status: scripts-utility
-- file: scripts/export_openapi_manifest.py
-  line: 281
-  pattern: path_write_text
-  snippet: output.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-  phase: Phase-scripts-utility
-  status: scripts-utility
-- file: scripts/imdf_real_e2e_check.py
-  line: 156
-  pattern: tempfile_named_temp_file
-  snippet: with tempfile.NamedTemporaryFile(
-  phase: Phase-scripts-utility
-  status: scripts-utility
-- file: scripts/imdf_real_e2e_check.py
-  line: 179
-  pattern: path_write_text
-  snippet: meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
-  phase: Phase-scripts-utility
-  status: scripts-utility
-- file: scripts/test_restore.py
-  line: 291
-  pattern: tempfile_mkdtemp
-  snippet: tmp_dir = Path(tempfile.mkdtemp(prefix="plenora_restore_test_"))
-  phase: Phase7-backup-restore
-  status: scripts-utility

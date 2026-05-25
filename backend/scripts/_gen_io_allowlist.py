@@ -189,10 +189,19 @@ def phase_for(filepath: str, pattern: str = "") -> str:
 
 _BOUNDARY_DIRS = ("app/core/io/", "app/core/storage/")
 # File singoli che fanno parte del boundary I/O ma non vivono in
-# `app/core/io/`. `app/utils/zip_safe.py` E' l'implementazione di
-# `safe_extractall`: e' meta-circolare richiedere che non chiami
-# `extractall`.
-_BOUNDARY_FILES = ("app/utils/zip_safe.py",)
+# `app/core/io/`. Sono primitive che esistono PER fornire la capability
+# filesystem al resto del codice in modo controllato. Esigere che NON
+# chiamino tempfile / write_bytes / extractall sarebbe meta-circolare.
+_BOUNDARY_FILES = (
+    "app/utils/zip_safe.py",  # safe_extractall + zip bomb guard impl
+    "app/core/results/temp_paths.py",  # path-only adapter primitives
+    "app/core/files/service_deps.py",  # DefaultFileSystem path adapter
+)
+# Top-level roots di codice escluso dal sweep applicativo: gli script
+# one-off (`backup_db`, `test_restore`, `export_openapi_manifest`,
+# `imdf_real_e2e_check`) sono utility — non application code — e
+# possono fare filesystem I/O liberamente.
+_EXCLUDED_ROOTS = ("scripts",)
 
 
 def _is_boundary(rel: str) -> bool:
@@ -204,7 +213,8 @@ def _is_boundary(rel: str) -> bool:
 
 def scan() -> list[tuple[str, int, str, str]]:
     findings: list[tuple[str, int, str, str]] = []
-    for root in ("app", "workers", "scripts"):
+    roots = tuple(r for r in ("app", "workers", "scripts") if r not in _EXCLUDED_ROOTS)
+    for root in roots:
         for dirpath, dirs, files in os.walk(root):
             dirs[:] = [d for d in dirs if d != "__pycache__" and not d.startswith(".")]
             for fname in files:

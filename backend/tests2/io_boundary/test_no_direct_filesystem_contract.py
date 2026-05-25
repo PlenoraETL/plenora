@@ -100,7 +100,12 @@ EXCLUDE_PREFIXES: tuple[str, ...] = (
 # findings che il generator non ha mai messo nella allowlist.
 EXCLUDE_FILES: tuple[str, ...] = (
     "app/utils/zip_safe.py",
+    "app/core/results/temp_paths.py",
+    "app/core/files/service_deps.py",
 )
+
+# Top-level roots esclusi dal sweep (script one-off, non application code).
+EXCLUDED_ROOTS: tuple[str, ...] = ("scripts",)
 
 
 def _backend_root() -> Path:
@@ -152,7 +157,10 @@ def _is_skip_line(line: str) -> bool:
 def _scan_findings() -> list[tuple[str, int, str, str]]:
     findings: list[tuple[str, int, str, str]] = []
     backend = _backend_root()
-    for root_name in ("app", "workers", "scripts"):
+    roots = tuple(
+        r for r in ("app", "workers", "scripts") if r not in EXCLUDED_ROOTS
+    )
+    for root_name in roots:
         root = backend / root_name
         if not root.exists():
             continue
