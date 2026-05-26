@@ -221,13 +221,18 @@ def ensure_redis_wsl_fallback(
 
 
 def _validate_data_dir(settings: Any, errors: list) -> None:
+    # Boundary: self-test scrivibilita' DATA_DIR via `io.local_filesystem`
+    # (vedi razionale operational nel modulo). Touch + unlink, niente residui.
+    from app.core.io.local_filesystem import (
+        LocalFilesystemError,
+        verify_local_writable,
+    )
+
     try:
-        data_dir = Path(settings.DATA_DIR)
-        data_dir.mkdir(parents=True, exist_ok=True)
-        test_file = data_dir / ".write_test"
-        test_file.touch()
-        test_file.unlink()
-    except Exception as exc:
+        verify_local_writable(settings.DATA_DIR)
+    except LocalFilesystemError as exc:
+        errors.append(f"DATA_DIR '{settings.get('DATA_DIR')}' non scrivibile: {exc}")
+    except Exception as exc:  # difensivo: settings access errors
         errors.append(f"DATA_DIR '{settings.get('DATA_DIR')}' non scrivibile: {exc}")
 
 

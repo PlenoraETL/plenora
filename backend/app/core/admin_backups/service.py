@@ -122,11 +122,13 @@ def _to_datetime(value: Any) -> datetime:
 # consumer in repo) e viene retirato qui
 # schedule cron / description -> `Settings.DEFAULTS` (APP_POLICY
 
-from app.infrastructure.storage.cloud_backends import (
+from app.core.io.object_storage import (
     ObjectStorageDisabledError,
-    _resolve_backup_bucket as _resolve_backup_bucket_env,
     aws_credentials_error_message,
     get_backup_object_storage,
+)
+from app.infrastructure.storage.cloud_backends import (
+    _resolve_backup_bucket as _resolve_backup_bucket_env,
 )
 
 BUCKET = _resolve_backup_bucket_env() or "plenora-backup-112011134642-eu-south-1-an"

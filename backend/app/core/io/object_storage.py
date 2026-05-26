@@ -8,22 +8,22 @@ Consolidamento orizzontale (2026-05-26): prima i 11+ caller in
 passano per questo modulo, allineato con gli altri boundary I/O
 (`vsimem`, `zip_guards`, `geospatial`).
 
-Public surface (i 5 symbol piu' usati dal core layer):
-  - `get_runtime_object_storage()`: factory runtime, solleva
-    `ObjectStorageDisabledError` se la capability globale e' off.
-  - `object_storage_enabled()`: True se la capability e' attiva
-    (consultata dai caller che degradano graceful).
-  - `ObjectStorage`: Protocol con l'API contract
-    (`upload_bytes` / `download` / `delete` / `list_objects` /
-    `get_object_stream` / `head_object`).
-  - `ObjectStorageDisabledError`: raised quando l'oggetto storage
-    non e' configurato (es. dev senza S3/MinIO).
-  - `ObjectMeta`: TypedDict shape comune a tutti i provider.
+Public surface (runtime data plane):
+  - `get_runtime_object_storage()`: factory runtime per result/IMDF/
+    eseguibili. Solleva `ObjectStorageDisabledError` se la capability
+    globale e' off.
+  - `object_storage_enabled()`: True se la capability e' attiva.
+  - `ObjectStorage`: Protocol API contract.
+  - `ObjectStorageDisabledError`: raised dalla factory.
+  - `ObjectMeta`: TypedDict shape comune.
 
-Symbol meno usati (`get_backup_object_storage`, `get_log_archive_storage`,
-`validate_storage_config`, `aws_credentials_error_message`, secrets
-backend) restano accessibili via `app.infrastructure.storage.cloud_backends`
-diretto — sono operational/cross-layer concerns, non core domain.
+Public surface (specializzati — operational/cross-cluster):
+  - `get_backup_object_storage()`: factory dedicato al backup bucket
+    (usato da `admin_backups`).
+  - `get_log_archive_storage()`: factory dedicato all'archive log
+    (usato da `beat_scheduler`).
+  - `aws_credentials_error_message(exc)`: error message formatter
+    per credential-related boto3 errors (usato da result blob writer).
 """
 
 from __future__ import annotations
@@ -32,6 +32,9 @@ from app.infrastructure.storage.cloud_backends import (
     ObjectMeta,
     ObjectStorage,
     ObjectStorageDisabledError,
+    aws_credentials_error_message,
+    get_backup_object_storage,
+    get_log_archive_storage,
     get_runtime_object_storage,
     object_storage_enabled,
 )
@@ -40,6 +43,9 @@ __all__ = [
     "ObjectMeta",
     "ObjectStorage",
     "ObjectStorageDisabledError",
+    "aws_credentials_error_message",
+    "get_backup_object_storage",
+    "get_log_archive_storage",
     "get_runtime_object_storage",
     "object_storage_enabled",
 ]

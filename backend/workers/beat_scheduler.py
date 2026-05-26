@@ -951,7 +951,7 @@ class PlenoraBeatScheduler(Scheduler):
             return  # retention disabilitata (0 o negativo
 
         try:
-            from app.infrastructure.storage.cloud_backends import get_log_archive_storage
+            from app.core.io.object_storage import get_log_archive_storage
             from app.core.scheduler.log_archive import LogArchiveWriter
 
             cutoff = datetime.now(timezone.utc) - timedelta(days=days)
@@ -1117,7 +1117,7 @@ class PlenoraBeatScheduler(Scheduler):
             return  # retention disabilitata (0 o negativo
 
         try:
-            from app.infrastructure.storage.cloud_backends import get_log_archive_storage
+            from app.core.io.object_storage import get_log_archive_storage
             from app.core.scheduler.log_archive import LogArchiveWriter
 
             cutoff = datetime.now(timezone.utc) - timedelta(days=days)

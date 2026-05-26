@@ -257,16 +257,27 @@ class LocalDataSource(DataSourceInterface):
             raise DataSourcePermissionError(f"Accesso negato: {full_path}") from e
 
     def write_file(self, path: str, content: bytes) -> None:
+        # Boundary: la scrittura locale passa per `io.local_filesystem`
+        # (data plane endpoint, vedi razionale nel modulo). I PermissionError
+        # / OSError sono wrappati come LocalFilesystemError; qui li
+        # riconvertiamo in datasource-specific per preservare l'API contract.
+        from app.core.io.local_filesystem import (
+            LocalFilesystemError,
+            write_local_bytes,
+        )
+
         full_path = self._abs(path)
-        parent = os.path.dirname(full_path)
         try:
-            os.makedirs(parent, exist_ok=True)
-            with open(full_path, "wb") as f:
-                f.write(content)
-        except PermissionError as e:
-            raise DataSourcePermissionError(f"Scrittura negata: {full_path}") from e
-        except OSError as e:
-            raise DataSourceConnectionError(f"Errore scrittura: {e}") from e
+            write_local_bytes(full_path, content)
+        except LocalFilesystemError as exc:
+            cause = exc.__cause__
+            if isinstance(cause, PermissionError):
+                raise DataSourcePermissionError(
+                    f"Scrittura negata: {full_path}"
+                ) from cause
+            raise DataSourceConnectionError(
+                f"Errore scrittura: {cause if cause is not None else exc}"
+            ) from (cause or exc)
 
     def delete_file(self, path: str) -> None:
         full_path = self._abs(path)

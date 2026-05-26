@@ -163,8 +163,13 @@ _LEGITIMATE_CACHE_FILES: tuple[str, ...] = (
 # server). NON sono temp/cache interni — sono il punto in cui la
 # pipeline scrive l'output di un task `CARICA` verso lo storage che
 # l'utente ha configurato. Contratto RAM-first NON si applica.
+#
+# `local.py` rimosso post audit follow-up 2026-05-26: la write delega
+# al boundary `app.core.io.local_filesystem.write_local_bytes` (unico
+# punto autorizzato per scritture filesystem locale). `sftp.py` resta
+# come false positive sintattico (client paramiko remoto, regex match
+# su `self._sftp.open(...,"wb")`).
 _DATAPLANE_FILES: tuple[str, ...] = (
-    "app/core/datasources/local.py",
     "app/core/datasources/sftp.py",
 )
 

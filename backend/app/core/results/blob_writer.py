@@ -110,7 +110,7 @@ def _storage_key(project_id: str, result_id: str) -> str:
 
 
 def _runtime_storage_upload_error(exc: Exception, *, result_id: str, filename: str | None = None) -> ResultSaveError:
-    from app.infrastructure.storage.cloud_backends import aws_credentials_error_message
+    from app.core.io.object_storage import aws_credentials_error_message
 
     hint = aws_credentials_error_message(exc)
     if hint is not None:

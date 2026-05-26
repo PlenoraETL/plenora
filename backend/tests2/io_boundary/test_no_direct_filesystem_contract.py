@@ -98,25 +98,31 @@ EXCLUDE_PREFIXES: tuple[str, ...] = (
     "app/core/imdf/",
 )
 
-# Boundary files puntuali fuori dalle dir whitelisted. Post Punto 3
-# cleanup (2026-05-25): `app/utils/zip_safe.py`, `app/core/results/temp_paths.py`,
-# `app/core/files/service_deps.py` rimossi dall'esclusione (zero
-# callsite filesystem residui dopo tombstone di safe_extractall /
-# get_temp_output_path / DefaultFileSystem.{write_text,extract_zip,write_binary}).
-# Punto 3 follow-up (2026-05-26): aggiunti i datasource endpoint
-# `local.py` + `sftp.py` come data plane esterno (user-configured
-# destinations, NON temp/cache interni — contratto RAM-first NON
-# si applica). DEVE essere allineato con `scripts/_gen_io_allowlist.py`
-# (_BOUNDARY_FILES) altrimenti il test segnala "nuovi offender" per
-# findings che il generator non ha mai messo nella allowlist.
+# Boundary files puntuali fuori dalle dir whitelisted. Storia rimozioni:
+# - 2026-05-25 (Punto 3): `app/utils/zip_safe.py`, `app/core/results/temp_paths.py`,
+#   `app/core/files/service_deps.py` rimossi dall'esclusione (zero callsite
+#   filesystem residui dopo tombstone safe_extractall / get_temp_output_path /
+#   DefaultFileSystem.{write_text,extract_zip,write_binary}).
+# - 2026-05-26 (audit follow-up): `app/core/datasources/local.py` rimosso —
+#   la scrittura ora delega a `app.core.io.local_filesystem.write_local_bytes`
+#   (data plane boundary, gia' coperto da EXCLUDE_PREFIXES). `sftp.py`
+#   resta nello scope per il match sintattico su `self._sftp.open(...,'wb')`
+#   (false positive: e' il client paramiko remoto, non filesystem locale).
+# DEVE essere allineato con `scripts/_gen_io_allowlist.py` (_BOUNDARY_FILES)
+# altrimenti il test segnala "nuovi offender" per findings che il generator
+# non ha mai messo nella allowlist.
 EXCLUDE_FILES: tuple[str, ...] = (
     "app/core/resources/loaders/result_blob.py",
     "app/core/arricchisci/api_connection_rest_file.py",
     "app/core/results/blob_writer.py",
-    # Data plane endpoints (out-of-contract: write a destinazione
-    # configurata dall'utente, non temp/cache interno).
-    "app/core/datasources/local.py",
+    # SFTP datasource endpoint: il regex `open_write_mode` matcha
+    # `self._sftp.open(...,'wb')` sintatticamente (e' il metodo del
+    # client paramiko, NON il built-in open), out-of-contract.
     "app/core/datasources/sftp.py",
+    # startup_validation: il regex matcha `path.touch()` come pattern,
+    # ma touch() non e' nella lista pattern del gate; tuttavia il path
+    # passa per `verify_local_writable` (boundary local_filesystem)
+    # che e' gia' coperto da EXCLUDE_PREFIXES. Resta fuori dal set.
 )
 
 # Top-level roots esclusi dal sweep (script one-off, non application code).
@@ -366,12 +372,16 @@ _BOUNDARY_FROZEN_SNAPSHOT: dict[str, int] = {
     "scripts/export_openapi_manifest.py": 1,
     # Data plane endpoints (Punto 3 follow-up 2026-05-26: il regex
     # `open_write_mode` ora intercetta anche `open(var, "w")`).
-    # Sono feature esterne del datasource layer: write su
-    # destinazione configurata dall'utente, NON temp/cache interni.
-    # Contratto RAM-first NON si applica — vivono nello snapshot
-    # solo per tracking del ratchet, non come violazione.
-    "app/core/datasources/local.py": 1,
+    # `local.py` non e' piu' qui post audit follow-up 2026-05-26:
+    # la write delega a `app.core.io.local_filesystem.write_local_bytes`
+    # (boundary unico per data plane locale + operational self-test).
+    # `sftp.py` resta: e' un false positive (paramiko remoto, non
+    # filesystem locale) ma match sintattico del regex.
     "app/core/datasources/sftp.py": 1,
+    # Local filesystem boundary (audit follow-up 2026-05-26): single
+    # entry point per scritture su filesystem locale. Il match e' su
+    # `open(target, "wb")` dentro `write_local_bytes`, by-design.
+    "app/core/io/local_filesystem.py": 1,
 }
 
 

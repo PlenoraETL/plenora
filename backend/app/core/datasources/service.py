@@ -26,7 +26,6 @@ from app.core.datasources.interface import DataSourceInterface
 from app.core.datasources import db as datasource_db
 from app.core.dataframes.default_loader import DefaultDataLoader
 from app.core.files.preview_temp import preview_file_temp
-from app.core.files.service_deps import DefaultFileSystem
 from app.core.files.helpers import ColumnInfoBuilder, FormatDetector
 
 logger = get_logger(__name__)
@@ -268,7 +267,6 @@ class DataSourceService:
         return preview_file_temp(
             BytesIO(content),
             filename,
-            fs=DefaultFileSystem(),
             loader=DefaultDataLoader(),
             format_detector=FormatDetector,
             column_builder=ColumnInfoBuilder,

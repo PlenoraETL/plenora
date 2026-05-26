@@ -32,12 +32,10 @@ from app.core.files.source_read import load_dataframe as _read_dataframe
 from app.core.files.storage_dispatch import BlobDispatchResult, dispatch_blob_storage
 from app.core.files.service_deps import (  # noqa: F401 (public domain export)
     LoggerProtocol,
-    FileSystemProtocol,
     DataLoaderProtocol,
     TimeProviderProtocol,
     NullLogger,
     DefaultTimeProvider,
-    DefaultFileSystem,
     DefaultDataLoader,
 )
 from app.core.files.helpers import (  # noqa: F401 (public domain export)
@@ -155,12 +153,13 @@ class FileSourceService:
     
     def __init__(
         self,
-        filesystem: Optional[FileSystemProtocol] = None,
         data_loader: Optional[DataLoaderProtocol] = None,
         logger: Optional[LoggerProtocol] = None,
         time_provider: Optional[TimeProviderProtocol] = None,
     ) -> None:
-        self._fs = filesystem or DefaultFileSystem()
+        # `filesystem` kwarg + `self._fs` rimossi (2026-05-26): erano
+        # legacy DI passati a `_preview_file_temp(fs=...)` che li
+        # ignorava esplicitamente. DefaultFileSystem tombstonato.
         self._loader = data_loader or DefaultDataLoader()
         self._logger = logger or NullLogger()
         self._time = time_provider or DefaultTimeProvider()
@@ -516,7 +515,6 @@ class FileSourceService:
         return _preview_file_temp(
             file_content,
             filename,
-            fs=self._fs,
             loader=self._loader,
             format_detector=self._format_detector,
             column_builder=self._column_builder,

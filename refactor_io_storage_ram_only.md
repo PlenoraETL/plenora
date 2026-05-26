@@ -2,16 +2,19 @@
 
 ## Contratto runtime RAM-first (standing reference)
 
-**Stato: Closed + Punto 3 cleanup + follow-up (2026-05-26).** Il refactor
-RAM-first ha chiuso TUTTI i pezzi runtime di produzione e ha rimosso le
-boundary primitives orfane (zero caller runtime). Il report inside-boundary
-residuo e' **5 entries / 5 file**, suddivisi in:
+**Stato: Closed + Punto 3 cleanup + follow-up + audit follow-up (2026-05-26).**
+Il refactor RAM-first ha chiuso TUTTI i pezzi runtime di produzione e
+ha rimosso le boundary primitives orfane (zero caller runtime). Il report
+inside-boundary residuo e' **5 entries / 5 file**, suddivisi in:
   - **3** scripts one-off (`backup_db.py`, `test_restore.py`,
     `export_openapi_manifest.py`) — dev tooling fuori application scope.
-  - **2** data plane endpoints (`datasources/local.py`,
-    `datasources/sftp.py`) — feature di write verso destinazioni
-    configurate dall'utente; il contratto RAM-first NON si applica
-    (vedi Regola 2.bis sotto).
+  - **1** local filesystem boundary
+    (`app/core/io/local_filesystem.py`) — single entry point per
+    scritture filesystem locale (data plane endpoint + operational
+    self-test). LocalDataSource + startup_validation delegano qui.
+  - **1** SFTP datasource endpoint (`datasources/sftp.py`) — false
+    positive sintattico del regex (e' `self._sftp.open(...,"wb")` del
+    client paramiko, non filesystem locale).
 
 Quello che segue NON e' piu' un piano di migrazione ma il **contratto**
 che il codice applicativo deve rispettare. Le sezioni analytical
@@ -39,7 +42,8 @@ delle decisioni prese; non vanno consultate per "cosa fare oggi".
 | Shapefile output | Fully-RAM via `/vsimem` ctypes | `aa0a569e` |
 | Boundary primitives dead-code cleanup (Punto 3) | `materialize.py` / `temp_paths.py` svuotati; `zip_safe.safe_extractall` + `DefaultFileSystem.{write_text,extract_zip}` tombstonati | (questo commit) |
 | Consolidamento orizzontale boundary | `imdf/gdal_vsi.py` -> `io/vsimem.py`; `utils/zip_safe.py` -> `io/zip_guards.py`. `app/core/io/` ora e' la facade unica per le primitive RAM-first (policy, payloads, geospatial, vsimem, zip_guards) | (questo commit) |
-| Cose sparse (#1+#3) — DRY su pattern duplicati | nuovo helper `open_zip_bytes_safe` in `io/zip_guards.py` (5 callsite uniformati: frame_io, files/{multi_layer_upload,preview_temp,upload}, imdf/loader — +bomb guard mancante in loader); nuovo facade `io/object_storage.py` re-esporta i 5 symbol comuni di `infrastructure/storage/cloud_backends` (9 caller core aggiornati al path corto) | (questo commit) |
+| Cose sparse (#1+#3) — DRY su pattern duplicati | nuovo helper `open_zip_bytes_safe` in `io/zip_guards.py` (5 callsite uniformati: frame_io, files/{multi_layer_upload,preview_temp,upload}, imdf/loader — +bomb guard mancante in loader); nuovo facade `io/object_storage.py` re-esporta i 5 symbol comuni di `infrastructure/storage/cloud_backends` (9 caller core aggiornati al path corto) | (commit precedente) |
+| Audit follow-up — chiusura "cose sparse" residue | facade `io/object_storage.py` esteso con 3 symbol specializzati (`aws_credentials_error_message`, `get_backup_object_storage`, `get_log_archive_storage`); admin_backups, beat_scheduler, blob_writer ora passano per il facade. `DefaultFileSystem` + `FileSystemProtocol` tombstonati interamente (zero caller runtime dei metodi DI). Nuovo boundary `io/local_filesystem.py` unifica le 2 scritture filesystem locale sopravvissute (LocalDataSource.write_file + startup_validation.verify_local_writable) | (questo commit) |
 
 ### Regola 1 — codice applicativo non scrive su filesystem
 
@@ -146,28 +150,43 @@ non riconducibile a un common denominator (vedi sentinel in
   `scripts/export_openapi_manifest.py` — dev tools, esplicitamente
   fuori dal sweep applicativo (`_EXCLUDED_ROOTS = ("scripts",)`).
 
-### Regola 2.bis — data plane endpoints (out-of-contract)
+### Regola 2.bis — data plane endpoints + local filesystem boundary
 
 I datasource user-configured **NON** sono soggetti al contratto RAM-first
 perche' rappresentano l'esposizione esplicita di un endpoint storage
-configurato dall'utente. Il task `CARICA` puo' scrivere l'output su:
+configurato dall'utente. Audit follow-up (2026-05-26): le scritture
+filesystem locale sopravvissute sono state unificate dietro un singolo
+boundary.
 
-- `app/core/datasources/local.py` (1) — `LocalDataSource.write_file`
-  scrive su un path configurato dall'utente (filesystem locale, mount
-  NFS/SMB, ecc.). `os.makedirs(parent) + open(path, "wb")` — comportamento
-  by-design.
-- `app/core/datasources/sftp.py` (1) — `SftpDataSource.write_file`
-  scrive su SFTP server remoto. `self._sftp.open(path, "wb")` matcha
-  sintatticamente il gate regex ma non e' filesystem locale (e' il
-  client paramiko/pysftp).
+**`app/core/io/local_filesystem.py` (1 entry) — single audit point:**
 
-Punto 3 follow-up (2026-05-26): il regex `open_write_mode` e' stato
-generalizzato da `open\(['"\s][^)]*?,\s*['"][wax]` a
+  - `write_local_bytes(path, content)`: usato da `LocalDataSource.write_file`
+    (data plane: scrive l'output del task `CARICA` su path configurato
+    dall'utente, mount NFS/SMB, ecc.).
+  - `verify_local_writable(path)`: usato da `startup_validation._validate_data_dir`
+    (operational: self-test scrivibilita' di `DATA_DIR` a boot).
+  - `LocalFilesystemError`: errore wrapped uniformato.
+
+**Razionale del boundary unico:** prima di questo audit ogni callsite
+faceva inline `os.makedirs + open(path, "wb")` direttamente. Senza
+centralizzazione, era impossibile: audit-are le destinazioni filesystem
+locale in un punto, applicare cross-cutting (logging, metrics, path
+policy), e distinguere data plane esterno da leak interno. Adesso
+TUTTE le scritture filesystem fuori da `app/core/io/*` e
+`app/core/storage/*` DEVONO passare per `local_filesystem.py`.
+
+**SFTP false positive (1 entry):**
+
+  - `app/core/datasources/sftp.py` — `SftpDataSource.write_file` chiama
+    `self._sftp.open(path, "wb")`. E' un metodo del client paramiko
+    remoto, non il built-in `open()`; matcha sintatticamente il regex
+    ma non scrive su filesystem locale.
+
+**Regex generalizzato (Punto 3 follow-up):** il pattern `open_write_mode`
+e' stato esteso da `open\(['"\s][^)]*?,\s*['"][wax]` a
 `open\(\s*[^,)]+,\s*['"][wax]` per catturare anche `open(var, "wb")`.
-Prima il gate aveva un buco: una scrittura `open(path, "wb")` con
-prima variabile (non literal) sfuggiva al sweep. Dopo il fix, i 2
-datasource endpoint sono stati esposti e classificati come data plane
-out-of-contract.
+Prima il gate aveva un buco: una scrittura con prima variabile (non
+literal) sfuggiva al sweep.
 
 ### Pattern /vsimem ctypes (riusabile)
 

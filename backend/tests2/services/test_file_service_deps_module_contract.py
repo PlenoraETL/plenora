@@ -1,7 +1,9 @@
 """
 Smoke contract: Protocols + Defaults del dominio files.
 
-Verifica le invarianti minime del refactor:
+Verifica le invarianti minime del refactor post tombstone
+DefaultFileSystem (2026-05-26): la DI surface ora copre solo
+Logger / TimeProvider / DataLoader.
 """
 
 from __future__ import annotations
@@ -9,22 +11,21 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-import pandas as pd
 import pytest
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-_PROTOCOLS = ("LoggerProtocol", "FileSystemProtocol", "DataLoaderProtocol", "TimeProviderProtocol")
-_DEFAULTS = ("NullLogger", "DefaultTimeProvider", "DefaultFileSystem", "DefaultDataLoader")
+_PROTOCOLS = ("LoggerProtocol", "DataLoaderProtocol", "TimeProviderProtocol")
+_DEFAULTS = ("NullLogger", "DefaultTimeProvider", "DefaultDataLoader")
 _ALL = _PROTOCOLS + _DEFAULTS
 
 
 # 1. Esposizione + identity dal core service
 
 
-def test_file_service_deps_module_exposes_eight_symbols():
+def test_file_service_deps_module_exposes_six_symbols():
     from app.core.files import service_deps as deps
 
     for name in _ALL:
@@ -94,67 +95,25 @@ def test_null_logger_is_no_op_on_all_levels():
     assert log.warning("x") is None
 
 
-# 4. DefaultFileSystem (smoke su tmp_path)
+# 4. DefaultFileSystem (tombstone sentinel)
 
 
-def test_default_file_system_smoke_mkdir_read(tmp_path: Path):
-    from app.core.files.service_deps import DefaultFileSystem
+def test_default_file_system_tombstoned_post_audit_followup():
+    """Audit follow-up (2026-05-26): `DefaultFileSystem` + `FileSystemProtocol`
+    rimossi interamente da `service_deps`.
 
-    fs = DefaultFileSystem()
-    sub = tmp_path / "sub"
-    fs.mkdir(sub)
-    assert fs.exists(sub)
-    assert fs.is_dir(sub)
-    assert not fs.is_file(sub)
+    Razionale: i metodi `mkdir`/`exists`/`read_text`/`stat_size`/`rmtree`/
+    `unlink`/`rglob`/`iterdir`/`is_dir`/`is_file` non erano chiamati a
+    runtime — `DefaultFileSystem()` era istanziato come DI default in
+    `FileSourceService.__init__` e `DataSourceService.preview_file_temp`,
+    e passato a `preview_file_temp(fs=...)` che lo ignorava esplicitamente.
+    Storia tombstone metodi write: 2026-05-25 (`write_text`, `extract_zip`)
+    + 2026-05-26 follow-up (`write_binary`)."""
+    from app.core.files import service_deps as deps
 
-    # Punto 3 cleanup: `write_text`, `write_binary`, `extract_zip`
-    # tombstonati dal protocol (RAM-only). Bypassiamo il protocol per
-    # creare un file di prova e verificare i metodi read-only.
-    target = sub / "hello.txt"
-    target.write_bytes(b"ciao")
-    assert fs.is_file(target)
-    assert fs.read_text(target) == "ciao"
-    assert fs.stat_size(target) == len("ciao".encode("utf-8"))
-
-    items = fs.iterdir(sub)
-    assert any(p.name == "hello.txt" for p in items)
-
-
-def test_default_file_system_unlink_and_rmtree(tmp_path: Path):
-    from app.core.files.service_deps import DefaultFileSystem
-
-    fs = DefaultFileSystem()
-    f = tmp_path / "x.txt"
-    f.write_bytes(b"x")
-    assert fs.exists(f)
-    fs.unlink(f)
-    assert not fs.exists(f)
-
-    sub = tmp_path / "deletable"
-    fs.mkdir(sub)
-    (sub / "a.txt").write_bytes(b"a")
-    fs.rmtree(sub)
-    assert not fs.exists(sub)
-
-
-def test_default_file_system_tombstones_dead_methods_post_punto3():
-    """Punto 3 cleanup (2026-05-25 + 2026-05-26): tombstonati i metodi
-    write-on-disk: `write_text`, `extract_zip`, `write_binary`.
-    Sostituti canonical:
-      - testo / binary: pass bytes ai writer storage-direct
-        (`StreamingResultBlobWriter`, `save_result_blob_from_bytes`,
-        `storage.save_bytes`)
-      - ZIP read: `zipfile.ZipFile(BytesIO(...))` +
-        `validate_zip_bomb_limits` + `z.read(name)` RAM-only."""
-    from app.core.files.service_deps import DefaultFileSystem, FileSystemProtocol
-
-    for legacy in ("write_text", "extract_zip", "write_binary"):
-        assert not hasattr(DefaultFileSystem, legacy), (
-            f"DefaultFileSystem.{legacy} ancora presente: cleanup Punto 3 incompleto."
-        )
-        assert not hasattr(FileSystemProtocol, legacy), (
-            f"FileSystemProtocol.{legacy} ancora presente nel protocol: "
-            f"sincronizzare con il refactor RAM-only."
+    for legacy in ("DefaultFileSystem", "FileSystemProtocol"):
+        assert not hasattr(deps, legacy), (
+            f"service_deps.{legacy} ancora esposto: tombstone DI cleanup incompleto."
         )
 
 

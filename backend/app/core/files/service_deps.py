@@ -1,16 +1,24 @@
 """Protocols + default implementations for ``FileSourceService`` DI.
 
-Canonical STORAGE_ARTIFACT_ENGINE boundary for the file service dependencies.
+Post tombstone DefaultFileSystem (2026-05-26): l'unico DI rimasto e'
+sui Logger / TimeProvider / DataLoader. `FileSystemProtocol` +
+`DefaultFileSystem` rimossi — erano istanziati come default da
+`FileSourceService` e `DatasourceService` e passati a
+`preview_file_temp(fs=...)` che li ignorava esplicitamente (RAM-only
+path non li usava). Storia dei tombstone:
+  - 2026-05-25 (Punto 3): `write_text`, `extract_zip` rimossi.
+  - 2026-05-26 (Punto 3 follow-up): `write_binary` rimosso.
+  - 2026-05-26 (audit follow-up): `FileSystemProtocol` + intera classe
+    `DefaultFileSystem` rimossi (zero caller runtime dei metodi
+    `mkdir`/`exists`/`read_text`/`stat_size`/`rmtree`/`unlink`/`rglob`).
 """
 
 from __future__ import annotations
 
-import shutil
 import uuid
 
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import List, Protocol
+from typing import Protocol
 
 from app.core.dataframes.default_loader import (
     DataLoaderProtocol as DataLoaderProtocol,
@@ -19,12 +27,10 @@ from app.core.dataframes.default_loader import (
 
 __all__ = [
     "LoggerProtocol",
-    "FileSystemProtocol",
     "DataLoaderProtocol",
     "TimeProviderProtocol",
     "NullLogger",
     "DefaultTimeProvider",
-    "DefaultFileSystem",
     "DefaultDataLoader",
 ]
 
@@ -39,33 +45,6 @@ class LoggerProtocol(Protocol):
     def error(self, msg: str) -> None: ...
     def debug(self, msg: str) -> None: ...
     def warning(self, msg: str) -> None: ...
-
-
-class FileSystemProtocol(Protocol):
-    """Protocol per operazioni filesystem - mockabile per test.
-
-    Punto 3 cleanup (2026-05-25 + 2026-05-26): tombstonati i metodi
-    write-on-disk del protocol (zero caller runtime post refactor
-    RAM-only):
-      - `write_text` -> `write_binary(BytesIO(text.encode()))` (era qui)
-      - `extract_zip` -> `zipfile.ZipFile(BytesIO(...))` +
-        `validate_zip_bomb_limits` (era qui)
-      - `write_binary` -> RAM-first (bytes -> storage backend); il
-        protocol resta read-only/structural.
-    Il `DefaultFileSystem` concreto sopravvive perche' istanziato come
-    DI default da `FileSourceService` / `DatasourceService`, ma il
-    payload upload viene letto dal blob storage in memoria, non da
-    disco locale."""
-    def mkdir(self, path: Path, parents: bool = True, exist_ok: bool = True) -> None: ...
-    def exists(self, path: Path) -> bool: ...
-    def is_dir(self, path: Path) -> bool: ...
-    def is_file(self, path: Path) -> bool: ...
-    def iterdir(self, path: Path) -> List[Path]: ...
-    def read_text(self, path: Path, encoding: str = 'utf-8') -> str: ...
-    def stat_size(self, path: Path) -> int: ...
-    def rmtree(self, path: Path) -> None: ...
-    def unlink(self, path: Path) -> None: ...
-    def rglob(self, path: Path, pattern: str) -> List[Path]: ...
 
 
 class TimeProviderProtocol(Protocol):
@@ -95,37 +74,3 @@ class DefaultTimeProvider:
         # combinazioni -> brute-force fattibile se il nome + timestamp
         # sono noti). 32-hex = 2^128 = infeasible
         return uuid.uuid4().hex
-
-
-class DefaultFileSystem:
-    """Implementazione default filesystem"""
-
-    def mkdir(self, path: Path, parents: bool = True, exist_ok: bool = True) -> None:
-        path.mkdir(parents=parents, exist_ok=exist_ok)
-
-    def exists(self, path: Path) -> bool:
-        return path.exists()
-
-    def is_dir(self, path: Path) -> bool:
-        return path.is_dir()
-
-    def is_file(self, path: Path) -> bool:
-        return path.is_file()
-
-    def iterdir(self, path: Path) -> List[Path]:
-        return list(path.iterdir()) if path.exists() else []
-
-    def read_text(self, path: Path, encoding: str = 'utf-8') -> str:
-        return path.read_text(encoding=encoding)
-
-    def stat_size(self, path: Path) -> int:
-        return path.stat().st_size
-
-    def rmtree(self, path: Path) -> None:
-        shutil.rmtree(path)
-
-    def unlink(self, path: Path) -> None:
-        path.unlink()
-
-    def rglob(self, path: Path, pattern: str) -> List[Path]:
-        return list(path.rglob(pattern))

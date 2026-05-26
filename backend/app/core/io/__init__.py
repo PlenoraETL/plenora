@@ -14,6 +14,9 @@ Moduli (consolidamento orizzontale 2026-05-26):
     manager (ex-`utils.zip_safe`)
   - `object_storage`: facade re-export per object storage cloud-agnostic
     (S3/MinIO via boto3) — front door per i caller `app.core.*`
+  - `local_filesystem`: data plane boundary per scritture filesystem
+    locale (out-of-contract RAM-first ma single audit point) —
+    `LocalDataSource` + `startup_validation` passano da qui
 
 Object storage layering:
   - `app.core.io.object_storage`: facade (entry point del core layer);
