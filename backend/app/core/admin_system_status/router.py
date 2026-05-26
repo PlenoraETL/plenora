@@ -18,7 +18,10 @@ router = APIRouter(prefix="/admin/system-status", tags=["admin-system-status"])
 @router.get("", summary="Aggregato stato sistema per dashboard admin")
 @audit_action(action="admin.system_status.read")
 def get_system_status(
-    _user: CurrentUser = Depends(require_superadmin),
+    # P1 (2026-05-26): vedi `admin_runtime_config/router.py`: param
+    # rinominato `current_user` per `@audit_action` (altrimenti user_id
+    # finiva NULL nell'audit).
+    current_user: CurrentUser = Depends(require_superadmin),
 ) -> Mapping[str, object]:
     """Ritorna un JSON con metriche aggregate per il dashboard admin:
 

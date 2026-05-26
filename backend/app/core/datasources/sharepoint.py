@@ -27,6 +27,23 @@ from app.core.datasources.interface import (
 )
 
 
+def _env_float(name: str, default: float) -> float:
+    """Legge una env var float-tipizzata con fallback su `default`.
+
+    P1 (2026-05-26): introdotta per esporre timeout SharePoint
+    (connect/read separati) come knob env invece di hardcode `300`.
+    """
+    import os
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        v = float(raw)
+        return v if v > 0 else default
+    except ValueError:
+        return default
+
+
 def _sanitize_sharepoint_error(e: Exception) -> str:
     """F5-B4 (2026-04-24): mappa eccezioni Office365 / msal / requests /
     socket a messaggi canonici user-facing, SENZA esporre str(e) che puo'
@@ -893,8 +910,21 @@ class SharePointDataSource(DataSourceInterface):
             yield from self._fallback_download_then_slice(path, chunk_size)
             return
 
+        # P1 (2026-05-26): timeout configurabile via env (connect/read
+        # separati). Pre-fix `timeout=300` era hardcoded — non
+        # tunabile per ambienti con SharePoint lento/veloce e mischiava
+        # connect timeout (deve essere breve, 15s tipico) con read
+        # timeout (puo' essere lungo per file grandi). requests accetta
+        # un tuple (connect, read).
+        connect_timeout = _env_float(
+            "PLENORA_SHAREPOINT_CONNECT_TIMEOUT_SEC", 15.0
+        )
+        read_timeout = _env_float(
+            "PLENORA_SHAREPOINT_STREAM_TIMEOUT_SEC", 300.0
+        )
+        timeout_tuple = (connect_timeout, read_timeout)
         try:
-            with session.get(url, stream=True, timeout=300) as resp:
+            with session.get(url, stream=True, timeout=timeout_tuple) as resp:
                 if resp.status_code == 404:
                     raise DataSourceFileNotFoundError(
                         f"File non trovato: {path!r}"
@@ -912,10 +942,12 @@ class SharePointDataSource(DataSourceInterface):
         except Exception as exc:
             # Errore network / HTTP generico: fallback office365 full
             # (preserva compatibility, log warning per visibility).
+            # P1 (2026-05-26): sanitize `{exc}` per evitare leak Bearer
+            # AAD token nel warning (stesso vettore di sharepoint:604).
             logger.warning(
                 f"[GESTITO] SharePoint REST streaming fallito per "
                 f"{path!r}, fallback _download_file full: "
-                f"{type(exc).__name__}: {exc}"
+                f"{type(exc).__name__}: {_sanitize_sharepoint_error(exc)}"
             )
             yield from self._fallback_download_then_slice(path, chunk_size)
 

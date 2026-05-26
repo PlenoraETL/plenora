@@ -120,13 +120,21 @@ class ConcurrencyManager:
         if ttl_seconds:
             expires_at = (datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)).isoformat()
         try:
+            # P1 (2026-05-26): WHERE clause include `expires_at IS NULL`
+            # cosi' lock pre-esistenti senza TTL non bloccano per
+            # sempre l'acquisizione. Pre-fix la condizione era solo
+            # `expires_at IS NOT NULL AND expires_at <= now()`:
+            # row con `expires_at = NULL` (pre-fix manuale, schedule
+            # senza TTL configurato) non potevano essere prese da
+            # nessuno fino a `force_release` manuale. NULL e' trattato
+            # come "lock orfano" (nessun heartbeat possibile).
             row = db.fetchone(
                 "INSERT INTO scheduler_locks (key, value, expires_at) "
                 "VALUES (%s,%s,%s) "
                 "ON CONFLICT (key) DO UPDATE "
                 "  SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at "
-                "  WHERE scheduler_locks.expires_at IS NOT NULL "
-                "    AND scheduler_locks.expires_at <= now() "
+                "  WHERE scheduler_locks.expires_at IS NULL "
+                "    OR scheduler_locks.expires_at <= now() "
                 "RETURNING value",
                 (key, value, expires_at),
             )

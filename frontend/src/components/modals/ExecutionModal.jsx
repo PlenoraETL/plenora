@@ -338,11 +338,13 @@ function ExecutionModal({
               )}
 
               {/* Output File Info */}
-              {(result.output_file || result.output_path) && (
+              {/* P1 (2026-05-26): rimosso fallback `output_path`
+                  (sempre undefined dopo pipeline RAM refactor). */}
+              {result.output_file && (
                 <div className="execution-modal__output">
                   <div className="execution-modal__output-label">📄 File generato</div>
                   <div className="execution-modal__output-file">
-                    {result.output_file || result.output_path?.split('/').pop()}
+                    {result.output_file}
                   </div>
                 </div>
               )}

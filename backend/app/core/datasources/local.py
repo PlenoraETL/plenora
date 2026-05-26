@@ -394,9 +394,21 @@ class LocalDataSource(DataSourceInterface):
     def _raw_read(self, full_path: str) -> bytes:
         size = os.path.getsize(full_path)
         if size > self._MAX_READ_SIZE:
+            # P1 (2026-05-26): messaggio canonico senza la size esatta.
+            # Pre-fix il `ValueError` propagava `{size // (1024*1024)}MB`
+            # fino al boundary `datasource_node_loading.py` che incolla
+            # `str(e)` nel response JSON utente → leak minore della
+            # dimensione del file (e dell'esistenza di un file specifico
+            # sul filesystem server). Log dettagliato resta nel logger
+            # server-side per diagnostica.
+            logger.warning(
+                f"[GESTITO] LocalDataSource._raw_read: file troppo "
+                f"grande ({size} bytes, limit "
+                f"{self._MAX_READ_SIZE} bytes), path={full_path!r}",
+            )
             raise ValueError(
-                f"File troppo grande ({size // (1024*1024)}MB). "
-                f"Limite: {self._MAX_READ_SIZE // (1024*1024)}MB"
+                f"File troppo grande. Limite: "
+                f"{self._MAX_READ_SIZE // (1024*1024)}MB"
             )
         with open(full_path, "rb") as f:
             return f.read()

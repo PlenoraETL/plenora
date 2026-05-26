@@ -286,9 +286,26 @@ const handleExecute = useCallback(async (executeOptions = {}) => {
   }, [handleExecute]);
 
   const downloadTaskResult = useCallback(async () => {
-    // Estrae il filename reale dal result (output_file o output_path)
-    const outputPath = result?.output_file || result?.output_path || null;
-    const filename   = outputPath ? outputPath.split(/[/\\]/).pop() : null;
+    // P1 (2026-05-26): `output_path` non e' piu' emesso dal pipeline
+    // (sostituito da `output_file` basename). Rimosso il fallback
+    // dead-code (era sempre undefined). `output_file` resta il
+    // canale canonico; il branch result_id sotto copre i casi in cui
+    // il BE non emette output_file (es. arricchimento DB output).
+    const outputPath = result?.output_file || null;
+    let filename   = outputPath ? outputPath.split(/[/\\]/).pop() : null;
+
+    // P1 (2026-05-26): fallback su `result_id` + `output_format` se
+    // output_file/output_path non e' presente. Post RAM refactor il
+    // BE propaga `result_id` (canale canonico di download) ma in
+    // alcuni branch (es. arricchimento DB output) output_file resta
+    // null. Pre-fix il filename era null e `downloadBlob` cadeva sul
+    // fallback `task_${taskId}_output` perdendo l'estensione reale.
+    if (!filename && result?.result_id) {
+      const ext = result?.output_format
+        ? `.${String(result.output_format).replace(/^\.+/, '')}`
+        : '';
+      filename = `result_${result.result_id}${ext}`;
+    }
 
     if (taskId) {
       await downloadTaskOutput(taskId, filename);

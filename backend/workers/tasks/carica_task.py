@@ -261,13 +261,21 @@ def execute_carica_task(
         rows_written = result.get("rows_written", 0) or 0
         elapsed_ms = int((_time.time() - _run_start) * 1000)
 
-        append_step({
-            "module":      "carica",
-            "status":      "success" if is_success else "failure",
-            "rows_out":    rows_written,
-            "duration_ms": elapsed_ms,
-            "error":       result.get("error_message") if not is_success else None,
-        })
+        # P1 (2026-05-26): emit `append_step` SOLO per i branch
+        # non-db. Il path `db` ha gia' un emit interno in
+        # `CaricaExecutor.execute()` che mappa correttamente lo
+        # status PARTIAL (qui invece si collassava a "failure").
+        # Pre-fix: doppia entry "carica" per ogni esecuzione db (run
+        # log e dashboard UI mostravano due righe per la stessa
+        # operazione).
+        if write_branch != 'db':
+            append_step({
+                "module":      "carica",
+                "status":      "success" if is_success else "failure",
+                "rows_out":    rows_written,
+                "duration_ms": elapsed_ms,
+                "error":       result.get("error_message") if not is_success else None,
+            })
         close_run(
             run_id=run_id,
             status="success" if is_success else "failure",

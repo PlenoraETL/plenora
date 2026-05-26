@@ -164,23 +164,61 @@ def list_projects(
     gid = group_filter(current_user)
     project_list = _project_service.list_projects(group_id=gid)
 
+    # P1 (2026-05-26): batch-fetch dei canvas manipola in 1 query
+    # invece di N+1 chiamate a `get_project_canvas`. Pre-fix con 20+
+    # progetti manipola la latenza era lineare (visibile a UI; piu'
+    # critico con piu' progetti). Si usa
+    # `list_project_canvas_check_rows()` esistente che ritorna tutti i
+    # canvas in una query; filtriamo client-side ai soli manipola.
+    # NB: salta `sync_canvas_with_output_contracts` (side-effect del
+    # `get_project_canvas` full) — il list endpoint non ne ha bisogno
+    # e il sync e' gia' fatto in fase di save/load del canvas detail.
+    canvas_by_id: dict = {}
+    try:
+        from app.core.projects.db import list_project_canvas_check_rows
+        for row in list_project_canvas_check_rows():
+            if row.project_type == 'manipola':
+                canvas_by_id[row.id] = row.canvas
+    except Exception as exc:
+        # Fallback graceful al pattern N+1 se la batch fallisce.
+        logger.warning(
+            f"list_projects: batch canvas load fallita, fallback "
+            f"N+1: {type(exc).__name__}: {exc}",
+            op="list_projects",
+        )
+
     enriched_projects = []
     for project in project_list.projects:
         project_dict = project.model_dump()
 
         if project.project_type == 'manipola':
             try:
-                canvas = _project_service.get_project_canvas(project.id)
-                if canvas and canvas.nodes:
+                # Fast path: usa il canvas pre-caricato (dict raw).
+                # Slow path (fallback batch fallita): get_project_canvas
+                # per quel singolo progetto.
+                raw_canvas = canvas_by_id.get(project.id)
+                if raw_canvas is None and not canvas_by_id:
+                    canvas = _project_service.get_project_canvas(project.id)
+                    raw_canvas = (
+                        canvas.model_dump() if canvas is not None else None
+                    )
+                if raw_canvas and raw_canvas.get('nodes'):
+                    nodes = raw_canvas.get('nodes') or []
                     source_ids = [
-                        n.data.get('source_project_id') or n.source_project_id
-                        for n in canvas.nodes
-                        if n.type == 'project_source' and (n.data.get('source_project_id') or n.source_project_id)
+                        (n.get('data') or {}).get('source_project_id')
+                        or n.get('source_project_id')
+                        for n in nodes
+                        if n.get('type') == 'project_source'
+                        and (
+                            (n.get('data') or {}).get('source_project_id')
+                            or n.get('source_project_id')
+                        )
                     ]
                     file_source_ids = [
-                        n.file_source_id
-                        for n in canvas.nodes
-                        if n.type == 'file_source' and n.file_source_id
+                        n.get('file_source_id')
+                        for n in nodes
+                        if n.get('type') == 'file_source'
+                        and n.get('file_source_id')
                     ]
                     project_dict['source_project_ids'] = source_ids
                     project_dict['file_source_ids'] = file_source_ids

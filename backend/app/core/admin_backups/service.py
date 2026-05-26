@@ -131,7 +131,13 @@ from app.infrastructure.storage.cloud_backends import (
     _resolve_backup_bucket as _resolve_backup_bucket_env,
 )
 
-BUCKET = _resolve_backup_bucket_env() or "plenora-backup-112011134642-eu-south-1-an"
+# P1 (2026-05-26): rimosso fallback hardcoded con AWS account ID reale
+# (`plenora-backup-112011134642-eu-south-1-an`). L'account ID era
+# rintracciabile via grep su backend/ ed esponeva infrastruttura prod.
+# In assenza di BACKUP_BUCKET la lista/restore restituiranno errore
+# strutturato invece di puntare in modo silenzioso a una risorsa
+# specifica.
+BUCKET = _resolve_backup_bucket_env() or ""
 REGION = settings.get("AWS_REGION", "eu-south-1")
 
 # Lock distribuito Postgres per evitare trigger concorrenti via API.

@@ -45,6 +45,16 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
   const nodesRef = useRef(nodes);
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
 
+  // P1 (2026-05-26): refs per editingEdge e pendingEdge cosi'
+  // handleSaveJoin non li ha nelle deps. Pre-fix ogni cambio
+  // editing/pending modificava la reference della callback,
+  // costringendo JoinModal (memo) a rimontare il form e perdere i
+  // campi in compilazione. Pattern identico a `nodesRef`.
+  const editingEdgeRef = useRef(editingEdge);
+  const pendingEdgeRef = useRef(pendingEdge);
+  useEffect(() => { editingEdgeRef.current = editingEdge; }, [editingEdge]);
+  useEffect(() => { pendingEdgeRef.current = pendingEdge; }, [pendingEdge]);
+
   /**
    * Crea stile edge in base al tipo
    */
@@ -194,16 +204,18 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
    */
   const handleSaveJoin = useCallback((joinConfig) => {
     const currentNodes = nodesRef.current;
-    const sourceNode = currentNodes.find(n => n.id === (editingEdge?.source || pendingEdge?.source));
-    const targetNode = currentNodes.find(n => n.id === (editingEdge?.target || pendingEdge?.target));
-    
+    const currentEditingEdge = editingEdgeRef.current;
+    const currentPendingEdge = pendingEdgeRef.current;
+    const sourceNode = currentNodes.find(n => n.id === (currentEditingEdge?.source || currentPendingEdge?.source));
+    const targetNode = currentNodes.find(n => n.id === (currentEditingEdge?.target || currentPendingEdge?.target));
+
     const edgeStyle = getEdgeStyle(joinConfig);
-    
-    if (editingEdge) {
+
+    if (currentEditingEdge) {
       // Aggiorna edge esistente
       setEdges((eds) =>
         eds.map((e) => {
-          if (e.id === editingEdge.id) {
+          if (e.id === currentEditingEdge.id) {
             const updatedEdge = {
               ...e,
               ...edgeStyle,
@@ -214,22 +226,22 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
                 target_table: targetNode?.data?.table_name
               }
             };
-            
+
             if (onEdgeUpdated) {
               onEdgeUpdated(updatedEdge);
             }
-            
+
             return updatedEdge;
           }
           return e;
         })
       );
-    } else if (pendingEdge) {
+    } else if (currentPendingEdge) {
       // Crea nuovo edge
       const newEdge = {
         id: `edge_${Date.now()}`,
-        source: pendingEdge.source,
-        target: pendingEdge.target,
+        source: currentPendingEdge.source,
+        target: currentPendingEdge.target,
         ...edgeStyle,
         data: {
           ...joinConfig,
@@ -237,19 +249,19 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
           target_table: targetNode?.data?.table_name
         }
       };
-      
+
       setEdges((eds) => addEdge(newEdge, eds));
-      
+
       if (onEdgeCreated) {
         onEdgeCreated(newEdge);
       }
     }
-    
+
     // Chiudi modal
     setShowJoinModal(false);
     setPendingEdge(null);
     setEditingEdge(null);
-  }, [pendingEdge, editingEdge, setEdges, getEdgeStyle, onEdgeCreated, onEdgeUpdated]);
+  }, [setEdges, getEdgeStyle, onEdgeCreated, onEdgeUpdated]);
 
   /**
    * Annulla operazione

@@ -6,7 +6,7 @@
  *
  * Ritorna: { validating, validation, estimate, validate, reset }
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { validateEnrichment, estimateEnrichment } from '../api';
 import { useMountedRef } from './useMountedRef';
 
@@ -39,28 +39,39 @@ export function useEnrichmentValidation() {
   // via mentre la richiesta e' in volo).
   const mountedRef = useMountedRef();
 
+  // P1 (2026-05-26): requestId guard. mountedRef protegge solo da
+  // setState post-unmount; non protegge da chiamate concorrenti sullo
+  // stesso componente montato (es. utente chiude/riapre il modal: due
+  // validate() in volo, la stale puo' vincere). Pattern stesso di
+  // useSchemaInference: incrementiamo `validateRequestRef` su ogni
+  // call; gli setter rispondono solo se requestId == ref corrente.
+  const validateRequestRef = useRef(0);
+  const estimateRequestRef = useRef(0);
+
   /**
    * Valida la configurazione enrichment
    */
   const validate = useCallback(async (projectId, apiId, paramMapping, fileSourceId = null, staticColumns = null, staticParameters = null) => {
+    validateRequestRef.current += 1;
+    const requestId = validateRequestRef.current;
     setIsValidating(true);
     setValidationError(null);
 
     try {
       const result = await validateEnrichment(projectId, apiId, paramMapping, fileSourceId, staticColumns, staticParameters);
-      if (mountedRef.current) {
+      if (mountedRef.current && requestId === validateRequestRef.current) {
         setValidation(result);
       }
       return result;
     } catch (error) {
       const errorMsg = error.message || 'Errore durante la validazione';
-      if (mountedRef.current) {
+      if (mountedRef.current && requestId === validateRequestRef.current) {
         setValidationError(errorMsg);
         setValidation({ valid: false, errors: [errorMsg] });
       }
       return { valid: false, errors: [errorMsg] };
     } finally {
-      if (mountedRef.current) {
+      if (mountedRef.current && requestId === validateRequestRef.current) {
         setIsValidating(false);
       }
     }
@@ -70,24 +81,26 @@ export function useEnrichmentValidation() {
    * Stima tempo esecuzione
    */
   const estimate = useCallback(async (projectId, apiId, paramMapping, fileSourceId = null) => {
+    estimateRequestRef.current += 1;
+    const requestId = estimateRequestRef.current;
     setIsEstimating(true);
     setEstimationError(null);
 
     try {
       const result = await estimateEnrichment(projectId, apiId, paramMapping, fileSourceId);
-      if (mountedRef.current) {
+      if (mountedRef.current && requestId === estimateRequestRef.current) {
         setEstimation(result);
       }
       return result;
     } catch (error) {
       const errorMsg = error.message || 'Errore durante la stima';
-      if (mountedRef.current) {
+      if (mountedRef.current && requestId === estimateRequestRef.current) {
         setEstimationError(errorMsg);
         setEstimation(null);
       }
       return null;
     } finally {
-      if (mountedRef.current) {
+      if (mountedRef.current && requestId === estimateRequestRef.current) {
         setIsEstimating(false);
       }
     }

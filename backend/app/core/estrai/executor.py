@@ -495,7 +495,25 @@ class EstraiExecutor:
             )
 
             if res.get("success"):
-                self._salva_tipi_colonne_da_canvas(project_id, canvas, res)
+                # P1 (2026-05-26): contract update schermata. Pre-fix
+                # un'eccezione in `_salva_tipi_colonne_da_canvas`
+                # (DB transient, contract write race) sollevava e
+                # veniva inghiottita dal try/except esterno → la run
+                # ArcGIS chiudeva con `success=False` nonostante il
+                # blob fosse persistito. Pattern allineato a
+                # MANIPOLA/ESTRAI database (vedi executor.py:425-442).
+                try:
+                    self._salva_tipi_colonne_da_canvas(project_id, canvas, res)
+                except Exception as exc_contract:
+                    logger.warning(
+                        f"[GESTITO] ESTRAI ArcGIS: contract update "
+                        f"fallito (blob persistito, marcatura "
+                        f"contract_update_failed): "
+                        f"{type(exc_contract).__name__}: {exc_contract}",
+                        op="execute",
+                        project_id=project_id,
+                    )
+                    res["contract_update_failed"] = True
 
             res['query'] = f"ArcGIS REST: {layer_url} WHERE {where}"
             return res

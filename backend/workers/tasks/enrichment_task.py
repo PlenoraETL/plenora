@@ -443,7 +443,10 @@ def execute_enrichment_task(
                              "Verifica che la connessione esista e non sia stata eliminata.",
                     "enrichment_stats": enrichment_stats,
                     "error_report": error_report_file,
-            "error_report_result_id": error_report_result_id,
+                    # P1 (2026-05-26): rimossa key duplicata
+                    # `error_report_result_id` (era presente due volte
+                    # con stessa shape — il dict literal silently
+                    # collassava ma indicava un mismatch storico).
                     "error_report_result_id": error_report_result_id,
                 })
 
@@ -592,9 +595,7 @@ def execute_enrichment_task(
                                 ),
                                 "enrichment_stats": enrichment_stats,
                                 "error_report": error_report_file,
-            "error_report_result_id": error_report_result_id,
                                 "error_report_result_id": error_report_result_id,
-                    "error_report_result_id": error_report_result_id,
                             })
 
                         threshold = exec_options.stop_on_error_threshold
@@ -614,9 +615,7 @@ def execute_enrichment_task(
                                 ),
                                 "enrichment_stats": enrichment_stats,
                                 "error_report": error_report_file,
-            "error_report_result_id": error_report_result_id,
                                 "error_report_result_id": error_report_result_id,
-                    "error_report_result_id": error_report_result_id,
                             })
 
                         if not api_config_local.get("output_mapping") and executor.detected_column_types:

@@ -327,7 +327,22 @@ class FTPDataSource(DataSourceInterface):
         """RAM-B2 (2026-05-26): override streaming via ftplib retrbinary
         + queue. `retrbinary` chiama il callback per ogni chunk; usiamo
         una queue thread-safe per yieldare i chunk al consumer del
-        generator senza accumulare tutto in memoria."""
+        generator senza accumulare tutto in memoria.
+
+        P1 (2026-05-26): cancellation cooperativa via threading.Event.
+        Pre-fix se il consumer abbandonava il generator (eccezione
+        downstream, slice via itertools, ecc.) il thread producer
+        restava bloccato su `q.put()` per sempre (queue piena, nessun
+        consumer). `t.join(timeout=5.0)` scadeva ma il thread era ancora
+        vivo nel worker Celery, occupando la control connection FTP.
+        Sotto load i thread orfani si accumulavano e prosciugavano sia
+        il pool thread che le sessioni FTP.
+
+        Fix: callback FTP rileva il cancel event e solleva una
+        eccezione interna (_FTPCancelled) che bypassa retrbinary. Il
+        finally drena la queue per sbloccare eventuali q.put ancora in
+        volo prima del join.
+        """
         import queue
         import threading
 
@@ -335,18 +350,39 @@ class FTPDataSource(DataSourceInterface):
         q: queue.Queue = queue.Queue(maxsize=4)  # bounded buffer
         sentinel = object()
         err_holder: list = []
+        cancel_event = threading.Event()
 
-        def _producer():
+        class _FTPCancelled(Exception):
+            """Segnale interno per uscire da retrbinary su cancel consumer."""
+
+        def _callback(chunk: bytes) -> None:
+            # Poll-put: invece di bloccare per sempre su queue piena,
+            # ricontrolliamo il cancel event ogni secondo. Se cancellato
+            # raise per interrompere retrbinary; altrimenti procediamo.
+            while not cancel_event.is_set():
+                try:
+                    q.put(chunk, timeout=1.0)
+                    return
+                except queue.Full:
+                    continue
+            raise _FTPCancelled()
+
+        def _producer() -> None:
             try:
                 self._ftp.retrbinary(
                     f"RETR {path}",
-                    lambda chunk: q.put(chunk),
+                    _callback,
                     blocksize=chunk_size,
                 )
+            except _FTPCancelled:
+                pass  # consumer ha abbandonato: uscita pulita
             except Exception as e:
                 err_holder.append(e)
             finally:
-                q.put(sentinel)
+                try:
+                    q.put(sentinel, timeout=1.0)
+                except queue.Full:
+                    pass
 
         t = threading.Thread(target=_producer, daemon=True)
         t.start()
@@ -357,6 +393,16 @@ class FTPDataSource(DataSourceInterface):
                     break
                 yield item
         finally:
+            # Signal cancel + drena la queue per liberare un eventuale
+            # q.put pendente del producer (timeout 1.0). Senza il drain
+            # il producer poteva restare bloccato un secondo extra per
+            # ogni chunk ancora in coda.
+            cancel_event.set()
+            while t.is_alive():
+                try:
+                    q.get(timeout=0.1)
+                except queue.Empty:
+                    pass
             t.join(timeout=5.0)
         if err_holder:
             e = err_holder[0]

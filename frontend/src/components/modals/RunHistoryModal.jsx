@@ -323,7 +323,7 @@ const colKeys = nodeData?.rows?.length > 0
                 <>
                   <div className="rh-data-meta">
                     <span>{formatRows(nodeData.row_count)} righe totali</span>
-                    {nodeData.truncated && (
+                    {(nodeData.truncated || nodeData.preview_truncated) && (
                       <span className="rh-truncated-badge">
                         Mostrando prime 200
                       </span>

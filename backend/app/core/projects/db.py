@@ -363,36 +363,42 @@ class ProjectRepository:
         group_id: str | None = None,
         project_type: str | None = None,
     ) -> list[ProjectRow]:
+        # P1 (2026-05-26): `description` aggiunta a TUTTI i 4 SELECT.
+        # Pre-fix solo l'ultima query (group_id senza project_type) la
+        # selezionava: superadmin (group_id=None) e i path con
+        # project_type filter vedevano description NULL in UI per ogni
+        # progetto. Helper `_PROJECT_LIST_COLUMNS` centralizza la
+        # colonna list per evitare drift se aggiungiamo altri campi.
+        _COLS = (
+            "id, group_id, name, project_type, connection_id, "
+            "created_at, updated_at, created_by, description"
+        )
         if group_id is None:
             if project_type:
                 return _project_rows(
                     _fetchall(
-                        "SELECT id, group_id, name, project_type, connection_id, "
-                        "created_at, updated_at, created_by FROM projects "
+                        f"SELECT {_COLS} FROM projects "
                         "WHERE project_type = %s ORDER BY updated_at DESC",
                         (project_type,),
                     )
                 )
             return _project_rows(
                 _fetchall(
-                    "SELECT id, group_id, name, project_type, connection_id, "
-                    "created_at, updated_at, created_by FROM projects "
+                    f"SELECT {_COLS} FROM projects "
                     "ORDER BY updated_at DESC"
                 )
             )
         if project_type:
             return _project_rows(
                 _fetchall(
-                    "SELECT id, group_id, name, project_type, connection_id, "
-                    "created_at, updated_at, created_by FROM projects "
+                    f"SELECT {_COLS} FROM projects "
                     "WHERE group_id = %s AND project_type = %s ORDER BY updated_at DESC",
                     (group_id, project_type),
                 )
             )
         return _project_rows(
             _fetchall(
-                "SELECT id, group_id, name, project_type, connection_id, "
-                "created_at, updated_at, created_by, description FROM projects "
+                f"SELECT {_COLS} FROM projects "
                 "WHERE group_id = %s ORDER BY updated_at DESC",
                 (group_id,),
             )

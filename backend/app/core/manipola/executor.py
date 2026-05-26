@@ -757,6 +757,24 @@ class ManipolaExecutor:
             inputs = [dataframes[e.source] for e in incoming if e.source in dataframes]
 
             if not inputs:
+                # P1 (2026-05-26): se il nodo ha incoming edges ma
+                # nessuna source e' presente in `dataframes`, e' un
+                # mismatch di stato (upstream fallito, edge orfano,
+                # ordering bug) — fail-loud invece di continuare e
+                # rischiare che i downstream leggano stale dal grafo
+                # parziale. Se invece il nodo e' completamente
+                # orfano (no incoming edges) accettiamo lo skip:
+                # canvas in fase di draft puo' avere nodi disconnessi.
+                if incoming:
+                    msg = (
+                        f"Nodo {node.id} ({node.type}) ha "
+                        f"{len(incoming)} incoming edges ma nessuna "
+                        f"source disponibile in dataframes "
+                        f"({[e.source for e in incoming]}). Upstream "
+                        "fallito o edge mismatch?"
+                    )
+                    logger.error(f"[CRASH] {msg}", op="execute", project_id=project_id)
+                    raise ValueError(msg)
                 logger.warning(f"Nodo {node.id} senza input, skip")
                 continue
 

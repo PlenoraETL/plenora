@@ -18,7 +18,11 @@ router = APIRouter(prefix="/admin/runtime-config", tags=["admin-runtime-config"]
 @router.get("", summary="Configurazione runtime read-only")
 @audit_action(action="admin.runtime_config.read")
 def get_runtime_config(
-    _user: CurrentUser = Depends(require_superadmin),
+    # P1 (2026-05-26): nome `current_user` richiesto da @audit_action
+    # che usa kwargs.get("current_user") per popolare audit.user_id.
+    # Pre-fix il param era `_user` e ogni read produceva audit row con
+    # user_id=NULL, annullando l'attribuzione superadmin.
+    current_user: CurrentUser = Depends(require_superadmin),
 ) -> Mapping[str, object]:
     """Return redacted runtime configuration and service probes.
 

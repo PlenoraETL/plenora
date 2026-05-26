@@ -310,11 +310,14 @@ def op_text_normalize(
         # Riassembla: copia del Series originale + assign delle posizioni
         # string trasformate. I non-string restano invariati.
         out = s.copy()
-        # Converti l'output string-extension a Python str native (per
-        # equivalenza dtype/repr con il legacy apply).
-        out.loc[is_str_mask] = [
-            v if _pd.isna(v) else str(v) for v in str_subset
-        ]
+        # P1 (2026-05-26): conversione vettoriale invece di listcomp.
+        # Pre-fix il list comprehension `[v if isna(v) else str(v) for
+        # v in str_subset]` materializzava una list Python intera in
+        # memoria (peak O(n) extra). `astype(object)` su pandas string
+        # extension produce Python str nativi per i non-NA e pd.NA per
+        # i missing — semantica equivalente al listcomp senza il
+        # buffer Python intermedio.
+        out.loc[is_str_mask] = str_subset.astype(object)
         return out
 
     try:

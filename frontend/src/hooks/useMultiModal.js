@@ -14,7 +14,7 @@
  * modals.closeAll();           // Chiude tutte
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 
 /**
  * Hook per gestire multiple modali
@@ -114,20 +114,33 @@ export function useMultiModal(modalNames = []) {
     return modals[name] || false;
   }, [modals]);
 
+  // P1 (2026-05-26): namesRef per stabilizzare `closeAll` e
+  // `openExclusive`. Pre-fix avevano `initialState` nelle deps; se il
+  // caller passava `modalNames` come prop variabile, `initialState`
+  // cambiava reference → callback re-renderizzate → consumer (memo,
+  // listener) ri-registrano. Pattern stesso di useEdgeHandlers nodesRef.
+  const namesRef = useRef(modalNames);
+  useEffect(() => { namesRef.current = modalNames; }, [namesKey, modalNames]);
+
   /**
    * Chiude tutte le modali
    */
   const closeAll = useCallback(() => {
-    setModals(initialState);
-  }, [initialState]);
+    setModals(namesRef.current.reduce((acc, name) => {
+      acc[name] = false;
+      return acc;
+    }, {}));
+  }, []);
 
   /**
    * Apre una modale e chiude tutte le altre
    */
   const openExclusive = useCallback((name) => {
-    const newState = { ...initialState, [name]: true };
-    setModals(newState);
-  }, [initialState]);
+    setModals(namesRef.current.reduce((acc, n) => {
+      acc[n] = (n === name);
+      return acc;
+    }, {}));
+  }, []);
 
   return {
     open,

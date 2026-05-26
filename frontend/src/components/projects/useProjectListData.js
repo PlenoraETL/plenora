@@ -31,6 +31,13 @@ import { useMountedRef } from '../../hooks/useMountedRef';
 
 export function useProjectListData() {
   const toast = useToast();
+  // P1 (2026-05-26): toast tramite ref invece che in deps di `reload`.
+  // Pre-fix: `toast` nelle deps di useCallback. Se il toast provider
+  // re-rendera (cambio variant, theme, ecc.) cambia l'identita' della
+  // reference; reload e' ricreato; useEffect([reload]) lo ri-triggera
+  // → potenziale loop di re-fetch su re-render del provider.
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
   const [projects, setProjects] = useState([]);
   const [connections, setConnections] = useState([]);
   const [arcgisConnections, setArcgisConnections] = useState([]);
@@ -107,7 +114,7 @@ export function useProjectListData() {
           : null)
         .filter(Boolean);
       if (failedServices.length > 0) {
-        toast.warning(`Alcuni dati non caricati: ${failedServices.join(', ')}`);
+        toastRef.current.warning(`Alcuni dati non caricati: ${failedServices.join(', ')}`);
       }
 
       const projectsList = projectsData.projects || [];
@@ -133,14 +140,14 @@ export function useProjectListData() {
     } catch (err) {
       console.error('Errore caricamento dati:', err);
       if (mountedRef.current && reloadIdRef.current === myId) {
-        toast.error('Errore caricamento dati');
+        toastRef.current.error('Errore caricamento dati');
       }
     } finally {
       if (mountedRef.current && reloadIdRef.current === myId) {
         setLoading(false);
       }
     }
-  }, [toast, mountedRef]);
+  }, [mountedRef]);
 
   useEffect(() => { reload(); }, [reload]);
 

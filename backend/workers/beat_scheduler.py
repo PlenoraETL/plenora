@@ -480,16 +480,46 @@ class PlenoraBeatScheduler(Scheduler):
 
         # SECOND: send_task (audit gia' registrato → dedupe history-based
         # opera correttamente al prossimo tick).
-        self.app.send_task(
-            SCHEDULE_PIPELINE_TASK_NAME,
-            kwargs={
-                "schedule_id": schedule_id,
-                **scheduled_run_kwargs(
-                    triggered_by="catchup",
-                    scheduled_for=scheduled_for_iso,
-                ),
-            },
-        )
+        # P1 (2026-05-26): se `send_task` fallisce dopo l'INSERT della
+        # history, la riga history rendeva il dedupe "gia' emesso" al
+        # tick successivo ma il task NON era in coda → run di catchup
+        # silenziosamente perso e non rilevabile. Ora: rollback della
+        # row history su failure e log error per visibility.
+        try:
+            self.app.send_task(
+                SCHEDULE_PIPELINE_TASK_NAME,
+                kwargs={
+                    "schedule_id": schedule_id,
+                    **scheduled_run_kwargs(
+                        triggered_by="catchup",
+                        scheduled_for=scheduled_for_iso,
+                    ),
+                },
+            )
+        except Exception as e_send:
+            logger.error(
+                f"[CRASH] [CATCHUP] send_task fallito dopo INSERT audit "
+                f"per {schedule_id} (scheduled_for={scheduled_for_iso}): "
+                f"{type(e_send).__name__}: {e_send}. Rollback row "
+                f"history per consentire ri-emit al prossimo tick.",
+                exc_info=True,
+            )
+            try:
+                _pg_execute(
+                    "DELETE FROM schedule_catchup_history "
+                    "WHERE schedule_id = %s AND scheduled_for = %s "
+                    "AND leader_id = %s",
+                    (schedule_id, scheduled_for_iso, self._leader_id),
+                )
+            except Exception as e_rb:
+                logger.error(
+                    f"[CRASH] [CATCHUP] Rollback row history fallito "
+                    f"per {schedule_id}: {type(e_rb).__name__}: {e_rb}. "
+                    "Il run di catchup resta perso (history dice 'gia' "
+                    "emesso' ma task non in coda).",
+                    exc_info=True,
+                )
+            return
 
         # Aggiornare last_run all'emit significa: se il task fallisce
         # o crasha prima del completamento, al tick successivo

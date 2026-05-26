@@ -114,6 +114,15 @@ def save_chunks(task_id: str, filename: str, chunks) -> str:
     part_number = 0
     part_buf = bytearray()
 
+    # P1 (2026-05-26): cleanup abort_multipart centralizzato.
+    # Pre-fix ogni fallimento di `upload_part` chiamava
+    # `_abort_multipart_safe` E poi sollevava RuntimeError, che il
+    # try/except esterno catchava ri-chiamando `_abort_multipart_safe`.
+    # Doppia abort -> seconda chiamata otteneva NoSuchUpload (gia'
+    # abortita), swallowed da `_abort_multipart_safe` con log debug,
+    # oscurando il vero errore nei log + raddoppiando le call S3.
+    # Ora le sub-call alzano direttamente: l'unico abort vive nel
+    # `except` esterno.
     def _flush_one_part(payload: bytes) -> None:
         nonlocal part_number
         part_number += 1
@@ -123,7 +132,6 @@ def save_chunks(task_id: str, filename: str, chunks) -> str:
                 PartNumber=part_number, Body=payload,
             )
         except Exception as exc:
-            _abort_multipart_safe(client, bucket, key, upload_id)
             raise RuntimeError(
                 f"eseguibili.save_chunks upload_part fallito (key={key}): {exc}"
             ) from exc
@@ -155,7 +163,6 @@ def save_chunks(task_id: str, filename: str, chunks) -> str:
                     MultipartUpload={"Parts": parts},
                 )
             except Exception as exc:
-                _abort_multipart_safe(client, bucket, key, upload_id)
                 raise RuntimeError(
                     f"eseguibili.save_chunks complete fallito (key={key}): {exc}"
                 ) from exc

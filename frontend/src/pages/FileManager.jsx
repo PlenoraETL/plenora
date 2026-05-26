@@ -106,7 +106,15 @@ const loadFiles = useCallback(async () => {
       setFiles(data.files || []);
       setError(null);
     } catch (err) {
-      setError('Errore nel caricamento dei file');
+      // P1 (2026-05-26): propaga dettaglio server invece di message
+      // generico. Pre-fix nascondeva sempre `err.message` o
+      // `err.response.data.detail` rendendo impossibile distinguere
+      // 401/403/500/timeout dall'UI.
+      setError(
+        err?.response?.data?.detail
+          || err?.message
+          || 'Errore nel caricamento dei file'
+      );
     } finally {
       setLoading(false);
     }
@@ -296,7 +304,13 @@ const handlePreview = async (file) => {
         loadFiles();
         return;
       }
-      toast.error('Errore nel caricamento della preview');
+      // P1 (2026-05-26): propaga dettaglio server invece di toast
+      // generico. Allineato al pattern 404/403 sopra.
+      toast.error(
+        err?.response?.data?.detail
+          || err?.message
+          || 'Errore nel caricamento della preview'
+      );
     }
   };
 const handleDelete = async (fileId, fileName) => {

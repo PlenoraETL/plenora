@@ -259,20 +259,32 @@ def _parquet_producer(df: Any, qbuf: _QueueBuf, chunksize: int, err_holder: list
             writer.close()
             return
 
-        # Primo batch per estrarre lo schema (i RecordBatch nudi non
-        # hanno il metadata pandas-extension richiesto da ParquetWriter
-        # — passiamo via Table per chunk piccolo).
-        first_end = min(chunksize, n)
-        first_table = pa.Table.from_pandas(
-            df.iloc[:first_end], preserve_index=False,
+        # P1 (2026-05-26): schema inferred su sample piu' largo per
+        # evitare ArrowInvalid quando il primo batch ha tutte None su
+        # colonne object (es. sparse extra). Pre-fix il primo
+        # `chunksize` righe inferiva schema=null per quelle colonne,
+        # poi il batch successivo con stringhe falliva con ArrowInvalid
+        # → Parquet corrotto (footer mancante). Minimo 1000 righe nel
+        # sample copre la maggior parte dei pattern; il caso patologico
+        # (10k+ righe iniziali tutte None) resta possibile ma viene
+        # rilanciato pulito come exception nel producer.
+        sample_size = min(n, max(chunksize, 1000))
+        sample_table = pa.Table.from_pandas(
+            df.iloc[:sample_size], preserve_index=False,
         )
-        writer = pq.ParquetWriter(qbuf, first_table.schema)
+        writer = pq.ParquetWriter(qbuf, sample_table.schema)
         try:
-            writer.write_table(first_table)
-            for start in range(first_end, n, chunksize):
+            writer.write_table(sample_table)
+            for start in range(sample_size, n, chunksize):
                 end = min(start + chunksize, n)
+                # `schema=` forza coerenza cross-batch via cast pyarrow:
+                # se un batch successivo ha dtypes incompatibili viene
+                # rilanciato ArrowInvalid invece di silently writing
+                # un row group con schema diverso (file corrotto).
                 batch_table = pa.Table.from_pandas(
-                    df.iloc[start:end], preserve_index=False,
+                    df.iloc[start:end],
+                    preserve_index=False,
+                    schema=sample_table.schema,
                 )
                 writer.write_table(batch_table)
         finally:
@@ -358,6 +370,17 @@ def dataframe_to_export_chunks(
                 break
             yield item
     finally:
+        # P1 (2026-05-26): drena la queue per sbloccare il producer
+        # che potrebbe essere fermo su `q.put()` se il consumer ha
+        # abbandonato il generator (eccezione downstream). Pre-fix:
+        # `t.join(timeout=30.0)` scadeva senza terminare il thread
+        # quando la queue era piena; il thread restava vivo nel
+        # worker Celery, accumulando thread orfani sotto load.
+        while t.is_alive():
+            try:
+                q.get(timeout=0.1)
+            except queue.Empty:
+                pass
         t.join(timeout=30.0)
 
     if err_holder:

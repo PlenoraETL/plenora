@@ -161,7 +161,19 @@ const handlePublish = async () => {
   if (isAccessDenied)                       disabledReasons.push('connessione ArcGIS non accessibile al gruppo');
   if (!connectionId)                        disabledReasons.push('connessione ArcGIS');
   if (!(fsNameTemplate || '').trim())       disabledReasons.push('nome Feature Service');
-  if (!bundleTaskId)                        disabledReasons.push('bundle IMDF (esegui arricchimento)');
+  // P1 (2026-05-26): se `imdfStore` esiste (arricchimento eseguito) ma
+  // bundle_task_id e' null, la persistenza S3 e' fallita server-side.
+  // Distinguiamo questo caso da "arricchimento mai eseguito" con un
+  // messaggio piu' specifico per l'utente.
+  if (!bundleTaskId) {
+    if (imdfStore && Object.keys(imdfStore).length > 0) {
+      disabledReasons.push(
+        'bundle IMDF non persistito (S3/quota): riesegui arricchimento'
+      );
+    } else {
+      disabledReasons.push('bundle IMDF (esegui arricchimento)');
+    }
+  }
 
   const handleValidate = async () => {
     if (!canPublish) return;

@@ -852,7 +852,12 @@ function ExtraFileSlot({ field, label, current, onUploaded, onRemoved }) {
       onUploaded({
         file_source_id:   fs.id,
         original_filename: fs.original_filename || file.name,
-        size:             fs.size_bytes || file.size,
+        // P1 (2026-05-26): nome canonico BE = `file_size` (vedi
+        // FileSource model). `size_bytes` era sempre undefined → il
+        // fallback puntava al File JS lato client invece che alla
+        // dimensione effettiva salvata (divergenti su re-encode/
+        // compressione upload).
+        size:             fs.file_size || file.size,
       });
     } catch (err) {
       setError(err?.message || 'Upload fallito');
