@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, List, Optional
 
-from app.infrastructure.storage.cloud_backends import object_storage_enabled
+from app.core.io.object_storage import object_storage_enabled
 from app.shared.contracts.payloads import JsonObject, StringMap
 from app.shared.resources.file_cleanup import rmtree_safe
 from app.shared.resources.storage_layout import IMDF_BUNDLES_PREFIX
@@ -34,7 +34,7 @@ def _storage():
     i caller list/get_meta_only/list_task_ids degradano graceful
     (cache locale only) catturando l'eccezione; save_bundle invece
     deve fallire perche' il pubblico richiede deve completare l'upload."""
-    from app.infrastructure.storage.cloud_backends import get_runtime_object_storage
+    from app.core.io.object_storage import get_runtime_object_storage
     return get_runtime_object_storage()
 
 

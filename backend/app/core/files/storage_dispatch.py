@@ -9,8 +9,8 @@ from __future__ import annotations
 from typing import Any, Optional
 from typing_extensions import TypedDict
 
+from app.core.io import object_storage as cloud_backends
 from app.core.resources import storage_reconciliation as reconciliation
-from app.infrastructure.storage import cloud_backends
 from app.shared.resources.storage_dispatch import resolve_payload_target
 from app.shared.resources.storage_layout import FILE_SOURCES_PREFIX
 

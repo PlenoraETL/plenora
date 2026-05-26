@@ -78,13 +78,13 @@ def load_preview_from_artifact(
         return ArtifactPreviewResult(error=f"limit invalido: {limit}")
 
     try:
-        from app.infrastructure.storage.cloud_backends import (
+        from app.core.io.object_storage import (
             ObjectStorageDisabledError,
             get_runtime_object_storage,
         )
     except Exception as e:  # pragma: no cover - difensivo
         return ArtifactPreviewResult(
-            error=f"cloud_backends import fallito: {type(e).__name__}: {e}",
+            error=f"object_storage import fallito: {type(e).__name__}: {e}",
         )
 
     try:

@@ -39,6 +39,7 @@ delle decisioni prese; non vanno consultate per "cosa fare oggi".
 | Shapefile output | Fully-RAM via `/vsimem` ctypes | `aa0a569e` |
 | Boundary primitives dead-code cleanup (Punto 3) | `materialize.py` / `temp_paths.py` svuotati; `zip_safe.safe_extractall` + `DefaultFileSystem.{write_text,extract_zip}` tombstonati | (questo commit) |
 | Consolidamento orizzontale boundary | `imdf/gdal_vsi.py` -> `io/vsimem.py`; `utils/zip_safe.py` -> `io/zip_guards.py`. `app/core/io/` ora e' la facade unica per le primitive RAM-first (policy, payloads, geospatial, vsimem, zip_guards) | (questo commit) |
+| Cose sparse (#1+#3) — DRY su pattern duplicati | nuovo helper `open_zip_bytes_safe` in `io/zip_guards.py` (5 callsite uniformati: frame_io, files/{multi_layer_upload,preview_temp,upload}, imdf/loader — +bomb guard mancante in loader); nuovo facade `io/object_storage.py` re-esporta i 5 symbol comuni di `infrastructure/storage/cloud_backends` (9 caller core aggiornati al path corto) | (questo commit) |
 
 ### Regola 1 — codice applicativo non scrive su filesystem
 
@@ -120,9 +121,10 @@ sono:
 
 **Domain storage wrapper (3 specializzazioni giustificate):**
 
-Sopra `cloud_backends.get_runtime_object_storage()` vivono 3 wrapper
-di dominio che NON sono unificabili in una facade comune perche'
-ognuno ha un data model diverso:
+Sopra `app.core.io.object_storage.get_runtime_object_storage()`
+(facade re-export di `cloud_backends`) vivono 3 wrapper di dominio
+che NON sono unificabili in una facade comune perche' ognuno ha
+un data model diverso:
 - `app/core/results/blob_writer.py` — result blob; coordina DB row +
   storage policy (size threshold DB BYTEA vs object storage) +
   retention.

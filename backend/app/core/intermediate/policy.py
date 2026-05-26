@@ -263,7 +263,7 @@ def validate_intermediate_settings(values: Optional[dict] = None) -> None:
     if mode == MODE_FULL_ARTIFACT:
         # Lazy import per evitare cicli (cloud_backends importa
         # eventualmente settings indirettamente
-        from app.infrastructure.storage.cloud_backends import object_storage_enabled
+        from app.core.io.object_storage import object_storage_enabled
         if not object_storage_enabled():
             raise IntermediateSettingsError(
                 "INTERMEDIATE_PERSISTENCE_MODE=full_artifact richiede "

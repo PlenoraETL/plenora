@@ -164,7 +164,7 @@ def save_result_blob_from_bytes(
             storage_key = _storage_key(project_id, result_id)
             upload_intent_id: Optional[str] = None
             try:
-                from app.infrastructure.storage.cloud_backends import get_runtime_object_storage
+                from app.core.io.object_storage import get_runtime_object_storage
 
                 storage = get_runtime_object_storage()
                 upload_intent_id = record_result_upload_intent(

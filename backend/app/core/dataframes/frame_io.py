@@ -607,13 +607,13 @@ def _carica_da_zip(
     di qualunque `inner.read()`.
     """
     from app.core.io.geospatial import read_vector_bytes
-    from app.core.io.zip_guards import validate_zip_bomb_limits
+    from app.core.io.zip_guards import open_zip_bytes_safe
 
     zip_bytes = zip_path.read_bytes()
 
-    with zipfile.ZipFile(BytesIO(zip_bytes), "r") as zf:
-        # SAFETY: bomb guard PRIMA di qualunque inner.read().
-        validate_zip_bomb_limits(zf)
+    # `open_zip_bytes_safe` valida i cap zip-bomb PRIMA di yield-are
+    # lo ZipFile: ogni `zf.read()` successivo e' guard-protetto.
+    with open_zip_bytes_safe(zip_bytes) as zf:
         contenuto = zf.namelist()
 
         shp_files = [n for n in contenuto if n.lower().endswith(".shp")]

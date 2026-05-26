@@ -11,14 +11,13 @@ from __future__ import annotations
 
 import logging
 import zipfile
-from io import BytesIO
 from typing import BinaryIO, Optional
 from typing_extensions import TypedDict
 
 from app.utils.mime_validator import MimeMismatchError, validate_no_executable
 from app.core.io.zip_guards import (
+    open_zip_bytes_safe,
     pick_zip_member_by_extension,
-    validate_zip_bomb_limits,
 )
 
 
@@ -108,10 +107,8 @@ def preview_file_temp(
 
     if format_type == 'zip':
         try:
-            with zipfile.ZipFile(BytesIO(raw_data), 'r') as z:
-                # SAFETY: zip bomb guard prima di `z.read()`.
-                validate_zip_bomb_limits(z)
-
+            # `open_zip_bytes_safe` valida i cap zip-bomb PRIMA di yield.
+            with open_zip_bytes_safe(raw_data) as z:
                 names = z.namelist()
                 inner_name, inner_format, inner_display = pick_zip_member_by_extension(
                     names,

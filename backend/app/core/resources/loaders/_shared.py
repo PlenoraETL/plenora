@@ -67,7 +67,7 @@ def _download_object_storage_impl(
         :class:`MemoryLimitExceededError` reporting:
         ``"result_blob_oversize"`` or ``"file_source_blob_oversize"``.
     """
-    from app.infrastructure.storage.cloud_backends import (
+    from app.core.io.object_storage import (
         ObjectStorageDisabledError,
         get_runtime_object_storage,
     )

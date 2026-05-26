@@ -25,8 +25,10 @@ Public surface attivo:
 """
 
 import zipfile
+from contextlib import contextmanager
+from io import BytesIO
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Iterator, Optional
 
 from app.environment import get_env
 
@@ -126,6 +128,39 @@ def validate_zip_bomb_limits(zf: zipfile.ZipFile) -> None:
                     f"(size={size}, compressed={comp}, cap={max_ratio}x). "
                     f"Override via env ZIP_MAX_COMPRESSION_RATIO se legittimo."
                 )
+
+
+@contextmanager
+def open_zip_bytes_safe(data: bytes) -> Iterator[zipfile.ZipFile]:
+    """Apre uno ZIP da bytes raw applicando `validate_zip_bomb_limits`
+    PRIMA che il caller possa chiamare `z.read(name)`.
+
+    Wrapper canonico per il pattern RAM-only ricorrente:
+
+        with open_zip_bytes_safe(raw) as z:
+            names = z.namelist()
+            payload = z.read("inner.csv")
+
+    DRY su 5 callsite precedenti (frame_io, files/multi_layer_upload,
+    files/preview_temp, files/upload, imdf/loader) che facevano
+    `zipfile.ZipFile(BytesIO(raw))` + `validate_zip_bomb_limits(z)`
+    manualmente. Il helper rende impossibile dimenticare la bomb
+    guard prima di un `z.read()`.
+
+    Args:
+        data: bytes raw del payload ZIP.
+
+    Yields:
+        `zipfile.ZipFile` aperto in read mode su BytesIO(data).
+
+    Raises:
+        `ZipBombError`: se il payload supera uno dei cap (size totale,
+            single-file, count, ratio).
+        `zipfile.BadZipFile`: se `data` non e' uno ZIP valido.
+    """
+    with zipfile.ZipFile(BytesIO(data), "r") as zf:
+        validate_zip_bomb_limits(zf)
+        yield zf
 
 
 def pick_zip_member_by_extension(

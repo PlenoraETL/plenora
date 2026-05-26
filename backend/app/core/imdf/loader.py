@@ -214,7 +214,13 @@ def extract_imdf_zip_bytes(data: bytes) -> ImdfBundle:
     gdb_members: list[tuple[str, bytes]] = []
     ifc_bytes: Optional[bytes] = None
 
-    with zipfile.ZipFile(io.BytesIO(data)) as z:
+    # `open_zip_bytes_safe` valida i cap zip-bomb PRIMA di yield: i
+    # bundle IMDF possono arrivare da upload utente, quindi la guard
+    # e' obbligatoria. Defense-in-depth (l'upload pipeline gia' valida
+    # il MIME, ma non l'inner ZIP bomb cap).
+    from app.core.io.zip_guards import open_zip_bytes_safe
+
+    with open_zip_bytes_safe(data) as z:
         members = z.namelist()
         for m in members:
             try:

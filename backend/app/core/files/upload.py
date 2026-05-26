@@ -13,14 +13,13 @@ RAM. Niente piu' NamedTemporaryFile / mkdtemp / safe_extractall:
 from __future__ import annotations
 
 import zipfile
-from io import BytesIO
 from typing import Any, BinaryIO, Callable, List, Optional
 
 from app.core.files.storage_dispatch import BlobDispatchResult
 from app.utils.mime_validator import MimeMismatchError
 from app.core.io.zip_guards import (
+    open_zip_bytes_safe,
     pick_zip_member_by_extension,
-    validate_zip_bomb_limits,
 )
 
 
@@ -99,13 +98,10 @@ def create_from_upload(
         # lo ZIP via /vsizip (vedi `_load_dataframe_from_bytes`).
         outer_filename = filename
         try:
-            with zipfile.ZipFile(BytesIO(raw_data), 'r') as z:
-                # SAFETY: zip bomb guard PRIMA di qualunque `z.read()`.
-                # Senza, un member da 10GB uncompressed potrebbe esaurire
-                # la RAM del worker. Stesso cap del path-based
-                # `safe_extractall` (env ZIP_MAX_UNCOMPRESSED_BYTES).
-                validate_zip_bomb_limits(z)
-
+            # `open_zip_bytes_safe` valida i cap zip-bomb PRIMA di yield:
+            # un member da 10GB uncompressed esaurirebbe la RAM del worker.
+            # Stesso cap del path-based legacy (env ZIP_MAX_UNCOMPRESSED_BYTES).
+            with open_zip_bytes_safe(raw_data) as z:
                 names = z.namelist()
                 inner_name, inner_format, inner_display = pick_zip_member_by_extension(
                     names,

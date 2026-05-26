@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Callable, Literal, Mapping
 from typing_extensions import TypedDict
 
-from app.infrastructure.storage.cloud_backends import ObjectStorage
+from app.core.io.object_storage import ObjectStorage
 
 
 # Canonical NDJSON shapes (O-ARC §5.1

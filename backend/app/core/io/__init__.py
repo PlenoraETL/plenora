@@ -10,14 +10,24 @@ Moduli (consolidamento orizzontale 2026-05-26):
   - `materialize`: TOMBSTONE (zero caller post refactor RAM-only)
   - `geospatial`: pyogrio bytes wrapper (read/write GeoJSON/GPKG/FGB/SHP-zip)
   - `vsimem`: ctypes adapter su libgdal per `/vsimem` (ex-`imdf.gdal_vsi`)
-  - `zip_guards`: bomb-cap pre-extract + member picker (ex-`utils.zip_safe`)
+  - `zip_guards`: bomb-cap pre-extract + `open_zip_bytes_safe` context
+    manager (ex-`utils.zip_safe`)
+  - `object_storage`: facade re-export per object storage cloud-agnostic
+    (S3/MinIO via boto3) — front door per i caller `app.core.*`
 
-Object storage (cloud-agnostic backend):
-  - `app.infrastructure.storage.cloud_backends`: boto3/MinIO factory
+Object storage layering:
+  - `app.core.io.object_storage`: facade (entry point del core layer);
+    5 symbol re-esportati (get_runtime_object_storage, object_storage_enabled,
+    ObjectStorage, ObjectStorageDisabledError, ObjectMeta).
+  - `app.infrastructure.storage.cloud_backends`: implementation source-of-truth
+    con boto3/MinIO factory, capability check, bucket resolution,
+    secrets backend. Simboli specializzati (backup, log_archive, validate
+    config, credentials-error formatter) restano deep import.
   - Domain wrapper (3 specializzazioni giustificate):
       - `app.core.results.blob_writer` (result blob + DB row + retention)
       - `app.core.imdf.storage` (bundle multi-file + sidecar meta)
       - `app.core.eseguibili.storage` (single-blob key/value)
+    Tutti delegano a `io.object_storage.get_runtime_object_storage()`.
 
 Contract:
   Fuori da questo package (e dai moduli storage autorizzati) NON e'
