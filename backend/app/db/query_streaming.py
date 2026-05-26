@@ -59,10 +59,18 @@ def _configure_session(conn: Any, connection: StreamingConnection) -> None:
     try:
         timeout_s = settings.DB_QUERY_TIMEOUT
         timeout_ms = int(timeout_s) * 1000
+        # P0 (2026-05-26): literal-embedded (no bind param) per le
+        # SET utility command. Stesso bug di `query_session.py`:
+        # psycopg3 usa extended query protocol con server-side Bind
+        # e PostgreSQL non accetta bound parameter sulle SET. Pre-fix
+        # il path streaming (CARICA da DB query, ESTRAI con
+        # persistence_mode=streaming) girava senza statement_timeout —
+        # silent fail nel broad except. `timeout_ms` e' un int da
+        # settings, no rischio injection.
         if connection.type in ("postgres", "postgresql"):
-            conn.execute(text("SET statement_timeout = :t"), {"t": timeout_ms})
+            conn.execute(text(f"SET statement_timeout = {timeout_ms}"))
         elif connection.type == "mysql":
-            conn.execute(text("SET SESSION max_execution_time = :t"), {"t": timeout_ms})
+            conn.execute(text(f"SET SESSION max_execution_time = {timeout_ms}"))
         elif connection.type == "oracle":
             raw = conn.connection.dbapi_connection
             if hasattr(raw, "callTimeout"):
