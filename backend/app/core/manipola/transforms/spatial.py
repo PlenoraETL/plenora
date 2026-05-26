@@ -107,6 +107,18 @@ def _clean_topology_max_geoms() -> int:
     return _env_int("PLENORA_GEO_CLEAN_TOPOLOGY_MAX_GEOMS", 50_000)
 
 
+def _clean_topology_max_vertices() -> int:
+    """Cap su somma vertici totali del GDF input per `clean_topology`.
+
+    M-8 follow-up: il commento prometteva "geometrie + vertici totali",
+    ora consegnato. Anche con 50k geometrie sotto cap, una singola
+    geometria con 10M vertici (es. boundary nazionale multipoligonale)
+    farebbe OOM su make_valid/buffer. Cap default 5M (= 50k * 100
+    vertici/poligono medio); override env per casi legittimi
+    (geometrie cartografiche dense)."""
+    return _env_int("PLENORA_GEO_CLEAN_TOPOLOGY_MAX_VERTICES", 5_000_000)
+
+
 # BUFFER
 # Crea area di rispetto attorno alle geometrie. Distanza in metri, riproiezione automatica
 
@@ -1137,10 +1149,13 @@ def op_geo_clean_topology(
     try:
         gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
 
-        # MANIPOLA-8 (2026-05-26): cap pre-flight su numero geometrie +
-        # vertici totali. Clean topology fa make_valid + buffer iterativi
-        # + overlay per N poligoni: peggior caso O(N^2) sui vertici. Cap
-        # pragmatico evita worker OOM. Override env per casi legittimi.
+        # MANIPOLA-8 (2026-05-26 + follow-up): cap pre-flight su numero
+        # geometrie + somma vertici totali. Clean topology fa make_valid
+        # + buffer iterativi + overlay per N poligoni: peggior caso
+        # O(N^2) sui vertici. Cap pragmatico evita worker OOM. Override
+        # env per casi legittimi. Il vertex check usa
+        # `shapely.get_num_coordinates` (shapely 2.0+); se non
+        # disponibile, skip graceful con log debug.
         n_geoms = len(gdf)
         cap_clean = _clean_topology_max_geoms()
         if n_geoms > cap_clean:
@@ -1149,6 +1164,31 @@ def op_geo_clean_topology(
                 f"{cap_clean}. Ridurre l'input o impostare "
                 f"PLENORA_GEO_CLEAN_TOPOLOGY_MAX_GEOMS (env) per override."
             )
+        if HAS_SHAPELY2 and n_geoms > 0:
+            try:
+                import shapely as _shapely
+                # `get_num_coordinates` ritorna ndarray int per ogni
+                # geometria; sum cheap. None/missing -> 0.
+                n_vertices = int(
+                    _shapely.get_num_coordinates(gdf.geometry.to_numpy()).sum()
+                )
+                cap_vertices = _clean_topology_max_vertices()
+                if n_vertices > cap_vertices:
+                    raise ValueError(
+                        f"Clean topology: {n_vertices} vertici totali supera "
+                        f"il cap {cap_vertices}. Tipicamente geometrie con "
+                        f"boundary molto denso (mappa nazionale). Ridurre "
+                        f"l'input, semplificare geometries con simplify(), "
+                        f"o impostare PLENORA_GEO_CLEAN_TOPOLOGY_MAX_VERTICES "
+                        f"(env) per override."
+                    )
+            except ValueError:
+                raise
+            except Exception as exc:
+                # get_num_coordinates puo' fallire su geometrie esotiche/None.
+                # Degrade graceful: skip vertex check, prosegui con solo cap
+                # n_geoms.
+                logger.debug(f"Clean topology vertex count skipped: {exc}")
 
         result = copy_frame_for_update(gdf)
         fixed_count = 0
