@@ -82,10 +82,12 @@ tombstonati** — zero caller runtime sopravvissuti al refactor:
   `pick_zip_member_by_extension` (member chooser).
   Zero filesystem callsite.
 - `app/core/files/service_deps.py` — tombstonati `DefaultFileSystem.write_text`,
-  `DefaultFileSystem.extract_zip` + corrispondenti voci di
-  `FileSystemProtocol`. Restano `mkdir`/`exists`/`read_text`/
-  `write_binary`/`rmtree`/`unlink`/`rglob` per uso DI nei flow upload.
-  Zero filesystem callsite riconosciuti dal regex sweep.
+  `DefaultFileSystem.extract_zip`, `DefaultFileSystem.write_binary` +
+  corrispondenti voci di `FileSystemProtocol` (write_binary rimosso nel
+  follow-up 2026-05-26 perche' zero caller runtime). Restano i metodi
+  read-only / lifecycle: `mkdir`/`exists`/`is_dir`/`is_file`/`iterdir`/
+  `read_text`/`stat_size`/`rmtree`/`unlink`/`rglob`. Zero filesystem
+  write callsite.
 
 **Boundary primitives senza filesystem callsite (helper logic only):**
 - `app/core/io/geospatial.py` — post QUERY-1 step 4: `write_shapefile_zip_bytes`
