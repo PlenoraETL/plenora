@@ -407,4 +407,105 @@ class StreamingResultBlobWriter:
             self.abort()
 
 
-__all__ = ["PART_SIZE", "StreamingResultBlobWriter"]
+def save_dataframe_to_result_blob_streaming(
+    *,
+    project_id: str,
+    df,
+    output_format: str,
+    filename: str,
+    rows_count: Optional[int] = None,
+    group_id: Optional[str] = None,
+    geom_column: Optional[str] = None,
+    crs: str = "EPSG:4326",
+) -> str:
+    """RAM-A1 (2026-05-26): persist DataFrame -> result blob streaming.
+
+    Sostituisce il pattern doppio-picco
+    `bytes = save_dataframe_to_bytes(df, fmt)` -> `save_result_blob_from_bytes(bytes)`
+    con un writer streaming: `dataframe_to_export_chunks(df, fmt)`
+    yielda chunks, `StreamingResultBlobWriter` li accumula in S3 multipart
+    o DB BYTEA buffer. Peak ridotto da `DataFrame + bytes_serializzati`
+    a `DataFrame + chunk_buffer (~few MB)`.
+
+    Formati supportati come streaming reale:
+      - csv, json, geojson: chunks via `dataframe_to_export_chunks`
+        (TextIOWrapper + queue-thread bridge).
+      - xlsx, xls: single-chunk fallback (openpyxl no streaming write).
+      - shp, gpkg, parquet, gdb: single-chunk via geospatial/parquet
+        writer (binari multi-file/footer-based richiedono buffer pieno).
+
+    Args:
+        project_id: result project owner.
+        df: DataFrame (o GeoDataFrame).
+        output_format: 'csv'/'xlsx'/'json'/'geojson'/'shp'/'gpkg'/'parquet'/'gdb'.
+        filename: filename del result blob (es. "out.csv", "out.zip").
+        rows_count: opzionale, scritto nella DB row.
+        group_id: opzionale, scope multi-tenant.
+        geom_column: per geospatial.
+        crs: per geospatial output.
+
+    Returns:
+        result_id del blob persistito.
+    """
+    from app.core.dataframes.export_writer import dataframe_to_export_chunks
+
+    fmt_lower = (output_format or "").lower()
+
+    # Formati che vanno via streaming nativo (CSV/JSON/geojson tabular)
+    _STREAMING_FORMATS = {"csv", "json"}
+
+    # Formati che cadono su single-chunk (geo binari, xlsx, parquet, gdb)
+    _PATH_BOUND_FORMATS = {"shp", "gpkg", "parquet", "gdb", "xlsx", "xls"}
+
+    writer = StreamingResultBlobWriter(
+        project_id=project_id,
+        filename=filename,
+        fmt=fmt_lower,
+        rows_count=rows_count or (len(df) if rows_count is None else 0),
+        group_id=group_id,
+    )
+    try:
+        if fmt_lower in _STREAMING_FORMATS:
+            # Vero streaming: chunks via queue+thread bridge.
+            for chunk in dataframe_to_export_chunks(df, fmt_lower):
+                writer.write(chunk)
+        elif fmt_lower == "geojson":
+            # GeoJSON: usa export_writer (json) se non-geo, altrimenti
+            # geospatial path.
+            try:
+                from app.core.dataframes.geospatial_io import (
+                    geospatial_dataframe_to_bytes,
+                )
+                # geojson da GeoDataFrame: usa il geospatial writer (singolo
+                # chunk; il GeoJSON e' un singolo doc JSON che non si
+                # divide row-by-row senza rompere il formato).
+                data = geospatial_dataframe_to_bytes(df, fmt_lower, geom_column, crs)
+                writer.write(data)
+            except Exception:
+                # Fallback su to_json records se geospatial_io fallisce
+                # (es. df non-geo).
+                for chunk in dataframe_to_export_chunks(df, "json"):
+                    writer.write(chunk)
+        elif fmt_lower in _PATH_BOUND_FORMATS:
+            # Single-chunk: i writer binari richiedono buffer pieno
+            # (footer-based: parquet/xlsx) o sono multi-file zippati (shp/gpkg/gdb).
+            from app.core.dataframes.frame_io import save_dataframe_to_bytes
+            data = save_dataframe_to_bytes(df, fmt_lower, geom_column=geom_column, crs=crs)
+            writer.write(data)
+        else:
+            # Formato sconosciuto: prova CSV streaming come default.
+            for chunk in dataframe_to_export_chunks(df, "csv"):
+                writer.write(chunk)
+
+        result_id = writer.finalize()
+        return result_id
+    except Exception:
+        writer.abort()
+        raise
+
+
+__all__ = [
+    "PART_SIZE",
+    "StreamingResultBlobWriter",
+    "save_dataframe_to_result_blob_streaming",
+]

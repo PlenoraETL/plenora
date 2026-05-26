@@ -809,19 +809,21 @@ def execute_enrichment_task(
                     "(atteso post-Phase5 REST output)"
                 )
 
-            from app.core.artifacts.resolver import ArtifactResolver
-            blob = ArtifactResolver().fetch_run_blob(
-                result_id=upstream_result_id,
-                expected_project_id=project_id,
-            )
-            output_bytes = blob.data
-
+            # RAM-B4 (2026-05-26): result_id propagation con metadata
+            # short-circuit. Pre-fix: fetch_run_blob caricava SEMPRE i
+            # bytes interi anche quando servivano solo per `rows_count`
+            # (che e' gia' nei metadata del result blob, scritto dal
+            # connector REST). Post-fix:
+            #   - Se NON e' IMDF (needs bundle bytes) E NON e' eseguibile
+            #     (needs upload bytes), tenta lookup metadata via
+            #     `store.get_result_row(result_id).rows_count`. Skip
+            #     fetch_run_blob quando metadata e' sufficient.
+            #   - Se metadata `rows_count` e' None (es. connector non lo
+            #     ha registrato): fallback al fetch_run_blob completo.
             elapsed_time = time.time() - start_time
             update_task_progress(self, 100, "Completato!", task_id=task_id)
 
             # Eventuale rename in base a output_filename del nodo Result.
-            # Solo metadata: lo storage del result_blob conserva il
-            # filename originale, ma il task result expone quello richiesto.
             src_ext = "." + (upstream_fmt or "bin")
             final_name = upstream_filename
             if output_filename and output_filename != "output":
@@ -830,56 +832,101 @@ def execute_enrichment_task(
 
             ext = (Path(final_name).suffix or src_ext).lower()
             rows_count = 0
-            try:
-                if len(output_bytes) == 0:
-                    raise ValueError("Il file di output è vuoto (0 bytes)")
-
-                if ext == '.csv':
-                    text = output_bytes.decode('utf-8-sig')
-                    rows_found = list(csv_mod.reader(text.splitlines()))
-                    if len(rows_found) < 2:
-                        raise ValueError("CSV vuoto o senza righe dati")
-                    rows_count = len(rows_found) - 1
-
-                elif ext in ('.xlsx', '.xls'):
-                    import io as _io
-                    import openpyxl
-                    wb = openpyxl.load_workbook(
-                        _io.BytesIO(output_bytes),
-                        read_only=True, data_only=True,
-                    )
-                    try:
-                        ws = wb.active
-                        rows_count = max(0, ws.max_row - 1)
-                    finally:
-                        wb.close()
-
-                elif ext == '.json':
-                    data = json_mod.loads(output_bytes)
-                    rows_count = len(data) if isinstance(data, list) else 1
-
-                elif ext in ('.geojson',):
-                    data = json_mod.loads(output_bytes)
-                    features = data.get('features', []) if isinstance(data, dict) else []
-                    rows_count = len(features)
-
-            except (UnicodeDecodeError, ValueError, Exception) as val_err:
-                raise ValueError(f"Output non valido ({ext}): {val_err}") from val_err
-
-            # Se nel canvas c'e' almeno un nodo api_enrich con
-            # output_kind='imdf', il file zip prodotto e' un IMDF: estraiamo
-            # manifest.json + validation.json e li includiamo inline nel task
-            # result come `result['imdf']`.
-            # IMDF-1 (Phase6 step 1): `extract_imdf_zip_bytes` apre lo zip
-            # via `ZipFile(BytesIO(...))`, niente piu' bounce su disco lato
-            # caller. La tmp dir interna del bundle resta finche' IMDF-2 non
-            # sposta manifest/validation/renderers/geojson in-memory.
-            imdf_metadata: Optional[JsonObject] = None
+            output_bytes: bytes = b""
+            # `has_imdf_upstream` calcolato PRIMA del check perche' la
+            # decisione di scaricare i bytes dipende anche dall'IMDF
+            # extraction (richiede bundle bytes completi).
             has_imdf_upstream = any(
                 (n.get("output_kind") == "imdf" or (n.get("data") or {}).get("output_kind") == "imdf")
                 for n in nodes
                 if n.get("type") == "api_enrich"
             )
+            needs_full_bytes = is_eseguibile or (
+                has_imdf_upstream and ext == ".zip"
+            )
+
+            # Tenta metadata short-circuit prima del full fetch.
+            metadata_rows_count: Optional[int] = None
+            if not needs_full_bytes:
+                try:
+                    from app.core.results import store as _store
+                    metadata_row = _store.get_result_row(upstream_result_id)
+                    if metadata_row is not None and metadata_row.rows_count is not None:
+                        metadata_rows_count = int(metadata_row.rows_count)
+                except Exception as _md_e:
+                    logger.debug(
+                        f"[Task {task_id}] result metadata lookup fallito, "
+                        f"fallback fetch_run_blob: {_md_e}"
+                    )
+
+            if metadata_rows_count is not None:
+                # Short-circuit: rows_count gia' nei metadata, skip download.
+                rows_count = metadata_rows_count
+                if rows_count <= 0:
+                    raise ValueError(
+                        f"Il file di output ha rows_count={rows_count} "
+                        f"da metadata (file vuoto o non valido)"
+                    )
+                logger.info(
+                    f"[Task {task_id}] rows_count={rows_count} via metadata "
+                    f"short-circuit (skip fetch_run_blob)"
+                )
+            else:
+                # Path classico: scarica i bytes per contare righe e/o
+                # per IMDF extraction / eseguibili upload.
+                from app.core.artifacts.resolver import ArtifactResolver
+                blob = ArtifactResolver().fetch_run_blob(
+                    result_id=upstream_result_id,
+                    expected_project_id=project_id,
+                )
+                output_bytes = blob.data
+
+                try:
+                    if len(output_bytes) == 0:
+                        raise ValueError("Il file di output è vuoto (0 bytes)")
+
+                    if ext == '.csv':
+                        text = output_bytes.decode('utf-8-sig')
+                        rows_found = list(csv_mod.reader(text.splitlines()))
+                        if len(rows_found) < 2:
+                            raise ValueError("CSV vuoto o senza righe dati")
+                        rows_count = len(rows_found) - 1
+
+                    elif ext in ('.xlsx', '.xls'):
+                        import io as _io
+                        import openpyxl
+                        wb = openpyxl.load_workbook(
+                            _io.BytesIO(output_bytes),
+                            read_only=True, data_only=True,
+                        )
+                        try:
+                            ws = wb.active
+                            rows_count = max(0, ws.max_row - 1)
+                        finally:
+                            wb.close()
+
+                    elif ext == '.json':
+                        data = json_mod.loads(output_bytes)
+                        rows_count = len(data) if isinstance(data, list) else 1
+
+                    elif ext in ('.geojson',):
+                        data = json_mod.loads(output_bytes)
+                        features = data.get('features', []) if isinstance(data, dict) else []
+                        rows_count = len(features)
+
+                except (UnicodeDecodeError, ValueError, Exception) as val_err:
+                    raise ValueError(f"Output non valido ({ext}): {val_err}") from val_err
+
+            # Se nel canvas c'e' almeno un nodo api_enrich con
+            # output_kind='imdf', il file zip prodotto e' un IMDF: estraiamo
+            # manifest.json + validation.json e li includiamo inline nel task
+            # result come `result['imdf']`. `has_imdf_upstream` calcolato
+            # sopra (pre-fetch check).
+            # IMDF-1 (Phase6 step 1): `extract_imdf_zip_bytes` apre lo zip
+            # via `ZipFile(BytesIO(...))`, niente piu' bounce su disco lato
+            # caller. La tmp dir interna del bundle resta finche' IMDF-2 non
+            # sposta manifest/validation/renderers/geojson in-memory.
+            imdf_metadata: Optional[JsonObject] = None
             if has_imdf_upstream and ext == ".zip":
                 try:
                     from app.core.imdf.loader import extract_imdf_zip_bytes
@@ -936,12 +983,34 @@ def execute_enrichment_task(
                 )
             else:
                 # Flusso arricchisci standard: il connector ha gia' salvato
-                # come result_id. Se l'utente ha specificato un
-                # `output_filename` custom o `rows_count` deve essere
-                # registrato, ri-salviamo con i metadati corretti
-                # (il primo result_blob diventera' orfano — accettabile).
-                # Altrimenti propaghiamo il result_id esistente.
-                if final_name != upstream_filename or rows_count > 0:
+                # come result_id. Decision tree:
+                #   - rename necessario E bytes non disponibili (metadata
+                #     short-circuit attivo): ri-fetch + ri-salva.
+                #   - rename necessario E bytes disponibili: ri-salva.
+                #   - no rename: propaga upstream_result_id (no re-save).
+                # RAM-B4 (2026-05-26): il caso "no rename + rows_count >0"
+                # NON ri-salva piu' (era ridondante: il connector aveva gia'
+                # registrato rows_count nei metadata, lo stesso che leggiamo
+                # via short-circuit). Solo `final_name != upstream_filename`
+                # giustifica un re-save per via dell'API contract task
+                # result dict.
+                needs_resave_for_rename = final_name != upstream_filename
+                if needs_resave_for_rename:
+                    # Se output_bytes vuoto (short-circuit attivo) e serve
+                    # ri-salvare, dobbiamo ricaricare. E' un caso raro
+                    # (utente custom output_filename + file remoto grande):
+                    # il re-fetch resta inevitabile per ora.
+                    if not output_bytes:
+                        logger.info(
+                            f"[Task {task_id}] rename richiesto, re-fetch "
+                            f"output_bytes per re-persist con final_name='{final_name}'"
+                        )
+                        from app.core.artifacts.resolver import ArtifactResolver
+                        blob_for_resave = ArtifactResolver().fetch_run_blob(
+                            result_id=upstream_result_id,
+                            expected_project_id=project_id,
+                        )
+                        output_bytes = blob_for_resave.data
                     from app.core.results.blob_writer import save_result_blob_from_bytes
                     result_id = save_result_blob_from_bytes(
                         project_id=project_id,
@@ -952,7 +1021,7 @@ def execute_enrichment_task(
                     )
                     logger.info(
                         f"[Task {task_id}] File result re-persistito con "
-                        f"rename/rows_count: {result_id}"
+                        f"rename: {result_id}"
                     )
                 else:
                     result_id = upstream_result_id

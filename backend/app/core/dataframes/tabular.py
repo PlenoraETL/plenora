@@ -25,6 +25,10 @@ RestRecords = tuple[RestRecord, ...]
 
 _CSV_ENCODINGS = ("utf-8", "utf-8-sig", "cp1252", "latin-1")
 
+# MANIPOLA-A6: batch RAM-bounded per `join_columns_as_strings`.
+# 100k righe x ~12 colonne x avg 50B = ~60MB peak per batch.
+_JOIN_BATCH_SIZE = 100_000
+
 
 def _read_csv_with_encodings(
     source: "Path | BytesIO",
@@ -999,8 +1003,34 @@ def melt_dataframe(
 
 
 def join_columns_as_strings(df: pd.DataFrame, separator: str) -> Any:
-    """Join column values as strings preserving legacy pandas coercion."""
-    return df.fillna("").astype(str).agg(separator.join, axis=1)
+    """Join column values as strings preserving legacy pandas coercion.
+
+    MANIPOLA-A6 (2026-05-26): batch RAM-bounded.
+    Pre-fix: `df.fillna('').astype(str)` materializzava una copia
+    string-typed dell'intero subset PRIMA del `.agg(separator.join, axis=1)`.
+    Peak ~ N_rows * N_cols * avg_str_size in stringhe + un'altra copy
+    nell'output Series. Su 10M righe x 12 colonne string: ~6-12GB.
+
+    Post-fix: itera batch da `_JOIN_BATCH_SIZE` righe. Per ogni batch
+    materializza solo la fascia di righe, fa fillna+astype+agg, scrive
+    nell'output array, libera. Peak ~ batch_size * N_cols * avg_str_size.
+    Semantica e dtype output (Series object) identici al legacy.
+    """
+    import numpy as _np
+
+    n = len(df)
+    if n == 0:
+        return empty_object_series()
+
+    out = _np.empty(n, dtype=object)
+    for start in range(0, n, _JOIN_BATCH_SIZE):
+        end = min(start + _JOIN_BATCH_SIZE, n)
+        batch = df.iloc[start:end].fillna("").astype(str).agg(
+            separator.join, axis=1
+        )
+        out[start:end] = batch.to_numpy()
+
+    return pd.Series(out, index=df.index, dtype=object)
 
 
 def concat_non_null_as_strings(values: Any, separator: str = ", ") -> str:

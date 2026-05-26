@@ -71,8 +71,19 @@ def save_pipeline_result_outcome(
     geom_column: Optional[str] = None,
     crs: str = "EPSG:4326",
 ) -> PipelineResultSave:
-    """Save a DataFrame as a result artifact through a single entry point."""
-    from app.core.dataframes.frame_io import save_dataframe_to_bytes
+    """Save a DataFrame as a result artifact through a single entry point.
+
+    RAM-A1 (2026-05-26): usa il path streaming
+    `save_dataframe_to_result_blob_streaming` che combina
+    `dataframe_to_export_chunks` (CSV/JSON via queue+thread bridge) con
+    `StreamingResultBlobWriter` (S3 multipart o DB BYTEA buffer). Per
+    CSV/JSON peak ridotto da `df + bytes_intere` a `df + chunk_buffer`.
+    Formati binari (parquet/xlsx/shp/gpkg/gdb) cadono su single-chunk
+    by-design (footer-based o multi-file).
+    """
+    from app.core.results.streaming_blob_writer import (
+        save_dataframe_to_result_blob_streaming,
+    )
 
     fmt_lower = (output_format or "").lower()
     # SHP esce zippato via `io.geospatial.write_shapefile_zip_bytes`;
@@ -82,16 +93,15 @@ def save_pipeline_result_outcome(
     else:
         filename = f"{filename_stem}.{fmt_lower}"
 
-    data = save_dataframe_to_bytes(
-        df, fmt_lower, geom_column=geom_column, crs=crs,
-    )
-    result_id = save_result_blob_from_bytes(
+    result_id = save_dataframe_to_result_blob_streaming(
         project_id=project_id,
-        data=data,
+        df=df,
+        output_format=fmt_lower,
         filename=filename,
-        fmt=fmt_lower,
         rows_count=rows_count,
         group_id=group_id,
+        geom_column=geom_column,
+        crs=crs,
     )
     return PipelineResultSave(result_id=result_id, output_filename=filename)
 
