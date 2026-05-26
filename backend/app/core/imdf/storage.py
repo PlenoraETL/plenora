@@ -6,9 +6,7 @@ Chiude R2 del multi-host audit: i bundle IMDF non vivono piu' solo su
 
 from __future__ import annotations
 
-import io
 import json
-import zipfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, List, Optional
@@ -17,7 +15,6 @@ from app.infrastructure.storage.cloud_backends import object_storage_enabled
 from app.shared.contracts.payloads import JsonObject, StringMap
 from app.shared.resources.file_cleanup import rmtree_safe
 from app.shared.resources.storage_layout import IMDF_BUNDLES_PREFIX
-from app.utils.zip_safe import safe_extractall
 from app.utils.logger import get_logger
 
 
@@ -333,94 +330,15 @@ def list_bundle_file_entries(task_id: str) -> List[JsonObject]:
 # Read (endpoint side
 
 
-def ensure_local_bundle(task_id: str) -> Path:
-    """Garantisce che il bundle sia estratto localmente. Cache miss → pull da storage.
-
-    IMDF-3: il layout su storage e' cambiato — ora i componenti
-    individuali (manifest/validation/renderers/geojson + .ifc)
-    vivono sotto ``{PREFIX}/{task_id}/files/*`` come oggetti singoli,
-    e il ``.gdb`` (se presente) e' uno zip dedicato a
-    ``{PREFIX}/{task_id}/_gdb.zip``. Cache miss → list+download dei
-    file individuali (+ extract del .gdb zip).
-
-    Policy:
-      - Se `IMDF_BUNDLES_DIR/{task_id}/` esiste e non e' vuota → cache hit.
-      - Altrimenti → list_objects su files prefix → download each → write
-        in local_dir. Se ``_gdb.zip`` presente → download + extract.
-      - Se ne' files ne' _gdb.zip esistono su storage → FileNotFoundError.
-
-    Side effect: scrive su IMDF_BUNDLES_DIR locale. Concorrenza multi-process
-    sullo stesso task_id sul medesimo nodo e' rara (ogni task_id e' univoco
-    e il primo accessor vince).
-
-    Returns:
-        Path della directory locale con il bundle estratto.
-
-    Raises:
-        FileNotFoundError: bundle non presente ne' in local ne' su storage.
-    """
-    local = _local_dir(task_id)
-    if local.exists() and any(local.iterdir()):
-        return local
-
-    storage = _storage()
-    prefix = _files_prefix(task_id)
-    try:
-        file_objects = storage.list_objects(prefix + "/")
-    except Exception as e:
-        logger.warning(f"[{task_id}] imdf storage list_objects failed: {e}")
-        file_objects = []
-
-    has_gdb = False
-    try:
-        # list_objects sul gdb_zip_key per detect se esiste l'adapter .gdb
-        gdb_objects = storage.list_objects(_gdb_zip_key(task_id))
-        has_gdb = any(o.get("key") == _gdb_zip_key(task_id) for o in gdb_objects)
-    except Exception as e:
-        logger.debug(f"[{task_id}] gdb zip probe failed: {e}")
-
-    if not file_objects and not has_gdb:
-        # Tombstone (IMDF-4 step 4): il fallback legacy zip-based su
-        # `_zip_key(task_id)` e' stato rimosso. Bundle pre-IMDF-3 con
-        # layout zip monolitico non sono piu' idratabili — richiedono
-        # re-upload via `persist_imdf_bundle` per essere accessibili.
-        raise FileNotFoundError(
-            f"Bundle {task_id} non presente su storage "
-            f"(prefix={prefix} vuoto, no _gdb.zip). Layout legacy "
-            f"zip-based non piu' supportato (IMDF-4 step 4)."
-        )
-
-    local.mkdir(parents=True, exist_ok=True)
-
-    # Hydrate individual files: list_objects ritorna key tipo
-    # `{prefix}/{name}` con name che puo' includere `/` (geojson sotto
-    # site_id). Strip del prefix per ricostruire il path relativo.
-    prefix_strip = prefix + "/"
-    for obj in file_objects:
-        key = obj.get("key")
-        if not key or not key.startswith(prefix_strip):
-            continue
-        rel_name = key[len(prefix_strip):]
-        if not rel_name:
-            continue
-        stream = storage.get_object_stream(key)
-        data = b"".join(stream.get("body", []))
-        target = local / rel_name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(data)
-
-    if has_gdb:
-        gdb_stream = storage.get_object_stream(_gdb_zip_key(task_id))
-        gdb_bytes = b"".join(gdb_stream.get("body", []))
-        # I bundle IMDF tipici sono 20-100MB; entrano in RAM senza problemi.
-        with zipfile.ZipFile(io.BytesIO(gdb_bytes), "r") as zf:
-            safe_extractall(zf, local)
-        logger.info(f"[{task_id}] .gdb extracted into {local}")
-
-    logger.info(
-        f"[{task_id}] imdf bundle hydrated from storage (files-layout) -> {local}"
-    )
-    return local
+# Tombstone (QUERY-1 step 3): `ensure_local_bundle` rimosso.
+# Era hydration legacy della cache locale (`IMDF_BUNDLES_DIR/{task_id}/`)
+# per i caller filesystem-bound. Post-IMDF-4/5/6 tutti gli endpoint
+# IMDF leggono direttamente da storage:
+#   - GET metadata + list: `imdf.storage.read_*` (storage-first)
+#   - publish/validate: `open_gdb_in_vsimem` -> `/vsizip//vsimem/` (RAM)
+#   - DELETE: `delete_bundle` su storage canonical
+# La cache locale non e' piu' canonical state; verra' eventualmente
+# rimossa anche come settings.IMDF_BUNDLES_DIR (separate cleanup).
 
 
 def get_meta_only(task_id: str) -> Optional[JsonObject]:

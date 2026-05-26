@@ -55,21 +55,10 @@ def _safe_bundle_dir(bundle_task_id: str) -> Path:
     )
 
 
-def _hydrate_local_cache(bundle_task_id: str) -> None:
-    """R2 multi-host: se la cache locale e' vuota, scarica il bundle da S3.
-
-    Side effect: scrive su `IMDF_BUNDLES_DIR/{task_id}/`. Dopo questa
-    chiamata, il path torna valido per lettura locale da parte degli
-    endpoint esistenti.
-
-    No-op su cache hit (local dir popolata).
-    Silent pass su errori: il codice downstream gestisce i 404 come prima.
-    """
-    _bundle_access.hydrate_local_cache(
-        bundle_task_id,
-        root=settings.IMDF_BUNDLES_DIR,
-        logger=logger,
-    )
+# Tombstone (QUERY-1 step 3): `_hydrate_local_cache` rimosso.
+# Era helper per idratare la cache locale da storage prima del check
+# ACL legacy. Post IMDF-4 step 4 (ACL via meta on storage), zero
+# caller dagli endpoint. Dead code.
 
 
 def _assert_bundle_group_access(bundle_dir: Path, current_user: CurrentUser) -> None:

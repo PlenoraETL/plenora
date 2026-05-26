@@ -1,197 +1,50 @@
 """
-Contract test current IMDF contract — validate_publish_endpoint hydrata cache locale.
+Contract test — validate-publish hydrate cross-node (TOMBSTONED).
 
-`/api/imdf/validate-publish` deve chiamare `_hydrate_local_cache` come fanno
+Storia:
+- Pre-IMDF-3: `/api/imdf/validate-publish` chiamava
+  `_hydrate_local_cache` per scaricare il bundle da S3 e leggere
+  meta/gdb su filesystem locale prima del check ACL.
+- IMDF-4 step 3: ACL via `assert_bundle_group_access_from_meta`
+  + `imdf.storage.get_meta_only` (storage-first, no hydrate).
+- IMDF-5: GDB via `open_gdb_in_vsimem` (RAM-only via /vsimem ctypes).
+- QUERY-1 step 3: `ensure_local_bundle` + `_hydrate_local_cache`
+  rimossi definitivamente. Endpoint validate-publish e' fully
+  storage-first.
+
+Le invarianti cross-node + cross-tenant restano coperte da:
+  - `tests2/imdf/unit/test_router_bundle_metadata_storage_first.py`
+    (`test_get_bundle_metadata_forbids_cross_tenant_via_meta_acl`)
+  - `tests2/imdf/unit/test_imdf_storage_open_gdb_vsimem.py`
+
+Questo file resta come sentinel anti-regression sul tombstone.
 """
 from __future__ import annotations
 
-import importlib
-import json
-from types import SimpleNamespace
-from unittest.mock import MagicMock
-
 import pytest
 
-# Pre-import per evitare che monkeypatch di settings rompa init-time reads.
-importlib.import_module("app.utils.logger")
-imdf_router = importlib.import_module("app.core.imdf.router")
-
-from app.shared.contracts.auth import CurrentUser
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-
-
-@pytest.fixture
-def superadmin() -> CurrentUser:
-    """Bypassa ACL (_assert_bundle_group_access ritorna early su superadmin),
-    isolando il test sulla logica hydrate."""
-    return CurrentUser(user_id="u-sa", username="super", group_id="g-sa", role="superadmin")
-
-
-@pytest.fixture
-def fake_settings(tmp_path, monkeypatch):
-    """Patch IMDF_BUNDLES_DIR sia su app.config che su imdf_router (gia'
-    importato → ha riferimento proprio a settings)."""
-    root = tmp_path / "imdf_bundles"
-    root.mkdir()
-    import app.config as config_mod
-    settings = SimpleNamespace(IMDF_BUNDLES_DIR=root, IMDF_BUNDLE_TTL_HOURS=24)
-    monkeypatch.setattr(config_mod, "settings", settings)
-    monkeypatch.setattr(imdf_router, "settings", settings)
-    return root
-
-
-@pytest.fixture
-def fake_validator(monkeypatch, fake_settings):
-    """Stub di app.core.imdf.validator.validate_publish.
-
-    Simula il check exists() del validator reale (validator.py:190): se la
-    bundle dir non esiste sotto IMDF_BUNDLES_DIR, ritorna report con
-    BUNDLE_MISSING. Altrimenti report base ok=True. Permette di verificare
-    in modo isolato l'effetto di hydrate sul check exists() downstream.
-    """
-    # `imdf_router` fa `from app.core.imdf.validator import validate_publish`,
-    # quindi il binding va patchato sul consumer.
-    def _fake(bundle_task_id, **kwargs):
-        bundle_dir = fake_settings / bundle_task_id
-        report = {
-            "ok": True,
-            "summary": {"errors": 0, "warnings": 0},
-            "top_issues": [],
-        }
-        if not bundle_dir.exists() or not bundle_dir.is_dir():
-            report["ok"] = False
-            report["summary"]["errors"] = 1
-            report["top_issues"].append({
-                "severity": "error",
-                "code": "BUNDLE_MISSING",
-                "message": f"Bundle '{bundle_task_id}' non trovato",
-            })
-        return report
-
-    monkeypatch.setattr(imdf_router, "validate_publish", _fake)
-    return _fake
-
-
-def _make_request(bundle_task_id: str = "task-test"):
-    return imdf_router.ImdfValidateRequest(
-        bundle_task_id=bundle_task_id,
-        connection_id="conn-1",
-        fs_name="MyFS",
-        mode="replace",
+def test_validate_publish_hydrate_legacy_tombstoned():
+    """Sentinel: `_hydrate_local_cache` rimosso dal router IMDF.
+    Validate-publish e' fully storage-first."""
+    from app.core.imdf import router as router_mod
+    assert not hasattr(router_mod, "_hydrate_local_cache"), (
+        "_hydrate_local_cache rimosso post-QUERY-1 step 3. "
+        "Validate-publish usa `assert_bundle_group_access_from_meta` "
+        "+ `imdf.storage.get_meta_only` storage-first."
     )
 
 
+def test_storage_ensure_local_bundle_tombstoned():
+    """Sentinel: `imdf.storage.ensure_local_bundle` rimosso."""
+    from app.core.imdf import storage as storage_mod
+    assert not hasattr(storage_mod, "ensure_local_bundle")
 
 
-@pytest.mark.usefixtures("fake_validator")
-def test_validate_publish_cached_locally_returns_report(
-    fake_settings, superadmin, monkeypatch
-):
-    """Cache hit: bundle gia' presente localmente. Hydrate viene comunque
-    chiamato (idempotenza), no-op nel caso reale (cache hit). Validator
-    vede la dir e ritorna report base, no BUNDLE_MISSING."""
-    bundle_dir = fake_settings / "task-test"
-    bundle_dir.mkdir()
-    (bundle_dir / "plenora_metadata.json").write_text(
-        json.dumps({"project_id": "proj-1", "site_id": "S1"}),
-        encoding="utf-8",
-    )
-
-    import app.core.imdf.storage as storage_mod
-    mock_ensure = MagicMock(return_value=bundle_dir)
-    monkeypatch.setattr(storage_mod, "ensure_local_bundle", mock_ensure)
-
-    report = imdf_router.validate_publish_endpoint(_make_request(), current_user=superadmin)
-
-    assert mock_ensure.called, "hydrate deve essere chiamato anche su cache hit (idempotenza)"
-    assert mock_ensure.call_args.args[0] == "task-test"
-    assert report["ok"] is True
-    codes = [issue["code"] for issue in report["top_issues"]]
-    assert "BUNDLE_MISSING" not in codes
-
-
-
-
-@pytest.mark.usefixtures("fake_validator")
-def test_validate_publish_hydrates_from_s3_when_cache_miss(
-    fake_settings, superadmin, monkeypatch
-):
-    """Cache miss: bundle solo-S3, hydrate scarica e popola la cache,
-    validator vede dir popolata, report valido (NON BUNDLE_MISSING).
-
-    Previous behavior (current IMDF contract): hydrate non era chiamato → exists()=False →
-    validator restituiva BUNDLE_MISSING falso-positivo.
-    """
-    bundle_dir = fake_settings / "task-test"
-    assert not bundle_dir.exists(), "precondizione: bundle non locale"
-
-    def _fake_ensure(task_id):
-        local = fake_settings / task_id
-        local.mkdir(exist_ok=True)
-        (local / "plenora_metadata.json").write_text(
-            json.dumps({"project_id": "proj-1", "site_id": "S1"}),
-            encoding="utf-8",
-        )
-        return local
-
-    import app.core.imdf.storage as storage_mod
-    monkeypatch.setattr(storage_mod, "ensure_local_bundle", _fake_ensure)
-
-    report = imdf_router.validate_publish_endpoint(_make_request(), current_user=superadmin)
-
-    assert bundle_dir.exists(), "hydrate deve aver popolato la cache"
-    assert report["ok"] is True
-    codes = [issue["code"] for issue in report["top_issues"]]
-    assert "BUNDLE_MISSING" not in codes
-
-
-
-
-@pytest.mark.usefixtures("fake_validator")
-def test_validate_publish_returns_bundle_missing_when_s3_empty(
-    fake_settings, superadmin, monkeypatch
-):
-    """Bundle assente ovunque: hydrate solleva FileNotFoundError, _hydrate_
-    local_cache silent pass (router.py:72-74), exists() resta False, validator
-    restituisce BUNDLE_MISSING. R5: nessun HYDRATE_FAILED introdotto."""
-    import app.core.imdf.storage as storage_mod
-
-    def _fake_ensure(task_id):
-        raise FileNotFoundError(f"bundle {task_id} assente su S3")
-
-    monkeypatch.setattr(storage_mod, "ensure_local_bundle", _fake_ensure)
-
-    report = imdf_router.validate_publish_endpoint(_make_request(), current_user=superadmin)
-
-    assert report["ok"] is False
-    codes = [issue["code"] for issue in report["top_issues"]]
-    assert "BUNDLE_MISSING" in codes
-    assert "HYDRATE_FAILED" not in codes, "R5: error code unico per non-disponibilita'"
-
-
-
-
-@pytest.mark.usefixtures("fake_validator")
-def test_validate_publish_keeps_bundle_missing_on_hydrate_exception(
-    fake_settings, superadmin, monkeypatch
-):
-    """Hydrate solleva exception non-FileNotFoundError (network 5xx, S3
-    timeout, credenziali rifiutate, ...). _hydrate_local_cache logga
-    warning + silent pass (router.py:75-76). exists() resta False ->
-    validator restituisce BUNDLE_MISSING. R5 enforcement."""
-    import app.core.imdf.storage as storage_mod
-
-    def _fake_ensure(task_id):
-        raise ConnectionError("S3 endpoint timeout")
-
-    monkeypatch.setattr(storage_mod, "ensure_local_bundle", _fake_ensure)
-
-    report = imdf_router.validate_publish_endpoint(_make_request(), current_user=superadmin)
-
-    assert report["ok"] is False
-    codes = [issue["code"] for issue in report["top_issues"]]
-    assert "BUNDLE_MISSING" in codes
-    assert "HYDRATE_FAILED" not in codes
+def test_bundle_access_hydrate_local_cache_tombstoned():
+    """Sentinel: `bundle_access.hydrate_local_cache` rimosso."""
+    from app.core.imdf import bundle_access
+    assert not hasattr(bundle_access, "hydrate_local_cache")

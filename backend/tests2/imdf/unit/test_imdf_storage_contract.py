@@ -123,59 +123,18 @@ def _seed_files_layout(fake_storage, task_id: str, meta: dict, files: dict[str, 
         fake_storage.objects[f"imdf-bundles/{task_id}/files/{name}"] = data
 
 
-# ensure_local_bundle
+# ensure_local_bundle — TOMBSTONED post QUERY-1 step 3
 
 
-def test_ensure_local_bundle_cache_hit(fake_storage, fake_settings, tmp_path):
-    """Se local esiste e ha contenuto, no download da S3."""
+def test_ensure_local_bundle_tombstoned():
+    """`storage.ensure_local_bundle` rimosso post-QUERY-1 step 3.
+    Endpoint IMDF leggono da storage direttamente (read_manifest /
+    read_validation / read_renderers / list_bundle_file_entries /
+    open_gdb_in_vsimem)."""
     from app.core.imdf import storage as st
-
-    local = fake_settings / "task-1"
-    _write_bundle(local)
-
-    # fake_storage.objects e' vuoto: se tentasse download, il test fallirebbe
-    result = st.ensure_local_bundle("task-1")
-    assert result == local
-    assert not fake_storage.upload_calls  # nessun I/O su storage
-
-
-def test_ensure_local_bundle_cache_miss_hydrates_from_files_layout(fake_storage, fake_settings, tmp_path):
-    """Cache miss: scarica i file individuali sotto `{task_id}/files/*`
-    da storage (layout IMDF-3) ed estrae nella cache locale.
-
-    Post IMDF-4 step 4: il fallback zip-based legacy e' rimosso, quindi
-    questo test usa direttamente il files layout."""
-    from app.core.imdf import storage as st
-
-    _seed_files_layout(
-        fake_storage,
-        task_id="task-1",
-        meta={"project_id": "proj-1", "site_id": "SITE01"},
-        files={
-            "plenora_metadata.json": json.dumps({"project_id": "proj-1", "site_id": "SITE01"}).encode("utf-8"),
-            "SITE01/building.geojson": json.dumps(
-                {"type": "FeatureCollection", "features": []}
-            ).encode("utf-8"),
-        },
+    assert not hasattr(st, "ensure_local_bundle"), (
+        "ensure_local_bundle rimosso post-QUERY-1 step 3."
     )
-
-    # Wipe cache locale.
-    import shutil
-    shutil.rmtree(fake_settings / "task-1", ignore_errors=True)
-    assert not (fake_settings / "task-1").exists()
-
-    # Ensure -> scarica files individuali.
-    result = st.ensure_local_bundle("task-1")
-    assert result.exists()
-    assert (result / "plenora_metadata.json").exists()
-    assert (result / "SITE01" / "building.geojson").exists()
-
-
-def test_ensure_local_bundle_not_found_raises(fake_storage, fake_settings):
-    from app.core.imdf import storage as st
-
-    with pytest.raises(FileNotFoundError):
-        st.ensure_local_bundle("task-does-not-exist")
 
 
 # get_meta_only

@@ -100,14 +100,10 @@ def test_get_bundle_metadata_uses_storage_readers_no_local_hydration(monkeypatch
         lambda tid, rel: {"type": "FeatureCollection", "features": []},
     )
 
-    # Tripwire: ensure_local_bundle e' un cache-hydration mai usato qui.
-    hydrate_mock = MagicMock(
-        side_effect=AssertionError(
-            "ensure_local_bundle non deve essere chiamato sul path normale "
-            "(IMDF-4 storage-first)"
-        )
-    )
-    monkeypatch.setattr(router_mod, "_hydrate_local_cache", hydrate_mock)
+    # Post QUERY-1 step 3: `_hydrate_local_cache` rimosso. Sentinel
+    # inline che il symbol non esiste e' coperto dal test
+    # `test_validate_publish_hydrate_legacy_tombstoned`.
+    assert not hasattr(router_mod, "_hydrate_local_cache")
 
     _bypass_acl(monkeypatch)
 
@@ -133,8 +129,7 @@ def test_get_bundle_metadata_404_when_not_on_storage_or_local(monkeypatch):
     from app.core.imdf import storage as st_mod
 
     monkeypatch.setattr(st_mod, "get_meta_only", lambda tid: None)
-    # _hydrate_local_cache no-op (no storage data); local dir non esiste.
-    monkeypatch.setattr(router_mod, "_hydrate_local_cache", lambda tid: None)
+    # Post-tombstone: _hydrate_local_cache rimosso; no patch needed.
 
     from fastapi import HTTPException
 
@@ -159,7 +154,7 @@ def test_get_bundle_metadata_forbids_cross_tenant_via_meta_acl(monkeypatch):
     monkeypatch.setattr(st_mod, "read_validation", lambda tid: None)
     monkeypatch.setattr(st_mod, "read_renderers", lambda tid: None)
     monkeypatch.setattr(st_mod, "list_bundle_file_entries", lambda tid: [])
-    monkeypatch.setattr(router_mod, "_hydrate_local_cache", lambda tid: None)
+    # Post-tombstone: _hydrate_local_cache rimosso; no patch needed.
 
     # Project esiste ma il visible_checker rifiuta (cross-tenant).
     monkeypatch.setattr(

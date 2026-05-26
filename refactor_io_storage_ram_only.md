@@ -2361,11 +2361,13 @@ ogni persistenza passa da DB/S3/MinIO/local-dev policy
 ## Boundary congelato — by-design residues (2026-05-25)
 
 Stato dopo Phase5 + REST connector bytes-first + IMDF-1..6 +
-QUERY-1 (query streaming end-to-end S3 multipart, no tempfile,
-`save_result_blob(path)` tombstoned).
+QUERY-1 + QUERY-1 step 2 (legacy streaming helpers tombstoned) +
+QUERY-1 step 3 (IMDF legacy tombstoned: `extract_imdf_zip(path)`,
+`persist_imdf_bundle_to_disk`, `ensure_local_bundle`,
+`_hydrate_local_cache`).
 
-Il report `test_report_inside_boundary_frozen` segnala **23 entries
-su 12 file** all'interno del boundary I/O. Questi residui sono
+Il report `test_report_inside_boundary_frozen` segnala **14 entries
+su 8 file** all'interno del boundary I/O. Questi residui sono
 intenzionali e classificati per categoria. Non vanno inseguiti: se
 qualcuno li tocca, deve aggiornare contestualmente questa sezione
 con il nuovo razionale.

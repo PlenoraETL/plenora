@@ -89,23 +89,20 @@ def test_extract_imdf_zip_bytes_empty_input_raises_value_error():
         extract_imdf_zip_bytes(b"")
 
 
-def test_extract_imdf_zip_bytes_invalid_zip_no_tmp_created(monkeypatch):
-    """IMDF-6: zip senza componenti IMDF -> ValueError SENZA creare
-    tmp dir (extract_imdf_zip_bytes ora e' fully-RAM).
+def test_extract_imdf_zip_bytes_invalid_zip_no_tmp_created():
+    """IMDF-6 + QUERY-1 step 3 tombstone: `loader` non importa piu'
+    `tempfile` (path-mode rimosso). Estraendo uno zip senza componenti
+    IMDF -> ValueError SENZA toccare filesystem.
 
-    Anti-regression: cattura tutti i call a tempfile.mkdtemp del modulo;
-    deve essere ZERO per il path bytes-first.
+    Anti-regression: doppio assert (a) il modulo NON ha `tempfile` come
+    attribute (import rimosso); (b) il ValueError viene sollevato senza
+    side effect.
     """
     from app.core.imdf import loader as _loader
-
-    mkdtemp_calls: list = []
-    real_mkdtemp = _loader.tempfile.mkdtemp
-
-    def _tracked_mkdtemp(prefix="", **kwargs):
-        mkdtemp_calls.append(prefix)
-        return real_mkdtemp(prefix=prefix, **kwargs)
-
-    monkeypatch.setattr(_loader.tempfile, "mkdtemp", _tracked_mkdtemp)
+    assert not hasattr(_loader, "tempfile"), (
+        "loader NON deve importare tempfile post-QUERY-1 step 3 "
+        "(path-mode rimosso)."
+    )
 
     buf = BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
@@ -114,11 +111,6 @@ def test_extract_imdf_zip_bytes_invalid_zip_no_tmp_created(monkeypatch):
 
     with pytest.raises(ValueError, match="non sembra un IMDF"):
         _loader.extract_imdf_zip_bytes(bogus_data)
-
-    assert mkdtemp_calls == [], (
-        f"extract_imdf_zip_bytes (IMDF-6) deve essere fully-RAM; "
-        f"chiamate mkdtemp inattese: {mkdtemp_calls}"
-    )
 
 
 def test_extract_imdf_zip_bytes_collects_gdb_into_gdb_zip_bytes():
@@ -169,31 +161,14 @@ def test_extract_imdf_zip_bytes_ifc_into_ifc_bytes():
     assert bundle.ifc_path is None
 
 
-def test_extract_imdf_zip_bytes_equivalent_to_path_based(tmp_path):
-    """Equivalenza site_id + raw_filelist tra path-mode (legacy) e
-    bytes-mode (IMDF-6). Shape DIVERGENT (path-mode ha tmp_dir +
-    *_path; bytes-mode ha files dict + gdb_zip_bytes), ma i metadati
-    derivati devono combaciare."""
-    from app.core.imdf.loader import extract_imdf_zip, extract_imdf_zip_bytes
-
-    data = _build_minimal_imdf_zip_bytes()
-    zip_on_disk = tmp_path / "imdf.zip"
-    zip_on_disk.write_bytes(data)
-
-    bundle_from_path = extract_imdf_zip(str(zip_on_disk))
-    bundle_from_bytes = extract_imdf_zip_bytes(data)
-    try:
-        # Metadati derivati: stessi indipendentemente dal path/bytes.
-        assert bundle_from_path.site_id == bundle_from_bytes.site_id
-        assert set(bundle_from_path.raw_filelist) == set(
-            bundle_from_bytes.raw_filelist
-        )
-        # has_* properties: stesso risultato.
-        assert bundle_from_path.has_manifest == bundle_from_bytes.has_manifest
-        assert bundle_from_path.has_gdb == bundle_from_bytes.has_gdb
-    finally:
-        bundle_from_path.cleanup()
-        bundle_from_bytes.cleanup()
+def test_extract_imdf_zip_path_mode_tombstoned():
+    """Sentinel: `extract_imdf_zip(path)` rimosso post-QUERY-1 step 3.
+    Bytes-mode `extract_imdf_zip_bytes(bytes)` e' l'unico entry."""
+    from app.core.imdf import loader as loader_mod
+    assert not hasattr(loader_mod, "extract_imdf_zip"), (
+        "extract_imdf_zip(path) rimosso post-QUERY-1 step 3. "
+        "Usa extract_imdf_zip_bytes(bytes)."
+    )
 
 
 # IMDF-2: shape RAM-first (`bundle.files`)
@@ -247,27 +222,29 @@ def test_bundle_files_populated_from_zip_members():
         bundle.cleanup()
 
 
-def test_bundle_files_accessor_falls_back_to_filesystem_when_empty(tmp_path):
-    """Path-based `extract_imdf_zip` non popola `bundle.files` per i
-    geojson/manifest? Wait — IMDF-2 ora le popola da entrambi i path
-    (l'extract reader e' condiviso). Questo test pinna il fallback
-    quando `bundle.files` viene svuotato manualmente (es. dopo persist
-    che potrebbe rilasciarli per liberare RAM)."""
-    from app.core.imdf.loader import extract_imdf_zip
+def test_bundle_files_accessor_falls_back_to_path_when_files_empty(tmp_path):
+    """Fallback path-based degli accessor `manifest()` / `validation()` /
+    `renderers()` quando `bundle.files` e' svuotato (es. consumer che
+    rilascia RAM dopo persist). Costruiamo manualmente un bundle con
+    `*_path` popolato per testare il branch fallback."""
+    from app.core.imdf.loader import ImdfBundle
+    import json as _json
 
-    data = _build_minimal_imdf_zip_bytes()
-    zip_on_disk = tmp_path / "imdf.zip"
-    zip_on_disk.write_bytes(data)
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(
+        _json.dumps({"sites": {"SITE_X": {"name": "Site X"}}}),
+        encoding="utf-8",
+    )
 
-    bundle = extract_imdf_zip(str(zip_on_disk))
-    try:
-        # Svuotiamo `files` per simulare il post-persist scenario.
-        bundle.files = {}
-        # Accessor cadde sul fallback filesystem via `manifest_path`.
-        assert bundle.manifest() == {"sites": {"SITE_X": {"name": "Site X"}}}
-        assert bundle.has_manifest is True  # manifest_path popolato
-    finally:
-        bundle.cleanup()
+    bundle = ImdfBundle(
+        tmp_dir=tmp_path,
+        site_id="SITE_X",
+        files={},  # svuotato
+        manifest_path=manifest_path,
+    )
+    # Accessor cade sul fallback filesystem via `manifest_path`.
+    assert bundle.manifest() == {"sites": {"SITE_X": {"name": "Site X"}}}
+    assert bundle.has_manifest is True  # manifest_path popolato
 
 
 def test_bundle_manifest_missing_returns_empty_dict():

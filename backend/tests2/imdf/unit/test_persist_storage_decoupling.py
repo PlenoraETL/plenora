@@ -65,9 +65,13 @@ def test_persist_imdf_bundle_uploads_via_save_bundle_files(monkeypatch):
     save_bundle_files_mock = MagicMock(
         return_value={"file_keys": [], "meta_key": "fake-meta", "gdb_zip_key": None}
     )
-    save_bundle_legacy_mock = MagicMock()
     monkeypatch.setattr(storage_mod, "save_bundle_files", save_bundle_files_mock)
-    monkeypatch.setattr(storage_mod, "save_bundle", save_bundle_legacy_mock)
+    # `storage.save_bundle` legacy tombstoned (IMDF-4 step 4). Sentinel
+    # via getattr per evitare import failure se anche il monkeypatch lo
+    # cercasse.
+    assert not hasattr(storage_mod, "save_bundle"), (
+        "save_bundle legacy tombstoned post-IMDF-4 step 4."
+    )
 
     bundle = _fake_bundle_in_memory()
     result = persist_mod.persist_imdf_bundle(
@@ -89,11 +93,8 @@ def test_persist_imdf_bundle_uploads_via_save_bundle_files(monkeypatch):
     assert "manifest.json" in call_args[1]
     assert "validation.json" in call_args[1]
 
-    # save_bundle legacy NON deve essere chiamato.
-    assert save_bundle_legacy_mock.call_count == 0, (
-        "persist_imdf_bundle non deve piu' chiamare save_bundle (legacy "
-        "zip-based). Usa save_bundle_files (RAM-first per-file)."
-    )
+    # save_bundle legacy gia' tombstoned (assert sopra). Nessun ulteriore
+    # check necessario.
 
 
 def test_persist_imdf_bundle_propagates_validation_summary_from_bytes():

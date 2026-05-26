@@ -13,15 +13,13 @@ import io
 import json
 import os
 import shutil
-import tempfile
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from app.core.dataframes.frame_io import load_dataframe_from_file
 from app.shared.contracts.payloads import JsonObject
-from app.utils.zip_safe import safe_extractall
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -174,77 +172,11 @@ def _is_geojson_member(name: str) -> bool:
     return name.endswith(".geojson") and "/" in name
 
 
-def _extract_zip_source_to_bundle(
-    zip_source: Union[str, os.PathLike, io.BytesIO], tmp: Path,
-) -> ImdfBundle:
-    """Internal: estrae uno ZipFile-compatible `zip_source` dentro `tmp`
-    e costruisce il bundle indicizzato.
-
-    IMDF-2: BEFORE l'extract su disco, leggiamo in memoria i membri
-    JSON/geojson e popoliamo `bundle.files`. Cosi' i consumer
-    RAM-first (manifest/validation/renderers accessor + IMDF-3
-    persist verso storage) non devono piu' passare dal filesystem.
-
-    Il caller e' responsabile della creazione di `tmp` e del cleanup
-    su exception (per le funzioni pubbliche `extract_imdf_zip*` quel
-    cleanup e' fatto dal wrapper, su success la cleanup passa al
-    bundle via `bundle.cleanup`).
-    """
-    files: Dict[str, bytes] = {}
-    with zipfile.ZipFile(zip_source) as z:
-        members = z.namelist()
-        # In-memory read dei componenti RAM-first PRIMA dell'extract.
-        # Le entry sono tipicamente piccole (manifest/validation/renderers
-        # KB-scale; geojson per-layer fino a MB-scale ma cappato da
-        # RESOURCE_MAX_BYTES upstream nel REST connector).
-        for m in members:
-            if m in _RAM_FIRST_MEMBERS or _is_geojson_member(m):
-                try:
-                    files[m] = z.read(m)
-                except KeyError:
-                    # Member listato in namelist ma non leggibile: skip
-                    # silenzioso, il fallback path-based gestira'.
-                    continue
-        safe_extractall(z, tmp)
-    bundle = _build_bundle_index(tmp, members)
-    bundle.files = files
-    return bundle
-
-
-def extract_imdf_zip(zip_path: str | os.PathLike, dest_dir: Optional[str | os.PathLike] = None) -> ImdfBundle:
-    """Estrae uno zip IMDF da un path su disco e indicizza i contenuti.
-
-    Args:
-        zip_path: percorso allo zip IMDF (output di imdf.plenora.it/api/process)
-        dest_dir: se None, crea una tempdir nuova; altrimenti usa quella
-
-    Returns:
-        ImdfBundle popolato.
-
-    Raises:
-        FileNotFoundError: se zip_path non esiste
-        ValueError: se lo zip non sembra un IMDF valido (manca .gdb e manifest)
-    """
-    src = Path(zip_path)
-    if not src.exists():
-        raise FileNotFoundError(f"Zip IMDF non trovato: {src}")
-
-    # Distinguiamo "abbiamo creato noi la tmp dir" da "il caller l'ha
-    # passata": solo nel primo caso siamo noi responsabili del cleanup
-    # in caso di errore. Sul path success la responsabilita' del cleanup
-    # passa al caller via `bundle.cleanup`. Senza il try/except, una
-    # eccezione (zipfile corrotto, ValueError IMDF non valido) dopo
-    # `mkdtemp` lascerebbe la tmp dir su disco
-    _we_own_tmp = dest_dir is None
-    tmp = Path(dest_dir) if dest_dir else Path(tempfile.mkdtemp(prefix="imdf_"))
-    tmp.mkdir(parents=True, exist_ok=True)
-
-    try:
-        return _extract_zip_source_to_bundle(src, tmp)
-    except Exception:
-        if _we_own_tmp:
-            shutil.rmtree(tmp, ignore_errors=True)
-        raise
+# Tombstone (QUERY-1 step 3): `extract_imdf_zip(path)` + helper interno
+# `_extract_zip_source_to_bundle` rimossi. Era il path-mode legacy
+# (mkdtemp + safe_extractall su filesystem) lasciato per i test/script
+# pre-IMDF-6. Tutti i caller production migrati a `extract_imdf_zip_bytes`
+# (RAM-first, no tmp dir, no safe_extractall) in IMDF-1/IMDF-6.
 
 
 def extract_imdf_zip_bytes(data: bytes) -> ImdfBundle:
@@ -384,72 +316,11 @@ def _build_bytes_bundle_index(
     return bundle
 
 
-def _build_bundle_index(tmp: Path, members: List[str]) -> "ImdfBundle":
-    """Indicizza i contenuti noti di un bundle IMDF gia' estratto in `tmp`.
-
-    Separato da `extract_imdf_zip` per wrappare l'intero ciclo
-    estrazione + indicizzazione in un singolo try/cleanup. Anche la
-    validazione finale `raise ValueError("non sembra un IMDF")` deve
-    avvenire sotto il guard del cleanup, altrimenti la tmp dir
-    resterebbe su disco.
-    """
-    bundle = ImdfBundle(tmp_dir=tmp, site_id="", raw_filelist=members)
-
-    # Indicizza i contenuti noti
-    # Convenzione del servizio
-    # {SITE_ID}.gdb/ cartella File Geodatabase
-    # {SITE_ID}.ifc file IFC al root
-    # {SITE_ID}/ cartella IMDF (geojson + manifest IMDF
-    # manifest.json manifest del processing (root
-    # validation.json (root
-    # renderers.json (root
-    site_id_candidates = set()
-
-    for m in members:
-        p = tmp / m
-        # Il GDB e' una "cartella" dentro lo zip: i membri sono path tipo
-        # "LO2244.gdb/a00000001.gdbtable". Estraggo il prefisso fino a `.gdb/`
-        # come cartella GDB
-        if ".gdb/" in m:
-            if bundle.gdb_path is None:
-                top = m.split(".gdb/", 1)[0] + ".gdb"
-                bundle.gdb_path = tmp / top
-                site_id_candidates.add(top.split("/")[-1].removesuffix(".gdb"))
-        elif m.endswith(".ifc"):
-            bundle.ifc_path = p
-            site_id_candidates.add(Path(m).stem)
-        elif m == "manifest.json":
-            bundle.manifest_path = p
-        elif m == "validation.json":
-            bundle.validation_path = p
-        elif m == "renderers.json":
-            bundle.renderers_path = p
-        elif m.endswith(".geojson") and "/" in m:
-            bundle.imdf_geojson_files.append(p)
-            top = m.split("/", 1)[0]
-            site_id_candidates.add(top)
-            if bundle.imdf_dir is None:
-                bundle.imdf_dir = tmp / top
-
-    # Site ID: prendi dal manifest se presente, altrimenti dal primo candidato
-    if bundle.manifest_path and bundle.manifest_path.exists():
-        try:
-            mf = json.loads(bundle.manifest_path.read_text(encoding="utf-8"))
-            sites = mf.get("sites") or {}
-            if isinstance(sites, dict) and sites:
-                bundle.site_id = next(iter(sites.keys()))
-        except Exception:
-            pass
-
-    if not bundle.site_id and site_id_candidates:
-        bundle.site_id = sorted(site_id_candidates)[0]
-
-    if not bundle.gdb_path and not bundle.manifest_path:
-        raise ValueError(
-            "Lo zip non sembra un IMDF: manca sia .gdb sia manifest.json"
-        )
-
-    return bundle
+# Tombstone (QUERY-1 step 3): `_build_bundle_index(tmp, members)` rimosso.
+# Helper interno path-mode: derivava `*_path` su disco scorrendo i
+# membri estratti via `safe_extractall`. Sostituito dalla variante
+# bytes-mode `_build_bytes_bundle_index` (sopra) che ragiona su
+# `bundle.files` + `gdb_zip_bytes` + `ifc_bytes` senza filesystem.
 
 
 def load_imdf_layers(

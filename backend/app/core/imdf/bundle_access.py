@@ -25,19 +25,9 @@ def safe_bundle_dir(bundle_task_id: str, *, root: Path) -> Path:
         )
 
 
-def hydrate_local_cache(bundle_task_id: str, *, root: Path, logger: Any) -> None:
-    """Hydrate the local bundle cache from object storage when needed."""
-    try:
-        from app.config import settings as runtime_settings
-
-        if runtime_settings.IMDF_BUNDLES_DIR.resolve() == root.resolve():
-            bundle_store.ensure_local_bundle(bundle_task_id)
-        else:
-            bundle_store.ensure_local_bundle(bundle_task_id, root=root)
-    except FileNotFoundError:
-        pass
-    except (OSError, RuntimeError, ValueError) as e:
-        logger.warning(f"[{bundle_task_id}] hydrate cache fallita (non-fatal): {e}")
+# Tombstone (QUERY-1 step 3): `hydrate_local_cache` rimosso.
+# Wrapper su `bundle_store.ensure_local_bundle` (a sua volta rimosso).
+# Zero caller post IMDF-4 step 4 (ACL check via meta on storage).
 
 
 def assert_bundle_group_access_from_meta(

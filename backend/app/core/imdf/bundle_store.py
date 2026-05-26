@@ -25,18 +25,11 @@ def resolve_bundle_dir(task_id: str, *, root: Path | None = None) -> Path:
     return validate_imdf_task_id(task_id, root.resolve())
 
 
-def ensure_local_bundle(task_id: str, *, root: Path | None = None) -> Path:
-    """Return a local bundle directory, hydrating it from storage if needed."""
-    bundle_dir = resolve_bundle_dir(task_id, root=root)
-    if root is not None and bundle_dir.exists() and bundle_dir.is_dir():
-        return bundle_dir
-    try:
-        return imdf_storage.ensure_local_bundle(task_id)
-    except FileNotFoundError:
-        raise
-    except (OSError, RuntimeError, ValueError) as exc:
-        logger.warning(f"[{task_id}] hydrate storage fallita: {exc}")
-        raise FileNotFoundError(f"Bundle {task_id} non trovato") from exc
+# Tombstone (QUERY-1 step 3): `ensure_local_bundle` wrapper rimosso.
+# Era thin facade su `imdf_storage.ensure_local_bundle` (a sua volta
+# rimosso). Tutti i consumer endpoint IMDF leggono direttamente da
+# storage (vedi `imdf.storage.read_manifest/validation/renderers/
+# read_geojson` + `open_gdb_in_vsimem`).
 
 
 def find_gdb_dir(bundle_dir: Path) -> Optional[Path]:
@@ -126,7 +119,6 @@ def purge_expired_local_bundles(
 
 __all__ = [
     "delete_bundle",
-    "ensure_local_bundle",
     "find_gdb_dir",
     "list_task_ids",
     "purge_expired_local_bundles",

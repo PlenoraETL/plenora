@@ -1,5 +1,10 @@
-"""Contract tests for the IMDF bundle lifecycle store."""
+"""Contract tests for the IMDF bundle lifecycle store.
 
+Post QUERY-1 step 3: `ensure_local_bundle` wrapper rimosso da
+`bundle_store`. I test che esercitavano la hydration tombstonati;
+quelli su delete / purge / read_metadata / find_gdb_dir restano
+validi.
+"""
 from __future__ import annotations
 
 import ast
@@ -106,7 +111,6 @@ def test_bundle_store_resolves_local_bundle_sidecars_and_gdb(tmp_path) -> None:
     (bundle_dir / "renderers.json").write_text('{"layers": {}}', encoding="utf-8")
 
     assert bundle_store.resolve_bundle_dir("task-1", root=tmp_path) == bundle_dir
-    assert bundle_store.ensure_local_bundle("task-1", root=tmp_path) == bundle_dir
     assert bundle_store.find_gdb_dir(bundle_dir) == gdb_dir
     assert bundle_store.read_metadata(bundle_dir) == {
         "project_id": "project-1",
@@ -115,21 +119,12 @@ def test_bundle_store_resolves_local_bundle_sidecars_and_gdb(tmp_path) -> None:
     assert bundle_store.read_renderers(bundle_dir) == {"layers": {}}
 
 
-def test_bundle_store_hydrates_missing_local_bundle(monkeypatch, tmp_path) -> None:
+def test_ensure_local_bundle_wrapper_tombstoned():
+    """Sentinel: `bundle_store.ensure_local_bundle` rimosso post-QUERY-1
+    step 3 (era thin facade su `imdf_storage.ensure_local_bundle`, anch'esso
+    rimosso). Consumer endpoint IMDF leggono da storage direttamente."""
     from app.core.imdf import bundle_store
-
-    hydrated_dir = tmp_path / "hydrated"
-    hydrated_dir.mkdir()
-    calls: list[str] = []
-
-    def fake_ensure(task_id: str):
-        calls.append(task_id)
-        return hydrated_dir
-
-    monkeypatch.setattr(bundle_store.imdf_storage, "ensure_local_bundle", fake_ensure)
-
-    assert bundle_store.ensure_local_bundle("task-1", root=tmp_path) == hydrated_dir
-    assert calls == ["task-1"]
+    assert not hasattr(bundle_store, "ensure_local_bundle")
 
 
 def test_bundle_store_remote_metadata_and_task_listing_delegate_to_storage(monkeypatch) -> None:
@@ -163,7 +158,10 @@ def test_imdf_router_delegates_delete_to_bundle_store() -> None:
     assert "_imdf_bundle_store.delete_bundle" in router_src
 
 
-def test_imdf_publish_and_validator_delegate_bundle_resolution_to_store() -> None:
+def test_imdf_publish_and_validator_no_legacy_bundle_store_hydration() -> None:
+    """Post QUERY-1 step 3: validator + publish task usano
+    `open_gdb_in_vsimem` (storage-direct RAM). Niente piu'
+    `bundle_store.ensure_local_bundle + find_gdb_dir` legacy."""
     publish_src = (_BACKEND_ROOT / "workers/tasks/imdf_publish_task.py").read_text(
         encoding="utf-8"
     )
@@ -171,9 +169,18 @@ def test_imdf_publish_and_validator_delegate_bundle_resolution_to_store() -> Non
         encoding="utf-8"
     )
 
-    assert "bundle_store.ensure_local_bundle" in publish_src
-    assert "bundle_store.find_gdb_dir" in publish_src
-    assert '.rglob("*.gdb")' not in publish_src
-    assert "bundle_store.ensure_local_bundle" in validator_src
-    assert "bundle_store.find_gdb_dir" in validator_src
-    assert "validate_imdf_task_id" not in validator_src
+    assert "bundle_store.ensure_local_bundle" not in publish_src, (
+        "publish task NON deve piu' usare bundle_store.ensure_local_bundle "
+        "(tombstoned post-QUERY-1 step 3)."
+    )
+    assert "bundle_store.ensure_local_bundle" not in validator_src, (
+        "validator NON deve piu' usare bundle_store.ensure_local_bundle "
+        "(tombstoned post-QUERY-1 step 3)."
+    )
+    assert ".rglob(\"*.gdb\")" not in publish_src
+    assert "open_gdb_in_vsimem" in publish_src, (
+        "publish task deve usare imdf_storage.open_gdb_in_vsimem."
+    )
+    assert "open_gdb_in_vsimem" in validator_src, (
+        "validator deve usare imdf_storage.open_gdb_in_vsimem."
+    )

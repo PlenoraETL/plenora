@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import io
 import json
-import shutil
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -189,111 +188,7 @@ def persist_imdf_bundle(
             logger.warning(f"[{task_id}] bundle.cleanup in finally: {ce}")
 
 
-def persist_imdf_bundle_to_disk(
-    bundle,
-    task_id: str,
-    project_id: Optional[str],
-    dest_root: Optional[Path] = None,
-) -> JsonObject:
-    """Legacy: persiste il bundle su `IMDF_BUNDLES_DIR/{task_id}/` (local dir).
-
-    Deprecato in IMDF-3. Mantenuto temporaneamente per i test esistenti
-    e per gli script one-off (`imdf_real_e2e_check.py`). Il caller
-    nuovo (worker IMDF, validator) deve usare ``persist_imdf_bundle``.
-
-    Tradeoff: questa funzione NON fa upload su storage. E' un legacy
-    local materializer puro; sara' rimosso quando i test/script
-    migreranno completamente a ``persist_imdf_bundle``.
-    """
-    if dest_root is None:
-        from app.config import settings as _settings
-        root = _settings.IMDF_BUNDLES_DIR / task_id
-    else:
-        root = Path(dest_root)
-    try:
-        if root.exists():
-            shutil.rmtree(root, ignore_errors=True)
-        root.mkdir(parents=True, exist_ok=True)
-
-        # Write RAM-first components from bytes (no shutil.move bounce).
-        for name, data in bundle.files.items():
-            target = root / name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(data)
-
-        # Move only filesystem-required components (.gdb dir + .ifc file)
-        # from tmp_dir. Il `bundle.files` ha gia' scritto tutto il resto.
-        if bundle.tmp_dir and bundle.tmp_dir.exists():
-            for item in list(bundle.tmp_dir.iterdir()):
-                target = root / item.name
-                if target.exists():
-                    # Gia' scritto da bundle.files (o cartella site_id/
-                    # creata da bundle.files geojson). Skip per non
-                    # sovrascrivere.
-                    continue
-                shutil.move(str(item), str(target))
-
-        meta: Dict[str, Any] = {
-            "project_id":    project_id,
-            "task_id":       task_id,
-            "site_id":       bundle.site_id,
-            "saved_at":      datetime.now(timezone.utc).isoformat(),
-            "has_gdb":       bundle.has_gdb,
-            "has_ifc":       bundle.has_ifc,
-            "has_renderers": bundle.has_renderers,
-        }
-
-        try:
-            val_path = root / "validation.json"
-            if val_path.exists():
-                val = json.loads(val_path.read_text(encoding="utf-8")) or {}
-                meta["validation_summary"] = {
-                    "passed":         val.get("passed"),
-                    "total_errors":   val.get("total_errors"),
-                    "total_warnings": val.get("total_warnings"),
-                }
-        except Exception as ve:
-            logger.warning(f"[{task_id}] validation_summary read: {ve}")
-
-        if bundle.site_id:
-            site_dir = root / bundle.site_id
-            if site_dir.is_dir():
-                for layer_attr, fname in (
-                    ("building_count", "building.geojson"),
-                    ("level_count",    "level.geojson"),
-                    ("unit_count",     "unit.geojson"),
-                ):
-                    p = site_dir / fname
-                    if p.exists():
-                        try:
-                            data = json.loads(p.read_text(encoding="utf-8"))
-                            feats = data.get("features")
-                            if isinstance(feats, list):
-                                meta[layer_attr] = len(feats)
-                        except Exception as e:
-                            logger.warning(f"_count_features {p.name}: {e}")
-
-        try:
-            (root / "plenora_metadata.json").write_text(
-                json.dumps(meta, indent=2), encoding="utf-8"
-            )
-        except Exception as me:
-            logger.warning(
-                f"[{task_id}] plenora_metadata.json write fallito, "
-                f"rollback dest: {me}"
-            )
-            shutil.rmtree(root, ignore_errors=True)
-            raise
-
-        logger.info(
-            f"[{task_id}] IMDF bundle persistito in {root} "
-            f"(site={bundle.site_id})"
-        )
-
-        return {"path": str(root), "meta": meta}
-
-    finally:
-        try:
-            bundle.cleanup()
-        except Exception as ce:
-            logger.warning(f"[{task_id}] bundle.cleanup in finally: {ce}")
+# Tombstone (QUERY-1 step 3): `persist_imdf_bundle_to_disk` rimosso.
+# Era il legacy local materializer (IMDF_BUNDLES_DIR/{task_id}/) lasciato
+# per i test/script pre-IMDF-3. Tutti i caller di produzione + script
+# `imdf_real_e2e_check.py` migrati a `persist_imdf_bundle` (storage-direct).

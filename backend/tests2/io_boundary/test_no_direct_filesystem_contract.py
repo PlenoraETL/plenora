@@ -332,25 +332,21 @@ _BOUNDARY_FROZEN_SNAPSHOT: dict[str, int] = {
     # passa da StreamingResultBlobWriter (S3 multipart via boto3
     # client diretto, non boundary pattern).
     # "app/core/results/blob_writer.py": 0  -> rimossa dallo snapshot
-    # IMDF subsystem (format-as-directory + cache hydration)
-    # loader.py post-IMDF-6 (extract_imdf_zip_bytes fully-RAM):
-    # 1 safe_extractall + 1 tempfile_mkdtemp restano in `extract_imdf_zip`
-    # path-mode legacy. `extract_imdf_zip_bytes` non tocca piu' il
-    # filesystem (legge solo membri zip via ZipFile.read).
-    "app/core/imdf/loader.py": 2,
-    "app/core/imdf/persist.py": 3,
-    # storage.py post-IMDF-5 (fully-RAM via /vsimem):
-    # 1 path_write_bytes (ensure_local_bundle files-layout hydration)
-    # + 1 safe_extractall (ensure_local_bundle .gdb extract).
-    # `hydrate_gdb_to_temp` rimosso: -1 tempfile_mkdtemp, -1 safe_extractall.
-    # `open_gdb_in_vsimem` non aggiunge entries (usa ctypes adapter,
-    # niente tempfile/safe_extractall/path_write_*).
-    "app/core/imdf/storage.py": 2,
+    # IMDF subsystem (post QUERY-1 step 3 tombstone):
+    # `loader.py`, `persist.py`, `storage.py` non hanno piu' callsite
+    # filesystem. `extract_imdf_zip(path)`, `persist_imdf_bundle_to_disk`,
+    # `ensure_local_bundle` tombstonati. I path runtime canonical sono:
+    #   - extract_imdf_zip_bytes (RAM, no tmp dir)
+    #   - persist_imdf_bundle (storage-direct)
+    #   - open_gdb_in_vsimem (ctypes /vsimem, no disco)
+    # Rimossi dal snapshot.
     # Scripts one-off tooling
     "scripts/backup_db.py": 1,
     "scripts/test_restore.py": 1,
     "scripts/export_openapi_manifest.py": 1,
-    "scripts/imdf_real_e2e_check.py": 2,
+    # scripts/imdf_real_e2e_check.py post QUERY-1 step 3:
+    # migrato a `extract_imdf_zip_bytes` + `persist_imdf_bundle` (storage).
+    # Niente piu' tempfile / path_write_text. Rimosso dal snapshot.
 }
 
 

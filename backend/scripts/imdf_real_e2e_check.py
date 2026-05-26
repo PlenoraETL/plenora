@@ -2,28 +2,29 @@
 """
 End-to-end check IMDF publish: imdf.plenora.it -> Plenora bundle -> AGOL.
 
-E' uno **script**, non un pytest. Ragione: il bundle dir
-(``settings.IMDF_BUNDLES_DIR = /data/imdf_bundles``) vive sul
-filesystem del backend, e il runner pytest non condivide quel volume.
-Eseguendo direttamente nel backend ci muoviamo sul filesystem giusto
-e riusiamo le funzioni interne ``extract_imdf_zip`` /
-``persist_imdf_bundle_to_disk`` senza duplicare logica.
+E' uno **script**, non un pytest. Post-IMDF (commit IMDF-6 + tombstone
+step 3) il bundle vive su object storage canonical (no piu' bundle dir
+locale). Lo script usa le nuove API bytes-first:
+
+    `extract_imdf_zip_bytes(bytes)`  -> ImdfBundle in RAM
+    `persist_imdf_bundle(bundle, ...)` -> upload diretto su storage
+
+Richiede un `PLENORA_E2E_PROJECT_ID` per legare il bundle a un progetto
+visibile dall'admin (ACL check downstream usa project_id -> group_id).
 
 Run:
     docker exec -e ARCGIS_TEST_CONNECTION_ID=arcgis_... \
                  -e IMDF_TEST_USERNAME=<imdf_user> \
                  -e IMDF_TEST_PASSWORD=<imdf_pass> \
                  -e PLENORA_ADMIN_PASSWORD=admin_plenora_2026 \
+                 -e PLENORA_E2E_PROJECT_ID=<uuid_progetto_admin> \
                  -e PYTHONPATH=/app \
                  plenora-backend-1 \
                  python /tmp/imdf_real_e2e_check.py
 
-Lo script va copiato nel container prima del run via ``docker cp``
-oppure piped via stdin (``cat ... | docker exec -i ... python -``).
-
 Exit codes:
     0  - publish riuscito e cleanup OK
-    2  - skip: nessun sito disponibile su imdf.plenora.it
+    2  - skip: nessun sito su imdf.plenora.it / PLENORA_E2E_PROJECT_ID assente
     1  - failure (con stack trace utile sul stderr)
 
 Env vars richieste:
@@ -35,22 +36,19 @@ Env vars richieste:
     PLENORA_API_URL          default http://localhost:5004
     PLENORA_ADMIN_USER       default admin_plenora
     PLENORA_ADMIN_PASSWORD   default admin_plenora_2026
+    PLENORA_E2E_PROJECT_ID   project_id Plenora visibile dall'admin (NEW)
 
-Cleanup: best-effort sia del bundle locale sia del FeatureService
+Cleanup: best-effort sia del bundle su storage sia del FeatureService
 creato su AGOL.
 """
 
 from __future__ import annotations
 
-import json
 import os
-import shutil
 import sys
-import tempfile
 import time
 import traceback
 import uuid
-from pathlib import Path
 from urllib.parse import quote
 
 import requests
@@ -144,47 +142,30 @@ def download_site_zip(imdf_token: str, site_id: str) -> bytes:
     return content
 
 
-def persist_to_plenora(zip_bytes: bytes) -> tuple[str, Path]:
-    """Salva zip su tmp, lo estrae con extract_imdf_zip e persiste
-    sul filesystem locale come bundle Plenora. Ritorna (task_id, dir).
+def persist_to_plenora(zip_bytes: bytes, project_id: str) -> str:
+    """Estrae lo zip via `extract_imdf_zip_bytes` (RAM) e persiste su
+    storage canonical via `persist_imdf_bundle` (storage-direct, no
+    bundle dir locale). Ritorna task_id.
+
+    `project_id` e' obbligatorio: post IMDF-4 step 4 l'ACL check usa
+    `project_id -> project.group_id` lookup. Senza un project_id
+    valido, il bundle resta inaccessibile via API endpoint.
     """
-    from app.core.imdf.loader import extract_imdf_zip
-    from app.core.imdf.persist import persist_imdf_bundle_to_disk
+    from app.core.imdf.loader import extract_imdf_zip_bytes
+    from app.core.imdf.persist import persist_imdf_bundle
 
     task_id = f"imdf_e2e_{uuid.uuid4().hex[:12]}"
-
-    with tempfile.NamedTemporaryFile(
-        prefix=f"{task_id}_", suffix=".zip", delete=False,
-    ) as tmp:
-        tmp.write(zip_bytes)
-        tmp_zip_path = Path(tmp.name)
-
-    try:
-        bundle = extract_imdf_zip(tmp_zip_path)
-        result = persist_imdf_bundle_to_disk(
-            bundle=bundle,
-            task_id=task_id,
-            project_id=None,
-        )
-        bundle_dir = Path(result["path"])
-        _log(f"bundle persistito: {bundle_dir} (site_id={bundle.site_id})")
-
-        # Per superare _assert_bundle_group_access serve group_id nel
-        # meta. Imposta a 'default' (gruppo admin) cosi' admin_plenora
-        # ha visibility.
-        meta_path = bundle_dir / "plenora_metadata.json"
-        if meta_path.exists():
-            meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            meta["group_id"] = "default"
-            meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
-            _log("group_id=default impostato nel plenora_metadata.json")
-
-        return task_id, bundle_dir
-    finally:
-        try:
-            tmp_zip_path.unlink()
-        except OSError:
-            pass
+    bundle = extract_imdf_zip_bytes(zip_bytes)
+    persist_imdf_bundle(
+        bundle=bundle,
+        task_id=task_id,
+        project_id=project_id,
+    )
+    _log(
+        f"bundle persistito su storage (site_id={bundle.site_id}, "
+        f"task_id={task_id})"
+    )
+    return task_id
 
 
 def login_plenora() -> str:
@@ -279,32 +260,35 @@ def cleanup_arcgis_service(fs_name: str):
         _log(f"cleanup AGOL non-fatal: {e}")
 
 
-def cleanup_bundle(bundle_task_id: str, plenora_token: str, bundle_dir: Path):
-    """Cleanup best-effort del bundle locale + record DB."""
+def cleanup_bundle(bundle_task_id: str, plenora_token: str):
+    """Cleanup best-effort del bundle: DELETE endpoint -> storage cleanup."""
     try:
         requests.delete(
             f"{PLENORA_API}/api/imdf/bundles/{bundle_task_id}",
             headers={"Authorization": f"Bearer {plenora_token}"},
             timeout=15,
         )
+        _log(f"cleanup bundle DELETE: task_id={bundle_task_id}")
     except Exception as e:
         _log(f"cleanup bundle DELETE non-fatal: {e}")
-    # Fallback: cancella la dir direttamente se ancora presente
-    if bundle_dir.exists():
-        shutil.rmtree(bundle_dir, ignore_errors=True)
-        _log(f"cleanup bundle dir locale: {bundle_dir}")
 
 
 def main() -> int:
     if not ARCGIS_CONN_ID:
         _skip("ARCGIS_TEST_CONNECTION_ID non settata")
+    project_id = os.environ.get("PLENORA_E2E_PROJECT_ID")
+    if not project_id:
+        _skip(
+            "PLENORA_E2E_PROJECT_ID non settata: post-IMDF-4 tombstone "
+            "il bundle richiede un project_id valido per l'ACL check."
+        )
 
     imdf_token = login_imdf()
     _log("login imdf.plenora.it OK")
 
     site_id = pick_site(imdf_token)
     zip_bytes = download_site_zip(imdf_token, site_id)
-    bundle_task_id, bundle_dir = persist_to_plenora(zip_bytes)
+    bundle_task_id = persist_to_plenora(zip_bytes, project_id=project_id)
 
     plenora_token = login_plenora()
     _log("login plenora OK")
@@ -319,7 +303,7 @@ def main() -> int:
     finally:
         if fs_name:
             cleanup_arcgis_service(fs_name)
-        cleanup_bundle(bundle_task_id, plenora_token, bundle_dir)
+        cleanup_bundle(bundle_task_id, plenora_token)
     return 0
 
 
