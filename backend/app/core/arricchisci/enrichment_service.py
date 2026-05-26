@@ -5,6 +5,7 @@ Keeps API enrichment behavior isolated from orchestration callers.
 """
 
 import csv
+import io
 
 import json
 import threading
@@ -265,18 +266,16 @@ class EnrichmentExecutor(
 
 def generate_error_report(
     errors: List[RowError],
-    output_path: str,
     auth: Optional[JsonObject] = None,
-) -> str:
+) -> Optional[bytes]:
     """
-    Genera report CSV degli errori di arricchimento.
+    Genera report CSV degli errori di arricchimento come bytes RAM-only.
 
     Ogni riga del CSV contiene: indice riga originale, status, tipo errore,
     messaggio, HTTP status, numero retry, parametri input, timestamp.
-    Il file viene salvato accanto all'output con suffisso '_errors.csv'.
 
-    `input_params` viene redatto via `sanitize_for_log`
-    prima della serializzazione. La path CSV pre-fix scriveva in chiaro
+    `input_params` viene redatto via `sanitize_for_log` prima della
+    serializzazione. La path CSV pre-fix scriveva in chiaro
     api_key/token/password presenti in `params` (es. api_key in query
     string materializzata da `_build_params`), causando credential leak
     nel file `<output>_errors.csv` distribuito ai consumer del task.
@@ -284,33 +283,47 @@ def generate_error_report(
     e' applicata anche a questa path. Se il caller passa `auth`, anche
     `auth.key_name` viene oscurato (api_key con nome custom es. `apikey`,
     `subscription-key`).
+
+    Args:
+        errors: lista di RowError dal RowProcessor.
+        auth: api_config['auth'] del nodo enricher (se presente, viene
+            usato per redattare anche key_name custom).
+
+    Returns:
+        bytes UTF-8 del CSV se ci sono errori, altrimenti `None`.
+        Il caller (worker) persiste i bytes via
+        `save_result_blob_from_bytes` -> result_id e li espone nel
+        task result come blob scaricabile.
+
+    Post-refactor (QUERY-1 follow-up): RAM-only. Niente piu' write
+    su `RESULTS_DIR/{project_id}/enrichment_errors_{task_id}.csv`;
+    il worker decide come persistere (result_blob su DB BYTEA o
+    object storage via storage_policy).
     """
     if not errors:
         return None
 
+    buf = io.StringIO(newline="")
+    writer = csv.DictWriter(buf, fieldnames=[
+        "row_index", "status", "error_type", "error_message",
+        "http_status", "retry_count", "input_params", "timestamp"
+    ])
+    writer.writeheader()
 
-    file_path = f"{output_path}_errors.csv"
+    for error in errors:
+        raw_params = getattr(error, "input_params", None) or {}
+        safe_params = sanitize_for_log(raw_params, auth)
+        writer.writerow({
+            "row_index": error.row_index,
+            "status": error.status.value,
+            "error_type": error.error_type,
+            "error_message": error.error_message,
+            "http_status": error.http_status or "",
+            "retry_count": error.retry_count,
+            "input_params": json.dumps(safe_params, ensure_ascii=False),
+            "timestamp": error.timestamp
+        })
 
-    with open(file_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=[
-            "row_index", "status", "error_type", "error_message",
-            "http_status", "retry_count", "input_params", "timestamp"
-        ])
-        writer.writeheader()
-
-        for error in errors:
-            raw_params = getattr(error, "input_params", None) or {}
-            safe_params = sanitize_for_log(raw_params, auth)
-            writer.writerow({
-                "row_index": error.row_index,
-                "status": error.status.value,
-                "error_type": error.error_type,
-                "error_message": error.error_message,
-                "http_status": error.http_status or "",
-                "retry_count": error.retry_count,
-                "input_params": json.dumps(safe_params, ensure_ascii=False),
-                "timestamp": error.timestamp
-            })
-
-    logger.info(f"Report errori salvato: {file_path}")
-    return file_path
+    data = buf.getvalue().encode("utf-8")
+    logger.info(f"Report errori generato in RAM: {len(data)} bytes, {len(errors)} righe")
+    return data

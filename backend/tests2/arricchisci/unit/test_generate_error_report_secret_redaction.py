@@ -1,14 +1,16 @@
 """
-Contract: secret redaction in generate_error_report CSV.
+Contract: secret redaction in `generate_error_report` (bytes-mode RAM-only).
 
-Previous behavior `generate_error_report` faceva `json.dumps(error.input_params)` senza
+Post-refactor (QUERY-1 follow-up): la funzione ritorna `Optional[bytes]`
+del CSV invece di scrivere su `RESULTS_DIR`. La redaction (api_key/
+authorization/password) deve restare invariata.
 """
 from __future__ import annotations
 
 import csv
+import io
 import json
-from pathlib import Path
-
+from typing import Optional
 
 from app.core.arricchisci.enrichment_service import generate_error_report
 from app.core.arricchisci.models import RowError, RowStatus
@@ -20,12 +22,14 @@ SECRET_PASSWORD = "p@ssw0rd-super-secret"
 CUSTOM_KEY_VALUE = "az-subscription-key-XYZ"
 
 
-def _read_csv_rows(path: str) -> list[dict]:
-    with open(path, "r", encoding="utf-8", newline="") as f:
-        return list(csv.DictReader(f))
+def _decode_csv_rows(data: Optional[bytes]) -> list[dict]:
+    if data is None:
+        return []
+    text = data.decode("utf-8")
+    return list(csv.DictReader(io.StringIO(text)))
 
 
-def test_generate_error_report_redacts_known_sensitive_keys(tmp_path: Path):
+def test_generate_error_report_redacts_known_sensitive_keys():
     """Pattern generici (api_key/authorization/password) sempre redatti."""
     err = RowError(
         row_index=42,
@@ -44,19 +48,17 @@ def test_generate_error_report_redacts_known_sensitive_keys(tmp_path: Path):
         },
     )
 
-    out_base = str(tmp_path / "report")
-    csv_path = generate_error_report([err], out_base)
+    data = generate_error_report([err])
+    assert data is not None
+    raw = data.decode("utf-8")
 
-    raw = Path(csv_path).read_text(encoding="utf-8")
-
-    # Nessun segreto, in nessuna forma, nel file
+    # Nessun segreto, in nessuna forma, nei bytes
     assert SECRET_API_KEY not in raw, "api_key in chiaro nel CSV"
     assert SECRET_BEARER not in raw, "bearer token in chiaro nel CSV"
     assert SECRET_PASSWORD not in raw, "password in chiaro nel CSV"
     assert "***REDACTED***" in raw, "marker REDACTED mancante"
 
-    # Dati benigni preservati
-    rows = _read_csv_rows(csv_path)
+    rows = _decode_csv_rows(data)
     assert len(rows) == 1
     parsed = json.loads(rows[0]["input_params"])
     assert parsed["api_key"] == "***REDACTED***"
@@ -66,13 +68,12 @@ def test_generate_error_report_redacts_known_sensitive_keys(tmp_path: Path):
     assert parsed["lng"] == 9.0
     assert parsed["address"] == "Via Roma 1"
 
-    # Metadati riga preservati
     assert rows[0]["row_index"] == "42"
     assert rows[0]["http_status"] == "503"
     assert rows[0]["retry_count"] == "3"
 
 
-def test_generate_error_report_redacts_custom_key_name_via_auth(tmp_path: Path):
+def test_generate_error_report_redacts_custom_key_name_via_auth():
     """`auth.key_name` con nome non standard (es. `subscription-key`)
     deve essere redatto SOLO se il caller passa `auth` al report."""
     custom_key_name = "subscription-key"
@@ -93,20 +94,19 @@ def test_generate_error_report_redacts_custom_key_name_via_auth(tmp_path: Path):
         "key_value": CUSTOM_KEY_VALUE,
     }
 
-    out_base = str(tmp_path / "report_auth")
-    csv_path = generate_error_report([err], out_base, auth=auth)
-
-    raw = Path(csv_path).read_text(encoding="utf-8")
+    data = generate_error_report([err], auth=auth)
+    assert data is not None
+    raw = data.decode("utf-8")
     assert CUSTOM_KEY_VALUE not in raw, "subscription-key in chiaro nel CSV"
     assert "***REDACTED***" in raw
 
-    rows = _read_csv_rows(csv_path)
+    rows = _decode_csv_rows(data)
     parsed = json.loads(rows[0]["input_params"])
     assert parsed[custom_key_name] == "***REDACTED***"
     assert parsed["city"] == "Milano"
 
 
-def test_generate_error_report_custom_key_not_redacted_without_auth(tmp_path: Path):
+def test_generate_error_report_custom_key_not_redacted_without_auth():
     """Senza `auth`, una chiave custom (non match sui pattern generici) NON
     viene redatta. Documenta il limite del fallback e giustifica la propagazione
     di `auth` dalla call site (workers/tasks/enrichment_task.py)."""
@@ -118,26 +118,19 @@ def test_generate_error_report_custom_key_not_redacted_without_auth(tmp_path: Pa
         input_params={custom_key_name: CUSTOM_KEY_VALUE},
     )
 
-    out_base = str(tmp_path / "report_noauth")
-    csv_path = generate_error_report([err], out_base)
-
-    raw = Path(csv_path).read_text(encoding="utf-8")
+    data = generate_error_report([err])
+    raw = data.decode("utf-8")
     # Senza auth, il pattern generico non lo matcha -> resta in chiaro.
-    # Questo TEST documenta il comportamento per evitare regressioni: chi
-    # introduce una nuova path che chiama generate_error_report DEVE passare
-    # `auth` se l'API ha una key con nome custom.
     assert CUSTOM_KEY_VALUE in raw
 
 
-def test_generate_error_report_empty_errors_returns_none(tmp_path: Path):
-    """Sanity: nessun errore -> nessun file."""
-    result = generate_error_report([], str(tmp_path / "empty"))
-    assert result is None
+def test_generate_error_report_empty_errors_returns_none():
+    """Sanity: nessun errore -> None (no bytes generated)."""
+    assert generate_error_report([]) is None
 
 
-def test_generate_error_report_does_not_mutate_input_params(tmp_path: Path):
-    """`sanitize_for_log` non deve mutare la struttura originale: i RowError
-    in memoria mantengono i valori reali (servono per debugging del worker)."""
+def test_generate_error_report_does_not_mutate_input_params():
+    """`sanitize_for_log` non deve mutare la struttura originale."""
     original = {
         "api_key": SECRET_API_KEY,
         "lat": 1.0,
@@ -149,24 +142,40 @@ def test_generate_error_report_does_not_mutate_input_params(tmp_path: Path):
         input_params=original,
     )
 
-    generate_error_report([err], str(tmp_path / "nomutate"))
+    generate_error_report([err])
 
-    # Il dict originale del RowError DEVE essere ancora intatto
     assert err.input_params["api_key"] == SECRET_API_KEY
     assert original["api_key"] == SECRET_API_KEY
 
 
-def test_generate_error_report_handles_missing_input_params(tmp_path: Path):
+def test_generate_error_report_handles_missing_input_params():
     """`input_params` None o assente non deve far crashare il writer."""
     err = RowError(
         row_index=0,
         status=RowStatus.ERROR,
         error_message="generic",
     )
-    # Forzo None per simulare un caller che imposta esplicitamente null
     err.input_params = None  # type: ignore[assignment]
 
-    csv_path = generate_error_report([err], str(tmp_path / "noparams"))
-    rows = _read_csv_rows(csv_path)
+    data = generate_error_report([err])
+    rows = _decode_csv_rows(data)
     assert len(rows) == 1
     assert rows[0]["input_params"] == "{}"
+
+
+def test_generate_error_report_returns_utf8_bytes():
+    """Output e' bytes UTF-8 encoded (assicura compat con
+    save_result_blob_from_bytes + content-type text/csv downstream)."""
+    err = RowError(
+        row_index=0,
+        status=RowStatus.ERROR,
+        error_message="città: Pordenone — €100",
+        input_params={"label": "località 'San José'"},
+    )
+
+    data = generate_error_report([err])
+    assert isinstance(data, bytes)
+    # Round-trip UTF-8.
+    text = data.decode("utf-8")
+    assert "Pordenone" in text
+    assert "località" in text

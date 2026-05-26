@@ -36,16 +36,48 @@ def project_result_response(
     requested_file: Optional[str],
     results_root: str | None = None,
 ) -> Response:
-    """Build the download response for a project result."""
+    """Build the download response for a project result.
+
+    Lookup logic:
+      1. Se `requested_file` e' valorizzato, cerca tra TUTTE le result row
+         del progetto la prima con `filename == requested_file`. Pensato
+         per scaricare blob secondari come `enrichment_errors_{task_id}.csv`
+         (refactor QUERY-1 follow-up: error report e' un result_blob,
+         non un file su RESULTS_DIR).
+      2. Altrimenti -> latest result (comportamento default per "ultimo
+         output del progetto").
+    """
+    if requested_file:
+        # Look up specifico per filename: scorre le result rows del
+        # progetto (incluse blob secondari come error_report).
+        rows = results_db.list_result_rows(project_id=project_id)
+        match = next(
+            (r for r in rows if r.id and (r.filename == requested_file)),
+            None,
+        )
+        if match is not None:
+            filename = match.filename or requested_file
+            blob = results_blob.get_result_data(match.id)
+            if blob is not None:
+                return Response(
+                    content=blob,
+                    media_type=mime_for_filename(filename),
+                    headers={
+                        "Content-Disposition": f'attachment; filename="{filename}"',
+                        "Content-Length": str(len(blob)),
+                    },
+                )
+        # Fallthrough: nessuna row con quel filename. Mantiene il 404
+        # legacy invece di restituire silently il latest.
+        raise HTTPException(
+            404,
+            f"File '{requested_file}' non trovato per progetto '{project_id}'",
+        )
+
     latest = results_db.get_latest_result_row(project_id)
 
     if latest and latest.id:
         filename = latest.filename or f"{project_id}.{latest.format or 'csv'}"
-        if requested_file and requested_file != filename:
-            raise HTTPException(
-                404,
-                f"File '{requested_file}' non trovato per progetto '{project_id}'",
-            )
         blob = results_blob.get_result_data(latest.id)
         if blob is not None:
             return Response(
@@ -59,13 +91,6 @@ def project_result_response(
         raise HTTPException(
             404,
             f"Blob risultato non disponibile per progetto '{project_id}'",
-        )
-
-    if requested_file:
-        raise HTTPException(
-            410,
-            "Download legacy da RESULTS_DIR rimosso: usare result_id/blob "
-            "come sorgente canonica",
         )
 
     if latest and not latest.id:

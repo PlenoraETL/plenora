@@ -175,7 +175,12 @@ def execute_enrichment_task(
 
     # Variabili per statistiche enrichment
     enrichment_stats = None
-    error_report_file = None
+    # Post-refactor (QUERY-1 follow-up): l'error report e' un result_blob
+    # secondario persistito via save_result_blob_from_bytes; il task
+    # result espone il filename canonico (display) + il result_id per il
+    # download. Niente piu' path filesystem.
+    error_report_file = None  # filename display, e.g. enrichment_errors_{task_id}.csv
+    error_report_result_id = None
 
     # Apre run in intermediate.db (non bloccante
     # Per gli eseguibili saltiamo `intermediate.create_run` perche' l'eseguibile
@@ -338,7 +343,7 @@ def execute_enrichment_task(
             bloccanti (API mancante, continue_on_error=False con errori,
             threshold errori raggiunto). Il caller propaga al global handler.
             """
-            nonlocal enrichment_stats, error_report_file
+            nonlocal enrichment_stats, error_report_file, error_report_result_id
 
             node = next((n for n in nodes if n["id"] == node_id), None)
             if not node:
@@ -438,6 +443,8 @@ def execute_enrichment_task(
                              "Verifica che la connessione esista e non sia stata eliminata.",
                     "enrichment_stats": enrichment_stats,
                     "error_report": error_report_file,
+            "error_report_result_id": error_report_result_id,
+                    "error_report_result_id": error_report_result_id,
                 })
 
             _input_edge_check = next((e for e in edges if e["target"] == node_id), None)
@@ -585,6 +592,9 @@ def execute_enrichment_task(
                                 ),
                                 "enrichment_stats": enrichment_stats,
                                 "error_report": error_report_file,
+            "error_report_result_id": error_report_result_id,
+                                "error_report_result_id": error_report_result_id,
+                    "error_report_result_id": error_report_result_id,
                             })
 
                         threshold = exec_options.stop_on_error_threshold
@@ -604,6 +614,9 @@ def execute_enrichment_task(
                                 ),
                                 "enrichment_stats": enrichment_stats,
                                 "error_report": error_report_file,
+            "error_report_result_id": error_report_result_id,
+                                "error_report_result_id": error_report_result_id,
+                    "error_report_result_id": error_report_result_id,
                             })
 
                         if not api_config_local.get("output_mapping") and executor.detected_column_types:
@@ -623,20 +636,32 @@ def execute_enrichment_task(
                             except Exception as _e:
                                 logger.warning(f"[Task {task_id}] Aggiornamento schema fallito: {_e}")
                         if exec_options.generate_error_report and enrichment_result.errors:
-                            output_dir = settings.RESULTS_DIR / project_id
-                            output_dir.mkdir(parents=True, exist_ok=True)
-                            # Filename basato su `task_id` (stabile per la
-                            # vita del task) invece di `datetime.now()`.
-                            # Pre-fix retry manuali producevano un nuovo file
-                            # ad ogni tentativo, accumulando report orfani
-                            # nella output_dir. Con task_id, il retry
-                            # sovrascrive il precedente report dello stesso
-                            # task: dimensione bounded, idempotente.
-                            error_report_file = generate_error_report(
+                            # Post-refactor (QUERY-1 follow-up): generazione
+                            # in-memory + persist via save_result_blob_from_bytes.
+                            # Niente piu' RESULTS_DIR/{project_id}/...csv su
+                            # filesystem. Filename basato su `task_id`
+                            # (stabile, idempotente sul retry).
+                            error_report_bytes = generate_error_report(
                                 enrichment_result.errors,
-                                str(output_dir / f"enrichment_errors_{task_id}"),
                                 auth=api_config_local.get("auth"),
                             )
+                            if error_report_bytes:
+                                error_report_file = f"enrichment_errors_{task_id}.csv"
+                                from app.core.results.blob_writer import save_result_blob_from_bytes
+                                error_report_result_id = save_result_blob_from_bytes(
+                                    project_id=project_id,
+                                    data=error_report_bytes,
+                                    filename=error_report_file,
+                                    fmt="csv",
+                                    rows_count=len(enrichment_result.errors),
+                                    group_id=_group_id or None,
+                                )
+                                logger.info(
+                                    f"[Task {task_id}] Error report persistito: "
+                                    f"result_id={error_report_result_id} "
+                                    f"({len(error_report_bytes)} bytes, "
+                                    f"{len(enrichment_result.errors)} errori)"
+                                )
                         logger.info(
                             f"[Task {task_id}] {api_name}: "
                             f"{enrichment_result.stats.success}/{enrichment_result.stats.total_rows} OK, "
@@ -956,6 +981,7 @@ def execute_enrichment_task(
                 "execution_time_ms": final_result.get("execution_time_ms", 0),
                 "enrichment_stats": None,
                 "error_report": None,
+                "error_report_result_id": None,
                 "message": f"Processamento completato: {final_name}",
             }
             if imdf_metadata is not None:
@@ -1077,6 +1103,7 @@ def execute_enrichment_task(
             # Statistiche enrichment
             "enrichment_stats": enrichment_stats,
             "error_report": error_report_file,
+            "error_report_result_id": error_report_result_id,
         }
         if is_eseguibile:
             result["download_url"] = f"/api/eseguibili/{project_id}/download/{task_id}"
@@ -1242,6 +1269,7 @@ def execute_enrichment_task(
             # Statistiche parziali se disponibili
             "enrichment_stats": enrichment_stats,
             "error_report": error_report_file,
+            "error_report_result_id": error_report_result_id,
         }
 
 
