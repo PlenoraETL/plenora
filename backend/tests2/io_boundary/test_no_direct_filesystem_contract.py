@@ -42,7 +42,12 @@ PATTERNS: tuple[tuple[str, re.Pattern], ...] = (
     ("safe_extractall", re.compile(r"safe_extractall\(|safe_extract_zip_path\(")),
     ("path_write_bytes", re.compile(r"\.write_bytes\(")),
     ("path_write_text", re.compile(r"\.write_text\(")),
-    ("open_write_mode", re.compile(r"""open\(['"\s][^)]*?,\s*['"][wax]""")),
+    # Match anche `open(var, "w")` / `open(path, 'wb')` (oltre al gia'
+    # coperto `open("file", "w")`). Punto 3 follow-up (2026-05-26):
+    # il regex precedente richiedeva quote/whitespace come primo char
+    # dentro `open(`, perdendo i call con prima variabile (es.
+    # `LocalDataSource.write_file` -> `open(full_path, 'wb')`).
+    ("open_write_mode", re.compile(r"""open\(\s*[^,)]+,\s*['"][wax]""")),
     ("fileresponse", re.compile(r"FileResponse\(")),
     ("shutil_copy", re.compile(r"shutil\.(copy|copyfile|copy2|copytree)\(")),
     ("shutil_move", re.compile(r"shutil\.move\(")),
@@ -97,14 +102,21 @@ EXCLUDE_PREFIXES: tuple[str, ...] = (
 # cleanup (2026-05-25): `app/utils/zip_safe.py`, `app/core/results/temp_paths.py`,
 # `app/core/files/service_deps.py` rimossi dall'esclusione (zero
 # callsite filesystem residui dopo tombstone di safe_extractall /
-# get_temp_output_path / DefaultFileSystem.{write_text,extract_zip}).
-# DEVE essere allineato con `scripts/_gen_io_allowlist.py`
+# get_temp_output_path / DefaultFileSystem.{write_text,extract_zip,write_binary}).
+# Punto 3 follow-up (2026-05-26): aggiunti i datasource endpoint
+# `local.py` + `sftp.py` come data plane esterno (user-configured
+# destinations, NON temp/cache interni — contratto RAM-first NON
+# si applica). DEVE essere allineato con `scripts/_gen_io_allowlist.py`
 # (_BOUNDARY_FILES) altrimenti il test segnala "nuovi offender" per
 # findings che il generator non ha mai messo nella allowlist.
 EXCLUDE_FILES: tuple[str, ...] = (
     "app/core/resources/loaders/result_blob.py",
     "app/core/arricchisci/api_connection_rest_file.py",
     "app/core/results/blob_writer.py",
+    # Data plane endpoints (out-of-contract: write a destinazione
+    # configurata dall'utente, non temp/cache interno).
+    "app/core/datasources/local.py",
+    "app/core/datasources/sftp.py",
 )
 
 # Top-level roots esclusi dal sweep (script one-off, non application code).
@@ -352,6 +364,14 @@ _BOUNDARY_FROZEN_SNAPSHOT: dict[str, int] = {
     "scripts/backup_db.py": 1,
     "scripts/test_restore.py": 1,
     "scripts/export_openapi_manifest.py": 1,
+    # Data plane endpoints (Punto 3 follow-up 2026-05-26: il regex
+    # `open_write_mode` ora intercetta anche `open(var, "w")`).
+    # Sono feature esterne del datasource layer: write su
+    # destinazione configurata dall'utente, NON temp/cache interni.
+    # Contratto RAM-first NON si applica — vivono nello snapshot
+    # solo per tracking del ratchet, non come violazione.
+    "app/core/datasources/local.py": 1,
+    "app/core/datasources/sftp.py": 1,
 }
 
 

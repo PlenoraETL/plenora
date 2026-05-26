@@ -25,7 +25,9 @@ PATTERNS: tuple[tuple[str, re.Pattern], ...] = (
     ("safe_extractall", re.compile(r"safe_extractall\(|safe_extract_zip_path\(")),
     ("path_write_bytes", re.compile(r"\.write_bytes\(")),
     ("path_write_text", re.compile(r"\.write_text\(")),
-    ("open_write_mode", re.compile(r"""open\(['"\s][^)]*?,\s*['"][wax]""")),
+    # Match anche `open(var, "w")` (oltre al gia' coperto
+    # `open("file", "w")`). Punto 3 follow-up (2026-05-26).
+    ("open_write_mode", re.compile(r"""open\(\s*[^,)]+,\s*['"][wax]""")),
     ("fileresponse", re.compile(r"FileResponse\(")),
     ("shutil_copy", re.compile(r"shutil\.(copy|copyfile|copy2|copytree)\(")),
     ("shutil_move", re.compile(r"shutil\.move\(")),
@@ -153,7 +155,17 @@ _LEGITIMATE_CACHE_FILES: tuple[str, ...] = (
     "app/core/imdf/",
     # Punto 3 cleanup (2026-05-25): rimossi `app/core/results/temp_paths.py`
     # e `app/core/files/service_deps.py` — tombstonati i symbol path-only
-    # (`get_temp_output_path`, `DefaultFileSystem.{write_text,extract_zip}`).
+    # (`get_temp_output_path`, `DefaultFileSystem.{write_text,extract_zip,write_binary}`).
+)
+
+# Data plane endpoints (Punto 3 follow-up 2026-05-26): datasource
+# user-configured destinations (filesystem locale / SMB share / SFTP
+# server). NON sono temp/cache interni — sono il punto in cui la
+# pipeline scrive l'output di un task `CARICA` verso lo storage che
+# l'utente ha configurato. Contratto RAM-first NON si applica.
+_DATAPLANE_FILES: tuple[str, ...] = (
+    "app/core/datasources/local.py",
+    "app/core/datasources/sftp.py",
 )
 
 
@@ -236,7 +248,11 @@ def _is_boundary(rel: str) -> bool:
     norm = rel.replace("\\", "/")
     if any(norm.startswith(p) for p in _BOUNDARY_DIRS):
         return True
-    return any(norm.endswith(f) or f"/{f}" in norm for f in _BOUNDARY_FILES)
+    if any(norm.endswith(f) or f"/{f}" in norm for f in _BOUNDARY_FILES):
+        return True
+    # Data plane endpoints (user-configured destinations) sono fuori
+    # contratto RAM-first.
+    return any(norm.endswith(f) or f"/{f}" in norm for f in _DATAPLANE_FILES)
 
 
 def scan() -> list[tuple[str, int, str, str]]:

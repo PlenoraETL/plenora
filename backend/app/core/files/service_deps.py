@@ -10,7 +10,7 @@ import uuid
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import BinaryIO, List, Protocol
+from typing import List, Protocol
 
 from app.core.dataframes.default_loader import (
     DataLoaderProtocol as DataLoaderProtocol,
@@ -44,18 +44,24 @@ class LoggerProtocol(Protocol):
 class FileSystemProtocol(Protocol):
     """Protocol per operazioni filesystem - mockabile per test.
 
-    Punto 3 cleanup (2026-05-25): rimossi `write_text` ed `extract_zip`
-    (zero caller runtime post refactor RAM-only). Per scritture testo
-    usare `write_binary` su `BytesIO(text.encode())`. Per estrarre ZIP
-    in memoria usare `zipfile.ZipFile(BytesIO(...))` + `validate_zip_bomb_limits`
-    da `app.utils.zip_safe`."""
+    Punto 3 cleanup (2026-05-25 + 2026-05-26): tombstonati i metodi
+    write-on-disk del protocol (zero caller runtime post refactor
+    RAM-only):
+      - `write_text` -> `write_binary(BytesIO(text.encode()))` (era qui)
+      - `extract_zip` -> `zipfile.ZipFile(BytesIO(...))` +
+        `validate_zip_bomb_limits` (era qui)
+      - `write_binary` -> RAM-first (bytes -> storage backend); il
+        protocol resta read-only/structural.
+    Il `DefaultFileSystem` concreto sopravvive perche' istanziato come
+    DI default da `FileSourceService` / `DatasourceService`, ma il
+    payload upload viene letto dal blob storage in memoria, non da
+    disco locale."""
     def mkdir(self, path: Path, parents: bool = True, exist_ok: bool = True) -> None: ...
     def exists(self, path: Path) -> bool: ...
     def is_dir(self, path: Path) -> bool: ...
     def is_file(self, path: Path) -> bool: ...
     def iterdir(self, path: Path) -> List[Path]: ...
     def read_text(self, path: Path, encoding: str = 'utf-8') -> str: ...
-    def write_binary(self, path: Path, content: BinaryIO) -> int: ...
     def stat_size(self, path: Path) -> int: ...
     def rmtree(self, path: Path) -> None: ...
     def unlink(self, path: Path) -> None: ...
@@ -111,11 +117,6 @@ class DefaultFileSystem:
 
     def read_text(self, path: Path, encoding: str = 'utf-8') -> str:
         return path.read_text(encoding=encoding)
-
-    def write_binary(self, path: Path, content: BinaryIO) -> int:
-        with open(path, 'wb') as f:
-            shutil.copyfileobj(content, f)
-        return path.stat().st_size
 
     def stat_size(self, path: Path) -> int:
         return path.stat().st_size

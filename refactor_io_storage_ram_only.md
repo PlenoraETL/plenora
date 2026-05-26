@@ -2,10 +2,17 @@
 
 ## Contratto runtime RAM-first (standing reference)
 
-**Stato: Closed + Punto 3 cleanup (2026-05-25).** Il refactor RAM-first
-ha chiuso TUTTI i pezzi runtime di produzione e ha rimosso le boundary
-primitives orfane (zero caller runtime). Il report inside-boundary
-residuo e' **3 entries / 3 file**, esclusivamente scripts one-off.
+**Stato: Closed + Punto 3 cleanup + follow-up (2026-05-26).** Il refactor
+RAM-first ha chiuso TUTTI i pezzi runtime di produzione e ha rimosso le
+boundary primitives orfane (zero caller runtime). Il report inside-boundary
+residuo e' **5 entries / 5 file**, suddivisi in:
+  - **3** scripts one-off (`backup_db.py`, `test_restore.py`,
+    `export_openapi_manifest.py`) — dev tooling fuori application scope.
+  - **2** data plane endpoints (`datasources/local.py`,
+    `datasources/sftp.py`) — feature di write verso destinazioni
+    configurate dall'utente; il contratto RAM-first NON si applica
+    (vedi Regola 2.bis sotto).
+
 Quello che segue NON e' piu' un piano di migrazione ma il **contratto**
 che il codice applicativo deve rispettare. Le sezioni analytical
 successive ("Obiettivo", "Architettura proposta", "Piano di
@@ -102,8 +109,29 @@ tombstonati** — zero caller runtime sopravvissuti al refactor:
 - `scripts/backup_db.py`, `scripts/test_restore.py`,
   `scripts/export_openapi_manifest.py` — dev tools, esplicitamente
   fuori dal sweep applicativo (`_EXCLUDED_ROOTS = ("scripts",)`).
-  Sono gli **unici 3 callsite filesystem** residui nel report
-  inside-boundary post Punto 3.
+
+### Regola 2.bis — data plane endpoints (out-of-contract)
+
+I datasource user-configured **NON** sono soggetti al contratto RAM-first
+perche' rappresentano l'esposizione esplicita di un endpoint storage
+configurato dall'utente. Il task `CARICA` puo' scrivere l'output su:
+
+- `app/core/datasources/local.py` (1) — `LocalDataSource.write_file`
+  scrive su un path configurato dall'utente (filesystem locale, mount
+  NFS/SMB, ecc.). `os.makedirs(parent) + open(path, "wb")` — comportamento
+  by-design.
+- `app/core/datasources/sftp.py` (1) — `SftpDataSource.write_file`
+  scrive su SFTP server remoto. `self._sftp.open(path, "wb")` matcha
+  sintatticamente il gate regex ma non e' filesystem locale (e' il
+  client paramiko/pysftp).
+
+Punto 3 follow-up (2026-05-26): il regex `open_write_mode` e' stato
+generalizzato da `open\(['"\s][^)]*?,\s*['"][wax]` a
+`open\(\s*[^,)]+,\s*['"][wax]` per catturare anche `open(var, "wb")`.
+Prima il gate aveva un buco: una scrittura `open(path, "wb")` con
+prima variabile (non literal) sfuggiva al sweep. Dopo il fix, i 2
+datasource endpoint sono stati esposti e classificati come data plane
+out-of-contract.
 
 ### Pattern /vsimem ctypes (riusabile)
 
@@ -153,7 +181,8 @@ oggi NON usano `/vsimem`):
 
 Il count per-file dei residui inside-boundary e' congelato in
 `backend/tests2/io_boundary/test_no_direct_filesystem_contract.py::_BOUNDARY_FROZEN_SNAPSHOT`.
-Stato corrente: **3 entries su 3 file** (scripts one-off).
+Stato corrente: **5 entries su 5 file** (3 scripts one-off + 2 data
+plane endpoints).
 
 Il test `test_report_inside_boundary_frozen` fallisce se:
 - **Cresce**: un file aggiunge callsite (accidentale o deliberato).
@@ -188,6 +217,8 @@ contratto sono stati rimossi in `a5f26bf6` (QUERY-1 step 3):
 | `results.temp_paths.{make_path_only_adapter_dir,write_path_only_adapter_bytes,cleanup_path_only_adapter,get_temp_output_path}` | `StreamingResultBlobWriter` (S3 multipart) + `save_result_blob_from_bytes` | Punto 3 cleanup |
 | `zip_safe.safe_extractall` + `safe_extract_zip_path` + `ZipSlipError` + `_validate_member` | `zipfile.ZipFile(BytesIO(...))` + `validate_zip_bomb_limits` + `z.read(name)` RAM-only | Punto 3 cleanup |
 | `service_deps.DefaultFileSystem.write_text` + `DefaultFileSystem.extract_zip` | `write_binary(BytesIO(text.encode()))` + `zipfile.ZipFile(BytesIO(...))` RAM-only | Punto 3 cleanup |
+| `service_deps.DefaultFileSystem.write_binary` (e voce protocol) | (zero caller runtime — solo test legacy; sostituito da writer storage-direct su bytes) | Punto 3 follow-up |
+| Gate regex hole: `open(var, "w")` non intercettato | regex generalizzato + 2 datasource endpoint classificati come data plane out-of-contract | Punto 3 follow-up |
 
 ### Regola 5 — bundle legacy (break compat IMDF-4 step 4)
 

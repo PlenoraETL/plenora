@@ -19,92 +19,24 @@ pytestmark = [
 
 
 # Fix 2: imdf/loader.extract_imdf_zip cleanup tmp on extraction error
+# Post QUERY-1 step 3 (commit a5f26bf6): `extract_imdf_zip(path, dest_dir)`
+# tombstonato. Il flow runtime e' `extract_imdf_zip_bytes(data)` fully-RAM
+# (no mkdtemp, no safe_extractall, niente disk touch). Il leak da
+# mkdtemp + extract_failure e' impossibile by-construction.
 
 
-def test_extract_imdf_zip_cleans_up_on_zip_error(tmp_path):
-    """Zip corrotto/illeggibile dopo mkdtemp â†’ tmp dir non deve restare
-    sul disco. Previous behavior l'eccezione di safe_extractall lasciava la dir
-    creata in TEMP."""
-    from app.core.imdf.loader import extract_imdf_zip
+def test_extract_imdf_zip_path_tombstone_post_query_1_step3():
+    """Sentinel: `extract_imdf_zip(path)` path-based rimosso.
+    Sostituto canonical: `extract_imdf_zip_bytes(bytes)` (RAM-only)."""
+    from app.core.imdf import loader
 
-    bad_zip = tmp_path / "bad.zip"
-    bad_zip.write_bytes(b"not a zip file at all")
-
-    import tempfile as _tf
-    temp_root = tmp_path / "temp-root"
-    temp_root.mkdir()
-
-    def _mkdtemp(prefix: str = "") -> str:
-        path = temp_root / f"{prefix}owned_zip_error"
-        path.mkdir()
-        return str(path)
-
-    # Isola il test dal temp globale di Windows: il contratto resta
-    # "extract_imdf_zip pulisce la tempdir che crea".
-    before = {d.name for d in temp_root.iterdir() if d.name.startswith("imdf_")}
-
-    with patch.object(_tf, "mkdtemp", side_effect=_mkdtemp), pytest.raises(Exception):
-        extract_imdf_zip(bad_zip)
-
-    after = {d.name for d in temp_root.iterdir() if d.name.startswith("imdf_")}
-    new_dirs = after - before
-    assert not new_dirs, (
-        f"extract_imdf_zip deve cleanup tmp su error, ma sono rimaste: {new_dirs}"
+    assert not hasattr(loader, "extract_imdf_zip"), (
+        "imdf.loader.extract_imdf_zip ancora esposto: refactor "
+        "RAM-only incompleto. Sostituto: extract_imdf_zip_bytes."
     )
-
-
-def test_extract_imdf_zip_cleans_up_on_invalid_imdf_content(tmp_path):
-    """Zip valido ma contenuto non IMDF (manca .gdb e manifest.json)
-    â†’ ValueError dopo l'estrazione, tmp dir deve essere pulita."""
-    import zipfile
-    from app.core.imdf.loader import extract_imdf_zip
-
-    not_imdf_zip = tmp_path / "fake.zip"
-    with zipfile.ZipFile(not_imdf_zip, "w") as zf:
-        zf.writestr("readme.txt", "this is not imdf")
-
-    import tempfile as _tf
-    temp_root = tmp_path / "temp-root"
-    temp_root.mkdir()
-
-    def _mkdtemp(prefix: str = "") -> str:
-        path = temp_root / f"{prefix}owned_invalid_content"
-        path.mkdir()
-        return str(path)
-
-    before = {d.name for d in temp_root.iterdir() if d.name.startswith("imdf_")}
-
-    with patch.object(_tf, "mkdtemp", side_effect=_mkdtemp), pytest.raises(
-        ValueError, match="non sembra un IMDF"
-    ):
-        extract_imdf_zip(not_imdf_zip)
-
-    after = {d.name for d in temp_root.iterdir() if d.name.startswith("imdf_")}
-    new_dirs = after - before
-    assert not new_dirs, (
-        f"extract_imdf_zip deve cleanup tmp su validazione fallita, "
-        f"ma sono rimaste: {new_dirs}"
+    assert callable(getattr(loader, "extract_imdf_zip_bytes", None)), (
+        "extract_imdf_zip_bytes assente: il sostituto RAM-only deve esistere."
     )
-
-
-def test_extract_imdf_zip_does_not_cleanup_caller_provided_dest(tmp_path):
-    """Sanity: se il caller fornisce dest_dir esplicito, NON dobbiamo
-    cleanarlo su errore (la responsabilita' e' del caller)."""
-    from app.core.imdf.loader import extract_imdf_zip
-
-    bad_zip = tmp_path / "bad.zip"
-    bad_zip.write_bytes(b"not a zip")
-
-    caller_dest = tmp_path / "caller_owned"
-    caller_dest.mkdir()
-    (caller_dest / "marker.txt").write_text("caller wrote this", encoding="utf-8")
-
-    with pytest.raises(Exception):
-        extract_imdf_zip(bad_zip, dest_dir=caller_dest)
-
-    # caller_dest deve esistere ancora â€” non l'abbiamo cleanata
-    assert caller_dest.exists()
-    assert (caller_dest / "marker.txt").exists()
 
 
 # Fix 3: api_connector._rest_file _cleanup_tmp on error path

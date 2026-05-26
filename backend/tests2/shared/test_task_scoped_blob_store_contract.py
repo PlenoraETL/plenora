@@ -174,8 +174,9 @@ def test_imdf_storage_has_equivalent_methods():
 def test_specialized_methods_are_per_wrapper():
     """Documenta in test le SPECIALIZATIONS che restano per-wrapper:
     - eseguibili: `open_stream(key)` per streaming download;
-    - IMDF: `ensure_local_bundle(task_id)` per cache locale lazy +
-      `get_meta_only(task_id)` per sidecar accessor.
+    - IMDF: `get_meta_only(task_id)` per sidecar accessor +
+      `read_manifest/validation/renderers/geojson` per bundle read
+      storage-first (post QUERY-1 step 3, ex-`ensure_local_bundle`).
 
     Il Protocol common denominator NON cattura queste capabilities;
     ogni eventuale futuro consumer cross-cluster che ne ha bisogno
@@ -186,10 +187,16 @@ def test_specialized_methods_are_per_wrapper():
     assert callable(getattr(ese_storage, "open_stream", None))
     assert getattr(imdf_storage, "open_stream", None) is None  # IMDF non lo expose
 
-    assert callable(getattr(imdf_storage, "ensure_local_bundle", None))
+    # Post QUERY-1 step 3: `ensure_local_bundle` tombstonato; al suo posto
+    # i reader storage-first (`read_manifest`, `read_validation`,
+    # `read_renderers`, `read_geojson`) e l'adapter `/vsimem` per pyogrio
+    # (`open_gdb_in_vsimem`).
+    assert getattr(imdf_storage, "ensure_local_bundle", None) is None, (
+        "ensure_local_bundle deve restare tombstonato (refactor RAM-only)."
+    )
     assert callable(getattr(imdf_storage, "get_meta_only", None))
-    # Eseguibili non ha cache locale ne' sidecar accessor
-    assert getattr(ese_storage, "ensure_local_bundle", None) is None
+    assert callable(getattr(imdf_storage, "read_manifest", None))
+    # Eseguibili non ha sidecar accessor
     assert getattr(ese_storage, "get_meta_only", None) is None
 
 
