@@ -97,7 +97,9 @@ def test_null_logger_is_no_op_on_all_levels():
 # 4. DefaultFileSystem (smoke su tmp_path)
 
 
-def test_default_file_system_smoke_mkdir_write_read(tmp_path: Path):
+def test_default_file_system_smoke_mkdir_read(tmp_path: Path):
+    from io import BytesIO
+
     from app.core.files.service_deps import DefaultFileSystem
 
     fs = DefaultFileSystem()
@@ -108,7 +110,9 @@ def test_default_file_system_smoke_mkdir_write_read(tmp_path: Path):
     assert not fs.is_file(sub)
 
     target = sub / "hello.txt"
-    fs.write_text(target, "ciao")
+    # Punto 3 cleanup: `write_text` rimosso dal protocol — usiamo
+    # `write_binary` su BytesIO per testare il path bytes-first.
+    fs.write_binary(target, BytesIO(b"ciao"))
     assert fs.is_file(target)
     assert fs.read_text(target) == "ciao"
     assert fs.stat_size(target) == len("ciao".encode("utf-8"))
@@ -118,20 +122,39 @@ def test_default_file_system_smoke_mkdir_write_read(tmp_path: Path):
 
 
 def test_default_file_system_unlink_and_rmtree(tmp_path: Path):
+    from io import BytesIO
+
     from app.core.files.service_deps import DefaultFileSystem
 
     fs = DefaultFileSystem()
     f = tmp_path / "x.txt"
-    fs.write_text(f, "x")
+    fs.write_binary(f, BytesIO(b"x"))
     assert fs.exists(f)
     fs.unlink(f)
     assert not fs.exists(f)
 
     sub = tmp_path / "deletable"
     fs.mkdir(sub)
-    fs.write_text(sub / "a.txt", "a")
+    fs.write_binary(sub / "a.txt", BytesIO(b"a"))
     fs.rmtree(sub)
     assert not fs.exists(sub)
+
+
+def test_default_file_system_tombstones_dead_methods_post_punto3():
+    """Punto 3 cleanup (2026-05-25): `write_text` ed `extract_zip`
+    rimossi (zero caller runtime). Per testo usare `write_binary` su
+    `BytesIO(text.encode())`; per ZIP RAM-only usare
+    `zipfile.ZipFile(BytesIO(...))` + `validate_zip_bomb_limits`."""
+    from app.core.files.service_deps import DefaultFileSystem, FileSystemProtocol
+
+    for legacy in ("write_text", "extract_zip"):
+        assert not hasattr(DefaultFileSystem, legacy), (
+            f"DefaultFileSystem.{legacy} ancora presente: cleanup Punto 3 incompleto."
+        )
+        assert not hasattr(FileSystemProtocol, legacy), (
+            f"FileSystemProtocol.{legacy} ancora presente nel protocol: "
+            f"sincronizzare con il refactor RAM-only."
+        )
 
 
 # 5. DefaultDataLoader.load_csv (round-trip minimo)

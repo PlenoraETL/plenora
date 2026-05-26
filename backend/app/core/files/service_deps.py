@@ -16,7 +16,6 @@ from app.core.dataframes.default_loader import (
     DataLoaderProtocol as DataLoaderProtocol,
     DefaultDataLoader as DefaultDataLoader,
 )
-from app.utils.zip_safe import safe_extract_zip_path
 
 __all__ = [
     "LoggerProtocol",
@@ -43,19 +42,23 @@ class LoggerProtocol(Protocol):
 
 
 class FileSystemProtocol(Protocol):
-    """Protocol per operazioni filesystem - mockabile per test"""
+    """Protocol per operazioni filesystem - mockabile per test.
+
+    Punto 3 cleanup (2026-05-25): rimossi `write_text` ed `extract_zip`
+    (zero caller runtime post refactor RAM-only). Per scritture testo
+    usare `write_binary` su `BytesIO(text.encode())`. Per estrarre ZIP
+    in memoria usare `zipfile.ZipFile(BytesIO(...))` + `validate_zip_bomb_limits`
+    da `app.utils.zip_safe`."""
     def mkdir(self, path: Path, parents: bool = True, exist_ok: bool = True) -> None: ...
     def exists(self, path: Path) -> bool: ...
     def is_dir(self, path: Path) -> bool: ...
     def is_file(self, path: Path) -> bool: ...
     def iterdir(self, path: Path) -> List[Path]: ...
     def read_text(self, path: Path, encoding: str = 'utf-8') -> str: ...
-    def write_text(self, path: Path, content: str, encoding: str = 'utf-8') -> None: ...
     def write_binary(self, path: Path, content: BinaryIO) -> int: ...
     def stat_size(self, path: Path) -> int: ...
     def rmtree(self, path: Path) -> None: ...
     def unlink(self, path: Path) -> None: ...
-    def extract_zip(self, zip_path: Path, dest_dir: Path) -> None: ...
     def rglob(self, path: Path, pattern: str) -> List[Path]: ...
 
 
@@ -109,9 +112,6 @@ class DefaultFileSystem:
     def read_text(self, path: Path, encoding: str = 'utf-8') -> str:
         return path.read_text(encoding=encoding)
 
-    def write_text(self, path: Path, content: str, encoding: str = 'utf-8') -> None:
-        path.write_text(content, encoding=encoding)
-
     def write_binary(self, path: Path, content: BinaryIO) -> int:
         with open(path, 'wb') as f:
             shutil.copyfileobj(content, f)
@@ -125,15 +125,6 @@ class DefaultFileSystem:
 
     def unlink(self, path: Path) -> None:
         path.unlink()
-
-    def extract_zip(self, zip_path: Path, dest_dir: Path) -> None:
-        """Estrae un archivio ZIP con guard zip slip + zip bomb.
-
-        Delega a `app.utils.zip_safe.safe_extract_zip_path` per evitare
-        duplicazione: stesso codepath di tutti gli altri estrattori del
-        progetto (file_service blob, dataframe utils, imdf storage/loader).
-        """
-        safe_extract_zip_path(zip_path, dest_dir)
 
     def rglob(self, path: Path, pattern: str) -> List[Path]:
         return list(path.rglob(pattern))

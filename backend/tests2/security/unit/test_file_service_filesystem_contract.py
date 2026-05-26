@@ -1,49 +1,29 @@
 """
 Tests the file service filesystem behavior.
 
-Locks backend contracts and regression boundaries for the current architecture.
+Post Punto 3 cleanup (2026-05-25): `DefaultFileSystem.extract_zip`
+rimosso (zero caller runtime). I caller RAM-only navigano lo ZIP via
+`zipfile.ZipFile(BytesIO(...))` + `validate_zip_bomb_limits` +
+`z.read(name)` su bytes. Per i flussi che richiedono multi-file
+formats (es. Shapefile), si usa `/vsizip//vsimem/...` via
+`app.core.imdf.gdal_vsi`.
 """
 
-import zipfile
-
 import pytest
-
-from app.core.files.service import DefaultFileSystem
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract, pytest.mark.regression]
 
 
-def _write_zip(path, *entries):
-    with zipfile.ZipFile(path, "w") as zf:
-        for name, content in entries:
-            zf.writestr(name, content)
+def test_default_filesystem_extract_zip_tombstoned_post_punto3():
+    """Sentinel: `DefaultFileSystem.extract_zip` non e' piu' esposto.
+    Sostituto canonical: `zipfile.ZipFile(BytesIO(...))` +
+    `validate_zip_bomb_limits` + `z.read(name)` su bytes."""
+    from app.core.files.service_deps import DefaultFileSystem, FileSystemProtocol
 
-
-def test_default_filesystem_extract_zip_rejects_parent_traversal(tmp_path):
-    zip_path = tmp_path / "bad.zip"
-    _write_zip(zip_path, ("../evil.txt", "boom"))
-
-    with pytest.raises(ValueError, match="Zip slip"):
-        DefaultFileSystem().extract_zip(zip_path, tmp_path / "out")
-
-
-def test_default_filesystem_extract_zip_rejects_absolute_windows_path(tmp_path):
-    zip_path = tmp_path / "bad.zip"
-    _write_zip(zip_path, ("C:/evil.txt", "boom"))
-
-    # extract_zip ora delega a safe_extract_zip_path: i path con drive
-    # letter Windows triggerano il check dedicato "drive letter rifiutata"
-    # (ZipSlipError, sottoclasse di ValueError).
-    with pytest.raises(ValueError, match="Zip slip"):
-        DefaultFileSystem().extract_zip(zip_path, tmp_path / "out")
-
-
-def test_default_filesystem_extract_zip_extracts_safe_members(tmp_path):
-    zip_path = tmp_path / "ok.zip"
-    out_dir = tmp_path / "out"
-    _write_zip(zip_path, ("nested/data.txt", "ok"))
-
-    DefaultFileSystem().extract_zip(zip_path, out_dir)
-
-    assert (out_dir / "nested" / "data.txt").read_text(encoding="utf-8") == "ok"
+    assert not hasattr(DefaultFileSystem, "extract_zip"), (
+        "DefaultFileSystem.extract_zip ancora presente: cleanup Punto 3 incompleto."
+    )
+    assert not hasattr(FileSystemProtocol, "extract_zip"), (
+        "FileSystemProtocol.extract_zip ancora presente: sincronizzare il protocol."
+    )

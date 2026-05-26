@@ -30,8 +30,6 @@ from app.core.results.storage_policy import (
     should_use_object_storage as _should_use_object_storage,
     storage_policy as _storage_policy,
 )
-from app.core.results.temp_paths import get_temp_output_path
-
 __all__ = [
     "DEFAULT_RESULTS_RETENTION",
     "PipelineResultSave",
@@ -46,7 +44,6 @@ __all__ = [
     "_storage_policy",
     "get_result_as_bytes",
     "get_result_info",
-    "get_temp_output_path",
     "save_pipeline_result",
     "save_pipeline_result_outcome",
     "save_result_blob_from_bytes",

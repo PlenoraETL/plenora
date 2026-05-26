@@ -99,7 +99,6 @@ PHASE_MAP: dict[str, str] = {
     "results/result_reader.py": "Phase5-results-download",
     "results/pipeline_result.py": "Phase5-results-download",
     "results/blob_writer.py": "Phase5-results-download",
-    "results/temp_paths.py": "Phase5-results-download",
     "artifacts/resolver.py": "Phase5-results-download",
     "scheduler/run_archive_store.py": "Phase5-scheduler-archive",
     "scheduler/router.py": "Phase5-scheduler-archive",
@@ -142,18 +141,19 @@ PATTERN_PHASE_OVERRIDES: dict[str, str] = {
 # del refactor RAM-only.
 _LEGITIMATE_CACHE_FILES: tuple[str, ...] = (
     "app/core/files/source_loading.py",
-    "app/core/results/temp_paths.py",
     "app/core/results/blob_writer.py",  # storage.upload(path) streaming
     # Path-only adapter helpers (callsiti che richiedono path per
     # library esterne che non hanno bytes API).
     "app/core/eseguibili/storage.py",  # eseguibili download from S3
-    "app/core/files/service_deps.py",  # DefaultFileSystem extract_zip helper
     "app/core/resources/loaders/result_blob.py",  # result blob disk materialize
     # IMDF cache infrastructure: persistent local bundle dir + S3 backing
     # store. Pattern cache-with-hydration (vedi `imdf.storage.ensure_local_bundle`):
     # on-disk e' la representation canonica per i bundle IMDF (consumati da
     # endpoint di download/render), non una materializzazione transitoria.
     "app/core/imdf/",
+    # Punto 3 cleanup (2026-05-25): rimossi `app/core/results/temp_paths.py`
+    # e `app/core/files/service_deps.py` — tombstonati i symbol path-only
+    # (`get_temp_output_path`, `DefaultFileSystem.{write_text,extract_zip}`).
 )
 
 
@@ -204,20 +204,21 @@ _BOUNDARY_DIRS = (
 # `app/core/io/`. Sono primitive che esistono PER fornire la capability
 # filesystem al resto del codice in modo controllato.
 _BOUNDARY_FILES = (
-    # zip-bomb-safe extract primitives. Implementation del guard
-    # ZIP_MAX_UNCOMPRESSED_BYTES + `safe_extractall`.
-    "app/utils/zip_safe.py",
-    # Centralized tempdir/tempfile helper per result streaming
-    # (eseguibili hydration, analyze upload). Path-only adapter.
-    "app/core/results/temp_paths.py",
-    # `DefaultFileSystem.extract_zip` path adapter consumato dall'upload
-    # pipeline. File-by-file extract con visibility check.
-    "app/core/files/service_deps.py",
     # ResultBlobLoader: post-Phase5 supporta solo mode="bytes"
     # (path-mode rimosso). Resta nel boundary per coerenza storica
     # (era il punto di materializzazione tempfile pre-Phase5) e come
     # ancora per la classification legitimate-cache.
     "app/core/resources/loaders/result_blob.py",
+    # Punto 3 cleanup (2026-05-25): rimossi
+    #   - `app/utils/zip_safe.py` (safe_extractall + safe_extract_zip_path
+    #     tombstonati; restano validate_zip_bomb_limits +
+    #     pick_zip_member_by_extension, entrambi RAM-only)
+    #   - `app/core/results/temp_paths.py` (tutti i symbol path-only
+    #     tombstonati: get_temp_output_path, make_path_only_adapter_dir,
+    #     ecc. Modulo svuotato)
+    #   - `app/core/files/service_deps.py` (DefaultFileSystem.extract_zip
+    #     e write_text tombstonati; write_binary resta ma il regex non
+    #     matcha `open(path, 'wb')` con path variable)
     # Post-QUERY-1: `blob_writer.py` rimosso dal boundary set.
     # `save_result_blob(path)` tombstoned; tutti i writer canonical
     # vanno via `save_result_blob_from_bytes` (RAM-first) o

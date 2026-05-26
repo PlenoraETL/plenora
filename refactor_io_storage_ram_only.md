@@ -2,15 +2,15 @@
 
 ## Contratto runtime RAM-first (standing reference)
 
-**Stato: Closed (2026-05-26).** Il refactor RAM-first ha chiuso TUTTI
-i pezzi runtime di produzione: 13 entries residui nel report
-inside-boundary sono interamente boundary primitives by-design (10)
-+ scripts one-off (3). Quello che segue NON e' piu' un piano di
-migrazione ma il **contratto** che il codice applicativo deve
-rispettare. Le sezioni analytical successive ("Obiettivo",
-"Architettura proposta", "Piano di migrazione", ecc.) restano come
-reference storico del percorso e delle decisioni prese; non vanno
-consultate per "cosa fare oggi".
+**Stato: Closed + Punto 3 cleanup (2026-05-25).** Il refactor RAM-first
+ha chiuso TUTTI i pezzi runtime di produzione e ha rimosso le boundary
+primitives orfane (zero caller runtime). Il report inside-boundary
+residuo e' **3 entries / 3 file**, esclusivamente scripts one-off.
+Quello che segue NON e' piu' un piano di migrazione ma il **contratto**
+che il codice applicativo deve rispettare. Le sezioni analytical
+successive ("Obiettivo", "Architettura proposta", "Piano di
+migrazione", ecc.) restano come reference storico del percorso e
+delle decisioni prese; non vanno consultate per "cosa fare oggi".
 
 ### Sintesi stato chiuso
 
@@ -30,6 +30,7 @@ consultate per "cosa fare oggi".
 | Query streaming output | S3 multipart end-to-end (no tempfile) | `b720c958` |
 | Enrichment error report | Bytes -> result_blob via `save_result_blob_from_bytes` | `439a93a8` |
 | Shapefile output | Fully-RAM via `/vsimem` ctypes | `aa0a569e` |
+| Boundary primitives dead-code cleanup (Punto 3) | `materialize.py` / `temp_paths.py` svuotati; `zip_safe.safe_extractall` + `DefaultFileSystem.{write_text,extract_zip}` tombstonati | (questo commit) |
 
 ### Regola 1 — codice applicativo non scrive su filesystem
 
@@ -55,16 +56,29 @@ sono primitive che esistono PER esporre quella capability al resto del
 codice. La motivazione e' inline nel `scripts/_gen_io_allowlist.py`
 (`_BOUNDARY_DIRS` + `_BOUNDARY_FILES`).
 
-**Boundary primitives (intentional disk capability, 10 entries / 4 file):**
-- `app/core/io/materialize.py` (3) — `temporary_path_from_bytes` escape
-  hatch + helper `mkstemp/mkdtemp`. Politica `MEMORY_ONLY` configurabile
-  via `PLENORA_IO_DISK_POLICY`.
-- `app/core/results/temp_paths.py` (2) — tempdir centralizzato per
-  path-only adapters legacy (eseguibili hydration, analyze upload).
-- `app/utils/zip_safe.py` (3) — `safe_extractall` + `pick_zip_member`
-  + zip-bomb guard implementation.
-- `app/core/files/service_deps.py` (2) — `DefaultFileSystem` adapter
-  per upload pipeline (`extract_zip`, `write_text`).
+**Boundary primitives (intentional disk capability, 0 entries / 0 file):**
+
+Post Punto 3 cleanup (2026-05-25) i seguenti file sono **svuotati o
+tombstonati** — zero caller runtime sopravvissuti al refactor:
+
+- ~~`app/core/io/materialize.py`~~ — tombstone: modulo svuotato.
+  `temporary_path_from_bytes` + `DiskWriteDeniedError` rimossi.
+  Sostituto canonical: BytesIO / `/vsimem` via `gdal_vsi`.
+- ~~`app/core/results/temp_paths.py`~~ — tombstone: modulo svuotato.
+  Rimossi `make_path_only_adapter_dir`, `write_path_only_adapter_bytes`,
+  `cleanup_path_only_adapter`, `get_temp_output_path`. Sostituto
+  canonical: `StreamingResultBlobWriter` (S3 multipart) +
+  `save_result_blob_from_bytes` (DB BYTEA fallback).
+- `app/utils/zip_safe.py` — tombstonati `safe_extractall`,
+  `safe_extract_zip_path`, `ZipSlipError`, `_validate_member`.
+  Restano `validate_zip_bomb_limits` (bomb guard, RAM-only) +
+  `pick_zip_member_by_extension` (member chooser).
+  Zero filesystem callsite.
+- `app/core/files/service_deps.py` — tombstonati `DefaultFileSystem.write_text`,
+  `DefaultFileSystem.extract_zip` + corrispondenti voci di
+  `FileSystemProtocol`. Restano `mkdir`/`exists`/`read_text`/
+  `write_binary`/`rmtree`/`unlink`/`rglob` per uso DI nei flow upload.
+  Zero filesystem callsite riconosciuti dal regex sweep.
 
 **Boundary primitives senza filesystem callsite (helper logic only):**
 - `app/core/io/geospatial.py` — post QUERY-1 step 4: `write_shapefile_zip_bytes`
@@ -88,6 +102,8 @@ codice. La motivazione e' inline nel `scripts/_gen_io_allowlist.py`
 - `scripts/backup_db.py`, `scripts/test_restore.py`,
   `scripts/export_openapi_manifest.py` — dev tools, esplicitamente
   fuori dal sweep applicativo (`_EXCLUDED_ROOTS = ("scripts",)`).
+  Sono gli **unici 3 callsite filesystem** residui nel report
+  inside-boundary post Punto 3.
 
 ### Pattern /vsimem ctypes (riusabile)
 
@@ -137,7 +153,7 @@ oggi NON usano `/vsimem`):
 
 Il count per-file dei residui inside-boundary e' congelato in
 `backend/tests2/io_boundary/test_no_direct_filesystem_contract.py::_BOUNDARY_FROZEN_SNAPSHOT`.
-Stato corrente: **13 entries su 7 file**.
+Stato corrente: **3 entries su 3 file** (scripts one-off).
 
 Il test `test_report_inside_boundary_frozen` fallisce se:
 - **Cresce**: un file aggiunge callsite (accidentale o deliberato).
@@ -167,6 +183,11 @@ contratto sono stati rimossi in `a5f26bf6` (QUERY-1 step 3):
 | `blob_writer.save_result_blob(path)` | `save_result_blob_from_bytes` + `StreamingResultBlobWriter` | `b720c958` |
 | `enrichment_service.generate_error_report(errors, output_path)` (filesystem CSV) | `generate_error_report(errors, auth) -> bytes` + `save_result_blob_from_bytes` | `439a93a8` |
 | `io.geospatial.write_shapefile_zip_bytes` TemporaryDirectory | `/vsimem` via `gdal_vsi` ctypes | `aa0a569e` |
+| `io.materialize.temporary_path_from_bytes` | (modulo svuotato — escape hatch non piu' necessario post `/vsimem`) | Punto 3 cleanup |
+| `io.materialize.DiskWriteDeniedError` | (orfana) | Punto 3 cleanup |
+| `results.temp_paths.{make_path_only_adapter_dir,write_path_only_adapter_bytes,cleanup_path_only_adapter,get_temp_output_path}` | `StreamingResultBlobWriter` (S3 multipart) + `save_result_blob_from_bytes` | Punto 3 cleanup |
+| `zip_safe.safe_extractall` + `safe_extract_zip_path` + `ZipSlipError` + `_validate_member` | `zipfile.ZipFile(BytesIO(...))` + `validate_zip_bomb_limits` + `z.read(name)` RAM-only | Punto 3 cleanup |
+| `service_deps.DefaultFileSystem.write_text` + `DefaultFileSystem.extract_zip` | `write_binary(BytesIO(text.encode()))` + `zipfile.ZipFile(BytesIO(...))` RAM-only | Punto 3 cleanup |
 
 ### Regola 5 — bundle legacy (break compat IMDF-4 step 4)
 

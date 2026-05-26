@@ -330,8 +330,9 @@ class ArtifactResolver:
 
         Post-Phase5: solo `mode="bytes"` supportato. Il loader
         `ResultBlobLoader` rifiuta `mode="path"` (zero production
-        caller; chi necessita di un path filesystem usa
-        `app.core.io.materialize.temporary_path_from_bytes`).
+        caller; il boundary `temporary_path_from_bytes` e' stato
+        tombstonato in Punto 3 — chi necessita davvero di un path
+        deve usare `/vsimem` via `app.core.imdf.gdal_vsi`).
         Il resolver continua a fornire row metadata lookup (format,
         group_id) + cross-tenant project_id check; la
         materializzazione del blob e' delegata al loader bytes-first.

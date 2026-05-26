@@ -796,11 +796,14 @@ class PlenoraBeatScheduler(Scheduler):
 
         Copre i pattern noti di temp naming:
           - plenora_cached_* / plenora_cached_* (results.result_reader materialization)
-          - plenora_{pid}_{hash}/ (results.temp_paths.get_temp_output_path)
           - tmp* (NamedTemporaryFile/mkdtemp generici
                                                 in file_service, artifacts, ecc.)
           - eseguibili_uploads/* (cross-worker upload staging,
                                                 router.eseguibili)
+          (storia: il pattern `plenora_{pid}_{hash}/` veniva creato da
+           `results.temp_paths.get_temp_output_path`, tombstonato in Punto 3
+           del refactor RAM-only; non viene piu' generato ma il cleanup
+           resta tollerante a residui legacy via il prefix `tmp*`).
 
         La dir `eseguibili_uploads/` resta (container fisso della cache),
         i file dentro vengono puliti individualmente.

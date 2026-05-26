@@ -1,7 +1,11 @@
 """
-Tests the zip safe behavior.
+Tests the zip safe behavior (bomb guards).
 
-Locks backend contracts and regression boundaries for the current architecture.
+Post Punto 3 cleanup (2026-05-25): `safe_extractall` / `safe_extract_zip_path` /
+`ZipSlipError` rimossi. Il flow RAM-only legge member tramite
+`z.read(name)` su bytes: no disk write, no zip-slip vulnerability.
+Le bomb guard (`validate_zip_bomb_limits`) restano attive e DEVONO
+essere chiamate prima di qualunque `z.read()`.
 """
 
 from io import BytesIO
@@ -9,7 +13,7 @@ import zipfile
 
 import pytest
 
-from app.utils.zip_safe import ZipBombError, ZipSlipError, safe_extractall
+from app.utils.zip_safe import ZipBombError, validate_zip_bomb_limits
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract, pytest.mark.regression]
@@ -26,32 +30,26 @@ def _build_zip(*entries, compression=zipfile.ZIP_STORED):
     return zipfile.ZipFile(buffer, "r")
 
 
-# Zip slip (regression)
+# Tombstone sentinel: i symbol path-based zip-slip sono fuori contratto.
 
 
-def test_safe_extractall_rejects_parent_traversal(tmp_path):
-    with _build_zip(("../evil.txt", "boom")) as zf:
-        with pytest.raises(ZipSlipError, match="esce da"):
-            safe_extractall(zf, tmp_path)
+def test_zip_safe_tombstones_path_based_symbols_post_punto3():
+    """Punto 3 cleanup: rimossi `safe_extractall` (disk-write),
+    `safe_extract_zip_path`, `ZipSlipError`. Tutti i caller RAM-only
+    leggono via `z.read(name)` su bytes."""
+    import app.utils.zip_safe as zs
 
-
-def test_safe_extractall_rejects_windows_drive_paths(tmp_path):
-    with _build_zip(("C:/windows/system32.txt", "boom")) as zf:
-        with pytest.raises(ZipSlipError, match="drive letter"):
-            safe_extractall(zf, tmp_path)
-
-
-def test_safe_extractall_extracts_regular_members(tmp_path):
-    with _build_zip(("nested/data.txt", "ok")) as zf:
-        safe_extractall(zf, tmp_path)
-
-    assert (tmp_path / "nested" / "data.txt").read_text(encoding="utf-8") == "ok"
+    for legacy in ("safe_extractall", "safe_extract_zip_path",
+                   "ZipSlipError", "_validate_member"):
+        assert not hasattr(zs, legacy), (
+            f"zip_safe.{legacy} ancora esposto: cleanup Punto 3 incompleto."
+        )
 
 
 # Zip bomb: total uncompressed size cap
 
 
-def test_safe_extractall_rejects_total_size_over_cap(tmp_path, monkeypatch):
+def test_validate_rejects_total_size_over_cap(monkeypatch):
     """3 file da 200 byte ciascuno con cap 500 byte → 400+200>500 → BombError."""
     monkeypatch.setenv("ZIP_MAX_UNCOMPRESSED_BYTES", "500")
     monkeypatch.setenv("ZIP_MAX_FILES", "100")
@@ -60,24 +58,21 @@ def test_safe_extractall_rejects_total_size_over_cap(tmp_path, monkeypatch):
         ("a.bin", payload), ("b.bin", payload), ("c.bin", payload),
     ) as zf:
         with pytest.raises(ZipBombError, match="dimensione totale"):
-            safe_extractall(zf, tmp_path)
-    # Disco non toccato (i 3 file non devono esserci)
-    assert not list(tmp_path.iterdir())
+            validate_zip_bomb_limits(zf)
 
 
-def test_safe_extractall_total_size_at_cap_succeeds(tmp_path, monkeypatch):
+def test_validate_total_size_at_cap_succeeds(monkeypatch):
     """File totale = cap esatto: passa (check e' strict >)."""
     monkeypatch.setenv("ZIP_MAX_UNCOMPRESSED_BYTES", "500")
     payload = b"Y" * 500
     with _build_zip(("only.bin", payload)) as zf:
-        safe_extractall(zf, tmp_path)
-    assert (tmp_path / "only.bin").stat().st_size == 500
+        validate_zip_bomb_limits(zf)
 
 
 # Zip bomb: per-single-file cap
 
 
-def test_safe_extractall_rejects_single_file_over_cap(tmp_path, monkeypatch):
+def test_validate_rejects_single_file_over_cap(monkeypatch):
     """Un file da 600 byte con cap singolo a 500 → BombError, anche
     se il cap totale e' molto piu' alto."""
     monkeypatch.setenv("ZIP_MAX_SINGLE_FILE_BYTES", "500")
@@ -85,56 +80,51 @@ def test_safe_extractall_rejects_single_file_over_cap(tmp_path, monkeypatch):
     payload = b"Z" * 600
     with _build_zip(("big.bin", payload)) as zf:
         with pytest.raises(ZipBombError, match="troppo grande"):
-            safe_extractall(zf, tmp_path)
-    assert not list(tmp_path.iterdir())
+            validate_zip_bomb_limits(zf)
 
 
-def test_safe_extractall_single_file_at_cap_succeeds(tmp_path, monkeypatch):
+def test_validate_single_file_at_cap_succeeds(monkeypatch):
     """Cap singolo strict: file == cap passa."""
     monkeypatch.setenv("ZIP_MAX_SINGLE_FILE_BYTES", "500")
     payload = b"K" * 500
     with _build_zip(("at.bin", payload)) as zf:
-        safe_extractall(zf, tmp_path)
-    assert (tmp_path / "at.bin").stat().st_size == 500
+        validate_zip_bomb_limits(zf)
 
 
-def test_single_file_cap_default_equals_total(tmp_path, monkeypatch):
+def test_single_file_cap_default_equals_total(monkeypatch):
     """Senza ZIP_MAX_SINGLE_FILE_BYTES esplicito, eredita ZIP_MAX_UNCOMPRESSED.
     Quindi un file = totale e' OK (no constraint extra di default)."""
     monkeypatch.delenv("ZIP_MAX_SINGLE_FILE_BYTES", raising=False)
     monkeypatch.setenv("ZIP_MAX_UNCOMPRESSED_BYTES", "1000")
     payload = b"M" * 1000
     with _build_zip(("solo.bin", payload)) as zf:
-        safe_extractall(zf, tmp_path)
-    assert (tmp_path / "solo.bin").stat().st_size == 1000
+        validate_zip_bomb_limits(zf)
 
 
 # Zip bomb: file count cap
 
 
-def test_safe_extractall_rejects_too_many_files(tmp_path, monkeypatch):
+def test_validate_rejects_too_many_files(monkeypatch):
     """Cap a 3 file, archivio con 5 → BombError."""
     monkeypatch.setenv("ZIP_MAX_FILES", "3")
     monkeypatch.setenv("ZIP_MAX_UNCOMPRESSED_BYTES", "10000000")
     entries = [(f"f{i}.txt", "x") for i in range(5)]
     with _build_zip(*entries) as zf:
         with pytest.raises(ZipBombError, match="troppi file"):
-            safe_extractall(zf, tmp_path)
-    assert not list(tmp_path.iterdir())
+            validate_zip_bomb_limits(zf)
 
 
-def test_safe_extractall_file_count_at_cap_succeeds(tmp_path, monkeypatch):
+def test_validate_file_count_at_cap_succeeds(monkeypatch):
     monkeypatch.setenv("ZIP_MAX_FILES", "3")
     entries = [(f"f{i}.txt", "x") for i in range(3)]
     with _build_zip(*entries) as zf:
-        safe_extractall(zf, tmp_path)
-    assert len(list(tmp_path.iterdir())) == 3
+        validate_zip_bomb_limits(zf)
 
 
 # Zip bomb: compression ratio
 
 
-def test_safe_extractall_rejects_high_compression_ratio(tmp_path, monkeypatch):
+def test_validate_rejects_high_compression_ratio(monkeypatch):
     """File da 2MB di zeri (uncompressed) → comprime ottimo (ratio enorme).
     Cap ratio = 10 → BombError."""
     monkeypatch.setenv("ZIP_MAX_COMPRESSION_RATIO", "10")
@@ -144,20 +134,19 @@ def test_safe_extractall_rejects_high_compression_ratio(tmp_path, monkeypatch):
         ("bomb.bin", payload), compression=zipfile.ZIP_DEFLATED,
     ) as zf:
         with pytest.raises(ZipBombError, match="compression ratio"):
-            safe_extractall(zf, tmp_path)
+            validate_zip_bomb_limits(zf)
 
 
-def test_safe_extractall_small_files_skip_ratio_check(tmp_path, monkeypatch):
+def test_validate_small_files_skip_ratio_check(monkeypatch):
     """File piccoli (< 1MB) saltano il ratio check anche se ratio alto.
     Un .txt di 100 byte di zeri ha ratio enorme ma non e' un bomb."""
     monkeypatch.setenv("ZIP_MAX_COMPRESSION_RATIO", "5")
     payload = b"\0" * 1000  # 1KB ben sotto la soglia 1MB
     with _build_zip(("small.bin", payload), compression=zipfile.ZIP_DEFLATED) as zf:
-        safe_extractall(zf, tmp_path)
-    assert (tmp_path / "small.bin").stat().st_size == 1000
+        validate_zip_bomb_limits(zf)
 
 
-def test_safe_extractall_normal_compression_ratio_passes(tmp_path, monkeypatch):
+def test_validate_normal_compression_ratio_passes(monkeypatch):
     """File 2MB di dati pseudo-random: ratio prossimo a 1 → OK."""
     monkeypatch.setenv("ZIP_MAX_COMPRESSION_RATIO", "10")
     monkeypatch.setenv("ZIP_MAX_UNCOMPRESSED_BYTES", str(10 * 1024 * 1024))
@@ -166,43 +155,21 @@ def test_safe_extractall_normal_compression_ratio_passes(tmp_path, monkeypatch):
     with _build_zip(
         ("data.bin", payload), compression=zipfile.ZIP_DEFLATED,
     ) as zf:
-        safe_extractall(zf, tmp_path)
-    assert (tmp_path / "data.bin").stat().st_size == 2 * 1024 * 1024
+        validate_zip_bomb_limits(zf)
 
 
 # Env override semantics
 
 
-def test_invalid_env_value_falls_back_to_default(tmp_path, monkeypatch):
+def test_invalid_env_value_falls_back_to_default(monkeypatch):
     """ZIP_MAX_FILES='abc' → ignorato, default 5000 si applica."""
     monkeypatch.setenv("ZIP_MAX_FILES", "abc")
     # Archivio piccolo che passerebbe il default ma non '0'/'-1'
     with _build_zip(("a.txt", "x"), ("b.txt", "y")) as zf:
-        safe_extractall(zf, tmp_path)
-    assert (tmp_path / "a.txt").exists()
+        validate_zip_bomb_limits(zf)
 
 
-def test_negative_env_value_falls_back_to_default(tmp_path, monkeypatch):
+def test_negative_env_value_falls_back_to_default(monkeypatch):
     monkeypatch.setenv("ZIP_MAX_UNCOMPRESSED_BYTES", "-100")
     with _build_zip(("a.txt", "x")) as zf:
-        safe_extractall(zf, tmp_path)
-    assert (tmp_path / "a.txt").exists()
-
-
-# Bomb checks pre-extract: nessun file scritto se cap violato
-
-
-def test_bomb_check_runs_before_any_disk_write(tmp_path, monkeypatch):
-    """Anche se l'archivio ha file 'innocui' come primi member, il bomb
-    check deve scoprire la violazione PRIMA di scrivere alcunche'."""
-    monkeypatch.setenv("ZIP_MAX_FILES", "2")
-    # 3 member: il primo 'innocuo', poi 2 che fanno superare il cap (3>2)
-    with _build_zip(
-        ("first.txt", "ok"), ("second.txt", "ok"), ("third.txt", "ok"),
-    ) as zf:
-        with pytest.raises(ZipBombError):
-            safe_extractall(zf, tmp_path)
-    # Nessuno dei 3 file scritto
-    assert not (tmp_path / "first.txt").exists()
-    assert not (tmp_path / "second.txt").exists()
-    assert not (tmp_path / "third.txt").exists()
+        validate_zip_bomb_limits(zf)

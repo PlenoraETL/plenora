@@ -93,16 +93,15 @@ EXCLUDE_PREFIXES: tuple[str, ...] = (
     "app/core/imdf/",
 )
 
-# Boundary files puntuali fuori dalle dir whitelisted. `app/utils/zip_safe.py`
-# E' l'implementazione di `safe_extractall` / `validate_zip_bomb_limits` /
-# `pick_zip_member_by_extension`: meta-circolare richiedere che non chiami
-# extractall. DEVE essere allineato con `scripts/_gen_io_allowlist.py`
+# Boundary files puntuali fuori dalle dir whitelisted. Post Punto 3
+# cleanup (2026-05-25): `app/utils/zip_safe.py`, `app/core/results/temp_paths.py`,
+# `app/core/files/service_deps.py` rimossi dall'esclusione (zero
+# callsite filesystem residui dopo tombstone di safe_extractall /
+# get_temp_output_path / DefaultFileSystem.{write_text,extract_zip}).
+# DEVE essere allineato con `scripts/_gen_io_allowlist.py`
 # (_BOUNDARY_FILES) altrimenti il test segnala "nuovi offender" per
 # findings che il generator non ha mai messo nella allowlist.
 EXCLUDE_FILES: tuple[str, ...] = (
-    "app/utils/zip_safe.py",
-    "app/core/results/temp_paths.py",
-    "app/core/files/service_deps.py",
     "app/core/resources/loaders/result_blob.py",
     "app/core/arricchisci/api_connection_rest_file.py",
     "app/core/results/blob_writer.py",
@@ -321,19 +320,27 @@ def _scan_excluded_findings() -> list[tuple[str, int, str, str]]:
 # callsite all'interno di un file fanno cambiare il count e devono
 # essere intenzionali.
 _BOUNDARY_FROZEN_SNAPSHOT: dict[str, int] = {
-    # Boundary primitives (intentional disk capability)
-    "app/core/io/materialize.py": 3,
+    # Punto 3 cleanup (2026-05-25): tombstonati interi moduli/metodi
+    # con zero caller runtime:
+    #   - `app/core/io/materialize.py`: `temporary_path_from_bytes` +
+    #     `DiskWriteDeniedError` rimossi (modulo svuotato).
+    #   - `app/core/results/temp_paths.py`: `make_path_only_adapter_dir`,
+    #     `write_path_only_adapter_bytes`, `cleanup_path_only_adapter`,
+    #     `get_temp_output_path` rimossi (modulo svuotato).
+    #   - `app/utils/zip_safe.py`: `safe_extractall`,
+    #     `safe_extract_zip_path`, `_validate_member`, `ZipSlipError`
+    #     rimossi. Restano `validate_zip_bomb_limits` +
+    #     `pick_zip_member_by_extension` (entrambi RAM-only).
+    #   - `app/core/files/service_deps.py`: `DefaultFileSystem.write_text`,
+    #     `DefaultFileSystem.extract_zip` + corrispondenti voci di
+    #     `FileSystemProtocol` rimossi.
     # io/geospatial.py post QUERY-1 step 4: rimosso dallo snapshot.
     # `write_shapefile_zip_bytes` ora fully-RAM via `gdal_vsi.vsi_temp_dir`
     # (ctypes adapter su libgdal). Zero filesystem callsite.
-    "app/core/results/temp_paths.py": 2,
-    "app/utils/zip_safe.py": 3,
-    "app/core/files/service_deps.py": 2,
     # blob_writer.py post-QUERY-1: `save_result_blob(path)` rimosso
     # (era 1 storage_upload_path). Lo streaming query end-to-end ora
     # passa da StreamingResultBlobWriter (S3 multipart via boto3
     # client diretto, non boundary pattern).
-    # "app/core/results/blob_writer.py": 0  -> rimossa dallo snapshot
     # IMDF subsystem (post QUERY-1 step 3 tombstone):
     # `loader.py`, `persist.py`, `storage.py` non hanno piu' callsite
     # filesystem. `extract_imdf_zip(path)`, `persist_imdf_bundle_to_disk`,
@@ -341,14 +348,10 @@ _BOUNDARY_FROZEN_SNAPSHOT: dict[str, int] = {
     #   - extract_imdf_zip_bytes (RAM, no tmp dir)
     #   - persist_imdf_bundle (storage-direct)
     #   - open_gdb_in_vsimem (ctypes /vsimem, no disco)
-    # Rimossi dal snapshot.
-    # Scripts one-off tooling
+    # Scripts one-off tooling (gli unici residui boundary):
     "scripts/backup_db.py": 1,
     "scripts/test_restore.py": 1,
     "scripts/export_openapi_manifest.py": 1,
-    # scripts/imdf_real_e2e_check.py post QUERY-1 step 3:
-    # migrato a `extract_imdf_zip_bytes` + `persist_imdf_bundle` (storage).
-    # Niente piu' tempfile / path_write_text. Rimosso dal snapshot.
 }
 
 

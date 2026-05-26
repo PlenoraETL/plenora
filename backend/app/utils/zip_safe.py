@@ -1,19 +1,29 @@
 """
-zip_safe.py — Estrazione ZIP con guard contro path traversal (zip slip)
+zip_safe.py — Guard contro zip bomb (cap pre-extract).
 
-e contro zip bomb (size cap pre-extract + file count + compression ratio).
+Post Punto 3 cleanup (2026-05-25):
+  - `safe_extractall` / `safe_extract_zip_path` rimossi (zero caller
+    runtime: tutto il flow di estrazione passa per `zipfile.ZipFile(
+    BytesIO(...))` + `validate_zip_bomb_limits` + `z.read(name)` su
+    bytes, oppure per `/vsizip//vsimem` per i binari OGR).
+  - `ZipSlipError` + `_validate_member` rimossi: la zip-slip vulnerability
+    e' un disk-write attack. Senza estrazione su filesystem (RAM-only)
+    il rischio scompare. I caller che leggono singoli member via
+    `z.read(name)` ottengono bytes, niente path traversal possibile.
+
+Public surface attivo:
+  - `validate_zip_bomb_limits(zf)`: cap size / count / ratio, da chiamare
+    PRIMA di `z.read(name)` per evitare decompress bombs.
+  - `pick_zip_member_by_extension(...)`: scelta del member ZIP per
+    priorita' di estensione (utility comune ai RAM-only loader).
+  - `ZipBombError`: raised da `validate_zip_bomb_limits`.
 """
 
 import zipfile
 from pathlib import Path
-from typing import Callable, Optional, Union
+from typing import Callable, Optional
 
 from app.environment import get_env
-from app.shared.resources.path_policy import assert_path_within
-
-
-class ZipSlipError(ValueError):
-    """Raised quando un archivio ZIP tenta un path traversal."""
 
 
 class ZipBombError(ValueError):
@@ -61,41 +71,13 @@ def _get_caps() -> tuple[int, int, int, int]:
     )
 
 
-def _validate_member(member_name: str, dest_root: Path, dest_dir: Path) -> None:
-    """Valida un singolo member. Solleva ZipSlipError se sospetto.
-
-    R#4 cleanup: il containment check (resolve + relative_to) e' delegato
-    a `app.shared.resources.path_policy.assert_path_within`. I reject su path
-    assoluti / drive letter restano inline perche' specifici del formato
-    ZIP (nessun member ZIP legittimo inizia con '/' o 'C:').
-    """
-    if not member_name:
-        return
-    # Path assoluti Unix / Windows / UNC
-    if member_name.startswith(('/', '\\')):
-        raise ZipSlipError(f"Zip slip: path assoluto rifiutato: {member_name!r}")
-    if len(member_name) >= 2 and member_name[1] == ':':
-        # es. "C:/foo" o "C:\\foo"
-        raise ZipSlipError(f"Zip slip: drive letter rifiutata: {member_name!r}")
-
-    try:
-        assert_path_within(dest_dir / member_name, [dest_root])
-    except ValueError as e:
-        raise ZipSlipError(
-            f"Zip slip: member {member_name!r} esce da {dest_root}"
-        ) from e
-
-
 def validate_zip_bomb_limits(zf: zipfile.ZipFile) -> None:
     """Controlli zip bomb PRE-extract: scansiona l'infolist senza
     toccare il disco. Solleva ZipBombError alla prima violazione.
 
-    Usato sia dal flow path-based (`safe_extractall`) sia dai caller
-    RAM-only che navigano lo ZIP via `zipfile.ZipFile(BytesIO(...))`:
-    DEVONO chiamare questa funzione PRIMA di leggere member arbitrari
-    (`z.read(name)`), altrimenti un attacker puo' decompress-bomb il
-    processo (es. `z.read("evil.txt")` su un member da 10 GB
-    uncompressed).
+    DEVE essere chiamata PRIMA di leggere member arbitrari (`z.read(name)`),
+    altrimenti un attacker puo' decompress-bomb il processo (es.
+    `z.read("evil.txt")` su un member da 10 GB uncompressed).
     """
     max_total, max_single, max_files, max_ratio = _get_caps()
 
@@ -139,30 +121,6 @@ def validate_zip_bomb_limits(zf: zipfile.ZipFile) -> None:
                     f"(size={size}, compressed={comp}, cap={max_ratio}x). "
                     f"Override via env ZIP_MAX_COMPRESSION_RATIO se legittimo."
                 )
-
-
-def safe_extractall(zf: zipfile.ZipFile, dest_dir: Union[str, Path]) -> None:
-    """Estrae tutti i member di un ZipFile gia' aperto. Valida zip slip
-    member-per-member durante l'estrazione, e zip bomb UNA VOLTA all'inizio
-    scorrendo l'infolist (nessun file scritto se i cap sono violati).
-    """
-    dest_dir = Path(dest_dir)
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest_root = dest_dir.resolve()
-    # Controllo bomb PRIMA di toccare il disco — se fallisce, dest_dir
-    # resta vuota (il caller la crea solo qui dentro via mkdir sopra
-    # ma se preesisteva non la tocchiamo
-    validate_zip_bomb_limits(zf)
-    for member in zf.infolist():
-        _validate_member(member.filename, dest_root, dest_dir)
-        zf.extract(member, dest_dir)
-
-
-def safe_extract_zip_path(zip_path: Union[str, Path],
-                          dest_dir: Union[str, Path]) -> None:
-    """Apre il file ZIP e lo estrae con safe_extractall."""
-    with zipfile.ZipFile(zip_path, 'r') as zf:
-        safe_extractall(zf, dest_dir)
 
 
 def pick_zip_member_by_extension(

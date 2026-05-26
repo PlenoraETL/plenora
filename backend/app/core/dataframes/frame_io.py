@@ -101,7 +101,6 @@ from app.core.dataframes.tabular import (
     window_function_values,
 )
 from app.core.resources.exceptions import MemoryLimitExceededError
-from app.utils.zip_safe import safe_extractall
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
