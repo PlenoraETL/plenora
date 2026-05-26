@@ -1,232 +1,103 @@
 """
-Contract test C11 — streaming path di QueryExecutor.
+Contract test — streaming path di QueryExecutor (post QUERY-1 step 2).
 
-Copre i gap rimasti dopo il fix C11:
+Storia:
+- Pre-QUERY-1: `QueryExecutor._execute_streaming_to_file` delegava a
+  `QueryStreamingWriter.execute(...)` (port adapter) che scriveva
+  CSV/Parquet su `output_path` filesystem; `_result_persistence
+  .persist_streamed_file(path)` poi faceva il save_result_blob.
+- QUERY-1 step 1 (commit `b720c958`): introdotto
+  `StreamingResultBlobWriter` + `execute_streaming_to_writer` per
+  flushare bytes cursor → S3 multipart / DB BYTEA. `_execute_streaming
+  _to_file` rimase come legacy helper.
+- QUERY-1 step 2 (questo file): tombstoned definitivamente
+  `QueryStreamingWriter`, `_execute_streaming_to_file`,
+  `execute_streaming_to_file`, e il param `streaming_writer` di
+  `QueryExecutor`. Lo streaming canonical e' single-call via
+  `persist_streaming_query_to_storage`.
+
+Questo file resta come sentinel anti-regression sul tombstone.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
 import pytest
 
-from app.db.query_streaming import execute_streaming_to_file
 from app.db.query_executor import QueryExecutor
-from app.db.query_result_persistence import PersistedQueryResult
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.estrai, pytest.mark.contract, pytest.mark.regression]
 
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[3]
+def test_query_executor_streaming_writer_legacy_tombstoned():
+    """`_execute_streaming_to_file` rimosso dal QueryExecutor.
+    Anti-regression sul tombstone QUERY-1 step 2."""
+    assert not hasattr(QueryExecutor, "_execute_streaming_to_file"), (
+        "_execute_streaming_to_file deve essere tombstoned post-QUERY-1 "
+        "step 2. Lo streaming branch chiama direttamente "
+        "`persist_streaming_query_to_storage` sul `_result_persistence`."
+    )
 
 
-def test_query_executor_delegates_streaming_mechanics_to_query_streaming_module():
-    source = (_BACKEND_ROOT / "app" / "db" / "query_executor.py").read_text(encoding="utf-8")
+def test_query_streaming_writer_class_legacy_tombstoned():
+    """`QueryStreamingWriter` rimosso da `query_streaming`.
+    Anti-regression sul port adapter dead."""
+    import app.db.query_streaming as qs
+    assert not hasattr(qs, "QueryStreamingWriter"), (
+        "QueryStreamingWriter port adapter rimosso post-QUERY-1 step 2."
+    )
+    assert not hasattr(qs, "execute_streaming_to_file"), (
+        "execute_streaming_to_file(path) rimosso post-QUERY-1 step 2. "
+        "Usa execute_streaming_to_writer(file-like)."
+    )
 
-    assert "from app.db.query_streaming import QueryStreamingWriter" in source
-    assert "self._streaming_writer.execute(" in source
+
+def test_query_executor_does_not_take_streaming_writer_param():
+    """`QueryExecutor.__init__` non accetta piu' `streaming_writer`.
+    Anti-regression sul tombstone del param + factory."""
+    import inspect
+    sig = inspect.signature(QueryExecutor.__init__)
+    assert "streaming_writer" not in sig.parameters, (
+        "streaming_writer param rimosso post-QUERY-1 step 2."
+    )
+
+    from app.db.query_executor import create_executor
+    factory_sig = inspect.signature(create_executor)
+    assert "streaming_writer" not in factory_sig.parameters, (
+        "create_executor streaming_writer param rimosso post-QUERY-1 step 2."
+    )
+
+
+def test_query_executor_uses_streaming_persist_path():
+    """Source-level pin: lo streaming branch invoca
+    `persist_streaming_query_to_storage`. Cattura regressioni che
+    re-introducano il path-based legacy.
+
+    Strip dei commenti single-line `# ...` prima del match per evitare
+    falsi positivi dai tombstone comment che menzionano i nomi rimossi.
+    """
+    from pathlib import Path
+    import re
+    backend_root = Path(__file__).resolve().parents[3]
+    raw = (backend_root / "app" / "db" / "query_executor.py").read_text(encoding="utf-8")
+    # Strip comment lines (preserva il code-only signal).
+    source = "\n".join(
+        line for line in raw.splitlines()
+        if not re.match(r"^\s*#", line)
+    )
+
+    assert "persist_streaming_query_to_storage" in source, (
+        "QueryExecutor deve invocare persist_streaming_query_to_storage "
+        "nel branch _streamable."
+    )
+    # Verifica che il vecchio pattern legacy NON sia tornato (codice, non commenti).
+    assert "QueryStreamingWriter" not in source, (
+        "QueryStreamingWriter import non deve tornare."
+    )
+    assert "self._streaming_writer" not in source, (
+        "_streaming_writer attribute non deve tornare."
+    )
     assert "from app.core.results.result_store import save_result_blob" not in source
     assert "csv.writer" not in source
     assert "ParquetWriter" not in source
     assert "pyarrow" not in source
-
-
-class _FakeResult:
-    def __init__(self, columns, chunks):
-        self.cursor = MagicMock()
-        self.cursor.description = [(c,) for c in columns]
-        self._chunks = list(chunks)
-
-    def fetchmany(self, size):
-        if self._chunks:
-            return self._chunks.pop(0)
-        return []
-
-
-def _make_factory_with_result(fake_result):
-    fake_conn = MagicMock()
-    fake_conn.execute.return_value = fake_result
-
-    fake_ctx = MagicMock()
-    fake_ctx.__enter__.return_value = fake_conn
-    fake_ctx.__exit__.return_value = False
-
-    fake_engine = MagicMock()
-    fake_engine.connect.return_value = fake_ctx
-
-    factory = MagicMock()
-    factory.create_engine.return_value = fake_engine
-
-    return factory
-
-
-def _make_executor_with_result(fake_result):
-    factory = _make_factory_with_result(fake_result)
-    return QueryExecutor(engine_factory=factory, logger=MagicMock())
-
-
-def test_execute_streaming_to_file_writes_csv_chunks(tmp_path, monkeypatch):
-
-    # `ESTRAI_MAX_ROWS` is a `@property` reading via `_int_setting(...)`,
-    # so it has no setter. Override the underlying env var instead.
-    monkeypatch.setenv("ESTRAI_MAX_ROWS", "10000")
-
-    fake_result = _FakeResult(
-        columns=["id", "name"],
-        chunks=[
-            [(1, "a"), (2, "b")],
-            [(3, "c")],
-            [],
-        ],
-    )
-    factory = _make_factory_with_result(fake_result)
-    conn = MagicMock()
-    conn.type = "postgres"
-
-    out = tmp_path / "out.csv"
-    row_count, columns = execute_streaming_to_file(
-        engine_factory=factory,
-        connection=conn,
-        sql="SELECT id, name FROM t",
-        params=None,
-        output_path=out,
-        output_format="csv",
-    )
-
-    assert row_count == 3
-    assert columns == ["id", "name"]
-    assert out.read_text(encoding="utf-8").splitlines() == [
-        "id,name",
-        "1,a",
-        "2,b",
-        "3,c",
-    ]
-
-
-def test_execute_streaming_to_file_disambiguates_duplicate_headers(tmp_path, monkeypatch):
-    monkeypatch.setenv("ESTRAI_MAX_ROWS", "10000")
-
-    fake_result = _FakeResult(
-        columns=["id", "name", "id", "name"],
-        chunks=[
-            [(1, "roma", 10, "lazio")],
-            [],
-        ],
-    )
-    factory = _make_factory_with_result(fake_result)
-    conn = MagicMock()
-    conn.type = "postgres"
-
-    out = tmp_path / "out.csv"
-    row_count, columns = execute_streaming_to_file(
-        engine_factory=factory,
-        connection=conn,
-        sql="SELECT * FROM joined",
-        params=None,
-        output_path=out,
-        output_format="csv",
-    )
-
-    assert row_count == 1
-    assert columns == ["id", "name", "id_2", "name_2"]
-    assert out.read_text(encoding="utf-8").splitlines() == [
-        "id,name,id_2,name_2",
-        "1,roma,10,lazio",
-    ]
-
-
-def test_execute_streaming_to_file_writes_parquet_chunks(tmp_path, monkeypatch):
-    pa = pytest.importorskip("pyarrow")
-    pq = pytest.importorskip("pyarrow.parquet")
-
-    # `ESTRAI_MAX_ROWS` is a `@property` reading via `_int_setting(...)`,
-    # so it has no setter. Override the underlying env var instead.
-    monkeypatch.setenv("ESTRAI_MAX_ROWS", "10000")
-
-    fake_result = _FakeResult(
-        columns=["id", "name"],
-        chunks=[
-            [(1, "a"), (2, "b")],
-            [(3, "c")],
-            [],
-        ],
-    )
-    executor = _make_executor_with_result(fake_result)
-    conn = MagicMock()
-    conn.type = "postgres"
-
-    out = tmp_path / "out.parquet"
-    row_count, columns = executor._execute_streaming_to_file(
-        connection=conn,
-        sql="SELECT id, name FROM t",
-        params=None,
-        output_path=out,
-        output_format="parquet",
-    )
-
-    table = pq.read_table(out)
-    rows = table.to_pylist()
-
-    assert row_count == 3
-    assert columns == ["id", "name"]
-    assert rows == [
-        {"id": 1, "name": "a"},
-        {"id": 2, "name": "b"},
-        {"id": 3, "name": "c"},
-    ]
-    assert isinstance(table, pa.Table)
-
-
-def test_execute_query_streamable_skips_global_dataframe_and_legacy_save(tmp_path):
-    executor = QueryExecutor(
-        engine_factory=MagicMock(),
-        results_dir=tmp_path,
-        logger=MagicMock(),
-    )
-    conn = MagicMock()
-    conn.type = "postgres"
-
-    with (
-        patch.object(
-            executor,
-            "_execute_streaming_to_file",
-            return_value=(2, ["id", "name"]),
-        ) as mock_stream,
-        patch.object(
-            executor._result_persistence,
-            "streaming_output_path",
-            return_value=Path(tmp_path) / "estrai_stream.csv",
-        ),
-        patch.object(
-            executor._df_builder,
-            "from_rows",
-            side_effect=AssertionError("global DataFrame path must not run"),
-        ),
-        patch.object(
-            executor._result_persistence,
-            "persist_streamed_file",
-            return_value=PersistedQueryResult(
-                result_id="res-stream-1",
-                output_path=Path(tmp_path) / "estrai_stream.csv",
-            ),
-        ) as mock_save_blob,
-    ):
-        result = executor.execute_query(
-            connection=conn,
-            sql="SELECT id, name FROM t",
-            project_id="proj-1",
-            output_filename="estrai_stream",
-            output_format="csv",
-            geom_column=None,
-            group_id="grp-1",
-        )
-
-    mock_stream.assert_called_once()
-    mock_save_blob.assert_called_once()
-    assert result["success"] is True
-    assert result["rows_count"] == 2
-    assert result["columns"] == ["id", "name"]
-    assert result["result_id"] == "res-stream-1"
-    assert result["output_path"].endswith(".csv")

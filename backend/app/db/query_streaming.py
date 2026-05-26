@@ -10,7 +10,6 @@ from __future__ import annotations
 import csv
 import io
 from decimal import Decimal
-from pathlib import Path
 from typing import Any, BinaryIO, List, Optional, Protocol, Tuple
 
 from sqlalchemy import text
@@ -35,32 +34,11 @@ class StreamingEngineFactory(Protocol):
     def create_engine(self, conn: StreamingConnection) -> Engine: ...
 
 
-class QueryStreamingWriter:
-    """Rows-to-file adapter for streamable query formats.
-
-    The disk materialization is intentionally isolated here because CSV and
-    Parquet libraries still require a concrete writable target. QueryExecutor
-    depends on this adapter as a port instead of owning filesystem writes.
-    """
-
-    def execute(
-        self,
-        *,
-        engine_factory: StreamingEngineFactory,
-        connection: StreamingConnection,
-        sql: str,
-        params: Optional[QueryParams],
-        output_path: Path,
-        output_format: str,
-    ) -> Tuple[int, List[str]]:
-        return execute_streaming_to_file(
-            engine_factory=engine_factory,
-            connection=connection,
-            sql=sql,
-            params=params,
-            output_path=output_path,
-            output_format=output_format,
-        )
+# Tombstone (QUERY-1 step 2): `QueryStreamingWriter` rimossa.
+# Era un thin adapter su `execute_streaming_to_file(path)`; con
+# QUERY-1 il path canonical e' `execute_streaming_to_writer(file-like)`
+# orchestrato da `persist_streaming_query_to_storage`. Zero caller
+# in produzione.
 
 
 def _max_streaming_rows() -> int:
@@ -244,28 +222,8 @@ def execute_streaming_to_writer(
     return total_rows, columns
 
 
-def execute_streaming_to_file(
-    *,
-    engine_factory: StreamingEngineFactory,
-    connection: StreamingConnection,
-    sql: str,
-    params: Optional[QueryParams],
-    output_path: Path,
-    output_format: str,
-) -> Tuple[int, List[str]]:
-    """Legacy: execute query + write CSV/Parquet a path filesystem.
-
-    Mantenuto per backward compat con consumer non ancora migrati al
-    flusso storage-first via `execute_streaming_to_writer`. Tombstone
-    quando l'ultimo caller (test/legacy) migra.
-    """
-    output_path = Path(output_path)
-    with open(output_path, "wb") as fp:
-        return execute_streaming_to_writer(
-            engine_factory=engine_factory,
-            connection=connection,
-            sql=sql,
-            params=params,
-            output_writer=fp,
-            output_format=output_format,
-        )
+# Tombstone (QUERY-1 step 2): `execute_streaming_to_file(path)` rimossa.
+# Sostituita da `execute_streaming_to_writer(file-like)` (sopra) che
+# accetta qualunque binary writer. Per persistere su storage canonical
+# il caller usa `StreamingResultBlobWriter` (S3 multipart o DB BYTEA);
+# per test bytes-only basta `io.BytesIO()`.

@@ -363,10 +363,11 @@ class FeaturesService:
         inizio = time.time()
         
         try:
-            # Directory output
-            project_dir = self._results_dir / project_id
-            project_dir.mkdir(parents=True, exist_ok=True)
-            
+            # Tombstone (QUERY-1 step 2): orphan `project_dir.mkdir(...)`
+            # rimosso. `project_dir` non era mai usato (il salvataggio
+            # passa da `save_pipeline_result_outcome` che gestisce
+            # storage policy DB/S3 trasparentemente).
+            #
             # Fase 0: Recupera CRS dal layer (per salvataggio geo corretto
             layer_crs = self._get_layer_crs(connection_id, layer_url, out_sr)
             

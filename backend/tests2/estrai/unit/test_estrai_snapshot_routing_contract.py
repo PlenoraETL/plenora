@@ -223,18 +223,20 @@ def test_estrai_streaming_branch_uses_legacy_write_node_ok_streamed(monkeypatch)
     status legacy `ok_streamed` via write_node legacy con rows=[]."""
     executor = _build_executor()
 
-    monkeypatch.setattr(
-        executor._result_persistence,
-        "persist_streamed_file",
-        MagicMock(return_value=PersistedQueryResult(
-            result_id="rid-stream",
-            output_path="out.csv",
-        )),
-    )
+    # Post-QUERY-1 step 2: lo streaming branch chiama
+    # `persist_streaming_query_to_storage` (singolo entry: orchestra
+    # `execute_streaming_to_writer` + `StreamingResultBlobWriter`).
+    # `_execute_streaming_to_file` + `persist_streamed_file` tombstoned.
+    from app.db.query_result_persistence import StreamedQueryResult
 
     monkeypatch.setattr(
-        executor, "_execute_streaming_to_file",
-        MagicMock(return_value=(123, ["col1", "col2"])),
+        executor._result_persistence,
+        "persist_streaming_query_to_storage",
+        MagicMock(return_value=StreamedQueryResult(
+            result_id="rid-stream",
+            rows_count=123,
+            columns=["col1", "col2"],
+        )),
     )
 
     write_node_spy = MagicMock()

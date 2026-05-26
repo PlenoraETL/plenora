@@ -22,7 +22,6 @@ from app.db.query_session import (
     normalize_result_columns,
 )
 from app.db.query_result_persistence import QueryResultPersistence
-from app.db.query_streaming import QueryStreamingWriter
 from app.db.sql_types import QueryParams, QueryTimings
 from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger
@@ -122,20 +121,11 @@ class QueryPersistenceProtocol(Protocol):
         ...
 
 
-class QueryStreamingWriterProtocol(Protocol):
-    """Streaming query execution port for formats that can be chunk-written."""
-
-    def execute(
-        self,
-        *,
-        engine_factory: EngineFactoryProtocol,
-        connection: DatabaseConnection,
-        sql: str,
-        params: Optional[QueryParams],
-        output_path: Path,
-        output_format: str,
-    ) -> Tuple[int, List[str]]:
-        ...
+# Tombstone (QUERY-1 step 2): `QueryStreamingWriterProtocol` rimosso.
+# Lo streaming canonico passa da `persist_streaming_query_to_storage`
+# (in `QueryResultPersistence`) -> `execute_streaming_to_writer` (in
+# `query_streaming`) -> `StreamingResultBlobWriter` (S3 multipart o
+# DB BYTEA). Nessun port adapter intermedio.
 
 
 class NullLogger:
@@ -244,7 +234,6 @@ class QueryExecutor:
         logger: LoggerProtocol = None,
         results_dir: Path = None,
         result_persistence: QueryPersistenceProtocol = None,
-        streaming_writer: QueryStreamingWriterProtocol = None,
     ):
         """
         Inizializza l'executor con le dipendenze iniettate.
@@ -255,9 +244,13 @@ class QueryExecutor:
         Args:
             engine_factory: Factory per SQLAlchemy engines.
             logger: Logger per messaggi di info/error/debug.
-            results_dir: Directory base per i file di output.
+            results_dir: Directory base per i file di output (legacy,
+                tenuto per backward-compat con caller pre-QUERY-1).
             result_persistence: porta di persistenza Rows/DataFrame -> result blob.
-            streaming_writer: porta SQL -> stream/file chunked per CSV/Parquet.
+
+        Tombstone (QUERY-1 step 2): `streaming_writer` param rimosso.
+        Lo streaming canonical e' `persist_streaming_query_to_storage`
+        del `result_persistence`.
         """
         self._engine_factory = engine_factory or DefaultEngineFactory()
         self._logger = logger or NullLogger()
@@ -270,7 +263,6 @@ class QueryExecutor:
         self._result_builder = ResultBuilder
         self._df_builder = DataFrameBuilder
         self._result_persistence = result_persistence or QueryResultPersistence()
-        self._streaming_writer = streaming_writer or QueryStreamingWriter()
 
     @property
     def RESULTS_DIR(self) -> Path:
@@ -357,23 +349,11 @@ class QueryExecutor:
 
             return rows, columns
 
-    def _execute_streaming_to_file(
-        self,
-        connection: DatabaseConnection,
-        sql: str,
-        params: Optional[QueryParams],
-        output_path: "Path",
-        output_format: str,
-    ) -> Tuple[int, List[str]]:
-        """Delegate CSV/Parquet streaming extraction to the streaming port."""
-        return self._streaming_writer.execute(
-            engine_factory=self._engine_factory,
-            connection=connection,
-            sql=sql,
-            params=params,
-            output_path=Path(output_path),
-            output_format=output_format,
-        )
+    # Tombstone (QUERY-1 step 2): `_execute_streaming_to_file` rimosso.
+    # Lo streaming branch di `execute_query` invoca direttamente
+    # `self._result_persistence.persist_streaming_query_to_storage(...)`
+    # che orchestra `execute_streaming_to_writer` su un
+    # `StreamingResultBlobWriter` (S3 multipart / DB BYTEA).
 
     def execute_query(
         self,
@@ -572,7 +552,6 @@ def create_executor(
     results_dir: Path = None,
     logger: LoggerProtocol = None,
     result_persistence: QueryPersistenceProtocol = None,
-    streaming_writer: QueryStreamingWriterProtocol = None,
 ) -> QueryExecutor:
     """Factory function per creare un QueryExecutor con Dependency Injection."""
     return QueryExecutor(
@@ -580,5 +559,4 @@ def create_executor(
         results_dir=results_dir,
         logger=logger,
         result_persistence=result_persistence,
-        streaming_writer=streaming_writer,
     )
