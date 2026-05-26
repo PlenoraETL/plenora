@@ -1,47 +1,41 @@
 """
-GDAL VSI adapter via ctypes (IMDF-5).
+GDAL VSI adapter via ctypes (IMDF-5 + QUERY-1 step 4).
 
-Espone `vsi_register_bytes` per registrare un buffer Python in
-`/vsimem/{path}` SENZA passare dalle Python bindings osgeo (non
-installabili nel container backend: `pip install gdal==3.13.0`
-fallisce per mancanza di toolchain di compilazione).
+Espone API minimali contro `libgdal.so` (bundled da pyogrio) senza
+passare per le Python bindings `osgeo` (non installabili nel container
+backend: `pip install gdal==3.13.0` fallisce per mancanza di toolchain).
+
+API:
+  - `vsi_register_bytes(vsi_path, data)` — context manager: registra
+    `data` come file VSI in `/vsimem/...` e cleanup al __exit__.
+  - `vsi_temp_dir(prefix)` — context manager: crea una `/vsimem/{prefix}_{uuid}/`
+    dir + cleanup ricorsivo. Per writer multi-file (Shapefile sidecar).
+  - `vsi_read_bytes(vsi_path)` — legge bytes da un path VSI (post-write).
+  - `vsi_listdir(vsi_path)` — lista entry di una /vsimem/ dir.
+  - `vsi_mkdir(vsi_path)` — crea una /vsimem/ dir (no parents).
+  - `vsi_rmdir_recursive(vsi_path)` — rmtree ricorsivo VSI.
 
 WHY ctypes:
   - pyogrio bundle GDAL in `/opt/gdal/lib/libgdal.so` (3.13.0).
   - pyogrio espone `vsi_listtree` / `vsi_unlink` / `vsi_rmtree` ma NON
-    una "write bytes to /vsimem" API. La sua `read_dataframe(BytesIO)`
-    registra internamente a /vsimem ma non espone il path per
-    sub-resource access (e.g. `/vsizip//vsimem/{auto_uuid}.zip/{gdb}`).
+    `mkdir` / `write bytes` / `read bytes` su /vsimem; non bastano
+    per scrivere Shapefile sidecar in RAM.
   - GDAL VSI C API e' parte dell'ABI pubblica e stabile.
-    `VSIFileFromMemBuffer` registra bytes in `/vsimem`; `VSIUnlink`
-    de-registra. Interop ctypes e' minimale e robusto.
-
-USAGE:
-    from app.core.imdf.gdal_vsi import vsi_register_bytes
-
-    with vsi_register_bytes("/vsimem/plenora_imdf/abc/_gdb.zip", zip_bytes):
-        gdf = pyogrio.read_dataframe(
-            f"/vsizip//vsimem/plenora_imdf/abc/_gdb.zip/SITE_X.gdb",
-            layer="Locale",
-        )
-    # vsi cleanup automatico (VSIUnlink) all'exit del context.
 
 INVARIANTI:
-  - Il `data: bytes` passato a `vsi_register_bytes` viene COPIATO in
-    una ctypes buffer (`from_buffer_copy`). Il buffer ctypes resta
-    vivo nello scope del context manager (riferimento esplicito).
-  - GDAL viene chiamato con `bTakeOwnership=0`: NON possiede il
-    buffer, quindi non tenta di liberare memoria Python-managed.
-  - `VSIUnlink` viene chiamato sempre nel `finally` (anche su
-    exception del consumer).
+  - `vsi_register_bytes` usa `bTakeOwnership=0`: il buffer ctypes
+    (`from_buffer_copy`) resta vivo nello scope, GDAL non possiede
+    memoria Python-managed.
+  - Cleanup garantito da `finally` in ogni context manager.
 """
 
 from __future__ import annotations
 
 import ctypes
 import threading
+import uuid
 from contextlib import contextmanager
-from typing import Iterator, Optional
+from typing import Iterator, List, Optional
 
 from app.utils.logger import get_logger
 
@@ -99,12 +93,41 @@ def _resolve_libgdal() -> ctypes.CDLL:
             ctypes.c_uint64,
             ctypes.c_int,
         ]
+        # VSILFILE *VSIFOpenL(const char *path, const char *mode)
+        lib.VSIFOpenL.restype = ctypes.c_void_p
+        lib.VSIFOpenL.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+        # size_t VSIFReadL(void *pBuffer, size_t nSize, size_t nCount, VSILFILE *fp)
+        lib.VSIFReadL.restype = ctypes.c_size_t
+        lib.VSIFReadL.argtypes = [
+            ctypes.c_void_p, ctypes.c_size_t, ctypes.c_size_t, ctypes.c_void_p,
+        ]
         # int VSIFCloseL(VSILFILE *fp)
         lib.VSIFCloseL.restype = ctypes.c_int
         lib.VSIFCloseL.argtypes = [ctypes.c_void_p]
+        # int VSIStatL(const char *path, VSIStatBufL *psStatBuf)
+        # Usiamo VSIStatExL con flag VSI_STAT_EXISTS_FLAG|SIZE_FLAG.
+        # Per semplicita': solo size via seek-to-end pattern.
+        # vsi_l_offset VSIFTellL(VSILFILE *fp)
+        lib.VSIFTellL.restype = ctypes.c_uint64
+        lib.VSIFTellL.argtypes = [ctypes.c_void_p]
+        # int VSIFSeekL(VSILFILE *fp, vsi_l_offset nOffset, int nWhence)
+        lib.VSIFSeekL.restype = ctypes.c_int
+        lib.VSIFSeekL.argtypes = [ctypes.c_void_p, ctypes.c_uint64, ctypes.c_int]
         # int VSIUnlink(const char *path)
         lib.VSIUnlink.restype = ctypes.c_int
         lib.VSIUnlink.argtypes = [ctypes.c_char_p]
+        # int VSIMkdir(const char *path, long mode)
+        lib.VSIMkdir.restype = ctypes.c_int
+        lib.VSIMkdir.argtypes = [ctypes.c_char_p, ctypes.c_long]
+        # int VSIRmdirRecursive(const char *path)
+        lib.VSIRmdirRecursive.restype = ctypes.c_int
+        lib.VSIRmdirRecursive.argtypes = [ctypes.c_char_p]
+        # char **VSIReadDir(const char *path) — NULL-terminated array of strings.
+        lib.VSIReadDir.restype = ctypes.POINTER(ctypes.c_char_p)
+        lib.VSIReadDir.argtypes = [ctypes.c_char_p]
+        # void CSLDestroy(char **strlist)
+        lib.CSLDestroy.restype = None
+        lib.CSLDestroy.argtypes = [ctypes.POINTER(ctypes.c_char_p)]
         _libgdal = lib
         return lib
 
@@ -171,4 +194,125 @@ def vsi_register_bytes(vsi_path: str, data: bytes) -> Iterator[str]:
         # `buf` esce di scope qui -> GC Python libera la memoria.
 
 
-__all__ = ["VsiAdapterError", "vsi_register_bytes"]
+def vsi_mkdir(vsi_path: str) -> None:
+    """Crea una directory `/vsimem/...`. Non-recursive.
+
+    Raises VsiAdapterError se `VSIMkdir` ritorna non-zero.
+    """
+    if not vsi_path.startswith("/vsimem/"):
+        raise ValueError(
+            f"vsi_mkdir: vsi_path deve iniziare con /vsimem/, dato: {vsi_path!r}"
+        )
+    lib = _resolve_libgdal()
+    rc = lib.VSIMkdir(vsi_path.encode("utf-8"), 0o755)
+    if rc != 0:
+        raise VsiAdapterError(f"VSIMkdir({vsi_path}) rc={rc}")
+
+
+def vsi_rmdir_recursive(vsi_path: str) -> None:
+    """Cancella ricorsivamente una directory `/vsimem/...`. Idempotente:
+    no-op se il path non esiste (rc != 0 viene loggato a debug)."""
+    if not vsi_path.startswith("/vsimem/"):
+        raise ValueError(
+            f"vsi_rmdir_recursive: vsi_path deve iniziare con /vsimem/, "
+            f"dato: {vsi_path!r}"
+        )
+    lib = _resolve_libgdal()
+    rc = lib.VSIRmdirRecursive(vsi_path.encode("utf-8"))
+    if rc != 0:
+        logger.debug(f"VSIRmdirRecursive({vsi_path}) rc={rc}")
+
+
+def vsi_listdir(vsi_path: str) -> List[str]:
+    """Lista i nomi delle entry in `/vsimem/{dir}`. Ritorna sempre
+    senza `.` / `..`. Lista vuota se la dir non esiste.
+    """
+    if not vsi_path.startswith("/vsimem/"):
+        raise ValueError(
+            f"vsi_listdir: vsi_path deve iniziare con /vsimem/, dato: {vsi_path!r}"
+        )
+    lib = _resolve_libgdal()
+    arr = lib.VSIReadDir(vsi_path.encode("utf-8"))
+    if not arr:
+        return []
+    try:
+        out: List[str] = []
+        i = 0
+        while arr[i]:
+            name = arr[i].decode("utf-8")
+            if name not in (".", ".."):
+                out.append(name)
+            i += 1
+        return out
+    finally:
+        lib.CSLDestroy(arr)
+
+
+def vsi_read_bytes(vsi_path: str) -> bytes:
+    """Legge i bytes di un file `/vsimem/...` interamente in RAM.
+
+    Pensato per file piccoli/medi (Shapefile sidecar tipicamente < 50MB
+    totali). Per file grandi usare API chunked separate.
+
+    Raises:
+        VsiAdapterError: se VSIFOpenL ritorna NULL (file inesistente o
+            permission denied).
+    """
+    if not vsi_path.startswith("/vsimem/"):
+        raise ValueError(
+            f"vsi_read_bytes: vsi_path deve iniziare con /vsimem/, dato: {vsi_path!r}"
+        )
+    lib = _resolve_libgdal()
+    fp = lib.VSIFOpenL(vsi_path.encode("utf-8"), b"rb")
+    if not fp:
+        raise VsiAdapterError(f"VSIFOpenL({vsi_path}, 'rb') ritornato NULL")
+    try:
+        # Seek to end per ottenere la size, poi rewind + read.
+        lib.VSIFSeekL(fp, 0, 2)  # SEEK_END
+        size = lib.VSIFTellL(fp)
+        lib.VSIFSeekL(fp, 0, 0)  # SEEK_SET
+        if size == 0:
+            return b""
+        buf = (ctypes.c_ubyte * size)()
+        n = lib.VSIFReadL(ctypes.cast(buf, ctypes.c_void_p), 1, size, fp)
+        if n != size:
+            raise VsiAdapterError(
+                f"VSIFReadL({vsi_path}): letti {n}/{size} bytes"
+            )
+        return bytes(buf)
+    finally:
+        lib.VSIFCloseL(fp)
+
+
+@contextmanager
+def vsi_temp_dir(prefix: str = "plenora_vsi_") -> Iterator[str]:
+    """Crea una `/vsimem/{prefix}{uuid}/` dir + cleanup ricorsivo all'exit.
+
+    Pensato per consumer multi-file in RAM (es. Shapefile sidecar:
+    pyogrio crea `.shp/.shx/.dbf/.prj/.cpg` nella stessa dir e il
+    caller li zippa via `vsi_read_bytes` + `zipfile.writestr`).
+
+    Yields:
+        Il path della dir VSI creata, senza trailing slash.
+    """
+    name = f"{prefix}{uuid.uuid4().hex}"
+    vsi_path = f"/vsimem/{name}"
+    vsi_mkdir(vsi_path)
+    try:
+        yield vsi_path
+    finally:
+        try:
+            vsi_rmdir_recursive(vsi_path)
+        except Exception as exc:
+            logger.warning(f"vsi_temp_dir cleanup {vsi_path} failed: {exc}")
+
+
+__all__ = [
+    "VsiAdapterError",
+    "vsi_listdir",
+    "vsi_mkdir",
+    "vsi_read_bytes",
+    "vsi_register_bytes",
+    "vsi_rmdir_recursive",
+    "vsi_temp_dir",
+]

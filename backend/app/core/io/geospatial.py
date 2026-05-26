@@ -29,10 +29,8 @@ Strategia generale:
 
 from __future__ import annotations
 
-import tempfile
 import zipfile
 from io import BytesIO
-from pathlib import Path
 from typing import Any, Optional
 
 
@@ -110,17 +108,16 @@ def write_shapefile_zip_bytes(
     *,
     name: str = "layer",
 ) -> bytes:
-    """Serialize a GeoDataFrame as a zipped ESRI Shapefile (bytes).
+    """Serialize a GeoDataFrame as a zipped ESRI Shapefile (bytes, fully RAM).
 
-    Shapefile e' multi-file (.shp/.shx/.dbf/.prj/.cpg) e pyogrio non
-    espone una `vsi_read` API per leggere i sidecar da /vsimem. La
-    soluzione RAM-equivalent: usiamo una `TemporaryDirectory` INTERNA
-    al boundary (consentita: questo modulo e' l'unico autorizzato a
-    fare disk I/O), scriviamo i sidecar via pyogrio, li zippiamo in
-    bytes, cleanup deterministico al with-exit.
+    Shapefile e' multi-file (.shp/.shx/.dbf/.prj/.cpg). QUERY-1 step 4:
+    sidecar scritti in `/vsimem/{uuid}/{name}.*` via pyogrio (GDAL
+    VSI handler), poi letti via `vsi_read_bytes` + assemblati come
+    zip in memoria. Zero disk touch.
 
-    Il caller riceve bytes pronti per object storage / DB BYTEA /
-    StreamingResponse — nessun temp file sopravvive alla chiamata.
+    Pattern mirror di IMDF-5 (`open_gdb_in_vsimem`): pyogrio scrive
+    sul path /vsimem; `gdal_vsi` (ctypes adapter) gestisce
+    mkdir/listdir/read/rmdir_recursive contro `libgdal.so` bundled.
 
     Args:
         gdf: GeoDataFrame da serializzare.
@@ -130,16 +127,25 @@ def write_shapefile_zip_bytes(
         `bytes` dello ZIP che contiene i 4-5 sidecar dello Shapefile.
     """
     import pyogrio
+    from app.core.imdf.gdal_vsi import (
+        vsi_listdir, vsi_read_bytes, vsi_temp_dir,
+    )
 
-    with tempfile.TemporaryDirectory(prefix="plenora_shp_") as tmpdir:
-        tmpdir_path = Path(tmpdir)
-        shp_path = tmpdir_path / f"{name}.shp"
-        pyogrio.write_dataframe(gdf, shp_path, driver="ESRI Shapefile")
+    with vsi_temp_dir(prefix="plenora_shp_") as vsi_root:
+        shp_vsi_path = f"{vsi_root}/{name}.shp"
+        pyogrio.write_dataframe(gdf, shp_vsi_path, driver="ESRI Shapefile")
 
+        # I sidecar pyogrio sono creati nella dir VSI; leggiamoli via
+        # `vsi_listdir` + `vsi_read_bytes` e zippiamoli in memoria.
         zip_buf = BytesIO()
         with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            for sidecar in sorted(tmpdir_path.glob(f"{name}.*")):
-                zf.write(sidecar, sidecar.name)
+            for sidecar_name in sorted(vsi_listdir(vsi_root)):
+                if not sidecar_name.startswith(f"{name}."):
+                    # Defensive: ignora entry estranee (non dovrebbero esistere
+                    # in una dir creata ad-hoc).
+                    continue
+                data = vsi_read_bytes(f"{vsi_root}/{sidecar_name}")
+                zf.writestr(sidecar_name, data)
         return zip_buf.getvalue()
 
 

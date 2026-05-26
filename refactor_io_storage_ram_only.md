@@ -2361,13 +2361,12 @@ ogni persistenza passa da DB/S3/MinIO/local-dev policy
 ## Boundary congelato — by-design residues (2026-05-25)
 
 Stato dopo Phase5 + REST connector bytes-first + IMDF-1..6 +
-QUERY-1 + QUERY-1 step 2 (legacy streaming helpers tombstoned) +
-QUERY-1 step 3 (IMDF legacy tombstoned: `extract_imdf_zip(path)`,
-`persist_imdf_bundle_to_disk`, `ensure_local_bundle`,
-`_hydrate_local_cache`).
+QUERY-1 step 1..4 (streaming S3 multipart + legacy helpers
+tombstoned + IMDF legacy tombstoned + Shapefile output fully-RAM
+via `/vsimem`).
 
-Il report `test_report_inside_boundary_frozen` segnala **14 entries
-su 8 file** all'interno del boundary I/O. Questi residui sono
+Il report `test_report_inside_boundary_frozen` segnala **13 entries
+su 7 file** all'interno del boundary I/O. Questi residui sono
 intenzionali e classificati per categoria. Non vanno inseguiti: se
 qualcuno li tocca, deve aggiornare contestualmente questa sezione
 con il nuovo razionale.
@@ -2381,7 +2380,6 @@ del codice. Esigere che non chiamino `tempfile`/`write_bytes`/
 | File | Entries | Razionale |
 |---|---|---|
 | `app/core/io/materialize.py` | 3 | `temporary_path_from_bytes` escape hatch + helper. Politica `MEMORY_ONLY` configurabile. |
-| `app/core/io/geospatial.py` | 1 | Tempdir per librerie che richiedono `/vsimem` fallback (es. driver legacy). |
 | `app/core/results/temp_paths.py` | 2 | Adapter path-only per result streaming + eseguibili hydration (centralizzato). |
 | `app/utils/zip_safe.py` | 3 | `safe_extractall` zip-bomb-safe + `pick_zip_member_by_extension`. Implementation primitive. |
 | `app/core/files/service_deps.py` | 2 | `DefaultFileSystem.extract_zip` path adapter per upload pipeline. |

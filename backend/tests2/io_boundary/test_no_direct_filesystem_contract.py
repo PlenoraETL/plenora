@@ -323,7 +323,9 @@ def _scan_excluded_findings() -> list[tuple[str, int, str, str]]:
 _BOUNDARY_FROZEN_SNAPSHOT: dict[str, int] = {
     # Boundary primitives (intentional disk capability)
     "app/core/io/materialize.py": 3,
-    "app/core/io/geospatial.py": 1,
+    # io/geospatial.py post QUERY-1 step 4: rimosso dallo snapshot.
+    # `write_shapefile_zip_bytes` ora fully-RAM via `gdal_vsi.vsi_temp_dir`
+    # (ctypes adapter su libgdal). Zero filesystem callsite.
     "app/core/results/temp_paths.py": 2,
     "app/utils/zip_safe.py": 3,
     "app/core/files/service_deps.py": 2,
