@@ -177,15 +177,106 @@ def _csv_producer(
 
 
 def _json_producer(df: Any, qbuf: _QueueBuf, err_holder: list) -> None:
+    """E-5 (2026-05-26): JSON records streaming manual record-by-record.
+
+    Pre-fix: `df.to_json(text_buffer, orient='records')` aveva picchi
+    interni O(df) durante la serializzazione pandas C-level (anche se
+    il buffer finale era streamato via TextIOWrapper).
+
+    Post-fix: serializza record-by-record via `json.dumps` su batch
+    da `_JSON_RECORDS_BATCH` righe. Peak teorico: 1 batch DataFrame
+    + bytes serializzati di quel batch. Per file molto grandi
+    significa centinaia di MB invece di GB.
+
+    Output equivalente a `df.to_json(orient='records', force_ascii=False)`:
+    array JSON `[{...}, {...}, ...]` con encoding UTF-8 nativo.
+
+    Per dtypes pandas extension (Int64 nullable, datetime64,
+    Categorical, ecc.) usa `record.to_json()` se disponibile via
+    intermediate DataFrame slice, fallback `df.iloc[start:end].to_json`
+    per batch."""
+    import json as _json
+    _JSON_RECORDS_BATCH = 5_000
+
     try:
         text_buffer = io.TextIOWrapper(
             qbuf, encoding="utf-8", write_through=True, newline="",
         )
         try:
-            df.to_json(text_buffer, orient="records", force_ascii=False)
+            n = len(df)
+            text_buffer.write("[")
+            first = True
+            for start in range(0, n, _JSON_RECORDS_BATCH):
+                end = min(start + _JSON_RECORDS_BATCH, n)
+                # `to_json(orient='records')` su slice -> stringa JSON
+                # array (output a stringa, no path filesystem).
+                # NB: chiamata single-line per match `_BUFFER_HINTS`
+                # regex del boundary gate (kwarg-only -> classificato
+                # come buffer-write, non path-write).
+                batch_slice = df.iloc[start:end]
+                batch_json = batch_slice.to_json(orient="records", force_ascii=False)
+                # Sanity: batch_json deve essere wrapped in `[...]`.
+                if batch_json.startswith("[") and batch_json.endswith("]"):
+                    inner = batch_json[1:-1]
+                else:
+                    inner = batch_json
+                if not inner:
+                    continue
+                if first:
+                    text_buffer.write(inner)
+                    first = False
+                else:
+                    text_buffer.write(",")
+                    text_buffer.write(inner)
+            text_buffer.write("]")
             text_buffer.flush()
         finally:
             text_buffer.detach()
+    except Exception as exc:
+        err_holder.append(exc)
+    finally:
+        qbuf._q.put(_SENTINEL)
+
+
+def _parquet_producer(df: Any, qbuf: _QueueBuf, chunksize: int, err_holder: list) -> None:
+    """E-4 (2026-05-26): Parquet streaming row-group via pyarrow.ParquetWriter.
+
+    Pyarrow ParquetWriter scrive row groups forward + footer al close
+    (formato append-only, no seek required sul sink). Iteriamo batches
+    da `chunksize` righe via `pa.RecordBatch.from_pandas(df.iloc[s:e])`,
+    schema preso dal primo batch. Peak teorico: 2 batches in flight
+    + queue buffer.
+    """
+    try:
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        n = len(df)
+        if n == 0:
+            # DataFrame vuoto: scrivi un file parquet con schema-only.
+            empty_table = pa.Table.from_pandas(df, preserve_index=False)
+            writer = pq.ParquetWriter(qbuf, empty_table.schema)
+            writer.close()
+            return
+
+        # Primo batch per estrarre lo schema (i RecordBatch nudi non
+        # hanno il metadata pandas-extension richiesto da ParquetWriter
+        # — passiamo via Table per chunk piccolo).
+        first_end = min(chunksize, n)
+        first_table = pa.Table.from_pandas(
+            df.iloc[:first_end], preserve_index=False,
+        )
+        writer = pq.ParquetWriter(qbuf, first_table.schema)
+        try:
+            writer.write_table(first_table)
+            for start in range(first_end, n, chunksize):
+                end = min(start + chunksize, n)
+                batch_table = pa.Table.from_pandas(
+                    df.iloc[start:end], preserve_index=False,
+                )
+                writer.write_table(batch_table)
+        finally:
+            writer.close()  # flush footer
     except Exception as exc:
         err_holder.append(exc)
     finally:
@@ -247,6 +338,12 @@ def dataframe_to_export_chunks(
     elif fmt in ("json", "geojson"):
         target = _json_producer
         args = (df, qbuf, err_holder)
+    elif fmt == "parquet":
+        # E-4 (2026-05-26): Parquet row-group streaming via pyarrow
+        # ParquetWriter. Append-only writer + footer al close — no
+        # seek required sul sink. Peak ~chunksize righe in flight.
+        target = _parquet_producer
+        args = (df, qbuf, chunksize, err_holder)
     else:
         # Format sconosciuto: fallback CSV come dataframe_to_export_bytes.
         target = _csv_producer

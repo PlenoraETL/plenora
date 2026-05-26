@@ -828,6 +828,125 @@ class SharePointDataSource(DataSourceInterface):
         self._ctx.execute_query()
         return buf.getvalue()
 
+    def iter_read_chunks(self, path: str, *, chunk_size: int = 64 * 1024):
+        """E-2 (2026-05-26): streaming download via REST API + Range header.
+
+        Bypassa office365 `File.download(buffer)` che e' full-buffer
+        (e' la limitazione documentata in sessione C+D nota). Usa la
+        ClientContext authentication via la sua requests.Session
+        interna per fare GET diretto a
+        `/_api/Web/GetFileByServerRelativeUrl(...)/$value` con
+        `stream=True` + `iter_content(chunk_size)`. Per backend
+        SharePoint connesso con ClientCredential, la session interna
+        di office365 SDK e' gia' autenticata; il request `stream=True`
+        eredita il bearer/cookies.
+
+        Peak RAM scende da O(file_size) a O(chunk_size) per file
+        grandi.
+
+        Degrade safe: se il request fallisce (HTTP error / auth /
+        session inaccessibile), fallback al `_download_file` full
+        + slicing locale — stesso peak del default ereditato ma
+        compatibile con l'interface uniforme.
+        """
+        self._check()
+        server_relative_url = self._server_relative_url(path)
+        extra = self.config.extra
+        site_url = extra.get("site_url", "").rstrip("/")
+
+        # Costruzione URL REST endpoint. `quote` per encoding
+        # accentate/spazi nel path SP. `()` non viene encoded perche'
+        # parte di sintassi OData.
+        from urllib.parse import quote
+        encoded_path = quote(server_relative_url, safe="/()")
+        url = (
+            f"{site_url}/_api/Web/GetFileByServerRelativeUrl('"
+            f"{encoded_path}')/$value"
+        )
+
+        # Tentativo accesso a session interna office365 per riusare
+        # auth. office365-python espone `pending_request()` o
+        # `_request_session` a seconda della versione; usiamo
+        # try/except per fragilita' API.
+        session = None
+        try:
+            pending = self._ctx.pending_request()
+            session = pending._session if hasattr(pending, "_session") else None
+        except Exception:
+            pass
+        if session is None:
+            try:
+                session = getattr(self._ctx, "_request_session", None)
+            except Exception:
+                session = None
+
+        if session is None:
+            # Auth session non accessibile: fallback office365 full.
+            logger.debug(
+                f"SharePoint iter_read_chunks: session office365 non "
+                f"accessibile per {path!r}, fallback _download_file full"
+            )
+            yield from self._fallback_download_then_slice(path, chunk_size)
+            return
+
+        try:
+            with session.get(url, stream=True, timeout=300) as resp:
+                if resp.status_code == 404:
+                    raise DataSourceFileNotFoundError(
+                        f"File non trovato: {path!r}"
+                    )
+                if resp.status_code in (401, 403):
+                    raise DataSourcePermissionError(
+                        f"Accesso negato: {path!r}"
+                    )
+                resp.raise_for_status()
+                for chunk in resp.iter_content(chunk_size=chunk_size):
+                    if chunk:
+                        yield chunk
+        except (DataSourceFileNotFoundError, DataSourcePermissionError):
+            raise
+        except Exception as exc:
+            # Errore network / HTTP generico: fallback office365 full
+            # (preserva compatibility, log warning per visibility).
+            logger.warning(
+                f"[GESTITO] SharePoint REST streaming fallito per "
+                f"{path!r}, fallback _download_file full: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            yield from self._fallback_download_then_slice(path, chunk_size)
+
+    def _fallback_download_then_slice(self, path: str, chunk_size: int):
+        """Helper fallback: full download via office365 client + slice
+        in chunks. Stesso peak del default DataSourceInterface ma
+        usa il client office365 (auth/folder context). Usato quando
+        il path REST diretto non e' disponibile."""
+        # Re-implementa la logica di read_file per ottenere file_obj
+        # senza duplicare il try/except del read_file pubblico.
+        server_relative_url = self._server_relative_url(path)
+        try:
+            file_obj = self._ctx.web.get_file_by_server_relative_url(
+                server_relative_url
+            )
+            self._ctx.load(file_obj)
+            self._ctx.execute_query()
+            full = self._download_file(file_obj)
+        except Exception as e:
+            msg = str(e).lower()
+            if "not found" in msg or "404" in msg:
+                raise DataSourceFileNotFoundError(
+                    f"File non trovato: {path!r}"
+                ) from e
+            if "unauthorized" in msg or "403" in msg or "401" in msg:
+                raise DataSourcePermissionError(
+                    f"Accesso negato: {path!r}"
+                ) from e
+            raise DataSourceConnectionError(
+                f"Errore read_file SharePoint: {_sanitize_sharepoint_error(e)}"
+            ) from e
+
+        for i in range(0, len(full), chunk_size):
+            yield full[i:i + chunk_size]
+
     @staticmethod
     def _parse_dt(s) -> datetime:
         """Parsa datetime SharePoint REST. Accetta sia stringa ISO che oggetto datetime."""

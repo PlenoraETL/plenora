@@ -451,11 +451,14 @@ def save_dataframe_to_result_blob_streaming(
 
     fmt_lower = (output_format or "").lower()
 
-    # Formati che vanno via streaming nativo (CSV/JSON/geojson tabular)
-    _STREAMING_FORMATS = {"csv", "json"}
+    # Formati che vanno via streaming nativo (CSV/JSON tabular + Parquet
+    # row-group via pyarrow). E-4 (2026-05-26): aggiunto parquet allo
+    # streaming set.
+    _STREAMING_FORMATS = {"csv", "json", "parquet"}
 
-    # Formati che cadono su single-chunk (geo binari, xlsx, parquet, gdb)
-    _PATH_BOUND_FORMATS = {"shp", "gpkg", "parquet", "gdb", "xlsx", "xls"}
+    # Formati che cadono su single-chunk (geo binari, xlsx, gdb).
+    # Parquet ora e' fuori da qui: row-group writer real-time.
+    _PATH_BOUND_FORMATS = {"shp", "gpkg", "gdb", "xlsx", "xls"}
 
     writer = StreamingResultBlobWriter(
         project_id=project_id,

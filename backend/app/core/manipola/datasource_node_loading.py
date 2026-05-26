@@ -136,11 +136,26 @@ def load_datasource_nodes(
         # Read remote bytes via the canonical service. The backend
         # connect/disconnect lifecycle and credential decryption live
         # there — no FTP/SFTP/SharePoint logic leaks into this loader.
+        # Sessione E-1 (2026-05-26): usa `iter_read_chunks` accumulando
+        # in bytearray. Per backend con override streaming
+        # (LocalDataSource, SFTP, FTP — RAM-3/B2) il peak intermedio
+        # scende a `chunk_size`. Il payload finale resta in bytearray
+        # come prima — il parser ha bisogno dei bytes interi. Per
+        # SharePoint (default fallback) il peak non cambia (la
+        # lettura interna e' comunque full). Trade-off accettato:
+        # win sostanziale solo per backend streaming nativi.
         try:
-            content = datasource_service.read_file(ds_id, file_path)
+            buf = bytearray()
+            for chunk in datasource_service.iter_read_chunks(ds_id, file_path):
+                buf.extend(chunk)
+            content = bytes(buf)
+            # Free bytearray per evitare picco doppio (bytearray + bytes
+            # immutabile in flight). Il bytearray e' GC'd subito dopo
+            # questa scope.
+            buf = bytearray()
         except Exception as e:
             log.error(
-                f"[GESTITO] datasource_node read_file fallito: ds={ds_id} "
+                f"[GESTITO] datasource_node iter_read fallito: ds={ds_id} "
                 f"path={file_path!r} {type(e).__name__}: {e}",
                 exc_info=True,
             )
