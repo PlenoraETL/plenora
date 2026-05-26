@@ -272,7 +272,11 @@ def load_file_sources(
         # still has to run here. Mirrors the project_source
         # branch. Idempotent: no-op if ``data`` is already a
         # GeoDataFrame
-        data = _applica_crs_da_colonne(data, node_columns, meta=meta)
+        # G-5 fix (2026-05-26): rename incompleto pre-existing —
+        # la variabile era stata rinominata `node_columns_normalized`
+        # ma questa call usava ancora il nome originale → NameError
+        # crash garantito a runtime su ogni file_source con geometry+SRID.
+        data = _applica_crs_da_colonne(data, node_columns_normalized, meta=meta)
         if metadata_map is not None:
             metadata_map[node.id] = meta
         dataframes[node.id] = data

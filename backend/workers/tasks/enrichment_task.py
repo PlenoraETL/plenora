@@ -859,21 +859,31 @@ def execute_enrichment_task(
                         f"fallback fetch_run_blob: {_md_e}"
                     )
 
-            if metadata_rows_count is not None:
-                # Short-circuit: rows_count gia' nei metadata, skip download.
+            # G-1 fix (2026-05-26): il REST connector salva sempre
+            # `rows_count=0` come placeholder iniziale (vedi
+            # api_connection_rest_file). Il vecchio check `<= 0: raise`
+            # rompeva TUTTI i task REST-file. Fix: trattare `rows_count=0`
+            # come "unknown/placeholder" (cade su path classico fetch
+            # per contarli davvero); short-circuit attivo SOLO se
+            # `metadata_rows_count > 0`.
+            if metadata_rows_count is not None and metadata_rows_count > 0:
+                # Short-circuit: rows_count gia' nei metadata (e > 0),
+                # skip download.
                 rows_count = metadata_rows_count
-                if rows_count <= 0:
-                    raise ValueError(
-                        f"Il file di output ha rows_count={rows_count} "
-                        f"da metadata (file vuoto o non valido)"
-                    )
                 logger.info(
                     f"[Task {task_id}] rows_count={rows_count} via metadata "
                     f"short-circuit (skip fetch_run_blob)"
                 )
             else:
                 # Path classico: scarica i bytes per contare righe e/o
-                # per IMDF extraction / eseguibili upload.
+                # per IMDF extraction / eseguibili upload. Include il
+                # caso `metadata_rows_count=0` (REST connector placeholder).
+                if metadata_rows_count == 0:
+                    logger.debug(
+                        f"[Task {task_id}] metadata rows_count=0 "
+                        f"(placeholder connector), fetch_run_blob per "
+                        f"count reale"
+                    )
                 from app.core.artifacts.resolver import ArtifactResolver
                 blob = ArtifactResolver().fetch_run_blob(
                     result_id=upstream_result_id,

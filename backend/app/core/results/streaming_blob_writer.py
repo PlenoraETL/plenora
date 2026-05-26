@@ -274,6 +274,22 @@ class StreamingResultBlobWriter:
                     exc, result_id=self.result_id, filename=self.filename,
                 ) from exc
 
+        # G-2 fix (2026-05-26): integrity check post-complete.
+        # Pre-fix: il path `upload_bytes` di `cloud_backends` chiama
+        # `_assert_upload_integrity` (head_object + ContentLength) per
+        # rilevare object S3 troncati / parziali. Il path streaming
+        # multipart bypassava questa verifica: una troncatura di rete
+        # mid-stream + S3/MinIO che non valida checksum poteva produrre
+        # object parziale ma DB row marcata "complete" con size
+        # arbitrario. Post-fix: head_object dopo complete; su size
+        # mismatch -> delete object + raise (fail-closed). Skip per
+        # zero-parts path (caso `put_object(Body=b"")` gia' validato
+        # da S3 stesso). head_object failure (network/404 race) e'
+        # best-effort: log warning ma non blocca (complete e' gia'
+        # andato OK, il dato dovrebbe esistere).
+        if self._parts:
+            self._verify_integrity_or_fail()
+
         # Object su S3 ora canonical. Save DB row referente.
         resolved_group_id = store.resolve_group_id_for_result(
             self.project_id, self.group_id,
@@ -325,6 +341,59 @@ class StreamingResultBlobWriter:
             logger.debug(
                 f"abort_multipart_upload(result_id={self.result_id}): {exc}"
             )
+
+    def _verify_integrity_or_fail(self) -> None:
+        """G-2 (2026-05-26): head_object post-complete per verificare che
+        S3 abbia ricevuto esattamente `self._total_bytes`. Su mismatch:
+        cleanup object + intent + raise ResultSaveError."""
+        try:
+            head = self._client.head_object(
+                Bucket=self._bucket, Key=self._key,
+            )
+        except Exception as exc:
+            # head_object fallito (network / IAM list-bucket missing):
+            # complete_multipart_upload e' gia' tornato OK, quindi il
+            # dato dovrebbe essere presente. Best-effort, non blocca.
+            logger.warning(
+                f"StreamingResultBlobWriter integrity head_object "
+                f"fallito (result_id={self.result_id}), procedo "
+                f"comunque: {exc}"
+            )
+            return
+
+        actual_size = int(head.get("ContentLength", -1))
+        if actual_size == self._total_bytes:
+            return
+
+        # MISMATCH: object troncato. Fail-closed.
+        logger.error(
+            f"StreamingResultBlobWriter integrity mismatch "
+            f"result_id={self.result_id}: expected "
+            f"{self._total_bytes} bytes, S3 reports "
+            f"{actual_size}. Object troncato? Aborting."
+        )
+        # Cleanup: delete dell'object parziale + intent failure (DB row
+        # NON ancora scritta, evita reference dangling).
+        try:
+            self._client.delete_object(
+                Bucket=self._bucket, Key=self._key,
+            )
+        except Exception as _del_e:
+            logger.warning(
+                f"delete partial object failed "
+                f"(key={self._key}): {_del_e}"
+            )
+        close_failed_result_upload_intent(
+            self._intent_id, cleanup_outcome="ok",
+        )
+        raise _runtime_storage_upload_error(
+            RuntimeError(
+                f"Integrity check failed: expected "
+                f"{self._total_bytes} bytes, got {actual_size}"
+            ),
+            result_id=self.result_id,
+            filename=self.filename,
+        )
 
     # ── File-like contract (write / tell / flush) ─────────────────────
 

@@ -269,9 +269,20 @@ def op_join(
     except ValueError:
         raise
     except Exception as exc:
-        # value_counts su tipi esotici puo' fallire: log e prosegui (non
-        # blocco l'operazione per un guard fallito).
-        logger.debug(f"Join cardinality guard skipped: {exc}")
+        # G-4 fix (2026-05-26): visibility-up del guard fallito.
+        # Pre-fix: `logger.debug` silenzioso → un join su chiave con
+        # extension dtype (nullable Int64, Arrow, geometry Shapely)
+        # bypassava il guard senza segnale operativo. Risultato: merge
+        # many-to-many potenziale OOM senza alert.
+        # Post-fix: `logger.warning` con context completo (tipi chiave,
+        # exception type) cosi' operations vedono il bypass in
+        # produzione. Il guard salta ancora (non blocchiamo join
+        # legittimi su dtype esotici), ma il bypass e' visibile.
+        logger.warning(
+            f"[GUARD-BYPASS] Join cardinality guard skipped: "
+            f"left_dtype={left_keys.dtype}, right_dtype={right_keys.dtype}, "
+            f"how={how}, exc_type={type(exc).__name__}: {exc}"
+        )
 
     _join_nan_token = uuid.uuid4().hex[:12]
     _left_sentinel_prefix = f"__JOIN_NULL_L_{_join_nan_token}_"

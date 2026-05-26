@@ -165,16 +165,32 @@ def load_datasource_nodes(
                 default=2 * 1024 * 1024 * 1024,  # 2GB default
             )
             buf = bytearray()
+            cap_exceeded = False
             for chunk in datasource_service.iter_read_chunks(ds_id, file_path):
                 buf.extend(chunk)
                 if len(buf) > max_bytes:
-                    raise ValueError(
-                        f"File datasource supera cap "
-                        f"PLENORA_DATASOURCE_SOURCE_MAX_BYTES "
-                        f"({max_bytes:,} bytes). Source: {file_path!r}, "
-                        f"size finora: {len(buf):,}. "
-                        f"Override env per casi legittimi."
+                    # G-3 fix (2026-05-26): segnala superamento cap via
+                    # flag, non via ValueError che leakka file_path +
+                    # size esatti nel `str(e)` ritornato al frontend
+                    # (info leak: path utente + bytes esatti). Log
+                    # dettagli completi server-side, ritorna messaggio
+                    # canonico user-facing.
+                    log.warning(
+                        f"[GESTITO] datasource_node cap exceeded: "
+                        f"ds={ds_id} path={file_path!r} "
+                        f"size_at_break={len(buf):,} cap={max_bytes:,}"
                     )
+                    cap_exceeded = True
+                    break
+            if cap_exceeded:
+                return {
+                    "success": False,
+                    "message": (
+                        "File datasource supera la dimensione massima "
+                        "consentita. Contattare l'amministratore per "
+                        "override del cap (env PLENORA_DATASOURCE_SOURCE_MAX_BYTES)."
+                    ),
+                }
             content = bytes(buf)
             # Free bytearray per evitare picco doppio (bytearray + bytes
             # immutabile in flight). Il bytearray e' GC'd subito dopo
@@ -186,10 +202,15 @@ def load_datasource_nodes(
                 f"path={file_path!r} {type(e).__name__}: {e}",
                 exc_info=True,
             )
+            # G-3 (2026-05-26): non includere `{e}` nel messaggio
+            # utente — alcune eccezioni (es. paramiko / requests)
+            # contengono path/credenziali/host nel str(). Log full
+            # exception server-side; messaggio user canonico.
             return {
                 "success": False,
                 "message": (
-                    f"Errore lettura file remoto '{file_path}': {e}"
+                    "Errore durante la lettura del file remoto. "
+                    "Verificare i log del worker per il dettaglio."
                 ),
             }
 
