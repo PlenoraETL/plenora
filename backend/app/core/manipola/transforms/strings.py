@@ -264,10 +264,43 @@ def op_text_normalize(
 
         return s
 
+    # MANIPOLA-5 (2026-05-26): branch vettoriale per operazioni `.str.*`
+    # native pandas. ~10x piu' veloce + peak RAM ridotto vs `.apply(lambda)`
+    # Python row-iter. Solo `strip_accents` (unicodedata combining) richiede
+    # ancora `.apply()` perche' non c'e' equivalente pandas vettoriale.
+    needs_strip_accents = operations in ("strip_accents", "full")
+
+    def _apply_vectorial(s):
+        """Applica le ops che hanno equivalente `.str.*` pandas vettoriale.
+        Le ops vengono concatenate in ordine semantico identico a
+        `normalize_text()`."""
+        if operations in ("trim", "full"):
+            s = s.str.strip()
+        if operations == "lower" or operations == "full":
+            s = s.str.lower()
+        elif operations == "upper":
+            s = s.str.upper()
+        elif operations == "title":
+            s = s.str.title()
+        if operations in ("strip_double_spaces", "full"):
+            s = s.str.replace(r"\s+", " ", regex=True)
+        return s
+
     try:
         for col in valid_columns:
             out_col = col if overwrite else f"{col}_norm"
-            result[out_col] = result[col].apply(lambda v: normalize_text(v, operations))
+            source = result[col]
+            if needs_strip_accents:
+                # strip_accents richiede unicodedata: fallback `.apply()`.
+                result[out_col] = source.apply(
+                    lambda v: normalize_text(v, operations)
+                )
+            else:
+                # Vettoriale `.str.*` pandas: ~10x piu' veloce + peak ridotto.
+                # NaN-safe by-construction: `.str.X` propaga NaN senza
+                # toccarli (semantica identica a normalize_text che ritornava
+                # text inalterato su `is_null_scalar`).
+                result[out_col] = _apply_vectorial(source)
 
         logger.info(f"Text Normalize ({operations}): {len(valid_columns)} colonne")
         return result

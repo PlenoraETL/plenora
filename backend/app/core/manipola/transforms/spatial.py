@@ -79,6 +79,34 @@ logger = get_logger(__name__)
 DataFrame = FrameLike
 
 
+def _env_int(name: str, default: int) -> int:
+    """Helper env-driven cap: legge env var, fallback su default su
+    valori non-int o <=0."""
+    import os
+    val = os.environ.get(name)
+    if not val:
+        return default
+    try:
+        n = int(val)
+        return n if n > 0 else default
+    except ValueError:
+        return default
+
+
+# MANIPOLA-8 (2026-05-26): cap pre-flight per operazioni spatial pesanti.
+# Voronoi: O(n log n) ma con costanti alte; >100k punti finisce OOM su
+# worker tipici. Clean topology: make_valid + buffer + overlay O(N^2) sui
+# vertici; cap su N_geometrie evita esplosioni topologiche. Override env
+# per casi legittimi (cluster dense). Lazy-read da env per consentire
+# tuning operational senza restart.
+def _voronoi_max_points() -> int:
+    return _env_int("PLENORA_GEO_VORONOI_MAX_POINTS", 100_000)
+
+
+def _clean_topology_max_geoms() -> int:
+    return _env_int("PLENORA_GEO_CLEAN_TOPOLOGY_MAX_GEOMS", 50_000)
+
+
 # BUFFER
 # Crea area di rispetto attorno alle geometrie. Distanza in metri, riproiezione automatica
 
@@ -963,6 +991,20 @@ def op_geo_voronoi(
             logger.error("shapely.ops.voronoi_diagram non disponibile. Aggiornare shapely >= 1.8")
             return df
 
+        # MANIPOLA-8 (2026-05-26): cap pre-flight su numero di punti.
+        # Voronoi e' O(n log n) ma con costanti alte e poligoni complessi;
+        # >100k punti finisce in OOM su worker tipici. Fail-closed con
+        # messaggio operativo invece di OOM silente. Override env per
+        # casi legittimi (cluster dense usano cap = unset).
+        n_points = len(gdf)
+        cap_voronoi = _voronoi_max_points()
+        if n_points > cap_voronoi:
+            raise ValueError(
+                f"Voronoi: {n_points} punti supera il cap "
+                f"{cap_voronoi}. Ridurre l'input o impostare "
+                f"PLENORA_GEO_VORONOI_MAX_POINTS (env) per override."
+            )
+
         # Crea MultiPoint da tutte le geometrie
         points = gdf.geometry.tolist()
         multipoint = MultiPoint(points)
@@ -1094,6 +1136,20 @@ def op_geo_clean_topology(
     """
     try:
         gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
+
+        # MANIPOLA-8 (2026-05-26): cap pre-flight su numero geometrie +
+        # vertici totali. Clean topology fa make_valid + buffer iterativi
+        # + overlay per N poligoni: peggior caso O(N^2) sui vertici. Cap
+        # pragmatico evita worker OOM. Override env per casi legittimi.
+        n_geoms = len(gdf)
+        cap_clean = _clean_topology_max_geoms()
+        if n_geoms > cap_clean:
+            raise ValueError(
+                f"Clean topology: {n_geoms} geometrie supera il cap "
+                f"{cap_clean}. Ridurre l'input o impostare "
+                f"PLENORA_GEO_CLEAN_TOPOLOGY_MAX_GEOMS (env) per override."
+            )
+
         result = copy_frame_for_update(gdf)
         fixed_count = 0
 

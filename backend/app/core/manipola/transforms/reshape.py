@@ -278,9 +278,25 @@ def op_table_diff(
     only_old_cols = [c for c in old_value_cols if c not in new_value_cols]
     only_new_cols = [c for c in new_value_cols if c not in old_value_cols]
 
+    # MANIPOLA-7 (2026-05-26): trim pre-merge per RAM.
+    # Pre-fix: `table_diff_dataframe` riceveva i DataFrame INTERI anche
+    # quando `compare_columns` selezionava poche colonne. Il merge interno
+    # produceva un DataFrame con `_OLD`/`_NEW` per OGNI colonna delle 2
+    # tabelle, anche per quelle non confrontate — picco RAM proporzionale
+    # al numero totale di colonne, non al subset compare.
+    # Post-fix: subset esplicito a `key_cols + common_value_cols +
+    # only_old_cols/only_new_cols` PRIMA di passarli al diff helper.
+    # Le colonne non rilevanti (es. timestamp tecnici, metadata) vengono
+    # droppate prima del merge.
+    relevant_old_cols = list(set(key_cols + common_value_cols + only_old_cols))
+    relevant_new_cols = list(set(key_cols + common_value_cols + only_new_cols))
+    # Preserve l'ordine originale per stabilita' output column.
+    old_df_trim = old_df[[c for c in old_df.columns if c in relevant_old_cols]]
+    new_df_trim = new_df[[c for c in new_df.columns if c in relevant_new_cols]]
+
     result_df, status_counts = table_diff_dataframe(
-        old_df,
-        new_df,
+        old_df_trim,
+        new_df_trim,
         key_cols=key_cols,
         common_value_cols=common_value_cols,
         only_old_cols=only_old_cols,

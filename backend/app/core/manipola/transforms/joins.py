@@ -218,6 +218,47 @@ def op_join(
             f"NaN==NaN, le righe key-NaN saranno {effetto}."
         )
 
+    # MANIPOLA-6 (2026-05-26): cardinality guard many-to-many.
+    # Pre-fix: un join `inner` con 50k righe x 50k righe su chiave a
+    # cardinalita' alta (es. solo 10 valori distinti) produceva 50k * 50k
+    # / 10 = 250M righe — OOM immediato. Mirror del guard di cross_join.
+    # Post-fix: stima cap pre-merge con bound peggiore basato sulle
+    # frequenze di chiave; se supera la soglia, fail-closed con messaggio
+    # operativo invece di OOM silente.
+    _MAX_JOIN_OUTPUT_ROWS = 50_000_000  # 50M righe = ~5-10GB peak tipico
+    try:
+        left_keys = left_df[left_on]
+        right_keys = right_df[right_on]
+        # Bound peggiore: per ogni valore chiave, sum(left_count * right_count).
+        # Usa value_counts (cheap) invece di un vero groupby cross-product.
+        left_vc = left_keys.value_counts(dropna=False)
+        right_vc = right_keys.value_counts(dropna=False)
+        # Common keys: prodotto delle frequenze sommate.
+        common = left_vc.index.intersection(right_vc.index)
+        if len(common) > 0:
+            estimated_rows = int(
+                (left_vc.loc[common] * right_vc.loc[common]).sum()
+            )
+            if how in ("left", "outer"):
+                # Aggiungi le righe left senza match (preservate).
+                estimated_rows += int(left_vc.drop(common).sum())
+            if how in ("right", "outer"):
+                estimated_rows += int(right_vc.drop(common).sum())
+            if estimated_rows > _MAX_JOIN_OUTPUT_ROWS:
+                raise ValueError(
+                    f"Join {how} su chiavi ('{left_on}' x '{right_on}') "
+                    f"produrrebbe ~{estimated_rows:,} righe (cap "
+                    f"{_MAX_JOIN_OUTPUT_ROWS:,}). Probabile many-to-many "
+                    f"con chiavi a bassa cardinalita'. Verifica le chiavi "
+                    f"o riduci le tabelle in input."
+                )
+    except ValueError:
+        raise
+    except Exception as exc:
+        # value_counts su tipi esotici puo' fallire: log e prosegui (non
+        # blocco l'operazione per un guard fallito).
+        logger.debug(f"Join cardinality guard skipped: {exc}")
+
     _join_nan_token = uuid.uuid4().hex[:12]
     _left_sentinel_prefix = f"__JOIN_NULL_L_{_join_nan_token}_"
     _right_sentinel_prefix = f"__JOIN_NULL_R_{_join_nan_token}_"

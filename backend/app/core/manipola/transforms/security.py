@@ -19,6 +19,11 @@ logger = get_logger("app.core.manipola.transforms.base")
 
 DataFrame = Any
 
+# MANIPOLA-3: dimensione del batch per md5 hash RAM-bounded.
+# 50k righe x 8 colonne x ~100 byte avg = ~40MB di peak per batch
+# (vs unbounded per intero DataFrame pre-fix).
+_HASH_BATCH_SIZE = 50_000
+
 
 # HASH MD5 (Rilevamento modifiche
 # Calcola hash MD5 di colonne selezionate per change detection e anonimizzazione
@@ -62,12 +67,13 @@ def op_md5_hash(
     separator = "\x1f"  # Unit Separator — non appare nei dati reali
 
     try:
-        # Per-column prep vettoriale (pandas-native, non e' l'hotspot
-        # Hotspot storico: il doppio passaggio .agg(join, axis=1) + .map(md5
-        # — due row-iter Python consecutivi. Qui li fondiamo in un singolo
-        # list-comp su numpy arrays: zip itera in C, separator.join/
-        # hashlib.md5/encode sono tutti C-impl nativi. Speedup tipico ~10x
-        # su 10k righe vs il legacy "agg+map"
+        # MANIPOLA-3 (2026-05-26): batch RAM-bounded.
+        # Pre-fix: materializzava `values + buf + np.array` per ognuna delle
+        # N colonne contemporaneamente (peak ~ N_cols * N_rows * avg_str_size).
+        # Su 5M righe x 8 colonne con stringhe ~50 byte: ~2GB di peak.
+        # Post-fix: processa batch da `_HASH_BATCH_SIZE` (50k righe) per
+        # volta. Peak ~ N_cols * 50k * avg_str_size ~ poche centinaia di MB
+        # max, indipendente da N_rows.
         #
         # Hot-path stabilizzato: lavoro su np.ndarray + Python puro per
         # bypassare il path pandas/pyarrow di `s.map(lambda)` /
@@ -77,50 +83,53 @@ def op_md5_hash(
         # list-comp ha la stessa semantica osservabile (NaN→"", Wkt per
         # geometrie shapely, str altrove) ma evita il dispatch interno
         # di pandas verso le extension che hanno l'interaction bug.
-        col_arrs: List[np.ndarray] = []
-        for col in valid_columns:
-            s = result[col]
-            # `.tolist()` materializza scalari Python/pandas autentici
-            # (es. `pd.Timestamp` per datetime64, Python int per int64,
-            # `pd.NaT` per missing datetime). Bypassa il path pandas/
-            # pyarrow di `s.map(lambda)` / `.astype(str)` che si e'
-            # rivelato instabile (SIGFPE/SIGSEGV intermittente sotto
-            # pytest in presenza di pandas+pyarrow+shapely caricati,
-            # ~30-70% dei run del bucket performance). Stringificazione
-            # uguale al legacy: `str(Timestamp(...))` ritorna sempre
-            # `"YYYY-MM-DD HH:MM:SS"` come `astype(str)` faceva.
-            values = s.tolist()
-            n_arr = len(values)
-            buf = [""] * n_arr
-            for i in range(n_arr):
-                v = values[i]
-                # pd.NaT / np.nan / None: skip → ""
-                if v is None:
-                    continue
-                try:
-                    if v != v:  # NaN/NaT idiom
-                        continue
-                except TypeError:
-                    pass
-                if hasattr(v, "wkt"):
-                    buf[i] = v.wkt
-                else:
-                    buf[i] = str(v)
-            if normalize:
-                for i in range(n_arr):
-                    buf[i] = buf[i].strip().lower()
-            col_arrs.append(np.array(buf, dtype=object))
-
         n = len(result)
         if n == 0:
             result[output_column] = empty_object_series()
-        else:
-            md5 = hashlib.md5
-            out = [
-                md5(separator.join(row).encode("utf-8")).hexdigest()
-                for row in zip(*col_arrs)
-            ]
-            result[output_column] = np.array(out, dtype=object)
+            logger.info(f"MD5 Hash: {len(valid_columns)} colonne -> {output_column}")
+            return result
+
+        md5 = hashlib.md5
+        out = np.empty(n, dtype=object)
+
+        for batch_start in range(0, n, _HASH_BATCH_SIZE):
+            batch_end = min(batch_start + _HASH_BATCH_SIZE, n)
+            batch_size = batch_end - batch_start
+
+            # Per ogni colonna prepara solo i bytes del batch.
+            col_arrs_batch: List[np.ndarray] = []
+            for col in valid_columns:
+                values = result[col].iloc[batch_start:batch_end].tolist()
+                buf = [""] * batch_size
+                for i in range(batch_size):
+                    v = values[i]
+                    if v is None:
+                        continue
+                    try:
+                        if v != v:  # NaN/NaT idiom
+                            continue
+                    except TypeError:
+                        pass
+                    if hasattr(v, "wkt"):
+                        buf[i] = v.wkt
+                    else:
+                        buf[i] = str(v)
+                if normalize:
+                    for i in range(batch_size):
+                        buf[i] = buf[i].strip().lower()
+                col_arrs_batch.append(np.array(buf, dtype=object))
+
+            # Hash del batch, scrivi nell'output finale.
+            for j, row in enumerate(zip(*col_arrs_batch)):
+                out[batch_start + j] = md5(
+                    separator.join(row).encode("utf-8")
+                ).hexdigest()
+
+            # Free batch arrays prima del prossimo iter (riduzione esplicita
+            # del peak — GC fara' la stessa cosa appena out-of-scope).
+            del col_arrs_batch
+
+        result[output_column] = out
         logger.info(f"MD5 Hash: {len(valid_columns)} colonne -> {output_column}")
         return result
     except Exception as e:

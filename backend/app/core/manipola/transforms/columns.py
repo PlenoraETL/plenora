@@ -19,6 +19,10 @@ logger = get_logger("app.core.manipola.transforms.base")
 
 DataFrame = FrameLike
 
+# MANIPOLA-4: dimensione del batch per concat_columns RAM-bounded.
+# Per N_cols=12 * batch=100k * avg_str=50B = ~60MB peak per batch.
+_CONCAT_BATCH_SIZE = 100_000
+
 
 # RIMOZIONE COLONNE
 # Rimuove colonne selezionate dal DataFrame
@@ -193,6 +197,13 @@ def op_concat_columns(
         subset = result[valid_cols]
 
         if skip_null:
+            # MANIPOLA-4 (2026-05-26): batch RAM-bounded.
+            # Pre-fix: materializzava str_arrs + mask_arrs per TUTTE le
+            # colonne contemporaneamente (peak ~ N_cols * N_rows *
+            # avg_str_size). Su 10M righe x 12 colonne: ~4-6GB peak.
+            # Post-fix: processa batch da `_CONCAT_BATCH_SIZE` righe per
+            # volta. Peak ~ N_cols * batch_size * avg_str_size.
+            #
             # Vera vettorizzazione: estrazione numpy arrays per colonna
             # + Python list-comp con itertools.compress per riga
             # Il path precedente `.agg(lambda parts: ..., axis=1)` era
@@ -204,26 +215,35 @@ def op_concat_columns(
                 result[output_column] = empty_object_series()
                 return result
 
-            # numpy str arrays + notna masks, una volta per colonna
-            # subset.reset_index(drop=True) non necessario: lavoriamo
-            # direttamente sugli ndarray, insensibili all'indice
-            str_arrs = [
-                subset[c].astype(str).to_numpy() for c in valid_cols
-            ]
-            mask_arrs = [subset[c].notna().to_numpy() for c in valid_cols]
+            out = np.empty(n, dtype=object)
+            out.fill(None)
 
-            # Per-row join: compress(values, mask) filtra in C le posizioni
-            # dove mask=True; separator.join lavora solo su stringhe
-            # Semantica legacy preservata: join "" → None (copre sia riga
-            # all-NaN che join di un unico ""
-            out = [None] * n
-            for i, (row_vals, row_mask) in enumerate(
-                zip(zip(*str_arrs), zip(*mask_arrs))
-            ):
-                joined = separator.join(compress(row_vals, row_mask))
-                if joined != "":
-                    out[i] = joined
-            result[output_column] = np.array(out, dtype=object)
+            for batch_start in range(0, n, _CONCAT_BATCH_SIZE):
+                batch_end = min(batch_start + _CONCAT_BATCH_SIZE, n)
+
+                # Solo i bytes del batch per ogni colonna.
+                str_arrs_batch = [
+                    subset[c].iloc[batch_start:batch_end].astype(str).to_numpy()
+                    for c in valid_cols
+                ]
+                mask_arrs_batch = [
+                    subset[c].iloc[batch_start:batch_end].notna().to_numpy()
+                    for c in valid_cols
+                ]
+
+                # Per-row join: compress(values, mask) filtra in C le posizioni
+                # dove mask=True. Semantica legacy preservata: join "" -> None.
+                for j, (row_vals, row_mask) in enumerate(
+                    zip(zip(*str_arrs_batch), zip(*mask_arrs_batch))
+                ):
+                    joined = separator.join(compress(row_vals, row_mask))
+                    if joined != "":
+                        out[batch_start + j] = joined
+
+                # Free batch arrays prima del prossimo iter.
+                del str_arrs_batch, mask_arrs_batch
+
+            result[output_column] = out
         else:
             result[output_column] = join_columns_as_strings(subset, separator)
 

@@ -425,6 +425,47 @@ fallback (office365 client `download(buffer)` non espone streaming
 nativo; un override richiederebbe REST diretto con Range header,
 fuori scope per ora).
 
+### MANIPOLA RAM optimization (2026-05-26)
+
+Audit dopo I/O+streaming ha identificato 8 ottimizzazioni nel
+processing MANIPOLA. Tutte chiuse:
+
+  - **M-1 op_formula** (`transforms/formula.py`): AST extraction dei
+    nomi colonna referenziati. Pre-fix: convertiva tutte le N colonne
+    object del DataFrame anche se la formula usava 2 (allocazione
+    coerced/cleaned series per ognuna). Post-fix: solo le colonne
+    citate dall'AST. Win su DataFrame wide (200+ cols).
+  - **M-2 op_flatten_json** (`transforms/analysis.py`): fast-path con
+    `output_columns`. Pre: `json_normalize` globale scopre tutte le
+    chiavi anche se il caller vuole 2. Post: estrai solo i path
+    richiesti via `.apply(dig)` per Series. Skip discovery globale.
+  - **M-3 op_md5_hash** (`transforms/security.py`): batch da 50k
+    righe invece di materializzare `str_arrs`/`mask_arrs` per intere
+    colonne contemporaneamente. Peak proporzionale a batch_size,
+    non a N_rows.
+  - **M-4 op_concat_columns** (`transforms/columns.py`): stesso
+    pattern batch da 100k righe.
+  - **M-5 op_text_normalize** (`transforms/strings.py`): branch
+    vettoriale `.str.strip/lower/upper/title/.str.replace(r'\s+')`
+    per ops senza accenti; fallback `.apply()` solo per
+    `strip_accents` (unicodedata combining). ~10x velocita' +
+    peak ridotto sulle ops vettoriali.
+  - **M-6 op_join** (`transforms/joins.py`): cardinality guard
+    many-to-many. Stima pre-merge `sum(left_vc[k] * right_vc[k])`
+    per chiavi comuni. Cap `_MAX_JOIN_OUTPUT_ROWS = 50M`. Mirror
+    del guard di `cross_join`. Fail-closed con messaggio operativo
+    invece di OOM silente.
+  - **M-7 op_table_diff** (`transforms/reshape.py`): trim pre-merge.
+    Subset `key_cols + common_value_cols + only_old/new_cols` PRIMA
+    di passare a `table_diff_dataframe`, droppando le colonne non
+    rilevanti (timestamp tecnici, metadata) che pesavano sul merge
+    `_OLD`/`_NEW`.
+  - **M-8 spatial** (`transforms/spatial.py`): cap pre-flight
+    env-driven su `op_geo_voronoi` (PLENORA_GEO_VORONOI_MAX_POINTS,
+    default 100k) e `op_geo_clean_topology`
+    (PLENORA_GEO_CLEAN_TOPOLOGY_MAX_GEOMS, default 50k). Fail-closed
+    invece di OOM su input pathological.
+
 ### Cosa NON e' stato toccato (priorita' bassa restante)
 
 - Enrichment `response.json()` materializza body intero: cambiare a

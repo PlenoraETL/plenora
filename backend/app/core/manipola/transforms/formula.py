@@ -150,6 +150,33 @@ def _validate_formula_ast(formula: str) -> None:
             )
 
 
+def _extract_referenced_names(formula: str) -> set[str]:
+    """Ritorna il set di tutti i `Name` referenziati nell'AST della formula.
+
+    MANIPOLA-1: usato per limitare `local_vars` alle sole colonne
+    citate, evitando la conversione numerica per-colonna su DataFrame
+    wide. Fallback safe: se l'AST non parse-a, ritorna set vuoto e
+    il caller cadra' sul comportamento tutto-colonne.
+
+    Args:
+        formula: stringa formula utente (gia' stripped).
+
+    Returns:
+        Set di nomi (str). Include built-in del namespace pandas eval
+        (es. `to_numeric`, `concat`); il caller deve filtrare contro
+        `df.columns` per scartare quelli non-colonna.
+    """
+    try:
+        tree = _ast.parse(formula, mode="eval")
+    except (SyntaxError, ValueError):
+        return set()
+    names: set[str] = set()
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.Name):
+            names.add(node.id)
+    return names
+
+
 # COLONNA CALCOLATA (FORMULA
 # Aggiunge colonna con espressione Python/Pandas valutata per riga
 
@@ -221,8 +248,18 @@ def op_formula(
 
         # Passa le colonne come variabili locali — nessuna sostituzione nel testo della formula
         # Auto-conversione a numerico per colonne object (es. CSV importato come stringa
+        # MANIPOLA-1 (2026-05-26): estrai dall'AST i soli nomi usati dalla
+        # formula. Pre-fix: scandiva TUTTE le colonne (200+ su DF wide) anche
+        # se la formula usava 2 colonne, allocando convertite + cleaned per
+        # ognuna. Post-fix: itera solo i nomi referenziati, RAM proporzionale
+        # alla complessita' della formula, non alla larghezza del DF.
+        referenced_names = _extract_referenced_names(formula)
+        cols_to_prepare = [
+            c for c in eval_df.columns
+            if c in referenced_names
+        ]
         local_vars = {}
-        for col in eval_df.columns:
+        for col in cols_to_prepare:
             series = eval_df[col]
             if series.dtype == 'object':
                 # Prova conversione a numerico (gestisce formato IT: 1.234,56

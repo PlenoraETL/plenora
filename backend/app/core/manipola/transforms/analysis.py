@@ -245,24 +245,55 @@ def op_flatten_json(
             return {}
 
         parsed_col = result[column].apply(parse_json)
-
-        # Normalizza in DataFrame piatto
-        flat = normalize_json_records(parsed_col.tolist(), max_level=max_level)
-
-        if flat.empty:
-            logger.warning(f"FlattenJSON: nessun dato JSON valido in '{column}'")
-            return df
-
-        # Applica prefisso alle colonne
         col_prefix = prefix if prefix else f"{column}_"
-        flat.columns = [f"{col_prefix}{c}" for c in flat.columns]
 
-        # Whitelist opzionale: tiene solo le colonne richieste.
+        # MANIPOLA-2 (2026-05-26): fast-path quando output_columns e' valorizzato.
+        # Pre-fix: normalize_json_records globale -> 1 DataFrame con TUTTE le
+        # chiavi (anche centinaia se i JSON sono pesanti), poi filter su
+        # output_columns. Peak = full normalized DF + lista dict intermedia.
+        # Post-fix: per ogni path richiesto, estrai via `.apply(dig)` come
+        # singola Series, evitando json_normalize globale. RAM ~ len(paths)
+        # x len(rows) invece di full schema discovery.
         if output_columns:
-            wanted = set(output_columns)
-            keep = [c for c in flat.columns if c in wanted]
-            if keep:
-                flat = flat[keep]
+            wanted = list(output_columns)
+            # Strip del prefix per ottenere il path JSON originale.
+            extracted_cols: dict = {}
+            for full_col_name in wanted:
+                if not full_col_name.startswith(col_prefix):
+                    continue
+                json_path = full_col_name[len(col_prefix):]
+                path_parts = json_path.split(".")
+
+                def _dig(d, parts=path_parts):
+                    cur = d
+                    for p in parts:
+                        if not isinstance(cur, dict):
+                            return None
+                        cur = cur.get(p)
+                        if cur is None:
+                            return None
+                    return cur
+
+                extracted_cols[full_col_name] = parsed_col.apply(_dig)
+
+            if not extracted_cols:
+                logger.warning(
+                    f"FlattenJSON: output_columns {output_columns!r} non "
+                    f"matchano nessun path estraibile da '{column}'"
+                )
+                return df
+
+            import pandas as _pd
+            flat = _pd.DataFrame(extracted_cols, index=result.index)
+        else:
+            # Path full: normalize_json_records scopre tutte le chiavi.
+            flat = normalize_json_records(parsed_col.tolist(), max_level=max_level)
+
+            if flat.empty:
+                logger.warning(f"FlattenJSON: nessun dato JSON valido in '{column}'")
+                return df
+
+            flat.columns = [f"{col_prefix}{c}" for c in flat.columns]
 
         # Allinea indici e unisci
         flat.index = result.index
