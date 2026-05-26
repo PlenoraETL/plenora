@@ -55,7 +55,9 @@ def test_session_context_carries_provider_timeout_metadata():
     assert context.provider == "postgres"
     assert context.timeout_seconds == 12
     assert context.timeout_milliseconds == 12_000
-    assert context.statement_timeout_sql == "SET statement_timeout = :t"
+    # P0 (2026-05-26): literal-embedded value (psycopg3 non accetta
+    # bind parameters per SET statement_timeout).
+    assert context.statement_timeout_sql == "SET statement_timeout = 12000"
     assert context.uses_native_call_timeout is False
     assert context.oracle_open_cursors is None
 
@@ -115,7 +117,7 @@ def test_query_executor_builds_execution_context_from_settings(monkeypatch):
     assert context.session.provider == "mysql"
     assert context.session.timeout_seconds == 9
     assert context.session.timeout_milliseconds == 9_000
-    assert context.session.statement_timeout_sql == "SET SESSION max_execution_time = :t"
+    assert context.session.statement_timeout_sql == "SET SESSION max_execution_time = 9000"
 
 
 def test_execute_raw_uses_session_context_and_keeps_engine_factory_api(monkeypatch):
@@ -140,8 +142,9 @@ def test_execute_raw_uses_session_context_and_keeps_engine_factory_api(monkeypat
     assert columns == ["id"]
 
     calls = fake_conn.execute.call_args_list
-    assert str(calls[0].args[0]) == "SET statement_timeout = :t"
-    assert calls[0].args[1] == {"t": 12_000}
+    # P0 (2026-05-26): SET con literal embedded, no params dict.
+    assert str(calls[0].args[0]) == "SET statement_timeout = 12000"
+    assert len(calls[0].args) == 1  # no params dict
     assert str(calls[1].args[0]) == "SELECT :limit"
     assert calls[1].args[1] == {"limit": 1}
 

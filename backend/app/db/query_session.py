@@ -57,11 +57,27 @@ class SessionContext:
         timeout_s = int(timeout_seconds)
         timeout_ms = timeout_s * 1000
 
+        # P0 (2026-05-26): valore inline come literal invece che bind
+        # parameter. Pre-fix (post-migrazione psycopg3): la SET con
+        # `:t` falliva a runtime con
+        #   ProgrammingError: syntax error at or near "$1"
+        #   SET statement_timeout = $1
+        # PostgreSQL non accetta bound parameter per le SET command
+        # (utility statement, non planned query). psycopg2 funzionava
+        # perche' faceva client-side substitution; psycopg3 usa
+        # l'extended query protocol con server-side Bind. L'except
+        # in `apply_session_context` inghiottiva silenziosamente
+        # l'errore (DEBUG log), risultato: dalla migrazione psycopg3
+        # NESSUNA query Postgres aveva statement_timeout applicato —
+        # l'unica protezione contro runaway era il worker timeout
+        # Celery. `timeout_ms` e' un int controllato da settings
+        # (DB_QUERY_TIMEOUT), no rischio injection.
+        # MySQL pymysql resta corretto anche con literal embedded.
         statement_timeout_sql = None
         if timeout_s > 0 and provider in ("postgres", "postgresql"):
-            statement_timeout_sql = "SET statement_timeout = :t"
+            statement_timeout_sql = f"SET statement_timeout = {timeout_ms}"
         elif timeout_s > 0 and provider == "mysql":
-            statement_timeout_sql = "SET SESSION max_execution_time = :t"
+            statement_timeout_sql = f"SET SESSION max_execution_time = {timeout_ms}"
 
         return cls(
             connection=connection,
@@ -147,10 +163,10 @@ def apply_session_context(
     """
     try:
         if context.statement_timeout_sql:
-            sqlalchemy_conn.execute(
-                text(context.statement_timeout_sql),
-                {"t": context.timeout_milliseconds},
-            )
+            # P0 (2026-05-26): no `{"t": ...}` params dict — vedi nota
+            # in SessionContext.for_connection. Il valore e' gia'
+            # embedded come literal nel SQL.
+            sqlalchemy_conn.execute(text(context.statement_timeout_sql))
         elif context.uses_native_call_timeout:
             raw = sqlalchemy_conn.connection.dbapi_connection
             if hasattr(raw, "callTimeout"):
