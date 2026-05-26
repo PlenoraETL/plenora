@@ -8,7 +8,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-import psycopg2
+# P0 (2026-05-26): migrato a psycopg3 (psycopg2 retirato).
+import psycopg
 import pytest
 
 from app.core.scheduler.execution_manager import ExecutionManager
@@ -90,9 +91,9 @@ def test_release_retry_budget_n3_on_all_transient(schedule_config, monkeypatch):
     manager = _make_manager_for_retry_test(schedule_config)
     manager.concurrency.release = MagicMock(
         side_effect=[
-            psycopg2.OperationalError("pool exhausted 1"),
-            psycopg2.OperationalError("pool exhausted 2"),
-            psycopg2.OperationalError("pool exhausted 3"),
+            psycopg.OperationalError("pool exhausted 1"),
+            psycopg.OperationalError("pool exhausted 2"),
+            psycopg.OperationalError("pool exhausted 3"),
         ]
     )
 
@@ -123,7 +124,7 @@ def test_release_retry_exits_early_on_success(schedule_config, monkeypatch):
     esce al primo success. Nessun warning [CRITICO] finale."""
     manager = _make_manager_for_retry_test(schedule_config)
     manager.concurrency.release = MagicMock(
-        side_effect=[psycopg2.OperationalError("blip"), None]
+        side_effect=[psycopg.OperationalError("blip"), None]
     )
 
     with patch(
@@ -177,9 +178,9 @@ def test_release_retry_backoff_exponential_with_jitter(schedule_config, monkeypa
     manager = _make_manager_for_retry_test(schedule_config)
     manager.concurrency.release = MagicMock(
         side_effect=[
-            psycopg2.OperationalError("1"),
-            psycopg2.OperationalError("2"),
-            psycopg2.OperationalError("3"),
+            psycopg.OperationalError("1"),
+            psycopg.OperationalError("2"),
+            psycopg.OperationalError("3"),
         ]
     )
     # Cattura le durate sleep invece di bloccare
@@ -220,9 +221,9 @@ def test_release_retry_budget_total_10s_interrupts(schedule_config, monkeypatch)
     manager = _make_manager_for_retry_test(schedule_config)
     manager.concurrency.release = MagicMock(
         side_effect=[
-            psycopg2.OperationalError("1"),
-            psycopg2.OperationalError("2"),
-            psycopg2.OperationalError("3"),
+            psycopg.OperationalError("1"),
+            psycopg.OperationalError("2"),
+            psycopg.OperationalError("3"),
         ]
     )
     # Sequenza time.monotonic: primo call = retry_start = 0.0; successivi
@@ -261,9 +262,9 @@ def test_release_retry_log_warning_per_attempt(schedule_config, monkeypatch):
     manager = _make_manager_for_retry_test(schedule_config)
     manager.concurrency.release = MagicMock(
         side_effect=[
-            psycopg2.OperationalError("fail-1"),
-            psycopg2.OperationalError("fail-2"),
-            psycopg2.OperationalError("fail-3"),
+            psycopg.OperationalError("fail-1"),
+            psycopg.OperationalError("fail-2"),
+            psycopg.OperationalError("fail-3"),
         ]
     )
 
@@ -296,11 +297,11 @@ def test_release_retry_mechanics_live_outside_execution_manager():
         BACKEND_ROOT / "app" / "core" / "scheduler" / "scheduler_release.py"
     ).read_text(encoding="utf-8")
 
-    assert "psycopg2.OperationalError" not in execution_src
+    assert "psycopg.OperationalError" not in execution_src
     assert "random.uniform" not in execution_src
     assert "time.sleep(backoff" not in execution_src
     assert "release_lock_with_retry(self.concurrency, schedule_id)" in execution_src
 
-    assert "psycopg2.OperationalError" in release_src
+    assert "psycopg.OperationalError" in release_src
     assert "random.uniform" in release_src
     assert "time.sleep" in release_src

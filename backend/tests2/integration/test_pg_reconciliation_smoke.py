@@ -78,12 +78,13 @@ _SKIP_NO_DB_LIVE_OPT_IN = pytest.mark.skipif(
 # psycopg2.connect ha completato in un altro processo, quindi e'
 # ragionevolmente safe nel processo pytest.
 
-# Snippet eseguito in subprocess: solo `psycopg2.connect` con
+# P0 (2026-05-26): migrato a psycopg3 (psycopg2 retirato).
+# Snippet eseguito in subprocess: solo `psycopg.connect` con
 # `connect_timeout`. Stampa "OK" stdout su success, exit code != 0 o
 # crash nativo => skip nel parent.
 _SUBPROCESS_PROBE_CODE = (
-    "import psycopg2,sys;"
-    "psycopg2.connect("
+    "import psycopg,sys;"
+    "psycopg.connect("
     f"host={PG_EXT_HOST!r},port={PG_EXT_PORT},"
     f"dbname={PG_EXT_DATABASE!r},"
     f"user={PG_EXT_USER!r},password={PG_EXT_PASSWORD!r},"

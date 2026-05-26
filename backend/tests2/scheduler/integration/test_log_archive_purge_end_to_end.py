@@ -418,7 +418,7 @@ def test_delete_on_logs_without_bypass_raises_from_trigger(test_marker):
     tramite SET LOCAL ma il guardrail difensivo sarebbe perso: il test
     lo chiude dentro il cluster.
     """
-    import psycopg2
+    import psycopg  # P0 (2026-05-26): psycopg2 retirato
     from app.db.pg_connection import get_connection, put_connection
 
     marker = test_marker["marker"]
@@ -431,7 +431,7 @@ def test_delete_on_logs_without_bypass_raises_from_trigger(test_marker):
         conn.autocommit = False
         with conn.cursor() as cur:
             cur.execute("SAVEPOINT sp_no_bypass_delete")
-            with pytest.raises(psycopg2.Error) as excinfo:
+            with pytest.raises(psycopg.Error) as excinfo:
                 cur.execute(
                     "DELETE FROM plenora.logs WHERE op = %s", (marker,)
                 )

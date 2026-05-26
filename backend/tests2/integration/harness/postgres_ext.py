@@ -10,8 +10,10 @@ from typing import Iterator
 from urllib.parse import quote_plus, urlparse
 import uuid
 
-import psycopg2
-import psycopg2.extras
+# P0 (2026-05-26): migrato a psycopg3 (psycopg2 retirato).
+# RealDictCursor (psycopg2.extras) → dict_row (psycopg.rows).
+import psycopg
+from psycopg.rows import dict_row
 
 
 _HOST_RUN_HOST = "127.0.0.1"
@@ -154,16 +156,16 @@ PG_EXT_PASSWORD = _CONFIG.password
 def postgres_ext_conn() -> Iterator[psycopg2.extensions.connection]:
     config = postgres_ext_config()
     try:
-        conn = psycopg2.connect(
+        conn = psycopg.connect(
             host=config.host,
             port=config.port,
             dbname=config.database,
             user=config.user,
             password=config.password,
             connect_timeout=10,
-            cursor_factory=psycopg2.extras.RealDictCursor,
+            row_factory=dict_row,
         )
-    except psycopg2.OperationalError as exc:
+    except psycopg.OperationalError as exc:
         raise RuntimeError(_connection_failure_message(config)) from exc
     try:
         yield conn

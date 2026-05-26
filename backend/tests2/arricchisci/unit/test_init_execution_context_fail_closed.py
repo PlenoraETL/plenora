@@ -6,7 +6,8 @@ current contract the execution-context contract (audit `arricchisci/api_connecto
 
 from types import SimpleNamespace
 
-import psycopg2
+# P0 (2026-05-26): migrato a psycopg3 (psycopg2 retirato).
+import psycopg
 import pytest
 
 from app.core.arricchisci import execution_context as execution_context_mod
@@ -83,7 +84,7 @@ def test_init_execution_context_raises_execution_context_error_on_db_error(
     `ExecutionContextError` con `original_error` + `__cause__`
     impostati all'eccezione psycopg2 originale (chain preservata).
     """
-    original = psycopg2.OperationalError("pool exhausted")
+    original = psycopg.OperationalError("pool exhausted")
 
     def _boom(project_id):
         raise original
@@ -126,7 +127,7 @@ def test_init_execution_context_does_not_write_singleton_state_on_db_error(
     api_service._preview_limit = 999
 
     def _boom(project_id):
-        raise psycopg2.OperationalError("connection lost")
+        raise psycopg.OperationalError("connection lost")
 
     monkeypatch.setattr(execution_context_mod, "load_project_access_context", _boom)
 
@@ -158,7 +159,7 @@ def test_execute_enrichment_routes_db_error_to_safe_boundary_response(
     """
 
     def _boom(project_id):
-        raise psycopg2.OperationalError("db down")
+        raise psycopg.OperationalError("db down")
 
     monkeypatch.setattr(execution_context_mod, "load_project_access_context", _boom)
 

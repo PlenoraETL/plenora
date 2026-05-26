@@ -9,7 +9,8 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError, fields
 from types import SimpleNamespace
 
-import psycopg2
+# P0 (2026-05-26): migrato a psycopg3 (psycopg2 retirato).
+import psycopg
 import pytest
 
 
@@ -104,7 +105,7 @@ def test_build_context_raises_execution_context_error_on_db_error(monkeypatch):
     from app.core.arricchisci import execution_context as ec_mod  # noqa: F401
     from app.core.arricchisci.exceptions import ExecutionContextError
 
-    original = psycopg2.OperationalError("pool exhausted")
+    original = psycopg.OperationalError("pool exhausted")
 
     def _boom(_pid):
         raise original

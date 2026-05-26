@@ -306,8 +306,20 @@ def apply_pending_migrations() -> List[str]:
                 f"[MIGRATIONS] fallita {filename}: {e}"
             ) from e
         finally:
+            # P0 (2026-05-26): restore `autocommit = False` invece di
+            # True. Pre-fix: la connection veniva restituita al pool
+            # psycopg3 con autocommit=True; il pool non resetta lo
+            # state (no `reset` callback in pg_connection.py). I
+            # caller successivi (es. unit_of_work) ricevevano conn
+            # con autocommit=True, dove `commit()` e' no-op e
+            # `rollback()` post-errore non rollbackava nulla —
+            # transazionalita' silenziosamente persa. Test runtime:
+            # `pool.getconn() → autocommit=True → putconn() →
+            # getconn() → autocommit STILL True`.
+            # Con psycopg2 ThreadedConnectionPool il comportamento
+            # storico era piu' tollerante; psycopg3 non resetta.
             try:
-                conn.autocommit = True
+                conn.autocommit = False
             except Exception:
                 pass
             put_connection(conn)

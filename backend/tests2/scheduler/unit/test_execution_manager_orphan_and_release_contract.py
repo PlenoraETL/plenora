@@ -138,7 +138,7 @@ def test_finally_release_lock_retries_once_after_transient_db_failure(
 ):
     """Blinda il fail-closed sul release nel finally di ``execute()``:
     se il primo ``concurrency.release`` solleva una classe transient PG
-    (psycopg2.OperationalError â€” pool exhausted, connection reset),
+    (psycopg.OperationalError â€” pool exhausted, connection reset),
     il codice DEVE:
 
       1. Loggare warning [GESTITO] per il tentativo transient.
@@ -155,11 +155,11 @@ def test_finally_release_lock_retries_once_after_transient_db_failure(
     Post current contract.b: classe transient narrow a psycopg2 (Previous behavior era
     Exception broad); RuntimeError generico NON triggera retry (non-transient).
     """
-    import psycopg2
+    import psycopg  # P0 (2026-05-26): psycopg2 retirato
     manager = _make_manager_for_cleanup_test(schedule_config)
     # Primo release solleva transient PG, secondo riesce
     manager.concurrency.release = MagicMock(
-        side_effect=[psycopg2.OperationalError("db blip"), None]
+        side_effect=[psycopg.OperationalError("db blip"), None]
     )
     # Evita attesa reale del backoff
     monkeypatch.setattr(
@@ -223,14 +223,14 @@ def test_finally_does_not_propagate_when_both_release_attempts_fail(
     Regressione: rimuovere l'outer guard del finally romperebbe il contract
     "sempre ritorna un result", anche in DB disaster scenario.
     """
-    import psycopg2
+    import psycopg  # P0 (2026-05-26): psycopg2 retirato
     manager = _make_manager_for_cleanup_test(schedule_config)
     # Tutti N=3 release sollevano transient PG (post-7.b budget N=3)
     manager.concurrency.release = MagicMock(
         side_effect=[
-            psycopg2.OperationalError("blip 1"),
-            psycopg2.OperationalError("blip 2"),
-            psycopg2.OperationalError("blip 3"),
+            psycopg.OperationalError("blip 1"),
+            psycopg.OperationalError("blip 2"),
+            psycopg.OperationalError("blip 3"),
         ]
     )
     monkeypatch.setattr(

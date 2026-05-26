@@ -123,7 +123,7 @@ def test_migration_covers_only_declared_tables(migration_sql: str) -> None:
 
 # B) INTEGRATION CONTRACT (richiede PG live, opt-in esplicito)
 #
-# Questi test fanno `psycopg2.connect` reale e applicano la migration
+# Questi test fanno `psycopg.connect` reale e applicano la migration
 # `2026-04-21_log_immutable_triggers.sql` su un DB di test condiviso.
 # Sono marcati `integration` E gated da una env opt-in esplicita.
 #
@@ -135,10 +135,10 @@ def test_migration_covers_only_declared_tables(migration_sql: str) -> None:
 #     skip se env opt-in non e' settata (env-gate ha priorita').
 #
 # Razionale del double-gate (env + marker):
-#   - su Windows, `psycopg2.connect` puo' produrre access violation nativa
+#   - su Windows, `psycopg.connect` puo' produrre access violation nativa
 #     prima di sollevare OperationalError. Il probe `connect_timeout=2` non
 #     e' garanzia: se il driver crasha lato C, il try/except Python non
-#     intercetta. La sola difesa solida e' NON chiamare `psycopg2.connect`.
+#     intercetta. La sola difesa solida e' NON chiamare `psycopg.connect`.
 #   - skipif su `DATABASE_URL` non basta: in dev locale `.env` carica
 #     DATABASE_URL anche quando i dev non vogliono che i DB-live partano.
 #   - env opt-in `URBY_RUN_DB_LIVE_TESTS=1` rende l'attivazione un atto
@@ -155,7 +155,7 @@ _SKIP_NO_DB_LIVE_OPT_IN = pytest.mark.skipif(
     reason=(
         "DB-live opt-in mancante: settare URBY_RUN_DB_LIVE_TESTS=1 + "
         "DATABASE_URL con PG raggiungibile e migration applicata. "
-        "Skip default per evitare access violation su psycopg2.connect "
+        "Skip default per evitare access violation su psycopg.connect "
         "in ambienti dove DATABASE_URL e' settato ma il DB non e' "
         "destinato a questi test."
     ),
@@ -171,7 +171,7 @@ def pg_tx():
     e' gia' stata applicata (via migrations_runner al boot del backend
     in ambiente di test / staging).
 
-    Doppio guard PRIMA di `psycopg2.connect`:
+    Doppio guard PRIMA di `psycopg.connect`:
       1. env opt-in `URBY_RUN_DB_LIVE_TESTS=1` mancante -> pytest.skip.
       2. `DATABASE_URL` mancante                       -> pytest.skip.
     Solo con entrambi present arriviamo a `connect`, dove `connect_timeout=2`
@@ -181,16 +181,16 @@ def pg_tx():
     if not _RUN_DB_LIVE:
         pytest.skip(
             "DB-live test non opt-in: settare URBY_RUN_DB_LIVE_TESTS=1 "
-            "per eseguire i test che fanno psycopg2.connect reale."
+            "per eseguire i test che fanno psycopg.connect reale."
         )
     if not _DATABASE_URL:
         pytest.skip("DATABASE_URL non configurato")
 
-    import psycopg2
+    import psycopg  # P0 (2026-05-26): psycopg2 retirato
 
     try:
-        conn = psycopg2.connect(_DATABASE_URL, connect_timeout=2)
-    except psycopg2.OperationalError as exc:
+        conn = psycopg.connect(_DATABASE_URL, connect_timeout=2)
+    except psycopg.OperationalError as exc:
         pytest.skip(f"PG non raggiungibile per integration test: {exc}")
     conn.autocommit = False
     cur = conn.cursor()
@@ -210,7 +210,7 @@ def test_update_on_audit_actions_is_blocked(pg_tx) -> None:
     Usa SAVEPOINT cosi' l'errore non aborta la tx globale del fixture
     (che deve restare viva per il rollback finale).
     """
-    import psycopg2
+    import psycopg  # P0 (2026-05-26): psycopg2 retirato
 
     pg_tx.execute(
         "INSERT INTO plenora.audit_actions (action, status) "
@@ -220,7 +220,7 @@ def test_update_on_audit_actions_is_blocked(pg_tx) -> None:
     row_id = pg_tx.fetchone()[0]
 
     pg_tx.execute("SAVEPOINT sp_update_attempt")
-    with pytest.raises(psycopg2.Error) as excinfo:
+    with pytest.raises(psycopg.Error) as excinfo:
         pg_tx.execute(
             "UPDATE plenora.audit_actions SET status = %s WHERE id = %s",
             (500, row_id),
@@ -238,7 +238,7 @@ def test_update_on_audit_actions_is_blocked(pg_tx) -> None:
 @_SKIP_NO_DB_LIVE_OPT_IN
 def test_delete_on_audit_actions_without_bypass_is_blocked(pg_tx) -> None:
     """DELETE senza `SET LOCAL plenora.retention_cleanup` → blocked."""
-    import psycopg2
+    import psycopg  # P0 (2026-05-26): psycopg2 retirato
 
     pg_tx.execute(
         "INSERT INTO plenora.audit_actions (action, status) "
@@ -248,7 +248,7 @@ def test_delete_on_audit_actions_without_bypass_is_blocked(pg_tx) -> None:
     row_id = pg_tx.fetchone()[0]
 
     pg_tx.execute("SAVEPOINT sp_delete_attempt")
-    with pytest.raises(psycopg2.Error) as excinfo:
+    with pytest.raises(psycopg.Error) as excinfo:
         pg_tx.execute(
             "DELETE FROM plenora.audit_actions WHERE id = %s",
             (row_id,),
@@ -292,7 +292,7 @@ def test_update_with_retention_bypass_still_blocked(pg_tx) -> None:
     totale: anche un retention job non puo' modificare una riga
     storicizzata (deve inserire una nuova riga di rettifica).
     """
-    import psycopg2
+    import psycopg  # P0 (2026-05-26): psycopg2 retirato
 
     pg_tx.execute(
         "INSERT INTO plenora.audit_actions (action, status) "
@@ -304,7 +304,7 @@ def test_update_with_retention_bypass_still_blocked(pg_tx) -> None:
     pg_tx.execute("SET LOCAL plenora.retention_cleanup = 'true'")
 
     pg_tx.execute("SAVEPOINT sp_update_even_with_bypass")
-    with pytest.raises(psycopg2.Error) as excinfo:
+    with pytest.raises(psycopg.Error) as excinfo:
         pg_tx.execute(
             "UPDATE plenora.audit_actions SET status = %s WHERE id = %s",
             (403, row_id),
@@ -321,7 +321,7 @@ def test_update_with_retention_bypass_still_blocked(pg_tx) -> None:
 @_SKIP_NO_DB_LIVE_OPT_IN
 def test_update_on_logs_is_blocked(pg_tx) -> None:
     """Stesso contratto anche su plenora.logs: UPDATE sempre vietato."""
-    import psycopg2
+    import psycopg  # P0 (2026-05-26): psycopg2 retirato
 
     # plenora.logs ha colonne level/message/category/user_id/etc, inserisco
     # un set minimo valido. Se lo schema di logs dovesse cambiare e
@@ -334,7 +334,7 @@ def test_update_on_logs_is_blocked(pg_tx) -> None:
     row_id = pg_tx.fetchone()[0]
 
     pg_tx.execute("SAVEPOINT sp_logs_update")
-    with pytest.raises(psycopg2.Error) as excinfo:
+    with pytest.raises(psycopg.Error) as excinfo:
         pg_tx.execute(
             "UPDATE plenora.logs SET message = %s WHERE id = %s",
             ("tampered", row_id),

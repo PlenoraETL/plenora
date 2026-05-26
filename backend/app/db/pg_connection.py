@@ -143,6 +143,48 @@ def _configure_connection(conn: psycopg.Connection) -> None:
     conn.commit()
 
 
+def _reset_connection(conn: psycopg.Connection) -> None:
+    """Reset state della connection prima di restituirla al pool.
+
+    P0 (2026-05-26): aggiunto per evitare leak di state fra caller.
+    Pre-fix psycopg_pool senza `reset` callback teneva intatto lo
+    state della connection su putconn: se un caller settava
+    `autocommit=True` (es. `migrations_runner.py`) e poi la
+    restituiva, il caller successivo riceveva una conn con
+    autocommit=True dove `commit()` e' no-op e `rollback()` non
+    rollbacka nulla → transazionalita' persa silenziosamente.
+    Test runtime confermato:
+      pool.getconn() → conn.autocommit=True → putconn() →
+      getconn() → autocommit ANCORA True
+
+    Il reset:
+    1. fa rollback() di eventuali transazioni pendenti (no-op se
+       il caller ha gia' commitato/rollbackato);
+    2. ripristina `autocommit = False` (default atteso dal resto del
+       codebase via `unit_of_work`).
+
+    Best-effort: errori loggati ma swallow. Una connection con stato
+    non resettabile (broken pipe, server gone) viene comunque
+    rimossa dal pool dal check successivo.
+    """
+    try:
+        if conn.broken:
+            return
+        if not conn.autocommit:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        if conn.autocommit:
+            conn.autocommit = False
+    except Exception as e:
+        logger.debug(
+            "pool reset_connection fallito (ignorato): %s: %s",
+            type(e).__name__,
+            e,
+        )
+
+
 # Pool singleton
 
 _pool: Optional[ConnectionPool] = None
@@ -166,6 +208,7 @@ def _get_pool() -> ConnectionPool:
                     min_size=_POOL_MIN,
                     max_size=_POOL_MAX,
                     configure=_configure_connection,
+                    reset=_reset_connection,
                     open=True,
                 )
                 # Log aggregato stimato per dare visibilita' all'operatore

@@ -5,7 +5,8 @@ errori tecnici (DB lookup + scrittura FS cache).
 """
 
 
-import psycopg2
+# P0 (2026-05-26): migrato a psycopg3 (psycopg2 retirato).
+import psycopg
 import pytest
 
 import app.config as config_mod
@@ -112,7 +113,7 @@ def test_raises_on_metadata_lookup_db_error(api_service, monkeypatch, tmp_path):
     e `__cause__` settato via `raise ... from e`.
     """
     _bypass_security(monkeypatch, api_service, tmp_path)
-    original = psycopg2.OperationalError("pool exhausted")
+    original = psycopg.OperationalError("pool exhausted")
 
     def _boom(fs_id, include_data=False):
         raise original
@@ -138,7 +139,7 @@ def test_raises_on_blob_lookup_db_error(api_service, monkeypatch, tmp_path):
     essere protette dalla stessa classe narrow.
     """
     _bypass_security(monkeypatch, api_service, tmp_path)
-    original = psycopg2.OperationalError("connection lost")
+    original = psycopg.OperationalError("connection lost")
 
     def _get(fs_id, include_data=False):
         if not include_data:

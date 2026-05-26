@@ -108,7 +108,7 @@ def _make_fake_conn():
 def test_ensure_schema_runs_create_schema_if_not_exists(monkeypatch):
     """ensure_schema esegue CREATE SCHEMA IF NOT EXISTS sullo schema
     configurato, con identifier quoting via psycopg2.sql."""
-    from psycopg2 import sql as _sql
+    from psycopg import sql as _sql  # P0 (2026-05-26): psycopg2 retirato
 
     monkeypatch.setenv("DB_SCHEMA", "plenora")
 
@@ -126,20 +126,23 @@ def test_ensure_schema_runs_create_schema_if_not_exists(monkeypatch):
     stmt = cur.execute.call_args.args[0]
     assert isinstance(stmt, _sql.Composed)
     parts = list(stmt)
+    # P0 (2026-05-26): psycopg3 sql.SQL non ha piu' `.string` attr,
+    # sostituito da `.as_string(None)`. sql.Identifier non ha piu'
+    # `.strings`, sostituito da `.as_string(None)` (output quoted).
     assert any(
-        isinstance(p, _sql.SQL) and "CREATE SCHEMA IF NOT EXISTS" in p.string
+        isinstance(p, _sql.SQL) and "CREATE SCHEMA IF NOT EXISTS" in p.as_string(None)
         for p in parts
     )
     idents = [p for p in parts if isinstance(p, _sql.Identifier)]
     assert len(idents) == 1
-    assert idents[0].strings == ("plenora",)
+    assert idents[0].as_string(None) == '"plenora"'
     conn.commit.assert_called_once()
     put_mock.assert_called_once_with(conn)
 
 
 def test_ensure_schema_uses_db_schema_env(monkeypatch):
     """Il nome schema viene da DB_SCHEMA, non hardcoded."""
-    from psycopg2 import sql as _sql
+    from psycopg import sql as _sql  # P0 (2026-05-26): psycopg2 retirato
 
     monkeypatch.setenv("DB_SCHEMA", "tenant_x")
 
@@ -151,7 +154,8 @@ def test_ensure_schema_uses_db_schema_env(monkeypatch):
     assert out == "tenant_x"
     stmt = cur.execute.call_args.args[0]
     idents = [p for p in stmt if isinstance(p, _sql.Identifier)]
-    assert idents and idents[0].strings == ("tenant_x",)
+    # P0 (2026-05-26): psycopg3 Identifier non ha `.strings`, usa as_string.
+    assert idents and idents[0].as_string(None) == '"tenant_x"'
 
 
 def test_ensure_schema_rejects_invalid_identifier(monkeypatch):
@@ -227,7 +231,7 @@ def test_apply_pending_migrations_tracking_table_uses_schema_env(
     """La tracking table deve usare lo schema risolto, non hardcoded
     `plenora.schema_migrations` hardcoded. Questo chiude davvero il path clean-room
     con `DB_SCHEMA` custom."""
-    from psycopg2 import sql as _sql
+    from psycopg import sql as _sql  # P0 (2026-05-26): psycopg2 retirato
 
     monkeypatch.setenv("DB_SCHEMA", "tenant_x")
     monkeypatch.setattr(mr, "MIGRATIONS_DIR", tmp_path / "empty")
@@ -245,4 +249,6 @@ def test_apply_pending_migrations_tracking_table_uses_schema_env(
     assert isinstance(stmt, _sql.Composed)
     identifiers = [p for p in stmt if isinstance(p, _sql.Identifier)]
     assert identifiers
-    assert identifiers[0].strings == ("tenant_x", "schema_migrations")
+    # P0 (2026-05-26): psycopg3 Identifier non ha `.strings`. Per
+    # multi-component identifier usa as_string (output `"a"."b"`).
+    assert identifiers[0].as_string(None) == '"tenant_x"."schema_migrations"'
