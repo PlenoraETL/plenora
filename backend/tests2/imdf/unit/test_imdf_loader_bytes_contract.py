@@ -56,8 +56,9 @@ def _build_minimal_imdf_zip_bytes() -> bytes:
 
 
 def test_extract_imdf_zip_bytes_returns_indexed_bundle():
-    """Happy path: bytes IMDF validi → bundle indicizzato con
-    manifest, geojson dir, site_id risolto dal manifest."""
+    """Happy path IMDF-6 fully-RAM: bytes IMDF validi → bundle con
+    files popolati, tmp_dir=None, *_path=None. Tutti i componenti
+    sono RAM-resident (bundle.files / gdb_zip_bytes / ifc_bytes)."""
     from app.core.imdf.loader import extract_imdf_zip_bytes
 
     data = _build_minimal_imdf_zip_bytes()
@@ -65,47 +66,47 @@ def test_extract_imdf_zip_bytes_returns_indexed_bundle():
     bundle = extract_imdf_zip_bytes(data)
     try:
         assert bundle.site_id == "SITE_X"
-        assert bundle.manifest_path is not None
-        assert bundle.manifest_path.exists()
-        assert bundle.imdf_dir is not None
-        assert bundle.imdf_dir.name == "SITE_X"
-        assert len(bundle.imdf_geojson_files) == 1
-        assert bundle.imdf_geojson_files[0].name == "anchor.geojson"
-        # raw_filelist riflette l'ordine zip
+        # IMDF-6: zero disk. tmp_dir None, *_path None.
+        assert bundle.tmp_dir is None
+        assert bundle.manifest_path is None
+        assert bundle.imdf_dir is None
+        assert bundle.imdf_geojson_files == []
+        # I componenti vivono in bundle.files.
+        assert "manifest.json" in bundle.files
+        assert "SITE_X/anchor.geojson" in bundle.files
+        # raw_filelist riflette l'ordine zip.
         assert "manifest.json" in bundle.raw_filelist
         assert "SITE_X/anchor.geojson" in bundle.raw_filelist
     finally:
-        bundle.cleanup()
+        bundle.cleanup()  # no-op safe con tmp_dir=None.
 
 
 def test_extract_imdf_zip_bytes_empty_input_raises_value_error():
-    """`data=b""` -> ValueError esplicito; niente tmp dir creata."""
+    """`data=b""` -> ValueError esplicito; niente filesystem touch."""
     from app.core.imdf.loader import extract_imdf_zip_bytes
 
     with pytest.raises(ValueError, match="vuoti"):
         extract_imdf_zip_bytes(b"")
 
 
-def test_extract_imdf_zip_bytes_invalid_zip_cleans_up_tmp(tmp_path, monkeypatch):
-    """Zip senza componenti IMDF (no .gdb, no manifest) → ValueError
-    + cleanup della tmp dir interna. Anti-regression: senza la
-    `shutil.rmtree(tmp, ignore_errors=True)` nel try/except, ogni
-    extract fallito lascerebbe una dir `imdf_*` orfana."""
+def test_extract_imdf_zip_bytes_invalid_zip_no_tmp_created(monkeypatch):
+    """IMDF-6: zip senza componenti IMDF -> ValueError SENZA creare
+    tmp dir (extract_imdf_zip_bytes ora e' fully-RAM).
+
+    Anti-regression: cattura tutti i call a tempfile.mkdtemp del modulo;
+    deve essere ZERO per il path bytes-first.
+    """
     from app.core.imdf import loader as _loader
 
-    # Forziamo la tmp dir interna sotto `tmp_path` per ispezione.
-    tmp_dirs_created: list[Path] = []
+    mkdtemp_calls: list = []
     real_mkdtemp = _loader.tempfile.mkdtemp
 
-    def _capturing_mkdtemp(prefix=""):
-        tmp = real_mkdtemp(prefix=prefix, dir=str(tmp_path))
-        tmp_dirs_created.append(Path(tmp))
-        return tmp
+    def _tracked_mkdtemp(prefix="", **kwargs):
+        mkdtemp_calls.append(prefix)
+        return real_mkdtemp(prefix=prefix, **kwargs)
 
-    monkeypatch.setattr(_loader.tempfile, "mkdtemp", _capturing_mkdtemp)
+    monkeypatch.setattr(_loader.tempfile, "mkdtemp", _tracked_mkdtemp)
 
-    # Zip valido come archivio ma senza manifest ne' .gdb: deve essere
-    # rifiutato dal `_build_bundle_index`.
     buf = BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
         z.writestr("random.txt", "noise")
@@ -114,19 +115,65 @@ def test_extract_imdf_zip_bytes_invalid_zip_cleans_up_tmp(tmp_path, monkeypatch)
     with pytest.raises(ValueError, match="non sembra un IMDF"):
         _loader.extract_imdf_zip_bytes(bogus_data)
 
-    assert len(tmp_dirs_created) == 1, (
-        "extract_imdf_zip_bytes deve aver creato esattamente 1 tmp dir"
+    assert mkdtemp_calls == [], (
+        f"extract_imdf_zip_bytes (IMDF-6) deve essere fully-RAM; "
+        f"chiamate mkdtemp inattese: {mkdtemp_calls}"
     )
-    assert not tmp_dirs_created[0].exists(), (
-        "tmp dir dell'extract bytes deve essere ripulita su ValueError "
-        "(altrimenti accumulo orfani imdf_* nel worker)"
-    )
+
+
+def test_extract_imdf_zip_bytes_collects_gdb_into_gdb_zip_bytes():
+    """IMDF-6: i membri `*.gdb/...` dello zip incoming vengono
+    ricomposti in `bundle.gdb_zip_bytes` (sub-zip RAM con stesso
+    layout di `persist._zip_gdb_dir_to_bytes`). Pin del contratto
+    inter-modulare: `open_gdb_in_vsimem` cerca `{site}.gdb/` come
+    top-level dentro `_gdb.zip` su storage."""
+    from app.core.imdf.loader import extract_imdf_zip_bytes
+
+    # Zip incoming con .gdb members + manifest.
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("manifest.json", json.dumps({"sites": {"SITE_X": {}}}))
+        z.writestr("SITE_X.gdb/a00000001.gdbtable", b"\x00fake gdb body\x00")
+        z.writestr("SITE_X.gdb/a00000001.gdbtablx", b"\x00fake gdb idx\x00")
+    data = buf.getvalue()
+
+    bundle = extract_imdf_zip_bytes(data)
+    assert bundle.gdb_zip_bytes is not None
+    assert bundle.has_gdb is True
+    assert bundle.gdb_path is None  # IMDF-6: zero disk
+
+    # Il sub-zip ha gli stessi arcname dei .gdb members originali.
+    sub = zipfile.ZipFile(BytesIO(bundle.gdb_zip_bytes))
+    sub_names = set(sub.namelist())
+    assert sub_names == {
+        "SITE_X.gdb/a00000001.gdbtable",
+        "SITE_X.gdb/a00000001.gdbtablx",
+    }
+
+
+def test_extract_imdf_zip_bytes_ifc_into_ifc_bytes():
+    """IMDF-6: file `.ifc` raccolto in `bundle.ifc_bytes` direttamente
+    (no on-disk path)."""
+    from app.core.imdf.loader import extract_imdf_zip_bytes
+
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("manifest.json", json.dumps({"sites": {"S1": {}}}))
+        z.writestr("S1.ifc", b"ISO-10303-21 fake ifc body")
+    data = buf.getvalue()
+
+    bundle = extract_imdf_zip_bytes(data)
+    assert bundle.ifc_bytes is not None
+    assert bundle.ifc_bytes.startswith(b"ISO-10303-21")
+    assert bundle.has_ifc is True
+    assert bundle.ifc_path is None
 
 
 def test_extract_imdf_zip_bytes_equivalent_to_path_based(tmp_path):
-    """Equivalenza output: lo stesso zip aperto da path o da bytes
-    deve produrre lo stesso `site_id` + lo stesso set di file
-    indicizzati. Anti-regression sul refactor `_extract_zip_source_to_bundle`."""
+    """Equivalenza site_id + raw_filelist tra path-mode (legacy) e
+    bytes-mode (IMDF-6). Shape DIVERGENT (path-mode ha tmp_dir +
+    *_path; bytes-mode ha files dict + gdb_zip_bytes), ma i metadati
+    derivati devono combaciare."""
     from app.core.imdf.loader import extract_imdf_zip, extract_imdf_zip_bytes
 
     data = _build_minimal_imdf_zip_bytes()
@@ -136,16 +183,14 @@ def test_extract_imdf_zip_bytes_equivalent_to_path_based(tmp_path):
     bundle_from_path = extract_imdf_zip(str(zip_on_disk))
     bundle_from_bytes = extract_imdf_zip_bytes(data)
     try:
+        # Metadati derivati: stessi indipendentemente dal path/bytes.
         assert bundle_from_path.site_id == bundle_from_bytes.site_id
         assert set(bundle_from_path.raw_filelist) == set(
             bundle_from_bytes.raw_filelist
         )
-        # I path concreti differiscono (tmp dir diverse) ma i nomi
-        # relativi devono combaciare.
-        assert (
-            sorted(p.name for p in bundle_from_path.imdf_geojson_files)
-            == sorted(p.name for p in bundle_from_bytes.imdf_geojson_files)
-        )
+        # has_* properties: stesso risultato.
+        assert bundle_from_path.has_manifest == bundle_from_bytes.has_manifest
+        assert bundle_from_path.has_gdb == bundle_from_bytes.has_gdb
     finally:
         bundle_from_path.cleanup()
         bundle_from_bytes.cleanup()

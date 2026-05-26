@@ -329,7 +329,11 @@ _BOUNDARY_FROZEN_SNAPSHOT: dict[str, int] = {
     "app/core/files/service_deps.py": 2,
     "app/core/results/blob_writer.py": 1,
     # IMDF subsystem (format-as-directory + cache hydration)
-    "app/core/imdf/loader.py": 3,
+    # loader.py post-IMDF-6 (extract_imdf_zip_bytes fully-RAM):
+    # 1 safe_extractall + 1 tempfile_mkdtemp restano in `extract_imdf_zip`
+    # path-mode legacy. `extract_imdf_zip_bytes` non tocca piu' il
+    # filesystem (legge solo membri zip via ZipFile.read).
+    "app/core/imdf/loader.py": 2,
     "app/core/imdf/persist.py": 3,
     # storage.py post-IMDF-5 (fully-RAM via /vsimem):
     # 1 path_write_bytes (ensure_local_bundle files-layout hydration)

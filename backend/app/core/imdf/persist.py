@@ -99,16 +99,23 @@ def persist_imdf_bundle(
         comunque cancellato dal finally.
     """
     try:
-        # Bytes del .ifc se presente (path-only): leggiamo dal tmp_dir.
-        ifc_bytes: Optional[bytes] = None
+        # IMDF-6: bytes pre-collezionati dall'extract bytes-first.
+        # Fallback al path-mode legacy (`extract_imdf_zip(path)`) che
+        # popola `*_path` su tmp_dir e richiede zip/read on-demand.
+        ifc_bytes: Optional[bytes] = bundle.ifc_bytes
         ifc_filename: Optional[str] = None
-        if bundle.ifc_path is not None and bundle.ifc_path.exists():
+        if ifc_bytes is not None:
+            # Filename: best-effort dalla site_id (`{site}.ifc`).
+            ifc_filename = (
+                bundle.ifc_path.name if bundle.ifc_path is not None
+                else f"{bundle.site_id or 'bundle'}.ifc"
+            )
+        elif bundle.ifc_path is not None and bundle.ifc_path.exists():
             ifc_bytes = bundle.ifc_path.read_bytes()
             ifc_filename = bundle.ifc_path.name
 
-        # Zip del .gdb dir in memoria se presente.
-        gdb_zip_bytes: Optional[bytes] = None
-        if bundle.gdb_path is not None and bundle.gdb_path.exists():
+        gdb_zip_bytes: Optional[bytes] = bundle.gdb_zip_bytes
+        if gdb_zip_bytes is None and bundle.gdb_path is not None and bundle.gdb_path.exists():
             gdb_zip_bytes = _zip_gdb_dir_to_bytes(bundle.gdb_path)
 
         # Meta dict computato in RAM dai counts in bundle.files (geojson).

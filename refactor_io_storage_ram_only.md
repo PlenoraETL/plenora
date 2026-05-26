@@ -2233,11 +2233,12 @@ ogni persistenza passa da DB/S3/MinIO/local-dev policy
 ## Boundary congelato — by-design residues (2026-05-25)
 
 Stato dopo Phase5 (ResultBlobLoader path-mode rimosso) + REST connector
-bytes-first + IMDF-1..5 (loader bytes / bundle.files / persist storage-direct
+bytes-first + IMDF-1..6 (loader bytes / bundle.files / persist storage-direct
 / GET metadata + list storage-first / validator+publish fully-RAM via
-GDAL `/vsimem` ctypes adapter / legacy fallback tombstoned).
+GDAL `/vsimem` ctypes adapter / legacy fallback tombstoned /
+`extract_imdf_zip_bytes` fully-RAM).
 
-Il report `test_report_inside_boundary_frozen` segnala **25 entries
+Il report `test_report_inside_boundary_frozen` segnala **24 entries
 su 13 file** all'interno del boundary I/O. Questi residui sono
 intenzionali e classificati per categoria. Non vanno inseguiti: se
 qualcuno li tocca, deve aggiornare contestualmente questa sezione
@@ -2271,7 +2272,7 @@ shape per i path che richiedono GDAL/pyogrio.
 
 | File | Entries | Razionale |
 |---|---|---|
-| `app/core/imdf/loader.py` | 3 | `extract_imdf_zip` + `extract_imdf_zip_bytes`: `tempfile.mkdtemp` per la dir di estrazione (richiesta da pyogrio). `safe_extractall` per zip-bomb-safety. |
+| `app/core/imdf/loader.py` | 2 | `extract_imdf_zip` (path-mode legacy) usa `tempfile.mkdtemp` + `safe_extractall`. Post-IMDF-6: `extract_imdf_zip_bytes` fully-RAM (legge solo membri zip via `ZipFile.read`, popola `bundle.files` + `gdb_zip_bytes` + `ifc_bytes`; tmp_dir=None). |
 | `app/core/imdf/persist.py` | 3 | `persist_imdf_bundle_to_disk` legacy (write_bytes + write_text + shutil.move). La funzione canonica IMDF-3 `persist_imdf_bundle` va su storage; il legacy resta per tooling/test finche' non migrano. |
 | `app/core/imdf/storage.py` | 2 | `ensure_local_bundle` hydration `path.write_bytes` + `safe_extractall` (.gdb extract da per-file layout). Post IMDF-5: `hydrate_gdb_to_temp` rimosso, sostituito da `open_gdb_in_vsimem` (ctypes adapter su `gdal_vsi.py`, zero filesystem callsite). |
 
@@ -2309,6 +2310,9 @@ non richiedono aggiornamento di questa sezione.
 
 Le seguenti aree restano target attivi di migrazione (non by-design):
 
+- `extract_imdf_zip(path)` path-mode legacy in loader.py — il path
+  bytes-first IMDF-6 e' la via canonica; il path-mode resta per i
+  test che leggono da disk. Tombstone se i test migrano.
 - `ensure_local_bundle` hydration su `IMDF_BUNDLES_DIR`: usata solo
   da DELETE endpoint e (residualmente) per cache cleanup. Tombstone
   possibile se DELETE migra a `storage.delete_bundle` puro.

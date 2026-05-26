@@ -89,6 +89,12 @@ class ImdfBundle:
     # Vedi class docstring "Invariant site_id" (D3, R4
     site_id: str
     files: Dict[str, bytes] = field(default_factory=dict)
+    # IMDF-6: shape RAM-first per .gdb/.ifc (alternativa al path-mode).
+    # `extract_imdf_zip_bytes` popola questi; `persist_imdf_bundle` li
+    # uploads direttamente senza rezippare. La `.gdb` non sta in `files`
+    # come singolo file perche' e' una directory zippata (opaque blob).
+    gdb_zip_bytes: Optional[bytes] = None
+    ifc_bytes: Optional[bytes] = None
     gdb_path: Optional[Path] = None
     ifc_path: Optional[Path] = None
     manifest_path: Optional[Path] = None
@@ -104,17 +110,15 @@ class ImdfBundle:
 
     @property
     def has_gdb(self) -> bool:
-        """`.gdb` directory presente nel bundle (richiede filesystem
-        per pyogrio). Derivato dal path-shape: la `.gdb` non e' mai
-        in `files` (e' una directory)."""
-        return self.gdb_path is not None
+        """`.gdb` presente nel bundle — come bytes RAM (`gdb_zip_bytes`,
+        IMDF-6) o come directory on-disk (`gdb_path`, legacy path-mode)."""
+        return self.gdb_zip_bytes is not None or self.gdb_path is not None
 
     @property
     def has_ifc(self) -> bool:
-        """`.ifc` file presente nel bundle. Path-shape only: l'IFC
-        non e' in `files` (binario potenzialmente grande, lettura
-        on-demand dal consumer)."""
-        return self.ifc_path is not None
+        """`.ifc` presente nel bundle — bytes RAM (`ifc_bytes`, IMDF-6)
+        o file on-disk (`ifc_path`, legacy path-mode)."""
+        return self.ifc_bytes is not None or self.ifc_path is not None
 
     @property
     def has_renderers(self) -> bool:
@@ -244,25 +248,29 @@ def extract_imdf_zip(zip_path: str | os.PathLike, dest_dir: Optional[str | os.Pa
 
 
 def extract_imdf_zip_bytes(data: bytes) -> ImdfBundle:
-    """Estrae uno zip IMDF da bytes in RAM e indicizza i contenuti.
+    """Estrae uno zip IMDF da bytes in RAM — IMDF-6 fully-RAM.
 
-    Variante bytes-first di `extract_imdf_zip`: chiude l'escape hatch
-    `temporary_path_from_bytes` lato caller. Lo zip stesso e' aperto
-    via `ZipFile(BytesIO(data))`, senza materializzare il file zip su
-    disco.
+    No tmp dir, no extract su disco. I componenti vengono letti dal
+    `ZipFile(BytesIO(data))` come bytes e popolano le rispettive shape
+    RAM-first:
 
-    Internamente la tmp dir resta necessaria SOLO per le componenti
-    estratte che richiedono filesystem (il File Geodatabase `.gdb`
-    e' una directory letta da pyogrio via path). IMDF-2 spostera'
-    anche manifest/validation/renderers/geojson in-memory e
-    introdurra' una nuova shape `ImdfBundle.files: dict[str, bytes]`;
-    IMDF-1 chiude solo il bounce nel caller.
+      - `bundle.files`: dict per JSON/geojson (`manifest.json`,
+        `validation.json`, `renderers.json`, `{site_id}/*.geojson`).
+      - `bundle.gdb_zip_bytes`: zip-in-zip dei membri `*.gdb/...`
+        ricomposto (stesso layout di `persist._zip_gdb_dir_to_bytes`,
+        cosi' `persist_imdf_bundle` lo uploads direttamente come
+        `_gdb.zip` su storage).
+      - `bundle.ifc_bytes`: bytes del file `.ifc` se presente.
+
+    `tmp_dir` resta `None`: i consumer post-IMDF-3 (`persist_imdf_bundle`)
+    + IMDF-5 (`open_gdb_in_vsimem` per validator/publish) ragionano
+    su bytes/storage, non hanno bisogno di un workspace su disco.
 
     Args:
         data: bytes dello zip IMDF.
 
     Returns:
-        ImdfBundle popolato (tmp_dir-based come `extract_imdf_zip`).
+        ImdfBundle popolato (no `tmp_dir`).
 
     Raises:
         ValueError: se `data` e' vuoto o lo zip non e' un IMDF valido.
@@ -270,14 +278,110 @@ def extract_imdf_zip_bytes(data: bytes) -> ImdfBundle:
     if not data:
         raise ValueError("IMDF bytes vuoti")
 
-    tmp = Path(tempfile.mkdtemp(prefix="imdf_"))
-    tmp.mkdir(parents=True, exist_ok=True)
+    files: Dict[str, bytes] = {}
+    gdb_members: list[tuple[str, bytes]] = []
+    ifc_bytes: Optional[bytes] = None
 
-    try:
-        return _extract_zip_source_to_bundle(io.BytesIO(data), tmp)
-    except Exception:
-        shutil.rmtree(tmp, ignore_errors=True)
-        raise
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        members = z.namelist()
+        for m in members:
+            try:
+                if m in _RAM_FIRST_MEMBERS or _is_geojson_member(m):
+                    files[m] = z.read(m)
+                elif ".gdb/" in m:
+                    # Membri della .gdb dir: collezioniamo i bytes,
+                    # poi ricomponiamo un sub-zip mirror di
+                    # `_zip_gdb_dir_to_bytes`.
+                    gdb_members.append((m, z.read(m)))
+                elif m.endswith(".ifc") and ifc_bytes is None:
+                    ifc_bytes = z.read(m)
+            except KeyError:
+                # Member listato in namelist ma non leggibile (corruzione
+                # parziale): skip silenzioso, _build_bytes_bundle_index
+                # decidera' se il bundle e' valido.
+                continue
+
+    gdb_zip_bytes: Optional[bytes] = None
+    if gdb_members:
+        # Ricomponi il sub-zip della .gdb mantenendo gli stessi arcname
+        # (cosi' `open_gdb_in_vsimem` trova `{site_id}.gdb/` come
+        # top-level dentro `_gdb.zip`).
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+            for arcname, payload in gdb_members:
+                zf.writestr(arcname, payload)
+        gdb_zip_bytes = buf.getvalue()
+
+    return _build_bytes_bundle_index(
+        members=members,
+        files=files,
+        gdb_zip_bytes=gdb_zip_bytes,
+        ifc_bytes=ifc_bytes,
+    )
+
+
+def _build_bytes_bundle_index(
+    *,
+    members: List[str],
+    files: Dict[str, bytes],
+    gdb_zip_bytes: Optional[bytes],
+    ifc_bytes: Optional[bytes],
+) -> "ImdfBundle":
+    """Indicizza un bundle IMDF da bytes (IMDF-6 fully-RAM).
+
+    Variante bytes-mode di `_build_bundle_index`: non ha `tmp_dir`,
+    quindi non assegna `*_path` (manifest_path/validation_path/etc).
+    I consumer leggono via `bundle.files` (gia' popolato dall'estrazione)
+    o via bytes campi (`gdb_zip_bytes`, `ifc_bytes`).
+
+    Site_id derivato:
+      1. da `manifest.json["sites"]` (primo key) se presente;
+      2. fallback: prefisso della prima `.gdb/` o primo dir top-level
+         con geojson, alphabetico.
+
+    Raises:
+        ValueError: se ne' .gdb ne' manifest sono presenti (formato
+        non-IMDF).
+    """
+    bundle = ImdfBundle(
+        tmp_dir=None,
+        site_id="",
+        files=files,
+        gdb_zip_bytes=gdb_zip_bytes,
+        ifc_bytes=ifc_bytes,
+        raw_filelist=members,
+    )
+
+    site_id_candidates: set[str] = set()
+    for m in members:
+        if ".gdb/" in m:
+            site_id_candidates.add(m.split(".gdb/", 1)[0].split("/")[-1])
+        elif m.endswith(".ifc"):
+            site_id_candidates.add(Path(m).stem)
+        elif m.endswith(".geojson") and "/" in m:
+            site_id_candidates.add(m.split("/", 1)[0])
+
+    # Preferenza al manifest.
+    manifest_raw = files.get("manifest.json")
+    if manifest_raw:
+        try:
+            mf = json.loads(manifest_raw.decode("utf-8"))
+            sites = mf.get("sites") or {}
+            if isinstance(sites, dict) and sites:
+                bundle.site_id = next(iter(sites.keys()))
+        except Exception:
+            pass
+
+    if not bundle.site_id and site_id_candidates:
+        bundle.site_id = sorted(site_id_candidates)[0]
+
+    # Validity check minimo: deve avere o .gdb o manifest.
+    if gdb_zip_bytes is None and "manifest.json" not in files:
+        raise ValueError(
+            "Lo zip non sembra un IMDF: manca sia .gdb sia manifest.json"
+        )
+
+    return bundle
 
 
 def _build_bundle_index(tmp: Path, members: List[str]) -> "ImdfBundle":
