@@ -350,17 +350,25 @@ def upload_file(
     """
     assert_group_access(_svc().get_datasource(ds_id), current_user, "Data Source")
     try:
-        content = file.file.read()
-        # Difesa malware: il file finisce su SharePoint/SFTP/FS esterno
-        # condiviso e persistente. Block-only mode: qualsiasi formato
-        # business legittimo passa, eseguibili (PE/ELF/Mach-O/shebang
-        # sono rifiutati con 400
+        # RAM-B3 (2026-05-26): upload streaming chunked.
+        # Pre: `file.file.read()` materializzava il body INTERO in RAM.
+        # Post: validate_no_executable sui primi 4KB (header magic
+        # bytes sufficiente), poi chunked write via `write_chunks`.
+        # Peak RAM: ~4KB header + chunk buffer (~64KB) + bounded
+        # internal buffer di starlette per UploadFile.
         from app.utils.mime_validator import (
             MimeMismatchError, validate_no_executable,
         )
+
+        _UPLOAD_CHUNK_SIZE = 64 * 1024
+        _MAGIC_HEADER_BYTES = 4096
+
+        # 1. Header bytes per magic check
+        file.file.seek(0)
+        header = file.file.read(_MAGIC_HEADER_BYTES)
         try:
             validate_no_executable(
-                content=content, filename=file.filename or path,
+                content=header, filename=file.filename or path,
             )
         except MimeMismatchError as e:
             logger.warning(
@@ -368,8 +376,21 @@ def upload_file(
                 f"path={path!r} user={current_user.username}: {e}"
             )
             raise HTTPException(status_code=400, detail=str(e))
-        _svc().write_file(ds_id, path, content)
-        return {"ok": True, "path": path, "size": len(content)}
+
+        # 2. Stream: yield header + remaining chunks
+        total_bytes = [len(header)]  # closure cell per counter
+
+        def _body_chunks():
+            yield header
+            while True:
+                chunk = file.file.read(_UPLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                total_bytes[0] += len(chunk)
+                yield chunk
+
+        _svc().write_chunks(ds_id, path, _body_chunks())
+        return {"ok": True, "path": path, "size": total_bytes[0]}
     except DataSourceError as e:
         raise _ds_error_to_http(e)
     except Exception as e:

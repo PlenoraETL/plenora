@@ -211,7 +211,6 @@ def extract_imdf_zip_bytes(data: bytes) -> ImdfBundle:
         raise ValueError("IMDF bytes vuoti")
 
     files: Dict[str, bytes] = {}
-    gdb_members: list[tuple[str, bytes]] = []
     ifc_bytes: Optional[bytes] = None
 
     # `open_zip_bytes_safe` valida i cap zip-bomb PRIMA di yield: i
@@ -220,35 +219,48 @@ def extract_imdf_zip_bytes(data: bytes) -> ImdfBundle:
     # il MIME, ma non l'inner ZIP bomb cap).
     from app.core.io.zip_guards import open_zip_bytes_safe
 
+    # RAM-A (2026-05-26): ricomposizione GDB sub-zip in streaming.
+    # Pre: accumuavamo `gdb_members: list[tuple[str, bytes]]` (peak
+    # O(sum members)) e poi ricomponevamo il sub-zip. Post: scriviamo
+    # member-by-member direttamente sul sub-zip mentre leggiamo il
+    # source — peak O(max single member) invece di O(sum).
+    gdb_buf = io.BytesIO()
+    gdb_zip_writer: Optional[zipfile.ZipFile] = None
+    gdb_member_count = 0
+
     with open_zip_bytes_safe(data) as z:
         members = z.namelist()
-        for m in members:
-            try:
-                if m in _RAM_FIRST_MEMBERS or _is_geojson_member(m):
-                    files[m] = z.read(m)
-                elif ".gdb/" in m:
-                    # Membri della .gdb dir: collezioniamo i bytes,
-                    # poi ricomponiamo un sub-zip mirror di
-                    # `_zip_gdb_dir_to_bytes`.
-                    gdb_members.append((m, z.read(m)))
-                elif m.endswith(".ifc") and ifc_bytes is None:
-                    ifc_bytes = z.read(m)
-            except KeyError:
-                # Member listato in namelist ma non leggibile (corruzione
-                # parziale): skip silenzioso, _build_bytes_bundle_index
-                # decidera' se il bundle e' valido.
-                continue
+        try:
+            for m in members:
+                try:
+                    if m in _RAM_FIRST_MEMBERS or _is_geojson_member(m):
+                        files[m] = z.read(m)
+                    elif ".gdb/" in m:
+                        # Lazy init del sub-zip writer al primo .gdb member
+                        # incontrato (evita ZIP header overhead se non ci
+                        # sono .gdb members).
+                        if gdb_zip_writer is None:
+                            gdb_zip_writer = zipfile.ZipFile(
+                                gdb_buf, "w", zipfile.ZIP_DEFLATED, allowZip64=True,
+                            )
+                        # Scrive direttamente: peak = singolo member,
+                        # non accumulazione di tutti.
+                        gdb_zip_writer.writestr(m, z.read(m))
+                        gdb_member_count += 1
+                    elif m.endswith(".ifc") and ifc_bytes is None:
+                        ifc_bytes = z.read(m)
+                except KeyError:
+                    # Member listato in namelist ma non leggibile (corruzione
+                    # parziale): skip silenzioso, _build_bytes_bundle_index
+                    # decidera' se il bundle e' valido.
+                    continue
+        finally:
+            if gdb_zip_writer is not None:
+                gdb_zip_writer.close()
 
     gdb_zip_bytes: Optional[bytes] = None
-    if gdb_members:
-        # Ricomponi il sub-zip della .gdb mantenendo gli stessi arcname
-        # (cosi' `open_gdb_in_vsimem` trova `{site_id}.gdb/` come
-        # top-level dentro `_gdb.zip`).
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
-            for arcname, payload in gdb_members:
-                zf.writestr(arcname, payload)
-        gdb_zip_bytes = buf.getvalue()
+    if gdb_member_count > 0:
+        gdb_zip_bytes = gdb_buf.getvalue()
 
     return _build_bytes_bundle_index(
         members=members,

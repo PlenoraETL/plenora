@@ -354,18 +354,58 @@ Upload streaming non e' stato toccato: il body request e' bufferizzato
 da Starlette/FastAPI internamente e cambiare quel comportamento richiede
 refactor dell'endpoint a `Request` raw. Trade-off accettato.
 
-### Cosa NON e' stato toccato (priorita' media identificata in audit)
+### RAM-A — IMDF GDB ricomposizione streaming
 
-- IMDF GDB zip streaming (`imdf/loader.py` accumula gdb_members + ricrea
-  BytesIO zip): moltiplicatore 4x ma solo per bundle IMDF, scope
-  ristretto.
+`app/core/imdf/loader.py::extract_imdf_zip_bytes` accumulava
+`gdb_members: list[tuple[str, bytes]]` (peak O(sum members)) e poi
+ricomponeva il sub-zip. Post-RAM-A: scrittura member-by-member
+direttamente sul sub-zip mentre leggi il source — peak O(max single
+member). Lazy init del `ZipFile` writer al primo member `.gdb`
+incontrato (no overhead se il bundle non ha GDB).
+
+### RAM-B — Datasource streaming write + read (interface)
+
+Interface `DataSourceInterface` esteso con metodi streaming uniformi:
+
+  - `iter_read_chunks(path, *, chunk_size=64KB) -> Iterator[bytes]`:
+    streaming download.
+  - `write_chunks(path, chunks: Iterable[bytes]) -> None`:
+    streaming upload.
+
+Entrambi hanno default fallback (read_file slicing / accumula → write_file)
+per backwards compat. Override nativi:
+
+  - **LocalDataSource**: vero streaming via file handle chunked.
+    `write_chunks` delega al boundary `io.local_filesystem.write_local_chunks`
+    (single audit point).
+  - **SftpDataSource**: `paramiko.SFTPClient.open(path, 'rb'|'wb')` con
+    prefetch automatico, peak ~chunk_size.
+  - **FtpDataSource**: `ftplib.storbinary` con file-like adapter sopra
+    l'iterable (per write); `ftplib.retrbinary` con thread+queue per
+    read (paramiko-style callback transformation).
+  - **SharePointDataSource**: default fallback (REST API tipicamente
+    richiede content-length).
+
+Router `upload_file` ora fa magic bytes validation sui primi 4KB +
+streaming write via `_body_chunks()` generator. Peak ~4KB header +
+64KB chunk + bounded starlette buffer.
+
+`DataSourceService.write_chunks(ds_id, path, chunks)` wrapper mantiene
+il lifecycle `backend.__enter__/__exit__`.
+
+### Cosa NON e' stato toccato (priorita' media restante)
+
 - Enrichment `response.json()` materializza body intero: cambiare a
   streaming JSON parser e' non-banale; lascio finche' non e' un
   bottleneck reale.
 - Spatial `gdf.to_crs()` su intero GDF: tradeoff usability vs perf
   poco chiaro.
-- Intermediate parquet `BytesIO + getvalue()`: stesso pattern fixed in
-  RAM-2; estensibile facilmente quando serve.
+- Intermediate parquet `BytesIO + getvalue()`: pattern simile a
+  StreamingResultBlobWriter; estendibile quando serve.
+- CARICA `dataframe_to_export_bytes` ritorna bytes finali (non chunks).
+  Per davvero streaming CARICA serve `to_csv` con queue-buffer threaded
+  (pyarrow CSV writer streaming sarebbe alternativa). Lasciato finche'
+  i CSV CARICA non sfondano la RAM in produzione.
 
 ---
 

@@ -295,6 +295,27 @@ class SFTPDataSource(DataSourceInterface):
             raise DataSourcePermissionError(f"Accesso negato: {path!r}") from e
         return buf.getvalue()
 
+    def iter_read_chunks(self, path: str, *, chunk_size: int = 64 * 1024):
+        """RAM-B2 (2026-05-26): override streaming via paramiko file-like.
+
+        `paramiko.SFTPClient.open(path, 'rb')` ritorna un file-like che
+        supporta `.read(chunk_size)` con prefetch automatico. Peak RAM
+        ~chunk_size, no double-buffer come in `read_file`."""
+        self._check()
+        try:
+            with self._sftp.open(path, "rb") as f:
+                # paramiko ottimizza con prefetch per file > 32KB; lasciamo
+                # default.
+                while True:
+                    chunk = f.read(chunk_size)
+                    if not chunk:
+                        break
+                    yield chunk
+        except IOError as e:
+            if "No such file" in str(e) or "does not exist" in str(e):
+                raise DataSourceFileNotFoundError(f"File non trovato: {path!r}") from e
+            raise DataSourcePermissionError(f"Accesso negato: {path!r}") from e
+
     def write_file(self, path: str, content: bytes) -> None:
         self._check()
         parent = "/".join(path.split("/")[:-1])
@@ -303,6 +324,21 @@ class SFTPDataSource(DataSourceInterface):
         try:
             with self._sftp.open(path, "wb") as f:
                 f.write(content)
+        except IOError as e:
+            raise DataSourcePermissionError(f"Scrittura negata: {path!r}") from e
+
+    def write_chunks(self, path: str, chunks) -> None:
+        """RAM-B1 (2026-05-26): override streaming write via paramiko
+        file-like. Scrive chunk-per-chunk con peak RAM ~chunk_size."""
+        self._check()
+        parent = "/".join(path.split("/")[:-1])
+        if parent:
+            self._mkdirs(parent)
+        try:
+            with self._sftp.open(path, "wb") as f:
+                for chunk in chunks:
+                    if chunk:
+                        f.write(chunk)
         except IOError as e:
             raise DataSourcePermissionError(f"Scrittura negata: {path!r}") from e
 

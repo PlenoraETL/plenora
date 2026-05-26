@@ -7,7 +7,7 @@ Classe base astratta comune a tutti i backend di storage.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Iterator, Mapping, Optional
+from typing import Iterable, Iterator, Mapping, Optional
 from typing_extensions import TypedDict
 import fnmatch
 import hashlib
@@ -216,6 +216,35 @@ class DataSourceInterface(ABC):
 
         Raises: DataSourcePermissionError, DataSourceError
         """
+
+    def write_chunks(self, path: str, chunks: Iterable[bytes]) -> None:
+        """Scrive un file consumando un iterable di bytes chunk (RAM-B1).
+
+        Default implementation: accumula tutti i chunk in `bytearray` e
+        delega a `write_file()`. Backwards-compatible: i backend che
+        non override-ano non perdono peak ma espongono l'interface
+        uniforme.
+
+        I backend con vero streaming nativo override-ano questo metodo:
+          - LocalDataSource: delega a io.local_filesystem chunked write — peak O(chunk_size)
+          - SftpDataSource: paramiko SFTPClient file-like in write mode — peak O(chunk_size)
+          - FtpDataSource: ftplib storbinary con callback file-like adapter — peak O(chunk_size)
+          - SharePointDataSource: default fallback (REST API tipicamente
+            richiede content-length, no chunked upload nativo)
+
+        Args:
+            path: file di destinazione (relativo alla root).
+            chunks: iterable di `bytes`. Puo' essere una list, un
+                generator, o un iterator. Consumato una sola volta.
+
+        Raises:
+            DataSourcePermissionError, DataSourceError — come `write_file()`.
+        """
+        # Default safe: accumula. Override per streaming vero.
+        buf = bytearray()
+        for chunk in chunks:
+            buf.extend(chunk)
+        self.write_file(path, bytes(buf))
 
     @abstractmethod
     def delete_file(self, path: str) -> None:

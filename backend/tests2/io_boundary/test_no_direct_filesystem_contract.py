@@ -377,11 +377,14 @@ _BOUNDARY_FROZEN_SNAPSHOT: dict[str, int] = {
     # (boundary unico per data plane locale + operational self-test).
     # `sftp.py` resta: e' un false positive (paramiko remoto, non
     # filesystem locale) ma match sintattico del regex.
-    "app/core/datasources/sftp.py": 1,
+    # Count = 2 post RAM-B2 (write_chunks + iter_read_chunks, entrambi
+    # `self._sftp.open(path, "wb"|"rb")`).
+    "app/core/datasources/sftp.py": 2,
     # Local filesystem boundary (audit follow-up 2026-05-26): single
-    # entry point per scritture su filesystem locale. Il match e' su
-    # `open(target, "wb")` dentro `write_local_bytes`, by-design.
-    "app/core/io/local_filesystem.py": 1,
+    # entry point per scritture su filesystem locale. I match sono
+    # `open(target, "wb")` dentro `write_local_bytes` (1) e
+    # `write_local_chunks` (1, RAM-B1 streaming write), by-design.
+    "app/core/io/local_filesystem.py": 2,
 }
 
 

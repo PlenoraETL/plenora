@@ -296,6 +296,17 @@ class DataSourceService:
         with backend as ds:
             ds.write_file(path, content)
 
+    def write_chunks(self, ds_id: str, path: str, chunks) -> None:
+        """RAM-B1 (2026-05-26): streaming write via il backend interface.
+
+        I backend con override nativo (Local, SFTP, FTP) scrivono
+        chunk-per-chunk con peak ~chunk_size. SharePoint usa il default
+        fallback (accumula in bytearray → write_file).
+        """
+        backend = self._get_backend(ds_id)
+        with backend as ds:
+            ds.write_chunks(path, chunks)
+
     def delete_file(self, ds_id: str, path: str) -> None:
         backend = self._get_backend(ds_id)
         with backend as ds:

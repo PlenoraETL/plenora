@@ -31,6 +31,9 @@ qui dentro come scope dichiarato.
 **API:**
   - `write_local_bytes(path, content)`: scrive `content` su `path`,
     creando le directory parent se mancanti.
+  - `write_local_chunks(path, chunks)`: variante streaming che scrive
+    chunk-per-chunk (peak ~chunk_size). Usata da
+    `LocalDataSource.write_chunks` per data plane uploads.
   - `verify_local_writable(path)`: touch + unlink come self-test
     sulla scrivibilita' del path (boot-time diagnostic).
   - `LocalFilesystemError`: raised su PermissionError / OSError dei
@@ -41,7 +44,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Union
+from typing import Iterable, Union
 
 from app.utils.logger import get_logger
 
@@ -87,6 +90,41 @@ def write_local_bytes(path: Union[str, Path], content: bytes) -> None:
         ) from exc
 
 
+def write_local_chunks(path: Union[str, Path], chunks: Iterable[bytes]) -> None:
+    """Scrive `chunks` su `path` in streaming, creando i parent.
+
+    Variante chunked di `write_local_bytes`: per ogni elemento yieldato
+    da `chunks`, fa `f.write(chunk)` direttamente — peak RAM ~chunk_size
+    invece di sum(len(c) for c in chunks). Usato da
+    `LocalDataSource.write_chunks` per upload chunked.
+
+    Args:
+        path: destinazione assoluta. Il caller e' responsabile della
+            path policy.
+        chunks: iterable di `bytes`. Consumato una sola volta.
+
+    Raises:
+        LocalFilesystemError: PermissionError / OSError wrapped.
+    """
+    target = str(path)
+    parent = os.path.dirname(target)
+    try:
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(target, "wb") as f:
+            for chunk in chunks:
+                if chunk:
+                    f.write(chunk)
+    except PermissionError as exc:
+        raise LocalFilesystemError(
+            f"Scrittura negata: {target}"
+        ) from exc
+    except OSError as exc:
+        raise LocalFilesystemError(
+            f"Errore scrittura locale: {exc}"
+        ) from exc
+
+
 def verify_local_writable(path: Union[str, Path]) -> None:
     """Self-test che `path` sia una directory scrivibile.
 
@@ -117,4 +155,5 @@ __all__ = [
     "LocalFilesystemError",
     "verify_local_writable",
     "write_local_bytes",
+    "write_local_chunks",
 ]

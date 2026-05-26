@@ -274,6 +274,29 @@ class LocalDataSource(DataSourceInterface):
         except PermissionError as e:
             raise DataSourcePermissionError(f"Accesso negato: {full_path}") from e
 
+    def write_chunks(self, path: str, chunks) -> None:
+        """RAM-B1 (2026-05-26): streaming write delegato al boundary
+        `io.local_filesystem.write_local_chunks` (single audit point
+        per scritture filesystem locale). Peak RAM ~chunk_size.
+        """
+        from app.core.io.local_filesystem import (
+            LocalFilesystemError,
+            write_local_chunks,
+        )
+
+        full_path = self._abs(path)
+        try:
+            write_local_chunks(full_path, chunks)
+        except LocalFilesystemError as exc:
+            cause = exc.__cause__
+            if isinstance(cause, PermissionError):
+                raise DataSourcePermissionError(
+                    f"Scrittura negata: {full_path}"
+                ) from cause
+            raise DataSourceConnectionError(
+                f"Errore scrittura: {cause if cause is not None else exc}"
+            ) from (cause or exc)
+
     def write_file(self, path: str, content: bytes) -> None:
         # Boundary: la scrittura locale passa per `io.local_filesystem`
         # (data plane endpoint, vedi razionale nel modulo). I PermissionError

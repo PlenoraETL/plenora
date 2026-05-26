@@ -323,6 +323,49 @@ class FTPDataSource(DataSourceInterface):
             raise DataSourceConnectionError(f"Errore read_file FTP: {_sanitize_ftp_error(e)}") from e
         return buf.getvalue()
 
+    def iter_read_chunks(self, path: str, *, chunk_size: int = 64 * 1024):
+        """RAM-B2 (2026-05-26): override streaming via ftplib retrbinary
+        + queue. `retrbinary` chiama il callback per ogni chunk; usiamo
+        una queue thread-safe per yieldare i chunk al consumer del
+        generator senza accumulare tutto in memoria."""
+        import queue
+        import threading
+
+        self._check()
+        q: queue.Queue = queue.Queue(maxsize=4)  # bounded buffer
+        sentinel = object()
+        err_holder: list = []
+
+        def _producer():
+            try:
+                self._ftp.retrbinary(
+                    f"RETR {path}",
+                    lambda chunk: q.put(chunk),
+                    blocksize=chunk_size,
+                )
+            except Exception as e:
+                err_holder.append(e)
+            finally:
+                q.put(sentinel)
+
+        t = threading.Thread(target=_producer, daemon=True)
+        t.start()
+        try:
+            while True:
+                item = q.get()
+                if item is sentinel:
+                    break
+                yield item
+        finally:
+            t.join(timeout=5.0)
+        if err_holder:
+            e = err_holder[0]
+            if isinstance(e, ftplib.error_perm):
+                if "550" in str(e):
+                    raise DataSourceFileNotFoundError(f"File non trovato: {path!r}") from e
+                raise DataSourcePermissionError(f"Accesso negato: {path!r}") from e
+            raise DataSourceConnectionError(f"Errore iter_read_chunks FTP: {_sanitize_ftp_error(e)}") from e
+
     def write_file(self, path: str, content: bytes) -> None:
         self._check()
         parent = "/".join(path.split("/")[:-1])
@@ -340,6 +383,48 @@ class FTPDataSource(DataSourceInterface):
                 exc_info=True,
             )
             raise DataSourceConnectionError(f"Errore write_file FTP: {_sanitize_ftp_error(e)}") from e
+
+    def write_chunks(self, path: str, chunks) -> None:
+        """RAM-B1 (2026-05-26): override streaming via ftplib storbinary
+        + adapter file-like. `storbinary` legge da un file-like in
+        blocks; wrappiamo l'iterable con un adapter che concatena i
+        chunk al volo (peak ~chunk_size)."""
+        self._check()
+        parent = "/".join(path.split("/")[:-1])
+        if parent:
+            self._mkdirs(parent)
+
+        # File-like adapter sopra l'iterable di bytes: ftplib chiama
+        # `read(blocksize)` finche' non ottiene bytes vuoti.
+        chunks_iter = iter(chunks)
+        leftover = bytearray()
+
+        class _ChunksAdapter:
+            def read(self_inner, n: int = -1) -> bytes:
+                if n <= 0:
+                    n = 8192
+                while len(leftover) < n:
+                    try:
+                        nxt = next(chunks_iter)
+                    except StopIteration:
+                        break
+                    if nxt:
+                        leftover.extend(nxt)
+                out = bytes(leftover[:n])
+                del leftover[:n]
+                return out
+
+        try:
+            self._ftp.storbinary(f"STOR {path}", _ChunksAdapter())
+        except ftplib.error_perm as e:
+            raise DataSourcePermissionError(f"Scrittura negata: {path!r}") from e
+        except ftplib.all_errors as e:
+            logger.warning(
+                f"[GESTITO] FTP write_chunks fallita: path={path!r} "
+                f"{type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            raise DataSourceConnectionError(f"Errore write_chunks FTP: {_sanitize_ftp_error(e)}") from e
 
     def delete_file(self, path: str) -> None:
         self._check()
