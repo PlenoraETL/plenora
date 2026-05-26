@@ -1,10 +1,19 @@
 """Persist dataframe pipeline outputs as result artifacts.
 
-Post-Phase5 refactor: bytes-only. Tutti i formati (csv/xlsx/json/parquet
-e geospatial gpkg/shp/geojson) sono serializzati in memoria via
-`save_dataframe_to_bytes`. Lo SHP multi-file e' zippato dentro il
-boundary `io.geospatial.write_shapefile_zip_bytes` (vedi doc del
-boundary), che e' l'unico punto autorizzato a touchare il disco.
+Post-Phase5 + RAM-A1 (2026-05-26): streaming end-to-end via
+`save_dataframe_to_result_blob_streaming` (combina
+`dataframe_to_export_chunks` + `StreamingResultBlobWriter`).
+
+Per formato:
+  - csv, json: vero streaming via queue+thread bridge.
+  - geojson: single-chunk (geospatial writer ritorna bytes interi).
+  - xlsx, xls, parquet, gpkg, shp, gdb: single-chunk by-design
+    (writer footer-based o multi-file zippato; lo SHP multi-file e'
+    zippato dentro il boundary `io.geospatial.write_shapefile_zip_bytes`).
+
+Picco RAM per CSV/JSON ridotto da `df + bytes_full` a `df +
+chunk_buffer (~8MB)`. Formati single-chunk mantengono il vecchio
+peak (limitazione del writer, non del path).
 """
 
 from __future__ import annotations

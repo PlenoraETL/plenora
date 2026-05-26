@@ -1097,25 +1097,34 @@ def execute_enrichment_task(
         result_id: Optional[str] = None
 
         if is_eseguibile:
-            # Eseguibile con output DataFrame → S3 via storage module
-            # save_bytes fa put_object diretto. Post-Phase5 anche gpkg/shp
-            # passano per bytes-first: gpkg single-file via pyogrio /vsimem,
-            # shp via io.geospatial.write_shapefile_zip_bytes (ZIP buffer
-            # construito dentro il boundary, niente disk per il caller).
+            # Eseguibile con output DataFrame → S3 via storage module.
+            # Sessione C (2026-05-26): streaming end-to-end via
+            # `dataframe_to_export_chunks` (queue+thread bridge) +
+            # `eseguibili_storage.save_chunks` (S3 multipart real-time).
+            # Pre-fix: `save_dataframe_to_bytes + save_bytes(bytes)`
+            # picco `df + bytes_serializzati`. Post: streaming, peak
+            # solo chunk_buffer (~8MB part_size) per CSV/JSON.
+            # Formati binari (xlsx/parquet/shp/gpkg/gdb): single-chunk
+            # fallback by-design (writer footer-based o multi-file).
             from app.core.eseguibili import storage as _eseg_storage
-            from app.core.dataframes.frame_io import save_dataframe_to_bytes
+            from app.core.dataframes.export_writer import (
+                dataframe_to_export_chunks,
+            )
             fmt_lower = (final_format or "").lower()
-            data_bytes = save_dataframe_to_bytes(final_df, fmt_lower)
             # SHP esce zippato: rinomina il filename su storage in `.zip`.
             storage_filename = (
                 Path(final_filename).with_suffix(".zip").name
                 if fmt_lower == "shp"
                 else final_filename
             )
-            _eseg_storage.save_bytes(task_id, storage_filename, data_bytes)
+            _eseg_storage.save_chunks(
+                task_id,
+                storage_filename,
+                dataframe_to_export_chunks(final_df, fmt_lower),
+            )
             saved_path = Path(storage_filename)  # per metadata payload
             logger.info(
-                f"[Task {task_id}] Output eseguibile (df) su storage: "
+                f"[Task {task_id}] Output eseguibile (df) su storage streaming: "
                 f"eseguibili-outputs/{task_id}/{storage_filename}"
             )
         else:

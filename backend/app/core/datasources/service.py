@@ -261,8 +261,46 @@ class DataSourceService:
 
         Il datasource resta la boundary di lettura remota; il parsing riusa
         il parser temporaneo del dominio Files, senza persistere FileSource.
+
+        Sessione D (2026-05-26): bounded read via `iter_read_chunks` con
+        cap `PLENORA_DATASOURCE_SCHEMA_MAX_BYTES` (default 50MB).
+        Pre-fix: `read_file()` caricava il file INTERO anche solo per
+        inferire schema/columns (preview_file_temp internamente usa gia'
+        `preview_dataframe_from_bytes(max_rows=200)` da RAM-1, ma il
+        wrapper get_file_schema buttava in RAM il payload completo del
+        file remoto).
+        Post-fix: itera chunks con cap. Per LocalDataSource/SFTP/FTP
+        (override streaming) il peak scende a max_bytes. Per SharePoint
+        (default fallback) `iter_read_chunks` carica comunque tutto in
+        RAM internamente — il cap dei bytes consumati limita solo lo
+        slice estratto. Trade-off accettato.
+
+        Caveat per format ZIP/binari (XLSX/Parquet/GPKG/SHP-ZIP):
+        questi formati richiedono il footer/index del file completo.
+        Il cap 50MB e' sufficiente per CSV/JSON (header bytes
+        bastano per detection + parse). Per formati binari il cap puo'
+        far fallire il parser su file molto grandi — l'utente deve
+        sapere che la preview ha un limite di scope.
         """
-        content = self.read_file(ds_id, path)
+        import os
+
+        try:
+            max_bytes = int(
+                os.environ.get("PLENORA_DATASOURCE_SCHEMA_MAX_BYTES")
+                or 50 * 1024 * 1024
+            )
+            if max_bytes <= 0:
+                max_bytes = 50 * 1024 * 1024
+        except ValueError:
+            max_bytes = 50 * 1024 * 1024
+
+        buf = bytearray()
+        for chunk in self.iter_read_chunks(ds_id, path):
+            buf.extend(chunk)
+            if len(buf) >= max_bytes:
+                break
+        content = bytes(buf)
+
         filename = Path(path).name or "datasource_file"
         return preview_file_temp(
             BytesIO(content),
