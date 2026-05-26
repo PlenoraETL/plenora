@@ -427,12 +427,20 @@ def save_dataframe_to_result_blob_streaming(
     o DB BYTEA buffer. Peak ridotto da `DataFrame + bytes_serializzati`
     a `DataFrame + chunk_buffer (~few MB)`.
 
-    Formati supportati come streaming reale:
-      - csv, json, geojson: chunks via `dataframe_to_export_chunks`
-        (TextIOWrapper + queue-thread bridge).
-      - xlsx, xls: single-chunk fallback (openpyxl no streaming write).
-      - shp, gpkg, parquet, gdb: single-chunk via geospatial/parquet
-        writer (binari multi-file/footer-based richiedono buffer pieno).
+    Formati supportati come streaming reale (E-4 follow-up):
+      - csv, json: chunks via `dataframe_to_export_chunks`
+        (TextIOWrapper + queue-thread bridge; CSV pandas to_csv
+        chunksize, JSON record-by-record batch).
+      - parquet: row-group streaming via `pyarrow.ParquetWriter`
+        (append-only writer, footer flush al close — no seek
+        required sul sink).
+      - geojson: single-chunk via geospatial_dataframe_to_bytes
+        (formato JSON-doc unico, non si splitta row-by-row senza
+        rompere il formato).
+      - xlsx, xls: single-chunk fallback (openpyxl write_only e'
+        invasivo; XLSX big rare in flow output).
+      - shp, gpkg, gdb: single-chunk via geospatial writer (multi-file
+        zippato / driver footer-based, richiedono buffer pieno).
 
     Args:
         project_id: result project owner.

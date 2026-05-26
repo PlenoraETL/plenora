@@ -33,58 +33,27 @@ from app.core.files.exceptions import FileSourceResolutionError
 from app.utils.logger import get_logger
 
 
-class _ChunksFileAdapter:
-    """File-like read-only adapter sopra un iterable di bytes chunks.
-
-    Sessione E-3 (2026-05-26): consumato da `requests.post(files=...)`
-    chunk-by-chunk via `.read(n)`. Permette di passare un generator
-    streaming (es. `dataframe_to_export_chunks`) come file part senza
-    materializzare il payload intero in RAM. Concatena al volo i
-    chunks finche' n bytes sono disponibili; il leftover resta in un
-    bytearray per la chiamata successiva.
-    """
-
-    def __init__(self, chunks):
-        self._iter = iter(chunks)
-        self._leftover = bytearray()
-        self._eof = False
-
-    def read(self, n: int = -1) -> bytes:
-        if n is None or n < 0:
-            # Read-all: consuma tutto. requests usa quasi sempre n>0
-            # ma supportiamolo per compat con `iter_content`-style.
-            while not self._eof:
-                try:
-                    nxt = next(self._iter)
-                except StopIteration:
-                    self._eof = True
-                    break
-                if nxt:
-                    self._leftover.extend(nxt)
-            out = bytes(self._leftover)
-            self._leftover = bytearray()
-            return out
-
-        if n == 0:
-            return b""
-
-        while len(self._leftover) < n and not self._eof:
-            try:
-                nxt = next(self._iter)
-            except StopIteration:
-                self._eof = True
-                break
-            if nxt:
-                self._leftover.extend(nxt)
-
-        out = bytes(self._leftover[:n])
-        del self._leftover[:n]
-        return out
-
-    def close(self) -> None:
-        # No-op: il generator viene GC'd.
-        self._eof = True
-        self._leftover = bytearray()
+# Sessione E-3 (2026-05-26): TENTATIVO `_ChunksFileAdapter` file-like
+# sopra `dataframe_to_export_chunks` per multipart streaming via
+# `requests.post(files=...)`. RIVELATOSI INEFFICACE: `requests` non
+# fa streaming dei file parts — `urllib3.encode_multipart_formdata`
+# chiama `fp.read()` UNA VOLTA per ogni file, materializzando il
+# payload intero in RAM prima di costruire il body multipart (serve
+# Content-Length header). Risultato: API "streaming" ma RAM uguale
+# al pattern bytes diretto.
+#
+# F2(a) follow-up (2026-05-26): RIPRISTINATO `save_dataframe_to_bytes`
+# (path diretto bytes) come comportamento onesto. Vero multipart
+# streaming richiede:
+#   - `requests_toolbelt.MultipartEncoder` (lazy-read file-like durante
+#     l'invio): pacchetto separato (~50KB dep aggiuntiva)
+#   - oppure encoder multipart custom + `requests.post(data=generator,
+#     headers={"Content-Type": "multipart/form-data; boundary=..."})`
+#     (~80 LOC custom, no nuova dep, ma server con no `Transfer-Encoding:
+#     chunked` support possono rompere).
+# Scope futuro: implementare l'opzione di streaming reale quando un
+# caso d'uso REST-file su DataFrame upstream >500MB diventa bottleneck
+# documentato in produzione.
 
 
 def _extract_file_source_group_id(
@@ -336,24 +305,12 @@ class ApiConnectionRestFileMixin:
                         )
                     continue
                 # FS-5: input_path puo' essere str (path su disco) OPPURE
-                # tuple(payload, filename) dal materialize in-memory.
-                # E-3 (2026-05-26): `payload` puo' essere:
-                #   - bytes: legacy / XLSX/Parquet single-chunk → BytesIO wrap.
-                #   - file-like con `.read()` (es. `_ChunksFileAdapter` da
-                #     dataframe_to_export_chunks): usato direttamente,
-                #     consumato chunk-by-chunk da requests.
+                # tuple(bytes, filename) dal materialize in-memory.
                 if isinstance(input_path, tuple):
-                    payload, filename = input_path
-                    if hasattr(payload, "read"):
-                        # Streaming adapter: requests.post chiama .read(n)
-                        # per leggere chunk-by-chunk dal generator.
-                        fh = payload
-                    else:
-                        # Bytes legacy: wrap in BytesIO.
-                        fh = io.BytesIO(payload)
-                    # Nessun opened_handle: il file-like adapter/BytesIO
-                    # viene GC'd al return; non serve close esplicito
-                    # (diversamente da file handle).
+                    data_bytes, filename = input_path
+                    fh = io.BytesIO(data_bytes)
+                    # Nessun opened_handle: BytesIO viene GC'd al return
+                    # non serve close esplicito (diversamente da file handle
                     files[name] = (filename, fh, 'application/octet-stream')
                 else:
                     ip = Path(input_path)
@@ -1099,42 +1056,28 @@ class ApiConnectionRestFileMixin:
                             f"in-memory (supportati: {supported}), uso xlsx"
                         )
                         fmt = 'xlsx'
-                    filename = f"input.{fmt}"
-                    # Sessione E-3 (2026-05-26): streaming upstream DF -> bytes
-                    # multipart. Per CSV/JSON usa `dataframe_to_export_chunks`
-                    # (queue+thread bridge) e wrappa in un file-like adapter
-                    # consumato chunk-by-chunk da `requests.post(files=...)`.
-                    # Per XLSX/Parquet cade su single-chunk (writer footer-
-                    # based, no streaming) — accumulato nell'adapter ma
-                    # comunque RAM-safe.
                     try:
-                        if fmt in ("csv", "json"):
-                            from app.core.dataframes.export_writer import (
-                                dataframe_to_export_chunks,
-                            )
-                            chunks_iter = dataframe_to_export_chunks(upstream_result, fmt)
-                            adapter = _ChunksFileAdapter(chunks_iter)
-                            logger.info(
-                                f"file-processor input: DataFrame upstream {source_id} "
-                                f"materializzato streaming chunks (fmt={fmt}, "
-                                f"{len(upstream_result)} righe)"
-                            )
-                            return (adapter, filename), False
-                        else:
-                            # XLSX/Parquet: writer footer-based, single-chunk.
-                            data_bytes = save_dataframe_to_bytes(upstream_result, fmt)
-                            logger.info(
-                                f"file-processor input: DataFrame upstream {source_id} "
-                                f"materializzato in-memory (fmt={fmt}, {len(upstream_result)} righe, "
-                                f"{len(data_bytes)} bytes)"
-                            )
-                            return (data_bytes, filename), False
+                        # F2(a) revert (2026-05-26): bytes diretto onesto.
+                        # `requests.post(files=...)` materializza comunque
+                        # il payload via urllib3 `_encode_files` upfront —
+                        # un file-like "streaming" non riduce il peak.
+                        # Vero multipart streaming = scope futuro
+                        # (requests_toolbelt o encoder custom, vedi nota
+                        # in testa al modulo).
+                        data_bytes = save_dataframe_to_bytes(upstream_result, fmt)
                     except Exception as e:
                         logger.error(
                             f"file-processor input: materializzazione DataFrame upstream "
                             f"fallita per nodo {target_node_id} (fmt={fmt}): {e}"
                         )
                         raise
+                    filename = f"input.{fmt}"
+                    logger.info(
+                        f"file-processor input: DataFrame upstream {source_id} "
+                        f"materializzato in-memory (fmt={fmt}, {len(upstream_result)} righe, "
+                        f"{len(data_bytes)} bytes)"
+                    )
+                    return (data_bytes, filename), False
 
         # Fallback: comportamento classico (file_source / project_source
         return self._resolve_file_source_path(

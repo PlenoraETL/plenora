@@ -15,6 +15,20 @@ from app.core.manipola.types import FrameMap, JsonObject
 from app.utils.logger import get_logger
 
 
+def _env_int_safe(name: str, *, default: int) -> int:
+    """Helper env-driven cap: legge env var, fallback su default su
+    valori non-int o <=0. F1-1 (2026-05-26): cap source datasource."""
+    import os as _os
+    val = _os.environ.get(name)
+    if not val:
+        return default
+    try:
+        n = int(val)
+        return n if n > 0 else default
+    except ValueError:
+        return default
+
+
 __all__ = ["load_datasource_nodes"]
 
 
@@ -136,18 +150,31 @@ def load_datasource_nodes(
         # Read remote bytes via the canonical service. The backend
         # connect/disconnect lifecycle and credential decryption live
         # there — no FTP/SFTP/SharePoint logic leaks into this loader.
-        # Sessione E-1 (2026-05-26): usa `iter_read_chunks` accumulando
-        # in bytearray. Per backend con override streaming
-        # (LocalDataSource, SFTP, FTP — RAM-3/B2) il peak intermedio
-        # scende a `chunk_size`. Il payload finale resta in bytearray
-        # come prima — il parser ha bisogno dei bytes interi. Per
-        # SharePoint (default fallback) il peak non cambia (la
-        # lettura interna e' comunque full). Trade-off accettato:
-        # win sostanziale solo per backend streaming nativi.
+        # Sessione E-1 (2026-05-26) + F1-1 follow-up: usa
+        # `iter_read_chunks` accumulando in bytearray con cap esplicito
+        # `PLENORA_DATASOURCE_SOURCE_MAX_BYTES` (default 2GB). Per
+        # backend con override streaming (LocalDataSource, SFTP, FTP,
+        # SharePoint via REST — RAM-3/B2/E-2) il peak intermedio scende
+        # a `chunk_size`. Il payload finale resta in bytearray finche'
+        # il parser non ha consumato i bytes — il parser non ha
+        # streaming API. Trade-off accettato: peak finale = file_size
+        # comunque, ma con cap che evita OOM su input pathological.
         try:
+            max_bytes = _env_int_safe(
+                "PLENORA_DATASOURCE_SOURCE_MAX_BYTES",
+                default=2 * 1024 * 1024 * 1024,  # 2GB default
+            )
             buf = bytearray()
             for chunk in datasource_service.iter_read_chunks(ds_id, file_path):
                 buf.extend(chunk)
+                if len(buf) > max_bytes:
+                    raise ValueError(
+                        f"File datasource supera cap "
+                        f"PLENORA_DATASOURCE_SOURCE_MAX_BYTES "
+                        f"({max_bytes:,} bytes). Source: {file_path!r}, "
+                        f"size finora: {len(buf):,}. "
+                        f"Override env per casi legittimi."
+                    )
             content = bytes(buf)
             # Free bytearray per evitare picco doppio (bytearray + bytes
             # immutabile in flight). Il bytearray e' GC'd subito dopo

@@ -919,7 +919,19 @@ class SharePointDataSource(DataSourceInterface):
         """Helper fallback: full download via office365 client + slice
         in chunks. Stesso peak del default DataSourceInterface ma
         usa il client office365 (auth/folder context). Usato quando
-        il path REST diretto non e' disponibile."""
+        il path REST diretto non e' disponibile.
+
+        F1-2 (2026-05-26): questo fallback e' **best-effort**, NON
+        garantisce streaming RAM. Il `_download_file` interno carica
+        il file INTERO in BytesIO via office365 client `.download(buf)`.
+        Lo slice in chunks ha un'API uniforme con altri backend ma il
+        peak RAM resta O(file_size). Usato quando:
+          - office365 session interna non e' accessibile (API SDK
+            cambiata fra versioni);
+          - REST stream fallisce con HTTP error / network error.
+
+        Il vero streaming RAM resta solo nel path principale
+        `iter_read_chunks` (REST + Range + iter_content)."""
         # Re-implementa la logica di read_file per ottenere file_obj
         # senza duplicare il try/except del read_file pubblico.
         server_relative_url = self._server_relative_url(path)
