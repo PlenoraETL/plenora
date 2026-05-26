@@ -254,15 +254,28 @@ def op_flatten_json(
         # Post-fix: per ogni path richiesto, estrai via `.apply(dig)` come
         # singola Series, evitando json_normalize globale. RAM ~ len(paths)
         # x len(rows) invece di full schema discovery.
+        #
+        # M-2 follow-up: il fast-path RISPETTA `max_level` come il legacy
+        # `json_normalize(..., max_level=max_level)`. Path piu' profondi
+        # del cap vengono scartati con log warning (UI contract: l'utente
+        # ha esplicitamente impostato max_level, le request di estrarre
+        # path piu' deep sono coerenti col legacy che li tagliava).
         if output_columns:
             wanted = list(output_columns)
             # Strip del prefix per ottenere il path JSON originale.
             extracted_cols: dict = {}
+            skipped_too_deep: list = []
             for full_col_name in wanted:
                 if not full_col_name.startswith(col_prefix):
                     continue
                 json_path = full_col_name[len(col_prefix):]
                 path_parts = json_path.split(".")
+                # max_level rispecchia il legacy json_normalize: 0 = solo
+                # top-level, 1 = un livello di nesting, ecc. Un path con
+                # `len(parts) > max_level + 1` e' piu' profondo del cap.
+                if max_level is not None and max_level >= 0 and len(path_parts) > max_level + 1:
+                    skipped_too_deep.append(full_col_name)
+                    continue
 
                 def _dig(d, parts=path_parts):
                     cur = d
@@ -276,10 +289,18 @@ def op_flatten_json(
 
                 extracted_cols[full_col_name] = parsed_col.apply(_dig)
 
+            if skipped_too_deep:
+                logger.warning(
+                    f"FlattenJSON fast-path: path piu' profondi di max_level={max_level} "
+                    f"saranno scartati per coerenza con legacy json_normalize: "
+                    f"{skipped_too_deep}"
+                )
+
             if not extracted_cols:
                 logger.warning(
                     f"FlattenJSON: output_columns {output_columns!r} non "
-                    f"matchano nessun path estraibile da '{column}'"
+                    f"matchano nessun path estraibile da '{column}' "
+                    f"(verifica prefix='{col_prefix}' e max_level={max_level})"
                 )
                 return df
 

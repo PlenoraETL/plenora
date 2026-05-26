@@ -268,23 +268,54 @@ def op_text_normalize(
     # native pandas. ~10x piu' veloce + peak RAM ridotto vs `.apply(lambda)`
     # Python row-iter. Solo `strip_accents` (unicodedata combining) richiede
     # ancora `.apply()` perche' non c'e' equivalente pandas vettoriale.
+    #
+    # M-5 follow-up: il branch vettoriale applica `.str.*` SOLO al
+    # sub-set di valori string del Series, preservando inalterati i
+    # non-string (int, float, bool, ecc.). Pre-fix-fix: `.str.lower()`
+    # su una Series object mista produceva NaN sui non-string,
+    # rompendo la semantica originale `normalize_text(text)` che
+    # ritornava `text` se non era str. Su Series numerica `.str.*`
+    # solleva — qui invece resta no-op perche' la mask di string e'
+    # vuota.
     needs_strip_accents = operations in ("strip_accents", "full")
 
-    def _apply_vectorial(s):
-        """Applica le ops che hanno equivalente `.str.*` pandas vettoriale.
-        Le ops vengono concatenate in ordine semantico identico a
-        `normalize_text()`."""
+    def _apply_vectorial_str_subset(s):
+        """Applica le ops `.str.*` solo ai valori string del Series,
+        copiando inalterati i non-string. Preserva la semantica del
+        legacy `normalize_text` su pandas Series con tipi misti."""
+        import pandas as _pd
+
+        # Mask delle posizioni che sono effettivamente stringhe (no None,
+        # no NaN, no int/float/bool/date/altre cose). Su una Series
+        # numerica pura -> mask vuota -> output identico all'input.
+        is_str_mask = s.map(lambda v: isinstance(v, str))
+        if not is_str_mask.any():
+            # Niente da fare: tutti non-string. Ritorna il Series invariato
+            # (copia per safety, evita aliasing con result[col]).
+            return s.copy()
+
+        str_subset = s[is_str_mask].astype("string")
+
         if operations in ("trim", "full"):
-            s = s.str.strip()
+            str_subset = str_subset.str.strip()
         if operations == "lower" or operations == "full":
-            s = s.str.lower()
+            str_subset = str_subset.str.lower()
         elif operations == "upper":
-            s = s.str.upper()
+            str_subset = str_subset.str.upper()
         elif operations == "title":
-            s = s.str.title()
+            str_subset = str_subset.str.title()
         if operations in ("strip_double_spaces", "full"):
-            s = s.str.replace(r"\s+", " ", regex=True)
-        return s
+            str_subset = str_subset.str.replace(r"\s+", " ", regex=True)
+
+        # Riassembla: copia del Series originale + assign delle posizioni
+        # string trasformate. I non-string restano invariati.
+        out = s.copy()
+        # Converti l'output string-extension a Python str native (per
+        # equivalenza dtype/repr con il legacy apply).
+        out.loc[is_str_mask] = [
+            v if _pd.isna(v) else str(v) for v in str_subset
+        ]
+        return out
 
     try:
         for col in valid_columns:
@@ -296,11 +327,10 @@ def op_text_normalize(
                     lambda v: normalize_text(v, operations)
                 )
             else:
-                # Vettoriale `.str.*` pandas: ~10x piu' veloce + peak ridotto.
-                # NaN-safe by-construction: `.str.X` propaga NaN senza
-                # toccarli (semantica identica a normalize_text che ritornava
-                # text inalterato su `is_null_scalar`).
-                result[out_col] = _apply_vectorial(source)
+                # Vettoriale `.str.*` pandas su SOLO i valori string:
+                # ~10x piu' veloce + peak ridotto sulle ops vettoriali;
+                # preserva non-string come il legacy `normalize_text`.
+                result[out_col] = _apply_vectorial_str_subset(source)
 
         logger.info(f"Text Normalize ({operations}): {len(valid_columns)} colonne")
         return result

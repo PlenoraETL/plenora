@@ -225,33 +225,47 @@ def op_join(
     # Post-fix: stima cap pre-merge con bound peggiore basato sulle
     # frequenze di chiave; se supera la soglia, fail-closed con messaggio
     # operativo invece di OOM silente.
+    #
+    # M-6 follow-up: ESCLUDI i null dal prodotto common-keys. La policy
+    # downstream sostituisce ogni null con una sentinel UNIVOCA per riga
+    # (NaN NON matcha NaN cross-side, vedi commento sopra). Quindi nella
+    # stima: left_nulls * right_nulls non e' una croce match-able — vanno
+    # contati solo come righe preservate per how in (left/right/outer).
+    # Pre-fix-fix: `value_counts(dropna=False)` includeva i null nei
+    # common e poteva sovrastimare (e bloccare) un join legittimo con
+    # molti null bilaterali ma chiavi reali a bassa cardinalita'.
     _MAX_JOIN_OUTPUT_ROWS = 50_000_000  # 50M righe = ~5-10GB peak tipico
     try:
         left_keys = left_df[left_on]
         right_keys = right_df[right_on]
-        # Bound peggiore: per ogni valore chiave, sum(left_count * right_count).
-        # Usa value_counts (cheap) invece di un vero groupby cross-product.
-        left_vc = left_keys.value_counts(dropna=False)
-        right_vc = right_keys.value_counts(dropna=False)
-        # Common keys: prodotto delle frequenze sommate.
+        # `dropna=True`: i null sono trattati separatamente sotto. Solo le
+        # chiavi NON-null entrano nel prodotto comune.
+        left_vc = left_keys.value_counts(dropna=True)
+        right_vc = right_keys.value_counts(dropna=True)
         common = left_vc.index.intersection(right_vc.index)
+        estimated_rows = 0
         if len(common) > 0:
             estimated_rows = int(
                 (left_vc.loc[common] * right_vc.loc[common]).sum()
             )
-            if how in ("left", "outer"):
-                # Aggiungi le righe left senza match (preservate).
-                estimated_rows += int(left_vc.drop(common).sum())
-            if how in ("right", "outer"):
-                estimated_rows += int(right_vc.drop(common).sum())
-            if estimated_rows > _MAX_JOIN_OUTPUT_ROWS:
-                raise ValueError(
-                    f"Join {how} su chiavi ('{left_on}' x '{right_on}') "
-                    f"produrrebbe ~{estimated_rows:,} righe (cap "
-                    f"{_MAX_JOIN_OUTPUT_ROWS:,}). Probabile many-to-many "
-                    f"con chiavi a bassa cardinalita'. Verifica le chiavi "
-                    f"o riduci le tabelle in input."
-                )
+        # `inner`: solo cross-product chiavi comuni non-null.
+        # `left`/`outer`: + righe left senza match (incluse left-null).
+        # `right`/`outer`: + righe right senza match (incluse right-null).
+        if how in ("left", "outer"):
+            # left orphans (chiavi non in right) + tutti i left-null.
+            estimated_rows += int(left_vc.drop(common, errors="ignore").sum())
+            estimated_rows += left_null_keys
+        if how in ("right", "outer"):
+            estimated_rows += int(right_vc.drop(common, errors="ignore").sum())
+            estimated_rows += right_null_keys
+        if estimated_rows > _MAX_JOIN_OUTPUT_ROWS:
+            raise ValueError(
+                f"Join {how} su chiavi ('{left_on}' x '{right_on}') "
+                f"produrrebbe ~{estimated_rows:,} righe (cap "
+                f"{_MAX_JOIN_OUTPUT_ROWS:,}). Probabile many-to-many "
+                f"con chiavi a bassa cardinalita'. Verifica le chiavi "
+                f"o riduci le tabelle in input."
+            )
     except ValueError:
         raise
     except Exception as exc:
