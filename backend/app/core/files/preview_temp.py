@@ -35,6 +35,11 @@ class FilePreviewTempColumnPayload(TypedDict):
 class FilePreviewTempPayload(TypedDict):
     columns: list[FilePreviewTempColumnPayload]
     row_count: int
+    # H-4 (2026-05-26): True quando row_count e' un lower-bound del totale
+    # (bounded preview cap, no metadata cheap dal formato). Il FE deve
+    # mostrare disclaimer "stima" all'utente. Casi True: csv/jsonlines/xlsx
+    # (require full scan); False: parquet/geospatial (totale da metadata).
+    row_count_is_estimate: bool
     format: str
     layers: list[str]
     sheets: list[str]
@@ -155,6 +160,7 @@ def preview_file_temp(
             return {
                 "columns": [],
                 "row_count": 0,
+                "row_count_is_estimate": False,
                 "format": format_type,
                 "layers": available_layers,
                 "sheets": [],
@@ -168,6 +174,7 @@ def preview_file_temp(
             return {
                 "columns": [],
                 "row_count": 0,
+                "row_count_is_estimate": False,
                 "format": format_type,
                 "layers": [],
                 "sheets": available_sheets,
@@ -191,15 +198,26 @@ def preview_file_temp(
     # con tabular access). Per formati non-geo, gdf=None.
     gdf_for_columns = df_preview if format_type in ('geojson', 'gpkg', 'shp', 'gdb', 'zip') else None
     columns = column_builder.from_dataframe(df_preview, gdf_for_columns)
-    # row_count: usa total se disponibile da metadata (parquet,
-    # geospatial via read_info), altrimenti len(df_preview) come
-    # lower-bound. Frontend interpreta: se row_count == max_rows
-    # forse il file e' piu' grande (truncated).
-    row_count = total_row_count if total_row_count is not None else len(df_preview)
+    # H-4 (2026-05-26): row_count semantics esplicita via
+    # `row_count_is_estimate`. Quando `total_row_count is None`, il
+    # bounded preview non puo' calcolare il totale cheap (CSV/XLSX/
+    # JSON-lines): `row_count` diventa `len(df_preview)` (lower-bound
+    # = max_rows del bounded loader) e `is_estimate=True`. Quando il
+    # formato espone metadata (parquet, geospatial via read_info),
+    # `row_count` e' il totale reale e `is_estimate=False`. Il FE
+    # deve interpretare `is_estimate=True` come "stima, totale reale
+    # disponibile dopo upload definitivo".
+    if total_row_count is not None:
+        row_count = total_row_count
+        row_count_is_estimate = False
+    else:
+        row_count = len(df_preview)
+        row_count_is_estimate = True
 
     return {
         "columns": [{"name": c.name, "type": c.type} for c in columns],
         "row_count": row_count,
+        "row_count_is_estimate": row_count_is_estimate,
         "format": format_type,
         "layers": [],
         "sheets": [],

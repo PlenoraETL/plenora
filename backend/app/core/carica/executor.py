@@ -376,10 +376,13 @@ class CaricaExecutor:
         elif db_type == "mysql" or db_type == "mariadb":
             url = f"mysql+pymysql://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
         elif db_type == "mssql":
+            # H-2 (2026-05-26): TrustServerCertificate gated da tls_bypass_allowed()
+            from app.core.security.tls_policy import tls_bypass_allowed
+            trust_cert = "yes" if tls_bypass_allowed() else "no"
             url = (
                 f"mssql+pyodbc://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
                 f"?driver=ODBC+Driver+18+for+SQL+Server"
-                f"&TrustServerCertificate=yes&Encrypt=Optional"
+                f"&TrustServerCertificate={trust_cert}&Encrypt=Optional"
             )
         elif db_type == "oracle":
             url = f"oracle+oracledb://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"

@@ -42,7 +42,7 @@
  * Non ha cache per-id: lo store e' gia' single source of truth, cachare
  * separatamente causava inconsistenze allo switch.
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import useCanvasStore from '../../../store/useCanvasStore';
 import { useToast } from '../../../hooks/useToast';
 import { useMountedRef } from '../../../hooks/useMountedRef';
@@ -148,7 +148,15 @@ export function useImdfBundles({ isImdfMode }) {
     return () => { cancelled = true; };
   }, [isImdfMode, bundleTaskId, imdfData?.bundle_task_id, imdfData?.manifest, setLastTaskResult]);
 
-  const handleDeleteBundle = async (tid) => {
+  // H-6 (2026-05-26): handleDeleteBundle wrappato in useCallback per
+  // stabilita' della reference fra render. Pre-fix: plain async function
+  // → ogni render produce una nuova reference → re-render spuri dei
+  // figli senza React.memo, e potenziale loop se usata come dep di
+  // useEffect / useCallback altrove. `selectedBundleId` accesso via
+  // setter funzionale per evitare stale closure (in alternativa
+  // a metterlo nelle deps che farebbe re-creare la callback ad ogni
+  // selezione).
+  const handleDeleteBundle = useCallback(async (tid) => {
     try {
       await deleteImdfBundle(tid);
       // mountedRef guard post-await: pre-fix (P1 frontend-hooks)
@@ -156,13 +164,15 @@ export function useImdfBundles({ isImdfMode }) {
       // setState su componente smontato.
       if (!mountedRef.current) return;
       setBundles(prev => prev.filter(b => b.task_id !== tid));
-      if (selectedBundleId === tid) setSelectedBundleId(null);
+      // Setter funzionale: confronta con il valore corrente nello
+      // stato (non quello catturato in closure), evita stale closure.
+      setSelectedBundleId(prev => (prev === tid ? null : prev));
     } catch (e) {
       if (!mountedRef.current) return;
       console.error('deleteImdfBundle:', e);
       toastApiError(toast, e, 'Errore cancellazione bundle');
     }
-  };
+  }, [mountedRef, toast]);
 
   return {
     bundles,

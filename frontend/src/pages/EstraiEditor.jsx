@@ -98,7 +98,17 @@ function EstraiEditor() {
   const validation = useCanvasValidation(dataNodes, edges, { validateOnChange: true, debounceMs: 300 });
   const edgeHandlers = useEdgeHandlers(nodes, setEdges, { resultNodeType: 'resultNode' });
   useEffect(() => {
-    if (!project?.canvas?.nodes || loading) return;
+    // H-9 (2026-05-26): early-return su loading PRIMA del check
+    // canvas.nodes. Pre-fix: `if (!project?.canvas?.nodes || loading) return`
+    // restituiva early su `nodes=[]` (canvas vuoto valido) SENZA settare
+    // `canvasLoadedForRef.current = canvasKey`. Al successivo re-render
+    // (es. selezione connection cambiata, project reload) il guard
+    // non si attivava perche' la ref non era stata settata, e il load
+    // ripartiva. Post-fix: usa `Array.isArray` per accettare anche
+    // `nodes=[]` (canvas legittimamente vuoto, contract con
+    // ProjectCanvas), settando canvasLoadedForRef anche in quel caso.
+    if (loading) return;
+    if (!project?.canvas || !Array.isArray(project.canvas.nodes)) return;
     const canvasKey = `${projectId}::${projectConnection?.id ?? 'none'}`;
     if (canvasLoadedForRef.current === canvasKey) return;
     canvasLoadedForRef.current = canvasKey;

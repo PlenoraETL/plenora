@@ -1006,33 +1006,59 @@ def execute_enrichment_task(
                 # result dict.
                 needs_resave_for_rename = final_name != upstream_filename
                 if needs_resave_for_rename:
-                    # Se output_bytes vuoto (short-circuit attivo) e serve
-                    # ri-salvare, dobbiamo ricaricare. E' un caso raro
-                    # (utente custom output_filename + file remoto grande):
-                    # il re-fetch resta inevitabile per ora.
-                    if not output_bytes:
+                    # H-3 (2026-05-26): re-fetch + re-save sotto try/except
+                    # esplicito con fallback su propagazione upstream_result_id
+                    # + warning, invece di crashare la run. Pre-fix: se il
+                    # re-fetch o il save_result_blob_from_bytes sollevavano,
+                    # il run veniva chiuso come failure mentre il blob
+                    # originale upstream restava persistito = orfano logico
+                    # (esistente in storage ma run-status=failure).
+                    # Post-fix: se il rename fallisce, propaga il
+                    # upstream_result_id con il filename originale e
+                    # registra un warning nel result envelope.
+                    resave_failed = False
+                    try:
+                        if not output_bytes:
+                            logger.info(
+                                f"[Task {task_id}] rename richiesto, re-fetch "
+                                f"output_bytes per re-persist con final_name='{final_name}'"
+                            )
+                            from app.core.artifacts.resolver import ArtifactResolver
+                            blob_for_resave = ArtifactResolver().fetch_run_blob(
+                                result_id=upstream_result_id,
+                                expected_project_id=project_id,
+                            )
+                            output_bytes = blob_for_resave.data
+                        from app.core.results.blob_writer import save_result_blob_from_bytes
+                        result_id = save_result_blob_from_bytes(
+                            project_id=project_id,
+                            data=output_bytes,
+                            filename=final_name,
+                            fmt=ext.lstrip(".") or "bin",
+                            rows_count=rows_count,
+                        )
                         logger.info(
-                            f"[Task {task_id}] rename richiesto, re-fetch "
-                            f"output_bytes per re-persist con final_name='{final_name}'"
+                            f"[Task {task_id}] File result re-persistito con "
+                            f"rename: {result_id}"
                         )
-                        from app.core.artifacts.resolver import ArtifactResolver
-                        blob_for_resave = ArtifactResolver().fetch_run_blob(
-                            result_id=upstream_result_id,
-                            expected_project_id=project_id,
+                    except Exception as _resave_e:
+                        # Re-fetch / save fallito: il blob originale e' integro,
+                        # propaga upstream_result_id + filename originale.
+                        # La run NON viene segnata come failure.
+                        logger.warning(
+                            f"[Task {task_id}] Re-save con rename '{final_name}' "
+                            f"fallito: {type(_resave_e).__name__}. "
+                            f"Propago result_id originale con filename "
+                            f"'{upstream_filename}'. "
+                            f"Dettaglio errore nei log server-side.",
+                            exc_info=True,
                         )
-                        output_bytes = blob_for_resave.data
-                    from app.core.results.blob_writer import save_result_blob_from_bytes
-                    result_id = save_result_blob_from_bytes(
-                        project_id=project_id,
-                        data=output_bytes,
-                        filename=final_name,
-                        fmt=ext.lstrip(".") or "bin",
-                        rows_count=rows_count,
-                    )
-                    logger.info(
-                        f"[Task {task_id}] File result re-persistito con "
-                        f"rename: {result_id}"
-                    )
+                        result_id = upstream_result_id
+                        # Reset final_name al nome originale del blob persistito
+                        # cosi' il task envelope e' coerente con la realta'
+                        # dello storage.
+                        final_name = upstream_filename
+                        resave_failed = True
                 else:
                     result_id = upstream_result_id
                     logger.info(

@@ -116,16 +116,24 @@ class DefaultConnectionFactory:
 
         Driver 18 ha cambiato i default: Encrypt=Mandatory.
         Per supportare server senza TLS valido (sviluppo, on-prem legacy)
-        usiamo Encrypt=Optional + TrustServerCertificate=yes.
-        Fallback automatico su Driver 17 per ambienti vecchi.
+        usiamo Encrypt=Optional + TrustServerCertificate gated.
+
+        H-2 (2026-05-26): TrustServerCertificate ora gated da
+        `tls_bypass_allowed()` (env-aware). Pre-fix: "yes" hardcoded
+        incondizionatamente, disabilitava verify certificato TLS in
+        prod = potenziale MitM su reti non-trusted. Stessa policy
+        applicata in `connections/service.py:_test_mssql`.
         """
         import pyodbc
+        from app.core.security.tls_policy import tls_bypass_allowed
+
+        trust_cert = "yes" if tls_bypass_allowed() else "no"
         base = (
             f"SERVER={conn.host},{conn.port};"
             f"DATABASE={conn.database};"
             f"UID={conn.username};"
             f"PWD={conn.password};"
-            f"TrustServerCertificate=yes"
+            f"TrustServerCertificate={trust_cert}"
         )
         attempts = [
             f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=Optional",

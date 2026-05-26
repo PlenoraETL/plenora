@@ -17,7 +17,7 @@ function PreviewModal({ file, data, onClose }) {
       onClose={onClose}
       title={`Preview — ${file.name}`}
       icon="👁"
-      subtitle={`Prime ${data.rows?.length || 0} righe · ${data.total_rows?.toLocaleString()} totali`}
+      subtitle={`Prime ${data.rows?.length || 0} righe · ${(data.total_count ?? 0).toLocaleString()} totali`}
       size="xl"
       footer={<ModalButton variant="primary" onClick={onClose}>Chiudi</ModalButton>}
     >

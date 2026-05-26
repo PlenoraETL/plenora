@@ -360,27 +360,39 @@ const ManipolaEditorContent = () => {
   // da ResultNode.runValidation). Hook condiviso con ArricchisciEditor.
   useValidationHighlights(setNodes);
 
+  // H-8 (2026-05-26): onConnect e onEdgeContextMenu DEVONO passare per
+  // `triggerAutosave()` (semaphore single-flight + coda re-fire). Pre-fix:
+  // chiamavano `handleSaveQuiet()` direttamente bypassando il semaphore
+  // `autosaveInFlightRef`. Risultato: due interazioni veloci (es. drop
+  // edge + change source) generavano due PUT /canvas concorrenti — il
+  // PUT con snapshot intermedio poteva arrivare al server DOPO il PUT
+  // con snapshot finale, sovrascrivendo i dati corretti.
+  // refreshSchemas resta accoppiato a connect (non a edge-remove).
   const onConnect = useCallback((params) => {
     setEdges(eds => {
       const newEdges = addEdge({ ...params, ...defaultEdgeOptions }, eds);
       setTimeout(() => {
         propagateColumns(nodesRef.current, newEdges);
-        handleSaveQuiet()
-          .then(() => refreshSchemas())
-          .catch(handleAutosaveError);
+        // triggerAutosave rispetta il single-flight semaphore.
+        // refreshSchemas non e' piu' chained al save: il semaphore
+        // potrebbe codarlo (re-fire) o saltarlo se gia' in flight.
+        // refreshSchemas locale e' safe ad essere chiamato comunque.
+        triggerAutosave();
+        refreshSchemas();
       }, 50);
       return newEdges;
     });
-  }, [setEdges, propagateColumns, refreshSchemas, handleSaveQuiet, handleAutosaveError]);
+  }, [setEdges, propagateColumns, refreshSchemas, triggerAutosave]);
 
   const onEdgeContextMenu = useCallback((event, edge) => {
     event.preventDefault();
     setEdges(eds => eds.filter(e => e.id !== edge.id));
     setTimeout(() => {
       propagateColumns(nodesRef.current, edgesRef.current);
-      handleSaveQuiet().catch(handleAutosaveError);
+      // H-8: triggerAutosave invece di handleSaveQuiet diretto.
+      triggerAutosave();
     }, 50);
-  }, [setEdges, propagateColumns, handleSaveQuiet, handleAutosaveError]);
+  }, [setEdges, propagateColumns, triggerAutosave]);
 
   const getPos = () => getViewportCenter({ screenToFlowPosition });
 

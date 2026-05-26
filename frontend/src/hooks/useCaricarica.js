@@ -24,13 +24,32 @@ import { useTaskPolling } from './useTaskPolling';
  * Pattern Go-friendly: funzione modulo, no classi, parametri espliciti.
  * Equivalente Go: `waitForTaskTerminal(taskID string, timeoutMs int) (Task, error)`.
  */
-async function _waitTaskTerminal(taskId, { timeoutMs = 90000, intervalMs = 500 } = {}) {
+async function _waitTaskTerminal(
+  taskId,
+  { timeoutMs = 90000, intervalMs = 500, isCancelled = null } = {}
+) {
+  // H-5 (2026-05-26): supporto cancellazione via callback `isCancelled`.
+  // Pre-fix: il loop non era interrompibile — un componente smontato
+  // continuava polling fino a timeout (90s) o completamento, tenendo
+  // viva la chain di microtask e consumando connessioni HTTP.
+  // Post-fix: check `isCancelled()` ad ogni iterazione. Se ritorna
+  // true, esce con TaskCancelledError (caller gestisce no-op).
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    if (isCancelled && isCancelled()) {
+      const err = new Error('Task polling cancellato (component unmounted)');
+      err.code = 'TASK_POLLING_CANCELLED';
+      throw err;
+    }
     const data = await getTaskStatus(taskId);
     const status = String(data?.status || '').toLowerCase();
     if (['success', 'failure', 'failed', 'revoked'].includes(status)) {
       return data;
+    }
+    if (isCancelled && isCancelled()) {
+      const err = new Error('Task polling cancellato (component unmounted)');
+      err.code = 'TASK_POLLING_CANCELLED';
+      throw err;
     }
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
@@ -135,7 +154,19 @@ export function useCaricarica(projectId, options = {}) {
       if (!mountedRef.current) return;
       if (executeResp?.task_id) {
         setProgressMessage('Attesa esecuzione query...');
-        const executeFinal = await _waitTaskTerminal(executeResp.task_id);
+        // H-5 (2026-05-26): passa `isCancelled` callback al polling.
+        // Il loop verifica ad ogni iterazione e abortisce con
+        // TASK_POLLING_CANCELLED se il componente e' smontato,
+        // invece di continuare polling fino a timeout 90s.
+        let executeFinal;
+        try {
+          executeFinal = await _waitTaskTerminal(executeResp.task_id, {
+            isCancelled: () => !mountedRef.current,
+          });
+        } catch (e) {
+          if (e?.code === 'TASK_POLLING_CANCELLED') return;
+          throw e;
+        }
         // Guard post-polling (puo' essere durato fino a 90s)
         if (!mountedRef.current) return;
         const executeStatus = String(executeFinal?.status || '').toLowerCase();

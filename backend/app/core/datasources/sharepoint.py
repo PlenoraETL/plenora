@@ -600,10 +600,14 @@ class SharePointDataSource(DataSourceInterface):
             msg = str(e).lower()
             if "unauthorized" in msg or "403" in msg or "401" in msg:
                 raise DataSourcePermissionError(f"Scrittura negata: {path!r}") from e
+            # H-1 (2026-05-26): sanitize `{e}` per evitare leak Bearer
+            # AAD token nei log. office365 ClientRequestException
+            # include response headers/body nel str() che possono
+            # contenere il token Authorization. `_sanitize_sharepoint_error`
+            # ripulisce token + URL sensitive.
             logger.warning(
                 f"[GESTITO] SharePoint write_chunks fallita: path={path!r} "
-                f"{type(e).__name__}: {e}",
-                exc_info=True,
+                f"{type(e).__name__}: {_sanitize_sharepoint_error(e)}",
             )
             raise DataSourceConnectionError(
                 f"Errore write_chunks SharePoint: {_sanitize_sharepoint_error(e)}"
@@ -653,10 +657,10 @@ class SharePointDataSource(DataSourceInterface):
                 chunk_index += 1
 
         except Exception as e:
+            # H-1 (2026-05-26): sanitize `{e}` per evitare token AAD leak.
             logger.warning(
                 f"[GESTITO] SharePoint upload chunked fallita: name={name!r} "
-                f"{type(e).__name__}: {e}",
-                exc_info=True,
+                f"{type(e).__name__}: {_sanitize_sharepoint_error(e)}",
             )
             raise DataSourceConnectionError(
                 f"Errore upload chunked SharePoint: {_sanitize_sharepoint_error(e)}"
