@@ -135,7 +135,7 @@ def validate_publish(
 
     # IMDF-5: hydration del .gdb fully-RAM via GDAL /vsimem.
     # `open_gdb_in_vsimem` carica `_gdb.zip` bytes in /vsimem via
-    # ctypes adapter (`app.core.imdf.gdal_vsi`); pyogrio legge via
+    # ctypes adapter (`app.core.io.vsimem`); pyogrio legge via
     # path `/vsizip//vsimem/.../{site}.gdb` senza tmp dir su disco.
     from app.core.imdf import storage as imdf_storage
 

@@ -6,7 +6,7 @@ runtime sopravvissuti al refactor RAM-only: tutti i flussi che
 richiedevano un path su disco sono stati migrati a:
 
   - `BytesIO` / `StringIO` per file-like API
-  - `/vsimem` (libgdal ctypes adapter in `app.core.imdf.gdal_vsi`)
+  - `/vsimem` (libgdal ctypes adapter in `app.core.io.vsimem`)
     per binari OGR multi-file
   - object storage diretto (`save_bytes` su S3/MinIO) per persistence
 

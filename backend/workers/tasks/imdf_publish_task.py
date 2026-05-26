@@ -67,7 +67,7 @@ def execute_imdf_publish_task(
 
         # IMDF-5: hydration del .gdb fully-RAM via GDAL /vsimem (zero disk).
         # `open_gdb_in_vsimem` carica `_gdb.zip` bytes via ctypes
-        # adapter (`app.core.imdf.gdal_vsi`); pyogrio legge via path
+        # adapter (`app.core.io.vsimem`); pyogrio legge via path
         # `/vsizip//vsimem/.../{site}.gdb`. Bundle senza `_gdb.zip` su
         # storage non sono processabili (richiedono re-upload via
         # `persist_imdf_bundle`).

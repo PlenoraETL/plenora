@@ -116,7 +116,7 @@ def write_shapefile_zip_bytes(
     zip in memoria. Zero disk touch.
 
     Pattern mirror di IMDF-5 (`open_gdb_in_vsimem`): pyogrio scrive
-    sul path /vsimem; `gdal_vsi` (ctypes adapter) gestisce
+    sul path /vsimem; `app.core.io.vsimem` (ctypes adapter) gestisce
     mkdir/listdir/read/rmdir_recursive contro `libgdal.so` bundled.
 
     Args:
@@ -127,7 +127,7 @@ def write_shapefile_zip_bytes(
         `bytes` dello ZIP che contiene i 4-5 sidecar dello Shapefile.
     """
     import pyogrio
-    from app.core.imdf.gdal_vsi import (
+    from app.core.io.vsimem import (
         vsi_listdir, vsi_read_bytes, vsi_temp_dir,
     )
 

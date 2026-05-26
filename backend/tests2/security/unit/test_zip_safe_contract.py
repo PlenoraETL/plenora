@@ -13,7 +13,7 @@ import zipfile
 
 import pytest
 
-from app.utils.zip_safe import ZipBombError, validate_zip_bomb_limits
+from app.core.io.zip_guards import ZipBombError, validate_zip_bomb_limits
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract, pytest.mark.regression]
@@ -37,13 +37,21 @@ def test_zip_safe_tombstones_path_based_symbols_post_punto3():
     """Punto 3 cleanup: rimossi `safe_extractall` (disk-write),
     `safe_extract_zip_path`, `ZipSlipError`. Tutti i caller RAM-only
     leggono via `z.read(name)` su bytes."""
-    import app.utils.zip_safe as zs
+    import app.core.io.zip_guards as zs
 
     for legacy in ("safe_extractall", "safe_extract_zip_path",
                    "ZipSlipError", "_validate_member"):
         assert not hasattr(zs, legacy), (
-            f"zip_safe.{legacy} ancora esposto: cleanup Punto 3 incompleto."
+            f"zip_guards.{legacy} ancora esposto: cleanup Punto 3 incompleto."
         )
+
+
+def test_app_utils_zip_safe_tombstoned_post_horizontal_consolidation():
+    """Consolidamento orizzontale (2026-05-26): il modulo legacy
+    `app/utils/zip_safe.py` e' stato spostato in `app/core/io/zip_guards.py`.
+    Sentinel anti-regressione: il vecchio path NON deve essere riusato."""
+    with pytest.raises(ModuleNotFoundError):
+        __import__("app.utils.zip_safe")
 
 
 # Zip bomb: total uncompressed size cap

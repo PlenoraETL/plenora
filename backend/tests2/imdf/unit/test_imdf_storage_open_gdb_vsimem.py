@@ -4,7 +4,7 @@ Contract test — `imdf.storage.open_gdb_in_vsimem` (IMDF-5 fully-RAM).
 `open_gdb_in_vsimem(task_id, site_id)` e' un context manager che:
   - Scarica `_gdb.zip` bytes da storage canonical.
   - Registra i bytes in `/vsimem/plenora_imdf/{task_id}/_gdb.zip` via
-    `app.core.imdf.gdal_vsi.vsi_register_bytes` (ctypes adapter
+    `app.core.io.vsimem.vsi_register_bytes` (ctypes adapter
     libgdal).
   - Yield il path GDAL VSI ``/vsizip//vsimem/.../{site_id}.gdb``
     pronto per pyogrio.
@@ -68,7 +68,7 @@ def fake_storage(monkeypatch):
 
 @pytest.fixture
 def vsi_register_mock(monkeypatch):
-    """Mock per `gdal_vsi.vsi_register_bytes`. Cattura i parametri e
+    """Mock per `io.vsimem.vsi_register_bytes`. Cattura i parametri e
     si comporta come context manager (yield del path)."""
     calls: list[dict] = []
 
@@ -77,8 +77,8 @@ def vsi_register_mock(monkeypatch):
         calls.append({"vsi_path": vsi_path, "data_len": len(data), "data": data})
         yield vsi_path
 
-    from app.core.imdf import gdal_vsi
-    monkeypatch.setattr(gdal_vsi, "vsi_register_bytes", _fake_register)
+    from app.core.io import vsimem
+    monkeypatch.setattr(vsimem, "vsi_register_bytes", _fake_register)
     return calls
 
 

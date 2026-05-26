@@ -607,7 +607,7 @@ def _carica_da_zip(
     di qualunque `inner.read()`.
     """
     from app.core.io.geospatial import read_vector_bytes
-    from app.utils.zip_safe import validate_zip_bomb_limits
+    from app.core.io.zip_guards import validate_zip_bomb_limits
 
     zip_bytes = zip_path.read_bytes()
 

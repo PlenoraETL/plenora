@@ -4,13 +4,20 @@ Layer orizzontale per tutta la gestione di lettura/scrittura/archiviazione
 fuori dal filesystem locale. Vedi refactor_io_storage_ram_only.md per
 il piano completo.
 
-Scope corrente (Fase 0):
+Moduli (consolidamento orizzontale 2026-05-26):
   - `policy`: env-driven policy (memory_only / temp_only_explicit / ...)
-  - `materialize`: unico punto autorizzato a creare path temporanei
   - `payloads`: BinaryPayload + StoredObjectRef tipati
+  - `materialize`: TOMBSTONE (zero caller post refactor RAM-only)
+  - `geospatial`: pyogrio bytes wrapper (read/write GeoJSON/GPKG/FGB/SHP-zip)
+  - `vsimem`: ctypes adapter su libgdal per `/vsimem` (ex-`imdf.gdal_vsi`)
+  - `zip_guards`: bomb-cap pre-extract + member picker (ex-`utils.zip_safe`)
 
-Fasi successive aggiungeranno: memory, archives, geospatial, tabular,
-responses, guards, metrics.
+Object storage (cloud-agnostic backend):
+  - `app.infrastructure.storage.cloud_backends`: boto3/MinIO factory
+  - Domain wrapper (3 specializzazioni giustificate):
+      - `app.core.results.blob_writer` (result blob + DB row + retention)
+      - `app.core.imdf.storage` (bundle multi-file + sidecar meta)
+      - `app.core.eseguibili.storage` (single-blob key/value)
 
 Contract:
   Fuori da questo package (e dai moduli storage autorizzati) NON e'

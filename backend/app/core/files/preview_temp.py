@@ -16,7 +16,7 @@ from typing import BinaryIO, Optional
 from typing_extensions import TypedDict
 
 from app.utils.mime_validator import MimeMismatchError, validate_no_executable
-from app.utils.zip_safe import (
+from app.core.io.zip_guards import (
     pick_zip_member_by_extension,
     validate_zip_bomb_limits,
 )

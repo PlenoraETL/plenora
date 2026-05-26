@@ -1,5 +1,10 @@
 """
-zip_safe.py — Guard contro zip bomb (cap pre-extract).
+zip_guards — Guard contro zip bomb (cap pre-extract).
+
+Storia: originalmente `app/utils/zip_safe.py`. Spostato in
+`app/core/io/zip_guards.py` nel consolidamento orizzontale
+(2026-05-26): non e' un'utility generica ma una primitive del
+boundary I/O (chiamata prima di ogni `z.read()` RAM-only).
 
 Post Punto 3 cleanup (2026-05-25):
   - `safe_extractall` / `safe_extract_zip_path` rimossi (zero caller

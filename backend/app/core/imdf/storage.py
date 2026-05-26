@@ -230,7 +230,7 @@ def open_gdb_in_vsimem(task_id: str, site_id: str) -> Iterator[Optional[str]]:
 
     IMDF-5: sostituisce `hydrate_gdb_to_temp`. Il `.gdb.zip` viene
     scaricato da storage in RAM e registrato in `/vsimem` via
-    l'adapter ctypes `app.core.imdf.gdal_vsi.vsi_register_bytes`.
+    l'adapter ctypes `app.core.io.vsimem.vsi_register_bytes`.
     Pyogrio legge il `.gdb` interno via path `/vsizip//vsimem/.../
     {site_id}.gdb` senza materializzare niente su disco.
 
@@ -276,7 +276,7 @@ def open_gdb_in_vsimem(task_id: str, site_id: str) -> Iterator[Optional[str]]:
 
     # Import locale per evitare ctypes load all'import-time del modulo
     # (tests fuori container non hanno libgdal).
-    from app.core.imdf.gdal_vsi import vsi_register_bytes
+    from app.core.io.vsimem import vsi_register_bytes
 
     vsi_zip_path = f"/vsimem/plenora_imdf/{task_id}/_gdb.zip"
     pyogrio_path = f"/vsizip/{vsi_zip_path}/{site_id}.gdb"

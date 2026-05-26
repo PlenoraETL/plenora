@@ -6,7 +6,7 @@ rimosso (zero caller runtime). I caller RAM-only navigano lo ZIP via
 `zipfile.ZipFile(BytesIO(...))` + `validate_zip_bomb_limits` +
 `z.read(name)` su bytes. Per i flussi che richiedono multi-file
 formats (es. Shapefile), si usa `/vsizip//vsimem/...` via
-`app.core.imdf.gdal_vsi`.
+`app.core.io.vsimem`.
 """
 
 import pytest

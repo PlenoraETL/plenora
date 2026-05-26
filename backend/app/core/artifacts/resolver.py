@@ -332,7 +332,7 @@ class ArtifactResolver:
         `ResultBlobLoader` rifiuta `mode="path"` (zero production
         caller; il boundary `temporary_path_from_bytes` e' stato
         tombstonato in Punto 3 — chi necessita davvero di un path
-        deve usare `/vsimem` via `app.core.imdf.gdal_vsi`).
+        deve usare `/vsimem` via `app.core.io.vsimem`).
         Il resolver continua a fornire row metadata lookup (format,
         group_id) + cross-tenant project_id check; la
         materializzazione del blob e' delegata al loader bytes-first.

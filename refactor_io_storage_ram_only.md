@@ -38,6 +38,7 @@ delle decisioni prese; non vanno consultate per "cosa fare oggi".
 | Enrichment error report | Bytes -> result_blob via `save_result_blob_from_bytes` | `439a93a8` |
 | Shapefile output | Fully-RAM via `/vsimem` ctypes | `aa0a569e` |
 | Boundary primitives dead-code cleanup (Punto 3) | `materialize.py` / `temp_paths.py` svuotati; `zip_safe.safe_extractall` + `DefaultFileSystem.{write_text,extract_zip}` tombstonati | (questo commit) |
+| Consolidamento orizzontale boundary | `imdf/gdal_vsi.py` -> `io/vsimem.py`; `utils/zip_safe.py` -> `io/zip_guards.py`. `app/core/io/` ora e' la facade unica per le primitive RAM-first (policy, payloads, geospatial, vsimem, zip_guards) | (questo commit) |
 
 ### Regola 1 — codice applicativo non scrive su filesystem
 
@@ -90,15 +91,25 @@ tombstonati** — zero caller runtime sopravvissuti al refactor:
   write callsite.
 
 **Boundary primitives senza filesystem callsite (helper logic only):**
-- `app/core/io/geospatial.py` — post QUERY-1 step 4: `write_shapefile_zip_bytes`
-  e gli altri write_* operano su `/vsimem` via `gdal_vsi`. Zero
-  filesystem callsite ma resta come location naturale per i
-  geospatial helper.
-- `app/core/imdf/gdal_vsi.py` — ctypes adapter su libgdal (vedi
-  sezione "Pattern /vsimem ctypes" sotto). Zero filesystem callsite
-  diretto (interop ctypes, GDAL gestisce il backing in-memory).
-- `app/core/storage/` — storage backend abstraction (boto3 client
-  wrappers per S3/MinIO). Multipart upload streaming.
+
+Consolidamento orizzontale (2026-05-26): tutti i moduli boundary
+generici vivono sotto `app/core/io/`. Le primitive helper-only ora
+sono:
+- `app/core/io/geospatial.py` — pyogrio bytes wrapper
+  (read/write GeoJSON/GPKG/FGB/Shapefile-zip). Post QUERY-1 step 4
+  `write_shapefile_zip_bytes` opera su `/vsimem` via `app.core.io.vsimem`.
+- `app/core/io/vsimem.py` — ctypes adapter su libgdal per `/vsimem`
+  (vedi "Pattern /vsimem ctypes" sotto). **Era** `app/core/imdf/gdal_vsi.py`
+  fino al consolidamento orizzontale; spostato perche' non e' specifico
+  IMDF, lo usano sia IMDF (open_gdb_in_vsimem) sia Shapefile sidecar
+  writer.
+- `app/core/io/zip_guards.py` — bomb-cap pre-extract +
+  `pick_zip_member_by_extension`. **Era** `app/utils/zip_safe.py`
+  fino al consolidamento; non e' un'utility generica ma una primitive
+  del boundary I/O (chiamata prima di ogni `z.read()` RAM-only).
+- `app/infrastructure/storage/cloud_backends.py` — storage backend
+  abstraction (boto3 client wrappers per S3/MinIO). Multipart upload
+  streaming.
 - `app/core/resources/loaders/result_blob.py` — Resource Engine loader
   (post-Phase5 solo `mode="bytes"`).
 - `app/core/imdf/{loader,persist,storage,bundle_store,bundle_access,router}.py` —
@@ -106,6 +117,27 @@ tombstonati** — zero caller runtime sopravvissuti al refactor:
   Sopravvivono solo API RAM-first (`extract_imdf_zip_bytes`,
   `persist_imdf_bundle`, `read_manifest/validation/renderers`,
   `open_gdb_in_vsimem`).
+
+**Domain storage wrapper (3 specializzazioni giustificate):**
+
+Sopra `cloud_backends.get_runtime_object_storage()` vivono 3 wrapper
+di dominio che NON sono unificabili in una facade comune perche'
+ognuno ha un data model diverso:
+- `app/core/results/blob_writer.py` — result blob; coordina DB row +
+  storage policy (size threshold DB BYTEA vs object storage) +
+  retention.
+- `app/core/imdf/storage.py` — bundle multi-file; layout `{task_id}/
+  {file}` + sidecar `{task_id}.meta.json`.
+- `app/core/eseguibili/storage.py` — single-blob key/value.
+
+Le 3 condividono solo un `_storage()` lazy factory di ~3 LOC che fa
+`from app.infrastructure.storage.cloud_backends import
+get_runtime_object_storage; return get_runtime_object_storage()`.
+Estrarre questa primitive in una nuova astrazione (es.
+`object_blob_store.py`) sarebbe over-engineering — la duplicazione
+e' minima e ogni wrapper ha una specializzazione domain-specific
+non riconducibile a un common denominator (vedi sentinel in
+`tests2/shared/test_task_scoped_blob_store_contract.py::test_specialized_methods_are_per_wrapper`).
 
 **Scripts (one-off tooling, 3 entries):**
 - `scripts/backup_db.py`, `scripts/test_restore.py`,
@@ -137,7 +169,7 @@ out-of-contract.
 
 ### Pattern /vsimem ctypes (riusabile)
 
-`app/core/imdf/gdal_vsi.py` espone un'API ctypes minimale contro
+`app/core/io/vsimem.py` espone un'API ctypes minimale contro
 `libgdal.so` (bundled da pyogrio 0.12+) per gestire file/dir
 in-memory che GDAL/pyogrio sanno consumare. Pattern usato in:
 - IMDF-5: `open_gdb_in_vsimem(task_id, site_id)` — `.gdb` zippata
@@ -148,7 +180,7 @@ in-memory che GDAL/pyogrio sanno consumare. Pattern usato in:
 
 **API surface:**
 ```python
-from app.core.imdf.gdal_vsi import (
+from app.core.io.vsimem import (
     vsi_register_bytes,      # ctx: register bytes -> /vsimem/path
     vsi_temp_dir,            # ctx: mkdir + rmdir_recursive
     vsi_mkdir,               # mkdir /vsimem/dir
