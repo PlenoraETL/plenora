@@ -8,12 +8,10 @@ from __future__ import annotations
 
 import io
 import json
-import shutil
-import tempfile
 import zipfile
-from dataclasses import dataclass
+from contextlib import contextmanager
 from pathlib import Path
-from typing import List, Optional
+from typing import Iterator, List, Optional
 
 from app.infrastructure.storage.cloud_backends import object_storage_enabled
 from app.shared.contracts.payloads import JsonObject, StringMap
@@ -229,54 +227,38 @@ def read_geojson(task_id: str, relative_name: str) -> Optional[JsonObject]:
     return _read_bundle_json(task_id, relative_name)
 
 
-@dataclass
-class GdbHandle:
-    """Handle scoped a un .gdb estratto su temp dir worker-local.
+@contextmanager
+def open_gdb_in_vsimem(task_id: str, site_id: str) -> Iterator[Optional[str]]:
+    """Idrata il `.gdb` di un bundle in GDAL `/vsimem` (zero disk).
 
-    Restituito da `hydrate_gdb_to_temp`. Il caller MUST chiamare
-    `cleanup()` (o usare il context manager) dopo aver finito di
-    consumare `gdb_path` con pyogrio.
-    """
-    gdb_path: Path
-    temp_root: Path
+    IMDF-5: sostituisce `hydrate_gdb_to_temp`. Il `.gdb.zip` viene
+    scaricato da storage in RAM e registrato in `/vsimem` via
+    l'adapter ctypes `app.core.imdf.gdal_vsi.vsi_register_bytes`.
+    Pyogrio legge il `.gdb` interno via path `/vsizip//vsimem/.../
+    {site_id}.gdb` senza materializzare niente su disco.
 
-    def cleanup(self) -> None:
-        if self.temp_root and self.temp_root.exists():
-            shutil.rmtree(self.temp_root, ignore_errors=True)
-
-    def __enter__(self) -> "GdbHandle":
-        return self
-
-    def __exit__(self, *exc) -> None:
-        self.cleanup()
-
-
-def hydrate_gdb_to_temp(task_id: str) -> Optional[GdbHandle]:
-    """Idrata solo il `.gdb` di un bundle in una temp dir worker-scoped.
-
-    Pensato per validator + publish task che richiedono il File
-    Geodatabase su filesystem (pyogrio `list_layers` / `read_dataframe`)
-    SENZA forzare la hydration dell'intero bundle nel local cache
-    persistent (`IMDF_BUNDLES_DIR`).
-
-    Layout target su storage (post-IMDF-3): ``{PREFIX}/{task_id}/_gdb.zip``.
+    Layout su storage (post-IMDF-3): ``{PREFIX}/{task_id}/_gdb.zip``.
     Lo zip contiene un singolo top-level `{site_id}.gdb/` directory
     (vedi `persist._zip_gdb_dir_to_bytes`).
 
-    Returns:
-        `GdbHandle` con `gdb_path` puntato alla `.gdb/` dir estratta e
-        `temp_root` per il cleanup. `None` se il bundle non ha `.gdb`
-        su storage (puo' essere un bundle senza .gdb oppure pre-IMDF-3
-        ancora in layout zip legacy).
+    Args:
+        task_id: id del bundle.
+        site_id: nome della `.gdb` dir interna (e.g. ``"SITE_X"``),
+            tipicamente ottenuto da ``get_meta_only(task_id)["site_id"]``.
+
+    Yields:
+        Path GDAL VSI ``/vsizip//vsimem/plenora_imdf/{task_id}/
+        _gdb.zip/{site_id}.gdb`` pronto per `pyogrio.list_layers` /
+        `read_dataframe`. ``None`` se il bundle non ha `.gdb` su
+        storage (caller decide come trattare: BUNDLE_MISSING /
+        GDB_MISSING / etc).
 
     Raises:
-        Propaga errori del backend storage solo se la chiamata e'
-        per un bundle che SI ATTENDE abbia `.gdb`. Per il probe
-        "esiste o no" il caller dovrebbe consultare prima il
-        `meta.has_gdb`.
+        Propaga errori storage del download; errori VSI ctypes.
     """
     if not object_storage_enabled():
-        return None
+        yield None
+        return
     storage = _storage()
     gdb_key = _gdb_zip_key(task_id)
 
@@ -285,36 +267,29 @@ def hydrate_gdb_to_temp(task_id: str) -> Optional[GdbHandle]:
         objs = storage.list_objects(gdb_key)
         has_gdb = any(o.get("key") == gdb_key for o in objs)
     except Exception as e:
-        logger.debug(f"[{task_id}] hydrate_gdb_to_temp probe failed: {e}")
-        return None
+        logger.debug(f"[{task_id}] open_gdb_in_vsimem probe failed: {e}")
+        yield None
+        return
     if not has_gdb:
-        return None
+        yield None
+        return
 
-    # Download .gdb zip → extract a temp scoped al caller.
-    temp_root = Path(tempfile.mkdtemp(prefix="plenora_imdf_gdb_"))
-    try:
-        stream = storage.get_object_stream(gdb_key)
-        gdb_bytes = b"".join(stream.get("body", []))
-        with zipfile.ZipFile(io.BytesIO(gdb_bytes), "r") as zf:
-            safe_extractall(zf, temp_root)
-        # Trova la .gdb dir dentro temp_root (top-level).
-        gdb_dir: Optional[Path] = None
-        for entry in temp_root.iterdir():
-            if entry.is_dir() and entry.suffix == ".gdb":
-                gdb_dir = entry
-                break
-        if gdb_dir is None:
-            logger.warning(
-                f"[{task_id}] _gdb.zip estratto ma nessuna .gdb dir "
-                f"trovata in {temp_root}"
-            )
-            shutil.rmtree(temp_root, ignore_errors=True)
-            return None
-        return GdbHandle(gdb_path=gdb_dir, temp_root=temp_root)
-    except Exception as e:
-        logger.warning(f"[{task_id}] hydrate_gdb_to_temp extract failed: {e}")
-        shutil.rmtree(temp_root, ignore_errors=True)
-        raise
+    stream = storage.get_object_stream(gdb_key)
+    gdb_bytes = b"".join(stream.get("body", []))
+
+    # Import locale per evitare ctypes load all'import-time del modulo
+    # (tests fuori container non hanno libgdal).
+    from app.core.imdf.gdal_vsi import vsi_register_bytes
+
+    vsi_zip_path = f"/vsimem/plenora_imdf/{task_id}/_gdb.zip"
+    pyogrio_path = f"/vsizip/{vsi_zip_path}/{site_id}.gdb"
+
+    with vsi_register_bytes(vsi_zip_path, gdb_bytes):
+        logger.info(
+            f"[{task_id}] .gdb registrato in /vsimem ({len(gdb_bytes)} bytes), "
+            f"path={pyogrio_path}"
+        )
+        yield pyogrio_path
 
 
 def list_bundle_file_entries(task_id: str) -> List[JsonObject]:

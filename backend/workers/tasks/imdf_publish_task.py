@@ -65,52 +65,66 @@ def execute_imdf_publish_task(
     try:
         _update_progress(self, 2, "Risoluzione bundle IMDF...")
 
-        # IMDF-4 step 3+4: hydration del .gdb storage-first scoped al
-        # task con cleanup automatico. Post-tombstone (step 4) il
-        # fallback legacy `ensure_local_bundle + find_gdb_dir` e'
-        # rimosso: i bundle senza `_gdb.zip` su storage non sono
-        # piu' processabili (richiedono re-upload via
+        # IMDF-5: hydration del .gdb fully-RAM via GDAL /vsimem (zero disk).
+        # `open_gdb_in_vsimem` carica `_gdb.zip` bytes via ctypes
+        # adapter (`app.core.imdf.gdal_vsi`); pyogrio legge via path
+        # `/vsizip//vsimem/.../{site}.gdb`. Bundle senza `_gdb.zip` su
+        # storage non sono processabili (richiedono re-upload via
         # `persist_imdf_bundle`).
         from app.core.imdf import storage as imdf_storage
         from app.core.imdf.loader import load_imdf_layers
 
-        try:
-            gdb_handle = imdf_storage.hydrate_gdb_to_temp(bundle_task_id)
-        except Exception as e:
-            msg = f"Hydration .gdb fallita: {e}"
-            logger.error(f"[Task {task_id}] {msg}")
-            return {
-                "success": False,
-                "task_id": task_id,
-                "bundle_task_id": bundle_task_id,
-                "error": msg,
-                "elapsed_time": round(time.time() - started_at, 2),
-            }
-
-        if gdb_handle is None:
+        # Site_id richiesto per costruire il path interno allo zip.
+        meta = imdf_storage.get_meta_only(bundle_task_id)
+        if meta is None:
             msg = (
-                f"Bundle IMDF '{bundle_task_id}' senza .gdb su storage "
-                f"(o bundle pre-IMDF-3 non piu' supportato). "
+                f"Bundle IMDF '{bundle_task_id}' senza meta su storage "
+                f"(o pre-IMDF-3 non piu' supportato). "
                 f"Potrebbe essere scaduto (TTL {settings.IMDF_BUNDLE_TTL_HOURS}h)."
             )
             logger.error(f"[Task {task_id}] {msg}")
             return {
-                "success": False,
-                "task_id": task_id,
-                "bundle_task_id": bundle_task_id,
-                "error": msg,
+                "success": False, "task_id": task_id,
+                "bundle_task_id": bundle_task_id, "error": msg,
+                "elapsed_time": round(time.time() - started_at, 2),
+            }
+        site_id = (meta.get("site_id") or "").strip()
+        if not site_id:
+            msg = (
+                f"Bundle IMDF '{bundle_task_id}' senza site_id nel meta: "
+                f"impossibile risolvere il path interno della .gdb."
+            )
+            logger.error(f"[Task {task_id}] {msg}")
+            return {
+                "success": False, "task_id": task_id,
+                "bundle_task_id": bundle_task_id, "error": msg,
                 "elapsed_time": round(time.time() - started_at, 2),
             }
 
         _update_progress(self, 8, "Caricamento layer IMDF dal GDB...")
 
         try:
-            gdf_layers = load_imdf_layers(gdb_handle.gdb_path)
-            total_features = sum(len(gdf) for gdf in gdf_layers.values())
-        finally:
-            # Post-pyogrio load: i GeoDataFrame sono in memoria, la
-            # temp dir scoped puo' essere rimossa.
-            gdb_handle.cleanup()
+            with imdf_storage.open_gdb_in_vsimem(bundle_task_id, site_id) as vsi_path:
+                if vsi_path is None:
+                    msg = (
+                        f"Bundle IMDF '{bundle_task_id}' senza .gdb su storage."
+                    )
+                    logger.error(f"[Task {task_id}] {msg}")
+                    return {
+                        "success": False, "task_id": task_id,
+                        "bundle_task_id": bundle_task_id, "error": msg,
+                        "elapsed_time": round(time.time() - started_at, 2),
+                    }
+                gdf_layers = load_imdf_layers(vsi_path)
+                total_features = sum(len(gdf) for gdf in gdf_layers.values())
+        except Exception as e:
+            msg = f"Hydration GDB /vsimem fallita: {e}"
+            logger.error(f"[Task {task_id}] {msg}", exc_info=True)
+            return {
+                "success": False, "task_id": task_id,
+                "bundle_task_id": bundle_task_id, "error": msg,
+                "elapsed_time": round(time.time() - started_at, 2),
+            }
         logger.info(
             f"[Task {task_id}] GDB caricato: {len(gdf_layers)} layer, "
             f"{total_features} features totali"

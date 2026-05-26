@@ -356,7 +356,10 @@ def load_imdf_layers(
     """Apre un File Geodatabase IMDF e ritorna i 5 layer come GeoDataFrames.
 
     Args:
-        gdb_path: percorso alla cartella .gdb
+        gdb_path: percorso alla cartella .gdb. Accetta sia path filesystem
+            (es. ``/tmp/foo/SITE.gdb``) sia path GDAL VSI (es.
+            ``/vsizip//vsimem/.../_gdb.zip/SITE.gdb``, IMDF-5
+            `open_gdb_in_vsimem`).
         target_srid: EPSG di destinazione (default 4326 — WGS84, ottimale per
             ArcGIS Online). Se diverso dal CRS originale (di norma 6875 per
             i siti italiani RFI), i layer vengono riproiettati.
@@ -370,22 +373,43 @@ def load_imdf_layers(
         layer mancanti vengono semplicemente omessi (warning).
 
     Raises:
-        FileNotFoundError: se gdb_path non esiste
+        FileNotFoundError: se gdb_path non esiste (solo per path filesystem;
+            per path VSI lascia che pyogrio sollevi DataSourceError).
     """
     import pyogrio
     from shapely.ops import transform as shapely_transform
 
-    p = Path(gdb_path)
-    if not p.exists():
-        raise FileNotFoundError(f"GDB non trovato: {p}")
+    # IMDF-5: gestiamo sia path filesystem sia GDAL VSI string. I path
+    # VSI (e.g. /vsizip//vsimem/... per .gdb in RAM) non supportano
+    # `Path.exists()`: pyogrio risolve via GDAL VSI handler.
+    gdb_path_str = str(gdb_path)
+    is_vsi = gdb_path_str.startswith("/vsi")
+    if is_vsi:
+        p_for_pyogrio: object = gdb_path_str
+    else:
+        p = Path(gdb_path)
+        if not p.exists():
+            raise FileNotFoundError(f"GDB non trovato: {p}")
+        p_for_pyogrio = p
 
-    available = {name: gtype for name, gtype in pyogrio.list_layers(str(p))}
+    available = {
+        name: gtype
+        for name, gtype in pyogrio.list_layers(
+            p_for_pyogrio if is_vsi else str(p_for_pyogrio)
+        )
+    }
 
     result: Dict[str, Any] = {}
     for layer_name in EXPECTED_LAYERS:
         if layer_name not in available:
             continue
-        gdf = load_dataframe_from_file(p, layer=layer_name)
+        if is_vsi:
+            # Bypass `load_dataframe_from_file`: usa pyogrio diretto.
+            # `gpd.read_file` accetta VSI string, ma il wrapper canonico
+            # ha guard `file_path.exists()` che fallisce su /vsi.
+            gdf = pyogrio.read_dataframe(p_for_pyogrio, layer=layer_name)
+        else:
+            gdf = load_dataframe_from_file(p_for_pyogrio, layer=layer_name)
 
         # Riproiezione
         if gdf.crs and target_srid:
