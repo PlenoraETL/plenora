@@ -3,7 +3,7 @@
 # Production frontend image: build the Vite app, then serve the static
 # bundle from nginx. Runtime contains no Node toolchain.
 
-FROM node:22-alpine AS build
+FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
 

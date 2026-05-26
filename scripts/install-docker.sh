@@ -582,7 +582,7 @@ provider_check() {
     fi
 
     local script
-    script="import psycopg2, pymysql, oracledb, pyodbc; drivers=pyodbc.drivers(); print('python db providers ok'); print('odbc_drivers=', drivers); required=${required}; ok=any(d in drivers for d in ('ODBC Driver 18 for SQL Server','ODBC Driver 17 for SQL Server')); raise SystemExit(3 if required and not ok else 0)"
+    script="import psycopg, pymysql, oracledb, pyodbc; drivers=pyodbc.drivers(); print('python db providers ok'); print('odbc_drivers=', drivers); required=${required}; ok=any(d in drivers for d in ('ODBC Driver 18 for SQL Server','ODBC Driver 17 for SQL Server')); raise SystemExit(3 if required and not ok else 0)"
     run_docker compose exec -T backend python -c "$script"
 }
 

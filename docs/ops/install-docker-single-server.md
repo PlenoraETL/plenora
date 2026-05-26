@@ -173,7 +173,7 @@ The backend image installs the Python database providers from
 
 | Provider | Python package | Native/system dependency | Status in default backend image |
 |---|---|---|---|
-| PostgreSQL | `psycopg2-binary` | `libpq5`, `postgresql-client-17` | Included. |
+| PostgreSQL | `psycopg[binary]` | `libpq`, `postgresql-client-17` | Included. |
 | MySQL/MariaDB | `pymysql` | None for the pure-Python driver | Included. |
 | Oracle | `oracledb` | None in thin mode | Included. |
 | SQL Server | `pyodbc` | Microsoft ODBC Driver 18 or 17 plus unixODBC | Python package included; native ODBC driver must be present for real SQL Server connections. |
@@ -181,7 +181,7 @@ The backend image installs the Python database providers from
 Provider import check after the backend is running:
 
 ```bash
-docker compose exec -T backend python -c "import psycopg2, pymysql, oracledb, pyodbc; print('python db providers ok'); print('odbc_drivers=', pyodbc.drivers())"
+docker compose exec -T backend python -c "import psycopg, pymysql, oracledb, pyodbc; print('python db providers ok'); print('odbc_drivers=', pyodbc.drivers())"
 ```
 
 Expected:

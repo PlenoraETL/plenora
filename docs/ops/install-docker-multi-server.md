@@ -153,7 +153,7 @@ The backend Python providers are installed from `backend/requirements.txt`:
 
 | Provider | Python package | Native/system dependency | Multi-server action |
 |---|---|---|---|
-| PostgreSQL | `psycopg2-binary` | `libpq5`, `postgresql-client-17` | Included in the standard backend image. |
+| PostgreSQL | `psycopg[binary]` | `libpq`, `postgresql-client-17` | Included in the standard backend image. |
 | MySQL/MariaDB | `pymysql` | None for the pure-Python driver | Included in the standard backend image. |
 | Oracle | `oracledb` | None in thin mode | Included in the standard backend image. |
 | SQL Server | `pyodbc` | Microsoft ODBC Driver 18 or 17 plus unixODBC | Install native ODBC driver in every backend and worker image that must connect to SQL Server. |
@@ -162,7 +162,7 @@ After a backend image is running, verify providers from each backend/worker
 image family:
 
 ```bash
-docker exec -it plenora-backend python -c "import psycopg2, pymysql, oracledb, pyodbc; print('python db providers ok'); print('odbc_drivers=', pyodbc.drivers())"
+docker exec -it plenora-backend python -c "import psycopg, pymysql, oracledb, pyodbc; print('python db providers ok'); print('odbc_drivers=', pyodbc.drivers())"
 ```
 
 For SQL Server, `odbc_drivers` must include `ODBC Driver 18 for SQL Server`
