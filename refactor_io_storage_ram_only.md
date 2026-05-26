@@ -1,5 +1,133 @@
 # Refactor I/O e Storage RAM-first per Plenora Backend
 
+## Contratto runtime RAM-first (standing reference)
+
+**Stato: Closed (2026-05-26).** Il refactor RAM-first ha chiuso i pezzi
+runtime principali. Quello che segue NON e' piu' un piano di migrazione
+ma il **contratto** che il codice applicativo deve rispettare. Le sezioni
+analytical successive ("Obiettivo", "Architettura proposta", "Piano di
+migrazione", ecc.) restano come reference storico del percorso e delle
+decisioni prese; non vanno consultate per "cosa fare oggi".
+
+### Sintesi stato chiuso
+
+| Workflow | Stato runtime | Riferimento commit |
+|---|---|---|
+| ETL pipeline (estrai/manipola/arricchisci/carica) | Zero disco | pre-refactor + Phase4 |
+| REST connector (input/output) | Bytes / `result_id` end-to-end | `ece07689` |
+| Scheduler download/archive | DB-only via `schedule_logs` | `330c21f4` |
+| ArcGIS routes (input) | Dataframe-first | `8728d6fa` |
+| ResultBlobLoader | `mode="bytes"` only (path mode tombstoned) | `598f2be5` |
+| IMDF ingest (bytes-first) | Zero disco transient | IMDF-1..6 |
+| IMDF persist | Storage canonical (no local cache) | `58859082` |
+| IMDF GET metadata + /bundles list | Storage-first | `b32f73f0` / `7def5e40` |
+| IMDF publish/validate | Fully-RAM via GDAL `/vsimem` ctypes | `012072f6` |
+| IMDF extract_imdf_zip_bytes | Fully-RAM (no tmp dir) | `43ef5dde` |
+| Query streaming output | S3 multipart end-to-end (no tempfile) | `b720c958` |
+
+### Regola 1 — codice applicativo non scrive su filesystem
+
+Il codice in `app/core/*` (escluse le directory boundary dichiarate sotto)
+e in `workers/tasks/*` **NON** deve usare:
+
+- `tempfile.NamedTemporaryFile` / `mkdtemp` / `mkstemp` / `TemporaryDirectory`
+- `pathlib.Path.write_bytes` / `write_text`
+- `open(..., "w"|"a"|"x")` per scrivere
+- `zipfile.ZipFile.extractall` / `safe_extractall`
+- `shutil.move` / `shutil.copy*`
+- `FileResponse(...)` (era usata per scheduler legacy)
+- `.to_csv(path)` / `.to_excel(path)` / `.to_parquet(path)` / `.to_json(path)` / `.to_file(path)`
+- `storage.upload(path, key)` / `storage.download(key, path)`
+
+**Enforcement:** `backend/tests2/io_boundary/test_no_direct_filesystem_contract.py::test_no_active_legacy_callsites_remain`.
+Il test fallisce su qualunque nuovo callsite fuori dal boundary set.
+
+### Regola 2 — boundary autorizzati (motivazione per file)
+
+Le seguenti location HANNO il permesso di toccare il filesystem perche'
+sono primitive che esistono PER esporre quella capability al resto del
+codice. La motivazione e' inline nel `scripts/_gen_io_allowlist.py`
+(`_BOUNDARY_DIRS` + `_BOUNDARY_FILES`).
+
+**Boundary primitives (intentional disk capability):**
+- `app/core/io/` — materializer + helper geospaziali (escape hatch tracciato).
+- `app/core/storage/` — storage backend abstraction.
+- `app/core/results/temp_paths.py` — tempdir centralizzato per path-only adapters.
+- `app/utils/zip_safe.py` — zip-bomb-safe extract impl.
+- `app/core/files/service_deps.py` — `DefaultFileSystem.extract_zip` adapter.
+- `app/core/resources/loaders/result_blob.py` — Resource Engine loader (post-Phase5 solo `mode="bytes"`).
+
+**IMDF subsystem (format-as-directory + cache hydration):**
+- `app/core/imdf/` — interamente nel boundary. Razionale: OGC IMDF e'
+  format-as-directory (`.gdb` letto da pyogrio via filesystem).
+  Post-IMDF-5 il path runtime publish/validate e' `/vsimem` via
+  `gdal_vsi.py` (ctypes); restano callsite per:
+  - `extract_imdf_zip(path)` legacy (test/script);
+  - `persist_imdf_bundle_to_disk` legacy (test/script);
+  - `ensure_local_bundle` cache locale (DELETE endpoint).
+
+**Scripts (one-off tooling):**
+- `scripts/` esplicitamente fuori dal sweep applicativo
+  (`_EXCLUDED_ROOTS = ("scripts",)`). Backup/restore/openapi-export/imdf-e2e-check
+  sono tool, non runtime.
+
+### Regola 3 — ratchet bidirezionale del count
+
+Il count per-file dei residui inside-boundary e' congelato in
+`backend/tests2/io_boundary/test_no_direct_filesystem_contract.py::_BOUNDARY_FROZEN_SNAPSHOT`.
+Stato corrente: **23 entries su 12 file**.
+
+Il test `test_report_inside_boundary_frozen` fallisce se:
+- **Cresce**: un file aggiunge callsite (accidentale o deliberato).
+- **Cala**: un file rimuove tutte le entries (legitimate cleanup ma da
+  documentare).
+- **Nuovo file**: appare nel boundary set senza essere dichiarato.
+
+Modifiche legittime al count richiedono **aggiornamento contestuale**
+del doc (questa sezione) + dello snapshot in `_BOUNDARY_FROZEN_SNAPSHOT`,
+nello stesso commit.
+
+### Regola 4 — legacy tombstone schedule
+
+I seguenti residui sono dichiarati tombstone-pending. Possono essere
+rimossi quando i loro consumer migrano:
+
+| Item | Consumer attuale | Tombstone quando |
+|---|---|---|
+| `imdf.loader.extract_imdf_zip(path)` | `scripts/imdf_real_e2e_check.py`, `tests2/.../test_imdf_persist_bundle_contract.py` | Script + test migrano a `extract_imdf_zip_bytes(bytes)`. |
+| `imdf.persist.persist_imdf_bundle_to_disk` | `scripts/imdf_real_e2e_check.py`, `tests2/.../test_imdf_persist_bundle_contract.py`, `tests2/.../test_plenora_metadata_schema.py`, `tests2/.../test_site_id_resolution_single_source.py` | Script + test migrano a `persist_imdf_bundle` (storage-direct). |
+| `imdf.storage.ensure_local_bundle` | Solo `DELETE /imdf/bundles/{id}` per cleanup cache locale eventuale | DELETE migra a `storage.delete_bundle` puro. |
+
+Quando rimossi: aggiornare snapshot + questa tabella. Break compat per
+operatori che dipendono dallo script `imdf_real_e2e_check.py` e' atteso
+(re-script via il nuovo entry point).
+
+### Regola 5 — bundle legacy (break compat IMDF-4 step 4)
+
+Bundle IMDF persistiti **prima** di IMDF-3 (`58859082`, layout zip
+monolitico via `save_bundle(local_dir, ...)`) non sono piu' accessibili
+dal runtime corrente. Il fallback `_zip_key` in `ensure_local_bundle` e'
+stato tombstoned in `f494cd38`. Operator action richiesta: re-upload
+via `persist_imdf_bundle` (IMDF-3 per-file layout) per ripristinare
+accesso.
+
+### Quando NON e' necessario seguire le regole
+
+- Test (`tests2/`, `backend/test-e2e-v2/`): possono creare tempfile per
+  fixture.
+- Migration files (`backend/migrations/`): script SQL ad-hoc.
+- Dev tooling (`.agent-temp/`, `.claude/`, doc).
+
+### Storia analitica
+
+Le sezioni seguenti ("Obiettivo", "Architettura proposta", ecc.) restano
+come reference storico del processo decisionale: probe OSGeo/GDAL,
+valutazione driver, scelte di shape `ImdfBundle`, reversal della
+decoupling persist/storage, ecc. Sono utili per capire **perche'** le
+regole sopra hanno la forma che hanno.
+
+---
+
 ## Obiettivo
 
 Ridurre drasticamente, e dove possibile eliminare, le scritture su filesystem locale nel backend.
