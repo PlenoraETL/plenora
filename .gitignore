@@ -92,8 +92,10 @@ dmypy.json
 .cursorignore
 .cursorindexingignore
 
-# Claude
+# Claude (local agent state — keep allowlist baseline tracked)
 .claude/settings.local.json
+.claude/agents/
+.claude/bug-reports/
 
 # Node.js / Frontend
 node_modules/
