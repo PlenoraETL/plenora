@@ -3,18 +3,29 @@
 QueryExecutor owns query execution and orchestration. This module owns the
 result-store calls so executor code does not import low-level persistence
 functions directly.
+
+QUERY-1 (post-IMDF-6): il path streamable evita il tempfile intermedio.
+`persist_streaming_query_to_storage` orchestra
+`StreamingResultBlobWriter` (S3 multipart o DB BYTEA) +
+`execute_streaming_to_writer` (cursor -> file-like). Il vecchio
+`persist_streamed_file(path)` e' rimosso (zero caller post-refactor).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Tuple
 
 from app.core.dataframes.ports import FrameLike
-from app.core.results.blob_writer import save_result_blob
 from app.core.results.pipeline_result import save_pipeline_result_outcome
-from app.core.results.temp_paths import get_temp_output_path
+from app.core.results.streaming_blob_writer import StreamingResultBlobWriter
+from app.db.query_streaming import (
+    StreamingConnection,
+    StreamingEngineFactory,
+    execute_streaming_to_writer,
+)
+from app.db.sql_types import QueryParams
 
 
 @dataclass(frozen=True)
@@ -23,31 +34,65 @@ class PersistedQueryResult:
     output_path: Path
 
 
+@dataclass(frozen=True)
+class StreamedQueryResult:
+    result_id: str
+    rows_count: int
+    columns: List[str]
+
+
 class QueryResultPersistence:
     """Persistence collaborator for query result outputs."""
 
-    def streaming_output_path(self, filename_stem: str, output_format: str) -> Path:
-        return get_temp_output_path(filename_stem).with_suffix(f".{output_format}")
-
-    def persist_streamed_file(
+    def persist_streaming_query_to_storage(
         self,
         *,
         project_id: str,
-        output_path: Path,
+        engine_factory: StreamingEngineFactory,
+        connection: StreamingConnection,
+        sql: str,
+        params: Optional[QueryParams],
         output_format: str,
-        rows_count: int,
+        output_filename: str,
         group_id: Optional[str] = None,
-    ) -> PersistedQueryResult:
-        result_id = save_result_blob(
-            project_id,
-            Path(output_path),
-            output_format,
-            rows_count,
+    ) -> StreamedQueryResult:
+        """Streaming end-to-end: query cursor → result blob storage.
+
+        Crea uno `StreamingResultBlobWriter` (S3 multipart o DB BYTEA
+        secondo policy) e ci passa il cursor query via
+        `execute_streaming_to_writer`. Niente tempfile intermedio.
+
+        Returns:
+            `StreamedQueryResult` con result_id, rows_count, columns.
+
+        Raises:
+            Propaga errori di query, streaming write, storage upload.
+            Su exception: aborta multipart (S3) + scarta buffer (DB).
+        """
+        writer = StreamingResultBlobWriter(
+            project_id=project_id,
+            filename=output_filename,
+            fmt=output_format,
             group_id=group_id,
         )
-        return PersistedQueryResult(
+        try:
+            rows_count, columns = execute_streaming_to_writer(
+                engine_factory=engine_factory,
+                connection=connection,
+                sql=sql,
+                params=params,
+                output_writer=writer,
+                output_format=output_format,
+            )
+            writer.update_rows_count(rows_count)
+            result_id = writer.finalize()
+        except Exception:
+            writer.abort()
+            raise
+        return StreamedQueryResult(
             result_id=result_id,
-            output_path=Path(output_path),
+            rows_count=rows_count,
+            columns=columns,
         )
 
     def persist_dataframe_result(

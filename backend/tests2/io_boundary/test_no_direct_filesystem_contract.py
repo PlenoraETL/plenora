@@ -327,7 +327,11 @@ _BOUNDARY_FROZEN_SNAPSHOT: dict[str, int] = {
     "app/core/results/temp_paths.py": 2,
     "app/utils/zip_safe.py": 3,
     "app/core/files/service_deps.py": 2,
-    "app/core/results/blob_writer.py": 1,
+    # blob_writer.py post-QUERY-1: `save_result_blob(path)` rimosso
+    # (era 1 storage_upload_path). Lo streaming query end-to-end ora
+    # passa da StreamingResultBlobWriter (S3 multipart via boto3
+    # client diretto, non boundary pattern).
+    # "app/core/results/blob_writer.py": 0  -> rimossa dallo snapshot
     # IMDF subsystem (format-as-directory + cache hydration)
     # loader.py post-IMDF-6 (extract_imdf_zip_bytes fully-RAM):
     # 1 safe_extractall + 1 tempfile_mkdtemp restano in `extract_imdf_zip`

@@ -2232,14 +2232,12 @@ ogni persistenza passa da DB/S3/MinIO/local-dev policy
 
 ## Boundary congelato — by-design residues (2026-05-25)
 
-Stato dopo Phase5 (ResultBlobLoader path-mode rimosso) + REST connector
-bytes-first + IMDF-1..6 (loader bytes / bundle.files / persist storage-direct
-/ GET metadata + list storage-first / validator+publish fully-RAM via
-GDAL `/vsimem` ctypes adapter / legacy fallback tombstoned /
-`extract_imdf_zip_bytes` fully-RAM).
+Stato dopo Phase5 + REST connector bytes-first + IMDF-1..6 +
+QUERY-1 (query streaming end-to-end S3 multipart, no tempfile,
+`save_result_blob(path)` tombstoned).
 
-Il report `test_report_inside_boundary_frozen` segnala **24 entries
-su 13 file** all'interno del boundary I/O. Questi residui sono
+Il report `test_report_inside_boundary_frozen` segnala **23 entries
+su 12 file** all'interno del boundary I/O. Questi residui sono
 intenzionali e classificati per categoria. Non vanno inseguiti: se
 qualcuno li tocca, deve aggiornare contestualmente questa sezione
 con il nuovo razionale.
@@ -2257,7 +2255,6 @@ del codice. Esigere che non chiamino `tempfile`/`write_bytes`/
 | `app/core/results/temp_paths.py` | 2 | Adapter path-only per result streaming + eseguibili hydration (centralizzato). |
 | `app/utils/zip_safe.py` | 3 | `safe_extractall` zip-bomb-safe + `pick_zip_member_by_extension`. Implementation primitive. |
 | `app/core/files/service_deps.py` | 2 | `DefaultFileSystem.extract_zip` path adapter per upload pipeline. |
-| `app/core/results/blob_writer.py` | 1 | `storage.upload(path, key)` streaming multipart per query output GB-scale (`save_result_blob(path)`); caller bounded usano `save_result_blob_from_bytes`. |
 
 **Policy**: questi file possono usare filesystem primitives liberamente.
 Modifiche che ne riducono il numero di entries sono benvenute ma non

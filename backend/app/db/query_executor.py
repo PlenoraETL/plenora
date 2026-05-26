@@ -94,16 +94,16 @@ class LoggerProtocol(Protocol):
 class QueryPersistenceProtocol(Protocol):
     """Persistence port for extracted query results."""
 
-    def streaming_output_path(self, output_filename: str, output_format: str) -> Path:
-        ...
-
-    def persist_streamed_file(
+    def persist_streaming_query_to_storage(
         self,
         *,
         project_id: str,
-        output_path: Path,
+        engine_factory: Any,
+        connection: Any,
+        sql: str,
+        params: Optional[Any],
         output_format: str,
-        rows_count: int,
+        output_filename: str,
         group_id: Optional[str],
     ):
         ...
@@ -431,27 +431,39 @@ class QueryExecutor:
             self._logger.info(f"Esecuzione query per progetto {project_id}")
 
             if _streamable:
+                # QUERY-1: streaming end-to-end cursor → result blob storage
+                # via `StreamingResultBlobWriter`. Niente tempfile intermedio,
+                # save = parte del query_total perche' multipart upload
+                # avviene mentre il cursor produce.
                 t_query = time.time()
-                output_path = self._result_persistence.streaming_output_path(
-                    output_filename,
-                    output_format,
+                # Filename per la DB row (display name nel result blob).
+                _ext = "." + (output_format or "bin").lstrip(".")
+                _streamed_filename = (
+                    output_filename if output_filename.lower().endswith(_ext)
+                    else f"{output_filename}{_ext}"
                 )
-                row_count, columns = self._execute_streaming_to_file(
+                streamed = self._result_persistence.persist_streaming_query_to_storage(
+                    project_id=project_id,
+                    engine_factory=self._engine_factory,
                     connection=connection,
                     sql=sql,
                     params=params,
-                    output_path=output_path,
                     output_format=output_format,
+                    output_filename=_streamed_filename,
+                    group_id=group_id,
                 )
-                saved_path = output_path
+                row_count = streamed.rows_count
+                columns = streamed.columns
+                result_id = streamed.result_id
+                saved_path = Path(_streamed_filename)
                 df = None
                 timings["query_total"] = time.time() - t_query
                 timings["dataframe"] = 0.0
-                timings["save"] = 0.0  # fuso dentro query_total
+                timings["save"] = 0.0  # fuso dentro query_total (multipart stream)
                 self._logger.info(
-                    f"Streaming {output_format} completato: "
+                    f"Streaming {output_format} -> result_id={result_id}: "
                     f"{row_count} righe in {timings['query_total']:.2f}s "
-                    f"(peak memory ~= 1 chunk, non il result set intero)"
+                    f"(peak memory ~= 1 part, no tempfile)"
                 )
             else:
                 t_query = time.time()
@@ -471,15 +483,9 @@ class QueryExecutor:
 
             t_save = time.time()
             if _streamable:
-                persisted = self._result_persistence.persist_streamed_file(
-                    project_id=project_id,
-                    output_path=saved_path,
-                    output_format=output_format,
-                    rows_count=row_count,
-                    group_id=group_id,
-                )
-                result_id = persisted.result_id
-                saved_path = persisted.output_path
+                # result_id + saved_path gia' valorizzati dentro il
+                # branch streaming sopra (persist_streaming_query_to_storage).
+                pass
             else:
                 persisted = self._result_persistence.persist_dataframe_result(
                     project_id=project_id,

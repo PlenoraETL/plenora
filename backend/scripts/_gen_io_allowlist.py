@@ -218,10 +218,11 @@ _BOUNDARY_FILES = (
     # (era il punto di materializzazione tempfile pre-Phase5) e come
     # ancora per la classification legitimate-cache.
     "app/core/resources/loaders/result_blob.py",
-    # `save_result_blob(path)` streaming upload multipart-friendly per
-    # query output GB-scale. I caller bounded (`save_result_blob_from_bytes`)
-    # girano gia' RAM-first.
-    "app/core/results/blob_writer.py",
+    # Post-QUERY-1: `blob_writer.py` rimosso dal boundary set.
+    # `save_result_blob(path)` tombstoned; tutti i writer canonical
+    # vanno via `save_result_blob_from_bytes` (RAM-first) o
+    # `StreamingResultBlobWriter` (S3 multipart real-time, no
+    # filesystem callsite — boto3 client diretto).
 )
 # Top-level roots di codice escluso dal sweep applicativo: gli script
 # one-off (`backup_db`, `test_restore`, `export_openapi_manifest`,

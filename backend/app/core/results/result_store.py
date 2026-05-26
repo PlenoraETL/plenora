@@ -11,7 +11,6 @@ from app.core.results.blob_writer import (
     apply_results_retention_after_save as _apply_results_retention,
     cleanup_uploaded_result_blob as _cleanup_uploaded_result_blob,
     enforce_db_hard_cap as _enforce_db_hard_cap,
-    save_result_blob,
     save_result_blob_from_bytes,
 )
 from app.core.results.pipeline_result import (
@@ -50,6 +49,5 @@ __all__ = [
     "get_temp_output_path",
     "save_pipeline_result",
     "save_pipeline_result_outcome",
-    "save_result_blob",
     "save_result_blob_from_bytes",
 ]
