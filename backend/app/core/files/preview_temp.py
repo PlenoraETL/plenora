@@ -80,14 +80,18 @@ def preview_file_temp(
 
     Returns:
         dict con `columns`, `row_count`, `format`, `layers`, `sheets`.
+        Post-RAM-1: `row_count` puo' essere `None` quando il formato
+        non espone metadata cheap (csv, jsonlines, xlsx); il frontend
+        deve interpretare `None` come "row count non disponibile in
+        preview, riprovare dopo upload definitivo".
 
     Raises:
         ValueError: formato non supportato o MIME mismatch (block-only).
     """
     from app.core.dataframes.load_dispatch import (
         list_excel_sheets_from_bytes,
-        load_by_format_bytes,
     )
+    from app.core.dataframes.preview_loader import preview_dataframe_from_bytes
     from app.core.io.geospatial import list_vector_layers
 
     file_content.seek(0)
@@ -172,14 +176,26 @@ def preview_file_temp(
             sheet = available_sheets[0]
 
     is_sheet = format_type in ['xlsx', 'xls']
-    df, gdf = load_by_format_bytes(
+    # RAM-1 (2026-05-26): bounded preview — carica al massimo `max_rows`
+    # righe/feature invece del DataFrame intero. Per CSV/XLSX/JSON-lines
+    # il row_count totale non e' disponibile cheap (None); per parquet
+    # e geospatial viene da metadata.
+    df_preview, total_row_count = preview_dataframe_from_bytes(
         inner_bytes,
         format_type,
         layer=None if is_sheet else layer,
         sheet=sheet if is_sheet else None,
     )
-    columns = column_builder.from_dataframe(df, gdf)
-    row_count = len(df)
+    # `column_builder.from_dataframe` accetta (df, gdf): per geospatial
+    # df e gdf sono lo stesso oggetto (read_dataframe ritorna GeoDataFrame
+    # con tabular access). Per formati non-geo, gdf=None.
+    gdf_for_columns = df_preview if format_type in ('geojson', 'gpkg', 'shp', 'gdb', 'zip') else None
+    columns = column_builder.from_dataframe(df_preview, gdf_for_columns)
+    # row_count: usa total se disponibile da metadata (parquet,
+    # geospatial via read_info), altrimenti len(df_preview) come
+    # lower-bound. Frontend interpreta: se row_count == max_rows
+    # forse il file e' piu' grande (truncated).
+    row_count = total_row_count if total_row_count is not None else len(df_preview)
 
     return {
         "columns": [{"name": c.name, "type": c.type} for c in columns],

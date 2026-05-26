@@ -4,7 +4,6 @@ Task Celery per il modulo CARICA — esecuzione asincrona con progresso Redis.
 Runs background execution while preserving backend runtime contracts.
 """
 
-import io
 import time as _time
 import traceback
 import uuid as _uuid
@@ -486,19 +485,12 @@ def _execute_datasource_write(task, df, carica_node_data, project_id, task_id):
 
     _update_progress(task, 20, f'Serializzazione DataFrame ({dest_format})...')
 
-    # Serializza DataFrame in bytes
-    buf = io.BytesIO()
-    if dest_format == 'csv':
-        buf.write(df.to_csv(index=False).encode('utf-8'))
-    elif dest_format in ('xlsx', 'xls'):
-        df.to_excel(buf, index=False)
-    elif dest_format == 'json':
-        buf.write(df.to_json(orient='records', force_ascii=False).encode('utf-8'))
-    elif dest_format == 'geojson':
-        buf.write(df.to_json(orient='records', force_ascii=False).encode('utf-8'))
-    else:
-        buf.write(df.to_csv(index=False).encode('utf-8'))
-    content = buf.getvalue()
+    # RAM-2 (2026-05-26): serializzazione minimal-copy via
+    # `dataframe_to_export_bytes`. Sostituisce il pattern legacy
+    # `df.to_csv().encode()` + `BytesIO.write()` + `getvalue()` che
+    # aveva peak ~4-5x del df. Ora ~2x (df + bytes finali).
+    from app.core.dataframes.export_writer import dataframe_to_export_bytes
+    content = dataframe_to_export_bytes(df, dest_format)
 
     _update_progress(task, 50, f'Scrittura su DataSource {datasource_id}...')
 

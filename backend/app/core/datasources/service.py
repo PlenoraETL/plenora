@@ -275,6 +275,22 @@ class DataSourceService:
             sheet=sheet,
         )
 
+    def iter_read_chunks(self, ds_id: str, path: str, *, chunk_size: int = 64 * 1024):
+        """RAM-3 (2026-05-26): streaming read via il backend interface.
+
+        Per `LocalDataSource` apre il file e itera `chunk_size` byte
+        per volta (peak ~chunk_size). Per gli altri backend usa il
+        default fallback (read_file + slicing — peak invariato ma
+        compatibile con `StreamingResponse`).
+
+        NB: il backend `__exit__` viene chiamato quando l'iterator
+        viene consumato — il caller DEVE consumare lo stream all'interno
+        del `with` per evitare leak di connection (SFTP/FTP).
+        """
+        backend = self._get_backend(ds_id)
+        with backend as ds:
+            yield from ds.iter_read_chunks(path, chunk_size=chunk_size)
+
     def write_file(self, ds_id: str, path: str, content: bytes) -> None:
         backend = self._get_backend(ds_id)
         with backend as ds:

@@ -256,6 +256,24 @@ class LocalDataSource(DataSourceInterface):
         except PermissionError as e:
             raise DataSourcePermissionError(f"Accesso negato: {full_path}") from e
 
+    def iter_read_chunks(self, path: str, *, chunk_size: int = 64 * 1024):
+        """RAM-3 (2026-05-26): override streaming nativo per filesystem
+        locale. Apre il file in binary mode e itera `chunk_size` byte
+        per volta — peak RAM ~`chunk_size` invece di file size.
+        """
+        full_path = self._abs(path)
+        if not os.path.exists(full_path):
+            raise DataSourceFileNotFoundError(f"File non trovato: {path!r}")
+        try:
+            with open(full_path, "rb") as f:
+                while True:
+                    chunk = f.read(chunk_size)
+                    if not chunk:
+                        break
+                    yield chunk
+        except PermissionError as e:
+            raise DataSourcePermissionError(f"Accesso negato: {full_path}") from e
+
     def write_file(self, path: str, content: bytes) -> None:
         # Boundary: la scrittura locale passa per `io.local_filesystem`
         # (data plane endpoint, vedi razionale nel modulo). I PermissionError

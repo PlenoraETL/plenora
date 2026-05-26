@@ -7,10 +7,13 @@ Classe base astratta comune a tutti i backend di storage.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Mapping, Optional
+from typing import Iterator, Mapping, Optional
 from typing_extensions import TypedDict
 import fnmatch
 import hashlib
+
+
+DEFAULT_CHUNK_SIZE = 64 * 1024  # 64KB — equilibrio tra syscall overhead e RAM peak
 
 
 class DataSourceError(Exception):
@@ -170,6 +173,40 @@ class DataSourceInterface(ABC):
         Returns: Contenuto come bytes.
         Raises: DataSourceFileNotFoundError, DataSourcePermissionError
         """
+
+    def iter_read_chunks(
+        self,
+        path: str,
+        *,
+        chunk_size: int = DEFAULT_CHUNK_SIZE,
+    ) -> Iterator[bytes]:
+        """Legge il file a chunk per minimizzare il RAM peak (RAM-3).
+
+        Default implementation: fallback a `read_file()` + suddivisione
+        del bytes intero (NON riduce il peak, ma fornisce l'interface
+        uniforme per `StreamingResponse` nel router).
+
+        I backend con vero streaming nativo (LocalDataSource: file handle
+        chunked read; SftpDataSource futuro: paramiko prefetch) overridano
+        questo metodo per davvero fare streaming senza buffering completo.
+
+        Args:
+            path: file da leggere (relativo alla root).
+            chunk_size: dimensione del singolo chunk (default 64KB).
+
+        Yields:
+            Sequenza di `bytes` con `len(chunk) <= chunk_size`. L'ultimo
+            chunk puo' essere piu' piccolo o vuoto.
+
+        Raises:
+            DataSourceFileNotFoundError, DataSourcePermissionError —
+            come `read_file()`.
+        """
+        # Default safe: legge tutto, poi suddivide. Override per
+        # streaming vero.
+        data = self.read_file(path)
+        for i in range(0, len(data), chunk_size):
+            yield data[i:i + chunk_size]
 
     @abstractmethod
     def write_file(self, path: str, content: bytes) -> None:

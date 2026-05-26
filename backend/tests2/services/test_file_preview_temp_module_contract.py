@@ -40,10 +40,10 @@ def test_preview_csv_returns_columns_and_row_count(fake_logger, real_helpers):
 
     content = io.BytesIO(b"id,name\n1,a\n2,b\n3,c\n")
     with patch(
-        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        "app.core.dataframes.preview_loader.preview_dataframe_from_bytes",
         return_value=(
             pd.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]}),
-            None,
+            3,
         ),
     ):
         out = preview_file_temp(
@@ -124,8 +124,8 @@ def test_preview_no_filesystem_io_in_csv_happy_path(
 
     pre = set(tmp_path.iterdir())
     with patch(
-        "app.core.dataframes.load_dispatch.load_by_format_bytes",
-        return_value=(pd.DataFrame({"a": [1]}), None),
+        "app.core.dataframes.preview_loader.preview_dataframe_from_bytes",
+        return_value=(pd.DataFrame({"a": [1]}), 1),
     ):
         preview_file_temp(
             io.BytesIO(b"a\n1\n"), "x.csv",
@@ -146,7 +146,6 @@ def test_file_source_service_preview_delegates_with_service_collaborators():
     from app.core.files.service import FileSourceService
 
     svc = FileSourceService.__new__(FileSourceService)
-    svc._fs = MagicMock()
     svc._loader = MagicMock()
     from app.core.files.helpers import ColumnInfoBuilder, FormatDetector
     svc._format_detector = FormatDetector
@@ -154,8 +153,8 @@ def test_file_source_service_preview_delegates_with_service_collaborators():
     svc._logger = MagicMock()
 
     with patch(
-        "app.core.dataframes.load_dispatch.load_by_format_bytes",
-        return_value=(pd.DataFrame({"k": [1, 2]}), None),
+        "app.core.dataframes.preview_loader.preview_dataframe_from_bytes",
+        return_value=(pd.DataFrame({"k": [1, 2]}), 2),
     ):
         out = svc.preview_file_temp(io.BytesIO(b"k\n1\n2\n"), "tiny.csv")
     assert out["format"] == "csv"
@@ -179,7 +178,7 @@ def test_preview_gpkg_multi_layer_without_selection_returns_layers(
         "app.core.io.geospatial.list_vector_layers",
         return_value=["roads", "buildings"],
     ) as list_vector, patch(
-        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        "app.core.dataframes.preview_loader.preview_dataframe_from_bytes",
     ) as load_lbf:
         out = preview_file_temp(
             content, "data.gpkg",
@@ -213,7 +212,7 @@ def test_preview_xlsx_multi_sheet_without_selection_returns_sheets(
         "app.core.dataframes.load_dispatch.list_excel_sheets_from_bytes",
         return_value=["Sheet1", "Sheet2"],
     ) as list_sheets, patch(
-        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        "app.core.dataframes.preview_loader.preview_dataframe_from_bytes",
     ) as load_lbf:
         out = preview_file_temp(
             content, "report.xlsx",

@@ -5,7 +5,7 @@ Endpoints CRUD per la gestione dei Data Source e operazioni sui file.
 """
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Depends
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from typing import Optional
 
 from app.utils.logger import get_logger
@@ -283,7 +283,6 @@ def download_file(
     """
     assert_resource_visible(_svc().get_datasource(ds_id), "datasources", current_user, "Data Source")
     try:
-        content = _svc().read_file(ds_id, path)
         # Sanitizza il filename per il Content-Disposition
         # basename only (no full path leak
         # rimuove caratteri non sicuri per il header HTTP (quote, CRLF
@@ -295,8 +294,14 @@ def download_file(
         )[:200]
         if not safe_filename:
             safe_filename = "download"
-        return Response(
-            content=content,
+        # RAM-3 (2026-05-26): StreamingResponse + iter_read_chunks
+        # invece di Response(content=full_bytes). Per LocalDataSource
+        # il peak RAM scende da O(file_size) a O(64KB). Per gli altri
+        # backend il default fallback non riduce il peak ma evita la
+        # doppia copia request->response di FastAPI.
+        chunks = _svc().iter_read_chunks(ds_id, path)
+        return StreamingResponse(
+            chunks,
             media_type="application/octet-stream",
             headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
         )

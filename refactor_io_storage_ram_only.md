@@ -302,6 +302,73 @@ regole sopra hanno la forma che hanno.
 
 ---
 
+## Follow-up: No RAM amplification (2026-05-26)
+
+Dopo il refactor "no disk leak" (chiuso sopra), audit con 6 worker
+ha identificato 3 pattern di **RAM amplification** runtime: il backend
+era RAM-first ma alcuni flussi tenevano N copie dello stesso payload
+in memoria contemporaneamente. Fix mirati:
+
+### RAM-1 — Preview bounded
+
+`app/core/files/preview_temp.py` chiamava `load_by_format_bytes()` che
+caricava il **DataFrame intero** solo per ritornare `len(df)` + column
+info. Su un CSV da 500MB pandas costruiva un DF da 1-2GB in memoria
+per mostrare 100 righe. Fix: nuovo `app/core/dataframes/preview_loader.py`
+con `preview_dataframe_from_bytes(data, format, *, max_rows=200, ...)`
+che usa format-specific bounded reads:
+  - CSV: `pd.read_csv(nrows=max_rows)`
+  - XLSX: `pd.read_excel(nrows=max_rows)`
+  - Parquet: `pyarrow.ParquetFile.iter_batches(batch_size=max_rows)`
+    + `metadata.num_rows` per il count totale (cheap, da footer)
+  - JSON: pandas `read_json(lines=True, nrows=...)` per JSON-lines;
+    JSON standard parse + truncate (raro per file grandi)
+  - Geospatial: `pyogrio.read_dataframe(max_features=max_rows)` +
+    `pyogrio.read_info` per il count totale cheap
+
+Su un CSV 12MB (100k righe): peak DF in pandas ~57MB; con bounded
+preview (200 righe): peak ~few KB. ~99% di RAM in meno.
+
+### RAM-2 — CARICA export minimal-copy
+
+`workers/tasks/carica_task.py` faceva
+`buf.write(df.to_csv(index=False).encode('utf-8'))` con peak ~4-5x del
+DF serializzato (DF + stringa Python + bytes + BytesIO + getvalue).
+Nuovo `app/core/dataframes/export_writer.py::dataframe_to_export_bytes`
+usa `io.TextIOWrapper(BytesIO)` per scrivere direttamente sul buffer
+binary senza materializzare la stringa intermedia. Peak ridotto a ~2x.
+Bonus: `chunksize=10_000` su CSV riduce il peak della string-building
+interna pandas.
+
+### RAM-3 — Datasource download streaming
+
+`app/core/datasources/router.py::download_file` faceva
+`Response(content=read_file())` — peak ~2x file size (read_file buffer
++ Response content). Nuovo metodo `iter_read_chunks(path, chunk_size)`
+sull'interface (default fallback = read_file + slicing per backwards
+compat), override su `LocalDataSource` per vero streaming via file
+handle chunked. Router ora usa `StreamingResponse(iter_chunks(...))` —
+per LocalDataSource peak scende da O(file_size) a O(64KB).
+
+Upload streaming non e' stato toccato: il body request e' bufferizzato
+da Starlette/FastAPI internamente e cambiare quel comportamento richiede
+refactor dell'endpoint a `Request` raw. Trade-off accettato.
+
+### Cosa NON e' stato toccato (priorita' media identificata in audit)
+
+- IMDF GDB zip streaming (`imdf/loader.py` accumula gdb_members + ricrea
+  BytesIO zip): moltiplicatore 4x ma solo per bundle IMDF, scope
+  ristretto.
+- Enrichment `response.json()` materializza body intero: cambiare a
+  streaming JSON parser e' non-banale; lascio finche' non e' un
+  bottleneck reale.
+- Spatial `gdf.to_crs()` su intero GDF: tradeoff usability vs perf
+  poco chiaro.
+- Intermediate parquet `BytesIO + getvalue()`: stesso pattern fixed in
+  RAM-2; estensibile facilmente quando serve.
+
+---
+
 ## Obiettivo
 
 Ridurre drasticamente, e dove possibile eliminare, le scritture su filesystem locale nel backend.
