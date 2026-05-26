@@ -16,7 +16,7 @@ from typing import Mapping, Optional
 from app.config import settings
 from app.core.resources.bounded_reader import read_stream_bounded
 from app.shared.contracts.payloads import ObjectMap
-from app.shared.resources.file_cleanup import rmtree_safe
+from app.core.io.local_cleanup import rmtree_safe
 from app.utils.logger import get_logger
 
 from . import storage
@@ -151,7 +151,7 @@ def delete_task_owner(task_id: str, *, outputs_dir: Path | None = None) -> None:
     try:
         path = task_owner_path(task_id, outputs_dir=outputs_dir)
         if path.exists():
-            path.unlink()
+            rmtree_safe(path, logger=logger)
     except Exception as exc:
         logger.debug(
             f"delete task owner locale best-effort fallito per "

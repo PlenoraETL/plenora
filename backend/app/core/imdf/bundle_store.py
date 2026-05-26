@@ -9,7 +9,7 @@ from typing import Optional
 from app.core.imdf import storage as imdf_storage
 from app.shared.contracts.payloads import JsonObject
 from app.shared.resources.path_policy import validate_imdf_task_id
-from app.shared.resources.file_cleanup import rmtree_safe
+from app.core.io.local_cleanup import rmtree_safe
 from app.utils.logger import get_logger
 
 

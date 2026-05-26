@@ -21,7 +21,7 @@ from app.core.scheduler.job_dispatcher import (
     SCHEDULE_PIPELINE_TASK_NAME,
     scheduled_run_kwargs,
 )
-from app.shared.resources.file_cleanup import rmtree_safe
+from app.core.io.local_cleanup import rmtree_safe
 
 logger = get_logger(__name__)
 

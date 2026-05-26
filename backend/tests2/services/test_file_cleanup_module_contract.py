@@ -1,7 +1,9 @@
 """
 Smoke contract: estrazione rmtree_safe.
 
-Verifica le invarianti minime del refactor:
+Storia: il modulo era `app/shared/resources/file_cleanup.py`. Spostato
+in `app/core/io/local_cleanup.py` nel consolidamento finale del
+boundary I/O (2026-05-26).
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
 def test_rmtree_safe_removes_regular_file(tmp_path):
-    from app.shared.resources.file_cleanup import rmtree_safe
+    from app.core.io.local_cleanup import rmtree_safe
 
     target = tmp_path / "x.txt"
     target.write_text("hello")
@@ -35,7 +37,7 @@ def test_rmtree_safe_removes_regular_file(tmp_path):
 
 
 def test_rmtree_safe_removes_directory_with_nested_content(tmp_path):
-    from app.shared.resources.file_cleanup import rmtree_safe
+    from app.core.io.local_cleanup import rmtree_safe
 
     root = tmp_path / "deletable"
     sub = root / "sub"
@@ -51,7 +53,7 @@ def test_rmtree_safe_removes_directory_with_nested_content(tmp_path):
 
 
 def test_rmtree_safe_silent_on_missing_path(tmp_path):
-    from app.shared.resources.file_cleanup import rmtree_safe
+    from app.core.io.local_cleanup import rmtree_safe
 
     ghost = tmp_path / "never_existed"
     assert not ghost.exists()
@@ -66,7 +68,7 @@ def test_rmtree_safe_silent_on_missing_path(tmp_path):
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Su Windows il bit ro su file singoli e' inconsistente; il path onerror si esercita meglio su POSIX")
 def test_rmtree_safe_handles_readonly_file_in_directory(tmp_path):
-    from app.shared.resources.file_cleanup import rmtree_safe
+    from app.core.io.local_cleanup import rmtree_safe
 
     root = tmp_path / "ro_dir"
     root.mkdir()
@@ -93,14 +95,14 @@ def test_rmtree_safe_handles_readonly_file_in_directory(tmp_path):
 def test_rmtree_safe_calls_logger_debug_on_persistent_failure(tmp_path):
     """Simula `shutil.rmtree` che fallisce sempre: dopo i retry, logger.debug
     chiamato con il path; nessuna exception propagata al chiamante."""
-    from app.shared.resources.file_cleanup import rmtree_safe
+    from app.core.io.local_cleanup import rmtree_safe
 
     target = tmp_path / "stuck"
     target.mkdir()
     fake_logger = MagicMock()
 
     # Mock: shutil.rmtree solleva persistente, p.exists() resta True
-    with patch("app.shared.resources.file_cleanup.shutil.rmtree",
+    with patch("app.core.io.local_cleanup.shutil.rmtree",
                side_effect=PermissionError("locked")):
         # Best-effort: nessuna exception propagata
         rmtree_safe(target, retries=2, logger=fake_logger)
@@ -114,7 +116,7 @@ def test_rmtree_safe_calls_logger_debug_on_persistent_failure(tmp_path):
 
 def test_rmtree_safe_uses_module_logger_when_no_logger_passed(tmp_path):
     """Se logger=None, usa il logger del modulo come fallback (no raise)."""
-    from app.shared.resources.file_cleanup import rmtree_safe
+    from app.core.io.local_cleanup import rmtree_safe
 
     target = tmp_path / "ghost"
     # Path non esistente: rmtree_safe deve essere idempotente e non sollevare,
@@ -122,40 +124,73 @@ def test_rmtree_safe_uses_module_logger_when_no_logger_passed(tmp_path):
     rmtree_safe(target, logger=None)
 
 
-# 6. I facade core usano la primitive shared di cleanup
+# 6. I facade core usano la primitive del boundary di cleanup
 
 
-def test_core_file_service_cleanup_delegates_to_shared_rmtree_safe(tmp_path):
-    """`app.core.files.service._rmtree_safe(path)` deve invocare la shared
-    `rmtree_safe` con `_logger` del modulo core."""
+def test_core_file_service_cleanup_delegates_to_local_cleanup_rmtree_safe(tmp_path):
+    """`app.core.files.service._rmtree_safe(path)` deve invocare la primitive
+    `rmtree_safe` con `_logger` del modulo core.
+
+    NB: il mock va sull'attributo del modulo `service` (riferimento
+    locale post `from app.core.io.local_cleanup import rmtree_safe`),
+    non sulla source — Python `from X import Y` copia il symbol nel
+    namespace del modulo importer."""
     from app.core.files import service as fs_mod
 
     target = tmp_path / "y.txt"
     target.write_text("z")
 
-    with patch("app.shared.resources.file_cleanup.rmtree_safe") as mock_shared:
+    with patch.object(fs_mod, "rmtree_safe") as mock_primitive:
         fs_mod._rmtree_safe(target)
 
-    mock_shared.assert_called_once()
-    args, kwargs = mock_shared.call_args
+    mock_primitive.assert_called_once()
+    args, kwargs = mock_primitive.call_args
     assert args[0] == target
     assert kwargs["retries"] == 3
     assert kwargs["logger"] is fs_mod._logger
 
 
-def test_preview_temp_cleanup_delegates_to_shared_rmtree_safe(tmp_path):
-    """`app.core.files.preview_temp._rmtree_safe(path)` deve invocare la shared
-    `rmtree_safe` con `_logger_module` del modulo preview."""
-    from app.core.files import preview_temp as fp_mod
+# 7. delete_local_file (strict mode) — nuovo nel consolidamento finale
+
+
+def test_delete_local_file_removes_existing_file(tmp_path):
+    from app.core.io.local_cleanup import delete_local_file
 
     target = tmp_path / "y.txt"
     target.write_text("z")
+    delete_local_file(target)
+    assert not target.exists()
 
-    with patch("app.shared.resources.file_cleanup.rmtree_safe") as mock_shared:
-        fp_mod._rmtree_safe(target)
 
-    mock_shared.assert_called_once()
-    args, kwargs = mock_shared.call_args
-    assert args[0] == target
-    assert kwargs["retries"] == 3
-    assert kwargs["logger"] is fp_mod._logger_module
+def test_delete_local_file_raises_on_missing_default(tmp_path):
+    from app.core.io.local_cleanup import delete_local_file
+
+    ghost = tmp_path / "never"
+    with pytest.raises(FileNotFoundError):
+        delete_local_file(ghost)
+
+
+def test_delete_local_file_missing_ok_silent(tmp_path):
+    from app.core.io.local_cleanup import delete_local_file
+
+    ghost = tmp_path / "never"
+    delete_local_file(ghost, missing_ok=True)  # no-op
+
+
+def test_delete_local_file_rejects_directory(tmp_path):
+    from app.core.io.local_cleanup import delete_local_file
+
+    d = tmp_path / "dir"
+    d.mkdir()
+    with pytest.raises(IsADirectoryError):
+        delete_local_file(d)
+
+
+# 8. Sentinel anti-regressione: il vecchio path NON deve essere riusato
+
+
+def test_app_shared_resources_file_cleanup_tombstoned():
+    """`app/shared/resources/file_cleanup.py` non deve piu' esistere come modulo.
+    Sostituto canonical: `app.core.io.local_cleanup`."""
+    with pytest.raises(ModuleNotFoundError):
+        __import__("app.shared.resources.file_cleanup")

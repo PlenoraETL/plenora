@@ -9,9 +9,7 @@ from __future__ import annotations
 
 from ipaddress import ip_address
 from urllib.parse import urlparse
-import shutil
 import socket
-import stat
 import sys
 
 import logging
@@ -237,37 +235,30 @@ def _validate_data_dir(settings: Any, errors: list) -> None:
 
 
 def _cleanup_temp_dir(settings: Any) -> None:
+    # Boundary: cleanup boot-time via `io.local_cleanup` (best-effort
+    # con retry + chmod onerror). Sostituisce il pattern inline
+    # shutil.rmtree(onerror=...) + entry.unlink() ripetuto qui.
+    from app.core.io.local_cleanup import rmtree_safe
+
     try:
-
-        def _on_error(func, fpath, exc_info):
-            try:
-                os.chmod(fpath, stat.S_IWRITE)
-                func(fpath)
-            except Exception as exc:
-                logger.debug("Cleanup temp: impossibile rimuovere %s: %s", fpath, exc)
-
         temp_dir = Path(settings.TEMP_DIR)
         if not temp_dir.exists():
             return
         for entry in temp_dir.iterdir():
-            if entry.is_dir():
-                shutil.rmtree(entry, onerror=_on_error)
-            else:
-                try:
-                    entry.unlink()
-                except Exception as exc:
-                    logger.debug("Cleanup temp: impossibile rimuovere %s: %s", entry, exc)
+            rmtree_safe(entry, logger=logger)
     except Exception as exc:
         logger.debug("Pulizia cartelle temp fallita (non critico): %s", exc)
 
 
 def _cleanup_legacy_dirs(settings: Any) -> None:
-    try:
+    # Boundary: cleanup legacy dirs via `io.local_cleanup` (best-effort).
+    from app.core.io.local_cleanup import rmtree_safe
 
+    try:
         for legacy_dir in ("files", "results", "File", "Results"):
             legacy_path = Path(settings.DATA_DIR) / legacy_dir
             if legacy_path.exists() and legacy_path.is_dir():
-                shutil.rmtree(legacy_path, ignore_errors=True)
+                rmtree_safe(legacy_path, logger=logger)
     except Exception as exc:
         logger.debug("Rimozione cartelle legacy fallita (non critico): %s", exc)
 

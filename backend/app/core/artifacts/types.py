@@ -378,9 +378,10 @@ class MaterializedArtifact:
         if self._cleaned or not self.is_temporary or self.path is None:
             return
         try:
+            from app.core.io.local_cleanup import rmtree_safe
             p = Path(self.path)
             if p.exists():
-                p.unlink()
+                rmtree_safe(p)
         except Exception:
             # cleanup best-effort: il caller non deve fallire per questo
             pass

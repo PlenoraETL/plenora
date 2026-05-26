@@ -777,7 +777,8 @@ class ApiConnectionRestFileMixin:
             # un unlink su tuple (che fallirebbe) in caso di future evoluzioni
             try:
                 if _owns_materialized_input and input_path and not isinstance(input_path, tuple):
-                    Path(input_path).unlink(missing_ok=True)
+                    from app.core.io.local_cleanup import rmtree_safe
+                    rmtree_safe(input_path, logger=logger)
             except Exception as _unlink_err:
                 logger.debug(
                     f"rest_file: unlink materialized input best-effort "

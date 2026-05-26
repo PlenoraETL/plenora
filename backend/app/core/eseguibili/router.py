@@ -271,8 +271,9 @@ def _delete_upload_meta(file_id: str) -> None:
 
     path = _upload_meta_path(file_id)
     try:
+        from app.core.io.local_cleanup import rmtree_safe
         if path.exists():
-            path.unlink()
+            rmtree_safe(path, logger=logger)
     except Exception as _unlink_err:
         logger.debug(
             f"_delete_upload_meta best-effort fallito per file_id={file_id}: "
@@ -456,8 +457,8 @@ def execute_eseguibile(
         # Cleanup: elimina il file_source upload temporaneo + metadata.
         if _local_upload_meta_fallback_allowed() and upload.get("path"):
             try:
-                if os.path.exists(str(upload["path"])):
-                    os.unlink(str(upload["path"]))
+                from app.core.io.local_cleanup import rmtree_safe
+                rmtree_safe(str(upload["path"]), logger=logger)
             except Exception as _unlink_err:
                 logger.debug(
                     f"execute_eseguibile: cleanup tmp upload legacy "

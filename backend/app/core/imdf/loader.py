@@ -12,7 +12,6 @@ from __future__ import annotations
 import io
 import json
 import os
-import shutil
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -104,7 +103,8 @@ class ImdfBundle:
 
     def cleanup(self) -> None:
         if self.tmp_dir and self.tmp_dir.exists():
-            shutil.rmtree(self.tmp_dir, ignore_errors=True)
+            from app.core.io.local_cleanup import rmtree_safe
+            rmtree_safe(self.tmp_dir)
 
     @property
     def has_gdb(self) -> bool:

@@ -280,11 +280,15 @@ class LocalDataSource(DataSourceInterface):
             ) from (cause or exc)
 
     def delete_file(self, path: str) -> None:
+        # Boundary: data plane delete via `io.local_cleanup.delete_local_file`
+        # (strict mode, solleva PermissionError / FileNotFoundError).
+        from app.core.io.local_cleanup import delete_local_file
+
         full_path = self._abs(path)
         if not os.path.exists(full_path):
             raise DataSourceFileNotFoundError(f"File non trovato: {path!r}")
         try:
-            os.remove(full_path)
+            delete_local_file(full_path)
         except PermissionError as e:
             raise DataSourcePermissionError(f"Cancellazione negata: {full_path}") from e
 

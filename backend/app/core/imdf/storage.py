@@ -13,7 +13,7 @@ from typing import Iterator, List, Optional
 
 from app.core.io.object_storage import object_storage_enabled
 from app.shared.contracts.payloads import JsonObject, StringMap
-from app.shared.resources.file_cleanup import rmtree_safe
+from app.core.io.local_cleanup import rmtree_safe
 from app.shared.resources.storage_layout import IMDF_BUNDLES_PREFIX
 from app.utils.logger import get_logger
 

@@ -40,7 +40,9 @@ def test_beat_janitors_use_shared_filesystem_cleanup_boundary() -> None:
         if isinstance(node, ast.ImportFrom) and node.module
     }
 
-    assert "app.shared.resources.file_cleanup" in imports
+    # Audit follow-up 2026-05-26: il modulo cleanup e' stato spostato
+    # in `app/core/io/local_cleanup.py` come boundary I/O orizzontale.
+    assert "app.core.io.local_cleanup" in imports
     assert "shutil.rmtree" not in src
     assert "_shutil.rmtree" not in src
     assert ".unlink(missing_ok=True)" not in src

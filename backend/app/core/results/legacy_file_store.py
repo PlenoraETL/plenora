@@ -92,11 +92,13 @@ def delete_output_file(
     *,
     root: Path | None = None,
 ) -> bool:
+    from app.core.io.local_cleanup import delete_local_file
+
     results_dir = project_results_dir(project_id, root=root)
     safe_name = Path(output_file).name
     target = assert_path_within(results_dir / safe_name, [results_dir])
     if target.is_file():
-        target.unlink()
+        delete_local_file(target)
         return True
     return False
 

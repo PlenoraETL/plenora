@@ -44,7 +44,7 @@ from app.core.files.helpers import (  # noqa: F401 (public domain export)
     FileIdGenerator,
     ColumnInfoBuilder,
 )
-from app.shared.resources.file_cleanup import rmtree_safe
+from app.core.io.local_cleanup import rmtree_safe
 from app.infrastructure.storage import compensation as storage_compensation
 
 # Non-blocking GDAL compatibility warning for newer GeoPackage user_version.

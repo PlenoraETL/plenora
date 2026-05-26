@@ -78,15 +78,16 @@ def save(task_id: str, src_path: Path) -> str:
 
     # Cleanup eager del local file dopo upload riuscito. Se l'upload
     # fallisce sopra, il file resta su disco per retry manuale.
+    from app.core.io.local_cleanup import rmtree_safe
+    rmtree_safe(src_path, logger=logger)
+    # Cleanup parent dir se vuota (evita accumulo di dir orfane
+    # tipo DATA_DIR/temp/urby_<pid>_<hash>/).
     try:
-        src_path.unlink()
-        # Cleanup parent dir se vuota (evita accumulo di dir orfane
-        # tipo DATA_DIR/temp/urby_<pid>_<hash>/).
         parent = src_path.parent
         if parent.exists() and not any(parent.iterdir()):
             parent.rmdir()
     except OSError as e:
-        logger.warning(f"Cleanup locale fallito per {src_path}: {e}")
+        logger.warning(f"Cleanup parent dir fallito per {src_path.parent}: {e}")
 
     return key
 

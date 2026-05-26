@@ -17,6 +17,10 @@ Moduli (consolidamento orizzontale 2026-05-26):
   - `local_filesystem`: data plane boundary per scritture filesystem
     locale (out-of-contract RAM-first ma single audit point) —
     `LocalDataSource` + `startup_validation` passano da qui
+  - `local_cleanup`: cleanup primitive per filesystem locale
+    (`rmtree_safe` best-effort + `delete_local_file` strict) — usato
+    da scheduler, IMDF, eseguibili, results, artifacts, ecc.
+    (ex-`app/shared/resources/file_cleanup.py`)
 
 Object storage layering:
   - `app.core.io.object_storage`: facade (entry point del core layer);
