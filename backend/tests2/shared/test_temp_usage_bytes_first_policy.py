@@ -335,8 +335,8 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
     ("app/core/files/multi_layer_upload.py", 90): (
         "STAGING_INGESTION",
         "Multi-layer file probe: writes HTTP-body chunks to disk "
-        "then opens with fiona to enumerate layers (GDB/GPKG). "
-        "fiona requires a path; bytes API not available.",
+        "then opens with pyogrio/GDAL to enumerate layers (GDB/GPKG). "
+        "Some GDAL drivers still require a path-like adapter.",
     ),
     ("app/core/files/preview_temp.py", 107): (
         "STAGING_INGESTION",
@@ -407,7 +407,7 @@ _TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {
         "PATH_REQUIRED_FILE",
         "FileSource blob materialization: writes the in-memory "
         "blob to a NamedTemporaryFile so downstream parsers that "
-        "require a path (geopandas/fiona for SHP/GDB, plus "
+        "require a path (geopandas/pyogrio for SHP/GDB, plus "
         "format-specific readers via dataframe_io) can open it. "
         "Bytes API not available for these drivers; tempfile is "
         "the structural adapter at the source-loading boundary.",

@@ -445,7 +445,7 @@ check_deps_inner() {
         echo "--- python-magic (venv) ---"
         '"${REMOTE_BACKEND_PATH}"'/venv/bin/python -c "import magic; print(\"OK:\", magic.__version__ if hasattr(magic, \"__version__\") else \"installed\")" 2>&1 || echo "NON INSTALLATO nel venv"
         echo ""
-        echo "--- libgdal (geopandas/fiona) ---"
+        echo "--- libgdal (geopandas/pyogrio) ---"
         dpkg -l libgdal-dev libgdal34t64 2>/dev/null | grep -E "^ii" | head -3 || echo "non rilevato (geopandas potrebbe usare wheels statiche)"
     '
     echo ""

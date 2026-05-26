@@ -76,7 +76,7 @@ def test_section_3_lists_os_binary_probes(native_deps_section: str):
          "`redis-cli --version`."),
         ("gdalinfo --version", "section 3.1 MUST include "
          "`gdalinfo --version` - this is the canonical OS-level "
-         "probe for the GDAL shared lib that fiona/geopandas "
+         "probe for the GDAL shared lib that pyogrio/geopandas "
          "load via ctypes at runtime."),
         ("node --version", "section 3.1 must include "
          "`node --version`."),
@@ -99,7 +99,7 @@ def test_section_3_includes_venv_python_import_probe(
         "psycopg2",
         "redis",
         "celery",
-        "fiona",
+        "pyogrio",
         "geopandas",
         "shapely",
         "pyarrow",
@@ -119,19 +119,18 @@ def test_section_3_includes_venv_python_import_probe(
         )
 
 
-def test_section_3_documents_fiona_transitive_via_geopandas(
+def test_section_3_documents_pyogrio_direct_gdal_binding(
     native_deps_section: str,
 ):
-    # `fiona` is NOT a direct entry in requirements.txt today.
+    # `pyogrio` is the direct GDAL Python binding used by the backend.
     # The doc must call this out so an operator hitting an ABI
     # mismatch knows the fix path.
     assert (
-        "fiona" in native_deps_section
-        and "transitive" in native_deps_section
-        and "geopandas" in native_deps_section
+        "pyogrio" in native_deps_section
+        and "gdal" in native_deps_section.lower()
     ), (
-        "section 3.2 must document that `fiona` is transitive via "
-        "`geopandas` (NOT a direct requirements.txt entry). This "
+        "section 3.2 must document that `pyogrio` is the direct "
+        "GDAL binding used by the backend. This "
         "matters for ABI-mismatch troubleshooting."
     )
 

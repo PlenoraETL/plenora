@@ -105,8 +105,8 @@ _BANNED_IMPORT_NEEDLES = (
     "from pandas",
     "import geopandas",
     "from geopandas",
-    "import fiona",
-    "from fiona",
+    "import pyogrio",
+    "from pyogrio",
     "import polars",
     "from polars",
     # Web framework — engine is core-level.
@@ -158,7 +158,7 @@ def test_no_banned_imports_under_resources():
             "Banned import(s) under app/core/resources/:\n"
             f"{details}\n\n"
             "Anti-god-engine rule: the Resource Engine returns byte-level "
-            "resources only. Domain parsing (pandas/geopandas/fiona), web "
+            "resources only. Domain parsing (pandas/geopandas/pyogrio), web "
             "framework (fastapi), auth resolution, and higher-level "
             "domain wrappers (core.artifacts/eseguibili/imdf/intermediate) "
             "are OUT OF SCOPE. See "
@@ -168,7 +168,7 @@ def test_no_banned_imports_under_resources():
 
 def test_loader_pkg_does_not_pull_pandas_at_import_time():
     """Defense-in-depth: confirm at runtime that importing the engine
-    package does NOT transitively pull pandas/geopandas/fiona into
+    package does NOT transitively pull pandas/geopandas/pyogrio into
     sys.modules. A stray `import pandas` deep in a util chain would
     pass the source-bound check above but fail here."""
     import importlib
@@ -183,7 +183,7 @@ def test_loader_pkg_does_not_pull_pandas_at_import_time():
     after = set(sys.modules.keys())
     new_modules = after - before
 
-    forbidden = {"pandas", "geopandas", "fiona", "polars", "fastapi"}
+    forbidden = {"pandas", "geopandas", "pyogrio", "polars", "fastapi"}
     leaked = forbidden & new_modules
     assert not leaked, (
         f"Importing the Resource Engine pulled forbidden modules "

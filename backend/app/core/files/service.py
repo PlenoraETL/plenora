@@ -146,7 +146,7 @@ class FileSourceService:
     
     Dependency Injection per testabilità:
     - filesystem: operazioni I/O (mock per test senza filesystem reale)
-    - data_loader: caricamento dati (mock per test senza GeoPandas/Fiona)
+    - data_loader: caricamento dati (mock per test senza GeoPandas/Pyogrio)
     - logger: logging (NullLogger per test silenziosi)
     - time_provider: datetime/uuid (mock per test deterministici)
     """

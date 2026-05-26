@@ -63,7 +63,7 @@ def test_dockerfile_installs_required_native_deps():
     for pkg in ("libpq-dev", "libgdal-dev", "build-essential"):
         assert pkg in text, (
             f"Dockerfile build stage must apt-install {pkg!r} "
-            "(required by psycopg2 fallback compile, fiona/"
+            "(required by psycopg2 fallback compile, pyogrio/"
             "geopandas GDAL ctypes load, and any source-only "
             "wheel respectively)."
         )
@@ -73,7 +73,7 @@ def test_dockerfile_installs_required_native_deps():
             f"Dockerfile runtime stage must apt-install {pkg!r} "
             "(runtime shared libs for the venv wheels). "
             "Missing the runtime lib means `import psycopg2` / "
-            "`import fiona` will fail at app boot inside the "
+            "`import pyogrio` will fail at app boot inside the "
             "container."
         )
 

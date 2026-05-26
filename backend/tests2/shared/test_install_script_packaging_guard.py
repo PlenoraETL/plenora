@@ -91,7 +91,7 @@ def test_installer_shared_lib_probe_includes_gdal(install_sh_text: str):
     )
     assert "gdal:" in _array_block(install_sh_text, "INSTALLER_REQUIRED_SHARED_LIBS"), (
         "Native lib probe must include 'gdal' - it is the only "
-        "non-pip-bundled runtime dep (fiona/geopandas import it via "
+        "non-pip-bundled runtime dep (pyogrio/geopandas import it via "
         "ctypes at runtime). Without this probe a host can pass `pip "
         "install -r requirements.txt` and still fail at first GeoPackage "
         "read."

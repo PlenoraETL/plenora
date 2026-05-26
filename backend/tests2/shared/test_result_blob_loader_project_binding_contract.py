@@ -315,7 +315,7 @@ _FORBIDDEN_IMPORTS = {
     # Heavy data
     "pandas",
     "geopandas",
-    "fiona",
+    "pyogrio",
     "polars",
 }
 
@@ -343,7 +343,7 @@ def _toplevel_imports(path: Path) -> set[str]:
 def test_resource_engine_modules_remain_anti_god_engine(path: Path):
     """`types.py` and `result_blob.py` MUST NOT introduce
     forbidden imports (projects / auth / artifacts / FastAPI /
-    pandas / geopandas / fiona / polars). RESOURCE-ENGINE-007
+    pandas / geopandas / pyogrio / polars). RESOURCE-ENGINE-007
     only adds an Optional[str] field — purely stdlib types."""
     imports = _toplevel_imports(path)
     violations: set[str] = set()

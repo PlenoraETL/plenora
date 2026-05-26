@@ -866,7 +866,7 @@ class Settings:
         I file_source sono salvati nel DB (source of truth). Questa dir
         e' solo una cache filesystem popolata on-demand da
         `api_connector._resolve_file_source_id_path` quando un workflow
-        deve dare a fiona/GDAL un path concreto. I file qui possono
+        deve dare a GDAL/pyogrio un path concreto. I file qui possono
         essere eliminati in qualsiasi momento — vengono ri-estratti dal
         DB al prossimo accesso.
         """

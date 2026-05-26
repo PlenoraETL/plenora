@@ -11,7 +11,7 @@ with the root [README](../../README.md) and the operations docs.
 - Redis 7+
 - Git 2.40+
 - Optional native libraries for geospatial formats, depending on the work:
-  GDAL, Fiona, Shapely, libspatialindex, libpq
+  GDAL, Pyogrio, Shapely, libspatialindex, libpq
 
 Docker is supported as a cleanroom target through the compose path documented
 in the ops install guide.

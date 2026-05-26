@@ -153,7 +153,7 @@ def list_vector_layers(data: bytes) -> list[str]:
     """List layer names available in a multi-layer vector dataset (bytes).
 
     Utile per GPKG e FileGDB che possono contenere multi layer.
-    Equivalent del vecchio `fiona.listlayers(path)` ma su bytes.
+    Equivalent del vecchio layer listing path-based ma su bytes.
     """
     import pyogrio
     infos = pyogrio.list_layers(data)

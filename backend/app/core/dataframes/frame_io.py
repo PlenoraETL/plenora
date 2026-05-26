@@ -317,13 +317,13 @@ def _load_dataframe_from_bytes(
         import geopandas as gpd
 
         try:
-            return gpd.read_file(BytesIO(data))
+            return gpd.read_file(BytesIO(data), engine="pyogrio")
         except Exception:
             try:
                 text = data.decode("utf-8")
             except UnicodeDecodeError:
                 text = data.decode("utf-8-sig")
-            return gpd.read_file(StringIO(text))
+            return gpd.read_file(StringIO(text), engine="pyogrio")
     if format_hint in _PATH_BOUND_ARTIFACT_FORMATS:
         # Pre-fix: scriveva i bytes su NamedTemporaryFile e poi
         # delegava a `load_dataframe_from_file(tmp_path)`. Costoso
@@ -380,7 +380,7 @@ def load_dataframe_from_artifact(
     if fmt == "geojson":
         import geopandas as gpd
 
-        return gpd.read_file(artifact_path)
+        return gpd.read_file(artifact_path, engine="pyogrio")
     if fmt in _PATH_BOUND_ARTIFACT_FORMATS:
         # Pre-fix: se il file su disco aveva un suffisso "sbagliato"
         # (es. `.bin` per un GPKG), copiava su NamedTemporaryFile con
@@ -471,9 +471,9 @@ def load_dataframe_from_file(
             import geopandas as gpd
 
             if layer and estensione == ".gpkg":
-                df = gpd.read_file(file_path, layer=layer)
+                df = gpd.read_file(file_path, layer=layer, engine="pyogrio")
             else:
-                df = gpd.read_file(file_path)
+                df = gpd.read_file(file_path, engine="pyogrio")
 
             if estensione == ".shp":
                 logger.warning(
@@ -524,11 +524,11 @@ def load_arcgis_feature_dataframe(file_path: Union[str, Path]) -> pd.DataFrame:
         import geopandas as gpd
 
         if suffix == ".geojson":
-            return gpd.read_file(path)
+            return gpd.read_file(path, engine="pyogrio")
         if suffix == ".gpkg":
-            return gpd.read_file(path)
+            return gpd.read_file(path, engine="pyogrio")
         if suffix in (".shp",):
-            return gpd.read_file(path)
+            return gpd.read_file(path, engine="pyogrio")
     except ImportError:
         pass
 
@@ -556,7 +556,7 @@ def load_arcgis_feature_dataframe(file_path: Union[str, Path]) -> pd.DataFrame:
     try:
         import geopandas as gpd
 
-        return gpd.read_file(path)
+        return gpd.read_file(path, engine="pyogrio")
     except Exception as exc:
         logger.warning(
             f"Lettura come GeoJSON fallita per {path.name} "
@@ -579,15 +579,15 @@ def _carica_filegdb(file_path: Path, layer: Optional[str] = None) -> pd.DataFram
     import geopandas as gpd
 
     if layer:
-        return gpd.read_file(file_path, layer=layer)
+        return gpd.read_file(file_path, layer=layer, engine="pyogrio")
 
-    import fiona
+    import pyogrio
 
-    layers = fiona.listlayers(file_path)
+    layers = [str(row[0]) for row in pyogrio.list_layers(str(file_path))]
     if not layers:
         raise ValueError(f"Nessun layer trovato in {file_path}")
 
-    return gpd.read_file(file_path, layer=layers[0])
+    return gpd.read_file(file_path, layer=layers[0], engine="pyogrio")
 
 
 def _carica_da_zip(

@@ -12,7 +12,7 @@
 # Multi-stage:
 #   1. gdal-build: compila PROJ+GEOS+GDAL from source in /opt/gdal
 #   2. python-deps: venv Python + pip install requirements.txt con
-#      pyogrio/fiona forzati `--no-binary` per linkare al GDAL custom
+#      pyogrio forzato `--no-binary` per linkare al GDAL custom
 #   3. runtime: stage minimale (no -dev headers, no build tools);
 #      copia /opt/gdal + /opt/venv + apt runtime libs.
 #
@@ -86,7 +86,7 @@ RUN curl -fsSL "https://download.osgeo.org/geos/geos-${GEOS_VERSION}.tar.bz2" -o
 
 # Build GDAL 3.13.0 linkato a PROJ/GEOS custom.
 # - BUILD_PYTHON_BINDINGS=OFF: i binding Python li installiamo via pip
-#   nello stage successivo (pip install --no-binary pyogrio fiona).
+#   nello stage successivo (pip install --no-binary pyogrio).
 # - BUILD_APPS=ON: serve gdal_translate/ogr2ogr per debugging operativo.
 RUN curl -fsSL "https://github.com/OSGeo/gdal/releases/download/v${GDAL_VERSION}/gdal-${GDAL_VERSION}.tar.gz" -o gdal.tar.gz \
     && tar xzf gdal.tar.gz \
@@ -132,7 +132,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
 # Native build deps necessarie per i pacchetti pip che compilano da
-# source (pyogrio, fiona linkano contro libgdal; psycopg[binary]
+# source (pyogrio linka contro libgdal; psycopg[binary]
 # usa libpq vendorizzata, niente -dev richiesto).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-full \
@@ -157,7 +157,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copia GDAL/PROJ/GEOS dal build stage.
 COPY --from=gdal-build /opt/gdal /opt/gdal
 
-# Env: pyogrio/fiona setup.py leggono GDAL_CONFIG per linkare al
+# Env: pyogrio setup.py legge GDAL_CONFIG per linkare al
 # GDAL custom invece del libgdal-dev di sistema. LD_LIBRARY_PATH
 # permette l'import runtime durante il test post-install.
 ENV GDAL_CONFIG=/opt/gdal/bin/gdal-config \
@@ -174,16 +174,15 @@ COPY backend/requirements.txt ./requirements.txt
 
 # pip install:
 #   - upgrade pip per supportare i wheel format piu' recenti
-#   - --no-binary pyogrio,fiona forza compile-from-source contro
+#   - --no-binary pyogrio forza compile-from-source contro
 #     il nostro GDAL 3.13.0 (le wheel ufficiali hanno GDAL vendored
 #     piu' vecchio, mix non condivide /vsimem)
 RUN pip install --upgrade pip setuptools wheel \
-    && pip install --no-binary=pyogrio,fiona -r requirements.txt
+    && pip install --no-binary=pyogrio -r requirements.txt
 
-# Sanity check post-install: pyogrio + fiona devono riportare la
-# STESSA versione GDAL del nostro build (no /vsimem mismatch).
-RUN python3 -c "import pyogrio; print(f'pyogrio: {pyogrio.__version__}, GDAL via pyogrio: {pyogrio.__gdal_version_string__}')" \
-    && python3 -c "import fiona; print(f'fiona: {fiona.__version__}, GDAL via fiona: {fiona.__gdal_version__}')"
+# Sanity check post-install: pyogrio deve riportare la STESSA versione
+# GDAL del nostro build (no /vsimem mismatch).
+RUN python3 -c "import pyogrio; print(f'pyogrio: {pyogrio.__version__}, GDAL via pyogrio: {pyogrio.__gdal_version_string__}')"
 
 COPY backend/ ./
 

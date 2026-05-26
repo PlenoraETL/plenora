@@ -24,7 +24,7 @@ _FORBIDDEN_PREFIXES = (
     "starlette",
     "pandas",
     "geopandas",
-    "fiona",
+    "pyogrio",
     "shapely",
     "polars",
 )

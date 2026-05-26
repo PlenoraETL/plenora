@@ -58,11 +58,10 @@ shapely>=2.1.2
 # pyarrow 24 e' la prima major dopo lo skip 20-23 di Apache Arrow
 # rebrand. Compat con pandas 3.0 PyArrow backend.
 pyarrow>=24.0.0
-# pyogrio e fiona vanno installati con --no-binary nel Dockerfile
-# per linkare al GDAL 3.13.0 custom (vedi Dockerfile stage python-deps).
+# pyogrio va installato con --no-binary nel Dockerfile per linkare
+# al GDAL 3.13.0 custom (vedi Dockerfile stage python-deps).
 # Pin minimum sui wheel API.
 pyogrio>=0.12.1
-fiona>=1.10.1
 openpyxl>=3.1.5
 
 # Network / HTTP clients

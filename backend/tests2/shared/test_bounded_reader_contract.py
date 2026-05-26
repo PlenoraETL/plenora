@@ -255,7 +255,7 @@ _FORBIDDEN_TOPLEVEL_IMPORTS = {
     # Heavy data
     "pandas",
     "geopandas",
-    "fiona",
+    "pyogrio",
     "polars",
 }
 

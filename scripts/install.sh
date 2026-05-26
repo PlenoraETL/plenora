@@ -194,11 +194,11 @@ INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR="3.11"
 # Native shared libraries the runtime imports through pip wheels. We do
 # NOT require building from source: psycopg2-binary bundles libpq, and
 # pyarrow ships manylinux wheels. The remaining hard dep is GDAL,
-# loaded at runtime by fiona / geopandas for GeoPackage / shapefile /
+# loaded at runtime by pyogrio / geopandas for GeoPackage / shapefile /
 # GDB drivers. We probe via Python's ctypes loader so the answer
 # matches what the runtime actually sees.
 INSTALLER_REQUIRED_SHARED_LIBS=(
-    "gdal:libgdal* (apt: libgdal-dev or libgdal*; required by fiona/geopandas at runtime)"
+    "gdal:libgdal* (apt: libgdal-dev or libgdal*; required by pyogrio/geopandas at runtime)"
 )
 
 step_validate_prereqs() {
@@ -311,7 +311,7 @@ PYEOF
 import importlib
 import sys
 modules = ("psycopg2", "redis", "celery", "fastapi", "uvicorn",
-           "pyarrow", "pandas", "fiona", "geopandas", "shapely")
+           "pyarrow", "pandas", "pyogrio", "geopandas", "shapely")
 failed = []
 for m in modules:
     try:

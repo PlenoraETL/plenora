@@ -81,18 +81,19 @@ class DefaultDataLoader:
         import geopandas as gpd
 
         if layer:
-            return gpd.read_file(path, layer=layer)
-        return gpd.read_file(path)
+            return gpd.read_file(path, layer=layer, engine="pyogrio")
+        return gpd.read_file(path, engine="pyogrio")
 
     def list_layers(self, path: Path) -> List[str]:
         try:
-            import fiona
+            import pyogrio
 
-            return fiona.listlayers(str(path))
+            infos = pyogrio.list_layers(str(path))
+            return [str(row[0]) for row in infos]
         except Exception as e:
-            # Probe fiona: in formati non multi-layer ritorna [].
+            # Probe pyogrio: in formati non multi-layer ritorna [].
             # Debug log preserva visibilita' su fallimenti reali.
-            _logger.debug(f"list_layers probe fiona fallita per {path}: {e}")
+            _logger.debug(f"list_layers probe pyogrio fallita per {path}: {e}")
             return []
 
     def list_sheets(self, path: Path) -> List[str]:
