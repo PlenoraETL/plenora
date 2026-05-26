@@ -2,12 +2,15 @@
 
 ## Contratto runtime RAM-first (standing reference)
 
-**Stato: Closed (2026-05-26).** Il refactor RAM-first ha chiuso i pezzi
-runtime principali. Quello che segue NON e' piu' un piano di migrazione
-ma il **contratto** che il codice applicativo deve rispettare. Le sezioni
-analytical successive ("Obiettivo", "Architettura proposta", "Piano di
-migrazione", ecc.) restano come reference storico del percorso e delle
-decisioni prese; non vanno consultate per "cosa fare oggi".
+**Stato: Closed (2026-05-26).** Il refactor RAM-first ha chiuso TUTTI
+i pezzi runtime di produzione: 13 entries residui nel report
+inside-boundary sono interamente boundary primitives by-design (10)
++ scripts one-off (3). Quello che segue NON e' piu' un piano di
+migrazione ma il **contratto** che il codice applicativo deve
+rispettare. Le sezioni analytical successive ("Obiettivo",
+"Architettura proposta", "Piano di migrazione", ecc.) restano come
+reference storico del percorso e delle decisioni prese; non vanno
+consultate per "cosa fare oggi".
 
 ### Sintesi stato chiuso
 
@@ -23,7 +26,10 @@ decisioni prese; non vanno consultate per "cosa fare oggi".
 | IMDF GET metadata + /bundles list | Storage-first | `b32f73f0` / `7def5e40` |
 | IMDF publish/validate | Fully-RAM via GDAL `/vsimem` ctypes | `012072f6` |
 | IMDF extract_imdf_zip_bytes | Fully-RAM (no tmp dir) | `43ef5dde` |
+| IMDF legacy (extract_imdf_zip(path) + persist_to_disk + ensure_local_bundle) | Tombstoned | `a5f26bf6` |
 | Query streaming output | S3 multipart end-to-end (no tempfile) | `b720c958` |
+| Enrichment error report | Bytes -> result_blob via `save_result_blob_from_bytes` | `439a93a8` |
+| Shapefile output | Fully-RAM via `/vsimem` ctypes | `aa0a569e` |
 
 ### Regola 1 — codice applicativo non scrive su filesystem
 
@@ -49,33 +55,89 @@ sono primitive che esistono PER esporre quella capability al resto del
 codice. La motivazione e' inline nel `scripts/_gen_io_allowlist.py`
 (`_BOUNDARY_DIRS` + `_BOUNDARY_FILES`).
 
-**Boundary primitives (intentional disk capability):**
-- `app/core/io/` — materializer + helper geospaziali (escape hatch tracciato).
-- `app/core/storage/` — storage backend abstraction.
-- `app/core/results/temp_paths.py` — tempdir centralizzato per path-only adapters.
-- `app/utils/zip_safe.py` — zip-bomb-safe extract impl.
-- `app/core/files/service_deps.py` — `DefaultFileSystem.extract_zip` adapter.
-- `app/core/resources/loaders/result_blob.py` — Resource Engine loader (post-Phase5 solo `mode="bytes"`).
+**Boundary primitives (intentional disk capability, 10 entries / 4 file):**
+- `app/core/io/materialize.py` (3) — `temporary_path_from_bytes` escape
+  hatch + helper `mkstemp/mkdtemp`. Politica `MEMORY_ONLY` configurabile
+  via `PLENORA_IO_DISK_POLICY`.
+- `app/core/results/temp_paths.py` (2) — tempdir centralizzato per
+  path-only adapters legacy (eseguibili hydration, analyze upload).
+- `app/utils/zip_safe.py` (3) — `safe_extractall` + `pick_zip_member`
+  + zip-bomb guard implementation.
+- `app/core/files/service_deps.py` (2) — `DefaultFileSystem` adapter
+  per upload pipeline (`extract_zip`, `write_text`).
 
-**IMDF subsystem (format-as-directory + cache hydration):**
-- `app/core/imdf/` — interamente nel boundary. Razionale: OGC IMDF e'
-  format-as-directory (`.gdb` letto da pyogrio via filesystem).
-  Post-IMDF-5 il path runtime publish/validate e' `/vsimem` via
-  `gdal_vsi.py` (ctypes); restano callsite per:
-  - `extract_imdf_zip(path)` legacy (test/script);
-  - `persist_imdf_bundle_to_disk` legacy (test/script);
-  - `ensure_local_bundle` cache locale (DELETE endpoint).
+**Boundary primitives senza filesystem callsite (helper logic only):**
+- `app/core/io/geospatial.py` — post QUERY-1 step 4: `write_shapefile_zip_bytes`
+  e gli altri write_* operano su `/vsimem` via `gdal_vsi`. Zero
+  filesystem callsite ma resta come location naturale per i
+  geospatial helper.
+- `app/core/imdf/gdal_vsi.py` — ctypes adapter su libgdal (vedi
+  sezione "Pattern /vsimem ctypes" sotto). Zero filesystem callsite
+  diretto (interop ctypes, GDAL gestisce il backing in-memory).
+- `app/core/storage/` — storage backend abstraction (boto3 client
+  wrappers per S3/MinIO). Multipart upload streaming.
+- `app/core/resources/loaders/result_blob.py` — Resource Engine loader
+  (post-Phase5 solo `mode="bytes"`).
+- `app/core/imdf/{loader,persist,storage,bundle_store,bundle_access,router}.py` —
+  post QUERY-1 step 3: legacy path-mode + cache hydration tombstoned.
+  Sopravvivono solo API RAM-first (`extract_imdf_zip_bytes`,
+  `persist_imdf_bundle`, `read_manifest/validation/renderers`,
+  `open_gdb_in_vsimem`).
 
-**Scripts (one-off tooling):**
-- `scripts/` esplicitamente fuori dal sweep applicativo
-  (`_EXCLUDED_ROOTS = ("scripts",)`). Backup/restore/openapi-export/imdf-e2e-check
-  sono tool, non runtime.
+**Scripts (one-off tooling, 3 entries):**
+- `scripts/backup_db.py`, `scripts/test_restore.py`,
+  `scripts/export_openapi_manifest.py` — dev tools, esplicitamente
+  fuori dal sweep applicativo (`_EXCLUDED_ROOTS = ("scripts",)`).
+
+### Pattern /vsimem ctypes (riusabile)
+
+`app/core/imdf/gdal_vsi.py` espone un'API ctypes minimale contro
+`libgdal.so` (bundled da pyogrio 0.12+) per gestire file/dir
+in-memory che GDAL/pyogrio sanno consumare. Pattern usato in:
+- IMDF-5: `open_gdb_in_vsimem(task_id, site_id)` — `.gdb` zippata
+  read-only via `vsi_register_bytes` + `/vsizip//vsimem/`.
+- QUERY-1 step 4: `write_shapefile_zip_bytes(gdf)` — sidecar
+  Shapefile write/read multi-file via `vsi_temp_dir` + `vsi_listdir`
+  + `vsi_read_bytes`.
+
+**API surface:**
+```python
+from app.core.imdf.gdal_vsi import (
+    vsi_register_bytes,      # ctx: register bytes -> /vsimem/path
+    vsi_temp_dir,            # ctx: mkdir + rmdir_recursive
+    vsi_mkdir,               # mkdir /vsimem/dir
+    vsi_rmdir_recursive,     # cleanup
+    vsi_listdir,             # list entries
+    vsi_read_bytes,          # read /vsimem/file -> bytes
+)
+```
+
+**Quando usarlo:**
+- Library path-only (pyogrio Shapefile sidecar, FileGDB driver,
+  drivers GDAL legacy) deve scrivere multi-file ma il consumer
+  vuole bytes / zip / object storage.
+- Pattern: `vsi_temp_dir` -> pyogrio write su `/vsimem/{root}/file.X`
+  -> `vsi_listdir` + `vsi_read_bytes` per consumare i file prodotti.
+
+**Quando NON usarlo:**
+- Single-file format con BytesIO support nativo (GeoJSON, GPKG via
+  pyogrio.read_dataframe/write_dataframe su BytesIO). Usa BytesIO
+  diretto.
+- File grandi (>500 MB): `/vsimem` tiene tutto in RAM. Usa
+  `app.core.io.materialize.temporary_path_from_bytes` come escape
+  hatch tracciato.
+
+**Future migration candidates** (formati multi-file path-only che
+oggi NON usano `/vsimem`):
+- GeoPackage multi-layer write (gia' bytes-first per single layer).
+- FileGDB write (OpenFileGDB driver supporta `/vsimem` per write,
+  vedi probe `osgeo_gdal_full_memory_probe.test_openfilegdb`).
 
 ### Regola 3 — ratchet bidirezionale del count
 
 Il count per-file dei residui inside-boundary e' congelato in
 `backend/tests2/io_boundary/test_no_direct_filesystem_contract.py::_BOUNDARY_FROZEN_SNAPSHOT`.
-Stato corrente: **23 entries su 12 file**.
+Stato corrente: **13 entries su 7 file**.
 
 Il test `test_report_inside_boundary_frozen` fallisce se:
 - **Cresce**: un file aggiunge callsite (accidentale o deliberato).
@@ -87,20 +149,24 @@ Modifiche legittime al count richiedono **aggiornamento contestuale**
 del doc (questa sezione) + dello snapshot in `_BOUNDARY_FROZEN_SNAPSHOT`,
 nello stesso commit.
 
-### Regola 4 — legacy tombstone schedule
+### Regola 4 — legacy tombstone completato (closed)
 
-I seguenti residui sono dichiarati tombstone-pending. Possono essere
-rimossi quando i loro consumer migrano:
+Tutti i tombstone-pending elencati in versioni precedenti di questo
+contratto sono stati rimossi in `a5f26bf6` (QUERY-1 step 3):
 
-| Item | Consumer attuale | Tombstone quando |
+| Item rimosso | Sostituto canonical | Commit |
 |---|---|---|
-| `imdf.loader.extract_imdf_zip(path)` | `scripts/imdf_real_e2e_check.py`, `tests2/.../test_imdf_persist_bundle_contract.py` | Script + test migrano a `extract_imdf_zip_bytes(bytes)`. |
-| `imdf.persist.persist_imdf_bundle_to_disk` | `scripts/imdf_real_e2e_check.py`, `tests2/.../test_imdf_persist_bundle_contract.py`, `tests2/.../test_plenora_metadata_schema.py`, `tests2/.../test_site_id_resolution_single_source.py` | Script + test migrano a `persist_imdf_bundle` (storage-direct). |
-| `imdf.storage.ensure_local_bundle` | Solo `DELETE /imdf/bundles/{id}` per cleanup cache locale eventuale | DELETE migra a `storage.delete_bundle` puro. |
-
-Quando rimossi: aggiornare snapshot + questa tabella. Break compat per
-operatori che dipendono dallo script `imdf_real_e2e_check.py` e' atteso
-(re-script via il nuovo entry point).
+| `imdf.loader.extract_imdf_zip(path)` | `extract_imdf_zip_bytes(bytes)` | `a5f26bf6` |
+| `imdf.persist.persist_imdf_bundle_to_disk` | `persist_imdf_bundle(bundle, task_id, project_id)` storage-direct | `a5f26bf6` |
+| `imdf.storage.ensure_local_bundle` | `imdf.storage.read_*` + `open_gdb_in_vsimem` storage-first | `a5f26bf6` |
+| `imdf.router._hydrate_local_cache` | `assert_bundle_group_access_from_meta` + `get_meta_only` | `a5f26bf6` |
+| `imdf.bundle_access.hydrate_local_cache` | (idem) | `a5f26bf6` |
+| `query_streaming.QueryStreamingWriter` + `execute_streaming_to_file(path)` | `execute_streaming_to_writer(file-like)` + `StreamingResultBlobWriter` | `84677d06` |
+| `query_executor._execute_streaming_to_file` + `streaming_writer` param | (idem) | `84677d06` |
+| `features_service.execute_query` `project_dir.mkdir` orphan | (rimosso) | `84677d06` |
+| `blob_writer.save_result_blob(path)` | `save_result_blob_from_bytes` + `StreamingResultBlobWriter` | `b720c958` |
+| `enrichment_service.generate_error_report(errors, output_path)` (filesystem CSV) | `generate_error_report(errors, auth) -> bytes` + `save_result_blob_from_bytes` | `439a93a8` |
+| `io.geospatial.write_shapefile_zip_bytes` TemporaryDirectory | `/vsimem` via `gdal_vsi` ctypes | `aa0a569e` |
 
 ### Regola 5 — bundle legacy (break compat IMDF-4 step 4)
 
