@@ -507,6 +507,108 @@ class SharePointDataSource(DataSourceInterface):
                 f"Errore write_file SharePoint: {_sanitize_sharepoint_error(e)}"
             ) from e
 
+    def write_chunks(self, path: str, chunks) -> None:
+        """RAM-C4 (2026-05-26): streaming write via SharePoint resumable
+        upload API. Pre-RAM-C4: il default fallback accumulava in
+        bytearray e poi chiamava `write_file(bytes)` (peak O(file_size)).
+
+        Post: usa un buffer di accumulo di `_CHUNK_SIZE` (10MB, soglia
+        SharePoint per `start_upload`/`continue_upload`/`finish_upload`)
+        e flusha ogni volta che il buffer pieno. Peak ~10MB invece di
+        file_size.
+
+        Strategia:
+          1. Crea il file vuoto (handle iniziale).
+          2. Accumula chunks in buffer fino a `_CHUNK_SIZE`.
+          3. Al primo buffer pieno: `start_upload`.
+          4. Per ogni successivo: `continue_upload(offset)`.
+          5. Al finale (eof + leftover): `finish_upload(offset, leftover)`.
+
+        Trade-off: il protocollo SharePoint richiede che ogni chunk
+        flushed sia >= 1 byte e abbia un upload_id session. Per file
+        <_CHUNK_SIZE accumuliamo tutto e facciamo save_binary_stream
+        diretto (no upload session overhead).
+        """
+        self._check()
+        effective_path = self._join_path(self._base_path(), path)
+        parts = effective_path.split("/")
+        name = parts[-1]
+        folder_path = "/".join(parts[:-1])
+        folder = self._get_or_create_folder(folder_path)
+        if folder is None:
+            raise DataSourceConnectionError(
+                f"Impossibile creare la cartella: {folder_path!r}"
+            )
+
+        chunk_size = self._CHUNK_SIZE
+        upload_id = str(uuid.uuid4())
+        buf = bytearray()
+        offset = 0
+        upload_started = False
+        file_ref = None
+
+        def _ensure_file_ref():
+            nonlocal file_ref
+            if file_ref is None:
+                empty = folder.upload_file(name, b"")
+                self._ctx.execute_query()
+                file_ref = self._ctx.web.get_file_by_server_relative_url(
+                    empty.serverRelativeUrl
+                )
+                self._ctx.load(file_ref)
+                self._ctx.execute_query()
+
+        try:
+            for chunk in chunks:
+                if not chunk:
+                    continue
+                buf.extend(chunk)
+                # Flusha tutti i full chunks dal buffer.
+                while len(buf) >= chunk_size:
+                    payload = bytes(buf[:chunk_size])
+                    del buf[:chunk_size]
+                    _ensure_file_ref()
+                    if not upload_started:
+                        file_ref.start_upload(upload_id, BytesIO(payload))
+                        self._ctx.execute_query()
+                        upload_started = True
+                    else:
+                        file_ref.continue_upload(upload_id, offset, BytesIO(payload))
+                        self._ctx.execute_query()
+                    offset += chunk_size
+
+            # Leftover handling:
+            leftover = bytes(buf)
+            if not upload_started:
+                # File piccolo: upload diretto, niente upload session.
+                if leftover:
+                    folder.upload_file(name, leftover)
+                    self._ctx.execute_query()
+                else:
+                    # Caso edge: iterable vuoto -> crea file vuoto.
+                    folder.upload_file(name, b"")
+                    self._ctx.execute_query()
+            else:
+                # Upload session attiva: finalizza con leftover (puo'
+                # essere vuoto, ma SharePoint richiede comunque la call).
+                _ensure_file_ref()
+                file_ref.finish_upload(upload_id, offset, BytesIO(leftover))
+                self._ctx.execute_query()
+        except (DataSourcePermissionError, DataSourceConnectionError):
+            raise
+        except Exception as e:
+            msg = str(e).lower()
+            if "unauthorized" in msg or "403" in msg or "401" in msg:
+                raise DataSourcePermissionError(f"Scrittura negata: {path!r}") from e
+            logger.warning(
+                f"[GESTITO] SharePoint write_chunks fallita: path={path!r} "
+                f"{type(e).__name__}: {e}",
+                exc_info=True,
+            )
+            raise DataSourceConnectionError(
+                f"Errore write_chunks SharePoint: {_sanitize_sharepoint_error(e)}"
+            ) from e
+
     def _upload_chunked(self, folder, name: str, content: bytes) -> None:
         """Upload a chunk per file grandi (>10 MB). Usa le API SharePoint resumable upload."""
 

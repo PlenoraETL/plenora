@@ -485,12 +485,18 @@ def _execute_datasource_write(task, df, carica_node_data, project_id, task_id):
 
     _update_progress(task, 20, f'Serializzazione DataFrame ({dest_format})...')
 
-    # RAM-2 (2026-05-26): serializzazione minimal-copy via
-    # `dataframe_to_export_bytes`. Sostituisce il pattern legacy
-    # `df.to_csv().encode()` + `BytesIO.write()` + `getvalue()` che
-    # aveva peak ~4-5x del df. Ora ~2x (df + bytes finali).
-    from app.core.dataframes.export_writer import dataframe_to_export_bytes
-    content = dataframe_to_export_bytes(df, dest_format)
+    # RAM-C (2026-05-26): streaming export end-to-end. Sostituisce il
+    # pattern RAM-2 (`dataframe_to_export_bytes` ritornava bytes interi)
+    # con `dataframe_to_export_chunks` (yielda chunks). Combinato con
+    # `ds_service.write_chunks` permette write streaming dal worker al
+    # backend datasource senza materializzare la versione serializzata
+    # in RAM. Peak teorico: ~40k righe in flight (chunksize=10k, queue
+    # maxsize=4) invece di sum(serialized_rows).
+    #
+    # XLSX/xls: dataframe_to_export_chunks cade su yield single chunk
+    # (no streaming openpyxl), comportamento equivalente a pre-RAM-C
+    # ma API uniforme.
+    from app.core.dataframes.export_writer import dataframe_to_export_chunks
 
     _update_progress(task, 50, f'Scrittura su DataSource {datasource_id}...')
 
@@ -505,7 +511,9 @@ def _execute_datasource_write(task, df, carica_node_data, project_id, task_id):
         safe_filename = PurePosixPath(dest_filename).name  # solo il nome, no directory
         path = f'{safe_folder}/{safe_filename}{ext}'.lstrip('/')
 
-        ds_service.write_file(datasource_id, path, content)
+        ds_service.write_chunks(
+            datasource_id, path, dataframe_to_export_chunks(df, dest_format),
+        )
 
         _update_progress(task, 100, f'Scrittura completata: {path}')
         logger.info(f'Task CARICA DS {task_id} completato: {path}')

@@ -393,7 +393,39 @@ streaming write via `_body_chunks()` generator. Peak ~4KB header +
 `DataSourceService.write_chunks(ds_id, path, chunks)` wrapper mantiene
 il lifecycle `backend.__enter__/__exit__`.
 
-### Cosa NON e' stato toccato (priorita' media restante)
+### RAM-C — Streaming end-to-end (CARICA, SharePoint, upload boundary)
+
+Chiude i 3 candidati post round 2:
+
+**RAM-C1+C2 — CARICA streaming export end-to-end:**
+`dataframe_to_export_chunks(df, fmt)` in `export_writer.py` con bridge
+thread + queue: un `_QueueBuf` (subclass `io.RawIOBase`) intercetta
+`write()` di pandas `to_csv`/`to_json` e mette i bytes in queue; il
+generator yielda al consumer (LocalDataSource/SFTP/FTP `write_chunks`).
+Producer thread + bounded queue (maxsize=4) — peak teorico ~40k righe
+in flight invece di sum(serialized_rows). XLSX cade su single-chunk
+fallback (openpyxl write_only non integrabile facilmente).
+
+`carica_task.py` ora chiama `ds_service.write_chunks(ds_id, path,
+dataframe_to_export_chunks(df, fmt))` invece di
+`dataframe_to_export_bytes(df, fmt)` + `write_file`. End-to-end:
+worker non materializza piu' il df serializzato.
+
+**RAM-C3 — files/upload_boundary header-only validation:**
+`read_upload_content_for_validation(file)` ora legge solo i primi 4KB
+(MIME magic bytes vivono tutti li). Pre-fix: `file.file.read()` su
+upload da 5GB carica 5GB in RAM per validare 4 byte. Post-fix: 4KB.
+
+**RAM-C4 — SharePoint streaming write:**
+`SharePointDataSource.write_chunks` usa il protocollo resumable upload
+(`start_upload` / `continue_upload(offset)` / `finish_upload`) con
+buffer di accumulo `_CHUNK_SIZE` (10MB, requirement SharePoint). Peak
+ridotto da O(file_size) a O(10MB). `iter_read_chunks` resta default
+fallback (office365 client `download(buffer)` non espone streaming
+nativo; un override richiederebbe REST diretto con Range header,
+fuori scope per ora).
+
+### Cosa NON e' stato toccato (priorita' bassa restante)
 
 - Enrichment `response.json()` materializza body intero: cambiare a
   streaming JSON parser e' non-banale; lascio finche' non e' un
@@ -402,10 +434,11 @@ il lifecycle `backend.__enter__/__exit__`.
   poco chiaro.
 - Intermediate parquet `BytesIO + getvalue()`: pattern simile a
   StreamingResultBlobWriter; estendibile quando serve.
-- CARICA `dataframe_to_export_bytes` ritorna bytes finali (non chunks).
-  Per davvero streaming CARICA serve `to_csv` con queue-buffer threaded
-  (pyarrow CSV writer streaming sarebbe alternativa). Lasciato finche'
-  i CSV CARICA non sfondano la RAM in produzione.
+- SharePoint read streaming: il client office365 non supporta
+  download chunked nativo. Override richiederebbe REST diretto con
+  Range header — fuori scope salvo bottleneck reale.
+- CARICA XLSX streaming: openpyxl write_only e' invasivo, XLSX big
+  rare in CARICA, fallback single-chunk accettato.
 
 ---
 

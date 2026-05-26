@@ -57,10 +57,27 @@ def sanitize_upload_filename(raw: Optional[str]) -> str:
     return name
 
 
-def read_upload_content_for_validation(file: UploadFile) -> bytes:
-    """Read upload content for MIME validation and rewind the file object."""
+# RAM-C3 (2026-05-26): MIME magic bytes vivono nei primi N byte
+# dell'header (PNG sig 8B, ZIP "PK" 2B, ELF "\x7fELF" 4B, MZ "MZ" 2B,
+# Mach-O fat headers <16B, ecc.). 4KB e' largamente sufficiente per
+# `filetype`/`validate_no_executable` senza materializzare il body
+# completo (DoS interno credenziato pre-fix: file.file.read() su un
+# upload da 5GB caricava 5GB in RAM per validare i primi 4 byte).
+_MIME_HEADER_BYTES = 4096
+
+
+def read_upload_content_for_validation(file: UploadFile, *, n: int = _MIME_HEADER_BYTES) -> bytes:
+    """Read upload HEADER for MIME validation and rewind the file object.
+
+    Post-RAM-C3: legge solo `n` byte (default 4KB) — sufficiente per
+    `filetype`/`validate_no_executable` su tutti i magic bytes noti.
+    Il `file.file.seek(0)` finale rimette il puntatore all'inizio
+    perche' il caller spesso legge il body successivamente (es.
+    preview_file_temp). Il nome resta per backwards-compat dei
+    chiamanti esistenti.
+    """
     file.file.seek(0)
-    content = file.file.read()
+    content = file.file.read(n)
     file.file.seek(0)
     return content
 

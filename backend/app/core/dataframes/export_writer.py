@@ -29,10 +29,14 @@ API:
 from __future__ import annotations
 
 import io
-from typing import Any
+import queue
+import threading
+from typing import Any, Iterator
 
 
 _DEFAULT_CHUNKSIZE = 10_000
+_DEFAULT_QUEUE_MAXSIZE = 4  # bounded buffer: ~4 * chunksize rows in flight
+_SENTINEL = object()
 
 
 def _to_csv_minimal_copy(df: Any, buf: io.BytesIO, chunksize: int) -> None:
@@ -111,6 +115,160 @@ def dataframe_to_export_bytes(
     return buf.getvalue()
 
 
+class _QueueBuf(io.RawIOBase):
+    """File-like binary write-only che pubblica `write()` su una queue.
+
+    Pensato come bridge tra un writer SINCRONO blocking (pandas
+    `to_csv`/`to_json`) e un consumer ITERATIVO (`write_chunks`).
+    Il writer chiama `write(bytes)` per ogni batch — i bytes vengono
+    messi in coda; il consumer (in altro thread) li yielda al caller.
+
+    Eredita da `io.RawIOBase` per compatibilita' con `io.TextIOWrapper`
+    (richiede `readable/writable/seekable` + altre API del file-protocol).
+    """
+
+    def __init__(self, q: queue.Queue) -> None:
+        super().__init__()
+        self._q = q
+        self._pos = 0
+
+    def writable(self) -> bool:
+        return True
+
+    def readable(self) -> bool:
+        return False
+
+    def seekable(self) -> bool:
+        return False
+
+    def write(self, data) -> int:
+        if isinstance(data, str):
+            data = data.encode("utf-8")
+        n = len(data)
+        if n > 0:
+            self._q.put(bytes(data))
+            self._pos += n
+        return n
+
+    def flush(self) -> None:
+        # No-op: la queue e' gia' eager push.
+        pass
+
+    def tell(self) -> int:
+        return self._pos
+
+
+def _csv_producer(
+    df: Any, qbuf: _QueueBuf, chunksize: int, err_holder: list,
+) -> None:
+    try:
+        text_buffer = io.TextIOWrapper(
+            qbuf, encoding="utf-8", write_through=True, newline="",
+        )
+        try:
+            df.to_csv(text_buffer, index=False, chunksize=chunksize)
+            text_buffer.flush()
+        finally:
+            text_buffer.detach()
+    except Exception as exc:
+        err_holder.append(exc)
+    finally:
+        qbuf._q.put(_SENTINEL)
+
+
+def _json_producer(df: Any, qbuf: _QueueBuf, err_holder: list) -> None:
+    try:
+        text_buffer = io.TextIOWrapper(
+            qbuf, encoding="utf-8", write_through=True, newline="",
+        )
+        try:
+            df.to_json(text_buffer, orient="records", force_ascii=False)
+            text_buffer.flush()
+        finally:
+            text_buffer.detach()
+    except Exception as exc:
+        err_holder.append(exc)
+    finally:
+        qbuf._q.put(_SENTINEL)
+
+
+def dataframe_to_export_chunks(
+    df: Any,
+    dest_format: str,
+    *,
+    chunksize: int = _DEFAULT_CHUNKSIZE,
+) -> Iterator[bytes]:
+    """Streaming export: yielda chunks invece di materializzare bytes.
+
+    Path canonical per il task `CARICA` quando serve davvero RAM bounded
+    (DataFrame >> RAM disponibile). Producer thread chiama il pandas
+    writer su `_QueueBuf`; consumer (questo generator) yielda i bytes
+    dalla queue.
+
+    Peak RAM teorico: `chunksize * row_size * QUEUE_MAXSIZE` invece di
+    sum(serialized_rows). Per default (chunksize=10k, maxsize=4): ~40k
+    righe in flight invece di tutto il DF serializzato.
+
+    Args:
+        df: DataFrame pandas (o GeoDataFrame; geojson branch e'
+            sintatticamente identico a json records).
+        dest_format: 'csv' | 'xlsx' | 'xls' | 'json' | 'geojson'.
+        chunksize: righe per batch nella serializzazione CSV pandas.
+            Ignorato per JSON (pandas to_json non supporta chunksize)
+            e XLSX (fallback).
+
+    Yields:
+        `bytes` chunks. L'ultimo chunk puo' essere piu' piccolo o vuoto.
+
+    Raises:
+        Exception sollevata dal pandas writer nel producer thread
+        viene rilanciata al consumer dopo il sentinel.
+
+    Note XLSX: openpyxl non supporta write_only streaming senza
+    riscrivere il flow; per XLSX cadiamo su `dataframe_to_export_bytes`
+    e yieldiamo come single chunk (peak invariato). XLSX export su
+    file grandi non e' un pattern comune in Plenora.
+    """
+    fmt = (dest_format or "").strip().lower().lstrip(".")
+
+    if fmt in ("xlsx", "xls"):
+        # Fallback: nessun vero streaming per openpyxl. Yield single
+        # chunk (peak invariato rispetto a dataframe_to_export_bytes).
+        yield dataframe_to_export_bytes(df, dest_format)
+        return
+
+    q: queue.Queue = queue.Queue(maxsize=_DEFAULT_QUEUE_MAXSIZE)
+    qbuf = _QueueBuf(q)
+    err_holder: list = []
+
+    if fmt in ("csv", ""):
+        target = _csv_producer
+        args = (df, qbuf, chunksize, err_holder)
+    elif fmt in ("json", "geojson"):
+        target = _json_producer
+        args = (df, qbuf, err_holder)
+    else:
+        # Format sconosciuto: fallback CSV come dataframe_to_export_bytes.
+        target = _csv_producer
+        args = (df, qbuf, chunksize, err_holder)
+
+    t = threading.Thread(target=target, args=args, daemon=True)
+    t.start()
+    try:
+        while True:
+            item = q.get()
+            if item is _SENTINEL:
+                break
+            yield item
+    finally:
+        t.join(timeout=30.0)
+
+    if err_holder:
+        # Producer ha sollevato: rilancia la stessa exception.
+        raise err_holder[0]
+
+
 __all__ = [
     "dataframe_to_export_bytes",
+    "dataframe_to_export_chunks",
 ]
