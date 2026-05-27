@@ -14,6 +14,8 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared]
 
 _SHARED_DIR = Path(__file__).parents[2] / "app" / "shared"
+_BACKEND_ROOT = Path(__file__).parents[2]
+_PROD_ROOTS = (_BACKEND_ROOT / "app", _BACKEND_ROOT / "workers")
 
 # Allowlist - organized by cross-cutting bucket.
 # Every root-level *.py file in app/shared/ must appear here.
@@ -86,6 +88,15 @@ _ALLOWED_UPWARD_IMPORTS: dict[str, frozenset[str]] = {
     ),
 }
 
+_SECURITY_COMPAT_MODULES: frozenset[str] = frozenset(
+    {
+        "app.shared.login_rate_limiter",
+        "app.shared.password_hashing",
+        "app.shared.token_blacklist",
+        "app.shared.upload_guards",
+    }
+)
+
 
 def _actual_root_modules() -> set[str]:
     """Return stem names of all *.py files at the root of app/shared/."""
@@ -106,6 +117,38 @@ def _import_edges(path: Path) -> set[str]:
         if isinstance(node, ast.ImportFrom) and node.module:
             edges.add(node.module)
     return edges
+
+
+def _iter_prod_python() -> list[Path]:
+    paths: list[Path] = []
+    for root in _PROD_ROOTS:
+        if root.exists():
+            paths.extend(sorted(root.rglob("*.py")))
+    return paths
+
+
+def _security_compat_imports(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+    hits: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            hits.update(
+                alias.name
+                for alias in node.names
+                if alias.name in _SECURITY_COMPAT_MODULES
+            )
+            continue
+        if not isinstance(node, ast.ImportFrom) or node.module is None:
+            continue
+        if node.module in _SECURITY_COMPAT_MODULES:
+            hits.add(node.module)
+            continue
+        if node.module == "app.shared":
+            for alias in node.names:
+                candidate = f"app.shared.{alias.name}"
+                if candidate in _SECURITY_COMPAT_MODULES:
+                    hits.add(candidate)
+    return hits
 
 
 def test_no_new_root_level_modules_without_allowlist_entry() -> None:
@@ -186,4 +229,20 @@ def test_shared_root_modules_do_not_import_domain_or_infrastructure_code() -> No
         "Root-level app.shared modules must not depend upward on domain, "
         "infrastructure, or DB modules. Move that code to the owning domain "
         f"or add a narrow transitional exception. Violations: {violations}"
+    )
+
+
+def test_production_does_not_import_security_compat_wrappers() -> None:
+    """Security helpers moved to app.core.security; app.shared paths are compat."""
+    violations: list[str] = []
+    for path in _iter_prod_python():
+        rel_path = path.relative_to(_BACKEND_ROOT).as_posix()
+        hits = _security_compat_imports(path)
+        for module in sorted(hits):
+            violations.append(f"{rel_path} -> {module}")
+
+    assert violations == [], (
+        "Production code must import runtime security helpers from "
+        "`app.core.security.*`, not the root-level compatibility wrappers. "
+        f"Violations: {violations}"
     )
