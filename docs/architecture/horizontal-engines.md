@@ -218,6 +218,7 @@ Rules:
 Canonical surfaces:
 
 - `app/core/resources/*`
+- `app/core/resources/stores/*`
 - `app/core/artifacts/*`
 - `app/core/results/legacy_file_store.py`
 - `app/core/files/cleanup.py`
@@ -262,6 +263,8 @@ Rules:
 - No unbounded `b"".join(stream)` over external or object-storage streams.
 - Path materialization is fallback behavior and must be inventoried.
 - Resource loaders must not become vertical domain services.
+- Resource loader DB access lives in `app/core/resources/stores/*`; files under
+  `app/core/resources/loaders/*_store.py` are compatibility re-exports only.
 - Do not bypass file-source refcount/reconciliation cleanup with direct
   `DELETE FROM file_sources WHERE group_id`.
 - Do not inspect or delete legacy `RESULTS_DIR/{project_id}` files directly

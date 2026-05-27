@@ -12,6 +12,8 @@ from typing import get_args
 
 import pytest
 
+from tests2.shared._source_scan import python_code_only as _python_code_only
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
@@ -211,6 +213,30 @@ def test_no_new_kind_in_loaders_directory_without_registration():
         "in `build_default_registry()`, an audit production-caller "
         "row, and an update to this lock test IN THE SAME PR."
     )
+
+
+def test_loader_store_files_are_compat_reexports_only():
+    """DB store boundaries are canonical under resources/stores.
+
+    The old loaders/*_store.py paths stay importable for compatibility, but
+    they must not regain pg_connection access or local query functions.
+    """
+    wrappers = {
+        "file_source_blob_store.py": "app.core.resources.stores.file_source_blob",
+        "result_blob_store.py": "app.core.resources.stores.result_blob",
+    }
+    for filename, canonical_module in wrappers.items():
+        text = (_RESOURCES_PKG / "loaders" / filename).read_text(encoding="utf-8")
+        code_only = _python_code_only(text)
+        assert canonical_module in text
+        assert "app.db" not in code_only
+        assert "pg_connection" not in code_only
+        assert "def fetch_" not in code_only
+
+    result_loader = (_RESOURCES_PKG / "loaders" / "result_blob.py").read_text(encoding="utf-8")
+    file_loader = (_RESOURCES_PKG / "loaders" / "file_source_blob.py").read_text(encoding="utf-8")
+    assert "app.core.resources.stores.result_blob" in result_loader
+    assert "app.core.resources.stores.file_source_blob" in file_loader
 
 
 # KEEP-3 positive lock: registry has at least one production caller

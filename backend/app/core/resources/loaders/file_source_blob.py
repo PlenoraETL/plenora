@@ -21,7 +21,7 @@ from app.core.resources.types import (
 from app.core.resources.loaders._shared import (
     _download_object_storage_impl,
 )
-from app.core.resources.loaders.file_source_blob_store import (
+from app.core.resources.stores.file_source_blob import (
     fetch_file_source_blob_lookup_row,
 )
 
