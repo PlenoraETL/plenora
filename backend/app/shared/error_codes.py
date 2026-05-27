@@ -6,35 +6,16 @@ PLENORA-ETL — Catalog dei codici stringa per error envelope
 from __future__ import annotations
 
 from app.core.admin_backups.errors import (
-    AWS_CREDENTIALS_EXPIRED,
-    AWS_CRT_MISSING,
     KNOWN_DOMAIN_CODES as ADMIN_BACKUPS_DOMAIN_CODES,
-    OBJECT_STORAGE_DISABLED,
 )
 from app.core.connections.errors import (
-    CONNECTION_IN_USE,
-    CONNECTION_NOT_FOUND,
     KNOWN_DOMAIN_CODES as CONNECTIONS_DOMAIN_CODES,
 )
 from app.core.datasources.errors import (
-    DATASOURCE_IN_USE,
-    DATASOURCE_NOT_FOUND,
     KNOWN_DOMAIN_CODES as DATASOURCES_DOMAIN_CODES,
 )
 from app.core.tickets.errors import (
     KNOWN_DOMAIN_CODES as TICKETS_DOMAIN_CODES,
-    TICKET_NOT_FOUND,
-)
-
-_DOMAIN_REEXPORT_CODES = (
-    AWS_CREDENTIALS_EXPIRED,
-    AWS_CRT_MISSING,
-    OBJECT_STORAGE_DISABLED,
-    CONNECTION_IN_USE,
-    CONNECTION_NOT_FOUND,
-    DATASOURCE_IN_USE,
-    DATASOURCE_NOT_FOUND,
-    TICKET_NOT_FOUND,
 )
 
 
@@ -62,9 +43,7 @@ def http_status_code(status_code: int) -> str:
     return f"http_{status_code}"
 
 
-# Domain-specific legacy definitions.
-# Migrated domain-owned codes are imported above and re-exported for
-# backward compatibility while call sites move to app.core.<domain>.errors.
+# Domain-specific definitions still owned by the shared envelope/catalog layer.
 
 API_CONNECTION_IN_USE = "api_connection_in_use"
 """409: tentativo di delete di un'api_connection referenziata."""

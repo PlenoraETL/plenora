@@ -58,7 +58,7 @@ def fake_storage():
 
 
 def _make_tx_patcher(*, current_storage_key, siblings, delete_rowcount):
-    """Costruisce un patcher di `file_sources.transaction` che simula:
+    """Costruisce un patcher di `file_sources.unit_of_work` che simula:
 
       - 1a `cur.execute` SELECT storage_key (con `FOR UPDATE`),
         cur.fetchone() -> {"storage_key": current_storage_key}
@@ -99,7 +99,7 @@ def _make_tx_patcher(*, current_storage_key, siblings, delete_rowcount):
         yield conn
 
     return (
-        patch("app.core.files.db.transaction", side_effect=tx_cm),
+        patch("app.core.files.db.unit_of_work", side_effect=tx_cm),
         cursor,
         conn,
     )
@@ -271,13 +271,13 @@ def test_delete_nonexistent_row_returns_false_no_side_effects(fake_storage):
     assert len(sqls) == 2
 
 
-# 6. E4: usa transaction() (single conn, atomic)
+# 6. E4: usa unit_of_work() (single conn, atomic)
 
 
 def test_delete_uses_transaction_context_manager(fake_storage):
     """BE-DELETE-002 E4: tutto il flow DB avviene dentro una sola
-    `pg_connection.transaction()` (single conn). Verificato indirettamente
-    dal fatto che `_make_tx_patcher` patcha `transaction` e tutte le
+    `pg_connection.unit_of_work()` (single conn). Verificato indirettamente
+    dal fatto che `_make_tx_patcher` patcha `unit_of_work` e tutte le
     cur.execute call accadono sullo stesso cursor mock."""
     from app.core.files import db as fs_db
 
@@ -337,7 +337,7 @@ def test_storage_delete_happens_after_db_commit_not_inside_transaction(
     fake_storage,
 ):
     """BE-DELETE-002 E4: storage.delete deve avvenire DOPO il commit del CM
-    `transaction()`, NON dentro la TX. Garantisce:
+    `unit_of_work()`, NON dentro la TX. Garantisce:
       - Race D eliminata (DB gia' committed quando storage call parte);
       - ADR-0011 contract preservato (storage failure -> orphan accepted,
         DB row gia' cancellata).
@@ -370,7 +370,7 @@ def test_storage_delete_happens_after_db_commit_not_inside_transaction(
         f"storage_delete:{key}"
     )
 
-    with patch("app.core.files.db.transaction", side_effect=tx_cm), \
+    with patch("app.core.files.db.unit_of_work", side_effect=tx_cm), \
          patch("app.infrastructure.storage.cloud_backends.object_storage_enabled", return_value=True), \
          patch("app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
                return_value=fake_storage):

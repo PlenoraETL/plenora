@@ -147,7 +147,7 @@ def test_cleanup_old_logs_deletes_rows_older_than_retention():
         "app.db.pg_connection.fetchall",
         return_value=[{"c": 7}],
     ) as mock_fetchall, patch(
-        "app.db.pg_connection.transaction",
+        "app.db.pg_connection.unit_of_work",
         return_value=mock_tx_cm,
     ) as mock_transaction:
         scheduler._cleanup_old_logs()
@@ -173,7 +173,7 @@ def test_cleanup_old_logs_skips_when_retention_disabled():
     ), patch(
         "app.db.pg_connection.fetchall"
     ) as mock_fetchall, patch(
-        "app.db.pg_connection.transaction"
+        "app.db.pg_connection.unit_of_work"
     ) as mock_transaction:
         scheduler._cleanup_old_logs()
 

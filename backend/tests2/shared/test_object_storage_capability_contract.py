@@ -179,7 +179,7 @@ def test_backup_factory_returns_backup_bucket(monkeypatch):
 
 def test_result_blob_object_storage_download_returns_none_when_disabled():
     """Capability off -> object-storage download ritorna None senza tentare
-    upload/get_object_storage."""
+    upload/runtime storage factory."""
     from app.core.resources.loaders.result_blob import _download_object_storage
 
     with _patch_capability(False, "s3"):
@@ -317,25 +317,11 @@ def test_admin_backups_list_raises_disabled_without_touching_runtime_factory():
     build_spy.assert_not_called()
 
 
-# E. Compat get_object_storage
+# E. Removed compatibility surface
 
 
-def test_get_object_storage_delegates_to_runtime():
-    """Compat shim: get_object_storage ritorna l'identica istanza di
-    get_runtime_object_storage."""
+def test_get_object_storage_compat_alias_is_removed():
+    """Runtime/backup callers must choose the explicit factory."""
     from app.infrastructure.storage import cloud_backends as cb
 
-    sentinel = MagicMock()
-    with patch.object(cb, "get_runtime_object_storage", return_value=sentinel):
-        out = cb.get_object_storage()
-
-    assert out is sentinel
-
-
-def test_get_object_storage_propagates_disabled_error():
-    """Compat shim non deve nascondere ObjectStorageDisabledError."""
-    from app.infrastructure.storage import cloud_backends as cb
-
-    with _patch_capability(False, "s3"):
-        with pytest.raises(cb.ObjectStorageDisabledError):
-            cb.get_object_storage()
+    assert not hasattr(cb, "get_object_storage")

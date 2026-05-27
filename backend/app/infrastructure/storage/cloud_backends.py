@@ -7,9 +7,6 @@ Obiettivo: concentrare in UN punto il codice SDK-specifico (oggi boto3).
 from __future__ import annotations
 
 import io
-import warnings as _warnings
-
-import functools
 import logging
 from dataclasses import dataclass
 from datetime import datetime
@@ -825,57 +822,13 @@ def get_backup_object_storage() -> ObjectStorage:
     return _build_object_storage(bucket, region_default="eu-south-1")
 
 
-@functools.lru_cache(maxsize=1)
-def _warn_get_object_storage_deprecated_once() -> None:
-    """Emit-once warning per ``get_object_storage`` (R-22, 2026-05-01).
-
-    Cache LRU per non spammare il logger ops in caller hot-path. Per i
-    test: ``_warn_get_object_storage_deprecated_once.cache_clear``.
-    """
-    msg = (
-        "[DEPRECATED] cloud_backends.get_object_storage e' un alias legacy. "
-        "Migrare a get_runtime_object_storage() o get_backup_object_storage() "
-        "esplicitamente. Removal target: 2026-Q4."
-    )
-    logger.warning(msg)
-    _warnings.warn(msg, DeprecationWarning, stacklevel=3)
-
-
-def get_object_storage() -> ObjectStorage:
-    """[DEPRECATED] Alias di `get_runtime_object_storage`.
-
-    Mantenuto come compat shim per i callsite che non distinguevano runtime
-    vs backup. I nuovi callsite devono usare `get_runtime_object_storage`
-    o `get_backup_object_storage` esplicitamente. Behavior identico
-    a `get_runtime_object_storage` (capability check + runtime bucket
-    resolution con fallback BACKUP_BUCKET legacy).
-
-    R-22 (2026-05-01): emette ``DeprecationWarning`` + logger.warning
-    emit-once. Removal target: 2026-Q4 (post-migrazione caller interni).
-
-    Config via env:
-      CLOUD_PROVIDER=aws (default)
-        BACKUP_S3_BUCKET (legacy) / BACKUP_BUCKET (nuovo, cross-provider)
-        AWS_REGION (default eu-south-1)
-
-      CLOUD_PROVIDER=minio (A1-B2, ADR-0015)
-        BACKUP_BUCKET — required
-        MINIO_ENDPOINT_URL — required (es. http://minio.internal:9000)
-        MINIO_ACCESS_KEY — required
-        MINIO_SECRET_KEY — required
-        AWS_REGION — default us-east-1 (MinIO ignora region)
-    """
-    _warn_get_object_storage_deprecated_once()
-    return get_runtime_object_storage()
-
-
 def get_log_archive_storage() -> ObjectStorage:
     """Ritorna l'ObjectStorage dedicato all'archive log (O-ARC, ADR-0014 §A3).
 
-    Gemella di `get_object_storage` ma su bucket distinto: IAM boundary
+    Gemella delle factory object-storage runtime/backup ma su bucket distinto: IAM boundary
     separato per archive log vs backup DB e' un invariante di design,
     non un'opzione. Per questo la factory e' dedicata e non parametrica
-    su `get_object_storage`.
+    su una factory condivisa.
 
     La coerenza config (ENABLED + provider reale + `LOG_ARCHIVE_BUCKET`
     distinto da `BACKUP_BUCKET` + prefix + batch_rows + audit retention)
@@ -903,7 +856,7 @@ def get_log_archive_storage() -> ObjectStorage:
             bucket=bucket,
             region=cfg.aws_region or "eu-south-1",
         )
-    # Estendere qui per Azure / GCP (stesso pattern di get_object_storage
+    # Estendere qui per Azure / GCP (stesso pattern delle factory storage)
     raise ValueError(f"CLOUD_PROVIDER non supportato: {provider!r}")
 
 

@@ -183,8 +183,7 @@ def test_os_getenv_only_at_boundary_modules():
 
 
 # Inventory esplicito per `threading.local` in `backend/app/`.
-# Baseline pulita: `pg_connection.transaction()` e' alias di
-# `unit_of_work()` e non mantiene piu' stato thread-local.
+# Baseline pulita: `pg_connection.unit_of_work()` non mantiene stato thread-local.
 ALLOWLIST_THREADING_LOCAL_COUNTS: Dict[str, int] = {}
 
 

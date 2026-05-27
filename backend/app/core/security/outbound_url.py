@@ -5,9 +5,6 @@ This module owns the anti-SSRF checks used before server-side HTTP calls.
 
 from __future__ import annotations
 
-import warnings as _warnings
-
-import functools
 import ipaddress
 import os
 import socket
@@ -17,19 +14,6 @@ from urllib.parse import urlparse
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-@functools.lru_cache(maxsize=1)
-def _warn_urby_loopback_alias_once() -> None:
-    """Emit the deprecated URBY loopback env alias warning once per process."""
-
-    msg = (
-        "[DEPRECATED] URBY_ALLOW_LOOPBACK_OUTBOUND e' un alias retro-compat. "
-        "Migrare a PLENORA_ALLOW_LOOPBACK_OUTBOUND. "
-        "L'alias verra' rimosso entro 2026-Q4."
-    )
-    logger.warning(msg)
-    _warnings.warn(msg, DeprecationWarning, stacklevel=2)
 
 
 def check_outbound_address(
@@ -56,13 +40,7 @@ def check_outbound_address(
                 os.environ.get("PLENORA_ALLOW_LOOPBACK_OUTBOUND", "").strip()
                 == "1"
             )
-            urby_set = (
-                os.environ.get("URBY_ALLOW_LOOPBACK_OUTBOUND", "").strip()
-                == "1"
-            )
-            allow_loopback = plenora_set or urby_set
-            if urby_set and not plenora_set:
-                _warn_urby_loopback_alias_once()
+            allow_loopback = plenora_set
     else:
         allow_loopback = False
 

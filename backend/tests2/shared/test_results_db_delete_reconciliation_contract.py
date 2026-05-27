@@ -94,7 +94,7 @@ class _FakeConn:
 
 
 def _patched_transaction(cursor: _FakeCursor):
-    """Build a context-manager that mimics `pg_connection.transaction`.
+    """Build a context-manager that mimics `pg_connection.unit_of_work`.
 
     Yields a `_FakeConn`; tracks whether commit was reached (no
     exception) so tests can assert atomicity behavior.

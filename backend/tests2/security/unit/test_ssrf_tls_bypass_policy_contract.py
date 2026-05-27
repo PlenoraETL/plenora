@@ -64,7 +64,6 @@ def _clean_env(monkeypatch):
         "ENVIRONMENT",
         "ENV",
         "PLENORA_ALLOW_LOOPBACK_OUTBOUND",
-        "URBY_ALLOW_LOOPBACK_OUTBOUND",
         "PLENORA_ALLOW_PRIVATE_NETWORK_OUTBOUND",
         "PLENORA_ALLOW_TLS_BYPASS",
     ):

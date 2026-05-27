@@ -168,14 +168,14 @@ def raise_typed_http(
     Adoption strategy:
     - Helper opzionale: i call site esistenti restano invariati.
     - Nuovi `raise` POSSONO usare questo helper per beneficiare
-      del catalog (`error_codes.<CONST>`) + del round-trip
+      del catalog (`error_codes.<CONST>` o `app.core.<domain>.errors.<CONST>`) + del round-trip
       envelope.
     - La migrazione dei call site esistenti e' debito separato
 
     Args:
         code: codice machine-readable. Convenzione snake_case.
-            Idealmente da `app.shared.error_codes` (`CONNECTION_IN_USE`,
-            ecc.). Stringa libera ammessa per estendibilita',
+            Idealmente dal catalogo condiviso o dal modulo errori del dominio.
+            Stringa libera ammessa per estendibilita',
             ma il drift test
             `test_error_codes_catalog::test_catalog_covers_all_router_emitted_codes`
             controllera' che i nuovi literal siano nel catalog.

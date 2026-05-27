@@ -206,10 +206,9 @@ def test_catalog_domain_and_global_disjoint():
     assert overlap == set(), f"Overlap inatteso: {overlap}"
 
 
-def test_catalog_constants_match_set_values():
-    """Ogni costante MAIUSCOLA esposta dal modulo deve avere il
-    valore equivalente nel `frozenset` (no drift fra dichiarazione
-    e set)."""
+def test_catalog_constants_match_shared_owned_set_values():
+    """Shared-owned constants must match the aggregate catalog minus
+    domain-owned values exported by their domain modules."""
     domain_constants = {
         value
         for name, value in vars(error_codes).items()
@@ -219,7 +218,13 @@ def test_catalog_constants_match_set_values():
             and isinstance(value, str)
         )
     }
-    assert domain_constants == set(error_codes.KNOWN_DOMAIN_CODES)
+    migrated_values = (
+        admin_backup_errors.KNOWN_DOMAIN_CODES
+        | connection_errors.KNOWN_DOMAIN_CODES
+        | datasource_errors.KNOWN_DOMAIN_CODES
+        | ticket_errors.KNOWN_DOMAIN_CODES
+    )
+    assert domain_constants == set(error_codes.KNOWN_DOMAIN_CODES) - migrated_values
 
 
 def test_migrated_domain_modules_feed_shared_catalog():
@@ -229,15 +234,12 @@ def test_migrated_domain_modules_feed_shared_catalog():
     assert ticket_errors.KNOWN_DOMAIN_CODES <= error_codes.KNOWN_DOMAIN_CODES
 
 
-def test_migrated_domain_codes_keep_shared_reexports_for_compat():
-    assert error_codes.OBJECT_STORAGE_DISABLED == admin_backup_errors.OBJECT_STORAGE_DISABLED
-    assert error_codes.AWS_CRT_MISSING == admin_backup_errors.AWS_CRT_MISSING
-    assert error_codes.AWS_CREDENTIALS_EXPIRED == admin_backup_errors.AWS_CREDENTIALS_EXPIRED
-    assert error_codes.CONNECTION_IN_USE == connection_errors.CONNECTION_IN_USE
-    assert error_codes.CONNECTION_NOT_FOUND == connection_errors.CONNECTION_NOT_FOUND
-    assert error_codes.DATASOURCE_IN_USE == datasource_errors.DATASOURCE_IN_USE
-    assert error_codes.DATASOURCE_NOT_FOUND == datasource_errors.DATASOURCE_NOT_FOUND
-    assert error_codes.TICKET_NOT_FOUND == ticket_errors.TICKET_NOT_FOUND
+def test_migrated_domain_codes_are_not_reexported_by_shared_catalog():
+    for const in _MIGRATED_DOMAIN_CONSTANTS:
+        assert not hasattr(error_codes, const), (
+            "Domain-owned error codes must be imported from their domain "
+            f"module, not re-exported by app.shared.error_codes: {const}"
+        )
 
 
 def test_migrated_domain_codes_are_not_defined_in_shared_catalog():

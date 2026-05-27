@@ -146,9 +146,9 @@ def _bypass_delete(table: str, where_clause: str, params: tuple) -> int:
     per cleanup dei dati seed sia per cleanup della riga observability
     emessa dagli hook.
     """
-    from app.db.pg_connection import transaction
+    from app.db.pg_connection import unit_of_work
 
-    with transaction() as conn:
+    with unit_of_work() as conn:
         with conn.cursor() as cur:
             cur.execute("SET LOCAL plenora.retention_cleanup = 'true'")
             cur.execute(

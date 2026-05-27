@@ -278,7 +278,7 @@ def test_build_runtime_services_kw_only():
         build_runtime_services(MagicMock())  # type: ignore[misc]
 
 
-# 3. main.py consumes the factory; module-globals re-export from container
+# 3. app_factory consumes the runtime-services factory
 
 
 def test_app_factory_consumes_runtime_services_factory():
@@ -311,25 +311,15 @@ def test_app_factory_consumes_runtime_services_factory():
         )
 
 
-def test_main_py_rebinds_globals_from_runtime_container():
-    """Source-bound: `main.py` exposes `_runtime_services` and
-    re-exports the 9 fields as module-globals (monkeypatch
-    backward compat).
-
-    BE-GO-READY-BOOTSTRAP-ENGINE-016: added
-    `api_connection_service` as the 8th re-export.
-    BE-GO-READY-BOOTSTRAP-ENGINE-017: added
-    `datasource_service` as the 9th re-export.
-    """
+def test_main_py_keeps_only_asgi_app_surface():
+    """Source-bound: `main.py` must not re-export runtime service globals."""
     src = _read(_MAIN_PY)
 
     assert "app = create_app()" in src
-    assert "_runtime_services = app.state.runtime_services" in src
-    # Each field is rebound at module level.
+    assert "_runtime_services = app.state.runtime_services" not in src
     for name in _RUNTIME_FIELD_NAMES:
-        assert f"{name} = _runtime_services.{name}" in src, (
-            f"main.py must re-export `{name}` from the container "
-            "to preserve the test monkeypatch surface."
+        assert f"{name} = _runtime_services.{name}" not in src, (
+            f"main.py must not re-export `{name}` from the container."
         )
 
 
@@ -451,11 +441,10 @@ def test_runtime_container_owns_api_connection_service_field():
 def test_main_py_no_longer_imports_api_connection_service_directly():
     """Source-bound: `app/main.py` must NOT import
     `api_connection_service` directly from `api_connector` â€” the
-    canonical path is now the container.
+    canonical path is the runtime container.
 
-    The arricchisci singleton stays in `api_connector.py` (test
-    patch surface preserved), but `main.py` consumes it via the
-    container re-export, not via a direct import.
+    The arricchisci singleton stays in `api_connector.py` for its own
+    patch surface, but `main.py` stays ASGI-only.
     """
     src = _read(_MAIN_PY)
     forbidden_import = (
@@ -463,8 +452,8 @@ def test_main_py_no_longer_imports_api_connection_service_directly():
     )
     assert forbidden_import not in src, (
         "app/main.py still imports `api_connection_service` directly "
-        "from `api_connector`. Post-016 the container owns the field; "
-        "main.py should re-export from `_runtime_services`."
+        "from `api_connector`. The container owns the field; "
+        "main.py should stay ASGI-only."
     )
 
 
@@ -535,10 +524,10 @@ def test_runtime_container_owns_datasource_service_field():
 def test_main_py_no_longer_imports_datasource_service_directly():
     """Source-bound: `app/main.py` must NOT import `datasource_service`
     directly from `app.core.datasources.service` â€” the canonical path
-    is now the container.
+    is the runtime container.
 
     The singleton stays in `service.py:440` (canonical attribute
-    preserved); `main.py` consumes it via container re-export.
+    preserved); `main.py` stays ASGI-only.
     """
     src = _read(_MAIN_PY)
     forbidden_import = (
@@ -546,8 +535,8 @@ def test_main_py_no_longer_imports_datasource_service_directly():
     )
     assert forbidden_import not in src, (
         "app/main.py still imports `datasource_service` directly "
-        "from `app.core.datasources.service`. Post-017 the container "
-        "owns the field; main.py should re-export from `_runtime_services`."
+        "from `app.core.datasources.service`. The container owns the field; "
+        "main.py should stay ASGI-only."
     )
 
 

@@ -1,7 +1,7 @@
 """
 Contract test — app/infrastructure/storage/cloud_backends.py (astrazione cloud-agnostic).
 
-1. Factory `get_secrets_backend()` / `get_object_storage()` dispatch via
+1. Factory `get_secrets_backend()` / explicit object-storage factory dispatch via
 """
 
 from __future__ import annotations
@@ -71,12 +71,12 @@ def test_factory_unknown_provider_raises(cb, monkeypatch):
     monkeypatch.setenv("CLOUD_PROVIDER", "oracle")
     with pytest.raises(ValueError, match="non supportato"):
         cb.get_secrets_backend()
-    # get_object_storage richiede un bucket per arrivare al provider
+    # get_backup_object_storage richiede un bucket per arrivare al provider
     # dispatch (la resolution bucket avviene prima). Settiamo un bucket
     # generico cosi' isoliamo la prova del provider check.
     monkeypatch.setenv("BACKUP_BUCKET", "any-bucket-for-provider-check")
     with pytest.raises(ValueError, match="non supportato"):
-        cb.get_object_storage()
+        cb.get_backup_object_storage()
 
 
 def test_object_storage_factory_requires_bucket(cb, monkeypatch):
@@ -84,7 +84,7 @@ def test_object_storage_factory_requires_bucket(cb, monkeypatch):
     monkeypatch.delenv("BACKUP_BUCKET", raising=False)
     monkeypatch.delenv("BACKUP_S3_BUCKET", raising=False)
     with pytest.raises(ValueError, match="BACKUP_BUCKET"):
-        cb.get_object_storage()
+        cb.get_backup_object_storage()
 
 
 def test_object_storage_factory_accepts_legacy_env_name(cb, monkeypatch):
@@ -93,7 +93,7 @@ def test_object_storage_factory_accepts_legacy_env_name(cb, monkeypatch):
     monkeypatch.setenv("CLOUD_PROVIDER", "aws")
     monkeypatch.delenv("BACKUP_BUCKET", raising=False)
     monkeypatch.setenv("BACKUP_S3_BUCKET", "legacy-bucket")
-    storage = cb.get_object_storage()
+    storage = cb.get_backup_object_storage()
     assert storage.bucket == "legacy-bucket"
 
 
@@ -102,7 +102,7 @@ def test_object_storage_factory_prefers_new_env_name(cb, monkeypatch):
     monkeypatch.setenv("CLOUD_PROVIDER", "aws")
     monkeypatch.setenv("BACKUP_BUCKET", "new-name")
     monkeypatch.setenv("BACKUP_S3_BUCKET", "legacy")
-    storage = cb.get_object_storage()
+    storage = cb.get_backup_object_storage()
     assert storage.bucket == "new-name"
 
 
@@ -283,26 +283,26 @@ def test_factory_minio_requires_endpoint_url(cb, monkeypatch):
     _set_minio_env(monkeypatch)
     monkeypatch.delenv("MINIO_ENDPOINT_URL", raising=False)
     with pytest.raises(ValueError, match="MINIO_ENDPOINT_URL"):
-        cb.get_object_storage()
+        cb.get_backup_object_storage()
 
 
 def test_factory_minio_requires_access_key(cb, monkeypatch):
     _set_minio_env(monkeypatch)
     monkeypatch.delenv("MINIO_ACCESS_KEY", raising=False)
     with pytest.raises(ValueError, match="MINIO_ACCESS_KEY"):
-        cb.get_object_storage()
+        cb.get_backup_object_storage()
 
 
 def test_factory_minio_requires_secret_key(cb, monkeypatch):
     _set_minio_env(monkeypatch)
     monkeypatch.delenv("MINIO_SECRET_KEY", raising=False)
     with pytest.raises(ValueError, match="MINIO_SECRET_KEY"):
-        cb.get_object_storage()
+        cb.get_backup_object_storage()
 
 
 def test_factory_minio_returns_configured_storage(cb, monkeypatch):
     _set_minio_env(monkeypatch)
-    storage = cb.get_object_storage()
+    storage = cb.get_backup_object_storage()
     assert isinstance(storage, cb.MinioObjectStorage)
     assert storage.bucket == "onprem-bucket"
     assert storage.endpoint_url == "http://minio.internal:9000"

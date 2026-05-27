@@ -18,7 +18,7 @@ class _StubConn:
         self.rollbacks += 1
 
 
-def test_transaction_is_unit_of_work_compat_alias(monkeypatch):
+def test_unit_of_work_commits_and_returns_connection_to_pool(monkeypatch):
     import app.db.pg_connection as pg
 
     conn = _StubConn()
@@ -26,7 +26,7 @@ def test_transaction_is_unit_of_work_compat_alias(monkeypatch):
     monkeypatch.setattr(pg, "get_connection", lambda: conn)
     monkeypatch.setattr(pg, "put_connection", returned.append)
 
-    with pg.transaction() as yielded:
+    with pg.unit_of_work() as yielded:
         assert isinstance(yielded, pg.PgSession)
 
     assert conn.commits == 1
@@ -34,7 +34,7 @@ def test_transaction_is_unit_of_work_compat_alias(monkeypatch):
     assert returned == [conn]
 
 
-def test_transaction_rolls_back_and_returns_connection_to_pool(monkeypatch):
+def test_unit_of_work_rolls_back_and_returns_connection_to_pool(monkeypatch):
     import app.db.pg_connection as pg
 
     conn = _StubConn()
@@ -43,7 +43,7 @@ def test_transaction_rolls_back_and_returns_connection_to_pool(monkeypatch):
     monkeypatch.setattr(pg, "put_connection", returned.append)
 
     with pytest.raises(ValueError, match="boom"):
-        with pg.transaction():
+        with pg.unit_of_work():
             raise ValueError("boom")
 
     assert conn.commits == 0
@@ -51,7 +51,7 @@ def test_transaction_rolls_back_and_returns_connection_to_pool(monkeypatch):
     assert returned == [conn]
 
 
-def test_nested_transaction_uses_explicit_independent_sessions(monkeypatch):
+def test_nested_unit_of_work_uses_explicit_independent_sessions(monkeypatch):
     import app.db.pg_connection as pg
 
     conns = [_StubConn(), _StubConn()]
@@ -63,10 +63,16 @@ def test_nested_transaction_uses_explicit_independent_sessions(monkeypatch):
     monkeypatch.setattr(pg, "get_connection", _get_connection)
     monkeypatch.setattr(pg, "put_connection", returned.append)
 
-    with pg.transaction() as outer:
-        with pg.transaction() as inner:
+    with pg.unit_of_work() as outer:
+        with pg.unit_of_work() as inner:
             assert outer is not inner
 
     assert len(returned) == 2
     assert all(conn.commits == 1 for conn in returned)
     assert all(conn.rollbacks == 0 for conn in returned)
+
+
+def test_transaction_compat_alias_is_removed():
+    import app.db.pg_connection as pg
+
+    assert not hasattr(pg, "transaction")

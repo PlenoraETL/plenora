@@ -13,8 +13,6 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-transaction = unit_of_work
-
 
 class FileSourceRow(TypedDict, total=False):
     """Riga tipizzata per la persistenza di un FileSource (BE-SHAPE-001).
@@ -248,7 +246,7 @@ def save_file_sources_batch(rows: List[FileSourceRow]) -> None:
         FileSourceRepository.SaveBatch(ctx, []FileSourceRow) error
         - input shape esplicita (no kwargs);
         - errori espliciti via raise;
-        - transaction boundary visibile (un solo `with transaction`).
+        - transaction boundary visibile (un solo `with unit_of_work`).
     """
     if not rows:
         return
@@ -280,7 +278,7 @@ def save_file_sources_batch(rows: List[FileSourceRow]) -> None:
         for r in rows
     ]
 
-    with transaction() as conn:
+    with unit_of_work() as conn:
         with conn.cursor() as cur:
             cur.executemany(sql, params_list)
 
@@ -298,7 +296,7 @@ def delete_file_source(file_id: str) -> bool:
 
     Flow (BE-HARDEN-001C E4 / BE-DELETE-002):
 
-      1. Apre `transaction` (single conn, autocommit off).
+      1. Apre `unit_of_work` (single conn, autocommit off).
       2. `SELECT storage_key WHERE id=? FOR UPDATE` - lock pessimistico
          sulla row da cancellare.
       3. Se `storage_key` valorizzato:
@@ -341,7 +339,7 @@ def delete_file_source(file_id: str) -> bool:
     # storage_key None) — neither needs reconciliation
     reconciliation_ref = None
 
-    with transaction() as conn:
+    with unit_of_work() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT storage_key FROM file_sources WHERE id = %s FOR UPDATE",

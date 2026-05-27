@@ -129,7 +129,7 @@ def test_archive_hook_invokes_writer_when_enabled(
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=MagicMock(),
     ), patch(
-        "app.db.pg_connection.transaction", new=MagicMock(),
+        "app.db.pg_connection.unit_of_work", new=MagicMock(),
     ):
         mock_writer = mock_writer_cls.return_value
         mock_writer.archive_and_purge.return_value = _writer_result(
@@ -198,7 +198,7 @@ def test_archive_hook_skips_before_writer_on_disabled_or_zero_retention(
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall",
     ) as mock_fetchall, patch(
-        "app.db.pg_connection.transaction",
+        "app.db.pg_connection.unit_of_work",
     ) as mock_transaction:
         _call_archive(scheduler, method_name)
 
@@ -239,7 +239,7 @@ def test_archive_hook_24h_gate(
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=MagicMock(),
     ), patch(
-        "app.db.pg_connection.transaction", new=MagicMock(),
+        "app.db.pg_connection.unit_of_work", new=MagicMock(),
     ):
         mock_writer = mock_writer_cls.return_value
         mock_writer.archive_and_purge.return_value = _writer_result(
@@ -288,7 +288,7 @@ def test_archive_hook_failure_swallowed_and_slot_not_updated(
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=MagicMock(),
     ), patch(
-        "app.db.pg_connection.transaction", new=MagicMock(),
+        "app.db.pg_connection.unit_of_work", new=MagicMock(),
     ), patch(
         "workers.beat_scheduler.logger",
     ) as mock_logger:
@@ -313,7 +313,7 @@ def test_cleanup_old_logs_skipped_when_archive_enabled():
     ), patch(
         "app.db.pg_connection.fetchall",
     ) as mock_fetchall, patch(
-        "app.db.pg_connection.transaction",
+        "app.db.pg_connection.unit_of_work",
     ) as mock_transaction:
         scheduler._cleanup_old_logs()
 
@@ -337,7 +337,7 @@ def test_cleanup_old_logs_still_runs_when_archive_disabled():
     ), patch(
         "app.db.pg_connection.fetchall", return_value=[{"c": 7}],
     ) as mock_fetchall, patch(
-        "app.db.pg_connection.transaction", return_value=mock_tx_cm,
+        "app.db.pg_connection.unit_of_work", return_value=mock_tx_cm,
     ) as mock_transaction:
         scheduler._cleanup_old_logs()
 
@@ -380,7 +380,7 @@ def test_select_rows_closure_builds_ordered_query(
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=mock_fetchall,
     ), patch(
-        "app.db.pg_connection.transaction", new=MagicMock(),
+        "app.db.pg_connection.unit_of_work", new=MagicMock(),
     ):
         captured = _capture_closures(mock_writer_cls.return_value)
         _call_archive(scheduler, method_name)
@@ -432,7 +432,7 @@ def test_retention_bypass_execute_closure_sets_local_flag_on_same_cursor(
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=MagicMock(),
     ), patch(
-        "app.db.pg_connection.transaction", new=mock_transaction,
+        "app.db.pg_connection.unit_of_work", new=mock_transaction,
     ):
         captured = _capture_closures(mock_writer_cls.return_value)
         _call_archive(scheduler, method_name)
@@ -482,7 +482,7 @@ def test_archive_hook_emits_observability_insert_on_success(
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=MagicMock(),
     ), patch(
-        "app.db.pg_connection.transaction", new=MagicMock(),
+        "app.db.pg_connection.unit_of_work", new=MagicMock(),
     ), patch(
         "app.db.pg_connection.execute", new=mock_pg_execute,
     ):
@@ -569,7 +569,7 @@ def test_archive_old_logs_skips_observability_when_archive_fails(monkeypatch):
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=MagicMock(),
     ), patch(
-        "app.db.pg_connection.transaction", new=MagicMock(),
+        "app.db.pg_connection.unit_of_work", new=MagicMock(),
     ), patch(
         "app.db.pg_connection.execute", new=mock_pg_execute,
     ):
@@ -600,7 +600,7 @@ def test_archive_old_logs_observability_failure_does_not_regress_archive_ok(
     ) as mock_writer_cls, patch(
         "app.db.pg_connection.fetchall", new=MagicMock(),
     ), patch(
-        "app.db.pg_connection.transaction", new=MagicMock(),
+        "app.db.pg_connection.unit_of_work", new=MagicMock(),
     ), patch(
         "app.db.pg_connection.execute", new=mock_pg_execute,
     ), patch(

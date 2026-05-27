@@ -17,7 +17,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 @pytest.fixture
 def fake_conn_cursor():
-    """Mock conn + cursor compatibili con `with transaction() as conn:
+    """Mock conn + cursor compatibili con `with unit_of_work() as conn:
     with conn.cursor() as cur: cur.executemany(...)`."""
     cursor = MagicMock()
     cursor.executemany = MagicMock()
@@ -33,7 +33,7 @@ def fake_conn_cursor():
 
 @pytest.fixture
 def patched_transaction(fake_conn_cursor):
-    """Patcher di file_sources.transaction -> context manager che yielda
+    """Patcher di file_sources.unit_of_work -> context manager che yielda
     fake_conn. Ritorna la tupla (patcher, conn, cursor) per assertions."""
     conn, cursor = fake_conn_cursor
 
@@ -41,7 +41,7 @@ def patched_transaction(fake_conn_cursor):
     def tx_cm():
         yield conn
 
-    return patch("app.core.files.db.transaction", side_effect=tx_cm), conn, cursor
+    return patch("app.core.files.db.unit_of_work", side_effect=tx_cm), conn, cursor
 
 
 def _row(file_id: str, **overrides):
@@ -112,7 +112,7 @@ def test_save_batch_shares_single_timestamp_across_rows(patched_transaction):
 
 def test_save_batch_raises_before_transaction_when_row_missing_blob():
     """Row con data=None E storage_key=None -> ValueError SOLLEVATA PRIMA
-    che `transaction()` venga chiamato. Zero side effect DB."""
+    che `unit_of_work()` venga chiamato. Zero side effect DB."""
     from app.core.files import db as fs_db
 
     bad_rows = [
@@ -121,7 +121,7 @@ def test_save_batch_raises_before_transaction_when_row_missing_blob():
         _row("f3"),
     ]
 
-    with patch("app.core.files.db.transaction") as mock_tx:
+    with patch("app.core.files.db.unit_of_work") as mock_tx:
         with pytest.raises(ValueError, match="senza data ne storage_key"):
             fs_db.save_file_sources_batch(bad_rows)
 
@@ -150,7 +150,7 @@ def test_save_batch_storage_key_only_row_is_valid(patched_transaction):
 
 def test_save_batch_rolls_back_on_executemany_exception(patched_transaction):
     """executemany solleva -> exception propaga al caller. Il rollback e'
-    responsabilita' di `transaction()` (verificato in pg_connection)."""
+    responsabilita' di `unit_of_work()` (verificato in pg_connection)."""
     from app.core.files import db as fs_db
 
     patcher, conn, cursor = patched_transaction
@@ -168,7 +168,7 @@ def test_save_batch_rolls_back_on_executemany_exception(patched_transaction):
 def test_save_batch_empty_rows_is_noop():
     from app.core.files import db as fs_db
 
-    with patch("app.core.files.db.transaction") as mock_tx:
+    with patch("app.core.files.db.unit_of_work") as mock_tx:
         out = fs_db.save_file_sources_batch([])
 
     assert out is None

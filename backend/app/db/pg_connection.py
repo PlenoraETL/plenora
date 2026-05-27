@@ -523,17 +523,6 @@ def executemany(sql: str, params_list: list[tuple]) -> None:
         session.executemany(sql, params_list)
 
 
-def transaction():
-    """Compatibility alias for an explicit PostgreSQL UnitOfWork.
-
-    Historical callers used ``transaction()`` as a raw-connection context
-    manager.  It now yields ``PgSession`` and shares the same explicit,
-    process-state-free lifecycle as ``unit_of_work()``. New code should
-    depend on ``unit_of_work()`` directly.
-    """
-    return unit_of_work()
-
-
 # Init DB (verifica tabelle)
 
 def init_db():

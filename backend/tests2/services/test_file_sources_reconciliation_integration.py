@@ -28,7 +28,7 @@ def _make_tx_patcher(
     delete_rowcount,
     record_pending_id="recon-uuid-1",
 ):
-    """Build a `transaction()` patcher whose mocked cursor yields
+    """Build a `unit_of_work()` patcher whose mocked cursor yields
     fetchone responses in this order:
 
       1. SELECT storage_key FOR UPDATE -> {"storage_key": ...} or None
@@ -72,7 +72,7 @@ def _make_tx_patcher(
         yield conn
 
     return (
-        patch("app.core.files.db.transaction", side_effect=tx_cm),
+        patch("app.core.files.db.unit_of_work", side_effect=tx_cm),
         cursor,
         conn,
     )

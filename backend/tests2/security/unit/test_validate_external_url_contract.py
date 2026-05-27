@@ -22,10 +22,8 @@ pytestmark = [
 def _clean_loopback_env(monkeypatch):
     """Pulisce env loopback + ENVIRONMENT prima di ogni test: deterministico.
 
-    Resetta anche la cache del warning one-shot A3
-    (`_warn_urby_loopback_alias_once`) per evitare flake tra test che
-    triggerano l'alias deprecato URBY_ALLOW_LOOPBACK_OUTBOUND in ordine
-    diverso.
+    Include l'alias storico rimosso per evitare che env locali influenzino
+    i test di blocco loopback.
     """
     for name in (
         "PLENORA_ALLOW_LOOPBACK_OUTBOUND",
@@ -34,7 +32,6 @@ def _clean_loopback_env(monkeypatch):
         "ENV",
     ):
         monkeypatch.delenv(name, raising=False)
-    outbound_url._warn_urby_loopback_alias_once.cache_clear()
 
 
 # Schema validation
@@ -115,26 +112,19 @@ def test_opt_in_strict_value_check(monkeypatch):
             validate_external_url("http://127.0.0.1/")
 
 
-# Retro-compat alias + guard hardened env (P1.5 + S6/P2.4, 2026-04-23)
+# Loopback opt-in + guard hardened env (P1.5 + S6/P2.4, 2026-04-23)
 
 
-def test_legacy_urby_alias_still_honored_in_dev(monkeypatch):
-    """Blinda P1.5 (rinomina 2026-04-23): l'alias legacy
-    `URBY_ALLOW_LOOPBACK_OUTBOUND` continua a funzionare in dev/test
-    per retro-compat. Deploy o test-harness non ancora migrati
-    devono continuare a operare.
-    """
+def test_legacy_urby_alias_is_not_honored(monkeypatch):
+    """L'alias storico non deve piu' aprire loopback in dev/test."""
     monkeypatch.setenv("URBY_ALLOW_LOOPBACK_OUTBOUND", "1")
-    # Non solleva — il fallback legacy attiva l'opt-in
-    validate_external_url("http://127.0.0.1:51360/ok")
+
+    with pytest.raises(ValueError, match="URL bloccato"):
+        validate_external_url("http://127.0.0.1:51360/ok")
 
 
 @pytest.mark.parametrize("hardened_env", ["production", "prod", "staging", "stage"])
-@pytest.mark.parametrize("flag_name", [
-    "PLENORA_ALLOW_LOOPBACK_OUTBOUND",
-    "URBY_ALLOW_LOOPBACK_OUTBOUND",
-])
-def test_flag_ignored_in_hardened_environments(hardened_env, flag_name, monkeypatch):
+def test_flag_ignored_in_hardened_environments(hardened_env, monkeypatch):
     """Blinda S6 / P2.4 (chiuso 2026-04-23): in ambienti hardened
     (`ENVIRONMENT in {production, prod, staging, stage}`) il flag e'
     IGNORATO indipendentemente dal valore.
@@ -144,7 +134,7 @@ def test_flag_ignored_in_hardened_environments(hardened_env, flag_name, monkeypa
     (Redis/Postgres/EC2 metadata). Simmetrico a `crypto.py` guard.
     """
     monkeypatch.setenv("ENVIRONMENT", hardened_env)
-    monkeypatch.setenv(flag_name, "1")
+    monkeypatch.setenv("PLENORA_ALLOW_LOOPBACK_OUTBOUND", "1")
 
     with pytest.raises(ValueError, match="URL bloccato"):
         validate_external_url("http://127.0.0.1:6379/")
@@ -277,15 +267,7 @@ def test_loopback_opt_in_still_works_for_ipv6_loopback(monkeypatch):
         validate_external_url("http://internal-test.example/q")
 
 
-# A3: deprecation warning one-shot per URBY_ALLOW_LOOPBACK_OUTBOUND
-#
-# Verifica che usare l'alias retro-compat senza il canonical generi UN warning
-# loud, e che chiamate successive nello stesso processo non lo ripetano (cache
-# hit via functools.lru_cache). La fixture autouse `_clean_loopback_env` chiama
-# `cache_clear()` tra test per garantire osservabilita' deterministica.
-#
-# Semantica funzionale invariata: l'alias continua a sbloccare il loopback in
-# dev/test, identico al canonical. Il warning e' puro segnale di migrazione.
+# A3: removed URBY_ALLOW_LOOPBACK_OUTBOUND compatibility alias
 
 
 def _spy_warning(monkeypatch):
@@ -307,25 +289,14 @@ def _deprecation_warnings(calls):
     return [m for m in calls if "[DEPRECATED] URBY_ALLOW_LOOPBACK_OUTBOUND" in str(m)]
 
 
-def test_urby_alias_emits_deprecation_warning_once(monkeypatch):
-    """Quando solo URBY_ALLOW_LOOPBACK_OUTBOUND e' settato, viene emesso un
-    warning loud UNA volta. Chiamate successive nello stesso processo NON
-    ripetono il warning (cache hit). Behavior funzionale invariato: il
-    loopback resta sbloccato in dev/test (alias mantiene la sua semantica)."""
+def test_urby_alias_does_not_emit_deprecation_or_allow_loopback(monkeypatch):
+    """Il nome rimosso non e' piu' una superficie runtime."""
     monkeypatch.setenv("URBY_ALLOW_LOOPBACK_OUTBOUND", "1")
     calls = _spy_warning(monkeypatch)
 
-    # Prima chiamata: warning emesso, loopback consentito (semantica alias)
-    validate_external_url("http://127.0.0.1:51360/ok")
-    assert len(_deprecation_warnings(calls)) == 1, (
-        f"Atteso 1 warning di deprecation, trovati {len(_deprecation_warnings(calls))}"
-    )
-
-    # Seconda chiamata: nessun warning aggiuntivo (cache hit)
-    validate_external_url("http://127.0.0.1:51361/ok")
-    assert len(_deprecation_warnings(calls)) == 1, (
-        "Il warning di deprecation NON deve ripetersi: cache hit attesa"
-    )
+    with pytest.raises(ValueError, match="URL bloccato"):
+        validate_external_url("http://127.0.0.1:51360/ok")
+    assert _deprecation_warnings(calls) == []
 
 
 def test_canonical_alone_does_not_emit_deprecation_warning(monkeypatch):
@@ -342,10 +313,8 @@ def test_canonical_alone_does_not_emit_deprecation_warning(monkeypatch):
     )
 
 
-def test_both_aliases_set_does_not_emit_deprecation_warning(monkeypatch):
-    """Quando ENTRAMBI canonical + alias sono settati, nessun warning:
-    l'operatore sta migrando (canonical presente). Spammare un warning in
-    questo scenario disturberebbe la migrazione progressiva."""
+def test_removed_alias_does_not_affect_canonical(monkeypatch):
+    """Il canonical resta l'unico opt-in effettivo."""
     monkeypatch.setenv("PLENORA_ALLOW_LOOPBACK_OUTBOUND", "1")
     monkeypatch.setenv("URBY_ALLOW_LOOPBACK_OUTBOUND", "1")
     calls = _spy_warning(monkeypatch)
@@ -353,23 +322,5 @@ def test_both_aliases_set_does_not_emit_deprecation_warning(monkeypatch):
     validate_external_url("http://127.0.0.1:51360/ok")
 
     assert _deprecation_warnings(calls) == [], (
-        "Nessun warning atteso quando canonical + alias sono entrambi settati"
-    )
-
-
-def test_cache_clear_allows_warning_to_be_re_emitted(monkeypatch):
-    """Sanity check sulla fixture: dopo `cache_clear()` il warning torna a
-    essere emesso. Garantisce che l'autouse fixture isoli correttamente i
-    test successivi che dipendono dall'observability del warning."""
-    monkeypatch.setenv("URBY_ALLOW_LOOPBACK_OUTBOUND", "1")
-    calls = _spy_warning(monkeypatch)
-
-    validate_external_url("http://127.0.0.1:51360/ok")
-    assert len(_deprecation_warnings(calls)) == 1
-
-    # Reset cache + nuova chiamata: warning ri-emesso
-    outbound_url._warn_urby_loopback_alias_once.cache_clear()
-    validate_external_url("http://127.0.0.1:51360/ok")
-    assert len(_deprecation_warnings(calls)) == 2, (
-        "Dopo cache_clear() il warning deve ri-emettersi una volta"
+        "Nessun warning atteso quando si usa il canonical"
     )

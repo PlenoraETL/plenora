@@ -40,7 +40,7 @@ _LEADER_METRICS_LAST_TRANSITION_AT = "scheduler:beat:leader:last_transition_at"
 _PG_CONNECTION_MODULE = importlib.import_module("app.db.pg_connection")
 _ORIGINAL_PG_FETCHALL = getattr(_PG_CONNECTION_MODULE, "fetchall")
 _ORIGINAL_PG_EXECUTE = getattr(_PG_CONNECTION_MODULE, "execute")
-_ORIGINAL_PG_TRANSACTION = getattr(_PG_CONNECTION_MODULE, "transaction")
+_ORIGINAL_PG_UNIT_OF_WORK = getattr(_PG_CONNECTION_MODULE, "unit_of_work")
 
 
 def _pg_fetchall(sql: str, params: tuple = ()):
@@ -66,8 +66,8 @@ def _pg_execute(sql: str, params: tuple = ()):
 
 
 def _pg_transaction():
-    patched = getattr(_PG_CONNECTION_MODULE, "transaction")
-    if patched is not _ORIGINAL_PG_TRANSACTION:
+    patched = getattr(_PG_CONNECTION_MODULE, "unit_of_work")
+    if patched is not _ORIGINAL_PG_UNIT_OF_WORK:
         return patched()
 
     from app.db.pg_connection import unit_of_work

@@ -314,7 +314,7 @@ def test_write_node_atomic_empty_rows_still_evicts_and_upserts_meta():
 
 def test_write_node_atomic_meta_fail_rollback_propagates():
     """Se l'INSERT su node_meta fallisce, l'eccezione propaga fuori dal
-    `with transaction()` → pg_connection.transaction() esegue rollback
+    `with unit_of_work()` → pg_connection.unit_of_work() esegue rollback
     automatico (cattura+rollback+re-raise nel context manager). Il
     contract qui pinna SOLO la propagazione: il rollback del DELETE+INSERT
     in node_rows e' garantito strutturalmente da PG, non da codice
