@@ -98,6 +98,34 @@ def test_get_task_status_uses_typed_result_payload_inside_core():
     assert compat_payload["status"] == "success"
 
 
+def test_get_task_status_preserves_managed_failure_result_payload():
+    celery_meta = {
+        "success": False,
+        "project_id": "project-1",
+        "message": "Il progetto sorgente e' stato modificato dopo l'ultima esecuzione.",
+    }
+    async_result = SimpleNamespace(
+        state="SUCCESS",
+        info=celery_meta,
+        name="pipeline.execute",
+    )
+
+    with patch(
+        "app.core.task_runtime.orchestrator.AsyncResult",
+        return_value=async_result,
+    ):
+        task_info = TaskService().get_task_status("task-1")
+
+    assert task_info.status is TaskStatus.FAILURE
+    assert isinstance(task_info.result, TaskResultPayload)
+    assert task_info.result.success is False
+    assert task_info.error == celery_meta["message"]
+
+    compat_payload = task_info_to_dict(task_info)
+    assert compat_payload["status"] == "failure"
+    assert compat_payload["result"] == celery_meta
+
+
 def test_get_task_status_uses_pending_metadata_store_before_celery_metadata():
     metadata_store = InMemoryTaskMetadataStore()
     metadata_store.put(

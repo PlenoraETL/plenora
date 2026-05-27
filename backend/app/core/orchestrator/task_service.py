@@ -543,7 +543,15 @@ class TaskService:
                 if isinstance(meta, Exception):
                     error = type(meta).__name__
                 elif isinstance(meta, dict):
-                    error = meta.get("error") or meta.get("error_message") or "Errore sconosciuto"
+                    error = (
+                        meta.get("error")
+                        or meta.get("error_message")
+                        or (
+                            message
+                            if isinstance(task_result, TaskResultPayload)
+                            else "Errore sconosciuto"
+                        )
+                    )
                 else:
                     error = "Errore sconosciuto"
         else:
@@ -590,7 +598,7 @@ class TaskService:
             status=status,
             progress=progress,
             message=message,
-            result=task_result if status == TaskStatus.SUCCESS else None,
+            result=task_result,
             error=error
         )
     
