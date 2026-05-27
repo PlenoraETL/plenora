@@ -45,7 +45,7 @@ def _make_manager_for_success_path(schedule_config) -> ExecutionManager:
     (`test_execution_manager_contract.py`,
     `test_execution_manager_orphan_and_release_contract.py`) +
     short-circuit su pre_check / orchestrator / carica / artifact_store
-    / policy / heartbeat. Niente DB, Redis, FS o thread reali.
+    / policy. Niente DB, Redis, FS o thread reali.
     """
     manager = ExecutionManager.__new__(ExecutionManager)
 
@@ -74,10 +74,6 @@ def _make_manager_for_success_path(schedule_config) -> ExecutionManager:
     manager._artifact_store = MagicMock()
     manager._artifact_store.archive = MagicMock(return_value="/tmp/archived.csv")
 
-    manager._start_lock_heartbeat = MagicMock(
-        return_value={"stop_event": None, "thread": None, "lock_lost": False}
-    )
-    manager._stop_lock_heartbeat = MagicMock()
     manager._pre_check_connection = MagicMock(return_value=True)
     manager._execute_carica = MagicMock(
         return_value={
@@ -109,6 +105,11 @@ def _patches():
         patch("app.core.scheduler.execution_manager.open_run"),
         patch("app.core.scheduler.execution_manager.set_run_context"),
         patch("app.core.scheduler.execution_manager.close_run"),
+        patch(
+            "app.core.scheduler.execution_manager.start_lock_heartbeat",
+            return_value={"stop_event": None, "thread": None, "lock_lost": False},
+        ),
+        patch("app.core.scheduler.execution_manager.stop_lock_heartbeat"),
     )
 
 
@@ -123,9 +124,9 @@ def test_execute_persists_scheduled_for_in_schedule_info_and_execution_info(
     create_log_entry / schedule_info / execution_info".
     """
     manager = _make_manager_for_success_path(schedule_config)
-    p_db, p_proj, p_open, p_ctx, p_close = _patches()
+    p_db, p_proj, p_open, p_ctx, p_close, p_hb_start, p_hb_stop = _patches()
 
-    with p_db, p_proj as project_service_cls, p_open, p_ctx, p_close:
+    with p_db, p_proj as project_service_cls, p_open, p_ctx, p_close, p_hb_start, p_hb_stop:
         project_service_cls.return_value.get_project_metadata.return_value = (
             _project_meta("grp-A")
         )
@@ -170,9 +171,9 @@ def test_execute_propagates_scheduled_for_to_carica_kwarg(schedule_config):
     `write_mode=append`.
     """
     manager = _make_manager_for_success_path(schedule_config)
-    p_db, p_proj, p_open, p_ctx, p_close = _patches()
+    p_db, p_proj, p_open, p_ctx, p_close, p_hb_start, p_hb_stop = _patches()
 
-    with p_db, p_proj as project_service_cls, p_open, p_ctx, p_close:
+    with p_db, p_proj as project_service_cls, p_open, p_ctx, p_close, p_hb_start, p_hb_stop:
         project_service_cls.return_value.get_project_metadata.return_value = (
             _project_meta("grp-A")
         )
@@ -207,9 +208,9 @@ def test_execute_with_scheduled_for_none_persists_none_in_log_entry(
     crasha. Garantisce che l'operatore vede esplicitamente "no tick
     logico" invece di un campo mancante."""
     manager = _make_manager_for_success_path(schedule_config)
-    p_db, p_proj, p_open, p_ctx, p_close = _patches()
+    p_db, p_proj, p_open, p_ctx, p_close, p_hb_start, p_hb_stop = _patches()
 
-    with p_db, p_proj as project_service_cls, p_open, p_ctx, p_close:
+    with p_db, p_proj as project_service_cls, p_open, p_ctx, p_close, p_hb_start, p_hb_stop:
         project_service_cls.return_value.get_project_metadata.return_value = (
             _project_meta("grp-A")
         )

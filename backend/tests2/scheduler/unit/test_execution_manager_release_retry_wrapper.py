@@ -45,15 +45,8 @@ def _make_manager_for_retry_test(schedule_config) -> ExecutionManager:
     manager.schedule_service.get_schedule = MagicMock(return_value=schedule_config)
     manager.schedule_service.set_runtime_status = MagicMock()
     manager.concurrency.try_acquire = MagicMock(return_value="acquired")
-    manager._start_lock_heartbeat = MagicMock(
-        return_value={"stop_event": None, "thread": None, "lock_lost": False}
-    )
-    manager._stop_lock_heartbeat = MagicMock()
     manager._get_orchestrator = MagicMock(
         side_effect=RuntimeError("forced downstream failure for retry test")
-    )
-    manager._handle_failure = MagicMock(
-        return_value={"success": False, "status": "failed", "message": "forced"}
     )
     return manager
 
@@ -76,6 +69,14 @@ def _run_execute_with_patches(manager, schedule_id, monkeypatch):
         "app.core.scheduler.execution_manager.set_run_context"
     ), patch(
         "app.core.scheduler.execution_manager.close_run"
+    ), patch(
+        "app.core.scheduler.execution_manager.start_lock_heartbeat",
+        return_value={"stop_event": None, "thread": None, "lock_lost": False},
+    ), patch(
+        "app.core.scheduler.execution_manager.stop_lock_heartbeat"
+    ), patch(
+        "app.core.scheduler.execution_manager.handle_failure",
+        return_value={"success": False, "status": "failed", "message": "forced"},
     ):
         project_service_cls.return_value.get_project_metadata.return_value = (
             _project_meta("grp-A")
@@ -195,7 +196,16 @@ def test_release_retry_backoff_exponential_with_jitter(schedule_config, monkeypa
         patch("app.core.projects.service.ProjectService") as psc, \
         patch("app.core.scheduler.execution_manager.open_run"), \
         patch("app.core.scheduler.execution_manager.set_run_context"), \
-        patch("app.core.scheduler.execution_manager.close_run"):
+        patch("app.core.scheduler.execution_manager.close_run"), \
+        patch(
+            "app.core.scheduler.execution_manager.start_lock_heartbeat",
+            return_value={"stop_event": None, "thread": None, "lock_lost": False},
+        ), \
+        patch("app.core.scheduler.execution_manager.stop_lock_heartbeat"), \
+        patch(
+            "app.core.scheduler.execution_manager.handle_failure",
+            return_value={"success": False, "status": "failed", "message": "forced"},
+        ):
         psc.return_value.get_project_metadata.return_value = _project_meta("grp-A")
         manager.execute("s-backoff")
 
@@ -243,7 +253,16 @@ def test_release_retry_budget_total_10s_interrupts(schedule_config, monkeypatch)
         patch("app.core.projects.service.ProjectService") as psc, \
         patch("app.core.scheduler.execution_manager.open_run"), \
         patch("app.core.scheduler.execution_manager.set_run_context"), \
-        patch("app.core.scheduler.execution_manager.close_run"):
+        patch("app.core.scheduler.execution_manager.close_run"), \
+        patch(
+            "app.core.scheduler.execution_manager.start_lock_heartbeat",
+            return_value={"stop_event": None, "thread": None, "lock_lost": False},
+        ), \
+        patch("app.core.scheduler.execution_manager.stop_lock_heartbeat"), \
+        patch(
+            "app.core.scheduler.execution_manager.handle_failure",
+            return_value={"success": False, "status": "failed", "message": "forced"},
+        ):
         psc.return_value.get_project_metadata.return_value = _project_meta("grp-A")
         manager.execute("s-timebudget")
 

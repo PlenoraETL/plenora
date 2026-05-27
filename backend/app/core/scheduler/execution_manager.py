@@ -20,8 +20,6 @@ from app.core.scheduler.policy_engine import PolicyEngine
 from app.core.scheduler.runtime_status import RuntimeStatus
 from app.core.scheduler.schedule_service import ScheduleService
 from app.core.scheduler.scheduler_execution_runtime import (
-    SchedulerHeartbeatState,
-    SchedulerFailureResult,
     handle_failure,
     start_lock_heartbeat,
     stop_lock_heartbeat,
@@ -103,19 +101,6 @@ class ExecutionManager:
         )
         return stack.orchestrator
     
-    def _start_lock_heartbeat(
-        self,
-        schedule_id: str,
-        interval: Optional[float] = None,
-        clock=None,
-    ) -> SchedulerHeartbeatState:
-        """Compatibility wrapper for scheduler_execution_runtime."""
-        return start_lock_heartbeat(self.concurrency, schedule_id, interval, clock)
-
-    def _stop_lock_heartbeat(self, state: SchedulerHeartbeatState) -> None:
-        """Compatibility wrapper for scheduler_execution_runtime."""
-        stop_lock_heartbeat(state)
-
     def execute(
         self,
         schedule_id: str,
@@ -306,13 +291,13 @@ class ExecutionManager:
         self.schedule_service.set_runtime_status(schedule_id, RuntimeStatus.RUNNING)
         # Tracker per il rollback del runtime status nel finally. Settato
         # a True quando `update_runtime` viene chiamato (success path) o
-        # quando `_handle_failure` viene invocato (failure path); il
+        # quando `handle_failure` viene invocato (failure path); il
         # finally usa questo flag per fare set_runtime_status("idle") di
         # rollback se il worker e' stato killato a metà esecuzione e
         # nessuno dei due path canonici ha aggiornato lo status.
         runtime_status_finalized = False
 
-        heartbeat_state = self._start_lock_heartbeat(schedule_id)
+        heartbeat_state = start_lock_heartbeat(self.concurrency, schedule_id)
 
         try:
             if config.destination and config.pre_check.verify_destination_connection:
@@ -544,7 +529,7 @@ class ExecutionManager:
                 )
                 # intent: boundary top-level sanitize — str(e) di eccezioni
                 # unknown NON deve finire nel result dict Celery user-facing
-                # via _handle_failure. Dettaglio tecnico preservato nel
+                # via handle_failure. Dettaglio tecnico preservato nel
                 # CRASH] logger.error sopra + canali admin (close_run
                 # log_service.create_log_entry) che continuano a ricevere
                 # err_msg_internal-style per postmortem
@@ -555,7 +540,10 @@ class ExecutionManager:
                     f"[LOCK_LOST] Schedule {schedule_id}: lock perso "
                     f"durante esecuzione fallita."
                 )
-            failure_result = self._handle_failure(
+            failure_result = handle_failure(
+                schedule_service=self.schedule_service,
+                log_service=self.log_service,
+                policy=self.policy,
                 config=config,
                 schedule_id=schedule_id,
                 triggered_by=triggered_by,
@@ -566,7 +554,7 @@ class ExecutionManager:
                 run_id=run_id,
                 scheduled_for=scheduled_for,
             )
-            # `_handle_failure` invoca `schedule_service.update_runtime`
+            # `handle_failure` invoca `schedule_service.update_runtime`
             # internamente (vedi `scheduler_execution_runtime.handle_failure`),
             # quindi lo status e' coerente: marca finalized.
             runtime_status_finalized = True
@@ -576,7 +564,7 @@ class ExecutionManager:
 
         finally:
             try:
-                self._stop_lock_heartbeat(heartbeat_state)
+                stop_lock_heartbeat(heartbeat_state)
             except Exception as hb_err:
                 logger.warning(f"[GESTITO] Errore stop heartbeat {schedule_id}: {hb_err}")
             # Rollback del runtime status se nessun path canonico l'ha
@@ -884,36 +872,6 @@ class ExecutionManager:
                 "message": "Errore esecuzione CARICA scheduler (consulta log)",
             }
     
-    # GESTIONE FALLIMENTI
-    
-    def _handle_failure(
-        self,
-        config: ScheduleConfig,
-        schedule_id: str,
-        triggered_by: str,
-        retry_attempt: int,
-        error_message: str,
-        steps: list,
-        start_time: float,
-        run_id: str = "",
-        scheduled_for: Optional[str] = None,
-    ) -> SchedulerFailureResult:
-        """Compatibility wrapper for scheduler_execution_runtime."""
-        return handle_failure(
-            schedule_service=self.schedule_service,
-            log_service=self.log_service,
-            policy=self.policy,
-            config=config,
-            schedule_id=schedule_id,
-            triggered_by=triggered_by,
-            retry_attempt=retry_attempt,
-            error_message=error_message,
-            steps=steps,
-            start_time=start_time,
-            run_id=run_id,
-            scheduled_for=scheduled_for,
-        )
-
 class ExecutionError(Exception):
     """Errore durante l'esecuzione di uno step specifico."""
     

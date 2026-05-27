@@ -40,12 +40,12 @@ def _make_manager_for_cleanup_test(schedule_config) -> ExecutionManager:
     deterministico downstream.
 
     Scelte:
-    - ``_start_lock_heartbeat`` stubbato per ritornare uno state che
-      ``_stop_lock_heartbeat`` capisce (no thread reale), altrimenti
+    - ``start_lock_heartbeat`` stubbato per ritornare uno state che
+      ``stop_lock_heartbeat`` capisce (no thread reale), altrimenti
       partirebbe un daemon che chiama ``refresh_lock`` sul mock.
     - ``_get_orchestrator`` solleva subito â†’ salta il body di try e va
       nel ``except Exception``.
-    - ``_handle_failure`` mockato per ritornare un result benign â€” i
+    - ``handle_failure`` mockato per ritornare un result benign â€” i
       test qui NON testano il contenuto del result ma SOLO il
       comportamento del finally block.
     """
@@ -53,15 +53,8 @@ def _make_manager_for_cleanup_test(schedule_config) -> ExecutionManager:
     manager.schedule_service.get_schedule = MagicMock(return_value=schedule_config)
     manager.schedule_service.set_runtime_status = MagicMock()
     manager.concurrency.try_acquire = MagicMock(return_value="acquired")
-    manager._start_lock_heartbeat = MagicMock(
-        return_value={"stop_event": None, "thread": None, "lock_lost": False}
-    )
-    manager._stop_lock_heartbeat = MagicMock()
     manager._get_orchestrator = MagicMock(
         side_effect=RuntimeError("forced downstream failure for finally test")
-    )
-    manager._handle_failure = MagicMock(
-        return_value={"success": False, "status": "failed", "message": "forced"}
     )
     return manager
 
@@ -163,7 +156,7 @@ def test_finally_release_lock_retries_once_after_transient_db_failure(
     )
     # Evita attesa reale del backoff
     monkeypatch.setattr(
-        "app.core.scheduler.execution_manager.time.sleep",
+        "app.core.scheduler.scheduler_release.time.sleep",
         lambda _seconds: None,
     )
 
@@ -178,6 +171,14 @@ def test_finally_release_lock_retries_once_after_transient_db_failure(
         "app.core.scheduler.execution_manager.set_run_context"
     ), patch(
         "app.core.scheduler.execution_manager.close_run"
+    ), patch(
+        "app.core.scheduler.execution_manager.start_lock_heartbeat",
+        return_value={"stop_event": None, "thread": None, "lock_lost": False},
+    ), patch(
+        "app.core.scheduler.execution_manager.stop_lock_heartbeat"
+    ), patch(
+        "app.core.scheduler.execution_manager.handle_failure",
+        return_value={"success": False, "status": "failed", "message": "forced"},
     ):
         project_service_cls.return_value.get_project_metadata.return_value = (
             _project_meta("grp-A")
@@ -195,7 +196,7 @@ def test_finally_release_lock_retries_once_after_transient_db_failure(
         assert args[0] == "s-release"
 
     # execute() NON deve propagare l'eccezione del primo release:
-    # il _handle_failure mockato ritorna il result, e il finally
+    # handle_failure mockato ritorna il result, e il finally
     # non solleva niente visibile al caller.
     assert result is not None
     assert result["status"] == "failed"
@@ -212,7 +213,7 @@ def test_finally_does_not_propagate_when_both_release_attempts_fail(
       2. Loggare CRITICO (il source cita "scadrÃ  per TTL").
       3. **NON propagare l'eccezione** â€” il finally completa
          pulitamente e ``execute()`` ritorna il result dal
-         ``_handle_failure`` (non un uncaught OperationalError).
+         ``handle_failure`` (non un uncaught OperationalError).
 
     Contract critico: ``execute()`` Ã¨ chiamato da un task Celery che
     si aspetta sempre un return value. Una OperationalError non catturata
@@ -234,7 +235,7 @@ def test_finally_does_not_propagate_when_both_release_attempts_fail(
         ]
     )
     monkeypatch.setattr(
-        "app.core.scheduler.execution_manager.time.sleep",
+        "app.core.scheduler.scheduler_release.time.sleep",
         lambda _seconds: None,
     )
 
@@ -249,6 +250,14 @@ def test_finally_does_not_propagate_when_both_release_attempts_fail(
         "app.core.scheduler.execution_manager.set_run_context"
     ), patch(
         "app.core.scheduler.execution_manager.close_run"
+    ), patch(
+        "app.core.scheduler.execution_manager.start_lock_heartbeat",
+        return_value={"stop_event": None, "thread": None, "lock_lost": False},
+    ), patch(
+        "app.core.scheduler.execution_manager.stop_lock_heartbeat"
+    ), patch(
+        "app.core.scheduler.execution_manager.handle_failure",
+        return_value={"success": False, "status": "failed", "message": "forced"},
     ):
         project_service_cls.return_value.get_project_metadata.return_value = (
             _project_meta("grp-A")
@@ -265,5 +274,5 @@ def test_finally_does_not_propagate_when_both_release_attempts_fail(
         f"execute() DEVE ritornare dict anche se tutti release "
         f"falliscono, ottenuto {type(result).__name__}"
     )
-    # Il result viene dal _handle_failure mockato, status "failed"
+    # Il result viene dal handle_failure mockato, status "failed"
     assert result["status"] == "failed"

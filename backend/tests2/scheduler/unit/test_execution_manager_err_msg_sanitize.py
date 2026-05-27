@@ -75,7 +75,7 @@ def test_err_msg_execution_error_branch_preserved():
 
 
 def test_handle_failure_failed_branch_has_canonical_error_token():
-    """Il return dict del branch `failed` in `_handle_failure` deve contenere
+    """Il return dict del branch `failed` in `handle_failure` deve contenere
     `"error": "schedule_execution_fatal"` (token machine-readable coerente
     con pattern 7.c). Il branch `retry` resta invariato (decisione ratificata:
     niente token retry in questo batch)."""
@@ -84,7 +84,7 @@ def test_handle_failure_failed_branch_has_canonical_error_token():
 
     assert '"error": "schedule_execution_fatal"' not in manager_src, (
         "failure finalization must stay in scheduler_execution_runtime.py; "
-        "ExecutionManager should only delegate through _handle_failure"
+        "ExecutionManager should call handle_failure directly"
     )
     assert "decide_after_failure" not in manager_src
     assert "DebugPayloadBuilder" not in manager_src

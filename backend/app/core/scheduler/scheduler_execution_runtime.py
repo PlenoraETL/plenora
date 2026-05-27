@@ -1,7 +1,7 @@
 """Execution runtime helpers for scheduler runs.
 
-This module owns lock heartbeat compatibility wrappers and failure
-finalization so ExecutionManager stays focused on orchestration.
+This module owns lock heartbeat lifecycle and failure finalization so
+ExecutionManager stays focused on orchestration.
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ from typing import Optional
 from typing_extensions import TypedDict
 
 from app.config import settings
-from app.core.scheduler.job_dispatcher import enqueue_schedule_run
 from app.core.scheduler.models import ScheduleConfig
 from app.core.scheduler.runtime_status import RuntimeStatus
 from app.core.scheduler.scheduler_lock import LockHeartbeatState as SchedulerHeartbeatState
@@ -178,6 +177,8 @@ def handle_failure(
         # con conferma dell'enqueue. Se enqueue fallisce, status va a
         # FAILED nel branch except sotto (gia' presente), NON RUNNING.
         try:
+            from app.core.scheduler.job_dispatcher import enqueue_schedule_run
+
             enqueue_schedule_run(
                 schedule_id,
                 triggered_by=triggered_by,

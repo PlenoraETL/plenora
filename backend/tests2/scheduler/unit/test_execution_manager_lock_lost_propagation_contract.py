@@ -11,6 +11,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from app.core.scheduler.scheduler_execution_runtime import (
+    start_lock_heartbeat,
+    stop_lock_heartbeat,
+)
 from app.shared.execution.clock import FakeClock
 
 
@@ -28,37 +32,28 @@ class _ListHandler(logging.Handler):
         self.records.append(record)
 
 
-def _build_em_with_fake_concurrency():
-    """Helper: istanzia un ExecutionManager con concurrency mockata.
-
-    Niente schedule_service / log_service / policy: chiamiamo solo
-    _start_lock_heartbeat / _stop_lock_heartbeat, non execute().
-    """
-    from app.core.scheduler.execution_manager import ExecutionManager
-
+def _build_fake_concurrency():
+    """Helper: concurrency mockata per gli helper heartbeat canonici."""
     cm = MagicMock()
     cm.refresh_lock = MagicMock(return_value=False)
     cm.try_acquire = MagicMock(return_value="failed")
-
-    em = ExecutionManager.__new__(ExecutionManager)
-    em.concurrency = cm
-    return em, cm
+    return cm
 
 
 def test_start_lock_heartbeat_returns_dict_with_lock_lost_key():
     """Il dict ritornato espone `lock_lost` come chiave: la proprieta'
     pubblica che `execute()` consuma in `heartbeat_state.get("lock_lost", False)`.
     """
-    em, _ = _build_em_with_fake_concurrency()
-    state = em._start_lock_heartbeat("sch-1", interval=10.0, clock=FakeClock())
+    cm = _build_fake_concurrency()
+    state = start_lock_heartbeat(cm, "sch-1", interval=10.0, clock=FakeClock())
     try:
         assert "lock_lost" in state, (
-            "Il dict ritornato da _start_lock_heartbeat DEVE contenere "
+            "Il dict ritornato da start_lock_heartbeat DEVE contenere "
             "'lock_lost'. execute() lo legge via state.get('lock_lost')."
         )
         assert state["lock_lost"] is False
     finally:
-        em._stop_lock_heartbeat(state)
+        stop_lock_heartbeat(state)
 
 
 def test_start_lock_heartbeat_state_lock_lost_is_live_reference(tick):
@@ -70,9 +65,9 @@ def test_start_lock_heartbeat_state_lock_lost_is_live_reference(tick):
     Senza questa proprieta', il refactor the lock-heartbeat contract con LockHeartbeat
     non potrebbe mantenere la signature pubblica invariata e
     l'invariante "execute() include lock_lost nel result"."""
-    em, _ = _build_em_with_fake_concurrency()
+    cm = _build_fake_concurrency()
     fc = FakeClock()
-    state = em._start_lock_heartbeat("sch-1", interval=10.0, clock=fc)
+    state = start_lock_heartbeat(cm, "sch-1", interval=10.0, clock=fc)
     try:
         tick(fc, 10.0)
         # Aspetta la re-park per garantire che l'iterazione (incluso
@@ -84,7 +79,7 @@ def test_start_lock_heartbeat_state_lock_lost_is_live_reference(tick):
             "il flag mutato dopo l'avvio dell'heartbeat."
         )
     finally:
-        em._stop_lock_heartbeat(state)
+        stop_lock_heartbeat(state)
 
 
 def test_lock_heartbeat_emits_error_log_when_lock_definitively_lost(tick):
@@ -98,14 +93,14 @@ def test_lock_heartbeat_emits_error_log_when_lock_definitively_lost(tick):
     handler = _ListHandler()
     target_logger.addHandler(handler)
 
-    em, _ = _build_em_with_fake_concurrency()
+    cm = _build_fake_concurrency()
     fc = FakeClock()
-    state = em._start_lock_heartbeat("sch-test", interval=10.0, clock=fc)
+    state = start_lock_heartbeat(cm, "sch-test", interval=10.0, clock=fc)
     try:
         tick(fc, 10.0)
         fc.wait_for_pending_waiters(1)
     finally:
-        em._stop_lock_heartbeat(state)
+        stop_lock_heartbeat(state)
         target_logger.removeHandler(handler)
 
     error_records = [r for r in handler.records if r.levelno == logging.ERROR]

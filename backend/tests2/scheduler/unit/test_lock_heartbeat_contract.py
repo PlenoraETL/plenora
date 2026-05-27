@@ -192,24 +192,25 @@ def test_refresh_exception_does_not_propagate_or_set_lock_lost(
 
 
 def test_state_dict_includes_external_hb_key_when_wrapper_injects_it():
-    """Finding H (the lock-heartbeat contract): il wrapper compat `_start_lock_heartbeat` in
-    `execution_manager` aggiunge la chiave `_hb` al dict ritornato da
-    `get_state_dict()`. Poiche' il dict E' la stessa reference dello
-    `_state` interno, l'iniezione muta anche `LockHeartbeat._state`.
+    """Finding H (the lock-heartbeat contract): `start_lock_heartbeat`
+    aggiunge la chiave `_hb` al dict ritornato da `get_state_dict()`.
+    Poiche' il dict E' la stessa reference dello `_state` interno,
+    l'iniezione muta anche `LockHeartbeat._state`.
 
     Questo test blinda il behavior accoppiato (NON un bug, e' design
     documentato): se la shape pulita di `_state` cambia in futuro, il
-    wrapper compat va aggiornato di conseguenza."""
+    runtime helper va aggiornato di conseguenza."""
     from app.core.scheduler.scheduler_lock import LockHeartbeat
-    from app.core.scheduler.execution_manager import ExecutionManager
+    from app.core.scheduler.scheduler_execution_runtime import (
+        start_lock_heartbeat,
+        stop_lock_heartbeat,
+    )
 
     cm = MagicMock()
     cm.refresh_lock = MagicMock(return_value=True)
-    em = ExecutionManager.__new__(ExecutionManager)
-    em.concurrency = cm
 
     fc = FakeClock()
-    state = em._start_lock_heartbeat("sch-test", interval=10.0, clock=fc)
+    state = start_lock_heartbeat(cm, "sch-test", interval=10.0, clock=fc)
     try:
         # 1. Il dict pubblico include _hb iniettato dal wrapper
         assert "_hb" in state
@@ -227,4 +228,4 @@ def test_state_dict_includes_external_hb_key_when_wrapper_injects_it():
         )
         assert "_hb" not in clean._state
     finally:
-        em._stop_lock_heartbeat(state)
+        stop_lock_heartbeat(state)

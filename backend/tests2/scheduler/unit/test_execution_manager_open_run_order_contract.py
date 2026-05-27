@@ -95,11 +95,11 @@ def _make_executor_with_spies(monkeypatch, schedule_config):
 
     # Heartbeat: no-op per non lanciare thread.
     monkeypatch.setattr(
-        executor, "_start_lock_heartbeat",
+        em_module, "start_lock_heartbeat",
         lambda *_a, **_kw: {"lock_lost": False},
     )
     monkeypatch.setattr(
-        executor, "_stop_lock_heartbeat", lambda *_a, **_kw: None,
+        em_module, "stop_lock_heartbeat", lambda *_a, **_kw: None,
     )
 
     # release_lock_with_retry: no-op
