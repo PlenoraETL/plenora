@@ -326,8 +326,8 @@ def test_production_imports_esri_conversion_from_shared(src_file: Path) -> None:
         f"{src_file.relative_to(_BACKEND_DIR).as_posix()}: production modules "
         "must import EsriJsonConverter/EsriTypeMapper from "
         "app.shared.connections, not app.core.features.arcgis_client. "
-        f"Violations: {violations}. arcgis_client keeps these only as "
-        "KEEP_COMPAT re-exports."
+        f"Violations: {violations}. arcgis_client no longer re-exports "
+        "shared ESRI helpers."
     )
 
 
@@ -423,16 +423,11 @@ def test_arcgis_connection_info_importable_from_shared():
     assert callable(ArcGISConnectionInfo)
 
 
-def test_arcgis_connection_info_backward_compat_via_arcgis_client():
-    """arcgis_client.py must re-export ArcGISConnectionInfo so existing
-    callers (features_service, test fixtures) are unaffected."""
-    from app.core.features.arcgis_client import ArcGISConnectionInfo as FromClient
-    from app.shared.connections.arcgis_connection import ArcGISConnectionInfo as FromShared
-    assert FromClient is FromShared, (
-        "arcgis_client.ArcGISConnectionInfo must be the same object as "
-        "app.shared.connections.arcgis_connection.ArcGISConnectionInfo. "
-        "The re-export in arcgis_client.py is missing or points to a copy."
-    )
+def test_arcgis_connection_info_not_reexported_via_arcgis_client():
+    """ArcGISConnectionInfo belongs in shared connections, not the concrete client."""
+    import app.core.features.arcgis_client as arcgis_client
+
+    assert not hasattr(arcgis_client, "ArcGISConnectionInfo")
 
 
 def test_esri_conversion_canonical_imports_from_shared_connections():
@@ -444,15 +439,16 @@ def test_esri_conversion_canonical_imports_from_shared_connections():
     assert callable(EsriTypeMapper.map_field_type)
 
 
-def test_esri_conversion_backward_compat_via_arcgis_client():
-    """arcgis_client.py keeps KEEP_COMPAT re-exports for legacy importers."""
-    from app.core.features.arcgis_client import EsriJsonConverter as JsonFromClient
-    from app.core.features.arcgis_client import EsriTypeMapper as TypeFromClient
-    from app.shared.connections.esri_json import EsriJsonConverter as JsonFromShared
-    from app.shared.connections.esri_types import EsriTypeMapper as TypeFromShared
+def test_esri_conversion_not_reexported_via_arcgis_client():
+    """Provider-neutral ESRI helpers stay canonical in shared connections."""
+    import app.core.features.arcgis_client as arcgis_client
+    from app.shared.connections.esri_json import EsriJsonConverter
+    from app.shared.connections.esri_types import EsriTypeMapper
 
-    assert JsonFromClient is JsonFromShared
-    assert TypeFromClient is TypeFromShared
+    assert callable(EsriJsonConverter.features_to_rows)
+    assert callable(EsriTypeMapper.map_field_type)
+    assert not hasattr(arcgis_client, "EsriJsonConverter")
+    assert not hasattr(arcgis_client, "EsriTypeMapper")
 
 
 def test_arcgis_connection_resolver_uses_neutral_provider_factory():

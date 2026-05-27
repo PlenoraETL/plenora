@@ -37,7 +37,7 @@ def _build_conn_or_skip():
     if os.getenv(_ENV_ENABLE, "").lower() not in {"1", "true", "yes"}:
         pytest.skip("ARCGIS_TESTS_ENABLED!=1")
 
-    from app.core.features.arcgis_client import ArcGISConnectionInfo
+    from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 
     portal = os.environ[_ENV_PORTAL].rstrip("/")
     owner = os.environ[_ENV_OWNER]

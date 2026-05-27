@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from app.core.features.arcgis_client import ArcGISClient, ArcGISConnectionInfo
+from app.core.features.arcgis_client import ArcGISClient
+from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections import oauth
 
 

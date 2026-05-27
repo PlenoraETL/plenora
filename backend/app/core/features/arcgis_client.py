@@ -7,7 +7,6 @@ Keeps provider-specific behavior behind a narrow integration boundary.
 from urllib.parse import urlparse
 
 import json
-import time  # noqa: F401 (legacy monkeypatch compatibility for auth backoff)
 from typing import Dict, Iterator, Mapping, Optional, Sequence, Tuple
 
 import requests
@@ -20,18 +19,12 @@ from app.shared.connections.arcgis_provider_results import (
 )
 from app.core.features.arcgis_auth import (
     ArcGISAuthMixin,
-    DefaultHttpClient,  # noqa: F401 (public compatibility re-export)
-    HttpClientProtocol,  # noqa: F401 (public compatibility re-export)
-    _mask_secret,  # noqa: F401 (legacy private import compatibility)
+    DefaultHttpClient as _DefaultHttpClient,
+    HttpClientProtocol as _HttpClientProtocol,
 )
 from app.core.features.arcgis_service_discovery import ArcGISServiceDiscoveryMixin
-from app.core.features.arcgis_read import (
-    ArcGISReadQueryMixin,
-    _chunked_values,  # noqa: F401 (legacy private import compatibility)
-    _quote_arcgis_sql_value,  # noqa: F401 (legacy private import compatibility)
-)
+from app.core.features.arcgis_read import ArcGISReadQueryMixin
 from app.core.features.arcgis_feature_write_methods import (
-    AddLayerResult,  # noqa: F401 (public compatibility re-export)
     ArcGISFeatureWriteMethodsMixin,
 )
 from app.core.features.arcgis_json_types import (
@@ -49,26 +42,14 @@ from app.core.dataframes.geodata import (
     is_geodataframe as _is_geodataframe,
 )
 from app.core.dataframes.tabular import non_null_head_values, object_series
-from app.shared.connections.arcgis_connection import ArcGISConnectionInfo  # noqa: F401
-from app.shared.connections.esri_json import EsriJsonConverter  # noqa: F401
-from app.shared.connections.esri_types import EsriTypeMapper  # noqa: F401
+from app.shared.connections.arcgis_connection import (
+    ArcGISConnectionInfo as _ArcGISConnectionInfo,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-__all__ = [
-    "AddLayerResult",
-    "ArcGISClient",
-    "ArcGISConnectionInfo",
-    "DefaultHttpClient",
-    "EsriJsonConverter",
-    "EsriTypeMapper",
-    "HttpClientProtocol",
-    "_chunked_values",
-    "_mask_secret",
-    "_quote_arcgis_sql_value",
-    "time",
-]
+__all__ = ["ArcGISClient"]
 
 
 # CLIENT PRINCIPALE
@@ -99,8 +80,8 @@ class ArcGISClient(
     # Timeout per richieste HTTP
     DEFAULT_TIMEOUT = 30
     
-    def __init__(self, http_client: HttpClientProtocol = None) -> None:
-        self._http = http_client or DefaultHttpClient()
+    def __init__(self, http_client: _HttpClientProtocol = None) -> None:
+        self._http = http_client or _DefaultHttpClient()
         self._token_cache: Dict[str, dict] = {}  # url → {token, expires}
 
     # CONVERSIONE: DataFrame → Esri JSON
@@ -386,7 +367,7 @@ class ArcGISClient(
 
     def create_service(
         self,
-        conn: ArcGISConnectionInfo,
+        conn: _ArcGISConnectionInfo,
         service_name: str,
         layer_name: str,
         df,
@@ -682,7 +663,7 @@ class ArcGISClient(
             "errors": write_result.get("errors", []),
         }
 
-    def test_connection(self, conn: ArcGISConnectionInfo) -> ArcGISJsonObject:
+    def test_connection(self, conn: _ArcGISConnectionInfo) -> ArcGISJsonObject:
         """
         Testa la connessione ArcGIS.
         
@@ -730,7 +711,7 @@ class ArcGISClient(
 
     def _renderer_update_result(
         self,
-        conn: ArcGISConnectionInfo,
+        conn: _ArcGISConnectionInfo,
         layer_url: str,
         drawing_info: dict,
     ) -> RendererUpdateResult:
@@ -790,7 +771,7 @@ class ArcGISClient(
 
     def update_renderer(
         self,
-        conn: ArcGISConnectionInfo,
+        conn: _ArcGISConnectionInfo,
         layer_url: str,
         drawing_info: dict,
     ) -> ArcGISJsonObject:
@@ -799,7 +780,7 @@ class ArcGISClient(
 
     def _layer_renderer_update_result(
         self,
-        conn: ArcGISConnectionInfo,
+        conn: _ArcGISConnectionInfo,
         layer_url: str,
         drawing_info: Mapping[str, object],
     ) -> RendererUpdateResult:
@@ -843,7 +824,7 @@ class ArcGISClient(
 
     def update_layer_renderer(
         self,
-        conn: ArcGISConnectionInfo,
+        conn: _ArcGISConnectionInfo,
         layer_url: str,
         drawing_info: Mapping[str, object],
     ) -> ArcGISJsonObject:
@@ -859,7 +840,7 @@ class ArcGISClient(
             drawing_info,
         ).to_compat_dict()
 
-    def _portal_sharing_base_url(self, conn: ArcGISConnectionInfo) -> str:
+    def _portal_sharing_base_url(self, conn: _ArcGISConnectionInfo) -> str:
         """Return the portal sharing REST base for an ArcGIS connection."""
 
         parsed = urlparse(conn.server_url)
@@ -867,7 +848,7 @@ class ArcGISClient(
 
     def _delete_item_permanently_result(
         self,
-        conn: ArcGISConnectionInfo,
+        conn: _ArcGISConnectionInfo,
         item_id: str,
     ) -> ItemDeleteResult:
         """Delete a portal item permanently.
@@ -947,7 +928,7 @@ class ArcGISClient(
 
     def delete_item_permanently(
         self,
-        conn: ArcGISConnectionInfo,
+        conn: _ArcGISConnectionInfo,
         item_id: str,
     ) -> ArcGISJsonObject:
         """Delete a portal item permanently and return the legacy dict shape."""
@@ -955,7 +936,7 @@ class ArcGISClient(
 
     def _delete_feature_service_items_result(
         self,
-        conn: ArcGISConnectionInfo,
+        conn: _ArcGISConnectionInfo,
         items: Sequence[Mapping[str, object]],
         service_name: str = "",
     ) -> DeleteFeatureServiceItemsResult:
@@ -989,7 +970,7 @@ class ArcGISClient(
 
     def delete_feature_service_items(
         self,
-        conn: ArcGISConnectionInfo,
+        conn: _ArcGISConnectionInfo,
         items: Sequence[Mapping[str, object]],
         service_name: str = "",
     ) -> Tuple[int, int]:
@@ -1002,7 +983,7 @@ class ArcGISClient(
 
     def _resolve_hosting_admin_url(
         self,
-        conn: ArcGISConnectionInfo,
+        conn: _ArcGISConnectionInfo,
     ) -> Tuple[Optional[str], Optional[str]]:
         """Resolve hosted server admin URL from portal metadata."""
         base_url = self._portal_sharing_base_url(conn)
@@ -1050,7 +1031,7 @@ class ArcGISClient(
 
     def cleanup_zombie_feature_service(
         self,
-        conn: ArcGISConnectionInfo,
+        conn: _ArcGISConnectionInfo,
         service_name: str,
     ) -> Tuple[bool, str]:
         """Delete a hosted Feature Service whose portal item is not enumerable."""

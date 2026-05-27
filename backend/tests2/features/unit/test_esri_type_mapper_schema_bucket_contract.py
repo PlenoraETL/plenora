@@ -239,12 +239,13 @@ def test_validator_symbols_remain_module_level():
     assert callable(validator._coarse_type_from_dtype)
 
 
-def test_esri_type_mapper_public_reexport_via_arcgis_client():
-    """arcgis_client.py keeps a public re-export for existing imports."""
-    from app.core.features.arcgis_client import EsriTypeMapper as FromClient
-    from app.shared.connections.esri_types import EsriTypeMapper as FromShared
+def test_esri_type_mapper_not_reexported_via_arcgis_client():
+    """ESRI type mapping belongs in shared connections, not the concrete client."""
+    import app.core.features.arcgis_client as arcgis_client
+    from app.shared.connections.esri_types import EsriTypeMapper
 
-    assert FromClient is FromShared
+    assert callable(EsriTypeMapper.map_field_type)
+    assert not hasattr(arcgis_client, "EsriTypeMapper")
 
 
 # 6. Source-bound: il validator delega senza re-implementare il match

@@ -121,7 +121,7 @@ def arcgis_conn_info(admin_token, arcgis_connection_id):
     modo da poter chiamare direttamente FeaturesService senza passare
     dal DB Plenora (utile per i test CARICA write che esercitano il
     service layer direttamente)."""
-    from app.core.features.arcgis_client import ArcGISConnectionInfo
+    from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
     return ArcGISConnectionInfo(
         server_url=os.environ[_ENV_PORTAL].rstrip("/"),
         server_type="arcgis_online",

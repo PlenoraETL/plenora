@@ -88,7 +88,7 @@ def arcgis_conn():
     smoke include create_service che richiede privileges utente reali.
     """
     portal, owner, _folder = _resolve_env_or_skip()
-    from app.core.features.arcgis_client import ArcGISConnectionInfo
+    from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 
     username = os.getenv(_ENV_USERNAME) or owner
     password = os.getenv(_ENV_PASSWORD)

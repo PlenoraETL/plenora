@@ -12,10 +12,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.core.features.arcgis_client import (
-    ArcGISClient,
-    AddLayerResult,
-)
+from app.core.features.arcgis_client import ArcGISClient
+from app.core.features.arcgis_feature_write_methods import AddLayerResult
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]

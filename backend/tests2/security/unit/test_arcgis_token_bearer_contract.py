@@ -25,7 +25,7 @@ def _make_response(status=200, json_body=None, headers=None):
 
 def _make_conn(server="https://arcgis.example.com", user="alice", pwd="pwd"):
     """ArcGISConnectionInfo con auth_type=token."""
-    from app.core.features.arcgis_client import ArcGISConnectionInfo
+    from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
     return ArcGISConnectionInfo(
         server_url=server,
         server_type="arcgis_online",
@@ -218,7 +218,7 @@ def test_request_backoffs_and_retries_on_429(monkeypatch):
     from app.core.features.arcgis_client import ArcGISClient
 
     sleeps = []
-    monkeypatch.setattr("app.core.features.arcgis_client.time.sleep",
+    monkeypatch.setattr("app.core.features.arcgis_auth.time.sleep",
                         lambda s: sleeps.append(s))
 
     mock_http = MagicMock()
@@ -251,7 +251,7 @@ def test_request_gives_up_on_429_after_max_retries(monkeypatch):
     la response 429 al caller senza loop infinito."""
     from app.core.features.arcgis_client import ArcGISClient
 
-    monkeypatch.setattr("app.core.features.arcgis_client.time.sleep",
+    monkeypatch.setattr("app.core.features.arcgis_auth.time.sleep",
                         lambda s: None)
 
     mock_http = MagicMock()
@@ -282,7 +282,7 @@ def test_request_uses_exponential_backoff_when_retry_after_is_malformed(monkeypa
     from app.core.features.arcgis_client import ArcGISClient
 
     sleeps = []
-    monkeypatch.setattr("app.core.features.arcgis_client.time.sleep",
+    monkeypatch.setattr("app.core.features.arcgis_auth.time.sleep",
                         lambda s: sleeps.append(s))
 
     mock_http = MagicMock()

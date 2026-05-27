@@ -42,9 +42,8 @@ def _fetch_conn_or_skip():
 def _client_and_conn_info():
     """Costruisce ArcGISClient + ArcGISConnectionInfo dalla connection DB."""
     db_conn = _fetch_conn_or_skip()
-    from app.core.features.arcgis_client import (
-        ArcGISClient, ArcGISConnectionInfo,
-    )
+    from app.core.features.arcgis_client import ArcGISClient
+    from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
     conn_info = ArcGISConnectionInfo(
         server_url=db_conn.server_url,
         server_type=db_conn.server_type or "arcgis_online",
