@@ -23,7 +23,7 @@ _SCRIPT_SCAN_ROOTS = (
     _REPO_ROOT / "scripts",
 )
 
-_MAX_DIRECT_IMPORTS = 26
+_MAX_DIRECT_IMPORTS = 22
 
 _ALLOWED_DIRECT_IMPORT_PATHS = {
     "backend/app/core/dataframes/default_loader.py",
@@ -38,10 +38,6 @@ _ALLOWED_DIRECT_IMPORT_PATHS = {
     "backend/app/core/dataframes/schema.py",
     "backend/app/core/dataframes/tabular.py",
     "backend/app/core/dataframes/values.py",
-    "backend/app/core/features/arcgis_client.py",
-    "backend/app/core/manipola/transforms/analysis.py",
-    "backend/app/core/manipola/transforms/strings.py",
-    "backend/app/core/output_contract/service.py",
 }
 
 _PANDAS_SPECIFIC_RESOURCE_HELPERS = {

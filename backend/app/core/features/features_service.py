@@ -28,7 +28,7 @@ from app.core.features.models import (
 from app.core.connections.arcgis_provider_factory import create_arcgis_provider
 from app.core.features.arcgis_feature_operations import ArcGISFeatureOperations
 from app.core.features.arcgis_feature_writer import ArcGISFeatureWriteService
-from app.core.features.arcgis_writer_boundary import (
+from app.core.connections.arcgis_writer_boundary import (
     ArcGISColumnMappingsInput,
     ArcGISFeatureWritePublicResult,
 )

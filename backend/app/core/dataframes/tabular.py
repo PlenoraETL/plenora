@@ -889,6 +889,30 @@ def dataframe_from_mapping(
     return pd.DataFrame(data, index=index, columns=columns)
 
 
+def apply_string_ops_to_string_subset(series: Any, operations: str) -> Any:
+    """Apply vectorized string operations only to actual string values."""
+    is_str_mask = series.map(lambda value: isinstance(value, str))
+    if not is_str_mask.any():
+        return series.copy()
+
+    str_subset = series[is_str_mask].astype("string")
+
+    if operations in ("trim", "full"):
+        str_subset = str_subset.str.strip()
+    if operations == "lower" or operations == "full":
+        str_subset = str_subset.str.lower()
+    elif operations == "upper":
+        str_subset = str_subset.str.upper()
+    elif operations == "title":
+        str_subset = str_subset.str.title()
+    if operations in ("strip_double_spaces", "full"):
+        str_subset = str_subset.str.replace(r"\s+", " ", regex=True)
+
+    out = series.copy()
+    out.loc[is_str_mask] = str_subset.astype(object)
+    return out
+
+
 def is_dataframe(value: Any) -> bool:
     """Return True when value is a DataFrame from the current engine."""
     return isinstance(value, pd.DataFrame)
@@ -1209,6 +1233,7 @@ __all__ = [
     "append_record_rows",
     "_compact_whole_number_floats",
     "_read_csv_safe",
+    "apply_string_ops_to_string_subset",
     "concat_dataframes",
     "concat_non_null_as_strings",
     "cut_numeric_series",

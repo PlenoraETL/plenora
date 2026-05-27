@@ -49,6 +49,9 @@ Current ArcGIS shape:
   `app.core.connections`, not `app.core.features`.
 - Generic ArcGIS SQL and existing-service publish-mode helpers live under
   `app/core/connections`; legacy `features` modules are compatibility-only.
+- ArcGIS write mapping and writer protocols live under `app/core/connections`;
+  legacy `app/core/features/arcgis_write_mapping.py` and
+  `app/core/features/arcgis_writer_boundary.py` are compatibility re-exports.
 
 Rules:
 
@@ -202,6 +205,11 @@ Rules:
   dataframe constructors, dtype probes, scalar missing values, concat/merge,
   JSON normalization, binning, or GeoDataFrame construction/overlay/clip/join;
   use `app.core.dataframes.tabular` or `app.core.dataframes.geodata`.
+- Output-contract dtype drift checks consume
+  `app.core.dataframes.schema.dtype_compatible_with_logical`; output contracts
+  must not import pandas/geopandas directly.
+- The direct pandas/geopandas vertical allowlist is empty. Any new engine
+  import outside `app.core.dataframes` is architectural drift.
 
 ---
 

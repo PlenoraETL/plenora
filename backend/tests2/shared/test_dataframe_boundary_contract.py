@@ -14,12 +14,7 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _APP_ROOT = _BACKEND_ROOT / "app"
 _DATAFRAME_BOUNDARY = _APP_ROOT / "core" / "dataframes"
 _FORBIDDEN_ENGINE_ROOTS = {"pandas", "geopandas"}
-_ALLOWED_VERTICAL_IMPORTS = {
-    "app/core/features/arcgis_client.py",
-    "app/core/manipola/transforms/analysis.py",
-    "app/core/manipola/transforms/strings.py",
-    "app/core/output_contract/service.py",
-}
+_ALLOWED_VERTICAL_IMPORTS: set[str] = set()
 
 
 def _python_files_under_app() -> list[Path]:

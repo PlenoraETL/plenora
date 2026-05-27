@@ -16,6 +16,27 @@ from app.shared.contracts.payloads import StringMap
 
 _logger = logging.getLogger(__name__)
 
+_LOGICAL_TYPE_COMPATIBLE_DTYPES: dict[str, tuple[str, ...]] = {
+    "string": ("object", "string", "category"),
+    "integer": (
+        "int8", "int16", "int32", "int64",
+        "Int8", "Int16", "Int32", "Int64",
+        "uint8", "uint16", "uint32", "uint64",
+        "UInt8", "UInt16", "UInt32", "UInt64",
+    ),
+    "number": (
+        "float16", "float32", "float64",
+        "Float32", "Float64",
+        "int8", "int16", "int32", "int64",
+        "Int8", "Int16", "Int32", "Int64",
+        "uint8", "uint16", "uint32", "uint64",
+        "UInt8", "UInt16", "UInt32", "UInt64",
+    ),
+    "boolean": ("bool", "boolean", "object"),
+    "datetime": ("object",),
+    "geometry": ("object", "geometry"),
+}
+
 
 try:
     from app.core.projects.canvas_models import ColumnInfo as _AppColumnInfo
@@ -217,11 +238,30 @@ def series_to_canvas_type(series: Any) -> str:
     return _pandas_series_to_canvas_type(series)
 
 
+def dtype_compatible_with_logical(dtype: Any, logical: str) -> bool:
+    """Return True when a frame-engine dtype satisfies a contract logical type."""
+    if logical == "datetime":
+        try:
+            if pd.api.types.is_datetime64_any_dtype(dtype):
+                return True
+        except (TypeError, ValueError):
+            pass
+    if logical == "geometry":
+        dtype_name = getattr(dtype, "name", str(dtype))
+        if dtype_name == "geometry":
+            return True
+    compatible = _LOGICAL_TYPE_COMPATIBLE_DTYPES.get(logical)
+    if not compatible:
+        return True
+    return str(dtype) in compatible
+
+
 __all__ = [
     "ColumnInfo",
     "ColumnInfoBuilder",
     "TypeInferrer",
     "canvas_type_to_pandas_dtype",
+    "dtype_compatible_with_logical",
     "empty_dataframe_from_column_metadata",
     "series_to_canvas_type",
 ]

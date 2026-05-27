@@ -8,11 +8,19 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from app.core.features.arcgis_write_mapping import ArcGISWriteMappingContract
+from app.core.connections.arcgis_write_mapping import ArcGISWriteMappingContract
 from app.core.features.features_service import FeaturesService
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.features, pytest.mark.contract]
+
+
+def test_legacy_features_mapping_path_reexports_neutral_contract() -> None:
+    from app.core.features.arcgis_write_mapping import (
+        ArcGISWriteMappingContract as LegacyContract,
+    )
+
+    assert LegacyContract is ArcGISWriteMappingContract
 
 
 def test_write_mapping_contract_renames_only_at_boundary_and_keeps_geometry() -> None:

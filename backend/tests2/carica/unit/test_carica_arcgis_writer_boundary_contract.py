@@ -17,7 +17,7 @@ from app.core.carica.arcgis_write_boundary import (
     execute_carica_arcgis_write,
 )
 from app.core.carica.rest_write_boundary import RestBatchSummary
-from app.core.features.arcgis_writer_boundary import ArcGISFeatureWriter
+from app.core.connections.arcgis_writer_boundary import ArcGISFeatureWriter
 from workers.tasks.carica_task import _execute_arcgis_write
 
 

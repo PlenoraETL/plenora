@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import List, Optional, Protocol, Tuple
 
 from app.core.dataframes.ports import FrameLike
-from app.core.features.arcgis_writer_boundary import (
+from app.core.connections.arcgis_writer_boundary import (
     ArcGISColumnMappingsInput,
     normalize_arcgis_column_mappings,
 )

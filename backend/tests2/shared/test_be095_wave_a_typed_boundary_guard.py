@@ -29,6 +29,7 @@ class BroadDictReturn(NamedTuple):
 
 _WAVE_A_TARGETS: tuple[str, ...] = (
     "workers/tasks/carica_task.py",
+    "app/core/connections/arcgis_writer_boundary.py",
     "app/core/features/arcgis_feature_operations.py",
     "app/core/features/arcgis_writer_boundary.py",
     "app/core/features/features_service.py",

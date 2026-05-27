@@ -181,7 +181,7 @@ def test_carica_arcgis_path_uses_provider_writer_boundary() -> None:
     boundary_imported_names = set(imported_names_in_file(CARICA_ARCGIS_BOUNDARY))
 
     assert any(
-        module == "app.core.features.arcgis_writer_boundary"
+        module == "app.core.connections.arcgis_writer_boundary"
         and name == "ArcGISFeatureWriter"
         for module, name, _line in boundary_imported_names
     )

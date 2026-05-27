@@ -11,7 +11,10 @@ from typing import Any, List
 
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
-from app.core.dataframes.tabular import dataframe_first_column
+from app.core.dataframes.tabular import (
+    apply_string_ops_to_string_subset,
+    dataframe_first_column,
+)
 from app.core.dataframes.values import is_null_scalar
 from app.utils.logger import get_logger
 
@@ -279,47 +282,6 @@ def op_text_normalize(
     # vuota.
     needs_strip_accents = operations in ("strip_accents", "full")
 
-    def _apply_vectorial_str_subset(s):
-        """Applica le ops `.str.*` solo ai valori string del Series,
-        copiando inalterati i non-string. Preserva la semantica del
-        legacy `normalize_text` su pandas Series con tipi misti."""
-        import pandas as _pd
-
-        # Mask delle posizioni che sono effettivamente stringhe (no None,
-        # no NaN, no int/float/bool/date/altre cose). Su una Series
-        # numerica pura -> mask vuota -> output identico all'input.
-        is_str_mask = s.map(lambda v: isinstance(v, str))
-        if not is_str_mask.any():
-            # Niente da fare: tutti non-string. Ritorna il Series invariato
-            # (copia per safety, evita aliasing con result[col]).
-            return s.copy()
-
-        str_subset = s[is_str_mask].astype("string")
-
-        if operations in ("trim", "full"):
-            str_subset = str_subset.str.strip()
-        if operations == "lower" or operations == "full":
-            str_subset = str_subset.str.lower()
-        elif operations == "upper":
-            str_subset = str_subset.str.upper()
-        elif operations == "title":
-            str_subset = str_subset.str.title()
-        if operations in ("strip_double_spaces", "full"):
-            str_subset = str_subset.str.replace(r"\s+", " ", regex=True)
-
-        # Riassembla: copia del Series originale + assign delle posizioni
-        # string trasformate. I non-string restano invariati.
-        out = s.copy()
-        # P1 (2026-05-26): conversione vettoriale invece di listcomp.
-        # Pre-fix il list comprehension `[v if isna(v) else str(v) for
-        # v in str_subset]` materializzava una list Python intera in
-        # memoria (peak O(n) extra). `astype(object)` su pandas string
-        # extension produce Python str nativi per i non-NA e pd.NA per
-        # i missing — semantica equivalente al listcomp senza il
-        # buffer Python intermedio.
-        out.loc[is_str_mask] = str_subset.astype(object)
-        return out
-
     try:
         for col in valid_columns:
             out_col = col if overwrite else f"{col}_norm"
@@ -333,7 +295,7 @@ def op_text_normalize(
                 # Vettoriale `.str.*` pandas su SOLO i valori string:
                 # ~10x piu' veloce + peak ridotto sulle ops vettoriali;
                 # preserva non-string come il legacy `normalize_text`.
-                result[out_col] = _apply_vectorial_str_subset(source)
+                result[out_col] = apply_string_ops_to_string_subset(source, operations)
 
         logger.info(f"Text Normalize ({operations}): {len(valid_columns)} colonne")
         return result

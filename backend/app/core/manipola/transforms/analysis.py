@@ -13,6 +13,7 @@ from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     concat_dataframes,
     cut_numeric_series,
+    dataframe_from_mapping,
     group_named_aggregate_merge,
     iter_grouped_dataframes,
     normalize_json_records,
@@ -304,8 +305,7 @@ def op_flatten_json(
                 )
                 return df
 
-            import pandas as _pd
-            flat = _pd.DataFrame(extracted_cols, index=result.index)
+            flat = dataframe_from_mapping(extracted_cols, index=result.index)
         else:
             # Path full: normalize_json_records scopre tutte le chiavi.
             flat = normalize_json_records(parsed_col.tolist(), max_level=max_level)

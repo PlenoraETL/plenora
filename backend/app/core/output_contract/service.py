@@ -5,8 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, Optional
 
-import pandas as pd
-
+from app.core.dataframes.schema import dtype_compatible_with_logical
 from app.core.dataframes.tabular import make_unique_column_names
 from app.utils.logger import get_logger
 
@@ -230,30 +229,8 @@ def node_columns_from_contract(
     return out
 
 
-_LOGICAL_TYPE_COMPATIBLE_DTYPES: dict[str, tuple] = {
-    "string": ("object", "string", "category"),
-    "integer": (
-        "int8", "int16", "int32", "int64",
-        "Int8", "Int16", "Int32", "Int64",
-        "uint8", "uint16", "uint32", "uint64",
-        "UInt8", "UInt16", "UInt32", "UInt64",
-    ),
-    "number": (
-        "float16", "float32", "float64",
-        "Float32", "Float64",
-        "int8", "int16", "int32", "int64",
-        "Int8", "Int16", "Int32", "Int64",
-        "uint8", "uint16", "uint32", "uint64",
-        "UInt8", "UInt16", "UInt32", "UInt64",
-    ),
-    "boolean": ("bool", "boolean", "object"),
-    "datetime": ("object",),
-    "geometry": ("object", "geometry"),
-}
-
-
 def _dtype_compatible_with_logical(dtype: Any, logical: str) -> bool:
-    """Return True when the pandas dtype satisfies the contract logical type.
+    """Return True when the frame-engine dtype satisfies the contract logical type.
 
     `string`, `boolean`, `geometry` accettano `object` perche' pandas
     rappresenta queste tipologie via dtype generico. `datetime` accetta
@@ -267,23 +244,7 @@ def _dtype_compatible_with_logical(dtype: Any, logical: str) -> bool:
     su NaN puo' degradare Int64→float64 con perdita di precisione su
     valori > 2^53.
     """
-    if logical == "datetime":
-        try:
-            if pd.api.types.is_datetime64_any_dtype(dtype):
-                return True
-        except (TypeError, ValueError):
-            pass
-    if logical == "geometry":
-        # GeoPandas geometry dtype non sempre disponibile come tipo
-        # comparabile via stringa; fallback al name attribute.
-        dtype_name = getattr(dtype, "name", str(dtype))
-        if dtype_name == "geometry":
-            return True
-    compatible = _LOGICAL_TYPE_COMPATIBLE_DTYPES.get(logical)
-    if not compatible:
-        # Logical sconosciuto → compatibilita' permissiva (no warning).
-        return True
-    return str(dtype) in compatible
+    return dtype_compatible_with_logical(dtype, logical)
 
 
 def ensure_dataframe_matches_contract(
@@ -291,7 +252,7 @@ def ensure_dataframe_matches_contract(
     dataframe_columns: Any,
     node_columns: list[dict[str, Any]],
     source_project_id: str,
-    dataframe: Optional[pd.DataFrame] = None,
+    dataframe: Optional[Any] = None,
 ) -> None:
     """Fail when the materialized project data does not match its contract.
 

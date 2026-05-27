@@ -48,7 +48,7 @@ from app.core.dataframes.geodata import (
     geodataframe_total_bounds,
     is_geodataframe as _is_geodataframe,
 )
-from app.core.dataframes.tabular import non_null_head_values
+from app.core.dataframes.tabular import non_null_head_values, object_series
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo  # noqa: F401
 from app.shared.connections.esri_json import EsriJsonConverter  # noqa: F401
 from app.shared.connections.esri_types import EsriTypeMapper  # noqa: F401
@@ -546,12 +546,11 @@ class ArcGISClient(
                     }
                     logger.debug(f"Extent calcolato dai dati: {extent}")
             elif geometry_column in df.columns:
-                import pandas as pd
                 from app.core.dataframes.geometry_parsing import parse_geometry_series
                 geom_values = non_null_head_values(df[geometry_column], 1000)
                 if geom_values:
                     geoms = [
-                        geom for geom in parse_geometry_series(pd.Series(geom_values)).dropna()
+                        geom for geom in parse_geometry_series(object_series(geom_values)).dropna()
                         if geom is not None and not geom.is_empty
                     ]
                     if geoms:
