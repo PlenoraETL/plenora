@@ -107,14 +107,11 @@ class TestQueryExecutorEndToEnd:
             logger=mock_logger,
         )
 
-        # Post-refactor in-memory: xlsx passa da save_result_blob_from_bytes
-        # (lazy import dentro la funzione). Per formati fs-only (gpkg, shp)
-        # resta path-based save_result_blob. Qui usiamo xlsx → patchiamo
-        # save_result_blob_from_bytes al posto del save_result_blob legacy.
+        # Post RAM-A1: anche xlsx passa dal boundary streaming result blob.
         with patch.object(
             executor, "execute_raw", return_value=(fake_rows, fake_columns)
         ), patch(
-            "app.core.results.pipeline_result.save_result_blob_from_bytes",
+            "app.core.results.streaming_blob_writer.save_dataframe_to_result_blob_streaming",
             return_value="res-generated-id",
         ) as mock_save_blob:
             conn = MagicMock()

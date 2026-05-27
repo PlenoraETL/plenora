@@ -65,9 +65,9 @@ def test_project_repository_covers_core_project_persistence_methods(monkeypatch)
         executed.append((sql, params))
         return _Cursor()
 
-    monkeypatch.setattr(project_db, "fetchone", fake_fetchone)
-    monkeypatch.setattr(project_db, "fetchall", fake_fetchall)
-    monkeypatch.setattr(project_db, "execute", fake_execute)
+    monkeypatch.setattr(project_db, "_fetchone", fake_fetchone)
+    monkeypatch.setattr(project_db, "_fetchall", fake_fetchall)
+    monkeypatch.setattr(project_db, "_execute", fake_execute)
 
     repo = project_db.ProjectRepository()
 

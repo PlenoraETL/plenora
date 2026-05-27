@@ -35,8 +35,8 @@ class _FailingStorage:
 @pytest.fixture
 def stub_storage(monkeypatch):
     stub = _StubStorage()
-    from app.infrastructure.storage import cloud_backends
-    monkeypatch.setattr(cloud_backends, "get_runtime_object_storage", lambda: stub)
+    from app.core.io import object_storage
+    monkeypatch.setattr(object_storage, "get_runtime_object_storage", lambda: stub)
     return stub
 
 
@@ -165,11 +165,11 @@ def test_object_storage_policy_upload_failure_no_db_row(mock_db, monkeypatch):
     """policy=object_storage + upload exc -> nessuna row DB (orphan guard).
     Stesso contratto del ramo hybrid: fail loud, niente DB row orfana."""
     from app.core.files.service import FileSourceService
-    from app.infrastructure.storage import cloud_backends
+    from app.core.io import object_storage
 
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
     failing = _FailingStorage()
-    monkeypatch.setattr(cloud_backends, "get_runtime_object_storage", lambda: failing)
+    monkeypatch.setattr(object_storage, "get_runtime_object_storage", lambda: failing)
 
     svc = FileSourceService()
     payload = b"anything"

@@ -58,8 +58,8 @@ def test_api_connection_rest_file_uses_tls_policy():
 
     src = inspect.getsource(api_connection_rest_file)
 
-    # Cerca il blocco "Chiamata HTTP" del rest_file
-    idx = src.find("# ── 6. Chiamata HTTP")
+    # Cerca il blocco HTTP del rest_file
+    idx = src.find("# ── HTTP call")
     assert idx >= 0
     window = src[idx:idx + 1200]
 

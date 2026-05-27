@@ -13,7 +13,7 @@ from typing import Any, Callable, MutableMapping, Optional
 
 import requests
 
-from app.core.security.tls_policy import resolve_tls_verify
+from app.shared.security.tls_policy import resolve_tls_verify
 from app.infrastructure.http.session import get_shared_session
 from app.shared.contracts.payloads import HeadersMap, JsonObject, StringMap
 from app.utils.logger import get_logger

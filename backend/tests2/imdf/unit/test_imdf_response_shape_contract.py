@@ -76,6 +76,54 @@ def imdf_bundles_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
     fake_settings = SimpleNamespace(IMDF_BUNDLES_DIR=root, IMDF_BUNDLE_TTL_HOURS=24)
     monkeypatch.setattr(imdf_router, "settings", fake_settings)
+    meta = {
+        "project_id": "proj-shape",
+        "site_id": "SITE123",
+        "saved_at": "2026-04-15T10:00:00",
+        "building_count": 2,
+        "level_count": 3,
+        "unit_count": 5,
+        "has_gdb": True,
+        "has_ifc": True,
+    }
+    monkeypatch.setattr(
+        imdf_router._imdf_storage,
+        "get_meta_only",
+        lambda task_id: meta if task_id == "task-shape" else None,
+    )
+    monkeypatch.setattr(
+        imdf_router._imdf_storage,
+        "read_manifest",
+        lambda task_id: {"id": "SITE123", "version": "1.0"},
+    )
+    monkeypatch.setattr(
+        imdf_router._imdf_storage,
+        "read_validation",
+        lambda task_id: {"ok": True, "errors": []},
+    )
+    monkeypatch.setattr(
+        imdf_router._imdf_storage,
+        "read_renderers",
+        lambda task_id: {"layers": ["unit"]},
+    )
+    monkeypatch.setattr(
+        imdf_router._imdf_storage,
+        "list_bundle_file_entries",
+        lambda task_id: [
+            {"path": "manifest.json", "size": 1},
+            {"path": "SITE123/building.geojson", "size": 1},
+            {"path": "SITE123/level.geojson", "size": 1},
+            {"path": "SITE123/unit.geojson", "size": 1},
+        ],
+    )
+    monkeypatch.setattr(
+        imdf_router._imdf_storage,
+        "read_geojson",
+        lambda task_id, rel: {
+            "type": "FeatureCollection",
+            "features": [{"type": "Feature"}],
+        },
+    )
     return root
 
 

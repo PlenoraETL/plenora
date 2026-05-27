@@ -46,8 +46,8 @@ def test_create_connection_db_encrypts_password_and_client_secret_before_insert(
 
     monkeypatch.setattr(store, "ensure_default_group", lambda: None)
     monkeypatch.setattr(store, "generate_id", lambda name: "arcgis_test")
-    monkeypatch.setattr(store.db, "execute", _execute)
-    monkeypatch.setattr(store.db, "fetchone", _fetchone)
+    monkeypatch.setattr(store, "_execute", _execute)
+    monkeypatch.setattr(store, "_fetchone", _fetchone)
 
     conn = create_connection_db(
         build_arcgis_create(password="pwd-123", client_secret="secret-123"),

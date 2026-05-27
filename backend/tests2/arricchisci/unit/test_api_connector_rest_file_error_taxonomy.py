@@ -82,8 +82,8 @@ def test_file_source_not_found_returns_structured_error_kind(service, minimal_ap
         },
     }
 
-    # _resolve_file_source_id_path ritorna None → caso file_source_not_found
-    with patch.object(service, "_resolve_file_source_id_path", return_value=None):
+    # _resolve_file_source_id_bytes ritorna None -> caso file_source_not_found
+    with patch.object(service, "_resolve_file_source_id_bytes", return_value=None):
         result = service._execute_rest_file(
             node_data=node_data,
             api_config=minimal_api_config,
@@ -124,7 +124,7 @@ def test_file_source_forbidden_returns_structured_error_kind(service, minimal_ap
             f"Accesso negato: il file sorgente '{fs_id}' non appartiene al tuo gruppo"
         )
 
-    with patch.object(service, "_resolve_file_source_id_path", side_effect=_raise_forbidden):
+    with patch.object(service, "_resolve_file_source_id_bytes", side_effect=_raise_forbidden):
         result = service._execute_rest_file(
             node_data=node_data,
             api_config=minimal_api_config,
@@ -168,7 +168,7 @@ def test_remote_processor_http_error_returns_structured_error_kind(
     # binding del modulo `requests` intercetta TUTTI i lookup
     # (api_connector caller corrente + futuri consumer estratti in mixin
     # via MRO). Pattern simmetrico a B3-B.4a (filter_visible_columns).
-    with patch.object(service, "_resolve_file_source_id_path", return_value=str(fake_excel)), \
+    with patch.object(service, "_resolve_file_source_id_bytes", return_value=(fake_excel.read_bytes(), fake_excel.name)), \
          patch("requests.post", return_value=fake_response), \
          patch.object(service, "_parse_http_error_body", return_value="Service Unavailable"):
 
@@ -203,7 +203,7 @@ def test_remote_processor_timeout_returns_structured_error_kind(
     }
 
     # B3-B.5a current contract: vedi commento sopra.
-    with patch.object(service, "_resolve_file_source_id_path", return_value=str(fake_excel)), \
+    with patch.object(service, "_resolve_file_source_id_bytes", return_value=(fake_excel.read_bytes(), fake_excel.name)), \
          patch("requests.post", side_effect=requests.Timeout("upstream timeout")):
 
         result = service._execute_rest_file(
@@ -235,7 +235,7 @@ def test_internal_exception_returns_structured_error_kind(service, minimal_api_c
     # Forza un'eccezione inattesa nel mezzo del flusso
     with patch.object(
         service,
-        "_resolve_file_source_id_path",
+        "_resolve_file_source_id_bytes",
         side_effect=RuntimeError("qualche bug interno non previsto"),
     ):
         result = service._execute_rest_file(
@@ -267,7 +267,7 @@ def test_all_error_returns_carry_error_kind_and_user_error_fields(service, minim
         },
     }
 
-    with patch.object(service, "_resolve_file_source_id_path", return_value=None):
+    with patch.object(service, "_resolve_file_source_id_bytes", return_value=None):
         result = service._execute_rest_file(
             node_data=node_data,
             api_config=minimal_api_config,

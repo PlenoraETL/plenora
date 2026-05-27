@@ -15,14 +15,18 @@ from app.core.results.result_store import (
     ResultSaveError,
     save_pipeline_result,
     save_pipeline_result_outcome,
-    save_result_blob,
     save_result_blob_from_bytes,
 )
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
+legacy_path_result_blob = pytest.mark.skip(
+    reason="save_result_blob(path) tombstonato post QUERY-1; usare save_result_blob_from_bytes"
+)
 
+
+@legacy_path_result_blob
 def test_save_result_blob_removes_temp_file_only_after_success(monkeypatch, tmp_path):
     temp_dir = tmp_path / "temp"
     temp_dir.mkdir()
@@ -68,6 +72,7 @@ def test_save_result_blob_removes_temp_file_only_after_success(monkeypatch, tmp_
     assert not temp_dir.exists()
 
 
+@legacy_path_result_blob
 def test_save_result_blob_keeps_temp_file_when_db_save_fails(monkeypatch, tmp_path):
     temp_dir = tmp_path / "temp"
     temp_dir.mkdir()
@@ -193,23 +198,15 @@ def test_result_store_slice_has_no_row_owned_to_legacy_dict():
 
 
 def test_save_pipeline_result_outcome_is_typed_internal_boundary(monkeypatch):
-    import app.core.results.pipeline_result as pipeline_result
-
     calls: dict[str, object] = {}
 
-    monkeypatch.setattr(
-        "app.core.dataframes.frame_io.save_dataframe_to_bytes",
-        lambda df, fmt, geom_column=None, crs="EPSG:4326": b"id\n1\n",
-    )
-
-    def _save_from_bytes(**kwargs):
+    def _save_streaming(**kwargs):
         calls.update(kwargs)
         return "res-typed"
 
     monkeypatch.setattr(
-        pipeline_result,
-        "save_result_blob_from_bytes",
-        _save_from_bytes,
+        "app.core.results.streaming_blob_writer.save_dataframe_to_result_blob_streaming",
+        _save_streaming,
     )
 
     outcome = save_pipeline_result_outcome(
@@ -225,6 +222,7 @@ def test_save_pipeline_result_outcome_is_typed_internal_boundary(monkeypatch):
     assert outcome.result_id == "res-typed"
     assert outcome.output_filename == "typed-output.csv"
     assert calls["filename"] == "typed-output.csv"
+    assert calls["output_format"] == "csv"
 
 
 def test_save_pipeline_result_public_wrapper_is_explicit_legacy_dict(monkeypatch):
@@ -271,6 +269,7 @@ def _force_object_storage(monkeypatch, tmp_path):
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
 
 
+@legacy_path_result_blob
 def test_save_result_blob_aws_credentials_expired_raises_operational_message(
     monkeypatch, tmp_path
 ):
@@ -292,7 +291,7 @@ def test_save_result_blob_aws_credentials_expired_raises_operational_message(
             raise LoginRefreshRequired()
 
     monkeypatch.setattr(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
+        "app.core.io.object_storage.get_runtime_object_storage",
         lambda: _ExpiredStorage(),
     )
 
@@ -308,6 +307,7 @@ def test_save_result_blob_aws_credentials_expired_raises_operational_message(
     assert isinstance(excinfo.value.__cause__, LoginRefreshRequired)
 
 
+@legacy_path_result_blob
 def test_save_result_blob_no_credentials_error_raises_operational_message(
     monkeypatch, tmp_path
 ):
@@ -326,7 +326,7 @@ def test_save_result_blob_no_credentials_error_raises_operational_message(
             raise NoCredentialsError()
 
     monkeypatch.setattr(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
+        "app.core.io.object_storage.get_runtime_object_storage",
         lambda: _NoCredsStorage(),
     )
 
@@ -334,6 +334,7 @@ def test_save_result_blob_no_credentials_error_raises_operational_message(
         save_result_blob("proj-1", result_file, "csv", rows_count=1)
 
 
+@legacy_path_result_blob
 def test_save_result_blob_generic_storage_error_keeps_old_message(
     monkeypatch, tmp_path
 ):
@@ -353,7 +354,7 @@ def test_save_result_blob_generic_storage_error_keeps_old_message(
             raise RuntimeError("connection reset by peer")
 
     monkeypatch.setattr(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
+        "app.core.io.object_storage.get_runtime_object_storage",
         lambda: _NetworkErrorStorage(),
     )
 
@@ -413,7 +414,7 @@ def _wire_object_storage_writer(monkeypatch, *, fake_storage, saved):
     # policy=object_storage: dispatcher forza sempre object storage
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
     monkeypatch.setattr(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
+        "app.core.io.object_storage.get_runtime_object_storage",
         lambda: fake_storage,
     )
 
@@ -423,6 +424,7 @@ def _wire_object_storage_writer(monkeypatch, *, fake_storage, saved):
 # BYTEA per i nuovi result quando la policy chiede object storage.
 
 
+@legacy_path_result_blob
 def test_save_result_blob_object_storage_small_file_goes_to_runtime(
     monkeypatch, tmp_path
 ):
@@ -484,6 +486,7 @@ def test_save_result_blob_from_bytes_object_storage_small_payload_goes_to_runtim
     assert saved["size_bytes"] == len(payload)
 
 
+@legacy_path_result_blob
 def test_save_result_blob_object_storage_capability_off_raises(
     monkeypatch, tmp_path
 ):
@@ -507,7 +510,7 @@ def test_save_result_blob_object_storage_capability_off_raises(
         )
 
     monkeypatch.setattr(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
+        "app.core.io.object_storage.get_runtime_object_storage",
         _disabled_factory,
     )
 

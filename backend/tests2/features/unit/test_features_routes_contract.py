@@ -4,10 +4,10 @@ Tests the features routes behavior.
 Locks backend contracts and regression boundaries for the current architecture.
 """
 
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pandas as pd
 import pytest
 
 from app.core.features.routes import _mask_secrets
@@ -17,15 +17,8 @@ from tests2.helpers.builders import build_arcgis_connection
 pytestmark = [pytest.mark.unit, pytest.mark.features, pytest.mark.contract, pytest.mark.regression]
 
 
-def _fake_materialized(path_str: str) -> MagicMock:
-    """Mock MaterializedArtifact context-manager per i test di contratto.
-    Il `with _resolve_input_path(...) as materialized:` deve ricevere
-    qualcosa con `.path` e supporto __enter__/__exit__."""
-    fake = MagicMock()
-    fake.path = Path(path_str)
-    fake.__enter__.return_value = fake
-    fake.__exit__.return_value = None
-    return fake
+def _fake_df() -> pd.DataFrame:
+    return pd.DataFrame({"id": [1]})
 
 
 def test_mask_secrets_hides_password_and_client_secret(fixed_now):
@@ -43,11 +36,12 @@ def test_write_features_checks_project_visibility_before_loading_project_output(
     write_features_mock = MagicMock(return_value={
         "success": True, "message": "Aggiunte 0 features", "count": 0, "errors": [],
     })
-    service = SimpleNamespace(write_features=write_features_mock)
+    service = SimpleNamespace(write_features_from_df=write_features_mock)
+    df = _fake_df()
 
     with patch("app.core.features.routes._check_arcgis_access"), \
          patch("app.core.features.routes.get_service", return_value=service), \
-         patch("app.core.features.routes._resolve_input_path", return_value=_fake_materialized("/tmp/result.parquet")), \
+         patch("app.core.features.routes._resolve_input_dataframe", return_value=(df, "parquet")), \
          patch("app.core.features.routes.assert_project_visible") as assert_project_visible:
         response = client.post(
             "/api/features/write",
@@ -59,19 +53,12 @@ def test_write_features_checks_project_visibility_before_loading_project_output(
         )
 
     assert response.status_code == 200
-    assert Path(write_features_mock.call_args.kwargs["input_path"]) == Path("/tmp/result.parquet")
+    assert write_features_mock.call_args.kwargs["df"] is df
     assert_project_visible.assert_called_once_with("proj-1", current_user)
 
 
 def test_write_features_skips_project_visibility_for_explicit_input_path(client):
-    write_features_mock = MagicMock(return_value={
-        "success": True, "message": "Aggiunte 0 features", "count": 0, "errors": [],
-    })
-    service = SimpleNamespace(write_features=write_features_mock)
-
     with patch("app.core.features.routes._check_arcgis_access"), \
-         patch("app.core.features.routes.get_service", return_value=service), \
-         patch("app.core.features.routes._resolve_input_path", return_value=_fake_materialized("/tmp/result.parquet")), \
          patch("app.core.features.routes.assert_project_visible") as assert_project_visible:
         response = client.post(
             "/api/features/write",
@@ -82,12 +69,9 @@ def test_write_features_skips_project_visibility_for_explicit_input_path(client)
             },
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 400
     assert_project_visible.assert_not_called()
-    write_features_mock.assert_called_once()
-    assert write_features_mock.call_args.kwargs["operation"] == "add"
-    assert write_features_mock.call_args.kwargs["match_column"] == ""
-    assert write_features_mock.call_args.kwargs["batch_size"] is None
+    assert "input_path locale disabilitato" in response.json()["detail"]
 
 
 def test_write_features_accepts_arcgis_writer_knobs(client):
@@ -97,11 +81,13 @@ def test_write_features_accepts_arcgis_writer_knobs(client):
         "count": 2,
         "errors": [],
     })
-    service = SimpleNamespace(write_features=write_features_mock)
+    service = SimpleNamespace(write_features_from_df=write_features_mock)
+    df = _fake_df()
 
     with patch("app.core.features.routes._check_arcgis_access"), \
          patch("app.core.features.routes.get_service", return_value=service), \
-         patch("app.core.features.routes._resolve_input_path", return_value=_fake_materialized("/tmp/result.parquet")):
+         patch("app.core.features.routes._resolve_input_dataframe", return_value=(df, "parquet")), \
+         patch("app.core.features.routes.assert_project_visible"):
         response = client.post(
             "/api/features/write",
             json={
@@ -109,7 +95,7 @@ def test_write_features_accepts_arcgis_writer_knobs(client):
                 "layer_url": "https://example.test/FeatureServer/0",
                 "operation": "add",
                 "upsert": True,
-                "input_path": "/tmp/result.parquet",
+                "project_id": "proj-1",
                 "match_column": "external_id",
                 "batch_size": 250,
                 "column_mappings": [
@@ -120,6 +106,7 @@ def test_write_features_accepts_arcgis_writer_knobs(client):
 
     assert response.status_code == 200
     write_features_mock.assert_called_once()
+    assert write_features_mock.call_args.kwargs["df"] is df
     assert write_features_mock.call_args.kwargs["operation"] == "upsert"
     assert write_features_mock.call_args.kwargs["match_column"] == "external_id"
     assert write_features_mock.call_args.kwargs["batch_size"] == 250
@@ -134,11 +121,12 @@ def test_create_service_checks_project_visibility_before_loading_project_output(
         "layer_url": "https://example.test/svc/0", "item_id": "item-1",
         "feature_count": 0, "errors": [],
     })
-    service = SimpleNamespace(create_service=create_service_mock)
+    service = SimpleNamespace(create_service_from_df=create_service_mock)
+    df = _fake_df()
 
     with patch("app.core.features.routes._check_arcgis_access"), \
          patch("app.core.features.routes.get_service", return_value=service), \
-         patch("app.core.features.routes._resolve_input_path", return_value=_fake_materialized("/tmp/result.parquet")), \
+         patch("app.core.features.routes._resolve_input_dataframe", return_value=(df, "parquet")), \
          patch("app.core.features.routes.assert_project_visible") as assert_project_visible:
         response = client.post(
             "/api/features/create-service",
@@ -150,5 +138,5 @@ def test_create_service_checks_project_visibility_before_loading_project_output(
         )
 
     assert response.status_code == 200
-    assert Path(create_service_mock.call_args.kwargs["input_path"]) == Path("/tmp/result.parquet")
+    assert create_service_mock.call_args.kwargs["df"] is df
     assert_project_visible.assert_called_once_with("proj-1", current_user)

@@ -33,9 +33,9 @@ def _lock_row(*, acquired_at: datetime | None = None, expires_at: datetime | Non
 
 
 def test_admin_backup_service_does_not_spawn_local_processes():
-    source = Path("backend/app/core/admin_backups/service.py").read_text(
-        encoding="utf-8"
-    )
+    from app.core.admin_backups import service
+
+    source = Path(service.__file__).read_text(encoding="utf-8")
 
     assert "subprocess.Popen" not in source
     assert "BACKUP_SCRIPT" not in source

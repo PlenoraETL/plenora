@@ -465,7 +465,7 @@ class QueryExecutor:
             if _streamable:
                 # result_id + saved_path gia' valorizzati dentro il
                 # branch streaming sopra (persist_streaming_query_to_storage).
-                pass
+                persisted = None
             else:
                 persisted = self._result_persistence.persist_dataframe_result(
                     project_id=project_id,

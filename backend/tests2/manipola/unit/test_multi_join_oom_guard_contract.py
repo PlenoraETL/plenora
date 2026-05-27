@@ -198,23 +198,23 @@ def test_executor_source_has_estimate_before_merge():
     assert '"multi_join_output"' in src
 
 
-def test_main_py_recognizes_manipola_multi_join_stage():
-    main_py = (
+def test_app_factory_recognizes_manipola_multi_join_stage():
+    app_factory_py = (
         Path(__file__).resolve().parent.parent.parent.parent
-        / "app" / "main.py"
+        / "app" / "app_factory.py"
     )
-    src = main_py.read_text(encoding="utf-8")
+    src = app_factory_py.read_text(encoding="utf-8")
     assert "_ROW_COUNT_STAGES" in src
     assert '"manipola_multi_join"' in src
     assert '"manipola_cross_join"' in src
 
 
-def test_main_py_multi_join_message_has_specific_hint():
-    main_py = (
+def test_app_factory_multi_join_message_has_specific_hint():
+    app_factory_py = (
         Path(__file__).resolve().parent.parent.parent.parent
-        / "app" / "main.py"
+        / "app" / "app_factory.py"
     )
-    src = main_py.read_text(encoding="utf-8")
+    src = app_factory_py.read_text(encoding="utf-8")
     assert '"genererebbe"' in src
     assert "chiavi non-unique" in src
     assert 'exc.stage == "manipola_multi_join"' in src

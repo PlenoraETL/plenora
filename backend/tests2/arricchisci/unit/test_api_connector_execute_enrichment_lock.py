@@ -124,13 +124,9 @@ def env(api_service):
             # Per scenari path-based (gpkg/shp) un eventuale futuro test deve
             # patchare il canonical `app.core.results.blob_writer.save_result_blob`,
             # NON l'alias re-import ormai rimosso da api_connector.
-            save_blob_bytes=_p(
-                "app.core.results.pipeline_result.save_result_blob_from_bytes",
+            streaming_save=_p(
+                "app.core.results.streaming_blob_writer.save_dataframe_to_result_blob_streaming",
                 return_value="res-stubbed-id",
-            ),
-            save_df_bytes=_p(
-                "app.core.dataframes.frame_io.save_dataframe_to_bytes",
-                return_value=b"stub-bytes",
             ),
             project_access_ctx=_p(
                 "app.core.arricchisci.execution_context.load_project_access_context",
@@ -451,11 +447,7 @@ class TestExecuteEnrichmentFinalResult:
         # il file temp non esiste piu' dopo `save_result_blob*`.
         assert "result_id" in result
         assert "output_filename" in result
-        # Post-refactor in-memory: per csv (default) passa da
-        # save_result_blob_from_bytes. B3-B.9 cleanup: il path-based
-        # `save_result_blob` non e' piu' patchato via alias api_connector
-        # (dead post-extraction); il default csv usa solo save_blob_bytes.
-        assert env.save_blob_bytes.call_count == 1
+        assert env.streaming_save.call_count == 1
 
     def test_dataframe_result_does_NOT_emit_stale_output_path(self, env):
         """Regression guard: i campi legacy `output_path`/`output_file`
@@ -482,11 +474,7 @@ class TestExecuteEnrichmentFinalResult:
             ),
         )
 
-        # Post-refactor in-memory: geojson passa da save_dataframe_to_bytes
-        # (non save_dataframe). Il format e' il secondo argomento
-        # positional: save_dataframe_to_bytes(df, format, ...).
-        args, kwargs = env.save_df_bytes.call_args
-        assert args[1] == "geojson"
+        assert env.streaming_save.call_args.kwargs["output_format"] == "geojson"
 
 
     def test_no_result_node_falls_back_to_last_node_result(self, env):
@@ -592,7 +580,7 @@ class TestExecuteEnrichmentResponseIncludesResultId:
         # Post-refactor in-memory: csv/xlsx/... passano da save_result_blob_from_bytes
         # B3-B.9 cleanup: rimosso `env.save_blob.return_value = ...` (binding
         # api_connector alias dead post-extraction).
-        env.save_blob_bytes.return_value = "res-df-42"
+        env.streaming_save.return_value = "res-df-42"
 
         result = env.svc.execute_enrichment(
             "proj-1",
@@ -612,7 +600,7 @@ class TestExecuteEnrichmentResponseIncludesResultId:
 
         # B3-B.9 cleanup: rimosso `env.save_blob.return_value = ...` (alias
         # api_connector dead post-extraction).
-        env.save_blob_bytes.return_value = "res-abc"
+        env.streaming_save.return_value = "res-abc"
 
         result = env.svc.execute_enrichment(
             "proj-1",

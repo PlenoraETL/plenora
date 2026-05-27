@@ -196,7 +196,7 @@ def analyze_file_upload(
 
     return AnalyzeFileUploadResult(
         file_id=file_id,
-        file_path=file_path,
+        file_path="",
         filename=filename,
         detected_columns=detected,
         row_count=int(len(df)),

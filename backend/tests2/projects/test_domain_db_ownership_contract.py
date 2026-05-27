@@ -36,6 +36,7 @@ def test_projects_domain_db_owns_sql_and_exports_project_contract() -> None:
         "list_project_ids_for_group",
         "list_project_dependency_rows_using_connection",
         "list_project_canvas_check_rows",
+        "update_project_output_contract_row",
         "update_project_canvas_key_atomic",
     }
 
@@ -59,7 +60,7 @@ def test_projects_router_uses_project_owned_usage_boundary() -> None:
     router_src = inspect.getsource(projects_router)
     helper_src = inspect.getsource(projects_router._visible_project_ids_strict)
 
-    assert "from app.core.projects.usage import list_owned_project_ids" in router_src
+    assert "from app.core.projects.usage import" in router_src
     assert "app.core.projects.db" not in router_src
     assert "list_owned_project_ids(" in helper_src
     legacy_import = "from app.db.config." + "projects import list_owned_project_ids"

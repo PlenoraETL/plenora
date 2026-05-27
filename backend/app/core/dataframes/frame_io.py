@@ -239,7 +239,7 @@ def _normalize_format_hint(format_hint: Optional[str]) -> Optional[str]:
 
 
 def _coerce_json_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Coerce object-dtype columns to numeric when 100% convertibili.
+    """Coerce string/object columns to numeric when 100% convertibili.
 
     Contract: NON muta il DataFrame di input. Pre-fix `df[col] = converted`
     scriveva sull'oggetto del caller (allineato al pattern P0
@@ -251,17 +251,22 @@ def _coerce_json_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
     out = df
     cols_to_convert = []
     for col in df.columns:
-        if df[col].dtype != "object":
+        series = df[col]
+        is_object = pd.api.types.is_object_dtype(series)
+        is_string = pd.api.types.is_string_dtype(series)
+        if not is_object and not is_string:
             continue
-        sample = df[col].dropna().head(100).astype(str)
+        sample = series.dropna().head(100).astype(str)
         has_underscore = sample.str.contains("_", na=False).any()
         if has_underscore:
             continue
-        converted = pd.to_numeric(df[col], errors="coerce")
-        original_count = df[col].notna().sum()
+        converted = pd.to_numeric(series, errors="coerce")
+        original_count = series.notna().sum()
         converted_count = converted.notna().sum()
         if original_count > 0 and converted_count == original_count:
             cols_to_convert.append((col, converted))
+        elif is_string:
+            cols_to_convert.append((col, series.astype(object)))
 
     if cols_to_convert:
         # Lazy copy: solo se ci sono modifiche reali, evita allocazione

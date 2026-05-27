@@ -13,6 +13,10 @@ import pytest
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
+legacy_path_result_blob = pytest.mark.skip(
+    reason="save_result_blob(path) tombstonato post QUERY-1; usare save_result_blob_from_bytes"
+)
+
 
 class _StubStorage:
     """Stub ObjectStorage per test senza AWS."""
@@ -45,8 +49,8 @@ class _StubStorage:
 @pytest.fixture
 def stub_storage(monkeypatch):
     stub = _StubStorage()
-    from app.infrastructure.storage import cloud_backends
-    monkeypatch.setattr(cloud_backends, "get_runtime_object_storage", lambda: stub)
+    from app.core.io import object_storage
+    monkeypatch.setattr(object_storage, "get_runtime_object_storage", lambda: stub)
     return stub
 
 
@@ -352,6 +356,7 @@ def test_delete_result_db_backed_does_not_touch_s3(monkeypatch):
 # 5. save_result_blob (path-based) — stesso dispatch post FS-4b
 
 
+@legacy_path_result_blob
 def test_save_result_blob_path_small_goes_to_db_blob(mock_db, stub_storage, monkeypatch, tmp_path):
     """Path-based: file < threshold -> DB BYTEA, NO storage.upload."""
     from app.core.results.blob_writer import save_result_blob
@@ -381,6 +386,7 @@ def test_save_result_blob_path_small_goes_to_db_blob(mock_db, stub_storage, monk
     assert not f.exists()
 
 
+@legacy_path_result_blob
 def test_save_result_blob_path_large_goes_to_s3(mock_db, stub_storage, monkeypatch, tmp_path):
     """Path-based: file >= threshold -> S3 via storage.upload(path) (streaming)."""
     from app.core.results.blob_writer import save_result_blob
@@ -414,6 +420,7 @@ def test_save_result_blob_path_large_goes_to_s3(mock_db, stub_storage, monkeypat
     assert mock_db[0]["size_bytes"] == 500
 
 
+@legacy_path_result_blob
 def test_save_result_blob_path_s3_upload_failure_no_db_row(mock_db, stub_storage, monkeypatch, tmp_path):
     """Path-based: se S3 upload solleva, no row DB orfana; file temp resta."""
     from app.core.results.blob_writer import save_result_blob, ResultSaveError

@@ -14,12 +14,15 @@ import pytest
 
 from app.core.results.blob_writer import (
     ResultSaveError,
-    save_result_blob,
     save_result_blob_from_bytes,
 )
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
+
+legacy_path_result_blob = pytest.mark.skip(
+    reason="save_result_blob(path) tombstonato post QUERY-1; usare save_result_blob_from_bytes"
+)
 
 
 # Stubs
@@ -59,9 +62,9 @@ def stub_storage_factory(monkeypatch):
 
     def _make(*, delete_should_fail: bool = False) -> _StubStorage:
         stub = _StubStorage(delete_should_fail=delete_should_fail)
-        from app.infrastructure.storage import cloud_backends
+        from app.core.io import object_storage
         monkeypatch.setattr(
-            cloud_backends, "get_runtime_object_storage", lambda: stub
+            object_storage, "get_runtime_object_storage", lambda: stub
         )
         return stub
 
@@ -155,6 +158,7 @@ def _write_temp_file(tmp_path: Path, name: str, payload: bytes) -> Path:
 # (a) upload OK + DB save OK -> nessun delete
 
 
+@legacy_path_result_blob
 @pytest.mark.usefixtures("mock_db_save_ok")
 def test_object_storage_save_ok_does_not_delete(
     stub_storage_factory, monkeypatch, tmp_path
@@ -170,6 +174,7 @@ def test_object_storage_save_ok_does_not_delete(
     assert storage.deletes == []  # no compensating delete on happy path
 
 
+@legacy_path_result_blob
 @pytest.mark.usefixtures("mock_db_save_ok")
 def test_object_storage_save_ok_closes_result_upload_intent(
     stub_storage_factory, monkeypatch, tmp_path
@@ -254,6 +259,7 @@ def test_object_storage_upload_failure_leaves_result_upload_intent_pending(
 # (b) upload OK + DB save fails -> delete chiamato + ResultSaveError
 
 
+@legacy_path_result_blob
 @pytest.mark.usefixtures("mock_db_save_fails")
 def test_object_storage_db_save_failure_triggers_compensating_delete(
     stub_storage_factory, monkeypatch, tmp_path
@@ -347,6 +353,7 @@ def test_object_storage_db_save_failure_bytes_path_triggers_delete(
 #     -> structured log + original DB-save error preserved
 
 
+@legacy_path_result_blob
 @pytest.mark.usefixtures("mock_db_save_fails")
 def test_db_save_failure_with_cleanup_failure_logs_orphan_event(
     stub_storage_factory, caplog_app, monkeypatch, tmp_path
@@ -399,6 +406,7 @@ def test_db_save_failure_with_cleanup_failure_bytes_path(
 # (c-extra) Successful cleanup also emits structured log
 
 
+@legacy_path_result_blob
 @pytest.mark.usefixtures("mock_db_save_fails")
 def test_successful_cleanup_emits_ok_event(
     stub_storage_factory, caplog_app, monkeypatch, tmp_path

@@ -103,6 +103,11 @@ def test_execute_proceeds_when_run_id_not_completed(monkeypatch):
             executor, "_get_connection",
             lambda cid: conn_calls.append(cid) or {"type": "postgres"}
         )
+        monkeypatch.setattr(
+            executor,
+            "_assert_connection_visible_for_project",
+            lambda *args, **kwargs: None,
+        )
         # Mock _create_engine cosi' il flow puo' proseguire oltre
         monkeypatch.setattr(executor, "_create_engine", lambda conn: MagicMock())
 
@@ -245,7 +250,7 @@ def test_connection_store_returns_legacy_shape_with_decrypted_password(monkeypat
 
     monkeypatch.setattr(
         connection_store,
-        "fetchone",
+        "_fetchone",
         lambda sql, params: {
             "id": "conn-1",
             "name": "Dest",

@@ -667,7 +667,6 @@ def test_create_task_router_uses_carica_task_service_boundary(monkeypatch):
 
     monkeypatch.setattr("app.core.auth.resource_access.assert_project_access", lambda *a, **kw: None)
     monkeypatch.setattr("app.core.auth.resource_access.assert_canvas_resources_access", lambda *a, **kw: None)
-    monkeypatch.setattr(router_mod, "enrich_canvas_types_from_metadata", lambda *a, **kw: None)
     monkeypatch.setattr(task_service, "create_carica_task", fake_create_carica_task)
     monkeypatch.setattr(task_service, "submit_task", fail_submit_task)
 

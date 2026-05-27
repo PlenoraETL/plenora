@@ -142,7 +142,7 @@ def test_verify_restore_when_db_raises_returns_unknown():
     from app.core.admin_system_status import service
 
     with patch(
-        "app.db.pg_connection.fetchone",
+        "app.core.admin_system_status.service.fetch_latest_verify_run",
         side_effect=ConnectionError("postgres unreachable"),
     ):
         out = service.get_verify_restore_status()
@@ -156,7 +156,7 @@ def test_verify_restore_when_db_raises_returns_unknown():
 def test_verify_restore_when_no_runs_registered():
     from app.core.admin_system_status import service
 
-    with patch("app.db.pg_connection.fetchone", return_value=None):
+    with patch("app.core.admin_system_status.service.fetch_latest_verify_run", return_value=None):
         out = service.get_verify_restore_status()
 
     assert out["status"] == "unknown"
@@ -175,7 +175,7 @@ def test_verify_restore_success_fresh_under_one_day():
         "result": "success",
         "error_message": None,
     }
-    with patch("app.db.pg_connection.fetchone", return_value=row):
+    with patch("app.core.admin_system_status.service.fetch_latest_verify_run", return_value=row):
         out = service.get_verify_restore_status()
 
     assert out["status"] == "ok"
@@ -195,7 +195,7 @@ def test_verify_restore_success_in_warn_band():
         "result": "success",
         "error_message": None,
     }
-    with patch("app.db.pg_connection.fetchone", return_value=row):
+    with patch("app.core.admin_system_status.service.fetch_latest_verify_run", return_value=row):
         out = service.get_verify_restore_status()
 
     assert out["status"] == "warn"
@@ -213,7 +213,7 @@ def test_verify_restore_success_over_error_threshold():
         "result": "success",
         "error_message": None,
     }
-    with patch("app.db.pg_connection.fetchone", return_value=row):
+    with patch("app.core.admin_system_status.service.fetch_latest_verify_run", return_value=row):
         out = service.get_verify_restore_status()
 
     assert out["status"] == "error"
@@ -230,7 +230,7 @@ def test_verify_restore_failed_result():
         "result": "failed",
         "error_message": "pg_restore exit 1: schema mismatch",
     }
-    with patch("app.db.pg_connection.fetchone", return_value=row):
+    with patch("app.core.admin_system_status.service.fetch_latest_verify_run", return_value=row):
         out = service.get_verify_restore_status()
 
     assert out["status"] == "error"
@@ -249,7 +249,7 @@ def test_verify_restore_running_result():
         "result": "running",
         "error_message": None,
     }
-    with patch("app.db.pg_connection.fetchone", return_value=row):
+    with patch("app.core.admin_system_status.service.fetch_latest_verify_run", return_value=row):
         out = service.get_verify_restore_status()
 
     assert out["status"] == "ok"
@@ -266,7 +266,7 @@ def test_verify_restore_malformed_finished_at_stays_graceful():
         "result": "success",
         "error_message": None,
     }
-    with patch("app.db.pg_connection.fetchone", return_value=row):
+    with patch("app.core.admin_system_status.service.fetch_latest_verify_run", return_value=row):
         out = service.get_verify_restore_status()
 
     assert out["status"] == "ok"
@@ -279,12 +279,11 @@ def test_verify_restore_malformed_finished_at_stays_graceful():
 
 def test_schedules_status_when_db_raises_returns_unknown(monkeypatch):
     from app.core.admin_system_status import service
-    import app.db.pg_connection as db
 
     def _boom(*a, **kw):
         raise ConnectionError("postgres unreachable")
 
-    monkeypatch.setattr(db, "fetchall", _boom)
+    monkeypatch.setattr(service, "fetch_schedule_rows", _boom)
 
     out = service.get_schedules_status()
 
@@ -296,7 +295,7 @@ def test_schedules_status_when_db_raises_returns_unknown(monkeypatch):
 def test_schedules_status_empty_table_returns_ok():
     from app.core.admin_system_status import service
 
-    with patch("app.db.pg_connection.fetchall", return_value=[]):
+    with patch("app.core.admin_system_status.service.fetch_schedule_rows", return_value=[]):
         out = service.get_schedules_status()
 
     assert out["status"] == "ok"
@@ -311,7 +310,7 @@ def test_schedules_status_half_or_more_failing_is_error():
         {"id": "a", "name": "a", "is_enabled": True, "last_status": "failed"},
         {"id": "b", "name": "b", "is_enabled": True, "last_status": "success"},
     ]
-    with patch("app.db.pg_connection.fetchall", return_value=rows):
+    with patch("app.core.admin_system_status.service.fetch_schedule_rows", return_value=rows):
         out = service.get_schedules_status()
 
     assert out["status"] == "error"
@@ -326,7 +325,7 @@ def test_schedules_status_ignores_disabled():
         {"id": "a", "name": "a", "is_enabled": False, "last_status": "failed"},
         {"id": "b", "name": "b", "is_enabled": True, "last_status": "success"},
     ]
-    with patch("app.db.pg_connection.fetchall", return_value=rows):
+    with patch("app.core.admin_system_status.service.fetch_schedule_rows", return_value=rows):
         out = service.get_schedules_status()
 
     assert out["total_active"] == 1

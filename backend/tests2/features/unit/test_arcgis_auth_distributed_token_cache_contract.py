@@ -62,8 +62,16 @@ def _reset_token_cache_state():
     oauth._reset_token_cache_state_for_tests()
 
 
-def test_arcgis_oauth_token_is_reused_across_client_instances():
+def test_arcgis_oauth_token_is_reused_across_client_instances(monkeypatch):
     oauth._set_token_cache_client_for_tests(_FakeRedis())
+    fetch_calls = []
+
+    def _fetch_token(auth, *, extra_form_data=None):
+        fetch_calls.append((auth, extra_form_data))
+        return {"access_token": "arcgis-token-1", "expires_in": 3600}
+
+    monkeypatch.setattr(oauth, "_fetch_oauth2_client_credentials_token", _fetch_token)
+
     conn = ArcGISConnectionInfo(
         server_url="https://tenant.maps.arcgis.com",
         server_type="arcgis_online",
@@ -79,6 +87,6 @@ def test_arcgis_oauth_token_is_reused_across_client_instances():
 
     assert first_client.authenticate(conn) == "arcgis-token-1"
     assert second_client.authenticate(conn) == "arcgis-token-1"
-    assert first_http.post_calls == 1
+    assert len(fetch_calls) == 1
+    assert first_http.post_calls == 0
     assert second_http.post_calls == 0
-

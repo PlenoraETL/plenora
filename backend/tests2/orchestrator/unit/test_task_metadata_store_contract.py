@@ -84,9 +84,9 @@ def test_redis_task_metadata_store_uses_broker_url_ttl_and_json(monkeypatch):
 
 
 def test_task_metadata_store_default_runtime_has_no_local_fallback_wrapper():
-    source = Path("backend/app/core/orchestrator/task_metadata_store.py").read_text(
-        encoding="utf-8"
-    )
+    import app.core.orchestrator.task_metadata_store as task_metadata_store
+
+    source = Path(task_metadata_store.__file__).read_text(encoding="utf-8")
 
     assert "_LOCAL_FALLBACK_ENVS" not in source
     assert "TaskMetadataStoreWithDevFallback" not in source

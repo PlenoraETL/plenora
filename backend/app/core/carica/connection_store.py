@@ -7,9 +7,13 @@ from app.db.pg_connection import unit_of_work
 from app.shared.contracts.payloads import JsonObject
 
 
-def fetch_connection_config(connection_id: str) -> JsonObject | None:
+def _fetchone(sql: str, params: tuple = ()) -> JsonObject | None:
     with unit_of_work() as session:
-        row = session.fetchone("SELECT * FROM connections WHERE id = %s", (connection_id,))
+        return session.fetchone(sql, params)
+
+
+def fetch_connection_config(connection_id: str) -> JsonObject | None:
+    row = _fetchone("SELECT * FROM connections WHERE id = %s", (connection_id,))
     if not row:
         return None
 

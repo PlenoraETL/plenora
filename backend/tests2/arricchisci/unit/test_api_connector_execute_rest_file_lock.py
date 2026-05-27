@@ -99,7 +99,10 @@ def rf_env(api_service, tmp_path):
             prepare_headers=_po("_prepare_headers", return_value={"Authorization": "Bearer x"}),
             ssrf=_po("_validate_outbound_url", return_value=None),  # None = OK
             resolve_path=_po("_resolve_file_source_path", return_value=str(input_file)),
-            resolve_id_path=_po("_resolve_file_source_id_path"),
+            resolve_id_path=_po(
+                "_resolve_file_source_id_bytes",
+                return_value=(b"dxf-content", "input.dxf"),
+            ),
             save_blob=_p(
                 "app.core.results.blob_writer.save_result_blob_from_bytes",
                 return_value="fake-result-id",

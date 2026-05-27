@@ -57,18 +57,12 @@ def test_create_service_file_not_found_sanitizes_detail(client, monkeypatch):
 
     sporco = r"Input file /home/urby/tmp/data/upload.csv not found"
 
-    # Mock sia la materializzazione sia il service: serve che l'eccezione
+    # Mock sia la risoluzione dataframe sia il service: serve che l'eccezione
     # venga catturata nel boundary del router, indipendentemente da quale
     # step interno fallisce.
-    class _FakeMaterialized:
-        def __enter__(self):
-            raise FileNotFoundError(sporco)
-        def __exit__(self, *a):
-            return False
-
     monkeypatch.setattr(
-        features_routes_module, "_resolve_input_path",
-        lambda *a, **kw: _FakeMaterialized(),
+        features_routes_module, "_resolve_input_dataframe",
+        lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError(sporco)),
     )
     monkeypatch.setattr(features_routes_module, "_service", MagicMock())
 

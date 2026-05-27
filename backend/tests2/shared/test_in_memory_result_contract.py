@@ -17,6 +17,10 @@ import pytest
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
+legacy_path_result_blob = pytest.mark.skip(
+    reason="save_result_blob(path) tombstonato post QUERY-1; usare save_result_blob_from_bytes"
+)
+
 
 # Helpers: fixture base DB-mock + fake settings
 
@@ -55,6 +59,7 @@ def mock_db(monkeypatch):
 # 1. REGRESSION — path-based save_result_blob
 
 
+@legacy_path_result_blob
 def test_regression_path_based_save_preserves_bytes_exactly(mock_db, tmp_path):
     """Il blob salvato su DB deve essere byte-identico al file temp."""
     from app.core.results.blob_writer import save_result_blob
@@ -68,6 +73,7 @@ def test_regression_path_based_save_preserves_bytes_exactly(mock_db, tmp_path):
     assert not f.exists(), "temp file deve essere cancellato dopo success"
 
 
+@legacy_path_result_blob
 def test_regression_path_based_save_keeps_temp_on_db_error(monkeypatch, tmp_path):
     """Se il DB fallisce, il temp file NON deve essere cancellato (retry-friendly)."""
     from app.core.results.blob_writer import save_result_blob, ResultSaveError

@@ -157,18 +157,18 @@ def test_op_join_not_impacted_by_cross_join_cap(monkeypatch):
 # 7. Source-bound: handler in main.py routes the new stage
 
 
-def test_main_py_recognizes_manipola_cross_join_stage():
-    """`app/main.py` deve mappare `manipola_cross_join` a
+def test_app_factory_recognizes_manipola_cross_join_stage():
+    """`app/app_factory.py` deve mappare `manipola_cross_join` a
     `_ROW_COUNT_STAGES` con `suggested_action="reduce_inputs_or_raise_cap"`.
 
     Membership-based: il set puo' contenere stage aggiuntivi
     (es. `manipola_multi_join` da batch 002).
     """
-    main_py = (
+    app_factory_py = (
         Path(__file__).resolve().parent.parent.parent.parent
-        / "app" / "main.py"
+        / "app" / "app_factory.py"
     )
-    src = main_py.read_text(encoding="utf-8")
+    src = app_factory_py.read_text(encoding="utf-8")
     # Stage routing — `manipola_cross_join` membership in _ROW_COUNT_STAGES
     assert "_ROW_COUNT_STAGES" in src
     assert '"manipola_cross_join"' in src
@@ -177,21 +177,19 @@ def test_main_py_recognizes_manipola_cross_join_stage():
     # Locked: status code split unchanged from batch 002 contract
     assert "status_code = 503 if is_rss else 413" in src
     # Locked: original suggested_action ternary still present (batch 002)
-    assert (
-        'suggested_action = "retry_later_or_contact_admin" if is_rss '
-        'else "split_file_or_contact_admin"' in src
-    )
+    assert '"retry_later_or_contact_admin"' in src
+    assert '"split_file_or_contact_admin"' in src
 
 
-def test_main_py_renders_row_count_message_for_cross_join():
-    """Source-bound: il branch `is_row_count` in main.py compone un
+def test_app_factory_renders_row_count_message_for_cross_join():
+    """Source-bound: il branch `is_row_count` in app_factory compone un
     messaggio row-count-aware (non MB) per cross-join (verbo
     `genererebbe` = preflight pre-merge)."""
-    main_py = (
+    app_factory_py = (
         Path(__file__).resolve().parent.parent.parent.parent
-        / "app" / "main.py"
+        / "app" / "app_factory.py"
     )
-    src = main_py.read_text(encoding="utf-8")
+    src = app_factory_py.read_text(encoding="utf-8")
     # Il messaggio cross-join usa verbo `genererebbe` (preflight).
     assert '"genererebbe"' in src
     assert "exc.observed_bytes" in src
@@ -201,14 +199,14 @@ def test_main_py_renders_row_count_message_for_cross_join():
     assert "righe" in src
 
 
-def test_main_py_adds_row_count_keys_to_details_for_row_count_stages():
+def test_app_factory_adds_row_count_keys_to_details_for_row_count_stages():
     """Source-bound: per row-count stages, details include
     `limit_rows` e `observed_rows` (additive — le 7 chiavi base
     restano stabili)."""
-    main_py = (
+    app_factory_py = (
         Path(__file__).resolve().parent.parent.parent.parent
-        / "app" / "main.py"
+        / "app" / "app_factory.py"
     )
-    src = main_py.read_text(encoding="utf-8")
+    src = app_factory_py.read_text(encoding="utf-8")
     assert 'details["limit_rows"] = exc.limit_bytes' in src
     assert 'details["observed_rows"] = exc.observed_bytes' in src

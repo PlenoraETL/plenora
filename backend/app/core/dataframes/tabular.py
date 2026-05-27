@@ -773,9 +773,11 @@ def stringify_columns_preserving_nulls(
     """
     out = copy_frame_for_update(df)
     for col in columns:
-        mask_null = out[col].isna()
-        out[col] = out[col].astype(str)
-        out.loc[mask_null, col] = None
+        out[col] = pd.Series(
+            [None if pd.isna(value) else str(value) for value in out[col].tolist()],
+            index=out.index,
+            dtype=object,
+        )
     return out
 
 
@@ -1025,9 +1027,10 @@ def join_columns_as_strings(df: pd.DataFrame, separator: str) -> Any:
     out = _np.empty(n, dtype=object)
     for start in range(0, n, _JOIN_BATCH_SIZE):
         end = min(start + _JOIN_BATCH_SIZE, n)
-        batch = df.iloc[start:end].fillna("").astype(str).agg(
-            separator.join, axis=1
+        batch_frame = df.iloc[start:end].map(
+            lambda value: "" if pd.isna(value) else str(value)
         )
+        batch = batch_frame.agg(separator.join, axis=1)
         out[start:end] = batch.to_numpy()
 
     return pd.Series(out, index=df.index, dtype=object)

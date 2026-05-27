@@ -39,7 +39,7 @@ def fake_client():
     esegue il body.
 
     Tutti i collaboratori (`_http.post`, `authenticate`, helper
-    staticmethods, `dataframe_to_esri_features`, `add_features`)
+    staticmethods, `add_dataframe_features`)
     restano stubati per-instance via `MagicMock`. Le assertion sul
     `client._http.post.call_args` continuano a funzionare invariate.
     """
@@ -56,10 +56,10 @@ def fake_client():
         }
     )
     client._default_drawing_info = MagicMock(return_value={"renderer": {"type": "simple"}})
-    client.dataframe_to_esri_features = MagicMock(return_value=[
-        {"attributes": {}, "geometry": {}},
-    ])
     client.add_features = MagicMock(
+        return_value={"added_count": 5, "errors": []}
+    )
+    client.add_dataframe_features = MagicMock(
         return_value={"added_count": 5, "errors": []}
     )
     return client
@@ -85,12 +85,12 @@ def _make_polygon_gdf(rows: int = 3, *, crs_epsg: int | None = 4326):
 
 
 def _post_call_kwargs(client) -> dict:
-    """Estrae kwargs dell'ultima chiamata `client._http.post`."""
-    return client._http.post.call_args.kwargs
+    """Estrae kwargs della POST addToDefinition."""
+    return client._http.post.call_args_list[0].kwargs
 
 
 def _post_url(client) -> str:
-    return client._http.post.call_args.args[0]
+    return client._http.post.call_args_list[0].args[0]
 
 
 def _layer_def_from_post(client) -> dict:
@@ -116,7 +116,7 @@ def test_happy_path_returns_typed_result(fake_client, fake_conn):
     assert result.feature_count == 5
     assert result.errors == ()
     fake_client._http.post.assert_called_once()
-    fake_client.add_features.assert_called_once()
+    fake_client.add_dataframe_features.assert_called_once()
 
 
 def test_happy_path_calls_collaborators_in_order(fake_client, fake_conn):
@@ -131,7 +131,7 @@ def test_happy_path_calls_collaborators_in_order(fake_client, fake_conn):
 
     # addToDefinition POST first, then add_features
     fake_client._http.post.assert_called_once()
-    fake_client.add_features.assert_called_once()
+    fake_client.add_dataframe_features.assert_called_once()
 
 
 # 2. Request shape: URL, body, header, timeout, token
@@ -361,8 +361,9 @@ def test_extent_defaults_to_world_when_no_geometry():
         side_effect=lambda col, dtype: {"name": col, "type": "esriFieldTypeString"}
     )
     fake_client._default_drawing_info = MagicMock(return_value={})
-    fake_client.dataframe_to_esri_features = MagicMock(return_value=[])
-    fake_client.add_features = MagicMock(return_value={"added_count": 0, "errors": []})
+    fake_client.add_dataframe_features = MagicMock(
+        return_value={"added_count": 0, "errors": []}
+    )
 
     fake_conn = SimpleNamespace(server_url="https://arc.test", username="u")
 
@@ -417,7 +418,7 @@ def test_drawing_info_via_client_helper(fake_client, fake_conn):
 
 def test_addtodefinition_failure_returns_failed_result(fake_client, fake_conn):
     """`addToDefinition` con `success: False` → risultato fallito,
-    NESSUNA chiamata a `add_features`."""
+    NESSUNA chiamata a `add_dataframe_features`."""
     fake_client._http.post.return_value = _make_response({
         "success": False,
         "error": {"code": 400, "message": "bad schema"},
@@ -433,13 +434,13 @@ def test_addtodefinition_failure_returns_failed_result(fake_client, fake_conn):
     assert result.feature_count == 0
     assert len(result.errors) == 1
     assert "addToDefinition fallito" in result.errors[0]
-    fake_client.add_features.assert_not_called()
+    fake_client.add_dataframe_features.assert_not_called()
 
 
 def test_add_features_zero_added_returns_not_success(fake_client, fake_conn):
-    """`add_features` con `added_count=0` → `success=False`. errori
+    """`add_dataframe_features` con `added_count=0` → `success=False`. errori
     propagati."""
-    fake_client.add_features.return_value = {
+    fake_client.add_dataframe_features.return_value = {
         "added_count": 0,
         "errors": ["err1", "err2"],
     }
@@ -456,9 +457,9 @@ def test_add_features_zero_added_returns_not_success(fake_client, fake_conn):
 
 
 def test_add_features_partial_success_returns_success(fake_client, fake_conn):
-    """`add_features` con `added_count > 0` → `success=True` anche se
+    """`add_dataframe_features` con `added_count > 0` → `success=True` anche se
     ci sono errors per features rifiutate (parziale)."""
-    fake_client.add_features.return_value = {
+    fake_client.add_dataframe_features.return_value = {
         "added_count": 2,
         "errors": ["row 3 rejected"],
     }
@@ -477,11 +478,11 @@ def test_add_features_partial_success_returns_success(fake_client, fake_conn):
 # 5. Features payload boundary
 
 
-def test_dataframe_to_esri_features_called_with_expected_args(
+def test_add_dataframe_features_called_with_expected_args(
     fake_client, fake_conn,
 ):
     """Verifica i kwargs/args passati a
-    `client.dataframe_to_esri_features`: gdf, "geometry", srid,
+    `client.add_dataframe_features`: gdf, "geometry", srid,
     operation="create_service"."""
     gdf = _make_polygon_gdf(crs_epsg=4326)
 
@@ -490,15 +491,19 @@ def test_dataframe_to_esri_features_called_with_expected_args(
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=0,
     )
-    call = fake_client.dataframe_to_esri_features.call_args
-    assert call.args[0] is gdf
-    assert call.args[1] == "geometry"
-    assert call.args[2] == 4326
-    assert call.kwargs == {"operation": "create_service"}
+    call = fake_client.add_dataframe_features.call_args
+    assert call.args[0] is fake_conn
+    assert call.args[1] == "https://arc.test/server/rest/services/X/FeatureServer/0"
+    assert call.args[2] is gdf
+    assert call.kwargs == {
+        "geometry_column": "geometry",
+        "srid": 4326,
+        "operation": "create_service",
+    }
 
 
-def test_add_features_called_on_layer_url(fake_client, fake_conn):
-    """`add_features` deve essere chiamato con
+def test_add_dataframe_features_called_on_layer_url(fake_client, fake_conn):
+    """`add_dataframe_features` deve essere chiamato con
     `service_url + "/" + layer_id`."""
     gdf = _make_polygon_gdf()
 
@@ -507,7 +512,7 @@ def test_add_features_called_on_layer_url(fake_client, fake_conn):
         service_url="https://arc.test/server/rest/services/X/FeatureServer",
         gdf=gdf, layer_name="L", layer_id=7,
     )
-    call = fake_client.add_features.call_args
+    call = fake_client.add_dataframe_features.call_args
     assert call.args[0] is fake_conn
     assert call.args[1] == "https://arc.test/server/rest/services/X/FeatureServer/7"
 

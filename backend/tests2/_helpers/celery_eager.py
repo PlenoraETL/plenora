@@ -299,7 +299,8 @@ def install_enrichment_task_mocks(
         "app.core.results.pipeline_result.save_pipeline_result", _fake_save_pipeline_result,
     )
     monkeypatch.setattr(
-        "app.core.results.blob_writer.save_result_blob", _fake_save_result_blob,
+        "app.core.results.blob_writer.save_result_blob_from_bytes",
+        _fake_save_result_blob,
     )
 
     # 10. snapshot / writer.close_run (lazy intermediate)

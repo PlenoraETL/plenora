@@ -92,7 +92,7 @@ def test_api_connection_db_read_returns_typed_row(monkeypatch) -> None:
             "created_by": "user-1",
         }
 
-    monkeypatch.setattr(api_db, "fetchone", _fetchone)
+    monkeypatch.setattr(api_db, "_fetchone", _fetchone)
 
     row = api_db.get_api_connection_row("api-1", group_id="grp-1")
 
@@ -120,8 +120,8 @@ def test_api_connection_db_update_hydrates_typed_row(monkeypatch) -> None:
             "created_by": "user-1",
         }
 
-    monkeypatch.setattr(api_db, "execute", _execute)
-    monkeypatch.setattr(api_db, "fetchone", _fetchone)
+    monkeypatch.setattr(api_db, "_execute", _execute)
+    monkeypatch.setattr(api_db, "_fetchone", _fetchone)
 
     row = api_db.update_api_connection_row("api-1", {"name": "Updated API"})
 

@@ -38,7 +38,7 @@ def test_connection_db_bridge_returns_typed_row(monkeypatch) -> None:
             "created_by": "u-1",
         }
 
-    monkeypatch.setattr(connection_db, "fetchone", _fetchone)
+    monkeypatch.setattr(connection_db, "_fetchone", _fetchone)
 
     row = connection_db.get_connection_config("conn-1", "grp-1")
 
@@ -81,8 +81,8 @@ def test_connection_db_create_hydrates_typed_row_without_legacy_dict_return(
             "created_by": "u-1",
         }
 
-    monkeypatch.setattr(connection_db, "execute", _execute)
-    monkeypatch.setattr(connection_db, "fetchone", _fetchone)
+    monkeypatch.setattr(connection_db, "_execute", _execute)
+    monkeypatch.setattr(connection_db, "_fetchone", _fetchone)
 
     row = connection_db.create_connection(
         conn_id="conn-1",
@@ -132,8 +132,8 @@ def test_connection_db_update_returns_typed_row(monkeypatch) -> None:
             "created_by": "u-1",
         }
 
-    monkeypatch.setattr(connection_db, "execute", _execute)
-    monkeypatch.setattr(connection_db, "fetchone", _fetchone)
+    monkeypatch.setattr(connection_db, "_execute", _execute)
+    monkeypatch.setattr(connection_db, "_fetchone", _fetchone)
 
     row = connection_db.update_connection(
         "conn-1",
@@ -158,7 +158,7 @@ def test_connection_db_delete_owns_delete_sql(monkeypatch) -> None:
         executed.append((sql, params))
         return Cursor()
 
-    monkeypatch.setattr(connection_db, "execute", _execute)
+    monkeypatch.setattr(connection_db, "_execute", _execute)
 
     assert connection_db.delete_connection("conn-1") is True
     assert executed == [("DELETE FROM connections WHERE id = %s", ("conn-1",))]
@@ -187,7 +187,7 @@ def test_connection_db_list_returns_typed_rows(monkeypatch) -> None:
             }
         ]
 
-    monkeypatch.setattr(connection_db, "fetchall", _fetchall)
+    monkeypatch.setattr(connection_db, "_fetchall", _fetchall)
 
     rows = connection_db.list_connection_configs("grp-1")
 

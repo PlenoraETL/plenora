@@ -7,6 +7,7 @@ emesse da `core/imdf/validator.validate_publish`.
 from __future__ import annotations
 
 import importlib
+from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock
@@ -90,6 +91,19 @@ def patch_collaborators(monkeypatch):
     monkeypatch.setattr(
         "app.core.imdf.loader.load_imdf_layers",
         lambda gdb_path, **_kw: knobs.bundle_layers,
+    )
+    monkeypatch.setattr(
+        "app.core.imdf.storage.get_meta_only",
+        lambda bundle_task_id: {"site_id": "site-test"},
+    )
+
+    @contextmanager
+    def _fake_open_gdb_in_vsimem(bundle_task_id, site_id):
+        yield f"/vsizip//vsimem/{bundle_task_id}/{site_id}.gdb"
+
+    monkeypatch.setattr(
+        "app.core.imdf.storage.open_gdb_in_vsimem",
+        _fake_open_gdb_in_vsimem,
     )
 
     # ArcGIS discovery helpers (private, lazy-imported by validator)

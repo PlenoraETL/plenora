@@ -45,7 +45,7 @@ def _user() -> CurrentUser:
 
 
 def test_get_eseguibile_missing_row_returns_none(monkeypatch) -> None:
-    monkeypatch.setattr(eseguibili_db.db, "fetchone", lambda *args, **kwargs: None)
+    monkeypatch.setattr(eseguibili_db, "_fetchone", lambda *args, **kwargs: None)
 
     assert eseguibili_db.get_eseguibile("missing") is None
 
@@ -66,8 +66,8 @@ def test_eseguibile_row_keeps_json_compatibility_defaults() -> None:
 
 def test_list_eseguibili_returns_typed_summary_rows(monkeypatch) -> None:
     monkeypatch.setattr(
-        eseguibili_db.db,
-        "fetchall",
+        eseguibili_db,
+        "_fetchall",
         lambda *args, **kwargs: [
             _db_row(canvas=None, expected_columns='[{"name": "a"}, {"name": "b"}]'),
         ],

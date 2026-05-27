@@ -35,7 +35,7 @@ def fix_mixed_type_columns(df: Any, logger) -> Any:
             f"Colonna '{col}' contiene tipi misti (numeri + stringhe), "
             f"conversione a TEXT"
         )
-    stringify_columns_preserving_nulls(df, mixed_columns)
+    df = stringify_columns_preserving_nulls(df, mixed_columns)
 
     return df
 

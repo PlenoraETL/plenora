@@ -60,12 +60,12 @@ def test_rest_file_path_resolver_remains_ctx_adapter_only() -> None:
     )
 
     with patch(
-        "app.core.arricchisci.api_connection_rest_file.resolve_file_source_id_path",
-        return_value="/cache/input.csv",
+        "app.core.arricchisci.api_connection_rest_file.resolve_file_source_id_bytes",
+        return_value=(b"csv", "input.csv"),
     ) as delegated:
         result = svc._resolve_file_source_id_path("fs-1", ctx=ctx)
 
-    assert result == "/cache/input.csv"
+    assert result == (b"csv", "input.csv")
     delegated.assert_called_once_with(
         "fs-1",
         expected_group_id="winner-grp",

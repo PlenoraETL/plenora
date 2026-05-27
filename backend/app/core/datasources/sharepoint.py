@@ -172,8 +172,7 @@ class SharePointDataSource(DataSourceInterface):
             # mitighiamo lo scenario via context manager (Office365 client
             # gia' inizia la session al primo execute_query).
             logger.warning(
-                "[GESTITO] SharePoint auth fallita: %s",
-                type(e).__name__,
+                f"[GESTITO] SharePoint auth fallita: {type(e).__name__}: {e}",
                 exc_info=True,
             )
             # self._ctx resta None: `disconnect()` no-op safe.

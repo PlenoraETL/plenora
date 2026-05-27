@@ -137,7 +137,7 @@ def test_arcgis_feature_write_service_write_add_preserves_existing_result_shape(
         dataframe_to_esri_features=MagicMock(
             return_value=[{"attributes": {"CITY": "Torino"}}]
         ),
-        add_features=MagicMock(
+        add_dataframe_features=MagicMock(
             return_value={"success": True, "added_count": 1, "errors": []}
         ),
     )
@@ -162,4 +162,4 @@ def test_arcgis_feature_write_service_write_add_preserves_existing_result_shape(
         "feature_count": 1,
         "errors": [],
     }
-    client.add_features.assert_called_once()
+    client.add_dataframe_features.assert_called_once()

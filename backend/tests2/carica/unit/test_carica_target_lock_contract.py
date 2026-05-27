@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -51,6 +52,17 @@ class _FakeConnection:
 
     def rollback(self) -> None:
         self.rollbacks += 1
+
+
+@contextmanager
+def _fake_unit_of_work(conn: _FakeConnection):
+    try:
+        yield conn
+    except Exception:
+        conn.rollback()
+        raise
+    else:
+        conn.commit()
 
 
 def test_db_target_lock_is_tenant_aware_and_project_independent_inside_group():
@@ -143,14 +155,9 @@ def test_rest_and_arcgis_targets_are_canonicalized():
 def test_acquire_returns_handle_when_insert_or_expired_update_wins(monkeypatch):
     cursor = _FakeCursor(row={"owner_token": "owner-1"})
     conn = _FakeConnection(cursor)
-    put_calls: list[object] = []
     monkeypatch.setattr(
-        "app.core.carica.target_lock.db.get_connection",
-        lambda: conn,
-    )
-    monkeypatch.setattr(
-        "app.core.carica.target_lock.db.put_connection",
-        lambda value: put_calls.append(value),
+        "app.core.carica.target_lock.unit_of_work",
+        lambda: _fake_unit_of_work(conn),
     )
     target = CaricaTargetLock(
         key="carica:db:hash",
@@ -169,7 +176,6 @@ def test_acquire_returns_handle_when_insert_or_expired_update_wins(monkeypatch):
     assert handle.owner_token == "owner-1"
     assert conn.commits == 1
     assert conn.rollbacks == 0
-    assert put_calls == [conn]
     sql, params = cursor.executed[0]
     assert "ON CONFLICT (lock_key) DO UPDATE" in sql
     assert "owner_token = EXCLUDED.owner_token" in sql
@@ -180,8 +186,10 @@ def test_acquire_returns_handle_when_insert_or_expired_update_wins(monkeypatch):
 def test_acquire_returns_none_when_unexpired_other_owner_holds_lock(monkeypatch):
     cursor = _FakeCursor(row=None)
     conn = _FakeConnection(cursor)
-    monkeypatch.setattr("app.core.carica.target_lock.db.get_connection", lambda: conn)
-    monkeypatch.setattr("app.core.carica.target_lock.db.put_connection", lambda _conn: None)
+    monkeypatch.setattr(
+        "app.core.carica.target_lock.unit_of_work",
+        lambda: _fake_unit_of_work(conn),
+    )
     target = CaricaTargetLock(
         key="carica:db:hash",
         kind="db",
@@ -203,8 +211,10 @@ def test_acquire_returns_none_when_unexpired_other_owner_holds_lock(monkeypatch)
 def test_release_deletes_only_matching_owner(monkeypatch):
     cursor = _FakeCursor(rowcount=1)
     conn = _FakeConnection(cursor)
-    monkeypatch.setattr("app.core.carica.target_lock.db.get_connection", lambda: conn)
-    monkeypatch.setattr("app.core.carica.target_lock.db.put_connection", lambda _conn: None)
+    monkeypatch.setattr(
+        "app.core.carica.target_lock.unit_of_work",
+        lambda: _fake_unit_of_work(conn),
+    )
     target = CaricaTargetLock(
         key="carica:db:hash",
         kind="db",

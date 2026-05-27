@@ -36,7 +36,7 @@ def _make_executor(
 ) -> EnrichmentExecutor:
     api_config = {
         "name": "TestAPI",
-        "endpoint": {"url": "https://api.test/lookup", "method": "GET"},
+        "endpoint": {"url": "https://example.com/lookup", "method": "GET"},
         "auth": {},
         "output_mapping": [{"path": "result", "column": "result"}],
     }

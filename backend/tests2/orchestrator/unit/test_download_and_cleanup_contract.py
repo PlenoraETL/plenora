@@ -248,21 +248,19 @@ def test_eseguibili_download_cleanup_runs_even_if_delete_by_task_raises():
 def test_save_pipeline_result_dict_shape(monkeypatch):
     """save_pipeline_result ritorna sempre {result_id, output_filename}."""
     from app.core.results.pipeline_result import save_pipeline_result
-    import app.core.results.blob_writer as result_blob_writer
-    import app.core.results.store as results_store
-    import app.core.results.db as results_db
-    from types import SimpleNamespace
+    import app.core.results.streaming_blob_writer as streaming_blob_writer
 
     # Stub DB mock
     saved_calls = []
-    monkeypatch.setattr(result_blob_writer, "uuid",
-                        SimpleNamespace(uuid4=lambda: "res-xyz"))
-    monkeypatch.setattr(results_store, "resolve_group_id_for_result",
-                        lambda project_id, group_id=None: "grp")
-    monkeypatch.setattr(results_db, "save_result_row",
-                        lambda **kw: saved_calls.append(kw))
-    monkeypatch.setattr(result_blob_writer, "apply_results_retention_after_save",
-                        lambda pid: None)
+    def fake_save_dataframe_to_result_blob_streaming(**kwargs):
+        saved_calls.append(kwargs)
+        return "res-xyz"
+
+    monkeypatch.setattr(
+        streaming_blob_writer,
+        "save_dataframe_to_result_blob_streaming",
+        fake_save_dataframe_to_result_blob_streaming,
+    )
 
     df = pd.DataFrame({"a": [1, 2]})
     result = save_pipeline_result(

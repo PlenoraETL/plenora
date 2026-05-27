@@ -207,8 +207,9 @@ def test_host_resources_uses_existing_parent_for_missing_data_dir(monkeypatch, t
 
     fake_psutil.disk_usage.assert_called_once_with(str(tmp_path))
     assert out["status"] == "ok"
-    assert out["disk"]["path"] == str(missing_data_dir)
-    assert out["disk"]["usage_path"] == str(tmp_path)
+    assert out.disk is not None
+    assert out.disk.path == str(missing_data_dir)
+    assert out.disk.usage_path == str(tmp_path)
 
 
 def test_host_resources_falls_back_to_shutil_when_psutil_disk_fails(monkeypatch, tmp_path):
@@ -256,7 +257,8 @@ def test_host_resources_falls_back_to_shutil_when_psutil_disk_fails(monkeypatch,
     assert out["disk"] is not None, (
         "Atteso disk_info popolato dal fallback shutil, ricevuto None"
     )
-    assert out["disk"]["path"] == str(data_dir)
+    assert out.disk is not None
+    assert out.disk.path == str(data_dir)
     assert out["disk"]["total_gb"] == 200.0
     assert out["disk"]["used_gb"] == 50.0
     assert out["disk"]["free_gb"] == 150.0
@@ -398,7 +400,7 @@ def test_host_resources_no_loadavg_on_windows(monkeypatch):
 def test_db_pool_when_db_fails_returns_unknown(monkeypatch):
     from app.core.admin_system_status import service
 
-    with patch("app.db.pg_connection.fetchone", side_effect=ConnectionError("down")):
+    with patch("app.core.admin_system_status.service.fetch_db_pool_row", side_effect=ConnectionError("down")):
         out = service.get_db_pool_status()
 
     assert out["status"] == "unknown"
@@ -427,7 +429,7 @@ def test_db_pool_when_db_fails_returns_unknown(monkeypatch):
 def test_db_pool_threshold_statuses(monkeypatch, row, expected_status, expected_percent):
     from app.core.admin_system_status import service
 
-    with patch("app.db.pg_connection.fetchone", return_value=row):
+    with patch("app.core.admin_system_status.service.fetch_db_pool_row", return_value=row):
         out = service.get_db_pool_status()
 
     assert out["status"] == expected_status
@@ -524,7 +526,7 @@ def test_redis_without_maxmemory_has_no_percent(monkeypatch):
 def test_db_schema_size_when_db_fails_returns_unknown(monkeypatch):
     from app.core.admin_system_status import service
 
-    with patch("app.db.pg_connection.fetchone", side_effect=ConnectionError("db down")):
+    with patch("app.core.admin_system_status.service.fetch_schema_size_row", side_effect=ConnectionError("db down")):
         out = service.get_db_schema_size()
 
     assert out["status"] == "unknown"
@@ -543,8 +545,8 @@ def test_db_schema_size_returns_tables_sorted(monkeypatch):
          "size_bytes": 10 * 1024 * 1024},
     ]
 
-    with patch("app.db.pg_connection.fetchone", return_value=size_row), \
-         patch("app.db.pg_connection.fetchall", return_value=table_rows):
+    with patch("app.core.admin_system_status.service.fetch_schema_size_row", return_value=size_row), \
+         patch("app.core.admin_system_status.service.fetch_critical_table_rows", return_value=table_rows):
         out = service.get_db_schema_size()
 
     assert out["status"] == "ok"  # 150MB < 1GB warn threshold
@@ -558,8 +560,8 @@ def test_db_schema_size_over_warn_threshold(monkeypatch):
     from app.core.admin_system_status import service
 
     size_row = {"size_pretty": "1.5 GB", "size_bytes": int(1.5 * 1024 ** 3)}
-    with patch("app.db.pg_connection.fetchone", return_value=size_row), \
-         patch("app.db.pg_connection.fetchall", return_value=[]):
+    with patch("app.core.admin_system_status.service.fetch_schema_size_row", return_value=size_row), \
+         patch("app.core.admin_system_status.service.fetch_critical_table_rows", return_value=[]):
         out = service.get_db_schema_size()
 
     assert out["status"] == "warn"
@@ -573,8 +575,8 @@ def test_db_schema_size_env_override(monkeypatch):
     monkeypatch.setenv("DB_SCHEMA_ERROR_GB", "50")
 
     size_row = {"size_pretty": "2 GB", "size_bytes": 2 * 1024 ** 3}
-    with patch("app.db.pg_connection.fetchone", return_value=size_row), \
-         patch("app.db.pg_connection.fetchall", return_value=[]):
+    with patch("app.core.admin_system_status.service.fetch_schema_size_row", return_value=size_row), \
+         patch("app.core.admin_system_status.service.fetch_critical_table_rows", return_value=[]):
         out = service.get_db_schema_size()
 
     assert out["status"] == "ok"  # 2GB < 10GB warn (override)

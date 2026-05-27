@@ -95,6 +95,9 @@ def save_pipeline_result_outcome(
     )
 
     fmt_lower = (output_format or "").lower()
+    supported_formats = {"csv", "json", "geojson", "xlsx", "xls", "parquet", "gpkg", "geopackage", "shp", "gdb"}
+    if fmt_lower not in supported_formats:
+        raise ValueError(f"Formato output non supportato: {output_format}")
     # SHP esce zippato via `io.geospatial.write_shapefile_zip_bytes`;
     # estensione del result blob diventa `.zip` (extracted by reader).
     if fmt_lower == "shp":

@@ -97,7 +97,7 @@ def test_list_datasources_filters_by_group_id_uses_where_clause(monkeypatch):
         captured.append((query, params))
         return []
 
-    monkeypatch.setattr(datasource_db, "fetchall", fake_fetchall)
+    monkeypatch.setattr(datasource_db, "_fetchall", fake_fetchall)
 
     service = DataSourceService()
     service.list_datasources(group_id="tenant-a")
@@ -133,7 +133,7 @@ def test_list_datasources_no_where_clause_when_group_id_is_none(monkeypatch):
         captured.append((query, params))
         return []
 
-    monkeypatch.setattr(datasource_db, "fetchall", fake_fetchall)
+    monkeypatch.setattr(datasource_db, "_fetchall", fake_fetchall)
 
     service = DataSourceService()
     service.list_datasources(group_id=None)
@@ -181,7 +181,7 @@ def test_list_datasources_uses_single_fetchall_no_per_row_requery(monkeypatch):
         get_datasource_count[0] += 1
         return rows[0]  # non dovrebbe mai essere chiamato
 
-    monkeypatch.setattr(datasource_db, "fetchall", fake_fetchall)
+    monkeypatch.setattr(datasource_db, "_fetchall", fake_fetchall)
     monkeypatch.setattr(datasource_db, "get_datasource", fake_get_datasource)
 
     service = DataSourceService()
@@ -315,8 +315,8 @@ def test_datasource_scan_state_db_boundary_uses_datasources_row(monkeypatch):
         execute_calls.append((query, params))
         return _Result()
 
-    monkeypatch.setattr(datasource_db, "fetchone", fake_fetchone)
-    monkeypatch.setattr(datasource_db, "execute", fake_execute)
+    monkeypatch.setattr(datasource_db, "_fetchone", fake_fetchone)
+    monkeypatch.setattr(datasource_db, "_execute", fake_execute)
 
     row = datasource_db.get_scan_state("ds-db")
     saved = datasource_db.save_scan_state("ds-db", {"processed": []})
@@ -336,7 +336,9 @@ def test_datasource_service_has_no_scan_state_filesystem_fallback():
     """scan_state runtime deve restare DB-only in ottica multi-pod."""
     from pathlib import Path
 
-    source = Path("backend/app/core/datasources/service.py").read_text(encoding="utf-8")
+    import app.core.datasources.service as datasource_service
+
+    source = Path(datasource_service.__file__).read_text(encoding="utf-8")
 
     assert "datasources_scan" not in source
     assert "_scan_dir" not in source

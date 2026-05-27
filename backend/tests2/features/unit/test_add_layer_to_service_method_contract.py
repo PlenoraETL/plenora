@@ -144,6 +144,9 @@ def real_client():
     client._default_drawing_info = MagicMock(return_value={"renderer": {}})
     client.dataframe_to_esri_features = MagicMock(return_value=[])
     client.add_features = MagicMock(return_value={"added_count": 4, "errors": []})
+    client.add_dataframe_features = MagicMock(
+        return_value={"added_count": 4, "errors": []}
+    )
     return client
 
 
@@ -190,7 +193,7 @@ def test_add_layer_to_service_failure_returns_typed_result(real_client):
 def test_add_layer_to_service_errors_is_tuple_not_list(real_client):
     """Errors propagati da `add_features` (lista legacy) sono
     convertiti a `tuple` immutabile in `AddLayerResult`."""
-    real_client.add_features.return_value = {
+    real_client.add_dataframe_features.return_value = {
         "added_count": 0, "errors": ["a", "b"],
     }
     conn = SimpleNamespace(server_url="https://arc.test", username="u")

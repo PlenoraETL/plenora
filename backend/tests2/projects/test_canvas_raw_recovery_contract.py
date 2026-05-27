@@ -50,20 +50,31 @@ def test_service_raw_canvas_read_keeps_group_filter() -> None:
     svc = ProjectService()
     malformed_canvas = '{"nodes": ['
 
-    with patch(
-        "app.core.projects.service.pg_connection.fetchone",
-        return_value={"id": "p-corrupt", "canvas": malformed_canvas},
-    ) as fetchone:
+    class _Session:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def fetchone(self, sql, params):
+            calls.append((sql, params))
+            return {"id": "p-corrupt", "canvas": malformed_canvas}
+
+    calls = []
+    with patch("app.core.projects.service.unit_of_work", return_value=_Session()):
         raw = svc.get_project_raw_canvas("p-corrupt", group_id="grp-1")
 
     assert raw == RawProjectCanvas(
         project_id="p-corrupt",
         canvas=malformed_canvas,
     )
-    fetchone.assert_called_once_with(
-        "SELECT id, canvas FROM projects WHERE id = %s AND group_id = %s",
-        ("p-corrupt", "grp-1"),
-    )
+    assert calls == [
+        (
+            "SELECT id, canvas FROM projects WHERE id = %s AND group_id = %s",
+            ("p-corrupt", "grp-1"),
+        )
+    ]
 
 
 def test_raw_canvas_endpoint_recovers_when_strict_canvas_validation_fails(

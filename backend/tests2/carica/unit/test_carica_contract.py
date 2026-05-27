@@ -26,6 +26,7 @@ def test_check_conflicts_checks_project_visibility_before_loading_project_output
     fake_loader = SimpleNamespace(load=lambda *args, **kwargs: df)
 
     with patch("app.core.carica.router._get_connection", return_value={"type": "postgres"}), \
+         patch("app.core.carica.router._assert_connection_visible"), \
          patch("app.core.carica.router._create_engine", return_value=object()), \
          patch("app.core.carica.conflict_checker.ConflictChecker", return_value=SimpleNamespace(check=lambda *args, **kwargs: report)), \
          patch("app.core.carica.router.assert_project_visible") as assert_project_visible, \

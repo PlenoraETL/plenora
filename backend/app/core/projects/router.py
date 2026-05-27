@@ -27,7 +27,10 @@ from app.core.auth.dependencies import (
 from app.core.auth.owner_dependencies import require_project_owner
 from app.shared.contracts.auth import CurrentUser, group_filter
 from app.core.auth.ownership import assert_group_access
-from app.core.projects.usage import list_owned_project_ids
+from app.core.projects.usage import (
+    list_owned_project_ids,
+    list_projects_with_canvas_for_datasource_check,
+)
 from app.core.projects import canvas_access as _canvas_access
 from app.core.projects.types import (
     CanvasResourceRefs,
@@ -167,18 +170,16 @@ def list_projects(
     # P1 (2026-05-26): batch-fetch dei canvas manipola in 1 query
     # invece di N+1 chiamate a `get_project_canvas`. Pre-fix con 20+
     # progetti manipola la latenza era lineare (visibile a UI; piu'
-    # critico con piu' progetti). Si usa
-    # `list_project_canvas_check_rows()` esistente che ritorna tutti i
-    # canvas in una query; filtriamo client-side ai soli manipola.
+    # critico con piu' progetti). Si usa il boundary projects.usage,
+    # filtrando client-side ai soli manipola.
     # NB: salta `sync_canvas_with_output_contracts` (side-effect del
     # `get_project_canvas` full) — il list endpoint non ne ha bisogno
     # e il sync e' gia' fatto in fase di save/load del canvas detail.
     canvas_by_id: dict = {}
     try:
-        from app.core.projects.db import list_project_canvas_check_rows
-        for row in list_project_canvas_check_rows():
-            if row.project_type == 'manipola':
-                canvas_by_id[row.id] = row.canvas
+        for row in list_projects_with_canvas_for_datasource_check():
+            if row.get("project_type") == "manipola":
+                canvas_by_id[str(row["id"])] = row.get("canvas")
     except Exception as exc:
         # Fallback graceful al pattern N+1 se la batch fallisce.
         logger.warning(

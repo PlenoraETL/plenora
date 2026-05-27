@@ -58,7 +58,12 @@ def test_write_features_from_df_applies_mapping_before_feature_serialization() -
         return [{"attributes": {"CITY": df.iloc[0]["CITY"]}}]
 
     client = SimpleNamespace(
-        dataframe_to_esri_features=MagicMock(side_effect=_to_features),
+        add_dataframe_features=MagicMock(
+            side_effect=lambda conn, layer_url, df, **kwargs: (
+                _to_features(df, kwargs["geometry_column"], kwargs["operation"])
+                and {"success": True, "added_count": 1, "errors": []}
+            )
+        ),
         add_features=MagicMock(
             return_value={"success": True, "added_count": 1, "errors": []}
         ),

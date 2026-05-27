@@ -334,9 +334,19 @@ def get_pool_headroom() -> PoolHeadroom:
         e mappa a fail-OPEN `(True, "introspection skipped: ...")`.
     """
     pool = _get_pool()
-    stats = pool.get_stats()
-    pool_size = int(stats.get("pool_size", 0))
-    pool_available = int(stats.get("pool_available", 0))
+    if hasattr(pool, "get_stats"):
+        stats = pool.get_stats()
+        pool_size = int(stats.get("pool_size", 0))
+        pool_available = int(stats.get("pool_available", 0))
+    else:
+        used = getattr(pool, "_used", {}) or {}
+        available = getattr(pool, "_pool", []) or []
+        try:
+            pool_size = len(used) + len(available)
+            pool_available = len(available)
+        except TypeError:
+            pool_size = 0
+            pool_available = 0
     in_use = max(0, pool_size - pool_available)
     return PoolHeadroom(max=_POOL_MAX, in_use=in_use, free=pool_available)
 

@@ -158,15 +158,10 @@ def test_raises_on_blob_lookup_db_error(api_service, monkeypatch, tmp_path):
     assert err.__cause__ is original
 
 
-def test_raises_on_filesystem_materialization_error(
+def test_bytes_first_resolver_does_not_materialize_to_filesystem(
     api_service, monkeypatch, tmp_path
 ):
-    """`OSError` su scrittura FS (mkdir su filesystem read-only,
-    permission denied, disk full) -> raise `FileSourceResolutionError
-    (cause="materialization", ...)` con chain preservata. La
-    classe `PermissionError` e' una sottoclasse di `OSError` e va
-    quindi catturata dalla stessa clausola.
-    """
+    """Post-Phase5: il resolver e' bytes-first e non crea cache locali."""
     _bypass_security(monkeypatch, api_service, tmp_path)
 
     def _get(fs_id, include_data=False):
@@ -186,15 +181,10 @@ def test_raises_on_filesystem_materialization_error(
     # revert automatico del monkeypatch a teardown.
     monkeypatch.setattr(type(tmp_path), "mkdir", _boom_mkdir)
 
-    with pytest.raises(FileSourceResolutionError) as exc_info:
-        api_service._resolve_file_source_id_path("fs-1", ctx=_TEST_CTX)
-
-    err = exc_info.value
-    assert err.file_source_id == "fs-1"
-    assert err.cause == "materialization"
-    assert "filesystem" in err.reason.lower()
-    assert err.original_error is original
-    assert err.__cause__ is original
+    assert api_service._resolve_file_source_id_path("fs-1", ctx=_TEST_CTX) == (
+        b"payload",
+        "input.xlsx",
+    )
 
 
 def test_fails_closed_without_security_context_still_short_circuits(api_service):

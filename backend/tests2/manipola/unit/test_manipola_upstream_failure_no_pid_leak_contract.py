@@ -216,8 +216,23 @@ def test_upstream_success_path_unchanged():
     # - load_dataframe_from_file per evitare I/O reale
     fake_materialized = MagicMock()
     fake_materialized.path = "/tmp/fake.csv"
+    fake_materialized.format = "csv"
+    fake_materialized.data = None
     fake_materialized.__enter__ = MagicMock(return_value=fake_materialized)
     fake_materialized.__exit__ = MagicMock(return_value=False)
+    fake_project_service = MagicMock()
+    fake_project_service.get_project_output_contract.return_value = {
+        "columns": [
+            {
+                "id": "col",
+                "physical_name": "col",
+                "source_name": "col",
+                "display_name": "col",
+                "type": {"logical": "integer"},
+                "status": "active",
+            }
+        ]
+    }
 
     with patch("app.utils.logger.open_run"), \
          patch("app.core.manipola.project_source_runtime.create_intermediate_run"), \
@@ -227,8 +242,11 @@ def test_upstream_success_path_unchanged():
                return_value=_UPSTREAM_CONTEXT), patch(
              "app.core.manipola.project_source_runtime.ArtifactResolver"
          ) as MockResolver, patch(
-             "app.core.manipola.executor.load_dataframe_from_file",
+             "app.core.manipola.source_loading.load_dataframe_from_artifact",
              return_value=fake_df,
+         ), patch(
+             "app.core.projects.service.ProjectService",
+             return_value=fake_project_service,
          ), patch(
              "app.core.manipola.project_source_runtime.Path"
          ) as MockPath:
@@ -236,6 +254,7 @@ def test_upstream_success_path_unchanged():
         instance_path = MagicMock()
         instance_path.exists.return_value = False
         MockPath.return_value = instance_path
+        MockResolver.return_value.materialize_run.return_value = fake_materialized
         MockResolver.return_value.materialize_latest.return_value = fake_materialized
 
         result = executor._carica_sorgenti_progetto(

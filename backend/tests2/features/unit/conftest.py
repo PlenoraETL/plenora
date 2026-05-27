@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.shared.contracts.auth import CurrentUser
-from app.core.auth.auth import require_not_esecutore
+from app.core.auth.auth import require_admin, require_not_esecutore
 from app.core.features.routes import router
 
 
@@ -28,6 +28,7 @@ def current_user() -> CurrentUser:
 @pytest.fixture
 def client(current_user: CurrentUser) -> TestClient:
     app = FastAPI()
+    app.dependency_overrides[require_admin] = lambda: current_user
     app.dependency_overrides[require_not_esecutore] = lambda: current_user
     app.include_router(router, prefix="/api")
     return TestClient(app, raise_server_exceptions=False)

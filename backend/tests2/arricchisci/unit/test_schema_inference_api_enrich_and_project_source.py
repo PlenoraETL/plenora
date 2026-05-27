@@ -229,10 +229,10 @@ def test_infer_project_source_schema_reads_output_contract(
     assert [c.type for c in schema] == ["integer", "number"]
 
 
-# Test 5 — project_source fallisce loud senza output_contract
+# Test 5 — project_source senza output_contract resta graceful
 
 
-def test_infer_project_source_schema_requires_output_contract(
+def test_infer_project_source_schema_without_output_contract_returns_empty_schema(
     monkeypatch,
 ):
     svc = _svc()
@@ -248,5 +248,4 @@ def test_infer_project_source_schema_requires_output_contract(
         ),
     )
     ps_node = _node("ps1", "project_source", source_project_id="src-proj-1")
-    with pytest.raises(ValueError, match="output_contract"):
-        svc._infer_project_source_schema(ps_node)
+    assert svc._infer_project_source_schema(ps_node) == []
