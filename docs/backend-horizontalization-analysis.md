@@ -152,7 +152,7 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 - `service.py`: `scan_state` e processed state sono su PostgreSQL (`datasources.scan_state`). Il fallback legacy su `DATA_DIR/datasources_scan/*.json` e' stato rimosso: il datasource service non tocca piu' filesystem locale per lo stato di scan.
 - `ftp.py`, `sftp.py`, `sharepoint.py`: naturalmente multi-host se credenziali e rete sono uguali.
 
-### `backend/app/core/auth/*`, `backend/app/shared/login_rate_limiter.py`, `backend/app/shared/token_blacklist.py`
+### `backend/app/core/auth/*`, `backend/app/core/security/login_rate_limiter.py`, `backend/app/core/security/token_blacklist.py`
 
 - JWT e utenti su DB; ok.
 - `login_rate_limiter.py`: Redis-backed; il fallback in-memory resta solo dev/single-host perche' production/staging/cluster richiedono `LOGIN_RL_REDIS_REQUIRED=true` via startup gate.

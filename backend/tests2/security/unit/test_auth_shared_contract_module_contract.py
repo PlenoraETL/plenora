@@ -48,6 +48,9 @@ _FORBIDDEN_IMPORTS = {
     "app.core.auth.ownership",
     "app.core.auth.mfa",
     # Stateful blacklist / rate-limit
+    "app.core.security.token_blacklist",
+    "app.core.security.login_rate_limiter",
+    "app.core.security.password_hashing",
     "app.shared.token_blacklist",
     "app.shared.login_rate_limiter",
     # Cloud SDK

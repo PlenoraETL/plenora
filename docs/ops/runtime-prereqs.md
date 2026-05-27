@@ -126,7 +126,7 @@ Lifecycle rule gestite via Terraform (`deploy/terraform/lifecycle.tf`), state su
 | Servizio | Endpoint | Usato da | Fallback |
 |---|---|---|---|
 | Postgres | `15.161.59.22:5432/plenora` (via `DATABASE_URL`) | tutto il backend + script backup | Senza DB: backend non parte. `admin_system_status.get_schedules_status` → `status="unknown"` con error |
-| Redis | env `CELERY_BROKER_URL` (variabile **canonica unica**) | `workers.celery_app` (broker), `workers.beat_scheduler` (leader lock), `admin_system_status` (queue depth / infra status), `app.shared.token_blacklist` (JWT revocation) | Redis down: `inspect()` timeout 2s → `nodes=0`, card workers vuota; `/auth/logout` → 503 (fail-loud write); `is_jti_blacklisted` → False (fail-open read) |
+| Redis | env `CELERY_BROKER_URL` (variabile **canonica unica**) | `workers.celery_app` (broker), `workers.beat_scheduler` (leader lock), `admin_system_status` (queue depth / infra status), `app.core.security.token_blacklist` (JWT revocation) | Redis down: `inspect()` timeout 2s → `nodes=0`, card workers vuota; `/auth/logout` → 503 (fail-loud write); `is_jti_blacklisted` → False (fail-open read) |
 
 ### Redis — perché una sola variabile
 

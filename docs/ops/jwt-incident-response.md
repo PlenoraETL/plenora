@@ -124,7 +124,7 @@ Se il server è stato compromesso e dobbiamo presumere che **tutti** i token att
 
 ## Link
 
-- Codice blacklist: [../../backend/app/shared/token_blacklist.py](../../backend/app/shared/token_blacklist.py)
+- Codice blacklist: [../../backend/app/core/security/token_blacklist.py](../../backend/app/core/security/token_blacklist.py)
 - Logout endpoint: [../../backend/app/core/auth/auth.py](../../backend/app/core/auth/auth.py) (`/auth/logout`)
 - Test unit: [../../backend/tests2/security/unit/test_jwt_logout_blacklist.py](../../backend/tests2/security/unit/test_jwt_logout_blacklist.py)
 - Test integration: [../../backend/tests2/integration/test_jwt_logout_blacklist_integration.py](../../backend/tests2/integration/test_jwt_logout_blacklist_integration.py)

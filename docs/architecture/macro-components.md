@@ -13,7 +13,8 @@ Plenora Backend
 
   A. Auth / Identity
      JWT, RBAC, MFA, disclosure policy, tenant isolation.
-     Canonical: app/core/auth, app/shared/contracts/auth.py
+     Canonical: app/core/auth, app/core/security,
+     app/shared/contracts/auth.py
 
   B. Connections / External Providers
      External DBs, REST APIs, ArcGIS, datasources.
@@ -89,6 +90,8 @@ subpackages:
 - `app/shared/contracts`: cross-cutting public contracts.
 
 Root-level shared modules are allowlisted and should shrink over time.
+Security helpers with runtime behavior belong in `app/core/security`; old
+`app/shared/*` security paths are compatibility aliases only.
 
 ---
 

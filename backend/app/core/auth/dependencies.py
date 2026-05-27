@@ -19,7 +19,7 @@ from app.core.auth.roles import (
 )
 from app.shared.contracts.auth import CurrentUser
 from app.core.auth.jwt_token import decode_token
-from app.shared.token_blacklist import is_jti_blacklisted
+from app.core.security.token_blacklist import is_jti_blacklisted
 
 
 __all__ = [

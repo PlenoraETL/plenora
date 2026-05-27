@@ -26,7 +26,7 @@ from app.shared import error_codes
 from app.shared.contracts.auth import CurrentUser
 from app.shared.error_envelope import raise_typed_http
 from app.shared.resources.path_policy import assert_path_within as _core_assert
-from app.shared.upload_guards import enforce_upload_size_limit
+from app.core.security.upload_guards import enforce_upload_size_limit
 from app.utils.logger import get_logger
 from app.core.files import upload_boundary as _upload_boundary
 from .models import (
@@ -41,9 +41,9 @@ def _sanitize_upload_filename(raw: Optional[str]) -> str:
     return _upload_boundary.sanitize_upload_filename(raw)
 
 def _enforce_upload_size_limit(file: "UploadFile") -> int:
-    """Wrapper locale al cap di upload: delega a `app.shared.upload_guards`.
+    """Wrapper locale al cap di upload: delega a `app.core.security.upload_guards`.
 
-    L'implementazione canonica vive in `app/shared/upload_guards.py`
+    L'implementazione canonica vive in `app/core/security/upload_guards.py`
     (T-04 + B1 riuso da `eseguibili/router.py`).
 
     Risolviamo `MAX_FILE_SIZE` dal `settings` di QUESTO modulo prima di

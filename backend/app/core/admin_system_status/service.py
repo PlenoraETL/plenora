@@ -42,7 +42,7 @@ from app.core.admin_system_status.models import (
     SystemStatusPayload,
     WorkerDetail,
 )
-from app.shared.token_blacklist import get_blacklist_status as _probe
+from app.core.security.token_blacklist import get_blacklist_status as _probe
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -741,7 +741,7 @@ def get_redis_status() -> AdminStatusBlock:
 def get_blacklist_status() -> AdminStatusBlock:
     """Status della blacklist JWT (revoca token via /auth/logout).
 
-    Wrapper su `app.shared.token_blacklist.get_blacklist_status` che
+    Wrapper su `app.core.security.token_blacklist.get_blacklist_status` che
     gestisce eventuali errori di import (es. test env senza il modulo).
     Soglia stale configurabile via env `JWT_BLACKLIST_STALE_THRESHOLD_SEC`
     (default 1800 = 30 min).

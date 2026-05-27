@@ -17,7 +17,7 @@ _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _TARGET_MODULES = (
     "app/observability/audit_action.py",
     "app/observability/log_sanitization.py",
-    "app/shared/token_blacklist.py",
+    "app/core/security/token_blacklist.py",
 )
 
 

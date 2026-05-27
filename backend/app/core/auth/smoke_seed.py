@@ -10,7 +10,7 @@ import uuid
 
 from app.core.auth import db
 from app.environment import environment_name, get_env
-from app.shared.password_hashing import hash_password
+from app.core.security.password_hashing import hash_password
 
 
 DEFAULT_GROUP_ID = "smoke"

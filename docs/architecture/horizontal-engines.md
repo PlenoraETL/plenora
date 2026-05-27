@@ -13,13 +13,14 @@ Canonical surfaces:
 
 - `app/core/auth/middleware.py`
 - `app/core/auth/dependencies.py`
+- `app/core/security/*`
 - `app/shared/contracts/auth.py`
-- `app/shared/jwt_token.py`
-- `app/shared/password_hashing.py`
 
 Rules:
 
 - Do not add new imports from the retired auth facade.
+- Runtime security helpers belong in `app/core/security`; `app/shared/*`
+  security paths are compatibility aliases only.
 - Disclosure policy and auth error codes are governed by ADR-0022.
 - Tenant/group binding must remain explicit at cross-tenant boundaries.
 

@@ -28,7 +28,7 @@ from app.core.auth.models import (
 from app.shared.contracts.auth import CurrentUser
 from app.core.auth.roles import ROLES_ADMIN_OR_ABOVE, VALID_ROLES
 from app.observability.audit_action import audit_action
-from app.shared.password_hashing import hash_password
+from app.core.security.password_hashing import hash_password
 
 from app.core.auth import db as _groups_dal
 from app.core.auth import db as _users_dal

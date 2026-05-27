@@ -24,10 +24,10 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "error_codes",        # shared error code registry
         "error_envelope",     # standard error response envelope
         "error_sanitizer",    # strip sensitive data from error messages
-        "login_rate_limiter", # per-user login throttle
-        "password_hashing",   # bcrypt password helpers
-        "token_blacklist",    # JWT revocation store
-        "upload_guards",      # upload size / MIME type enforcement
+        "login_rate_limiter", # compat alias to app.core.security.login_rate_limiter
+        "password_hashing",   # compat alias to app.core.security.password_hashing
+        "token_blacklist",    # compat alias to app.core.security.token_blacklist
+        "upload_guards",      # compat alias to app.core.security.upload_guards
         "clock",                       # wall-clock abstraction for testability
         "canvas_types",                # canvas type helpers shared across engines
     }
@@ -38,10 +38,10 @@ _ROOT_MODULE_CLASSIFICATIONS: dict[str, str] = {
     "error_codes": "KEEP_ROOT_CROSS_CUTTING",
     "error_envelope": "KEEP_ROOT_CROSS_CUTTING",
     "error_sanitizer": "KEEP_ROOT_CROSS_CUTTING",
-    "login_rate_limiter": "MOVE_TO_SECURITY_PACKAGE_LATER",
-    "password_hashing": "MOVE_TO_SECURITY_PACKAGE_LATER",
-    "token_blacklist": "MOVE_TO_SECURITY_PACKAGE_LATER",
-    "upload_guards": "MOVE_TO_SECURITY_PACKAGE_LATER",
+    "login_rate_limiter": "KEEP_COMPAT_SECURITY_WRAPPER",
+    "password_hashing": "KEEP_COMPAT_SECURITY_WRAPPER",
+    "token_blacklist": "KEEP_COMPAT_SECURITY_WRAPPER",
+    "upload_guards": "KEEP_COMPAT_SECURITY_WRAPPER",
     "clock": "KEEP_ROOT_CROSS_CUTTING",
     "canvas_types": "KEEP_ROOT_CROSS_CUTTING",
 }
@@ -53,6 +53,7 @@ _CLASSIFICATION_BUCKETS: frozenset[str] = frozenset(
         "MOVE_TO_EXECUTION_CANDIDATE",
         "MOVE_TO_CONNECTIONS_CANDIDATE",
         "MOVE_TO_SECURITY_PACKAGE_LATER",
+        "KEEP_COMPAT_SECURITY_WRAPPER",
         "HEAVY_ROOT_UTILITY",
     }
 )
@@ -70,6 +71,18 @@ _ALLOWED_UPWARD_IMPORTS: dict[str, frozenset[str]] = {
             "app.core.datasources.errors",
             "app.core.tickets.errors",
         }
+    ),
+    "login_rate_limiter": frozenset(
+        {"app.core.security", "app.core.security.login_rate_limiter"}
+    ),
+    "password_hashing": frozenset(
+        {"app.core.security", "app.core.security.password_hashing"}
+    ),
+    "token_blacklist": frozenset(
+        {"app.core.security", "app.core.security.token_blacklist"}
+    ),
+    "upload_guards": frozenset(
+        {"app.core.security", "app.core.security.upload_guards"}
     ),
 }
 
