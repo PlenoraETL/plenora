@@ -10,7 +10,7 @@
       "category": "base",
       "icon": "🔗",
       "description": "Unisce due tabelle su una chiave comune",
-      "function": "base.op_join",
+      "function": "joins.op_join",
       "inputs": "multi",
       "parameters": [
         {
@@ -69,7 +69,7 @@
       "category": "base",
       "icon": "📚",
       "description": "Unisce più tabelle verticalmente (append righe)",
-      "function": "base.op_union",
+      "function": "joins.op_union",
       "inputs": "multi",
       "parameters": [
         {
@@ -91,7 +91,7 @@
       "category": "base",
       "icon": "🔍",
       "description": "Filtra righe in base a una condizione",
-      "function": "base.op_filter",
+      "function": "filtering.op_filter",
       "inputs": "single",
       "parameters": [
         {
@@ -169,7 +169,7 @@
       "category": "base",
       "icon": "🧮",
       "description": "Crea una nuova colonna calcolata con un'espressione",
-      "function": "base.op_formula",
+      "function": "formula.op_formula",
       "inputs": "single",
       "parameters": [
         {
@@ -199,7 +199,7 @@
       "category": "base",
       "icon": "🔗",
       "description": "Unisce più colonne in una nuova colonna con separatore",
-      "function": "base.op_concat_columns",
+      "function": "columns.op_concat_columns",
       "inputs": "single",
       "parameters": [
         {
@@ -243,7 +243,7 @@
       "category": "base",
       "icon": "📊",
       "description": "Raggruppa dati e applica funzioni di aggregazione",
-      "function": "base.op_aggregate",
+      "function": "aggregation.op_aggregate",
       "inputs": "single",
       "parameters": [
         {
@@ -271,7 +271,7 @@
       "category": "base",
       "icon": "↕️",
       "description": "Ordina le righe per una o più colonne",
-      "function": "base.op_sort",
+      "function": "aggregation.op_sort",
       "inputs": "single",
       "parameters": [
         {
@@ -298,7 +298,7 @@
       "category": "base",
       "icon": "🎯",
       "description": "Rimuove righe duplicate",
-      "function": "base.op_distinct",
+      "function": "aggregation.op_distinct",
       "inputs": "single",
       "parameters": [
         {
@@ -338,7 +338,7 @@
       "category": "base",
       "icon": "✏️",
       "description": "Rinomina una o più colonne",
-      "function": "base.op_rename",
+      "function": "columns.op_rename",
       "inputs": "single",
       "parameters": [
         {
@@ -359,7 +359,7 @@
       "category": "base",
       "icon": "🗑️",
       "description": "Rimuove colonne dal dataset",
-      "function": "base.op_drop_columns",
+      "function": "columns.op_drop_columns",
       "inputs": "single",
       "parameters": [
         {
@@ -380,7 +380,7 @@
       "category": "base",
       "icon": "🔲",
       "description": "Sostituisce i valori NULL/NaN",
-      "function": "base.op_fill_na",
+      "function": "cleansing.op_fill_na",
       "inputs": "single",
       "parameters": [
         {
@@ -429,7 +429,7 @@
       "category": "base",
       "icon": "🔄",
       "description": "Sostituisce valori in una colonna",
-      "function": "base.op_replace",
+      "function": "cleansing.op_replace",
       "inputs": "single",
       "parameters": [
         {
@@ -467,7 +467,7 @@
       "category": "base",
       "icon": "✂️",
       "description": "Divide una colonna in più colonne usando un separatore",
-      "function": "base.op_split_column",
+      "function": "columns.op_split_column",
       "inputs": "single",
       "parameters": [
         {
@@ -1049,7 +1049,7 @@
       "category": "privacy",
       "icon": "🔑",
       "description": "Crea colonna hash MD5 da una o più colonne (utile per change detection)",
-      "function": "base.op_md5_hash",
+      "function": "security.op_md5_hash",
       "inputs": "single",
       "parameters": [
         {
@@ -1085,7 +1085,7 @@
       "category": "privacy",
       "icon": "🎭",
       "description": "Maschera dati sensibili (CF, email, telefono, IBAN) in modo irreversibile",
-      "function": "base.op_mask_data",
+      "function": "security.op_mask_data",
       "inputs": "single",
       "parameters": [
         {
@@ -1114,7 +1114,7 @@
       "category": "base",
       "icon": "🔄",
       "description": "Converte il tipo di una o più colonne (str→int, str→date, str→float, ecc.)",
-      "function": "base.op_type_cast",
+      "function": "cleansing.op_type_cast",
       "inputs": "single",
       "parameters": [
         {
@@ -1201,7 +1201,7 @@
       "category": "spatial",
       "icon": "📍",
       "description": "Crea colonna geometria Point da colonne lat/lon o da WKT",
-      "function": "base.op_geo_from_coords",
+      "function": "geo.op_geo_from_coords",
       "inputs": "single",
       "parameters": [
         {
@@ -1278,7 +1278,7 @@
       "category": "base",
       "icon": "🔀",
       "description": "Crea colonna con logica if/else o case when su condizioni multiple",
-      "function": "base.op_conditional",
+      "function": "filtering.op_conditional",
       "inputs": "single",
       "parameters": [
         {
@@ -1321,7 +1321,7 @@
       "category": "base",
       "icon": "✂️",
       "description": "Normalizza colonne testo: trim, maiuscolo/minuscolo, rimuovi accenti, spazi doppi",
-      "function": "base.op_text_normalize",
+      "function": "strings.op_text_normalize",
       "inputs": "single",
       "parameters": [
         {
@@ -1384,7 +1384,7 @@
       "category": "base",
       "icon": "📊",
       "description": "Trasforma righe in colonne: spalma i valori di una colonna come nuove colonne",
-      "function": "base.op_pivot",
+      "function": "reshape.op_pivot",
       "inputs": "single",
       "parameters": [
         {
@@ -1470,7 +1470,7 @@
       "category": "base",
       "icon": "🔀",
       "description": "Confronta due tabelle e identifica righe aggiunte, eliminate e modificate",
-      "function": "base.op_table_diff",
+      "function": "reshape.op_table_diff",
       "inputs": "multi",
       "parameters": [
         {
@@ -1941,7 +1941,7 @@
       "category": "base",
       "icon": "🎲",
       "description": "Estrae un campione casuale di righe dal dataset",
-      "function": "base.op_sample",
+      "function": "analysis.op_sample",
       "inputs": "single",
       "parameters": [
         {
@@ -1985,7 +1985,7 @@
       "category": "base",
       "icon": "🔃",
       "description": "Trasforma colonne in righe (inverso di Pivot): da formato wide a long",
-      "function": "base.op_melt",
+      "function": "reshape.op_melt",
       "inputs": "single",
       "parameters": [
         {
@@ -2025,7 +2025,7 @@
       "category": "base",
       "icon": "🔢",
       "description": "Aggiunge colonna con numerazione progressiva, con opzione di partizionamento e ordinamento",
-      "function": "base.op_add_row_number",
+      "function": "utility.op_add_row_number",
       "inputs": "single",
       "parameters": [
         {
@@ -2073,7 +2073,7 @@
       "category": "base",
       "icon": "📅",
       "description": "Estrae parti da una colonna data: anno, mese, giorno, trimestre, giorno settimana, ecc.",
-      "function": "base.op_date_extract",
+      "function": "utility.op_date_extract",
       "inputs": "single",
       "parameters": [
         {
@@ -2118,7 +2118,7 @@
       "category": "base",
       "icon": "🗺️",
       "description": "Ricodifica i valori di una colonna tramite dizionario (es. codice zona → nome zona)",
-      "function": "base.op_lookup",
+      "function": "analysis.op_lookup",
       "inputs": "single",
       "parameters": [
         {
@@ -2158,7 +2158,7 @@
       "category": "base",
       "icon": "📊",
       "description": "Raggruppa valori numerici in classi (es. fasce di prezzo, classi di superficie)",
-      "function": "base.op_bin",
+      "function": "analysis.op_bin",
       "inputs": "single",
       "parameters": [
         {
@@ -2202,7 +2202,7 @@
       "category": "base",
       "icon": "📋",
       "description": "Espande una colonna contenente JSON/dizionari in colonne separate",
-      "function": "base.op_flatten_json",
+      "function": "analysis.op_flatten_json",
       "inputs": "single",
       "parameters": [
         {
@@ -2394,7 +2394,7 @@
       "category": "base",
       "icon": "📈",
       "description": "Calcola statistiche su una colonna numerica (count, min, max, media, mediana, deviazione std, percentili)",
-      "function": "base.op_statistics",
+      "function": "analysis.op_statistics",
       "inputs": "single",
       "parameters": [
         {
@@ -2447,7 +2447,7 @@
       "category": "base",
       "icon": "🔍",
       "description": "Estrae testo da una colonna usando espressioni regolari (regex) — utile per parsing indirizzi, codici, ecc.",
-      "function": "base.op_string_extract",
+      "function": "strings.op_string_extract",
       "inputs": "single",
       "parameters": [
         {
@@ -2487,7 +2487,7 @@
       "category": "base",
       "icon": "✖️",
       "description": "Genera tutte le combinazioni possibili tra le righe di due tabelle",
-      "function": "base.op_cross_join",
+      "function": "joins.op_cross_join",
       "inputs": "multi",
       "parameters": [],
       "output": {
@@ -2502,7 +2502,7 @@
       "category": "base",
       "icon": "🔄",
       "description": "Scambia righe e colonne: le colonne diventano righe e viceversa",
-      "function": "base.op_transpose",
+      "function": "reshape.op_transpose",
       "inputs": "single",
       "parameters": [
         {
@@ -2531,7 +2531,7 @@
       "category": "base",
       "icon": "↕️",
       "description": "Cambia l'ordine delle colonne nel dataset",
-      "function": "base.op_reorder_columns",
+      "function": "columns.op_reorder_columns",
       "inputs": "single",
       "parameters": [
         {
@@ -2556,7 +2556,7 @@
       "category": "base",
       "icon": "📏",
       "description": "Allunga i valori a una lunghezza fissa aggiungendo caratteri (es. '1' → '001')",
-      "function": "base.op_string_pad",
+      "function": "strings.op_string_pad",
       "inputs": "single",
       "parameters": [
         {
@@ -2604,7 +2604,7 @@
       "category": "base",
       "icon": "📐",
       "description": "Calcola la lunghezza del testo in ogni riga",
-      "function": "base.op_string_length",
+      "function": "strings.op_string_length",
       "inputs": "single",
       "parameters": [
         {
@@ -2632,7 +2632,7 @@
       "category": "base",
       "icon": "🧹",
       "description": "Rimuove duplicati con priorità: ordina per una colonna prima di scegliere quale tenere",
-      "function": "base.op_dedup_advanced",
+      "function": "aggregation.op_dedup_advanced",
       "inputs": "single",
       "parameters": [
         {
@@ -2674,7 +2674,7 @@
       "category": "base",
       "icon": "📊",
       "description": "Calcoli su finestre: ranking, somma cumulativa, valore precedente/successivo (lag/lead)",
-      "function": "base.op_window_function",
+      "function": "aggregation.op_window_function",
       "inputs": "single",
       "parameters": [
         {
@@ -2737,7 +2737,7 @@
       "category": "base",
       "icon": "🔑",
       "description": "Aggiunge un identificativo univoco (UUID v4) a ogni riga",
-      "function": "base.op_uuid_generator",
+      "function": "utility.op_uuid_generator",
       "inputs": "single",
       "parameters": [
         {

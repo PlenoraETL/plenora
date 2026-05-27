@@ -12,8 +12,8 @@ Moduli (consolidamento orizzontale 2026-05-26):
   - `vsimem`: ctypes adapter su libgdal per `/vsimem` (ex-`imdf.gdal_vsi`)
   - `zip_guards`: bomb-cap pre-extract + `open_zip_bytes_safe` context
     manager (ex-`utils.zip_safe`)
-  - `object_storage`: facade re-export per object storage cloud-agnostic
-    (S3/MinIO via boto3) — front door per i caller `app.core.*`
+  - `object_storage`: front door per object storage cloud-agnostic
+    (S3/MinIO via boto3) usato dai caller `app.core.*`
   - `local_filesystem`: data plane boundary per scritture filesystem
     locale (out-of-contract RAM-first ma single audit point) —
     `LocalDataSource` + `startup_validation` passano da qui
@@ -23,8 +23,8 @@ Moduli (consolidamento orizzontale 2026-05-26):
     (ex-`app/shared/resources/file_cleanup.py`)
 
 Object storage layering:
-  - `app.core.io.object_storage`: facade (entry point del core layer);
-    5 symbol re-esportati (get_runtime_object_storage, object_storage_enabled,
+  - `app.core.io.object_storage`: entry point del core layer;
+    5 symbol pubblici (get_runtime_object_storage, object_storage_enabled,
     ObjectStorage, ObjectStorageDisabledError, ObjectMeta).
   - `app.infrastructure.storage.cloud_backends`: implementation source-of-truth
     con boto3/MinIO factory, capability check, bucket resolution,

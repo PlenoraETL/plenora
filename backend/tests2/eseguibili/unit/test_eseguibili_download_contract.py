@@ -25,18 +25,10 @@ def test_upload_meta_path_sanitizes_file_id(monkeypatch, tmp_path):
     assert path.name == "evilid.meta.json"
 
 
-def test_upload_meta_rejects_local_path_payload():
+def test_upload_meta_save_wrapper_is_removed():
     import app.core.eseguibili.router as router_mod
 
-    with pytest.raises(ValueError, match="local paths"):
-        router_mod._save_upload_meta(
-            "fs-upload-1",
-            {
-                "path": "/tmp/upload.csv",
-                "eseguibile_id": "exe-1",
-                "user_id": "u-1",
-            },
-        )
+    assert not hasattr(router_mod, "_save_upload_meta")
 
 
 def test_task_owner_path_sanitizes_task_id(monkeypatch, tmp_path):

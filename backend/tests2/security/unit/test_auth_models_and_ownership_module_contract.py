@@ -263,13 +263,11 @@ def test_auth_no_longer_reexports_removed_handlers_via_import():
 def test_auth_no_longer_reexports_group_filter():
     """BE-GO-READY-AUTH-ENGINE-014-AUTH-FACADE-REEXPORT-DEATHMAP-DTO-CUT:
     the `group_filter` KEEP_COMPAT re-export was deleted from
-    `app.core.auth.auth`. The 9 app routers already consume the
-    leaf `app.core.auth.ownership` directly. Production callers via
-    the facade: ZERO.
+    `app.core.auth.auth`. App routers consume the pure helper from
+    `app.shared.contracts.auth`. Production callers via the facade: ZERO.
 
-    Re-introducing `from app.core.auth.ownership import group_filter`
-    (or any other re-export of `group_filter`) at the top of
-    `auth.py` widens the facade surface and reverses AUTH-ENGINE-014.
+    Re-introducing any re-export of `group_filter` at the top of `auth.py`
+    widens the facade surface and reverses AUTH-ENGINE-014.
 
     Symmetric to `test_auth_no_longer_reexports_removed_dtos` /
     `test_auth_no_longer_reexports_removed_handlers`: hasattr +
@@ -282,13 +280,12 @@ def test_auth_no_longer_reexports_group_filter():
         "app.core.auth.auth.group_filter was removed by "
         "BE-GO-READY-AUTH-ENGINE-014. If this assertion fails, "
         "someone re-introduced the re-export. Import from "
-        "`app.core.auth.ownership` instead (canonical home), or "
-        "`app.shared.contracts.auth` for shared DTO contracts."
+        "`app.shared.contracts.auth` for shared auth contracts."
     )
     assert "group_filter" not in auth_mod.__dict__, (
         "`from app.core.auth.auth import group_filter` is no "
         "longer supported after BE-GO-READY-AUTH-ENGINE-014. "
-        "Import from `app.core.auth.ownership` instead."
+        "Import from `app.shared.contracts.auth` instead."
     )
 
 

@@ -33,7 +33,7 @@ class PluginExecutor:
     Executor con caricamento dinamico delle trasformazioni dal registry JSON.
 
     Le funzioni vengono importate dinamicamente al formato:
-    "base.op_join" → app.core.manipola.transforms.base.op_join
+    "joins.op_join" → app.core.manipola.transforms.joins.op_join
     "spatial.op_geo_buffer" → app.core.manipola.transforms.spatial.op_geo_buffer
     """
 
@@ -106,7 +106,7 @@ class PluginExecutor:
         Importa dinamicamente tutte le funzioni dal registry.
 
         Il campo 'function' nel registry ha formato "modulo.nome_funzione":
-        - "base.op_join" → app.core.manipola.transforms.base.op_join
+        - "joins.op_join" → app.core.manipola.transforms.joins.op_join
         - "spatial.op_geo_buffer" → app.core.manipola.transforms.spatial.op_geo_buffer
         """
         for transform_id, config in self.registry.items():

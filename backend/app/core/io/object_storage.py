@@ -1,12 +1,8 @@
-"""Object storage facade — boundary I/O orizzontale (re-export).
+"""Object storage boundary I/O.
 
-Re-esporta i punti di ingresso canonical per object storage
-cloud-agnostic (boto3/MinIO/S3) dal layer `app/infrastructure/storage/`.
-Consolidamento orizzontale (2026-05-26): prima i 11+ caller in
-`app/core/*` facevano deep import diretto su
-`from app.infrastructure.storage.cloud_backends import ...`; ora
-passano per questo modulo, allineato con gli altri boundary I/O
-(`vsimem`, `zip_guards`, `geospatial`).
+Front door stabile per object storage cloud-agnostic (boto3/MinIO/S3).
+Il core passa da questo modulo invece di importare direttamente il layer
+infrastrutturale.
 
 Public surface (runtime data plane):
   - `get_runtime_object_storage()`: factory runtime per result/IMDF/

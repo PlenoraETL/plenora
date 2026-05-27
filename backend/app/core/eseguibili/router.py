@@ -225,12 +225,6 @@ def _upload_meta_path(file_id: str) -> Path:
     return tmp_dir / f"{safe_id}.meta.json"
 
 
-def _save_upload_meta(file_id: str, meta: dict) -> None:
-    """Compatibility wrapper: upload metadata is persisted by the service."""
-    if "path" in meta:
-        raise ValueError("upload metadata must not contain local paths")
-
-
 def _load_upload_meta(file_id: str) -> Optional[Mapping[str, object]]:
     """Carica metadata upload durable dal DB; legacy local solo dev/test."""
     meta = eseguibili_service.load_upload_metadata(file_id)

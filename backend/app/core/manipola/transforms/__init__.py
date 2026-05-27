@@ -4,46 +4,21 @@ Transforms Package — Funzioni di trasformazione per MANIPOLA.
 Nota: il PluginExecutor carica le funzioni direttamente dai sottomoduli
 """
 
-# ── Trasformazioni base ──────────────────────────────────────────────────────
-from .base import (
-    # Join e unione
-    op_join,
-    op_union,
-    # Filtro e formula
-    op_filter,
-    op_formula,
-    # Colonne
-    op_concat_columns,
-    op_rename,
-    op_drop_columns,
-    op_split_column,
-    op_type_cast,
-    # Aggregazione e ordinamento
-    op_aggregate,
-    op_sort,
-    op_distinct,
-    # Pulizia dati
-    op_fill_na,
-    op_replace,
-    op_text_normalize,
-    # Sicurezza / hashing
-    op_md5_hash,
-    op_mask_data,
-    # Geometria da coordinate
-    op_geo_from_coords,
-    # Logica condizionale
-    op_conditional,
-    # Analisi differenziale
-    op_table_diff,
-    # Pivot
-    op_pivot,
-    # Statistiche e testo
-    op_statistics,
-    op_string_extract,
-)
+# ── Trasformazioni non-spaziali ──────────────────────────────────────────────
+from .aggregation import op_aggregate, op_distinct, op_sort
+from .analysis import op_statistics
+from .cleansing import op_fill_na, op_replace, op_type_cast
+from .columns import op_concat_columns, op_drop_columns, op_rename, op_split_column
+from .filtering import op_conditional, op_filter
+from .formula import op_formula
+from .geo import op_geo_from_coords
+from .joins import op_join, op_union
+from .reshape import op_pivot, op_table_diff
+from .security import op_mask_data, op_md5_hash
+from .strings import op_string_extract, op_text_normalize
 
-# Alias: op_concat e' sinonimo di op_union (unione verticale di DataFrame
-from .base import op_union as op_concat  # noqa: F401
+# Alias: op_concat e' sinonimo di op_union (unione verticale di DataFrame).
+op_concat = op_union
 
 # ── Trasformazioni spaziali ──────────────────────────────────────────────────
 from .spatial import (

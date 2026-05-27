@@ -41,7 +41,7 @@ def test_explicit_registry_within_module_is_accepted(tmp_path, monkeypatch):
 def test_registry_path_outside_manipola_is_rejected(tmp_path):
     """Un path esplicito fuori dal perimetro DEVE sollevare ValueError."""
     evil_registry = tmp_path / "evil_registry.json"
-    evil_registry.write_text('{"transforms": {"pwn": {"function": "base.op_join"}}}')
+    evil_registry.write_text('{"transforms": {"pwn": {"function": "joins.op_join"}}}')
 
     with pytest.raises(ValueError, match="fuori dal perimetro"):
         PluginExecutor(registry_path=str(evil_registry))

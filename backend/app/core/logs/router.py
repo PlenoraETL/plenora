@@ -6,14 +6,6 @@ import json
 from typing import Any, Optional, TypeAlias
 
 from fastapi import APIRouter, Depends, Query
-# the FastAPI auth dependency callables (`get_current_user`
-# `require_not_esecutore`) are consumed from the canonical
-# leaf `app.core.auth.dependencies` instead of the
-# `app.core.auth.auth` compatibility module. Identity preserved (the compatibility module
-# now re-exports from this leaf), but the import edge moves
-# to the canonical owner so future contributors can trace the
-# dependency without dragging the whole login + MFA + JWT
-# omnibus
 from app.core.auth.dependencies import (
     require_not_esecutore,
 )
