@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.shared.clock import FakeClock
+from app.shared.execution.clock import FakeClock
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]

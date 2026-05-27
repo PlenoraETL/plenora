@@ -9,7 +9,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared]
 
 def test_features_geo_utils_reexports_geodata_helpers() -> None:
     from app.core.dataframes import geodata
-    from app.core.features import geo_utils
+    from app.core.dataframes import geodata as geo_utils
 
     assert geo_utils.detect_geometry_column is geodata.detect_geometry_column
     assert geo_utils.empty_geodataframe is geodata.empty_geodataframe

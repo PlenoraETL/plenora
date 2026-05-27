@@ -22,7 +22,7 @@ from app.observability.log_sanitization import (
     sanitize_for_log,
     sanitize_url_for_log,
 )
-from app.core.security.tls_policy import resolve_tls_verify
+from app.shared.security.tls_policy import resolve_tls_verify
 from app.shared.connections.oauth import get_arcgis_token
 from app.utils.logger import get_logger
 

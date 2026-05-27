@@ -1,5 +1,5 @@
 """
-Contract test per `app.shared.canvas_types`.
+Contract test per `app.shared.execution.canvas_types`.
 
 Lock-in dei valori dei `Literal` shared FE↔BE: il modulo canvas_types
 e' la single source of truth. Una modifica accidentale (rimozione,
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.shared import canvas_types as ct
+from app.shared.execution import canvas_types as ct
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]

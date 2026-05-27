@@ -26,7 +26,7 @@ def _make_upload(content: bytes) -> SimpleNamespace:
 
 
 def _stub_settings_with_max(monkeypatch, max_bytes: int) -> None:
-    """Sostituisce `settings` in `app.shared.upload_guards` (e in `app.config`
+    """Sostituisce `settings` in `app.core.security.upload_guards` (e in `app.config`
     per simmetria) cosi' la default-resolution di `MAX_FILE_SIZE` dentro
     `enforce_upload_size_limit(file)` (chiamato senza `max_bytes`) torna il
     valore desiderato in modo deterministico, indipendente dallo stato
@@ -37,7 +37,7 @@ def _stub_settings_with_max(monkeypatch, max_bytes: int) -> None:
             return max_bytes if key == "MAX_FILE_SIZE" else default
 
     import app.config as cfg
-    from app.shared import upload_guards
+    from app.core.security import upload_guards
     stub = _Settings()
     monkeypatch.setattr(cfg, "settings", stub)
     monkeypatch.setattr(upload_guards, "settings", stub)
@@ -46,7 +46,7 @@ def _stub_settings_with_max(monkeypatch, max_bytes: int) -> None:
 def test_eseguibili_size_cap_rejects_over_limit_with_413(monkeypatch):
     """Contract: file oltre cap -> 413 fail-loud, prima di toccare il
     payload. Replica il guard inserito in `analyze_upload`."""
-    from app.shared.upload_guards import enforce_upload_size_limit
+    from app.core.security.upload_guards import enforce_upload_size_limit
 
     _stub_settings_with_max(monkeypatch, max_bytes=1024)
 
@@ -59,7 +59,7 @@ def test_eseguibili_size_cap_rejects_over_limit_with_413(monkeypatch):
 
 def test_eseguibili_size_cap_accepts_under_limit(monkeypatch):
     """Contract: file sotto cap -> ritorna size, cursore a 0."""
-    from app.shared.upload_guards import enforce_upload_size_limit
+    from app.core.security.upload_guards import enforce_upload_size_limit
 
     _stub_settings_with_max(monkeypatch, max_bytes=4096)
 
@@ -77,7 +77,7 @@ def test_eseguibili_size_cap_does_not_read_payload_into_memory(monkeypatch):
     chiamare `read()` sul payload prima del rifiuto, altrimenti si riapre
     la classe di DoS interno credenziato che T-04 ha chiuso lato `files/`.
     """
-    from app.shared.upload_guards import enforce_upload_size_limit
+    from app.core.security.upload_guards import enforce_upload_size_limit
 
     _stub_settings_with_max(monkeypatch, max_bytes=4096)
 

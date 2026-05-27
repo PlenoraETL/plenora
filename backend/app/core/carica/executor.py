@@ -377,7 +377,7 @@ class CaricaExecutor:
             url = f"mysql+pymysql://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
         elif db_type == "mssql":
             # H-2 (2026-05-26): TrustServerCertificate gated da tls_bypass_allowed()
-            from app.core.security.tls_policy import tls_bypass_allowed
+            from app.shared.security.tls_policy import tls_bypass_allowed
             trust_cert = "yes" if tls_bypass_allowed() else "no"
             url = (
                 f"mssql+pyodbc://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"

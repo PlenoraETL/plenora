@@ -44,9 +44,9 @@ import pytest
 # resta veloce e i test SFTP/OAuth non scaricano il graph pandas.
 from app.core.datasources.interface import BackendConfig
 from app.core.datasources.sftp import SFTPDataSource
-from app.core.security import tls_policy
+from app.shared.security import tls_policy
 import app.core.datasources.sftp as sftp_module
-import app.core.security.tls_policy as tls_policy_module
+import app.shared.security.tls_policy as tls_policy_module
 
 
 pytestmark = [

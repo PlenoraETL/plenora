@@ -16,7 +16,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.features, pytest.mark.contract]
 
 
 def test_legacy_features_mapping_path_reexports_neutral_contract() -> None:
-    from app.core.features.arcgis_write_mapping import (
+    from app.core.connections.arcgis_write_mapping import (
         ArcGISWriteMappingContract as LegacyContract,
     )
 

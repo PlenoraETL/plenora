@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.shared.clock import FakeClock
+from app.shared.execution.clock import FakeClock
 from app.shared.contracts.auth import CurrentUser
 from app.core.scheduler.models import (
     ScheduleConcurrency,

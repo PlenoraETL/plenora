@@ -14,30 +14,22 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 def _runtime_imports_old_files_dataframe_io() -> list[tuple[str, int, str]]:
     roots = (_REPO_ROOT / "backend" / "app", _REPO_ROOT / "backend" / "workers")
-    allowed = {
-        "backend/app/core/files/dataframe_io.py",
-        "backend/app/core/files/geospatial_io.py",
+    legacy_modules = {
+        "app.core.files.dataframe_io",
+        "app.core.files.geospatial_io",
     }
     hits: list[tuple[str, int, str]] = []
     for root in roots:
         for path in sorted(root.rglob("*.py")):
             rel = path.relative_to(_REPO_ROOT).as_posix()
-            if rel in allowed:
-                continue
             tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
             for node in ast.walk(tree):
                 if isinstance(node, ast.ImportFrom) and node.module:
-                    if node.module in {
-                        "app.core.files.dataframe_io",
-                        "app.core.files.geospatial_io",
-                    }:
+                    if node.module in legacy_modules:
                         hits.append((rel, node.lineno, node.module))
                 elif isinstance(node, ast.Import):
                     for alias in node.names:
-                        if alias.name in {
-                            "app.core.files.dataframe_io",
-                            "app.core.files.geospatial_io",
-                        }:
+                        if alias.name in legacy_modules:
                             hits.append((rel, node.lineno, alias.name))
     return hits
 
@@ -75,7 +67,7 @@ def test_core_files_domain_does_not_import_pandas_or_geopandas_directly() -> Non
 
 def test_files_dataframe_io_reexports_tabular_helpers_from_dataframes_boundary() -> None:
     from app.core.dataframes import tabular
-    from app.core.files import dataframe_io
+    from app.core.dataframes import frame_io as dataframe_io
 
     assert dataframe_io._compact_whole_number_floats is tabular._compact_whole_number_floats
     assert dataframe_io._read_csv_safe is tabular._read_csv_safe
@@ -374,7 +366,7 @@ def test_tabular_business_helpers_preserve_dataframe_semantics() -> None:
 
 def test_files_dataframe_io_reexports_frame_io_boundary() -> None:
     from app.core.dataframes import frame_io
-    from app.core.files import dataframe_io
+    from app.core.dataframes import frame_io as dataframe_io
 
     assert dataframe_io.DefaultFrameFileIO is frame_io.DefaultFrameFileIO
     assert dataframe_io.find_latest_output_file is frame_io.find_latest_output_file
@@ -384,7 +376,7 @@ def test_files_dataframe_io_reexports_frame_io_boundary() -> None:
 
 def test_files_geospatial_io_reexports_dataframe_boundary() -> None:
     from app.core.dataframes import geospatial_io as dataframe_geospatial
-    from app.core.files import geospatial_io as files_geospatial
+    from app.core.dataframes import geospatial_io as files_geospatial
 
     assert (
         files_geospatial.geospatial_dataframe_to_bytes
@@ -395,7 +387,7 @@ def test_files_geospatial_io_reexports_dataframe_boundary() -> None:
 def test_files_load_dispatch_reexports_dataframe_dispatch_boundary() -> None:
     from app.core.dataframes import load_dispatch as dataframe_dispatch
     from app.core.dataframes import ports
-    from app.core.files import load_dispatch as files_dispatch
+    from app.core.dataframes import load_dispatch as files_dispatch
 
     assert dataframe_dispatch.DataLoaderProtocol is ports.DataLoaderProtocol
     assert dataframe_dispatch.FrameIOEngine is ports.FrameIOEngine

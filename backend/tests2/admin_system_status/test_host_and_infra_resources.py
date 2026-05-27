@@ -653,7 +653,7 @@ def test_blacklist_status_ok_via_wrapper(monkeypatch):
     """Happy path: il wrapper delega a token_blacklist.get_blacklist_status
     e ritorna il suo dict integro."""
     from app.core.admin_system_status import service
-    import app.shared.token_blacklist as tb
+    import app.core.security.token_blacklist as tb
 
     expected = {
         "status": "ok",
@@ -679,9 +679,9 @@ def test_blacklist_status_unknown_when_module_missing(monkeypatch):
     import sys
     import types
 
-    fake_mod = types.ModuleType("app.shared.token_blacklist")
+    fake_mod = types.ModuleType("app.core.security.token_blacklist")
     # NON settiamo `get_blacklist_status` su questo modulo → ImportError
-    monkeypatch.setitem(sys.modules, "app.shared.token_blacklist", fake_mod)
+    monkeypatch.setitem(sys.modules, "app.core.security.token_blacklist", fake_mod)
     # service ha gia' importato il probe come `_probe` all'import time:
     # rimuoviamo l'attribute per simulare il modulo "non importabile".
     monkeypatch.delattr(service, "_probe", raising=False)

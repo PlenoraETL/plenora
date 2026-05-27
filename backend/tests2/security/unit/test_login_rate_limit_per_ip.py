@@ -35,7 +35,7 @@ def client_with_auth_router(monkeypatch):
     # Questo test esercita il path in-memory (resetta lo store fallback),
     # quindi forziamo Redis client a None cosi' il wrapper cade sempre
     # sul fallback indipendentemente da un Redis attivo sull'host di test.
-    from app.shared import login_rate_limiter as _rl_mod
+    from app.core.security import login_rate_limiter as _rl_mod
     _rl_mod._set_client_for_tests(None)
     _rl_mod._reset_state_for_tests()
 
@@ -128,7 +128,7 @@ def test_login_untrusted_peer_xff_ignored_shared_bucket(client_with_auth_router,
     with fallback_rl._STORE.lock:
         fallback_rl._STORE.failed_attempts.clear()
     # R-01: vedi sopra — forziamo il fallback in-memory.
-    from app.shared import login_rate_limiter as _rl_mod
+    from app.core.security import login_rate_limiter as _rl_mod
     _rl_mod._set_client_for_tests(None)
 
     # 127.0.0.1 non e' piu' trusted → XFF ignorato → tutti condividono

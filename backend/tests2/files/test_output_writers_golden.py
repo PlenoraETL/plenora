@@ -56,7 +56,7 @@ def test_csv_writer_no_trailing_dot_zero_on_int_promoted_to_float(
     """``age`` ha 1 NaN -> pandas promuove a float64 -> writer ingenuo
     scriveva ``34.0``. Dopo il fix scrive ``34`` (vuoto per NaN).
     Regression-guard sul commit 525c4340."""
-    from app.core.files.dataframe_io import tabular_dataframe_to_bytes
+    from app.core.dataframes.frame_io import tabular_dataframe_to_bytes
 
     raw = tabular_dataframe_to_bytes(tortured_tabular_df, "csv").decode("utf-8")
     rows = [r for r in raw.splitlines() if r]
@@ -89,7 +89,7 @@ def test_csv_writer_decimal_from_postgres_numeric_compact(
     writer scrive ``str(Decimal("36.5000000000000000"))`` con 16 zeri.
     Regression-guard sul commit 666fa513 (streaming) +
     ``_compact_whole_number_floats`` (non-streaming)."""
-    from app.core.files.dataframe_io import tabular_dataframe_to_bytes
+    from app.core.dataframes.frame_io import tabular_dataframe_to_bytes
 
     raw = tabular_dataframe_to_bytes(tortured_tabular_df, "csv").decode("utf-8")
     rows = [r for r in raw.splitlines() if r]
@@ -106,7 +106,7 @@ def test_csv_writer_decimal_from_postgres_numeric_compact(
 
 
 def test_csv_writer_unicode_and_emoji_preserved(tortured_tabular_df: pd.DataFrame):
-    from app.core.files.dataframe_io import tabular_dataframe_to_bytes
+    from app.core.dataframes.frame_io import tabular_dataframe_to_bytes
 
     raw = tabular_dataframe_to_bytes(tortured_tabular_df, "csv").decode("utf-8")
     assert "Marco Müller" in raw
@@ -118,7 +118,7 @@ def test_csv_writer_internal_commas_and_quotes_escaped(
     tortured_tabular_df: pd.DataFrame,
 ):
     """pandas to_csv deve quotare valori con virgole/virgolette interne."""
-    from app.core.files.dataframe_io import tabular_dataframe_to_bytes
+    from app.core.dataframes.frame_io import tabular_dataframe_to_bytes
 
     raw = tabular_dataframe_to_bytes(tortured_tabular_df, "csv").decode("utf-8")
     # virgola interna -> wrapping con virgolette
@@ -129,7 +129,7 @@ def test_csv_writer_internal_commas_and_quotes_escaped(
 
 def test_json_writer_decimal_and_unicode(tortured_tabular_df: pd.DataFrame):
     """JSON: Decimal -> numero / stringa compatti, Unicode preservato."""
-    from app.core.files.dataframe_io import tabular_dataframe_to_bytes
+    from app.core.dataframes.frame_io import tabular_dataframe_to_bytes
 
     raw = tabular_dataframe_to_bytes(tortured_tabular_df, "json").decode("utf-8")
     parsed = json.loads(raw)
@@ -153,7 +153,7 @@ def test_xlsx_writer_produces_valid_excel(tortured_tabular_df: pd.DataFrame):
     """XLSX: verifica che il blob sia un ZIP valido + readable con openpyxl.
     Non sanity-checkiamo i valori cell-by-cell (Excel ha la sua gestione
     tipi che pandas rispetta), solo che la pipeline non crasha."""
-    from app.core.files.dataframe_io import tabular_dataframe_to_bytes
+    from app.core.dataframes.frame_io import tabular_dataframe_to_bytes
 
     raw = tabular_dataframe_to_bytes(tortured_tabular_df, "xlsx")
     assert len(raw) > 0
@@ -171,7 +171,7 @@ def test_xlsx_writer_produces_valid_excel(tortured_tabular_df: pd.DataFrame):
 
 def test_csv_writer_empty_dataframe_does_not_crash():
     """Un DF vuoto deve produrre solo l'header senza errori."""
-    from app.core.files.dataframe_io import tabular_dataframe_to_bytes
+    from app.core.dataframes.frame_io import tabular_dataframe_to_bytes
 
     df = pd.DataFrame(columns=["a", "b"])
     raw = tabular_dataframe_to_bytes(df, "csv").decode("utf-8")
@@ -181,7 +181,7 @@ def test_csv_writer_empty_dataframe_does_not_crash():
 def test_compact_whole_number_floats_preserves_real_decimals():
     """Guard: la compaction NON deve trasformare 3.14 in 3 (loss of data).
     Solo float dove TUTTI i non-NaN sono interi vengono compattati."""
-    from app.core.files.dataframe_io import _compact_whole_number_floats
+    from app.core.dataframes.frame_io import _compact_whole_number_floats
 
     df = pd.DataFrame(
         {
@@ -214,7 +214,7 @@ def test_geojson_writer_compacts_int_properties():
     pytest.importorskip("psycopg2")  # geospatial_io tira la chain DB
     from shapely.geometry import Point
 
-    from app.core.files.geospatial_io import geospatial_dataframe_to_bytes
+    from app.core.dataframes.geospatial_io import geospatial_dataframe_to_bytes
 
     gdf = geopandas.GeoDataFrame(
         {

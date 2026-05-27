@@ -10,12 +10,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.core.results.result_store import (
-    PipelineResultSave,
+from app.core.results.blob_writer import (
     ResultSaveError,
+    save_result_blob_from_bytes,
+)
+from app.core.results.pipeline_result import (
+    PipelineResultSave,
     save_pipeline_result,
     save_pipeline_result_outcome,
-    save_result_blob_from_bytes,
 )
 
 
@@ -136,9 +138,8 @@ def test_apply_results_retention_uses_typed_result_rows(monkeypatch):
     assert deleted == ["res-old"]
 
 
-def test_result_store_retention_wrapper_delegates_to_results_domain(monkeypatch):
+def test_blob_writer_retention_wrapper_delegates_to_results_domain(monkeypatch):
     import app.core.results.blob_writer as result_blob_writer
-    import app.core.results.result_store as result_store
 
     called: list[str] = []
     monkeypatch.setattr(
@@ -147,22 +148,14 @@ def test_result_store_retention_wrapper_delegates_to_results_domain(monkeypatch)
         called.append,
     )
 
-    result_store._apply_results_retention("proj-1")
+    result_blob_writer.apply_results_retention_after_save("proj-1")
 
     assert called == ["proj-1"]
 
 
-def test_result_store_uses_results_boundary_not_row_modules():
+def test_result_store_compat_facade_is_tombstoned():
     backend_root = Path(__file__).resolve().parents[2]
-    source = (
-        backend_root / "app" / "core" / "results" / "result_store.py"
-    ).read_text(encoding="utf-8")
-
-    assert "from app.core.results.db import" not in source
-    assert "from app.core.results.blob import" not in source
-    assert "from app.core.projects.db import" not in source
-    assert "from app.core.results import store as results_store" not in source
-    assert "from app.core.results.blob_writer import" in source
+    assert not (backend_root / "app" / "core" / "results" / "result_store.py").exists()
 
 
 def test_production_does_not_import_result_store_compat_facade():
@@ -177,8 +170,6 @@ def test_production_does_not_import_result_store_compat_facade():
             continue
         for path in sorted(root.rglob("*.py")):
             rel = path.relative_to(backend_root).as_posix()
-            if rel == "app/core/results/result_store.py":
-                continue
             tree = ast.parse(path.read_text(encoding="utf-8-sig"))
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):

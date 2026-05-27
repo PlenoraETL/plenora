@@ -5,7 +5,7 @@ from typing import Mapping
 
 import pytest
 
-from app.core.features.rest_sink import (
+from app.core.connections.rest_sink import (
     RestFeatureSink,
     RestSinkBatchMode,
     RestSinkBodyField,

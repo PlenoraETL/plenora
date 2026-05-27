@@ -73,7 +73,7 @@ def _patched_settings(policy_value):
 def test_dispatch_policy_routes_payload(
     fake_logger, fake_storage, monkeypatch, policy, raw, threshold, expected_key,
 ):
-    from app.core.files.storage_dispatch import dispatch_blob_storage
+    from app.core.resources.blob_dispatch import dispatch_blob_storage
 
     monkeypatch.setenv("FILE_SOURCE_S3_THRESHOLD_BYTES", str(threshold))
     with _patched_settings(policy), \
@@ -94,7 +94,7 @@ def test_dispatch_policy_routes_payload(
 
 def test_dispatch_db_policy_does_not_log(fake_logger):
     """Path BYTEA: nessun log info/error (silenzioso)."""
-    from app.core.files.storage_dispatch import dispatch_blob_storage
+    from app.core.resources.blob_dispatch import dispatch_blob_storage
 
     with _patched_settings("db"):
         dispatch_blob_storage("file_x", b"data", "f.csv", logger=fake_logger)
@@ -110,7 +110,7 @@ def test_dispatch_object_storage_policy_reraises_upload_exception(
     fake_logger, fake_storage,
 ):
     """Orphan guard: upload exception rilanciata, no row DB nel caller."""
-    from app.core.files.storage_dispatch import dispatch_blob_storage
+    from app.core.resources.blob_dispatch import dispatch_blob_storage
 
     fake_storage.upload_bytes.side_effect = RuntimeError("S3 down")
     with _patched_settings("object_storage"), \
@@ -128,7 +128,7 @@ def test_dispatch_object_storage_policy_reraises_upload_exception(
 def test_dispatch_uses_injected_logger_not_global(fake_storage):
     """Il logger e' parametro: due call con due logger distinti devono
     loggare ciascuno sul proprio."""
-    from app.core.files.storage_dispatch import dispatch_blob_storage
+    from app.core.resources.blob_dispatch import dispatch_blob_storage
 
     log_a = MagicMock()
     log_b = MagicMock()
@@ -179,7 +179,7 @@ def test_dispatch_uses_storage_key_id_when_provided(fake_logger, fake_storage):
     """Object storage path: se `storage_key_id` e' fornito, sostituisce
     `file_id` come segmento path. Permette al multi-layer upload di
     condividere 1 blob fisico tra N FileSource logici."""
-    from app.core.files.storage_dispatch import dispatch_blob_storage
+    from app.core.resources.blob_dispatch import dispatch_blob_storage
 
     raw = b"shared blob bytes" * 10
     with _patched_settings("object_storage"), \
@@ -200,7 +200,7 @@ def test_dispatch_storage_key_id_none_falls_back_to_file_id(
     fake_logger, fake_storage,
 ):
     """Single-file path: storage_key_id=None usa `file_id` nel path."""
-    from app.core.files.storage_dispatch import dispatch_blob_storage
+    from app.core.resources.blob_dispatch import dispatch_blob_storage
 
     raw = b"single file bytes"
     with _patched_settings("object_storage"), \

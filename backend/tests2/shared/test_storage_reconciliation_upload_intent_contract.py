@@ -288,7 +288,7 @@ def _settings_get_stub(**overrides):
 def test_dispatch_records_upload_intent_before_upload(monkeypatch):
     """object_storage branch: record_upload_intent runs BEFORE
     storage.upload_bytes; on success the intent stays pending."""
-    from app.core.files import storage_dispatch as file_storage_dispatch
+    from app.core.resources import blob_dispatch as file_storage_dispatch
 
     record_calls = []
     upload_calls = []
@@ -347,7 +347,7 @@ def test_dispatch_records_upload_intent_before_upload(monkeypatch):
 def test_dispatch_marks_failed_when_upload_fails(monkeypatch):
     """object_storage branch: upload exception -> mark_failed_attempt(intent_id)
     -> exception re-raised so the reconciler can retry/escalate."""
-    from app.core.files import storage_dispatch as file_storage_dispatch
+    from app.core.resources import blob_dispatch as file_storage_dispatch
 
     mark_failed_calls = []
 
@@ -391,7 +391,7 @@ def test_dispatch_marks_failed_when_upload_fails(monkeypatch):
 def test_dispatch_does_not_record_intent_on_db_bytea_path(monkeypatch):
     """STORAGE_POLICY=db: no upload, no upload_intent. Intent is only
     relevant for the object_storage path."""
-    from app.core.files import storage_dispatch as file_storage_dispatch
+    from app.core.resources import blob_dispatch as file_storage_dispatch
 
     record_calls = []
 
@@ -422,7 +422,7 @@ def test_dispatch_proceeds_when_record_upload_intent_returns_none(monkeypatch):
     """Best-effort: record_upload_intent failure (returns None) does
     NOT block the upload. The dispatch continues; intent_id stays None
     and on upload exception mark_done is NOT called (no intent to close)."""
-    from app.core.files import storage_dispatch as file_storage_dispatch
+    from app.core.resources import blob_dispatch as file_storage_dispatch
 
     upload_calls = []
     mark_done_calls = []

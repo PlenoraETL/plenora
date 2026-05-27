@@ -296,7 +296,7 @@ class ConnectionService:
         # decryptare username/password. Gating env-aware via tls_policy:
         # in prod/staging si forza TrustServerCertificate=no, in dev/CI
         # rimane "yes" per supportare i certificati locali.
-        from app.core.security.tls_policy import tls_bypass_allowed
+        from app.shared.security.tls_policy import tls_bypass_allowed
         trust_server_cert = "yes" if tls_bypass_allowed() else "no"
         if trust_server_cert == "no":
             logger.info(

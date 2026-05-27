@@ -26,12 +26,6 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "error_codes",        # shared error code registry
         "error_envelope",     # standard error response envelope
         "error_sanitizer",    # strip sensitive data from error messages
-        "login_rate_limiter", # compat alias to app.core.security.login_rate_limiter
-        "password_hashing",   # compat alias to app.core.security.password_hashing
-        "token_blacklist",    # compat alias to app.core.security.token_blacklist
-        "upload_guards",      # compat alias to app.core.security.upload_guards
-        "clock",                       # compat alias to app.shared.execution.clock
-        "canvas_types",                # compat alias to app.shared.execution.canvas_types
     }
 )
 
@@ -40,12 +34,6 @@ _ROOT_MODULE_CLASSIFICATIONS: dict[str, str] = {
     "error_codes": "KEEP_ROOT_CROSS_CUTTING",
     "error_envelope": "KEEP_ROOT_CROSS_CUTTING",
     "error_sanitizer": "KEEP_ROOT_CROSS_CUTTING",
-    "login_rate_limiter": "KEEP_COMPAT_SECURITY_WRAPPER",
-    "password_hashing": "KEEP_COMPAT_SECURITY_WRAPPER",
-    "token_blacklist": "KEEP_COMPAT_SECURITY_WRAPPER",
-    "upload_guards": "KEEP_COMPAT_SECURITY_WRAPPER",
-    "clock": "KEEP_COMPAT_EXECUTION_WRAPPER",
-    "canvas_types": "KEEP_COMPAT_EXECUTION_WRAPPER",
 }
 
 _CLASSIFICATION_BUCKETS: frozenset[str] = frozenset(
@@ -55,8 +43,6 @@ _CLASSIFICATION_BUCKETS: frozenset[str] = frozenset(
         "MOVE_TO_EXECUTION_CANDIDATE",
         "MOVE_TO_CONNECTIONS_CANDIDATE",
         "MOVE_TO_SECURITY_PACKAGE_LATER",
-        "KEEP_COMPAT_SECURITY_WRAPPER",
-        "KEEP_COMPAT_EXECUTION_WRAPPER",
         "HEAVY_ROOT_UTILITY",
     }
 )
@@ -75,42 +61,12 @@ _ALLOWED_UPWARD_IMPORTS: dict[str, frozenset[str]] = {
             "app.core.tickets.errors",
         }
     ),
-    "login_rate_limiter": frozenset(
-        {"app.core.security", "app.core.security.login_rate_limiter"}
-    ),
-    "password_hashing": frozenset(
-        {"app.core.security", "app.core.security.password_hashing"}
-    ),
-    "token_blacklist": frozenset(
-        {"app.core.security", "app.core.security.token_blacklist"}
-    ),
-    "upload_guards": frozenset(
-        {"app.core.security", "app.core.security.upload_guards"}
-    ),
-    "clock": frozenset({"app.shared.execution", "app.shared.execution.clock"}),
-    "canvas_types": frozenset(
-        {"app.shared.execution", "app.shared.execution.canvas_types"}
-    ),
 }
-
-_SECURITY_COMPAT_MODULES: frozenset[str] = frozenset(
-    {
-        "app.shared.login_rate_limiter",
-        "app.shared.password_hashing",
-        "app.shared.token_blacklist",
-        "app.shared.upload_guards",
-    }
-)
-
-_EXECUTION_COMPAT_MODULES: frozenset[str] = frozenset(
-    {
-        "app.shared.clock",
-        "app.shared.canvas_types",
-    }
-)
 
 _FILE_COMPAT_MODULES: frozenset[str] = frozenset(
     {
+        "app.core.files.dataframe_io",
+        "app.core.files.geospatial_io",
         "app.core.files.load_dispatch",
         "app.core.files.storage_dispatch",
     }
@@ -144,58 +100,6 @@ def _iter_prod_python() -> list[Path]:
         if root.exists():
             paths.extend(sorted(root.rglob("*.py")))
     return paths
-
-
-def _security_compat_imports(path: Path) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8-sig"))
-    hits: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            hits.update(
-                alias.name
-                for alias in node.names
-                if alias.name in _SECURITY_COMPAT_MODULES
-            )
-            continue
-        if not isinstance(node, ast.ImportFrom) or node.module is None:
-            continue
-        if node.module in _SECURITY_COMPAT_MODULES:
-            hits.add(node.module)
-            continue
-        if node.module == "app.shared":
-            for alias in node.names:
-                candidate = f"app.shared.{alias.name}"
-                if candidate in _SECURITY_COMPAT_MODULES:
-                    hits.add(candidate)
-    return hits
-
-
-def _root_compat_imports(
-    path: Path,
-    *,
-    compat_modules: frozenset[str],
-) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8-sig"))
-    hits: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            hits.update(
-                alias.name
-                for alias in node.names
-                if alias.name in compat_modules
-            )
-            continue
-        if not isinstance(node, ast.ImportFrom) or node.module is None:
-            continue
-        if node.module in compat_modules:
-            hits.add(node.module)
-            continue
-        if node.module == "app.shared":
-            for alias in node.names:
-                candidate = f"app.shared.{alias.name}"
-                if candidate in compat_modules:
-                    hits.add(candidate)
-    return hits
 
 
 def _compat_imports(path: Path, *, compat_modules: frozenset[str]) -> set[str]:
@@ -302,41 +206,6 @@ def test_shared_root_modules_do_not_import_domain_or_infrastructure_code() -> No
     )
 
 
-def test_production_does_not_import_security_compat_wrappers() -> None:
-    """Security helpers moved to app.core.security; app.shared paths are compat."""
-    violations: list[str] = []
-    for path in _iter_prod_python():
-        rel_path = path.relative_to(_BACKEND_ROOT).as_posix()
-        hits = _security_compat_imports(path)
-        for module in sorted(hits):
-            violations.append(f"{rel_path} -> {module}")
-
-    assert violations == [], (
-        "Production code must import runtime security helpers from "
-        "`app.core.security.*`, not the root-level compatibility wrappers. "
-        f"Violations: {violations}"
-    )
-
-
-def test_production_does_not_import_execution_compat_wrappers() -> None:
-    """Execution helpers moved to app.shared.execution; root paths are compat."""
-    violations: list[str] = []
-    for path in _iter_prod_python():
-        rel_path = path.relative_to(_BACKEND_ROOT).as_posix()
-        hits = _root_compat_imports(
-            path,
-            compat_modules=_EXECUTION_COMPAT_MODULES,
-        )
-        for module in sorted(hits):
-            violations.append(f"{rel_path} -> {module}")
-
-    assert violations == [], (
-        "Production code must import execution helpers from "
-        "`app.shared.execution.*`, not the root-level compatibility wrappers. "
-        f"Violations: {violations}"
-    )
-
-
 def test_production_does_not_import_file_compat_wrappers() -> None:
     """File compatibility wrappers must not be used by production code."""
     violations: list[str] = []
@@ -350,4 +219,16 @@ def test_production_does_not_import_file_compat_wrappers() -> None:
         "Production code must import file/dataframe helpers from their "
         "canonical boundaries, not the app.core.files compatibility wrappers. "
         f"Violations: {violations}"
+    )
+
+
+def test_file_compat_wrappers_stay_tombstoned() -> None:
+    missing = [
+        module
+        for module in sorted(_FILE_COMPAT_MODULES)
+        if (_BACKEND_ROOT / (module.replace(".", "/") + ".py")).exists()
+    ]
+    assert missing == [], (
+        "Removed app.core.files compatibility wrappers must not be recreated. "
+        f"Reintroduced modules: {missing}"
     )

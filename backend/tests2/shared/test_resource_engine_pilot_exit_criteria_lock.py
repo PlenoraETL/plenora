@@ -201,9 +201,7 @@ def test_no_new_kind_in_loaders_directory_without_registration():
     )
     assert loader_files == [
         "file_source_blob.py",
-        "file_source_blob_store.py",
         "result_blob.py",
-        "result_blob_store.py",
     ], (
         f"Loader directory must currently contain exactly "
         f"`file_source_blob.py` (RESOURCE-ENGINE-020) and "
@@ -215,23 +213,19 @@ def test_no_new_kind_in_loaders_directory_without_registration():
     )
 
 
-def test_loader_store_files_are_compat_reexports_only():
+def test_loader_store_compat_reexports_stay_tombstoned():
     """DB store boundaries are canonical under resources/stores.
 
-    The old loaders/*_store.py paths stay importable for compatibility, but
-    they must not regain pg_connection access or local query functions.
+    The old loaders/*_store.py compatibility paths have been removed and
+    must not regain pg_connection access or local query functions.
     """
-    wrappers = {
-        "file_source_blob_store.py": "app.core.resources.stores.file_source_blob",
-        "result_blob_store.py": "app.core.resources.stores.result_blob",
-    }
-    for filename, canonical_module in wrappers.items():
-        text = (_RESOURCES_PKG / "loaders" / filename).read_text(encoding="utf-8")
-        code_only = _python_code_only(text)
-        assert canonical_module in text
-        assert "app.db" not in code_only
-        assert "pg_connection" not in code_only
-        assert "def fetch_" not in code_only
+    wrappers = ("file_source_blob_store.py", "result_blob_store.py")
+    reintroduced = [
+        filename
+        for filename in wrappers
+        if (_RESOURCES_PKG / "loaders" / filename).exists()
+    ]
+    assert reintroduced == []
 
     result_loader = (_RESOURCES_PKG / "loaders" / "result_blob.py").read_text(encoding="utf-8")
     file_loader = (_RESOURCES_PKG / "loaders" / "file_source_blob.py").read_text(encoding="utf-8")

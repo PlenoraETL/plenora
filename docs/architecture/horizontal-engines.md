@@ -49,10 +49,10 @@ Current ArcGIS shape:
   route generic discovery and lifecycle helper calls through
   `app.core.connections`, not `app.core.features`.
 - Generic ArcGIS SQL and existing-service publish-mode helpers live under
-  `app/core/connections`; legacy `features` modules are compatibility-only.
+  `app/core/connections`; legacy `features` wrapper modules are tombstoned.
 - ArcGIS write mapping and writer protocols live under `app/core/connections`;
   legacy `app/core/features/arcgis_write_mapping.py` and
-  `app/core/features/arcgis_writer_boundary.py` are compatibility re-exports.
+  `app/core/features/arcgis_writer_boundary.py` are tombstoned.
 
 Rules:
 
@@ -145,15 +145,13 @@ Current direction:
 - Pandas-neutral dataframe contracts live in `app/core/dataframes/ports.py`;
   this module must not import pandas/geopandas or vertical runtime services.
 - File-source parser dispatch lives in `app/core/dataframes/load_dispatch.py`;
-  `app/core/files/load_dispatch.py` is compatibility-only for legacy/test
-  callers. Production code must import `app/core/dataframes/load_dispatch.py`.
+  the old `app/core/files/load_dispatch.py` wrapper is tombstoned.
 - The default file-source loader that owns pandas/geopandas parsing lives in
   `app/core/dataframes/default_loader.py`; `app/core/files/service_deps.py`
   re-exports it for legacy service DI.
 - DataFrame path/bytes I/O lives in `app/core/dataframes/frame_io.py` and
   geospatial export helpers live in `app/core/dataframes/geospatial_io.py`;
-  matching `app/core/files/*_io.py` modules are compatibility-only during
-  migration.
+  matching `app/core/files/*_io.py` wrappers are tombstoned.
 - DataFrame-backed column type inference and empty typed-frame construction live in
   `app/core/dataframes/schema.py`; `app/core/files/helpers.py` re-exports
   the legacy helper names while upload code migrates.
@@ -175,7 +173,7 @@ Current direction:
 - Geodataframe helpers live in `app/core/dataframes/geodata.py`, including
   GeoDataFrame construction/probes and overlay, clip, and spatial join
   wrappers backed by the dataframe engine; legacy `features/geo_utils.py` is
-  compatibility-only.
+  tombstoned.
 
 Rules:
 
@@ -267,12 +265,11 @@ Rules:
 - No unbounded `b"".join(stream)` over external or object-storage streams.
 - Path materialization is fallback behavior and must be inventoried.
 - Resource loaders must not become vertical domain services.
-- Resource loader DB access lives in `app/core/resources/stores/*`; files under
-  `app/core/resources/loaders/*_store.py` are compatibility re-exports only.
+- Resource loader DB access lives in `app/core/resources/stores/*`; old
+  `app/core/resources/loaders/*_store.py` wrappers are tombstoned.
 - File-source blob storage dispatch lives in
-  `app/core/resources/blob_dispatch.py`; `app/core/files/storage_dispatch.py`
-  is a compatibility re-export for legacy/test callers. Production code must
-  import `app/core/resources/blob_dispatch.py`.
+  `app/core/resources/blob_dispatch.py`; the old
+  `app/core/files/storage_dispatch.py` wrapper is tombstoned.
 - Do not bypass file-source refcount/reconciliation cleanup with direct
   `DELETE FROM file_sources WHERE group_id`.
 - Do not inspect or delete legacy `RESULTS_DIR/{project_id}` files directly

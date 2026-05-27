@@ -120,7 +120,7 @@ def test_save_dataframe_to_bytes_roundtrip(fmt):
 
     Senza touchare il filesystem.
     """
-    from app.core.files.dataframe_io import save_dataframe_to_bytes
+    from app.core.dataframes.frame_io import save_dataframe_to_bytes
 
     df = pd.DataFrame({
         "id": [1, 2, 3],
@@ -153,7 +153,7 @@ def test_save_dataframe_to_bytes_roundtrip(fmt):
 def test_save_dataframe_to_bytes_geojson():
     """GeoJSON serialization in-memory via geopandas."""
     pytest.importorskip("geopandas")
-    from app.core.files.dataframe_io import save_dataframe_to_bytes
+    from app.core.dataframes.frame_io import save_dataframe_to_bytes
     from shapely.geometry import Point
 
     df = pd.DataFrame({
@@ -177,7 +177,7 @@ def test_save_dataframe_to_bytes_gpkg_and_shp_now_supported():
       scrivere i sidecar e li zippa in RAM.
     """
     pytest.importorskip("geopandas")
-    from app.core.files.dataframe_io import save_dataframe_to_bytes
+    from app.core.dataframes.frame_io import save_dataframe_to_bytes
     from shapely.geometry import Point
 
     df = pd.DataFrame({
@@ -234,7 +234,7 @@ def test_save_result_blob_from_bytes_no_artificial_hard_cap(monkeypatch):
 
 def test_get_result_as_bytes_returns_raw_blob(monkeypatch):
     """get_result_as_bytes: DB blob -> bytes direttamente, zero tempfile."""
-    from app.core.results import result_store
+    from app.core.results import result_reader
     from app.core.results import store as results_store
     import app.core.results.db as results_db
 
@@ -247,19 +247,19 @@ def test_get_result_as_bytes_returns_raw_blob(monkeypatch):
     monkeypatch.setattr(results_store, "get_result_data",
                         lambda rid: expected)
 
-    result = result_store.get_result_as_bytes("proj-1")
+    result = result_reader.get_result_as_bytes("proj-1")
     assert result == expected
 
 
 def test_get_result_as_bytes_returns_none_when_missing(monkeypatch):
-    from app.core.results import result_store
+    from app.core.results import result_reader
     import app.core.results.db as results_db
     monkeypatch.setattr(
         results_db,
         "get_latest_result_row",
         lambda pid, group_id=None: None,
     )
-    assert result_store.get_result_as_bytes("missing") is None
+    assert result_reader.get_result_as_bytes("missing") is None
 
 
 # 3. SENTINEL no-temp-file-leak
@@ -307,7 +307,7 @@ def test_get_result_as_bytes_creates_no_files_on_disk(
     monkeypatch, tmp_path
 ):
     """Stesso sentinel per la direzione di lettura."""
-    from app.core.results import result_store
+    from app.core.results import result_reader
     from app.core.results import store as results_store
     import app.core.results.db as results_db
 
@@ -316,7 +316,7 @@ def test_get_result_as_bytes_creates_no_files_on_disk(
 
     class _FakeSettings:
         DATA_DIR = tmp_path
-    monkeypatch.setattr(result_store, "settings", _FakeSettings, raising=False)
+    monkeypatch.setattr(result_reader, "settings", _FakeSettings, raising=False)
 
     monkeypatch.setattr(
         results_db,
@@ -326,7 +326,7 @@ def test_get_result_as_bytes_creates_no_files_on_disk(
     monkeypatch.setattr(results_store, "get_result_data",
                         lambda rid: b"payload")
 
-    result_store.get_result_as_bytes("proj-1")
+    result_reader.get_result_as_bytes("proj-1")
 
     residui = list(temp_dir.rglob("*"))
     assert residui == [], (

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from app.core.carica.rest_config_parser import parse_carica_rest_config
-from app.core.features.rest_sink import RestSinkBatchMode, RestSinkMethod
+from app.core.connections.rest_sink import RestSinkBatchMode, RestSinkMethod
 
 
 def test_carica_rest_config_parser_builds_typed_sink_config() -> None:

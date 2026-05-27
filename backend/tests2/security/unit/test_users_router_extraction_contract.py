@@ -194,7 +194,7 @@ def test_auth_module_imports_users_router_after_dependencies():
         "REGRESSIONE: `require_admin` deve essere definita prima "
         "dell'import di `users_router` per evitare circular import."
     )
-    # `hash_password` re-export da `app.shared.password_hashing`,
+    # `hash_password` re-export da `app.core.security.password_hashing`,
     # cercato come substring.
     idx_hash_password = src.find("hash_password,")
     assert 0 < idx_hash_password < idx_users_router_import, (

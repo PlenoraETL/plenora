@@ -38,7 +38,7 @@ def fake_loader():
 
 
 def test_csv_dispatches_to_loader_load_csv(fake_loader, fake_logger):
-    from app.core.files.load_dispatch import load_by_format
+    from app.core.dataframes.load_dispatch import load_by_format
 
     expected_df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
     fake_loader.load_csv.return_value = expected_df
@@ -61,7 +61,7 @@ def test_csv_dispatches_to_loader_load_csv(fake_loader, fake_logger):
 
 
 def test_xlsx_dispatches_to_loader_load_excel_with_sheet(fake_loader, fake_logger):
-    from app.core.files.load_dispatch import load_by_format
+    from app.core.dataframes.load_dispatch import load_by_format
 
     expected_df = pd.DataFrame({"col": [1]})
     fake_loader.load_excel.return_value = expected_df
@@ -79,7 +79,7 @@ def test_xlsx_dispatches_to_loader_load_excel_with_sheet(fake_loader, fake_logge
 
 
 def test_json_dispatches_to_loader_load_json(fake_loader, fake_logger):
-    from app.core.files.load_dispatch import load_by_format
+    from app.core.dataframes.load_dispatch import load_by_format
 
     expected_df = pd.DataFrame({"k": [1, 2, 3]})
     fake_loader.load_json.return_value = expected_df
@@ -104,7 +104,7 @@ def _fake_geometry(wkt_value):
 def test_geospatial_dispatches_to_load_geospatial_and_converts_geometry_to_wkt(
     fake_loader, fake_logger, fmt,
 ):
-    from app.core.files.load_dispatch import load_by_format
+    from app.core.dataframes.load_dispatch import load_by_format
 
     # GeoDataFrame-like: e' un pd.DataFrame con colonna `geometry` di
     # oggetti geometry-like + attributo `geometry` (Series di geom).
@@ -134,7 +134,7 @@ def test_geospatial_dispatches_to_load_geospatial_and_converts_geometry_to_wkt(
 def test_geospatial_without_geometry_column_skips_wkt_conversion(
     fake_loader, fake_logger,
 ):
-    from app.core.files.load_dispatch import load_by_format
+    from app.core.dataframes.load_dispatch import load_by_format
 
     # Un layer senza geometria: gdf privo della colonna 'geometry'.
     fake_gdf = pd.DataFrame({"id": [1, 2]})
@@ -151,7 +151,7 @@ def test_geospatial_without_geometry_column_skips_wkt_conversion(
 
 
 def test_unsupported_format_raises_value_error(fake_loader, fake_logger):
-    from app.core.files.load_dispatch import load_by_format
+    from app.core.dataframes.load_dispatch import load_by_format
 
     with pytest.raises(ValueError) as exc_info:
         load_by_format(

@@ -505,9 +505,9 @@ def test_disclosure_module_does_not_import_db_or_router():
         "import app.core.security.token_blacklist",
         "import app.core.security.password_hashing",
         "import app.core.security.login_rate_limiter",
-        "import app.shared.token_blacklist",
-        "import app.shared.password_hashing",
-        "import app.shared.login_rate_limiter",
+        "import app.core.security.token_blacklist",
+        "import app.core.security.password_hashing",
+        "import app.core.security.login_rate_limiter",
     ]
     for line in forbidden:
         assert line not in text, (

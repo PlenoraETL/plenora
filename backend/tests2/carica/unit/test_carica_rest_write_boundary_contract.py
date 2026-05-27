@@ -6,7 +6,7 @@ from typing import Mapping
 import pandas as pd
 
 from app.core.carica.rest_write_boundary import execute_carica_rest_write
-from app.core.features.rest_sink import (
+from app.core.connections.rest_sink import (
     RestSinkBatchMode,
     RestSinkBodyField,
     RestSinkBodyMapping,

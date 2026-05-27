@@ -66,7 +66,7 @@ def test_blob_dispatch_result_has_exactly_three_keys():
     fanno splattare il return con `**blob_kwargs` su `db.save_file_source`
     / `save_file_sources_batch`: aggiungere una chiave qui senza
     aggiornare i 3 caller crea row DB inconsistenti."""
-    from app.core.files.storage_dispatch import BlobDispatchResult
+    from app.core.resources.blob_dispatch import BlobDispatchResult
 
     expected = {"data", "storage_key", "size_bytes"}
     actual = set(BlobDispatchResult.__annotations__.keys())
@@ -83,7 +83,7 @@ def test_blob_dispatch_result_subset_of_file_source_row():
     introduce una chiave non presente in FileSourceRow, save_file_source
     rifiuterebbe il kwarg con TypeError."""
     from app.core.files.db import FileSourceRow
-    from app.core.files.storage_dispatch import BlobDispatchResult
+    from app.core.resources.blob_dispatch import BlobDispatchResult
 
     blob_keys = set(BlobDispatchResult.__annotations__.keys())
     row_keys = set(FileSourceRow.__annotations__.keys())

@@ -125,7 +125,7 @@ class DefaultConnectionFactory:
         applicata in `connections/service.py:_test_mssql`.
         """
         import pyodbc
-        from app.core.security.tls_policy import tls_bypass_allowed
+        from app.shared.security.tls_policy import tls_bypass_allowed
 
         trust_cert = "yes" if tls_bypass_allowed() else "no"
         base = (

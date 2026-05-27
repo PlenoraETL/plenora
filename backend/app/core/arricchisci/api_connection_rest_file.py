@@ -636,7 +636,7 @@ class ApiConnectionRestFileMixin:
             # usato in `enrichment_retry_http` e `oauth`. Post-fix:
             # delega allo stesso helper env-aware → bypass concesso solo
             # in dev/test/opt-in, bloccato in prod.
-            from app.core.security.tls_policy import resolve_tls_verify
+            from app.shared.security.tls_policy import resolve_tls_verify
             auth_cfg = api_config.get('auth', {}) or {}
             verify_tls = resolve_tls_verify(
                 auth_cfg.get('verify_ssl', True),

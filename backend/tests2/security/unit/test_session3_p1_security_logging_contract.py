@@ -164,7 +164,7 @@ def test_token_blacklist_read_fail_logs_at_error_level():
     """Quando Redis va giu', `is_jti_blacklisted` deve loggare a
     ERROR (non WARNING) con tag [SECURITY] per visibilita' operativa.
     Pre-fix: log a WARNING, missato nel rumore generale."""
-    from app.shared import token_blacklist
+    from app.core.security import token_blacklist
 
     src = inspect.getsource(token_blacklist.is_jti_blacklisted)
     src_no_comments = "\n".join(

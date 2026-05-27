@@ -1,7 +1,7 @@
 """
 Contract test — login rate limiter Redis-backed (R-01).
 
-Copre il modulo `app.shared.login_rate_limiter`:
+Copre il modulo `app.core.security.login_rate_limiter`:
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def fake_client():
 @pytest.fixture
 def rl_with_redis(fake_client):
     """Inietta `fake_client` nel limiter; cleanup dopo."""
-    from app.shared import login_rate_limiter as rl
+    from app.core.security import login_rate_limiter as rl
 
     rl._set_client_for_tests(fake_client)
     rl._reset_state_for_tests()
@@ -41,7 +41,7 @@ def rl_with_redis(fake_client):
 @pytest.fixture
 def rl_no_redis():
     """Forza Redis a None: il limiter cade sul fallback."""
-    from app.shared import login_rate_limiter as rl
+    from app.core.security import login_rate_limiter as rl
 
     rl._set_client_for_tests(None)
     rl._reset_state_for_tests()
@@ -186,7 +186,7 @@ def test_cluster_safety_two_callers_share_bucket(fake_client):
     """Due chiamanti che usano lo stesso fakeredis store condividono il
     bucket: i tentativi del primo influenzano il check del secondo —
     proprio cio' che il vecchio limiter in-memory non garantiva."""
-    from app.shared import login_rate_limiter as rl
+    from app.core.security import login_rate_limiter as rl
 
     rl._set_client_for_tests(fake_client)
     rl._reset_state_for_tests()
@@ -273,7 +273,7 @@ def test_fallback_called_when_redis_pipeline_raises():
     """Se Redis e' "online" ma l'I/O solleva (es. timeout, server error),
     cadiamo sul fallback. Simulato con un client che esplode su `pipeline()`.
     """
-    from app.shared import login_rate_limiter as rl
+    from app.core.security import login_rate_limiter as rl
 
     class ExplodingClient:
         def pipeline(self, *_a, **_kw):

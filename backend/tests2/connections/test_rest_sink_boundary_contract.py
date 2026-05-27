@@ -9,8 +9,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 def test_rest_sink_lives_under_connections_and_keeps_features_alias() -> None:
     from app.core.connections.rest_sink import RestFeatureSink, RestSinkConfig
-    from app.core.features.rest_sink import RestFeatureSink as LegacyRestFeatureSink
-    from app.core.features.rest_sink import RestSinkConfig as LegacyRestSinkConfig
+    from app.core.connections.rest_sink import RestFeatureSink as LegacyRestFeatureSink
+    from app.core.connections.rest_sink import RestSinkConfig as LegacyRestSinkConfig
 
     assert LegacyRestFeatureSink is RestFeatureSink
     assert LegacyRestSinkConfig is RestSinkConfig

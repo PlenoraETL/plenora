@@ -13,7 +13,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
 def test_password_hashing_module_exposes_expected_symbols():
-    from app.shared import password_hashing as ph
+    from app.core.security import password_hashing as ph
 
     assert callable(ph.hash_password)
     assert callable(ph.verify_password)
@@ -32,7 +32,7 @@ def test_password_hashing_module_exposes_expected_symbols():
 def test_auth_reexports_password_hashing_with_object_identity():
     """auth.py re-esporta gli stessi oggetti: monkeypatch su auth_mod
     continua a funzionare; il modulo sorgente resta intatto."""
-    from app.shared import password_hashing as ph
+    from app.core.security import password_hashing as ph
     from app.core.auth import auth as auth_mod
 
     assert auth_mod.hash_password is ph.hash_password

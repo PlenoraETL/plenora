@@ -1,5 +1,5 @@
 """
-Smoke contract - R-05: app.shared.clock.
+Smoke contract - R-05: app.shared.execution.clock.
 
 Verifica le invarianti minime del boundary:
 """
@@ -11,7 +11,7 @@ import time
 
 import pytest
 
-from app.shared.clock import WALL_CLOCK, Clock, FakeClock, WallClock
+from app.shared.execution.clock import WALL_CLOCK, Clock, FakeClock, WallClock
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]

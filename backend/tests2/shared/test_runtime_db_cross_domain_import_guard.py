@@ -37,7 +37,6 @@ _TARGET_FILES: tuple[str, ...] = (
     "app/core/results/store.py",
     "app/services/task_service.py",
     "app/utils/debug_payload_builder.py",
-    "app/core/results/result_store.py",
     "workers/tasks/pipeline_task.py",
     "workers/tasks/carica_task.py",
 )
@@ -336,7 +335,6 @@ def test_cleaned_runtime_surfaces_stay_raw_db_import_free() -> None:
         "app/core/results/result_reader.py",
         "app/services/task_service.py",
         "app/utils/debug_payload_builder.py",
-        "app/core/results/result_store.py",
     )
     offenders = {
         edge

@@ -12,7 +12,7 @@ Blinda due regole anti-MITM su tutto il sorgente `backend/app/`:
 
 2. NESSUNA chiamata HTTP outbound deve usare `verify=False` come
    costante literal. La policy MITM-prevention richiede di passare il
-   flag attraverso `app.core.security.tls_policy.resolve_tls_verify`,
+   flag attraverso `app.shared.security.tls_policy.resolve_tls_verify`,
    che applica la regola env-aware + opt-in. Solo cosi' il bypass
    diventa rifiutabile in prod/staging.
 
@@ -160,7 +160,7 @@ def test_no_module_level_disable_warnings_anywhere_in_app():
 def test_no_verify_false_literal_in_http_calls():
     """Invariante: nessuna chiamata HTTP outbound usa `verify=False` come
     costante literal. Il flag deve essere risolto via
-    `app.core.security.tls_policy.resolve_tls_verify(...)`.
+    `app.shared.security.tls_policy.resolve_tls_verify(...)`.
 
     Regressione: pre-fix `oauth.py:565` (get_arcgis_token) e
     `enrichment_retry_http.py:93,101` (call_api_with_retry) passavano

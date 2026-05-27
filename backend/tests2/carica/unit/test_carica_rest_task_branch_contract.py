@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from app.core.features.rest_sink import RestSinkHttpResponse
+from app.core.connections.rest_sink import RestSinkHttpResponse
 from workers.tasks.carica_task import (
     _execute_rest_write,
     _select_carica_write_branch,

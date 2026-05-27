@@ -36,7 +36,7 @@ def test_mssql_test_connection_uses_tls_policy_gate():
 def test_tls_policy_blocks_bypass_in_prod():
     """Sanity sul gate stesso: prod-like env nega il bypass."""
     import os
-    from app.core.security import tls_policy
+    from app.shared.security import tls_policy
 
     saved_env = os.environ.get("ENVIRONMENT")
     saved_allow = os.environ.get("PLENORA_ALLOW_TLS_BYPASS")

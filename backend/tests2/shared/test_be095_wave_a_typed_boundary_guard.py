@@ -31,7 +31,6 @@ _WAVE_A_TARGETS: tuple[str, ...] = (
     "workers/tasks/carica_task.py",
     "app/core/connections/arcgis_writer_boundary.py",
     "app/core/features/arcgis_feature_operations.py",
-    "app/core/features/arcgis_writer_boundary.py",
     "app/core/features/features_service.py",
     "app/core/orchestrator/carica_payload_validation.py",
     "app/core/orchestrator/task_service.py",

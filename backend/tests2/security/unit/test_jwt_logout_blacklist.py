@@ -29,7 +29,7 @@ def fake_redis():
 @pytest.fixture
 def patched_blacklist(fake_redis):
     """Inietta fakeredis nel modulo blacklist; ripristina a None dopo."""
-    from app.shared import token_blacklist as tb
+    from app.core.security import token_blacklist as tb
     tb._set_client_for_tests(fake_redis)
     yield tb
     tb._reset_client_for_tests()
@@ -259,7 +259,7 @@ def test_logout_legacy_token_without_jti(auth_client):
 def test_logout_redis_down_returns_503(auth_client):
     tc, auth_mod = auth_client
     # Simulo Redis down rimpiazzando il client con None
-    from app.shared import token_blacklist as tb
+    from app.core.security import token_blacklist as tb
     tb._set_client_for_tests(None)
 
     tok = _issue_token(auth_mod)
@@ -280,7 +280,7 @@ def test_blacklist_check_fail_open_on_redis_down(auth_client):
     tc, auth_mod = auth_client
     tok = _issue_token(auth_mod)
 
-    from app.shared import token_blacklist as tb
+    from app.core.security import token_blacklist as tb
     tb._set_client_for_tests(None)
 
     r = tc.get("/api/auth/me", headers={"Authorization": f"Bearer {tok}"})

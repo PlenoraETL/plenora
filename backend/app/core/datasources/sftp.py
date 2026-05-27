@@ -15,7 +15,7 @@ from app.core.datasources.interface import (
     DataSourcePermissionError,
     FileInfo,
 )
-from app.core.security.tls_policy import is_prod_like_env
+from app.shared.security.tls_policy import is_prod_like_env
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
