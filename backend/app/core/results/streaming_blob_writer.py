@@ -395,7 +395,7 @@ class StreamingResultBlobWriter:
             filename=self.filename,
         )
 
-    # ── File-like contract (write / tell / flush) ─────────────────────
+    # ── File-like contract (write / tell / flush / IO mode probes) ────
 
     def write(self, data: bytes) -> int:
         if self._closed:
@@ -418,6 +418,23 @@ class StreamingResultBlobWriter:
         # `flush()` periodicamente; non vogliamo fare upload_part per
         # ogni flush sintetico.
         return None
+
+    # `io.TextIOWrapper.__init__` interroga readable/writable/seekable sul
+    # buffer per configurarsi (un writer CSV streaming arriva qui via
+    # `query_streaming._write_csv_to_writer` -> `TextIOWrapper(self)`).
+    # Senza queste tre AttributeError immediato a costruzione del wrapper.
+    def readable(self) -> bool:
+        return False
+
+    def writable(self) -> bool:
+        return True
+
+    def seekable(self) -> bool:
+        return False
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
 
     # ── Lifecycle ────────────────────────────────────────────────────
 
