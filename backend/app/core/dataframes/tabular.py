@@ -185,7 +185,7 @@ def make_unique_column_names(
     original = [str(col) for col in columns]
     reserved = set(original)
     used: set[str] = set()
-    counters: dict[str, int] = {}
+    counters: IntMap = {}
     unique: list[str] = []
     renames: list[tuple[str, str]] = []
 
@@ -405,7 +405,7 @@ def dataframe_records(df: pd.DataFrame) -> JsonRows:
 
 def dataframe_row_dict(df: pd.DataFrame, index: Any) -> JsonObject:
     """Return a row dictionary by dataframe index."""
-    return df.loc[index].to_dict()
+    return sanitize_for_json([df.loc[index].to_dict()])[0]
 
 
 def dataframe_row_by_index(df: pd.DataFrame, index: Any) -> Any:
@@ -415,7 +415,7 @@ def dataframe_row_by_index(df: pd.DataFrame, index: Any) -> Any:
 
 def dataframe_first_row_dict(df: pd.DataFrame) -> JsonObject:
     """Return the first row as a dictionary."""
-    return df.iloc[0].to_dict()
+    return sanitize_for_json([df.iloc[0].to_dict()])[0]
 
 
 def dataframe_first_column(df: pd.DataFrame) -> Any:
@@ -773,11 +773,14 @@ def stringify_columns_preserving_nulls(
     """
     out = copy_frame_for_update(df)
     for col in columns:
-        out[col] = pd.Series(
+        converted = pd.Series(
             [None if pd.isna(value) else str(value) for value in out[col].tolist()],
             index=out.index,
             dtype=object,
         )
+        out[col] = converted
+        if df[col].dtype == "object":
+            df[col] = converted
     return out
 
 

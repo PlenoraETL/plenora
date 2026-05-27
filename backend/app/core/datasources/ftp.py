@@ -3,7 +3,7 @@
 import ftplib
 import io
 import socket
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from app.utils.logger import get_logger
@@ -254,7 +254,7 @@ class FTPDataSource(DataSourceInterface):
                         name=name,
                         path=self._join_path(path, name),
                         size=0,
-                        modified_date=datetime.now(),
+                        modified_date=datetime.now(timezone.utc),
                         type="folder",
                         hash=None,
                     ))

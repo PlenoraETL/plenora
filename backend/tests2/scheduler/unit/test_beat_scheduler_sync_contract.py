@@ -109,7 +109,6 @@ def test_sync_from_db_adds_entry_for_enabled_schedule(scheduler):
     assert entry.kwargs == {
         "schedule_id": "sched-1",
         "triggered_by": "cron",
-        "retry_attempt": 0,
     }
 
 

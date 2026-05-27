@@ -8,6 +8,17 @@ from typing import Any
 from app.core.output_contract.service import node_columns_from_contract
 from app.core.projects.canvas_models import Column
 
+ColumnPayload = dict[str, Any]
+ColumnPayloadRows = list[ColumnPayload]
+ColumnByName = dict[str, ColumnPayload]
+ColumnMigrationMap = dict[str, ColumnPayload | None]
+ColumnMigrationsByNode = dict[str, ColumnMigrationMap]
+SchemaContext = tuple[Any, dict[str, Any], dict[str, list[Any]]]
+StringMap = dict[str, str]
+SyncConfigResult = tuple[ColumnPayload, bool]
+ProjectSourceSyncResult = tuple[bool, ColumnMigrationsByNode]
+ExpressionRefs = list[ColumnPayload]
+
 
 SCALAR_COLUMN_CONFIG_KEYS = frozenset({
     "aggregate_column",
@@ -96,7 +107,7 @@ def sync_canvas_with_output_contracts(
 def _sync_project_source_columns(
     canvas: Any,
     project_service: Any,
-) -> tuple[bool, dict[str, dict[str, dict[str, Any] | None]]]:
+) -> ProjectSourceSyncResult:
     changed = False
     column_migrations_by_node: dict[str, dict[str, dict[str, Any] | None]] = {}
     for node in getattr(canvas, "nodes", []) or []:
@@ -263,7 +274,7 @@ def _sync_param_mapping(
     columns: list[dict[str, Any]],
     *,
     column_migrations: dict[str, dict[str, Any] | None],
-) -> dict[str, Any]:
+) -> ColumnPayload:
     changed = False
     out = dict(mapping)
     by_name = _columns_by_current_name(columns)
@@ -315,9 +326,9 @@ def _sync_param_mapping_value(
 def _node_output_columns(
     node: Any,
     *,
-    schema_context: tuple[Any, dict[str, Any], dict[str, list[Any]]] | None = None,
+    schema_context: SchemaContext | None = None,
     project_id: str | None = None,
-) -> list[dict[str, Any]]:
+) -> ColumnPayloadRows:
     columns = [_as_dict(c) for c in (getattr(node, "columns", None) or [])]
     if columns or not schema_context or not project_id:
         return columns
@@ -340,7 +351,7 @@ def _sync_expression_config(
     *,
     column_migrations: dict[str, dict[str, Any] | None] | None = None,
     extra_legacy_names: dict[str, str] | None = None,
-) -> dict[str, Any]:
+) -> ColumnPayload:
     out, changed = _sync_column_reference_config(
         config,
         columns,
@@ -452,7 +463,7 @@ def _sync_column_reference_config(
     *,
     column_migrations: dict[str, dict[str, Any] | None] | None = None,
     extra_legacy_names: dict[str, str] | None = None,
-) -> tuple[dict[str, Any], bool]:
+) -> SyncConfigResult:
     """Rewrite non-expression column params after upstream alias changes."""
 
     changed = False
@@ -578,7 +589,7 @@ def _sync_dict_column_reference_list(
     legacy_names: dict[str, str],
     column_migrations: dict[str, dict[str, Any] | None],
     id_field: str = "column_id",
-) -> dict[str, Any]:
+) -> ColumnPayload:
     values = config.get(key)
     if not isinstance(values, list):
         return config
@@ -629,7 +640,7 @@ def _sync_dict_column_reference_list(
     return out
 
 
-def _columns_by_current_name(columns: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def _columns_by_current_name(columns: list[dict[str, Any]]) -> ColumnByName:
     candidates: dict[str, list[dict[str, Any]]] = {}
     for col in columns:
         name = col.get("name")
@@ -645,7 +656,7 @@ def _columns_by_current_name(columns: list[dict[str, Any]]) -> dict[str, dict[st
 def _build_schema_context(
     canvas: Any,
     project_service: Any,
-) -> tuple[Any, dict[str, Any], dict[str, list[Any]]] | None:
+) -> SchemaContext | None:
     try:
         from app.core.projects.schema_inference import SchemaInferenceService
 
@@ -662,7 +673,7 @@ def _build_schema_context(
 def _contract_legacy_name_map(
     contract: Any,
     columns: list[dict[str, Any]],
-) -> dict[str, str]:
+) -> StringMap:
     if not isinstance(contract, dict):
         return {}
     previous_columns = [
@@ -712,7 +723,7 @@ def _resolve_column_name(
     columns_by_name: dict[str, dict[str, Any]],
     legacy_names: dict[str, str],
     column_migrations: dict[str, dict[str, Any] | None],
-) -> dict[str, Any] | None:
+) -> ColumnPayload | None:
     migrated = column_migrations.get(f"name:{name}")
     if isinstance(migrated, dict):
         return migrated
@@ -723,7 +734,7 @@ def _resolve_column_name(
 def _build_column_migrations(
     previous_columns: list[dict[str, Any]],
     next_columns: list[dict[str, Any]],
-) -> dict[str, dict[str, Any] | None]:
+) -> ColumnMigrationMap:
     migrations: dict[str, dict[str, Any] | None] = {}
     next_by_id = {
         str(col.get("id") or col.get("column_id")): col
@@ -821,7 +832,7 @@ def _is_removed_column_reference(
 def _lookup_id_migration(
     migrations: dict[str, dict[str, Any] | None],
     column_id: Any,
-) -> dict[str, Any] | None:
+) -> ColumnPayload | None:
     if not column_id:
         return None
     current = migrations.get(f"id:{column_id}")
@@ -845,7 +856,7 @@ def _merge_column_migrations(
 def _lookup_column_migration(
     migrations: dict[str, dict[str, Any] | None],
     ref: dict[str, Any],
-) -> dict[str, Any] | None:
+) -> ColumnPayload | None:
     col_id = ref.get("id") or ref.get("column_id")
     if col_id:
         found = migrations.get(f"id:{col_id}")
@@ -862,7 +873,7 @@ def _lookup_column_migration(
 def _filter_column_migrations_for_output(
     migrations: dict[str, dict[str, Any] | None],
     columns: list[dict[str, Any]],
-) -> dict[str, dict[str, Any] | None]:
+) -> ColumnMigrationMap:
     if not migrations:
         return {}
     if not columns:
@@ -897,7 +908,7 @@ def _filter_column_migrations_for_output(
 
 def _legacy_name_map_from_migrations(
     migrations: dict[str, dict[str, Any] | None],
-) -> dict[str, str]:
+) -> StringMap:
     out: dict[str, str] = {}
     for key, current in migrations.items():
         if not key.startswith("name:") or not isinstance(current, dict):
@@ -919,7 +930,7 @@ def _removed_name_tokens_from_migrations(
     }
 
 
-def _legacy_name_map(columns: list[dict[str, Any]]) -> dict[str, str]:
+def _legacy_name_map(columns: list[dict[str, Any]]) -> StringMap:
     candidates: dict[str, set[str]] = {}
     for col in columns:
         current = col.get("name")
@@ -939,7 +950,7 @@ def _legacy_name_map(columns: list[dict[str, Any]]) -> dict[str, str]:
 def _collect_expression_refs(
     expression: str,
     columns: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
+) -> ExpressionRefs:
     token_columns: dict[str, set[str]] = {}
     for col in columns:
         col_id = col.get("id") or col.get("column_id")
@@ -1013,7 +1024,7 @@ def _node_field(node: Any, key: str, default: Any = None) -> Any:
     return default
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
+def _as_dict(value: Any) -> ColumnPayload:
     if isinstance(value, dict):
         return dict(value)
     if hasattr(value, "model_dump"):

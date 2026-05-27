@@ -61,7 +61,7 @@ def test_execute_carica_uses_result_id_artifact_before_output_path(schedule_conf
 
     from app.core.results.db import ResultMetadataRow
 
-    with patch("app.core.dataframes.frame_io.load_dataframe_from_file", return_value=df) as mock_load, \
+    with patch("app.core.dataframes.frame_io.load_dataframe_from_artifact", return_value=df) as mock_load, \
          patch("app.core.carica.executor.CaricaExecutor") as mock_executor, \
          patch("app.core.results.db.get_result_row", return_value=ResultMetadataRow(id="res-1", project_id="proj-1", group_id="grp-1", format="csv")), \
          patch("app.db.pg_connection.fetchone", return_value={"data": b"id\n1\n2\n", "storage_key": None, "project_id": "proj-1"}):
@@ -73,8 +73,7 @@ def test_execute_carica_uses_result_id_artifact_before_output_path(schedule_conf
 
     assert result["success"] is True
     assert mock_load.call_count == 1
-    loaded_target = Path(mock_load.call_args.args[0])
-    assert loaded_target.name != stale_path.name
+    assert mock_load.call_args.kwargs["data"] == b"id\n1\n2\n"
 
 
 def test_execute_carica_fails_when_no_run_specific_artifact_is_available(schedule_config):
@@ -101,7 +100,7 @@ def test_execute_carica_uses_explicit_write_result_insert_update_counts(schedule
 
     from app.core.results.db import ResultMetadataRow
 
-    with patch("app.core.dataframes.frame_io.load_dataframe_from_file", return_value=df), \
+    with patch("app.core.dataframes.frame_io.load_dataframe_from_artifact", return_value=df), \
          patch("app.core.carica.executor.CaricaExecutor") as mock_executor, \
          patch("app.core.results.db.get_result_row", return_value=ResultMetadataRow(id="res-1", project_id="proj-1", group_id="grp-1", format="csv")), \
          patch("app.db.pg_connection.fetchone", return_value={"data": b"id\n1\n2\n3\n4\n5\n", "storage_key": None, "project_id": "proj-1"}):

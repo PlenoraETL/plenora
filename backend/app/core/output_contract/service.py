@@ -14,6 +14,10 @@ from .models import OutputColumn, OutputColumnType, OutputContract
 
 logger = get_logger(__name__)
 
+ColumnPayload = dict[str, Any]
+ColumnPayloadRows = list[ColumnPayload]
+ColumnTypeMap = dict[str, str]
+
 
 def _field(obj: Any, key: str, default: Any = None) -> Any:
     if isinstance(obj, dict):
@@ -39,7 +43,7 @@ def _logical_type(raw_type: Any) -> str:
     return value
 
 
-def _previous_columns(previous_contract: Any) -> list[dict[str, Any]]:
+def _previous_columns(previous_contract: Any) -> ColumnPayloadRows:
     if not previous_contract:
         return []
     if isinstance(previous_contract, OutputContract):
@@ -146,7 +150,7 @@ def build_output_contract(
     )
 
 
-def column_types_from_contract(contract: Any) -> dict[str, str]:
+def column_types_from_contract(contract: Any) -> ColumnTypeMap:
     """Return ``physical_name -> logical_type`` from an output contract."""
     if isinstance(contract, OutputContract):
         columns = [c.model_dump() for c in contract.columns]
@@ -169,7 +173,7 @@ def node_columns_from_contract(
     contract: Any,
     *,
     previous_node_columns: list[Any] | None = None,
-) -> list[dict[str, Any]]:
+) -> ColumnPayloadRows:
     """Return canvas-compatible source columns from an output contract.
 
     Visibility is preserved by column id from the previous project_source node.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Callable, Dict, List
 
 from app.core.resources import storage_reconciliation as reconciliation
@@ -19,7 +20,7 @@ DeleteRun = Callable[[str], None]
 DEFAULT_RUNS_RETENTION = 5
 
 
-def _fetchall(sql: str, params: tuple = ()) -> List[Dict]:
+def _fetchall(sql: str, params: tuple = ()) -> list[Mapping[str, object]]:
     with unit_of_work() as session:
         return session.fetchall(sql, params)
 

@@ -9,7 +9,6 @@ CONNECTION_DUPLICATE_NAME = "connection_duplicate_name"
 KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     CONNECTION_IN_USE,
     CONNECTION_NOT_FOUND,
-    CONNECTION_DUPLICATE_NAME,
 })
 
 

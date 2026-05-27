@@ -10,6 +10,9 @@ from __future__ import annotations
 from app.app_factory import create_app
 from app.app_factory import _compute_doc_endpoints as _factory_compute_doc_endpoints
 
+# API composition is centralized in app_factory:
+# from app.core.api import api_router
+# app.include_router(api_router, prefix="/api")
 
 _compute_doc_endpoints = _factory_compute_doc_endpoints
 

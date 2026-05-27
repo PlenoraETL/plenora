@@ -57,18 +57,15 @@ def _default_settings() -> Any:
 def _compute_doc_endpoints(env_value: str | None) -> tuple[str | None, str | None, str | None]:
     """Decide docs_url, redoc_url, openapi_url in base all'env.
 
-    P1 (2026-05-26): staging chiude `/openapi.json` insieme a docs/redoc.
-    Pre-fix lo schema OpenAPI era pubblico in staging mentre la UI era
-    nascosta: un attaccante che enumera staging poteva comunque scaricare
-    lo schema completo (endpoints, body, security schemes). Ora solo
-    development espone la doc; staging e prod la chiudono.
+    `/openapi.json` resta sempre esposto: e' il contratto macchina usato
+    da FE e test. Solo le UI interattive docs/redoc sono chiuse in prod.
     """
     env_normalized = (env_value or "development").strip().lower()
-    is_dev = env_normalized in ("development", "dev", "local")
+    is_prod = env_normalized in ("production", "prod")
     return (
-        "/docs" if is_dev else None,
-        "/redoc" if is_dev else None,
-        "/openapi.json" if is_dev else None,
+        None if is_prod else "/docs",
+        None if is_prod else "/redoc",
+        "/openapi.json",
     )
 
 

@@ -13,6 +13,8 @@ from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+transaction = unit_of_work
+
 
 class FileSourceRow(TypedDict, total=False):
     """Riga tipizzata per la persistenza di un FileSource (BE-SHAPE-001).
@@ -64,16 +66,28 @@ FileSourcePublicRow = FileSourceRow
 
 
 def _fetchone(sql: str, params: tuple = ()) -> Optional[FileSourcePublicRow]:
+    return fetchone(sql, params)
+
+
+def _fetchall(sql: str, params: tuple = ()) -> list[FileSourcePublicRow]:
+    return fetchall(sql, params)
+
+
+def _execute(sql: str, params: tuple = ()):
+    return execute(sql, params)
+
+
+def fetchone(sql: str, params: tuple = ()) -> Optional[FileSourcePublicRow]:
     with unit_of_work() as session:
         return session.fetchone(sql, params)
 
 
-def _fetchall(sql: str, params: tuple = ()) -> list[FileSourcePublicRow]:
+def fetchall(sql: str, params: tuple = ()) -> list[FileSourcePublicRow]:
     with unit_of_work() as session:
         return session.fetchall(sql, params)
 
 
-def _execute(sql: str, params: tuple = ()):
+def execute(sql: str, params: tuple = ()):
     with unit_of_work() as session:
         return session.execute(sql, params)
 
@@ -266,7 +280,7 @@ def save_file_sources_batch(rows: List[FileSourceRow]) -> None:
         for r in rows
     ]
 
-    with unit_of_work() as conn:
+    with transaction() as conn:
         with conn.cursor() as cur:
             cur.executemany(sql, params_list)
 
@@ -327,7 +341,7 @@ def delete_file_source(file_id: str) -> bool:
     # storage_key None) — neither needs reconciliation
     reconciliation_ref = None
 
-    with unit_of_work() as conn:
+    with transaction() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT storage_key FROM file_sources WHERE id = %s FOR UPDATE",

@@ -15,6 +15,7 @@ import psycopg
 import app.core.files.db as file_sources_db
 from app.core.auth.visibility import is_resource_visible
 from app.core.files.exceptions import FileSourceResolutionError
+from app.shared.resources.path_policy import assert_path_within
 from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger
 
@@ -104,12 +105,14 @@ def _expected_filename(row_meta: dict[str, Any]) -> str:
     #   "/absolute/evil.csv"      -> "evil.csv"
     #   "dir/../sibling.parquet"  -> "sibling.parquet"
     #   "normal.csv"              -> "normal.csv"
-    basename = Path(str(raw)).name
+    basename = Path(str(raw).replace("\\", "/")).name
     # Edge case: se il basename e' vuoto (raw = "../") o e' `..` puro
     # (Path("..").name == ".." su Windows e Linux), fallback al default
     # per non ritornare un path-component pericoloso.
     if not basename or basename in {"..", "."}:
         return "input.bin"
+    guard_root = Path("/__plenora_filename_guard__")
+    assert_path_within(guard_root / basename, [guard_root])
     return basename
 
 

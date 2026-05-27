@@ -67,10 +67,10 @@ def _mock_object_storage(uploads: dict):
     fake_storage.upload_bytes.side_effect = _capture_upload_bytes
 
     with patch(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
+        "app.core.io.object_storage.get_runtime_object_storage",
         return_value=fake_storage,
     ), patch(
-        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
+        "app.core.io.object_storage.object_storage_enabled",
         return_value=True,
     ):
         yield fake_storage
@@ -205,7 +205,7 @@ def test_full_artifact_validate_fails_when_object_storage_disabled():
     )
     cfg = _settings_baseline(mode="full_artifact")
     with patch(
-        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
+        "app.core.io.object_storage.object_storage_enabled",
         return_value=False,
     ):
         with pytest.raises(IntermediateSettingsError, match="OBJECT_STORAGE_ENABLED"):
@@ -230,10 +230,10 @@ def test_full_artifact_runtime_capability_collapse_marks_failed():
     fake_get = MagicMock(side_effect=ObjectStorageDisabledError("disabled"))
 
     with _patch_settings(mode="full_artifact"), patch(
-        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
+        "app.core.io.object_storage.object_storage_enabled",
         return_value=True,  # validate OK
     ), patch(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage", fake_get,
+        "app.core.io.object_storage.get_runtime_object_storage", fake_get,
     ), _patch_run_meta(), patch(
         "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
         side_effect=_capture_db,
@@ -340,7 +340,7 @@ def test_full_pg_legacy_path_does_not_touch_object_storage():
         captured_db.update(kwargs)
 
     with _patch_settings(mode="full_pg"), patch(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage", fake_get_storage,
+        "app.core.io.object_storage.get_runtime_object_storage", fake_get_storage,
     ), patch(
         "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
         side_effect=_capture_db,
@@ -374,7 +374,7 @@ def test_metadata_only_path_does_not_touch_object_storage():
         captured_db.update(kwargs)
 
     with _patch_settings(mode="metadata_only"), patch(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage", fake_get_storage,
+        "app.core.io.object_storage.get_runtime_object_storage", fake_get_storage,
     ), patch(
         "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
         side_effect=_capture_db,

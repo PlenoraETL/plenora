@@ -28,16 +28,37 @@ Public surface (specializzati — operational/cross-cluster):
 
 from __future__ import annotations
 
+from importlib import import_module
+
 from app.infrastructure.storage.cloud_backends import (
     ObjectMeta,
     ObjectStorage,
     ObjectStorageDisabledError,
-    aws_credentials_error_message,
-    get_backup_object_storage,
-    get_log_archive_storage,
-    get_runtime_object_storage,
-    object_storage_enabled,
 )
+
+
+def _cloud_backends():
+    return import_module("app.infrastructure.storage.cloud_backends")
+
+
+def aws_credentials_error_message(exc: Exception) -> str:
+    return _cloud_backends().aws_credentials_error_message(exc)
+
+
+def get_backup_object_storage():
+    return _cloud_backends().get_backup_object_storage()
+
+
+def get_log_archive_storage():
+    return _cloud_backends().get_log_archive_storage()
+
+
+def get_runtime_object_storage():
+    return _cloud_backends().get_runtime_object_storage()
+
+
+def object_storage_enabled() -> bool:
+    return _cloud_backends().object_storage_enabled()
 
 __all__ = [
     "ObjectMeta",

@@ -15,7 +15,7 @@ from tests2.functional.harness.auth import (
 )
 from tests2.functional.harness.celery import spawn_celery_worker
 from tests2.functional.harness.celery import flush_redis_db
-from tests2.functional.harness.env import configure_redis_urls
+from tests2.functional.harness.env import configure_redis_urls, isolate_redis_dbs
 from tests2.functional.harness.ports import find_free_port
 from tests2.functional.harness.processes import (
     spawn_process,
@@ -34,10 +34,12 @@ def functional_env(tmp_path) -> dict:
     data_dir.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     env["PYTHONPATH"] = os.getcwd()
-    env.setdefault("ENVIRONMENT", "development")
+    env["ENVIRONMENT"] = "development"
     env["JWT_SECRET_KEY"] = "tests2-functional-jwt-secret"
+    env["PLENORA_ENCRYPTION_KEY"] = "tests2-functional-encryption-key"
     env["DATA_DIR"] = str(data_dir)
     configure_redis_urls(env)
+    isolate_redis_dbs(env, broker_db=13, result_db=14)
     # Opt-in SSRF loopback: i test funzionali lanciano un fake HTTP
     # server su 127.0.0.1 e poi fanno chiamare il backend reale verso
     # quell'URL. Senza questa opt-in, `validate_external_url` blocca

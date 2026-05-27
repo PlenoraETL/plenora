@@ -87,6 +87,12 @@ def geometry_series_to_wkt(
             non_geom_passthrough[idx] = value
             continue
 
+        if not isinstance(value, BaseGeometry) and hasattr(value, "wkt"):
+            values.append(None)
+            valid.append(False)
+            non_geom_passthrough[idx] = getattr(value, "wkt")
+            continue
+
         values.append(value)
         valid.append(True)
 

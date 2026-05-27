@@ -67,12 +67,12 @@ def _try_register_used_code(user_id: str, code: str) -> bool:
     with unit_of_work() as session:
         row = session.fetchone(
             """
-            INSERT INTO plenora.user_mfa_used_codes
+            INSERT INTO user_mfa_used_codes
                 (user_id, code_hash, expires_at)
             VALUES (%s, %s, %s)
             ON CONFLICT (user_id, code_hash) DO UPDATE
                 SET expires_at = EXCLUDED.expires_at
-                WHERE plenora.user_mfa_used_codes.expires_at <= NOW()
+                WHERE user_mfa_used_codes.expires_at <= NOW()
             RETURNING 1
             """,
             (user_id, code_hash, expires_at),
@@ -89,7 +89,7 @@ def vacuum_expired_used_codes() -> int:
     """
     with unit_of_work() as session:
         return session.execute(
-            "DELETE FROM plenora.user_mfa_used_codes WHERE expires_at <= NOW()"
+            "DELETE FROM user_mfa_used_codes WHERE expires_at <= NOW()"
         ) or 0
 
 

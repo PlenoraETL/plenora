@@ -14,7 +14,7 @@ from app.core.auth.group_cleanup import delete_group_cascade
 
 from tests2.functional.harness.celery import spawn_celery_worker
 from tests2.functional.harness.celery import flush_redis_db
-from tests2.functional.harness.env import configure_redis_urls
+from tests2.functional.harness.env import configure_redis_urls, isolate_redis_dbs
 from tests2.functional.harness.http import http_json_response
 from tests2.functional.harness.ports import find_free_port
 from tests2.functional.harness.processes import (
@@ -93,6 +93,7 @@ def integration_env(tmp_path_factory) -> dict:
     env["PYTHONPATH"] = os.getcwd()
     env["ENVIRONMENT"] = "development"
     env["JWT_SECRET_KEY"] = "tests2-integration-jwt-secret"
+    env["PLENORA_ENCRYPTION_KEY"] = "tests2-integration-encryption-key"
     # DATABASE_URL: in CI il workflow ci-functional.yml lo fornisce
     # esplicitamente per il subprocess uvicorn (B-2 tier). In dev locale
     # il subprocess legge .env via app.config dotenv import-time.
@@ -108,6 +109,7 @@ def integration_env(tmp_path_factory) -> dict:
     # DB_SCHEMA resta poppato per usare il default 'plenora'.
     env.pop("DB_SCHEMA", None)
     configure_redis_urls(env)
+    isolate_redis_dbs(env, broker_db=11, result_db=12)
     env["DATA_DIR"] = str(data_dir)
     return env
 

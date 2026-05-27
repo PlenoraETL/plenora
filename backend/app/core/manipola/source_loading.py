@@ -31,7 +31,7 @@ logger = get_logger(__name__)
 _DEFAULT_LOGGER = get_logger(__name__)
 
 
-def normalize_node_columns(node_columns: Sequence[Any] | None) -> list[dict[str, Any]]:
+def normalize_node_columns(node_columns: Sequence[Any] | None) -> JsonRows:
     """Normalizza una lista di node columns in dict omogenei.
 
     Pre-fix: lo stesso for-loop `if isinstance(c, dict): append(c) else
@@ -42,7 +42,7 @@ def normalize_node_columns(node_columns: Sequence[Any] | None) -> list[dict[str,
     canvas e ottengono dict normalizzati da consegnare a
     `filter_visible_columns` / `_metadata_columns_from_node_columns`.
     """
-    out: list[dict[str, Any]] = []
+    out: JsonRows = []
     for c in node_columns or []:
         if isinstance(c, dict):
             out.append(c)

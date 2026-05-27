@@ -433,11 +433,8 @@ def check_beat_heartbeat() -> CheckOutcome:
         return True, "skipped: disabled (threshold=0)"
 
     try:
-        from app.db.pg_connection import unit_of_work
-        with unit_of_work() as session:
-            row = session.fetchone(
-                "SELECT ts FROM beat_heartbeat WHERE id = 'beat'"
-            )
+        from app.db.pg_connection import fetchone
+        row = fetchone("SELECT ts FROM beat_heartbeat WHERE id = 'beat'")
     except Exception as e:
         # Table missing (fresh dev DB) / DB unreachable / SQL syntax
         # error: fail-OPEN diagnostic. The PG check upstream already

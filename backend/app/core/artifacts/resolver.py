@@ -208,8 +208,9 @@ class ArtifactResolver:
         fmt = row.format or "csv"
         return MaterializedArtifact(
             data=resource.data,
+            path=resource.path,
             format=fmt,
-            is_temporary=False,
+            is_temporary=resource.is_temporary,
         )
 
     def fetch_run_blob(
@@ -426,8 +427,9 @@ class ArtifactResolver:
         fmt = row.format or "csv"
         return MaterializedArtifact(
             data=resource.data,
+            path=resource.path,
             format=fmt,
-            is_temporary=False,
+            is_temporary=resource.is_temporary,
         )
 
     def _materialize_from_output_path(

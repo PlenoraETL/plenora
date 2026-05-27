@@ -307,6 +307,8 @@ class ApiConnectionSourceLoadingMixin:
             source_project_id
         )
         if not output_contract:
+            if not node_data.get("columns"):
+                return df
             raise ValueError(
                 f"output_contract mancante per progetto sorgente "
                 f"{source_project_id}"

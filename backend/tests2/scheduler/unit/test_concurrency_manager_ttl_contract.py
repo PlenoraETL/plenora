@@ -70,7 +70,17 @@ class _FakeDb:
         if "UPDATE SCHEDULER_LOCKS" in norm and "RETURNING" not in norm:
             # refresh_lock: UPDATE ... SET expires_at = %s WHERE key = %s
             new_expires, key = params
-            if key in self.rows:
+            entry = self.rows.get(key)
+            if entry is not None:
+                if "EXPIRES_AT > NOW()" in norm:
+                    expires_at = entry.get("expires_at")
+                    if not expires_at:
+                        return _FakeCursor(rowcount=0)
+                    exp = datetime.fromisoformat(expires_at)
+                    if exp.tzinfo is None:
+                        exp = exp.replace(tzinfo=timezone.utc)
+                    if datetime.now(timezone.utc) >= exp:
+                        return _FakeCursor(rowcount=0)
                 self.rows[key]["expires_at"] = new_expires
                 return _FakeCursor(rowcount=1)
             return _FakeCursor(rowcount=0)
@@ -80,6 +90,23 @@ class _FakeDb:
     def fetchone(self, sql: str, params: tuple = ()) -> Optional[Dict[str, Optional[str]]]:
         self.executed_sql.append((sql, params))
         norm = " ".join(sql.split()).upper()
+        if "INSERT INTO SCHEDULER_LOCKS" in norm and "ON CONFLICT" in norm:
+            key, value, expires_at = params
+            entry = self.rows.get(key)
+            if entry is None:
+                self.rows[key] = {"value": value, "expires_at": expires_at}
+                return {"value": value}
+            current_expires = entry.get("expires_at")
+            should_steal = current_expires is None
+            if current_expires:
+                exp = datetime.fromisoformat(current_expires)
+                if exp.tzinfo is None:
+                    exp = exp.replace(tzinfo=timezone.utc)
+                should_steal = datetime.now(timezone.utc) >= exp
+            if should_steal:
+                self.rows[key] = {"value": value, "expires_at": expires_at}
+                return {"value": value}
+            return None
         if "SELECT" in norm and "SCHEDULER_LOCKS" in norm:
             key = params[0]
             entry = self.rows.get(key)
@@ -292,15 +319,12 @@ def test_is_running_returns_false_when_lock_is_expired(mgr_with_real_helpers):
 def test_refresh_lock_on_expired_lock_returns_false_without_issuing_update(
     mgr_with_real_helpers,
 ):
-    """Blinda il guard ``if self._get(lock_key) is None: return False``
-    in ``refresh_lock`` (line 244).
+    """Blinda il refresh atomico con guard SQL su TTL vivo.
 
-    Contract: se il lock è scaduto (auto-cleanuppato da ``_get``),
+    Contract: se il lock è scaduto,
     ``refresh_lock`` DEVE:
       - ritornare False
-      - **NON eseguire l'UPDATE** (la riga è già sparita, un UPDATE
-        rimbalzerebbe con rowcount=0 ma è comunque traffico sprecato e
-        log-noise)
+      - non modificare la riga scaduta
 
     Più importante: se qualcuno togliesse il guard e lasciasse solo
     l'UPDATE finale, il caller userebbe ``rowcount > 0`` come proxy di
@@ -324,12 +348,5 @@ def test_refresh_lock_on_expired_lock_returns_false_without_issuing_update(
     result = mgr_with_real_helpers.refresh_lock("dead-refresh")
 
     assert result is False, "refresh su lock scaduto DEVE ritornare False"
-    assert _count_updates(fake) == updates_before, (
-        "refresh su lock scaduto NON deve emettere UPDATE: il guard "
-        "_get() is None → return False deve short-circuitare prima."
-    )
-    # Il lock è stato rimosso da _get (auto-cleanup), non ri-creato da refresh
-    assert "scheduler:lock:dead-refresh" not in fake.rows, (
-        "il cleanup di _get DEVE aver rimosso la row; refresh NON deve "
-        "reinstaurarla"
-    )
+    assert _count_updates(fake) == updates_before + 1
+    assert fake.rows["scheduler:lock:dead-refresh"]["expires_at"] == past_iso

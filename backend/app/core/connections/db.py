@@ -12,16 +12,28 @@ from app.db.pg_connection import unit_of_work
 
 
 def _fetchone(sql: str, params: tuple = ()) -> Mapping[str, object] | None:
+    return fetchone(sql, params)
+
+
+def _fetchall(sql: str, params: tuple = ()) -> list[Mapping[str, object]]:
+    return fetchall(sql, params)
+
+
+def _execute(sql: str, params: tuple = ()):
+    return execute(sql, params)
+
+
+def fetchone(sql: str, params: tuple = ()) -> Mapping[str, object] | None:
     with unit_of_work() as session:
         return session.fetchone(sql, params)
 
 
-def _fetchall(sql: str, params: tuple = ()) -> list[Mapping[str, object]]:
+def fetchall(sql: str, params: tuple = ()) -> list[Mapping[str, object]]:
     with unit_of_work() as session:
         return session.fetchall(sql, params)
 
 
-def _execute(sql: str, params: tuple = ()):
+def execute(sql: str, params: tuple = ()):
     with unit_of_work() as session:
         return session.execute(sql, params)
 

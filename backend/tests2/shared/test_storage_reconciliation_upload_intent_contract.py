@@ -324,7 +324,7 @@ def test_dispatch_records_upload_intent_before_upload(monkeypatch):
         _fake_mark_done,
     )
     monkeypatch.setattr(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
+        "app.core.files.storage_dispatch.cloud_backends.get_runtime_object_storage",
         _fake_get_runtime,
     )
 
@@ -344,12 +344,12 @@ def test_dispatch_records_upload_intent_before_upload(monkeypatch):
     assert out["storage_key"].startswith("file-sources/file-1/")
 
 
-def test_dispatch_marks_done_when_upload_fails(monkeypatch):
-    """object_storage branch: upload exception -> mark_done(intent_id)
-    -> exception re-raised. No orphan possible (nothing uploaded)."""
+def test_dispatch_marks_failed_when_upload_fails(monkeypatch):
+    """object_storage branch: upload exception -> mark_failed_attempt(intent_id)
+    -> exception re-raised so the reconciler can retry/escalate."""
     from app.core.files import storage_dispatch as file_storage_dispatch
 
-    mark_done_calls = []
+    mark_failed_calls = []
 
     def _fake_record_upload_intent(**kwargs):
         return "intent-uuid-2"
@@ -360,8 +360,8 @@ def test_dispatch_marks_done_when_upload_fails(monkeypatch):
     def _fake_get_runtime():
         return fake_storage
 
-    def _fake_mark_done(intent_id):
-        mark_done_calls.append(intent_id)
+    def _fake_mark_failed(intent_id, *, error):
+        mark_failed_calls.append((intent_id, error))
 
     monkeypatch.setattr("app.config.settings", _settings_get_stub())
     monkeypatch.setattr(
@@ -369,11 +369,11 @@ def test_dispatch_marks_done_when_upload_fails(monkeypatch):
         _fake_record_upload_intent,
     )
     monkeypatch.setattr(
-        "app.core.resources.storage_reconciliation.mark_done",
-        _fake_mark_done,
+        "app.core.resources.storage_reconciliation.mark_failed_attempt",
+        _fake_mark_failed,
     )
     monkeypatch.setattr(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
+        "app.core.files.storage_dispatch.cloud_backends.get_runtime_object_storage",
         _fake_get_runtime,
     )
 
@@ -383,8 +383,9 @@ def test_dispatch_marks_done_when_upload_fails(monkeypatch):
             "file-2", b"x" * 2048, "f.csv", logger=log,
         )
 
-    # Intent must be cleared because nothing was uploaded.
-    assert mark_done_calls == ["intent-uuid-2"]
+    assert mark_failed_calls == [
+        ("intent-uuid-2", "upload_bytes failed: RuntimeError: S3 down")
+    ]
 
 
 def test_dispatch_does_not_record_intent_on_db_bytea_path(monkeypatch):
@@ -447,7 +448,7 @@ def test_dispatch_proceeds_when_record_upload_intent_returns_none(monkeypatch):
         _fake_mark_done,
     )
     monkeypatch.setattr(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
+        "app.core.files.storage_dispatch.cloud_backends.get_runtime_object_storage",
         lambda: fake_storage,
     )
 

@@ -398,12 +398,15 @@ def load_dataframe_from_artifact(
         # `load_dataframe_from_file` quando il path e' una dir.
         if fmt == "gdb" and artifact_path.is_dir():
             return load_dataframe_from_file(artifact_path, sheet=sheet, layer=layer)
-        return _load_dataframe_from_bytes(
-            artifact_path.read_bytes(),
-            format_hint=fmt,
-            sheet=sheet,
-            layer=layer,
-        )
+        suffix = {
+            "gpkg": ".gpkg",
+            "geopackage": ".gpkg",
+            "shp": ".shp",
+            "zip": ".zip",
+            "gdb": ".gdb",
+        }.get(fmt, artifact_path.suffix)
+        delegated_path = artifact_path if artifact_path.suffix else artifact_path.with_suffix(suffix)
+        return load_dataframe_from_file(delegated_path, sheet=sheet, layer=layer)
 
     return load_dataframe_from_file(artifact_path, sheet=sheet, layer=layer)
 

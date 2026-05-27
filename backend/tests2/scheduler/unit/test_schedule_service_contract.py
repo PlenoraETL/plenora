@@ -38,7 +38,10 @@ def _row_from_config(schedule_config: object) -> ScheduleRow:
 
 
 def test_schedule_service_has_no_process_local_schedule_locks():
-    source = Path("backend/app/core/scheduler/schedule_service.py").read_text(
+    source = (
+        Path(__file__).resolve().parents[3]
+        / "app/core/scheduler/schedule_service.py"
+    ).read_text(
         encoding="utf-8"
     )
 

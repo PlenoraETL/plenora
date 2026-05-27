@@ -6,6 +6,7 @@ service can keep its public API without importing the concrete DB adapter.
 """
 
 import uuid
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -20,14 +21,15 @@ logger = get_logger(__name__)
 DEFAULT_GROUP = "default"
 
 _SENSITIVE_FIELDS = ("password", "client_secret")
+ArcGISConnectionDbRow = Mapping[str, Any]
 
 
-def _fetchone(sql: str, params: tuple = ()) -> dict[str, Any] | None:
+def _fetchone(sql: str, params: tuple = ()) -> ArcGISConnectionDbRow | None:
     with unit_of_work() as session:
         return session.fetchone(sql, params)
 
 
-def _fetchall(sql: str, params: tuple = ()) -> list[dict[str, Any]]:
+def _fetchall(sql: str, params: tuple = ()) -> list[ArcGISConnectionDbRow]:
     with unit_of_work() as session:
         return session.fetchall(sql, params)
 

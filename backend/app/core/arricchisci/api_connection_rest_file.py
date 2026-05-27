@@ -257,6 +257,8 @@ class ApiConnectionRestFileMixin:
 
         return buf.getvalue(), total_bytes, download_timed_out
 
+    _download_binary_response = _download_binary_response_to_bytes
+
     def _build_rest_file_multipart(
         self,
         *,

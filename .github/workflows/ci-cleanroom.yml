@@ -1,0 +1,43 @@
+name: CI Cleanroom
+
+on:
+  workflow_dispatch:
+
+jobs:
+  cleanroom:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Celery cleanroom readiness
+        run: |
+          python - <<'PY'
+          import importlib
+          from workers.celery_app import celery_app
+          assert celery_app.main == "dataflow_tasks"
+          for module_name in (
+              "workers.tasks.enrichment_task",
+              "workers.tasks.carica_task",
+              "workers.tasks.schedule_task",
+              "workers.tasks.pipeline_task",
+              "workers.tasks.imdf_publish_task",
+          ):
+              importlib.import_module(module_name)
+          celery_app.connection().ensure_connection(max_retries=1, timeout=5)
+          from workers.beat_scheduler import PlenoraBeatScheduler
+          assert PlenoraBeatScheduler
+          PY
+      - name: Verify Celery worker enqueue smoke
+        run: |
+          python - <<'PY'
+          from workers.celery_app import celery_app
+          result = celery_app.send_task("cleanroom.ping")
+          assert result.get(timeout=30) == "pong"
+          PY
+      - name: Verify Celery beat tick smoke
+        env:
+          PLENORA_CLEANROOM_BEAT_PING: "1"
+        run: |
+          python - <<'PY'
+          from workers.celery_app import celery_app
+          result = celery_app.send_task("cleanroom.beat_ping")
+          assert result.get(timeout=30) == "beat_pong"
+          PY

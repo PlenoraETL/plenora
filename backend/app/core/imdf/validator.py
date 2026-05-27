@@ -142,37 +142,48 @@ def validate_publish(
     # Site_id richiesto per costruire il path interno allo zip.
     meta = imdf_storage.get_meta_only(bundle_task_id)
     if meta is None:
-        _add_top_issue(
-            "error", "BUNDLE_MISSING",
-            f"Bundle '{bundle_task_id}' senza meta su storage "
-            f"(o pre-IMDF-3 non piu' supportato)."
-        )
-        return report
-    site_id = (meta.get("site_id") or "").strip()
-    if not site_id:
-        _add_top_issue(
-            "error", "BUNDLE_MISSING",
-            f"Bundle '{bundle_task_id}' senza site_id nel meta — "
-            f"impossibile risolvere il path interno della .gdb."
-        )
-        return report
+        from app.config import settings
 
-    try:
-        with imdf_storage.open_gdb_in_vsimem(bundle_task_id, site_id) as vsi_path:
-            if vsi_path is None:
-                _add_top_issue(
-                    "error", "BUNDLE_MISSING",
-                    f"Bundle '{bundle_task_id}' senza .gdb su storage."
-                )
-                return report
-            try:
-                bundle_layers = load_imdf_layers(vsi_path)
-            except Exception as e:
-                _add_top_issue("error", "GDB_LOAD_FAILED", f"Caricamento GDB fallito: {e}")
-                return report
-    except Exception as e:
-        _add_top_issue("error", "GDB_LOAD_FAILED", f"Hydration GDB /vsimem fallita: {e}")
-        return report
+        bundle_dir = settings.IMDF_BUNDLES_DIR / bundle_task_id
+        gdb_candidates = sorted(bundle_dir.glob("*.gdb")) if bundle_dir.exists() else []
+        if not gdb_candidates:
+            _add_top_issue(
+                "error", "BUNDLE_MISSING",
+                f"Bundle '{bundle_task_id}' senza meta su storage "
+                f"e senza cache locale .gdb."
+            )
+            return report
+        try:
+            bundle_layers = load_imdf_layers(str(gdb_candidates[0]))
+        except Exception as e:
+            _add_top_issue("error", "GDB_LOAD_FAILED", f"Caricamento GDB fallito: {e}")
+            return report
+    else:
+        site_id = (meta.get("site_id") or "").strip()
+        if not site_id:
+            _add_top_issue(
+                "error", "BUNDLE_MISSING",
+                f"Bundle '{bundle_task_id}' senza site_id nel meta — "
+                f"impossibile risolvere il path interno della .gdb."
+            )
+            return report
+
+        try:
+            with imdf_storage.open_gdb_in_vsimem(bundle_task_id, site_id) as vsi_path:
+                if vsi_path is None:
+                    _add_top_issue(
+                        "error", "BUNDLE_MISSING",
+                        f"Bundle '{bundle_task_id}' senza .gdb su storage."
+                    )
+                    return report
+                try:
+                    bundle_layers = load_imdf_layers(vsi_path)
+                except Exception as e:
+                    _add_top_issue("error", "GDB_LOAD_FAILED", f"Caricamento GDB fallito: {e}")
+                    return report
+        except Exception as e:
+            _add_top_issue("error", "GDB_LOAD_FAILED", f"Hydration GDB /vsimem fallita: {e}")
+            return report
 
     layers_present = [n for n in LAYER_ORDER if n in bundle_layers and len(bundle_layers[n]) > 0]
     if not layers_present:

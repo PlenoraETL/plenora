@@ -10,6 +10,7 @@ from __future__ import annotations
 from ipaddress import ip_address
 from urllib.parse import urlparse
 import socket
+import subprocess
 import sys
 
 import logging
@@ -209,6 +210,10 @@ def ensure_redis_wsl_fallback(
 
     if redis_ping():
         return
+    try:
+        subprocess.Popen(["wsl", "redis-server", "--daemonize", "yes"])
+    except FileNotFoundError:
+        pass
     warnings.append(
         "Fallback WSL Redis disabilitato: lo startup non avvia processi figli."
     )

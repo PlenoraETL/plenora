@@ -326,8 +326,7 @@ def test_carica_create_then_append_to_arcgis(arcgis_conn_info):
 # Tests: IMDF publish (BLOCKED — documented stub)
 
 
-@pytest.mark.skip(
-    reason=(
+@pytest.mark.skip(reason=(
         "IMDF publish richiede un bundle preprocessato disponibile via "
         "GET /api/imdf/bundles. In env locale i bundle vengono creati "
         "dal servizio esterno imdf.plenora.it/api/process (D3 pipeline) "
@@ -335,8 +334,7 @@ def test_carica_create_then_append_to_arcgis(arcgis_conn_info):
         "Per attivare: 1) avere imdf.plenora.it accessibile + un IMDF "
         "zip valido; 2) submit del bundle al processor; 3) wait for "
         "completion; 4) rimuovere questo skip e usare bundle_task_id."
-    ),
-)
+    ))
 def test_imdf_publish_to_arcgis_real(admin_token, arcgis_connection_id):
     """Publish di un IMDF preprocessato come FeatureService AGOL.
 

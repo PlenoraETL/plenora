@@ -822,17 +822,18 @@ def _scan_value_error_str_e_callsites() -> Dict[str, int]:
 # PROMOTE_DOMAIN_CODE, NEEDS_CONTEXT). Drift detection per-file evita
 # espansione silente del pattern fra release.
 EXPECTED_VALUE_ERROR_STR_E_COUNTS: Dict[str, int] = {
-    "backend/app/core/arricchisci/router.py": 4,
-    "backend/app/core/carica/router.py": 1,
-    "backend/app/core/connections/router.py": 5,
-    "backend/app/core/datasources/router.py": 6,
+    "backend/app/shared/error_envelope.py": 1,
+    "backend/app/core/arricchisci/router.py": 2,
+    "backend/app/core/carica/conflict_request_loader.py": 1,
+    "backend/app/core/datasources/router.py": 5,
     "backend/app/core/eseguibili/router.py": 4,
     "backend/app/core/estrai/router.py": 1,
     "backend/app/core/features/routes.py": 9,
-    "backend/app/core/files/router.py": 10,
-    "backend/app/core/orchestrator/router.py": 1,
+    "backend/app/core/files/router.py": 7,
+    "backend/app/core/files/upload_boundary.py": 2,
+    "backend/app/core/orchestrator/router.py": 2,
     "backend/app/core/projects/router.py": 1,
-    "backend/app/core/tickets/router.py": 1,
+    "backend/app/core/tickets/attachment_boundary.py": 1,
 }
 
 
@@ -870,7 +871,7 @@ def test_value_error_str_e_total_count_lock():
     """Sanity check: somma per-file == 42. Lock indipendente che
     cattura desync fra `EXPECTED_VALUE_ERROR_STR_E_COUNTS` e somma
     intesa nel commit message."""
-    assert sum(EXPECTED_VALUE_ERROR_STR_E_COUNTS.values()) == 43
+    assert sum(EXPECTED_VALUE_ERROR_STR_E_COUNTS.values()) == 36
 
 
 def test_value_error_str_e_pattern_in_accepted_fallback():

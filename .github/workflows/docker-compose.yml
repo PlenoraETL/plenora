@@ -1,0 +1,49 @@
+name: Docker Compose Smoke
+
+on:
+  pull_request:
+    paths:
+      - "docker-compose.yml"
+      - "backend/**"
+      - "frontend/**"
+      - "scripts/docker-api-smoke.sh"
+      - ".github/workflows/docker-compose.yml"
+  push:
+    branches: [main]
+    paths:
+      - "docker-compose.yml"
+      - "backend/**"
+      - "frontend/**"
+      - "scripts/docker-api-smoke.sh"
+      - ".github/workflows/docker-compose.yml"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      PLENORA_ACCEPTANCE_TIMEOUT_SECONDS: "180"
+      PLENORA_ACCEPTANCE_POLL_INTERVAL_SECONDS: "2"
+      PLENORA_ACCEPTANCE_CURL_MAX_TIME_SECONDS: "5"
+      PLENORA_SMOKE_USERNAME: "smoke@example.test"
+      PLENORA_SMOKE_PASSWORD: "smoke-password"
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config
+      - name: Validate compose file
+        run: docker compose config
+      - name: Build images
+        run: docker compose build backend frontend
+      - name: Start infrastructure
+        run: docker compose up -d postgres redis
+      - name: Start backend
+        run: docker compose up -d backend
+      - name: Infrastructure smoke
+        run: bash scripts/docker-api-smoke.sh --infrastructure-only
+      - name: Seed smoke user
+        run: docker compose exec -T backend python -m app.core.auth.smoke_seed
+      - name: Run full Docker API smoke
+        run: bash scripts/docker-api-smoke.sh
+      - name: Stop services
+        if: always()
+        run: docker compose stop

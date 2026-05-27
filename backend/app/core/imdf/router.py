@@ -486,6 +486,37 @@ def list_bundles(
             building_count = meta.get("building_count")
             level_count    = meta.get("level_count")
             unit_count     = meta.get("unit_count")
+            if entry_local_exists and site_id and (
+                building_count is None or level_count is None or unit_count is None
+            ):
+                site_dir = entry / str(site_id)
+
+                def _count_geojson_features(name: str) -> int | None:
+                    path = site_dir / f"{name}.geojson"
+                    if not path.is_file():
+                        return None
+                    try:
+                        data = _json.loads(path.read_text(encoding="utf-8"))
+                    except (_json.JSONDecodeError, OSError, UnicodeError):
+                        return None
+                    features = data.get("features") if isinstance(data, dict) else None
+                    return len(features) if isinstance(features, list) else None
+
+                building_count = (
+                    building_count
+                    if building_count is not None
+                    else _count_geojson_features("building")
+                )
+                level_count = (
+                    level_count
+                    if level_count is not None
+                    else _count_geojson_features("level")
+                )
+                unit_count = (
+                    unit_count
+                    if unit_count is not None
+                    else _count_geojson_features("unit")
+                )
 
             # age_hours: da mtime locale se c'e', altrimenti None.
             # saved_at del meta sarebbe la fonte canonica; lasciamo
@@ -544,6 +575,8 @@ def delete_bundle(
     """
     bundle_dir = _safe_bundle_dir(bundle_task_id)
     meta = _imdf_storage.get_meta_only(bundle_task_id)
+    if meta is None and bundle_dir.is_dir():
+        meta = _imdf_bundle_store.read_metadata(bundle_dir)
     if meta is None:
         raise HTTPException(
             status_code=404,

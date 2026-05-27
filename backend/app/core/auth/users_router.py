@@ -11,9 +11,12 @@ schema generation con `TypeAdapter is not fully defined`.
 """
 
 import uuid
+from collections.abc import Mapping
 from typing_extensions import TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import ValidationError
 
 from app.core.auth import disclosure as _disclosure
 from app.core.auth.models import (
@@ -32,9 +35,11 @@ from app.core.auth import db as _users_dal
 
 
 __all__ = ["users_router"]
+UserUpdateFields = Mapping[str, object]
 
 
 users_router = APIRouter(prefix="/auth/users", tags=["users"])
+_security = HTTPBearer(auto_error=False)
 
 
 class UserResponsePayload(TypedDict):
@@ -59,9 +64,32 @@ def _user_response_payload(user: _users_dal.UserRow) -> UserResponsePayload:
     }
 
 
-# Dipendenze condivise estratte in `router_deps.py` per evitare drift
-# rispetto a `groups_router.py` (pre-fix erano identiche copie inline).
-from app.core.auth.router_deps import require_admin  # noqa: F401
+def _get_current_user_proxy(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_security),
+) -> CurrentUser:
+    from app.core.auth.dependencies import get_current_user
+
+    return get_current_user(credentials)
+
+
+def require_admin(current_user: CurrentUser = Depends(_get_current_user_proxy)) -> CurrentUser:
+    from app.core.auth.dependencies import require_admin as _require_admin
+
+    return _require_admin(current_user)
+
+
+def _user_update_fields(data: UserUpdateRequest | UserUpdateFields) -> UserUpdateFields:
+    if isinstance(data, dict):
+        try:
+            return UserUpdateRequest.model_validate(data).model_dump(exclude_unset=True)
+        except ValidationError as exc:
+            message = str(exc)
+            if "reset-password" in message:
+                raise HTTPException(status_code=400, detail=message) from exc
+            if "Ruolo non valido" in message:
+                raise HTTPException(status_code=400, detail=message) from exc
+            raise HTTPException(status_code=422, detail=exc.errors()) from exc
+    return data.model_dump(exclude_unset=True)
 
 
 @users_router.get("", response_model=list[UserResponse])
@@ -141,7 +169,7 @@ def update_user(user_id: str, data: UserUpdateRequest,
 
     # `exclude_unset=True` distingue "non passato" da "passato come None":
     # solo i campi presenti nel body originale finiscono in `data_dict`.
-    data_dict = data.model_dump(exclude_unset=True)
+    data_dict = _user_update_fields(data)
 
     # group_id non e' aggiornabile da admin non-super (whitelist per-ruolo,
     # non check di shape — resta nel router).

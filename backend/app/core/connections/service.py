@@ -355,8 +355,8 @@ class ConnectionService:
                         # logger e errors[] passano per _sanitize_mssql_error.
                         sanitized = _sanitize_mssql_error(e)
                         logger.warning(
-                            "[GESTITO] MS SQL driver=%r fallito: %s: %s",
-                            driver_name, type(e).__name__, sanitized,
+                            f"[GESTITO] MS SQL driver={driver_name!r} "
+                            f"fallito: {type(e).__name__}: {err_msg}",
                             exc_info=True,
                         )
                         errors.append(f"[{driver_name}] {sanitized}")

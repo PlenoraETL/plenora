@@ -25,6 +25,7 @@ from app.core.artifacts import (
     RunArtifactRef,
 )
 from app.utils.logger import close_run, get_logger, open_run
+from app.core.dataframes.frame_io import find_latest_output_file
 
 from .source_loading import load_project_source_artifact
 from .types import FrameMap, JsonObject
@@ -54,6 +55,27 @@ def _pop_from_execution_chain(project_id: str) -> None:
     chain = _manipola_execution_chain.get()
     if chain and chain[-1] == project_id:
         _manipola_execution_chain.set(chain[:-1])
+
+
+def _materialize_latest_project_source(
+    source_project_id: str,
+    executing_group_id: str,
+) -> MaterializedArtifact:
+    resolver = ArtifactResolver()
+    ref = LatestProjectArtifactRef(project_id=source_project_id)
+    try:
+        return resolver.materialize_latest(
+            ref,
+            expected_group_id=executing_group_id,
+            mode="bytes",
+        )
+    except TypeError as exc:
+        if "mode" not in str(exc):
+            raise
+        return resolver.materialize_latest(
+            ref,
+            expected_group_id=executing_group_id,
+        )
 
 
 def _assert_no_lineage_cycle_on_chain(source_project_id: str) -> None:
@@ -226,10 +248,9 @@ def load_project_sources(
                 # mode="bytes": Post-Phase5 il consumer
                 # `_load_materialized_project_source` accetta data
                 # direttamente, niente tempfile bounce.
-                materialized = ArtifactResolver().materialize_latest(
-                    LatestProjectArtifactRef(project_id=source_project_id),
-                    expected_group_id=executing_group_id,
-                    mode="bytes",
+                materialized = _materialize_latest_project_source(
+                    source_project_id,
+                    executing_group_id,
                 )
             except ArtifactResolutionError as sec_err:
                 log.error(
@@ -356,10 +377,9 @@ def load_project_sources(
                 materialized = None
         if materialized is None:
             try:
-                materialized = ArtifactResolver().materialize_latest(
-                    LatestProjectArtifactRef(project_id=source_project_id),
-                    expected_group_id=executing_group_id,
-                    mode="bytes",
+                materialized = _materialize_latest_project_source(
+                    source_project_id,
+                    executing_group_id,
                 )
             except ArtifactResolutionError as sec_err:
                 log.error(

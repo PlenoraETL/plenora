@@ -22,11 +22,16 @@ __all__ = [
     "ProjectDetailRow",
     "ProjectDependencyRow",
     "ProjectRepository",
+    "ProjectRawCanvasRow",
     "ProjectRow",
     "create_project_row",
     "delete_comparison_keys",
     "delete_project",
+    "execute",
+    "fetchall",
+    "fetchone",
     "get_project_retention_n",
+    "get_project_raw_canvas_row",
     "get_project_row",
     "list_project_canvas_check_rows",
     "list_project_dependency_rows_using_connection",
@@ -132,16 +137,28 @@ def _normalize_json_column(
 
 
 def _fetchone(sql: str, params: tuple = ()) -> Mapping[str, object] | None:
+    return fetchone(sql, params)
+
+
+def _fetchall(sql: str, params: tuple = ()) -> list[Mapping[str, object]]:
+    return fetchall(sql, params)
+
+
+def _execute(sql: str, params: tuple = ()):
+    return execute(sql, params)
+
+
+def fetchone(sql: str, params: tuple = ()) -> Mapping[str, object] | None:
     with unit_of_work() as session:
         return session.fetchone(sql, params)
 
 
-def _fetchall(sql: str, params: tuple = ()) -> list[Mapping[str, object]]:
+def fetchall(sql: str, params: tuple = ()) -> list[Mapping[str, object]]:
     with unit_of_work() as session:
         return session.fetchall(sql, params)
 
 
-def _execute(sql: str, params: tuple = ()):
+def execute(sql: str, params: tuple = ()):
     with unit_of_work() as session:
         return session.execute(sql, params)
 
@@ -212,9 +229,7 @@ class ProjectDetailRow:
             group_id=_optional_str(row, "group_id"),
             name=_required_str(row, "name"),
             project_type=_required_str(row, "project_type"),
-            canvas=_normalize_json_column(
-                row, "canvas", fallback={"nodes": [], "edges": []}
-            ),
+            canvas=row.get("canvas") or '{"nodes": [], "edges": []}',
             output_contract=_normalize_json_column(
                 row, "output_contract", fallback=None
             ),
@@ -262,10 +277,23 @@ class ProjectCanvasCheckRow:
             id=_required_str(row, "id"),
             name=_required_str(row, "name"),
             project_type=_required_str(row, "project_type"),
-            canvas=_normalize_json_column(
-                row, "canvas", fallback={"nodes": [], "edges": []}
-            ),
+            canvas=row.get("canvas") or '{"nodes": [], "edges": []}',
             group_id=_optional_str(row, "group_id"),
+        )
+
+
+@dataclass(frozen=True)
+class ProjectRawCanvasRow:
+    """Typed raw canvas read used by recovery/debug service paths."""
+
+    id: str
+    canvas: object
+
+    @classmethod
+    def from_mapping(cls, row: Mapping[str, object]) -> "ProjectRawCanvasRow":
+        return cls(
+            id=_required_str(row, "id"),
+            canvas=row.get("canvas"),
         )
 
 
@@ -357,6 +385,23 @@ class ProjectRepository:
                     )
                     normalized["output_contract"] = None
         return ProjectDetailRow.from_mapping(normalized)
+
+    def get_project_raw_canvas_row(
+        self,
+        project_id: str,
+        group_id: str | None = None,
+    ) -> ProjectRawCanvasRow | None:
+        if group_id:
+            row = _fetchone(
+                "SELECT id, canvas FROM projects WHERE id = %s AND group_id = %s",
+                (project_id, group_id),
+            )
+        else:
+            row = _fetchone(
+                "SELECT id, canvas FROM projects WHERE id = %s",
+                (project_id,),
+            )
+        return ProjectRawCanvasRow.from_mapping(row) if row else None
 
     def list_projects(
         self,
@@ -591,6 +636,16 @@ def get_project_row(
     group_id: str | None = None,
 ) -> ProjectDetailRow | None:
     return project_repository.get_project_row(project_id, group_id=group_id)
+
+
+def get_project_raw_canvas_row(
+    project_id: str,
+    group_id: str | None = None,
+) -> ProjectRawCanvasRow | None:
+    return project_repository.get_project_raw_canvas_row(
+        project_id,
+        group_id=group_id,
+    )
 
 
 def list_projects(

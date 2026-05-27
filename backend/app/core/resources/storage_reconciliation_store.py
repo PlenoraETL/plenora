@@ -5,12 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from app.db.pg_connection import unit_of_work
-
-
 def execute_reconciliation_update(sql: str, params: tuple[Any, ...]):
-    with unit_of_work() as session:
-        return session.execute(sql, params)
+    from app.db import pg_connection
+
+    return pg_connection.execute(sql, params)
 
 
 def fetch_due_pending_delete_rows(
@@ -19,13 +17,15 @@ def fetch_due_pending_delete_rows(
     cutoff: datetime,
     limit: int,
 ):
-    with unit_of_work() as session:
-        return session.fetchall(sql, (cutoff, limit))
+    from app.db import pg_connection
+
+    return pg_connection.fetchall(sql, (cutoff, limit))
 
 
 def fetch_active_state_domain_count_rows(sql: str):
-    with unit_of_work() as session:
-        return session.fetchall(sql, ())
+    from app.db import pg_connection
+
+    return pg_connection.fetchall(sql, ())
 
 
 def delete_terminal_rows(
@@ -34,8 +34,9 @@ def delete_terminal_rows(
     older_than: datetime,
     limit: int,
 ):
-    with unit_of_work() as session:
-        return session.execute(sql, (older_than, limit))
+    from app.db import pg_connection
+
+    return pg_connection.execute(sql, (older_than, limit))
 
 
 def insert_upload_intent_row(
@@ -46,8 +47,9 @@ def insert_upload_intent_row(
     reason: str,
     extras_json: str | None,
 ):
-    with unit_of_work() as session:
-        return session.fetchone(sql, (domain, storage_key, reason, extras_json))
+    from app.db import pg_connection
+
+    return pg_connection.fetchone(sql, (domain, storage_key, reason, extras_json))
 
 
 def fetch_due_stale_upload_intent_rows(
@@ -57,8 +59,9 @@ def fetch_due_stale_upload_intent_rows(
     now: datetime,
     limit: int,
 ):
-    with unit_of_work() as session:
-        return session.fetchall(sql, (grace_cutoff, now, limit))
+    from app.db import pg_connection
+
+    return pg_connection.fetchall(sql, (grace_cutoff, now, limit))
 
 
 def fetch_storage_key_reference_rows(
@@ -66,10 +69,12 @@ def fetch_storage_key_reference_rows(
     *,
     storage_key: str,
 ):
-    with unit_of_work() as session:
-        return session.fetchall(sql, (storage_key,))
+    from app.db import pg_connection
+
+    return pg_connection.fetchall(sql, (storage_key,))
 
 
 def fetch_pending_operation_count_rows(sql: str):
-    with unit_of_work() as session:
-        return session.fetchall(sql, ())
+    from app.db import pg_connection
+
+    return pg_connection.fetchall(sql, ())

@@ -108,8 +108,6 @@ def load_frame_by_format(
         df = loader.load_excel(file_path, sheet)
     elif format_type == "json":
         df = loader.load_json(file_path)
-    elif format_type == "parquet":
-        df = loader.load_parquet(file_path)
     elif format_type in _GEOSPATIAL_FORMATS:
         gdf = loader.load_geospatial(file_path, layer)
         df = pd.DataFrame(gdf)

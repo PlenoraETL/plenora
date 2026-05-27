@@ -9,8 +9,10 @@ from app.core.projects.project_context_loader import (
 from app.core.projects.schema_transform_handlers import TransformSchemaHandlers
 from app.core.projects.types import (
     EdgesByTarget,
+    JsonObject,
     SchemaMap,
     SchemaRows,
+    StringMap,
     TransformHandlerRegistry,
 )
 from app.shared.execution.schema_types import ColumnSchema
@@ -426,9 +428,9 @@ class SchemaInferenceService:
 
     def _resolve_schema_config_column_refs(
         self,
-        config: dict,
+        config: JsonObject,
         input_schemas: List[List[ColumnSchema]],
-    ) -> dict:
+    ) -> JsonObject:
         if not isinstance(config, dict):
             return config
         id_to_name = {
@@ -528,7 +530,7 @@ class SchemaInferenceService:
     @staticmethod
     def _resolve_schema_dict_ref(
         item: Any,
-        id_to_name: dict[str, str],
+        id_to_name: StringMap,
         name_field: str,
         id_field: str = "column_id",
     ) -> Any:
@@ -543,7 +545,7 @@ class SchemaInferenceService:
     @staticmethod
     def _resolve_schema_dict_legacy_name(
         item: Any,
-        legacy_name_to_name: dict[str, str],
+        legacy_name_to_name: StringMap,
         name_field: str,
     ) -> Any:
         if not isinstance(item, dict):

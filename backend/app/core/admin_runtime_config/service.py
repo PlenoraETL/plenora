@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 from app.config import API_VERSION, settings
+from app.environment import environment_name, get_env
 from app.observability.health import (
     check_bootstrap_complete,
     check_migrations_aligned,
@@ -20,6 +21,12 @@ from app.observability.health import (
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+RuntimeConfigEntry = dict[str, object]
+RuntimeSnapshot = dict[str, object]
+HealthCheckPayload = dict[str, object]
+WorkerSnapshotPayload = dict[str, object]
+RuntimeConfigPayload = dict[str, object]
 
 
 _SECRET_NEEDLES = (
@@ -237,8 +244,8 @@ def _serialize_value(key: str, value: Any) -> object:
     return str(value)
 
 
-def _setting_entry(key: str) -> dict[str, object]:
-    raw_value = os.getenv(key)
+def _setting_entry(key: str) -> RuntimeConfigEntry:
+    raw_value = get_env(key)
     value = settings.get(key)
     has_default = key in settings.DEFAULTS
     # Sanity log: una chiave in `_CONFIG_SECTIONS` che non e' ne' in
@@ -283,7 +290,7 @@ def _requires_restart(key: str) -> list[str]:
     return []
 
 
-def _health_check(name: str, fn) -> dict[str, object]:
+def _health_check(name: str, fn) -> HealthCheckPayload:
     try:
         ok, detail = fn()
         return {"name": name, "ok": bool(ok), "detail": detail}
@@ -291,7 +298,7 @@ def _health_check(name: str, fn) -> dict[str, object]:
         return {"name": name, "ok": False, "detail": f"{type(exc).__name__}: {exc}"}
 
 
-def _worker_snapshot() -> dict[str, object]:
+def _worker_snapshot() -> WorkerSnapshotPayload:
     try:
         from app.core.task_runtime.probes import inspect_celery_workers
 
@@ -338,13 +345,11 @@ def _is_dev_env() -> bool:
     # positivo. Espongo `_dev_topology` solo se l'env e' esplicitamente
     # marcato dev/test/local. Tutto il resto (incluso None/empty/typo)
     # viene trattato come produzione → no leak.
-    env_name = os.environ.get(
-        "ENVIRONMENT", os.environ.get("ENV", "")
-    ).lower()
+    env_name = environment_name(default="")
     return env_name in ("development", "dev", "test", "local")
 
 
-def _runtime_snapshot() -> dict[str, object]:
+def _runtime_snapshot() -> RuntimeSnapshot:
     """Snapshot del runtime visibile in `GET /admin/runtime-config`.
 
     Espone solo informazioni utili e a basso rischio in prod/staging
@@ -365,13 +370,13 @@ def _runtime_snapshot() -> dict[str, object]:
             "hostname": socket.gethostname(),
             "docker_cli_available": shutil.which("docker") is not None,
             "docker_socket_mounted": os.path.exists("/var/run/docker.sock"),
-            "compose_project": os.getenv("COMPOSE_PROJECT_NAME"),
-            "container_name": os.getenv("HOSTNAME"),
+            "compose_project": get_env("COMPOSE_PROJECT_NAME"),
+            "container_name": get_env("HOSTNAME"),
         }
     return snapshot
 
 
-def get_runtime_config() -> dict[str, object]:
+def get_runtime_config() -> RuntimeConfigPayload:
     sections = [
         {
             "name": section_name,
@@ -395,4 +400,3 @@ def get_runtime_config() -> dict[str, object]:
         "runtime": _runtime_snapshot(),
         "workers": _worker_snapshot(),
     }
-

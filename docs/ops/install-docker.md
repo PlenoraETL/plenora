@@ -129,7 +129,7 @@ docker compose version
 
 Expected output checklist:
 
-1. **`docker compose config --quiet`**
+1. **`docker compose config`**
    Expected: compose resolves without missing env/file errors.
 2. **`docker compose build backend frontend`**
    Expected: backend and frontend images build successfully.

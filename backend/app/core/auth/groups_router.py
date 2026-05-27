@@ -8,6 +8,7 @@ sono ForwardRef.
 """
 
 from fastapi import APIRouter, Depends
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from typing_extensions import TypedDict
 
 from app.core.auth import disclosure as _disclosure
@@ -32,6 +33,7 @@ __all__ = ["groups_router"]
 
 
 groups_router = APIRouter(prefix="/auth/groups", tags=["groups"])
+_security = HTTPBearer(auto_error=False)
 
 
 class GroupResponsePayload(TypedDict):
@@ -70,12 +72,26 @@ def _group_summary_payload(summary: _groups.GroupSummaryRow) -> GroupSummaryPayl
     }
 
 
-# Dipendenze condivise estratte in `router_deps.py` per evitare drift
-# rispetto a `users_router.py` (pre-fix erano identiche copie inline).
-from app.core.auth.router_deps import (  # noqa: F401
-    require_admin,
-    require_superadmin,
-)
+def _get_current_user_proxy(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_security),
+) -> CurrentUser:
+    from app.core.auth.dependencies import get_current_user
+
+    return get_current_user(credentials)
+
+
+def require_admin(current_user: CurrentUser = Depends(_get_current_user_proxy)) -> CurrentUser:
+    from app.core.auth.dependencies import require_admin as _require_admin
+
+    return _require_admin(current_user)
+
+
+def require_superadmin(
+    current_user: CurrentUser = Depends(_get_current_user_proxy),
+) -> CurrentUser:
+    from app.core.auth.dependencies import require_superadmin as _require_superadmin
+
+    return _require_superadmin(current_user)
 
 
 @groups_router.get("", response_model=list[GroupResponse])

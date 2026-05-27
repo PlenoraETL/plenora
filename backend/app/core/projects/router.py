@@ -83,7 +83,7 @@ def create_project(
             raise HTTPException(
                 status_code=400,
                 detail={
-                    "error": "canvas_invalid",
+                    "error": "validation_error",
                     "message": str(e)[:500],
                 },
             )
@@ -126,7 +126,7 @@ def create_project(
             raise HTTPException(
                 status_code=400,
                 detail={
-                    "error": "canvas_invalid",
+                    "error": "validation_error",
                     "message": str(e)[:500],
                 },
             )

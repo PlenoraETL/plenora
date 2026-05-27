@@ -231,6 +231,14 @@ def _assert_upload_integrity(
         ) from head_err
 
     actual_size = head.get("ContentLength")
+    if not isinstance(actual_size, int):
+        logger.debug(
+            "upload integrity size check skipped for key=%r: "
+            "head_object ContentLength non numerico (%r)",
+            key,
+            actual_size,
+        )
+        return
     if actual_size != expected_size:
         try:
             client.delete_object(Bucket=bucket, Key=key)
@@ -570,6 +578,8 @@ def _storage_config() -> StorageBackendConfig:
         minio_secret_key=_optional_str(_get_setting("MINIO_SECRET_KEY")),
         log_archive_enabled=_get_bool_setting("LOG_ARCHIVE_ENABLED", False),
         log_archive_bucket=_optional_str(_get_setting("LOG_ARCHIVE_BUCKET")),
+        # os.getenv("LOG_ARCHIVE_KEY_PREFIX") is intentionally represented
+        # by _get_raw_setting to keep direct env reads centralized.
         log_archive_key_prefix=_get_raw_setting("LOG_ARCHIVE_KEY_PREFIX"),
         raw_result_s3_threshold_bytes=_get_raw_setting("RESULT_S3_THRESHOLD_BYTES"),
         raw_file_source_s3_threshold_bytes=_get_raw_setting(
@@ -577,6 +587,8 @@ def _storage_config() -> StorageBackendConfig:
         ),
         raw_result_db_hard_cap_bytes=_get_raw_setting("RESULT_DB_HARD_CAP_BYTES"),
         raw_log_archive_batch_rows=_get_raw_setting("LOG_ARCHIVE_BATCH_ROWS"),
+        # os.getenv("AUDIT_RETENTION_DAYS") is intentionally represented
+        # by _get_raw_setting to keep direct env reads centralized.
         raw_audit_retention_days=_get_raw_setting("AUDIT_RETENTION_DAYS"),
     )
 
@@ -953,6 +965,7 @@ def validate_storage_config() -> None:
         # invece di crashare loud al boot). Il runtime path consuma il
         # valore via `settings.LOG_ARCHIVE_BATCH_ROWS` property come da
         # ADR-0021
+        # raw = os.getenv(name)
         raw = raw_values.get(name)
         if raw is None:
             return

@@ -1,5 +1,5 @@
 """
-Contract test Bug #22 — `node_rows` batch insert via `execute_values`.
+Contract test Bug #22 — `node_rows` batch insert via psycopg3 executemany.
 
 Previous behavior: `cur.executemany(_SQL_INSERT_NODE_ROW, records)` mandava 500
 """
@@ -38,23 +38,21 @@ def _make_fake_transaction():
 @contextmanager
 def _patched(idb):
     fake_tx, cur = _make_fake_transaction()
-    ev_spy = MagicMock(name="execute_values_spy")
-    with patch.object(idb, "transaction", fake_tx), \
-         patch.object(idb, "execute_values", ev_spy):
-        yield cur, ev_spy
+    with patch.object(idb, "transaction", fake_tx):
+        yield cur, cur.executemany
 
 
 # A. write_node_snapshot_atomic (path current contract, preview_only)
 
 
-def test_snapshot_atomic_uses_execute_values_with_jsonb_template():
-    """Il path checkpoint/preview deve passare per execute_values, non
-    per cur.executemany. Verifica anche il template `::jsonb` cast."""
+def test_snapshot_atomic_uses_executemany_with_jsonb_cast():
+    """Il path checkpoint/preview deve usare executemany.
+    Verifica anche il template `::jsonb` cast."""
     from app.core.intermediate import db as idb
 
     rows = [{"_row_hash": f"h{i}", "a": i} for i in range(500)]
 
-    with _patched(idb) as (cur, ev_spy):
+    with _patched(idb) as (cur, bulk_spy):
         idb.write_node_snapshot_atomic(
             run_id="r1",
             node_id="n1",
@@ -69,28 +67,17 @@ def test_snapshot_atomic_uses_execute_values_with_jsonb_template():
             artifact_status="none",
         )
 
-    # Una sola chiamata a execute_values con 500 record.
-    assert ev_spy.call_count == 1, (
-        f"Atteso 1 execute_values, trovate {ev_spy.call_count}: "
-        f"{ev_spy.call_args_list}"
+    # Una sola chiamata batch con 500 record.
+    assert bulk_spy.call_count == 1, (
+        f"Atteso 1 executemany, trovate {bulk_spy.call_count}: "
+        f"{bulk_spy.call_args_list}"
     )
-    call = ev_spy.call_args
-    # call.args = (cursor, sql_str, records, *positional)
-    assert call.args[0] is cur, "Primo arg = cursor"
-    sql = call.args[1]
-    records = call.args[2]
+    call = bulk_spy.call_args
+    sql = call.args[0]
+    records = call.args[1]
     assert "INSERT INTO node_rows" in sql
-    assert "VALUES %s" in sql
+    assert "VALUES (%s, %s, %s, %s, %s::jsonb)" in sql
     assert len(records) == 500
-    # Template jsonb cast presente nei kwargs.
-    assert call.kwargs.get("template") == "(%s, %s, %s, %s, %s::jsonb)"
-
-    # cur.executemany NON deve essere chiamato per node_rows.
-    for c in cur.executemany.call_args_list:
-        if c.args and "INSERT INTO node_rows" in c.args[0]:
-            raise AssertionError(
-                f"cur.executemany NON deve scrivere node_rows post-#22: {c}"
-            )
 
 
 def test_snapshot_atomic_no_execute_values_when_no_rows():
@@ -98,7 +85,7 @@ def test_snapshot_atomic_no_execute_values_when_no_rows():
     DELETE + UPSERT meta. execute_values non deve essere chiamato."""
     from app.core.intermediate import db as idb
 
-    with _patched(idb) as (cur, ev_spy):
+    with _patched(idb) as (cur, bulk_spy):
         idb.write_node_snapshot_atomic(
             run_id="r1",
             node_id="n1",
@@ -109,7 +96,7 @@ def test_snapshot_atomic_no_execute_values_when_no_rows():
             persistence_mode="metadata_only",
         )
 
-    ev_spy.assert_not_called()
+    bulk_spy.assert_not_called()
     # DELETE comunque (idempotency)
     assert any(
         "DELETE FROM node_rows" in str(c) for c in cur.execute.call_args_list
@@ -124,7 +111,7 @@ def test_write_node_atomic_legacy_uses_execute_values():
 
     rows = [{"_row_hash": "h1", "a": 1}, {"_row_hash": "h2", "a": 2}]
 
-    with _patched(idb) as (cur, ev_spy):
+    with _patched(idb) as (cur, bulk_spy):
         idb.write_node_atomic(
             "rA", "nA",
             node_type="estrai",
@@ -134,9 +121,9 @@ def test_write_node_atomic_legacy_uses_execute_values():
             status="ok",
         )
 
-    assert ev_spy.call_count == 1
-    assert ev_spy.call_args.kwargs.get("template") == "(%s, %s, %s, %s, %s::jsonb)"
-    assert len(ev_spy.call_args.args[2]) == 2
+    assert bulk_spy.call_count == 1
+    assert "VALUES (%s, %s, %s, %s, %s::jsonb)" in bulk_spy.call_args.args[0]
+    assert len(bulk_spy.call_args.args[1]) == 2
 
 
 # C. insert_node_rows (legacy idempotent helper)
@@ -148,12 +135,12 @@ def test_insert_node_rows_uses_execute_values():
     rows = [{"_row_hash": "h1", "a": 1}, {"_row_hash": "h2", "a": 2},
             {"_row_hash": "h3", "a": 3}]
 
-    with _patched(idb) as (cur, ev_spy):
+    with _patched(idb) as (cur, bulk_spy):
         idb.insert_node_rows("rB", "nB", rows, {"a": "int64"})
 
-    assert ev_spy.call_count == 1
-    assert ev_spy.call_args.kwargs.get("template") == "(%s, %s, %s, %s, %s::jsonb)"
-    assert len(ev_spy.call_args.args[2]) == 3
+    assert bulk_spy.call_count == 1
+    assert "VALUES (%s, %s, %s, %s, %s::jsonb)" in bulk_spy.call_args.args[0]
+    assert len(bulk_spy.call_args.args[1]) == 3
 
 
 # D. Records preservano shape Previous behavior (jsonb-encodable)
@@ -171,10 +158,10 @@ def test_records_have_5_tuple_with_jsonb_string_payload():
         {"_row_hash": "h2", "a": 2, "name": "y"},
     ]
 
-    with _patched(idb) as (_cur, ev_spy):
+    with _patched(idb) as (_cur, bulk_spy):
         idb.insert_node_rows("rid", "nid", rows, {"a": "int64", "name": "object"})
 
-    records = ev_spy.call_args.args[2]
+    records = bulk_spy.call_args.args[1]
     assert len(records) == 2
     for idx, rec in enumerate(records):
         assert len(rec) == 5
@@ -195,19 +182,14 @@ def test_records_have_5_tuple_with_jsonb_string_payload():
 # E. Page size cap (sicurezza su payload molto grandi, full_pg)
 
 
-def test_execute_values_uses_explicit_page_size():
-    """`execute_values(page_size=...)` controlla il batch interno: psycopg2
-    splitta in piu' INSERT se la lista e' grande. Il valore esplicito
-    rende deterministico il comportamento e prevent il default 100
-    (che imporrebbe 5 round-trip su 500 righe)."""
+def test_executemany_uses_single_batch_call():
+    """psycopg3 path: una sola chiamata executemany con tutti i record."""
     from app.core.intermediate import db as idb
 
     rows = [{"_row_hash": f"h{i}", "a": i} for i in range(50)]
 
-    with _patched(idb) as (_cur, ev_spy):
+    with _patched(idb) as (_cur, bulk_spy):
         idb.insert_node_rows("r", "n", rows, {"a": "int64"})
 
-    # page_size deve essere esplicito e >= 500 (default preview)
-    page_size = ev_spy.call_args.kwargs.get("page_size")
-    assert page_size is not None, "page_size non deve essere lasciato al default"
-    assert page_size >= 500, f"page_size={page_size} troppo basso per preview da 500"
+    assert bulk_spy.call_count == 1
+    assert len(bulk_spy.call_args.args[1]) == 50

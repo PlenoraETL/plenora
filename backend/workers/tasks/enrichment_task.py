@@ -1407,6 +1407,7 @@ def _cleanup_temp_file_sources(file_source_ids: Optional[List[str]], task_id: st
             else:
                 logger.warning(f"[Task {task_id}] Cleanup: file source temp '{fsid}' non trovato")
         except Exception as e:
+            logger.debug(f"cleanup temp dir fallito: {type(e).__name__}: {e}")
             logger.warning(f"[Task {task_id}] Cleanup: errore eliminando '{fsid}': {e}")
 
 

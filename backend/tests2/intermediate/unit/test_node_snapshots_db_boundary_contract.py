@@ -36,7 +36,6 @@ _DB_BOUNDARY_CALLS = {
     "fetchone",
     "executemany",
     "transaction",
-    "execute_values",
 }
 
 
@@ -165,6 +164,9 @@ def test_intermediate_db_node_row_facade_preserves_patchable_batch_insert(
         def execute(self, sql, params=()):
             calls.append(("execute", sql, tuple(params)))
 
+        def executemany(self, sql, records):
+            calls.append(("executemany", sql, list(records)))
+
     class CursorContext:
         def __enter__(self):
             return Cursor()
@@ -183,11 +185,7 @@ def test_intermediate_db_node_row_facade_preserves_patchable_batch_insert(
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    def fake_execute_values(cur, sql, records, **kwargs):
-        calls.append(("execute_values", sql, list(records), kwargs))
-
     monkeypatch.setattr(idb, "transaction", lambda: Transaction())
-    monkeypatch.setattr(idb, "execute_values", fake_execute_values)
 
     idb.insert_node_rows(
         "run-1",
@@ -198,5 +196,5 @@ def test_intermediate_db_node_row_facade_preserves_patchable_batch_insert(
 
     assert calls[0][0] == "execute"
     assert "DELETE FROM node_rows" in calls[0][1]
-    assert calls[1][0] == "execute_values"
+    assert calls[1][0] == "executemany"
     assert "INSERT INTO node_rows" in calls[1][1]

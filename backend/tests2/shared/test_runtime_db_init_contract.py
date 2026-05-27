@@ -34,14 +34,12 @@ def test_runtime_db_init_preserves_historical_order(monkeypatch):
         lambda: calls.append("migrations_runner.apply_pending_migrations"),
     )
 
+    import importlib
     import app.core.runtime.db_init as runtime_db_init
 
-    init_all_dbs = getattr(
-        runtime_db_init,
-        "_original_init_all_dbs",
-        runtime_db_init.init_all_dbs,
-    )
-    init_all_dbs()
+    runtime_db_init = importlib.reload(runtime_db_init)
+
+    runtime_db_init.init_all_dbs()
 
     assert calls == [
         "pg_connection.init_db",

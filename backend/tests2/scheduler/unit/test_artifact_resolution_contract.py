@@ -54,13 +54,13 @@ def test_execute_carica_prefers_result_id_before_output_path():
     config = _make_schedule_config()
     loaded = []
 
-    def _load_dataframe(path):
-        loaded.append(str(path))
+    def _load_dataframe(*, data, format_hint):
+        loaded.append((data, format_hint))
         return SimpleNamespace(empty=False)
 
     from app.core.results.db import ResultMetadataRow
 
-    with patch("app.core.dataframes.frame_io.load_dataframe_from_file", side_effect=_load_dataframe), \
+    with patch("app.core.dataframes.frame_io.load_dataframe_from_artifact", side_effect=_load_dataframe), \
          patch("app.core.results.db.get_result_row", return_value=ResultMetadataRow(id="res-1", project_id="proj-1", group_id="grp-1", format="csv")), \
          patch("app.db.pg_connection.fetchone", return_value={"data": b"id\n1\n", "storage_key": None, "project_id": "proj-1"}), \
          patch("app.core.carica.executor.CaricaExecutor") as executor_cls, \
@@ -73,7 +73,7 @@ def test_execute_carica_prefers_result_id_before_output_path():
 
     assert result["success"] is True
     assert len(loaded) == 1
-    assert "legacy.csv" not in loaded[0]
+    assert loaded[0] == (b"id\n1\n", "csv")
 
 
 def test_execute_carica_rejects_result_id_from_other_project_even_if_output_path_exists():
@@ -85,7 +85,7 @@ def test_execute_carica_rejects_result_id_from_other_project_even_if_output_path
     # silente a output_path legacy.
     from app.core.results.db import ResultMetadataRow
 
-    with patch("app.core.dataframes.frame_io.load_dataframe_from_file") as load_dataframe, \
+    with patch("app.core.dataframes.frame_io.load_dataframe_from_artifact") as load_dataframe, \
          patch("app.core.results.db.get_result_row", return_value=ResultMetadataRow(id="res-1", project_id="proj-2", group_id="grp-1", format="csv")), \
          patch("app.core.results.blob.get_result_data", return_value=b"id\n1\n"), \
          patch("app.core.carica.executor.CaricaExecutor") as executor_cls, \

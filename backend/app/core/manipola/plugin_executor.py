@@ -13,7 +13,13 @@ from pathlib import Path
 from typing import Any, Callable, List, Optional
 
 from app.core.dataframes.ports import FrameLike
-from app.core.manipola.types import JsonObject, RegistryMap, RegistryRows
+from app.core.manipola.types import (
+    JsonObject,
+    RegistryMap,
+    RegistryRows,
+    StringMap,
+    StringSetMap,
+)
 from app.core.projects.canvas_models import Node
 from app.utils.logger import get_logger
 
@@ -404,7 +410,7 @@ class PluginExecutor:
 
         return resolved
 
-    def _column_reference_maps(self, node: Node) -> tuple[dict[str, str], dict[str, str]]:
+    def _column_reference_maps(self, node: Node) -> tuple[StringMap, StringMap]:
         data = node.data if isinstance(node.data, dict) else {}
         raw_columns = []
         for field in ("inputColumns", "columns"):
@@ -412,8 +418,8 @@ class PluginExecutor:
             if isinstance(value, list):
                 raw_columns.extend(value)
 
-        id_to_name: dict[str, str] = {}
-        legacy_candidates: dict[str, set[str]] = {}
+        id_to_name: StringMap = {}
+        legacy_candidates: StringSetMap = {}
         for col in raw_columns:
             if not isinstance(col, dict):
                 continue
@@ -440,7 +446,7 @@ class PluginExecutor:
         self,
         resolved: JsonObject,
         transform_config: JsonObject,
-        legacy_name_to_name: dict[str, str],
+        legacy_name_to_name: StringMap,
     ) -> JsonObject:
         if not legacy_name_to_name:
             return resolved
@@ -489,7 +495,7 @@ class PluginExecutor:
     def _resolve_dict_column_ref(
         self,
         item: Any,
-        id_to_name: dict[str, str],
+        id_to_name: StringMap,
         name_field: str,
         id_field: str = "column_id",
     ) -> Any:
@@ -504,7 +510,7 @@ class PluginExecutor:
     def _resolve_dict_legacy_name(
         self,
         item: Any,
-        legacy_name_to_name: dict[str, str],
+        legacy_name_to_name: StringMap,
         name_field: str,
     ) -> Any:
         if not isinstance(item, dict):
@@ -519,7 +525,7 @@ class PluginExecutor:
         self,
         expression: str,
         refs: list[Any],
-        id_to_name: dict[str, str],
+        id_to_name: StringMap,
     ) -> str:
         rewritten = expression
         for ref in refs:
@@ -543,7 +549,7 @@ class PluginExecutor:
     def _rewrite_expression_legacy_names(
         self,
         expression: str,
-        legacy_name_to_name: dict[str, str],
+        legacy_name_to_name: StringMap,
     ) -> str:
         rewritten = expression
         for old_name, new_name in legacy_name_to_name.items():

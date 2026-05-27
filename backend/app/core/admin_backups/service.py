@@ -493,10 +493,11 @@ def trigger_manual_backup() -> ManualBackupTriggerResult:
         }
 
     try:
-        from workers.tasks.admin_backup_task import run_manual_backup_task
+        from app.core.task_runtime.dispatch import dispatch_task_by_name
 
-        async_result = run_manual_backup_task.apply_async(
-            kwargs={"owner_token": owner_token}
+        async_result = dispatch_task_by_name(
+            "workers.tasks.admin_backup_task.run_manual_backup_task",
+            kwargs={"owner_token": owner_token},
         )
         logger.info("Backup manuale Celery accodato: task_id=%s", async_result.id)
         return {

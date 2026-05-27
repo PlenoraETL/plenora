@@ -88,7 +88,8 @@ def save_pipeline_result_outcome(
     `StreamingResultBlobWriter` (S3 multipart o DB BYTEA buffer). Per
     CSV/JSON peak ridotto da `df + bytes_intere` a `df + chunk_buffer`.
     Formati binari (parquet/xlsx/shp/gpkg/gdb) cadono su single-chunk
-    by-design (footer-based o multi-file).
+    by-design (footer-based o multi-file) tramite save_dataframe_to_bytes
+    dentro il writer streaming.
     """
     from app.core.results.streaming_blob_writer import (
         save_dataframe_to_result_blob_streaming,

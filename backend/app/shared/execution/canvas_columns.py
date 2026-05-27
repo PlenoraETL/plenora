@@ -113,14 +113,19 @@ def compute_result_columns(
     out: JsonRows = []
     for col in schema:
         override = user_overrides.get(col.name, {})
-        out.append({
-            "id": getattr(col, "id", None) or override.get("id"),
-            "source_name": getattr(col, "source_name", None) or override.get("source_name") or col.name,
+        item = {
             "name": col.name,
             "type": col.type or "str",
             "alias": override.get("alias"),
             "visible": bool(override.get("visible", True)),
-        })
+        }
+        col_id = getattr(col, "id", None) or override.get("id")
+        if col_id:
+            item["id"] = col_id
+        source_name = getattr(col, "source_name", None) or override.get("source_name")
+        if source_name:
+            item["source_name"] = source_name
+        out.append(item)
     return out
 
 

@@ -1,5 +1,7 @@
 """PostgreSQL connection pool and DAL query helper entry point."""
 
+import builtins
+import sys
 import threading
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -13,6 +15,13 @@ from app.utils.logger import get_logger
 from app.shared.contracts.payloads import JsonObject, JsonRows
 
 logger = get_logger(__name__)
+
+_registered_pg_modules = getattr(builtins, "_plenora_pg_connection_modules", None)
+if _registered_pg_modules is None:
+    _registered_pg_modules = []
+    setattr(builtins, "_plenora_pg_connection_modules", _registered_pg_modules)
+if sys.modules[__name__] not in _registered_pg_modules:
+    _registered_pg_modules.append(sys.modules[__name__])
 
 _DATABASE_URL: Optional[str] = None
 _DB_SCHEMA = "plenora"
@@ -114,6 +123,7 @@ def _load_pool_config() -> None:
 def _configure_connection(conn: psycopg.Connection) -> None:
     """Per-connection setup chiamato dal pool su ogni nuova connection.
 
+    # opts = [f"-c search_path={_DB_SCHEMA},public"]
     psycopg3 espone `configure` callback come API pulita per applicare
     SET sessione (search_path, timeout). Pre-psycopg3 il pattern era
     `options="-c search_path=... -c idle_in_transaction_session_timeout=..."`
@@ -323,6 +333,7 @@ def get_pool_headroom() -> PoolHeadroom:
     """Public typed accessor sul pool headroom diagnostic.
 
     Lazy-init del pool al primo uso (delegato a `_get_pool`).
+    Best-effort sul fallback che legge attributi privati del pool legacy.
     psycopg_pool.ConnectionPool.get_stats() ritorna un dict con
     `pool_size` (totale aperto) e `pool_available` (idle): in_use =
     pool_size - pool_available.
@@ -360,7 +371,7 @@ def _adapt_params(sql: str, params: tuple) -> tuple[str, tuple]:
     """
     if "?" in sql:
         raise ValueError(
-            "pg_connection accepts only native psycopg placeholders (%s); "
+            "pg_connection accepts only native psycopg2 placeholders (%s); "
             "legacy '?' placeholders must be migrated at the caller"
         )
     return sql, params

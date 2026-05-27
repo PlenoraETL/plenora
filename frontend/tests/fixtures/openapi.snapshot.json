@@ -1,6 +1,37 @@
 {
   "components": {
     "schemas": {
+      "AdminBackupsListResponse": {
+        "properties": {
+          "bucket": {
+            "title": "Bucket",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BackupObjectPayload"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "region": {
+            "title": "Region",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bucket",
+          "region",
+          "count",
+          "items"
+        ],
+        "title": "AdminBackupsListResponse",
+        "type": "object"
+      },
       "AggregationConfig": {
         "description": "Configurazione di una funzione di aggregazione per GROUP BY.",
         "properties": {
@@ -50,6 +81,7 @@
           },
           "detected_columns": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Detected Columns",
@@ -61,6 +93,7 @@
           },
           "preview_rows": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Preview Rows",
@@ -304,6 +337,7 @@
           "details": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -500,6 +534,91 @@
         "title": "AutoMappingRequest",
         "type": "object"
       },
+      "BackupObjectPayload": {
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "last_modified": {
+            "title": "Last Modified",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "size_mb": {
+            "title": "Size Mb",
+            "type": "number"
+          },
+          "storage_class": {
+            "title": "Storage Class",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "size_bytes",
+          "size_mb",
+          "last_modified",
+          "storage_class"
+        ],
+        "title": "BackupObjectPayload",
+        "type": "object"
+      },
+      "BackupScheduleInfo": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run"
+          },
+          "next_run": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run"
+          },
+          "schedule_cron": {
+            "title": "Schedule Cron",
+            "type": "string"
+          },
+          "timer_active": {
+            "title": "Timer Active",
+            "type": "boolean"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timer_active",
+          "next_run",
+          "last_run",
+          "schedule_cron",
+          "description",
+          "timezone"
+        ],
+        "title": "BackupScheduleInfo",
+        "type": "object"
+      },
       "BeatHealthcheck": {
         "description": "Stato del processo Celery Beat.\n\nVerificato tramite heartbeat in Redis scritto da RedBeat.\nSe last_beat è più vecchio di 2 minuti → Beat è down.",
         "properties": {
@@ -538,7 +657,7 @@
       "Body_analyze_upload_api_eseguibili__eseguibile_id__analyze_upload_post": {
         "properties": {
           "file": {
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "type": "string"
           }
@@ -552,7 +671,7 @@
       "Body_preview_file_temp_api_files_preview_temp_post": {
         "properties": {
           "file": {
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "type": "string"
           },
@@ -588,7 +707,7 @@
       "Body_upload_attachment_endpoint_api_tickets__ticket_id__attachments_post": {
         "properties": {
           "file": {
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "type": "string"
           }
@@ -602,7 +721,7 @@
       "Body_upload_file_api_datasources__ds_id__files_upload_post": {
         "properties": {
           "file": {
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "type": "string"
           }
@@ -621,7 +740,7 @@
             "type": "string"
           },
           "file": {
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "type": "string"
           },
@@ -689,7 +808,7 @@
             "type": "string"
           },
           "file": {
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "type": "string"
           },
@@ -726,6 +845,7 @@
         "properties": {
           "layers": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Layers",
@@ -743,6 +863,7 @@
         "properties": {
           "services": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Services",
@@ -753,6 +874,25 @@
           "services"
         ],
         "title": "BrowseServicesResponse",
+        "type": "object"
+      },
+      "CancelTaskResponse": {
+        "properties": {
+          "status": {
+            "const": "cancelled",
+            "title": "Status",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "task_id"
+        ],
+        "title": "CancelTaskResponse",
         "type": "object"
       },
       "CanvasWithPlugins": {
@@ -777,6 +917,7 @@
           "plugins": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -821,6 +962,17 @@
               }
             ],
             "title": "Alias"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
           },
           "name": {
             "title": "Name",
@@ -998,6 +1150,7 @@
           "sample_values": {
             "default": [],
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Sample Values",
@@ -1171,6 +1324,7 @@
           "details": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -1322,6 +1476,7 @@
         "properties": {
           "column_mappings": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Column Mappings",
@@ -1380,6 +1535,7 @@
           "errors": {
             "default": [],
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Errors",
@@ -1419,12 +1575,14 @@
       "CreateTaskRequest": {
         "properties": {
           "canvas": {
+            "additionalProperties": true,
             "title": "Canvas",
             "type": "object"
           },
           "carica_node_data": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -1938,6 +2096,7 @@
           "details": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -2419,7 +2578,12 @@
                   "ST_Contains",
                   "ST_DWithin",
                   "ST_Touches",
-                  "ST_Overlaps"
+                  "ST_Overlaps",
+                  "ST_Crosses",
+                  "ST_Equals",
+                  "ST_Disjoint",
+                  "ST_Covers",
+                  "ST_CoveredBy"
                 ],
                 "type": "string"
               },
@@ -3203,6 +3367,7 @@
           },
           "rows": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Rows",
@@ -3457,6 +3622,7 @@
           "validation_summary": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -3617,6 +3783,111 @@
         "title": "ImdfValidateRequest",
         "type": "object"
       },
+      "LastBackupRunStatus": {
+        "properties": {
+          "bucket_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bucket Key"
+          },
+          "duration_sec": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Sec"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "log_tail": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Log Tail",
+            "type": "array"
+          },
+          "result": {
+            "title": "Result",
+            "type": "string"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          }
+        },
+        "required": [
+          "result",
+          "exit_code",
+          "started_at",
+          "finished_at",
+          "duration_sec",
+          "bucket_key",
+          "size_bytes",
+          "error_message",
+          "log_tail"
+        ],
+        "title": "LastBackupRunStatus",
+        "type": "object"
+      },
       "LastExecution": {
         "description": "Informazioni sull'ultima esecuzione dello schedule.",
         "properties": {
@@ -3662,6 +3933,7 @@
         "properties": {
           "folders": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Folders",
@@ -3895,6 +4167,48 @@
         "title": "MFAVerifyRequest",
         "type": "object"
       },
+      "ManualBackupTriggerResult": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "pid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pid"
+          },
+          "started": {
+            "title": "Started",
+            "type": "boolean"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Id"
+          }
+        },
+        "required": [
+          "started",
+          "pid",
+          "task_id",
+          "message"
+        ],
+        "title": "ManualBackupTriggerResult",
+        "type": "object"
+      },
       "Node": {
         "additionalProperties": true,
         "description": "Nodo nel canvas visuale del progetto.\n\nTipologie supportate:\n    - source: tabella database (progetti ESTRAI)\n    - feature_source: layer ArcGIS Feature Service (progetti ESTRAI)\n    - result: nodo di output con formato e opzioni export\n    - project_source: riferimento a un altro progetto (MANIPOLA/ARRICCHISCI)\n    - file_source: file esterno caricato (MANIPOLA)\n    - transform: operazione di trasformazione (MANIPOLA)\n    - api_enrich: arricchimento via API esterna (ARRICCHISCI)\n    - staticValues: valori statici con supporto variabili template\n    - comment: annotazione/nota visuale nel canvas (non influenza il flusso dati)",
@@ -3924,6 +4238,18 @@
               }
             ],
             "title": "Alias"
+          },
+          "allow_unsafe_append": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "title": "Allow Unsafe Append"
           },
           "api_id": {
             "anyOf": [
@@ -4056,6 +4382,7 @@
           "arrowStyle": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -4089,6 +4416,7 @@
             "anyOf": [
               {
                 "items": {
+                  "additionalProperties": true,
                   "type": "object"
                 },
                 "type": "array"
@@ -4127,6 +4455,7 @@
             "anyOf": [
               {
                 "items": {
+                  "additionalProperties": true,
                   "type": "object"
                 },
                 "type": "array"
@@ -4149,6 +4478,7 @@
           "config": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -4246,6 +4576,7 @@
           "data": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -4305,6 +4636,7 @@
                 "enum": [
                   "csv",
                   "xlsx",
+                  "json",
                   "geojson",
                   "gpkg"
                 ],
@@ -4401,6 +4733,7 @@
           "extra_files": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -4424,6 +4757,7 @@
             "anyOf": [
               {
                 "items": {
+                  "additionalProperties": true,
                   "type": "object"
                 },
                 "type": "array"
@@ -4638,6 +4972,22 @@
             "title": "Id",
             "type": "string"
           },
+          "if_table_exists": {
+            "anyOf": [
+              {
+                "enum": [
+                  "error",
+                  "replace"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "error",
+            "title": "If Table Exists"
+          },
           "imdf_apply_renderers": {
             "anyOf": [
               {
@@ -4699,6 +5049,21 @@
             ],
             "default": "replace",
             "title": "Imdf Publish Mode"
+          },
+          "join_key_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": [],
+            "title": "Join Key Ids"
           },
           "join_keys": {
             "anyOf": [
@@ -4927,6 +5292,7 @@
           "parse_options": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -4965,6 +5331,7 @@
             "anyOf": [
               {
                 "items": {
+                  "additionalProperties": true,
                   "type": "object"
                 },
                 "type": "array"
@@ -5024,6 +5391,7 @@
             "anyOf": [
               {
                 "items": {
+                  "additionalProperties": true,
                   "type": "object"
                 },
                 "type": "array"
@@ -5039,6 +5407,7 @@
             "anyOf": [
               {
                 "items": {
+                  "additionalProperties": true,
                   "type": "object"
                 },
                 "type": "array"
@@ -5134,6 +5503,18 @@
               }
             ],
             "title": "Skip Null Params"
+          },
+          "source_freshness": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Freshness"
           },
           "source_project_id": {
             "anyOf": [
@@ -5338,6 +5719,21 @@
               }
             ],
             "title": "Unique Key Column"
+          },
+          "update_columns": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": [],
+            "title": "Update Columns"
           },
           "where": {
             "anyOf": [
@@ -6194,6 +6590,7 @@
           "execution_info": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -6226,6 +6623,7 @@
           "pipeline_info": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -6241,6 +6639,7 @@
           "schedule_info": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -6685,6 +7084,7 @@
           "result": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -6926,6 +7326,7 @@
           "expression": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -6948,6 +7349,7 @@
           "params": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -7077,6 +7479,58 @@
         "title": "UserResponse",
         "type": "object"
       },
+      "UserUpdateRequest": {
+        "additionalProperties": false,
+        "description": "Body tipizzato per `PUT /auth/users/{user_id}` (admin update).\n\nTutti i campi sono opzionali: aggiorna solo quelli passati. La\nwhitelist per ruolo (admin vs superadmin) e gli effetti collaterali\n(self-demotion, group_id check) restano nel router, ma la validazione\ndi shape/type/format e' schema-first qui.\n\n`extra=\"forbid\"`: rifiuta qualsiasi campo non in schema (es. `password`\nstorica), evitando drop silenzioso che storicamente faceva credere\nall'utente di aver cambiato la password mentre restava la vecchia.\nIl caso `password` viene intercettato con messaggio user-friendly\nda `_reject_password` invece del generico 422 \"extra inputs\".",
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          }
+        },
+        "title": "UserUpdateRequest",
+        "type": "object"
+      },
       "ValidateRequest": {
         "properties": {
           "api_id": {
@@ -7193,6 +7647,13 @@
       },
       "ValidationError": {
         "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
           "loc": {
             "items": {
               "anyOf": [
@@ -7230,6 +7691,7 @@
           "config": {
             "anyOf": [
               {
+                "additionalProperties": true,
                 "type": "object"
               },
               {
@@ -7264,6 +7726,7 @@
           "errors": {
             "default": [],
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Errors",
@@ -7302,6 +7765,7 @@
           },
           "column_mappings": {
             "items": {
+              "additionalProperties": true,
               "type": "object"
             },
             "title": "Column Mappings",
@@ -7472,7 +7936,7 @@
   "paths": {
     "/": {
       "get": {
-        "description": "Banner root (non e' health check vero — vedi /health)",
+        "description": "Banner root (non e' health check vero - vedi /health).",
         "operationId": "root__get",
         "responses": {
           "200": {
@@ -7496,8 +7960,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "title": "Response List Backups Endpoint Api Admin Backups Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/AdminBackupsListResponse"
                 }
               }
             },
@@ -7524,8 +7987,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "title": "Response Backup Schedule Endpoint Api Admin Backups Schedule Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/BackupScheduleInfo"
                 }
               }
             },
@@ -7552,8 +8014,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "title": "Response Backup Status Endpoint Api Admin Backups Status Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/LastBackupRunStatus"
                 }
               }
             },
@@ -7580,8 +8041,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "title": "Response Backup Trigger Endpoint Api Admin Backups Trigger Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ManualBackupTriggerResult"
                 }
               }
             },
@@ -7599,15 +8059,45 @@
         ]
       }
     },
+    "/api/admin/runtime-config": {
+      "get": {
+        "description": "Return redacted runtime configuration and service probes.\n\nThis endpoint is intentionally read-only. Configuration editing and\nservice restarts need a separate, audited operational boundary.\n\nAudit: ogni lettura emette un evento `admin.runtime_config.read`.\nPre-fix l'endpoint era senza traccia: un superadmin compromesso\npoteva estrarre la configurazione completa (DATABASE_URL host,\nbroker Redis, endpoint MinIO redatto, secret needles) senza lasciare\naudit trail per forensics.",
+        "operationId": "get_runtime_config_api_admin_runtime_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Runtime Config Api Admin Runtime Config Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Configurazione runtime read-only",
+        "tags": [
+          "admin-runtime-config"
+        ]
+      }
+    },
     "/api/admin/system-status": {
       "get": {
-        "description": "Ritorna un JSON con metriche aggregate per il dashboard admin:\n\n- `backup`: stato ultimo dump S3 (soglie 26h/48h)\n- `verify_restore`: stato ultimo `plenora-backup-test.service`\n- `schedules`: count attivi + failing negli ultimi 7gg\n- `workers`: Celery worker online + task attivi + queue depth\n- `host_resources`: disco/RAM/CPU via psutil (warn 80%, error 92-95%)\n- `db_pool`: conn pool Postgres (attive/idle/waiting, warn 80%)\n- `redis`: broker/cache memory + clients + uptime\n- `db_schema`: size schema `plenora` + row count tabelle critiche\n- `jwt_blacklist`: stato blacklist JWT (Redis) + contatori ops + warning \"inoperante da X min\"\n\nOgni blocco ha `status` in {ok, warn, error, unknown} e `message`\nhuman-readable. Errori di uno NON bloccano gli altri (graceful\ndegradation).",
+        "description": "Ritorna un JSON con metriche aggregate per il dashboard admin:\n\n- `backup`: stato ultimo dump S3 (soglie 26h/48h)\n- `verify_restore`: stato ultimo `plenora-backup-test.service`\n- `schedules`: count attivi + failing negli ultimi 7gg\n- `workers`: Celery worker online + task attivi + queue depth\n- `host_resources`: disco/RAM/CPU via psutil (warn 80%, error 92-95%)\n- `db_pool`: conn pool Postgres (attive/idle/waiting, warn 80%)\n- `redis`: broker/cache memory + clients + uptime\n- `db_schema`: size schema `plenora` + row count tabelle critiche\n- `jwt_blacklist`: stato blacklist JWT (Redis) + contatori ops + warning \"inoperante da X min\"\n\nOgni blocco ha `status` in {ok, warn, error, unknown} e `message`\nhuman-readable. Ogni blocco espone anche `scope`:\n`cluster` per dipendenze condivise e `local_replica` per metriche\ndella sola replica backend che risponde. I blocchi locali includono\n`scope_warning`/`warnings`. Errori di uno NON bloccano gli altri\n(graceful degradation).",
         "operationId": "get_system_status_api_admin_system_status_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get System Status Api Admin System Status Get",
                   "type": "object"
                 }
@@ -7688,6 +8178,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Data",
                 "type": "object"
               }
@@ -7779,6 +8270,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Data",
                 "type": "object"
               }
@@ -7919,6 +8411,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": true,
                 "title": "Data",
                 "type": "object"
               }
@@ -7976,8 +8469,16 @@
           "content": {
             "application/json": {
               "schema": {
-                "title": "Body",
-                "type": "object"
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
               }
             }
           }
@@ -8015,7 +8516,7 @@
     },
     "/api/auth/change-password": {
       "post": {
-        "description": "Cambia la propria password. Richiede di conoscere la password attuale.\nQualsiasi utente autenticato (incluso viewer) può cambiare la propria.",
+        "description": "Cambia la propria password. Richiede di conoscere la password attuale.\nQualsiasi utente autenticato (incluso viewer) può cambiare la propria.\n\nRate limit (P1 security-auth): pre-fix endpoint senza throttle.\nUn attaccante con JWT valido (token leak o sessione rubata) poteva\nbrute-forzare `old_password` senza freno: nessun limit per IP/utente,\nnessun lockout. Post-fix: stesso rate limit del login (IP-based)\n+ record di failed attempts per scenari di tentativo brute-force.",
         "operationId": "change_password_api_auth_change_password_post",
         "requestBody": {
           "content": {
@@ -8581,7 +9082,7 @@
         ]
       },
       "put": {
-        "description": "Aggiorna utente.\nsuperadmin → può cambiare role e group_id\nadmin → solo email e is_active, solo nel proprio gruppo\n\nSECURITY hardening:\n  - Whitelist dei campi consentiti per ruolo\n  - Type checking di ogni campo (no coercion silenziosa)\n  - Validazione email format (base)\n  - Validazione role contro VALID_ROLES\n  - Verifica esistenza group_id se passato\n  - Self-demotion: un utente non può modificare il proprio ruolo né disabilitare se stesso",
+        "description": "Aggiorna utente.\nsuperadmin → può cambiare role e group_id\nadmin → solo email e is_active, solo nel proprio gruppo\n\nBody schema: `UserUpdateRequest` (Pydantic, extra=\"forbid\"). Type\ncheck + format validation gestiti dal modello; il router applica solo\nla whitelist per-ruolo, il check di esistenza del group_id e i\nself-modify guard.\n\nPre-fix il body era `dict` raw: shape/type non documentati in\nOpenAPI, validation duplicata in 4 punti con check manuali.",
         "operationId": "update_user_api_auth_users__user_id__put",
         "parameters": [
           {
@@ -8598,8 +9099,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "title": "Data",
-                "type": "object"
+                "$ref": "#/components/schemas/UserUpdateRequest"
               }
             }
           },
@@ -10633,7 +11133,7 @@
     },
     "/api/features/create-service": {
       "post": {
-        "description": "Crea un nuovo Feature Service su ArcGIS Online.\n\nFlusso:\n1. Legge il file da input_path (o project_id)\n2. Crea il servizio con schema dal DataFrame\n3. Carica i dati nel layer\n\nRestituisce URL del nuovo servizio e conteggio features caricate.",
+        "description": "Crea un nuovo Feature Service su ArcGIS Online.\n\nSECURITY: require_admin (non require_not_esecutore). La creazione di\nun Feature Service su un account ArcGIS condiviso e' un'operazione\ncross-tenant (il nuovo servizio resta visibile a tutti gli utenti\ndi quel portale). Allineato con `write_features` e con il pattern\n`create_connection`/`update_connection` del modulo.\n\nFlusso:\n1. Legge il file da input_path (o project_id)\n2. Crea il servizio con schema dal DataFrame\n3. Carica i dati nel layer\n\nRestituisce URL del nuovo servizio e conteggio features caricate.",
         "operationId": "create_service_api_features_create_service_post",
         "requestBody": {
           "content": {
@@ -10767,7 +11267,7 @@
     },
     "/api/features/write": {
       "post": {
-        "description": "Scrittura su Feature Service esistente (add/update/delete).",
+        "description": "Scrittura su Feature Service esistente (add/update/delete).\n\nSECURITY: require_admin (non require_not_esecutore). Pre-fix qualunque\nutente loggato di ruolo `user` o superiore poteva scrivere su un\nFeature Service ArcGIS condiviso, anche se la mutation modifica dati\nvisibili ad altri tenant via FeatureServer pubblico. La feature di\nwrite su servizi esterni e' un'operazione admin-only per coerenza\ncon `create_connection`/`update_connection`.",
         "operationId": "write_features_api_features_write_post",
         "requestBody": {
           "content": {
@@ -11186,6 +11686,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Catalog Api Functions Catalog Get",
                   "type": "object"
                 }
@@ -11254,7 +11755,7 @@
     },
     "/api/imdf/bundles": {
       "get": {
-        "description": "Lista i bundle IMDF disponibili su disco con metadata base.\n\nArgs:\n    project_id: se valorizzato, filtra solo i bundle generati per quel\n        progetto (letto da plenora_metadata.json dentro ogni bundle).",
+        "description": "Lista i bundle IMDF disponibili con metadata base.\n\nIMDF-4: storage-first symmetrico a GET /bundles/{id}. La fonte di\nverita' e' object storage (`imdf.storage.list_task_ids`); il meta\nper-bundle e' letto via `imdf.storage.get_meta_only(task_id)`.\nNiente piu' `bundles_dir.iterdir()` + per-task `read_metadata` dal\nfilesystem locale per il path normale. La cache locale resta una\nfallback union per i bundle pre-IMDF-3 ancora solo su disco\n(es. ambienti dev con storage off).\n\nArgs:\n    project_id: se valorizzato, filtra solo i bundle generati per quel\n        progetto (letto da plenora_metadata dentro ogni bundle).",
         "operationId": "list_bundles_api_imdf_bundles_get",
         "parameters": [
           {
@@ -11313,7 +11814,7 @@
     },
     "/api/imdf/bundles/{bundle_task_id}": {
       "delete": {
-        "description": "Cancella una cartella bundle IMDF dal disco.\n\n- Validazione path-traversal via `_safe_bundle_dir`\n- Verifica group access via `_assert_bundle_group_access` (fail-closed\n  sui bundle legacy senza metadata)\n- 404 se il bundle non esiste\n- Rimozione ricorsiva della directory",
+        "description": "Cancella un bundle IMDF da storage canonico + cache locale.\n\nIMDF-4 step 4: ACL check storage-first (no hydrate locale per\nleggere meta). Bundle pre-IMDF-3 senza meta su storage falliscono\n404 — il delete di cache locale eventualmente presente puo' essere\nfatto manualmente da admin.\n\n- Validazione path-traversal via `_safe_bundle_dir`\n- Verifica group access via `assert_bundle_group_access_from_meta`\n- 404 se il bundle non esiste su storage\n- Rimozione da storage + cleanup cache locale",
         "operationId": "delete_bundle_api_imdf_bundles__bundle_task_id__delete",
         "parameters": [
           {
@@ -11352,7 +11853,7 @@
         ]
       },
       "get": {
-        "description": "Ritorna i metadata completi di un bundle IMDF persistito (manifest,\nvalidation, renderers, geojson, site_id) — stessa struttura che il task\ndi enrichment salva in `result.imdf`. Usato dal frontend per rehydratare\nil canvas store dopo un refresh (altrimenti i modali del nodo result\nrestano vuoti perche' `lastTaskResult` e' in memoria e non persistente).",
+        "description": "Ritorna i metadata completi di un bundle IMDF persistito (manifest,\nvalidation, renderers, geojson, site_id) — stessa struttura che il task\ndi enrichment salva in `result.imdf`. Usato dal frontend per rehydratare\nil canvas store dopo un refresh.\n\nIMDF-4: storage-first. L'endpoint legge meta/manifest/validation/\nrenderers/geojson direttamente da object storage via\n``imdf.storage.read_*``. Niente piu' ``ensure_local_bundle`` + scan\nfilesystem per la response normale. Il ``has_gdb``/``has_ifc`` viene\ndai flag nel meta (scritti da persist al save time). Fallback su\ncache locale solo se il meta su storage manca (bundle legacy in zip\nlayout, hydrated dal `_hydrate_local_cache`).",
         "operationId": "get_bundle_metadata_api_imdf_bundles__bundle_task_id__get",
         "parameters": [
           {
@@ -11999,6 +12500,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Projects Api Projects Get",
                   "type": "object"
                 }
@@ -12035,6 +12537,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Project Api Projects Post",
                   "type": "object"
                 }
@@ -12085,6 +12588,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Admin Cleanup Orphans Api Projects Admin Cleanup Orphans Post",
                   "type": "object"
                 }
@@ -12173,6 +12677,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Project Api Projects  Project Id  Get",
                   "type": "object"
                 }
@@ -12284,6 +12789,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Project Raw Canvas Api Projects  Project Id  Canvas Raw Get",
                   "type": "object"
                 }
@@ -12315,7 +12821,7 @@
     },
     "/api/projects/{project_id}/download": {
       "get": {
-        "description": "Scarica il file risultato di un progetto.\n\nSECURITY: assert_group_access per cross-tenant isolation. Senza questo\ncheck, un utente potrebbe scaricare risultati di progetti di altri tenant.\n\nParametri:\n    file: nome file specifico (opzionale) — usato per scaricare file\n          accessori come il report errori di arricchimento.\n          Se omesso, restituisce il file più recente.",
+        "description": "Scarica il file risultato di un progetto.",
         "operationId": "download_project_result_api_projects__project_id__download_get",
         "parameters": [
           {
@@ -12456,7 +12962,7 @@
     },
     "/api/projects/{project_id}/execute": {
       "post": {
-        "description": "Avvia la pipeline come task Celery asincrono.\n\nSECURITY: assert_group_access verifica che il progetto appartenga al\ngruppo dell'utente. Senza questo check, un utente di gruppoA potrebbe\neseguire la pipeline di un progetto di gruppoB (cross-tenant execution).\n\nR-25 PR-B3: il param `intermediate_mode` e' opt-in superadmin per\naudit run-specific. Il dual-auth (require_not_esecutore PER il\nbase-flow + check superadmin SOLO se override richiesto) preserva\nla backward-compat: caller esistenti senza param continuano a girare\ncon i loro ruoli abituali.",
+        "description": "Avvia la pipeline come task Celery asincrono.",
         "operationId": "execute_project_pipeline_api_projects__project_id__execute_post",
         "parameters": [
           {
@@ -12507,6 +13013,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Execute Project Pipeline Api Projects  Project Id  Execute Post",
                   "type": "object"
                 }
@@ -12538,7 +13045,7 @@
     },
     "/api/projects/{project_id}/preview": {
       "get": {
-        "description": "Avvia preview come task Celery asincrono.\n\nSECURITY: assert_group_access per cross-tenant isolation.\nN5 (2026-04-17): `limit` ha cap 10k per prevenire DoS via OOM worker.\nUn attacker con `?limit=999999999` senza cap materializzava milioni di\nrighe in RAM del worker Celery -> crash + rifiuto servizio altri job.",
+        "description": "Avvia preview come task Celery asincrono.",
         "operationId": "preview_project_api_projects__project_id__preview_get",
         "parameters": [
           {
@@ -12570,6 +13077,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Preview Project Api Projects  Project Id  Preview Get",
                   "type": "object"
                 }
@@ -12619,6 +13127,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get All Schemas Api Projects  Project Id  Schemas Get",
                   "type": "object"
                 }
@@ -12677,6 +13186,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Node Schema Api Projects  Project Id  Schemas  Node Id  Get",
                   "type": "object"
                 }
@@ -12726,6 +13236,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Validate All Connections Api Projects  Project Id  Validate All Get",
                   "type": "object"
                 }
@@ -12785,6 +13296,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Validate Connection Api Projects  Project Id  Validate Connection Post",
                   "type": "object"
                 }
@@ -12909,6 +13421,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Compare Runs L2 Api Runs Compare L2 Get",
                   "type": "object"
                 }
@@ -13043,6 +13556,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Node Data Api Runs  Run Id  Nodes  Node Id  Data Get",
                   "type": "object"
                 }
@@ -13102,6 +13616,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Pin Run Api Runs  Run Id  Pin Post",
                   "type": "object"
                 }
@@ -13235,7 +13750,7 @@
     },
     "/api/schedules/healthcheck": {
       "get": {
-        "description": "Verifica se Celery Beat (PlenoraBeatScheduler) è attivo.\nLegge il heartbeat dalla tabella beat_heartbeat nel DB.",
+        "description": "Verifica se Celery Beat (PlenoraBeatScheduler) e' attivo.",
         "operationId": "beat_healthcheck_api_schedules_healthcheck_get",
         "responses": {
           "200": {
@@ -14080,11 +14595,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Cancel Task Api Tasks  Task Id  Delete",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CancelTaskResponse"
                 }
               }
             },
@@ -14365,6 +14876,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response List Tickets Endpoint Api Tickets Get",
                   "type": "object"
                 }
@@ -14410,6 +14922,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Create Ticket Endpoint Api Tickets Post",
                   "type": "object"
                 }
@@ -14448,6 +14961,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Counts Api Tickets Counts Get",
                   "type": "object"
                 }
@@ -14476,6 +14990,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Meta Api Tickets Meta Get",
                   "type": "object"
                 }
@@ -14563,6 +15078,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Ticket Endpoint Api Tickets  Ticket Id  Get",
                   "type": "object"
                 }
@@ -14619,6 +15135,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Update Ticket Endpoint Api Tickets  Ticket Id  Patch",
                   "type": "object"
                 }
@@ -14678,6 +15195,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Upload Attachment Endpoint Api Tickets  Ticket Id  Attachments Post",
                   "type": "object"
                 }
@@ -14841,6 +15359,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Add Comment Endpoint Api Tickets  Ticket Id  Comments Post",
                   "type": "object"
                 }
@@ -14879,6 +15398,7 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "additionalProperties": true,
                   "title": "Response Get Registry Api Transforms Registry Get",
                   "type": "object"
                 }
@@ -14900,7 +15420,6 @@
     },
     "/health": {
       "get": {
-        "description": "Lightweight liveness check.\n\nRitorna 200 se il processo FastAPI risponde. Le dipendenze\ncritiche sono verificate da /ready per evitare restart su lag\ntransitorio di PG/Redis.",
         "operationId": "health_health_get",
         "responses": {
           "200": {
@@ -14917,7 +15436,6 @@
     },
     "/ready": {
       "get": {
-        "description": "Readiness check rigoroso. Include:\n- deep PG SELECT 1 e Redis PING bounded\n- headroom sul pool PG (non saturo)\n- migrations allineate al codice committato\n\nPensato per K8s readinessProbe conservativo (rimuove pod dal pool\ndi load balancing se qualcosa e' degradato anche non-fatal).",
         "operationId": "ready_ready_get",
         "responses": {
           "200": {

@@ -136,7 +136,7 @@ def _patch_storage_and_cap(monkeypatch, chunks: list[bytes], cap: int = 1024):
 
     monkeypatch.setenv("ARTIFACT_PREVIEW_MAX_BYTES", str(cap))
     monkeypatch.setattr(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
+        "app.core.io.object_storage.get_runtime_object_storage",
         lambda: _FakeStorage(chunks),
     )
     return ar

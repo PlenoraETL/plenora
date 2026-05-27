@@ -48,7 +48,7 @@ def _to_csv_minimal_copy(df: Any, buf: io.BytesIO, chunksize: int) -> None:
         buf, encoding="utf-8", write_through=True, newline="",
     )
     try:
-        df.to_csv(text_buf, index=False, chunksize=chunksize)
+        df.to_csv(text_buf, index=False, chunksize=chunksize, encoding="utf-8")
         text_buf.flush()
     finally:
         # `detach()` riporta ownership del BytesIO al caller senza
@@ -166,7 +166,7 @@ def _csv_producer(
             qbuf, encoding="utf-8", write_through=True, newline="",
         )
         try:
-            df.to_csv(text_buffer, index=False, chunksize=chunksize)
+            df.to_csv(text_buffer, index=False, chunksize=chunksize, encoding="utf-8")
             text_buffer.flush()
         finally:
             text_buffer.detach()

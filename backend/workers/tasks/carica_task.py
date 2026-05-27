@@ -788,7 +788,10 @@ def _load_upstream_data(
     3. Dopo ricalcolo rilegge l'artefatto specifico della run
     """
     try:
-        from app.core.dataframes.frame_io import load_dataframe_from_file
+        from app.core.dataframes.frame_io import (
+            load_dataframe_from_artifact,
+            load_dataframe_from_file,
+        )
         from app.core.artifacts import (
             LatestProjectArtifactRef,
             SourceLoader,
@@ -893,6 +896,10 @@ def _load_upstream_data(
         with materialized as m:
             if m.df is not None:
                 return m.df
+            if m.data is not None:
+                return load_dataframe_from_artifact(
+                    data=m.data, format_hint=m.format,
+                )
             return load_dataframe_from_file(m.path)
 
     except ImportError as e:

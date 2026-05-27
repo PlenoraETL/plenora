@@ -126,7 +126,7 @@ def _connection_failure_message(config: PostgresExtConfig) -> str:
 def postgres_ext_sqlalchemy_url() -> str:
     config = postgres_ext_config()
     return (
-        "postgresql+psycopg2://"
+        "postgresql+psycopg://"
         f"{quote_plus(config.user)}:{quote_plus(config.password)}@"
         f"{config.host}:{config.port}/{quote_plus(config.database)}"
     )
@@ -153,7 +153,7 @@ PG_EXT_PASSWORD = _CONFIG.password
 
 
 @contextmanager
-def postgres_ext_conn() -> Iterator[psycopg2.extensions.connection]:
+def postgres_ext_conn() -> Iterator[psycopg.Connection]:
     config = postgres_ext_config()
     try:
         conn = psycopg.connect(

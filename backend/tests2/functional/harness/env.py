@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Mapping, MutableMapping
+from urllib.parse import urlsplit, urlunsplit
 
 
 _BROKER_ENV_NAMES = (
@@ -61,3 +62,27 @@ def configure_redis_urls(env: MutableMapping[str, str]) -> None:
         result_backend or _HOST_RUN_RESULT_BACKEND
     )
 
+
+def isolate_redis_dbs(
+    env: MutableMapping[str, str],
+    *,
+    broker_db: int,
+    result_db: int,
+) -> None:
+    """Move Celery test subprocesses off the application worker DBs.
+
+    Functional/integration tests spawn their own worker. If they reuse DB 0,
+    an already-running compose worker can consume the task first, bypassing
+    the test env and the current working tree code.
+    """
+
+    def _with_db(url: str, db: int) -> str:
+        parts = urlsplit(url)
+        return urlunsplit(
+            (parts.scheme, parts.netloc, f"/{db}", parts.query, parts.fragment)
+        )
+
+    env["CELERY_BROKER_URL"] = _with_db(env["CELERY_BROKER_URL"], broker_db)
+    env["CELERY_RESULT_BACKEND"] = _with_db(
+        env["CELERY_RESULT_BACKEND"], result_db
+    )

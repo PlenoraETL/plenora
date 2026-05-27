@@ -28,7 +28,6 @@ from app.core.projects.canvas_models import (
 from app.core.auth import db as _groups
 from app.core.eseguibili.db import list_eseguibili_by_source
 from app.core.projects import db as project_db
-from app.db.pg_connection import unit_of_work
 from app.core.results import store as results_store
 from app.core.projects.domain import build_project_id, resolve_project_group_id
 from app.core.projects.lineage import detect_project_lineage_cycle
@@ -294,21 +293,10 @@ class ProjectService:
         provided the DB read is tenant-filtered, so service callers cannot
         accidentally bypass project ownership checks.
         """
-        if group_id:
-            with unit_of_work() as session:
-                row = session.fetchone(
-                    "SELECT id, canvas FROM projects WHERE id = %s AND group_id = %s",
-                    (project_id, group_id),
-                )
-        else:
-            with unit_of_work() as session:
-                row = session.fetchone(
-                    "SELECT id, canvas FROM projects WHERE id = %s",
-                    (project_id,),
-                )
+        row = project_db.get_project_raw_canvas_row(project_id, group_id=group_id)
         if not row:
             return None
-        return RawProjectCanvas(project_id=str(row["id"]), canvas=row.get("canvas"))
+        return RawProjectCanvas(project_id=row.id, canvas=row.canvas)
 
     def get_project(
         self,
@@ -351,17 +339,20 @@ class ProjectService:
         )
         return updated_row is not None
 
-    def get_project_output_contract(self, project_id: str) -> dict | None:
+    def get_project_output_contract(
+        self,
+        project_id: str,
+    ) -> Mapping[str, object] | None:
         row = project_db.get_project_row(project_id)
         if not row:
             return None
         contract = row.output_contract
-        return contract if isinstance(contract, dict) else None
+        return contract if isinstance(contract, Mapping) else None
 
     def update_project_output_contract(
         self,
         project_id: str,
-        output_contract: dict,
+        output_contract: Mapping[str, object],
     ) -> bool:
         return project_db.update_project_output_contract_row(
             project_id,

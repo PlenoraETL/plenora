@@ -29,6 +29,7 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "token_blacklist",    # JWT revocation store
         "upload_guards",      # upload size / MIME type enforcement
         "clock",                       # wall-clock abstraction for testability
+        "canvas_types",                # canvas type helpers shared across engines
     }
 )
 
@@ -42,6 +43,7 @@ _ROOT_MODULE_CLASSIFICATIONS: dict[str, str] = {
     "token_blacklist": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "upload_guards": "MOVE_TO_SECURITY_PACKAGE_LATER",
     "clock": "KEEP_ROOT_CROSS_CUTTING",
+    "canvas_types": "KEEP_ROOT_CROSS_CUTTING",
 }
 
 _CLASSIFICATION_BUCKETS: frozenset[str] = frozenset(

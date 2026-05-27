@@ -25,6 +25,7 @@ logger = get_logger(__name__)
 PREFIX = IMDF_BUNDLES_PREFIX
 META_SUFFIX = ".meta.json"
 ZIP_SUFFIX = ".zip"
+BundleFiles = dict[str, bytes]
 
 
 def _storage():
@@ -76,7 +77,7 @@ def _local_dir(task_id: str) -> Path:
 
 def save_bundle_files(
     task_id: str,
-    files: dict[str, bytes],
+    files: BundleFiles,
     meta: JsonObject,
     *,
     gdb_zip_bytes: Optional[bytes] = None,
@@ -350,9 +351,9 @@ def get_meta_only(task_id: str) -> Optional[JsonObject]:
     """
     if not object_storage_enabled():
         return None
-    storage = _storage()
     mk = _meta_key(task_id)
     try:
+        storage = _storage()
         stream = storage.get_object_stream(mk)
         body_bytes = b"".join(stream["body"])
         return json.loads(body_bytes.decode("utf-8"))

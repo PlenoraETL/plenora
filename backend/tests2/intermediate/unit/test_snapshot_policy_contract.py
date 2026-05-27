@@ -61,7 +61,7 @@ def test_validate_settings_rejects_full_artifact_when_object_storage_disabled():
         IntermediateSettingsError, validate_intermediate_settings,
     )
     with patch(
-        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
+        "app.core.io.object_storage.object_storage_enabled",
         return_value=False,
     ):
         with pytest.raises(IntermediateSettingsError, match="OBJECT_STORAGE_ENABLED"):
@@ -73,7 +73,7 @@ def test_validate_settings_accepts_full_artifact_when_object_storage_enabled():
     passa la validazione."""
     from app.core.intermediate.policy import validate_intermediate_settings
     with patch(
-        "app.infrastructure.storage.cloud_backends.object_storage_enabled",
+        "app.core.io.object_storage.object_storage_enabled",
         return_value=True,
     ):
         validate_intermediate_settings(_settings_baseline(mode="full_artifact"))

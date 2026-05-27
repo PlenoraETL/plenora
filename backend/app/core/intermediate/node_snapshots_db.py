@@ -19,12 +19,12 @@ NodeTableRow: TypeAlias = Dict[str, object]
 SpecialFloatSentinel: TypeAlias = Dict[str, str]
 
 
-def _fetchone(sql: str, params: tuple = ()) -> Optional[Dict[str, object]]:
+def _fetchone(sql: str, params: tuple = ()) -> Optional[NodeMetaRow]:
     with unit_of_work() as session:
         return session.fetchone(sql, params)
 
 
-def _fetchall(sql: str, params: tuple = ()) -> List[Dict[str, object]]:
+def _fetchall(sql: str, params: tuple = ()) -> List[NodeMetaRow]:
     with unit_of_work() as session:
         return session.fetchall(sql, params)
 

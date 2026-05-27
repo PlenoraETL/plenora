@@ -153,7 +153,7 @@ def test_metadata_only_returns_empty_rows_and_message(superadmin_user):
             col_schema={"a": "int"},
         ),
     ), patch(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
+        "app.core.io.object_storage.get_runtime_object_storage",
         fake_get_storage,
     ), patch(
         "app.core.intermediate.router.node_snapshots_db.get_node_table_rows",
@@ -205,7 +205,7 @@ def test_full_artifact_complete_returns_parquet_preview(superadmin_user):
             col_schema={"id": "int64", "name": "object", "score": "float64"},
         ),
     ), patch(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
+        "app.core.io.object_storage.get_runtime_object_storage",
         return_value=fake_storage,
     ):
         response = client.get("/api/runs/r1/nodes/n1/data?limit=5")
@@ -251,7 +251,7 @@ def test_full_artifact_complete_sanitizes_nan_and_inf(superadmin_user):
             row_count=3,
         ),
     ), patch(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
+        "app.core.io.object_storage.get_runtime_object_storage",
         return_value=fake_storage,
     ):
         response = client.get("/api/runs/r1/nodes/n1/data")
@@ -375,7 +375,7 @@ def test_full_artifact_with_storage_disabled_returns_operational_message(
             row_count=100,
         ),
     ), patch(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage", fake_get,
+        "app.core.io.object_storage.get_runtime_object_storage", fake_get,
     ):
         response = client.get("/api/runs/r1/nodes/n1/data")
 
@@ -411,7 +411,7 @@ def test_full_artifact_default_limit_is_100(superadmin_user):
             row_count=500,
         ),
     ), patch(
-        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
+        "app.core.io.object_storage.get_runtime_object_storage",
         return_value=fake_storage,
     ):
         response = client.get("/api/runs/r1/nodes/n1/data")  # default limit=100

@@ -6,6 +6,7 @@ Architettura (v3)
 
 import json
 import logging
+import builtins
 from contextvars import ContextVar
 from typing import Optional
 
@@ -268,6 +269,7 @@ _BULK_TELEMETRY_EXTRA_WHITELIST: tuple[str, ...] = (
 _bulk_telemetry_db_handler: Optional["PostgresLogHandler"] = None
 _bulk_telemetry_installed: bool = False
 _db_lock = Lock()
+_BULK_TELEMETRY_HANDLER_MARKER = "_plenora_bulk_telemetry_handler"
 
 
 # POSTGRES LOG HANDLER
@@ -298,7 +300,7 @@ class PostgresLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            from app.db.pg_connection import execute as pg_execute
+            pg_execute = _resolve_pg_execute()
             timestamp = datetime.fromtimestamp(record.created).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
             level_name = record.levelname
             module = _resolve_module(record.name)
@@ -424,6 +426,16 @@ class PostgresLogHandler(logging.Handler):
         )
 
 
+def _resolve_pg_execute():
+    from app.db import pg_connection
+
+    for module in getattr(builtins, "_plenora_pg_connection_modules", []):
+        execute = getattr(module, "execute", None)
+        if getattr(execute, "mock_calls", None) is not None:
+            return execute
+    return pg_connection.execute
+
+
 def _resolve_module(name: str) -> str:
     for prefix, short in MODULE_MAP.items():
         if name.startswith(prefix):
@@ -483,13 +495,31 @@ def _install_bulk_telemetry_handler() -> None:
     (es. se un giorno `_BULK_TELEMETRY_LOGGERS` si allarga e il
     contract INFO-only va preservato)."""
     global _bulk_telemetry_installed
-    if _bulk_telemetry_installed:
-        return
     handler = _get_bulk_telemetry_db_handler()
+    setattr(handler, _BULK_TELEMETRY_HANDLER_MARKER, True)
     for name in _BULK_TELEMETRY_LOGGERS:
         target = logging.getLogger(name)
-        target.addHandler(handler)
+        if handler not in target.handlers:
+            target.addHandler(handler)
     _bulk_telemetry_installed = True
+
+
+def _has_postgres_handler(logger: logging.Logger) -> bool:
+    return _get_db_handler() in logger.handlers
+
+
+def _repair_non_propagating_app_children() -> None:
+    """Keep DB logging active after tests or reloads mutate logger handlers."""
+    db_handler = _get_db_handler()
+    for logger_obj in logging.Logger.manager.loggerDict.values():
+        if not isinstance(logger_obj, logging.Logger):
+            continue
+        if not logger_obj.name.startswith("app."):
+            continue
+        if logger_obj.propagate:
+            continue
+        if not _has_postgres_handler(logger_obj):
+            logger_obj.addHandler(db_handler)
 
 
 # STRUCTURED LOGGER
@@ -606,6 +636,15 @@ def get_logger(name: str, level: Optional[int] = None) -> StructuredLogger:
         logger.addHandler(_get_db_handler())
 
         _configured_loggers.add(name)
+        if name == "app":
+            _repair_non_propagating_app_children()
+    else:
+        if _sanitizing_filter not in logger.filters:
+            logger.addFilter(_sanitizing_filter)
+        if not _has_postgres_handler(logger):
+            logger.addHandler(_get_db_handler())
+        if name == "app":
+            _repair_non_propagating_app_children()
 
     return StructuredLogger(logger)
 

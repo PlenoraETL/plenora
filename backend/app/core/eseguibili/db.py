@@ -20,19 +20,33 @@ from app.shared.contracts.payloads import JsonObject, JsonRows
 ExpectedColumns = JsonRows
 
 
+class _DbFacade:
+    def fetchone(self, sql: str, params: tuple = ()) -> JsonObject | None:
+        with unit_of_work() as session:
+            return session.fetchone(sql, params)
+
+    def fetchall(self, sql: str, params: tuple = ()) -> JsonRows:
+        with unit_of_work() as session:
+            return session.fetchall(sql, params)
+
+    def execute(self, sql: str, params: tuple = ()):
+        with unit_of_work() as session:
+            return session.execute(sql, params)
+
+
+db = _DbFacade()
+
+
 def _fetchone(sql: str, params: tuple = ()) -> JsonObject | None:
-    with unit_of_work() as session:
-        return session.fetchone(sql, params)
+    return db.fetchone(sql, params)
 
 
 def _fetchall(sql: str, params: tuple = ()) -> JsonRows:
-    with unit_of_work() as session:
-        return session.fetchall(sql, params)
+    return db.fetchall(sql, params)
 
 
 def _execute(sql: str, params: tuple = ()):
-    with unit_of_work() as session:
-        return session.execute(sql, params)
+    return db.execute(sql, params)
 
 
 @dataclass(frozen=True)

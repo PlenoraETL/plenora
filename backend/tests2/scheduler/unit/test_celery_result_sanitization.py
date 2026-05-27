@@ -45,9 +45,11 @@ def test_schedule_task_return_dict_no_longer_interpolates_str_e():
 
 def test_carica_task_outer_has_canonical_token():
     src = _read("workers/tasks/carica_task.py")
-    assert '"error": "carica_task_fatal"' in src
-    assert '"message": "Errore task CARICA (consulta log)"' in src
-    assert '"error_message": "Errore task CARICA (consulta log)"' in src
+    assert 'public_error_code = "carica_task_fatal"' in src
+    assert 'public_error_message = "Errore task CARICA (consulta log)"' in src
+    assert '"error": public_error_code' in src
+    assert '"message": public_error_message' in src
+    assert '"error_message": public_error_message' in src
 
 
 def test_carica_task_outer_preserves_error_details_traceback():

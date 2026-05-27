@@ -8,6 +8,8 @@ from typing import Any
 
 from app.db.pg_connection import unit_of_work
 
+ProjectSourceFreshnessPayload = dict[str, Any]
+
 
 @dataclass(frozen=True)
 class ProjectSourceFreshness:
@@ -34,7 +36,7 @@ class ProjectSourceFreshness:
             )
         return f"Il progetto sorgente '{name}' e' allineato."
 
-    def to_payload(self) -> dict[str, Any]:
+    def to_payload(self) -> ProjectSourceFreshnessPayload:
         return {
             "source_project_id": self.source_project_id,
             "source_project_name": self.source_project_name,

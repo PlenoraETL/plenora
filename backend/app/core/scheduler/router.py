@@ -5,6 +5,7 @@ Owns the HTTP boundary and delegates business logic to services or helpers.
 """
 
 import json
+import re
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends
@@ -367,6 +368,8 @@ async def download_schedule_output(
 
         # Branch 1: run specifica via ?run=... — sanitize + lookup nel catalog
         if run:
+            if not re.fullmatch(r"\d{8}_\d{6}", run):
+                raise HTTPException(status_code=400, detail="Parametro 'run' non valido")
             try:
                 selected_run = catalog.get_run(project_id, schedule_id, run)
             except ValueError:

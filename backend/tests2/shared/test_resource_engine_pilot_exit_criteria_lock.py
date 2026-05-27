@@ -197,7 +197,12 @@ def test_no_new_kind_in_loaders_directory_without_registration():
         p.name for p in loaders_dir.glob("*.py")
         if p.name not in {"__init__.py"} and not p.name.startswith("_")
     )
-    assert loader_files == ["file_source_blob.py", "result_blob.py"], (
+    assert loader_files == [
+        "file_source_blob.py",
+        "file_source_blob_store.py",
+        "result_blob.py",
+        "result_blob_store.py",
+    ], (
         f"Loader directory must currently contain exactly "
         f"`file_source_blob.py` (RESOURCE-ENGINE-020) and "
         f"`result_blob.py` (RESOURCE-ENGINE-002). "

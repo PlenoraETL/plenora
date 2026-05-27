@@ -50,7 +50,7 @@ def _make_fake_transaction():
 
 @contextmanager
 def _patch_db_io(idb):
-    """Patcha sia `idb.transaction` sia `idb.execute_values` (Bug #22).
+    """Patcha `idb.transaction` e osserva il batch insert su executemany.
 
     Rende osservabili in un singolo gancio:
       - le chiamate al cursor (execute, ecc.) per DELETE / UPSERT meta
@@ -60,10 +60,8 @@ def _patch_db_io(idb):
     Yields `(cur, ev_spy)` cosi' i test possono ispezionare entrambi.
     """
     fake_tx, cur, _conn = _make_fake_transaction()
-    ev_spy = MagicMock(name="execute_values_spy")
-    with patch.object(idb, "transaction", fake_tx), \
-         patch.object(idb, "execute_values", ev_spy):
-        yield cur, ev_spy
+    with patch.object(idb, "transaction", fake_tx):
+        yield cur, cur.executemany
 
 
 def _delete_calls(cur) -> list:
@@ -95,6 +93,9 @@ def _insert_row_calls(cur, ev_spy=None) -> list:
             if len(c.args) >= 3:
                 sql_arg = c.args[1]
                 records_arg = c.args[2]
+            elif len(c.args) >= 2:
+                sql_arg = c.args[0]
+                records_arg = c.args[1]
             elif "sql" in c.kwargs and "argslist" in c.kwargs:
                 sql_arg = c.kwargs["sql"]
                 records_arg = c.kwargs["argslist"]
@@ -322,7 +323,7 @@ def test_write_node_atomic_meta_fail_rollback_propagates():
     from app.core.intermediate import db as idb
 
     fake_tx, cur, _conn = _make_fake_transaction()
-    ev_spy = MagicMock(name="execute_values_spy")
+    ev_spy = cur.executemany
 
     # Simula fallimento solo sull'INSERT meta. Per gli altri execute
     # ritorna None (no-op) — non vogliamo richiamare il mock stesso
@@ -335,8 +336,7 @@ def test_write_node_atomic_meta_fail_rollback_propagates():
 
     cur.execute.side_effect = execute_side_effect
 
-    with patch.object(idb, "transaction", fake_tx), \
-         patch.object(idb, "execute_values", ev_spy):
+    with patch.object(idb, "transaction", fake_tx):
         with pytest.raises(RuntimeError, match="meta INSERT fail simulated"):
             idb.write_node_atomic(
                 "run-rb", "node-rb", node_type="estrai",

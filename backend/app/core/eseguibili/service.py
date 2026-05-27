@@ -13,6 +13,8 @@ import uuid
 from typing import Mapping, Optional, Sequence
 
 from app.utils.logger import get_logger
+from app.core.files import db as files_db
+from app.core.files.service import file_source_service
 
 from . import db as eseguibili_db
 from .models import (
@@ -214,9 +216,6 @@ def persist_upload_file_source(
     group_id: str,
 ) -> str:
     """Persist an analyzed upload behind a cross-host file_source id."""
-    from app.core.files import db as files_db
-    from app.core.files.service import file_source_service
-
     safe_filename = filename or "upload.bin"
     temp_name = f"__exec_upload_{eseguibile['id']}_{uuid.uuid4().hex[:8]}"
     file_source = file_source_service.create_from_upload(
@@ -249,8 +248,6 @@ def persist_upload_file_source(
 
 def load_upload_metadata(file_source_id: str) -> Optional[Mapping[str, object]]:
     """Load durable upload metadata from the file_source DB row."""
-    from app.core.files import db as files_db
-
     row = files_db.get_file_source(file_source_id, include_data=False)
     if not row:
         return None

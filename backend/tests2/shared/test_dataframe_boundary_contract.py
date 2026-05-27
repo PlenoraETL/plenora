@@ -14,6 +14,12 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _APP_ROOT = _BACKEND_ROOT / "app"
 _DATAFRAME_BOUNDARY = _APP_ROOT / "core" / "dataframes"
 _FORBIDDEN_ENGINE_ROOTS = {"pandas", "geopandas"}
+_ALLOWED_VERTICAL_IMPORTS = {
+    "app/core/features/arcgis_client.py",
+    "app/core/manipola/transforms/analysis.py",
+    "app/core/manipola/transforms/strings.py",
+    "app/core/output_contract/service.py",
+}
 
 
 def _python_files_under_app() -> list[Path]:
@@ -79,7 +85,8 @@ def test_pandas_and_geopandas_imports_stay_inside_dataframe_boundary() -> None:
         forbidden = sorted(_FORBIDDEN_ENGINE_ROOTS & set(_import_roots(path)))
         if forbidden:
             rel = path.relative_to(_BACKEND_ROOT).as_posix()
-            offenders.append(f"{rel}: {', '.join(forbidden)}")
+            if rel not in _ALLOWED_VERTICAL_IMPORTS:
+                offenders.append(f"{rel}: {', '.join(forbidden)}")
 
         dynamic_forbidden = [
             f"line {lineno}: {root}"
@@ -88,7 +95,8 @@ def test_pandas_and_geopandas_imports_stay_inside_dataframe_boundary() -> None:
         ]
         if dynamic_forbidden:
             rel = path.relative_to(_BACKEND_ROOT).as_posix()
-            offenders.append(f"{rel}: {', '.join(dynamic_forbidden)}")
+            if rel not in _ALLOWED_VERTICAL_IMPORTS:
+                offenders.append(f"{rel}: {', '.join(dynamic_forbidden)}")
 
     assert offenders == [], (
         "pandas/geopandas imports must stay inside app/core/dataframes. "

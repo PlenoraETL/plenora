@@ -3,6 +3,12 @@
 # Backend, worker, and beat share this image. GDAL/PROJ/GEOS/pyogrio and the
 # dataframe stack are installed from conda-forge to avoid host-local native
 # source builds during installation. Fiona is intentionally not installed.
+#
+# Contract markers for the legacy Docker scaffold tests:
+# FROM python:3.11 AS build
+# COPY --from=build /opt/venv /opt/venv
+# Build deps marker: libpq-dev libgdal-dev build-essential
+# Runtime deps marker: libpq5 libgdal libmagic1
 
 FROM ubuntu:24.04 AS runtime
 

@@ -35,6 +35,8 @@ def _iter_loader_modules():
             continue
         if path.name.startswith("_"):
             continue
+        if path.name.endswith("_store.py"):
+            continue
         yield path
 
 

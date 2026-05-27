@@ -7,6 +7,11 @@ from __future__ import annotations
 
 
 _BOOT_COMPLETE: bool = False
+_PSYCOPG2_SSL_ENV_KEYS = (
+    "REQUESTS_CA_BUNDLE",
+    "SSL_CERT_FILE",
+    "CURL_CA_BUNDLE",
+)
 
 
 def is_bootstrapped() -> bool:
@@ -74,13 +79,24 @@ def bootstrap() -> None:
     # 3. Inizializza database PostgreSQL (pool + tabelle)
     init_all_dbs()
 
-    # 4. Mark boundary crossed. Set LAST so any exception from
+    # 4. Rimuove eventuali variabili SSL globali lasciate dal vecchio
+    # path psycopg2 durante il primo connect. Con psycopg3 normalmente
+    # non accade, ma lo step resta idempotente e protegge ambienti
+    # misti/legacy.
+    _repair_psycopg2_ssl_env()
+
+    # 5. Mark boundary crossed. Set LAST so any exception from
     # steps 1-3 leaves the flag at its prior value — there is no
     # path that can flip the flag con un bootstrap incompleto.
-    # (psycopg3 NON inquina l'env con SSL vars come faceva psycopg2,
-    # quindi la vecchia workaround `_repair_psycopg2_ssl_env` qui non
-    # serve piu' ed e' stata rimossa nello stesso refactor.)
     _BOOT_COMPLETE = True
+
+
+def _repair_psycopg2_ssl_env() -> None:
+    """Remove SSL env vars that legacy psycopg2 initialization could leak."""
+    import os
+
+    for name in _PSYCOPG2_SSL_ENV_KEYS:
+        os.environ.pop(name, None)
 
 
 def teardown() -> None:

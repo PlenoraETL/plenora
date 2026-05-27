@@ -122,7 +122,7 @@ def test_archive_hook_invokes_writer_when_enabled(
         "app.config.settings",
         new=_settings_ns(LOG_ARCHIVE_ENABLED=True, **{retention_key: retention_days}),
     ), patch(
-        "app.infrastructure.storage.cloud_backends.get_log_archive_storage",
+        "app.core.io.object_storage.get_log_archive_storage",
         return_value=mock_storage,
     ), patch(
         "app.core.scheduler.log_archive.LogArchiveWriter",
@@ -192,7 +192,7 @@ def test_archive_hook_skips_before_writer_on_disabled_or_zero_retention(
     with patch(
         "app.config.settings", new=_settings_ns(**settings_overrides),
     ), patch(
-        "app.infrastructure.storage.cloud_backends.get_log_archive_storage",
+        "app.core.io.object_storage.get_log_archive_storage",
     ) as mock_get_storage, patch(
         "app.core.scheduler.log_archive.LogArchiveWriter",
     ) as mock_writer_cls, patch(
@@ -232,7 +232,7 @@ def test_archive_hook_24h_gate(
     with patch(
         "app.config.settings", new=_settings_ns(),
     ), patch(
-        "app.infrastructure.storage.cloud_backends.get_log_archive_storage",
+        "app.core.io.object_storage.get_log_archive_storage",
         return_value=MagicMock(),
     ), patch(
         "app.core.scheduler.log_archive.LogArchiveWriter",
@@ -281,7 +281,7 @@ def test_archive_hook_failure_swallowed_and_slot_not_updated(
     with patch(
         "app.config.settings", new=_settings_ns(),
     ), patch(
-        "app.infrastructure.storage.cloud_backends.get_log_archive_storage",
+        "app.core.io.object_storage.get_log_archive_storage",
         return_value=MagicMock(),
     ), patch(
         "app.core.scheduler.log_archive.LogArchiveWriter",
@@ -373,7 +373,7 @@ def test_select_rows_closure_builds_ordered_query(
     with patch(
         "app.config.settings", new=_settings_ns(),
     ), patch(
-        "app.infrastructure.storage.cloud_backends.get_log_archive_storage",
+        "app.core.io.object_storage.get_log_archive_storage",
         return_value=MagicMock(),
     ), patch(
         "app.core.scheduler.log_archive.LogArchiveWriter",
@@ -425,7 +425,7 @@ def test_retention_bypass_execute_closure_sets_local_flag_on_same_cursor(
     with patch(
         "app.config.settings", new=_settings_ns(),
     ), patch(
-        "app.infrastructure.storage.cloud_backends.get_log_archive_storage",
+        "app.core.io.object_storage.get_log_archive_storage",
         return_value=MagicMock(),
     ), patch(
         "app.core.scheduler.log_archive.LogArchiveWriter",
@@ -475,7 +475,7 @@ def test_archive_hook_emits_observability_insert_on_success(
         "app.config.settings",
         new=_settings_ns(LOG_ARCHIVE_ENABLED=True, **{retention_key: retention_days}),
     ), patch(
-        "app.infrastructure.storage.cloud_backends.get_log_archive_storage",
+        "app.core.io.object_storage.get_log_archive_storage",
         return_value=MagicMock(),
     ), patch(
         "app.core.scheduler.log_archive.LogArchiveWriter",
@@ -531,7 +531,7 @@ def test_archive_hook_skips_observability_when_gate_early_returns():
     with patch(
         "app.config.settings", new=_settings_ns(LOG_ARCHIVE_ENABLED=False),
     ), patch(
-        "app.infrastructure.storage.cloud_backends.get_log_archive_storage",
+        "app.core.io.object_storage.get_log_archive_storage",
     ), patch(
         "app.core.scheduler.log_archive.LogArchiveWriter",
     ), patch(
@@ -543,7 +543,7 @@ def test_archive_hook_skips_observability_when_gate_early_returns():
         "app.config.settings",
         new=_settings_ns(LOG_ARCHIVE_ENABLED=True, AUDIT_RETENTION_DAYS=0),
     ), patch(
-        "app.infrastructure.storage.cloud_backends.get_log_archive_storage",
+        "app.core.io.object_storage.get_log_archive_storage",
     ), patch(
         "app.core.scheduler.log_archive.LogArchiveWriter",
     ), patch(
@@ -562,7 +562,7 @@ def test_archive_old_logs_skips_observability_when_archive_fails(monkeypatch):
     with patch(
         "app.config.settings", new=_settings_ns(),
     ), patch(
-        "app.infrastructure.storage.cloud_backends.get_log_archive_storage",
+        "app.core.io.object_storage.get_log_archive_storage",
         return_value=MagicMock(),
     ), patch(
         "app.core.scheduler.log_archive.LogArchiveWriter",
@@ -593,7 +593,7 @@ def test_archive_old_logs_observability_failure_does_not_regress_archive_ok(
     with patch(
         "app.config.settings", new=_settings_ns(),
     ), patch(
-        "app.infrastructure.storage.cloud_backends.get_log_archive_storage",
+        "app.core.io.object_storage.get_log_archive_storage",
         return_value=MagicMock(),
     ), patch(
         "app.core.scheduler.log_archive.LogArchiveWriter",

@@ -17,19 +17,17 @@ from typing import Any, BinaryIO, Dict, List, Optional, Tuple
 import app.core.files.db as files_db
 from app.core.auth.visibility import is_resource_visible, is_shareable
 from app.core.files import load_dispatch as _load_dispatch
-from app.core.files.multi_layer_upload import (
-    create_multi_layer_from_upload as _create_multi_layer_from_upload,
-)
+from app.core.files import multi_layer_upload as _multi_layer_upload
 from app.core.files.preview_temp import preview_file_temp as _preview_file_temp
-from app.core.files.raw_upload import create_raw_from_upload as _create_raw_from_upload
-from app.core.files.source_blob import get_blob_from_db as _read_blob_from_db
+from app.core.files import raw_upload as _raw_upload
+from app.core.files import source_blob as _source_blob
 from app.core.files import source_metadata as _source_metadata
-from app.core.files.source_read import get_layers_info as _read_layers_info
-from app.core.files.source_read import get_preview as _read_preview
+from app.core.files import source_read as _source_read
 from app.core.files.source_read import FileSourceLayersPayload, FileSourcePreviewPayload
 from app.core.files.preview_temp import FilePreviewTempPayload
-from app.core.files.source_read import load_dataframe as _read_dataframe
 from app.core.files.storage_dispatch import BlobDispatchResult, dispatch_blob_storage
+from typing import Protocol
+
 from app.core.files.service_deps import (  # noqa: F401 (public domain export)
     LoggerProtocol,
     DataLoaderProtocol,
@@ -49,6 +47,10 @@ from app.infrastructure.storage import compensation as storage_compensation
 
 # Non-blocking GDAL compatibility warning for newer GeoPackage user_version.
 warnings.filterwarnings("ignore", message=".*GeoPackage user_version.*may only be partially supported.*")
+
+
+class FileSystemProtocol(Protocol):
+    """Legacy constructor marker; no runtime filesystem methods are used."""
 
 # Module-level fallback for helpers constructed before FileSourceService exists.
 try:
@@ -153,6 +155,7 @@ class FileSourceService:
     
     def __init__(
         self,
+        filesystem: Optional[FileSystemProtocol] = None,
         data_loader: Optional[DataLoaderProtocol] = None,
         logger: Optional[LoggerProtocol] = None,
         time_provider: Optional[TimeProviderProtocol] = None,
@@ -160,6 +163,7 @@ class FileSourceService:
         # `filesystem` kwarg + `self._fs` rimossi (2026-05-26): erano
         # legacy DI passati a `_preview_file_temp(fs=...)` che li
         # ignorava esplicitamente. DefaultFileSystem tombstonato.
+        self._fs = filesystem
         self._loader = data_loader or DefaultDataLoader()
         self._logger = logger or NullLogger()
         self._time = time_provider or DefaultTimeProvider()
@@ -310,7 +314,7 @@ class FileSourceService:
     def _get_blob_from_db(
         self, file_id: str, expected_group_id: str = None,
     ) -> Optional[bytes]:
-        return _read_blob_from_db(
+        return _source_blob.get_blob_from_db(
             file_id,
             expected_group_id=expected_group_id,
             assert_visible=self._assert_visible,
@@ -383,7 +387,7 @@ class FileSourceService:
         group_id: str = None,
     ) -> FileSource:
         from app.config import settings
-        return _create_raw_from_upload(
+        return _raw_upload.create_raw_from_upload(
             file_content, filename, name, description, group_id,
             generate_file_id=self._generate_file_id,
             time_now=self._time.now,
@@ -416,7 +420,7 @@ class FileSourceService:
                 logger=self._logger,
             )
 
-        return _create_multi_layer_from_upload(
+        return _multi_layer_upload.create_multi_layer_from_upload(
             file_content, filename, name, description,
             layers_config, srid, group_id,
             generate_file_id=self._generate_file_id,
@@ -440,7 +444,7 @@ class FileSourceService:
         N1 resta fail-closed: il modulo estratto riceve `_assert_visible`
         come collaborator esplicito.
         """
-        return _read_dataframe(
+        return _source_read.load_dataframe(
             file_id,
             layer=layer,
             sheet=sheet,
@@ -476,7 +480,7 @@ class FileSourceService:
 
         N1: `expected_group_id` obbligatorio per fail-closed check.
         """
-        return _read_layers_info(
+        return _source_read.get_layers_info(
             file_id,
             expected_group_id=expected_group_id,
             assert_visible=self._assert_visible,
@@ -492,7 +496,7 @@ class FileSourceService:
 
         N1: `expected_group_id` obbligatorio per fail-closed check.
         """
-        return _read_preview(
+        return _source_read.get_preview(
             file_id,
             limit=limit,
             expected_group_id=expected_group_id,
@@ -518,7 +522,7 @@ class FileSourceService:
             loader=self._loader,
             format_detector=self._format_detector,
             column_builder=self._column_builder,
-            logger=self._logger,
+                    logger=getattr(self, "_logger", NullLogger()),
             layer=layer,
             sheet=sheet,
         )

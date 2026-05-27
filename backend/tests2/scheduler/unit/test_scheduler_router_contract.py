@@ -39,18 +39,30 @@ def test_download_without_run_uses_latest_archived_schedule_run(current_user, tm
 
     schedule_id = "schedule_123456789abc"
     project_id = "proj-1"
-    schedule_short = schedule_id.replace("schedule_", "")[:12]
-    older = tmp_path / project_id / "runs" / schedule_short / "20260401_060000"
-    newer = tmp_path / project_id / "runs" / schedule_short / "20260402_060000"
-    older.mkdir(parents=True, exist_ok=True)
-    newer.mkdir(parents=True, exist_ok=True)
-    (older / "older.csv").write_text("id\n1\n", encoding="utf-8")
-    (newer / "newer.csv").write_text("id\n2\n", encoding="utf-8")
-
     schedule_cfg = SimpleNamespace(pipeline=SimpleNamespace(project_id=project_id))
+    result_rows = {
+        "res-old": SimpleNamespace(
+            id="res-old",
+            project_id=project_id,
+            filename="older.csv",
+            size_bytes=5,
+        ),
+        "res-new": SimpleNamespace(
+            id="res-new",
+            project_id=project_id,
+            filename="newer.csv",
+            size_bytes=5,
+        ),
+    }
 
     with patch("app.core.scheduler.schedule_service.ScheduleService.get_schedule", return_value=schedule_cfg), \
          patch("app.core.scheduler.db.get_schedule_row", return_value=SimpleNamespace(id=schedule_id, group_id="grp-1")), \
+         patch("app.core.scheduler.db.list_schedule_logs", return_value=[
+             {"timestamp_str": "20260402_060000", "execution_info": {"result_id": "res-new"}},
+             {"timestamp_str": "20260401_060000", "execution_info": {"result_id": "res-old"}},
+         ]), \
+         patch("app.core.results.store.get_result_row", side_effect=lambda rid: result_rows.get(rid)), \
+         patch("app.core.results.store.get_result_data", side_effect=lambda rid, group_id=None: {"res-old": b"id\n1\n", "res-new": b"id\n2\n"}[rid]), \
          patch("app.config.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)):
         response = client.get(f"/api/schedules/{schedule_id}/download")
 
@@ -76,15 +88,21 @@ def test_download_specific_run_returns_requested_file(current_user, tmp_path):
 
     schedule_id = "schedule_123456789abc"
     project_id = "proj-1"
-    schedule_short = schedule_id.replace("schedule_", "")[:12]
-    run_dir = tmp_path / project_id / "runs" / schedule_short / "20260402_060000"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "requested.csv").write_text("id\n7\n", encoding="utf-8")
-
     schedule_cfg = SimpleNamespace(pipeline=SimpleNamespace(project_id=project_id))
+    result_row = SimpleNamespace(
+        id="res-7",
+        project_id=project_id,
+        filename="requested.csv",
+        size_bytes=5,
+    )
 
     with patch("app.core.scheduler.schedule_service.ScheduleService.get_schedule", return_value=schedule_cfg), \
          patch("app.core.scheduler.db.get_schedule_row", return_value=SimpleNamespace(id=schedule_id, group_id="grp-1")), \
+         patch("app.core.scheduler.db.list_schedule_logs", return_value=[
+             {"timestamp_str": "20260402_060000", "execution_info": {"result_id": "res-7"}},
+         ]), \
+         patch("app.core.results.store.get_result_row", return_value=result_row), \
+         patch("app.core.results.store.get_result_data", return_value=b"id\n7\n"), \
          patch("app.config.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)):
         response = client.get(
             f"/api/schedules/{schedule_id}/download",

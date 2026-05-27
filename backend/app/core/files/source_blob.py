@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import Any, Callable, Optional
 
 from app.core.resources.exceptions import MemoryLimitExceededError
-from app.core.resources.file_source_blob_access import load_file_source_blob_bytes
+from app.core.resources import file_source_blob_access
 
 
 AssertVisible = Callable[[str, str], None]
@@ -40,7 +40,7 @@ def get_blob_from_db(
     is_superadmin_caller = expected_group_id == superadmin_bypass
 
     def _fetch(is_superadmin: bool) -> Optional[bytes]:
-        return load_file_source_blob_bytes(
+        return file_source_blob_access.load_file_source_blob_bytes(
             file_source_id=file_id,
             expected_group_id=(expected_group_id or "").strip()
             or superadmin_bypass,

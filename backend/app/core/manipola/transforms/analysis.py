@@ -19,7 +19,7 @@ from app.core.dataframes.tabular import (
     sample_dataframe,
     sample_rows_reset_index,
 )
-from app.core.manipola.types import JsonObject
+from app.core.manipola.types import FrameMap, JsonObject
 from app.utils.logger import get_logger
 
 logger = get_logger("app.core.manipola.transforms.base")
@@ -263,7 +263,7 @@ def op_flatten_json(
         if output_columns:
             wanted = list(output_columns)
             # Strip del prefix per ottenere il path JSON originale.
-            extracted_cols: dict = {}
+            extracted_cols: FrameMap = {}
             skipped_too_deep: list = []
             for full_col_name in wanted:
                 if not full_col_name.startswith(col_prefix):

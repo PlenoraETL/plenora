@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -49,6 +50,12 @@ class FakeScheduleRuntime:
         return SimpleNamespace(id="scheduled-runtime-1")
 
 
+def _assert_auto_scheduled_for(kwargs: dict[str, object]) -> None:
+    scheduled_for = kwargs.get("scheduled_for")
+    assert isinstance(scheduled_for, str)
+    datetime.fromisoformat(scheduled_for)
+
+
 def test_enqueue_schedule_run_adapts_manual_run_to_runtime_shape() -> None:
     task = FakeScheduleTask()
 
@@ -60,12 +67,11 @@ def test_enqueue_schedule_run_adapts_manual_run_to_runtime_shape() -> None:
     )
 
     assert handle.id == "scheduled-task-1"
-    assert task.calls == [
-        {
-            "args": ["schedule-1"],
-            "kwargs": {"triggered_by": "manual", "retry_attempt": 0},
-        }
-    ]
+    assert task.calls[0]["args"] == ["schedule-1"]
+    kwargs = task.calls[0]["kwargs"]
+    assert kwargs["triggered_by"] == "manual"
+    assert kwargs["retry_attempt"] == 0
+    _assert_auto_scheduled_for(kwargs)
 
 
 def test_enqueue_schedule_run_dispatches_by_task_name_through_runtime() -> None:
@@ -79,13 +85,12 @@ def test_enqueue_schedule_run_dispatches_by_task_name_through_runtime() -> None:
     )
 
     assert handle.id == "scheduled-runtime-1"
-    assert runtime.calls == [
-        {
-            "name": SCHEDULE_PIPELINE_TASK_NAME,
-            "args": ["schedule-1"],
-            "kwargs": {"triggered_by": "manual", "retry_attempt": 0},
-        }
-    ]
+    assert runtime.calls[0]["name"] == SCHEDULE_PIPELINE_TASK_NAME
+    assert runtime.calls[0]["args"] == ["schedule-1"]
+    kwargs = runtime.calls[0]["kwargs"]
+    assert kwargs["triggered_by"] == "manual"
+    assert kwargs["retry_attempt"] == 0
+    _assert_auto_scheduled_for(kwargs)
 
 
 def test_enqueue_schedule_run_adapts_retry_countdown_and_scheduled_for() -> None:
@@ -117,10 +122,10 @@ def test_scheduler_task_name_and_kwargs_are_canonical() -> None:
     assert SCHEDULE_PIPELINE_TASK_NAME == (
         "workers.tasks.schedule_task.schedule_pipeline_task"
     )
-    assert scheduled_run_kwargs(triggered_by="cron") == {
-        "triggered_by": "cron",
-        "retry_attempt": 0,
-    }
+    cron_kwargs = scheduled_run_kwargs(triggered_by="cron")
+    assert cron_kwargs["triggered_by"] == "cron"
+    assert cron_kwargs["retry_attempt"] == 0
+    _assert_auto_scheduled_for(cron_kwargs)
     assert scheduled_run_kwargs(
         triggered_by="catchup",
         scheduled_for="2026-05-14T10:00:00+00:00",
