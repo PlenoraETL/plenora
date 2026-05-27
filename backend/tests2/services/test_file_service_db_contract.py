@@ -201,36 +201,32 @@ def test_no_temp_dir_leak_on_upload(monkeypatch):
     assert not leaked, f"Temp dir leak dopo upload: {leaked}"
 
 
-# 3. DI Protocol: service gira con mocks (filesystem/loader)
+# 3. DI Protocol: service gira con mocks (loader/logger/time)
 
 
 def test_service_can_be_instantiated_with_mocks():
-    """Il contratto DI dichiarato (FileSystemProtocol, DataLoaderProtocol,
-    LoggerProtocol, TimeProviderProtocol) e' usabile: costruire il service
-    con tutti mock non crasha e espone l'API pubblica.
+    """Il contratto DI dichiarato (DataLoaderProtocol, LoggerProtocol,
+    TimeProviderProtocol) e' usabile: costruire il service con tutti i mock
+    runtime ancora supportati non crasha e espone l'API pubblica.
     """
     from app.core.files.service import (
         FileSourceService,
-        FileSystemProtocol,
         DataLoaderProtocol,
         LoggerProtocol,
         TimeProviderProtocol,
     )
 
-    mock_fs = MagicMock(spec=FileSystemProtocol)
     mock_loader = MagicMock(spec=DataLoaderProtocol)
     mock_logger = MagicMock(spec=LoggerProtocol)
     mock_time = MagicMock(spec=TimeProviderProtocol)
 
     svc = FileSourceService(
-        filesystem=mock_fs,
         data_loader=mock_loader,
         logger=mock_logger,
         time_provider=mock_time,
     )
 
     # Service attributes set correttamente
-    assert svc._fs is mock_fs
     assert svc._loader is mock_loader
     assert svc._logger is mock_logger
     assert svc._time is mock_time
@@ -244,6 +240,15 @@ def test_service_no_longer_exposes_files_dir_fs_attrs():
     svc = FileSourceService()
     assert not hasattr(svc, "_files_dir")
     assert not hasattr(svc, "FILES_DIR")
+    assert not hasattr(svc, "_fs")
+
+
+def test_service_init_no_longer_accepts_filesystem():
+    """Parametro `filesystem` rimosso insieme al vecchio filesystem DI."""
+    from app.core.files.service import FileSourceService
+
+    with pytest.raises(TypeError):
+        FileSourceService(filesystem=MagicMock())
 
 
 def test_service_init_no_longer_accepts_files_dir():

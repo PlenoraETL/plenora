@@ -12,9 +12,7 @@ WorkingDirectory=/home/ubuntu/plenora-etl/backend
 
 # AWS region per SSM (fetch secrets) e S3 (upload).
 Environment=AWS_REGION=eu-south-1
-# Bucket object storage. Nome cross-provider BACKUP_BUCKET; lasciamo
-# anche BACKUP_S3_BUCKET per retro-compat (factory cloud_backends
-# accetta entrambi).
+# Bucket object storage. Nome cross-provider BACKUP_BUCKET.
 Environment=BACKUP_BUCKET=plenora-backup-112011134642-eu-south-1-an
 
 # C1: secrets da AWS SSM, NON da backend/.env.

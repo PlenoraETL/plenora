@@ -103,7 +103,7 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 
 - `blob_writer.py`: buon punto di orizzontalizzazione. Salva in DB o object storage e registra upload intent per reconciliation.
 - `pipeline_result.py`: per `gpkg`/`shp` usa temp locale solo per serializzare, poi salva bytes come result blob. Ok se il temp e' effimero.
-- `legacy_file_store.py`, `temp_paths.py`, `result_reader.py`: compat filesystem/temp confinata ad adapter interni. I router non usano piu' `RESULTS_DIR` come fallback download/input operativo.
+- `output_file_cleanup.py`, `temp_paths.py`, `result_reader.py`: filesystem/temp confinato ad adapter interni. I router non usano piu' `RESULTS_DIR` come fallback download/input operativo.
 - `db.py` e `cleanup_repository.py`: repository result migrati a `unit_of_work()`/`PgSession` espliciti, senza import diretto dei wrapper legacy `execute/fetchone/fetchall`.
 - `cleanup.py`: usa `FOR UPDATE` e reconciliation, buono per concorrenza.
 

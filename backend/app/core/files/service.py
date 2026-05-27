@@ -26,7 +26,6 @@ from app.core.files import source_read as _source_read
 from app.core.files.source_read import FileSourceLayersPayload, FileSourcePreviewPayload
 from app.core.files.preview_temp import FilePreviewTempPayload
 from app.core.resources.blob_dispatch import BlobDispatchResult, dispatch_blob_storage
-from typing import Protocol
 
 from app.core.files.service_deps import (  # noqa: F401 (public domain export)
     LoggerProtocol,
@@ -48,9 +47,6 @@ from app.infrastructure.storage import compensation as storage_compensation
 # Non-blocking GDAL compatibility warning for newer GeoPackage user_version.
 warnings.filterwarnings("ignore", message=".*GeoPackage user_version.*may only be partially supported.*")
 
-
-class FileSystemProtocol(Protocol):
-    """Legacy constructor marker; no runtime filesystem methods are used."""
 
 # Module-level fallback for helpers constructed before FileSourceService exists.
 try:
@@ -147,7 +143,6 @@ class FileSourceService:
     6. Salva metadata.json con info complete
     
     Dependency Injection per testabilità:
-    - filesystem: operazioni I/O (mock per test senza filesystem reale)
     - data_loader: caricamento dati (mock per test senza GeoPandas/Pyogrio)
     - logger: logging (NullLogger per test silenziosi)
     - time_provider: datetime/uuid (mock per test deterministici)
@@ -155,15 +150,10 @@ class FileSourceService:
     
     def __init__(
         self,
-        filesystem: Optional[FileSystemProtocol] = None,
         data_loader: Optional[DataLoaderProtocol] = None,
         logger: Optional[LoggerProtocol] = None,
         time_provider: Optional[TimeProviderProtocol] = None,
     ) -> None:
-        # `filesystem` kwarg + `self._fs` rimossi (2026-05-26): erano
-        # legacy DI passati a `_preview_file_temp(fs=...)` che li
-        # ignorava esplicitamente. DefaultFileSystem tombstonato.
-        self._fs = filesystem
         self._loader = data_loader or DefaultDataLoader()
         self._logger = logger or NullLogger()
         self._time = time_provider or DefaultTimeProvider()
@@ -519,10 +509,9 @@ class FileSourceService:
         return _preview_file_temp(
             file_content,
             filename,
-            loader=self._loader,
             format_detector=self._format_detector,
             column_builder=self._column_builder,
-                    logger=getattr(self, "_logger", NullLogger()),
+            logger=getattr(self, "_logger", NullLogger()),
             layer=layer,
             sheet=sheet,
         )

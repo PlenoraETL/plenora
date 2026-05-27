@@ -54,10 +54,6 @@ def preview_file_temp(
     logger,
     layer: Optional[str] = None,
     sheet: Optional[str] = None,
-    # Legacy `loader` kwarg preservato per backward compat con
-    # FileSourceService caller; intentionally ignored. `fs` kwarg
-    # rimosso post tombstone DefaultFileSystem (2026-05-26).
-    loader=None,
 ) -> FilePreviewTempPayload:
     """Preview temporanea di un file prima dell'upload definitivo.
 
@@ -78,11 +74,6 @@ def preview_file_temp(
         logger: LoggerProtocol-like (warning/debug usato qui).
         layer: layer GPKG/GDB da caricare (opzionale).
         sheet: foglio XLSX da caricare (opzionale).
-        loader: legacy collaborator kwarg, ignorato (RAM-only path non
-            lo usa). Tenuto per compat callsite finche' non e' tutto
-            allineato. Il kwarg `fs` (DefaultFileSystem) e' stato rimosso
-            nel tombstone DefaultFileSystem (2026-05-26).
-
     Returns:
         dict con `columns`, `row_count`, `format`, `layers`, `sheets`.
         Post-RAM-1: `row_count` puo' essere `None` quando il formato

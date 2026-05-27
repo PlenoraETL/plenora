@@ -195,7 +195,7 @@ class Settings:
         "AUDIT_RETENTION_DAYS": 365,
         # NB: LOG_ARCHIVE_BUCKET e' intenzionalmente fuori da DEFAULTS —
         # e' required-if-enabled con validazione fail-fast a boot
-        # ADR-0014 §A3: distinto da BACKUP_BUCKET/BACKUP_S3_BUCKET
+        # ADR-0014 §A3: distinto da BACKUP_BUCKET
 
         "SUPPORTED_PROJECT_TYPES": ["estrai", "manipola", "arricchisci", "salva"],
         "DEFAULT_GROUP": "default",
@@ -511,7 +511,7 @@ class Settings:
         # questi default sono i valori esposti al FE quando l'env e'
         # unset, e devono essere overridabili via env per allineare il
         # display alla schedule effettivamente configurata sul deployment
-        # NOTA: `BACKUP_BUCKET`, `BACKUP_S3_BUCKET`, `AWS_REGION` restano
+        # NOTA: `BACKUP_BUCKET`, `AWS_REGION` restano
         # DEPLOY_INFRA env-only, ma i consumer passano da Settings/storage
         # boundary (`cloud_backends._resolve_backup_bucket`,
         # `_build_object_storage`, admin backup service).

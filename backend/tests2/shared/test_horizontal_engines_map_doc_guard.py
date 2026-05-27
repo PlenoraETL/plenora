@@ -115,7 +115,7 @@ def test_doc_references_canonical_entry_points(doc_text: str):
         "app/core/dataframes/schema.py",
         "app/core/dataframes/values.py",
         "app/core/resources/*",
-        "app/core/results/legacy_file_store.py",
+        "app/core/results/output_file_cleanup.py",
         "app/core/files/cleanup.py",
         "app/core/scheduler/run_archive_store.py",
         "app/core/eseguibili/output_store.py",
@@ -124,7 +124,7 @@ def test_doc_references_canonical_entry_points(doc_text: str):
         "app/shared/resources/file_cleanup.py",
         "app/db/config/*",
         "app/observability/health.py",
-        "app/core/admin_system_status/worker_runtime.py",
+        "app/core/task_runtime/probes.py",
         "scripts/install.sh",
     )
     for path in expected_paths:
@@ -214,15 +214,15 @@ def test_do_not_import_lists_canonical_guards(doc_text: str):
         ("app.core.imdf.publish_dispatcher",
          "Do-not-import section must point production callers at "
          "the IMDF dispatch boundary."),
-        ("app.core.admin_system_status.worker_runtime",
+        ("app.core.task_runtime.probes",
          "Do-not-import section must point production callers at "
-         "the admin worker runtime boundary."),
+         "the task-runtime worker probe boundary."),
         ("app.core.files.cleanup",
          "Do-not-import section must point group file-source cleanup "
          "at the storage-aware lifecycle boundary."),
-        ("app.core.results.legacy_file_store",
-         "Do-not-import section must point legacy result files "
-         "at the result file-store boundary."),
+        ("app.core.results.output_file_cleanup",
+         "Do-not-import section must point project result output cleanup "
+         "at the result cleanup boundary."),
         ("app.core.eseguibili.output_store",
          "Do-not-import section must point eseguibili output access "
          "at the task-scoped output boundary."),

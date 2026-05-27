@@ -143,7 +143,7 @@ Keep backup storage separate from runtime storage:
 
 ```bash
 BACKUP_BUCKET=<plenora-backup-bucket>
-BACKUP_S3_BUCKET=<plenora-backup-bucket>
+BACKUP_BUCKET=<plenora-backup-bucket>
 BACKUP_S3_REGION=<region>
 ```
 
@@ -230,7 +230,7 @@ OBJECT_STORAGE_BACKEND=s3
 OBJECT_STORAGE_BUCKET=<plenora-runtime-bucket>
 PLENORA_ARTIFACT_BUCKET=<plenora-runtime-bucket>
 BACKUP_BUCKET=<plenora-backup-bucket>
-BACKUP_S3_BUCKET=<plenora-backup-bucket>
+BACKUP_BUCKET=<plenora-backup-bucket>
 BACKUP_S3_REGION=<region>
 INTERMEDIATE_PERSISTENCE_MODE=metadata_only
 ```

@@ -115,8 +115,7 @@ def _to_datetime(value: Any) -> datetime:
 # ── Config — nomi canonical allineati a cloud_backends.py ─────────────────
 # `BUCKET` -> delega a `cloud_backends._resolve_backup_bucket`
 # DEPLOY_INFRA, env-only) che gia' centralizza la chain
-# `BACKUP_BUCKET` -> legacy `BACKUP_S3_BUCKET`. Fallback hardcoded
-# preservato come prima per deployment legacy senza env
+# `BACKUP_BUCKET` -> canonical backup bucket env-only.
 # `REGION` -> single env read `AWS_REGION` (DEPLOY_INFRA). Il
 # NOTE: legacy alias `BACKUP_S3_REGION` era un dead alias (zero altri
 # consumer in repo) e viene retirato qui

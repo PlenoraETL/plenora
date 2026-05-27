@@ -9,7 +9,6 @@ from __future__ import annotations
 import bcrypt
 from argon2 import PasswordHasher
 from argon2.exceptions import (
-    HashingError,  # noqa: F401 (compatibility export potenziale; mantenuto per parita'
     InvalidHashError,
     VerificationError,
     VerifyMismatchError,
@@ -19,7 +18,6 @@ from argon2.exceptions import (
 _ph = PasswordHasher()
 
 __all__ = [
-    "HashingError",
     "hash_password",
     "verify_password",
     "needs_rehash",

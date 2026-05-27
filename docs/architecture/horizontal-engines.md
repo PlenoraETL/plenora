@@ -78,6 +78,7 @@ Canonical surfaces:
 - `app/shared/execution/schema_types.py`
 - `app/core/orchestrator/*`
 - `app/core/task_runtime/*`
+- `app/core/task_runtime/probes.py`
 - `app/core/scheduler/job_dispatcher.py`
 - `app/core/scheduler/run_log_store.py`
 - `app/core/imdf/publish_dispatcher.py`
@@ -223,7 +224,7 @@ Canonical surfaces:
 - `app/core/resources/*`
 - `app/core/resources/stores/*`
 - `app/core/artifacts/*`
-- `app/core/results/legacy_file_store.py`
+- `app/core/results/output_file_cleanup.py`
 - `app/core/files/cleanup.py`
 - `app/core/scheduler/run_archive_store.py`
 - `app/core/eseguibili/output_store.py`
@@ -253,8 +254,8 @@ Current contracts:
 - Result object-storage writes record `upload_intent` before upload and
   close it only after the `results` row is saved or after confirmed
   compensating delete.
-- Legacy filesystem result downloads and output-file cleanup should go
-  through `app/core/results/legacy_file_store.py`.
+- Project result output-file cleanup should go through
+  `app/core/results/output_file_cleanup.py`.
 - Scheduled-run filesystem archive lookup should go through
   `app/core/scheduler/run_archive_store.py`; the catalog should merge store
   outputs, not encode archive layout itself.
@@ -324,7 +325,7 @@ Rules:
 Canonical surfaces:
 
 - `app/observability/health.py`
-- `app/core/admin_system_status/worker_runtime.py`
+- `app/core/task_runtime/probes.py`
 - `scripts/install.sh`
 - `scripts/docker-validate.sh`
 - `backend/Dockerfile`
@@ -345,7 +346,7 @@ Rules:
 - Prefer automated checks over long manual checklists.
 - Keep `/health` cheap and `/ready` bounded.
 - Admin status code should probe Celery through
-  `app/core/admin_system_status/worker_runtime.py`, not direct worker imports.
+  `app/core/task_runtime/probes.py`, not direct worker imports.
 - Do not claim Docker production readiness until a real Linux-PC validation
   report exists.
 
@@ -404,11 +405,11 @@ Rules:
 - Do not enqueue IMDF publish tasks directly through
   `workers.tasks.imdf_publish_task`; use `app.core.imdf.publish_dispatcher`.
 - Do not inspect Celery workers directly from admin service code; use
-  `app.core.admin_system_status.worker_runtime`.
+  `app.core.task_runtime.probes`.
 - Do not remove file-source group rows through the generic DB cleanup helper;
   use `app.core.files.cleanup`.
-- Do not inspect or delete legacy result files directly from API routers; use
-  `app.core.results.legacy_file_store`.
+- Do not delete project result output files directly from API routers; use
+  `app.core.results.output_file_cleanup`.
 - Do not encode scheduled-run archive path/listing/lookup in catalog or router
   code; use `app.core.scheduler.run_archive_store`.
 - Do not lookup or stream raw eseguibili output keys from API routers; use

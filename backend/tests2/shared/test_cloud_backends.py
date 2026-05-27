@@ -20,7 +20,7 @@ def _isolate_bucket_env(monkeypatch):
     """Test-only env isolation per i factory bucket di cloud_backends.
 
     `_resolve_runtime_bucket()` legge in priorita' OBJECT_STORAGE_BUCKET →
-    PLENORA_ARTIFACT_BUCKET → BACKUP_BUCKET → BACKUP_S3_BUCKET. Senza
+    PLENORA_ARTIFACT_BUCKET → BACKUP_BUCKET. Senza
     questo isolamento i test che asseriscono "ValueError quando bucket
     mancante" falliscono in locale dove `.env` ha OBJECT_STORAGE_BUCKET
     valorizzato (CI passa perche' `.env` non e' presente).
@@ -30,7 +30,6 @@ def _isolate_bucket_env(monkeypatch):
         "OBJECT_STORAGE_BUCKET",
         "PLENORA_ARTIFACT_BUCKET",
         "BACKUP_BUCKET",
-        "BACKUP_S3_BUCKET",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -82,26 +81,23 @@ def test_factory_unknown_provider_raises(cb, monkeypatch):
 def test_object_storage_factory_requires_bucket(cb, monkeypatch):
     monkeypatch.setenv("CLOUD_PROVIDER", "aws")
     monkeypatch.delenv("BACKUP_BUCKET", raising=False)
-    monkeypatch.delenv("BACKUP_S3_BUCKET", raising=False)
     with pytest.raises(ValueError, match="BACKUP_BUCKET"):
         cb.get_backup_object_storage()
 
 
-def test_object_storage_factory_accepts_legacy_env_name(cb, monkeypatch):
-    """BACKUP_S3_BUCKET e' il nome legacy, BACKUP_BUCKET e' quello nuovo
-    cross-provider. Factory accetta entrambi."""
+def test_object_storage_factory_rejects_removed_legacy_env_name(cb, monkeypatch):
+    """BACKUP_S3_BUCKET e' rimosso: BACKUP_BUCKET e' il nome cross-provider."""
     monkeypatch.setenv("CLOUD_PROVIDER", "aws")
     monkeypatch.delenv("BACKUP_BUCKET", raising=False)
     monkeypatch.setenv("BACKUP_S3_BUCKET", "legacy-bucket")
-    storage = cb.get_backup_object_storage()
-    assert storage.bucket == "legacy-bucket"
+    with pytest.raises(ValueError, match="BACKUP_BUCKET"):
+        cb.get_backup_object_storage()
 
 
 def test_object_storage_factory_prefers_new_env_name(cb, monkeypatch):
-    """BACKUP_BUCKET (nuovo) ha priorita' su BACKUP_S3_BUCKET (legacy)."""
+    """BACKUP_BUCKET e' il nome canonico per backup cross-provider."""
     monkeypatch.setenv("CLOUD_PROVIDER", "aws")
     monkeypatch.setenv("BACKUP_BUCKET", "new-name")
-    monkeypatch.setenv("BACKUP_S3_BUCKET", "legacy")
     storage = cb.get_backup_object_storage()
     assert storage.bucket == "new-name"
 

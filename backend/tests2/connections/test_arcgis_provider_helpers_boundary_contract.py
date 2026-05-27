@@ -24,30 +24,9 @@ def _imports(rel_path: str) -> set[str]:
     return imports
 
 
-def test_arcgis_sql_helpers_legacy_path_reexports_connections_boundary() -> None:
-    from app.core.connections.arcgis_sql_helpers import (
-        chunked,
-        query_oid_by_key,
-        quote_sql_value,
-    )
-    from app.core.features import arcgis_sql_helpers as legacy
-
-    assert legacy.chunked is chunked
-    assert legacy.query_oid_by_key is query_oid_by_key
-    assert legacy.quote_sql_value is quote_sql_value
-
-
-def test_arcgis_publish_modes_legacy_path_reexports_connections_boundary() -> None:
-    from app.core.connections.arcgis_publish_modes import (
-        ArcGISPublishModeLayerResult,
-        ArcGISPublishModeProviderProtocol,
-        publish_existing_layer_mode,
-    )
-    from app.core.features import arcgis_publish_modes as legacy
-
-    assert legacy.ArcGISPublishModeLayerResult is ArcGISPublishModeLayerResult
-    assert legacy.ArcGISPublishModeProviderProtocol is ArcGISPublishModeProviderProtocol
-    assert legacy.publish_existing_layer_mode is publish_existing_layer_mode
+def test_arcgis_feature_helper_legacy_paths_are_removed() -> None:
+    assert not (_BACKEND_ROOT / "app/core/features/arcgis_sql_helpers.py").exists()
+    assert not (_BACKEND_ROOT / "app/core/features/arcgis_publish_modes.py").exists()
 
 
 def test_imdf_arcgis_wrappers_import_generic_helpers_from_connections() -> None:

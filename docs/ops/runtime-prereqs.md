@@ -73,7 +73,7 @@ Lette da `.env` via systemd unit wrapper o SSM secrets (vedi `deploy/iam/README.
 | `PLENORA_ARTIFACT_BUCKET` | alias di `OBJECT_STORAGE_BUCKET` | Alias operativo per artifact runtime |
 | `BACKUP_BUCKET` | `plenora-backup-112011134642-eu-south-1-an` | Nome canonico bucket backup |
 | `DATABASE_URL` | — (obbligatoria) | `scripts/backup_db.py`, `scripts/test_restore.py`, `app/db/*` |
-| `BACKUP_S3_BUCKET` | `plenora-backup-112011134642-eu-south-1-an` | `admin_backups.service`, `scripts/backup_db.py` |
+| `BACKUP_BUCKET` | `plenora-backup-bucket` | `admin_backups.service`, `scripts/backup_db.py` |
 | `BACKUP_S3_REGION` | `eu-south-1` | come sopra |
 | `BACKUP_SCHEMA` | `plenora` | `scripts/backup_db.py` (vuoto → full DB dump) |
 | `BACKUP_PG_DUMP_TIMEOUT_SEC` | `3600` | `scripts/backup_db.py` |

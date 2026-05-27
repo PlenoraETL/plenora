@@ -40,7 +40,6 @@ def _clean_storage_env(monkeypatch):
         "STORAGE_POLICY",
         "CLOUD_PROVIDER",
         "BACKUP_BUCKET",
-        "BACKUP_S3_BUCKET",
         "OBJECT_STORAGE_BUCKET",
         "PLENORA_ARTIFACT_BUCKET",
         "OBJECT_STORAGE_ENABLED",
@@ -131,15 +130,15 @@ def test_object_storage_requires_bucket(monkeypatch):
         validate_storage_config()
 
 
-def test_object_storage_rejects_legacy_bucket_only(monkeypatch):
-    """Policy=object_storage: solo BACKUP_S3_BUCKET (legacy) NON e' piu'
-    sufficiente. Il bucket runtime deve essere esplicito tramite
-    OBJECT_STORAGE_BUCKET (canonical) o PLENORA_ARTIFACT_BUCKET (alias) —
-    niente fallback silenzioso su BACKUP_BUCKET."""
+def test_object_storage_rejects_removed_legacy_bucket_only(monkeypatch):
+    """Policy=object_storage: solo BACKUP_S3_BUCKET (rimosso) NON e' piu'
+    sufficiente: il bucket backup canonico e' BACKUP_BUCKET e il bucket
+    runtime deve essere esplicito tramite OBJECT_STORAGE_BUCKET o
+    PLENORA_ARTIFACT_BUCKET."""
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
     monkeypatch.setenv("CLOUD_PROVIDER", "aws")
     monkeypatch.setenv("BACKUP_S3_BUCKET", "legacy-name")
-    with pytest.raises(StorageConfigError, match="OBJECT_STORAGE_BUCKET"):
+    with pytest.raises(StorageConfigError, match="BACKUP_BUCKET"):
         validate_storage_config()
 
 
@@ -284,7 +283,6 @@ def test_minio_boot_still_requires_bucket(monkeypatch):
     BACKUP_BUCKET, simmetrico ad AWS."""
     _set_minio_boot_env(monkeypatch)
     monkeypatch.delenv("BACKUP_BUCKET", raising=False)
-    monkeypatch.delenv("BACKUP_S3_BUCKET", raising=False)
     with pytest.raises(StorageConfigError, match="bucket"):
         validate_storage_config()
 

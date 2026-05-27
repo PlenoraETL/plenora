@@ -112,7 +112,7 @@ def delete_local_file(path: Union[str, Path], *, missing_ok: bool = False) -> No
 
     Differenza con `rmtree_safe`: questa funzione solleva su error,
     non e' best-effort. Pensata per la data plane delete API
-    (`LocalDataSource.delete_file`, `legacy_file_store.delete_output_file`)
+    (`LocalDataSource.delete_file`, result output cleanup)
     dove il caller DEVE sapere se l'operazione e' riuscita per
     rispondere correttamente al client.
 

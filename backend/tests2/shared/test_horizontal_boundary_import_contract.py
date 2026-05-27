@@ -15,11 +15,6 @@ _APP_CORE_ROOT = _BACKEND_ROOT / "app" / "core"
 
 _TASK_RUNTIME_PREFIX = "app/core/task_runtime/"
 
-_ADMIN_WORKER_BOUNDARY_ALLOWLIST = {
-    "app/core/admin_system_status/worker_runtime.py": ("workers.celery_app",),
-}
-
-
 def _imports(rel_path: str) -> set[str]:
     tree = ast.parse((_BACKEND_ROOT / rel_path).read_text(encoding="utf-8"))
     modules: set[str] = set()
@@ -250,16 +245,6 @@ def _is_task_runtime_path(rel_path: str) -> bool:
             ),
         ),
         (
-            "app/core/admin_system_status/worker_runtime.py",
-            (
-                "app.core.features",
-                "app.db",
-                "fastapi",
-                "requests",
-                "httpx",
-            ),
-        ),
-        (
             "app/core/eseguibili/output_store.py",
             (
                 "app.core.features",
@@ -272,7 +257,7 @@ def _is_task_runtime_path(rel_path: str) -> bool:
             ),
         ),
         (
-            "app/core/results/legacy_file_store.py",
+            "app/core/results/output_file_cleanup.py",
             (
                 "app.core.features",
                 "app.db",
@@ -350,19 +335,17 @@ def test_app_core_worker_imports_stay_on_explicit_runtime_boundaries() -> None:
 
     for path in _app_core_python_paths():
         rel_path = _rel_path(path)
-        admin_allowed = _ADMIN_WORKER_BOUNDARY_ALLOWLIST.get(rel_path, ())
         forbidden = sorted(
             module
             for module in _imports(rel_path)
             if _matches_import(module, "workers")
             and not _is_task_runtime_path(rel_path)
-            and module not in admin_allowed
         )
         if forbidden:
             violations[rel_path] = forbidden
 
     assert violations == {}, (
         "Application modules must not import worker runtime internals except "
-        "through app/core/task_runtime/* or explicit admin worker-status "
+        "through app/core/task_runtime/* "
         f"boundaries. Violations: {violations}"
     )

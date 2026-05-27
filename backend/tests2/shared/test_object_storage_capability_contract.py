@@ -146,7 +146,6 @@ def test_backup_factory_uses_backup_bucket_only(monkeypatch):
 
     monkeypatch.setenv("OBJECT_STORAGE_BUCKET", "runtime-bucket")
     monkeypatch.delenv("BACKUP_BUCKET", raising=False)
-    monkeypatch.delenv("BACKUP_S3_BUCKET", raising=False)
 
     with _patch_capability(True, "s3"):
         with pytest.raises(ValueError, match="BACKUP_BUCKET"):

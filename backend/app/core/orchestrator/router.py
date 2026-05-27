@@ -43,7 +43,7 @@ from app.shared.contracts.payloads import JsonObject
 from app.core.auth.ownership import assert_group_access
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.core.eseguibili import output_store as _eseg_output_store
-from app.core.results import legacy_file_store
+from app.core.results import output_file_cleanup
 
 def _mime_for_filename(filename: str) -> str:
     """Ritorna il Content-Type corretto basandosi sull'estensione del file."""
@@ -546,7 +546,7 @@ def cleanup_task_completely(
         output_file = task_result_payload.get("output_file")
         if output_file:
             try:
-                deleted_output = legacy_file_store.delete_output_file(
+                deleted_output = output_file_cleanup.delete_project_output_file(
                     project_id,
                     output_file,
                     root=settings.RESULTS_DIR,

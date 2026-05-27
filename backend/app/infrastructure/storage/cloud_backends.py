@@ -512,7 +512,6 @@ class StorageBackendConfig:
     object_storage_bucket: "str | None"
     plenora_artifact_bucket: "str | None"
     backup_bucket: "str | None"
-    backup_s3_bucket: "str | None"
     minio_endpoint_url: "str | None"
     minio_access_key: "str | None"
     minio_secret_key: "str | None"
@@ -569,7 +568,6 @@ def _storage_config() -> StorageBackendConfig:
         object_storage_bucket=_optional_str(_get_setting("OBJECT_STORAGE_BUCKET")),
         plenora_artifact_bucket=_optional_str(_get_setting("PLENORA_ARTIFACT_BUCKET")),
         backup_bucket=_optional_str(_get_setting("BACKUP_BUCKET")),
-        backup_s3_bucket=_optional_str(_get_setting("BACKUP_S3_BUCKET")),
         minio_endpoint_url=_optional_str(_get_setting("MINIO_ENDPOINT_URL")),
         minio_access_key=_optional_str(_get_setting("MINIO_ACCESS_KEY")),
         minio_secret_key=_optional_str(_get_setting("MINIO_SECRET_KEY")),
@@ -695,9 +693,8 @@ def _resolve_runtime_bucket(config: "StorageBackendConfig | None" = None) -> "st
     Priorita':
       1. OBJECT_STORAGE_BUCKET (canonical, distinto da BACKUP_BUCKET)
       2. PLENORA_ARTIFACT_BUCKET
-      3. BACKUP_BUCKET / BACKUP_S3_BUCKET (retro-compat con WARNING:
-         deployment legacy che usavano lo stesso bucket per backup e
-         runtime artifact)
+      3. BACKUP_BUCKET (retro-compat con WARNING: deployment che usavano lo
+         stesso bucket per backup e runtime artifact)
 
     None se nessuno e' settato (factory solleva).
     """
@@ -708,28 +705,26 @@ def _resolve_runtime_bucket(config: "StorageBackendConfig | None" = None) -> "st
     bucket = cfg.plenora_artifact_bucket
     if bucket:
         return bucket
-    legacy = cfg.backup_bucket or cfg.backup_s3_bucket
-    if legacy:
+    if cfg.backup_bucket:
         logger.warning(
             "OBJECT_STORAGE_BUCKET non configurato: fallback su "
             "BACKUP_BUCKET=%s per retro-compatibilita'. Configurare "
             "OBJECT_STORAGE_BUCKET (runtime artifacts) distinto da "
             "BACKUP_BUCKET (backup amministrativi).",
-            legacy,
+            cfg.backup_bucket,
         )
-        return legacy
+        return cfg.backup_bucket
     return None
 
 
 def _resolve_backup_bucket(config: "StorageBackendConfig | None" = None) -> "str | None":
     """Bucket dedicato backup amministrativi.
 
-    Solo `BACKUP_BUCKET` / `BACKUP_S3_BUCKET` (legacy). Mai fallback
-    su OBJECT_STORAGE_BUCKET: i due bucket sono semanticamente distinti
-    per IAM boundary e lifecycle policy.
+    Solo `BACKUP_BUCKET`. Mai fallback su OBJECT_STORAGE_BUCKET: i due
+    bucket sono semanticamente distinti per IAM boundary e lifecycle policy.
     """
     cfg = config or _storage_config()
-    return cfg.backup_bucket or cfg.backup_s3_bucket
+    return cfg.backup_bucket
 
 
 def _build_object_storage(bucket: str, *, region_default: str) -> ObjectStorage:
@@ -775,7 +770,7 @@ def get_runtime_object_storage() -> ObjectStorage:
     Bucket:
       - OBJECT_STORAGE_BUCKET (canonical)
       - PLENORA_ARTIFACT_BUCKET
-      - BACKUP_BUCKET (legacy fallback con warning)
+      - BACKUP_BUCKET (fallback con warning)
     """
     if not object_storage_enabled():
         raise ObjectStorageDisabledError(
@@ -799,7 +794,7 @@ def get_runtime_object_storage() -> ObjectStorage:
 def get_backup_object_storage() -> ObjectStorage:
     """ObjectStorage per backup amministrativi (admin_backups, backup_db.py).
 
-    Bucket: solo `BACKUP_BUCKET` / `BACKUP_S3_BUCKET`. Mai fallback su
+    Bucket: solo `BACKUP_BUCKET`. Mai fallback su
     OBJECT_STORAGE_BUCKET: IAM boundary e lifecycle distinti.
 
     Solleva `ObjectStorageDisabledError` se la capability globale e' off:
@@ -817,7 +812,7 @@ def get_backup_object_storage() -> ObjectStorage:
     bucket = _resolve_backup_bucket()
     if not bucket:
         raise ValueError(
-            "BACKUP_BUCKET (o BACKUP_S3_BUCKET legacy) non configurato."
+            "BACKUP_BUCKET non configurato."
         )
     return _build_object_storage(bucket, region_default="eu-south-1")
 
@@ -892,7 +887,7 @@ def validate_storage_config() -> None:
     Controlli:
       1. STORAGE_POLICY in {db, object_storage, hybrid}
       2. CLOUD_PROVIDER in enum noto + implementato in factory
-      3. Se policy != db: BACKUP_BUCKET (o legacy BACKUP_S3_BUCKET) settato
+      3. Se policy != db: BACKUP_BUCKET settato
          e CLOUD_PROVIDER != none
       4. Se policy == db con bucket+provider cloud: warning non-blocking
          (probabile cut-paste)
@@ -982,13 +977,13 @@ def validate_storage_config() -> None:
         if not bucket:
             _fail(
                 f"STORAGE_POLICY={policy} richiede un bucket object storage, "
-                "ma ne' BACKUP_BUCKET ne' BACKUP_S3_BUCKET (legacy) sono "
-                "configurati."
+                "ma BACKUP_BUCKET non e' configurato."
             )
         # Policy `object_storage` richiede bucket runtime esplicito
         # niente fallback silenzioso su BACKUP_BUCKET (semanticamente
-        # diverso, IAM/lifecycle distinti). Con `hybrid` il fallback
-        # NOTE: legacy resta consentito per retro-compat dev/test
+        # diverso, IAM/lifecycle distinti). Con `hybrid` il fallback su
+        # BACKUP_BUCKET resta consentito per deployment che non separano
+        # ancora runtime artifacts e backup amministrativi.
         if policy == "object_storage":
             runtime_bucket = cfg.object_storage_bucket or cfg.plenora_artifact_bucket
             if not runtime_bucket:
@@ -1057,7 +1052,7 @@ def validate_storage_config() -> None:
                 "configurato (bucket dedicato archive, distinto da "
                 "BACKUP_BUCKET)."
             )
-        # 4. Bucket archive distinto da BACKUP_BUCKET/BACKUP_S3_BUCKET
+        # 4. Bucket archive distinto da BACKUP_BUCKET
         # IAM boundary (O-ARC §5.4, ADR-0014 §A3). A questo punto
         # `bucket` e' guaranteed truthy: regola 1 ha escluso policy=db
         # e il ramo A1 else-branch (riga 395) fallisce gia' se bucket
@@ -1065,7 +1060,7 @@ def validate_storage_config() -> None:
         if log_archive_bucket == bucket:
             _fail(
                 f"LOG_ARCHIVE_BUCKET={log_archive_bucket!r} coincide con "
-                "BACKUP_BUCKET/BACKUP_S3_BUCKET: IAM boundary richiesto "
+                "BACKUP_BUCKET: IAM boundary richiesto "
                 "distinto per archive log vs backup DB (O-ARC §5.4)."
             )
         # 5. Formato key prefix (se settata): vuoto o endswith "/"
