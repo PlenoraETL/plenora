@@ -87,7 +87,7 @@ def test_load_file_sources_ignores_stale_singleton_post_005():
     post-005 the singleton is invisible to this chain.
 
     The lock is the symmetric counterpart of
-    ``test_resolve_file_source_id_path_no_longer_falls_back_to_current_group_id``
+    ``test_resolve_file_source_id_bytes_no_longer_falls_back_to_current_group_id``
     on the arricchisci side (ORCHESTRATION-ENGINE-010)."""
     executor = ManipolaExecutor(project_service=object())
     dataframes = {}

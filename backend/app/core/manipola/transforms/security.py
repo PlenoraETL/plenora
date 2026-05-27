@@ -15,7 +15,7 @@ from app.core.dataframes.tabular import empty_object_series
 from app.core.manipola.types import JsonRows
 from app.utils.logger import get_logger
 
-logger = get_logger("app.core.manipola.transforms.base")
+logger = get_logger(__name__)
 
 DataFrame = Any
 
@@ -186,17 +186,11 @@ def _mask_custom(value: str, chars_start: int = 3, chars_end: int = 3, mask_char
 
 
 # Mappa tipo mascheramento → funzione
-# NOTE: questo dict viene compatibility export da `base.py` via
-# `from .security import MASK_FUNCTIONS`. Il test contract
-# `tests2/manipola/unit/test_op_mask_data_fail_closed.py:69,110`
-# patcha `"app.core.manipola.transforms.base.MASK_FUNCTIONS"` con
-# `patch.dict` (NON `patch.object`). `patch.dict` muta il dict
-# in-place; poiche' `base.MASK_FUNCTIONS is security.MASK_FUNCTIONS`
-# stesso oggetto), la mutazione e' visibile da `op_mask_data` qui
-# sotto che legge `MASK_FUNCTIONS` via module-level name lookup
-# NON convertire in `MASK_FUNCTIONS = MappingProxyType({...})` o
-# rebindare a un nuovo dict in qualunque punto della catena: il
-# patch contract dipende dall'identita' oggetto preservata
+# NOTE: questo dict deve restare mutabile e patchabile in-place:
+# `op_mask_data` legge `MASK_FUNCTIONS` via module-level name lookup e i
+# contract test lo sostituiscono con `patch.dict`.
+# NON convertire in `MASK_FUNCTIONS = MappingProxyType({...})` o rebindare
+# a un nuovo dict.
 MASK_FUNCTIONS = {
     'cf': _mask_cf,
     'email': _mask_email,

@@ -12,7 +12,7 @@ from app.core.dataframes.values import is_null_scalar
 
 from app.utils.logger import get_logger
 
-logger = get_logger("app.core.manipola.transforms.base")
+logger = get_logger(__name__)
 
 DataFrame = FrameLike
 

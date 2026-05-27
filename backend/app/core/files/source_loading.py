@@ -1,7 +1,7 @@
 """File-source bytes resolution boundary (RAM-only).
 
 Post-refactor: il file_source si risolve in `(bytes, filename)` direttamente
-da DB / object storage. Niente piu' cache locale su `{FILES_DIR}/{file_source_id}/`.
+da DB / object storage. Niente piu' cache locale su filesystem.
 Il caller (REST connector) consuma i bytes via `requests.post(files=...)`.
 """
 
@@ -85,7 +85,7 @@ def _expected_filename(row_meta: dict[str, Any]) -> str:
     Pre-fix (CVE-grade P0): ritornava `row_meta["original_filename"]` raw.
     Un record DB con `original_filename = "../../../etc/passwd"` (creato da
     upload malformato o DB corrotto) componeva un path che usciva dalla
-    source_dir, esponendo sia READ che WRITE arbitrari sotto FILES_DIR.
+    source_dir, esponendo sia READ che WRITE arbitrari nella cache locale.
 
     Post-fix: `Path(raw).name` taglia qualunque directory component,
     indipendentemente da `..`, `/`, `\\`, separatori URL-encoded, ecc.
@@ -122,7 +122,6 @@ def resolve_file_source_id_bytes(
     expected_group_id: Optional[str],
     get_file_source: GetFileSource = _default_get_file_source,
     visibility_check: Optional[VisibilityCheck] = None,
-    **_legacy_kwargs: Any,
 ) -> Optional[tuple[bytes, str]]:
     """Risolve un file_source_id in `(bytes, filename)` RAM-only.
 
@@ -134,15 +133,12 @@ def resolve_file_source_id_bytes(
         ValueError (via `assert_file_source_group_access`) su cross-tenant.
         `FileSourceResolutionError` su fault DB / object storage.
 
-    Sostituisce la vecchia `resolve_file_source_id_path` che persisteva
-    il blob su `{FILES_DIR}/{file_source_id}/{filename}` come cache
-    locale. Il caller (REST connector) consuma i bytes direttamente in
+    Sostituisce il vecchio resolver path-based che persisteva il blob
+    in una cache locale per file_source. Il caller (REST connector)
+    consuma i bytes direttamente in
     `requests.post(files=...)`, niente cache disco — trade-off: re-fetch
     da DB / object storage ad ogni invocazione (accettabile per il
     profilo Plenora: tipicamente una POST per file_source per task).
-
-    `**_legacy_kwargs` swallow per backward-compat con test che ancora
-    passano `get_file_source_dir=...` (no-op nel path bytes-first).
     """
     if not file_source_id:
         return None
@@ -212,16 +208,7 @@ def resolve_file_source_id_bytes(
     return blob_bytes, expected_name
 
 
-# Backward-compat alias: il nome `resolve_file_source_id_path` storicamente
-# ritornava un path str di una cache locale. Post-Phase5 il path-cache e'
-# stato eliminato; la funzione ritorna `(bytes, filename)`. Tenuto come
-# alias per non rompere i test esistenti che importano il nome vecchio —
-# i caller di produzione devono migrare a `resolve_file_source_id_bytes`.
-resolve_file_source_id_path = resolve_file_source_id_bytes
-
-
 __all__ = [
     "assert_file_source_group_access",
     "resolve_file_source_id_bytes",
-    "resolve_file_source_id_path",
 ]

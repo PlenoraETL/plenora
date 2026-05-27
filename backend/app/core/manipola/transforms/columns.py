@@ -15,7 +15,7 @@ from app.core.dataframes.ports import FrameLike
 from app.core.manipola.types import JsonRows
 from app.utils.logger import get_logger
 
-logger = get_logger("app.core.manipola.transforms.base")
+logger = get_logger(__name__)
 
 DataFrame = FrameLike
 

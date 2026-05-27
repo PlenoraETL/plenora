@@ -18,7 +18,7 @@ from app.core.dataframes.tabular import (
 from app.core.manipola.types import JsonRows
 from app.utils.logger import get_logger
 
-logger = get_logger("app.core.manipola.transforms.base")
+logger = get_logger(__name__)
 
 DataFrame = FrameLike
 

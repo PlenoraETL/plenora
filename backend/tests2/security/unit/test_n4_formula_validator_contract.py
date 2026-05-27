@@ -55,7 +55,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
     "class X: pass",
 ])
 def test_ast_validator_blocks_dangerous_payloads(payload):
-    from app.core.manipola.transforms.base import _validate_formula_ast
+    from app.core.manipola.transforms.formula import _validate_formula_ast
     with pytest.raises(ValueError):
         _validate_formula_ast(payload)
 
@@ -83,7 +83,7 @@ def test_ast_validator_blocks_exotic_nodes_whitelist(payload):
     """Whitelist positiva: solo i nodi necessari a formule pandas sono
     ammessi. Comprehension/lambda/walrus/f-string/slice/literal containers
     non servono e ingrandiscono la superficie — rifiutati."""
-    from app.core.manipola.transforms.base import _validate_formula_ast
+    from app.core.manipola.transforms.formula import _validate_formula_ast
     with pytest.raises(ValueError):
         _validate_formula_ast(payload)
 
@@ -123,7 +123,7 @@ def test_ast_validator_blocks_exotic_nodes_whitelist(payload):
     "pd.to_numeric(col, errors='coerce')",
 ])
 def test_ast_validator_allows_legitimate_formulas(formula):
-    from app.core.manipola.transforms.base import _validate_formula_ast
+    from app.core.manipola.transforms.formula import _validate_formula_ast
     # Non deve sollevare
     _validate_formula_ast(formula)
 
@@ -145,8 +145,8 @@ class _ListHandler(logging.Handler):
 
 @pytest.fixture
 def base_log_records():
-    """Attacca un ListHandler al logger di base.py e restituisce la lista."""
-    target = logging.getLogger("app.core.manipola.transforms.base")
+    """Attacca un ListHandler al logger formula e restituisce la lista."""
+    target = logging.getLogger("app.core.manipola.transforms.formula")
     handler = _ListHandler()
     target.addHandler(handler)
     try:
@@ -160,7 +160,7 @@ def test_op_formula_skips_dunder_column_from_eval_namespace():
     e la formula che la referenzia deve essere rifiutata fail-loud
     (ValueError). Contratto attuale: op_formula rilancia errori AST/eval
     come ValueError invece di tornare il df originale silenziosamente."""
-    from app.core.manipola.transforms.base import op_formula
+    from app.core.manipola.transforms.formula import op_formula
 
     df = pd.DataFrame({
         "normal": [1, 2, 3],
@@ -174,7 +174,7 @@ def test_op_formula_skips_single_underscore_prefix():
     """Colonne con prefix _ (semi-private) escluse per defense-in-depth.
     Una formula che le referenzia non trova il nome nel namespace eval
     e op_formula solleva ValueError (contratto fail-loud)."""
-    from app.core.manipola.transforms.base import op_formula
+    from app.core.manipola.transforms.formula import op_formula
 
     df = pd.DataFrame({
         "normal": [1, 2, 3],
@@ -186,7 +186,7 @@ def test_op_formula_skips_single_underscore_prefix():
 
 def test_op_formula_accepts_normal_column_names():
     """Sanity: colonne con nomi normali funzionano."""
-    from app.core.manipola.transforms.base import op_formula
+    from app.core.manipola.transforms.formula import op_formula
 
     df = pd.DataFrame({"a": [1, 2, 3], "b": [10, 20, 30]})
     result = op_formula(df, "a + b", new_column="c")
@@ -196,7 +196,7 @@ def test_op_formula_accepts_normal_column_names():
 
 def test_op_formula_skip_logs_warning(base_log_records):
     """Quando si scarta una colonna dunder, viene emesso un warning."""
-    from app.core.manipola.transforms.base import op_formula
+    from app.core.manipola.transforms.formula import op_formula
 
     df = pd.DataFrame({"normal": [1], "__dunder__": [2]})
     # Uso una formula che NON referenzia la colonna scartata, cosi'

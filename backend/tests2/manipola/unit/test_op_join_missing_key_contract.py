@@ -9,7 +9,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from app.core.manipola.transforms.base import op_join
+from app.core.manipola.transforms.joins import op_join
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]

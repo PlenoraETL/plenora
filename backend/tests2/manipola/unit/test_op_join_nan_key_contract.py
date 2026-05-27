@@ -25,7 +25,7 @@ pytestmark = [
 
 class _ListHandler(logging.Handler):
     """Handler custom: colleziona LogRecord. Necessario perche' il logger
-    di base.py potrebbe avere propagate=False (caplog non sempre arriva)."""
+    di joins.py potrebbe avere propagate=False (caplog non sempre arriva)."""
 
     def __init__(self):
         super().__init__(level=logging.WARNING)
@@ -37,7 +37,7 @@ class _ListHandler(logging.Handler):
 
 @pytest.fixture
 def base_log_records():
-    target = logging.getLogger("app.core.manipola.transforms.base")
+    target = logging.getLogger("app.core.manipola.transforms.joins")
     handler = _ListHandler()
     target.addHandler(handler)
     try:
@@ -59,7 +59,7 @@ def _nan_key_warnings(records):
 
 def test_inner_join_excludes_rows_with_nan_keys():
     """inner + key NaN -> riga esclusa, no NaN==NaN match."""
-    from app.core.manipola.transforms.base import op_join
+    from app.core.manipola.transforms.joins import op_join
 
     left = pd.DataFrame({"k": [1.0, 2.0, np.nan, 4.0], "lv": ["a", "b", "c", "d"]})
     right = pd.DataFrame({"k": [1.0, 2.0, 3.0, 4.0], "rv": ["x", "y", "z", "w"]})
@@ -72,7 +72,7 @@ def test_inner_join_excludes_rows_with_nan_keys():
 
 def test_left_join_preserves_left_nan_keys_with_null_right_columns():
     """left + key NaN sul left -> riga preservata, colonne right = NaN."""
-    from app.core.manipola.transforms.base import op_join
+    from app.core.manipola.transforms.joins import op_join
 
     left = pd.DataFrame({"k": [1.0, np.nan, 3.0], "lv": ["a", "b", "c"]})
     right = pd.DataFrame({"k": [1.0, 2.0, 3.0], "rv": ["x", "y", "z"]})
@@ -86,7 +86,7 @@ def test_left_join_preserves_left_nan_keys_with_null_right_columns():
 
 def test_right_join_preserves_right_nan_keys_symmetric_to_left():
     """right + key NaN sul right -> riga preservata, colonne left = NaN."""
-    from app.core.manipola.transforms.base import op_join
+    from app.core.manipola.transforms.joins import op_join
 
     left = pd.DataFrame({"k": [1.0, 2.0, 3.0], "lv": ["a", "b", "c"]})
     right = pd.DataFrame({"k": [1.0, np.nan, 3.0], "rv": ["x", "y", "z"]})
@@ -101,7 +101,7 @@ def test_right_join_preserves_right_nan_keys_symmetric_to_left():
 def test_outer_join_separates_nan_on_both_sides_no_cross_match():
     """outer + NaN su entrambi i lati -> righe separate, mai matchate
     fra loro (no cross-NaN match)."""
-    from app.core.manipola.transforms.base import op_join
+    from app.core.manipola.transforms.joins import op_join
 
     left = pd.DataFrame({"k": [1.0, np.nan], "lv": ["a", "b"]})
     right = pd.DataFrame({"k": [1.0, np.nan], "rv": ["x", "y"]})
@@ -123,7 +123,7 @@ def test_legitimate_nan_string_matches_on_both_sides_when_dtypes_align():
     """Stringa letterale 'nan' su entrambi i lati (dtype object identico,
     no coercion path) -> deve matchare come valore reale. Stato pre-C1
     gia' funzionante, blindato qui per regressione."""
-    from app.core.manipola.transforms.base import op_join
+    from app.core.manipola.transforms.joins import op_join
 
     left = pd.DataFrame({"k": ["a", "nan", "c"], "lv": [1, 2, 3]})
     right = pd.DataFrame({"k": ["nan", "c", "d"], "rv": [10, 20, 30]})
@@ -140,7 +140,7 @@ def test_legitimate_nan_string_preserved_through_dtype_mismatch_coercion():
     """Stringa letterale 'nan' su un lato, valori numerici sull'altro: la
     coercion clean_to_str NON deve trasformare la stringa in None.
     Pre-C1: la stringa "nan" finiva nulla -> esclusa. Post-C1: preservata."""
-    from app.core.manipola.transforms.base import op_join
+    from app.core.manipola.transforms.joins import op_join
 
     # Left object con stringhe (incluso il letterale "nan").
     left = pd.DataFrame({"k": ["1", "nan", "3"], "lv": ["a", "b", "c"]})
@@ -166,7 +166,7 @@ def test_real_nan_does_not_match_legitimate_nan_string_across_sides():
     Caso canonico del bug pre-C1: la coercion stringificava il NaN come
     'nan' (object cleanup invertito) e lo joinava col 'nan' string sul
     lato opposto, producendo match falso."""
-    from app.core.manipola.transforms.base import op_join
+    from app.core.manipola.transforms.joins import op_join
 
     # Left object con stringa "nan" reale (no missing).
     left = pd.DataFrame(
@@ -189,7 +189,7 @@ def test_real_nan_in_int64_does_not_collide_with_na_string_after_coercion():
     il roundtrip astype('Int64').astype(str) produce '<NA>' per i null, ma
     la mask C1 li riconverte a pd.NA. La stringa '<NA>' a destra resta
     valore reale e NON matcha il null sinistro."""
-    from app.core.manipola.transforms.base import op_join
+    from app.core.manipola.transforms.joins import op_join
 
     left = pd.DataFrame(
         {"k": pd.array([1, pd.NA, 3], dtype="Int64"), "lv": ["a", "b", "c"]}
@@ -211,7 +211,7 @@ def test_dtype_mismatch_numeric_object_with_valid_values_still_matches():
     """Pre-C1 funzionava: id 1,2,3 (int) vs '1','2','3' (string).
     La rewrite C1 di clean_to_str preserva esattamente il path int -> '1'
     via Int64 nullable, quindi il match deve continuare a riuscire."""
-    from app.core.manipola.transforms.base import op_join
+    from app.core.manipola.transforms.joins import op_join
 
     left = pd.DataFrame({"k": [1, 2, 3], "lv": ["a", "b", "c"]})
     right = pd.DataFrame({"k": ["1", "2", "3"], "rv": ["x", "y", "z"]})
@@ -224,7 +224,7 @@ def test_dtype_mismatch_numeric_object_with_valid_values_still_matches():
 def test_dtype_mismatch_both_numeric_uses_to_numeric_coerce():
     """Path "entrambi numeric ma dtype diversi" (es. int vs float):
     pd.to_numeric con errors='coerce'. Valori validi matchano normalmente."""
-    from app.core.manipola.transforms.base import op_join
+    from app.core.manipola.transforms.joins import op_join
 
     left = pd.DataFrame({"k": pd.array([1, 2, 3], dtype="int32"), "lv": ["a", "b", "c"]})
     right = pd.DataFrame({"k": pd.array([1.0, 2.0, 3.0], dtype="float64"), "rv": ["x", "y", "z"]})
@@ -238,7 +238,7 @@ def test_dtype_mismatch_both_numeric_uses_to_numeric_coerce():
 
 def test_warning_emitted_when_left_has_nan_keys(base_log_records):
     """key-null count > 0 -> WARNING con how, left_on/right_on, conteggi."""
-    from app.core.manipola.transforms.base import op_join
+    from app.core.manipola.transforms.joins import op_join
 
     left = pd.DataFrame({"k": [1.0, np.nan, 3.0], "lv": ["a", "b", "c"]})
     right = pd.DataFrame({"k": [1.0, 2.0, 3.0], "rv": ["x", "y", "z"]})
@@ -254,7 +254,7 @@ def test_warning_emitted_when_left_has_nan_keys(base_log_records):
 
 def test_warning_emitted_when_right_has_nan_keys(base_log_records):
     """Telemetria simmetrica: NaN sul right -> warning."""
-    from app.core.manipola.transforms.base import op_join
+    from app.core.manipola.transforms.joins import op_join
 
     left = pd.DataFrame({"k": [1.0, 2.0, 3.0], "lv": ["a", "b", "c"]})
     right = pd.DataFrame({"k": [1.0, np.nan, 3.0], "rv": ["x", "y", "z"]})
@@ -267,7 +267,7 @@ def test_warning_emitted_when_right_has_nan_keys(base_log_records):
 
 def test_no_warning_when_keys_are_clean(base_log_records):
     """key-null count == 0 -> nessun warning di telemetria (no log spam)."""
-    from app.core.manipola.transforms.base import op_join
+    from app.core.manipola.transforms.joins import op_join
 
     left = pd.DataFrame({"k": [1.0, 2.0, 3.0], "lv": ["a", "b", "c"]})
     right = pd.DataFrame({"k": [1.0, 2.0, 3.0], "rv": ["x", "y", "z"]})

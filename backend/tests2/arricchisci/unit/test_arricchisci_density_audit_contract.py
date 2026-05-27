@@ -63,7 +63,7 @@ def test_rest_file_path_resolver_remains_ctx_adapter_only() -> None:
         "app.core.arricchisci.api_connection_rest_file.resolve_file_source_id_bytes",
         return_value=(b"csv", "input.csv"),
     ) as delegated:
-        result = svc._resolve_file_source_id_path("fs-1", ctx=ctx)
+        result = svc._resolve_file_source_id_bytes("fs-1", ctx=ctx)
 
     assert result == (b"csv", "input.csv")
     delegated.assert_called_once_with(

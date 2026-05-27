@@ -71,7 +71,7 @@ def minimal_api_config():
 
 def test_file_source_not_found_returns_structured_error_kind(service, minimal_api_config, ctx_default):
     """Bug reale 2026-04-23: file_source_id referenziato nel canvas non esiste
-    nel DB. `_resolve_file_source_id_path` ritorna None (via row_meta None).
+    nel DB. `_resolve_file_source_id_bytes` ritorna None (via row_meta None).
     Il build multipart deve returnare error_kind='file_source_not_found'."""
     node_data = {
         "extra_files": {

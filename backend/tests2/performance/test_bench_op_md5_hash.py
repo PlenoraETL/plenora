@@ -14,12 +14,12 @@ from typing import Callable, List
 import pandas as pd
 import pytest
 
-from app.core.manipola.transforms.base import op_md5_hash
+from app.core.manipola.transforms.security import op_md5_hash
 
 from .conftest import make_pandas_df
 
 
-# Oracle: legacy impl (verbatim da base.py:1102 @ aea1f63)
+# Oracle: legacy impl (verbatim da previous monolith @ aea1f63)
 
 
 def _legacy_op_md5_hash(

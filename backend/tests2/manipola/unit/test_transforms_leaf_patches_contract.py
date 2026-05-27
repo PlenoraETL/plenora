@@ -1,5 +1,5 @@
 """
-Contract test per i fix puntuali su transforms/base.py.
+Contract test per i fix puntuali su leaf transform modules.
 
 Dalla sessione di audit 2026-04-17:
 """
@@ -20,7 +20,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.manipola, pytest.mark.contract]
 def test_filter_raises_on_missing_column():
     """Filtro su colonna non esistente deve sollevare ValueError
     esplicito invece di ritornare il df invariato in silenzio."""
-    from app.core.manipola.transforms.base import op_filter
+    from app.core.manipola.transforms.filtering import op_filter
 
     df = pd.DataFrame({"a": [1, 2, 3], "b": [10, 20, 30]})
     with pytest.raises(ValueError) as exc:
@@ -32,7 +32,7 @@ def test_filter_raises_on_missing_column():
 
 def test_filter_works_on_existing_column():
     """Regression: il filtro normale deve continuare a funzionare."""
-    from app.core.manipola.transforms.base import op_filter
+    from app.core.manipola.transforms.filtering import op_filter
     df = pd.DataFrame({"a": [1, 2, 3], "b": [10, 20, 30]})
     result = op_filter(df, column="a", operator=">", value=1)
     assert len(result) == 2
@@ -43,7 +43,7 @@ def test_filter_works_on_existing_column():
 
 
 def test_concat_columns_skip_null_basic():
-    from app.core.manipola.transforms.base import op_concat_columns
+    from app.core.manipola.transforms.columns import op_concat_columns
     df = pd.DataFrame({
         "cognome": ["Rossi", "Verdi", "Bianchi"],
         "nome": ["Mario", "Luigi", "Anna"],
@@ -54,7 +54,7 @@ def test_concat_columns_skip_null_basic():
 
 def test_concat_columns_skip_null_with_nan():
     """skip_null=True: NaN devono essere skippati, non inclusi come 'nan'."""
-    from app.core.manipola.transforms.base import op_concat_columns
+    from app.core.manipola.transforms.columns import op_concat_columns
     df = pd.DataFrame({
         "a": ["x", None, "z"],
         "b": ["1", "2", None],
@@ -65,7 +65,7 @@ def test_concat_columns_skip_null_with_nan():
 
 def test_concat_columns_skip_null_all_nan_returns_none():
     """Se tutte le colonne sono NaN per una riga, output e' None."""
-    from app.core.manipola.transforms.base import op_concat_columns
+    from app.core.manipola.transforms.columns import op_concat_columns
     df = pd.DataFrame({"a": [None, "x"], "b": [None, "y"]})
     result = op_concat_columns(df, columns=["a", "b"], separator="-", skip_null=True)
     assert result["concatenated"].iloc[0] is None or pd.isna(result["concatenated"].iloc[0])
@@ -74,7 +74,7 @@ def test_concat_columns_skip_null_all_nan_returns_none():
 
 def test_concat_columns_no_skip_null_treats_as_empty():
     """skip_null=False: NaN trattato come stringa vuota (comportamento esistente)."""
-    from app.core.manipola.transforms.base import op_concat_columns
+    from app.core.manipola.transforms.columns import op_concat_columns
     df = pd.DataFrame({"a": ["x", None], "b": ["y", "z"]})
     result = op_concat_columns(df, columns=["a", "b"], separator="-", skip_null=False)
     # "x-y" e "-z" (NaN -> "")
@@ -102,7 +102,7 @@ def _expected_md5(values, separator="\x1f", normalize=True):
 
 def test_md5_hash_deterministic():
     """Stesso input -> stesso hash."""
-    from app.core.manipola.transforms.base import op_md5_hash
+    from app.core.manipola.transforms.security import op_md5_hash
     df = pd.DataFrame({"a": ["hello", "world"], "b": [1, 2]})
     r1 = op_md5_hash(df, columns=["a", "b"])
     r2 = op_md5_hash(df, columns=["a", "b"])
@@ -111,7 +111,7 @@ def test_md5_hash_deterministic():
 
 def test_md5_hash_value_matches_expected():
     """L'hash generato deve matchare calcolo manuale."""
-    from app.core.manipola.transforms.base import op_md5_hash
+    from app.core.manipola.transforms.security import op_md5_hash
     df = pd.DataFrame({"a": ["Hello"], "b": [42]})
     result = op_md5_hash(df, columns=["a", "b"], normalize=True)
     # Nota: sorted alfabeticamente => ["a", "b"]
@@ -121,7 +121,7 @@ def test_md5_hash_value_matches_expected():
 
 def test_md5_hash_handles_nan():
     """NaN -> stringa vuota nell'hash."""
-    from app.core.manipola.transforms.base import op_md5_hash
+    from app.core.manipola.transforms.security import op_md5_hash
     df = pd.DataFrame({"a": ["x", None], "b": ["y", "z"]})
     result = op_md5_hash(df, columns=["a", "b"])
     expected_row0 = _expected_md5(["x", "y"])
@@ -133,7 +133,7 @@ def test_md5_hash_handles_nan():
 def test_md5_hash_columns_sorted_alphabetically():
     """Le colonne sono sempre ordinate prima dell'hash — determinismo
     indipendente dall'ordine in input."""
-    from app.core.manipola.transforms.base import op_md5_hash
+    from app.core.manipola.transforms.security import op_md5_hash
     df = pd.DataFrame({"z": ["x"], "a": ["y"]})
     r1 = op_md5_hash(df, columns=["z", "a"])
     r2 = op_md5_hash(df, columns=["a", "z"])
@@ -144,7 +144,7 @@ def test_md5_hash_columns_sorted_alphabetically():
 
 
 def test_table_diff_identifies_added_deleted_modified():
-    from app.core.manipola.transforms.base import op_table_diff
+    from app.core.manipola.transforms.reshape import op_table_diff
     old_df = pd.DataFrame({
         "id": [1, 2, 3],
         "nome": ["Anna", "Beto", "Carlo"],
@@ -169,7 +169,7 @@ def test_table_diff_identifies_added_deleted_modified():
 
 def test_table_diff_unchanged_excluded_by_default():
     """include_unchanged='no': UNCHANGED non nel risultato."""
-    from app.core.manipola.transforms.base import op_table_diff
+    from app.core.manipola.transforms.reshape import op_table_diff
     old_df = pd.DataFrame({"id": [1], "v": ["x"]})
     new_df = pd.DataFrame({"id": [1], "v": ["x"]})  # identico
     result = op_table_diff(
@@ -183,7 +183,7 @@ def test_table_diff_unchanged_excluded_by_default():
 
 def test_table_diff_modified_tracks_changed_columns():
     """Su MODIFIED, _diff_columns contiene le colonne cambiate."""
-    from app.core.manipola.transforms.base import op_table_diff
+    from app.core.manipola.transforms.reshape import op_table_diff
     old_df = pd.DataFrame({"id": [1], "a": ["x"], "b": ["y"]})
     new_df = pd.DataFrame({"id": [1], "a": ["x"], "b": ["z"]})
     result = op_table_diff(
@@ -199,7 +199,7 @@ def test_table_diff_modified_tracks_changed_columns():
 
 def test_table_diff_numeric_tolerance():
     """Differenze numeriche < 1e-9 non sono considerate MODIFIED."""
-    from app.core.manipola.transforms.base import op_table_diff
+    from app.core.manipola.transforms.reshape import op_table_diff
     old_df = pd.DataFrame({"id": [1], "v": [1.0]})
     new_df = pd.DataFrame({"id": [1], "v": [1.0 + 1e-15]})   # tolleranza OK
     result = op_table_diff(
@@ -212,7 +212,7 @@ def test_table_diff_numeric_tolerance():
 
 def test_table_diff_nan_nan_are_equal():
     """NaN == NaN -> UNCHANGED (non MODIFIED)."""
-    from app.core.manipola.transforms.base import op_table_diff
+    from app.core.manipola.transforms.reshape import op_table_diff
     old_df = pd.DataFrame({"id": [1], "v": [None]})
     new_df = pd.DataFrame({"id": [1], "v": [None]})
     result = op_table_diff(

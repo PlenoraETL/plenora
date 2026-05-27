@@ -66,13 +66,13 @@ def test_assert_file_source_group_access_accepts_ctx_kwarg():
     assert sig.parameters["ctx"].kind == inspect.Parameter.KEYWORD_ONLY
 
 
-def test_resolve_file_source_id_path_accepts_ctx_kwarg():
+def test_resolve_file_source_id_bytes_accepts_ctx_kwarg():
     from app.core.arricchisci.api_connection_rest_file import (
         ApiConnectionRestFileMixin,
     )
 
     sig = inspect.signature(
-        ApiConnectionRestFileMixin._resolve_file_source_id_path
+        ApiConnectionRestFileMixin._resolve_file_source_id_bytes
     )
     assert "ctx" in sig.parameters
     assert sig.parameters["ctx"].kind == inspect.Parameter.KEYWORD_ONLY

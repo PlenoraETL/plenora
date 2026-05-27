@@ -1,8 +1,4 @@
-"""
-Contract test — fail-closed sui 32 transform top-level di base.py (E1).
-
-Verifica che un errore interno dei 32 transform top-level di
-"""
+"""Contract test — fail-closed su transform MANIPOLA rappresentative."""
 
 from __future__ import annotations
 
@@ -11,12 +7,9 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from app.core.manipola.transforms.base import (
-    op_aggregate,
-    op_pivot,
-    op_sort,
-    op_type_cast,
-)
+from app.core.manipola.transforms.aggregation import op_aggregate, op_sort
+from app.core.manipola.transforms.cleansing import op_type_cast
+from app.core.manipola.transforms.reshape import op_pivot
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.manipola, pytest.mark.contract]

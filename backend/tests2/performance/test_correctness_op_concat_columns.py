@@ -10,10 +10,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.core.manipola.transforms.base import op_concat_columns
+from app.core.manipola.transforms.columns import op_concat_columns
 
 
-# Oracle: legacy impl copiato verbatim da base.py:599 @ afe47ce
+# Oracle: legacy impl copiato verbatim da previous monolith @ afe47ce
 
 
 def _legacy_op_concat_columns(

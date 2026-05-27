@@ -9,7 +9,7 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 
-from app.core.manipola.transforms.base import op_mask_data
+from app.core.manipola.transforms.security import op_mask_data
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.manipola, pytest.mark.contract]
@@ -33,7 +33,7 @@ def test_op_mask_data_fails_closed_on_mask_fn_error():
         raise RuntimeError("simulated: regex rotta su cf")
 
     with patch.dict(
-        "app.core.manipola.transforms.base.MASK_FUNCTIONS",
+        "app.core.manipola.transforms.security.MASK_FUNCTIONS",
         {"cf": broken_cf_mask},
         clear=False,
     ):
@@ -74,7 +74,7 @@ def test_op_mask_data_no_partial_output_on_fail():
         raise RuntimeError("boom sulla seconda")
 
     with patch.dict(
-        "app.core.manipola.transforms.base.MASK_FUNCTIONS",
+        "app.core.manipola.transforms.security.MASK_FUNCTIONS",
         {"cf": broken_cf_mask},
         clear=False,
     ):

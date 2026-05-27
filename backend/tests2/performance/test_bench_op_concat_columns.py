@@ -11,12 +11,12 @@ from typing import Callable, List
 import pandas as pd
 import pytest
 
-from app.core.manipola.transforms.base import op_concat_columns
+from app.core.manipola.transforms.columns import op_concat_columns
 
 from .conftest import make_pandas_df
 
 
-# Oracle: legacy impl (verbatim da base.py:599 @ afe47ce)
+# Oracle: legacy impl (verbatim da previous monolith @ afe47ce)
 
 
 def _legacy_op_concat_columns(

@@ -112,7 +112,7 @@ def test_expected_filename_passes_through_safe_basenames():
 
 # Path 2: superadmin bypass
 
-def test_storage_blob_loader_called_with_is_superadmin_false(monkeypatch, tmp_path):
+def test_storage_blob_loader_called_with_is_superadmin_false(monkeypatch):
     """Il loader blob storage-aware DEVE essere invocato con
     `is_superadmin=False` SEMPRE, anche se `expected_group_id` fosse
     None (caso che il guard upstream dovrebbe bloccare comunque, ma
@@ -143,16 +143,11 @@ def test_storage_blob_loader_called_with_is_superadmin_false(monkeypatch, tmp_pa
             return {"data": None, "storage_key": "s3://bucket/key", "original_filename": "data.csv"}
         return {"original_filename": "data.csv"}
 
-    def _fake_get_dir(fid):
-        d = tmp_path / fid
-        return d
-
     # Exercise: chiamata con expected_group_id valorizzato
-    source_loading.resolve_file_source_id_path(
+    source_loading.resolve_file_source_id_bytes(
         file_source_id="file-1",
         expected_group_id="grp-1",
         get_file_source=_fake_get_file_source,
-        get_file_source_dir=_fake_get_dir,
         visibility_check=lambda *a, **kw: True,
     )
 

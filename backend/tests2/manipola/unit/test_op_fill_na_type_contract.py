@@ -23,7 +23,7 @@ pytestmark = [
 
 def test_fill_na_numeric_column_with_non_numeric_string_raises():
     """numeric + value='N/A' -> ValueError fail-loud, niente upcast a object."""
-    from app.core.manipola.transforms.base import op_fill_na
+    from app.core.manipola.transforms.cleansing import op_fill_na
 
     df = pd.DataFrame({"amount": [1.0, 2.0, np.nan, 4.0]})
     assert pd.api.types.is_float_dtype(df["amount"])
@@ -37,7 +37,7 @@ def test_fill_na_numeric_column_with_non_numeric_string_raises():
 
 def test_fill_na_numeric_column_with_int_value_preserves_dtype():
     """numeric + value=0 -> ok, dtype numerico preservato (no upcast)."""
-    from app.core.manipola.transforms.base import op_fill_na
+    from app.core.manipola.transforms.cleansing import op_fill_na
 
     df = pd.DataFrame({"amount": [1.0, 2.0, np.nan, 4.0]})
     result = op_fill_na(df, column="amount", method="value", value=0)
@@ -49,7 +49,7 @@ def test_fill_na_numeric_column_with_int_value_preserves_dtype():
 
 def test_fill_na_numeric_column_with_int_dtype_and_int_value():
     """int column + int value -> int preservato (no upcast a float)."""
-    from app.core.manipola.transforms.base import op_fill_na
+    from app.core.manipola.transforms.cleansing import op_fill_na
 
     df = pd.DataFrame({"qty": pd.Series([1, 2, 3, 4], dtype="int64")})
     # NB: int64 non puo' rappresentare NaN; testiamo che il fill su una
@@ -62,7 +62,7 @@ def test_fill_na_numeric_column_with_int_dtype_and_int_value():
 
 def test_fill_na_numeric_column_with_coercible_string_value():
     """numeric + value='1.5' -> ok, coerced a float (no upcast object)."""
-    from app.core.manipola.transforms.base import op_fill_na
+    from app.core.manipola.transforms.cleansing import op_fill_na
 
     df = pd.DataFrame({"amount": [1.0, 2.0, np.nan, 4.0]})
     result = op_fill_na(df, column="amount", method="value", value="1.5")
@@ -74,7 +74,7 @@ def test_fill_na_numeric_column_with_coercible_string_value():
 
 def test_fill_na_numeric_column_with_coercible_int_string():
     """numeric + value='0' -> ok, coerced (caso piu' frequente in canvas)."""
-    from app.core.manipola.transforms.base import op_fill_na
+    from app.core.manipola.transforms.cleansing import op_fill_na
 
     df = pd.DataFrame({"amount": [1.0, 2.0, np.nan, 4.0]})
     result = op_fill_na(df, column="amount", method="value", value="0")
@@ -84,7 +84,7 @@ def test_fill_na_numeric_column_with_coercible_int_string():
 
 def test_fill_na_object_column_accepts_arbitrary_string():
     """object/string column + value='N/A' -> ok, free-form (no policy)."""
-    from app.core.manipola.transforms.base import op_fill_na
+    from app.core.manipola.transforms.cleansing import op_fill_na
 
     df = pd.DataFrame({"label": ["a", "b", None, "d"]})
     # pandas 2.x produce dtype object; pandas 3.x produce StringDtype.
@@ -99,7 +99,7 @@ def test_fill_na_object_column_accepts_arbitrary_string():
 
 def test_fill_na_numeric_column_with_none_value_is_noop():
     """numeric + value=None -> accept, no upcast, NaN restano NaN."""
-    from app.core.manipola.transforms.base import op_fill_na
+    from app.core.manipola.transforms.cleansing import op_fill_na
 
     df = pd.DataFrame({"amount": [1.0, np.nan, 3.0]})
     result = op_fill_na(df, column="amount", method="value", value=None)
@@ -108,7 +108,7 @@ def test_fill_na_numeric_column_with_none_value_is_noop():
 
 def test_fill_na_numeric_column_with_nan_value_is_noop():
     """numeric + value=float('nan') -> accept, no upcast."""
-    from app.core.manipola.transforms.base import op_fill_na
+    from app.core.manipola.transforms.cleansing import op_fill_na
 
     df = pd.DataFrame({"amount": [1.0, np.nan, 3.0]})
     result = op_fill_na(df, column="amount", method="value", value=float("nan"))
@@ -121,7 +121,7 @@ def test_fill_na_numeric_column_with_bool_value_raises():
     bool e' un sottotipo di int in Python; lasciar passare il True su una
     colonna float darebbe 1.0 silenzioso, mascherando un bug del canvas
     (utente che ha confuso il fill di un flag con un fill numerico)."""
-    from app.core.manipola.transforms.base import op_fill_na
+    from app.core.manipola.transforms.cleansing import op_fill_na
 
     df = pd.DataFrame({"amount": [1.0, np.nan]})
     with pytest.raises(ValueError, match="bool"):
@@ -134,7 +134,7 @@ def test_fill_na_numeric_column_with_empty_string_raises():
     Default Python `value=""` su colonna numerica e' la fonte canonica
     del bug pre-C2: senza override il fill demoteva la colonna a object.
     Il messaggio di errore deve indirizzare l'utente al fix."""
-    from app.core.manipola.transforms.base import op_fill_na
+    from app.core.manipola.transforms.cleansing import op_fill_na
 
     df = pd.DataFrame({"amount": [1.0, np.nan]})
     with pytest.raises(ValueError) as exc:
@@ -147,7 +147,7 @@ def test_fill_na_numeric_column_with_empty_string_raises():
 def test_fill_na_all_columns_validates_each_numeric_column():
     """column=None + df misto: la validazione deve scattare se ALMENO
     una colonna numerica esiste e value non e' compatibile."""
-    from app.core.manipola.transforms.base import op_fill_na
+    from app.core.manipola.transforms.cleansing import op_fill_na
 
     df = pd.DataFrame({
         "label": ["a", None, "c"],
@@ -162,7 +162,7 @@ def test_fill_na_all_columns_with_compatible_value():
     """column=None + value=0 -> ok per colonne numeriche; le object/
     string vengono comunque riempite con 0 raw (comportamento pandas
     pre-esistente, non rompiamo questo path)."""
-    from app.core.manipola.transforms.base import op_fill_na
+    from app.core.manipola.transforms.cleansing import op_fill_na
 
     df = pd.DataFrame({
         "amount": [1.0, np.nan, 3.0],
@@ -181,7 +181,7 @@ def test_fill_na_ffill_bfill_unchanged_by_c2_policy():
     """C2 modifica solo il path method='value'. Il forward/backward fill
     non legge il parametro `value`, quindi non deve scattare la
     validazione type-vs-dtype."""
-    from app.core.manipola.transforms.base import op_fill_na
+    from app.core.manipola.transforms.cleansing import op_fill_na
 
     df = pd.DataFrame({"amount": [1.0, np.nan, 3.0, np.nan]})
     # value="N/A" sarebbe ValueError con method='value'; con ffill viene

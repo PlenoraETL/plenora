@@ -860,19 +860,6 @@ class Settings:
         return self._directory("uploads", create=False)
 
     @property
-    def FILES_DIR(self) -> Path:
-        """Cache dir per file_source blob materializzati.
-
-        I file_source sono salvati nel DB (source of truth). Questa dir
-        e' solo una cache filesystem popolata on-demand da
-        `api_connector._resolve_file_source_id_path` quando un workflow
-        deve dare a GDAL/pyogrio un path concreto. I file qui possono
-        essere eliminati in qualsiasi momento — vengono ri-estratti dal
-        DB al prossimo accesso.
-        """
-        return self._directory("files", create=False)
-
-    @property
     def CATALOG_DIR(self) -> Path:
         return self._directory("catalog", create=False)
 
@@ -891,9 +878,6 @@ class Settings:
     @property
     def ARCGIS_CONNECTIONS_DIR(self) -> Path:
         return self._directory("arcgis_connections", create=False)
-
-    def get_file_source_dir(self, file_id: str) -> Path:
-        return self._directory(file_id, base=self.FILES_DIR)
 
     def print_config(self):
         from app.config_display import print_config

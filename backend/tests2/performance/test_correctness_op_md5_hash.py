@@ -13,16 +13,16 @@ import pandas as pd
 import pytest
 from shapely.geometry import Point
 
-from app.core.manipola.transforms.base import op_md5_hash
+from app.core.manipola.transforms.security import op_md5_hash
 
 
-# Oracle: legacy impl (verbatim da base.py:1102 @ aea1f63)
+# Oracle: legacy impl (verbatim da previous monolith @ aea1f63)
 
 
 def _legacy_op_md5_hash(
     df, columns, output_column="md5_hash", normalize=True
 ):
-    """Copia verbatim dell'impl previous implementation (base.py:1102)."""
+    """Copia verbatim dell'impl previous implementation (previous monolith)."""
     if not columns:
         return df
     valid_columns = [c for c in columns if c in df.columns]

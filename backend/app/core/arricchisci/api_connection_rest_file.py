@@ -63,7 +63,7 @@ def _extract_file_source_group_id(
     """+
      variante ctx-strict
     per la catena di risoluzione `file_source` (chiamata da
-    `_assert_file_source_group_access` → `_resolve_file_source_id_path`).
+    `_assert_file_source_group_access` → `_resolve_file_source_id_bytes`).
 
     Storia:
       - helper `_resolve_rest_file_group_id` (legacy
@@ -80,7 +80,7 @@ def _extract_file_source_group_id(
         del fallback singleton anche qui. I 2 callsite di
         produzione (`_build_rest_file_multipart` linea 536,
         `_resolve_file_source_path` linea 1144) propagano sempre
-        `ctx=ctx` attraverso `_resolve_file_source_id_path` →
+        `ctx=ctx` attraverso `_resolve_file_source_id_bytes` →
         `_assert_file_source_group_access`. Il ramo "ctx None
         → singleton" era dead code in produzione AND apriva un
         canale cross-tenant teorico (singleton stale di una run
@@ -279,7 +279,7 @@ class ApiConnectionRestFileMixin:
           → error, altrimenti skip silenzioso.
         - `file_fields` con `source='extra_input'` leggono da
           `extra_files_cfg[name]` (dict con `file_source_id` o id nudo)
-          via `_resolve_file_source_id_path`. Stessa logica required/skip.
+          via `_resolve_file_source_id_bytes`. Stessa logica required/skip.
         - `static_fields` con `content_type` sono inviati come file
           in-memory (per JSON inline tipo styles/mapping); altrimenti
           come form-data semplice.
@@ -752,7 +752,7 @@ class ApiConnectionRestFileMixin:
         except ValueError as e:
             # F5 primo batch (2026-04-24): un ValueError con prefisso
             # "Accesso negato" arriva da `_assert_file_source_group_access`
-            # chiamato da `_resolve_file_source_id_path` in
+            # chiamato da `_resolve_file_source_id_bytes` in
             # `_build_rest_file_multipart` per extra_input). Senza questo
             # catch specifico cadrebbe nel safety-net sotto e risulterebbe
             # "internal" opaco — ma e' un denial cross-tenant semantico
@@ -868,14 +868,6 @@ class ApiConnectionRestFileMixin:
             file_source_id,
             expected_group_id=current_group_id,
         )
-
-    # Backward-compat alias: storicamente questo metodo ritornava un path
-    # str della cache locale; post-Phase5 ritorna `(bytes, filename)`.
-    # Conservato come alias del nuovo metodo bytes per non rompere i test
-    # che lo patchano via `monkeypatch.setattr(service,
-    # "_resolve_file_source_id_path", ...)`. Nuovo codice usa
-    # `_resolve_file_source_id_bytes`.
-    _resolve_file_source_id_path = _resolve_file_source_id_bytes
 
     def _resolve_file_source_path(
         self,

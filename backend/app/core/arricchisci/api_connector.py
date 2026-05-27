@@ -65,7 +65,7 @@ from app.core.arricchisci.api_connection_source_loading import (
 # `_build_rest_file_multipart`, `_parse_rest_file_config`
 # `_rest_file_error`, `_execute_rest_file`) + FILE_SOURCE RESOLUTION
 # 4 metodi: `_assert_file_source_group_access`
-# `_resolve_file_source_id_path`, `_resolve_file_source_path`
+# `_resolve_file_source_id_bytes`, `_resolve_file_source_path`
 # `_resolve_input_path_for_file_processor`) spostato in
 # `app.core.arricchisci.api_connection_rest_file.ApiConnectionRestFileMixin`
 # previous implementation B3-B.5a ha modernizzato 3 patch sites

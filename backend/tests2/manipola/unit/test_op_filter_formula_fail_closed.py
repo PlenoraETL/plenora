@@ -7,7 +7,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from app.core.manipola.transforms.base import op_filter, op_formula
+from app.core.manipola.transforms.filtering import op_filter
+from app.core.manipola.transforms.formula import op_formula
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.manipola, pytest.mark.contract]

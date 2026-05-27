@@ -22,7 +22,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.arricchisci, pytest.mark.security, p
 # byte-per-byte identico: i 6 mixin reader site (typed context contract) leggono
 # `ctx.group_id` quando il caller passa `ctx=`. Il singleton-state
 # fallback resta KEEP_COMPAT (vedi i lock test
-# `test_resolve_file_source_id_path_fails_closed_without_security_context`
+# `test_resolve_file_source_id_bytes_fails_closed_without_security_context`
 # che NON setta il ctx — esplicito KEEP_AS_LEGACY_LOCK).
 def _ctx(group_id: str | None = "grp-1", project_id: str = "p-1",
          preview_limit: int | None = None) -> ArricchisciExecutionContext:
@@ -73,7 +73,7 @@ def test_assert_file_source_group_access_wraps_visibility_backend_errors(api_ser
             api_service._assert_file_source_group_access("fs-1", ctx=_ctx())
 
 
-def test_resolve_file_source_id_path_fails_closed_without_security_context(api_service):
+def test_resolve_file_source_id_bytes_fails_closed_without_security_context(api_service):
     """BE-GO-READY-ORCHESTRATION-ENGINE-010: post-cut del fallback
     singleton, una chiamata senza `ctx` con `_current_group_id=None`
     fail-closed perche' `_extract_file_source_group_id` ritorna
@@ -81,10 +81,10 @@ def test_resolve_file_source_id_path_fails_closed_without_security_context(api_s
     api_service._current_group_id = None
 
     with pytest.raises(ValueError, match="Contesto di sicurezza non determinabile"):
-        api_service._resolve_file_source_id_path("fs-1")
+        api_service._resolve_file_source_id_bytes("fs-1")
 
 
-def test_resolve_file_source_id_path_no_longer_falls_back_to_current_group_id(api_service):
+def test_resolve_file_source_id_bytes_no_longer_falls_back_to_current_group_id(api_service):
     """BE-GO-READY-ORCHESTRATION-ENGINE-010 (cut lock): Current contract
     il fallback `ctx=None → getattr(self, "_current_group_id",
     None)` e' rimosso. Anche se `_current_group_id` e' settato a
@@ -109,7 +109,7 @@ def test_resolve_file_source_id_path_no_longer_falls_back_to_current_group_id(ap
 
     with patch("app.core.files.source_loading.is_resource_visible", side_effect=_spy):
         with pytest.raises(ValueError, match="Contesto di sicurezza non determinabile"):
-            api_service._resolve_file_source_id_path("fs-1")
+            api_service._resolve_file_source_id_bytes("fs-1")
 
     assert visibility_called["count"] == 0, (
         "is_resource_visible NON deve essere chiamata: il fail-closed "
@@ -186,14 +186,13 @@ def test_assert_file_source_group_access_ctx_with_none_group_does_not_fall_back_
     )
 
 
-def test_resolve_file_source_id_path_ctx_wins_over_stale_singleton(api_service, monkeypatch, tmp_path):
+def test_resolve_file_source_id_bytes_ctx_wins_over_stale_singleton(api_service, monkeypatch):
     """TE-024 lock end-to-end: il livello superiore
-    `_resolve_file_source_id_path` propaga ctx fino alla
+    `_resolve_file_source_id_bytes` propaga ctx fino alla
     visibility check, e ctx.group_id vince su singleton stale.
     Cache hit-path NON viene esercitato: monkey-patcha
     `is_resource_visible` per ritornare True solo per
     winner-grp-B, e mock del DB blob per evitare I/O reale."""
-    import app.config as config_mod
     # source_loading e' il consumer reale di is_resource_visible: per
     # patcharlo serve il binding sul consumer, non sull'origine.
     import app.core.files.source_loading as sharing_mod
@@ -201,12 +200,6 @@ def test_resolve_file_source_id_path_ctx_wins_over_stale_singleton(api_service, 
 
     # Stato legacy stale.
     api_service._current_group_id = "stale-grp-A"
-
-    monkeypatch.setattr(
-        config_mod,
-        "settings",
-        type("S", (), {"get_file_source_dir": lambda self, file_source_id: tmp_path / file_source_id})(),
-    )
 
     # Mock del DB blob lookup.
     monkeypatch.setattr(
@@ -227,7 +220,7 @@ def test_resolve_file_source_id_path_ctx_wins_over_stale_singleton(api_service, 
     monkeypatch.setattr(sharing_mod, "is_resource_visible", _visibility_lock)
 
     # Ctx esplicito vince su singleton stale.
-    result = api_service._resolve_file_source_id_path(
+    result = api_service._resolve_file_source_id_bytes(
         "fs-1", ctx=_ctx(group_id="winner-grp-B"),
     )
 
@@ -341,26 +334,20 @@ def test_resolve_file_source_path_project_source_ctx_with_none_group_does_not_fa
     )
 
 
-def test_resolve_file_source_id_path_requires_visibility_before_materializing_blob(api_service, monkeypatch, tmp_path):
+def test_resolve_file_source_id_bytes_requires_visibility_before_materializing_blob(api_service, monkeypatch):
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx typed context contract.
-    import app.config as config_mod
     # source_loading e' il consumer reale di is_resource_visible: per
     # patcharlo serve il binding sul consumer, non sull'origine.
     import app.core.files.source_loading as sharing_mod
     import app.core.files.db as file_sources_db
 
-    monkeypatch.setattr(
-        config_mod,
-        "settings",
-        type("S", (), {"get_file_source_dir": lambda self, file_source_id: tmp_path / file_source_id})(),
-    )
     monkeypatch.setattr(sharing_mod, "is_resource_visible", lambda *args, **kwargs: False)
     monkeypatch.setattr(
         file_sources_db, "get_file_source", lambda *args, **kwargs: {"data": b"abc"}
     )
 
     with pytest.raises(ValueError, match="Accesso negato"):
-        api_service._resolve_file_source_id_path("fs-1", ctx=_ctx())
+        api_service._resolve_file_source_id_bytes("fs-1", ctx=_ctx())
 
 
 # C-API-01: cross-tenant recompute via force_recalculate
