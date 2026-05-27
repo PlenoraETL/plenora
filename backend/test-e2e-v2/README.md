@@ -12,6 +12,7 @@ attiva e sostituisce il vecchio harness `backend/test-e2e`.
 | `plenora-test-sqlserver` | `51433` | `1433` | SQL Server 2022 Developer con seed SQL |
 | `plenora-test-oracle` | `51521` | `1521` | Oracle Free 23 full con seed SQL anche Spatial |
 | `plenora-test-fake-rest` | `58080` | `8080` | API REST fake |
+| `plenora-e2e-minio` | `59000` | `9000` | MinIO object storage per profilo hybrid/object storage |
 | `plenora-test-ftp` | `2121` | `21` | FTP con fixture file |
 | `plenora-test-sftp` | `2222` | `22` | SFTP con fixture file |
 
@@ -25,6 +26,22 @@ testano solo Postgres/REST/file transfer. Oracle usa l'immagine `full` per
 avere anche i tipi Spatial `MDSYS.SDO_GEOMETRY`.
 
 ## Avvio
+
+Comando consigliato da root repo: ricrea le fixture, avvia anche il profilo
+cross-db e collega backend/worker/beat Plenora alla rete e2e.
+
+```bash
+bash backend/test-e2e-v2/recreate.sh
+```
+
+Per il set leggero senza MySQL, SQL Server e Oracle:
+
+```bash
+bash backend/test-e2e-v2/recreate.sh --no-cross-db
+```
+
+Lo script elimina solo i volumi della suite e2e. Non elimina i volumi
+applicativi Plenora.
 
 ```bash
 cd backend/test-e2e-v2
@@ -54,6 +71,7 @@ plenora-test-mysql:3306
 plenora-test-sqlserver:1433
 plenora-test-oracle:1521/plenora_test
 plenora-test-fake-rest:8080
+plenora-e2e-minio:9000
 plenora-test-ftp:21
 plenora-test-sftp:22
 ```
