@@ -150,8 +150,8 @@ def test_execute_enrichment_task_propagates_result_id_in_dataframe_branch(
     `result_id` nel dict ritornato. Senza, `/api/tasks/{id}/download`
     cade su `task_info.result["result_id"]` → None → 410 Gone.
 
-    Behavior probe: monkeypatch `save_pipeline_result` per ritornare
-    un result_id noto. Forziamo il task ad arrivare al ramo DataFrame
+    Behavior probe: il salvataggio pipeline deve ritornare un result_id noto.
+    Forziamo il task ad arrivare al ramo DataFrame
     sostituendo lo step di esecuzione con uno stub che produce un
     DataFrame "finto", e verifichiamo che il dict ritornato dal task
     contenga `"result_id"`.

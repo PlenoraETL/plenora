@@ -23,11 +23,6 @@ class ResultSaveError(Exception):
     """Fatal error while saving a pipeline result."""
 
 
-def apply_results_retention_after_save(project_id: str) -> None:
-    """Compatibility wrapper around the results retention workflow."""
-    apply_results_retention(project_id)
-
-
 def cleanup_uploaded_result_blob(
     storage,
     storage_key: str,
@@ -209,7 +204,7 @@ def save_result_blob_from_bytes(
                 f"(policy={policy}, {size // (1024 * 1024)} MB): {storage_key}"
             )
 
-        apply_results_retention_after_save(project_id)
+        apply_results_retention(project_id)
         return result_id
     except ResultSaveError:
         raise
@@ -226,7 +221,6 @@ def save_result_blob_from_bytes(
 
 __all__ = [
     "ResultSaveError",
-    "apply_results_retention_after_save",
     "cleanup_uploaded_result_blob",
     "close_failed_result_upload_intent",
     "close_result_upload_intent",

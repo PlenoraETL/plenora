@@ -110,8 +110,8 @@ def env(api_service):
             # B3-B.9 cleanup: rimossi 3 patches dead post-B3-B extraction.
             #   - `app.core.arricchisci.api_connector.save_dataframe` (0 usages
             #     in test): post-extraction `_save_and_build_dataframe_response`
-            #     vive nel SupportMixin (B3-B.3) e usa `save_pipeline_result`
-            #     lazy import — il binding api_connector.save_dataframe non
+            #     vive nel SupportMixin (B3-B.3) e usa il salvataggio pipeline
+            #     lazy import; il binding api_connector.save_dataframe non
             #     veniva mai invocato.
             #   - `app.core.arricchisci.api_connector.save_result_blob`: il
             #     binding alias api_connector e' dead post-extraction; la

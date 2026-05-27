@@ -48,7 +48,7 @@ def db_mode_env(monkeypatch):
         mod.store, "resolve_group_id_for_result",
         lambda pid, gid: gid or "grp-default",
     )
-    monkeypatch.setattr(mod, "apply_results_retention_after_save", lambda pid: None)
+    monkeypatch.setattr(mod, "apply_results_retention", lambda pid: None)
     return save_calls
 
 
@@ -199,7 +199,7 @@ def s3_mode_env(monkeypatch):
         mod.store, "resolve_group_id_for_result",
         lambda pid, gid: gid or "grp-default",
     )
-    monkeypatch.setattr(mod, "apply_results_retention_after_save", lambda pid: None)
+    monkeypatch.setattr(mod, "apply_results_retention", lambda pid: None)
     monkeypatch.setattr(mod, "record_result_upload_intent", lambda *a, **kw: "intent-id-1")
     monkeypatch.setattr(mod, "close_result_upload_intent", lambda iid: None)
     monkeypatch.setattr(mod, "close_failed_result_upload_intent", lambda *a, **kw: None)

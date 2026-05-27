@@ -48,7 +48,6 @@ from typing import Optional
 from app.core.results import store
 from app.core.results.blob_writer import (
     ResultSaveError,
-    apply_results_retention_after_save,
     close_failed_result_upload_intent,
     close_result_upload_intent,
     enforce_db_hard_cap,
@@ -56,6 +55,7 @@ from app.core.results.blob_writer import (
     _runtime_storage_upload_error,
     _storage_key,
 )
+from app.core.results.retention import apply_results_retention
 from app.core.results.storage_policy import (
     result_db_hard_cap,
     storage_policy,
@@ -460,7 +460,7 @@ class StreamingResultBlobWriter:
             rid = self._finalize_db()
         else:
             rid = self._finalize_s3()
-        apply_results_retention_after_save(self.project_id)
+        apply_results_retention(self.project_id)
         return rid
 
     def abort(self) -> None:

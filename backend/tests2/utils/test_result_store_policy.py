@@ -56,7 +56,7 @@ def mock_db(monkeypatch):
                         lambda pid, group_id=None: group_id or "grp-1")
     monkeypatch.setattr(results_store, "save_result_row",
                         lambda **kw: saved.append(kw))
-    monkeypatch.setattr(result_blob_writer, "apply_results_retention_after_save",
+    monkeypatch.setattr(result_blob_writer, "apply_results_retention",
                         lambda pid: None)
     return saved
 

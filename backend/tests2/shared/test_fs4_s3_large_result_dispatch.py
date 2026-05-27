@@ -72,7 +72,7 @@ def mock_db(monkeypatch):
     )
     monkeypatch.setattr(results_db, "save_result_row",
                         lambda **kw: saved.append(kw))
-    monkeypatch.setattr(result_blob_writer, "apply_results_retention_after_save",
+    monkeypatch.setattr(result_blob_writer, "apply_results_retention",
                         lambda pid: None)
 
     return saved

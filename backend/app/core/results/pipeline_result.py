@@ -19,12 +19,7 @@ peak (limitazione del writer, non del path).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, TypeAlias
-
-from app.core.results.blob_writer import save_result_blob_from_bytes
-
-
-PipelineResultPayload: TypeAlias = dict[str, str]
+from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -34,40 +29,6 @@ class PipelineResultSave:
     result_id: str
     output_filename: str
     output_columns: Optional[list[str]] = None
-
-
-def pipeline_result_save_legacy_payload(
-    outcome: PipelineResultSave,
-) -> PipelineResultPayload:
-    """Serialize the public save_pipeline_result compatibility payload."""
-    return {
-        "result_id": outcome.result_id,
-        "output_filename": outcome.output_filename,
-    }
-
-
-def save_pipeline_result(
-    project_id: str,
-    df,
-    output_format: str,
-    filename_stem: str,
-    rows_count: Optional[int] = None,
-    group_id: Optional[str] = None,
-    geom_column: Optional[str] = None,
-    crs: str = "EPSG:4326",
-) -> PipelineResultPayload:
-    """Compatibility wrapper returning legacy dict result metadata."""
-    outcome = save_pipeline_result_outcome(
-        project_id=project_id,
-        df=df,
-        output_format=output_format,
-        filename_stem=filename_stem,
-        rows_count=rows_count,
-        group_id=group_id,
-        geom_column=geom_column,
-        crs=crs,
-    )
-    return pipeline_result_save_legacy_payload(outcome)
 
 
 def save_pipeline_result_outcome(
@@ -140,7 +101,5 @@ def save_pipeline_result_outcome(
 
 __all__ = [
     "PipelineResultSave",
-    "pipeline_result_save_legacy_payload",
-    "save_pipeline_result",
     "save_pipeline_result_outcome",
 ]

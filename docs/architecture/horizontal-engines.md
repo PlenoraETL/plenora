@@ -239,6 +239,11 @@ Current contracts:
 - Resource loading is bounded by explicit byte limits.
 - `LoadedResource` pairs loaded data with `ResourceMetadata`.
 - Object storage is governed by `STORAGE_POLICY`.
+- DataFrame pipeline result persistence returns `PipelineResultSave` through
+  `app/core/results/pipeline_result.py`; callers should not use legacy dict
+  result payload wrappers.
+- Result retention is applied through `app/core/results/retention.py`; result
+  writers should not restore writer-local retention compatibility aliases.
 - Result object-storage writes record `upload_intent` before upload and
   close it only after the `results` row is saved or after confirmed
   compensating delete.

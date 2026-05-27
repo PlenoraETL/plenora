@@ -1125,8 +1125,8 @@ def execute_enrichment_task(
             logger.info(f"[Task {task_id}] DataFrame vuoto (0 righe) — salvo output con solo header")
         
         # Salva DataFrame come bytes/object su destinazione finale
-        # Niente DATA_DIR/temp staging (save_pipeline_result e la variante
-        # S3 per eseguibili gestiscono il dispatch internamente
+        # Niente DATA_DIR/temp staging: result pipeline ed eseguibili storage
+        # gestiscono il dispatch internamente.
         final_filename = f"{output_filename}.{final_format}"
         elapsed_time = time.time() - start_time
         result_id: Optional[str] = None
@@ -1163,17 +1163,17 @@ def execute_enrichment_task(
                 f"eseguibili-outputs/{task_id}/{storage_filename}"
             )
         else:
-            # Arricchisci standard: single entry-point save_pipeline_result
-            from app.core.results.pipeline_result import save_pipeline_result
-            saved = save_pipeline_result(
+            # Arricchisci standard: typed pipeline-result boundary.
+            from app.core.results.pipeline_result import save_pipeline_result_outcome
+            saved = save_pipeline_result_outcome(
                 project_id=project_id,
                 df=final_df,
                 output_format=final_format,
                 filename_stem=output_filename,
                 rows_count=len(final_df),
             )
-            result_id = saved["result_id"]
-            saved_path = Path(saved["output_filename"])
+            result_id = saved.result_id
+            saved_path = Path(saved.output_filename)
             logger.info(f"[Task {task_id}] Risultato persistito: {result_id}")
 
             from app.core.projects.service import ProjectService as _ProjSvc

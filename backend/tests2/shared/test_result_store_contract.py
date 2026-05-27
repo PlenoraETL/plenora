@@ -16,7 +16,6 @@ from app.core.results.blob_writer import (
 )
 from app.core.results.pipeline_result import (
     PipelineResultSave,
-    save_pipeline_result,
     save_pipeline_result_outcome,
 )
 
@@ -55,7 +54,7 @@ def test_save_result_blob_removes_temp_file_only_after_success(monkeypatch, tmp_
     )
     monkeypatch.setattr(
         result_blob_writer,
-        "apply_results_retention_after_save",
+        "apply_results_retention",
         lambda project_id: None,
     )
     monkeypatch.setattr(
@@ -138,19 +137,16 @@ def test_apply_results_retention_uses_typed_result_rows(monkeypatch):
     assert deleted == ["res-old"]
 
 
-def test_blob_writer_retention_wrapper_delegates_to_results_domain(monkeypatch):
+def test_blob_writer_retention_compat_wrapper_stays_removed():
     import app.core.results.blob_writer as result_blob_writer
 
-    called: list[str] = []
-    monkeypatch.setattr(
+    assert not hasattr(
         result_blob_writer,
-        "apply_results_retention",
-        called.append,
+        "apply_results_retention" + "_after_save",
+    ), (
+        "result retention must use app.core.results.retention.apply_results_retention "
+        "directly; do not restore the blob_writer compat wrapper"
     )
-
-    result_blob_writer.apply_results_retention_after_save("proj-1")
-
-    assert called == ["proj-1"]
 
 
 def test_result_store_compat_facade_is_tombstoned():
@@ -251,24 +247,10 @@ def test_save_pipeline_result_outcome_is_typed_internal_boundary(monkeypatch):
     assert calls["output_format"] == "csv"
 
 
-def test_save_pipeline_result_public_wrapper_is_explicit_legacy_dict(monkeypatch):
+def test_save_pipeline_result_public_wrapper_is_tombstoned():
     import app.core.results.pipeline_result as pipeline_result
 
-    monkeypatch.setattr(
-        pipeline_result,
-        "save_pipeline_result_outcome",
-        lambda **kwargs: PipelineResultSave(
-            result_id="res-compat",
-            output_filename="compat.csv",
-        ),
-    )
-
-    assert save_pipeline_result(
-        project_id="proj-1",
-        df=object(),
-        output_format="csv",
-        filename_stem="compat",
-    ) == {"result_id": "res-compat", "output_filename": "compat.csv"}
+    assert not hasattr(pipeline_result, "save_pipeline" + "_result")
 
 
 # RB.2 (2026-04-27): AWS credentials expired -> ResultSaveError con messaggio
@@ -436,7 +418,7 @@ def _wire_object_storage_writer(monkeypatch, *, fake_storage, saved):
     monkeypatch.setattr(results_store, "save_result_row",
         lambda **kwargs: saved.update(kwargs),
     )
-    monkeypatch.setattr(result_blob_writer, "apply_results_retention_after_save", lambda pid: None)
+    monkeypatch.setattr(result_blob_writer, "apply_results_retention", lambda pid: None)
     # policy=object_storage: dispatcher forza sempre object storage
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
     monkeypatch.setattr(

@@ -242,12 +242,12 @@ def test_eseguibili_download_cleanup_runs_even_if_delete_by_task_raises():
         mock_del_owner.assert_called_once_with("t1")
 
 
-# 3. Task result payload shape (post save_pipeline_result)
+# 3. Task result payload shape (post save_pipeline_result_outcome)
 
 
-def test_save_pipeline_result_dict_shape(monkeypatch):
-    """save_pipeline_result ritorna sempre {result_id, output_filename}."""
-    from app.core.results.pipeline_result import save_pipeline_result
+def test_save_pipeline_result_outcome_shape(monkeypatch):
+    """save_pipeline_result_outcome returns typed result metadata."""
+    from app.core.results.pipeline_result import save_pipeline_result_outcome
     import app.core.results.streaming_blob_writer as streaming_blob_writer
 
     # Stub DB mock
@@ -263,15 +263,14 @@ def test_save_pipeline_result_dict_shape(monkeypatch):
     )
 
     df = pd.DataFrame({"a": [1, 2]})
-    result = save_pipeline_result(
+    result = save_pipeline_result_outcome(
         project_id="p1", df=df, output_format="csv",
         filename_stem="myreport", rows_count=2,
     )
 
     # Shape contract
-    assert set(result.keys()) == {"result_id", "output_filename"}
-    assert result["result_id"] == "res-xyz"
-    assert result["output_filename"] == "myreport.csv"
+    assert result.result_id == "res-xyz"
+    assert result.output_filename == "myreport.csv"
     # DB blob salvato
     assert len(saved_calls) == 1
     assert saved_calls[0]["filename"] == "myreport.csv"
@@ -279,11 +278,11 @@ def test_save_pipeline_result_dict_shape(monkeypatch):
 
 def test_save_pipeline_result_rejects_unknown_format():
     """Formato non supportato â†’ ValueError dalla serializzazione."""
-    from app.core.results.pipeline_result import save_pipeline_result
+    from app.core.results.pipeline_result import save_pipeline_result_outcome
 
     df = pd.DataFrame({"a": [1]})
     with pytest.raises(ValueError):
-        save_pipeline_result(
+        save_pipeline_result_outcome(
             project_id="p1", df=df, output_format="xyz",
             filename_stem="x", rows_count=1,
         )
@@ -291,7 +290,7 @@ def test_save_pipeline_result_rejects_unknown_format():
 
 def test_save_pipeline_result_path_based_tombstone_post_phase5():
     """Post-Phase5: `save_dataframe` path-based e' stato rimosso.
-    `save_pipeline_result*` ora usa esclusivamente `save_dataframe_to_bytes`
+    Il salvataggio pipeline ora usa esclusivamente `save_dataframe_to_bytes`
     (vedi pipeline_result.py). I test originali che mockavano save_dataframe
     (path) testavano un flow non piu' esistente."""
     from app.core.dataframes import frame_io

@@ -284,19 +284,22 @@ def install_enrichment_task_mocks(
         monkeypatch.setitem(sys.modules, lifecycle_name, stub)
 
     # 9. result persistence (lazy)
-    def _fake_save_pipeline_result(**kwargs):
+    def _fake_save_pipeline_result_outcome(**kwargs):
+        from app.core.results.pipeline_result import PipelineResultSave
+
         spies.saved_pipeline_results.append(kwargs)
-        return {
-            "result_id": "fake-result-id-df",
-            "output_filename": kwargs.get("filename_stem", "output") + ".csv",
-        }
+        return PipelineResultSave(
+            result_id="fake-result-id-df",
+            output_filename=kwargs.get("filename_stem", "output") + ".csv",
+        )
 
     def _fake_save_result_blob(**kwargs):
         spies.saved_result_blobs.append(kwargs)
         return "fake-result-id-file"
 
     monkeypatch.setattr(
-        "app.core.results.pipeline_result.save_pipeline_result", _fake_save_pipeline_result,
+        "app.core.results.pipeline_result.save_pipeline_result_outcome",
+        _fake_save_pipeline_result_outcome,
     )
     monkeypatch.setattr(
         "app.core.results.blob_writer.save_result_blob_from_bytes",

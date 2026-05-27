@@ -1,7 +1,7 @@
 """Tombstone: gpkg/shp cleanup hardening (Post-Phase5).
 
 I test originali verificavano:
-  - DATA_DIR/temp resta vuota dopo save_pipeline_result(gpkg)
+  - DATA_DIR/temp resta vuota dopo il salvataggio pipeline gpkg
   - il path passato a save_dataframe e' dentro TemporaryDirectory
     con prefix urby_gpkg_shp_
   - tmp dir pulita anche su upload failure

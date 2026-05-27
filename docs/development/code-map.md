@@ -627,7 +627,7 @@ Responsabilita: salva e legge result finali, separando catalogo DB e payload run
 
 | file | funzioni/classi chiave | cosa guardare |
 |---|---|---|
-| `app/core/results/blob_writer.py` | `save_result_blob`, `save_result_blob_from_bytes`, `ResultSaveError`, `_storage_policy`, `_should_use_object_storage`, `_apply_results_retention` | writer result policy-aware |
+| `app/core/results/blob_writer.py` | `save_result_blob_from_bytes`, `ResultSaveError`, `enforce_db_hard_cap`, `record_result_upload_intent` | writer result policy-aware |
 | `app/core/results/db.py` | `save_result`, `get_latest_result`, `get_result_data`, `delete_results_for_project`, object-storage reader helpers | catalogo result + reader compatibility |
 | `app/infrastructure/storage/cloud_backends.py` | `ObjectStorage`, `ObjectStorageDisabledError`, `object_storage_enabled`, `get_runtime_object_storage`, `get_backup_object_storage`, `get_log_archive_storage`, `validate_storage_config` | factory e gate object storage |
 | `app/config.py` | `StoragePolicy`, `StorageProvider`, storage env accessors | policy storage dichiarativa |
@@ -737,4 +737,3 @@ Sintesi trasversale dei confini operativi piu' importanti del repo. Toccarli sen
 - **`backend/app/core/features/`** governa il contratto ArcGIS. I response model `WriteFeaturesResponse` e `CreateServiceResponse` sono consumati da test e frontend: cambiarne shape e' un breaking change. Token come `?token=` query param, mai header. Output sempre via `_mask_secrets` per non leakare credenziali.
 - **`backend/app/core/auth/` + RBAC** non si bypassa. Tutte le route nuove devono passare per `JWTMiddleware`; protezioni di ruolo via `require_admin`/`require_user_or_above`/`require_not_esecutore`/`require_*_owner`. Niente lettura segreti in chiaro: passare da `infrastructure/security/crypto.py`.
 - **`backend/app/core/manipola/transforms_registry.json`** e' la fonte unica delle trasformazioni esposte. Nuove `op_*` devono essere registrate li'; il frontend (`api/transforms.js` -> `transforms_api.get_registry`) consuma quel file. Mai hardcodare trasformazioni nel router o in `executor.py`.
-
