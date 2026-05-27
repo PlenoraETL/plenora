@@ -125,7 +125,7 @@ def test_retention_failure_does_not_propagate(monkeypatch):
 
 def test_apply_runs_retention_signature_stable():
     """Signature stabile di apply_runs_retention: (canvas_id, group_id, retention_n)."""
-    from app.core.intermediate.db import apply_runs_retention
+    from app.core.intermediate.retention import apply_runs_retention
 
     sig = inspect.signature(apply_runs_retention)
     params = list(sig.parameters.keys())
@@ -139,10 +139,10 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_intermediate_db_does_not_read_project_retention_policy():
-    """La policy projects.retention_n non deve vivere dentro intermediate.db."""
+    """La policy projects.retention_n non deve vivere dentro intermediate retention."""
     import ast
 
-    src_path = _BACKEND_ROOT / "app" / "core" / "intermediate" / "db.py"
+    src_path = _BACKEND_ROOT / "app" / "core" / "intermediate" / "retention.py"
     tree = ast.parse(src_path.read_text(encoding="utf-8"))
 
     for node in ast.walk(tree):

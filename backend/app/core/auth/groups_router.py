@@ -140,7 +140,7 @@ def delete_group(group_id: str,
     """
     Cascade delete gruppo (solo superadmin).
     Elimina in ordine: schedules, api_connections, datasources, file_sources,
-    connections, projects (+ results.db + intermediate.db), users, log.db, gruppo.
+    connections, projects (+ results/intermediate cleanup), users, log.db, gruppo.
     Blocca solo se il gruppo è 'default'.
     """
     if group_id == "default":

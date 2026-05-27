@@ -182,7 +182,7 @@ def execute_enrichment_task(
     error_report_file = None  # filename display, e.g. enrichment_errors_{task_id}.csv
     error_report_result_id = None
 
-    # Apre run in intermediate.db (non bloccante
+    # Apre run intermedio (non bloccante).
     # Per gli eseguibili saltiamo `intermediate.create_run` perche' l'eseguibile
     # non e' un progetto in `projects`, quindi un record runs con
     # canvas_id="exec_..." sarebbe orfano. MA il `_group_id` deve comunque

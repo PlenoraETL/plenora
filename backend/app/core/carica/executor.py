@@ -195,7 +195,7 @@ class CaricaExecutor:
             except Exception as _idem_err:
                 # Fail-open: se il check idempotency esplode, NON blocchiamo
                 # Meglio un possibile duplicato che bloccare la run su un
-                # errore di lettura intermediate.db
+                # errore di lettura dello stato intermedio
                 logger.warning(
                     f"[IDEMPOTENCY] check fallito per run_id={run_id}: {_idem_err}. "
                     f"Proseguo senza guard (fail-open).",

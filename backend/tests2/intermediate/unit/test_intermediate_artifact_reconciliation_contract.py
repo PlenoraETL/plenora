@@ -1,7 +1,7 @@
 """
 Contract tests BE-GO-READY-STORAGE-ENGINE-016-INTERMEDIATE-ARTIFACT-RECONCILIATION.
 
-Lock the W1 reconciliation wiring on `_delete_run` in
+Lock the W1 reconciliation wiring on `retention._delete_run`.
 """
 
 from __future__ import annotations
@@ -63,22 +63,22 @@ def _make_tx_patcher(*, delete_rowcount=1):
         yield conn
 
     return (
-        patch("app.core.intermediate.db.transaction", side_effect=tx_cm),
+        patch("app.core.intermediate.retention.unit_of_work", side_effect=tx_cm),
         cursor,
         conn,
     )
 
 
 def _patch_fetchall(monkeypatch, *, response):
-    """Monkeypatch the bound `fetchall` symbol used by `_delete_run`."""
+    """Monkeypatch the bound `_fetchall` symbol used by `_delete_run`."""
     calls: List[Tuple[str, tuple]] = []
 
     def _fake_fetchall(sql, params=()):
         calls.append((sql, tuple(params)))
         return list(response)
 
-    import app.core.intermediate.db as idb
-    monkeypatch.setattr(idb, "fetchall", _fake_fetchall)
+    import app.core.intermediate.retention as retention
+    monkeypatch.setattr(retention, "_fetchall", _fake_fetchall)
     return calls
 
 
@@ -92,7 +92,7 @@ def _executed_sqls(cursor):
 def test_no_artifacts_only_deletes_run_no_reconciliation(monkeypatch):
     """Dominant case in production (`metadata_only`): no node_meta
     row has a non-NULL artifact_uri with cleanup-eligible status."""
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import retention as idb
 
     fa_calls = _patch_fetchall(monkeypatch, response=[])
     patcher, cursor, _conn = _make_tx_patcher()
@@ -141,7 +141,7 @@ def test_single_complete_artifact_records_pair_and_marks_done(monkeypatch):
     - 2 record_pending entries (parquet + derived manifest sibling)
     - DELETE inside same transaction
     - 2 compensating_delete + 2 mark_done post-commit."""
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import retention as idb
 
     artifact_key = "intermediate/group=g1/project=p1/run=r1/module=manipola/node=n1/kind=final/data.parquet"
     expected_manifest = "intermediate/group=g1/project=p1/run=r1/module=manipola/node=n1/kind=final/manifest.json"
@@ -214,7 +214,7 @@ def test_artifact_uri_with_scheme_is_skipped(monkeypatch):
     """Defense: if a future writer stores `s3://...` or `file://...`,
     the W1 path skips it (cannot guess how to delete via runtime
     object storage). No record_pending, no compensating_delete."""
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import retention as idb
 
     _patch_fetchall(
         monkeypatch,
@@ -251,7 +251,7 @@ def test_artifact_uri_not_ending_in_data_parquet_skips_manifest(monkeypatch):
     """Future writer with a different layout (e.g. single-file
     `<prefix>/snapshot.parquet`): we record the parquet itself but
     DO NOT derive a manifest sibling we don't know exists."""
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import retention as idb
 
     custom_key = "intermediate/group=g/project=p/run=r/module=m/node=n/kind=k/snapshot.parquet"
     _patch_fetchall(
@@ -287,7 +287,7 @@ def test_compensating_delete_failed_marks_failed_attempt(monkeypatch):
     """ADR-0011: storage failure does NOT propagate; the run row is
     still gone. The new contract: failure is now persisted via
     mark_failed_attempt."""
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import retention as idb
 
     artifact_key = "intermediate/group=g/project=p/run=r/module=m/node=n/kind=final/data.parquet"
     _patch_fetchall(
@@ -333,7 +333,7 @@ def test_compensating_delete_failed_marks_failed_attempt(monkeypatch):
 def test_pre_fetch_sql_includes_failed_and_excludes_null_at_db_level(monkeypatch):
     """Failed artifacts with artifact_uri are cleanup-eligible; null rows
     remain filtered at the DB level."""
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import retention as idb
 
     fa_calls = _patch_fetchall(monkeypatch, response=[])
     patcher, _cursor, _conn = _make_tx_patcher()
@@ -358,7 +358,7 @@ def test_pre_fetch_sql_includes_failed_and_excludes_null_at_db_level(monkeypatch
 def test_multiple_nodes_each_yield_pair_entries(monkeypatch):
     """A run with 3 full_artifact nodes produces 6 pending entries
     (3 parquet + 3 manifest) inside the same transaction."""
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import retention as idb
 
     keys = [
         f"intermediate/group=g/project=p/run=r/module=m/node=n{i}/kind=final/data.parquet"
@@ -411,7 +411,7 @@ def test_delete_all_runs_for_canvas_reconciles_each_run(monkeypatch):
     `_delete_run`. Each invocation must trigger its own reconciliation
     pass (not just the last one). Sanity check: 2 runs with 1
     artifact each → 2 pre-fetch SELECTs against `node_meta`."""
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import retention as idb
 
     # Two runs, each with one canonical artifact.
     runs_response = [{"run_id": "r-a"}, {"run_id": "r-b"}]

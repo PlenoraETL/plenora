@@ -30,21 +30,10 @@ _RETENTION_POLICY_MARKERS = (
     "artifact_status IN ('complete', 'failed')",
 )
 _INTERMEDIATE_DB_PUBLIC_EXPORTS = {
-    "DEFAULT_RUNS_RETENTION",
-    "apply_runs_retention",
-    "close_connection",
-    "close_worker_connection",
-    "create_run",
-    "delete_all_runs_for_canvas",
     "get_node_meta",
     "get_node_table_rows",
-    "get_run",
-    "init_db",
     "insert_node_rows",
     "list_node_meta",
-    "list_runs",
-    "pin_run",
-    "update_run",
     "upsert_node_meta",
     "upsert_node_meta_extended",
     "write_node_atomic",
@@ -59,6 +48,9 @@ _REMOVED_PRIVATE_COMPAT_ALIASES = {
     "_SPECIAL_FLOAT_TAG_NAN",
     "_SPECIAL_FLOAT_TAG_INF_POS",
     "_SPECIAL_FLOAT_TAG_INF_NEG",
+    "_SPECIAL_FLOAT_KEY",
+    "_from_jsonable_value",
+    "_to_jsonable",
 }
 
 
@@ -174,36 +166,18 @@ def test_retention_owns_retention_and_cleanup_logic() -> None:
 
 
 def test_intermediate_db_facade_contains_no_embedded_run_sql_or_retention_policy() -> None:
-    facade_tree = _tree(_INTERMEDIATE_ROOT / "db.py")
     runs_tree = _tree(_INTERMEDIATE_ROOT / "runs_db.py")
-    facade_source = _source(_INTERMEDIATE_ROOT / "db.py")
     retention_source = _source(_INTERMEDIATE_ROOT / "retention.py")
 
-    facade_literals = "\n".join(_string_literals(facade_tree))
     runs_literals = "\n".join(_string_literals(runs_tree))
 
-    leaked = [
-        marker
-        for marker in (*_RUN_CRUD_SQL_MARKERS, *_RUN_RETENTION_SQL_MARKERS)
-        if marker in facade_literals
-    ]
-    assert leaked == [], (
-        "app.core.intermediate.db must stay a compatibility facade. "
-        f"Move run SQL back to its leaf module. Leaked markers: {leaked}"
-    )
+    assert not (_INTERMEDIATE_ROOT / "db.py").exists()
     missing_from_leaf = [
         marker for marker in _RUN_CRUD_SQL_MARKERS if marker not in runs_literals
     ]
     assert missing_from_leaf == [], (
         "Run persistence SQL must be owned by runs_db.py. "
         f"Missing leaf markers: {missing_from_leaf}"
-    )
-    leaked_policy = [
-        marker for marker in _RETENTION_POLICY_MARKERS if marker in facade_source
-    ]
-    assert leaked_policy == [], (
-        "app.core.intermediate.db must not own retention policy. "
-        f"Move retention policy to retention.py. Leaked markers: {leaked_policy}"
     )
     missing_policy = [
         marker for marker in _RETENTION_POLICY_MARKERS if marker not in retention_source
@@ -229,16 +203,8 @@ def test_runs_db_contains_no_embedded_retention_policy_or_cleanup_sql() -> None:
     assert leaked_policy == []
 
 
-def test_intermediate_db_facade_imports_only_intermediate_leaf_dbs() -> None:
-    tree = _tree(_INTERMEDIATE_ROOT / "db.py")
-
-    imports = _imported_modules(tree)
-
-    assert "app.core.projects.db" not in imports
-    assert "app.core.intermediate.runs_db" in imports
-    assert "app.core.intermediate.node_snapshots_db" in imports
-    assert "app.core.intermediate.retention" in imports
-    assert "app.core.intermediate.init" in imports
+def test_intermediate_db_facade_stays_tombstoned() -> None:
+    assert not (_INTERMEDIATE_ROOT / "db.py").exists()
 
 
 def test_runtime_code_does_not_import_intermediate_db_facade() -> None:
@@ -272,67 +238,46 @@ def test_runtime_code_does_not_import_intermediate_db_facade() -> None:
 
 
 def test_intermediate_db_facade_exports_are_explicit_and_ratcheted() -> None:
-    tree = _tree(_INTERMEDIATE_ROOT / "db.py")
-
-    assert _all_assignment_values(tree) == _INTERMEDIATE_DB_PUBLIC_EXPORTS
-
-    public_functions = {
-        node.name
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef) and not node.name.startswith("_")
-    }
-    assert public_functions == _INTERMEDIATE_DB_ALLOWED_PUBLIC_FUNCTIONS
-
-    leaked_private_aliases = (
-        _module_assignment_names(tree) & _REMOVED_PRIVATE_COMPAT_ALIASES
-    )
-    assert leaked_private_aliases == set()
+    assert not (_INTERMEDIATE_ROOT / "db.py").exists()
 
 
-def test_intermediate_db_create_run_facade_preserves_patchable_boundary(
-    monkeypatch,
-) -> None:
-    from app.core.intermediate import db as idb
+def test_runs_db_create_run_preserves_explicit_patchable_boundary() -> None:
+    from app.core.intermediate import runs_db
 
     captured: list[dict] = []
 
     def fake_execute(sql, params=()):
         captured.append({"sql": sql, "params": tuple(params)})
 
-    monkeypatch.setattr(idb, "execute", fake_execute)
-    monkeypatch.setattr(idb, "get_run", lambda run_id: {"run_id": run_id})
-
-    out = idb.create_run(
-        "run-1",
-        "canvas-1",
-        "group-1",
+    out = runs_db.create_run(
+        run_id="run-1",
+        canvas_id="canvas-1",
+        group_id="group-1",
         total_nodes=2,
         user_id="user-1",
+        execute_func=fake_execute,
+        get_run_func=lambda run_id: {"run_id": run_id},
     )
 
-    assert out == {"run_id": "run-1"}
+    assert out.as_dict() == {"run_id": "run-1"}
     assert len(captured) == 1
     assert "INSERT INTO runs" in captured[0]["sql"]
     assert "user-1" in captured[0]["params"]
 
 
-def test_intermediate_db_delete_all_runs_facade_uses_patchable_delete(
-    monkeypatch,
-) -> None:
-    from app.core.intermediate import db as idb
+def test_retention_delete_all_runs_uses_explicit_patchable_delete() -> None:
+    from app.core.intermediate import retention
 
     deleted: list[str] = []
-    monkeypatch.setattr(
-        idb,
-        "fetchall",
-        lambda sql, params=(): [{"run_id": "r1"}, {"run_id": "r2"}],
-    )
-    monkeypatch.setattr(idb, "_delete_run", lambda run_id: deleted.append(run_id))
-    monkeypatch.setattr(
-        idb,
-        "logger",
-        SimpleNamespace(info=lambda *a, **k: None, warning=lambda *a, **k: None),
-    )
 
-    assert idb.delete_all_runs_for_canvas("canvas-1") == 2
+    assert retention.delete_all_runs_for_canvas(
+        "canvas-1",
+        fetchall_func=lambda sql, params=(): [{"run_id": "r1"}, {"run_id": "r2"}],
+        delete_run_func=lambda run_id: deleted.append(run_id),
+        logger_obj=SimpleNamespace(
+            info=lambda *a, **k: None,
+            warning=lambda *a, **k: None,
+            error=lambda *a, **k: None,
+        ),
+    ) == 2
     assert deleted == ["r1", "r2"]

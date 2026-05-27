@@ -120,25 +120,20 @@ def test_runs_db_list_runs_hydrates_each_record() -> None:
     assert all(isinstance(row, runs_db.RunRow) for row in rows)
 
 
-def test_intermediate_db_facade_serializes_runrow_to_dict(monkeypatch) -> None:
-    from app.core.intermediate import db as idb
+def test_runs_db_runrow_serializes_to_public_dict() -> None:
     from app.core.intermediate import runs_db
 
-    monkeypatch.setattr(idb, "fetchone", lambda sql, params: _record())
-    monkeypatch.setattr(
-        idb,
-        "fetchall",
-        lambda sql, params: [_record()],
+    one = runs_db.get_run("run-1", fetchone_func=lambda sql, params: _record())
+    many = runs_db.list_runs(
+        "canvas-1",
+        "group-1",
+        fetchall_func=lambda sql, params: [_record()],
     )
 
-    one = idb.get_run("run-1")
-    many = idb.list_runs("canvas-1", "group-1")
-
-    assert isinstance(one, dict)
-    assert not isinstance(one, runs_db.RunRow)
-    assert one["run_id"] == "run-1"
-    assert one["pinned"] is True
-    assert many == [one]
+    assert isinstance(one, runs_db.RunRow)
+    assert one.as_dict()["run_id"] == "run-1"
+    assert one.as_dict()["pinned"] is True
+    assert [row.as_dict() for row in many] == [one.as_dict()]
 
 
 def test_intermediate_router_serializes_native_pg_run_timestamp() -> None:

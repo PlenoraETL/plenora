@@ -1,8 +1,8 @@
 """Node snapshot persistence for intermediate runs.
 
 Owns `node_meta`, `node_rows`, and JSONB normalization for persisted
-intermediate node data. `app.core.intermediate.db` keeps explicit facade
-imports for existing callers.
+intermediate node data. Runtime callers should use this leaf boundary
+directly.
 """
 
 from __future__ import annotations
@@ -151,15 +151,16 @@ def write_node_snapshot_atomic(
     artifact_format: Optional[str] = None,
     artifact_status: Optional[str] = None,
     artifact_error: Optional[str] = None,
-    transaction_func=unit_of_work,
+    transaction_func=None,
 ) -> None:
     """Atomically write `node_rows` plus extended `node_meta`."""
+    transaction_boundary = transaction_func or unit_of_work
     records = _build_node_row_records(run_id, node_id, rows_to_persist or [])
     persisted_rows_count = len(records)
     if row_count is None:
         row_count = persisted_rows_count
 
-    with transaction_func() as conn:
+    with transaction_boundary() as conn:
         with conn.cursor() as cur:
             cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
             _bulk_insert_node_rows(cur, records)
@@ -352,12 +353,13 @@ def insert_node_rows(
     rows: List[Dict],
     col_schema: dict,
     *,
-    transaction_func=unit_of_work,
+    transaction_func=None,
 ) -> None:
     """Idempotently bulk insert node rows for one run/node pair."""
+    transaction_boundary = transaction_func or unit_of_work
     records = _build_node_row_records(run_id, node_id, rows)
 
-    with transaction_func() as conn:
+    with transaction_boundary() as conn:
         with conn.cursor() as cur:
             cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
             _bulk_insert_node_rows(cur, records)
@@ -373,9 +375,10 @@ def write_node_atomic(
     exec_time: Optional[float] = None,
     status: Optional[str] = None,
     error_msg: Optional[str] = None,
-    transaction_func=unit_of_work,
+    transaction_func=None,
 ) -> None:
     """Atomically write legacy `node_rows` plus base `node_meta`."""
+    transaction_boundary = transaction_func or unit_of_work
     records = _build_node_row_records(run_id, node_id, rows or [])
     meta_params = (
         run_id,
@@ -388,7 +391,7 @@ def write_node_atomic(
         error_msg,
     )
 
-    with transaction_func() as conn:
+    with transaction_boundary() as conn:
         with conn.cursor() as cur:
             cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
             _bulk_insert_node_rows(cur, records)

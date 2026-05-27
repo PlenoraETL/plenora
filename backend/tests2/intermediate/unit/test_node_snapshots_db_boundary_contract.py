@@ -92,19 +92,11 @@ def test_node_snapshots_db_owns_node_meta_rows_and_json_sentinels() -> None:
 
 
 def test_intermediate_db_facade_contains_no_embedded_node_snapshot_sql() -> None:
-    facade_tree = _tree(_INTERMEDIATE_ROOT / "db.py")
     snapshots_tree = _tree(_INTERMEDIATE_ROOT / "node_snapshots_db.py")
 
-    facade_literals = "\n".join(_string_literals(facade_tree))
     snapshots_literals = "\n".join(_string_literals(snapshots_tree))
 
-    leaked = [
-        marker for marker in _NODE_TABLE_SQL_MARKERS if marker in facade_literals
-    ]
-    assert leaked == [], (
-        "app.core.intermediate.db must stay a compatibility facade. "
-        f"Move node snapshot SQL back to node_snapshots_db.py. Leaked markers: {leaked}"
-    )
+    assert not (_INTERMEDIATE_ROOT / "db.py").exists()
     missing_from_leaf = [
         marker
         for marker in _NODE_TABLE_SQL_MARKERS
@@ -116,47 +108,14 @@ def test_intermediate_db_facade_contains_no_embedded_node_snapshot_sql() -> None
     )
 
 
-def test_intermediate_db_node_snapshot_facades_only_sync_then_delegate() -> None:
-    facade_tree = _tree(_INTERMEDIATE_ROOT / "db.py")
-    violations: list[str] = []
-
-    for node in facade_tree.body:
-        if not isinstance(node, ast.FunctionDef):
-            continue
-        if node.name not in _NODE_FACADE_FUNCTIONS:
-            continue
-
-        calls = [
-            _call_name(call.func)
-            for call in ast.walk(node)
-            if isinstance(call, ast.Call)
-        ]
-        direct_boundary_calls = sorted(set(calls) & _DB_BOUNDARY_CALLS)
-        if direct_boundary_calls:
-            violations.append(
-                f"{node.name} calls DB boundary directly: {direct_boundary_calls}"
-            )
-        if not any(
-            isinstance(call.func, ast.Attribute)
-            and isinstance(call.func.value, ast.Name)
-            and call.func.value.id == "_node_snapshots_db"
-            and call.func.attr == node.name
-            for call in ast.walk(node)
-            if isinstance(call, ast.Call)
-        ):
-            violations.append(f"{node.name} does not delegate to node_snapshots_db")
-
-    assert not violations, (
-        "Node snapshot compatibility functions in intermediate/db.py must only "
-        "sync patchable boundaries and delegate to node_snapshots_db.py:\n  - "
-        + "\n  - ".join(violations)
-    )
+def test_intermediate_db_node_snapshot_facades_stay_tombstoned() -> None:
+    assert not (_INTERMEDIATE_ROOT / "db.py").exists()
 
 
-def test_intermediate_db_node_row_facade_preserves_patchable_batch_insert(
+def test_node_snapshots_db_preserves_patchable_batch_insert(
     monkeypatch,
 ) -> None:
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import node_snapshots_db as idb
 
     calls: list[tuple] = []
 
@@ -185,7 +144,7 @@ def test_intermediate_db_node_row_facade_preserves_patchable_batch_insert(
         def __exit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr(idb, "transaction", lambda: Transaction())
+    monkeypatch.setattr(idb, "unit_of_work", lambda: Transaction())
 
     idb.insert_node_rows(
         "run-1",

@@ -722,9 +722,9 @@ def admin_cleanup_orphans(
     dry_run: bool = True,
     current_user: CurrentUser = Depends(require_superadmin),
 ) -> JsonObject:
-    """Cleanup degli orfani cross-DB (results.db / intermediate.db).
+    """Cleanup degli orfani cross-DB (results / intermediate storage).
 
-    Trova e cancella righe in `results.db` e `intermediate.db` che fanno
+    Trova e cancella record result/intermediate che fanno
     riferimento a `project_id` non più esistenti in `config.projects`. Sono
     creati quando un progetto viene cancellato senza passare per
     `delete_project` (cancellazione DB diretta, restore parziale, crash, ecc.).

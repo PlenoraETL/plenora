@@ -38,7 +38,7 @@ def _make_fake_transaction():
 @contextmanager
 def _patched(idb):
     fake_tx, cur = _make_fake_transaction()
-    with patch.object(idb, "transaction", fake_tx):
+    with patch.object(idb, "unit_of_work", fake_tx):
         yield cur, cur.executemany
 
 
@@ -48,7 +48,7 @@ def _patched(idb):
 def test_snapshot_atomic_uses_executemany_with_jsonb_cast():
     """Il path checkpoint/preview deve usare executemany.
     Verifica anche il template `::jsonb` cast."""
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import node_snapshots_db as idb
 
     rows = [{"_row_hash": f"h{i}", "a": i} for i in range(500)]
 
@@ -83,7 +83,7 @@ def test_snapshot_atomic_uses_executemany_with_jsonb_cast():
 def test_snapshot_atomic_no_execute_values_when_no_rows():
     """metadata_only / dataset vuoto: niente INSERT batch, solo
     DELETE + UPSERT meta. execute_values non deve essere chiamato."""
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import node_snapshots_db as idb
 
     with _patched(idb) as (cur, bulk_spy):
         idb.write_node_snapshot_atomic(
@@ -107,7 +107,7 @@ def test_snapshot_atomic_no_execute_values_when_no_rows():
 
 
 def test_write_node_atomic_legacy_uses_execute_values():
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import node_snapshots_db as idb
 
     rows = [{"_row_hash": "h1", "a": 1}, {"_row_hash": "h2", "a": 2}]
 
@@ -130,7 +130,7 @@ def test_write_node_atomic_legacy_uses_execute_values():
 
 
 def test_insert_node_rows_uses_execute_values():
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import node_snapshots_db as idb
 
     rows = [{"_row_hash": "h1", "a": 1}, {"_row_hash": "h2", "a": 2},
             {"_row_hash": "h3", "a": 3}]
@@ -151,7 +151,7 @@ def test_records_have_5_tuple_with_jsonb_string_payload():
     tupla 5-ari (run_id, node_id, row_idx, row_hash, jsonb_string).
     `_build_node_row_records` non e' cambiato; il test pinna che
     nessun refactor lo abbia rotto silenziosamente."""
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import node_snapshots_db as idb
 
     rows = [
         {"_row_hash": "h1", "a": 1, "name": "x"},
@@ -184,7 +184,7 @@ def test_records_have_5_tuple_with_jsonb_string_payload():
 
 def test_executemany_uses_single_batch_call():
     """psycopg3 path: una sola chiamata executemany con tutti i record."""
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import node_snapshots_db as idb
 
     rows = [{"_row_hash": f"h{i}", "a": i} for i in range(50)]
 

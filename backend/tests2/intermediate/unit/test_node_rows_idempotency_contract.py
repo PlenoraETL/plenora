@@ -26,7 +26,7 @@ pytestmark = [
 
 def _make_fake_transaction():
     """Ritorna `(fake_tx, cur, conn)` dove fake_tx e' un context manager
-    compatibile con db.transaction() e cur e' il MagicMock del cursor
+    compatibile con unit_of_work() e cur e' il MagicMock del cursor
     su cui si possono ispezionare execute/executemany.
 
     Il cursor stesso e' anche un context manager per supportare
@@ -50,7 +50,7 @@ def _make_fake_transaction():
 
 @contextmanager
 def _patch_db_io(idb):
-    """Patcha `idb.transaction` e osserva il batch insert su executemany.
+    """Patcha `idb.unit_of_work` e osserva il batch insert su executemany.
 
     Rende osservabili in un singolo gancio:
       - le chiamate al cursor (execute, ecc.) per DELETE / UPSERT meta
@@ -60,7 +60,7 @@ def _patch_db_io(idb):
     Yields `(cur, ev_spy)` cosi' i test possono ispezionare entrambi.
     """
     fake_tx, cur, _conn = _make_fake_transaction()
-    with patch.object(idb, "transaction", fake_tx):
+    with patch.object(idb, "unit_of_work", fake_tx):
         yield cur, cur.executemany
 
 
@@ -131,7 +131,7 @@ def test_insert_node_rows_emits_delete_before_insert():
     Bug #22 (perf): l'INSERT batch passa per `execute_values`, ispezione
     via `ev_spy`. La sequenza temporale resta DELETE -> INSERT -> ...
     """
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import node_snapshots_db as idb
 
     rows = [{"_row_hash": "h1", "a": 1}, {"_row_hash": "h2", "a": 2}]
     schema = {"a": "int64"}
@@ -156,7 +156,7 @@ def test_insert_node_rows_double_invocation_evicts_previous():
     """Doppia invocazione per stesso (run_id, node_id): ogni chiamata
     emette il proprio DELETE prima del proprio INSERT. Il DB vede:
     DELETE → INSERT(N1) → DELETE → INSERT(N2). Nessuna duplicazione."""
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import node_snapshots_db as idb
 
     rows1 = [{"_row_hash": "h1", "a": 1}]
     rows2 = [{"_row_hash": "h2", "a": 2}, {"_row_hash": "h3", "a": 3}]
@@ -183,7 +183,7 @@ def test_insert_node_rows_double_invocation_evicts_previous():
 def test_insert_node_rows_empty_rows_still_emits_delete():
     """Anche con rows=[] eseguiamo il DELETE: previene l'inconsistenza
     "node_meta.row_count=0 ma node_rows residue da run Previous behavior"."""
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import node_snapshots_db as idb
 
     with _patch_db_io(idb) as (cur, ev_spy):
         idb.insert_node_rows("run-empty", "node-x", [], {"a": "int64"})
@@ -206,7 +206,7 @@ def test_write_node_atomic_emits_delete_insert_upsert_in_order():
         execute_values INSERT INTO node_rows VALUES %s
         INSERT INTO node_meta ... ON CONFLICT DO UPDATE
     """
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import node_snapshots_db as idb
 
     rows = [{"_row_hash": "h1", "a": 1}, {"_row_hash": "h2", "a": 2}]
     schema = {"a": "int64"}
@@ -234,7 +234,7 @@ def test_write_node_atomic_emits_delete_insert_upsert_in_order():
 def test_write_node_atomic_meta_row_count_matches_inserted_rows():
     """node_meta.row_count = len(rows) effettivamente inseriti.
     Coerenza meta-rows garantita per costruzione (stessa tx)."""
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import node_snapshots_db as idb
 
     rows = [{"_row_hash": "h1", "a": 1}, {"_row_hash": "h2", "a": 2},
             {"_row_hash": "h3", "a": 3}]
@@ -261,7 +261,7 @@ def test_write_node_atomic_double_invocation_no_duplicates_meta_consistent():
     """Due chiamate consecutive (es. retry Celery) per stesso
     (run_id, node_id): la seconda DELETE rimuove la prima INSERT,
     la seconda INSERT-meta upserta. Stato finale = solo seconda scrittura."""
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import node_snapshots_db as idb
 
     rows1 = [{"_row_hash": "h1", "a": 1}]
     rows2 = [{"_row_hash": "h2", "a": 2}, {"_row_hash": "h3", "a": 3}]
@@ -292,7 +292,7 @@ def test_write_node_atomic_empty_rows_still_evicts_and_upserts_meta():
     INSERT batch + upsert meta con row_count=0. Garantisce consistency
     quando un retry "vuoto" deve sovrascrivere una run precedente che
     aveva inserito righe."""
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import node_snapshots_db as idb
 
     with _patch_db_io(idb) as (cur, ev_spy):
         idb.write_node_atomic(
@@ -320,7 +320,7 @@ def test_write_node_atomic_meta_fail_rollback_propagates():
     in node_rows e' garantito strutturalmente da PG, non da codice
     application-side, e si verifica integration-side.
     """
-    from app.core.intermediate import db as idb
+    from app.core.intermediate import node_snapshots_db as idb
 
     fake_tx, cur, _conn = _make_fake_transaction()
     ev_spy = cur.executemany
@@ -336,7 +336,7 @@ def test_write_node_atomic_meta_fail_rollback_propagates():
 
     cur.execute.side_effect = execute_side_effect
 
-    with patch.object(idb, "transaction", fake_tx):
+    with patch.object(idb, "unit_of_work", fake_tx):
         with pytest.raises(RuntimeError, match="meta INSERT fail simulated"):
             idb.write_node_atomic(
                 "run-rb", "node-rb", node_type="estrai",

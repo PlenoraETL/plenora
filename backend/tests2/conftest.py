@@ -243,7 +243,7 @@ def pytest_collection_modifyitems(config, items):
 # modulo. Qualsiasi test (es. `test_c8_observability_contract.py`) che fa
 # `import app.main` triggera la catena:
 #   init_all_dbs -> pg_connection.init_db -> psycopg2.connect
-#   -> idb.init_db -> psycopg2.connect
+#   -> intermediate.init.init_db
 #   -> migrations_runner.apply_pending_migrations -> psycopg2.connect
 # In unit-test env senza DB raggiungibile, psycopg2 puo' produrre un crash
 # nativo Windows (access violation) prima di qualsiasi catch Python.

@@ -445,7 +445,10 @@ Responsabilita: governa dataset intermedi e contratto di scambio tra step pipeli
 | file | funzioni/classi chiave | cosa guardare |
 |---|---|---|
 | `router.py` | `RunSummary`, `CompareL1Result`, `PinRequest`, `_run_to_summary`, `_check_run_access`, `list_runs`, `get_node_data`, `compare_runs_l1`, `compare_runs_l2`, `pin_run` | contratto API intermediate |
-| `db.py` | `init_db`, `create_run`, `get_run`, `list_runs`, `update_run`, `pin_run`, `upsert_node_meta`, `get_node_meta`, `list_node_meta`, `close_connection` | persistenza run + node meta |
+| `runs_db.py` | `RunRow`, `create_run`, `get_run`, `list_runs`, `update_run`, `pin_run` | catalogo run |
+| `node_snapshots_db.py` | `upsert_node_meta_extended`, `write_node_snapshot_atomic`, `get_node_meta`, `list_node_meta`, `get_node_table_rows` | persistenza node meta/rows |
+| `retention.py` | `apply_runs_retention`, `delete_all_runs_for_canvas`, `list_canvas_ids_with_runs` | cleanup run e artifact intermedi |
+| `run_lifecycle.py` | `create_run`, `close_run`, `close_worker_connection`, `get_default_runs_retention` | boundary lifecycle per worker |
 | `writer.py` | `compute_aggregate_hash`, `compute_row_hash`, `_format_float_stable`, `_normalize_value`, `write_node`, `close_run` | scrittura node data + hash di confronto |
 | `policy.py` | `validate_intermediate_settings`, `resolve_intermediate_policy`, `persistence_mode_for_record`, `reset_validation_cache` | mode `metadata_only`/`preview_only`/`full_pg`/`full_artifact` + checkpoint policy |
 | `snapshot.py` | `record_checkpoint_snapshot`, `record_final_snapshot`, `_fingerprint_dataframe`, `_preview_rows_for_policy` | snapshot DataFrame policy-aware senza `df.to_dict` full sul path metadata |
@@ -454,7 +457,7 @@ Responsabilita: governa dataset intermedi e contratto di scambio tra step pipeli
 
 Keywords: `RunSummary`, `create_run`, `pin_run`, `compare_runs_l1`, `compare_runs_l2`, `get_node_data`, `upsert_node_meta`, `compute_row_hash`, `write_node`, `metadata_only`, `full_artifact`, `artifact_uri`
 
-Intervento/confini: preservare schema/compatibilita dei dataset intermedi (e' il contratto di scambio). Non accoppiare a UI o scheduler. Pin/compare sono read-side; non scrivere stato pipeline da qui. Postgres resta catalogo leggero (`runs`, `node_meta`, hash, row count); payload completi solo via `full_artifact` su runtime object storage. `metadata_only` deve avere zero `node_rows`; `compare/l2` deve dichiarare esplicitamente diff non disponibile quando non ci sono righe persistite.
+Intervento/confini: preservare schema/compatibilita dei dataset intermedi (e' il contratto di scambio). Non accoppiare a UI o scheduler. Runtime code deve usare i leaf boundary (`runs_db`, `node_snapshots_db`, `retention`, `run_lifecycle`); il facade storico `db.py` e' tombstoned. Pin/compare sono read-side; non scrivere stato pipeline da qui. Postgres resta catalogo leggero (`runs`, `node_meta`, hash, row count); payload completi solo via `full_artifact` su runtime object storage. `metadata_only` deve avere zero `node_rows`; `compare/l2` deve dichiarare esplicitamente diff non disponibile quando non ci sono righe persistite.
 
 ---
 

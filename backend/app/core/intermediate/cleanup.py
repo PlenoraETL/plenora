@@ -9,7 +9,7 @@ from app.core.intermediate.retention import (
     delete_all_runs_for_canvas,
     list_canvas_ids_with_runs as _list_canvas_ids_with_runs,
 )
-from app.core.intermediate.db import close_worker_connection as _close_worker_connection
+from app.db.pg_connection import close_connection as _close_connection
 
 
 class CleanupLogger(Protocol):
@@ -47,7 +47,7 @@ def delete_runs_for_canvases(
 
 def close_worker_connection() -> None:
     """Release the current worker thread's intermediate DB connection."""
-    _close_worker_connection()
+    _close_connection()
 
 
 __all__ = [

@@ -589,12 +589,12 @@ def test_migration_for_intermediate_runs_user_id_exists():
 
 
 def test_intermediate_create_run_accepts_user_id():
-    """intermediate.db.create_run deve accettare user_id optional."""
-    from app.core.intermediate.db import create_run
+    """runs_db.create_run deve accettare user_id optional."""
+    from app.core.intermediate.runs_db import create_run
 
     sig = inspect.signature(create_run)
     assert "user_id" in sig.parameters, (
-        "intermediate.db.create_run non accetta user_id â€” allineamento "
+        "runs_db.create_run non accetta user_id — allineamento "
         "con log_runs incompleto."
     )
     assert sig.parameters["user_id"].default is None
@@ -605,17 +605,20 @@ def test_intermediate_create_run_writes_user_id_in_insert_sql(monkeypatch):
     il valore deve apparire nei params bindati.
 
     Replacement R-04 di `inspect.getsource(create_run) + "user_id" in src + "INSERT INTO runs" + "user_id)"`:
-    SQL capture via spy su intermediate.db.execute -> boundary DB.
+    SQL capture via explicit execute_func boundary.
     """
-    from app.core.intermediate import db as int_db
+    from app.core.intermediate import runs_db
 
-    captured_calls = _capture_execute(monkeypatch, "app.core.intermediate.db.execute")
-    # Stub get_run per evitare fetch reale dopo l'INSERT.
-    monkeypatch.setattr(int_db, "get_run", lambda run_id: {"run_id": run_id})
+    captured_calls = []
 
-    int_db.create_run(
+    def fake_execute(sql, params=()):
+        captured_calls.append({"sql": sql, "params": tuple(params)})
+
+    runs_db.create_run(
         run_id="r-1", canvas_id="canvas-1", group_id="g-1",
         total_nodes=3, user_id="usr_intermediate",
+        execute_func=fake_execute,
+        get_run_func=lambda run_id: {"run_id": run_id},
     )
 
     _assert_single_insert_user_id(
@@ -641,14 +644,14 @@ def test_tasks_reference_intermediate_create_run(task_name, task_module):
     mod = importlib.import_module(task_module)
     task = getattr(mod, task_name)
     assert _references_name(task, "create_run"), (
-        f"{task_name} non referenzia intermediate.db.create_run â€” "
+        f"{task_name} non referenzia run_lifecycle.create_run — "
         "allineamento incompleto (log_runs ha user_id, intermediate.runs no)."
     )
 
 
 def test_pipeline_task_passes_user_id_to_intermediate_create_run(monkeypatch):
     """Il task `execute_pipeline_task` deve invocare
-    `intermediate.db.create_run` propagando user_id come kwarg.
+    `run_lifecycle.create_run` propagando user_id come kwarg.
 
     Replacement R-04 (parte e2e di) `inspect.getsource(...) + "user_id=user_id" in src`:
     eager mode + spy su `create_run`. Scope: solo pipeline_task; per
@@ -661,7 +664,7 @@ def test_pipeline_task_passes_user_id_to_intermediate_create_run(monkeypatch):
     monkeypatch.setattr("app.utils.logger.open_run", lambda **kwargs: None)
     monkeypatch.setattr("app.utils.logger.close_run", lambda **kwargs: None)
 
-    # Spy su intermediate.db.create_run.
+    # Spy su run_lifecycle.create_run.
     captured_create_run = {}
 
     def spy_create_run(*args, **kwargs):

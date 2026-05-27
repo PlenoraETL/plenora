@@ -24,7 +24,7 @@ pytestmark = [
 def test_to_jsonable_nan_returns_sentinel_dict_not_none():
     """NaN -> dict-sentinel namespaced, NON None come Previous behavior e
     NON la stringa "__nan__" che colliderebbe con valori utente."""
-    from app.core.intermediate.db import _to_jsonable, _SPECIAL_FLOAT_KEY
+    from app.core.intermediate.node_snapshots_db import _to_jsonable, _SPECIAL_FLOAT_KEY
 
     out = _to_jsonable(float("nan"))
     assert isinstance(out, dict), f"atteso dict-sentinel, trovato: {type(out).__name__}"
@@ -34,21 +34,21 @@ def test_to_jsonable_nan_returns_sentinel_dict_not_none():
 
 def test_to_jsonable_pos_inf_returns_sentinel_dict():
     """+Inf -> {"__plenora_special_float__": "+inf"}."""
-    from app.core.intermediate.db import _to_jsonable, _SPECIAL_FLOAT_KEY
+    from app.core.intermediate.node_snapshots_db import _to_jsonable, _SPECIAL_FLOAT_KEY
 
     assert _to_jsonable(float("inf")) == {_SPECIAL_FLOAT_KEY: "+inf"}
 
 
 def test_to_jsonable_neg_inf_returns_sentinel_dict():
     """-Inf -> {"__plenora_special_float__": "-inf"}."""
-    from app.core.intermediate.db import _to_jsonable, _SPECIAL_FLOAT_KEY
+    from app.core.intermediate.node_snapshots_db import _to_jsonable, _SPECIAL_FLOAT_KEY
 
     assert _to_jsonable(float("-inf")) == {_SPECIAL_FLOAT_KEY: "-inf"}
 
 
 def test_to_jsonable_finite_floats_unchanged():
     """I float finiti restano float (no false-positive sentinel)."""
-    from app.core.intermediate.db import _to_jsonable
+    from app.core.intermediate.node_snapshots_db import _to_jsonable
 
     assert _to_jsonable(1.23) == 1.23
     assert _to_jsonable(0.0) == 0.0
@@ -57,7 +57,7 @@ def test_to_jsonable_finite_floats_unchanged():
 
 def test_to_jsonable_none_stays_none():
     """None resta None: nessuna confusione tra null Previous behavior e sentinel."""
-    from app.core.intermediate.db import _to_jsonable
+    from app.core.intermediate.node_snapshots_db import _to_jsonable
 
     assert _to_jsonable(None) is None
 
@@ -66,7 +66,7 @@ def test_to_jsonable_none_stays_none():
 
 def test_from_jsonable_nan_dict_sentinel_restores_nan():
     """Dict-sentinel canonico -> float NaN."""
-    from app.core.intermediate.db import _from_jsonable_value, _SPECIAL_FLOAT_KEY
+    from app.core.intermediate.node_snapshots_db import _from_jsonable_value, _SPECIAL_FLOAT_KEY
 
     out = _from_jsonable_value({_SPECIAL_FLOAT_KEY: "nan"})
     assert isinstance(out, float)
@@ -74,14 +74,14 @@ def test_from_jsonable_nan_dict_sentinel_restores_nan():
 
 
 def test_from_jsonable_pos_inf_dict_sentinel_restores_pos_inf():
-    from app.core.intermediate.db import _from_jsonable_value, _SPECIAL_FLOAT_KEY
+    from app.core.intermediate.node_snapshots_db import _from_jsonable_value, _SPECIAL_FLOAT_KEY
 
     out = _from_jsonable_value({_SPECIAL_FLOAT_KEY: "+inf"})
     assert math.isinf(out) and out > 0
 
 
 def test_from_jsonable_neg_inf_dict_sentinel_restores_neg_inf():
-    from app.core.intermediate.db import _from_jsonable_value, _SPECIAL_FLOAT_KEY
+    from app.core.intermediate.node_snapshots_db import _from_jsonable_value, _SPECIAL_FLOAT_KEY
 
     out = _from_jsonable_value({_SPECIAL_FLOAT_KEY: "-inf"})
     assert math.isinf(out) and out < 0
@@ -89,7 +89,7 @@ def test_from_jsonable_neg_inf_dict_sentinel_restores_neg_inf():
 
 def test_from_jsonable_passes_through_non_sentinel_values():
     """Stringhe non-sentinel, numeri, None, bool: invariati."""
-    from app.core.intermediate.db import _from_jsonable_value
+    from app.core.intermediate.node_snapshots_db import _from_jsonable_value
 
     assert _from_jsonable_value("hello") == "hello"
     assert _from_jsonable_value(42) == 42
@@ -104,21 +104,21 @@ def test_user_string_nan_is_not_converted():
     """Un valore utente uguale alla stringa "__nan__" deve restare
     stringa: la forma sentinel e' object, non string. Questo era il
     rischio del primo design rigettato in review."""
-    from app.core.intermediate.db import _from_jsonable_value
+    from app.core.intermediate.node_snapshots_db import _from_jsonable_value
 
     assert _from_jsonable_value("__nan__") == "__nan__"
 
 
 def test_user_string_inf_pos_is_not_converted():
     """Stringa "__inf+__" resta stringa."""
-    from app.core.intermediate.db import _from_jsonable_value
+    from app.core.intermediate.node_snapshots_db import _from_jsonable_value
 
     assert _from_jsonable_value("__inf+__") == "__inf+__"
 
 
 def test_user_string_inf_neg_is_not_converted():
     """Stringa "__inf-__" resta stringa (simmetria col positivo)."""
-    from app.core.intermediate.db import _from_jsonable_value
+    from app.core.intermediate.node_snapshots_db import _from_jsonable_value
 
     assert _from_jsonable_value("__inf-__") == "__inf-__"
 
@@ -128,7 +128,7 @@ def test_user_dict_with_sentinel_key_plus_other_keys_is_not_converted():
     altre chiavi NON e' un sentinel: deve essere ricorso come dict normale,
     non collassato a NaN.
     """
-    from app.core.intermediate.db import _from_jsonable_value, _SPECIAL_FLOAT_KEY
+    from app.core.intermediate.node_snapshots_db import _from_jsonable_value, _SPECIAL_FLOAT_KEY
 
     user_dict = {_SPECIAL_FLOAT_KEY: "nan", "other": 1}
     out = _from_jsonable_value(user_dict)
@@ -142,7 +142,7 @@ def test_dict_with_sentinel_key_but_unknown_tag_is_not_converted():
     """Dict di forma `{<key>: <tag>}` ma tag sconosciuto: trattato come
     dict utente normale, non come sentinel. Difesa-in-profondita' contro
     valori utente che casualmente usano la nostra chiave riservata."""
-    from app.core.intermediate.db import _from_jsonable_value, _SPECIAL_FLOAT_KEY
+    from app.core.intermediate.node_snapshots_db import _from_jsonable_value, _SPECIAL_FLOAT_KEY
 
     user_dict = {_SPECIAL_FLOAT_KEY: "something_else"}
     out = _from_jsonable_value(user_dict)
@@ -154,7 +154,7 @@ def test_dict_with_sentinel_key_but_unknown_tag_is_not_converted():
 def test_from_jsonable_recurses_into_list_and_dict_with_sentinels():
     """Reverse mapping ricorsivo: list/dict propagano la trasformazione,
     i sentinel annidati vengono ricostruiti, gli altri valori invariati."""
-    from app.core.intermediate.db import _from_jsonable_value, _SPECIAL_FLOAT_KEY
+    from app.core.intermediate.node_snapshots_db import _from_jsonable_value, _SPECIAL_FLOAT_KEY
 
     sentinel_nan = {_SPECIAL_FLOAT_KEY: "nan"}
     sentinel_inf_pos = {_SPECIAL_FLOAT_KEY: "+inf"}
@@ -176,7 +176,7 @@ def test_from_jsonable_recurses_into_list_and_dict_with_sentinels():
 def test_roundtrip_preserves_mixed_special_floats():
     """Forward + reverse su un dict realistico: valori finiti invariati,
     speciali ricostruiti, valori utente con stringhe omonime invariati."""
-    from app.core.intermediate.db import _to_jsonable, _from_jsonable_value
+    from app.core.intermediate.node_snapshots_db import _to_jsonable, _from_jsonable_value
 
     original = {
         "id": 42,
@@ -215,7 +215,7 @@ def test_compute_row_hash_matches_after_jsonb_roundtrip():
     invece di "nan", digest divergente.
     Current contract: NaN -> dict-sentinel -> NaN, hash recompute identico.
     """
-    from app.core.intermediate.db import _to_jsonable, _from_jsonable_value
+    from app.core.intermediate.node_snapshots_db import _to_jsonable, _from_jsonable_value
     from app.core.intermediate.writer import compute_row_hash
 
     original_row = {
@@ -273,7 +273,7 @@ def test_legacy_null_jsonb_stays_none_after_reverse_mapping():
     mapping NON deve trasformarli in NaN per retro-compat — solo i
     dict-sentinel canonici vengono ricostruiti come float.
     """
-    from app.core.intermediate.db import _from_jsonable_value
+    from app.core.intermediate.node_snapshots_db import _from_jsonable_value
 
     # row_data come arriverebbe da una run Previous behavior
     legacy_row_data = {"ratio_was_nan": None, "amount": 99.5}

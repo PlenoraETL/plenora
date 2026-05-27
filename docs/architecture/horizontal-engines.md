@@ -229,6 +229,9 @@ Canonical surfaces:
 - `app/core/eseguibili/output_store.py`
 - `app/core/imdf/bundle_store.py`
 - `app/core/intermediate/retention.py`
+- `app/core/intermediate/runs_db.py`
+- `app/core/intermediate/node_snapshots_db.py`
+- `app/core/intermediate/run_lifecycle.py`
 - `app/shared/resources/metadata.py`
 - `app/shared/resources/file_cleanup.py`
 - `app/infrastructure/storage/cloud_backends.py`
@@ -239,6 +242,9 @@ Current contracts:
 - Resource loading is bounded by explicit byte limits.
 - `LoadedResource` pairs loaded data with `ResourceMetadata`.
 - Object storage is governed by `STORAGE_POLICY`.
+- Runtime intermediate callers use explicit leaf boundaries
+  (`runs_db`, `node_snapshots_db`, `retention`, `run_lifecycle`), not the
+  historical `app/core/intermediate/db.py` facade, which is tombstoned.
 - DataFrame pipeline result persistence returns `PipelineResultSave` through
   `app/core/results/pipeline_result.py`; callers should not use legacy dict
   result payload wrappers.
