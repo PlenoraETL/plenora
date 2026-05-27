@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Optional
 
-from app.core.files.storage_dispatch import BlobDispatchResult
+from app.core.resources.blob_dispatch import BlobDispatchResult
 from app.utils.mime_validator import MimeMismatchError, validate_no_executable
 
 

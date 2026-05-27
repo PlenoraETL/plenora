@@ -13,7 +13,7 @@ import zipfile
 from typing import Any, BinaryIO, Callable, Dict, List, Optional
 
 from app.core.files.db import FileSourceRow
-from app.core.files.storage_dispatch import BlobDispatchResult
+from app.core.resources.blob_dispatch import BlobDispatchResult
 from app.utils.mime_validator import MimeMismatchError, validate_no_executable
 from app.core.io.zip_guards import (
     open_zip_bytes_safe,

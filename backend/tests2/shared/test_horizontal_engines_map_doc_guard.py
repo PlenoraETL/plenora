@@ -99,6 +99,8 @@ def test_doc_references_canonical_entry_points(doc_text: str):
         "app/core/connections/arcgis_sql_helpers.py",
         "app/core/connections/arcgis_publish_modes.py",
         "app/shared/execution/schema_types.py",
+        "app/shared/execution/canvas_types.py",
+        "app/shared/execution/clock.py",
         "app/core/scheduler/job_dispatcher.py",
         "app/core/scheduler/run_log_store.py",
         "app/core/imdf/publish_dispatcher.py",

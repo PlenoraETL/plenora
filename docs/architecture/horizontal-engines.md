@@ -70,6 +70,8 @@ Canonical surfaces:
 
 - `app/shared/execution/canvas_node.py`
 - `app/shared/execution/canvas_graph.py`
+- `app/shared/execution/canvas_types.py`
+- `app/shared/execution/clock.py`
 - `app/shared/execution/graph.py`
 - `app/shared/execution/executor_protocol.py`
 - `app/shared/execution/payloads.py`
@@ -143,7 +145,8 @@ Current direction:
 - Pandas-neutral dataframe contracts live in `app/core/dataframes/ports.py`;
   this module must not import pandas/geopandas or vertical runtime services.
 - File-source parser dispatch lives in `app/core/dataframes/load_dispatch.py`;
-  `app/core/files/load_dispatch.py` is compatibility-only during migration.
+  `app/core/files/load_dispatch.py` is compatibility-only for legacy/test
+  callers. Production code must import `app/core/dataframes/load_dispatch.py`.
 - The default file-source loader that owns pandas/geopandas parsing lives in
   `app/core/dataframes/default_loader.py`; `app/core/files/service_deps.py`
   re-exports it for legacy service DI.
@@ -268,7 +271,8 @@ Rules:
   `app/core/resources/loaders/*_store.py` are compatibility re-exports only.
 - File-source blob storage dispatch lives in
   `app/core/resources/blob_dispatch.py`; `app/core/files/storage_dispatch.py`
-  is a compatibility re-export for file service callers.
+  is a compatibility re-export for legacy/test callers. Production code must
+  import `app/core/resources/blob_dispatch.py`.
 - Do not bypass file-source refcount/reconciliation cleanup with direct
   `DELETE FROM file_sources WHERE group_id`.
 - Do not inspect or delete legacy `RESULTS_DIR/{project_id}` files directly

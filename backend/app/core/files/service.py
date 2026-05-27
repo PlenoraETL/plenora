@@ -16,7 +16,7 @@ from typing import Any, BinaryIO, Dict, List, Optional, Tuple
 
 import app.core.files.db as files_db
 from app.core.auth.visibility import is_resource_visible, is_shareable
-from app.core.files import load_dispatch as _load_dispatch
+from app.core.dataframes import load_dispatch as _load_dispatch
 from app.core.files import multi_layer_upload as _multi_layer_upload
 from app.core.files.preview_temp import preview_file_temp as _preview_file_temp
 from app.core.files import raw_upload as _raw_upload
@@ -25,7 +25,7 @@ from app.core.files import source_metadata as _source_metadata
 from app.core.files import source_read as _source_read
 from app.core.files.source_read import FileSourceLayersPayload, FileSourcePreviewPayload
 from app.core.files.preview_temp import FilePreviewTempPayload
-from app.core.files.storage_dispatch import BlobDispatchResult, dispatch_blob_storage
+from app.core.resources.blob_dispatch import BlobDispatchResult, dispatch_blob_storage
 from typing import Protocol
 
 from app.core.files.service_deps import (  # noqa: F401 (public domain export)

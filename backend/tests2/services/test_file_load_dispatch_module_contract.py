@@ -170,7 +170,7 @@ def test_unsupported_format_raises_value_error(fake_loader, fake_logger):
 
 
 def test_file_source_service_facade_delegates_to_load_by_format():
-    """`FileSourceService._load_by_format` delega alla funzione modulare.
+    """`FileSourceService._load_by_format` delega alla boundary canonical.
     Spy via patch per evitare di costruire
     l'intero service tree (richiede DB/fs reali in __init__)."""
     from app.core.files.service import FileSourceService
@@ -184,7 +184,7 @@ def test_file_source_service_facade_delegates_to_load_by_format():
     expected_gdf = None
 
     with patch(
-        "app.core.files.load_dispatch.load_by_format",
+        "app.core.dataframes.load_dispatch.load_by_format",
         return_value=(expected_df, expected_gdf),
     ) as mock_dispatch:
         df, gdf = svc._load_by_format(

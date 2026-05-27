@@ -3,7 +3,7 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Any, Dict, List, Optional, Literal
 
-from app.shared.canvas_types import (
+from app.shared.execution.canvas_types import (
     ConflictPolicyLiteral,
     DestTypeLiteral,
     LEGACY_CONFLICT_POLICY_ALIASES,

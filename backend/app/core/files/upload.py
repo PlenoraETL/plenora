@@ -15,7 +15,7 @@ from __future__ import annotations
 import zipfile
 from typing import Any, BinaryIO, Callable, List, Optional
 
-from app.core.files.storage_dispatch import BlobDispatchResult
+from app.core.resources.blob_dispatch import BlobDispatchResult
 from app.utils.mime_validator import MimeMismatchError
 from app.core.io.zip_guards import (
     open_zip_bytes_safe,

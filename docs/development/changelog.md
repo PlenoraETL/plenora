@@ -12,7 +12,7 @@ truth for exact changes.
     code cleanup (`useCaricaSchemaSelect.loadDestColumns`),
     cancellation guard sulle fetch a catena.
   - Sprint 2 — architettura contratto FE↔BE: `X-API-Version` header +
-    FE drift detector, `app/shared/canvas_types.py` centralizzato (9
+    FE drift detector, `app/shared/execution/canvas_types.py` centralizzato (9
     TypeAlias Literal), mirror FE `canvasTypes.js` + contract test,
     fix di 2 drift storici (`conflict_policy "update"→"force"` con
     validator legacy, `rest_method DELETE` rimosso BE↔FE allineato),

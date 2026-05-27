@@ -165,6 +165,41 @@ def test_result_store_uses_results_boundary_not_row_modules():
     assert "from app.core.results.blob_writer import" in source
 
 
+def test_production_does_not_import_result_store_compat_facade():
+    """New production code must use the concrete results modules directly."""
+    backend_root = Path(__file__).resolve().parents[2]
+    prod_roots = (backend_root / "app", backend_root / "workers")
+    facade = "app.core.results.result_store"
+    violations: list[str] = []
+
+    for root in prod_roots:
+        if not root.exists():
+            continue
+        for path in sorted(root.rglob("*.py")):
+            rel = path.relative_to(backend_root).as_posix()
+            if rel == "app/core/results/result_store.py":
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    if any(alias.name == facade for alias in node.names):
+                        violations.append(f"{rel}:{node.lineno} -> {facade}")
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module == facade:
+                        violations.append(f"{rel}:{node.lineno} -> {facade}")
+                    elif (
+                        node.module == "app.core.results"
+                        and any(alias.name == "result_store" for alias in node.names)
+                    ):
+                        violations.append(f"{rel}:{node.lineno} -> {facade}")
+
+    assert violations == [], (
+        "Production code must import concrete results modules "
+        "(`blob_writer`, `pipeline_result`, `result_reader`, `temp_paths`) "
+        f"instead of result_store facade. Violations: {violations}"
+    )
+
+
 def test_result_store_slice_has_no_row_owned_to_legacy_dict():
     """Result-store dict compatibility belongs at explicit public edges."""
     backend_root = Path(__file__).resolve().parents[2]

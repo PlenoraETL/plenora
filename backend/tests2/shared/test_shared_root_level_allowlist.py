@@ -30,8 +30,8 @@ _ALLOWED_ROOT_MODULES: frozenset[str] = frozenset(
         "password_hashing",   # compat alias to app.core.security.password_hashing
         "token_blacklist",    # compat alias to app.core.security.token_blacklist
         "upload_guards",      # compat alias to app.core.security.upload_guards
-        "clock",                       # wall-clock abstraction for testability
-        "canvas_types",                # canvas type helpers shared across engines
+        "clock",                       # compat alias to app.shared.execution.clock
+        "canvas_types",                # compat alias to app.shared.execution.canvas_types
     }
 )
 
@@ -44,8 +44,8 @@ _ROOT_MODULE_CLASSIFICATIONS: dict[str, str] = {
     "password_hashing": "KEEP_COMPAT_SECURITY_WRAPPER",
     "token_blacklist": "KEEP_COMPAT_SECURITY_WRAPPER",
     "upload_guards": "KEEP_COMPAT_SECURITY_WRAPPER",
-    "clock": "KEEP_ROOT_CROSS_CUTTING",
-    "canvas_types": "KEEP_ROOT_CROSS_CUTTING",
+    "clock": "KEEP_COMPAT_EXECUTION_WRAPPER",
+    "canvas_types": "KEEP_COMPAT_EXECUTION_WRAPPER",
 }
 
 _CLASSIFICATION_BUCKETS: frozenset[str] = frozenset(
@@ -56,6 +56,7 @@ _CLASSIFICATION_BUCKETS: frozenset[str] = frozenset(
         "MOVE_TO_CONNECTIONS_CANDIDATE",
         "MOVE_TO_SECURITY_PACKAGE_LATER",
         "KEEP_COMPAT_SECURITY_WRAPPER",
+        "KEEP_COMPAT_EXECUTION_WRAPPER",
         "HEAVY_ROOT_UTILITY",
     }
 )
@@ -86,6 +87,10 @@ _ALLOWED_UPWARD_IMPORTS: dict[str, frozenset[str]] = {
     "upload_guards": frozenset(
         {"app.core.security", "app.core.security.upload_guards"}
     ),
+    "clock": frozenset({"app.shared.execution", "app.shared.execution.clock"}),
+    "canvas_types": frozenset(
+        {"app.shared.execution", "app.shared.execution.canvas_types"}
+    ),
 }
 
 _SECURITY_COMPAT_MODULES: frozenset[str] = frozenset(
@@ -94,6 +99,20 @@ _SECURITY_COMPAT_MODULES: frozenset[str] = frozenset(
         "app.shared.password_hashing",
         "app.shared.token_blacklist",
         "app.shared.upload_guards",
+    }
+)
+
+_EXECUTION_COMPAT_MODULES: frozenset[str] = frozenset(
+    {
+        "app.shared.clock",
+        "app.shared.canvas_types",
+    }
+)
+
+_FILE_COMPAT_MODULES: frozenset[str] = frozenset(
+    {
+        "app.core.files.load_dispatch",
+        "app.core.files.storage_dispatch",
     }
 )
 
@@ -148,6 +167,57 @@ def _security_compat_imports(path: Path) -> set[str]:
                 candidate = f"app.shared.{alias.name}"
                 if candidate in _SECURITY_COMPAT_MODULES:
                     hits.add(candidate)
+    return hits
+
+
+def _root_compat_imports(
+    path: Path,
+    *,
+    compat_modules: frozenset[str],
+) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+    hits: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            hits.update(
+                alias.name
+                for alias in node.names
+                if alias.name in compat_modules
+            )
+            continue
+        if not isinstance(node, ast.ImportFrom) or node.module is None:
+            continue
+        if node.module in compat_modules:
+            hits.add(node.module)
+            continue
+        if node.module == "app.shared":
+            for alias in node.names:
+                candidate = f"app.shared.{alias.name}"
+                if candidate in compat_modules:
+                    hits.add(candidate)
+    return hits
+
+
+def _compat_imports(path: Path, *, compat_modules: frozenset[str]) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8-sig"))
+    hits: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            hits.update(
+                alias.name
+                for alias in node.names
+                if alias.name in compat_modules
+            )
+            continue
+        if not isinstance(node, ast.ImportFrom) or node.module is None:
+            continue
+        if node.module in compat_modules:
+            hits.add(node.module)
+            continue
+        for module in compat_modules:
+            parent, leaf = module.rsplit(".", 1)
+            if node.module == parent and any(alias.name == leaf for alias in node.names):
+                hits.add(module)
     return hits
 
 
@@ -244,5 +314,40 @@ def test_production_does_not_import_security_compat_wrappers() -> None:
     assert violations == [], (
         "Production code must import runtime security helpers from "
         "`app.core.security.*`, not the root-level compatibility wrappers. "
+        f"Violations: {violations}"
+    )
+
+
+def test_production_does_not_import_execution_compat_wrappers() -> None:
+    """Execution helpers moved to app.shared.execution; root paths are compat."""
+    violations: list[str] = []
+    for path in _iter_prod_python():
+        rel_path = path.relative_to(_BACKEND_ROOT).as_posix()
+        hits = _root_compat_imports(
+            path,
+            compat_modules=_EXECUTION_COMPAT_MODULES,
+        )
+        for module in sorted(hits):
+            violations.append(f"{rel_path} -> {module}")
+
+    assert violations == [], (
+        "Production code must import execution helpers from "
+        "`app.shared.execution.*`, not the root-level compatibility wrappers. "
+        f"Violations: {violations}"
+    )
+
+
+def test_production_does_not_import_file_compat_wrappers() -> None:
+    """File compatibility wrappers must not be used by production code."""
+    violations: list[str] = []
+    for path in _iter_prod_python():
+        rel_path = path.relative_to(_BACKEND_ROOT).as_posix()
+        hits = _compat_imports(path, compat_modules=_FILE_COMPAT_MODULES)
+        for module in sorted(hits):
+            violations.append(f"{rel_path} -> {module}")
+
+    assert violations == [], (
+        "Production code must import file/dataframe helpers from their "
+        "canonical boundaries, not the app.core.files compatibility wrappers. "
         f"Violations: {violations}"
     )
