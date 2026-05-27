@@ -2,7 +2,7 @@
 
 Bug coperti:
 1. results/db.py save_result_row → ON CONFLICT DO NOTHING + log warning
-2. files/storage_dispatch.py → Path(filename).name sanitize
+2. resources/blob_dispatch.py -> Path(filename).name sanitize
 3. arricchisci/api_connection_rest_file → output_ext regex validato
 4. datasources/sharepoint.py:368 → log via _sanitize_sharepoint_error
 5. orchestrator/task_service.py → error fallback safe (no str(meta) raw)
@@ -38,7 +38,7 @@ def test_save_result_row_uses_on_conflict_do_nothing():
 def test_storage_dispatch_sanitizes_filename_via_basename():
     """storage_key costruzione usa `Path(filename).name` per stripping
     directory component (path traversal residual)."""
-    from app.core.files import storage_dispatch
+    from app.core.resources import blob_dispatch as storage_dispatch
 
     src = inspect.getsource(storage_dispatch)
     src_no_comments = "\n".join(

@@ -98,7 +98,7 @@ _CALLSITE_CLASSIFICATION: dict[str, tuple[Classification, str]] = {
         "`imdf-bundles/` prefix. Operator-triggered cleanup; "
         "lifecycle is the safety net.",
     ),
-    "app/core/files/storage_dispatch.py": (
+    "app/core/resources/blob_dispatch.py": (
         "tracked",
         "W2 race covered by upload_intent self-clearing pattern "
         "(BE-GO-READY-STORAGE-ENGINE-008, R-021.1 closed). "

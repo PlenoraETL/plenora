@@ -77,7 +77,7 @@ def test_result_storage_policy_reads_threshold_via_settings():
 
 
 def test_file_storage_dispatch_reads_threshold_via_settings():
-    src = _read(_BACKEND_APP / "core" / "files" / "storage_dispatch.py")
+    src = _read(_BACKEND_APP / "core" / "resources" / "blob_dispatch.py")
     assert "settings.get(\"FILE_SOURCE_S3_THRESHOLD_BYTES\")" in src
     assert "os.getenv(\"FILE_SOURCE_S3_THRESHOLD_BYTES" not in src
     assert "os.environ.get(\"FILE_SOURCE_S3_THRESHOLD_BYTES" not in src

@@ -324,7 +324,7 @@ def test_dispatch_records_upload_intent_before_upload(monkeypatch):
         _fake_mark_done,
     )
     monkeypatch.setattr(
-        "app.core.files.storage_dispatch.cloud_backends.get_runtime_object_storage",
+        "app.core.resources.blob_dispatch.cloud_backends.get_runtime_object_storage",
         _fake_get_runtime,
     )
 
@@ -373,7 +373,7 @@ def test_dispatch_marks_failed_when_upload_fails(monkeypatch):
         _fake_mark_failed,
     )
     monkeypatch.setattr(
-        "app.core.files.storage_dispatch.cloud_backends.get_runtime_object_storage",
+        "app.core.resources.blob_dispatch.cloud_backends.get_runtime_object_storage",
         _fake_get_runtime,
     )
 
@@ -448,7 +448,7 @@ def test_dispatch_proceeds_when_record_upload_intent_returns_none(monkeypatch):
         _fake_mark_done,
     )
     monkeypatch.setattr(
-        "app.core.files.storage_dispatch.cloud_backends.get_runtime_object_storage",
+        "app.core.resources.blob_dispatch.cloud_backends.get_runtime_object_storage",
         lambda: fake_storage,
     )
 

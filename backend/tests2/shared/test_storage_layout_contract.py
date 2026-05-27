@@ -85,7 +85,7 @@ def test_file_storage_dispatch_uses_shared_prefix():
 
     backend_root = Path(__file__).resolve().parent.parent.parent
     source = (
-        backend_root / "app" / "core" / "files" / "storage_dispatch.py"
+        backend_root / "app" / "core" / "resources" / "blob_dispatch.py"
     ).read_text(encoding="utf-8")
 
     assert "from app.shared.resources.storage_layout import FILE_SOURCES_PREFIX" in source

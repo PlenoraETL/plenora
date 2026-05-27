@@ -265,6 +265,9 @@ Rules:
 - Resource loaders must not become vertical domain services.
 - Resource loader DB access lives in `app/core/resources/stores/*`; files under
   `app/core/resources/loaders/*_store.py` are compatibility re-exports only.
+- File-source blob storage dispatch lives in
+  `app/core/resources/blob_dispatch.py`; `app/core/files/storage_dispatch.py`
+  is a compatibility re-export for file service callers.
 - Do not bypass file-source refcount/reconciliation cleanup with direct
   `DELETE FROM file_sources WHERE group_id`.
 - Do not inspect or delete legacy `RESULTS_DIR/{project_id}` files directly
