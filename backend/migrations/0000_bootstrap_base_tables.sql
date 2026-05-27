@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS "plenora"."projects" (
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "created_by" "text",
+    "description" "text" DEFAULT ''::"text",
     "retention_n" integer
 );;
 

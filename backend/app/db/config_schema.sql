@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS projects (
     created_at    TEXT NOT NULL,
     updated_at    TEXT NOT NULL,
     created_by    TEXT REFERENCES users(id),
+    description   TEXT DEFAULT '',
     retention_n   INTEGER DEFAULT NULL
 );
 
@@ -304,4 +305,3 @@ CREATE TABLE IF NOT EXISTS file_source_shares (
     FOREIGN KEY (file_source_id) REFERENCES file_sources(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_file_source_shares_group ON file_source_shares(group_id);
-
