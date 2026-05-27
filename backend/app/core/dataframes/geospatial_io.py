@@ -84,6 +84,46 @@ def _dedup_columns_for_geo_save(df: pd.DataFrame, formato: str) -> pd.DataFrame:
     return df
 
 
+def _unique_shapefile_field_name(name: str, used: set[str]) -> str:
+    """Return a DBF-compatible field name matching GDAL's 10-char limit."""
+    base = str(name or "")[:10] or "field"
+    candidate = base
+    counter = 1
+    while candidate.lower() in used:
+        suffix = f"_{counter}"
+        candidate = f"{base[: max(1, 10 - len(suffix))]}{suffix}"
+        counter += 1
+    used.add(candidate.lower())
+    return candidate
+
+
+def exported_column_names_for_format(
+    columns,
+    formato: str,
+    *,
+    geom_column: Optional[str] = None,
+) -> list[str]:
+    """Return physical column names expected after export.
+
+    Shapefile stores attributes in DBF, whose field names are capped at 10
+    characters. GDAL/pyogrio launders longer fields during write; downstream
+    project-source contracts must expose those physical names or consumers
+    fail when validating the materialized artifact.
+    """
+    names = [str(col) for col in columns]
+    if (formato or "").lower() != "shp":
+        return names
+
+    used: set[str] = set()
+    out: list[str] = []
+    for name in names:
+        if geom_column and name == geom_column:
+            out.append(name)
+            continue
+        out.append(_unique_shapefile_field_name(name, used))
+    return out
+
+
 def geospatial_dataframe_to_bytes(
     df: pd.DataFrame,
     formato: str,
@@ -192,5 +232,4 @@ def _converti_geometrie_secondarie_in_wkt(gdf):
         )
 
     return gdf
-
 

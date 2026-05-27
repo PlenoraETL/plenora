@@ -112,7 +112,26 @@ def save_pipeline_result_outcome(
         geom_column=geom_column,
         crs=crs,
     )
-    return PipelineResultSave(result_id=result_id, output_filename=filename)
+    output_columns = None
+    try:
+        if fmt_lower in {"geojson", "gpkg", "geopackage", "shp"}:
+            from app.core.dataframes.geospatial_io import (
+                exported_column_names_for_format,
+            )
+
+            output_columns = exported_column_names_for_format(
+                df.columns,
+                fmt_lower,
+                geom_column=geom_column,
+            )
+    except Exception:
+        output_columns = None
+
+    return PipelineResultSave(
+        result_id=result_id,
+        output_filename=filename,
+        output_columns=output_columns,
+    )
 
 
 __all__ = [
