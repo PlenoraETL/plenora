@@ -10,9 +10,12 @@ import pandas as pd
 
 from app.core.resources.column_types import (
     normalize_canvas_type,
-    pandas_series_to_canvas_type as _pandas_series_to_canvas_type,
 )
 from app.shared.contracts.payloads import StringMap
+from app.core.dataframes.tabular import (
+    float_series_non_null_whole_numbers,
+    non_null_head_values,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -234,8 +237,38 @@ def canvas_type_to_pandas_dtype(canvas_type: Optional[str]) -> str:
 
 
 def series_to_canvas_type(series: Any) -> str:
-    """Infer the canonical canvas type for a frame-engine series."""
-    return _pandas_series_to_canvas_type(series)
+    """Infer the canonical canvas type for a frame-engine series.
+
+    Dispatch based on `series.dtype` plus the N11 heuristic for recovering
+    integers promoted to float by NaN.
+    """
+    dtype_str = str(series.dtype).lower()
+
+    if "int" in dtype_str:
+        return "int"
+    if "float" in dtype_str:
+        if float_series_non_null_whole_numbers(series):
+            return "int"
+        return "real"
+    if "bool" in dtype_str:
+        return "bool"
+    if "datetime" in dtype_str:
+        return "date"
+    if dtype_str == "object":
+        sample = non_null_head_values(series, 20)
+        if not sample:
+            return "str"
+        all_numeric = True
+        for value in sample:
+            try:
+                float(value)
+            except (TypeError, ValueError):
+                all_numeric = False
+                break
+        if all_numeric:
+            return "real"
+        return "str"
+    return "str"
 
 
 def dtype_compatible_with_logical(dtype: Any, logical: str) -> bool:

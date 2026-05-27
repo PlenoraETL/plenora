@@ -153,7 +153,8 @@ Current direction:
   geospatial export helpers live in `app/core/dataframes/geospatial_io.py`;
   matching `app/core/files/*_io.py` wrappers are tombstoned.
 - DataFrame-backed column type inference and empty typed-frame construction live in
-  `app/core/dataframes/schema.py`; `app/core/files/helpers.py` re-exports
+  `app/core/dataframes/schema.py`; pandas-specific helpers are not exposed from
+  `app/core/resources/column_types.py`. `app/core/files/helpers.py` re-exports
   the legacy helper names while upload code migrates.
 - Scalar null checks, DataFrame probes, and GeoSeries-like probes that depend
   on pandas/geopandas live in

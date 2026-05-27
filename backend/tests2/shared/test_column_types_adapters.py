@@ -12,7 +12,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.core.dataframes.schema import canvas_type_to_pandas_dtype
+from app.core.dataframes.schema import (
+    canvas_type_to_pandas_dtype,
+    series_to_canvas_type,
+)
 from app.core.resources.column_types import (
     CANONICAL_BASE_TYPES,
     TYPE_ALIASES,
@@ -21,7 +24,6 @@ from app.core.resources.column_types import (
     lookup_canvas_column_type,
     metadata_to_dict,
     normalize_canvas_type,
-    pandas_series_to_canvas_type,
 )
 
 
@@ -236,10 +238,14 @@ def test_canvas_type_to_pandas_dtype_is_instantiable():
         pd.Series([], dtype=dtype)
 
 
-def test_canvas_type_to_pandas_dtype_resource_compat_wrapper():
-    from app.core.resources.column_types import canvas_type_to_pandas_dtype as compat
+def test_resource_column_types_has_no_dataframe_compat_helpers():
+    import app.core.resources.column_types as column_types
 
-    assert compat("integer") == canvas_type_to_pandas_dtype("integer")
+    assert not hasattr(column_types, "canvas_type_to_pandas_dtype")
+    assert not hasattr(column_types, "pandas_series_to_canvas_type")
+    assert "app.core.dataframes" not in Path(column_types.__file__).read_text(
+        encoding="utf-8"
+    )
 
 
 # lookup_canvas_column_type
@@ -264,54 +270,54 @@ def test_lookup_canvas_column_type_returns_none_for_unknown_column():
     assert lookup_canvas_column_type("missing", {"id": "int"}) is None
 
 
-# pandas_series_to_canvas_type (fase C — include N11 heuristic)
+# series_to_canvas_type (fase C — include N11 heuristic)
 
 
 def test_pandas_series_int_is_int():
-    assert pandas_series_to_canvas_type(pd.Series([1, 2], dtype="int64")) == "int"
+    assert series_to_canvas_type(pd.Series([1, 2], dtype="int64")) == "int"
 
 
 def test_pandas_series_uint_is_int():
     """uint* -> int (dtype_str contiene 'int')."""
-    assert pandas_series_to_canvas_type(pd.Series([1, 2], dtype="uint16")) == "int"
+    assert series_to_canvas_type(pd.Series([1, 2], dtype="uint16")) == "int"
 
 
 def test_pandas_series_float_with_fractions_is_real():
-    assert pandas_series_to_canvas_type(pd.Series([1.5, 2.7], dtype=float)) == "real"
+    assert series_to_canvas_type(pd.Series([1.5, 2.7], dtype=float)) == "real"
 
 
 def test_pandas_series_float_all_int_is_int_n11():
-    assert pandas_series_to_canvas_type(pd.Series([1.0, 2.0], dtype=float)) == "int"
+    assert series_to_canvas_type(pd.Series([1.0, 2.0], dtype=float)) == "int"
 
 
 def test_pandas_series_float_with_nan_rest_int_is_int_n11():
-    assert pandas_series_to_canvas_type(pd.Series([1.0, np.nan, 3.0], dtype=float)) == "int"
+    assert series_to_canvas_type(pd.Series([1.0, np.nan, 3.0], dtype=float)) == "int"
 
 
 def test_pandas_series_float_all_nan_is_real():
-    assert pandas_series_to_canvas_type(pd.Series([np.nan, np.nan], dtype=float)) == "real"
+    assert series_to_canvas_type(pd.Series([np.nan, np.nan], dtype=float)) == "real"
 
 
 def test_pandas_series_bool_is_bool():
-    assert pandas_series_to_canvas_type(pd.Series([True, False], dtype=bool)) == "bool"
+    assert series_to_canvas_type(pd.Series([True, False], dtype=bool)) == "bool"
 
 
 def test_pandas_series_datetime_is_date():
     s = pd.Series(pd.to_datetime(["2026-01-01"]))
-    assert pandas_series_to_canvas_type(s) == "date"
+    assert series_to_canvas_type(s) == "date"
 
 
 def test_pandas_series_object_strings_is_str():
-    assert pandas_series_to_canvas_type(pd.Series(["a", "b"], dtype=object)) == "str"
+    assert series_to_canvas_type(pd.Series(["a", "b"], dtype=object)) == "str"
 
 
 def test_pandas_series_object_numeric_strings_is_real():
-    assert pandas_series_to_canvas_type(pd.Series(["1.5", "2.7"], dtype=object)) == "real"
+    assert series_to_canvas_type(pd.Series(["1.5", "2.7"], dtype=object)) == "real"
 
 
 def test_pandas_series_empty_object_is_str():
-    assert pandas_series_to_canvas_type(pd.Series([], dtype=object)) == "str"
+    assert series_to_canvas_type(pd.Series([], dtype=object)) == "str"
 
 
 def test_pandas_series_nullable_Int64_is_int():
-    assert pandas_series_to_canvas_type(pd.Series([1, pd.NA, 3], dtype="Int64")) == "int"
+    assert series_to_canvas_type(pd.Series([1, pd.NA, 3], dtype="Int64")) == "int"

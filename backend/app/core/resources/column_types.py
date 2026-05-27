@@ -7,11 +7,6 @@ Three concepts have adjacent names but distinct semantics:
 from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Mapping, Optional
-
-from app.core.dataframes.tabular import (
-    float_series_non_null_whole_numbers,
-    non_null_head_values,
-)
 from app.shared.contracts.payloads import StringMap, StringRows
 
 
@@ -82,13 +77,6 @@ def normalize_canvas_type(canvas_type: Optional[str]) -> str:
     return ""
 
 
-def canvas_type_to_pandas_dtype(canvas_type: Optional[str]) -> str:
-    """Compatibility wrapper for the dataframe boundary implementation."""
-    from app.core.dataframes.schema import canvas_type_to_pandas_dtype as _impl
-
-    return _impl(canvas_type)
-
-
 def lookup_canvas_column_type(
     column_name: str,
     canvas_type_map: Mapping[str, str],
@@ -111,48 +99,6 @@ def lookup_canvas_column_type(
             return canvas_type_map_lower[lowered]
 
     return None
-
-
-def pandas_series_to_canvas_type(series: Any) -> str:
-    """pandas Series -> canonical canvas-type.
-
-    Dispatch based on `series.dtype` plus the N11 heuristic for recovering
-    integers promoted to float by NaN.
-
-    N11 policy (fixed 2026-04-17):
-    - float with all non-null values integer -> "int"
-    - float all-NaN -> fallback "real" (conservative)
-    - float with at least one fractional value -> "real"
-    - object numeric parseable -> "real"
-    - object otherwise -> "str"
-    """
-    dtype_str = str(series.dtype).lower()
-
-    if "int" in dtype_str:
-        return "int"
-    if "float" in dtype_str:
-        if float_series_non_null_whole_numbers(series):
-            return "int"
-        return "real"
-    if "bool" in dtype_str:
-        return "bool"
-    if "datetime" in dtype_str:
-        return "date"
-    if dtype_str == "object":
-        sample = non_null_head_values(series, 20)
-        if not sample:
-            return "str"
-        all_numeric = True
-        for value in sample:
-            try:
-                float(value)
-            except (TypeError, ValueError):
-                all_numeric = False
-                break
-        if all_numeric:
-            return "real"
-        return "str"
-    return "str"
 
 
 # Shape adapters (list <-> dict)
