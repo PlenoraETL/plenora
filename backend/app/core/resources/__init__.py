@@ -17,7 +17,20 @@ from app.core.resources.types import (
     ResourceRef,
     ResourceRegistry,
 )
-from app.core.resources.registry import default_registry, build_default_registry
+
+
+def build_default_registry():
+    """Build the default registry without importing DB-backed loaders at package import."""
+    from app.core.resources.registry import build_default_registry as _build
+
+    return _build()
+
+
+def default_registry():
+    """Return the default registry without importing DB-backed loaders at package import."""
+    from app.core.resources.registry import default_registry as _default
+
+    return _default()
 
 __all__ = [
     "OutputMode",
