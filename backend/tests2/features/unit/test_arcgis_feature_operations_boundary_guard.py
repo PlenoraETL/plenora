@@ -210,6 +210,10 @@ def test_features_service_has_no_directory_storage_state() -> None:
 
     assert "_arcgis_dir" not in src
     assert "_results_dir" not in src
+    assert "arcgis_dir:" not in src
+    assert "results_dir:" not in src
+    assert "arcgis_dir=" not in src
+    assert "results_dir=" not in src
     assert "from app.config import settings" not in src
 
 

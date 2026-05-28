@@ -109,8 +109,6 @@ class FeaturesService:
     def __init__(
         self,
         client: ArcGISProviderProtocol = None,
-        arcgis_dir: Path = None,
-        results_dir: Path = None,
     ) -> None:
         self._client = client or create_arcgis_provider()
         self._operations = ArcGISFeatureOperations(self._client)
@@ -676,12 +674,8 @@ class FeaturesService:
 
 def create_features_service(
     client: ArcGISProviderProtocol = None,
-    arcgis_dir: Path = None,
-    results_dir: Path = None,
 ) -> FeaturesService:
     """Factory function per creare un FeaturesService con Dependency Injection."""
     return FeaturesService(
         client=client,
-        arcgis_dir=arcgis_dir,
-        results_dir=results_dir,
     )
