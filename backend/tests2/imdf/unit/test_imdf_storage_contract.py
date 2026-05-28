@@ -193,7 +193,7 @@ def test_list_task_ids_empty_when_no_bundles(fake_storage, fake_settings):
 
 
 def test_delete_bundle_removes_s3_and_local(fake_storage, fake_settings, tmp_path):
-    """IMDF-3: delete_bundle elimina meta + legacy zip + gdb zip + tutti
+    """IMDF-3: delete_bundle elimina meta + gdb zip + tutti
     i file individuali sotto `{task_id}/files/`. Count = numero di
     delete chiamati."""
     from app.core.imdf import storage as st
@@ -211,9 +211,9 @@ def test_delete_bundle_removes_s3_and_local(fake_storage, fake_settings, tmp_pat
     _write_bundle(local)
 
     count = st.delete_bundle("task-1")
-    # Fixed keys (meta + legacy zip + gdb zip) sempre tentati = 3,
-    # piu' i 2 file individuali = 5.
-    assert count == 5
+    # Fixed keys (meta + gdb zip) sempre tentati = 2,
+    # piu' i 2 file individuali = 4.
+    assert count == 4
     assert "imdf-bundles/task-1.meta.json" not in fake_storage.objects
     assert "imdf-bundles/task-1/files/plenora_metadata.json" not in fake_storage.objects
     assert "imdf-bundles/task-1/files/S1/building.geojson" not in fake_storage.objects

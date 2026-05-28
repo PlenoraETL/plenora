@@ -34,9 +34,7 @@ class ScheduleLogService:
     def write_log(self, log_entry: ScheduleLogEntry) -> str:
         """INSERT del log entry. Ritorna il log_id (identificatore canonico).
 
-        Caller legacy aspettavano un "relative path" (es.
-        "2026-02-07/sched_abc_030000.json"). Oggi ritorniamo il log_id:
-        e' stabile, opaco, usabile come identificatore anywhere.
+        Ritorna il log_id: stabile, opaco, usabile come identificatore.
         """
         try:
             scheduler_db.insert_schedule_log(

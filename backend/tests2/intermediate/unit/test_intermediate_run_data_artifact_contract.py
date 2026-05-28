@@ -63,15 +63,15 @@ def _make_parquet_bytes(df: pd.DataFrame) -> bytes:
     return buf.getvalue()
 
 
-# 1. Legacy / full_pg / preview_only -> node_rows path
+# 1. NULL / full_pg / preview_only -> node_rows path
 
 
-def test_legacy_full_pg_node_rows_path_unchanged(superadmin_user):
-    """Persistence_mode NULL (record legacy) o full_pg: legge da
+def test_null_full_pg_node_rows_path_unchanged(superadmin_user):
+    """Persistence_mode NULL o full_pg: legge da
     node_rows come prima del batch artifact. Regression."""
     client = build_client(superadmin_user)
 
-    legacy_rows = [{"id": 1, "v": "a"}, {"id": 2, "v": "b"}]
+    full_pg_rows = [{"id": 1, "v": "a"}, {"id": 2, "v": "b"}]
 
     with patch(
         "app.core.intermediate.router._check_run_access",
@@ -79,21 +79,21 @@ def test_legacy_full_pg_node_rows_path_unchanged(superadmin_user):
     ), patch(
         "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         return_value=_node_meta(
-            persistence_mode=None,  # NOTE: legacy NULL -> trattato come full_pg
+            persistence_mode=None,  # NOTE: NULL -> trattato come full_pg
             row_count=2,
             col_schema={"id": "int", "v": "str"},
         ),
     ), patch(
         "app.core.intermediate.router.node_snapshots_db.get_node_table_rows",
-        return_value=legacy_rows,
+        return_value=full_pg_rows,
     ) as mock_rows:
         response = client.get("/api/runs/r1/nodes/n1/data")
 
     assert response.status_code == 200
     body = response.json()
-    assert body["rows"] == legacy_rows
+    assert body["rows"] == full_pg_rows
     assert body["row_count"] == 2
-    # Persistence mode resa esplicita ai client (legacy -> "full_pg")
+    # Persistence mode resa esplicita ai client (NULL -> "full_pg")
     assert body["persistence_mode"] == "full_pg"
     mock_rows.assert_called_once()
 
@@ -425,9 +425,9 @@ def test_full_artifact_default_limit_is_100(superadmin_user):
 # 7. Campi additivi sempre presenti
 
 
-def test_response_contains_additive_fields_for_legacy_path(superadmin_user):
+def test_response_contains_additive_fields_for_null_mode_path(superadmin_user):
     """I campi nuovi (persistence_mode, artifact_uri, ...) devono
-    essere presenti anche sui record legacy NULL (consistency)."""
+    essere presenti anche sui record con persistence_mode NULL."""
     client = build_client(superadmin_user)
 
     with patch(

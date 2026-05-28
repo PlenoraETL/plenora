@@ -49,8 +49,7 @@ from app.core.arricchisci.api_connection_support import (
 # canonical. Logger canonico
 # `get_logger("app.core.arricchisci.api_connector")` (StructuredLogger
 # wrapper supporta kwarg `op=` usato in `_assert_source_project_in_tenant`
-# State refs `self.results_dir` / `self._current_group_id` /
-# `self._preview_limit` accessibili via MRO. Cross-cluster forward refs
+# Cross-cluster forward refs
 # `_validate_outbound_url` chiamato da `_execute_rest_file` core (futuro
 # B3-B.5/B3-B.6) → MRO trasparente. `_load_*` chiamati da
 # `executor.py:170,173,176` instance-level → MRO trasparente. Pattern

@@ -606,16 +606,13 @@ def _build_record_policy(
     )
 
 
-# Lettura record legacy
-
 def persistence_mode_for_record(node_meta_row: dict) -> str:
     """Risolve la `persistence_mode` apparente di un record `node_meta`.
 
     Usata dai reader (router/L2/diff) per sapere se trattare il record
-    come legacy `full_pg` o secondo nuova policy. Record scritti prima
-    di hanno tutte le colonne nuove NULL: per quelli ritorniamo
-    `full_pg`, conservando il significato originale (tutte le righe in
-    `node_rows`).
+    come `full_pg` o secondo la policy dichiarata. Le righe con valore
+    NULL vengono lette come `full_pg`, perche' il dato completo vive in
+    `node_rows`.
     """
     val = (node_meta_row or {}).get("persistence_mode")
     if val is None or val == "":

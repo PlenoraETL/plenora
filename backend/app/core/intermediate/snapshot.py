@@ -225,8 +225,8 @@ def compute_dataframe_fingerprint(df: Any) -> tuple[str, str]:
 def _build_preview_rows(df: Any, n_rows: int) -> List[SnapshotRow]:
     """Return preview records with `_row_hash` for each row.
 
-    Per riusa `writer.compute_row_hash` per garantire che
-    il `row_hash` di una riga preview sia identico a quello legacy
+    Riusa `writer.compute_row_hash` per garantire che
+    il `row_hash` di una riga preview sia identico a quello di
     `full_pg` (cosi' diff L2 fra una run preview_only e una full_pg
     sullo stesso dataset combacia sulle prime N righe).
     """
@@ -246,11 +246,11 @@ def _build_preview_rows(df: Any, n_rows: int) -> List[SnapshotRow]:
     return out
 
 
-def _build_full_rows_legacy(df: Any) -> List[SnapshotRow]:
+def _build_full_rows_pg(df: Any) -> List[SnapshotRow]:
     """Materializza l'intero DataFrame in lista di dict + `_row_hash`.
 
-    Equivalente al path legacy `writer.write_node`. SOLO mode
-    `full_pg`. Costoso su DataFrame grandi: per definizione.
+    Usato solo dalla mode `full_pg`. Costoso su DataFrame grandi:
+    per definizione.
     """
     if df is None:
         return []
@@ -346,7 +346,7 @@ def _record_snapshot(
 
     if policy.should_record_rows:
         if persistence_mode == _policy.MODE_FULL_PG:
-            rows_to_persist = _build_full_rows_legacy(df)
+            rows_to_persist = _build_full_rows_pg(df)
         elif persistence_mode == _policy.MODE_PREVIEW_ONLY:
             rows_to_persist = _build_preview_rows(df, policy.preview_rows)
         # mode metadata_only / full_artifact non entrano in questo branch

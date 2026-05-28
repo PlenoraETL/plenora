@@ -69,13 +69,13 @@ def test_l2_full_pg_full_pg_returns_full_diff(superadmin_user):
     assert "reason" not in body or body.get("reason") != "preview_only"
 
 
-def test_l2_legacy_null_treated_as_full_pg(superadmin_user):
-    """Record legacy senza `persistence_mode` -> mappato a `full_pg`
+def test_l2_null_persistence_mode_treated_as_full_pg(superadmin_user):
+    """Record senza `persistence_mode` -> mappato a `full_pg`
     (vedi `policy.persistence_mode_for_record`)."""
     client = build_client(superadmin_user)
 
     def _fake_meta(rid, _nid):
-        return _node_meta(persistence_mode=None)  # NOTE: legacy record without persistence_mode.
+        return _node_meta(persistence_mode=None)
 
     with patch(
         "app.core.intermediate.router._check_run_access",
@@ -385,7 +385,7 @@ def test_l2_does_not_return_500_on_any_documented_mode(superadmin_user):
         ("full_artifact", "full_artifact", "pending", "complete", 422),
         ("full_artifact", "full_artifact", "failed", "complete", 422),
         ("preview_only", "full_pg", None, None, 422),
-        (None, None, None, None, 200),  # NOTE: legacy NULL = full_pg
+        (None, None, None, None, 200),  # NOTE: NULL = full_pg
     ]
 
     for mode_a, mode_b, sa, sb, expected in cases:

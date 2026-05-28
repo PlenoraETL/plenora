@@ -24,7 +24,6 @@ logger = get_logger(__name__)
 # Module-level alias kept for internal call sites and tests.
 PREFIX = IMDF_BUNDLES_PREFIX
 META_SUFFIX = ".meta.json"
-ZIP_SUFFIX = ".zip"
 BundleFiles = dict[str, bytes]
 
 
@@ -37,10 +36,6 @@ def _storage():
     deve fallire perche' il pubblico richiede deve completare l'upload."""
     from app.core.io.object_storage import get_runtime_object_storage
     return get_runtime_object_storage()
-
-
-def _zip_key(task_id: str) -> str:
-    return f"{PREFIX}/{task_id}{ZIP_SUFFIX}"
 
 
 def _meta_key(task_id: str) -> str:
@@ -182,8 +177,7 @@ def read_bundle_file_bytes(task_id: str, name: str) -> Optional[bytes]:
 # Wrappano `read_bundle_file_bytes` decodificando i bytes come JSON. Pensati
 # per i reader HTTP che NON devono piu' idratare la cache locale: vanno
 # direct-from-storage senza il giro `ensure_local_bundle + Path.read_text`.
-# `ensure_local_bundle` resta come fallback legacy (vecchi bundle in zip
-# layout) o per consumer che richiedono .gdb directory (pyogrio).
+# I consumer che richiedono .gdb usano `open_gdb_in_vsimem`.
 
 
 def _read_bundle_json(task_id: str, name: str) -> Optional[JsonObject]:
@@ -236,8 +230,7 @@ def open_gdb_in_vsimem(task_id: str, site_id: str) -> Iterator[Optional[str]]:
     {site_id}.gdb` senza materializzare niente su disco.
 
     Layout su storage (post-IMDF-3): ``{PREFIX}/{task_id}/_gdb.zip``.
-    Lo zip contiene un singolo top-level `{site_id}.gdb/` directory
-    (vedi `persist._zip_gdb_dir_to_bytes`).
+    Lo zip contiene un singolo top-level `{site_id}.gdb/` directory.
 
     Args:
         task_id: id del bundle.
@@ -298,7 +291,7 @@ def list_bundle_file_entries(task_id: str) -> List[JsonObject]:
     relativo (strip del prefix `files/`) per matchare il layout usato
     dal frontend (i.e. ``{site_id}/foo.geojson``).
     Lista vuota se la capability object_storage e' off o nessun file
-    individuale presente (e.g. bundle legacy in zip layout).
+    individuale presente.
     """
     if not object_storage_enabled():
         return []
@@ -367,8 +360,7 @@ def list_task_ids() -> List[str]:
 
     Usato dal list endpoint per vedere bundle da tutti i nodi (non solo
     quelli cached sul nodo corrente). ritorna [] se la
-    capability object storage e' disabilitata (router fallback su
-    cache locale only)."""
+    capability object storage e' disabilitata."""
     if not object_storage_enabled():
         return []
     storage = _storage()
@@ -393,13 +385,12 @@ def delete_bundle(task_id: str, *, cleanup_local: bool = True) -> int:
       - meta.json (``{task_id}.meta.json``)
       - tutti i file individuali sotto ``{task_id}/files/*``
       - ``_gdb.zip`` se presente
-      - legacy ``{task_id}.zip`` se presente (compat con bundle vecchi)
     """
     storage = _storage()
     deleted = 0
 
-    # Meta + legacy zip + gdb zip: key fissi.
-    for key in (_meta_key(task_id), _zip_key(task_id), _gdb_zip_key(task_id)):
+    # Meta + gdb zip: key fissi.
+    for key in (_meta_key(task_id), _gdb_zip_key(task_id)):
         try:
             storage.delete(key)
             deleted += 1

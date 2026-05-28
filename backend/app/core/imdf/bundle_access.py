@@ -1,4 +1,4 @@
-"""IMDF bundle path, cache hydration, and ownership use-cases."""
+"""IMDF bundle path and storage-meta ownership use-cases."""
 
 from __future__ import annotations
 
@@ -38,14 +38,12 @@ def assert_bundle_group_access_from_meta(
     logger: Any,
     visible_checker: Any = assert_resource_visible,
 ) -> None:
-    """Variante storage-first del check di group access (IMDF-4).
+    """Check di group access da meta storage IMDF.
 
-    A differenza di ``assert_bundle_group_access`` che legge
-    ``plenora_metadata.json`` dalla cartella locale del bundle, questa
-    accetta direttamente il dict del meta gia' caricato dal caller
+    Accetta direttamente il dict del meta gia' caricato dal caller
     (tipicamente via ``imdf.storage.get_meta_only(task_id)``). Permette
-    agli endpoint di servire le response da storage senza idratare la
-    cache locale per il solo check di ownership.
+    agli endpoint di servire le response da storage senza idratare file
+    locali per il solo check di ownership.
 
     Same fail-closed policy:
       - superadmin -> bypass
@@ -112,26 +110,3 @@ def assert_bundle_group_access_from_meta(
             status_code=500,
             detail="Errore verifica accesso bundle",
         )
-
-
-def assert_bundle_group_access(
-    bundle_dir: Path,
-    current_user: CurrentUser,
-    *,
-    logger: Any,
-    visible_checker: Any = assert_resource_visible,
-) -> None:
-    """Verify that the current user can access the project that owns a bundle.
-
-    Legacy: legge il meta dalla cartella locale. Per i nuovi endpoint
-    storage-first usa ``assert_bundle_group_access_from_meta`` con il
-    meta gia' caricato da ``imdf.storage.get_meta_only``.
-    """
-    meta = bundle_store.read_metadata(bundle_dir)
-    assert_bundle_group_access_from_meta(
-        meta,
-        current_user,
-        bundle_dir.name,
-        logger=logger,
-        visible_checker=visible_checker,
-    )

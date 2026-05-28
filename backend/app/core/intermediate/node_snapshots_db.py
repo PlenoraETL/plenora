@@ -377,7 +377,7 @@ def write_node_atomic(
     error_msg: Optional[str] = None,
     transaction_func=None,
 ) -> None:
-    """Atomically write legacy `node_rows` plus base `node_meta`."""
+    """Atomically write `node_rows` plus base `node_meta`."""
     transaction_boundary = transaction_func or unit_of_work
     records = _build_node_row_records(run_id, node_id, rows or [])
     meta_params = (

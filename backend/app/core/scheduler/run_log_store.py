@@ -25,7 +25,7 @@ class ScheduleRunLogStore:
             )
         except (PsycopgError, OSError, RuntimeError, ValueError, TypeError) as exc:
             logger.debug(
-                "list_completed_runs: DB fallback skipped (%s: %s)",
+                "list_completed_runs: DB read skipped (%s: %s)",
                 type(exc).__name__,
                 exc,
             )

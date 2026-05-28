@@ -8,15 +8,8 @@ Copre:
 - Input vuoto -> `ValueError` esplicito (no fall-through silente).
 - Zip senza componenti IMDF valide -> `ValueError("non sembra un IMDF...")`
   con cleanup della tmp dir creata internamente.
-- Equivalenza output con `extract_imdf_zip(path)` per la stessa zip:
-  i due percorsi (path-based vs bytes-based) devono produrre lo stesso
-  set di file indicizzati e lo stesso `site_id`.
-
-NOTA su tmp dir: IMDF-1 chiude solo il bounce nel caller (worker non usa
-piu' `temporary_path_from_bytes`). Il loader internamente continua a
-estrarre su tmp dir perche' `.gdb` e' un formato directory letto da
-pyogrio via filesystem; IMDF-2 introdurra' la shape in-memory
-`ImdfBundle.files: dict[str, bytes]`.
+Il loader espone solo la shape RAM-first: niente path-mode, niente tmp
+dir, niente accessor filesystem.
 """
 
 from __future__ import annotations
@@ -66,11 +59,8 @@ def test_extract_imdf_zip_bytes_returns_indexed_bundle():
     bundle = extract_imdf_zip_bytes(data)
     try:
         assert bundle.site_id == "SITE_X"
-        # IMDF-6: zero disk. tmp_dir None, *_path None.
+        # IMDF-6: zero disk. tmp_dir None.
         assert bundle.tmp_dir is None
-        assert bundle.manifest_path is None
-        assert bundle.imdf_dir is None
-        assert bundle.imdf_geojson_files == []
         # I componenti vivono in bundle.files.
         assert "manifest.json" in bundle.files
         assert "SITE_X/anchor.geojson" in bundle.files
@@ -116,7 +106,7 @@ def test_extract_imdf_zip_bytes_invalid_zip_no_tmp_created():
 def test_extract_imdf_zip_bytes_collects_gdb_into_gdb_zip_bytes():
     """IMDF-6: i membri `*.gdb/...` dello zip incoming vengono
     ricomposti in `bundle.gdb_zip_bytes` (sub-zip RAM con stesso
-    layout di `persist._zip_gdb_dir_to_bytes`). Pin del contratto
+    layout consumato da `open_gdb_in_vsimem`. Pin del contratto
     inter-modulare: `open_gdb_in_vsimem` cerca `{site}.gdb/` come
     top-level dentro `_gdb.zip` su storage."""
     from app.core.imdf.loader import extract_imdf_zip_bytes
@@ -132,7 +122,6 @@ def test_extract_imdf_zip_bytes_collects_gdb_into_gdb_zip_bytes():
     bundle = extract_imdf_zip_bytes(data)
     assert bundle.gdb_zip_bytes is not None
     assert bundle.has_gdb is True
-    assert bundle.gdb_path is None  # IMDF-6: zero disk
 
     # Il sub-zip ha gli stessi arcname dei .gdb members originali.
     sub = zipfile.ZipFile(BytesIO(bundle.gdb_zip_bytes))
@@ -158,7 +147,6 @@ def test_extract_imdf_zip_bytes_ifc_into_ifc_bytes():
     assert bundle.ifc_bytes is not None
     assert bundle.ifc_bytes.startswith(b"ISO-10303-21")
     assert bundle.has_ifc is True
-    assert bundle.ifc_path is None
 
 
 def test_extract_imdf_zip_path_mode_tombstoned():
@@ -222,34 +210,21 @@ def test_bundle_files_populated_from_zip_members():
         bundle.cleanup()
 
 
-def test_bundle_files_accessor_falls_back_to_path_when_files_empty(tmp_path):
-    """Fallback path-based degli accessor `manifest()` / `validation()` /
-    `renderers()` quando `bundle.files` e' svuotato (es. consumer che
-    rilascia RAM dopo persist). Costruiamo manualmente un bundle con
-    `*_path` popolato per testare il branch fallback."""
+def test_bundle_files_accessor_path_fallback_tombstoned():
+    """Gli accessor leggono solo da `bundle.files`: i campi path-mode
+    sono rimossi dal dataclass."""
     from app.core.imdf.loader import ImdfBundle
-    import json as _json
 
-    manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text(
-        _json.dumps({"sites": {"SITE_X": {"name": "Site X"}}}),
-        encoding="utf-8",
-    )
-
-    bundle = ImdfBundle(
-        tmp_dir=tmp_path,
-        site_id="SITE_X",
-        files={},  # svuotato
-        manifest_path=manifest_path,
-    )
-    # Accessor cade sul fallback filesystem via `manifest_path`.
-    assert bundle.manifest() == {"sites": {"SITE_X": {"name": "Site X"}}}
-    assert bundle.has_manifest is True  # manifest_path popolato
+    bundle = ImdfBundle(tmp_dir=None, site_id="SITE_X", files={})
+    assert not hasattr(bundle, "manifest_path")
+    assert not hasattr(bundle, "validation_path")
+    assert not hasattr(bundle, "renderers_path")
+    assert not hasattr(bundle, "gdb_path")
+    assert not hasattr(bundle, "ifc_path")
 
 
 def test_bundle_manifest_missing_returns_empty_dict():
-    """Quando il manifest non e' presente in nessuna delle due shape
-    (`files` vuoto + `manifest_path` None), gli accessor ritornano
+    """Quando il manifest non e' presente in `files`, gli accessor ritornano
     `{}` senza sollevare. Garantisce che i consumer optional-aware
     (es. metadata builder) possano interrogare il bundle senza
     pre-check."""

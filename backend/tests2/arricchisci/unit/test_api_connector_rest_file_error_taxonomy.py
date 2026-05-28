@@ -27,12 +27,8 @@ def _ensure_database_url(monkeypatch):
 @pytest.fixture
 def service(monkeypatch):
     svc = ApiConnectionService()
-    # BE-GO-READY-TRANSFORMATION-ENGINE-022: rimossa la singleton
-    # mutation `svc._current_group_id = "default"`. I 6 callsite
-    # `service._execute_rest_file(...)` ricevono `ctx=ctx_default`
-    # esplicito (typed boundary typed context contract). Lo state legacy resta
-    # `None` di default — coerente col contract: il passaggio
-    # esplicito del ctx vince sul fallback singleton.
+    # I 6 callsite `service._execute_rest_file(...)` ricevono
+    # `ctx=ctx_default` esplicito (typed boundary context contract).
     # Bypass SSRF guard per i test: usiamo hostname fittizi che non
     # risolverebbero. La logica SSRF e' testata altrove
     # (tests2/security/unit/test_validate_external_url_contract.py).

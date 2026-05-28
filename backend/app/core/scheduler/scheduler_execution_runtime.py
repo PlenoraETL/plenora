@@ -57,24 +57,12 @@ def start_lock_heartbeat(
 
 
 def stop_lock_heartbeat(state: SchedulerHeartbeatState) -> None:
-    """Stop a heartbeat state created by start_lock_heartbeat.
-
-    Also accepts the legacy state shape used before the LockHeartbeat
-    object was stored under ``_hb``.
-    """
+    """Stop a heartbeat state created by start_lock_heartbeat."""
     if not state:
         return
     hb = state.get("_hb")
     if hb is not None:
         hb.stop()
-        return
-
-    stop_event = state.get("stop_event")
-    thread = state.get("thread")
-    if stop_event is not None:
-        stop_event.set()
-    if thread is not None and thread.is_alive():
-        thread.join(timeout=5.0)
 
 
 def handle_failure(

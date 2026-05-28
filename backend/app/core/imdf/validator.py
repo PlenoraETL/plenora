@@ -70,7 +70,7 @@ def validate_publish(
     """Esegue la validazione e ritorna un dict report.
 
     Args:
-        bundle_task_id: task_id del bundle persistito in IMDF_BUNDLES_DIR
+        bundle_task_id: task_id del bundle persistito nello storage IMDF
         connection_id: id connessione ArcGIS in cui pubblicheremo
         fs_name: nome Feature Service target
         mode: 'replace' | 'append' | 'upsert'
@@ -86,9 +86,7 @@ def validate_publish(
         Dict con la struttura del report (vedi docstring modulo).
         Non lancia eccezioni per errori di validazione — li riporta nel dict.
     """
-    from app.config import settings
     from app.core.connections.arcgis_connection_resolver import resolve_arcgis_connection
-    from app.core.imdf import bundle_store
     from app.core.imdf.arcgis.service_discovery import (
         _find_existing_service,
         _is_service_name_available,
@@ -142,22 +140,11 @@ def validate_publish(
     # Site_id richiesto per costruire il path interno allo zip.
     meta = imdf_storage.get_meta_only(bundle_task_id)
     if meta is None:
-        from app.config import settings
-
-        bundle_dir = settings.IMDF_BUNDLES_DIR / bundle_task_id
-        gdb_candidates = sorted(bundle_dir.glob("*.gdb")) if bundle_dir.exists() else []
-        if not gdb_candidates:
-            _add_top_issue(
-                "error", "BUNDLE_MISSING",
-                f"Bundle '{bundle_task_id}' senza meta su storage "
-                f"e senza cache locale .gdb."
-            )
-            return report
-        try:
-            bundle_layers = load_imdf_layers(str(gdb_candidates[0]))
-        except Exception as e:
-            _add_top_issue("error", "GDB_LOAD_FAILED", f"Caricamento GDB fallito: {e}")
-            return report
+        _add_top_issue(
+            "error", "BUNDLE_MISSING",
+            f"Bundle '{bundle_task_id}' senza meta su storage."
+        )
+        return report
     else:
         site_id = (meta.get("site_id") or "").strip()
         if not site_id:

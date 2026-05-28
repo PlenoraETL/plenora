@@ -444,12 +444,9 @@ class ScheduleService:
     ) -> List[ScheduleConfig]:
         """Lista tutti gli schedule di un progetto specifico.
 
-        `group_id`: tenant in cui cercare. None => fallback a
-        `DEFAULT_GROUP` (legacy default per chiamanti che non
-        conoscono il tenant). I caller che servono progetti di
-        tenant non-default DEVONO passare `group_id` esplicito,
-        altrimenti gli schedule cross-tenant sono invisibili e
-        un cascade-cleanup li lascia indietro come orfani.
+        `group_id`: tenant in cui cercare. I caller che servono progetti
+        di tenant non-default devono passare `group_id` esplicito,
+        altrimenti `list_schedules` applica il proprio default di query.
         """
         return self.list_schedules(
             project_id=project_id, group_id=group_id,

@@ -36,15 +36,7 @@ def _preview_limit_from_ctx(
     `preview_limit`.
 
     Ritorna `ctx.preview_limit` se il caller passa un context tipato,
-    altrimenti `None`. **Non legge** `_preview_limit` dal singleton
-    — il preview-limit pre-set sul singleton e' considerato stale
-    state che NON deve influenzare il flusso `_load_file_source`
-    quando il caller non ha esplicitamente dichiarato un context.
-
-    Storia (TE25/TE30B): introdotto in -025 a fianco del legacy
-    `_resolve_preview_limit` (ctx-or-singleton-fallback). Il legacy
-    helper era dead code dopo che -025 ha sostituito l'unico
-    callsite production: in -030B e' stato rimosso.
+    altrimenti `None`.
 
     Decisione di slice (audit -023/-025):
       Il `preview_limit` e' tenant-non-sensitive ma cross-execution
@@ -65,26 +57,15 @@ def _group_id_from_ctx(
     """helper strict
 
     Ritorna `ctx.group_id` se il caller passa un context tipato,
-    altrimenti `None`. **Non legge** `_current_group_id` dal
-    singleton — la "tenant binding via singleton mutation" non e'
-    parte del contract di questo helper.
-
-    Storia (TE19/TE23/TE30B): in -019 il legacy `_resolve_group_id`
-    (ctx-or-singleton-fallback) era l'helper unico. -023 ha
-    introdotto questa variante strict per il branch static. -030B
-    ha promosso anche `_load_source_project` e `_load_file_source`
-    a usare lo strict helper, completando la migrazione e
-    rimuovendo il legacy `_resolve_group_id` come dead code.
+    altrimenti `None`.
 
     Decisione di slice (audit -021):
       `_load_static_values` non ha tenant binding semantico
       (processing puro di template variables come `{{NOW}}`,
       `{{TODAY}}`). La sua dipendenza pre-singleton era
       un side effect del helper legacy, non del contract della
-      funzione. La rimozione del fallback per il branch static
-      elimina lo stale-state coupling al singleton (un eventuale
-      `svc._current_group_id` pre-set da un'altra esecuzione non
-      puo' ne' deve influenzare il static).
+      funzione. La lettura dal typed boundary elimina lo stale-state
+      coupling al singleton.
     """
     if ctx is not None:
         return ctx.group_id
@@ -107,7 +88,7 @@ class ApiConnectionSourceLoadingMixin:
     # SOURCE_LOADING / TENANCY
     # Wrapper sopra `app.core.artifacts.SourceLoader`. I wrapper di
     # api_connector aggiungono solo cio' che e' specifico al modulo
-    # `_load_source_project`: recompute upstream + fallback filesystem
+    # `_load_source_project`: recompute upstream + loader unico
     # `_load_file_source`: preview_limit
     # tutti: `filter_visible_columns` sul DataFrame ritornato
 
@@ -209,8 +190,8 @@ class ApiConnectionSourceLoadingMixin:
         """Carica dati dal progetto sorgente via SourceLoader.
 
         Cross-tenant fail-closed delegato al loader (che a sua volta
-        delega ad ArtifactResolver). Recompute upstream + fallback
-        filesystem restano qui perche' sono specifici di api_connector.
+        delega ad ArtifactResolver). Il recompute upstream resta qui
+        perche' e' specifico di api_connector.
 
          `ctx` e' ora un
         keyword-only **required** parameter (no default). Tutti i 3
@@ -357,9 +338,7 @@ class ApiConnectionSourceLoadingMixin:
 
          (slice migration):
         `preview_limit` viene letto ESCLUSIVAMENTE da
-        `ctx.preview_limit` via `_preview_limit_from_ctx(ctx)`. Lo
-        `svc._preview_limit` legacy non e' piu' consultato —
-        elimina lo stale-state cross-execution leak. Quando
+        `ctx.preview_limit` via `_preview_limit_from_ctx(ctx)`. Quando
         `ctx.preview_limit is None`, il preview_limit e' considerato
         non-richiesto (no truncation).
         """
@@ -389,10 +368,7 @@ class ApiConnectionSourceLoadingMixin:
         # Tronca per preview (opzionale
         # slice migration
         # sia il `preview_limit` (TE-025) sia il `group_id` (TE-030B
-        # vengono ora letti SOLO dal `ctx` (typed boundary). I legacy
-        # state `svc._preview_limit` / `svc._current_group_id` non
-        # sono piu' consultati — eliminato lo stale-state cross
-        # execution leak
+        # vengono letti SOLO dal `ctx` (typed boundary).
         _plimit = _preview_limit_from_ctx(ctx)
         if _plimit and isinstance(_plimit, int) and _plimit > 0:
             df = df.head(_plimit)
@@ -438,8 +414,7 @@ class ApiConnectionSourceLoadingMixin:
              Cambiare la signature a required romperebbe il contract.
 
          (slice migration):
-        questa funzione NON legge piu' `_current_group_id` dal
-        singleton. Usa il helper strict `_group_id_from_ctx(ctx)`
+        questa funzione usa il helper strict `_group_id_from_ctx(ctx)`
         che ritorna esclusivamente `ctx.group_id` (o `None`); il
         sentinel `"_static_"` viene applicato come placeholder
         quando il context non fornisce un group_id.

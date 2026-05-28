@@ -17,10 +17,9 @@ from app.core.arricchisci.execution_context import ArricchisciExecutionContext
 from app.core.files.exceptions import FileSourceResolutionError
 
 
-# BE-GO-READY-ORCHESTRATION-ENGINE-010: il fallback singleton
-# `_current_group_id` per la catena `file_source` e' stato rimosso
-# da `_extract_file_source_group_id`. Questi test ora propagano un
-# ctx tipato come fa il codice di produzione
+# BE-GO-READY-ORCHESTRATION-ENGINE-010: la catena `file_source`
+# passa da `_extract_file_source_group_id`. Questi test propagano
+# un ctx tipato come fa il codice di produzione
 # (`_build_rest_file_multipart` linea 536 e
 # `_resolve_file_source_path` linea 1144 → `ctx=ctx`).
 _TEST_CTX = ArricchisciExecutionContext(
@@ -45,8 +44,7 @@ def _bypass_security(monkeypatch, api_service):
 
     BE-GO-READY-ORCHESTRATION-ENGINE-010: i test ora passano `ctx`
     esplicito alle chiamate `_resolve_file_source_id_bytes(...,
-    ctx=_TEST_CTX)` invece di settare `api_service._current_group_id`.
-    Il fallback singleton e' stato rimosso dalla catena file_source.
+    ctx=_TEST_CTX)`.
     """
     monkeypatch.setattr(sharing_mod, "is_resource_visible", lambda *a, **kw: True)
 

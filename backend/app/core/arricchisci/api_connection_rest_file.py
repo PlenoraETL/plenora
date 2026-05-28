@@ -57,106 +57,33 @@ from app.utils.logger import get_logger
 
 
 def _extract_file_source_group_id(
-    self_obj,
     ctx: Optional[ArricchisciExecutionContext],
 ) -> Optional[str]:
-    """+
-     variante ctx-strict
-    per la catena di risoluzione `file_source` (chiamata da
-    `_assert_file_source_group_access` → `_resolve_file_source_id_bytes`).
+    """Variante ctx-strict per la catena di risoluzione `file_source`.
 
-    Storia:
-      - helper `_resolve_rest_file_group_id` (legacy
-        uniforme: ctx.group_id se ctx, altrimenti singleton).
-      - `_extract_file_source_group_id` ctx-strict
-        sostituisce il legacy helper nei 2 path
-        file_source/project_source.
-      - `_resolve_rest_file_group_id` rimosso come
-        dead code (zero callsite attivi).
-      - `_extract_project_source_group_id`
-        cut del fallback singleton (ctx None → ritorno None,
-        fail-closed esplicito) — gemella di questa funzione.
-      - ****: cut
-        del fallback singleton anche qui. I 2 callsite di
-        produzione (`_build_rest_file_multipart` linea 536,
-        `_resolve_file_source_path` linea 1144) propagano sempre
-        `ctx=ctx` attraverso `_resolve_file_source_id_bytes` →
-        `_assert_file_source_group_access`. Il ramo "ctx None
-        → singleton" era dead code in produzione AND apriva un
-        canale cross-tenant teorico (singleton stale di una run
-        precedente nello stesso processo worker autorizzava una
-        risorsa di un'altra run).
-
-    Behavior (post-010):
-      - **Ctx fornito**: ritorna `ctx.group_id` esclusivamente.
-        Se `ctx.group_id is None` ritorna `None` (fail-closed
-        esplicito a valle).
-      - **Ctx assente**: ritorna `None` (fail-closed). Il
-        singleton legacy NON e' piu' consultato.
-
-    Il parametro `self_obj` resta nella firma per simmetria con
-    `_extract_project_source_group_id` (uguale signature
-    post-009/-010) e perche' il lock test
-    `test_rest_file_strict_helpers_still_present` scansiona per
-    nome funzione + arity. Nel corpo non e' piu' letto.
+    Ritorna `ctx.group_id` se il context e' presente, altrimenti `None`
+    per fail-closed a valle. Non consulta stato singleton del service.
 
     Razionale: la catena `file_source` (visibility check + blob
     materialization) e' un boundary di security ad alto rischio
-    cross-tenant. Eliminare il fallback singleton chiude la
-    superficie residua: qualsiasi caller che dimentica di
-    passare `ctx=` riceve un fail-closed pulito invece di un
-    silent fallback su stato di un'altra run.
+    cross-tenant.
     """
-    _ = self_obj  # compatibility arity; security logic is ctx-strict
     if ctx is None:
         return None
     return ctx.group_id
 
 
 def _extract_project_source_group_id(
-    self_obj,
     ctx: Optional[ArricchisciExecutionContext],
 ) -> Optional[str]:
-    """+
-     variante ctx-strict
-    per il branch `project_source` di `_resolve_file_source_path`
-    (chiama `SourceLoader.resolve_project_file_bytes` con
-    `expected_group_id`).
+    """Variante ctx-strict per il branch `project_source`.
 
-    Behavior (ctx-strict):
-      - **Ctx fornito**: ritorna `ctx.group_id` esclusivamente.
-        Anche con `ctx.group_id is None`, NON cadiamo sul
-        singleton legacy — la run dichiarata fail-closed a
-        valle (caller raise `ValueError("Contesto di sicurezza
-        non determinabile (group_id mancante)")`).
-      - **Ctx assente**: ritorna `None` (fail-closed esplicito).
-        ORCHESTRATION-ENGINE-009 ha rimosso il fallback su
-        `getattr(self_obj, "_current_group_id", None)`: il
-        callsite di produzione (`_resolve_file_source_path`,
-        unico chiamante in app + workers) propaga sempre `ctx`
-        attraverso la catena `_get_input_path_for_rest_file ->
-        _resolve_input_path_for_file_processor ->
-        _resolve_file_source_path`. Nessun caller esterno (es.
-        `enrichment_task.py`) chiama questo helper o
-        `_resolve_file_source_path` direttamente. Il parametro
-        `self_obj` resta nella firma per simmetria con
-        `_extract_file_source_group_id` e perche' il lock test
-        `test_rest_file_strict_helpers_still_present` scansiona
-        per nome funzione.
+    Ritorna `ctx.group_id` se il context e' presente, altrimenti `None`
+    per fail-closed a valle. Non consulta stato singleton del service.
 
     Razionale: `SourceLoader.resolve_project_file_bytes` accetta
     `expected_group_id` come tenant binding fail-closed.
-    Passare un singleton stale qui significherebbe che un
-    canvas cross-tenant con `project_source` referenziando un
-    progetto di un altro tenant verrebbe risolto attraverso
-    il group_id sbagliato — il loader bloccherebbe comunque
-    (defense in depth), ma il messaggio di errore + il log
-    `[SECURITY]` riferirebbe il group sbagliato. Ctx-strict
-    senza fallback singleton rende il fallimento attribuibile
-    alla run corretta E impedisce qualsiasi leak da una run
-    precedente nello stesso processo worker.
     """
-    _ = self_obj  # compatibility arity; security logic is ctx-strict
     if ctx is None:
         return None
     return ctx.group_id
@@ -829,21 +756,16 @@ class ApiConnectionRestFileMixin:
 
          la catena di
         risoluzione `file_source` usa `_extract_file_source_group_id`
-        (ctx-strict, NO fallback singleton). Se `ctx` e' fornito,
+        (ctx-strict). Se `ctx` e' fornito,
         `ctx.group_id` vince in modo assoluto. Se `ctx is None`
         (o `ctx.group_id is None`), la funzione fail-closed
         esplicito SOTTO con `ValueError("Contesto di sicurezza
-        non determinabile")` — il singleton legacy
-        `self._current_group_id` NON e' piu' consultato a partire
-        da -010 (era dead code in produzione: i 2 callsite
-        `_build_rest_file_multipart` linea 536 e
-        `_resolve_file_source_path` linea 1144 propagano sempre
-        `ctx=ctx`).
+        non determinabile")`.
 
         Raises:
             ValueError con 403-like message se cross-tenant.
         """
-        current_group_id = _extract_file_source_group_id(self, ctx)
+        current_group_id = _extract_file_source_group_id(ctx)
         assert_file_source_group_access(file_source_id, current_group_id)
 
     def _resolve_file_source_id_bytes(
@@ -855,7 +777,7 @@ class ApiConnectionRestFileMixin:
         """Risolve un file_source_id in `(bytes, filename)` RAM-only.
 
         Post-Phase5: il blob viene letto direttamente da DB / object
-        storage senza materializzare cache locale. Il caller
+        storage senza materializzare file locali. Il caller
         (`_build_files_for_post`) lo consuma via `requests.post(files=...)`
         come tuple, niente file handle.
 
@@ -863,7 +785,7 @@ class ApiConnectionRestFileMixin:
 
         Restituisce None se il file_source non esiste o e' vuoto.
         """
-        current_group_id = _extract_file_source_group_id(self, ctx)
+        current_group_id = _extract_file_source_group_id(ctx)
         return resolve_file_source_id_bytes(
             file_source_id,
             expected_group_id=current_group_id,
@@ -892,7 +814,7 @@ class ApiConnectionRestFileMixin:
 
         `ctx` e' il solo boundary di sicurezza per il group_id.
         Se il contesto manca, i branch file_source/project_source
-        falliscono chiusi invece di consultare singleton legacy.
+        falliscono chiusi.
         """
         # Trova edge in ingresso
         input_edge = next((e for e in edges if e['target'] == target_node_id), None)
@@ -917,13 +839,9 @@ class ApiConnectionRestFileMixin:
             # niente accesso diretto ad ArtifactResolver. Senza
             # group_id rifiutiamo esplicitamente: meglio errore
             # visibile che leak silente
-            # ctx-strict per
-            # il branch project_source. Quando `ctx` e' fornito
-            # `ctx.group_id` vince sempre — anche se None — e lo
-            # stato singleton legacy NON viene mai consultato. Chiude
-            # il residual TE24-R1 (project_source path migrato a
-            # strict helper
-            executing_group_id = _extract_project_source_group_id(self, ctx)
+            # ctx-strict per il branch project_source. Quando `ctx` e'
+            # fornito `ctx.group_id` vince sempre, anche se None.
+            executing_group_id = _extract_project_source_group_id(ctx)
             if not executing_group_id:
                 logger.error(
                     f"[SECURITY] _resolve_file_source_path: group_id "
@@ -984,9 +902,8 @@ class ApiConnectionRestFileMixin:
         Ritorna `(input_ref, owns_disk_file)`. `input_ref` puo' essere:
           - `tuple(bytes, filename)`: caso comune post-Phase5 (rest_file
             upstream, api_enrich DataFrame, file_source/project_source).
-          - `str` (path): rimane solo per ramificazioni legacy che il
-            fallback `_resolve_file_source_path` potrebbe ancora produrre
-            (oggi tutti i branch ritornano bytes).
+          - `str` (path): accettato solo come input difensivo; i branch
+            correnti ritornano bytes.
           - `None`: nessun input risolvibile.
 
         `owns_disk_file`: False sempre post-Phase5 (no tempfile creati qui).
@@ -1073,7 +990,7 @@ class ApiConnectionRestFileMixin:
                     )
                     return (data_bytes, filename), False
 
-        # Fallback: comportamento classico (file_source / project_source
+        # Branch base: file_source / project_source.
         return self._resolve_file_source_path(
             nodes, edges, target_node_id, ctx=ctx,
         ), False

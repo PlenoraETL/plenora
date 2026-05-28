@@ -6,9 +6,6 @@ cache locale. Le funzioni storage `read_manifest` / `read_validation` /
 `read_renderers` / `read_geojson` / `get_meta_only` /
 `list_bundle_file_entries` vengono monkeypatchate; ``ensure_local_bundle``
 NON deve essere invocata sul path normale.
-
-Fallback legacy (meta=None su storage) testato in test dedicato:
-deve idratare la cache locale e leggere dal filesystem.
 """
 
 from __future__ import annotations
@@ -123,8 +120,8 @@ def test_get_bundle_metadata_uses_storage_readers_no_local_hydration(monkeypatch
     assert out["has_renderers"] is True
 
 
-def test_get_bundle_metadata_404_when_not_on_storage_or_local(monkeypatch):
-    """Bundle assente su storage AND sulla cache locale -> 404."""
+def test_get_bundle_metadata_404_when_not_on_storage(monkeypatch):
+    """Bundle assente su storage -> 404."""
     from app.core.imdf import router as router_mod
     from app.core.imdf import storage as st_mod
 

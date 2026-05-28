@@ -109,32 +109,11 @@ def init_execution_context(
 ) -> ArricchisciExecutionContext:
     """Inizializza il contesto di esecuzione per `execute_canvas_enrichment`.
 
-    Storia:
-
-      l'implementazione era spezzata in due step espliciti:
-      `build_execution_context(...)` (costruzione del typed
-      immutabile) + `apply_to_legacy_state(svc, ctx)` (legacy
-      mirror su `svc._current_group_id` / `svc._preview_limit`
-      per i mixin che ancora leggevano dal singleton).
-
-      026/030B + ORCHESTRATION-ENGINE-009/010**: tutti i mixin
-      reader site sono stati migrati a CTX-STRICT
-      (`_extract_file_source_group_id`,
-      `_extract_project_source_group_id`,
-      `_group_id_from_ctx`, `_preview_limit_from_ctx`). Nessuna
-      funzione di produzione legge piu' `svc._current_group_id`
-      / `svc._preview_limit` (verificato da AST scan: zero read
-      sites in `app/core/arricchisci/`).
-
     Contratto attuale:
-      mirror `apply_to_legacy_state(svc, ctx)` in questa
-      funzione era diventato dead-write: scriveva attributi che
-      nessuno leggeva. Removed. Il `svc` parametro non e' piu'
-      mutato; `init_execution_context` e' ora una thin wrapper
-      pubblica che delega a `build_execution_context` e ritorna il
-      typed ctx. La firma con `svc` e' mantenuta come API esplicita
-      dell'orchestratore per i caller che hanno gia' il servizio in
-      scope.
+      Il `svc` parametro non viene mutato; `init_execution_context`
+      delega a `build_execution_context` e ritorna il typed ctx. La
+      firma con `svc` e' mantenuta come API esplicita dell'orchestratore
+      per i caller che hanno gia' il servizio in scope.
 
     Behavior post-011:
     - Pure delegation: nessun side effect su `svc`. Il typed
@@ -143,13 +122,6 @@ def init_execution_context(
     - Fail-closed identico: errori `psycopg2.Error` propagati
       come `ExecutionContextError` dal builder (chain
       preservata via `from e`).
-    - Stale singleton state: se `svc._current_group_id` era
-      pre-set da un run precedente, NON viene piu' azzerato qui.
-      E' irrilevante perche' i mixin readers sono ctx-strict; il
-      typed ctx fresco vince sempre. Il regression test
-      `test_init_execution_context_does_not_write_singleton_state`
-      lock-a questo invariant.
-
     Returns:
         Il `ArricchisciExecutionContext` costruito. Ogni
         esecuzione produce un context fresco immutabile.

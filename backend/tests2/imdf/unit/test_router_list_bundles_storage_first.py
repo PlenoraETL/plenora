@@ -1,25 +1,22 @@
 """
 Contract test — GET /imdf/bundles storage-first (IMDF-4 step 2).
 
-L'endpoint ora usa `imdf.storage.list_task_ids` come fonte di verita'
-(union con cache locale solo come fallback compat). Per ogni task_id
-il meta viene letto via `imdf.storage.get_meta_only` se non disponibile
-in cache locale. Niente piu' iterdir sul filesystem come primary path.
+L'endpoint usa `imdf.storage.list_task_ids` come fonte di verita'. Per
+ogni task_id il meta viene letto via `imdf.storage.get_meta_only`.
+Niente piu' iterdir sul filesystem.
 
 Test coperti:
   - happy path: storage list ritorna task_ids, meta letti da storage,
     response Summary popolata
   - ACL: project di altro group_id viene skippato
-  - filtro project_id: bundle legacy senza meta skippato (loggato)
-  - union con cache locale: bundle solo-on-disk (storage off) appare
+  - bundle senza meta skippato
+  - cache locale ignorata: bundle solo-on-disk non appare
   - sort: bundle con saved_at piu' recente in testa
 """
 
 from __future__ import annotations
 
-import json
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -38,9 +35,9 @@ def _fake_current_user(role: str = "user", group_id: str = "grp-1"):
 
 def _patch_storage_list(monkeypatch, task_ids: list[str]):
     """Patcha la fonte storage-first di task_ids list."""
-    from app.core.imdf import bundle_store as bs
+    from app.core.imdf import storage as st
 
-    monkeypatch.setattr(bs, "list_task_ids", lambda: task_ids)
+    monkeypatch.setattr(st, "list_task_ids", lambda: task_ids)
 
 
 def _patch_storage_meta(monkeypatch, meta_by_task: dict[str, dict]):
@@ -51,6 +48,7 @@ def _patch_storage_meta(monkeypatch, meta_by_task: dict[str, dict]):
         st, "get_meta_only",
         lambda tid: meta_by_task.get(tid),
     )
+    monkeypatch.setattr(st, "list_bundle_file_entries", lambda tid: [])
 
 
 def _patch_empty_local(monkeypatch, tmp_path):
@@ -114,7 +112,7 @@ def test_list_bundles_storage_first_happy_path(monkeypatch, tmp_path):
     assert by_id["task-a"].has_gdb is True
     assert by_id["task-a"].building_count == 5
     assert by_id["task-b"].has_gdb is False
-    # Size: 0 perche' cache locale vuota.
+    # Size: 0 perche' lo storage file listing e' vuoto nel test.
     assert by_id["task-a"].size_mb == 0.0
 
 
@@ -142,11 +140,10 @@ def test_list_bundles_acl_skips_other_group(monkeypatch, tmp_path):
     assert task_ids == ["task-own"]
 
 
-def test_list_bundles_legacy_no_meta_skipped_when_project_filter_active(
+def test_list_bundles_missing_meta_skipped(
     monkeypatch, tmp_path,
 ):
-    """Bundle senza meta (legacy / multi-host race) viene skippato quando
-    il filtro project_id e' esplicito. Senza filtro, viene incluso."""
+    """Bundle senza meta viene skippato sia con filtro che senza."""
     from app.core.imdf import router as router_mod
 
     _patch_empty_local(monkeypatch, tmp_path)
@@ -157,50 +154,33 @@ def test_list_bundles_legacy_no_meta_skipped_when_project_filter_active(
     })
     _patch_acl_bypass(monkeypatch)
 
-    # Con filtro: orphan skippato.
     out_filtered = router_mod.list_bundles(
         project_id="proj-1", current_user=_fake_current_user(),
     )
     assert [b.task_id for b in out_filtered] == ["task-with"]
 
-    # Senza filtro: orphan incluso (project_id=None nella response).
     out_all = router_mod.list_bundles(
         project_id=None, current_user=_fake_current_user(),
     )
-    assert set(b.task_id for b in out_all) == {"task-with", "task-orphan"}
+    assert [b.task_id for b in out_all] == ["task-with"]
 
 
-def test_list_bundles_includes_local_only_bundles(monkeypatch, tmp_path):
-    """Union con cache locale: un bundle solo-on-disk (storage list non
-    lo enumera) compare comunque nella risposta."""
+def test_list_bundles_ignores_local_only_bundles(monkeypatch, tmp_path):
+    """La cache locale non viene piu' usata come fallback di listing."""
     from app.core.imdf import router as router_mod
-    from app.core.imdf import bundle_store as bs
 
-    # Storage list ritorna VUOTO; sulla cache locale c'e' un bundle.
     _patch_empty_local(monkeypatch, tmp_path)
     local_bundle_dir = tmp_path / "task-localonly"
     local_bundle_dir.mkdir()
-    (local_bundle_dir / "plenora_metadata.json").write_text(
-        json.dumps({"project_id": "proj-1", "site_id": "S_LOCAL"}),
-        encoding="utf-8",
-    )
 
     _patch_storage_list(monkeypatch, [])  # storage vuoto
     _patch_storage_meta(monkeypatch, {})
     _patch_acl_bypass(monkeypatch)
 
-    # bundle_store.read_metadata legge dalla local cache dir.
-    monkeypatch.setattr(
-        bs, "read_metadata",
-        lambda d: json.loads((d / "plenora_metadata.json").read_text("utf-8"))
-        if (d / "plenora_metadata.json").exists() else None,
-    )
-
     out = router_mod.list_bundles(
         project_id=None, current_user=_fake_current_user(),
     )
-    assert [b.task_id for b in out] == ["task-localonly"]
-    assert out[0].site_id == "S_LOCAL"
+    assert out == []
 
 
 def test_list_bundles_sort_by_saved_at_desc(monkeypatch, tmp_path):

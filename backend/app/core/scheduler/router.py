@@ -394,12 +394,12 @@ async def download_schedule_output(
                 status_code=404,
                 detail=(
                     f"Nessun result_id per la run '{run}' "
-                    f"(filesystem archive legacy non piu' supportato)"
+                    f"(archive filesystem non piu' supportato)"
                 ),
             )
 
         # Branch 2: senza parametro `run` -> latest run di QUESTO
-        # schedule via DB log + result_id. Niente piu' fallback filesystem.
+        # schedule via DB log + result_id.
         latest_run = catalog.latest_run(project_id, schedule_id)
         first_run_file = latest_run.files[0] if latest_run and latest_run.files else None
         if first_run_file is not None and first_run_file.result_id:

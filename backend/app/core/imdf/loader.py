@@ -1,11 +1,4 @@
-"""
-IMDF loader — estrazione zip + lettura File Geodatabase.
-
-Funzioni pubbliche:
-- `extract_imdf_zip(path)`        — estrae da un path su disco (legacy)
-- `extract_imdf_zip_bytes(data)`  — estrae da bytes (no temp path nel caller)
-- `load_imdf_layers(gdb_path)`    — lettura dei 5 layer dal File Geodatabase
-"""
+"""IMDF loader — estrazione zip da bytes + lettura File Geodatabase."""
 
 from __future__ import annotations
 
@@ -42,28 +35,20 @@ from app.shared.connections.esri_system_fields import ESRI_SYSTEM_FIELDS_LITERAL
 class ImdfBundle:
     """Indice dei file dentro uno zip IMDF estratto.
 
-    Shape ibrida (IMDF-2):
-      - `files: dict[str, bytes]` — componenti RAM-first (manifest.json,
-        validation.json, renderers.json, geojson). Popolata da
-        `extract_imdf_zip_bytes`; vuota quando il caller usa
-        `extract_imdf_zip(path)` (path-only legacy).
-      - `tmp_dir + *_path` — workspace fisico per i componenti che
-        richiedono filesystem (`.gdb` directory letta da pyogrio,
-        `.ifc`). IMDF-3 spostera' la persistenza di `files` a storage
-        e introdurra' la modalita' `tmp_dir is None` quando il bundle
-        non contiene `.gdb`/`.ifc`.
+    Shape RAM-first:
+      - `files: dict[str, bytes]` per manifest/validation/renderers/geojson.
+      - `gdb_zip_bytes` per il File Geodatabase ricomposto come sub-zip.
+      - `ifc_bytes` per il file IFC opzionale.
 
     Gli accessor `manifest()` / `validation()` / `renderers()` leggono
-    da `files` se popolato, altrimenti fallback su `*_path` su disco.
+    solo da `files`.
     Le properties `has_gdb` / `has_ifc` / `has_renderers` derivano da
-    entrambe le shape e sono il modo canonico per i consumer di
-    interrogare il bundle (sostituiscono il pattern `bundle.X_path is
-    not None`).
+    questa shape e sono il modo canonico per i consumer di interrogare il
+    bundle.
 
-    `tmp_dir` e' la directory radice dove l'estrazione e' stata fatta. Il
-    chiamante e' responsabile di chiamare `cleanup` quando finito. Puo'
-    essere `None` quando il bundle e' puramente in-memory (caso non
-    ancora prodotto da IMDF-2; preparazione per IMDF-3).
+    `tmp_dir` resta nel dataclass solo per stabilita' di cleanup verso
+    caller gia' optional-aware; `extract_imdf_zip_bytes` produce sempre
+    `tmp_dir=None`.
 
     Invariant site_id (D3, R4 — ratificato 2026-04-22):
       Il campo `site_id` e' popolato **esclusivamente** da
@@ -86,19 +71,8 @@ class ImdfBundle:
     # Vedi class docstring "Invariant site_id" (D3, R4
     site_id: str
     files: Dict[str, bytes] = field(default_factory=dict)
-    # IMDF-6: shape RAM-first per .gdb/.ifc (alternativa al path-mode).
-    # `extract_imdf_zip_bytes` popola questi; `persist_imdf_bundle` li
-    # uploads direttamente senza rezippare. La `.gdb` non sta in `files`
-    # come singolo file perche' e' una directory zippata (opaque blob).
     gdb_zip_bytes: Optional[bytes] = None
     ifc_bytes: Optional[bytes] = None
-    gdb_path: Optional[Path] = None
-    ifc_path: Optional[Path] = None
-    manifest_path: Optional[Path] = None
-    validation_path: Optional[Path] = None
-    renderers_path: Optional[Path] = None
-    imdf_dir: Optional[Path] = None
-    imdf_geojson_files: List[Path] = field(default_factory=list)
     raw_filelist: List[str] = field(default_factory=list)
 
     def cleanup(self) -> None:
@@ -108,52 +82,43 @@ class ImdfBundle:
 
     @property
     def has_gdb(self) -> bool:
-        """`.gdb` presente nel bundle — come bytes RAM (`gdb_zip_bytes`,
-        IMDF-6) o come directory on-disk (`gdb_path`, legacy path-mode)."""
-        return self.gdb_zip_bytes is not None or self.gdb_path is not None
+        """`.gdb` presente nel bundle come sub-zip RAM."""
+        return self.gdb_zip_bytes is not None
 
     @property
     def has_ifc(self) -> bool:
-        """`.ifc` presente nel bundle — bytes RAM (`ifc_bytes`, IMDF-6)
-        o file on-disk (`ifc_path`, legacy path-mode)."""
-        return self.ifc_bytes is not None or self.ifc_path is not None
+        """`.ifc` presente nel bundle come bytes RAM."""
+        return self.ifc_bytes is not None
 
     @property
     def has_renderers(self) -> bool:
-        """`renderers.json` presente — in RAM (`files`) o su disco
-        (`renderers_path`)."""
-        return self.renderers_path is not None or "renderers.json" in self.files
+        """`renderers.json` presente in RAM."""
+        return "renderers.json" in self.files
 
     @property
     def has_manifest(self) -> bool:
-        return self.manifest_path is not None or "manifest.json" in self.files
+        return "manifest.json" in self.files
 
     @property
     def has_validation(self) -> bool:
-        return self.validation_path is not None or "validation.json" in self.files
+        return "validation.json" in self.files
 
     def manifest(self) -> JsonObject:
         raw = self.files.get("manifest.json")
         if raw is not None:
             return json.loads(raw.decode("utf-8"))
-        if self.manifest_path and self.manifest_path.exists():
-            return json.loads(self.manifest_path.read_text(encoding="utf-8"))
         return {}
 
     def validation(self) -> JsonObject:
         raw = self.files.get("validation.json")
         if raw is not None:
             return json.loads(raw.decode("utf-8"))
-        if self.validation_path and self.validation_path.exists():
-            return json.loads(self.validation_path.read_text(encoding="utf-8"))
         return {}
 
     def renderers(self) -> JsonObject:
         raw = self.files.get("renderers.json")
         if raw is not None:
             return json.loads(raw.decode("utf-8"))
-        if self.renderers_path and self.renderers_path.exists():
-            return json.loads(self.renderers_path.read_text(encoding="utf-8"))
         return {}
 
 
@@ -173,10 +138,9 @@ def _is_geojson_member(name: str) -> bool:
 
 
 # Tombstone (QUERY-1 step 3): `extract_imdf_zip(path)` + helper interno
-# `_extract_zip_source_to_bundle` rimossi. Era il path-mode legacy
-# (mkdtemp + safe_extractall su filesystem) lasciato per i test/script
-# pre-IMDF-6. Tutti i caller production migrati a `extract_imdf_zip_bytes`
-# (RAM-first, no tmp dir, no safe_extractall) in IMDF-1/IMDF-6.
+# `_extract_zip_source_to_bundle` rimossi. Quel path usava mkdtemp +
+# safe_extractall su filesystem; tutti i caller production usano
+# `extract_imdf_zip_bytes` (RAM-first, no tmp dir, no safe_extractall).
 
 
 def extract_imdf_zip_bytes(data: bytes) -> ImdfBundle:
@@ -189,8 +153,8 @@ def extract_imdf_zip_bytes(data: bytes) -> ImdfBundle:
       - `bundle.files`: dict per JSON/geojson (`manifest.json`,
         `validation.json`, `renderers.json`, `{site_id}/*.geojson`).
       - `bundle.gdb_zip_bytes`: zip-in-zip dei membri `*.gdb/...`
-        ricomposto (stesso layout di `persist._zip_gdb_dir_to_bytes`,
-        cosi' `persist_imdf_bundle` lo uploads direttamente come
+        ricomposto nel layout consumato da `open_gdb_in_vsimem`, cosi'
+        `persist_imdf_bundle` lo uploads direttamente come
         `_gdb.zip` su storage).
       - `bundle.ifc_bytes`: bytes del file `.ifc` se presente.
 
@@ -279,10 +243,8 @@ def _build_bytes_bundle_index(
 ) -> "ImdfBundle":
     """Indicizza un bundle IMDF da bytes (IMDF-6 fully-RAM).
 
-    Variante bytes-mode di `_build_bundle_index`: non ha `tmp_dir`,
-    quindi non assegna `*_path` (manifest_path/validation_path/etc).
-    I consumer leggono via `bundle.files` (gia' popolato dall'estrazione)
-    o via bytes campi (`gdb_zip_bytes`, `ifc_bytes`).
+    I consumer leggono via `bundle.files` (gia' popolato
+    dall'estrazione) o via bytes campi (`gdb_zip_bytes`, `ifc_bytes`).
 
     Site_id derivato:
       1. da `manifest.json["sites"]` (primo key) se presente;

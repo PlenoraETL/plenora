@@ -18,7 +18,7 @@ from typing import Optional, Tuple
 
 @dataclass(frozen=True)
 class RunFileInfo:
-    """Metadata for a file inside an archived run directory."""
+    """Metadata for an output file associated with a scheduled run."""
 
     name: str
     size_bytes: int
@@ -29,8 +29,8 @@ class RunFileInfo:
 class RunInfo:
     """Snapshot of a scheduled run.
 
-    `path` resta come Optional[Path] per compat di shape ma post-cleanup
-    e' sempre `None` (niente piu' archive filesystem).
+    `path` e' sempre `None` nel catalog DB-backed: niente archive
+    filesystem.
     """
 
     timestamp: str
@@ -46,9 +46,7 @@ class RunInfo:
 def schedule_short(schedule_id: str) -> str:
     """Return the stable folder token for a schedule id.
 
-    Preservato per compat con i callsite legacy che ancora costruiscono
-    path-like reference; il token e' usato anche come segmento URL nei
-    download endpoint.
+    Il token e' usato come segmento URL stabile nei download endpoint.
     """
     return schedule_id.replace("schedule_", "")[:12]
 

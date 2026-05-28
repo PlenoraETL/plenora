@@ -4,15 +4,15 @@ Tests the imdf security behavior.
 Locks backend contracts and regression boundaries for the current architecture.
 """
 
-import json
 import ast
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
 
 from app.shared.contracts.auth import CurrentUser
-from app.core.imdf.router import _assert_bundle_group_access
+from app.core.imdf.bundle_access import assert_bundle_group_access_from_meta
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract, pytest.mark.regression]
@@ -28,41 +28,40 @@ def current_user() -> CurrentUser:
     )
 
 
-def test_assert_bundle_group_access_fails_closed_without_metadata(tmp_path, current_user):
-    bundle_dir = tmp_path / "bundle-1"
-    bundle_dir.mkdir()
+@pytest.fixture
+def fake_logger():
+    return SimpleNamespace(warning=lambda *a, **k: None, error=lambda *a, **k: None)
 
+
+def test_assert_bundle_group_access_fails_closed_without_metadata(current_user, fake_logger):
     with pytest.raises(HTTPException) as exc:
-        _assert_bundle_group_access(bundle_dir, current_user)
+        assert_bundle_group_access_from_meta(
+            None,
+            current_user,
+            "bundle-1",
+            logger=fake_logger,
+        )
 
     assert exc.value.status_code == 403
 
 
-def test_assert_bundle_group_access_fails_closed_without_project_id(tmp_path, current_user):
-    bundle_dir = tmp_path / "bundle-1"
-    bundle_dir.mkdir()
-    (bundle_dir / "plenora_metadata.json").write_text(json.dumps({}), encoding="utf-8")
-
+def test_assert_bundle_group_access_fails_closed_without_project_id(current_user, fake_logger):
     with pytest.raises(HTTPException) as exc:
-        _assert_bundle_group_access(bundle_dir, current_user)
+        assert_bundle_group_access_from_meta(
+            {},
+            current_user,
+            "bundle-1",
+            logger=fake_logger,
+        )
 
     assert exc.value.status_code == 403
 
 
-def test_assert_bundle_group_access_requires_visible_project(tmp_path, current_user, monkeypatch):
-    bundle_dir = tmp_path / "bundle-1"
-    bundle_dir.mkdir()
-    (bundle_dir / "plenora_metadata.json").write_text(
-        json.dumps({"project_id": "proj-1"}),
-        encoding="utf-8",
-    )
-
-    # BE-GO-READY-AUTH-ENGINE-020: monkeypatch via consuming
-    # router-module surface (mirrors connections/datasources/
-    # eseguibili pattern). The IMDF router now imports
-    # `assert_resource_visible` from the leaf at module top, so
-    # patching the facade no longer reaches the call site.
-    import app.core.imdf.router as imdf_router_mod
+def test_assert_bundle_group_access_requires_visible_project(
+    current_user,
+    fake_logger,
+    monkeypatch,
+):
     import app.core.imdf.project_access as imdf_project_access
 
     monkeypatch.setattr(
@@ -74,10 +73,14 @@ def test_assert_bundle_group_access_requires_visible_project(tmp_path, current_u
     def _deny(*args, **kwargs):
         raise HTTPException(status_code=403, detail="Accesso negato")
 
-    monkeypatch.setattr(imdf_router_mod, "assert_resource_visible", _deny)
-
     with pytest.raises(HTTPException) as exc:
-        _assert_bundle_group_access(bundle_dir, current_user)
+        assert_bundle_group_access_from_meta(
+            {"project_id": "proj-1"},
+            current_user,
+            "bundle-1",
+            logger=fake_logger,
+            visible_checker=_deny,
+        )
 
     assert exc.value.status_code == 403
 
