@@ -9,7 +9,6 @@ from __future__ import annotations
 import importlib
 import inspect
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Optional
 from unittest.mock import MagicMock
 

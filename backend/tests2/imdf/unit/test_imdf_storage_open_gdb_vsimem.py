@@ -25,7 +25,6 @@ from __future__ import annotations
 import io
 import zipfile
 from contextlib import contextmanager
-from unittest.mock import MagicMock
 
 import pytest
 

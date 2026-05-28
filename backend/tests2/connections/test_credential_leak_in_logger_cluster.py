@@ -22,8 +22,6 @@ del logger + `strings.Contains(buf.String(), fakeCred) == false`.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 import pytest
 
 
@@ -172,7 +170,7 @@ def test_arcgis_token_fetch_does_not_leak_in_log(monkeypatch):
     }
     # get_arcgis_token chiama _fetch_record internamente; in caso di
     # eccezione cattura e logga.
-    result = oauth.get_arcgis_token(auth)
+    oauth.get_arcgis_token(auth)
 
     # _fetch_record ritorna None su eccezione, ma get_arcgis_token usa
     # un cache layer; il risultato finale puo' essere None o un valore

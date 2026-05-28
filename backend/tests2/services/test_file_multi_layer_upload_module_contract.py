@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 import zipfile as _zipfile
 from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pandas as pd

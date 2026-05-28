@@ -16,12 +16,15 @@ from app.core.dataframes.geometry_parsing import (
     WKT_PREFIXES,
     extract_srid_from_ewkb,
     looks_like_wkb_hex,
-    parse_geometry,
+    parse_geometry as _parse_geometry,
     parse_geometry_series,
 )
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Public compatibility re-export used by features geo utils.
+parse_geometry = _parse_geometry
 
 
 # PARSING GEOMETRIE

@@ -9,6 +9,7 @@ _ALLOWED_UPDATE_FIELDS: dict[str, frozenset[str]] = {
     "users": frozenset({
         "username",
         "email",
+        "group_id",
         "role",
         "is_active",
         "password_hash",

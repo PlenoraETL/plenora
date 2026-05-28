@@ -30,7 +30,6 @@ preservation, non testano l'intera pipeline a valle.
 from __future__ import annotations
 
 import io
-import tempfile
 from pathlib import Path
 
 import pandas as pd

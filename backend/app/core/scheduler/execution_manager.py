@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Optional
 from typing_extensions import TypedDict
 
-from app.config import settings
 from app.core.scheduler import db as scheduler_db
 from app.core.scheduler.concurrency_manager import ConcurrencyManager
 from app.core.scheduler.log_service import ScheduleLogService

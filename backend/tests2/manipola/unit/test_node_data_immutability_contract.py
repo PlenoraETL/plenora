@@ -21,7 +21,6 @@ passata via `canvas.nodes` NON deve essere stato mutato.
 
 from __future__ import annotations
 
-from typing import List
 from unittest.mock import MagicMock, patch
 
 import pandas as pd

@@ -29,7 +29,6 @@ API:
 from __future__ import annotations
 
 import io
-import json as _json
 import queue
 import threading
 from typing import Any, Iterator

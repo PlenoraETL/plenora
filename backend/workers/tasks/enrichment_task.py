@@ -1015,7 +1015,6 @@ def execute_enrichment_task(
                     # Post-fix: se il rename fallisce, propaga il
                     # upstream_result_id con il filename originale e
                     # registra un warning nel result envelope.
-                    resave_failed = False
                     try:
                         if not output_bytes:
                             logger.info(
@@ -1057,7 +1056,6 @@ def execute_enrichment_task(
                         # cosi' il task envelope e' coerente con la realta'
                         # dello storage.
                         final_name = upstream_filename
-                        resave_failed = True
                 else:
                     result_id = upstream_result_id
                     logger.info(

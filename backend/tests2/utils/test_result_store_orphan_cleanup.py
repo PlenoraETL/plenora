@@ -25,6 +25,10 @@ legacy_path_result_blob = pytest.mark.skip(
 )
 
 
+def save_result_blob(*_args, **_kwargs):
+    pytest.skip("save_result_blob(path) tombstonato post QUERY-1")
+
+
 # Stubs
 
 class _StubStorage:

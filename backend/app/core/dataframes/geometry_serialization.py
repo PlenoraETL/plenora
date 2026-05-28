@@ -115,12 +115,10 @@ def geometry_series_to_wkt(
 
     # Riposiziona i passthrough non-Shapely al loro indice originale.
     if non_geom_passthrough:
-        index_arr = series.index
         for pos, raw in non_geom_passthrough.items():
             out.iat[pos] = raw
         # `iat` accede per posizione assoluta — sicuro anche con index
         # custom (stringhe/datetime/multiindex).
-        del index_arr
 
     return out
 

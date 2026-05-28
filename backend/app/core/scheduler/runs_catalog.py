@@ -129,7 +129,7 @@ class ScheduleRunsCatalog:
             f"Run '{run_token}' non trovata per schedule '{schedule_id}'"
         )
 
-    def latest_run(self, project_id: str, schedule_id: str) -> Optional[RunInfo]:
+    def latest_run(self, project_id: str, schedule_id: str) -> RunInfo | None:
         runs = self.list_runs(project_id, schedule_id)
         return runs[0] if runs else None
 

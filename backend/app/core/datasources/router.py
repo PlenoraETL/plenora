@@ -5,7 +5,7 @@ Endpoints CRUD per la gestione dei Data Source e operazioni sui file.
 """
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Depends
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import StreamingResponse
 from typing import Optional
 
 from app.utils.logger import get_logger

@@ -8,9 +8,6 @@ column filtering, JSON-safe row normalization, and geospatial file dispatch.
 import time as _time_mod
 
 import json
-import shutil
-import tempfile
-import zipfile
 from io import BytesIO, StringIO
 from pathlib import Path
 from typing import Optional, Union

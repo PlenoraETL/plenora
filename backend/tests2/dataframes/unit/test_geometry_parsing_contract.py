@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-from shapely.geometry import GeometryCollection, Point
+from shapely.geometry import Point
 
 from app.core.dataframes.geometry_parsing import (
     parse_geometry,

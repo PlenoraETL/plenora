@@ -28,9 +28,6 @@ isolamento, no infrastruttura. Mappa a Go come
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import MagicMock
-
 import pytest
 
 

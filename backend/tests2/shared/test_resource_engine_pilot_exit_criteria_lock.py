@@ -12,8 +12,6 @@ from typing import get_args
 
 import pytest
 
-from tests2.shared._source_scan import python_code_only as _python_code_only
-
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 

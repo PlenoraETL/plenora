@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 from app.core.dataframes.ports import FrameLike
 from app.core.results.pipeline_result import save_pipeline_result_outcome

@@ -204,7 +204,6 @@ def test_file_source_service_get_file_source_facade_delegates():
 
 
 def test_file_source_service_update_file_source_facade_delegates():
-    from app.core.files import service as service_module
     from app.core.files.service import FileSourceService
 
     svc = FileSourceService.__new__(FileSourceService)

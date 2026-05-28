@@ -27,6 +27,10 @@ legacy_path_result_blob = pytest.mark.skip(
 )
 
 
+def save_result_blob(*_args, **_kwargs):
+    pytest.skip("save_result_blob(path) tombstonato post QUERY-1")
+
+
 @legacy_path_result_blob
 def test_save_result_blob_removes_temp_file_only_after_success(monkeypatch, tmp_path):
     temp_dir = tmp_path / "temp"

@@ -15,8 +15,6 @@ emettendo `logger.warning` (non raise) per back-compat.
 
 from __future__ import annotations
 
-import logging
-
 import pandas as pd
 import pytest
 

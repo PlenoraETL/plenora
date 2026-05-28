@@ -23,7 +23,6 @@ Cluster bug coperti (commit 406b5031, 572a15a0):
 
 from __future__ import annotations
 
-import inspect
 from pathlib import Path
 
 import numpy as np

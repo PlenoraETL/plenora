@@ -17,8 +17,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 
 def _make_response(*, status_code: int, json_side_effect: Exception | None = None,
                    json_return: object = None, text: str = ""):

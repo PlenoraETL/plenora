@@ -4,7 +4,6 @@ Implementation for file-source CRUD, upload orchestration, blob reads, and
 preview delegation.
 """
 
-import os
 import warnings
 from pathlib import Path
 from typing import Any, BinaryIO, Dict, List, Optional, Tuple
@@ -22,7 +21,6 @@ from app.core.files.models import FileSource, FileSourceList
 from app.core.files.source_read import FileSourceLayersPayload, FileSourcePreviewPayload
 from app.core.files.preview_temp import FilePreviewTempPayload
 from app.core.resources.blob_dispatch import BlobDispatchResult, dispatch_blob_storage
-from app.core.projects.canvas_models import ColumnInfo
 from app.utils.logger import get_logger as _get_logger
 
 from app.core.files.service_deps import (  # noqa: F401 (public domain export)

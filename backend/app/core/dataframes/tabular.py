@@ -31,7 +31,7 @@ _JOIN_BATCH_SIZE = 100_000
 
 
 def _read_csv_with_encodings(
-    source: "Path | BytesIO",
+    source: "Path | io.BytesIO",
     *,
     label: str,
 ) -> pd.DataFrame:

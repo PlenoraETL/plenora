@@ -151,10 +151,6 @@ def _sync_transform_expression_configs(
     for edge in edges:
         edges_by_target.setdefault(edge.target, []).append(edge)
 
-    try:
-        previous_contract = project_service.get_project_output_contract(project_id)
-    except Exception:
-        previous_contract = None
     schema_context = _build_schema_context(canvas, project_service)
 
     changed = False

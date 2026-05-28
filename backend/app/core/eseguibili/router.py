@@ -6,7 +6,6 @@ Endpoint:
 
 import json as _json
 
-import os
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
 from typing import List, Mapping, Optional

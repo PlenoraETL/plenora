@@ -27,9 +27,7 @@ I test in questo file pinnano il NUOVO invariant:
 """
 from __future__ import annotations
 
-import inspect
 import json
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -86,7 +84,6 @@ def test_persist_imdf_bundle_uploads_via_save_bundle_files(monkeypatch):
     assert save_bundle_files_mock.call_count == 1, (
         "persist_imdf_bundle deve invocare save_bundle_files una volta sola"
     )
-    call_kwargs = save_bundle_files_mock.call_args.kwargs
     call_args = save_bundle_files_mock.call_args.args
     # task_id come primo arg positional; files dict come secondo.
     assert call_args[0] == "task-imdf3"

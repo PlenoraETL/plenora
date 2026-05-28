@@ -309,6 +309,10 @@ def test_safe_set_clause_is_owned_by_generic_db_infrastructure():
         "email = %s",
         ("a@example.test",),
     )
+    assert sql_safety.safe_set_clause("users", {"group_id": "g2"}) == (
+        "group_id = %s",
+        ("g2",),
+    )
     assert importlib.util.find_spec(_LEGACY_SAFE_SET_DOTTED) is None
 
 

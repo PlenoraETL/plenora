@@ -33,7 +33,6 @@ monkeypatch mirato invece di build-up complesso di fixture.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import pandas as pd
 import pytest

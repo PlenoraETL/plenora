@@ -58,9 +58,9 @@ class TestManualBackupLockTtlPolicy:
             f"in tempo per impedire la scadenza"
         )
         assert MANUAL_LOCK_HEARTBEAT_SEC <= MANUAL_LOCK_TTL_SEC / 2, (
-            f"heartbeat troppo vicino al TTL: un singolo refresh "
-            f"fallito (network blip) puo' causare scadenza spuria. "
-            f"Tieni heartbeat <= TTL/2."
+            "heartbeat troppo vicino al TTL: un singolo refresh "
+            "fallito (network blip) puo' causare scadenza spuria. "
+            "Tieni heartbeat <= TTL/2."
         )
 
 
