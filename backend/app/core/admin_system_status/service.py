@@ -21,7 +21,6 @@ from app.core.admin_system_status.db_probe_store import (
     fetch_schema_size_row,
 )
 from app.core.admin_system_status.tickets_metrics import (
-    TicketsMetricsUnavailable,
     get_active_ticket_metrics,
 )
 from app.core.task_runtime.probes import (
@@ -798,12 +797,6 @@ def get_tickets_status() -> AdminStatusBlock:
         # `critical > 0` downstream possono dare risultati inattesi.
         critical = int(by_severity.get("critical", 0) or 0)
         high = int(by_severity.get("high", 0) or 0)
-    except TicketsMetricsUnavailable as e:
-        return AdminStatusBlock(
-            status="unknown",
-            message="Modulo tickets non disponibile",
-            error=str(e)[:200],
-        )
     except Exception as e:
         logger.warning(f"get_tickets_status DB error: {e}")
         return AdminStatusBlock(

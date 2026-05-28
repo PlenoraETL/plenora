@@ -4,13 +4,8 @@ Implementation for file-source CRUD, upload orchestration, blob reads, and
 preview delegation.
 """
 
-import logging as _logging
-
-import json
 import os
 import warnings
-from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any, BinaryIO, Dict, List, Optional, Tuple
 
@@ -23,9 +18,12 @@ from app.core.files import raw_upload as _raw_upload
 from app.core.files import source_blob as _source_blob
 from app.core.files import source_metadata as _source_metadata
 from app.core.files import source_read as _source_read
+from app.core.files.models import FileSource, FileSourceList
 from app.core.files.source_read import FileSourceLayersPayload, FileSourcePreviewPayload
 from app.core.files.preview_temp import FilePreviewTempPayload
 from app.core.resources.blob_dispatch import BlobDispatchResult, dispatch_blob_storage
+from app.core.projects.canvas_models import ColumnInfo
+from app.utils.logger import get_logger as _get_logger
 
 from app.core.files.service_deps import (  # noqa: F401 (public domain export)
     LoggerProtocol,
@@ -48,79 +46,7 @@ from app.infrastructure.storage import compensation as storage_compensation
 warnings.filterwarnings("ignore", message=".*GeoPackage user_version.*may only be partially supported.*")
 
 
-# Module-level fallback for helpers constructed before FileSourceService exists.
-try:
-    from app.utils.logger import get_logger as _get_logger
-    _logger = _get_logger(__name__)
-except ImportError:
-    _get_logger = None
-    _logger = _logging.getLogger(__name__)
-
-try:
-    from app.core.files.models import (
-        FileSource as _AppFileSource,
-        FileSourceList,
-    )
-    from app.core.projects.canvas_models import ColumnInfo as _AppColumnInfo
-    _USE_APP_MODELS = True
-except ImportError:
-    _USE_APP_MODELS = False
-
-
-if _USE_APP_MODELS:
-    FileSource = _AppFileSource
-    ColumnInfo = _AppColumnInfo
-else:
-    @dataclass
-    class ColumnInfo:
-        name: str
-        type: str
-
-
-    @dataclass
-    class FileSource:
-        id: str
-        name: str
-        description: str
-        original_filename: str
-        format: str
-        layer: Optional[str]
-        sheet: Optional[str]
-        columns: List[ColumnInfo]
-        row_count: int
-        file_size: int
-        crs: Optional[str]
-        created_at: datetime
-        updated_at: datetime
-
-        def model_dump_json(self, indent: int = 2) -> str:
-            return json.dumps({
-                "id": self.id,
-                "name": self.name,
-                "description": self.description,
-                "original_filename": self.original_filename,
-                "format": self.format,
-                "layer": self.layer,
-                "sheet": self.sheet,
-                "columns": [{"name": c.name, "type": c.type} for c in self.columns],
-                "row_count": self.row_count,
-                "file_size": self.file_size,
-                "crs": self.crs,
-                "created_at": self.created_at.isoformat(),
-                "updated_at": self.updated_at.isoformat(),
-            }, indent=indent)
-        
-        @classmethod
-        def model_validate_json(cls, json_str: str) -> 'FileSource':
-            return cls.from_json(json_str)
-        
-        @classmethod
-        def from_json(cls, json_str: str) -> 'FileSource':
-            data = json.loads(json_str)
-            data['columns'] = [ColumnInfo(**c) for c in data['columns']]
-            data['created_at'] = datetime.fromisoformat(data['created_at'])
-            data['updated_at'] = datetime.fromisoformat(data['updated_at'])
-            return cls(**data)
+_logger = _get_logger(__name__)
 
 
 def _rmtree_safe(path: Path | str, _retries: int = 3) -> None:
@@ -317,7 +243,7 @@ class FileSourceService:
             file_id,
             db_get_file_source=files_db.get_file_source,
             file_source_model=FileSource,
-            use_app_models=_USE_APP_MODELS,
+            use_app_models=True,
             logger=self._logger,
         )
 
@@ -330,13 +256,12 @@ class FileSourceService:
         )
 
     def list_file_sources(self, group_id: str = None) -> Any:
-        file_source_list_model = FileSourceList if _USE_APP_MODELS else None
         return _source_metadata.list_file_sources(
             group_id,
             db_list_file_sources=files_db.list_file_sources,
             get_file_source_by_id=self.get_file_source,
-            file_source_list_model=file_source_list_model,
-            use_app_models=_USE_APP_MODELS,
+            file_source_list_model=FileSourceList,
+            use_app_models=True,
             logger=self._logger,
         )
 
@@ -459,7 +384,7 @@ class FileSourceService:
             db_get_file_source=files_db.get_file_source,
             db_save_file_source=files_db.save_file_source,
             default_group=settings.DEFAULT_GROUP,
-            use_app_models=_USE_APP_MODELS,
+            use_app_models=True,
             logger=self._logger,
         )
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from typing import Any, Iterable, List, Mapping, Optional
 
 import pandas as pd
@@ -16,6 +15,7 @@ from app.core.dataframes.tabular import (
     float_series_non_null_whole_numbers,
     non_null_head_values,
 )
+from app.core.projects.canvas_models import ColumnInfo
 
 _logger = logging.getLogger(__name__)
 
@@ -39,23 +39,6 @@ _LOGICAL_TYPE_COMPATIBLE_DTYPES: dict[str, tuple[str, ...]] = {
     "datetime": ("object",),
     "geometry": ("object", "geometry"),
 }
-
-
-try:
-    from app.core.projects.canvas_models import ColumnInfo as _AppColumnInfo
-    _USE_APP_MODELS = True
-except ImportError:  # pragma: no cover
-    _USE_APP_MODELS = False
-
-if _USE_APP_MODELS:
-    ColumnInfo = _AppColumnInfo
-else:
-    @dataclass
-    class ColumnInfo:  # type: ignore[no-redef]
-        """Informazioni su una colonna (fallback dataclass)."""
-
-        name: str
-        type: str
 
 
 class TypeInferrer:

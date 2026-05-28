@@ -5,6 +5,8 @@ Bootstrap boundary — single explicit init for the FastAPI app.
 
 from __future__ import annotations
 
+import os
+
 
 _BOOT_COMPLETE: bool = False
 _PSYCOPG2_SSL_ENV_KEYS = (
@@ -93,8 +95,6 @@ def bootstrap() -> None:
 
 def _repair_psycopg2_ssl_env() -> None:
     """Remove SSL env vars that legacy psycopg2 initialization could leak."""
-    import os
-
     for name in _PSYCOPG2_SSL_ENV_KEYS:
         os.environ.pop(name, None)
 

@@ -229,5 +229,5 @@ def test_file_source_service_update_file_source_facade_delegates():
     )
     assert delegated.call_args.kwargs["get_blob_from_db"] is svc._get_blob_from_db
     assert delegated.call_args.kwargs["time_now"] is svc._time.now
-    assert delegated.call_args.kwargs["use_app_models"] is service_module._USE_APP_MODELS
+    assert delegated.call_args.kwargs["use_app_models"] is True
     assert delegated.call_args.kwargs["logger"] is svc._logger
