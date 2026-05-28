@@ -25,7 +25,6 @@ from app.core.artifacts import (
     RunArtifactRef,
 )
 from app.utils.logger import close_run, get_logger, open_run
-from app.core.dataframes.frame_io import find_latest_output_file
 
 from .source_loading import load_project_source_artifact
 from .types import FrameMap, JsonObject
@@ -347,31 +346,31 @@ def load_project_sources(
             }
 
         materialized = None
-        raw_output_path = upstream.output_path or ""
-        if raw_output_path:
-            # Pre-fix il path arrivava da upstream e veniva usato
-            # direttamente come `MaterializedArtifact.path` bypassando la
-            # trusted-root whitelist (`RESULTS_DIR/{project_id}`,
-            # `TEMP_DIR`, `DATA_DIR/temp`) che
-            # `ArtifactResolver._materialize_from_output_path` applica
-            # correttamente. Un upstream compromesso poteva quindi
-            # forzare letture da path arbitrari (file traversal).
-            # Fix: delegare al resolver via `RunArtifactRef` pubblico —
-            # se il path e' fuori dai trusted roots solleva
-            # ArtifactResolutionError invece di leggere silenziosamente.
+        run_ref = None
+        if hasattr(upstream, "to_run_artifact_ref"):
+            try:
+                run_ref = upstream.to_run_artifact_ref()
+            except ValueError:
+                run_ref = None
+
+        if run_ref is None:
+            raw_output_path = upstream.output_path or ""
+            if raw_output_path:
+                run_ref = RunArtifactRef(
+                    project_id=source_project_id,
+                    output_path=raw_output_path,
+                )
+
+        if run_ref is not None:
             try:
                 materialized = ArtifactResolver().materialize_run(
-                    RunArtifactRef(
-                        project_id=source_project_id,
-                        output_path=raw_output_path,
-                    ),
+                    run_ref,
                     mode="bytes",
                 )
             except ArtifactResolutionError as resolve_err:
                 log.warning(
-                    f"output_path upstream rifiutato (fuori trusted-root "
-                    f"o non esistente): {resolve_err}; fallback a "
-                    f"materialize_latest.",
+                    f"artifact upstream rifiutato o non disponibile: "
+                    f"{resolve_err}; fallback a materialize_latest.",
                     op="execute",
                 )
                 materialized = None

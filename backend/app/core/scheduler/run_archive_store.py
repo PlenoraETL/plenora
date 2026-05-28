@@ -12,7 +12,6 @@ L'enumerazione delle run e' ora unica responsabilita' di
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Optional, Tuple
 
 
@@ -29,12 +28,10 @@ class RunFileInfo:
 class RunInfo:
     """Snapshot of a scheduled run.
 
-    `path` e' sempre `None` nel catalog DB-backed: niente archive
-    filesystem.
+    Le run scheduler sono DB-backed: niente archive filesystem.
     """
 
     timestamp: str
-    path: Optional[Path]
     files: Tuple[RunFileInfo, ...] = field(default_factory=tuple)
     result_id: Optional[str] = None
 

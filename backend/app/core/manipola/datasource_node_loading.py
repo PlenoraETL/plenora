@@ -90,7 +90,7 @@ def load_datasource_nodes(
     if not group_id:
         log.error(
             "[SECURITY] manipola.load_datasource_nodes: explicit "
-            "group_id required (no singleton fallback), fail-closed"
+            "group_id required, fail-closed"
         )
         return {
             "success": False,

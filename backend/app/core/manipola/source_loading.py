@@ -161,8 +161,7 @@ def load_file_sources(
             loaded DataFrame per node.id. **Mutated in place.**
         group_id: explicit tenant binding. MUST be a non-empty
             ``str``; ``None`` / empty triggers the canonical
-            fail-closed dict. NO fallback to any legacy
-            singleton — the TE-005 contract is enforced here.
+            fail-closed dict.
         logger: optional logger; defaults to a module-level
             logger so test harnesses can inject a captured
             logger if needed.
@@ -200,13 +199,11 @@ def load_file_sources(
         _nf,
     )
 
-    # Tenant binding ctx-strict: explicit ``group_id`` only. No
-    # singleton fallback (TE-005 contract); see module docstring
+    # Tenant binding: explicit ``group_id`` only.
     if not group_id:
         log.error(
             "[SECURITY] manipola.load_file_sources: explicit "
-            "group_id required (post TRANSFORMATION-ENGINE-005, "
-            "no singleton fallback), fail-closed"
+            "group_id required, fail-closed"
         )
         return {
             "success": False,

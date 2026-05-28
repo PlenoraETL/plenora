@@ -15,6 +15,9 @@ _OPERATIONS_PATH = (
     _BACKEND_DIR / "app" / "core" / "features" / "arcgis_feature_operations.py"
 )
 _FEATURES_INIT_PATH = _BACKEND_DIR / "app" / "core" / "features" / "__init__.py"
+_FEATURES_SERVICE_PATH = (
+    _BACKEND_DIR / "app" / "core" / "features" / "features_service.py"
+)
 _CLIENT_PATH = _BACKEND_DIR / "app" / "core" / "features" / "arcgis_client.py"
 _WRITER_PATH = _BACKEND_DIR / "app" / "core" / "features" / "arcgis_feature_writer.py"
 _WRITE_METHODS_PATH = (
@@ -199,6 +202,15 @@ def test_features_package_uses_explicit_public_imports() -> None:
 
     assert "__getattr__" not in defined_functions
     assert {"FeaturesService", "create_features_service"} <= imported
+
+
+def test_features_service_has_no_directory_storage_state() -> None:
+    """Feature reads/writes go through provider/result boundaries, not local dirs."""
+    src = _FEATURES_SERVICE_PATH.read_text(encoding="utf-8")
+
+    assert "_arcgis_dir" not in src
+    assert "_results_dir" not in src
+    assert "from app.config import settings" not in src
 
 
 def test_arcgis_feature_write_methods_does_not_import_concrete_client() -> None:

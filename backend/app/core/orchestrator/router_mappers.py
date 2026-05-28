@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from decimal import Decimal
 import math
-from typing import Optional, cast
+from typing import Optional
 from typing_extensions import TypedDict
 
 from app.core.orchestrator.task_service import TaskInfo, TaskResultPayload
@@ -38,10 +38,6 @@ def task_result_to_dict(result: object) -> Mapping[str, object]:
 
 def task_info_to_dict(task_info: TaskInfo) -> TaskInfoPublicPayload:
     """Serialize typed task info at the HTTP boundary."""
-    if not isinstance(task_info, TaskInfo):
-        legacy_to_dict = getattr(task_info, "to_dict", None)
-        if callable(legacy_to_dict):
-            return cast(TaskInfoPublicPayload, dict(legacy_to_dict()))
     return {
         "task_id": task_info.task_id,
         "task_type": task_info.task_type.value,

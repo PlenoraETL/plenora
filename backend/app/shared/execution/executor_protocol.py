@@ -208,6 +208,9 @@ class PipelineArtifactProtocol(Protocol):
     def output_path(self) -> Optional[str]:
         ...
 
+    def to_run_artifact_ref(self) -> Any:
+        ...
+
 
 @runtime_checkable
 class PipelineDispatcherProtocol(Protocol):

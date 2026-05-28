@@ -32,6 +32,13 @@ def _canvas_with_project_source(source_project_id="proj-99"):
     )
 
 
+def test_project_source_runtime_does_not_import_latest_file_scanner():
+    """Project-source loading resolves artifacts through ArtifactResolver."""
+    import app.core.manipola.project_source_runtime as runtime
+
+    assert not hasattr(runtime, "find_latest_output_file")
+
+
 # Fail-closed quando group_id esplicito e' assente o vuoto
 
 
@@ -227,9 +234,6 @@ def test_explicit_group_id_is_forwarded_to_resolver():
     with patch(
         "app.core.manipola.project_source_runtime.ArtifactResolver",
         return_value=_StubResolver(),
-    ), patch(
-        "app.core.manipola.project_source_runtime.find_latest_output_file",
-        return_value=None,
     ):
         executor._carica_sorgenti_progetto(
             _canvas_with_project_source("proj-99"), dataframes,

@@ -9,7 +9,6 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from app.config import settings
 from app.utils.logger import get_logger
 from app.core.results.pipeline_result import save_pipeline_result_outcome
 from app.core.dataframes.frame_io import (
@@ -105,8 +104,6 @@ class FeaturesService:
     
     Dependency Injection:
     - client: ArcGISProviderProtocol (mockabile per test)
-    - arcgis_dir: directory storage connessioni
-    - results_dir: directory output risultati
     """
 
     def __init__(
@@ -118,10 +115,6 @@ class FeaturesService:
         self._client = client or create_arcgis_provider()
         self._operations = ArcGISFeatureOperations(self._client)
         self._writer = ArcGISFeatureWriteService(self._client)
-        self._arcgis_dir = arcgis_dir or settings.ARCGIS_CONNECTIONS_DIR
-        self._results_dir = results_dir or Path(settings.RESULTS_DIR)
-        
-        # Crea directory se non esiste
     
     # CRUD CONNESSIONI
     

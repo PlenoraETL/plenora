@@ -12,8 +12,6 @@ storiche archived-only-on-filesystem non sono piu' supportate.
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from typing import Optional
 
 from app.core.scheduler.run_archive_store import (
     RunFileInfo,
@@ -33,14 +31,9 @@ class ScheduleRunsCatalog:
 
     def __init__(
         self,
-        results_dir: Optional[Path] = None,
         *,
         log_store: ScheduleRunLogStore | None = None,
     ) -> None:
-        # `results_dir` conservato per backward-compat di costruzione;
-        # non viene piu' usato per filesystem reads. Sara' rimosso quando
-        # i caller / test costruttori saranno aggiornati.
-        del results_dir
         self._log_store = log_store or ScheduleRunLogStore()
 
     @staticmethod
@@ -101,7 +94,6 @@ class ScheduleRunsCatalog:
         files = (file_info,) if file_info is not None else ()
         return RunInfo(
             timestamp=ts,
-            path=None,  # Post-cleanup: niente piu' archive path filesystem.
             files=files,
             result_id=result_id,
         )

@@ -66,3 +66,10 @@ def test_rejection_happens_before_file_read(tmp_path):
 
     with pytest.raises(ValueError, match="fuori dal perimetro"):
         PluginExecutor(registry_path=str(nonexistent_outside))
+
+
+def test_no_legacy_plugin_dispatch_compatibility_layer():
+    """Manipola dispatches directly through PluginExecutor."""
+    import app.core.manipola.plugin_executor as plugin_mod
+
+    assert not hasattr(plugin_mod, "PluginExecutorCompatibility")

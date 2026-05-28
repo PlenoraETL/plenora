@@ -148,10 +148,8 @@ def publish_imdf(
     # Path traversal guard sull'id.
     _safe_bundle_dir(request.bundle_task_id)
 
-    # IMDF-4 step 4: bundle check + ACL solo da storage. Post-tombstone
-    # il fallback locale (`_hydrate_local_cache + read_metadata`) e'
-    # rimosso: i bundle pre-IMDF-3 senza meta su storage falliscono
-    # 404 e richiedono re-upload.
+    # Bundle check + ACL solo da storage. Bundle senza meta su storage
+    # falliscono 404 e richiedono re-upload.
     meta = _imdf_storage.get_meta_only(request.bundle_task_id)
     if meta is None:
         raise HTTPException(
@@ -219,7 +217,7 @@ def validate_publish_endpoint(
         )
     # Path traversal guard sull'id.
     _safe_bundle_dir(request.bundle_task_id)
-    # IMDF-4 step 4: ACL check solo da storage (no fallback locale).
+    # ACL check solo da storage.
     # Bundle totalmente assente: il validator emettera' BUNDLE_MISSING
     # nel report — no early-return qui per simmetria con la logica
     # current (il validator e' l'oracolo del missing bundle).
@@ -264,9 +262,8 @@ def get_bundle_metadata(
     # Path traversal guard sull'id.
     _safe_bundle_dir(bundle_task_id)
 
-    # IMDF-4 step 4: lettura solo da storage. Post-tombstone il fallback
-    # legacy (`_hydrate_local_cache + bundle_dir.rglob`) e' rimosso.
-    # Bundle pre-IMDF-3 senza layout per-file su storage falliscono 404.
+    # Lettura solo da storage. Bundle senza layout per-file su storage
+    # falliscono 404.
     meta = _imdf_storage.get_meta_only(bundle_task_id)
 
     if meta is None:
@@ -370,7 +367,7 @@ def list_bundles(
 
     # Ordino: i bundle con saved_at piu' recente in testa. Per chi non ha
     # saved_at, fallback alphabetico stabile. saved_at viene letto dal
-    # meta in storage; e' indipendente dalla cache locale (multi-host safe).
+    # meta in storage.
     out: List[ImdfBundleSummary] = []
     acl_skipped = 0
 
@@ -451,17 +448,14 @@ def delete_bundle(
     bundle_task_id: str,
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    """Cancella un bundle IMDF da storage canonico + cache locale.
+    """Cancella un bundle IMDF da storage canonico e directory locale.
 
-    IMDF-4 step 4: ACL check storage-first (no hydrate locale per
-    leggere meta). Bundle pre-IMDF-3 senza meta su storage falliscono
-    404 — il delete di cache locale eventualmente presente puo' essere
-    fatto manualmente da admin.
+    ACL check storage-first: bundle senza meta su storage falliscono 404.
 
     - Validazione path-traversal via `_safe_bundle_dir`
     - Verifica group access via `assert_bundle_group_access_from_meta`
     - 404 se il bundle non esiste su storage
-    - Rimozione da storage + cleanup cache locale
+    - Rimozione da storage + cleanup directory locale
     """
     bundle_dir = _safe_bundle_dir(bundle_task_id)
     meta = _imdf_storage.get_meta_only(bundle_task_id)

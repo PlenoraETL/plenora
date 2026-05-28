@@ -31,9 +31,8 @@ def _storage():
     """Lazy load della factory cloud runtime.
 
     Solleva `ObjectStorageDisabledError` se la capability globale e' off:
-    i caller list/get_meta_only/list_task_ids degradano graceful
-    (cache locale only) catturando l'eccezione; save_bundle invece
-    deve fallire perche' il pubblico richiede deve completare l'upload."""
+    i caller read/list degradano graceful catturando l'eccezione;
+    save_bundle invece deve fallire perche' l'upload deve completare."""
     from app.core.io.object_storage import get_runtime_object_storage
     return get_runtime_object_storage()
 
@@ -157,9 +156,8 @@ def read_bundle_file_bytes(task_id: str, name: str) -> Optional[bytes]:
     """Legge un singolo file del bundle direttamente da storage (IMDF-3).
 
     Pensato per i reader che servono manifest/validation/renderers/geojson
-    senza dover prima idratare l'intero bundle in cache locale
-    (IMDF-4 endpoint serve). Ritorna ``None`` se l'oggetto non
-    esiste su storage o la capability object_storage e' off.
+    direttamente da storage. Ritorna ``None`` se l'oggetto non esiste
+    su storage o la capability object_storage e' off.
     """
     if not object_storage_enabled():
         return None
@@ -175,8 +173,8 @@ def read_bundle_file_bytes(task_id: str, name: str) -> Optional[bytes]:
 
 # IMDF-4: storage-first JSON reader helpers
 # Wrappano `read_bundle_file_bytes` decodificando i bytes come JSON. Pensati
-# per i reader HTTP che NON devono piu' idratare la cache locale: vanno
-# direct-from-storage senza il giro `ensure_local_bundle + Path.read_text`.
+# per i reader HTTP direct-from-storage senza il giro
+# `ensure_local_bundle + Path.read_text`.
 # I consumer che richiedono .gdb usano `open_gdb_in_vsimem`.
 
 
@@ -324,15 +322,11 @@ def list_bundle_file_entries(task_id: str) -> List[JsonObject]:
 # Read (endpoint side
 
 
-# Tombstone (QUERY-1 step 3): `ensure_local_bundle` rimosso.
-# Era hydration legacy della cache locale (`IMDF_BUNDLES_DIR/{task_id}/`)
-# per i caller filesystem-bound. Post-IMDF-4/5/6 tutti gli endpoint
-# IMDF leggono direttamente da storage:
-#   - GET metadata + list: `imdf.storage.read_*` (storage-first)
-#   - publish/validate: `open_gdb_in_vsimem` -> `/vsizip//vsimem/` (RAM)
+# Tombstone (QUERY-1 step 3): `ensure_local_bundle` rimosso. Gli
+# endpoint IMDF leggono direttamente da storage:
+#   - GET metadata + list: `imdf.storage.read_*`
+#   - publish/validate: `open_gdb_in_vsimem` -> `/vsizip//vsimem/`
 #   - DELETE: `delete_bundle` su storage canonical
-# La cache locale non e' piu' canonical state; verra' eventualmente
-# rimossa anche come settings.IMDF_BUNDLES_DIR (separate cleanup).
 
 
 def get_meta_only(task_id: str) -> Optional[JsonObject]:
@@ -413,7 +407,7 @@ def delete_bundle(task_id: str, *, cleanup_local: bool = True) -> int:
         except Exception as e:
             logger.warning(f"delete {key} fallito (non-fatal): {e}")
 
-    # Cleanup cache locale sul nodo corrente (se presente
+    # Cleanup directory locale sul nodo corrente (se presente).
     if cleanup_local:
         local = _local_dir(task_id)
         if local.exists():

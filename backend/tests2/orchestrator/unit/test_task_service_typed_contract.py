@@ -242,6 +242,14 @@ def test_router_serializes_typed_task_result_payload_at_edge():
     }
 
 
+def test_task_info_mapper_has_no_to_dict_fallback():
+    """Task status serialization is typed-only at the router boundary."""
+    from app.core.orchestrator import router_mappers
+
+    src = inspect.getsource(router_mappers.task_info_to_dict)
+    assert "to_dict" not in src
+
+
 def test_task_service_does_not_call_task_result_to_dict_internally(monkeypatch):
     def fail_to_dict(_payload: TaskResultPayload) -> dict[str, object]:
         raise AssertionError("TaskService called TaskResultPayload.to_dict()")

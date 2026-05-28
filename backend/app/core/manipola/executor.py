@@ -106,7 +106,7 @@ def _failure_step(message: str, step_start: float) -> JsonObject:
 
 
 def _nf(node: Node, key: str, default: Any = None) -> Any:
-    """Legge un campo flat dal nodo Pydantic, con fallback su node.data (backward compat)."""
+    """Legge un campo flat dal nodo Pydantic o dal wrapper ``node.data``."""
     field_value = getattr(node, key, None)
     if field_value is not None and field_value != [] and field_value != {}:
         return field_value
@@ -130,7 +130,7 @@ def _applica_crs_da_colonne(
     source-loading path. When provided the internal construction from
     ``node_columns`` is skipped â€” metadata travels from the loader rather
     than being reconstructed here. ``node_columns`` is still required for
-    the legacy fallback path (callers that do not supply ``meta``).
+    callers that do not supply ``meta``.
     """
     if is_geodataframe(df):
         return df  # Gia' risorsa geospaziale: non toccare.
@@ -558,13 +558,10 @@ class ManipolaExecutor:
         inserire nel canvas un source_project_id di un altro tenant e
         esfiltrare i dati durante l'esecuzione della pipeline.
 
-         (ctx-strict): il
-        ``group_id`` esplicito e' OBBLIGATORIO. Il singleton fallback
-        ``self._current_group_id`` e' stato rimosso da questa catena.
-        Se ``group_id`` e' None o vuoto il metodo ritorna fail-closed
-        senza invocare il resolver. I caller (execute / preview)
-        ricevono il ``group_id`` da ``_init_security_context`` e lo
-        propagano esplicitamente.
+        Il ``group_id`` esplicito e' obbligatorio: se assente, il metodo
+        ritorna fail-closed senza invocare il resolver. I caller
+        (execute / preview) ricevono il ``group_id`` da
+        ``_init_security_context`` e lo propagano esplicitamente.
         """
         return load_project_sources(
             canvas,
@@ -599,25 +596,13 @@ class ManipolaExecutor:
             geospaziale sono ancora garantiti dal ``SourceLoader``
             unificato e dagli helper `app.core.dataframes`, nessuna
             duplicazione inline.
-          - ``TRANSFORMATION-ENGINE-004``: ``group_id`` esplicito
-            e' il canale primario di tenant binding (production:
-            ``execute``/``preview`` lo passano sempre dopo
-            ``_init_security_context``).
-          - ``TRANSFORMATION-ENGINE-005`` (chain-local cut):
-            questa catena NON consulta ``self._current_group_id``
-            ne' nel delegator ne' nel modulo estratto. Una stale
-            singleton (race window cross-run, residuo da
-            un'esecuzione precedente nello stesso processo
-            worker) NON puo' autorizzare un ``file_source``.
-            Mirror della cut arricchisci
-
-        Il delegator NON passa ``self._current_group_id`` al
-        helper: l'argomento ``group_id`` del helper e' l'**unico**
-        canale tenant per questa catena.
-        ``_carica_sorgenti_progetto`` e' ctx-strict (TE-007 cut: nessun
-        fallback singleton). ``_carica_sorgenti_statiche`` usa
-        l'argomento esplicito ``group_id`` o il sentinel
-        ``"_static_"`` non-autorizzante (TE-008).
+          - ``group_id`` esplicito e' il canale tenant per questa
+            catena (production: ``execute``/``preview`` lo passano
+            dopo ``_init_security_context``).
+          - Il delegator inoltra al helper solo l'argomento ricevuto:
+            ``_carica_sorgenti_progetto`` e' fail-closed senza ctx,
+            mentre ``_carica_sorgenti_statiche`` usa l'argomento
+            esplicito o il sentinel non-autorizzante ``"_static_"``.
         """
         return load_file_sources(
             canvas,
@@ -635,9 +620,9 @@ class ManipolaExecutor:
         """Carica DataFrame dai nodi `datasource_node` in `mode=source`.
 
         Body in `app.core.manipola.datasource_node_loading.load_datasource_nodes`.
-        Stesso contratto degli altri loader: ctx-strict su `group_id`,
-        nessun fallback singleton, mutazione in-place di `dataframes`,
-        ritorno `{success: False, message}` su errore canonical.
+        Stesso contratto degli altri loader: `group_id` esplicito,
+        mutazione in-place di `dataframes`, ritorno
+        `{success: False, message}` su errore canonical.
         """
         return load_datasource_nodes(
             canvas,
@@ -658,20 +643,18 @@ class ManipolaExecutor:
         dei parametri statici vive nel loader unico;
         qui resta solo l'iterazione sui nodi del canvas.
 
-         (ctx-strict cut): lo
-        static branch e' pure processing (no DB, no file I/O). Il
-        ``group_id`` esplicito del caller e' l'unico canale tenant;
-        ``self._current_group_id`` NON e' consultato. Se ``group_id``
-        e' assente il sentinel non-autorizzante ``"_static_"`` soddisfa
-        la guardia non-vuota del loader senza ambiguita' cross-tenant
-        (nessuna risorsa esterna caricata in questo branch).
+        Lo static branch e' pure processing (no DB, no file I/O). Se
+        ``group_id`` e' assente il sentinel non-autorizzante
+        ``"_static_"`` soddisfa la guardia non-vuota del loader senza
+        ambiguita' cross-tenant (nessuna risorsa esterna caricata in
+        questo branch).
         """
         static_nodes = [n for n in canvas.nodes if n.type == "staticValues"]
         if not static_nodes:
             return None
 
-        # TE-008: pure processing â€” do NOT read self._current_group_id
-        # Explicit group_id (production path) or non-authorizing sentinel
+        # Pure processing: explicit group_id (production path) or
+        # non-authorizing sentinel.
         current_group_id = group_id or "_static_"
         loader = SourceLoader()
 
@@ -1143,8 +1126,9 @@ class ManipolaExecutor:
                 )
 
             # Single entry-point: in-memory per csv/xlsx/json/parquet/
-            # geojson (zero temp), filesystem fallback interno per
-            # gpkg/shp. Nessun if/else duplicato caller-side
+            # geojson (zero temp); i formati container sono gestiti
+            # dentro il boundary risultati, senza duplicare branch nel
+            # caller.
             saved = save_pipeline_result_outcome(
                 project_id=project_id,
                 df=df,

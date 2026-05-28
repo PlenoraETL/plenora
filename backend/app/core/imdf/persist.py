@@ -152,6 +152,6 @@ def persist_imdf_bundle(
 
 
 # Tombstone (QUERY-1 step 3): `persist_imdf_bundle_to_disk` rimosso.
-# Era il legacy local materializer (IMDF_BUNDLES_DIR/{task_id}/) lasciato
-# per i test/script pre-IMDF-3. Tutti i caller di produzione + script
-# `imdf_real_e2e_check.py` migrati a `persist_imdf_bundle` (storage-direct).
+# Era il materializer locale `IMDF_BUNDLES_DIR/{task_id}/`. Tutti i
+# caller di produzione + script `imdf_real_e2e_check.py` usano
+# `persist_imdf_bundle` (storage-direct).

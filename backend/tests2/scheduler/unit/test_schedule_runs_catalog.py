@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from app.core.scheduler.run_archive_store import RunInfo
 from app.core.scheduler.runs_catalog import RunFileInfo, ScheduleRunsCatalog
 
 
@@ -42,6 +43,12 @@ def test_schedule_short_convention_owned_by_catalog():
     catalog_short = ScheduleRunsCatalog._schedule_short(schedule_id)
     assert catalog_short == "my_long_id_x"
     assert ScheduleRunsCatalog._schedule_short("other_x") == "other_x"
+
+
+def test_run_info_no_longer_exposes_archive_path():
+    """RunInfo is DB-backed; archive filesystem path is not part of shape."""
+    run = RunInfo(timestamp="20260101_000000")
+    assert not hasattr(run, "path")
 
 
 # list_runs (DB-only)

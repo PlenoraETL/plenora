@@ -204,10 +204,9 @@ def compute_parallel_groups(
     la materializzazione upstream DataFrame→file fatta in
     `_resolve_input_path_for_file_processor` (api_connector.py).
 
-    Se `api_connections` non e' passato, il comportamento e' quello legacy
-    (file-processor trattati come gli altri enricher — fa crashare il
-    chaining enricher→rest_file ma resta compat per i call site non ancora
-    aggiornati).
+    Se `api_connections` non e' passato, il detector non puo' leggere la
+    configurazione centralizzata del connector e quindi considera solo i
+    marker presenti direttamente sul nodo.
 
     Il parametro `edges` e' accettato per compat ma non usato — potrebbe
     servire in futuro per check di safety opzionali.
@@ -234,7 +233,8 @@ def compute_parallel_groups(
         """True se il nodo e' api_enrich con connector rest_file.
 
         Richiede `api_connections` nel closure: senza, ritorna sempre False
-        (compat legacy). `api_id` puo' stare al root del nodo o dentro `data`.
+        per assenza della configurazione connector. `api_id` puo' stare al
+        root del nodo o dentro `data`.
         """
         cn = CanvasNode(n)
         if api_connections is None or cn.type != "api_enrich":
