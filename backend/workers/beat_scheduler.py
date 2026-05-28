@@ -16,12 +16,22 @@ from datetime import datetime as _dt, timedelta as _td, timezone as _tz
 from pathlib import Path as _Path
 from typing import Any, Optional
 from celery.beat import Scheduler, ScheduleEntry
+from celery.schedules import crontab
 from celery.utils.log import get_logger
+from app import config as app_config
+from app.core.eseguibili import output_store
+from app.core.imdf import bundle_store
+from app.core.io import object_storage as object_storage_module
 from app.core.scheduler.job_dispatcher import (
     SCHEDULE_PIPELINE_TASK_NAME,
     scheduled_run_kwargs,
 )
+from app.core.scheduler import log_archive as scheduler_log_archive
+from app.core.scheduler import log_service as scheduler_log_service
+from app.core.scheduler import schedule_service as schedule_service_module
+from app.core.resources import storage_reconciliation as storage_reconciliation_module
 from app.core.io.local_cleanup import rmtree_safe
+from app.infrastructure.storage import compensation as storage_compensation
 
 logger = get_logger(__name__)
 
@@ -101,9 +111,8 @@ class PlenoraBeatScheduler(Scheduler):
             return self._redis_client
         try:
             import redis
-            from app.config import settings
 
-            client = redis.Redis.from_url(settings.CELERY_BROKER_URL)
+            client = redis.Redis.from_url(app_config.settings.CELERY_BROKER_URL)
             client.ping()
             self._redis_client = client
             return client
@@ -166,9 +175,9 @@ class PlenoraBeatScheduler(Scheduler):
         Returns:
             True se questo processo e' (o e' diventato) leader.
         """
-        from app.config import settings
-
-        fail_open = bool(getattr(settings, "SCHEDULE_BEAT_LEADER_FAIL_OPEN", False))
+        fail_open = bool(
+            getattr(app_config.settings, "SCHEDULE_BEAT_LEADER_FAIL_OPEN", False)
+        )
 
         def _degraded_result() -> bool:
             if fail_open:
@@ -322,8 +331,6 @@ class PlenoraBeatScheduler(Scheduler):
         Robustezza: errori DB non crashano il tick (swallowed + loggati).
         """
         try:
-            from app.core.scheduler.schedule_service import detect_missed_run
-
             rows = _pg_fetchall(
                 "SELECT id, cron_expression, last_run, config "
                 "FROM schedules WHERE is_enabled = TRUE"
@@ -345,7 +352,7 @@ class PlenoraBeatScheduler(Scheduler):
                 last_run = self._parse_dt(row.get("last_run"))
                 cron_expr = row.get("cron_expression", "")
 
-                expected_last = detect_missed_run(
+                expected_last = schedule_service_module.detect_missed_run(
                     cron_expr, last_run, now, grace_hours=grace_hours,
                 )
                 if expected_last is None:
@@ -666,8 +673,6 @@ class PlenoraBeatScheduler(Scheduler):
     def _parse_cron(self, cron_expr: str) -> Optional[object]:
         """Parsa espressione cron in un oggetto schedule Celery."""
         try:
-            from celery.schedules import crontab
-
             parts = cron_expr.strip().split()
             if len(parts) != 5:
                 logger.warning(f"Cron non valido: {cron_expr!r}")
@@ -736,10 +741,8 @@ class PlenoraBeatScheduler(Scheduler):
                 logger.info(f"[STUCK] Rimossi {len(rows)} lock scaduti")
 
             # Controlla schedule con last_status = 'running' da più del hard limit
-            from app.config import settings
-
             try:
-                hard_limit = int(settings.CELERY_SCHEDULE_HARD_LIMIT)
+                hard_limit = int(app_config.settings.CELERY_SCHEDULE_HARD_LIMIT)
             except (TypeError, ValueError):
                 hard_limit = 3600
             if hard_limit <= 0:
@@ -777,8 +780,6 @@ class PlenoraBeatScheduler(Scheduler):
         self._last_eseguibili_cleanup = now
 
         try:
-            from app.core.eseguibili import output_store
-
             ttl_seconds = 2 * 3600  # 2 ore
             removed = output_store.purge_expired_local_outputs(
                 now_ts=now,
@@ -805,10 +806,7 @@ class PlenoraBeatScheduler(Scheduler):
         self._last_imdf_bundles_cleanup = now
 
         try:
-            from app.config import settings
-            from app.core.imdf import bundle_store
-
-            ttl_seconds = settings.IMDF_BUNDLE_TTL_HOURS * 3600
+            ttl_seconds = app_config.settings.IMDF_BUNDLE_TTL_HOURS * 3600
             removed = bundle_store.purge_expired_local_bundles(
                 now_ts=now,
                 ttl_seconds=ttl_seconds,
@@ -849,8 +847,7 @@ class PlenoraBeatScheduler(Scheduler):
         self._last_temp_orphan_cleanup = now
 
         try:
-            from app.config import settings
-
+            settings = app_config.settings
             temp_dir = _Path(settings.DATA_DIR) / "temp"
             if not temp_dir.exists():
                 return
@@ -922,12 +919,10 @@ class PlenoraBeatScheduler(Scheduler):
         self._last_schedule_logs_retention = now
 
         try:
-            from app.config import settings
-
             # Niente `or 90` per non collassare 0 → 90 (l'utente che imposta
             # esplicitamente 0 vuole disabilitare). Il fallback al default
             # avviene solo se l'attributo manca o non e' int
-            raw = getattr(settings, "SCHEDULE_LOGS_RETENTION_DAYS", 90)
+            raw = getattr(app_config.settings, "SCHEDULE_LOGS_RETENTION_DAYS", 90)
             try:
                 days = int(raw)
             except (TypeError, ValueError):
@@ -935,9 +930,8 @@ class PlenoraBeatScheduler(Scheduler):
             if days <= 0:
                 return  # retention disabilitata
             cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).date()
-            from app.core.scheduler.log_service import ScheduleLogService
 
-            deleted = ScheduleLogService().delete_logs_before(cutoff)
+            deleted = scheduler_log_service.ScheduleLogService().delete_logs_before(cutoff)
             if deleted:
                 logger.info(
                     f"Retention schedule_logs: rimosse {deleted} righe "
@@ -973,8 +967,7 @@ class PlenoraBeatScheduler(Scheduler):
         if now - self._last_logs_archive < 86400:  # 24h
             return
 
-        from app.config import settings
-
+        settings = app_config.settings
         if not getattr(settings, "LOG_ARCHIVE_ENABLED", False):
             return
         try:
@@ -985,12 +978,9 @@ class PlenoraBeatScheduler(Scheduler):
             return  # retention disabilitata (0 o negativo
 
         try:
-            from app.core.io.object_storage import get_log_archive_storage
-            from app.core.scheduler.log_archive import LogArchiveWriter
-
             cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-            storage = get_log_archive_storage()
-            writer = LogArchiveWriter(
+            storage = object_storage_module.get_log_archive_storage()
+            writer = scheduler_log_archive.LogArchiveWriter(
                 storage=storage,
                 key_prefix=settings.LOG_ARCHIVE_KEY_PREFIX,
                 batch_size=settings.LOG_ARCHIVE_BATCH_ROWS,
@@ -1075,8 +1065,7 @@ class PlenoraBeatScheduler(Scheduler):
         self._last_logs_retention = now
 
         try:
-            from app.config import settings
-
+            settings = app_config.settings
             if getattr(settings, "LOG_ARCHIVE_ENABLED", False):
                 return
             days = int(getattr(settings, "LOG_RETENTION_DAYS", 30) or 30)
@@ -1141,8 +1130,7 @@ class PlenoraBeatScheduler(Scheduler):
         if now - self._last_audit_archive < 86400:  # 24h
             return
 
-        from app.config import settings
-
+        settings = app_config.settings
         if not getattr(settings, "LOG_ARCHIVE_ENABLED", False):
             return
         try:
@@ -1153,12 +1141,9 @@ class PlenoraBeatScheduler(Scheduler):
             return  # retention disabilitata (0 o negativo
 
         try:
-            from app.core.io.object_storage import get_log_archive_storage
-            from app.core.scheduler.log_archive import LogArchiveWriter
-
             cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-            storage = get_log_archive_storage()
-            writer = LogArchiveWriter(
+            storage = object_storage_module.get_log_archive_storage()
+            writer = scheduler_log_archive.LogArchiveWriter(
                 storage=storage,
                 key_prefix=settings.LOG_ARCHIVE_KEY_PREFIX,
                 batch_size=settings.LOG_ARCHIVE_BATCH_ROWS,
@@ -1261,7 +1246,7 @@ class PlenoraBeatScheduler(Scheduler):
         now_ts = _t.time()
 
         try:
-            from app.config import settings
+            settings = app_config.settings
         except Exception:
             return  # config non disponibile: skip silente
 
@@ -1300,16 +1285,9 @@ class PlenoraBeatScheduler(Scheduler):
             backoff_base = 60
 
         try:
-            from app.core.resources import storage_reconciliation as _recon
-            from app.infrastructure.storage.compensation import compensating_delete
-        except Exception as e:
-            logger.warning(
-                f"Reconcile storage: import fallito: {e}", exc_info=True
+            rows = storage_reconciliation_module.fetch_due_pending_deletes(
+                limit=batch_size
             )
-            return
-
-        try:
-            rows = _recon.fetch_due_pending_deletes(limit=batch_size)
         except Exception as e:
             logger.warning(
                 f"Reconcile storage: fetch fallito: {e}", exc_info=True
@@ -1330,7 +1308,7 @@ class PlenoraBeatScheduler(Scheduler):
                 if row.operation != "delete":
                     continue
 
-                outcome = compensating_delete(
+                outcome = storage_compensation.compensating_delete(
                     row.storage_key,
                     domain=row.domain,
                     reason="reconciler_retry",
@@ -1338,24 +1316,24 @@ class PlenoraBeatScheduler(Scheduler):
                 )
 
                 if outcome == "ok":
-                    _recon.mark_orphan_deleted(row.id)
+                    storage_reconciliation_module.mark_orphan_deleted(row.id)
                     ok_count += 1
                 else:
                     # outcome == "failed" or "skipped": object not confirmed
                     # deleted, keep the row retryable instead of terminal.
                     new_attempts = row.attempts + 1
                     if new_attempts >= max_attempts:
-                        _recon.mark_lost(
+                        storage_reconciliation_module.mark_lost(
                             row.id,
                             error=f"max_attempts_exceeded ({new_attempts})",
                         )
                         lost_count += 1
                     else:
-                        next_retry = _recon.compute_next_retry_at(
+                        next_retry = storage_reconciliation_module.compute_next_retry_at(
                             new_attempts,
                             base_seconds=backoff_base,
                         )
-                        _recon.mark_failed_attempt(
+                        storage_reconciliation_module.mark_failed_attempt(
                             row.id,
                             error="compensating_delete_failed",
                             next_retry_at=next_retry,
@@ -1390,7 +1368,7 @@ class PlenoraBeatScheduler(Scheduler):
         ui_batch_size = _read_int("STORAGE_RECONCILE_UPLOAD_INTENT_BATCH_SIZE", 50)
         if ui_grace_s > 0 and ui_batch_size > 0:
             try:
-                ui_rows = _recon.fetch_due_stale_upload_intents(
+                ui_rows = storage_reconciliation_module.fetch_due_stale_upload_intents(
                     limit=ui_batch_size,
                     grace_seconds=ui_grace_s,
                 )
@@ -1411,13 +1389,13 @@ class PlenoraBeatScheduler(Scheduler):
                         # belt-and-suspenders: SQL gia' filtra
                         continue
 
-                    referenced = _recon.is_storage_key_referenced(
+                    referenced = storage_reconciliation_module.is_storage_key_referenced(
                         row.storage_key,
                         domain=row.domain,
                     )
                     if referenced is True:
                         # caller's DB save committed -> intent satisfied
-                        _recon.mark_done(row.id)
+                        storage_reconciliation_module.mark_done(row.id)
                         ui_done_count += 1
                         continue
                     if referenced is None:
@@ -1425,7 +1403,7 @@ class PlenoraBeatScheduler(Scheduler):
                         # Increment attempts + backoff -> retry next tick
                         new_attempts = row.attempts + 1
                         if new_attempts >= max_attempts:
-                            _recon.mark_lost(
+                            storage_reconciliation_module.mark_lost(
                                 row.id,
                                 error=(
                                     "upload_intent_ref_check_failed "
@@ -1434,11 +1412,11 @@ class PlenoraBeatScheduler(Scheduler):
                             )
                             ui_lost_count += 1
                         else:
-                            next_retry = _recon.compute_next_retry_at(
+                            next_retry = storage_reconciliation_module.compute_next_retry_at(
                                 new_attempts,
                                 base_seconds=backoff_base,
                             )
-                            _recon.mark_failed_attempt(
+                            storage_reconciliation_module.mark_failed_attempt(
                                 row.id,
                                 error="upload_intent_ref_check_failed",
                                 next_retry_at=next_retry,
@@ -1447,29 +1425,29 @@ class PlenoraBeatScheduler(Scheduler):
                         continue
 
                     # referenced is False -> orphan candidate
-                    outcome = compensating_delete(
+                    outcome = storage_compensation.compensating_delete(
                         row.storage_key,
                         domain=row.domain,
                         reason="upload_intent_orphan",
                         extras={"reconciliation_id": row.id},
                     )
                     if outcome == "ok":
-                        _recon.mark_orphan_deleted(row.id)
+                        storage_reconciliation_module.mark_orphan_deleted(row.id)
                         ui_orphan_count += 1
                     else:
                         new_attempts = row.attempts + 1
                         if new_attempts >= max_attempts:
-                            _recon.mark_lost(
+                            storage_reconciliation_module.mark_lost(
                                 row.id,
                                 error=f"upload_intent_max_attempts ({new_attempts})",
                             )
                             ui_lost_count += 1
                         else:
-                            next_retry = _recon.compute_next_retry_at(
+                            next_retry = storage_reconciliation_module.compute_next_retry_at(
                                 new_attempts,
                                 base_seconds=backoff_base,
                             )
-                            _recon.mark_failed_attempt(
+                            storage_reconciliation_module.mark_failed_attempt(
                                 row.id,
                                 error="upload_intent_compensating_delete_failed",
                                 next_retry_at=next_retry,
@@ -1493,7 +1471,7 @@ class PlenoraBeatScheduler(Scheduler):
         # set di righe lette da `fetch_due_pending_deletes`. Entrambi
         # best-effort: errori loggati, il tick non crasha
         try:
-            counts = _recon.count_active_by_state_domain()
+            counts = storage_reconciliation_module.count_active_by_state_domain()
             if counts:
                 # Aggregato totale per livello (utile per alerting su
                 # threshold) + per-row breakdown per dashboard manuale
@@ -1522,7 +1500,7 @@ class PlenoraBeatScheduler(Scheduler):
         if retention_days > 0 and prune_batch > 0:
             try:
                 cutoff = _dt.now(_tz.utc) - _td(days=retention_days)
-                pruned = _recon.prune_terminal_older_than(
+                pruned = storage_reconciliation_module.prune_terminal_older_than(
                     older_than=cutoff,
                     limit=prune_batch,
                 )

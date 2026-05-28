@@ -16,6 +16,8 @@ from typing_extensions import TypedDict
 
 import jwt
 
+from app.config import settings as _settings
+from app.environment import environment_name, get_env
 
 ALGORITHM = "HS256"
 
@@ -34,8 +36,6 @@ class AccessTokenPayload(TypedDict, total=False):
 # costante e' parte del contratto modulo (consumata da `auth.auth` e
 # da test-contract `test_jwt_token_module_contract`). Importare settings
 # inizializza app.config prima delle letture env sottostanti.
-from app.config import settings as _settings
-from app.environment import environment_name, get_env
 ACCESS_TOKEN_EXPIRE_HOURS = int(_settings.get("JWT_EXPIRE_HOURS"))
 
 _jwt_env_value = (get_env("JWT_SECRET_KEY", "") or "").strip()

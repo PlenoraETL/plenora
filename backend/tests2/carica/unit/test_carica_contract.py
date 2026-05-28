@@ -59,7 +59,7 @@ def test_load_upstream_data_does_not_fallback_to_latest_project_result_after_fai
     # stub).
     with patch("app.core.projects.runtime_context.get_project_runtime_context", return_value=None), \
          patch(
-             "workers.tasks.carica_task.build_orchestrator_stack",
+             "app.runtime.services.build_orchestrator_stack",
              return_value=SimpleNamespace(orchestrator=orchestrator),
          ):
         result = _load_upstream_data(

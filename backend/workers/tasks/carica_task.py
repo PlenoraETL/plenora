@@ -47,7 +47,6 @@ from app.core.intermediate.run_idempotency import is_already_completed
 from app.core.projects.runtime_context import get_project_runtime_context
 from app.core.projects.service import ProjectService
 from app.db.pg_connection import close_connection as _close_config_connection
-from app.runtime.services import build_orchestrator_stack
 from app.utils.debug_payload_builder import DebugPayloadBuilder
 
 from workers.celery_app import celery_app, BaseTaskWithRetry
@@ -841,6 +840,8 @@ def _load_upstream_data(
         # Runtime composition owns the executor graph. CARICA must not rely on
         # OrchestratorService fallback builders, otherwise the worker path
         # diverges from the API/data-plane contract wiring.
+        from app.runtime.services import build_orchestrator_stack
+
         orchestrator_stack = build_orchestrator_stack()
         orchestrator = orchestrator_stack.orchestrator
 

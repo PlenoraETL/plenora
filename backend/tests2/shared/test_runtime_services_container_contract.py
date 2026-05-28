@@ -479,17 +479,19 @@ def test_factory_does_not_reconstruct_api_connection_service():
             continue
         assert "ApiConnectionService(" not in line, (
             f"app/runtime/services.py constructs ApiConnectionService "
-            f"on line: {line!r}. Use the canonical singleton import "
-            "instead (`from app.core.arricchisci.api_connector "
-            "import api_connection_service`)."
+            f"on line: {line!r}. Use the canonical singleton attribute "
+            "from `app.core.arricchisci.api_connector` instead."
         )
-    # Positive assertion: the factory imports the singleton.
+    # Positive assertion: the factory consumes the singleton from the
+    # canonical module attribute, preserving patchability while avoiding
+    # direct symbol binding at import time.
     assert (
-        "from app.core.arricchisci.api_connector import api_connection_service"
+        "from app.core.arricchisci import api_connector as api_connector_module"
         in src
+        and "api_connector_module.api_connection_service" in src
     ), (
-        "app/runtime/services.py must import the canonical singleton "
-        "to preserve the public/patch surface."
+        "app/runtime/services.py must consume the canonical singleton "
+        "module attribute to preserve the public/patch surface."
     )
 
 
@@ -561,15 +563,17 @@ def test_factory_does_not_reconstruct_datasource_service():
             continue
         assert "DataSourceService(" not in line, (
             f"app/runtime/services.py constructs DataSourceService "
-            f"on line: {line!r}. Use the canonical singleton import "
-            "instead (`from app.core.datasources.service "
-            "import datasource_service`)."
+            f"on line: {line!r}. Use the canonical singleton attribute "
+            "from `app.core.datasources.service` instead."
         )
-    # Positive assertion: the factory imports the singleton.
+    # Positive assertion: the factory consumes the singleton from the
+    # canonical module attribute, preserving patchability while avoiding
+    # direct symbol binding at import time.
     assert (
-        "from app.core.datasources.service import datasource_service"
+        "from app.core.datasources import service as datasource_service_module"
         in src
+        and "datasource_service_module.datasource_service" in src
     ), (
         "app/runtime/services.py must import the canonical "
-        "datasource_service singleton to preserve the public surface."
+        "datasource_service module attribute to preserve the public surface."
     )

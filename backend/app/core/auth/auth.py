@@ -28,18 +28,58 @@ from app.core.auth.roles import (  # noqa: F401 (explicit public auth API)
     ROLES_ADMIN_OR_ABOVE,
     ROLES_KIOSK_ONLY,
 )
-
-logger = get_logger(__name__)
-
-# Login rate-limit constants stay module-level because security tests
-# monkeypatch them directly through this public auth facade.
 from app.core.auth.rate_limit_fallback import (
     RateLimitFallbackTriggered,
     _STORE as _rate_limit_fallback_store,
     record_failed_login_in_memory as _record_failed_login_in_memory,
     clear_failed_logins_in_memory as _clear_failed_logins_in_memory,
 )
+from app.core.auth.jwt_token import (  # noqa: F401 (explicit public auth API)
+    ALGORITHM,
+    ACCESS_TOKEN_EXPIRE_HOURS,
+    SECRET_KEY,
+    create_access_token,
+    decode_token,
+)
+from app.core.auth.models import (  # noqa: F401 (explicit public auth API)
+    LoginRequest,
+    TokenResponse,
+    CurrentUser,
+    ChangePasswordRequest,
+    UserResponse,
+    GroupResponse,
+    MFAEnrollResponse,
+    MFAVerifyRequest,
+    MFADisableRequest,
+    MFAStatusResponse,
+)
+from app.core.security.password_hashing import (  # noqa: F401 (explicit public auth API)
+    _ph,
+    hash_password,
+    verify_password,
+    needs_rehash,
+    _DUMMY_PASSWORD_HASH,
+)
+from app.core.auth.dependencies import (  # noqa: F401 (explicit public auth API)
+    _bearer_scheme,
+    get_current_user,
+    require_admin,
+    require_not_esecutore,
+    require_superadmin,
+    require_user_or_above,
+)
+from app.core.auth.owner_dependencies import (  # noqa: F401 (explicit public auth API)
+    require_file_owner,
+    require_project_owner,
+    require_schedule_owner,
+)
+from app.core.auth.users_router import users_router  # noqa: F401
+from app.core.auth.groups_router import groups_router  # noqa: F401
 
+logger = get_logger(__name__)
+
+# Login rate-limit constants stay module-level because security tests
+# monkeypatch them directly through this public auth facade.
 LOGIN_MAX_ATTEMPTS    = int(_settings.get("LOGIN_MAX_ATTEMPTS"))
 LOGIN_WINDOW_SECONDS  = int(_settings.get("LOGIN_WINDOW_SECONDS"))
 LOGIN_LOCKOUT_SECONDS = int(_settings.get("LOGIN_LOCKOUT_SECONDS"))
@@ -96,29 +136,6 @@ def _clear_failed_logins(ip: str):
     )
 
 
-# Keep these as explicit public auth facade exports for existing callers.
-from app.core.auth.jwt_token import (  # noqa: F401 (explicit public auth API)
-    ALGORITHM,
-    ACCESS_TOKEN_EXPIRE_HOURS,
-    SECRET_KEY,
-    create_access_token,
-    decode_token,
-)
-
-
-from app.core.auth.models import (  # noqa: F401 (explicit public auth API)
-    LoginRequest,
-    TokenResponse,
-    CurrentUser,
-    ChangePasswordRequest,
-    UserResponse,
-    GroupResponse,
-    MFAEnrollResponse,
-    MFAVerifyRequest,
-    MFADisableRequest,
-    MFAStatusResponse,
-)
-
 class UserResponsePayload(TypedDict):
     id: str
     username: str
@@ -139,37 +156,6 @@ def _user_response_payload(user: db.UserRow) -> UserResponsePayload:
         "is_active": user.is_active,
         "created_at": user.created_at,
     }
-
-
-from app.core.security.password_hashing import (  # noqa: F401 (explicit public auth API)
-    _ph,
-    hash_password,
-    verify_password,
-    needs_rehash,
-    _DUMMY_PASSWORD_HASH,
-)
-
-# Public auth API exports for existing callers; new domain imports should use
-# `app.core.auth.dependencies` directly.
-
-from app.core.auth.dependencies import (  # noqa: F401 (explicit public auth API)
-    _bearer_scheme,
-    get_current_user,
-    require_admin,
-    require_not_esecutore,
-    require_superadmin,
-    require_user_or_above,
-)
-
-# Owner dependencies remain part of the explicit auth API. Domain
-# modules should import them from `app.core.auth.owner_dependencies`
-# directly.
-
-from app.core.auth.owner_dependencies import (  # noqa: F401 (explicit public auth API)
-    require_file_owner,
-    require_project_owner,
-    require_schedule_owner,
-)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -364,12 +350,6 @@ def mfa_disable(
     if not _mfa.disable(current_user.user_id, data.code):
         _disclosure.raise_disclosure(_disclosure.mfa_code_invalid())
     return {"ok": True, "enabled": False}
-
-
-from app.core.auth.users_router import users_router  # noqa: F401
-
-
-from app.core.auth.groups_router import groups_router  # noqa: F401
 
 
 __all__ = [

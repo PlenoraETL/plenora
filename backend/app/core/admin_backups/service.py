@@ -16,6 +16,14 @@ from app.core.admin_backups.backup_run_store import (
     release_manual_backup_lock,
     try_acquire_manual_backup_lock,
 )
+from app.core.io.object_storage import (
+    ObjectStorageDisabledError,
+    aws_credentials_error_message,
+    get_backup_object_storage,
+)
+from app.infrastructure.storage.cloud_backends import (
+    _resolve_backup_bucket as _resolve_backup_bucket_env,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -120,15 +128,6 @@ def _to_datetime(value: Any) -> datetime:
 # NOTE: legacy alias `BACKUP_S3_REGION` era un dead alias (zero altri
 # consumer in repo) e viene retirato qui
 # schedule cron / description -> `Settings.DEFAULTS` (APP_POLICY
-
-from app.core.io.object_storage import (
-    ObjectStorageDisabledError,
-    aws_credentials_error_message,
-    get_backup_object_storage,
-)
-from app.infrastructure.storage.cloud_backends import (
-    _resolve_backup_bucket as _resolve_backup_bucket_env,
-)
 
 # P1 (2026-05-26): rimosso fallback hardcoded con AWS account ID reale
 # (`plenora-backup-112011134642-eu-south-1-an`). L'account ID era

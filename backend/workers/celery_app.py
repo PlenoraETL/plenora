@@ -5,6 +5,15 @@ Broker: redis://localhost:6379/0
 """
 
 from celery import Celery
+from celery.schedules import schedule as _celery_schedule
+from celery.signals import (
+    before_task_publish,
+    task_prerun,
+    task_postrun,
+    worker_init,
+    worker_process_init,
+    beat_init,
+)
 from kombu import Queue
 from app.config import settings
 from app.environment import env_flag
@@ -79,8 +88,6 @@ celery_app.conf.update(
 
 
 if env_flag("PLENORA_CLEANROOM_BEAT_PING"):
-    from celery.schedules import schedule as _celery_schedule
-
     celery_app.conf.beat_schedule = {
         **(celery_app.conf.beat_schedule or {}),
         "cleanroom-beat-ping": {
@@ -97,8 +104,6 @@ if env_flag("PLENORA_CLEANROOM_BEAT_PING"):
 # Vedi `workers/tasks/cleanup_temp_files_task.py`. Sempre registrato,
 # no env-gate: il task e' idempotente e su una tabella vuota ha costo
 # trascurabile (una SELECT su index parziale `idx_file_sources_temp_expires`).
-from celery.schedules import schedule as _celery_schedule
-
 celery_app.conf.beat_schedule = {
     **(celery_app.conf.beat_schedule or {}),
     "cleanup-temp-files-hourly": {
@@ -147,16 +152,6 @@ class BaseTaskWithRetry(celery_app.Task):
 
 
 celery_app.Task = BaseTaskWithRetry
-
-
-from celery.signals import (
-    before_task_publish,
-    task_prerun,
-    task_postrun,
-    worker_init,
-    worker_process_init,
-    beat_init,
-)
 
 
 def _bootstrap_worker_process(*, force_reset: bool = False) -> None:

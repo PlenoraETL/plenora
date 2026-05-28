@@ -74,11 +74,13 @@ def test_enrichment_task_no_direct_singleton_mutation():
 
 def test_enrichment_task_imports_and_uses_typed_context():
     """`enrichment_task.py` deve importare `ArricchisciExecutionContext`
-    dal modulo `execution_context` e costruire il context esplicitamente.
-    Il worker NON muta `svc._current_group_id` direttamente."""
+    tramite il modulo `execution_context` e costruire il context
+    esplicitamente. Il worker NON muta `svc._current_group_id`
+    direttamente."""
     src = _ENRICHMENT_TASK_PY.read_text(encoding="utf-8")
     assert (
-        "from app.core.arricchisci.execution_context import" in src
+        "from app.core.arricchisci import execution_context "
+        "as execution_context_module" in src
     ), "Atteso import del modulo execution_context."
     assert "ArricchisciExecutionContext(" in src, (
         "Atteso costruzione esplicita di ArricchisciExecutionContext."

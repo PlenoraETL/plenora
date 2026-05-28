@@ -21,6 +21,8 @@ from pydantic import (
     StrictStr,
     TypeAdapter,
 )
+from app.db.pg_connection import unit_of_work
+from app.db.sql_safety import safe_set_clause
 
 
 def _coerce_timestamp_to_str(value: Any) -> Any:
@@ -39,9 +41,6 @@ def _coerce_timestamp_to_str(value: Any) -> Any:
 
 
 _TimestampStr = Annotated[StrictStr, BeforeValidator(_coerce_timestamp_to_str)]
-
-from app.db.pg_connection import unit_of_work
-from app.db.sql_safety import safe_set_clause
 
 
 @dataclass(frozen=True)

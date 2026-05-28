@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from app.core.arricchisci.api_connector import ApiConnectionService
-    from app.core.datasources.service import DataSourceService
-    from app.core.estrai.database_inspector import DatabaseInspector
-    from app.core.estrai.query_generator import QueryGenerator
-    from app.core.features.features_service import FeaturesService
-    from app.core.orchestrator.service import OrchestratorService
-    from app.db.query_executor import QueryExecutor
-    from app.core.connections.service import ConnectionService
-    from app.core.projects.service import ProjectService
+from app.core.arricchisci import api_connector as api_connector_module
+from app.core.arricchisci import executor as enrich_executor_module
+from app.core.connections import service as connection_service_module
+from app.core.datasources import service as datasource_service_module
+from app.core.estrai import database_inspector as database_inspector_module
+from app.core.estrai import executor as estrai_executor_module
+from app.core.estrai import query_generator as query_generator_module
+from app.core.features import features_service as features_service_module
+from app.core.manipola import executor as manipola_executor_module
+from app.core.orchestrator import service as orchestrator_service_module
+from app.core.projects import service as project_service_module
+from app.db import query_executor as query_executor_module
 
 
 __all__ = [
@@ -29,12 +31,12 @@ __all__ = [
 class OrchestratorStack:
     """Small runtime bundle for callers that only need pipeline execution."""
 
-    project_service: "ProjectService"
-    connection_service: "ConnectionService"
-    query_generator: "QueryGenerator"
-    query_executor: "QueryExecutor"
-    features_service: "FeaturesService"
-    orchestrator: "OrchestratorService"
+    project_service: project_service_module.ProjectService
+    connection_service: connection_service_module.ConnectionService
+    query_generator: query_generator_module.QueryGenerator
+    query_executor: query_executor_module.QueryExecutor
+    features_service: features_service_module.FeaturesService
+    orchestrator: orchestrator_service_module.OrchestratorService
 
 
 @dataclass(frozen=True)
@@ -74,15 +76,15 @@ class RuntimeServices:
         in `main.py`, no router-side change required.
     """
 
-    project_service: "ProjectService"
-    connection_service: "ConnectionService"
-    database_inspector: "DatabaseInspector"
-    query_generator: "QueryGenerator"
-    query_executor: "QueryExecutor"
-    features_service: "FeaturesService"
-    orchestrator: "OrchestratorService"
-    api_connection_service: "ApiConnectionService"
-    datasource_service: "DataSourceService"
+    project_service: project_service_module.ProjectService
+    connection_service: connection_service_module.ConnectionService
+    database_inspector: database_inspector_module.DatabaseInspector
+    query_generator: query_generator_module.QueryGenerator
+    query_executor: query_executor_module.QueryExecutor
+    features_service: features_service_module.FeaturesService
+    orchestrator: orchestrator_service_module.OrchestratorService
+    api_connection_service: api_connector_module.ApiConnectionService
+    datasource_service: datasource_service_module.DataSourceService
 
 
 def build_orchestrator_stack(
@@ -95,22 +97,13 @@ def build_orchestrator_stack(
     composition boundary while preserving standalone callers such as
     scheduler and arricchisci recompute paths.
     """
-    # Lazy imports keep this module cheap to load for contract tests.
-    from app.core.estrai.query_generator import QueryGenerator
-    from app.core.estrai.executor import EstraiExecutor
-    from app.core.features.features_service import FeaturesService
-    from app.core.manipola.executor import ManipolaExecutor
-    from app.core.arricchisci.executor import EnrichExecutor
-    from app.core.orchestrator.service import OrchestratorService
-    from app.db.query_executor import QueryExecutor
-    from app.core.connections.service import ConnectionService
-    from app.core.projects.service import ProjectService
-
-    project_service = ProjectService()
-    resolved_connection_service = connection_service or ConnectionService()
-    query_generator = QueryGenerator()
-    query_executor = QueryExecutor()
-    features_service = FeaturesService()
+    project_service = project_service_module.ProjectService()
+    resolved_connection_service = (
+        connection_service or connection_service_module.ConnectionService()
+    )
+    query_generator = query_generator_module.QueryGenerator()
+    query_executor = query_executor_module.QueryExecutor()
+    features_service = features_service_module.FeaturesService()
 
     orchestrator = None
 
@@ -119,20 +112,22 @@ def build_orchestrator_stack(
             raise RuntimeError("Orchestrator dispatcher used before wiring")
         return orchestrator.execute_pipeline(*args, **kwargs)
 
-    estrai_executor = EstraiExecutor(
+    estrai_executor = estrai_executor_module.EstraiExecutor(
         project_service=project_service,
         executor=query_executor,
         generator=query_generator,
         connection_service=resolved_connection_service,
         features_service=features_service,
     )
-    manipola_executor = ManipolaExecutor(
+    manipola_executor = manipola_executor_module.ManipolaExecutor(
         project_service=project_service,
         pipeline_dispatcher=dispatch_pipeline,
     )
-    enrich_executor = EnrichExecutor(project_service=project_service)
+    enrich_executor = enrich_executor_module.EnrichExecutor(
+        project_service=project_service
+    )
 
-    orchestrator = OrchestratorService(
+    orchestrator = orchestrator_service_module.OrchestratorService(
         project_service=project_service,
         executor=query_executor,
         generator=query_generator,
@@ -169,16 +164,8 @@ def build_runtime_services() -> RuntimeServices:
         by `app.bootstrap`. A contract test locks the order
         invariant.
     """
-    # Lazy imports keep this module cheap to load for contract tests.
-    from app.core.estrai.database_inspector import DatabaseInspector
-    from app.core.connections.service import ConnectionService
-
-    from app.core.arricchisci.api_connector import api_connection_service
-
-    from app.core.datasources.service import datasource_service
-
-    connection_service = ConnectionService()
-    database_inspector = DatabaseInspector()
+    connection_service = connection_service_module.ConnectionService()
+    database_inspector = database_inspector_module.DatabaseInspector()
     orchestrator_stack = build_orchestrator_stack(
         connection_service=connection_service,
     )
@@ -191,6 +178,6 @@ def build_runtime_services() -> RuntimeServices:
         query_executor=orchestrator_stack.query_executor,
         features_service=orchestrator_stack.features_service,
         orchestrator=orchestrator_stack.orchestrator,
-        api_connection_service=api_connection_service,
-        datasource_service=datasource_service,
+        api_connection_service=api_connector_module.api_connection_service,
+        datasource_service=datasource_service_module.datasource_service,
     )

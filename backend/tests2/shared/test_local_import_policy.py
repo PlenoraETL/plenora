@@ -26,8 +26,8 @@ _SCAN_ROOTS = (
 
 # Baseline corrente: ogni nuovo import locale aumenta accoppiamento nascosto.
 # La soglia puo' solo scendere; se sale, il reviewer deve giustificare il caso.
-MAX_LOCAL_IMPORTS = 495
-MAX_LATE_MODULE_IMPORTS = 30
+MAX_LOCAL_IMPORTS = 422
+MAX_LATE_MODULE_IMPORTS = 8
 
 
 def _iter_py_files() -> Iterable[Path]:

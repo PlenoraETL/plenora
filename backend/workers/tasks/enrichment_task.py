@@ -17,10 +17,33 @@ from pathlib import Path
 from typing import Any, Optional, List
 from workers.celery_app import celery_app
 from app.config import settings
+from app.core.artifacts import resolver as artifact_resolver_module
+from app.core.auth import async_user_recheck as async_user_recheck_module
+from app.core.arricchisci import api_connector as api_connector_module
+from app.core.arricchisci import canvas_orchestrator as canvas_orchestrator_module
+from app.core.arricchisci import execution_context as execution_context_module
+from app.core.arricchisci import parallel as parallel_module
+from app.core.dataframes import export_writer as dataframe_export_writer
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.values import is_dataframe, is_nonempty_dataframe
+from app.core.eseguibili import db as eseguibili_db
+from app.core.eseguibili import storage as eseg_storage
+from app.core.files import service as files_service
+from app.core.imdf import loader as imdf_loader
+from app.core.imdf import persist as imdf_persist
+from app.core.intermediate import run_idempotency as run_idempotency_module
+from app.core.intermediate import run_lifecycle as run_lifecycle_module
+from app.core.intermediate import snapshot as intermediate_snapshot
+from app.core.intermediate import writer as intermediate_writer
+from app.core import output_contract as output_contract_module
+from app.core.projects import retention as project_retention
+from app.core.projects import service as project_service_module
+from app.core.results import blob_writer as result_blob_writer
+from app.core.results import pipeline_result as pipeline_result_module
+from app.core.results import store as result_store
 from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
+from app.utils import debug_payload_builder as debug_payload_builder_module
 from app.core.arricchisci.enrichment_service import EnrichmentExecutor, generate_error_report
 from app.core.arricchisci.models import EnrichmentOptions
 
@@ -135,9 +158,7 @@ def execute_enrichment_task(
     task_id = self.request.id
 
     if run_id is not None:
-        from app.core.intermediate.run_idempotency import is_already_completed
-
-        if is_already_completed(run_id):
+        if run_idempotency_module.is_already_completed(run_id):
             logger.info(
                 f"[IDEMPOTENCY] Task ENRICHMENT {task_id}: run_id {run_id} "
                 f"gia' completato con successo, skip."
@@ -155,9 +176,7 @@ def execute_enrichment_task(
     # Per is_eseguibile, skip: gli eseguibili hanno flusso di auth
     # separato (token eseguibile) e non passano per user_id interattivo
     if not is_eseguibile:
-        from app.core.auth.async_user_recheck import recheck_user_authorized
-
-        _revoked = recheck_user_authorized(
+        _revoked = async_user_recheck_module.recheck_user_authorized(
             user_id=user_id, project_id=project_id,
             task_id=task_id, run_id=run_id or "", task_name="ENRICHMENT",
         )
@@ -198,9 +217,7 @@ def execute_enrichment_task(
     if is_eseguibile:
         _run_id = None
         try:
-            from app.core.eseguibili.db import get_eseguibile
-
-            _eseg = get_eseguibile(project_id)
+            _eseg = eseguibili_db.get_eseguibile(project_id)
             _group_id = (_eseg.get("group_id") or "") if _eseg else ""
         except Exception as _ge:
             logger.warning(
@@ -210,20 +227,13 @@ def execute_enrichment_task(
     else:
         _run_id = str(_uuid.uuid4())
         try:
-            from app.core.intermediate.run_lifecycle import (
-                create_run,
-                get_default_runs_retention,
-            )
-            from app.core.projects.retention import resolve_runs_retention_n
-            from app.core.projects.service import ProjectService
-
-            _meta = ProjectService().get_project_metadata(project_id)
+            _meta = project_service_module.ProjectService().get_project_metadata(project_id)
             _group_id = getattr(_meta, 'group_id', 'unknown') if _meta else 'unknown'
-            _retention_n = resolve_runs_retention_n(
+            _retention_n = project_retention.resolve_runs_retention_n(
                 project_id,
-                default=get_default_runs_retention(),
+                default=run_lifecycle_module.get_default_runs_retention(),
             )
-            create_run(
+            run_lifecycle_module.create_run(
                 run_id=_run_id,
                 canvas_id=project_id,
                 group_id=_group_id,
@@ -252,9 +262,7 @@ def execute_enrichment_task(
         # sullo stesso worker process (Celery prefork riusa i fork
         # Un'istanza locale per task garantisce isolamento totale del tenant
         # binding
-        from app.core.arricchisci.api_connector import ApiConnectionService
-
-        api_connection_service = ApiConnectionService()
+        api_connection_service = api_connector_module.ApiConnectionService()
         # — costruisci un
         # `ArricchisciExecutionContext` tipato esplicito; il context
         # viene threadato esplicitamente ai 4 mixin callsite
@@ -267,11 +275,7 @@ def execute_enrichment_task(
         # worker. Post-OE012 la funzione legacy `apply_to_legacy_state`
         # `tests2/arricchisci/unit/test_external_consumers_ctx_migration_contract.py`
         # protegge contro re-introduzione
-        from app.core.arricchisci.execution_context import (
-            ArricchisciExecutionContext,
-        )
-
-        ctx = ArricchisciExecutionContext(
+        ctx = execution_context_module.ArricchisciExecutionContext(
             project_id=project_id,
             group_id=(
                 _group_id if _group_id and _group_id != 'unknown' else None
@@ -296,10 +300,7 @@ def execute_enrichment_task(
         
         update_task_progress(self, 10, "API caricate, inizio elaborazione...", task_id=task_id)
 
-        from app.core.arricchisci.canvas_orchestrator import (
-            get_execution_order,
-        )
-        execution_order = get_execution_order(nodes, edges)
+        execution_order = canvas_orchestrator_module.get_execution_order(nodes, edges)
         node_results = {}
         
         # compute_parallel_groups raggruppa api_enrich consecutivi che non
@@ -307,9 +308,7 @@ def execute_enrichment_task(
         # presenti nel DataFrame al momento del gruppo) → possono girare
         # concorrentemente. I nodi di tipo source/static/result restano
         # "single" (eseguiti uno alla volta
-        from app.core.arricchisci.parallel import compute_parallel_groups, should_execute_node
-
-        parallel_groups = compute_parallel_groups(
+        parallel_groups = parallel_module.compute_parallel_groups(
             execution_order, nodes, edges,
             api_connections=api_connections,
         )
@@ -457,7 +456,7 @@ def execute_enrichment_task(
 
             _input_edge_check = next((e for e in edges if e["target"] == node_id), None)
             _input_df_check = node_results.get(_input_edge_check["source"]) if _input_edge_check else None
-            if not should_execute_node(node_data, _input_df_check):
+            if not parallel_module.should_execute_node(node_data, _input_df_check):
                 logger.info(f"[Task {task_id}] Nodo {node_id} skippato (execute_if)")
                 update_task_progress(self, node_progress, f"Nodo {node_id} skippato (condizione)", task_id=task_id)
                 node_results[node_id] = _input_df_check
@@ -651,9 +650,7 @@ def execute_enrichment_task(
                             )
                             if error_report_bytes:
                                 error_report_file = f"enrichment_errors_{task_id}.csv"
-                                from app.core.results.blob_writer import save_result_blob_from_bytes
-
-                                error_report_result_id = save_result_blob_from_bytes(
+                                error_report_result_id = result_blob_writer.save_result_blob_from_bytes(
                                     project_id=project_id,
                                     data=error_report_bytes,
                                     filename=error_report_file,
@@ -680,11 +677,7 @@ def execute_enrichment_task(
                 try:
                     _df = result if is_nonempty_dataframe(result) else None
                     if _df is not None:
-                        from app.core.intermediate.snapshot import (
-                            record_checkpoint_snapshot,
-                        )
-
-                        record_checkpoint_snapshot(
+                        intermediate_snapshot.record_checkpoint_snapshot(
                             run_id=_run_id,
                             module="arricchisci",
                             node_id=node_id,
@@ -855,9 +848,7 @@ def execute_enrichment_task(
             metadata_rows_count: Optional[int] = None
             if not needs_full_bytes:
                 try:
-                    from app.core.results import store as _result_store
-
-                    metadata_row = _result_store.get_result_row(upstream_result_id)
+                    metadata_row = result_store.get_result_row(upstream_result_id)
                     if metadata_row is not None and metadata_row.rows_count is not None:
                         metadata_rows_count = int(metadata_row.rows_count)
                 except Exception as _md_e:
@@ -891,9 +882,7 @@ def execute_enrichment_task(
                         f"(placeholder connector), fetch_run_blob per "
                         f"count reale"
                     )
-                from app.core.artifacts.resolver import ArtifactResolver
-
-                blob = ArtifactResolver().fetch_run_blob(
+                blob = artifact_resolver_module.ArtifactResolver().fetch_run_blob(
                     result_id=upstream_result_id,
                     expected_project_id=project_id,
                 )
@@ -947,10 +936,7 @@ def execute_enrichment_task(
             imdf_metadata: Optional[JsonObject] = None
             if has_imdf_upstream and ext == ".zip":
                 try:
-                    from app.core.imdf.loader import extract_imdf_zip_bytes
-                    from app.core.imdf.persist import persist_imdf_bundle
-
-                    bundle = extract_imdf_zip_bytes(output_bytes)
+                    bundle = imdf_loader.extract_imdf_zip_bytes(output_bytes)
 
                     # IMDF-3: single-call persistence verso storage canonico.
                     # `persist_imdf_bundle` orchestra upload bundle.files +
@@ -958,7 +944,7 @@ def execute_enrichment_task(
                     # save_bundle separato.
                     bundle_persisted = False
                     try:
-                        persist_imdf_bundle(
+                        imdf_persist.persist_imdf_bundle(
                             bundle, task_id=task_id, project_id=project_id,
                         )
                         bundle_persisted = True
@@ -994,9 +980,7 @@ def execute_enrichment_task(
                 # frontend scarica via GET /api/eseguibili/{id}/download/{task_id}
                 # che streamma da S3 e cancella l'oggetto dopo l'invio.
                 # Post-Phase5: bytes-first via `save_bytes` (skippa FS).
-                from app.core.eseguibili import storage as _eseg_storage
-
-                _eseg_storage.save_bytes(task_id, final_name, output_bytes)
+                eseg_storage.save_bytes(task_id, final_name, output_bytes)
                 logger.info(
                     f"[Task {task_id}] Output eseguibile su storage: "
                     f"eseguibili-outputs/{task_id}/{final_name}"
@@ -1032,16 +1016,12 @@ def execute_enrichment_task(
                                 f"[Task {task_id}] rename richiesto, re-fetch "
                                 f"output_bytes per re-persist con final_name='{final_name}'"
                             )
-                            from app.core.artifacts.resolver import ArtifactResolver
-
-                            blob_for_resave = ArtifactResolver().fetch_run_blob(
+                            blob_for_resave = artifact_resolver_module.ArtifactResolver().fetch_run_blob(
                                 result_id=upstream_result_id,
                                 expected_project_id=project_id,
                             )
                             output_bytes = blob_for_resave.data
-                        from app.core.results.blob_writer import save_result_blob_from_bytes
-
-                        result_id = save_result_blob_from_bytes(
+                        result_id = result_blob_writer.save_result_blob_from_bytes(
                             project_id=project_id,
                             data=output_bytes,
                             filename=final_name,
@@ -1152,11 +1132,6 @@ def execute_enrichment_task(
             # solo chunk_buffer (~8MB part_size) per CSV/JSON.
             # Formati binari (xlsx/parquet/shp/gpkg/gdb): single-chunk
             # fallback by-design (writer footer-based o multi-file).
-            from app.core.eseguibili import storage as _eseg_storage
-            from app.core.dataframes.export_writer import (
-                dataframe_to_export_chunks,
-            )
-
             fmt_lower = (final_format or "").lower()
             # SHP esce zippato: rinomina il filename su storage in `.zip`.
             storage_filename = (
@@ -1164,10 +1139,10 @@ def execute_enrichment_task(
                 if fmt_lower == "shp"
                 else final_filename
             )
-            _eseg_storage.save_chunks(
+            eseg_storage.save_chunks(
                 task_id,
                 storage_filename,
-                dataframe_to_export_chunks(final_df, fmt_lower),
+                dataframe_export_writer.dataframe_to_export_chunks(final_df, fmt_lower),
             )
             saved_path = Path(storage_filename)  # per metadata payload
             logger.info(
@@ -1176,9 +1151,7 @@ def execute_enrichment_task(
             )
         else:
             # Arricchisci standard: typed pipeline-result boundary.
-            from app.core.results.pipeline_result import save_pipeline_result_outcome
-
-            saved = save_pipeline_result_outcome(
+            saved = pipeline_result_module.save_pipeline_result_outcome(
                 project_id=project_id,
                 df=final_df,
                 output_format=final_format,
@@ -1189,11 +1162,8 @@ def execute_enrichment_task(
             saved_path = Path(saved.output_filename)
             logger.info(f"[Task {task_id}] Risultato persistito: {result_id}")
 
-            from app.core.projects.service import ProjectService
-            from app.core.output_contract import build_output_contract
-
-            _project_service = ProjectService()
-            output_contract = build_output_contract(
+            _project_service = project_service_module.ProjectService()
+            output_contract = output_contract_module.build_output_contract(
                 project_id=project_id,
                 result_columns=[
                     {"name": col, "type": str(final_df[col].dtype)}
@@ -1239,9 +1209,7 @@ def execute_enrichment_task(
 
         if _run_id and result_node and not is_eseguibile:
             try:
-                from app.core.intermediate.snapshot import record_final_snapshot
-
-                record_final_snapshot(
+                intermediate_snapshot.record_final_snapshot(
                     run_id=_run_id,
                     module="arricchisci",
                     node_id=result_node["id"],
@@ -1261,9 +1229,7 @@ def execute_enrichment_task(
             def _async_close(_r: str = _rid_c, _t: float = _exec_time,
                              _rn: int | None = _retention_c) -> None:
                 try:
-                    from app.core.intermediate.writer import close_run as close_intermediate_writer_run
-
-                    close_intermediate_writer_run(
+                    intermediate_writer.close_run(
                         run_id=_r,
                         input_hash="",
                         output_hash="",
@@ -1322,9 +1288,7 @@ def execute_enrichment_task(
         if type(e).__name__ == "_EarlyTaskReturn" and hasattr(e, "payload"):
             if _run_id and not is_eseguibile:
                 try:
-                    from app.core.intermediate.writer import close_run as close_intermediate_writer_run
-
-                    close_intermediate_writer_run(
+                    intermediate_writer.close_run(
                         run_id=_run_id,
                         input_hash="",
                         output_hash="",
@@ -1347,9 +1311,7 @@ def execute_enrichment_task(
             return e.payload
         if _run_id and not is_eseguibile:
             try:
-                from app.core.intermediate.writer import close_run as close_intermediate_writer_run
-
-                close_intermediate_writer_run(
+                intermediate_writer.close_run(
                     run_id=_run_id,
                     input_hash="",
                     output_hash="",
@@ -1368,9 +1330,7 @@ def execute_enrichment_task(
 
         if not is_eseguibile:
             try:
-                from app.utils.debug_payload_builder import DebugPayloadBuilder
-
-                _debug_payload = DebugPayloadBuilder().build(
+                _debug_payload = debug_payload_builder_module.DebugPayloadBuilder().build(
                     run_id=_run_id or task_id,
                     project_id=project_id,
                     steps=[],
@@ -1428,15 +1388,10 @@ def _cleanup_temp_file_sources(file_source_ids: Optional[List[str]], task_id: st
     """
     if not file_source_ids:
         return
-    try:
-        from app.core.files.service import file_source_service
-    except Exception as e:
-        logger.warning(f"[Task {task_id}] Cleanup: import file_source_service fallito: {e}")
-        return
 
     for fsid in file_source_ids:
         try:
-            ok = file_source_service.delete_file_source(fsid)
+            ok = files_service.file_source_service.delete_file_source(fsid)
             if ok:
                 logger.info(f"[Task {task_id}] Cleanup: file source temp '{fsid}' eliminato")
             else:

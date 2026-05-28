@@ -7,8 +7,15 @@ Architettura (v3)
 import json
 import logging
 import builtins
+import re
+import sys
+import traceback
 from contextvars import ContextVar
+from datetime import datetime, timezone
+from threading import Lock
 from typing import Optional
+
+from app.config import settings
 
 # C8: contesto via ContextVar (non threading.local). ContextVar propaga
 # attraverso asyncio: `asyncio.create_task`, `asyncio.gather`, e
@@ -77,15 +84,6 @@ def set_user_id(user_id: str) -> None:
 
 def get_user_id() -> str:
     return _user_id_var.get() or ""
-
-import re
-import sys
-import traceback
-from datetime import datetime, timezone
-from threading import Lock
-
-from app.config import settings
-
 
 # SANIFICAZIONE LOG (difesa in profondità contro leak credenziali
 # Anche se i call site dovrebbero sanificare a monte (vedi
