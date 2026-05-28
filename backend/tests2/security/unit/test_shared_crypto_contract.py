@@ -18,8 +18,9 @@ def test_encrypt_is_idempotent():
     assert crypto.encrypt(encrypted) == encrypted
 
 
-def test_decrypt_keeps_legacy_plaintext_unchanged():
-    assert crypto.decrypt("legacy-plaintext") == "legacy-plaintext"
+def test_decrypt_rejects_plaintext():
+    with pytest.raises(RuntimeError, match="plaintext"):
+        crypto.decrypt("plain-secret")
 
 
 def test_encrypt_dict_fields_and_decrypt_dict_fields_roundtrip():

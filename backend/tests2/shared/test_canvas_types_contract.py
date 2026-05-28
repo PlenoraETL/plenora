@@ -30,7 +30,7 @@ def test_node_types_lockin():
         "multi_join", "comment", "datasource_node", "imdf_publisher",
     }
     # Sentinel: se qualcuno cambia un caso (es. "result" -> "Result") il
-    # canvas legacy rompe — qui catturiamo prima del deploy.
+    # canvas non valida piu' — qui catturiamo prima del deploy.
     assert "result" in ct.VALID_NODE_TYPES
     assert "carica_arcgis" in ct.VALID_NODE_TYPES  # snake_case canonico
 
@@ -65,26 +65,18 @@ def test_conflict_policies_lockin():
     "force", allineato all'executor e al FE
     (`frontend/src/constants/canvasTypes.js`).
 
-    Il validator `Node._normalize_conflict_policy` rimappa
-    "update" -> "force" per preservare canvas legacy eventualmente
-    salvati con il valore sbagliato (vedi
-    LEGACY_CONFLICT_POLICY_ALIASES).
+    "update" non e' piu' accettato: i canvas devono usare il valore
+    canonico "force".
     """
     assert set(ct.VALID_CONFLICT_POLICIES) == {"abort", "skip", "force"}
-
-
-def test_conflict_policy_legacy_alias_update_maps_to_force():
-    """Lock del mapping legacy "update" -> "force"."""
-    assert ct.LEGACY_CONFLICT_POLICY_ALIASES == {"update": "force"}
 
 
 def test_rest_methods_lockin():
     """
     Lock post fix-drift: POST/PUT/PATCH. DELETE rimosso — il FE non
     l'ha mai esposto in UI e la semantica CARICA su DELETE non era
-    definita. Canvas legacy con rest_method="DELETE" (solo bypass
-    scripts, mai dal FE) vengono ora rifiutati dal Pydantic; nessun
-    validator legacy aggiunto perche` la fattispecie e' teorica.
+    definita. Canvas con rest_method="DELETE" vengono rifiutati dal
+    Pydantic.
     """
     assert set(ct.VALID_REST_METHODS) == {"POST", "PUT", "PATCH"}
 
@@ -121,10 +113,12 @@ def _make_carica_node(conflict_policy: str):
     })
 
 
-def test_conflict_policy_legacy_update_maps_to_force():
-    """Canvas legacy con conflict_policy="update" caricano come "force"."""
-    node = _make_carica_node("update")
-    assert node.conflict_policy == "force"
+def test_conflict_policy_update_is_rejected():
+    """Il vecchio alias "update" resta tombstonato."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        _make_carica_node("update")
 
 
 def test_conflict_policy_canonical_force_passes_through():
@@ -143,7 +137,7 @@ def test_conflict_policy_canonical_skip_passes_through():
 
 
 def test_conflict_policy_unknown_value_raises():
-    """Valori fuori canonical e fuori legacy alias falliscono validation."""
+    """Valori fuori dal set canonico falliscono validation."""
     import pytest as _pytest
     from pydantic import ValidationError
     with _pytest.raises(ValidationError):

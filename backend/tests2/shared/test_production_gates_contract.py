@@ -182,7 +182,6 @@ def test_validate_startup_runs_production_gates_before_boot_completes(
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setattr(startup_validation, "_validate_data_dir", lambda *_a: None)
     monkeypatch.setattr(startup_validation, "_cleanup_temp_dir", lambda *_a: None)
-    monkeypatch.setattr(startup_validation, "_cleanup_legacy_dirs", lambda *_a: None)
     monkeypatch.setattr(startup_validation, "ensure_redis", lambda *_a: None)
 
     with pytest.raises(SystemExit) as exc_info:

@@ -187,10 +187,6 @@ def _sync_transform_expression_configs(
             config,
             incoming_columns,
             column_migrations=incoming_migrations,
-            extra_legacy_names=_contract_legacy_name_map(
-                previous_contract,
-                incoming_columns,
-            ),
         )
         if next_config is not config:
             node.config = next_config
@@ -278,8 +274,7 @@ def _sync_param_mapping(
     changed = False
     out = dict(mapping)
     by_name = _columns_by_current_name(columns)
-    legacy_names = _legacy_name_map(columns)
-    legacy_names.update(_legacy_name_map_from_migrations(column_migrations))
+    renamed_columns = _name_map_from_migrations(column_migrations)
 
     for api_param, raw_value in mapping.items():
         if not isinstance(raw_value, str) or not raw_value:
@@ -287,7 +282,7 @@ def _sync_param_mapping(
         next_value = _sync_param_mapping_value(
             raw_value,
             by_name,
-            legacy_names,
+            renamed_columns,
             column_migrations,
         )
         if next_value != raw_value:
@@ -299,7 +294,7 @@ def _sync_param_mapping(
 def _sync_param_mapping_value(
     value: str,
     columns_by_name: dict[str, dict[str, Any]],
-    legacy_names: dict[str, str],
+    renamed_columns: dict[str, str],
     column_migrations: dict[str, dict[str, Any] | None],
 ) -> str:
     if _is_removed_column_reference(value, column_migrations):
@@ -308,14 +303,14 @@ def _sync_param_mapping_value(
     current = _resolve_column_name(
         value,
         columns_by_name,
-        legacy_names,
+        renamed_columns,
         column_migrations,
     )
     if current and current.get("name"):
         return str(current["name"])
 
     next_value = value
-    for old_name, current_name in legacy_names.items():
+    for old_name, current_name in renamed_columns.items():
         next_value = next_value.replace(f"{{{old_name}}}", f"{{{current_name}}}")
     for removed_name in _removed_name_tokens_from_migrations(column_migrations):
         if f"{{{removed_name}}}" in next_value:
@@ -350,13 +345,11 @@ def _sync_expression_config(
     columns: list[dict[str, Any]],
     *,
     column_migrations: dict[str, dict[str, Any] | None] | None = None,
-    extra_legacy_names: dict[str, str] | None = None,
 ) -> ColumnPayload:
     out, changed = _sync_column_reference_config(
         config,
         columns,
         column_migrations=column_migrations,
-        extra_legacy_names=extra_legacy_names,
     )
     by_id = {
         str(col.get("id") or col.get("column_id")): col
@@ -375,9 +368,7 @@ def _sync_expression_config(
         next_refs = []
         removed_ref_seen = False
         columns_by_name = _columns_by_current_name(columns)
-        legacy_names = _legacy_name_map(columns)
-        legacy_names.update(_legacy_name_map_from_migrations(column_migrations or {}))
-        legacy_names.update(extra_legacy_names or {})
+        renamed_columns = _name_map_from_migrations(column_migrations or {})
         for ref in refs:
             if not isinstance(ref, dict):
                 continue
@@ -399,7 +390,7 @@ def _sync_expression_config(
                 current = _resolve_column_name(
                     ref_name,
                     columns_by_name,
-                    legacy_names,
+                    renamed_columns,
                     column_migrations or {},
                 )
             if not current or not current.get("name"):
@@ -430,10 +421,8 @@ def _sync_expression_config(
         if isinstance(out.get(refs_key), list) and out[refs_key]:
             continue
         next_expr = expr
-        legacy_names = _legacy_name_map(columns)
-        legacy_names.update(_legacy_name_map_from_migrations(column_migrations or {}))
-        legacy_names.update(extra_legacy_names or {})
-        for old_name, current_name in legacy_names.items():
+        renamed_columns = _name_map_from_migrations(column_migrations or {})
+        for old_name, current_name in renamed_columns.items():
             next_expr = _rewrite_expression_token(next_expr, old_name, current_name)
         if any(
             _expression_has_token(next_expr, removed_name)
@@ -462,16 +451,13 @@ def _sync_column_reference_config(
     columns: list[dict[str, Any]],
     *,
     column_migrations: dict[str, dict[str, Any] | None] | None = None,
-    extra_legacy_names: dict[str, str] | None = None,
 ) -> SyncConfigResult:
     """Rewrite non-expression column params after upstream alias changes."""
 
     changed = False
     out = dict(config)
     by_name = _columns_by_current_name(columns)
-    legacy_names = _legacy_name_map(columns)
-    legacy_names.update(_legacy_name_map_from_migrations(column_migrations or {}))
-    legacy_names.update(extra_legacy_names or {})
+    renamed_columns = _name_map_from_migrations(column_migrations or {})
 
     for key in SCALAR_COLUMN_CONFIG_KEYS:
         value = out.get(key)
@@ -495,10 +481,10 @@ def _sync_column_reference_config(
         current = _lookup_id_migration(column_migrations or {}, out.get(id_key))
         if not current:
             current = _resolve_column_name(
-            value,
-            by_name,
-            legacy_names,
-            column_migrations or {},
+                value,
+                by_name,
+                renamed_columns,
+                column_migrations or {},
             )
         if not current:
             continue
@@ -540,10 +526,10 @@ def _sync_column_reference_config(
             current = _lookup_id_migration(column_migrations or {}, companion_id)
             if not current:
                 current = _resolve_column_name(
-                item,
-                by_name,
-                legacy_names,
-                column_migrations or {},
+                    item,
+                    by_name,
+                    renamed_columns,
+                    column_migrations or {},
                 )
             if not current:
                 next_values.append(item)
@@ -573,7 +559,7 @@ def _sync_column_reference_config(
             name_field=name_field,
             id_field=id_field,
             columns_by_name=by_name,
-            legacy_names=legacy_names,
+            renamed_columns=renamed_columns,
             column_migrations=column_migrations or {},
         )
 
@@ -586,7 +572,7 @@ def _sync_dict_column_reference_list(
     key: str,
     name_field: str,
     columns_by_name: dict[str, dict[str, Any]],
-    legacy_names: dict[str, str],
+    renamed_columns: dict[str, str],
     column_migrations: dict[str, dict[str, Any] | None],
     id_field: str = "column_id",
 ) -> ColumnPayload:
@@ -606,10 +592,10 @@ def _sync_dict_column_reference_list(
         current = _lookup_id_migration(column_migrations, item.get(id_field))
         if not current:
             current = _resolve_column_name(
-            value,
-            columns_by_name,
-            legacy_names,
-            column_migrations,
+                value,
+                columns_by_name,
+                renamed_columns,
+                column_migrations,
             )
         if current is None and _is_removed_column_reference(
             value,
@@ -670,64 +656,16 @@ def _build_schema_context(
         return None
 
 
-def _contract_legacy_name_map(
-    contract: Any,
-    columns: list[dict[str, Any]],
-) -> StringMap:
-    if not isinstance(contract, dict):
-        return {}
-    previous_columns = [
-        col for col in (contract.get("columns") or [])
-        if isinstance(col, dict) and col.get("status", "active") == "active"
-    ]
-    current_by_id = {
-        str(col.get("id") or col.get("column_id")): col
-        for col in columns
-        if col.get("id") or col.get("column_id")
-    }
-    current_by_source_candidates: dict[str, list[dict[str, Any]]] = {}
-    for col in columns:
-        source_name = col.get("source_name")
-        if source_name:
-            current_by_source_candidates.setdefault(str(source_name), []).append(col)
-    current_by_source = {
-        source_name: values[0]
-        for source_name, values in current_by_source_candidates.items()
-        if len(values) == 1
-    }
-
-    candidates: dict[str, set[str]] = {}
-    for previous in previous_columns:
-        current = None
-        previous_id = previous.get("id")
-        if previous_id:
-            current = current_by_id.get(str(previous_id))
-        if not current and previous.get("source_name"):
-            current = current_by_source.get(str(previous.get("source_name")))
-        if not current or not current.get("name"):
-            continue
-        current_name = str(current["name"])
-        for key in ("physical_name", "display_name"):
-            old_name = previous.get(key)
-            if old_name and str(old_name) != current_name:
-                candidates.setdefault(str(old_name), set()).add(current_name)
-    return {
-        old_name: next(iter(names))
-        for old_name, names in candidates.items()
-        if len(names) == 1
-    }
-
-
 def _resolve_column_name(
     name: str,
     columns_by_name: dict[str, dict[str, Any]],
-    legacy_names: dict[str, str],
+    renamed_columns: dict[str, str],
     column_migrations: dict[str, dict[str, Any] | None],
 ) -> ColumnPayload | None:
     migrated = column_migrations.get(f"name:{name}")
     if isinstance(migrated, dict):
         return migrated
-    current_name = legacy_names.get(name, name)
+    current_name = renamed_columns.get(name, name)
     return columns_by_name.get(current_name)
 
 
@@ -741,25 +679,12 @@ def _build_column_migrations(
         for col in next_columns
         if col.get("id") or col.get("column_id")
     }
-    next_by_source_candidates: dict[str, list[dict[str, Any]]] = {}
-    for col in next_columns:
-        source_name = col.get("source_name")
-        if source_name:
-            next_by_source_candidates.setdefault(str(source_name), []).append(col)
-    next_by_source = {
-        name: values[0]
-        for name, values in next_by_source_candidates.items()
-        if len(values) == 1
-    }
-
     matched_next_indexes: set[int] = set()
     for index, previous in enumerate(previous_columns):
         current = None
         previous_id = previous.get("id") or previous.get("column_id")
         if previous_id:
             current = next_by_id.get(str(previous_id))
-        if not current and previous.get("source_name"):
-            current = next_by_source.get(str(previous.get("source_name")))
         if not current and len(previous_columns) == len(next_columns) and index not in matched_next_indexes:
             current = next_columns[index]
         if not current:
@@ -793,7 +718,7 @@ def _column_lookup_keys(column: dict[str, Any]) -> list[str]:
     col_id = column.get("id") or column.get("column_id")
     if col_id:
         keys.append(f"id:{col_id}")
-    for name_key in ("name", "source_name", "display_name"):
+    for name_key in ("name",):
         name = column.get(name_key)
         if name:
             keys.append(f"name:{name}")
@@ -887,7 +812,7 @@ def _filter_column_migrations_for_output(
     output_names = {
         str(value)
         for col in columns
-        for value in (col.get("name"), col.get("source_name"), col.get("display_name"))
+        for value in (col.get("name"),)
         if value
     }
 
@@ -906,7 +831,7 @@ def _filter_column_migrations_for_output(
     return out
 
 
-def _legacy_name_map_from_migrations(
+def _name_map_from_migrations(
     migrations: dict[str, dict[str, Any] | None],
 ) -> StringMap:
     out: dict[str, str] = {}
@@ -930,23 +855,6 @@ def _removed_name_tokens_from_migrations(
     }
 
 
-def _legacy_name_map(columns: list[dict[str, Any]]) -> StringMap:
-    candidates: dict[str, set[str]] = {}
-    for col in columns:
-        current = col.get("name")
-        if not current:
-            continue
-        for key in ("source_name", "display_name"):
-            old = col.get(key)
-            if old and str(old) != str(current):
-                candidates.setdefault(str(old), set()).add(str(current))
-    return {
-        old: next(iter(values))
-        for old, values in candidates.items()
-        if len(values) == 1
-    }
-
-
 def _collect_expression_refs(
     expression: str,
     columns: list[dict[str, Any]],
@@ -957,7 +865,7 @@ def _collect_expression_refs(
         if not col_id:
             continue
         col_id = str(col_id)
-        for name in (col.get("name"), col.get("source_name"), col.get("display_name")):
+        for name in (col.get("name"),):
             if name:
                 token_columns.setdefault(str(name), set()).add(col_id)
 

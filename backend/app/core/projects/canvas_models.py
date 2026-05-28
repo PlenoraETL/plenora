@@ -6,7 +6,6 @@ from typing import Any, Dict, List, Optional, Literal
 from app.shared.execution.canvas_types import (
     ConflictPolicyLiteral,
     DestTypeLiteral,
-    LEGACY_CONFLICT_POLICY_ALIASES,
     MultiJoinTypeLiteral,
     NodeTypeLiteral,
     RestBatchModeLiteral,
@@ -146,10 +145,8 @@ class Node(BaseModel):
     # `model_validator` qui sotto logga un WARNING strutturato a ogni
     # carico, cosi' un campo nuovo del FE che divergesse dal BE
     # compare immediatamente nei log invece che diventare un bug
-    # silenzioso a runtime. `extra="forbid"` sarebbe stato il
-    # rigorosamente corretto ma avrebbe rotto canvas legacy in DB —
-    # vedi il commit `e5b04dcf` (Literal aggiornata da 30 a 70 op): la
-    # stessa famiglia di bug.
+    # silenzioso a runtime. `extra="forbid"` resta troppo rigido per campi
+    # FE nuovi non ancora tipizzati sul backend.
     model_config = ConfigDict(extra="allow")
 
     @model_validator(mode="after")
@@ -177,23 +174,6 @@ class Node(BaseModel):
         """Normalizza nomi tipo camelCase dal frontend a snake_case."""
         _MAP = {'caricaArcgis': 'carica_arcgis', 'resultNode': 'result'}
         return _MAP.get(v, v)
-
-    @field_validator('conflict_policy', mode='before')
-    @classmethod
-    def _normalize_conflict_policy(cls, v):
-        """Rimappa valori legacy di conflict_policy al canonico FE/executor.
-
-        Pre-centralizzazione il canvas Pydantic accettava "update" come
-        conflict_policy — valore non corrispondente a nulla nell'executor
-        `app.core.carica.models.ConflictPolicy` (SKIP/FORCE/ABORT). Il
-        FE ha sempre inviato "force" (allineato all'executor); canvas
-        eventualmente salvati con "update" da percorsi che bypassavano
-        la Pydantic validation (es. JSONB diretto, scripts) si
-        caricano comunque post-fix grazie a questo alias.
-        """
-        if isinstance(v, str):
-            return LEGACY_CONFLICT_POLICY_ALIASES.get(v, v)
-        return v
 
     table_name: Optional[str] = None
     alias: Optional[str] = None

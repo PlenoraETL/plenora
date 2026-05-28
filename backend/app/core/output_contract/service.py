@@ -66,22 +66,15 @@ def build_output_contract(
     """Build a public output contract from final result columns.
 
     Identity preservation is intentionally based on ``source_name`` first:
-    alias/display changes must not create a new semantic column id. A
-    same-width ordinal fallback covers legacy contracts that stored a public
-    name as ``source_name`` before the canonical source name was available.
+    alias/display changes must not create a new semantic column id.
     """
 
     previous = _previous_columns(previous_contract)
     previous_by_source: dict[str, list[dict[str, Any]]] = {}
     previous_by_physical: dict[str, list[dict[str, Any]]] = {}
-    previous_by_ordinal: dict[int, dict[str, Any]] = {}
     for col in previous:
         previous_by_source.setdefault(str(col.get("source_name") or ""), []).append(col)
         previous_by_physical.setdefault(str(col.get("physical_name") or ""), []).append(col)
-        try:
-            previous_by_ordinal[int(col.get("ordinal"))] = col
-        except (TypeError, ValueError):
-            pass
 
     prepared: list[tuple[Any, str, str]] = []
     for raw in result_columns or []:
@@ -111,10 +104,6 @@ def build_output_contract(
             physical_bucket = previous_by_physical.get(physical_name) or []
             if physical_bucket:
                 reused = physical_bucket.pop(0)
-            elif len(previous) == len(prepared):
-                ordinal_candidate = previous_by_ordinal.get(ordinal)
-                if ordinal_candidate and ordinal_candidate.get("id"):
-                    reused = ordinal_candidate
 
         column_id = (
             (str(reused.get("id")) if reused and reused.get("id") else "")
@@ -183,7 +172,7 @@ def node_columns_from_contract(
         col_id = _field(col, "id", None) or _field(col, "column_id", None)
         if col_id:
             previous_visible_by_id[str(col_id)] = bool(_field(col, "visible", True))
-        for name_key in ("source_name", "name", "display_name"):
+        for name_key in ("name", "display_name"):
             name = _field(col, name_key, None)
             if name:
                 previous_visible_by_name[str(name)] = bool(_field(col, "visible", True))
@@ -221,8 +210,8 @@ def node_columns_from_contract(
             "visible": previous_visible_by_id.get(
                 col_id,
                 previous_visible_by_name.get(
-                    str(col.get("source_name") or ""),
-                    previous_visible_by_name.get(physical_name, True),
+                    physical_name,
+                    True,
                 ),
             ),
         })

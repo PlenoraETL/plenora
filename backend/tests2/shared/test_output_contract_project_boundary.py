@@ -67,7 +67,7 @@ def test_output_contract_disambiguates_duplicate_join_columns():
     assert [c.ordinal for c in contract.columns] == [0, 1, 2, 3]
 
 
-def test_node_columns_from_contract_preserves_legacy_visibility_by_source_name():
+def test_node_columns_from_contract_does_not_match_visibility_by_source_name():
     contract = {
         "columns": [
             {
@@ -95,7 +95,7 @@ def test_node_columns_from_contract_preserves_legacy_visibility_by_source_name()
             "source_name": "id",
             "display_name": "myid",
             "type": "integer",
-            "visible": False,
+                "visible": True,
         }
     ]
 
@@ -116,7 +116,7 @@ def test_ensure_dataframe_matches_contract_fails_on_stale_artifact():
         )
 
 
-def test_plugin_executor_rewrites_legacy_formula_source_name_to_physical_name():
+def test_plugin_executor_does_not_rewrite_formula_by_source_name():
     from app.core.manipola.plugin_executor import PluginExecutor
 
     executor = PluginExecutor.__new__(PluginExecutor)
@@ -134,7 +134,7 @@ def test_plugin_executor_rewrites_legacy_formula_source_name_to_physical_name():
         {"parameters": [{"id": "formula", "type": "expression"}]},
     )
 
-    assert resolved["formula"] == "myid * 2"
+    assert resolved["formula"] == "id * 2"
 
 
 def test_plugin_executor_keeps_column_names_when_column_ids_companion_is_empty():
@@ -204,7 +204,7 @@ def test_column_reference_sync_key_sets_cover_current_transform_registry():
     assert list_ids <= LIST_COLUMN_CONFIG_KEYS
 
 
-def test_plugin_executor_rewrites_all_column_param_shapes_by_legacy_source_name():
+def test_plugin_executor_does_not_rewrite_column_param_shapes_by_source_name():
     from app.core.manipola.plugin_executor import PluginExecutor
     from app.core.output_contract.canvas_sync import (
         LIST_COLUMN_CONFIG_KEYS,
@@ -239,17 +239,17 @@ def test_plugin_executor_rewrites_all_column_param_shapes_by_legacy_source_name(
     resolved = executor._resolve_column_references(config, node, transform_config)
 
     for key in SCALAR_COLUMN_CONFIG_KEYS - LIST_COLUMN_CONFIG_KEYS:
-        assert resolved[key] == "myid"
+        assert resolved[key] == "id"
     for key in LIST_COLUMN_CONFIG_KEYS:
-        assert resolved[key] == ["myid"]
-    assert resolved["aggregations"] == [{"column": "myid"}]
-    assert resolved["aggs"] == [{"column": "myid"}]
-    assert resolved["maskings"] == [{"column": "myid"}]
-    assert resolved["renames"] == [{"old_name": "myid", "new_name": "renamed"}]
-    assert resolved["formula"] == "myid + 1"
+        assert resolved[key] == ["id"]
+    assert resolved["aggregations"] == [{"column": "id"}]
+    assert resolved["aggs"] == [{"column": "id"}]
+    assert resolved["maskings"] == [{"column": "id"}]
+    assert resolved["renames"] == [{"old_name": "id", "new_name": "renamed"}]
+    assert resolved["formula"] == "id + 1"
 
 
-def test_schema_inference_rewrites_all_column_param_shapes_by_legacy_source_name():
+def test_schema_inference_does_not_rewrite_column_param_shapes_by_source_name():
     pytest.importorskip("psycopg2")
 
     from app.core.projects.schema_inference import (
@@ -275,13 +275,13 @@ def test_schema_inference_rewrites_all_column_param_shapes_by_legacy_source_name
     )
 
     for key in SCALAR_COLUMN_CONFIG_KEYS - LIST_COLUMN_CONFIG_KEYS:
-        assert resolved[key] == "myid"
+        assert resolved[key] == "id"
     for key in LIST_COLUMN_CONFIG_KEYS:
-        assert resolved[key] == ["myid"]
-    assert resolved["aggregations"] == [{"column": "myid"}]
-    assert resolved["aggs"] == [{"column": "myid"}]
-    assert resolved["maskings"] == [{"column": "myid"}]
-    assert resolved["renames"] == [{"old_name": "myid", "new_name": "renamed"}]
+        assert resolved[key] == ["id"]
+    assert resolved["aggregations"] == [{"column": "id"}]
+    assert resolved["aggs"] == [{"column": "id"}]
+    assert resolved["maskings"] == [{"column": "id"}]
+    assert resolved["renames"] == [{"old_name": "id", "new_name": "renamed"}]
 
 
 def test_arricchisci_project_source_consumes_output_contract_not_canvas_columns():
@@ -373,7 +373,7 @@ def test_carica_type_enricher_reads_output_contract():
     assert out["canvas_types"] == {"id": "text", "score": "number"}
 
 
-def test_canvas_sync_rewrites_legacy_formula_from_output_contract():
+def test_canvas_sync_does_not_rewrite_formula_from_source_name():
     from app.core.output_contract import sync_canvas_with_output_contracts
     from app.core.projects.canvas_models import CanvasState
 
@@ -429,10 +429,8 @@ def test_canvas_sync_rewrites_legacy_formula_from_output_contract():
     assert changed is True
     assert canvas.nodes[0].columns[0].id == "col-stable"
     assert canvas.nodes[0].columns[0].source_name == "id"
-    assert canvas.nodes[1].config["formula"] == "myid*2"
-    assert canvas.nodes[1].config["formula_column_refs"] == [
-        {"id": "col-stable", "name": "myid"}
-    ]
+    assert canvas.nodes[1].config["formula"] == "id*2"
+    assert "formula_column_refs" not in canvas.nodes[1].config
 
 
 def test_canvas_sync_rewrites_drop_columns_after_upstream_alias_removed():
@@ -762,9 +760,9 @@ def test_canvas_sync_rewrites_drop_columns_from_previous_project_contract():
         project_service=_ProjectService(),
     )
 
-    assert changed is True
-    assert canvas.nodes[2].config["columns"] == ["id"]
-    assert canvas.nodes[2].config["columns_column_ids"] == ["col-stable"]
+    assert changed is False
+    assert canvas.nodes[2].config["columns"] == ["z"]
+    assert canvas.nodes[2].config["columns_column_ids"] == []
 
 
 def test_canvas_sync_migrates_formula_ref_when_upstream_calculated_column_was_renamed():

@@ -18,7 +18,6 @@ from app.core.manipola.types import (
     RegistryMap,
     RegistryRows,
     StringMap,
-    StringSetMap,
 )
 from app.core.projects.canvas_models import Node
 from app.utils.logger import get_logger
@@ -336,8 +335,8 @@ class PluginExecutor:
             return node_config
 
         resolved = dict(node_config)
-        id_to_name, legacy_name_to_name = self._column_reference_maps(node)
-        if not id_to_name and not legacy_name_to_name:
+        id_to_name = self._column_reference_maps(node)
+        if not id_to_name:
             return resolved
 
         def by_id(column_id: Any, fallback: Any = None) -> Any:
@@ -379,12 +378,6 @@ class PluginExecutor:
                         for item in value
                     ]
 
-        resolved = self._resolve_legacy_param_names(
-            resolved,
-            transform_config or {},
-            legacy_name_to_name,
-        )
-
         for key, value in list(resolved.items()):
             if not key.endswith("_column_refs") or not isinstance(value, list):
                 continue
@@ -397,20 +390,9 @@ class PluginExecutor:
                     id_to_name,
                 )
 
-        for param in (transform_config or {}).get("parameters", []) or []:
-            if not isinstance(param, dict) or param.get("type") != "expression":
-                continue
-            expression_key = param.get("id")
-            expression = resolved.get(expression_key)
-            if isinstance(expression, str):
-                resolved[expression_key] = self._rewrite_expression_legacy_names(
-                    expression,
-                    legacy_name_to_name,
-                )
-
         return resolved
 
-    def _column_reference_maps(self, node: Node) -> tuple[StringMap, StringMap]:
+    def _column_reference_maps(self, node: Node) -> StringMap:
         data = node.data if isinstance(node.data, dict) else {}
         raw_columns = []
         for field in ("inputColumns", "columns"):
@@ -419,7 +401,6 @@ class PluginExecutor:
                 raw_columns.extend(value)
 
         id_to_name: StringMap = {}
-        legacy_candidates: StringSetMap = {}
         for col in raw_columns:
             if not isinstance(col, dict):
                 continue
@@ -427,70 +408,7 @@ class PluginExecutor:
             name = col.get("name")
             if col_id and name:
                 id_to_name[str(col_id)] = str(name)
-            if not name:
-                continue
-            current_name = str(name)
-            for legacy_key in ("source_name",):
-                legacy_name = col.get(legacy_key)
-                if legacy_name and str(legacy_name) != current_name:
-                    legacy_candidates.setdefault(str(legacy_name), set()).add(current_name)
-
-        legacy_name_to_name = {
-            legacy: next(iter(names))
-            for legacy, names in legacy_candidates.items()
-            if len(names) == 1
-        }
-        return id_to_name, legacy_name_to_name
-
-    def _resolve_legacy_param_names(
-        self,
-        resolved: JsonObject,
-        transform_config: JsonObject,
-        legacy_name_to_name: StringMap,
-    ) -> JsonObject:
-        if not legacy_name_to_name:
-            return resolved
-
-        out = dict(resolved)
-        for param in transform_config.get("parameters", []) or []:
-            if not isinstance(param, dict):
-                continue
-            param_id = param.get("id")
-            param_type = param.get("type")
-            if not param_id or param_id not in out:
-                continue
-            value = out.get(param_id)
-            if param_type in {"column", "geometry_column"} and isinstance(value, str):
-                out[param_id] = legacy_name_to_name.get(value, value)
-            elif param_type in {"columns", "column_order"} and isinstance(value, list):
-                out[param_id] = [
-                    legacy_name_to_name.get(item, item) if isinstance(item, str) else item
-                    for item in value
-                ]
-            elif param_type == "aggregation_list" and isinstance(value, list):
-                out[param_id] = [
-                    self._resolve_dict_legacy_name(item, legacy_name_to_name, "column")
-                    for item in value
-                ]
-
-        for key, value in list(out.items()):
-            if key in {"aggregations", "aggs"} and isinstance(value, list):
-                out[key] = [
-                    self._resolve_dict_legacy_name(item, legacy_name_to_name, "column")
-                    for item in value
-                ]
-            elif key == "renames" and isinstance(value, list):
-                out[key] = [
-                    self._resolve_dict_legacy_name(item, legacy_name_to_name, "old_name")
-                    for item in value
-                ]
-            elif key == "maskings" and isinstance(value, list):
-                out[key] = [
-                    self._resolve_dict_legacy_name(item, legacy_name_to_name, "column")
-                    for item in value
-                ]
-
-        return out
+        return id_to_name
 
     def _resolve_dict_column_ref(
         self,
@@ -507,20 +425,6 @@ class PluginExecutor:
             out[name_field] = id_to_name[str(column_id)]
         return out
 
-    def _resolve_dict_legacy_name(
-        self,
-        item: Any,
-        legacy_name_to_name: StringMap,
-        name_field: str,
-    ) -> Any:
-        if not isinstance(item, dict):
-            return item
-        out = dict(item)
-        value = out.get(name_field)
-        if isinstance(value, str) and value in legacy_name_to_name:
-            out[name_field] = legacy_name_to_name[value]
-        return out
-
     def _rewrite_expression_refs(
         self,
         expression: str,
@@ -533,26 +437,6 @@ class PluginExecutor:
                 continue
             old_name = str(ref.get("name") or "")
             new_name = id_to_name.get(str(ref.get("id") or ""))
-            if not old_name or not new_name or old_name == new_name:
-                continue
-            rewritten = rewritten.replace(f"`{old_name}`", f"`{new_name}`")
-            rewritten = rewritten.replace(f"['{old_name}']", f"['{new_name}']")
-            rewritten = rewritten.replace(f'["{old_name}"]', f'["{new_name}"]')
-            if old_name.isidentifier():
-                rewritten = re.sub(
-                    rf"\b{re.escape(old_name)}\b",
-                    new_name,
-                    rewritten,
-                )
-        return rewritten
-
-    def _rewrite_expression_legacy_names(
-        self,
-        expression: str,
-        legacy_name_to_name: StringMap,
-    ) -> str:
-        rewritten = expression
-        for old_name, new_name in legacy_name_to_name.items():
             if not old_name or not new_name or old_name == new_name:
                 continue
             rewritten = rewritten.replace(f"`{old_name}`", f"`{new_name}`")

@@ -1084,7 +1084,6 @@ memory_only
 temp_only_explicit
 object_storage_required
 local_dev_allowed
-legacy_compat
 ```
 
 #### `payloads.py`

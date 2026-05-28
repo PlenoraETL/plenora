@@ -8,8 +8,6 @@ Valori supportati (vedi refactor_io_storage_ram_only.md):
   - `temp_only_explicit` (default): temp disk solo via `io.materialize`
     con `reason=` obbligatorio; vietato persistent disk
   - `local_dev_allowed`: anche persistent disk locale (sviluppo)
-  - `legacy_compat`: tutto consentito (back-compat durante migrazione,
-    deprecato).
 
 Default = `temp_only_explicit`: ambiente di sviluppo/staging tipico
 con DATA_DIR montato come temp, no persistent local stores. Le fasi
@@ -30,7 +28,6 @@ class DiskWritePolicy(StrEnum):
     MEMORY_ONLY = "memory_only"
     TEMP_ONLY_EXPLICIT = "temp_only_explicit"
     LOCAL_DEV_ALLOWED = "local_dev_allowed"
-    LEGACY_COMPAT = "legacy_compat"
 
 
 _DEFAULT_POLICY = DiskWritePolicy.TEMP_ONLY_EXPLICIT
@@ -59,12 +56,9 @@ def is_temp_disk_allowed() -> bool:
 
 
 def is_persistent_disk_allowed() -> bool:
-    """True solo in `local_dev_allowed` o `legacy_compat`."""
+    """True solo in `local_dev_allowed`."""
     policy = get_disk_policy()
-    return policy in (
-        DiskWritePolicy.LOCAL_DEV_ALLOWED,
-        DiskWritePolicy.LEGACY_COMPAT,
-    )
+    return policy == DiskWritePolicy.LOCAL_DEV_ALLOWED
 
 
 __all__ = [

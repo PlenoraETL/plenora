@@ -207,8 +207,8 @@ def decrypt(value: Optional[str]) -> Optional[str]:
     """Decifra un valore precedentemente cifrato con :func:`encrypt`.
 
     - ``None`` o stringa vuota → restituiti tal quali.
-    - Valore in chiaro (no prefisso ``enc:``) → restituito tal quale.
-      *Backward-compat con i record legacy non ancora migrati.*
+    - Valore in chiaro (no prefisso ``enc:``) → errore esplicito: i secret
+      persistiti devono sempre essere cifrati.
     - Token cifrato non decifrabile (chiave sbagliata, dato corrotto) →
       log warning + restituzione del valore originale (l'app continua a
       girare ma la connessione di terze parti fallirà al primo uso, dando
@@ -217,7 +217,9 @@ def decrypt(value: Optional[str]) -> Optional[str]:
     if value is None or value == "":
         return value
     if not is_encrypted(value):
-        return value  # NOTE: legacy plaintext
+        raise RuntimeError(
+            "crypto.decrypt refused plaintext secret; expected enc: payload"
+        )
     token = value[len(ENC_PREFIX):]
     try:
         return _get_fernet().decrypt(token.encode("utf-8")).decode("utf-8")

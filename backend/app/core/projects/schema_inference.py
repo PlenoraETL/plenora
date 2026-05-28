@@ -439,18 +439,7 @@ class SchemaInferenceService:
             for col in schema
             if getattr(col, "id", None)
         }
-        legacy_candidates: dict[str, set[str]] = {}
-        for schema in input_schemas:
-            for col in schema:
-                source_name = getattr(col, "source_name", None)
-                if source_name and source_name != col.name:
-                    legacy_candidates.setdefault(str(source_name), set()).add(col.name)
-        legacy_name_to_name = {
-            legacy: next(iter(names))
-            for legacy, names in legacy_candidates.items()
-            if len(names) == 1
-        }
-        if not id_to_name and not legacy_name_to_name:
+        if not id_to_name:
             return config
 
         out = dict(config)
@@ -489,42 +478,6 @@ class SchemaInferenceService:
                     for item in value
                 ]
 
-        if legacy_name_to_name:
-            for key, value in list(out.items()):
-                if key in SCALAR_COLUMN_CONFIG_KEYS and isinstance(value, str):
-                    out[key] = legacy_name_to_name.get(value, value)
-                elif key in LIST_COLUMN_CONFIG_KEYS and isinstance(value, list):
-                    out[key] = [
-                        legacy_name_to_name.get(item, item) if isinstance(item, str) else item
-                        for item in value
-                    ]
-                elif key in {"aggregations", "aggs"} and isinstance(value, list):
-                    out[key] = [
-                        self._resolve_schema_dict_legacy_name(
-                            item,
-                            legacy_name_to_name,
-                            "column",
-                        )
-                        for item in value
-                    ]
-                elif key == "renames" and isinstance(value, list):
-                    out[key] = [
-                        self._resolve_schema_dict_legacy_name(
-                            item,
-                            legacy_name_to_name,
-                            "old_name",
-                        )
-                        for item in value
-                    ]
-                elif key == "maskings" and isinstance(value, list):
-                    out[key] = [
-                        self._resolve_schema_dict_legacy_name(
-                            item,
-                            legacy_name_to_name,
-                            "column",
-                        )
-                        for item in value
-                    ]
         return out
 
     @staticmethod
@@ -540,20 +493,6 @@ class SchemaInferenceService:
         column_id = out.get(id_field)
         if column_id and str(column_id) in id_to_name:
             out[name_field] = id_to_name[str(column_id)]
-        return out
-
-    @staticmethod
-    def _resolve_schema_dict_legacy_name(
-        item: Any,
-        legacy_name_to_name: StringMap,
-        name_field: str,
-    ) -> Any:
-        if not isinstance(item, dict):
-            return item
-        out = dict(item)
-        value = out.get(name_field)
-        if isinstance(value, str) and value in legacy_name_to_name:
-            out[name_field] = legacy_name_to_name[value]
         return out
 
     def _build_transform_handlers(

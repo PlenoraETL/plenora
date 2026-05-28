@@ -22,8 +22,8 @@ Convention di bump:
       API_VERSION major + migration sui canvas legacy.
 
 Drift FE↔BE storici fixati nei commit a9800ee (conflict_policy
-"update"→"force" + legacy alias) e c6bcd9a (rest_method DELETE
-rimosso, BE↔UI allineato). Nessun drift attivo dopo Sprint 2.
+canonico "force") e c6bcd9a (rest_method DELETE rimosso, BE↔UI
+allineato). Nessun drift attivo dopo Sprint 2.
 
 Nota su `dest_type='arcgis'`: NON e' drift. Il FE `canvasSerializer.js`
 factory `caricaArcgis` produce un Node con `type='carica_arcgis'`
@@ -82,18 +82,8 @@ VALID_TRANSACTION_MODES: tuple[str, ...] = get_args(TransactionModeLiteral)
 # Carica conflict policy — comportamento del CARICA su righe in conflitto
 # con i match_columns. Allineato con `app.core.carica.models.ConflictPolicy`
 # enum (SKIP, FORCE, ABORT) che e' canonico dell'executor + col FE.
-# Prima del fix dei drift il canvas Pydantic accettava "update" (bug
-# pre-esistente, valore non corrispondente a nulla nell'executor): il
-# validator `_normalize_conflict_policy` su Node mappa "update" -> "force"
-# per preservare canvas legacy eventualmente salvati con il valore
-# sbagliato.
 ConflictPolicyLiteral = Literal["abort", "skip", "force"]
 VALID_CONFLICT_POLICIES: tuple[str, ...] = get_args(ConflictPolicyLiteral)
-# Legacy mapping per validator backward-compat. Bumpa al fix di
-# ulteriori drift.
-LEGACY_CONFLICT_POLICY_ALIASES: dict[str, str] = {
-    "update": "force",
-}
 
 
 # REST destination HTTP method (per carica con dest_type='rest').

@@ -255,19 +255,6 @@ def _cleanup_temp_dir(settings: Any) -> None:
         logger.debug("Pulizia cartelle temp fallita (non critico): %s", exc)
 
 
-def _cleanup_legacy_dirs(settings: Any) -> None:
-    # Boundary: cleanup legacy dirs via `io.local_cleanup` (best-effort).
-    from app.core.io.local_cleanup import rmtree_safe
-
-    try:
-        for legacy_dir in ("files", "results", "File", "Results"):
-            legacy_path = Path(settings.DATA_DIR) / legacy_dir
-            if legacy_path.exists() and legacy_path.is_dir():
-                rmtree_safe(legacy_path, logger=logger)
-    except Exception as exc:
-        logger.debug("Rimozione cartelle legacy fallita (non critico): %s", exc)
-
-
 def validate_startup(settings: Any) -> None:
     """Run explicit startup side effects for the configured process."""
     errors: list[str] = []
@@ -276,7 +263,6 @@ def validate_startup(settings: Any) -> None:
     validate_production_gates(settings, errors)
     _validate_data_dir(settings, errors)
     _cleanup_temp_dir(settings)
-    _cleanup_legacy_dirs(settings)
     ensure_redis(settings, errors, warnings)
 
     for warning in warnings:
