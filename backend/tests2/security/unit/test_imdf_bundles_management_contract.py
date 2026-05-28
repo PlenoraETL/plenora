@@ -79,6 +79,44 @@ def bundles_dir(tmp_path, monkeypatch):
     ))
     # Patch nel modulo router (già importato → ha riferimento proprio a settings)
     monkeypatch.setattr(imdf_router, "settings", config_mod.settings)
+    monkeypatch.setattr(
+        imdf_router._imdf_storage,
+        "list_task_ids",
+        lambda: [p.name for p in root.iterdir() if p.is_dir()],
+    )
+
+    def _meta_only(task_id):
+        meta_path = root / task_id / "plenora_metadata.json"
+        if not meta_path.exists():
+            return None
+        return json.loads(meta_path.read_text(encoding="utf-8"))
+
+    def _file_entries(task_id):
+        bundle = root / task_id
+        if not bundle.exists():
+            return []
+        return [
+            {
+                "path": p.relative_to(bundle).as_posix(),
+                "size": p.stat().st_size,
+            }
+            for p in bundle.rglob("*")
+            if p.is_file()
+        ]
+
+    def _read_geojson(task_id, rel):
+        path = root / task_id / rel
+        if not path.exists():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    monkeypatch.setattr(imdf_router._imdf_storage, "get_meta_only", _meta_only)
+    monkeypatch.setattr(
+        imdf_router._imdf_storage,
+        "list_bundle_file_entries",
+        _file_entries,
+    )
+    monkeypatch.setattr(imdf_router._imdf_storage, "read_geojson", _read_geojson)
     return root
 
 
@@ -148,7 +186,7 @@ def test_delete_bundle_blocks_cross_group(bundles_dir, normal_user, monkeypatch)
     # surface; IMDF router imports `assert_resource_visible` from the
     # ownership leaf at module top, the facade is no longer the
     # monkeypatch target.
-    import app.core.imdf.router as imdf_router_mod
+    import app.core.imdf.bundle_access as imdf_bundle_access
     import app.core.imdf.project_access as imdf_project_access
     # Il progetto del bundle esiste, ma NON è visibile all'utente
     monkeypatch.setattr(
@@ -160,7 +198,7 @@ def test_delete_bundle_blocks_cross_group(bundles_dir, normal_user, monkeypatch)
     def _deny(*a, **kw):
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Accesso negato")
-    monkeypatch.setattr(imdf_router_mod, "assert_resource_visible", _deny)
+    monkeypatch.setattr(imdf_bundle_access, "assert_resource_visible", _deny)
 
     from fastapi import HTTPException
     with pytest.raises(HTTPException) as exc:

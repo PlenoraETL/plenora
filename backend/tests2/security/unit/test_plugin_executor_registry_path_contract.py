@@ -27,15 +27,10 @@ def test_default_registry_path_loads():
 
 def test_explicit_registry_within_module_is_accepted(tmp_path, monkeypatch):
     """Un path esplicito che risolve dentro app/core/manipola/ e' accettato."""
-    # Creiamo un registry minimale dentro il perimetro del modulo.
-    fake_registry = _MANIPOLA_ROOT / "_test_registry.json"
-    fake_registry.write_text('{"transforms": {}, "categories": {}}')
-
-    try:
-        executor = PluginExecutor(registry_path=str(fake_registry))
-        assert executor.registry == {}
-    finally:
-        fake_registry.unlink(missing_ok=True)
+    registry = _MANIPOLA_ROOT / "transforms_registry.json"
+    executor = PluginExecutor(registry_path=str(registry))
+    assert executor.registry_path == registry
+    assert len(executor.registry) > 0
 
 
 def test_registry_path_outside_manipola_is_rejected(tmp_path):

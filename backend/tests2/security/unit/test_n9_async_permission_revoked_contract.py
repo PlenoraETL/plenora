@@ -269,6 +269,7 @@ def test_execute_endpoint_passes_current_user_id(monkeypatch):
     from fastapi.testclient import TestClient
     from app.core.auth.auth import require_not_esecutore
     from app.core.orchestrator.router import pipeline_router, init_orchestrator
+    from app.core.orchestrator.task_service import TaskInfo, TaskStatus, TaskType
     from tests2.helpers.builders import build_current_user
 
     project_service = MagicMock()
@@ -286,9 +287,11 @@ def test_execute_endpoint_passes_current_user_id(monkeypatch):
 
     def spy_create_pipeline_task(**kwargs):
         captured.update(kwargs)
-        return SimpleNamespace(
+        return TaskInfo(
             task_id="t-1",
-            to_dict=lambda: {"task_id": "t-1", "status": "pending"},
+            task_type=TaskType.EXECUTE,
+            project_id=kwargs["project_id"],
+            status=TaskStatus.PENDING,
         )
 
     monkeypatch.setattr(

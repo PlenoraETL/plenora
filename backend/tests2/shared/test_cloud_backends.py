@@ -27,9 +27,16 @@ def _isolate_bucket_env(monkeypatch):
 
     Ogni test setta esplicitamente le var bucket che gli servono."""
     for var in (
+        "CLOUD_PROVIDER",
+        "OBJECT_STORAGE_BACKEND",
+        "OBJECT_STORAGE_ENABLED",
+        "STORAGE_POLICY",
         "OBJECT_STORAGE_BUCKET",
         "PLENORA_ARTIFACT_BUCKET",
         "BACKUP_BUCKET",
+        "MINIO_ENDPOINT_URL",
+        "MINIO_ACCESS_KEY",
+        "MINIO_SECRET_KEY",
     ):
         monkeypatch.delenv(var, raising=False)
 

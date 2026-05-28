@@ -88,6 +88,11 @@ def imdf_bundles_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     }
     monkeypatch.setattr(
         imdf_router._imdf_storage,
+        "list_task_ids",
+        lambda: ["task-shape"],
+    )
+    monkeypatch.setattr(
+        imdf_router._imdf_storage,
         "get_meta_only",
         lambda task_id: meta if task_id == "task-shape" else None,
     )

@@ -229,7 +229,10 @@ def test_auth_db_does_not_import_intermediate_db() -> None:
 
 
 def test_intermediate_db_facade_does_not_import_projects_db() -> None:
-    src = (_CORE_ROOT / "intermediate" / "db.py").read_text(encoding="utf-8")
+    path = _CORE_ROOT / "intermediate" / "db.py"
+    if not path.exists():
+        pytest.skip("legacy intermediate/db.py facade removed")
+    src = path.read_text(encoding="utf-8")
     tree = ast.parse(src)
     imported_modules: set[str] = set()
 

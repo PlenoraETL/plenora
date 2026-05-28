@@ -4,7 +4,6 @@ Tests the http cross tenant behavior.
 Locks backend contracts and regression boundaries for the current architecture.
 """
 
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -13,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.core.auth.auth import require_not_esecutore
 from app.core.orchestrator.router import tasks_router
+from app.core.orchestrator.task_service import TaskInfo, TaskStatus, TaskType
 from app.shared.execution.canvas_graph import CanvasGraph
 from tests2.helpers.builders import build_current_user
 
@@ -64,15 +64,13 @@ def test_create_task_parses_canvas_graph_once_before_resource_authz():
         from_canvas_calls["count"] += 1
         return original_from_canvas(raw_canvas)
 
-    task_info = SimpleNamespace(
-        to_dict=lambda: {
-            "task_id": "task-1",
-            "task_type": "enrichment",
-            "project_id": "proj-1",
-            "status": "pending",
-            "progress": 0,
-            "message": "queued",
-        }
+    task_info = TaskInfo(
+        task_id="task-1",
+        task_type=TaskType.ENRICHMENT,
+        project_id="proj-1",
+        status=TaskStatus.PENDING,
+        progress=0,
+        message="queued",
     )
 
     with patch("app.core.auth.resource_access.assert_project_access"), \

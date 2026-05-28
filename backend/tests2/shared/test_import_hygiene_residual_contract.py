@@ -127,10 +127,17 @@ def test_runtime_factories_do_not_thread_legacy_results_dirs() -> None:
     runtime_src = _read("runtime/services.py")
     scheduler_src = _read("core/scheduler/execution_manager.py")
     arricchisci_source_src = _read("core/arricchisci/api_connection_source_loading.py")
+    carica_task_src = (
+        Path(__file__).resolve().parents[2]
+        / "workers"
+        / "tasks"
+        / "carica_task.py"
+    ).read_text(encoding="utf-8")
 
     assert "results_dir" not in runtime_src
     assert "settings:" not in runtime_src
     assert "build_runtime_services(settings=" not in _read("app_factory.py")
+    assert "build_orchestrator_stack(\n            settings=" not in carica_task_src
     assert "results_dir=" not in scheduler_src
     assert "results_dir=" not in arricchisci_source_src
     assert "except ImportError" not in arricchisci_source_src

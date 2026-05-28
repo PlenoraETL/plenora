@@ -147,9 +147,10 @@ def test_static_parameter_processing_is_not_template_variables_business_logic() 
 
 
 def test_utm_crs_selection_is_not_owned_by_app_utils_geo() -> None:
-    geo_utils = (_BACKEND_ROOT / "app" / "core" / "features" / "geo_utils.py").read_text(
-        encoding="utf-8-sig"
-    )
+    path = _BACKEND_ROOT / "app" / "core" / "features" / "geo_utils.py"
+    if not path.exists():
+        return
+    geo_utils = path.read_text(encoding="utf-8-sig")
 
     assert "def get_utm_crs_for_geometry" not in geo_utils
 

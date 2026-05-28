@@ -50,8 +50,8 @@ def test_trigger_manual_backup_uses_db_lock_before_enqueue(monkeypatch):
 
     monkeypatch.setattr(service, "try_acquire_manual_backup_lock", acquire)
     monkeypatch.setattr(
-        "workers.tasks.admin_backup_task.run_manual_backup_task.apply_async",
-        apply_async,
+        "app.core.task_runtime.dispatch.dispatch_task_by_name",
+        lambda name, **kwargs: apply_async(**kwargs),
     )
 
     out = service.trigger_manual_backup()
@@ -72,8 +72,8 @@ def test_trigger_manual_backup_rejects_when_db_lock_is_active(monkeypatch):
     monkeypatch.setattr(service, "is_manual_backup_running", lambda: True)
     apply_async = MagicMock()
     monkeypatch.setattr(
-        "workers.tasks.admin_backup_task.run_manual_backup_task.apply_async",
-        apply_async,
+        "app.core.task_runtime.dispatch.dispatch_task_by_name",
+        lambda name, **kwargs: apply_async(**kwargs),
     )
 
     out = service.trigger_manual_backup()
@@ -95,8 +95,8 @@ def test_trigger_manual_backup_refuses_enqueue_when_disabled(monkeypatch):
     apply_async = MagicMock()
     monkeypatch.setattr(service, "try_acquire_manual_backup_lock", acquire)
     monkeypatch.setattr(
-        "workers.tasks.admin_backup_task.run_manual_backup_task.apply_async",
-        apply_async,
+        "app.core.task_runtime.dispatch.dispatch_task_by_name",
+        lambda name, **kwargs: apply_async(**kwargs),
     )
 
     out = service.trigger_manual_backup()
@@ -122,8 +122,8 @@ def test_trigger_manual_backup_can_enqueue_in_cluster(monkeypatch):
     apply_async = MagicMock(return_value=SimpleNamespace(id="backup-task-cluster"))
     monkeypatch.setattr(service, "try_acquire_manual_backup_lock", acquire)
     monkeypatch.setattr(
-        "workers.tasks.admin_backup_task.run_manual_backup_task.apply_async",
-        apply_async,
+        "app.core.task_runtime.dispatch.dispatch_task_by_name",
+        lambda name, **kwargs: apply_async(**kwargs),
     )
 
     out = service.trigger_manual_backup()

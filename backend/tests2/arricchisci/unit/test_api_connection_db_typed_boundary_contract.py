@@ -21,6 +21,8 @@ def _api_row(
     group_id: str = "grp-1",
     config: dict[str, object] | None = None,
 ) -> api_db.ApiConnectionRow:
+    from app.infrastructure.security.crypto import encrypt
+
     return api_db.ApiConnectionRow(
         id=api_id,
         group_id=group_id,
@@ -30,7 +32,7 @@ def _api_row(
             "name": "Typed API",
             "category": "custom",
             "connection_type": "manual",
-            "auth": {"type": "bearer", "token": "secret"},
+            "auth": {"type": "bearer", "token": encrypt("secret")},
             "created_at": "2026-05-08T10:00:00+00:00",
         },
         created_at="2026-05-08T10:00:00+00:00",

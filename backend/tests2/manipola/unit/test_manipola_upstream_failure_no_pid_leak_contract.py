@@ -247,13 +247,7 @@ def test_upstream_success_path_unchanged():
          ), patch(
              "app.core.projects.service.ProjectService",
              return_value=fake_project_service,
-         ), patch(
-             "app.core.manipola.project_source_runtime.Path"
-         ) as MockPath:
-        # Path("...").exists() -> False -> fallback a materialize_latest
-        instance_path = MagicMock()
-        instance_path.exists.return_value = False
-        MockPath.return_value = instance_path
+         ):
         MockResolver.return_value.materialize_run.return_value = fake_materialized
         MockResolver.return_value.materialize_latest.return_value = fake_materialized
 

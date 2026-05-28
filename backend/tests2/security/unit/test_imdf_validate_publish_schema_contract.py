@@ -3,6 +3,7 @@ test_imdf_validate_publish_schema_contract.py
 
 Contract test per la schema-compat logic di validate_publish:
 """
+from contextlib import contextmanager
 import importlib
 
 import pytest
@@ -73,6 +74,21 @@ def fake_bundle(tmp_path, monkeypatch):
         IMDF_BUNDLES_DIR=tmp_path,
         IMDF_BUNDLE_TTL_HOURS=24,
     ))
+    import app.core.imdf.storage as storage_mod
+
+    monkeypatch.setattr(
+        storage_mod,
+        "get_meta_only",
+        lambda task_id: {"site_id": "fake", "project_id": "proj-1"}
+        if task_id == "task-xyz"
+        else None,
+    )
+
+    @contextmanager
+    def _fake_vsimem(task_id, site_id):
+        yield str(bundle_dir / "fake.gdb")
+
+    monkeypatch.setattr(storage_mod, "open_gdb_in_vsimem", _fake_vsimem)
     return bundle_dir
 
 

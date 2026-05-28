@@ -81,13 +81,13 @@ def test_auth_reads_login_constants_via_settings():
 
 
 def test_login_rate_limiter_reads_timeout_via_settings():
-    src = _read(_BACKEND_APP / "shared" / "login_rate_limiter.py")
+    src = _read(_BACKEND_APP / "core" / "security" / "login_rate_limiter.py")
     assert "settings.get(\"LOGIN_RL_REDIS_TIMEOUT_SEC\")" in src
     assert "os.getenv(\"LOGIN_RL_REDIS_TIMEOUT_SEC" not in src
 
 
 def test_token_blacklist_reads_timeout_via_settings():
-    src = _read(_BACKEND_APP / "shared" / "token_blacklist.py")
+    src = _read(_BACKEND_APP / "core" / "security" / "token_blacklist.py")
     assert "settings.get(\"JWT_BLACKLIST_REDIS_TIMEOUT_SEC\")" in src
     assert "os.getenv(\"JWT_BLACKLIST_REDIS_TIMEOUT_SEC" not in src
 

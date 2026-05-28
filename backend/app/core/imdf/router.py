@@ -417,6 +417,35 @@ def list_bundles(
             building_count = meta.get("building_count")
             level_count    = meta.get("level_count")
             unit_count     = meta.get("unit_count")
+            if (
+                site_id
+                and (
+                    building_count is None
+                    or level_count is None
+                    or unit_count is None
+                )
+            ):
+                fallback_counts: dict[str, int] = {}
+                site_prefix = f"{site_id}/"
+                wanted = {"building", "level", "unit"}
+                for file_entry in storage_files:
+                    rel = file_entry.get("path") or ""
+                    if not rel.startswith(site_prefix) or not rel.endswith(".geojson"):
+                        continue
+                    layer_name = Path(rel).stem
+                    if layer_name not in wanted:
+                        continue
+                    obj = _imdf_storage.read_geojson(task_id, rel)
+                    if isinstance(obj, dict):
+                        features = obj.get("features")
+                        if isinstance(features, list):
+                            fallback_counts[layer_name] = len(features)
+                if building_count is None:
+                    building_count = fallback_counts.get("building")
+                if level_count is None:
+                    level_count = fallback_counts.get("level")
+                if unit_count is None:
+                    unit_count = fallback_counts.get("unit")
 
             out.append(ImdfBundleSummary(
                 task_id=task_id,

@@ -233,7 +233,7 @@ def test_file_sources_delete_skips_s3_cleanup_when_disabled(monkeypatch):
         yield fake_conn
 
     monkeypatch.setattr(
-        file_sources, "transaction", lambda: transaction_cm(),
+        file_sources, "unit_of_work", lambda: transaction_cm(),
     )
 
     # BE-GO-READY-STORAGE-ENGINE-005: no-op the reconciliation

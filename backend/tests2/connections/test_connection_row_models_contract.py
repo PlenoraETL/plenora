@@ -94,7 +94,7 @@ def test_connection_db_create_hydrates_typed_row_without_legacy_dict_return(
         database="analytics",
         db_schema="public",
         username="reader",
-        password="pwd-123",
+        password=encrypt("pwd-123"),
         extra={"description": "primary"},
         created_by="u-1",
     )
@@ -208,7 +208,7 @@ def test_connection_service_consumes_typed_connection_row(monkeypatch) -> None:
         database="analytics",
         db_schema="public",
         username="reader",
-        password="pwd-123",
+        password=encrypt("pwd-123"),
         extra={"description": "primary"},
         created_at=fixed_now,
         updated_at=fixed_now,

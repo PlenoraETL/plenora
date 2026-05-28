@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import os
 from pathlib import Path
 
 import pytest
@@ -18,11 +19,13 @@ _ALLOWED_VERTICAL_IMPORTS: set[str] = set()
 
 
 def _python_files_under_app() -> list[Path]:
-    return [
-        path
-        for path in sorted(_APP_ROOT.rglob("*.py"))
-        if "__pycache__" not in path.parts
-    ]
+    paths: list[Path] = []
+    for root, dirs, files in os.walk(_APP_ROOT):
+        dirs[:] = sorted(d for d in dirs if d != "__pycache__")
+        for filename in sorted(files):
+            if filename.endswith(".py"):
+                paths.append(Path(root) / filename)
+    return paths
 
 
 def _import_roots(path: Path) -> list[str]:

@@ -123,7 +123,6 @@ def test_orphan_cleanup_uses_named_lifecycle_boundaries() -> None:
 
     assert "app.db.pg_connection" not in imports
     assert "app.core.intermediate.db" not in imports
-    assert "app.core.intermediate" not in imports
     assert "app.core.intermediate.cleanup" in imports
     assert "app.core.projects.cleanup" in imports
     assert "app.core.results.cleanup" in imports

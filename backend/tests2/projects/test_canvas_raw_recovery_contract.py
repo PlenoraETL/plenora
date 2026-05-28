@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import FastAPI
@@ -46,35 +46,28 @@ def client(current_user: CurrentUser, monkeypatch) -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
-def test_service_raw_canvas_read_keeps_group_filter() -> None:
+def test_service_raw_canvas_read_keeps_group_filter(monkeypatch) -> None:
     svc = ProjectService()
     malformed_canvas = '{"nodes": ['
-
-    class _Session:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def fetchone(self, sql, params):
-            calls.append((sql, params))
-            return {"id": "p-corrupt", "canvas": malformed_canvas}
+    from app.core.projects import db as project_db
 
     calls = []
-    with patch("app.core.projects.service.unit_of_work", return_value=_Session()):
-        raw = svc.get_project_raw_canvas("p-corrupt", group_id="grp-1")
+
+    def _raw_canvas(project_id, group_id=None):
+        calls.append((project_id, group_id))
+        return project_db.ProjectRawCanvasRow(
+            id="p-corrupt",
+            canvas=malformed_canvas,
+        )
+
+    monkeypatch.setattr(project_db, "get_project_raw_canvas_row", _raw_canvas)
+    raw = svc.get_project_raw_canvas("p-corrupt", group_id="grp-1")
 
     assert raw == RawProjectCanvas(
         project_id="p-corrupt",
         canvas=malformed_canvas,
     )
-    assert calls == [
-        (
-            "SELECT id, canvas FROM projects WHERE id = %s AND group_id = %s",
-            ("p-corrupt", "grp-1"),
-        )
-    ]
+    assert calls == [("p-corrupt", "grp-1")]
 
 
 def test_raw_canvas_endpoint_recovers_when_strict_canvas_validation_fails(

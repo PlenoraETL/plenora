@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import Tuple
 
+import app.config as config
 from app.config import settings
 
 
@@ -323,13 +324,15 @@ def check_reconciliation_backlog() -> CheckOutcome:
 
     try:
         pending_threshold = int(
-            settings.get("STORAGE_RECONCILE_BACKLOG_PENDING_503_THRESHOLD", 1000)
+            config.settings.get(
+                "STORAGE_RECONCILE_BACKLOG_PENDING_503_THRESHOLD", 1000
+            )
         )
         lost_threshold = int(
-            settings.get("STORAGE_RECONCILE_BACKLOG_LOST_503_THRESHOLD", 10)
+            config.settings.get("STORAGE_RECONCILE_BACKLOG_LOST_503_THRESHOLD", 10)
         )
         upload_intent_threshold = int(
-            settings.get(
+            config.settings.get(
                 "STORAGE_RECONCILE_BACKLOG_UPLOAD_INTENT_503_THRESHOLD",
                 0,
             )
@@ -418,7 +421,7 @@ def check_beat_heartbeat() -> CheckOutcome:
     """
     try:
         max_age = int(
-            settings.get("READINESS_BEAT_HEARTBEAT_MAX_AGE_SECONDS", 0)
+            config.settings.get("READINESS_BEAT_HEARTBEAT_MAX_AGE_SECONDS", 0)
         )
     except Exception as e:
         return True, f"check skipped: {type(e).__name__}"

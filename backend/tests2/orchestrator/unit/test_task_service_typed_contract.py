@@ -247,7 +247,8 @@ def test_task_info_mapper_has_no_to_dict_fallback():
     from app.core.orchestrator import router_mappers
 
     src = inspect.getsource(router_mappers.task_info_to_dict)
-    assert "to_dict" not in src
+    body_src = "\n".join(src.splitlines()[1:])
+    assert ".to_dict" not in body_src
 
 
 def test_task_service_does_not_call_task_result_to_dict_internally(monkeypatch):

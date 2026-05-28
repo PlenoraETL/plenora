@@ -848,9 +848,7 @@ def _load_upstream_data(
         # Runtime composition owns the executor graph. CARICA must not rely on
         # OrchestratorService fallback builders, otherwise the worker path
         # diverges from the API/data-plane contract wiring.
-        orchestrator_stack = build_orchestrator_stack(
-            settings=settings,
-        )
+        orchestrator_stack = build_orchestrator_stack()
         orchestrator = orchestrator_stack.orchestrator
 
         result = orchestrator.execute_pipeline(

@@ -222,11 +222,11 @@ def test_delete_bundle_removes_s3_and_local(fake_storage, fake_settings, tmp_pat
 
 def test_delete_bundle_idempotent_when_nothing(fake_storage, fake_settings):
     """delete su task inesistente non fallisce (storage delete e' idempotente).
-    IMDF-3: count riflette i tentativi sui key fissi (meta + zip + gdb zip)."""
+    IMDF-5: count riflette i tentativi sui key fissi (meta + gdb zip)."""
     from app.core.imdf import storage as st
 
     count = st.delete_bundle("task-nope")
-    assert count == 3
+    assert count == 2
 
 
 def test_delete_bundle_can_skip_local_cleanup(fake_storage, fake_settings, tmp_path):
@@ -242,6 +242,6 @@ def test_delete_bundle_can_skip_local_cleanup(fake_storage, fake_settings, tmp_p
 
     count = st.delete_bundle("task-1", cleanup_local=False)
 
-    # 3 fixed keys + 0 files (questo seed non ha files individuali).
-    assert count == 3
+    # 2 fixed keys + 0 files (questo seed non ha files individuali).
+    assert count == 2
     assert local.exists()

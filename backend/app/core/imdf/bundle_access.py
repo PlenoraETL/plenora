@@ -36,7 +36,7 @@ def assert_bundle_group_access_from_meta(
     bundle_task_id: str,
     *,
     logger: Any,
-    visible_checker: Any = assert_resource_visible,
+    visible_checker: Any = None,
 ) -> None:
     """Check di group access da meta storage IMDF.
 
@@ -52,6 +52,9 @@ def assert_bundle_group_access_from_meta(
       - project_id presente ma progetto non in DB -> 404
       - project_id visible_checker fail -> 403/404 da visible_checker
     """
+    if visible_checker is None:
+        visible_checker = assert_resource_visible
+
     if current_user.role == "superadmin":
         return
 

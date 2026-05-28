@@ -3,6 +3,8 @@ test_imdf_validate_publish_folder_contract.py
 
 Contract test per il supporto del parametro `folder` in validate_publish.
 """
+from contextlib import contextmanager
+
 import pytest
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
@@ -61,6 +63,21 @@ def fake_bundle(tmp_path, monkeypatch):
         IMDF_BUNDLE_TTL_HOURS=24,
     )
     monkeypatch.setattr(config_mod, "settings", fake_settings)
+    import app.core.imdf.storage as storage_mod
+
+    monkeypatch.setattr(
+        storage_mod,
+        "get_meta_only",
+        lambda task_id: {"site_id": "fake", "project_id": "proj-1"}
+        if task_id == "task-abc"
+        else None,
+    )
+
+    @contextmanager
+    def _fake_vsimem(task_id, site_id):
+        yield str(bundle_dir / "fake.gdb")
+
+    monkeypatch.setattr(storage_mod, "open_gdb_in_vsimem", _fake_vsimem)
     return bundle_dir
 
 

@@ -121,6 +121,9 @@ def mock_db_save_fails(monkeypatch):
 def _clean_policy_env(monkeypatch):
     for name in (
         "STORAGE_POLICY",
+        "OBJECT_STORAGE_ENABLED",
+        "OBJECT_STORAGE_BACKEND",
+        "CLOUD_PROVIDER",
         "RESULT_S3_THRESHOLD_BYTES",
         "RESULT_DB_HARD_CAP_BYTES",
     ):

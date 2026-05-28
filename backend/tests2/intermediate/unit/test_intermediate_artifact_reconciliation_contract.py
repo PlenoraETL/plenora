@@ -433,8 +433,6 @@ def test_delete_all_runs_for_canvas_reconciles_each_run(monkeypatch):
                 return [{"node_id": "n1", "artifact_uri": artifact_b}]
         return []
 
-    monkeypatch.setattr(idb, "fetchall", _fake_fetchall)
-
     patcher, cursor, _conn = _make_tx_patcher()
 
     def _fake_record_pending(cur, **kwargs):
@@ -448,7 +446,14 @@ def test_delete_all_runs_for_canvas_reconciles_each_run(monkeypatch):
                return_value="ok"), \
          patch("app.core.resources.storage_reconciliation.mark_done"), \
          patch("app.core.resources.storage_reconciliation.mark_failed_attempt"):
-        deleted = idb.delete_all_runs_for_canvas("canvas-x")
+        deleted = idb.delete_all_runs_for_canvas(
+            "canvas-x",
+            fetchall_func=_fake_fetchall,
+            delete_run_func=lambda run_id: idb._delete_run(
+                run_id,
+                fetchall_func=_fake_fetchall,
+            ),
+        )
 
     assert deleted == 2
     # 1 outer SELECT runs + 2 per-run SELECT node_meta.

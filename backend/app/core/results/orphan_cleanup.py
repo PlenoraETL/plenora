@@ -5,7 +5,10 @@ from __future__ import annotations
 from typing import Literal
 from typing_extensions import TypedDict
 
-from app.core.intermediate import cleanup as intermediate_cleanup
+from app.core.intermediate.cleanup import (
+    delete_runs_for_canvas,
+    list_canvas_ids_with_runs,
+)
 from app.core.projects.cleanup import list_existing_project_ids
 from app.core.results.cleanup import (
     delete_results_for_project,
@@ -62,7 +65,7 @@ def find_orphan_run_canvas_ids() -> list[str]:
     existing = _get_existing_project_ids()
     return [
         canvas_id
-        for canvas_id in intermediate_cleanup.list_canvas_ids_with_runs()
+        for canvas_id in list_canvas_ids_with_runs()
         if canvas_id not in existing
     ]
 
@@ -129,7 +132,7 @@ def cleanup_orphans(dry_run: bool = False) -> OrphanCleanupReport:
         if not dry_run:
             for cid in orphan_canvas_ids:
                 try:
-                    n = intermediate_cleanup.delete_runs_for_canvas(cid)
+                    n = delete_runs_for_canvas(cid)
                     report["orphan_runs"]["runs_deleted"] += n
                 except Exception as e:
                     err = f"delete_runs_for_canvas({cid}): {e}"

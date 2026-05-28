@@ -50,7 +50,7 @@ def test_cleanup_orphans_status_clean_when_all_deletes_succeed():
         "app.core.results.orphan_cleanup.delete_results_for_project",
         return_value=3
     ), patch(
-        "app.core.intermediate.cleanup.delete_runs_for_canvas",
+        "app.core.results.orphan_cleanup.delete_runs_for_canvas",
         return_value=2
     ):
         report = cleanup_orphans(dry_run=False)

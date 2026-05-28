@@ -442,13 +442,16 @@ def test_phase2_imdf_lazy_assert_resource_visible_migrated_to_leaf():
         "Use `from app.core.auth.ownership import "
         "assert_resource_visible` instead."
     )
+    assert "from app.core.imdf import bundle_access as _bundle_access" in text
+    bundle_access_text = (
+        _APP / "core" / "imdf" / "bundle_access.py"
+    ).read_text(encoding="utf-8")
     assert (
         "from app.core.auth.ownership import assert_resource_visible"
-        in text
+        in bundle_access_text
     ), (
-        "imdf/router.py must import `assert_resource_visible` from "
-        "the ownership leaf at module top after AUTH-ENGINE-020 "
-        "(closes R-019.1)."
+        "IMDF ownership must pass through the bundle access leaf, which "
+        "imports `assert_resource_visible` from app.core.auth.ownership."
     )
 
 
