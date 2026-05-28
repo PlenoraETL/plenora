@@ -58,12 +58,10 @@ def test_load_upstream_data_does_not_fallback_to_latest_project_result_after_fai
     # dal test (fail-closed su _project_group_id, execute via orchestrator
     # stub).
     with patch("app.core.projects.runtime_context.get_project_runtime_context", return_value=None), \
-         patch("app.core.projects.service.ProjectService", return_value=object()), \
-         patch("app.core.connections.service.ConnectionService", return_value=object()), \
-         patch("app.core.estrai.query_generator.QueryGenerator", return_value=object()), \
-         patch("app.db.query_executor.create_executor", return_value=object()), \
-         patch("app.core.features.features_service.FeaturesService", return_value=object()), \
-         patch("app.core.orchestrator.service.OrchestratorService", return_value=orchestrator):
+         patch(
+             "workers.tasks.carica_task.build_orchestrator_stack",
+             return_value=SimpleNamespace(orchestrator=orchestrator),
+         ):
         result = _load_upstream_data(
             project_id="proj-1",
             canvas={},

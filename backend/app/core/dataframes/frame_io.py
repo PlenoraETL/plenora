@@ -17,7 +17,7 @@ import geopandas as gpd
 import pyogrio
 from shapely.errors import GEOSException
 
-from app.config import settings as _settings
+from app import config as app_config
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.geospatial_io import geospatial_dataframe_to_bytes
 from app.core.dataframes.geometry_parsing import parse_geometry_series
@@ -427,7 +427,7 @@ def load_dataframe_from_file(
     except OSError:
         _preflight_size = -1
     if _preflight_size >= 0:
-        _cap = int(_settings.get("LOAD_FILE_MAX_BYTES", 200 * 1024 * 1024))
+        _cap = int(app_config.settings.get("LOAD_FILE_MAX_BYTES", 200 * 1024 * 1024))
         if _cap > 0 and _preflight_size > _cap:
             raise MemoryLimitExceededError(
                 observed_bytes=_preflight_size,

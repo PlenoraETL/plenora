@@ -163,13 +163,11 @@ def test_runtime_and_worker_factories_pass_explicit_executors_to_orchestrator() 
     runtime_src = _RUNTIME_SERVICES.read_text(encoding="utf-8")
     worker_src = _PIPELINE_TASK.read_text(encoding="utf-8")
 
-    for src, label in (
-        (runtime_src, "app/runtime/services.py"),
-        (worker_src, "workers/tasks/pipeline_task.py"),
-    ):
-        assert "estrai_executor=estrai_executor" in src, label
-        assert "manipola_executor=manipola_executor" in src, label
-        assert "enrich_executor=enrich_executor" in src, label
+    assert "estrai_executor=estrai_executor" in runtime_src
+    assert "manipola_executor=manipola_executor" in runtime_src
+    assert "enrich_executor=enrich_executor" in runtime_src
+    assert "build_orchestrator_stack().orchestrator" in worker_src
+    assert "OrchestratorService(" not in worker_src
 
 
 def test_orchestrator_has_no_default_executor_builders_left() -> None:
