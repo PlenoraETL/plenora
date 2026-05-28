@@ -5,6 +5,7 @@ Keeps database loading behavior isolated from orchestration callers.
 """
 
 import json
+import time as _time
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import quote_plus as _qp
 
@@ -145,7 +146,6 @@ class CaricaExecutor:
         Returns:
             WriteResult con esito dell'operazione.
         """
-        import time as _time
         _step_start = _time.time()
 
         # Pre-fix: carica/executor.py NON emetteva mai `append_step`. Tutte

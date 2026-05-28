@@ -29,6 +29,7 @@ API:
 from __future__ import annotations
 
 import io
+import json as _json
 import queue
 import threading
 from typing import Any, Iterator
@@ -195,7 +196,6 @@ def _json_producer(df: Any, qbuf: _QueueBuf, err_holder: list) -> None:
     Categorical, ecc.) usa `record.to_json()` se disponibile via
     intermediate DataFrame slice, fallback `df.iloc[start:end].to_json`
     per batch."""
-    import json as _json
     _JSON_RECORDS_BATCH = 5_000
 
     try:

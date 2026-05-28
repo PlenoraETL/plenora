@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import pytest
@@ -40,3 +41,41 @@ def test_ticket_metrics_does_not_mask_internal_import_failures() -> None:
 
     assert "_TICKETS_IMPORT_ERROR" not in src
     assert "except Exception as exc" not in src
+
+
+def test_selected_stdlib_imports_are_not_repeated_inside_functions() -> None:
+    """Small guard for stdlib imports already cleaned up.
+
+    This is intentionally narrow: optional/heavy dependencies and app.* lazy
+    imports are runtime boundaries, not covered by this guard.
+    """
+    expected_top_level: dict[str, set[str]] = {
+        "core/arricchisci/api_connection_rest_file.py": {"re"},
+        "core/carica/executor.py": {"time"},
+        "core/dataframes/export_writer.py": {"json"},
+        "core/dataframes/preview_loader.py": {"json"},
+        "core/datasources/ftp.py": {"queue", "threading"},
+        "core/datasources/service.py": {"os"},
+        "core/datasources/sharepoint.py": {"os", "urllib.parse"},
+        "core/eseguibili/db.py": {"datetime"},
+        "core/eseguibili/service.py": {"hashlib"},
+        "core/estrai/query_filters.py": {"re"},
+    }
+
+    violations: list[tuple[str, int, str]] = []
+    for relative, modules in expected_top_level.items():
+        source = _read(relative)
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.Import, ast.ImportFrom)):
+                continue
+            if isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+            else:
+                module = node.names[0].name
+            if module not in modules:
+                continue
+            if not any(child is node for child in tree.body):
+                violations.append((relative, node.lineno, module))
+
+    assert not violations

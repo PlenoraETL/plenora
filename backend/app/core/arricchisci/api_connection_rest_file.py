@@ -6,6 +6,7 @@ Keeps API enrichment behavior isolated from orchestration callers.
 
 from __future__ import annotations
 
+import re
 import time
 import time as _time
 
@@ -368,7 +369,6 @@ class ApiConnectionRestFileMixin:
         # tmp_exec_dir e' creata via mkdtemp con prefix random, MA la
         # sanificazione blinda anche caller futuri che bypassano la
         # tmp_exec_dir (es. test che inietta un output_path custom).
-        import re
         if not re.match(r'^\.[A-Za-z0-9_]{1,16}$', output_ext):
             logger.warning(
                 "Output extension non valida '%s': fallback a '.bin' "

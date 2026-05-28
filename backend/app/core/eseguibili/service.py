@@ -8,6 +8,7 @@ import io
 import re
 
 import copy
+import hashlib
 import json
 import uuid
 from typing import Mapping, Optional, Sequence
@@ -359,7 +360,6 @@ def execute(
     # diverso) → diverso temp_name. Hash sha256 troncato e' sufficiente
     # per disambiguare retry rapidi (no collisione su 2^32 retry distinti).
     # Il cleanup TTL 24h (sessione precedente) resta come safety net.
-    import hashlib
     _df_signature = hashlib.sha256(
         f"{eseguibile['id']}::{len(df)}::{','.join(df.columns)}".encode("utf-8")
     ).hexdigest()[:8]

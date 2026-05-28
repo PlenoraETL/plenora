@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Mapping, Optional
 
 from app.db.pg_connection import unit_of_work
@@ -122,7 +122,6 @@ def _coerce_str(value: object) -> str | None:
         return None
     if isinstance(value, str):
         return value
-    from datetime import datetime, date
     if isinstance(value, (datetime, date)):
         return value.isoformat()
     return str(value)

@@ -125,9 +125,8 @@ class WhereClauseBuilder:
             if isinstance(value, (list, tuple)) and len(value) >= 2:
                 lo_raw, hi_raw = value[0], value[1]
             elif isinstance(value, str):
-                import re as _re
-                parts = _re.split(r"\s+and\s+", value.strip(), maxsplit=1,
-                                  flags=_re.IGNORECASE)
+                parts = re.split(r"\s+and\s+", value.strip(), maxsplit=1,
+                                 flags=re.IGNORECASE)
                 if len(parts) != 2 or not parts[0] or not parts[1]:
                     raise ValueError(
                         "BETWEEN richiede due valori separati da 'AND' "

@@ -1,5 +1,6 @@
 """Data source configuration service and runtime file operations."""
 
+import os
 import uuid
 from io import BytesIO
 from pathlib import Path
@@ -281,8 +282,6 @@ class DataSourceService:
         far fallire il parser su file molto grandi — l'utente deve
         sapere che la preview ha un limite di scope.
         """
-        import os
-
         try:
             max_bytes = int(
                 os.environ.get("PLENORA_DATASOURCE_SCHEMA_MAX_BYTES")

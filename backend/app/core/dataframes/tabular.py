@@ -43,11 +43,10 @@ def _read_csv_with_encodings(
     blob in `frame_io._load_dataframe_from_bytes` non aveva fallback
     e produceva dati corrotti o exception su CSV italiani cp1252.
     """
-    from io import BytesIO as _BytesIO  # local import to avoid module cycle
     last_err: Optional[UnicodeDecodeError] = None
     for enc in _CSV_ENCODINGS:
         try:
-            if isinstance(source, _BytesIO):
+            if isinstance(source, io.BytesIO):
                 source.seek(0)
             return pd.read_csv(source, low_memory=False, encoding=enc)
         except UnicodeDecodeError as e:
@@ -78,8 +77,7 @@ def read_csv_safe_bytes(data: bytes, *, source_label: str = "in-memory CSV") -> 
     etl-sources). Allinea il blob path al pattern del filesystem path
     via lo stesso helper.
     """
-    from io import BytesIO
-    return _read_csv_with_encodings(BytesIO(data), label=source_label)
+    return _read_csv_with_encodings(io.BytesIO(data), label=source_label)
 
 
 def _compact_whole_number_floats(df: pd.DataFrame) -> pd.DataFrame:

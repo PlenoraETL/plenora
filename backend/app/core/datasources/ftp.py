@@ -2,7 +2,9 @@
 
 import ftplib
 import io
+import queue
 import socket
+import threading
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -343,9 +345,6 @@ class FTPDataSource(DataSourceInterface):
         finally drena la queue per sbloccare eventuali q.put ancora in
         volo prima del join.
         """
-        import queue
-        import threading
-
         self._check()
         q: queue.Queue = queue.Queue(maxsize=4)  # bounded buffer
         sentinel = object()

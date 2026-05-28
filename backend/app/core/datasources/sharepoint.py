@@ -5,10 +5,11 @@ Usa la libreria Office365-REST-Python-Client (stessa usata in sharepoint_uploade
 """
 
 from io import BytesIO
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 import uuid
 
 import io
+import os
 from datetime import datetime
 from typing import Optional
 
@@ -33,7 +34,6 @@ def _env_float(name: str, default: float) -> float:
     P1 (2026-05-26): introdotta per esporre timeout SharePoint
     (connect/read separati) come knob env invece di hardcode `300`.
     """
-    import os
     raw = os.environ.get(name)
     if raw is None or raw.strip() == "":
         return default
@@ -877,7 +877,6 @@ class SharePointDataSource(DataSourceInterface):
         # Costruzione URL REST endpoint. `quote` per encoding
         # accentate/spazi nel path SP. `()` non viene encoded perche'
         # parte di sintassi OData.
-        from urllib.parse import quote
         encoded_path = quote(server_relative_url, safe="/()")
         url = (
             f"{site_url}/_api/Web/GetFileByServerRelativeUrl('"

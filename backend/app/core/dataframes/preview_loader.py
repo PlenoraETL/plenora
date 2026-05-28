@@ -22,6 +22,7 @@ API:
 
 from __future__ import annotations
 
+import json
 from io import BytesIO, StringIO
 from typing import Any, Optional, Tuple
 
@@ -108,8 +109,6 @@ def _preview_json(data: bytes, max_rows: int) -> Tuple[pd.DataFrame, Optional[in
     """JSON bounded: per JSON-lines pandas supporta `nrows`; per JSON
     standard dobbiamo caricare e truncare (no streaming nel format).
     JSON normale e' raro per file >100MB, accettiamo questa limitazione."""
-    import json
-
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
