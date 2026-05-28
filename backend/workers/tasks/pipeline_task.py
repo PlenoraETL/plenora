@@ -49,53 +49,9 @@ def _build_orchestrator() -> Any:
     con nodi ArcGIS Feature Service non riescono a risolvere il layer al
     task-time (mentre in modalita' sincrona via app/main.py funzionano).
     """
-    from app.core.projects.service import ProjectService
-    from app.core.connections.service import ConnectionService
-    from app.core.estrai.query_generator import QueryGenerator
-    from app.core.features.features_service import FeaturesService
-    from app.db.query_executor import create_executor
-    from app.core.orchestrator.service import OrchestratorService
-    from app.core.estrai.executor import EstraiExecutor
-    from app.core.manipola.executor import ManipolaExecutor
-    from app.core.arricchisci.executor import EnrichExecutor
+    from app.runtime.services import build_orchestrator_stack
 
-    project_service = ProjectService()
-    connection_service = ConnectionService()
-    generator = QueryGenerator()
-    executor = create_executor()
-    features_service = FeaturesService()
-
-    orchestrator = None
-
-    def dispatch_pipeline(*args: Any, **kwargs: Any) -> Any:
-        if orchestrator is None:
-            raise RuntimeError("Orchestrator dispatcher used before wiring")
-        return orchestrator.execute_pipeline(*args, **kwargs)
-
-    estrai_executor = EstraiExecutor(
-        project_service=project_service,
-        executor=executor,
-        generator=generator,
-        connection_service=connection_service,
-        features_service=features_service,
-    )
-    manipola_executor = ManipolaExecutor(
-        project_service=project_service,
-        pipeline_dispatcher=dispatch_pipeline,
-    )
-    enrich_executor = EnrichExecutor(project_service=project_service)
-
-    orchestrator = OrchestratorService(
-        project_service=project_service,
-        executor=executor,
-        generator=generator,
-        connection_service=connection_service,
-        features_service=features_service,
-        estrai_executor=estrai_executor,
-        manipola_executor=manipola_executor,
-        enrich_executor=enrich_executor,
-    )
-    return orchestrator
+    return build_orchestrator_stack().orchestrator
 
 
 def _get_project_info(project_id: str) -> JsonObject:
@@ -213,6 +169,7 @@ def execute_pipeline_task(
 
     if run_id is not None:
         from app.core.intermediate.run_idempotency import is_already_completed
+
         if is_already_completed(run_id):
             logger.info(
                 f"[IDEMPOTENCY] Task PIPELINE {task_id}: run_id {run_id} "
@@ -231,6 +188,7 @@ def execute_pipeline_task(
     _run_start = _time.time()
 
     from app.core.auth.async_user_recheck import recheck_user_authorized
+
     _revoked = recheck_user_authorized(
         user_id=user_id, project_id=project_id,
         task_id=task_id, run_id=run_id, task_name="PIPELINE",
@@ -271,8 +229,9 @@ def execute_pipeline_task(
 
     # Apri run su intermediate storage tramite boundary di lifecycle.
     try:
-        from app.core.intermediate import run_lifecycle as intermediate_run_lifecycle
-        intermediate_run_lifecycle.create_run(
+        from app.core.intermediate.run_lifecycle import create_run
+
+        create_run(
             run_id=run_id,
             canvas_id=project_id,
             group_id=group_id,
@@ -362,6 +321,7 @@ def execute_pipeline_task(
 
             try:
                 from app.utils.debug_payload_builder import DebugPayloadBuilder
+
                 debug_payload = DebugPayloadBuilder().build(
                     run_id=run_id,
                     project_id=project_id,
@@ -413,6 +373,7 @@ def execute_pipeline_task(
         # Chiudi run intermediate storage tramite boundary di lifecycle.
         try:
             from app.core.intermediate.run_lifecycle import close_run as close_intermediate_run
+
             close_intermediate_run(
                 run_id=run_id, input_hash="", output_hash="",
                 total_exec_time=_time.time() - _run_start, success=True,
@@ -443,6 +404,7 @@ def execute_pipeline_task(
         # Costruisce debug_payload con traceback completo
         try:
             from app.utils.debug_payload_builder import DebugPayloadBuilder
+
             debug_payload = DebugPayloadBuilder().build(
                 run_id=run_id,
                 project_id=project_id,
@@ -475,6 +437,7 @@ def execute_pipeline_task(
         # Chiudi run intermediate storage tramite boundary di lifecycle.
         try:
             from app.core.intermediate.run_lifecycle import close_run as close_intermediate_run
+
             close_intermediate_run(
                 run_id=run_id, input_hash="", output_hash="",
                 total_exec_time=_time.time() - _run_start, success=False,
@@ -488,6 +451,7 @@ def execute_pipeline_task(
         # Pattern ereditato dalla migrazione SQLite -> PG.
         try:
             from app.core.intermediate.run_lifecycle import close_worker_connection
+
             close_worker_connection()
         except Exception as e:
             logger.debug(f"close_connection intermediate fallito post-crash: {type(e).__name__}: {e}")
@@ -516,6 +480,7 @@ def preview_pipeline_task(
 
     # N9: re-check permessi al pickup (helper condiviso
     from app.core.auth.async_user_recheck import recheck_user_authorized
+
     _revoked = recheck_user_authorized(
         user_id=user_id, project_id=project_id,
         task_id=task_id, task_name="PREVIEW",

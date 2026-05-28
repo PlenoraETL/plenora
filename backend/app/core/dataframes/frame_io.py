@@ -13,8 +13,14 @@ from pathlib import Path
 from typing import Optional, Union
 
 import pandas as pd
+import geopandas as gpd
+import pyogrio
+from shapely.errors import GEOSException
 
+from app.config import settings as _settings
 from app.core.dataframes.frame_copy import copy_frame_for_update
+from app.core.dataframes.geospatial_io import geospatial_dataframe_to_bytes
+from app.core.dataframes.geometry_parsing import parse_geometry_series
 from app.core.dataframes.tabular import (
     _compact_whole_number_floats,
     _read_csv_safe,
@@ -80,6 +86,7 @@ from app.core.dataframes.tabular import (
     null_row_indices_for_columns,
     object_series,
     pivot_table_dataframe,
+    read_csv_safe_bytes,
     rename_duplicate_columns,
     sample_dataframe,
     sample_rows_reset_index,
@@ -97,6 +104,8 @@ from app.core.dataframes.tabular import (
     unique_rows_for_columns,
     window_function_values,
 )
+from app.core.io.geospatial import read_vector_bytes
+from app.core.io.zip_guards import open_zip_bytes_safe
 from app.core.resources.exceptions import MemoryLimitExceededError
 from app.utils.logger import get_logger
 
@@ -291,7 +300,6 @@ def _load_dataframe_from_bytes(
         # gia' faceva fallback multi-encoding. Pre-fix
         # `pd.read_csv(BytesIO(data))` senza `encoding=` falliva su CSV
         # italiani cp1252 nel path in-memory.
-        from app.core.dataframes.tabular import read_csv_safe_bytes
         return read_csv_safe_bytes(data, source_label="blob CSV")
     if format_hint == "json":
         try:
@@ -316,8 +324,6 @@ def _load_dataframe_from_bytes(
         # (int/float) per i valori non-null (vedi audit D1).
         return pd.read_parquet(BytesIO(data), dtype_backend="numpy_nullable")
     if format_hint == "geojson":
-        import geopandas as gpd
-
         try:
             return gpd.read_file(BytesIO(data), engine="pyogrio")
         except Exception:
@@ -334,7 +340,6 @@ def _load_dataframe_from_bytes(
         # `BytesIO` come `path_or_buffer` e gestisce internamente
         # /vsimem (per single-file) e /vsizip (per shapefile/gdb
         # ZIP). I formati gpkg/shp/zip/gdb sono ora RAM-only.
-        from app.core.io.geospatial import read_vector_bytes
         return read_vector_bytes(data, layer=layer)
     raise ValueError(f"Formato artifact non supportato: {format_hint}")
 
@@ -380,8 +385,6 @@ def load_dataframe_from_artifact(
         # il contratto integer-null-preserving su entrambi i call site.
         return pd.read_parquet(artifact_path, dtype_backend="numpy_nullable")
     if fmt == "geojson":
-        import geopandas as gpd
-
         return gpd.read_file(artifact_path, engine="pyogrio")
     if fmt in _PATH_BOUND_ARTIFACT_FORMATS:
         # Pre-fix: se il file su disco aveva un suffisso "sbagliato"
@@ -424,8 +427,6 @@ def load_dataframe_from_file(
     except OSError:
         _preflight_size = -1
     if _preflight_size >= 0:
-        from app.config import settings as _settings
-
         _cap = int(_settings.get("LOAD_FILE_MAX_BYTES", 200 * 1024 * 1024))
         if _cap > 0 and _preflight_size > _cap:
             raise MemoryLimitExceededError(
@@ -473,8 +474,6 @@ def load_dataframe_from_file(
             df = pd.read_parquet(file_path, dtype_backend="numpy_nullable")
 
         elif estensione in [".geojson", ".gpkg", ".shp"]:
-            import geopandas as gpd
-
             if layer and estensione == ".gpkg":
                 df = gpd.read_file(file_path, layer=layer, engine="pyogrio")
             else:
@@ -526,8 +525,6 @@ def load_arcgis_feature_dataframe(file_path: Union[str, Path]) -> pd.DataFrame:
     suffix = path.suffix.lower()
 
     try:
-        import geopandas as gpd
-
         if suffix == ".geojson":
             return gpd.read_file(path, engine="pyogrio")
         if suffix == ".gpkg":
@@ -543,12 +540,9 @@ def load_arcgis_feature_dataframe(file_path: Union[str, Path]) -> pd.DataFrame:
 
         if geom_col:
             try:
-                import geopandas as gpd
-                from app.core.dataframes.geometry_parsing import parse_geometry_series
-
                 df["geometry"] = parse_geometry_series(df[geom_col])
                 return gpd.GeoDataFrame(df, geometry="geometry")
-            except (ImportError, Exception) as e:
+            except (ValueError, TypeError, AttributeError, GEOSException) as e:
                 logger.warning(f"Errore conversione geometria WKT: {e}")
         return df
 
@@ -559,8 +553,6 @@ def load_arcgis_feature_dataframe(file_path: Union[str, Path]) -> pd.DataFrame:
         return pd.read_excel(path)
 
     try:
-        import geopandas as gpd
-
         return gpd.read_file(path, engine="pyogrio")
     except Exception as exc:
         logger.warning(
@@ -581,12 +573,8 @@ def load_arcgis_feature_dataframe(file_path: Union[str, Path]) -> pd.DataFrame:
 
 def _carica_filegdb(file_path: Path, layer: Optional[str] = None) -> pd.DataFrame:
     """Load a DataFrame from an Esri File Geodatabase."""
-    import geopandas as gpd
-
     if layer:
         return gpd.read_file(file_path, layer=layer, engine="pyogrio")
-
-    import pyogrio
 
     layers = [str(row[0]) for row in pyogrio.list_layers(str(file_path))]
     if not layers:
@@ -611,9 +599,6 @@ def _carica_da_zip(
     volta sola via BytesIO, e i cap zip-bomb sono validati prima
     di qualunque `inner.read()`.
     """
-    from app.core.io.geospatial import read_vector_bytes
-    from app.core.io.zip_guards import open_zip_bytes_safe
-
     zip_bytes = zip_path.read_bytes()
 
     # `open_zip_bytes_safe` valida i cap zip-bomb PRIMA di yield-are
@@ -686,8 +671,6 @@ def save_dataframe_to_bytes(
     formato = format.lower()
 
     if formato in _GEOSPATIAL_FORMATS:
-        from app.core.dataframes.geospatial_io import geospatial_dataframe_to_bytes
-
         return geospatial_dataframe_to_bytes(df, formato, geom_column, crs)
 
     return tabular_dataframe_to_bytes(df, formato)

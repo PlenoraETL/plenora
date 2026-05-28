@@ -25,6 +25,17 @@ from app.core.scheduler.scheduler_execution_runtime import (
 )
 from app.core.scheduler.scheduler_preflight import pre_check_destination_connection
 from app.utils.logger import get_logger, open_run, close_run, set_run_context
+from app.core import artifacts as artifact_module
+from app.core.carica import executor as carica_executor_module
+from app.core.carica import models as carica_models
+from app.core.connections.service import ConnectionService
+from app.core.dataframes import frame_io as dataframe_frame_io
+from app.core.intermediate import cleanup as intermediate_cleanup
+from app.core.intermediate import run_lifecycle as intermediate_run_lifecycle
+from app.core.intermediate import runs_db as intermediate_runs_db
+from app.core.orchestrator import execution_contract as execution_contract_module
+from app.core.projects import service as project_service_module
+from app.runtime.services import build_orchestrator_stack
 
 logger = get_logger(__name__)
 
@@ -80,7 +91,6 @@ class ExecutionManager:
     def _get_connection_service(self):
         """ConnectionService lazy singleton per questa istanza di ExecutionManager."""
         if self._connection_service is None:
-            from app.core.connections.service import ConnectionService
             self._connection_service = ConnectionService()
         return self._connection_service
 
@@ -91,8 +101,6 @@ class ExecutionManager:
         Importato lazy per evitare circular imports e perché i servizi
         richiedono settings già inizializzati.
         """
-        from app.runtime.services import build_orchestrator_stack
-
         stack = build_orchestrator_stack(
             connection_service=self._get_connection_service(),
         )
@@ -146,8 +154,7 @@ class ExecutionManager:
         # `return` senza `close_run` lascia il record in stato 'running'
         # per sempre (orphan run che sporca la dashboard e inquina il
         # check di task bloccate
-        from app.core.projects.service import ProjectService
-        project_service = ProjectService()
+        project_service = project_service_module.ProjectService()
 
         schedule_row = scheduler_db.get_schedule_row(schedule_id)
         schedule_group_id = schedule_row.group_id if schedule_row else None
@@ -263,7 +270,6 @@ class ExecutionManager:
         # commit 6d600650). Mirror del pattern usato in
         # `workers/tasks/pipeline_task.py:189` per i task non-schedule.
         try:
-            from app.core.intermediate import run_lifecycle as intermediate_run_lifecycle
             intermediate_run_lifecycle.create_run(
                 run_id=run_id,
                 canvas_id=project_id,
@@ -321,10 +327,7 @@ class ExecutionManager:
             orchestrator = self._get_orchestrator()
             force_recalculate = not config.execution.use_cache
 
-            from app.core.orchestrator.execution_contract import (
-                build_pipeline_execution_contract,
-            )
-            execution_contract = build_pipeline_execution_contract(
+            execution_contract = execution_contract_module.build_pipeline_execution_contract(
                 project_id=project_id,
                 project_service=project_service,
             )
@@ -597,8 +600,7 @@ class ExecutionManager:
             # dalla migrazione SQLite -> PostgreSQL (in SQLite il rischio era
             # SQLITE_BUSY / file descriptor exhaustion
             try:
-                from app.core.intermediate.cleanup import close_worker_connection
-                close_worker_connection()
+                intermediate_cleanup.close_worker_connection()
             except Exception as e:
                 logger.debug(f"close_connection intermediate fallito: {type(e).__name__}: {e}")
             try:
@@ -671,14 +673,7 @@ class ExecutionManager:
             # mismatch) → output_path. Niente latest-by-project: due
             # esecuzioni parallele sullo stesso project si scambierebbero
             # silenziosamente l'output sulla tabella di destinazione
-            from app.core.dataframes.frame_io import load_dataframe_from_file
-            from app.core.artifacts import (
-                ArtifactResolver,
-                ArtifactResolutionError,
-                PipelineArtifact,
-            )
-
-            artifact = PipelineArtifact.from_executor_result(
+            artifact = artifact_module.PipelineArtifact.from_executor_result(
                 pipeline_result, project_id=project_id
             )
             if artifact.artifact_kind == "none":
@@ -696,11 +691,11 @@ class ExecutionManager:
             try:
                 # mode="bytes": Post-Phase5 il consumer carica
                 # `m.data` via load_dataframe_from_artifact (no tempfile).
-                materialized = ArtifactResolver().materialize_run(
+                materialized = artifact_module.ArtifactResolver().materialize_run(
                     artifact.to_run_artifact_ref(),
                     mode="bytes",
                 )
-            except ArtifactResolutionError as e:
+            except artifact_module.ArtifactResolutionError as e:
                 logger.error(
                     f"[GESTITO] CARICA scheduler: risoluzione artefatto "
                     f"fallita per project={project_id}: {e}",
@@ -712,14 +707,11 @@ class ExecutionManager:
                 if m.df is not None:
                     df = m.df
                 elif m.data is not None:
-                    from app.core.dataframes.frame_io import (
-                        load_dataframe_from_artifact,
-                    )
-                    df = load_dataframe_from_artifact(
+                    df = dataframe_frame_io.load_dataframe_from_artifact(
                         data=m.data, format_hint=m.format,
                     )
                 else:
-                    df = load_dataframe_from_file(m.path)
+                    df = dataframe_frame_io.load_dataframe_from_file(m.path)
 
             if df.empty:
                 return {"success": False, "error": "DataFrame output vuoto"}
@@ -737,9 +729,9 @@ class ExecutionManager:
                 "column_mappings": [],  # auto-mapping da CaricaExecutor
             }
 
-            from app.core.carica.executor import CaricaExecutor
-
-            carica_executor = CaricaExecutor(connection_service=self._get_connection_service())
+            carica_executor = carica_executor_module.CaricaExecutor(
+                connection_service=self._get_connection_service()
+            )
 
             # Registra la run intermediate PRIMA dell'execute.
             # Pre-fix: lo scheduler passava un `carica_run_id`
@@ -755,10 +747,6 @@ class ExecutionManager:
             # (`rows_written=0`, status `completed`).
             if carica_run_id:
                 try:
-                    from app.core.intermediate import (
-                        run_lifecycle as intermediate_run_lifecycle,
-                        runs_db as intermediate_runs_db,
-                    )
                     if intermediate_runs_db.get_run(carica_run_id) is None:
                         intermediate_run_lifecycle.create_run(
                             run_id=carica_run_id,
@@ -786,13 +774,12 @@ class ExecutionManager:
                 run_id=carica_run_id,
             )
 
-            from app.core.carica.models import WriteStatus
             # SKIPPED_IDEMPOTENT is a safe no-op on retry.
             # Se non incluso qui, il guard causa retry loop infiniti
             success = write_result.status in (
-                WriteStatus.SUCCESS,
-                WriteStatus.PARTIAL,
-                WriteStatus.SKIPPED_IDEMPOTENT,
+                carica_models.WriteStatus.SUCCESS,
+                carica_models.WriteStatus.PARTIAL,
+                carica_models.WriteStatus.SKIPPED_IDEMPOTENT,
             )
 
             # Chiudi la run intermediate per il guard idempotency.
@@ -802,9 +789,6 @@ class ExecutionManager:
             # successivo riprova invece di skippare.
             if carica_run_id:
                 try:
-                    from app.core.intermediate import (
-                        runs_db as intermediate_runs_db,
-                    )
                     intermediate_runs_db.update_run(
                         carica_run_id,
                         status="completed" if success else "failed",
@@ -850,9 +834,6 @@ class ExecutionManager:
             # righe → no-op silente, comportamento corretto.
             if carica_run_id:
                 try:
-                    from app.core.intermediate import (
-                        runs_db as intermediate_runs_db,
-                    )
                     intermediate_runs_db.update_run(
                         carica_run_id, status="failed"
                     )

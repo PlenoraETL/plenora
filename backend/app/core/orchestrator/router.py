@@ -21,6 +21,8 @@ from app.core.projects.canvas_models import ExecuteRequest
 from app.core.orchestrator.task_service import (
     TaskType,
 )
+from app.core.orchestrator import task_service as task_service_module
+from app.core.orchestrator import log_cleanup as orchestrator_log_cleanup
 from app.core.orchestrator.execution_contract import (
     build_pipeline_execution_contract,
 )
@@ -35,13 +37,20 @@ from app.core.orchestrator.carica_payload_validation import (
     validate_rest_carica_task_payload,
 )
 from app.core.orchestrator import download_response as _download_response
+from app.core.projects import service as project_service_module
+from app.core.results import cleanup as results_cleanup
 from app.utils.router_utils import require_service
 from app.observability.audit_action import audit_action
 from app.core.auth.dependencies import get_current_user, require_not_esecutore
 from app.shared.contracts.auth import CurrentUser
 from app.shared.contracts.payloads import JsonObject
+from app.core.auth import resource_access as resource_access_module
 from app.core.auth.ownership import assert_group_access
+from app.core import artifacts as artifact_module
 from app.shared.execution.canvas_graph import CanvasGraph
+from app.shared.execution.output_contract_types_enricher import (
+    enrich_canvas_types_from_output_contract,
+)
 from app.core.eseguibili import output_store as _eseg_output_store
 from app.core.results import output_file_cleanup
 
@@ -140,16 +149,13 @@ def execute_project_pipeline(
         raise HTTPException(
             status_code=403,
             detail="intermediate_mode override richiede ruolo superadmin",
-        )
+    )
 
     try:
-        from app.core.orchestrator.task_service import task_service
         force_recalculate = request.force_recalculate if request else False
         project_service = getattr(_orchestrator, "project_service", None)
         if project_service is None:
-            from app.core.projects.service import ProjectService
-
-            project_service = ProjectService()
+            project_service = project_service_module.ProjectService()
         try:
             execution_contract = build_pipeline_execution_contract(
                 project_id=project_id,
@@ -157,7 +163,7 @@ def execute_project_pipeline(
             )
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        task_info = task_service.create_pipeline_task(
+        task_info = task_service_module.task_service.create_pipeline_task(
             project_id=project_id,
             force_recalculate=force_recalculate,
             user_id=current_user.user_id,
@@ -198,8 +204,7 @@ def preview_project(
     require_service(_orchestrator, "OrchestratorService")
     _assert_project_group(project_id, current_user)
     try:
-        from app.core.orchestrator.task_service import task_service
-        task_info = task_service.create_preview_task(
+        task_info = task_service_module.task_service.create_preview_task(
             project_id=project_id,
             limit=limit,
             user_id=current_user.user_id,
@@ -294,26 +299,21 @@ def create_task(
     utente autenticato puo' accodare task su progetti di altri tenant
     conoscendone l'id (cross-tenant data exfil).
     """
-    from app.core.orchestrator.task_service import task_service
-    from app.core.auth.resource_access import (
-        assert_project_access, assert_canvas_resources_access,
-    )
-
     # Authz guard cross-tenant su project_id
-    assert_project_access(request.project_id, current_user)
+    resource_access_module.assert_project_access(request.project_id, current_user)
     # Authz guard sui nodi del canvas: blocca canvas costruiti ad arte
     # che referenziano file_source/project_source di altri tenant
     # Validare qui significa che il task Celery riceve un canvas gia'
     # verificato lato HTTP
     canvas_graph = CanvasGraph.from_canvas(request.canvas)
-    assert_canvas_resources_access(
+    resource_access_module.assert_canvas_resources_access(
         {"nodes": canvas_graph.raw_nodes, "edges": canvas_graph.edges},
         current_user,
     )
 
     try:
         if request.task_type == TaskType.ENRICHMENT:
-            task_info = task_service.create_enrichment_task(
+            task_info = task_service_module.task_service.create_enrichment_task(
                 project_id=request.project_id,
                 canvas=request.canvas,
                 output_format=request.output_format,
@@ -324,18 +324,13 @@ def create_task(
             if not request.carica_node_data:
                 raise HTTPException(status_code=400, detail="carica_node_data è obbligatorio per task CARICA")
             _validate_rest_carica_task_payload(request.carica_node_data)
-            from app.core.projects.service import ProjectService
-
-            from app.shared.execution.output_contract_types_enricher import (
-                enrich_canvas_types_from_output_contract,
-            )
 
             enrich_canvas_types_from_output_contract(
                 request.carica_node_data,
                 request.project_id,
-                ProjectService().get_project_output_contract,
+                project_service_module.ProjectService().get_project_output_contract,
             )
-            task_info = task_service.create_carica_task(
+            task_info = task_service_module.task_service.create_carica_task(
                 project_id=request.project_id,
                 canvas=request.canvas,
                 carica_node_data=request.carica_node_data,
@@ -366,10 +361,9 @@ def get_task_status(
     SECURITY: verifica ownership via project_id del task.
     """
     _assert_task_group(task_id, current_user)
-    from app.core.orchestrator.task_service import task_service
 
     try:
-        task_info = task_service.get_task_status(task_id)
+        task_info = task_service_module.task_service.get_task_status(task_id)
         result = _task_info_to_dict(task_info)
         result["progress"] = int(result.get("progress") or 0)
 
@@ -410,10 +404,9 @@ def cancel_task(
     SECURITY: verifica ownership via project_id del task.
     """
     _assert_task_group(task_id, current_user)
-    from app.core.orchestrator.task_service import task_service
     
     try:
-        success = task_service.cancel_task(task_id)
+        success = task_service_module.task_service.cancel_task(task_id)
         if success:
             return {"status": "cancelled", "task_id": task_id}
         else:
@@ -469,13 +462,10 @@ def cleanup_task_completely(
         non e' integrale — altrimenti il claim GDPR "rimuovere ogni traccia"
         resta silenziosamente violato.
     """
-    from app.core.orchestrator.task_service import task_service
-    from app.core.results.cleanup import delete_result
-
     project_id = None
     task_result_payload: JsonObject = {}
     try:
-        task_info = task_service.get_task_status(task_id)
+        task_info = task_service_module.task_service.get_task_status(task_id)
         project_id = task_info.project_id
         if task_info.result:
             task_result_payload = _task_result_to_dict(task_info.result)
@@ -490,8 +480,7 @@ def cleanup_task_completely(
             detail="Task non trovato o senza progetto associato — cleanup non eseguibile",
         )
     try:
-        from app.core.projects.service import ProjectService
-        _meta = ProjectService().get_project_metadata(project_id)
+        _meta = project_service_module.ProjectService().get_project_metadata(project_id)
     except Exception as e:
         logger.warning(
             f"[GESTITO] full-cleanup tenant check: project lookup project_id={project_id} fallito: {e}",
@@ -527,7 +516,7 @@ def cleanup_task_completely(
     try:
         result_id = task_result_payload.get("result_id")
         if result_id:
-            deleted = delete_result(result_id)
+            deleted = results_cleanup.delete_result(result_id)
             if deleted:
                 logger.info(f"cleanup: result_id '{result_id}' eliminato (task {task_id})")
         else:
@@ -562,15 +551,14 @@ def cleanup_task_completely(
         failed_steps.append("unlink_output_file")
 
     try:
-        from app.core.orchestrator.log_cleanup import delete_task_log_runs
-        delete_task_log_runs(task_id)
+        orchestrator_log_cleanup.delete_task_log_runs(task_id)
     except Exception as e:
         logger.warning(f"cleanup: errore delete log_runs: {e}", exc_info=True)
         failed_steps.append("delete_log_runs")
 
     # 6. Forget del result Celery (libera Redis
     try:
-        task_service.forget_task_result(task_id)
+        task_service_module.task_service.forget_task_result(task_id)
     except Exception as e:
         logger.warning(f"cleanup: errore forget Celery: {e}", exc_info=True)
         failed_steps.append("celery_forget")
@@ -613,10 +601,9 @@ def download_task_result(
     time_started = time.perf_counter()
 
     _assert_task_group(task_id, current_user)
-    from app.core.orchestrator.task_service import task_service
 
     try:
-        task_info = task_service.get_task_status(task_id)
+        task_info = task_service_module.task_service.get_task_status(task_id)
         time_celery_loaded = time.perf_counter()
 
         if task_info.status.value != "success":
@@ -704,13 +691,12 @@ def download_task_result(
                 ),
             )
 
-        from app.core.artifacts import ArtifactResolver, ArtifactResolutionError
         try:
-            blob = ArtifactResolver().fetch_run_blob(
+            blob = artifact_module.ArtifactResolver().fetch_run_blob(
                 result_id=result_id,
                 expected_project_id=project_id,
             )
-        except ArtifactResolutionError as e:
+        except artifact_module.ArtifactResolutionError as e:
             logger.error(
                 f"download task {task_id}: risoluzione blob fallita: {e}"
             )

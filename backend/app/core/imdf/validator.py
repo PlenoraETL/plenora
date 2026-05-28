@@ -566,12 +566,12 @@ def validate_publish(
                     try:
                         m = series.astype(str).str.len().max()
                         info["max_len"] = int(m) if m is not None else 0
-                    except Exception:
+                    except (TypeError, ValueError, AttributeError):
                         info["max_len"] = None
                 # Null count
                 try:
                     info["null_count"] = null_count_for_columns(gdf, [col])
-                except Exception:
+                except (TypeError, ValueError, AttributeError):
                     info["null_count"] = 0
                 bundle_fields_info[col] = info
 

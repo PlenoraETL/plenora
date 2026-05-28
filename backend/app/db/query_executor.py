@@ -530,18 +530,3 @@ class QueryExecutor:
             self._logger.error(f"[GESTITO] Errore esecuzione query: {str(e)}")
             result = self._result_builder.error(str(e))
             return self._result_builder.to_dict(result)
-
-
-# FACTORY FUNCTION
-
-def create_executor(
-    engine_factory: EngineFactoryProtocol = None,
-    logger: LoggerProtocol = None,
-    result_persistence: QueryPersistenceProtocol = None,
-) -> QueryExecutor:
-    """Factory function per creare un QueryExecutor con Dependency Injection."""
-    return QueryExecutor(
-        engine_factory=engine_factory,
-        logger=logger,
-        result_persistence=result_persistence,
-    )

@@ -14,12 +14,41 @@ from typing_extensions import TypedDict
 from app.shared.contracts.payloads import HeadersMap, JsonObject
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
 from app.config import settings
+from app.core.artifacts import (
+    ArtifactResolver,
+    ArtifactResolutionError,
+    LatestProjectArtifactRef,
+    PipelineArtifact,
+    SourceLoader,
+    SourceLoadingError,
+    SourceRef,
+)
+from app.core.auth.async_user_recheck import recheck_user_authorized
+from app.core.auth.visibility import is_resource_visible
+from app.core.carica.executor import CaricaExecutor
+from app.core.carica.rest_config_parser import parse_carica_rest_config
+from app.core.carica.rest_write_boundary import execute_carica_rest_write
 from app.core.carica.target_lock import (
     CaricaTargetLockHandle,
     acquire_carica_target_lock,
     release_carica_target_lock,
     resolve_carica_target_lock,
 )
+from app.core.connections.rest_sink import RestSinkHttpResponse
+from app.core.connections.service import ConnectionService
+from app.core.dataframes.export_writer import dataframe_to_export_chunks
+from app.core.dataframes.frame_io import (
+    load_dataframe_from_artifact,
+    load_dataframe_from_file,
+)
+from app.core.datasources.service import DataSourceService
+from app.core.intermediate.cleanup import close_worker_connection
+from app.core.intermediate.run_idempotency import is_already_completed
+from app.core.projects.runtime_context import get_project_runtime_context
+from app.core.projects.service import ProjectService
+from app.db.pg_connection import close_connection as _close_config_connection
+from app.runtime.services import build_orchestrator_stack
+from app.utils.debug_payload_builder import DebugPayloadBuilder
 
 from workers.celery_app import celery_app, BaseTaskWithRetry
 
@@ -116,7 +145,6 @@ def execute_carica_task(
     """
     task_id = self.request.id
     if run_id is not None:
-        from app.core.intermediate.run_idempotency import is_already_completed
         if is_already_completed(run_id):
             logger.info(
                 f"[IDEMPOTENCY] Task CARICA {task_id}: run_id {run_id} "
@@ -136,7 +164,6 @@ def execute_carica_task(
 
     logger.info(f"Task CARICA {task_id} avviato per progetto {project_id} (run_id={run_id})")
 
-    from app.core.auth.async_user_recheck import recheck_user_authorized
     _revoked = recheck_user_authorized(
         user_id=user_id, project_id=project_id,
         task_id=task_id, run_id=run_id, task_name="CARICA",
@@ -147,8 +174,7 @@ def execute_carica_task(
 
     _group_id = ""
     try:
-        from app.core.projects.service import ProjectService as _PS
-        _meta = _PS().get_project_metadata(project_id)
+        _meta = ProjectService().get_project_metadata(project_id)
         _group_id = getattr(_meta, "group_id", "") if _meta else ""
     except Exception as e:
         logger.debug(f"group_id lookup fallito: {type(e).__name__}: {e}")
@@ -303,7 +329,6 @@ def execute_carica_task(
 
         # debug_payload --- (diagnostic canonico, str(e) intenzionale
         try:
-            from app.utils.debug_payload_builder import DebugPayloadBuilder
             debug_payload = DebugPayloadBuilder().build(
                 run_id=run_id,
                 project_id=project_id,
@@ -368,13 +393,11 @@ def execute_carica_task(
         # o il pool resta saturo. Pre-migrazione si manifestava come
         # SQLITE_BUSY; post-migrazione come PG pool exhaustion
         try:
-            from app.core.intermediate.cleanup import close_worker_connection
             close_worker_connection()
         except Exception as e:
             logger.debug(f"close_connection intermediate fallito: {type(e).__name__}: {e}")
         try:
-            from app.db.pg_connection import close_connection as _close_cfg
-            _close_cfg()
+            _close_config_connection()
         except Exception as e:
             logger.debug(f"close_connection config fallito: {type(e).__name__}: {e}")
 
@@ -459,9 +482,6 @@ def _execute_datasource_write(task, df, carica_node_data, project_id, task_id):
         }
 
     try:
-        from app.core.auth.visibility import is_resource_visible
-        from app.core.projects.service import ProjectService
-
         metadata = ProjectService().get_project_metadata(project_id)
         group_id = getattr(metadata, "group_id", None) if metadata else None
         if not group_id or not is_resource_visible(
@@ -504,12 +524,9 @@ def _execute_datasource_write(task, df, carica_node_data, project_id, task_id):
     # XLSX/xls: dataframe_to_export_chunks cade su yield single chunk
     # (no streaming openpyxl), comportamento equivalente a pre-RAM-C
     # ma API uniforme.
-    from app.core.dataframes.export_writer import dataframe_to_export_chunks
-
     _update_progress(task, 50, f'Scrittura su DataSource {datasource_id}...')
 
     try:
-        from app.core.datasources.service import DataSourceService
         ds_service = DataSourceService()
 
         # Componi path: dest_folder + dest_filename + .ext
@@ -561,9 +578,6 @@ def _execute_db_write(task, df, carica_node_data, project_id, task_id, triggered
             run_id). Lo passiamo per coerenza: tutti i callsite dell'executor
             opt-in al guard quando hanno un run_id.
     """
-    from app.core.carica.executor import CaricaExecutor
-    from app.core.connections.service import ConnectionService
-
     def progress_callback(batch_progress):
         overall_percent = 10 + int(batch_progress.percent * 0.85)
         _update_progress(task, overall_percent, batch_progress.message)
@@ -607,9 +621,6 @@ def _execute_rest_write(
     _update_progress(task, 15, "Preparazione scrittura REST...")
 
     try:
-        from app.core.carica.rest_config_parser import parse_carica_rest_config
-        from app.core.carica.rest_write_boundary import execute_carica_rest_write
-
         parsed_config = parse_carica_rest_config(carica_node_data)
         _update_progress(task, 25, "Scrittura REST...")
         outcome = execute_carica_rest_write(
@@ -659,7 +670,6 @@ class _RequestsRestHttpClient:
         timeout: float,
     ) -> Any:
         import requests
-        from app.core.connections.rest_sink import RestSinkHttpResponse
 
         response = requests.request(
             method=method,
@@ -788,17 +798,6 @@ def _load_upstream_data(
     3. Dopo ricalcolo rilegge l'artefatto specifico della run
     """
     try:
-        from app.core.dataframes.frame_io import (
-            load_dataframe_from_artifact,
-            load_dataframe_from_file,
-        )
-        from app.core.artifacts import (
-            LatestProjectArtifactRef,
-            SourceLoader,
-            SourceLoadingError,
-            SourceRef,
-        )
-
         # Pre-cache check: se il blob e' gia' presente, salta execute_pipeline
         # Il group_id viene letto dal progetto per chiudere il check
         # cross-tenant del resolver (defense-in-depth: il task CARICA
@@ -806,9 +805,6 @@ def _load_upstream_data(
         # dal layer HTTP a monte ma comunque verificato qui
         if not force_recalculate:
             try:
-                from app.core.projects.runtime_context import (
-                    get_project_runtime_context,
-                )
                 _project_context = get_project_runtime_context(project_id)
                 _project_group_id = (
                     _project_context.group_id if _project_context else None
@@ -842,9 +838,6 @@ def _load_upstream_data(
                     return df
 
         # Nessun risultato in cache o force_recalculate → riesegui pipeline
-
-        from app.runtime.services import build_orchestrator_stack
-
         # Runtime composition owns the executor graph. CARICA must not rely on
         # OrchestratorService fallback builders, otherwise the worker path
         # diverges from the API/data-plane contract wiring.
@@ -870,12 +863,6 @@ def _load_upstream_data(
         # ArtifactResolver: inline_df → result_id (verify project_id
         # hard fail su mismatch). Niente latest-by-project: due esecuzioni
         # parallele sullo stesso project si scambierebbero l'output
-        from app.core.artifacts import (
-            ArtifactResolver,
-            ArtifactResolutionError,
-            PipelineArtifact,
-        )
-
         artifact = PipelineArtifact.from_executor_result(result, project_id=project_id)
         if artifact.artifact_kind == "none":
             logger.error(

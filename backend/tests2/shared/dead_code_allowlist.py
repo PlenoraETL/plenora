@@ -26,7 +26,7 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     # Celery tasks and signal callbacks are registered by decorators.
     re.compile(r"backend[\\/]+workers[\\/]+celery_app\.py:\d+: unused function "),
     re.compile(r"backend[\\/]+workers[\\/]+tasks[\\/]+.+\.py:\d+: unused function "),
-    re.compile(r"backend[\\/]+workers[\\/]+beat_scheduler\.py:\d+: unused method "),
+    re.compile(r"backend[\\/]+workers[\\/]+beat_scheduler\.py:\d+: unused method '(setup_schedule|sync)' "),
 
     # Transform functions are loaded from transforms_registry.json or plugin dispatch.
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+manipola[\\/]+transforms[\\/]+.+\.py:\d+: unused function "),
@@ -62,15 +62,21 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+features[\\/]+features_service\.py:\d+: unused method 'write_features' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+features[\\/]+arcgis_feature_write_methods\.py:\d+: unused method 'apply_edits' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+files[\\/]service\.py:\d+: unused (method|function) '(_load_by_format|create_file_service|_rmtree_safe|model_(dump|validate)_json)' "),
-    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+intermediate[\\/](policy|snapshot|node_snapshots_db)\.py:\d+: unused function "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+intermediate[\\/]node_snapshots_db\.py:\d+: unused function '(upsert_node_meta_extended|insert_node_rows)' "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+intermediate[\\/]policy\.py:\d+: unused function 'reset_validation_cache' "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+intermediate[\\/]snapshot\.py:\d+: unused function 'flush_snapshots' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+manipola[\\/]executor\.py:\d+: unused method '(set_pipeline_dispatcher|_rileva_geometria_da_contenuto)' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+orchestrator[\\/](execution_logs|router_mappers)\.py:\d+: unused function "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+orchestrator[\\/]router\.py:\d+: unused method 'coerce_progress_to_int' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+orchestrator[\\/]task_service\.py:\d+: unused method '(create_carica_task|create_preview_task|get_task_result|list_active_tasks|cleanup_old_results)' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+projects[\\/]service\.py:\d+: unused method '(get_project|project_exists)' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+projects[\\/]source_freshness\.py:\d+: unused function 'assert_project_source_fresh' "),
-    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+scheduler[\\/](concurrency_manager|db|log_service|policy_engine|runs_catalog|schedule_service)\.py:\d+: unused (method|function) "),
-    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+resources[\\/]column_types\.py:\d+: unused function "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+scheduler[\\/]concurrency_manager\.py:\d+: unused method '(get_status|is_running|force_release|cleanup_all)' "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+scheduler[\\/]db\.py:\d+: unused function 'list_project_ids' "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+scheduler[\\/]log_service\.py:\d+: unused method 'get_(latest_)?log' "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+scheduler[\\/]policy_engine\.py:\d+: unused method '(resolve_conflict|should_log_skipped)' "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+scheduler[\\/]runs_catalog\.py:\d+: unused method '_schedule_short' "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+resources[\\/]column_types\.py:\d+: unused function '(is_canonical_type|dict_to_metadata)' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+imdf[\\/]arcgis[\\/](publish_ops|service_discovery|sql_helpers)\.py:\d+: unused function "),
 
     # Model convenience methods and typed row adapters.
@@ -82,10 +88,11 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+.+[\\/]db\.py:\d+: unused method '__getitem__' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+artifacts[\\/]types\.py:\d+: unused method "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+dataframes[\\/](default_loader|ports)\.py:\d+: unused method 'load_(parquet|path)' "),
-    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+dataframes[\\/](export_writer|geodata)\.py:\d+: unused (method|function) "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+dataframes[\\/]export_writer\.py:\d+: unused method '(readable|writable|seekable)' "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+dataframes[\\/]geodata\.py:\d+: unused function 'geoseries_first_value' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+results[\\/]streaming_blob_writer\.py:\d+: unused method '(readable|writable|seekable)' "),
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+resources[\\/]metadata\.py:\d+: unused method "),
-    re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+resources[\\/]storage_layout\.py:\d+: unused function "),
+    re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+resources[\\/]storage_layout\.py:\d+: unused function 'is_valid_prefix' "),
 
     # Small utility public APIs.
     re.compile(r"backend[\\/]+app[\\/]+db[\\/]query_engines\.py:\d+: unused method 'dispose_all' "),
@@ -98,7 +105,8 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]connections[\\/]oauth\.py:\d+: unused function '_.+_for_tests' "),
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]execution[\\/]clock\.py:\d+: unused method "),
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]resources[\\/]external_artifact_processor\.py:\d+: unused method 'process' "),
-    re.compile(r"backend[\\/]+app[\\/]+utils[\\/]logger\.py:\d+: unused (method|function) "),
+    re.compile(r"backend[\\/]+app[\\/]+utils[\\/]logger\.py:\d+: unused method 'exception' "),
+    re.compile(r"backend[\\/]+app[\\/]+utils[\\/]logger\.py:\d+: unused function 'log_event' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+admin_backups[\\/]service\.py:\d+: unused function 'is_manual_backup_running' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+auth[\\/]mfa\.py:\d+: unused function 'vacuum_expired_used_codes' "),
     re.compile(r"backend[\\/]+app[\\/]environment\.py:\d+: unused function 'is_hardened_environment' "),

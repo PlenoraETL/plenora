@@ -136,6 +136,7 @@ def execute_enrichment_task(
 
     if run_id is not None:
         from app.core.intermediate.run_idempotency import is_already_completed
+
         if is_already_completed(run_id):
             logger.info(
                 f"[IDEMPOTENCY] Task ENRICHMENT {task_id}: run_id {run_id} "
@@ -155,6 +156,7 @@ def execute_enrichment_task(
     # separato (token eseguibile) e non passano per user_id interattivo
     if not is_eseguibile:
         from app.core.auth.async_user_recheck import recheck_user_authorized
+
         _revoked = recheck_user_authorized(
             user_id=user_id, project_id=project_id,
             task_id=task_id, run_id=run_id or "", task_name="ENRICHMENT",
@@ -196,8 +198,9 @@ def execute_enrichment_task(
     if is_eseguibile:
         _run_id = None
         try:
-            from app.core.eseguibili.db import get_eseguibile as _get_eseg
-            _eseg = _get_eseg(project_id)
+            from app.core.eseguibili.db import get_eseguibile
+
+            _eseg = get_eseguibile(project_id)
             _group_id = (_eseg.get("group_id") or "") if _eseg else ""
         except Exception as _ge:
             logger.warning(
@@ -208,18 +211,19 @@ def execute_enrichment_task(
         _run_id = str(_uuid.uuid4())
         try:
             from app.core.intermediate.run_lifecycle import (
-                create_run as _create_intermediate_run,
-                get_default_runs_retention as _get_default_runs_retention,
+                create_run,
+                get_default_runs_retention,
             )
-            from app.core.projects.service import ProjectService as _PS
             from app.core.projects.retention import resolve_runs_retention_n
-            _meta = _PS().get_project_metadata(project_id)
+            from app.core.projects.service import ProjectService
+
+            _meta = ProjectService().get_project_metadata(project_id)
             _group_id = getattr(_meta, 'group_id', 'unknown') if _meta else 'unknown'
             _retention_n = resolve_runs_retention_n(
                 project_id,
-                default=_get_default_runs_retention(),
+                default=get_default_runs_retention(),
             )
-            _create_intermediate_run(
+            create_run(
                 run_id=_run_id,
                 canvas_id=project_id,
                 group_id=_group_id,
@@ -242,7 +246,6 @@ def execute_enrichment_task(
         set_run_context(run_id=_run_id or task_id, project_id=project_id)
 
     try:
-        # Import qui per evitare circular imports
         # NOTE: istanziamo una NUOVA `ApiConnectionService` invece di
         # usare il singleton modulo-level. Il singleton ha stato per-execution
         # che e' soggetto a race condition cross-tenant fra task paralleli
@@ -250,6 +253,7 @@ def execute_enrichment_task(
         # Un'istanza locale per task garantisce isolamento totale del tenant
         # binding
         from app.core.arricchisci.api_connector import ApiConnectionService
+
         api_connection_service = ApiConnectionService()
         # — costruisci un
         # `ArricchisciExecutionContext` tipato esplicito; il context
@@ -266,6 +270,7 @@ def execute_enrichment_task(
         from app.core.arricchisci.execution_context import (
             ArricchisciExecutionContext,
         )
+
         ctx = ArricchisciExecutionContext(
             project_id=project_id,
             group_id=(
@@ -647,6 +652,7 @@ def execute_enrichment_task(
                             if error_report_bytes:
                                 error_report_file = f"enrichment_errors_{task_id}.csv"
                                 from app.core.results.blob_writer import save_result_blob_from_bytes
+
                                 error_report_result_id = save_result_blob_from_bytes(
                                     project_id=project_id,
                                     data=error_report_bytes,
@@ -677,6 +683,7 @@ def execute_enrichment_task(
                         from app.core.intermediate.snapshot import (
                             record_checkpoint_snapshot,
                         )
+
                         record_checkpoint_snapshot(
                             run_id=_run_id,
                             module="arricchisci",
@@ -848,8 +855,9 @@ def execute_enrichment_task(
             metadata_rows_count: Optional[int] = None
             if not needs_full_bytes:
                 try:
-                    from app.core.results import store as _store
-                    metadata_row = _store.get_result_row(upstream_result_id)
+                    from app.core.results import store as _result_store
+
+                    metadata_row = _result_store.get_result_row(upstream_result_id)
                     if metadata_row is not None and metadata_row.rows_count is not None:
                         metadata_rows_count = int(metadata_row.rows_count)
                 except Exception as _md_e:
@@ -884,6 +892,7 @@ def execute_enrichment_task(
                         f"count reale"
                     )
                 from app.core.artifacts.resolver import ArtifactResolver
+
                 blob = ArtifactResolver().fetch_run_blob(
                     result_id=upstream_result_id,
                     expected_project_id=project_id,
@@ -940,6 +949,7 @@ def execute_enrichment_task(
                 try:
                     from app.core.imdf.loader import extract_imdf_zip_bytes
                     from app.core.imdf.persist import persist_imdf_bundle
+
                     bundle = extract_imdf_zip_bytes(output_bytes)
 
                     # IMDF-3: single-call persistence verso storage canonico.
@@ -985,6 +995,7 @@ def execute_enrichment_task(
                 # che streamma da S3 e cancella l'oggetto dopo l'invio.
                 # Post-Phase5: bytes-first via `save_bytes` (skippa FS).
                 from app.core.eseguibili import storage as _eseg_storage
+
                 _eseg_storage.save_bytes(task_id, final_name, output_bytes)
                 logger.info(
                     f"[Task {task_id}] Output eseguibile su storage: "
@@ -1022,12 +1033,14 @@ def execute_enrichment_task(
                                 f"output_bytes per re-persist con final_name='{final_name}'"
                             )
                             from app.core.artifacts.resolver import ArtifactResolver
+
                             blob_for_resave = ArtifactResolver().fetch_run_blob(
                                 result_id=upstream_result_id,
                                 expected_project_id=project_id,
                             )
                             output_bytes = blob_for_resave.data
                         from app.core.results.blob_writer import save_result_blob_from_bytes
+
                         result_id = save_result_blob_from_bytes(
                             project_id=project_id,
                             data=output_bytes,
@@ -1143,6 +1156,7 @@ def execute_enrichment_task(
             from app.core.dataframes.export_writer import (
                 dataframe_to_export_chunks,
             )
+
             fmt_lower = (final_format or "").lower()
             # SHP esce zippato: rinomina il filename su storage in `.zip`.
             storage_filename = (
@@ -1163,6 +1177,7 @@ def execute_enrichment_task(
         else:
             # Arricchisci standard: typed pipeline-result boundary.
             from app.core.results.pipeline_result import save_pipeline_result_outcome
+
             saved = save_pipeline_result_outcome(
                 project_id=project_id,
                 df=final_df,
@@ -1174,9 +1189,10 @@ def execute_enrichment_task(
             saved_path = Path(saved.output_filename)
             logger.info(f"[Task {task_id}] Risultato persistito: {result_id}")
 
-            from app.core.projects.service import ProjectService as _ProjSvc
+            from app.core.projects.service import ProjectService
             from app.core.output_contract import build_output_contract
-            _project_service = _ProjSvc()
+
+            _project_service = ProjectService()
             output_contract = build_output_contract(
                 project_id=project_id,
                 result_columns=[
@@ -1224,6 +1240,7 @@ def execute_enrichment_task(
         if _run_id and result_node and not is_eseguibile:
             try:
                 from app.core.intermediate.snapshot import record_final_snapshot
+
                 record_final_snapshot(
                     run_id=_run_id,
                     module="arricchisci",
@@ -1244,9 +1261,16 @@ def execute_enrichment_task(
             def _async_close(_r: str = _rid_c, _t: float = _exec_time,
                              _rn: int | None = _retention_c) -> None:
                 try:
-                    from app.core.intermediate.writer import close_run as _cr
-                    _cr(run_id=_r, input_hash="", output_hash="",
-                        total_exec_time=_t, success=True, retention_n=_rn)
+                    from app.core.intermediate.writer import close_run as close_intermediate_writer_run
+
+                    close_intermediate_writer_run(
+                        run_id=_r,
+                        input_hash="",
+                        output_hash="",
+                        total_exec_time=_t,
+                        success=True,
+                        retention_n=_rn,
+                    )
                 except Exception as e:
                     logger.debug(f"cleanup async close_run fallito: {type(e).__name__}: {e}")
             threading.Thread(target=_async_close, daemon=True).start()
@@ -1298,10 +1322,16 @@ def execute_enrichment_task(
         if type(e).__name__ == "_EarlyTaskReturn" and hasattr(e, "payload"):
             if _run_id and not is_eseguibile:
                 try:
-                    from app.core.intermediate.writer import close_run as _close_run
-                    _close_run(run_id=_run_id, input_hash="", output_hash="",
-                               total_exec_time=time.time() - _run_start, success=False,
-                               retention_n=_retention_n)
+                    from app.core.intermediate.writer import close_run as close_intermediate_writer_run
+
+                    close_intermediate_writer_run(
+                        run_id=_run_id,
+                        input_hash="",
+                        output_hash="",
+                        total_exec_time=time.time() - _run_start,
+                        success=False,
+                        retention_n=_retention_n,
+                    )
                 except Exception as e_inner:
                     logger.debug(f"close_run intermediate fallito (early return): {type(e_inner).__name__}: {e_inner}")
             if not is_eseguibile:
@@ -1317,10 +1347,16 @@ def execute_enrichment_task(
             return e.payload
         if _run_id and not is_eseguibile:
             try:
-                from app.core.intermediate.writer import close_run as _close_run
-                _close_run(run_id=_run_id, input_hash="", output_hash="",
-                           total_exec_time=time.time() - _run_start, success=False,
-                           retention_n=_retention_n)
+                from app.core.intermediate.writer import close_run as close_intermediate_writer_run
+
+                close_intermediate_writer_run(
+                    run_id=_run_id,
+                    input_hash="",
+                    output_hash="",
+                    total_exec_time=time.time() - _run_start,
+                    success=False,
+                    retention_n=_retention_n,
+                )
             except Exception as e_inner:
                 logger.debug(f"close_connection intermediate fallito (outer except): {type(e_inner).__name__}: {e_inner}")
         error_message = str(e)
@@ -1333,6 +1369,7 @@ def execute_enrichment_task(
         if not is_eseguibile:
             try:
                 from app.utils.debug_payload_builder import DebugPayloadBuilder
+
                 _debug_payload = DebugPayloadBuilder().build(
                     run_id=_run_id or task_id,
                     project_id=project_id,

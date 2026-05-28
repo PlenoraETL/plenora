@@ -38,12 +38,12 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# Lock attuale: 692 occorrenze totali in `app/` (esclusi tests/,
+# Lock attuale: 736 occorrenze totali in `app/` (esclusi tests/,
 # scripts/, migrations/). Diminuirebbe ad ogni narrow incrementale;
 # aumentarne il valore richiede commit con motivazione esplicita.
 # Top offender file (15+ broad-catch): sharepoint.py, imdf/validator.py,
 # carica/writer_replace_strategies.py, carica/executor.py.
-_EXPECT_BROAD_BUDGET = 742
+_EXPECT_BROAD_BUDGET = 736
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

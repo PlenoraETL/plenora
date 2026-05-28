@@ -54,17 +54,11 @@ def test_query_streaming_writer_class_legacy_tombstoned():
 
 def test_query_executor_does_not_take_streaming_writer_param():
     """`QueryExecutor.__init__` non accetta piu' `streaming_writer`.
-    Anti-regression sul tombstone del param + factory."""
+    Anti-regression sul tombstone del param."""
     import inspect
     sig = inspect.signature(QueryExecutor.__init__)
     assert "streaming_writer" not in sig.parameters, (
         "streaming_writer param rimosso post-QUERY-1 step 2."
-    )
-
-    from app.db.query_executor import create_executor
-    factory_sig = inspect.signature(create_executor)
-    assert "streaming_writer" not in factory_sig.parameters, (
-        "create_executor streaming_writer param rimosso post-QUERY-1 step 2."
     )
 
 

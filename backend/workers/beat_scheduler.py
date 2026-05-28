@@ -48,9 +48,7 @@ def _pg_fetchall(sql: str, params: tuple = ()):
     if patched is not _ORIGINAL_PG_FETCHALL:
         return patched(sql, params)
 
-    from app.db.pg_connection import unit_of_work
-
-    with unit_of_work() as session:
+    with _ORIGINAL_PG_UNIT_OF_WORK() as session:
         return session.fetchall(sql, params)
 
 
@@ -59,9 +57,7 @@ def _pg_execute(sql: str, params: tuple = ()):
     if patched is not _ORIGINAL_PG_EXECUTE:
         return patched(sql, params)
 
-    from app.db.pg_connection import unit_of_work
-
-    with unit_of_work() as session:
+    with _ORIGINAL_PG_UNIT_OF_WORK() as session:
         return session.execute(sql, params)
 
 
@@ -70,9 +66,7 @@ def _pg_transaction():
     if patched is not _ORIGINAL_PG_UNIT_OF_WORK:
         return patched()
 
-    from app.db.pg_connection import unit_of_work
-
-    return unit_of_work()
+    return _ORIGINAL_PG_UNIT_OF_WORK()
 
 
 class PlenoraBeatScheduler(Scheduler):
@@ -108,6 +102,7 @@ class PlenoraBeatScheduler(Scheduler):
         try:
             import redis
             from app.config import settings
+
             client = redis.Redis.from_url(settings.CELERY_BROKER_URL)
             client.ping()
             self._redis_client = client
@@ -172,6 +167,7 @@ class PlenoraBeatScheduler(Scheduler):
             True se questo processo e' (o e' diventato) leader.
         """
         from app.config import settings
+
         fail_open = bool(getattr(settings, "SCHEDULE_BEAT_LEADER_FAIL_OPEN", False))
 
         def _degraded_result() -> bool:
@@ -671,6 +667,7 @@ class PlenoraBeatScheduler(Scheduler):
         """Parsa espressione cron in un oggetto schedule Celery."""
         try:
             from celery.schedules import crontab
+
             parts = cron_expr.strip().split()
             if len(parts) != 5:
                 logger.warning(f"Cron non valido: {cron_expr!r}")
@@ -733,13 +730,14 @@ class PlenoraBeatScheduler(Scheduler):
                     logger.warning(
                         f"[STUCK] Lock scaduto: {row['key']} "
                         f"(valore={row['value']}, scaduto={row['expires_at']})"
-                    )
+                )
                 # Pulisci lock scaduti
                 _pg_execute("DELETE FROM scheduler_locks WHERE expires_at IS NOT NULL AND expires_at < NOW()")
                 logger.info(f"[STUCK] Rimossi {len(rows)} lock scaduti")
 
             # Controlla schedule con last_status = 'running' da più del hard limit
             from app.config import settings
+
             try:
                 hard_limit = int(settings.CELERY_SCHEDULE_HARD_LIMIT)
             except (TypeError, ValueError):
@@ -780,6 +778,7 @@ class PlenoraBeatScheduler(Scheduler):
 
         try:
             from app.core.eseguibili import output_store
+
             ttl_seconds = 2 * 3600  # 2 ore
             removed = output_store.purge_expired_local_outputs(
                 now_ts=now,
@@ -808,6 +807,7 @@ class PlenoraBeatScheduler(Scheduler):
         try:
             from app.config import settings
             from app.core.imdf import bundle_store
+
             ttl_seconds = settings.IMDF_BUNDLE_TTL_HOURS * 3600
             removed = bundle_store.purge_expired_local_bundles(
                 now_ts=now,
@@ -850,6 +850,7 @@ class PlenoraBeatScheduler(Scheduler):
 
         try:
             from app.config import settings
+
             temp_dir = _Path(settings.DATA_DIR) / "temp"
             if not temp_dir.exists():
                 return
@@ -922,6 +923,7 @@ class PlenoraBeatScheduler(Scheduler):
 
         try:
             from app.config import settings
+
             # Niente `or 90` per non collassare 0 → 90 (l'utente che imposta
             # esplicitamente 0 vuole disabilitare). Il fallback al default
             # avviene solo se l'attributo manca o non e' int
@@ -934,6 +936,7 @@ class PlenoraBeatScheduler(Scheduler):
                 return  # retention disabilitata
             cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).date()
             from app.core.scheduler.log_service import ScheduleLogService
+
             deleted = ScheduleLogService().delete_logs_before(cutoff)
             if deleted:
                 logger.info(
@@ -971,6 +974,7 @@ class PlenoraBeatScheduler(Scheduler):
             return
 
         from app.config import settings
+
         if not getattr(settings, "LOG_ARCHIVE_ENABLED", False):
             return
         try:
@@ -1072,6 +1076,7 @@ class PlenoraBeatScheduler(Scheduler):
 
         try:
             from app.config import settings
+
             if getattr(settings, "LOG_ARCHIVE_ENABLED", False):
                 return
             days = int(getattr(settings, "LOG_RETENTION_DAYS", 30) or 30)
@@ -1137,6 +1142,7 @@ class PlenoraBeatScheduler(Scheduler):
             return
 
         from app.config import settings
+
         if not getattr(settings, "LOG_ARCHIVE_ENABLED", False):
             return
         try:
