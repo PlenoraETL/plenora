@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from dataclasses import dataclass
 from typing import Tuple
 
+from app.config import settings
+
 
 CheckOutcome = Tuple[bool, str]
 
@@ -67,7 +69,6 @@ def check_postgres() -> CheckOutcome:
     """
     try:
         from app.db.pg_connection import get_connection, put_connection
-        from app.config import settings
         try:
             timeout = int(settings.get("READINESS_PG_TIMEOUT_SECONDS", 2))
         except Exception:
@@ -125,7 +126,6 @@ def check_redis() -> CheckOutcome:
     disabilitabile: /ready senza bound sarebbe un footgun ops).
     """
     try:
-        from app.config import settings
         from app.observability.runtime_ports import (
             bounded_readiness_timeout,
             ping_redis_broker,
@@ -266,7 +266,6 @@ def check_object_storage() -> CheckOutcome:
 
     # Keep object-storage readiness bounded; boto3 defaults can exceed the
     # load-balancer-friendly /ready window by minutes.
-    from app.config import settings
     try:
         timeout = int(
             settings.get("READINESS_OBJECT_STORAGE_TIMEOUT_SECONDS", 3)
@@ -323,7 +322,6 @@ def check_reconciliation_backlog() -> CheckOutcome:
         return True, f"check skipped: {type(e).__name__}"
 
     try:
-        from app.config import settings
         pending_threshold = int(
             settings.get("STORAGE_RECONCILE_BACKLOG_PENDING_503_THRESHOLD", 1000)
         )
@@ -419,7 +417,6 @@ def check_beat_heartbeat() -> CheckOutcome:
     e non deve dipendere dallo stato del beat scheduler.
     """
     try:
-        from app.config import settings
         max_age = int(
             settings.get("READINESS_BEAT_HEARTBEAT_MAX_AGE_SECONDS", 0)
         )

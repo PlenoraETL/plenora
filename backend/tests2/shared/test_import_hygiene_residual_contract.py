@@ -79,3 +79,32 @@ def test_selected_stdlib_imports_are_not_repeated_inside_functions() -> None:
                 violations.append((relative, node.lineno, module))
 
     assert not violations
+
+
+def test_selected_light_app_imports_are_not_repeated_inside_functions() -> None:
+    """Guard app imports that were duplicated and are not optional boundaries."""
+    expected_top_level: dict[str, set[str]] = {
+        "core/arricchisci/_rate_limiter.py": {"app.config"},
+        "core/carica/conflict_request_loader.py": {
+            "app.core.dataframes.tabular"
+        },
+        "observability/health.py": {"app.config"},
+    }
+
+    violations: list[tuple[str, int, str]] = []
+    for relative, modules in expected_top_level.items():
+        source = _read(relative)
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.Import, ast.ImportFrom)):
+                continue
+            if isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+            else:
+                module = node.names[0].name
+            if module not in modules:
+                continue
+            if not any(child is node for child in tree.body):
+                violations.append((relative, node.lineno, module))
+
+    assert not violations

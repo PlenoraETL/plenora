@@ -13,6 +13,7 @@ import threading
 import time
 from typing import Any, Mapping, Optional
 
+from app.config import settings
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -45,8 +46,6 @@ return wait_ms
 
 def _setting_bool(name: str, default: bool = False) -> bool:
     try:
-        from app.config import settings
-
         return bool(settings.get(name, default))
     except Exception:
         return default
@@ -54,8 +53,6 @@ def _setting_bool(name: str, default: bool = False) -> bool:
 
 def _setting_int(name: str, default: int) -> int:
     try:
-        from app.config import settings
-
         value = int(settings.get(name, default))
         return value if value > 0 else default
     except (TypeError, ValueError):
@@ -64,8 +61,6 @@ def _setting_int(name: str, default: int) -> int:
 
 def _setting_str(name: str, default: str) -> str:
     try:
-        from app.config import settings
-
         value = settings.get(name, default)
         return default if value is None else str(value)
     except Exception:
@@ -88,8 +83,6 @@ def _get_client() -> Optional[Any]:
         except ImportError:
             return None
         try:
-            from app.config import settings
-
             timeout = _setting_int("ARRICCHISCI_RATE_LIMIT_REDIS_TIMEOUT_SEC", 1)
             _client = redis.from_url(
                 settings.CELERY_BROKER_URL,

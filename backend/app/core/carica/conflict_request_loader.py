@@ -9,6 +9,11 @@ from typing import Any, Callable, Optional
 from fastapi import HTTPException
 
 from app.core.artifacts import SourceLoadingError
+from app.core.dataframes.tabular import (
+    dataframe_from_records,
+    dataframe_from_rows,
+    select_and_rename_columns,
+)
 from app.shared.contracts.payloads import JsonObject
 
 
@@ -35,8 +40,6 @@ def load_conflict_input(
 ) -> ConflictInput:
     """Build the dataframe used by ConflictChecker, or an early no-data response."""
     if request.sample_values:
-        from app.core.dataframes.tabular import dataframe_from_records
-
         return ConflictInput(dataframe=dataframe_from_records(request.sample_values))
 
     if request.source_connection_id and request.source_table:
@@ -100,8 +103,6 @@ def _load_source_table_conflict_dataframe(
         result_proxy = src_conn_obj.execute(text(src_query))
         rows = result_proxy.fetchall()
         col_names = list(result_proxy.keys())
-    from app.core.dataframes.tabular import dataframe_from_rows, select_and_rename_columns
-
     df = dataframe_from_rows(rows, col_names)
     if request.source_match_columns and request.source_match_columns != request.match_columns:
         rename_map = dict(zip(request.source_match_columns, request.match_columns))
@@ -151,8 +152,6 @@ def _load_project_conflict_dataframe(
     df_cols = request.df_match_columns or request.match_columns
     available_match = [col for col in df_cols if col in df.columns]
     if not available_match:
-        from app.core.dataframes.tabular import dataframe_from_rows
-
         return ConflictInput(dataframe=dataframe_from_rows([], request.match_columns))
 
     col_rename = {}
@@ -160,7 +159,5 @@ def _load_project_conflict_dataframe(
         for db_col, df_col in zip(request.match_columns, request.df_match_columns):
             if df_col != db_col and df_col in df.columns:
                 col_rename[df_col] = db_col
-    from app.core.dataframes.tabular import select_and_rename_columns
-
     df = select_and_rename_columns(df, available_match, rename_map=col_rename)
     return ConflictInput(dataframe=df)
