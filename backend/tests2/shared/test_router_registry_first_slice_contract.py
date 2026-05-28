@@ -431,11 +431,10 @@ def test_app_factory_init_order_is_canonical():
 def test_datasources_binding_uses_runtime_container_singleton_identity():
     """Datasources keeps the canonical singleton through container and binding."""
     import app.core.datasources.service as datasources_svc_mod
-    from app.config import settings as _settings
     from app.runtime import DATASOURCES_BINDING
     from app.runtime.services import build_runtime_services
 
-    services = build_runtime_services(settings=_settings)
+    services = build_runtime_services()
 
     canonical = datasources_svc_mod.datasource_service
     assert services.datasource_service is canonical
@@ -445,11 +444,10 @@ def test_datasources_binding_uses_runtime_container_singleton_identity():
 
 def test_carica_binding_uses_runtime_container_singleton_identity():
     """Carica receives the connection_service instance owned by RuntimeServices."""
-    from app.config import settings as _settings
     from app.runtime import CARICA_BINDING
     from app.runtime.services import build_runtime_services
 
-    services = build_runtime_services(settings=_settings)
+    services = build_runtime_services()
 
     args = CARICA_BINDING.extract(services)
     assert args == (services.connection_service,)

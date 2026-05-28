@@ -4,6 +4,7 @@ Operazioni di trasformazione geospaziali per MANIPOLA.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
+import os
 from typing import List, Optional
 
 from app.utils.logger import get_logger
@@ -82,7 +83,6 @@ DataFrame = FrameLike
 def _env_int(name: str, default: int) -> int:
     """Helper env-driven cap: legge env var, fallback su default su
     valori non-int o <=0."""
-    import os
     val = os.environ.get(name)
     if not val:
         return default

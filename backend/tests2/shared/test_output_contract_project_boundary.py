@@ -293,7 +293,6 @@ def test_arricchisci_project_source_consumes_output_contract_not_canvas_columns(
     from app.core.arricchisci.execution_context import ArricchisciExecutionContext
 
     svc = ApiConnectionSourceLoadingMixin()
-    svc.results_dir = None
     svc._upstream_blob_is_stale = lambda _project_id: False
     source_df = pd.DataFrame({"myid": [1, 2], "name": ["a", "b"]})
     contract = {

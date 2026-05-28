@@ -25,7 +25,6 @@ pytestmark = [
 def _make_service(group_id="grp-1"):
     svc = ApiConnectionService.__new__(ApiConnectionService)
     svc._current_group_id = group_id
-    svc.results_dir = None
     return svc
 
 
@@ -36,7 +35,6 @@ def _make_service_no_singleton():
     il caller deve passare `ctx=ArricchisciExecutionContext(...)`
     per la tenant binding."""
     svc = ApiConnectionService.__new__(ApiConnectionService)
-    svc.results_dir = None
     return svc
 
 

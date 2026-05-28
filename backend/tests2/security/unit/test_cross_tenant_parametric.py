@@ -41,7 +41,6 @@ def _manipola_project_source_denied():
     """TE-009: ctx-strict. The ``group_id`` is passed explicitly
     (mirroring the production call shape from ``execute``/``preview``)."""
     executor = ManipolaExecutor(project_service=object())
-    executor.results_base_dir = None
     canvas = build_canvas(build_node("project_source", source_project_id="proj-99", columns=[]))
     dataframes = {}
 
@@ -93,7 +92,6 @@ def _arricchisci_project_source_denied():
 
     service = ApiConnectionService.__new__(ApiConnectionService)
     service._current_group_id = "stale-grp-LEAK"
-    service.results_dir = None
     node_data = {"source_project_id": "proj-99"}
     ctx = ArricchisciExecutionContext(
         project_id="p-1", group_id="grp-1", preview_limit=None,

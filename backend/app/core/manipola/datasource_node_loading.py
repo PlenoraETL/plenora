@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os as _os
 from pathlib import Path
 from typing import Optional
 
@@ -18,7 +19,6 @@ from app.utils.logger import get_logger
 def _env_int_safe(name: str, *, default: int) -> int:
     """Helper env-driven cap: legge env var, fallback su default su
     valori non-int o <=0. F1-1 (2026-05-26): cap source datasource."""
-    import os as _os
     val = _os.environ.get(name)
     if not val:
         return default

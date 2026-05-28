@@ -5,10 +5,15 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-def execute_reconciliation_update(sql: str, params: tuple[Any, ...]):
+
+def _pg_connection():
     from app.db import pg_connection
 
-    return pg_connection.execute(sql, params)
+    return pg_connection
+
+
+def execute_reconciliation_update(sql: str, params: tuple[Any, ...]):
+    return _pg_connection().execute(sql, params)
 
 
 def fetch_due_pending_delete_rows(
@@ -17,15 +22,11 @@ def fetch_due_pending_delete_rows(
     cutoff: datetime,
     limit: int,
 ):
-    from app.db import pg_connection
-
-    return pg_connection.fetchall(sql, (cutoff, limit))
+    return _pg_connection().fetchall(sql, (cutoff, limit))
 
 
 def fetch_active_state_domain_count_rows(sql: str):
-    from app.db import pg_connection
-
-    return pg_connection.fetchall(sql, ())
+    return _pg_connection().fetchall(sql, ())
 
 
 def delete_terminal_rows(
@@ -34,9 +35,7 @@ def delete_terminal_rows(
     older_than: datetime,
     limit: int,
 ):
-    from app.db import pg_connection
-
-    return pg_connection.execute(sql, (older_than, limit))
+    return _pg_connection().execute(sql, (older_than, limit))
 
 
 def insert_upload_intent_row(
@@ -47,9 +46,7 @@ def insert_upload_intent_row(
     reason: str,
     extras_json: str | None,
 ):
-    from app.db import pg_connection
-
-    return pg_connection.fetchone(sql, (domain, storage_key, reason, extras_json))
+    return _pg_connection().fetchone(sql, (domain, storage_key, reason, extras_json))
 
 
 def fetch_due_stale_upload_intent_rows(
@@ -59,9 +56,7 @@ def fetch_due_stale_upload_intent_rows(
     now: datetime,
     limit: int,
 ):
-    from app.db import pg_connection
-
-    return pg_connection.fetchall(sql, (grace_cutoff, now, limit))
+    return _pg_connection().fetchall(sql, (grace_cutoff, now, limit))
 
 
 def fetch_storage_key_reference_rows(
@@ -69,12 +64,8 @@ def fetch_storage_key_reference_rows(
     *,
     storage_key: str,
 ):
-    from app.db import pg_connection
-
-    return pg_connection.fetchall(sql, (storage_key,))
+    return _pg_connection().fetchall(sql, (storage_key,))
 
 
 def fetch_pending_operation_count_rows(sql: str):
-    from app.db import pg_connection
-
-    return pg_connection.fetchall(sql, ())
+    return _pg_connection().fetchall(sql, ())

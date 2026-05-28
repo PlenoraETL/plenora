@@ -95,8 +95,6 @@ class ExecutionManager:
         from app.runtime.services import build_orchestrator_stack
 
         stack = build_orchestrator_stack(
-            settings=settings,
-            results_dir=settings.RESULTS_DIR,
             connection_service=self._get_connection_service(),
         )
         return stack.orchestrator

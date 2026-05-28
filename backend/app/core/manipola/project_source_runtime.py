@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from contextvars import ContextVar
-from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, List, Optional
 import uuid as _uuid
@@ -204,14 +203,12 @@ def load_project_sources(
     *,
     force_recalculate: bool,
     pipeline_dispatcher: Optional[PipelineDispatcherProtocol],
-    results_base_dir: Path,
     run_id: Optional[str] = None,
     group_id: Optional[str] = None,
     logger=None,
 ) -> Optional[JsonObject]:
     """Load ``project_source`` nodes, recomputing upstream projects as needed."""
     del run_id  # The upstream recompute path opens its own cascade run id.
-    del results_base_dir  # Project sources resolve through artifact store only.
     log = logger or globals()["logger"]
     source_nodes = [n for n in canvas.nodes if n.type == "project_source"]
 

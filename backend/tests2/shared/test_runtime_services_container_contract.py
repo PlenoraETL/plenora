@@ -39,9 +39,7 @@ def _read(path: Path) -> str:
 def _build_runtime_for_contract():
     from app.runtime import build_runtime_services
 
-    return build_runtime_services(
-        settings=SimpleNamespace(DATA_DIR=Path("/tmp/plenora")),
-    )
+    return build_runtime_services()
 
 
 # 1. Public API shape
@@ -124,10 +122,8 @@ def test_build_runtime_services_constructs_in_canonical_order():
         construction_order.append("QueryGenerator")
         return generator_instance
 
-    def _QueryExecutor(*, results_dir):
-        # Locked: kwargs-only signature.
+    def _QueryExecutor():
         construction_order.append("QueryExecutor")
-        executor_instance.results_dir = results_dir
         return executor_instance
 
     def _FeaturesService():
@@ -175,7 +171,6 @@ def test_build_runtime_services_constructs_in_canonical_order():
         assert enrich_executor is enrich_executor_instance
         return orchestrator_instance
 
-    fake_settings = SimpleNamespace(DATA_DIR=Path("/tmp/plenora"))
     # BE-GO-READY-BOOTSTRAP-ENGINE-016: the factory imports the
     # canonical singleton from `api_connector` instead of constructing
     # one. Stub it with an identifiable sentinel so the identity
@@ -207,9 +202,7 @@ def test_build_runtime_services_constructs_in_canonical_order():
     ):
         from app.runtime import build_runtime_services
 
-        result = build_runtime_services(
-            settings=fake_settings,
-        )
+        result = build_runtime_services()
 
     # 1. Order: orchestrator MUST be last (it depends on all the others).
     assert construction_order[-1] == "OrchestratorService"
@@ -247,10 +240,7 @@ def test_build_runtime_services_constructs_in_canonical_order():
     # a duplicate.
     assert result.datasource_service is datasource_sentinel
 
-    # 4. Wiring assertions: settings flowed through.
-    assert executor_instance.results_dir == Path("/tmp/plenora") / "temp"
-
-    # 5. The factory MUST NOT also call `ApiConnectionService()` or
+    # 4. The factory MUST NOT also call `ApiConnectionService()` or
     # `DataSourceService()`. Constructing a second instance would
     # diverge from the canonical singleton and break any test patch
     # surface that targets the canonical attribute. Construction

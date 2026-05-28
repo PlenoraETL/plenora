@@ -225,14 +225,12 @@ class QueryExecutor:
     Dependency Injection:
         - engine_factory: creazione engine SQLAlchemy (mockabile per test)
         - logger: logging (NullLogger per test silenziosi)
-        - results_dir: directory per i file di output
     """
 
     def __init__(
         self,
         engine_factory: EngineFactoryProtocol = None,
         logger: LoggerProtocol = None,
-        results_dir: Path = None,
         result_persistence: QueryPersistenceProtocol = None,
     ):
         """
@@ -244,8 +242,6 @@ class QueryExecutor:
         Args:
             engine_factory: Factory per SQLAlchemy engines.
             logger: Logger per messaggi di info/error/debug.
-            results_dir: Directory base per i file di output (legacy,
-                tenuto per backward-compat con caller pre-QUERY-1).
             result_persistence: porta di persistenza Rows/DataFrame -> result blob.
 
         Tombstone (QUERY-1 step 2): `streaming_writer` param rimosso.
@@ -254,20 +250,11 @@ class QueryExecutor:
         """
         self._engine_factory = engine_factory or DefaultEngineFactory()
         self._logger = logger or NullLogger()
-        if results_dir is None:
-            from app.config import settings
-            results_dir = Path(settings.TEMP_DIR)
-        self._results_dir = Path(results_dir)
 
         # Componenti interni (funzioni pure senza stato
         self._result_builder = ResultBuilder
         self._df_builder = DataFrameBuilder
         self._result_persistence = result_persistence or QueryResultPersistence()
-
-    @property
-    def RESULTS_DIR(self) -> Path:
-        """Directory risultati (per compatibilità con codice esistente)."""
-        return self._results_dir
 
     def _build_execution_context(
         self,
@@ -549,14 +536,12 @@ class QueryExecutor:
 
 def create_executor(
     engine_factory: EngineFactoryProtocol = None,
-    results_dir: Path = None,
     logger: LoggerProtocol = None,
     result_persistence: QueryPersistenceProtocol = None,
 ) -> QueryExecutor:
     """Factory function per creare un QueryExecutor con Dependency Injection."""
     return QueryExecutor(
         engine_factory=engine_factory,
-        results_dir=results_dir,
         logger=logger,
         result_persistence=result_persistence,
     )

@@ -87,8 +87,6 @@ class RuntimeServices:
 
 def build_orchestrator_stack(
     *,
-    settings: Any,
-    results_dir: Any = None,
     connection_service: Any = None,
 ) -> OrchestratorStack:
     """Construct the shared services required to execute a pipeline.
@@ -111,10 +109,7 @@ def build_orchestrator_stack(
     project_service = ProjectService()
     resolved_connection_service = connection_service or ConnectionService()
     query_generator = QueryGenerator()
-    resolved_results_dir = (
-        results_dir if results_dir is not None else settings.DATA_DIR / "temp"
-    )
-    query_executor = QueryExecutor(results_dir=resolved_results_dir)
+    query_executor = QueryExecutor()
     features_service = FeaturesService()
 
     orchestrator = None
@@ -158,15 +153,8 @@ def build_orchestrator_stack(
     )
 
 
-def build_runtime_services(
-    *,
-    settings: Any,
-) -> RuntimeServices:
+def build_runtime_services() -> RuntimeServices:
     """Construct shared services in dependency order.
-
-    Args:
-        settings: app `Settings` singleton. Read for
-            `DATA_DIR` (composed into the executor's results dir).
 
     Returns:
         Fully wired `RuntimeServices`. The orchestrator references
@@ -192,7 +180,6 @@ def build_runtime_services(
     connection_service = ConnectionService()
     database_inspector = DatabaseInspector()
     orchestrator_stack = build_orchestrator_stack(
-        settings=settings,
         connection_service=connection_service,
     )
 

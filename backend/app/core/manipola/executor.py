@@ -177,7 +177,6 @@ class ManipolaExecutor:
         self.project_service = project_service
         self.pipeline_dispatcher = pipeline_dispatcher
         self.group_id_resolver = group_id_resolver
-        self.results_base_dir = settings.RESULTS_DIR
 
     def set_pipeline_dispatcher(self, dispatcher: PipelineDispatcherProtocol) -> None:
         """Set the dispatcher used for recursive upstream project execution."""
@@ -568,7 +567,6 @@ class ManipolaExecutor:
             dataframes,
             force_recalculate=force_recalculate,
             pipeline_dispatcher=self.pipeline_dispatcher,
-            results_base_dir=self.results_base_dir,
             run_id=run_id,
             group_id=group_id,
             logger=logger,

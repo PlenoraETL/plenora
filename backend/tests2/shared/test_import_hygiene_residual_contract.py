@@ -60,6 +60,8 @@ def test_selected_stdlib_imports_are_not_repeated_inside_functions() -> None:
         "core/eseguibili/db.py": {"datetime"},
         "core/eseguibili/service.py": {"hashlib"},
         "core/estrai/query_filters.py": {"re"},
+        "core/manipola/datasource_node_loading.py": {"os"},
+        "core/manipola/transforms/spatial.py": {"os"},
     }
 
     violations: list[tuple[str, int, str]] = []
@@ -79,6 +81,73 @@ def test_selected_stdlib_imports_are_not_repeated_inside_functions() -> None:
                 violations.append((relative, node.lineno, module))
 
     assert not violations
+
+
+def test_storage_reconciliation_store_has_single_lazy_db_import() -> None:
+    """Keep pg_connection lazy, but centralized in one helper."""
+    src = _read("core/resources/storage_reconciliation_store.py")
+    tree = ast.parse(src)
+
+    imports = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom)
+        and node.module == "app.db"
+        and any(alias.name == "pg_connection" for alias in node.names)
+    ]
+
+    assert len(imports) == 1
+    assert "_pg_connection()" in src
+
+
+def test_query_executor_no_longer_carries_legacy_results_dir() -> None:
+    """QueryExecutor persists via result blob ports, not instance result dirs."""
+    src = _read("db/query_executor.py")
+    tree = ast.parse(src)
+
+    query_executor = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "QueryExecutor"
+    )
+    init_fn = next(
+        node
+        for node in query_executor.body
+        if isinstance(node, ast.FunctionDef) and node.name == "__init__"
+    )
+    init_args = [arg.arg for arg in init_fn.args.args + init_fn.args.kwonlyargs]
+
+    assert "results_dir" not in init_args
+    assert "RESULTS_DIR" not in src
+    assert "_results_dir" not in src
+
+
+def test_runtime_factories_do_not_thread_legacy_results_dirs() -> None:
+    """Runtime composition wires executors, not filesystem result roots."""
+    runtime_src = _read("runtime/services.py")
+    scheduler_src = _read("core/scheduler/execution_manager.py")
+    arricchisci_source_src = _read("core/arricchisci/api_connection_source_loading.py")
+
+    assert "results_dir" not in runtime_src
+    assert "settings:" not in runtime_src
+    assert "build_runtime_services(settings=" not in _read("app_factory.py")
+    assert "results_dir=" not in scheduler_src
+    assert "results_dir=" not in arricchisci_source_src
+    assert "except ImportError" not in arricchisci_source_src
+
+
+def test_arricchisci_and_manipola_no_dead_result_dir_state() -> None:
+    """Project sources and API connections resolve through artifact ports."""
+    for relative in (
+        "core/arricchisci/api_connector.py",
+        "core/arricchisci/executor.py",
+        "core/manipola/executor.py",
+        "core/manipola/project_source_runtime.py",
+    ):
+        src = _read(relative)
+        assert "results_base_dir" not in src
+        assert "self.results_dir" not in src
+        assert "self.data_dir" not in src
 
 
 def test_selected_light_app_imports_are_not_repeated_inside_functions() -> None:

@@ -5,7 +5,6 @@ Locks backend contracts and regression boundaries for the current architecture.
 """
 
 from unittest.mock import patch
-from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -123,7 +122,6 @@ def test_load_project_sources_blocks_cross_tenant_source_project():
     from app.core.artifacts import ArtifactResolutionError
 
     executor = ManipolaExecutor(project_service=object())
-    executor.results_base_dir = Path("/tmp/plenora-results-unused")
     dataframes = {}
     canvas = build_canvas(
         build_node("project_source", source_project_id="proj-99", columns=[]),

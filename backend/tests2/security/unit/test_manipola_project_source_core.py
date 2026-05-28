@@ -21,9 +21,7 @@ pytestmark = [
 
 
 def _make_executor():
-    executor = ManipolaExecutor(project_service=object())
-    executor.results_base_dir = None
-    return executor
+    return ManipolaExecutor(project_service=object())
 
 
 def _canvas_with_project_source(source_project_id="proj-99"):

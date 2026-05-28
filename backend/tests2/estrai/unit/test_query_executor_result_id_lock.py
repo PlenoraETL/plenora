@@ -4,7 +4,6 @@ Lock tests per `QueryExecutor.execute_query` → `ResultBuilder.success`
 → `to_dict`.
 """
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -103,7 +102,6 @@ class TestQueryExecutorEndToEnd:
 
         executor = QueryExecutor(
             engine_factory=mock_engine_factory,
-            results_dir=Path("/tmp"),
             logger=mock_logger,
         )
 

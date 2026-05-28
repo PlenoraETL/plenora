@@ -10,7 +10,6 @@ import time as _time_mod
 
 from typing import Any, Optional
 
-from app.config import settings
 from app.core.artifacts import SourceLoader, SourceLoadingError, SourceRef
 from app.core.arricchisci._api_connection_helpers import _nd
 from app.core.arricchisci.execution_context import (
@@ -153,7 +152,7 @@ class ApiConnectionSourceLoadingMixin:
     ) -> None:
         """Istanzia un OrchestratorService standalone e ri-esegue la
         pipeline di `source_project_id`. Solleva `ValueError` su
-        `ImportError` o `success=False`.
+        `success=False`; gli errori di import interni restano fail-loud.
 
         Pattern standalone (no `from main import orchestrator`) perche'
         `main.py` non e' nel path del worker Celery. Il caller fa
@@ -161,19 +160,12 @@ class ApiConnectionSourceLoadingMixin:
         appena salvato.
         """
         logger.info(f"Riesecuzione progetto upstream: {source_project_id}")
-        try:
-            from app.runtime.services import build_orchestrator_stack
-            _stack = build_orchestrator_stack(
-                settings=settings,
-                results_dir=settings.DATA_DIR / "temp",
-            )
-            upstream_result = _stack.orchestrator.execute_pipeline(
-                source_project_id, force_recalculate=force_recalculate
-            )
-        except ImportError as _ie:
-            raise ValueError(
-                f"Impossibile importare orchestrator per ricalcolo: {_ie}"
-            ) from _ie
+        from app.runtime.services import build_orchestrator_stack
+
+        _stack = build_orchestrator_stack()
+        upstream_result = _stack.orchestrator.execute_pipeline(
+            source_project_id, force_recalculate=force_recalculate
+        )
 
         if not upstream_result.get('success'):
             raise ValueError(

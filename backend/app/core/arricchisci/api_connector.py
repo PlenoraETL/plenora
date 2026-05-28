@@ -6,7 +6,6 @@ Keeps API enrichment behavior isolated from orchestration callers.
 
 from typing import Optional
 
-from app.config import settings
 from app.utils.logger import get_logger
 from app.core.arricchisci.types import JsonObject
 from app.shared.contracts.payloads import HeadersMap
@@ -120,11 +119,6 @@ class ApiConnectionService(
     - datasource: sorgente dati esterna (WFS, REST catalog)
     """
     
-    def __init__(self):
-        self.data_dir = settings.DATA_DIR
-        self.results_dir = settings.RESULTS_DIR
-
-
     def execute_enrichment(self, project_id: str, canvas: JsonObject, format: str = 'csv',
                           force_recalculate: bool = False, preview_limit: int = None,
                           run_id: str = None,

@@ -290,9 +290,7 @@ def create_app(
             headers=_cors_headers_for(request),
         )
 
-    runtime_services = resolved_deps.build_runtime_services(
-        settings=resolved_settings,
-    )
+    runtime_services = resolved_deps.build_runtime_services()
     app.state.runtime_services = runtime_services
 
     from app.core.api import api_router

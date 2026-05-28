@@ -30,7 +30,6 @@ class EnrichExecutor:
     
     def __init__(self, project_service):
         self.project_service = project_service
-        self.results_base_dir = settings.RESULTS_DIR
 
     def execute(
         self,
