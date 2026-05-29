@@ -93,7 +93,7 @@ def test_doc_references_canonical_entry_points(doc_text: str):
     # The page must point at the canonical paths so the reader
     # does not have to guess. These are the load-bearing imports.
     expected_paths = (
-        "app/core/auth/middleware.py",
+        "app/core/auth/auth_middleware.py",
         "app/core/auth/dependencies.py",
         "app/core/connections/rest_sink.py",
         "app/core/connections/arcgis_sql_helpers.py",
@@ -122,7 +122,9 @@ def test_doc_references_canonical_entry_points(doc_text: str):
         "app/core/imdf/bundle_store.py",
         "app/core/intermediate/retention.py",
         "app/shared/resources/file_cleanup.py",
-        "app/db/config/*",
+        "app/db/query_result_persistence.py",
+        "app/db/migrations_runner.py",
+        "app/db/sql_functions.py",
         "app/observability/health.py",
         "app/core/task_runtime/probes.py",
         "scripts/install.sh",

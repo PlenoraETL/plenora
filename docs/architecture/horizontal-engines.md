@@ -11,7 +11,7 @@ between engines.
 
 Canonical surfaces:
 
-- `app/core/auth/middleware.py`
+- `app/core/auth/auth_middleware.py`
 - `app/core/auth/dependencies.py`
 - `app/core/security/*`
 - `app/shared/contracts/auth.py`
@@ -302,9 +302,10 @@ Rules:
 Canonical surfaces:
 
 - `app/db/pg_connection.py`
-- `app/db/config/*`
-- `app/db/results_db_service.py`
 - `app/db/query_executor.py`
+- `app/db/query_result_persistence.py`
+- `app/db/migrations_runner.py`
+- `app/db/sql_functions.py`
 - Domain DB boundaries: `app/core/**/db.py`, `app/core/**/*_store.py`,
   and `app/core/**/*_repository.py`
 

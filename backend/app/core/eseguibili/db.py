@@ -310,6 +310,19 @@ def list_eseguibili_by_source(source_canvas_id: str) -> list[EseguibileSourceRef
     return [eseguibile_source_ref_row_from_db(row) for row in rows]
 
 
+def mark_temp_file_source_ttl(file_source_id: str) -> None:
+    """Marca un file_source temporaneo creato dal runtime eseguibili."""
+    _execute(
+        """
+        UPDATE file_sources
+        SET is_temp = true,
+            expires_at = now() + INTERVAL '24 hours'
+        WHERE id = %s
+        """,
+        (file_source_id,),
+    )
+
+
 def update_eseguibile(eid: str, **fields: object) -> Optional[EseguibileRow]:
     """Aggiorna i campi passati (solo metadata, non canvas/expected_columns)."""
     to_update = {

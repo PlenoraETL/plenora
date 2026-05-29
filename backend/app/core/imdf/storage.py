@@ -12,8 +12,11 @@ from pathlib import Path
 from typing import Iterator, List, Optional
 
 from app.core.io.object_storage import object_storage_enabled
-from app.shared.contracts.payloads import JsonObject, StringMap
 from app.core.io.local_cleanup import rmtree_safe
+from app.core.resources.bounded_reader import read_stream_bounded
+from app.core.resources.exceptions import MemoryLimitExceededError
+from app.core.resources.resource_caps import resolve_resource_max_bytes
+from app.shared.contracts.payloads import JsonObject, StringMap
 from app.shared.resources.storage_layout import IMDF_BUNDLES_PREFIX
 from app.utils.logger import get_logger
 
@@ -60,6 +63,21 @@ def _gdb_zip_key(task_id: str) -> str:
     Geodatabase resta directory-format per pyogrio, lo manteniamo
     come singolo zip per upload/download atomico)."""
     return f"{PREFIX}/{task_id}/_gdb.zip"
+
+
+def _read_storage_stream_bytes(
+    stream: dict,
+    *,
+    key: str,
+    stage: str,
+) -> bytes:
+    label = key.rsplit("/", 1)[-1] or key
+    return read_stream_bounded(
+        stream.get("body", ()),
+        max_bytes=resolve_resource_max_bytes(),
+        label=label,
+        stage=stage,
+    )
 
 
 def _local_dir(task_id: str) -> Path:
@@ -168,7 +186,11 @@ def read_bundle_file_bytes(task_id: str, name: str) -> Optional[bytes]:
     except Exception as e:
         logger.debug(f"[{task_id}] read_bundle_file_bytes {name!r}: {e}")
         return None
-    return b"".join(stream.get("body", []))
+    return _read_storage_stream_bytes(
+        stream,
+        key=key,
+        stage="imdf_bundle_file_read",
+    )
 
 
 # IMDF-4: storage-first JSON reader helpers
@@ -264,7 +286,11 @@ def open_gdb_in_vsimem(task_id: str, site_id: str) -> Iterator[Optional[str]]:
         return
 
     stream = storage.get_object_stream(gdb_key)
-    gdb_bytes = b"".join(stream.get("body", []))
+    gdb_bytes = _read_storage_stream_bytes(
+        stream,
+        key=gdb_key,
+        stage="imdf_gdb_zip_vsimem",
+    )
 
     # Import locale per evitare ctypes load all'import-time del modulo
     # (tests fuori container non hanno libgdal).
@@ -342,8 +368,14 @@ def get_meta_only(task_id: str) -> Optional[JsonObject]:
     try:
         storage = _storage()
         stream = storage.get_object_stream(mk)
-        body_bytes = b"".join(stream["body"])
+        body_bytes = _read_storage_stream_bytes(
+            stream,
+            key=mk,
+            stage="imdf_bundle_meta_read",
+        )
         return json.loads(body_bytes.decode("utf-8"))
+    except MemoryLimitExceededError:
+        raise
     except Exception as e:
         logger.debug(f"[{task_id}] meta only read skipped: {e}")
         return None

@@ -19,7 +19,6 @@ from app.core.dataframes import tabular as dataframe_tabular
 from app.core.projects import access_context as project_access_context
 from app.core.files import db as files_db
 from app.core.files.service import file_source_service
-from app.db import pg_connection as pg_connection_module
 
 from . import db as eseguibili_db
 from .models import (
@@ -390,15 +389,7 @@ def execute(
     # senza migration) NON blocca l'esecuzione dell'eseguibile —
     # peggio caso il file resta orfano e va cancellato manualmente.
     try:
-        with pg_connection_module.unit_of_work() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE file_sources "
-                    "SET is_temp = true, "
-                    "    expires_at = now() + INTERVAL '24 hours' "
-                    "WHERE id = %s",
-                    (temp_file_source_id,),
-                )
+        eseguibili_db.mark_temp_file_source_ttl(temp_file_source_id)
     except Exception as ttl_err:
         logger.warning(
             "[GESTITO] eseguibili: TTL marking fallito per "
