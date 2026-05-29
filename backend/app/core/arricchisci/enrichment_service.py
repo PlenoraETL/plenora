@@ -18,6 +18,7 @@ from collections import deque
 # sopprimeva globalmente i warning SSL per tutto il processo — rimossa per
 # preservare segnali diagnostici di security monitoring su future regressioni.
 
+from app.config import settings
 from app.core.arricchisci.models import (
     RowError, EnrichmentStats, EnrichmentOptions,
     EnrichmentResult, BatchConfig
@@ -327,3 +328,56 @@ def generate_error_report(
     data = buf.getvalue().encode("utf-8")
     logger.info(f"Report errori generato in RAM: {len(data)} bytes, {len(errors)} righe")
     return data
+
+
+def build_enrichment_executor(
+    node_data: JsonObject,
+    api_config: JsonObject,
+    *,
+    progress_callback: Optional[Callable[[int, str], None]] = None,
+) -> "EnrichmentExecutor":
+    """Costruisce un EnrichmentExecutor (motore avanzato) con output_mapping
+    deduplicato e opzioni derivate dal nodo canvas + api_config.
+
+    Logica condivisa tra `execute_enrichment_task` (standalone) e
+    `canvas_orchestrator.run_single_enricher` (arricchisci come nodo / preview
+    / schedulato): garantisce che TUTTI i path usino lo stesso motore avanzato
+    (parallel/dedup/retry/cache), eliminando il vecchio engine semplificato.
+
+    `node_data` deve essere il merge dei campi root del nodo + il suo `data{}`
+    (i campi del nodo canvas hanno priorita' sui default della connection).
+    """
+    node_om = node_data.get("output_mapping")
+    api_om = api_config.get("output_mapping", [])
+    raw_output_mapping = node_om if node_om else api_om
+    seen_cols: set[str] = set()
+    deduped: list = []
+    for mapping in (raw_output_mapping or []):
+        col = mapping.get("column") or mapping.get("path")
+        if col and col not in seen_cols:
+            seen_cols.add(col)
+            deduped.append(mapping)
+
+    api_cfg = {
+        **api_config,
+        "output_mapping": deduped,
+        "batch": node_data.get("batch") or api_config.get("batch", {}),
+    }
+    opts_src = api_cfg.get("options", {}) or {}
+    options = EnrichmentOptions(
+        enable_deduplication=node_data.get("enable_deduplication", True),
+        continue_on_error=node_data.get("continue_on_error", True),
+        stop_on_error_threshold=node_data.get("max_errors", 0) or 0,
+        generate_error_report=node_data.get("generate_error_report", True),
+        skip_null_params=node_data.get("skip_null_params", True),
+        rate_limit=opts_src.get("rate_limit", settings.API_DEFAULT_RATE_LIMIT),
+        request_timeout=opts_src.get("timeout", settings.API_TIMEOUT),
+        max_retries=opts_src.get("retry_max", 3),
+        parallel_workers=opts_src.get("parallel_workers", 1),
+    )
+    return EnrichmentExecutor(
+        api_config=api_cfg,
+        param_mapping=node_data.get("param_mapping", {}),
+        options=options,
+        progress_callback=progress_callback,
+    )

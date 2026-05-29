@@ -6,7 +6,7 @@ Locks backend contracts and regression boundaries for the current architecture.
 
 from contextlib import ExitStack
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
@@ -94,10 +94,6 @@ def env(api_service):
             ),
             load_static=_po(
                 "_load_static_values", return_value=pd.DataFrame([{"a": 1}])
-            ),
-            enricher=_po(
-                "_execute_api_enricher",
-                return_value=pd.DataFrame([{"a": 1, "enriched": "ok"}]),
             ),
             generator=_po(
                 "_execute_api_generator",
@@ -253,20 +249,33 @@ class TestExecuteEnrichmentSourceNodes:
 
 
 class TestExecuteEnrichmentApiEnrichDispatch:
-    def test_enricher_api_type_invokes_execute_api_enricher(self, env):
+    def test_enricher_api_type_invokes_advanced_executor(self, env):
+        """Il path enricher usa il motore avanzato condiviso (EnrichmentExecutor
+        via `build_enrichment_executor`), non piu' il vecchio engine semplice
+        `_execute_api_enricher`."""
         env.list_conns.return_value = {
             "api-1": {"api_type": "enricher", "connection_type": "manual"},
         }
-
-        env.svc.execute_enrichment(
-            "proj-1",
-            _canvas(
-                nodes=[_static_values(), _api_enrich(), _result()],
-                edges=[_edge("sv-1", "ae-1"), _edge("ae-1", "r-1")],
-            ),
+        fake_exec = MagicMock()
+        fake_exec.execute.return_value = (
+            pd.DataFrame([{"a": 1, "enriched": "ok"}]),
+            SimpleNamespace(),
         )
 
-        env.enricher.assert_called_once()
+        with patch(
+            "app.core.arricchisci.canvas_orchestrator.build_enrichment_executor",
+            return_value=fake_exec,
+        ) as build_exec:
+            env.svc.execute_enrichment(
+                "proj-1",
+                _canvas(
+                    nodes=[_static_values(), _api_enrich(), _result()],
+                    edges=[_edge("sv-1", "ae-1"), _edge("ae-1", "r-1")],
+                ),
+            )
+
+        build_exec.assert_called_once()
+        fake_exec.execute.assert_called_once()
         env.generator.assert_not_called()
 
     def test_generator_api_type_invokes_execute_api_generator(self, env):
@@ -283,11 +292,11 @@ class TestExecuteEnrichmentApiEnrichDispatch:
         )
 
         env.generator.assert_called_once()
-        env.enricher.assert_not_called()
 
-    def test_enricher_valueerror_in_parallel_branch_is_blocking(self, env):
-        """CONTRATTO: un ValueError sollevato da `_execute_api_enricher`
-        dentro un parallel group deve far FALLIRE la pipeline.
+    def test_enricher_hard_error_in_parallel_branch_is_blocking(self, env):
+        """CONTRATTO (preservato post unificazione engine): un errore hard
+        sollevato dal motore enricher dentro un parallel group deve far
+        FALLIRE la pipeline.
 
         Prima dell'aprile 2026 il comportamento degradava a success:
         l'errore veniva inghiottito e il final_result tornava il
@@ -298,15 +307,20 @@ class TestExecuteEnrichmentApiEnrichDispatch:
         env.list_conns.return_value = {
             "api-1": {"api_type": "enricher", "connection_type": "manual"},
         }
-        env.enricher.side_effect = ValueError("param mapping mismatch")
+        fake_exec = MagicMock()
+        fake_exec.execute.side_effect = ValueError("param mapping mismatch")
 
-        result = env.svc.execute_enrichment(
-            "proj-1",
-            _canvas(
-                nodes=[_static_values(), _api_enrich(), _result()],
-                edges=[_edge("sv-1", "ae-1"), _edge("ae-1", "r-1")],
-            ),
-        )
+        with patch(
+            "app.core.arricchisci.canvas_orchestrator.build_enrichment_executor",
+            return_value=fake_exec,
+        ):
+            result = env.svc.execute_enrichment(
+                "proj-1",
+                _canvas(
+                    nodes=[_static_values(), _api_enrich(), _result()],
+                    edges=[_edge("sv-1", "ae-1"), _edge("ae-1", "r-1")],
+                ),
+            )
 
         # La pipeline DEVE fallire: non si puo' "continuare con il
         # fallback upstream" quando un api_enrich upstream del result
@@ -369,7 +383,6 @@ class TestExecuteEnrichmentApiEnrichDispatch:
         # Post-PR #22: il branch single dispatcha a _run_single_enricher
         # che chiama _execute_api_generator.
         env.generator.assert_called_once()
-        env.enricher.assert_not_called()
 
     def test_generator_in_single_step_propagates_http_error_as_failure(self, env):
         """PR #22 regression test.

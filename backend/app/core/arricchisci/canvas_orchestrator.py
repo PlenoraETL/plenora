@@ -17,6 +17,7 @@ from app.core.arricchisci.parallel import (
     execute_parallel_enrichers,
     should_execute_node,
 )
+from app.core.arricchisci.enrichment_service import build_enrichment_executor
 from app.core.arricchisci.types import JsonObject, JsonObjectById, JsonRows
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.shared.execution.canvas_node import CanvasNode
@@ -129,18 +130,35 @@ def init_execution_context(
     return build_execution_context(project_id, preview_limit)
 
 
+def _merge_node_data(node: Any) -> JsonObject:
+    """Merge dei campi root del nodo (esclusi i campi identita') + node['data'].
+
+    Mirror del merge usato da `execute_enrichment_task._run_single_node`: i
+    campi del nodo canvas hanno priorita' sui default della connection.
+    """
+    if isinstance(node, dict):
+        flat = {
+            k: v
+            for k, v in node.items()
+            if k not in ("id", "type", "position", "data", "config")
+        }
+        return {**flat, **(node.get("data") or {})}
+    return dict(getattr(node, "data", None) or {})
+
+
 def run_single_enricher(
     svc: "ApiConnectionService",
     node_data: JsonObject,
     api_conns: JsonObjectById,
     in_df: Any,
 ) -> Any:
-    """Esegue un singolo nodo enricher.
+    """Esegue un singolo nodo enricher con il motore avanzato condiviso.
 
-    Dispatch su `api_type`: generator (1 call → df intero) vs
-    enricher (1 call per riga). Usato sia direttamente che come
-    callback da `execute_parallel_enrichers`. Solleva `ValueError`
-    se l'api_id non e' nelle connections decifrate.
+    Dispatch su `api_type`: generator (1 call → df intero) vs enricher
+    (`EnrichmentExecutor`: parallel/dedup/retry/cache, lo stesso engine del
+    task standalone). Usato sia direttamente che come callback da
+    `execute_parallel_enrichers`. Solleva `ValueError` se l'api_id non e'
+    nelle connections decifrate.
     """
     _ncn = CanvasNode(node_data)
     api_id = _ncn.get_field("api_id")
@@ -149,8 +167,12 @@ def run_single_enricher(
         raise ValueError(f"API '{api_id}' non trovata")
     if api_config.get("api_type", "enricher") == "generator":
         return svc._execute_api_generator(api_config, in_df)
-    param_mapping = _ncn.get_field("param_mapping", {})
-    return svc._execute_api_enricher(in_df, api_config, param_mapping)
+    if in_df is None:
+        # Enricher senza input (nessun parametro da colonna): chiamata singola.
+        return svc._execute_api_generator(api_config, None)
+    executor = build_enrichment_executor(_merge_node_data(node_data), api_config)
+    result_df, _enrichment_result = executor.execute(in_df)
+    return result_df
 
 
 # Top-level orchestrator

@@ -11,25 +11,17 @@ from typing import Any, Optional
 
 import requests
 
-from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.tabular import (
     dataframe_first_row_dict,
     dataframe_from_records,
     dataframe_from_rows,
-    iter_dataframe_indexed_rows,
-    set_cell_value,
 )
-from app.core.dataframes.values import is_null_scalar
 from app.observability.log_sanitization import sanitize_for_log
 from app.core.security.outbound_url import validate_external_url
 from app.infrastructure.http.session import get_shared_session
 from app.shared.resources.json_path import extract_json_value as _shared_extract_json_value
 from app.utils.logger import get_logger
 from app.core.arricchisci.response_parser import ResponseParser, get_preset_config
-from app.core.arricchisci._rate_limiter import (
-    RateLimiter,
-    rate_limit_scope_for_api_config,
-)
 from app.core.arricchisci.types import JsonObject, JsonRows
 from app.core.artifacts.static_parameters import process_static_fields
 
@@ -184,12 +176,11 @@ class ApiConnectionGeneratorEnricherMixin:
 
         `safe` controlla quali caratteri NON vengono percent-encodati:
         - default `"-._~:@!$&'*+,=;/"`: permissivo, preserva slash/virgola
-          (usato da `_execute_api_enricher` e `test_api_connection` —
-          alcuni endpoint si aspettano `lat,lon` non encoded nel path).
+          (usato da `test_api_connection` — alcuni endpoint si aspettano
+          `lat,lon` non encoded nel path).
         - `""`: stretto, encoda tutto (usato da `_execute_api_generator`).
 
-        Usato da `_execute_api_generator`, `_execute_api_enricher` e
-        `test_api_connection`.
+        Usato da `_execute_api_generator` e `test_api_connection`.
         """
         target_url = url
         query_params: JsonObject = {}
@@ -481,163 +472,6 @@ class ApiConnectionGeneratorEnricherMixin:
             rows.append(row)
 
         return rows
-
-    def _enrich_one_row(
-        self,
-        *,
-        row,
-        api_config: JsonObject,
-        headers: JsonObject,
-        param_mapping: JsonObject,
-        output_mapping: JsonRows,
-        method: str,
-        url: str,
-        idx,
-    ) -> Optional[JsonObject]:
-        """Esegue l'enrichment per una singola riga del DataFrame.
-
-        Costruisce parametri (static + mappati da colonne + api_key in
-        query), sostituisce path params nell'URL, fa la chiamata HTTP,
-        estrae i valori per le colonne output.
-
-        Ritorna `dict[col_name → value]` su success (200), `None` su
-        errore HTTP (lascia il caller incrementare l'error counter senza
-        propagare l'eccezione). Le eccezioni network/parse risalgono al
-        caller (che le cattura nel try/except del loop).
-        """
-        auth = api_config.get('auth', {}) or {}
-        params = dict(api_config.get('static_parameters', {}) or {})
-
-        for api_param, df_column in param_mapping.items():
-            if df_column and df_column in row:
-                value = row[df_column]
-                params[api_param] = str(value) if not is_null_scalar(value) else None
-
-        if auth.get('type') == 'api_key' and auth.get('location') == 'query':
-            params[auth.get('key_name', 'apiKey')] = auth.get('key_value', '')
-
-        call_url, call_params = self._substitute_url_path_params(url, params)
-
-        validate_external_url(call_url)
-        session = get_shared_session()
-        if method == 'GET':
-            response = session.get(
-                call_url, params=call_params, headers=headers, timeout=30
-            )
-        else:
-            response = session.post(
-                call_url, json=call_params, headers=headers, timeout=30
-            )
-
-        if response.status_code != 200:
-            logger.warning(
-                f"Riga {idx}: HTTP {response.status_code} - "
-                f"{response.text[:200]}"
-            )
-            return None
-
-        data = response.json()
-        extracted: JsonObject = {}
-        for mapping in output_mapping:
-            path = mapping.get('path', '')
-            col_name = mapping.get('column', path)
-            extracted[col_name] = self._extract_json_value(data, path)
-        return extracted
-
-    def _execute_api_enricher(
-        self,
-        df: Any,
-        api_config: JsonObject,
-        param_mapping: JsonObject,
-    ) -> Any:
-        """
-        Esegue API di tipo 'enricher' — arricchisce ogni riga del DataFrame.
-        
-        Per ogni riga: costruisce parametri (fissi + mappati da colonne),
-        chiama l'API, estrae i campi dalla risposta JSON, e li scrive
-        nelle colonne output. Rispetta il rate limiting tra le chiamate.
-        
-        Questa è la versione semplificata (sincrona, senza deduplicazione).
-        Per l'esecuzione avanzata (parallela, con cache, batch) vedere
-        enrichment_service.py / EnrichmentExecutor.
-        """
-
-        result_df = copy_frame_for_update(df)
-
-        endpoint = api_config.get('endpoint', {})
-        url = endpoint.get('url', '')
-        method = endpoint.get('method', 'GET').upper()
-        auth = api_config.get('auth', {})
-        custom_headers = api_config.get('custom_headers', {})
-        output_mapping = api_config.get('output_mapping', [])
-
-        if not url:
-            raise ValueError("URL API non configurato")
-
-        # Prepara colonne output
-        for mapping in output_mapping:
-            col_name = mapping.get('column', mapping.get('path'))
-            if col_name not in result_df.columns:
-                result_df[col_name] = None
-
-        # Token OAuth2 gestito via cache con expires_at (vedi api_utils.get_cached_oauth2_token
-        # Il refresh avviene automaticamente solo quando il token sta per scadere — non serve
-        # piu il vecchio pattern "rinnova ogni N righe" basato su un counter arbitrario
-        _is_oauth2 = auth.get('type') in ('oauth2_password', 'oauth2_client_credentials')
-
-        def _get_fresh_headers():
-            return self._prepare_headers(auth, custom_headers)
-
-        headers = _get_fresh_headers()
-
-        rate_limit = api_config.get('options', {}).get('rate_limit', 5)
-        rate_limiter = RateLimiter(
-            rate_limit,
-            scope=rate_limit_scope_for_api_config(api_config),
-        )
-
-        success_count = 0
-        error_count = 0
-
-        for idx, row in iter_dataframe_indexed_rows(df):
-            try:
-                if _is_oauth2:
-                    headers = _get_fresh_headers()
-
-                rate_limiter.acquire()
-                extracted_values = self._enrich_one_row(
-                    row=row,
-                    api_config=api_config,
-                    headers=headers,
-                    param_mapping=param_mapping,
-                    output_mapping=output_mapping,
-                    method=method,
-                    url=url,
-                    idx=idx,
-                )
-                if extracted_values is not None:
-                    for col_name, value in extracted_values.items():
-                        set_cell_value(result_df, idx, col_name, value)
-                    success_count += 1
-                else:
-                    error_count += 1
-
-            except Exception as _row_err:
-                # skip-on-row-error per design (vedi docstring
-                # `_enrich_one_row`): il loop continua sul batch
-                # Log a `debug` per evitare flood su dataset grandi
-                # il riassunto finale `info` mostra il counter aggregato
-                logger.debug(
-                    f"Riga {idx}: eccezione skippata "
-                    f"({type(_row_err).__name__}: {_row_err})"
-                )
-                error_count += 1
-
-            if (idx + 1) % 100 == 0:
-                logger.info(f"Progresso: {idx + 1}/{len(df)} (OK: {success_count}, ERR: {error_count})")
-
-        logger.info(f"Completato: {success_count}/{len(df)} righe, {error_count} errori")
-        return result_df
 
     # JSON PATH UTIL — delegate condiviso fra Generator e Enricher
 
