@@ -80,6 +80,7 @@ def test_orchestrator_module_exposes_pure_function_api():
         "execute_canvas_enrichment",
         "run_enrichment_canvas",
         "CanvasRunError",
+        "CanvasRunHooks",
         "init_execution_context",
         "get_execution_order",
         "run_single_enricher",

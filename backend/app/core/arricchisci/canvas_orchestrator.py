@@ -5,6 +5,7 @@ Canvas-based enrichment orchestrator.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Callable, List, Optional, TYPE_CHECKING
 
 from app.core.dataframes.values import is_dataframe
@@ -36,6 +37,7 @@ __all__ = [
     "execute_canvas_enrichment",
     "run_enrichment_canvas",
     "CanvasRunError",
+    "CanvasRunHooks",
     "init_execution_context",
     "get_execution_order",
     "run_single_enricher",
@@ -57,6 +59,20 @@ class CanvasRunError(Exception):
     def __init__(self, payload: JsonObject) -> None:
         super().__init__(str(payload.get("error", "canvas run error")))
         self.payload = payload
+
+
+@dataclass
+class CanvasRunHooks:
+    """Hook di lifecycle opzionali per `run_enrichment_canvas`.
+
+    Default tutti `None` → no-op (path canonico/preview). Il task standalone
+    li fornisce per progress su Redis e snapshot intermedi. Niente hook deve
+    frugare negli interni del loop: ricevono solo identita' del nodo e il
+    risultato prodotto.
+    """
+
+    before_node: Optional[Callable[[str, str], None]] = None
+    after_node: Optional[Callable[[str, str, Any], None]] = None
 
 
 # Pure / orchestration helpers
@@ -206,13 +222,26 @@ def run_enrichment_canvas(
     force_recalculate: bool = False,
     run_id: Optional[str] = None,
     intermediate_mode_override: Optional[str] = None,
+    enrich_fn: Optional[Callable[[JsonObject, JsonObjectById, Any], Any]] = None,
+    hooks: Optional[CanvasRunHooks] = None,
 ) -> JsonObject:
     """Esegue il loop canvas (gruppi single/parallel) e ritorna `node_results`.
 
-    Scheletro condiviso fra il path canonico e (Step C3b) il task standalone.
-    Gli errori bloccanti vengono sollevati come `CanvasRunError(payload)`; la
-    finalizzazione (find_final_result + save/finalize) resta nei caller.
+    Scheletro condiviso fra il path canonico e il task standalone.
+
+    - `enrich_fn(node_data, api_conns, in_df) -> df` esegue un singolo nodo
+      api_enrich. Default `run_single_enricher` (motore avanzato); il task ne
+      passa una versione con stats/soglie/error-report.
+    - `hooks` aggiunge progress e snapshot per-nodo (default no-op).
+    - Errori bloccanti → `CanvasRunError(payload)`; il finalize resta nei caller.
     """
+    hooks = hooks or CanvasRunHooks()
+
+    def _enrich(node_data, api_conns, in_df):
+        if enrich_fn is not None:
+            return enrich_fn(node_data, api_conns, in_df)
+        return run_single_enricher(svc, node_data, api_conns, in_df)
+
     edges = graph.edges
     nodes = graph.raw_nodes
     node_results: JsonObject = {}
@@ -227,6 +256,8 @@ def run_enrichment_canvas(
             node_type = graph.get(node_id).type
             node_data = node
             logger.debug(f"Esecuzione nodo: {node_id} ({node_type})")
+            if hooks.before_node is not None:
+                hooks.before_node(node_id, node_type)
 
             if node_type == "project_source":
                 node_results[node_id] = svc._load_source_project(
@@ -251,7 +282,10 @@ def run_enrichment_canvas(
                     node_data, ctx=ctx,
                 )
 
-            elif node_type == "result":
+            elif node_type in ("result", "imdf_publisher"):
+                # `result` e `imdf_publisher` propagano l'output del
+                # predecessore (passthrough nel DAG; il publish IMDF vero
+                # avviene nel post-processing del caller task).
                 input_edge = next(
                     (e for e in edges if e["target"] == node_id), None
                 )
@@ -262,7 +296,7 @@ def run_enrichment_canvas(
 
             elif node_type == "api_enrich":
                 # api_enrich emesso come step "single" quando
-                # cardinality-changing o isolato (RB.#15). `run_single_enricher`
+                # cardinality-changing o isolato (RB.#15). `_enrich`
                 # propaga ValueError su HTTP error → CanvasRunError sotto.
                 input_edge = next(
                     (e for e in edges if e["target"] == node_id), None
@@ -271,12 +305,13 @@ def run_enrichment_canvas(
                     node_results.get(input_edge["source"])
                     if input_edge else None
                 )
-                result = run_single_enricher(
-                    svc, node_data, api_connections, input_df
-                )
+                result = _enrich(node_data, api_connections, input_df)
                 if isinstance(result, dict) and not result.get("success", True):
                     raise CanvasRunError(result)
                 node_results[node_id] = result
+
+            if hooks.after_node is not None:
+                hooks.after_node(node_id, node_type, node_results.get(node_id))
 
         else:
             # ── Gruppo parallelo di api_enrich ──
@@ -330,15 +365,12 @@ def run_enrichment_canvas(
                     f"Esecuzione parallela: {len(parallel_ids)} nodi enricher"
                 )
 
-                def _execute_single(node_data, api_conns, in_df):
-                    return run_single_enricher(svc, node_data, api_conns, in_df)
-
                 group_results, group_error = execute_parallel_enrichers(
                     node_ids=parallel_ids,
                     input_df=input_df,
                     node_map=graph.raw_map,
                     api_connections=api_connections,
-                    execute_single_fn=_execute_single,
+                    execute_single_fn=_enrich,
                 )
                 node_results.update(group_results)
 
@@ -360,8 +392,10 @@ def run_enrichment_canvas(
                         "error_node_type": "api_enrich",
                     })
 
-            if run_id:
-                for nid in step_node_ids:
+            for nid in step_node_ids:
+                if hooks.after_node is not None:
+                    hooks.after_node(nid, "api_enrich", node_results.get(nid))
+                if run_id:
                     svc._write_intermediate_snapshot(
                         run_id, nid, "api_enrich",
                         node_results.get(nid),
