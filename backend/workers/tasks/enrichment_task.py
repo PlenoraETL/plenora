@@ -42,6 +42,7 @@ from app.core.results import blob_writer as result_blob_writer
 from app.core.results import pipeline_result as pipeline_result_module
 from app.core.results import store as result_store
 from app.shared.contracts.payloads import JsonObject
+from app.shared.execution import carica_dispatcher
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
 from app.utils import debug_payload_builder as debug_payload_builder_module
 from app.core.arricchisci.enrichment_service import EnrichmentExecutor, generate_error_report
@@ -1257,8 +1258,6 @@ def execute_enrichment_task(
                 duration_ms=_elapsed_ms,
             )
 
-        # Stessa logica di OrchestratorService._execute_carica_if_present ma qui
-        # perché execute_enrichment_task non passa per l'orchestrator
         try:
             carica_info = _trigger_carica_if_present(
                 project_id=project_id,
@@ -1454,37 +1453,18 @@ def _trigger_carica_if_present(
     canvas: JsonObject,
     output_format: str = "csv",
 ) -> Optional[JsonObject]:
-    """Cerca nodi CARICA (db/arcgis/datasource) collegati al nodo Output e lancia i relativi task.
-
-    Replica la logica di OrchestratorService._execute_carica_if_present, ma viene chiamata
-    direttamente dal task di enrichment perché /enrich-async non passa per l'orchestrator.
+    """Cerca nodi CARICA collegati all'output e lancia i relativi task.
 
     Returns: JSON object {"tasks": [{task_id, node_id}, ...], "message": ...} oppure None se
              nessun nodo carica trovato. Il frontend usa questo per fare polling sui task.
     """
-    nodes = canvas.get("nodes", []) or []
-    edges = canvas.get("edges", []) or []
-
-    # Trova nodo Output (result
-    output_node_id = next((n["id"] for n in nodes if n.get("type") == "result"), None)
-    if not output_node_id:
-        return None
-
-    # Cerca nodi carica/carica_arcgis/datasource_node collegati all'output
-    carica_nodes = []
-    for node in nodes:
-        ntype = node.get("type")
-        if ntype in ("carica", "carica_arcgis", "datasource_node"):
-            connected = any(
-                e.get("source") == output_node_id and e.get("target") == node.get("id")
-                for e in edges
-            )
-            if connected:
-                carica_nodes.append(node)
-            else:
-                logger.warning(
-                    f"Nodo {ntype} ({node.get('id')}) non collegato al nodo Output, skip"
-                )
+    carica_nodes = carica_dispatcher.find_connected_carica_nodes(
+        canvas,
+        on_unconnected=lambda node: logger.warning(
+            f"Nodo {carica_dispatcher.node_type(node)} "
+            f"({carica_dispatcher.node_id(node)}) non collegato al nodo Output, skip"
+        ),
+    )
 
     if not carica_nodes:
         return None
@@ -1503,12 +1483,17 @@ def _trigger_carica_if_present(
     from workers.tasks.carica_task import execute_carica_task
 
     tasks = []
+    _output_contract_loader = (
+        project_service_module.ProjectService().get_project_output_contract
+    )
     for carica_node in carica_nodes:
+        node_id = carica_dispatcher.node_id(carica_node)
         try:
-            # Merge node root + node['data'] (stesso pattern dell'orchestratore
-            node_dict = dict(carica_node)
-            nested_data = node_dict.get("data") or {}
-            carica_node_data = {**node_dict, **nested_data}
+            carica_node_data = carica_dispatcher.build_carica_node_data(
+                carica_node,
+                project_id=project_id,
+                output_contract_loader=_output_contract_loader,
+            )
 
             task_info = task_service.submit_task(
                 TaskSubmitRequest(
@@ -1527,13 +1512,13 @@ def _trigger_carica_if_present(
                 )
             )
             logger.info(
-                f"Task CARICA avviato: {task_info.task_id} (nodo: {carica_node.get('id')})",
+                f"Task CARICA avviato: {task_info.task_id} (nodo: {node_id})",
                 project_id=project_id
             )
-            tasks.append({"task_id": task_info.task_id, "node_id": carica_node.get("id")})
+            tasks.append({"task_id": task_info.task_id, "node_id": node_id})
         except Exception as e:
             logger.error(
-                f"[GESTITO] Errore creazione task CARICA per nodo {carica_node.get('id')}: {e}",
+                f"[GESTITO] Errore creazione task CARICA per nodo {node_id}: {e}",
                 project_id=project_id, exc_info=True
             )
 

@@ -19,7 +19,7 @@ from app.core.query_execution.query_executor import QueryExecutor
 from app.shared import error_codes
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution.executor_protocol import CanvasExecutorProtocol, ExecutionResult
-from app.shared.execution import output_contract_types_enricher
+from app.shared.execution import carica_dispatcher
 from app.utils.logger import get_logger
 
 from app.core.artifacts import PipelineArtifact
@@ -287,35 +287,23 @@ class OrchestratorService:
 
         try:
             tasks = []
-            # Campi di identità del nodo che NON devono essere sovrascritti dal
-            # merge con `data{}`. Se l'utente, per errore o malizia, mette
-            # `id`/`type`/... dentro `data`, ignoriamo: cambierebbe l'identità
-            # del nodo (es. far passare un nodo per un altro tipo, o cambiare
-            # l'id che è la chiave usata dal task carica
-            _NODE_RESERVED_FIELDS = {
-                'id', 'type', 'position', 'selected', 'dragging',
-                'measured', 'positionAbsolute', 'width', 'height',
-            }
             for carica_node in carica_nodes:
-                node_dict = carica_node.model_dump() if hasattr(carica_node, 'model_dump') else vars(carica_node)
-                # data{} è il campo annidato nel nodo canvas con tutta la configurazione CARICA
-                # Merge: node_dict (top-level) + data{} (configurazione) — data{} ha priorità
-                # ma SOLO sui campi non riservati (vedi _NODE_RESERVED_FIELDS
-                nested_data = node_dict.get('data') or carica_node.data or {}
-                if not isinstance(nested_data, dict):
-                    nested_data = {}
-                safe_nested = {k: v for k, v in nested_data.items() if k not in _NODE_RESERVED_FIELDS}
-                carica_node_data = {**node_dict, **safe_nested}
-                # Arricchisci canvas_types dal contratto pubblico del progetto
-                # per evitare che CARICA perda il tipo semantico quando MANIPOLA
-                # promuove silenziosamente int->float per NaN.
-                output_contract_types_enricher.enrich_canvas_types_from_output_contract(
-                    carica_node_data,
-                    project_id,
-                    self.project_service.get_project_output_contract,
+                carica_node_data = carica_dispatcher.build_carica_node_data(
+                    carica_node,
+                    project_id=project_id,
+                    output_contract_loader=(
+                        self.project_service.get_project_output_contract
+                    ),
                 )
+                node_data = getattr(carica_node, "data", None)
+                nested_data = (
+                    carica_node.get("data")
+                    if isinstance(carica_node, dict)
+                    else node_data
+                ) or {}
+                node_id = carica_dispatcher.node_id(carica_node)
                 logger.info(
-                    f"Nodo {carica_node.id} — connection_id: '{carica_node_data.get('connection_id', 'MANCANTE')}', "
+                    f"Nodo {node_id} — connection_id: '{carica_node_data.get('connection_id', 'MANCANTE')}', "
                     f"dest_type: '{carica_node_data.get('dest_type', 'MANCANTE')}', "
                     f"table: '{carica_node_data.get('table_name', 'MANCANTE')}', "
                     f"data_keys: {list(nested_data.keys()) if nested_data else 'VUOTO'}",
@@ -329,8 +317,12 @@ class OrchestratorService:
                     force_recalculate=False,
                     triggered_by="pipeline",
                 )
-                logger.info(f"Task CARICA avviato: {task_info.task_id} (nodo: {carica_node.id})", op="carica", project_id=project_id)
-                tasks.append({"task_id": task_info.task_id, "node_id": carica_node.id})
+                logger.info(
+                    f"Task CARICA avviato: {task_info.task_id} (nodo: {node_id})",
+                    op="carica",
+                    project_id=project_id,
+                )
+                tasks.append({"task_id": task_info.task_id, "node_id": node_id})
 
             return {
                 "tasks": tasks,
@@ -348,26 +340,21 @@ class OrchestratorService:
 
     def _find_all_carica_nodes(self, canvas: CanvasState) -> list:
         """Trova tutti i nodi CARICA collegati al nodo Output."""
-        result = []
-        for node in canvas.nodes:
-            if node.type in ('carica', 'carica_arcgis', 'datasource_node'):
-                if self._is_connected_to_output(node, canvas):
-                    result.append(node)
-                else:
-                    logger.warning(f"Nodo {node.type} ({node.id}) non collegato al nodo Output")
-        return result
+        return carica_dispatcher.find_connected_carica_nodes(
+            canvas,
+            on_unconnected=lambda node: logger.warning(
+                f"Nodo {carica_dispatcher.node_type(node)} "
+                f"({carica_dispatcher.node_id(node)}) non collegato al nodo Output"
+            ),
+            on_missing_output=lambda: logger.warning(
+                "Nodo Output (result) non trovato nel canvas"
+            ),
+        )
 
     def _is_connected_to_output(self, carica_node: Any, canvas: CanvasState) -> bool:
         """Verifica che il nodo CARICA sia collegato al nodo Output (result)."""
-        output_node_id = next(
-            (n.id for n in canvas.nodes if n.type == 'result'), None
-        )
-
-        if not output_node_id:
-            logger.warning("Nodo Output (result) non trovato nel canvas")
-            return False
-
+        wanted_id = carica_dispatcher.node_id(carica_node)
         return any(
-            e.source == output_node_id and e.target == carica_node.id
-            for e in canvas.edges
+            carica_dispatcher.node_id(node) == wanted_id
+            for node in carica_dispatcher.find_connected_carica_nodes(canvas)
         )
