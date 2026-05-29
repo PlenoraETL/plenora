@@ -11,7 +11,7 @@ from app.core.arricchisci.router import (
     enrichment_router,
     templates_router,
 )
-from app.core.auth.auth import router as auth_router
+from app.core.auth.router import router as auth_router
 from app.core.auth.users_router import users_router
 from app.core.auth.groups_router import groups_router
 from app.core.auth.shares_router import router as shares_router

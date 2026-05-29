@@ -19,16 +19,18 @@ from app.core.auth.ownership import (
     compute_can_edit,
 )
 from app.core.features.models import (
-    ArcGISConnection,
-    ArcGISCreate,
-    ArcGISUpdate,
-    ArcGISList,
-    ArcGISTestResult,
     WriteFeaturesResponse,
     CreateServiceResponse,
     BrowseServicesResponse,
     ListFoldersResponse,
     BrowseLayersResponse,
+)
+from app.core.connections.arcgis_models import (
+    ArcGISConnection,
+    ArcGISCreate,
+    ArcGISList,
+    ArcGISTestResult,
+    ArcGISUpdate,
 )
 from app.core.features.features_service import FeaturesService
 from app.core.features.arcgis_json_types import ArcGISJsonObject

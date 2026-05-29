@@ -94,10 +94,13 @@ def test_doc_references_canonical_entry_points(doc_text: str):
     # does not have to guess. These are the load-bearing imports.
     expected_paths = (
         "app/core/auth/auth_middleware.py",
+        "app/core/auth/router.py",
         "app/core/auth/dependencies.py",
         "app/core/connections/rest_sink.py",
         "app/core/connections/arcgis_sql_helpers.py",
         "app/core/connections/arcgis_publish_modes.py",
+        "app/core/connections/arcgis_connection_store.py",
+        "app/core/connections/arcgis_models.py",
         "app/shared/execution/schema_types.py",
         "app/shared/execution/canvas_types.py",
         "app/shared/execution/clock.py",

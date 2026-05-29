@@ -16,13 +16,13 @@ from app.core.dataframes.frame_io import (
     load_arcgis_feature_dataframe,
 )
 from app.core.dataframes.ports import FrameLike
-from app.core.features import arcgis_connection_store
-from app.core.features.models import (
+from app.core.connections import arcgis_connection_store
+from app.core.connections.arcgis_models import (
     ArcGISConnection,
     ArcGISCreate,
-    ArcGISUpdate,
     ArcGISList,
     ArcGISTestResult,
+    ArcGISUpdate,
 )
 from app.core.connections.arcgis_provider_factory import create_arcgis_provider
 from app.core.features.arcgis_feature_operations import ArcGISFeatureOperations

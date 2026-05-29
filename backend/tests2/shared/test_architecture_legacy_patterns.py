@@ -418,6 +418,59 @@ def test_pg_connection_not_imported_from_new_routers():
     )
 
 
+ALLOWLIST_PG_CONNECTION_SERVICE_FILES: Set[str] = set()
+
+
+def _is_service_path(rel_path: str) -> bool:
+    return rel_path.endswith("/service.py") or rel_path.endswith("_service.py")
+
+
+def _scan_pg_connection_in_services() -> Set[str]:
+    hits: Set[str] = set()
+    for p in _iter_py(_APP_ROOT):
+        rel = _rel(p)
+        if not _is_service_path(rel):
+            continue
+        tree = _parse(p)
+        if tree is None:
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                if node.module == "app.db.pg_connection" or node.module.startswith(
+                    "app.db.pg_connection."
+                ):
+                    hits.add(rel)
+                    break
+                if node.module == "app.db" and any(
+                    alias.name == "pg_connection" for alias in node.names
+                ):
+                    hits.add(rel)
+                    break
+            elif isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name == "app.db.pg_connection":
+                        hits.add(rel)
+                        break
+    return hits
+
+
+def test_pg_connection_not_imported_from_vertical_services():
+    """Vertical services must route persistence through local DB boundaries."""
+    found = _scan_pg_connection_in_services()
+    extra = found - ALLOWLIST_PG_CONNECTION_SERVICE_FILES
+    missing = ALLOWLIST_PG_CONNECTION_SERVICE_FILES - found
+    assert not extra, (
+        "Service verticali con import diretto di `app.db.pg_connection`: "
+        f"{sorted(extra)}.\n"
+        "Action: sposta la query in `db.py`, `*_store.py` o "
+        "`*_repository.py` del dominio."
+    )
+    assert not missing, (
+        "Service presenti nell'allowlist ma non piu' rilevati: "
+        f"{sorted(missing)}. Aggiorna la baseline."
+    )
+
+
 # Rule 6 — `app.main` imports inside shared/unit tests
 
 

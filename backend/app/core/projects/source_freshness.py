@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from app.db.pg_connection import unit_of_work
+from app.core.projects import source_freshness_store
 
 ProjectSourceFreshnessPayload = dict[str, Any]
 
@@ -98,20 +98,10 @@ def get_project_source_freshness(
     if not source_project_id:
         return None
 
-    where = "WHERE p.id = %s"
-    params: tuple[Any, ...] = (source_project_id,)
-    if expected_group_id:
-        where += " AND p.group_id = %s"
-        params = (source_project_id, expected_group_id)
-
-    with unit_of_work() as session:
-        row = session.fetchone(
-            "SELECT p.id, p.name, p.updated_at AS project_updated_at, "
-            "(SELECT MAX(r.created_at) FROM results r "
-            " WHERE r.project_id = p.id) AS latest_result_at "
-            f"FROM projects p {where}",
-            params,
-        )
+    row = source_freshness_store.fetch_project_source_freshness_row(
+        source_project_id,
+        expected_group_id=expected_group_id,
+    )
 
     if not row:
         return None

@@ -15,7 +15,7 @@ from typing_extensions import TypedDict
 import pyotp
 import qrcode
 
-from app.db.pg_connection import unit_of_work
+from app.core.auth import mfa_store
 from app.infrastructure.security.crypto import decrypt, encrypt
 from app.utils.logger import get_logger
 
@@ -64,33 +64,18 @@ def _try_register_used_code(user_id: str, code: str) -> bool:
     """
     code_hash = _hash_used_code(user_id, code)
     expires_at = datetime.now(timezone.utc) + _REPLAY_BLACKLIST_TTL
-    with unit_of_work() as session:
-        row = session.fetchone(
-            """
-            INSERT INTO user_mfa_used_codes
-                (user_id, code_hash, expires_at)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (user_id, code_hash) DO UPDATE
-                SET expires_at = EXCLUDED.expires_at
-                WHERE user_mfa_used_codes.expires_at <= NOW()
-            RETURNING 1
-            """,
-            (user_id, code_hash, expires_at),
-        )
-    # RETURNING e' presente sia su INSERT che su UPDATE-when-expired.
-    # Se entrambi i path non producono righe → row None → conflict
-    # attivo (entro TTL) → codice gia' usato → replay.
-    return row is not None
+    return mfa_store.register_used_code(
+        user_id=user_id,
+        code_hash=code_hash,
+        expires_at=expires_at,
+    )
 
 
 def vacuum_expired_used_codes() -> int:
     """Cleanup periodico delle righe scadute. Best-effort, chiamabile da
     cron / healthcheck. Ritorna il numero di righe cancellate.
     """
-    with unit_of_work() as session:
-        return session.execute(
-            "DELETE FROM user_mfa_used_codes WHERE expires_at <= NOW()"
-        ) or 0
+    return mfa_store.vacuum_expired_used_codes()
 
 
 class MFAEnrollment(TypedDict):
@@ -114,12 +99,8 @@ class MFAStatus(TypedDict):
 
 
 def _row_for(user_id: str) -> Optional[MFARow]:
-    with unit_of_work() as session:
-        return session.fetchone(
-            "SELECT user_id, secret_encrypted, enabled, enrolled_at, last_verified_at "
-            "FROM user_mfa WHERE user_id = %s",
-            (user_id,),
-        )
+    row = mfa_store.row_for(user_id)
+    return dict(row) if row else None
 
 
 def is_enabled(user_id: str) -> bool:
@@ -150,19 +131,7 @@ def generate_enrollment(user_id: str, username: str) -> MFAEnrollment:
     secret = pyotp.random_base32()
     secret_encrypted = encrypt(secret)
 
-    with unit_of_work() as session:
-        session.execute(
-        """
-        INSERT INTO user_mfa (user_id, secret_encrypted, enabled, created_at, updated_at)
-        VALUES (%s, %s, FALSE, NOW(), NOW())
-        ON CONFLICT (user_id) DO UPDATE
-        SET secret_encrypted = EXCLUDED.secret_encrypted,
-            enabled = FALSE,
-            enrolled_at = NULL,
-            updated_at = NOW()
-        """,
-        (user_id, secret_encrypted),
-        )
+    mfa_store.save_pending_enrollment(user_id, secret_encrypted)
 
     totp = pyotp.TOTP(secret)
     provisioning_uri = totp.provisioning_uri(name=username, issuer_name=TOTP_ISSUER)
@@ -221,12 +190,7 @@ def verify_code(user_id: str, code: str) -> bool:
             op="mfa_replay_blocked",
         )
         return False
-    with unit_of_work() as session:
-        session.execute(
-            "UPDATE user_mfa SET last_verified_at = NOW(), updated_at = NOW() "
-            "WHERE user_id = %s",
-            (user_id,),
-        )
+    mfa_store.touch_last_verified(user_id)
     return True
 
 
@@ -238,13 +202,7 @@ def verify_enrollment(user_id: str, code: str) -> bool:
     """
     if not verify_code(user_id, code):
         return False
-    with unit_of_work() as session:
-        session.execute(
-            "UPDATE user_mfa "
-            "SET enabled = TRUE, enrolled_at = COALESCE(enrolled_at, NOW()), updated_at = NOW() "
-            "WHERE user_id = %s",
-            (user_id,),
-        )
+    mfa_store.activate_enrollment(user_id)
     logger.info(f"MFA enrollment activated for user {user_id}", op="mfa_enroll_activated")
     return True
 
@@ -260,11 +218,7 @@ def disable(user_id: str, code: str) -> bool:
     """
     if not verify_code(user_id, code):
         return False
-    with unit_of_work() as session:
-        session.execute(
-            "DELETE FROM user_mfa WHERE user_id = %s",
-            (user_id,),
-        )
+    mfa_store.delete_enrollment(user_id)
     logger.info(f"MFA disabled for user {user_id}", op="mfa_disable")
     return True
 

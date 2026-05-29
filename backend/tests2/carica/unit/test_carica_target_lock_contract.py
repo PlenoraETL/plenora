@@ -156,7 +156,7 @@ def test_acquire_returns_handle_when_insert_or_expired_update_wins(monkeypatch):
     cursor = _FakeCursor(row={"owner_token": "owner-1"})
     conn = _FakeConnection(cursor)
     monkeypatch.setattr(
-        "app.core.carica.target_lock.unit_of_work",
+        "app.core.carica.target_lock_store.unit_of_work",
         lambda: _fake_unit_of_work(conn),
     )
     target = CaricaTargetLock(
@@ -187,7 +187,7 @@ def test_acquire_returns_none_when_unexpired_other_owner_holds_lock(monkeypatch)
     cursor = _FakeCursor(row=None)
     conn = _FakeConnection(cursor)
     monkeypatch.setattr(
-        "app.core.carica.target_lock.unit_of_work",
+        "app.core.carica.target_lock_store.unit_of_work",
         lambda: _fake_unit_of_work(conn),
     )
     target = CaricaTargetLock(
@@ -212,7 +212,7 @@ def test_release_deletes_only_matching_owner(monkeypatch):
     cursor = _FakeCursor(rowcount=1)
     conn = _FakeConnection(cursor)
     monkeypatch.setattr(
-        "app.core.carica.target_lock.unit_of_work",
+        "app.core.carica.target_lock_store.unit_of_work",
         lambda: _fake_unit_of_work(conn),
     )
     target = CaricaTargetLock(

@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
+import importlib
 from typing import Mapping, Protocol
-
-from celery.result import AsyncResult
-from workers.celery_app import celery_app
 
 
 class TaskLaunchResult(Protocol):
@@ -63,10 +61,15 @@ class TaskRuntimePort(Protocol):
 class CeleryTaskRuntime:
     """Celery-backed implementation of the orchestrator task runtime port."""
 
-    def __init__(self, app: object = celery_app):
-        self.app = app
+    def __init__(self, app: object | None = None):
+        self.app = app if app is not None else self._default_app()
+
+    @staticmethod
+    def _default_app() -> object:
+        return importlib.import_module("workers.celery_app").celery_app
 
     def get_result(self, task_id: str) -> TaskRuntimeResult:
+        AsyncResult = importlib.import_module("celery.result").AsyncResult
         return AsyncResult(task_id, app=self.app)
 
     def forget_result(self, task_id: str) -> None:

@@ -9,7 +9,7 @@ import json
 from typing import Mapping
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-from app.db.pg_connection import unit_of_work
+from app.core.carica import target_lock_store
 from app.utils.logger import get_logger
 
 
@@ -100,70 +100,28 @@ def acquire_carica_target_lock(
     now = datetime.now(timezone.utc)
     expires_at = now + timedelta(seconds=ttl)
 
-    with unit_of_work() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                f"""
-                INSERT INTO {_TABLE_NAME} (
-                    lock_key,
-                    group_id,
-                    target_kind,
-                    target_identity,
-                    owner_token,
-                    acquired_at,
-                    expires_at,
-                    updated_at
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (lock_key) DO UPDATE SET
-                    group_id = EXCLUDED.group_id,
-                    target_kind = EXCLUDED.target_kind,
-                    target_identity = EXCLUDED.target_identity,
-                    owner_token = EXCLUDED.owner_token,
-                    acquired_at = CASE
-                        WHEN {_TABLE_NAME}.owner_token = EXCLUDED.owner_token
-                        THEN {_TABLE_NAME}.acquired_at
-                        ELSE EXCLUDED.acquired_at
-                    END,
-                    expires_at = EXCLUDED.expires_at,
-                    updated_at = EXCLUDED.updated_at
-                WHERE {_TABLE_NAME}.expires_at <= %s
-                   OR {_TABLE_NAME}.owner_token = EXCLUDED.owner_token
-                RETURNING owner_token
-                """,
-                (
-                    target.key,
-                    target.group_id,
-                    target.kind,
-                    target.identity,
-                    owner_token,
-                    now,
-                    expires_at,
-                    now,
-                    now,
-                ),
-            )
-            row = cur.fetchone()
-
-    if not row:
+    acquired = target_lock_store.acquire_target_lock_row(
+        table_name=_TABLE_NAME,
+        lock_key=target.key,
+        group_id=target.group_id,
+        target_kind=target.kind,
+        target_identity=target.identity,
+        owner_token=owner_token,
+        acquired_at=now,
+        expires_at=expires_at,
+    )
+    if not acquired:
         return None
     return CaricaTargetLockHandle(target=target, owner_token=owner_token)
 
 
 def release_carica_target_lock(handle: CaricaTargetLockHandle) -> bool:
     """Release a lock only if the caller still owns the row."""
-    with unit_of_work() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                f"""
-                DELETE FROM {_TABLE_NAME}
-                WHERE lock_key = %s
-                  AND owner_token = %s
-                """,
-                (handle.target.key, handle.owner_token),
-            )
-            rowcount = cur.rowcount
-    return rowcount > 0
+    return target_lock_store.release_target_lock_row(
+        table_name=_TABLE_NAME,
+        lock_key=handle.target.key,
+        owner_token=handle.owner_token,
+    )
 
 
 def _tenant_scope(*, project_id: str, group_id: str) -> Mapping[str, str]:

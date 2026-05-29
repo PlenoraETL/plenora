@@ -12,6 +12,7 @@ between engines.
 Canonical surfaces:
 
 - `app/core/auth/auth_middleware.py`
+- `app/core/auth/router.py`
 - `app/core/auth/dependencies.py`
 - `app/core/security/*`
 - `app/shared/contracts/auth.py`
@@ -36,6 +37,8 @@ Canonical surfaces:
 - `app/core/connections/arcgis_publish_modes.py`
 - `app/core/features/arcgis_client.py`
 - `app/core/connections/arcgis_connection_resolver.py`
+- `app/core/connections/arcgis_connection_store.py`
+- `app/core/connections/arcgis_models.py`
 - `app/core/datasources/*`
 - `app/db/query_executor.py`
 
@@ -53,6 +56,9 @@ Current ArcGIS shape:
 - ArcGIS write mapping and writer protocols live under `app/core/connections`;
   legacy `app/core/features/arcgis_write_mapping.py` and
   `app/core/features/arcgis_writer_boundary.py` are tombstoned.
+- ArcGIS connection CRUD models and persistence live under
+  `app/core/connections`; matching `app/core/features/*` imports are
+  compatibility shims only.
 
 Rules:
 
@@ -61,6 +67,8 @@ Rules:
 - New provider semantics belong in `connections`, not in canvas node models.
 - Do not add new IMDF imports from `app.core.features`; the boundary guard has
   no remaining ADR-0023 IMDF exceptions.
+- Do not add new ArcGIS connection CRUD persistence under
+  `app.core.features`; use `app.core.connections.arcgis_connection_store`.
 
 ---
 
@@ -378,6 +386,9 @@ Rules:
   `app.core.features.arcgis_sql_helpers` or
   `app.core.features.arcgis_publish_modes` in production code; use
   `app.core.connections`.
+- Do not put new ArcGIS connection CRUD models or persistence in
+  `app.core.features`; use `app.core.connections.arcgis_models` and
+  `app.core.connections.arcgis_connection_store`.
 - Do not add direct pandas/geopandas imports in vertical domains; use
   `app.core.dataframes.*` ports/helpers for parser dispatch, constructors,
   probes, joins, serialization, hashing, and geospatial mechanics.

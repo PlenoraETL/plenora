@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.features, pytest.mark.security, pyte
 def test_create_connection_db_encrypts_password_and_client_secret_before_insert(monkeypatch):
     captured = {}
 
-    import app.core.features.arcgis_connection_store as store
+    import app.core.connections.arcgis_connection_store as store
 
     def _execute(sql, params):
         captured["sql"] = sql
