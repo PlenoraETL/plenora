@@ -27,8 +27,12 @@ from app.core.projects.canvas_models import (
 
 from app.core.auth import db as _groups
 from app.core.eseguibili.db import list_eseguibili_by_source
+from app.core.intermediate import cleanup as intermediate_cleanup_module
+from app.core.output_contract import sync_canvas_with_output_contracts
 from app.core.projects import db as project_db
+from app.core.projects import cleanup as project_cleanup_module
 from app.core.results import store as results_store
+from app.core.results import cleanup as results_cleanup_module
 from app.core.projects.domain import build_project_id, resolve_project_group_id
 from app.core.projects.lineage import detect_project_lineage_cycle
 from app.core.projects.exceptions import (
@@ -266,7 +270,6 @@ class ProjectService:
                 original_error=e,
             )
         try:
-            from app.core.output_contract import sync_canvas_with_output_contracts
             sync_canvas_with_output_contracts(
                 canvas=canvas,
                 project_id=project_id,
@@ -541,8 +544,9 @@ class ProjectService:
         # dinamiche contengono dati utente (volume potenzialmente grande
         # outcome: fail-closed via aggregazione (vedi gate sotto
         try:
-            from app.core.intermediate.cleanup import delete_runs_for_canvas
-            deleted_runs = delete_runs_for_canvas(project_id)
+            deleted_runs = intermediate_cleanup_module.delete_runs_for_canvas(
+                project_id
+            )
             if deleted_runs:
                 logger.info(
                     f"Cleanup intermediate: {deleted_runs} run eliminate per progetto {project_id}",
@@ -560,8 +564,9 @@ class ProjectService:
         # utente esportati (GDPR-sensitive
         # outcome: fail-closed via aggregazione
         try:
-            from app.core.results.cleanup import delete_results_for_project
-            deleted_results = delete_results_for_project(project_id)
+            deleted_results = results_cleanup_module.delete_results_for_project(
+                project_id
+            )
             if deleted_results:
                 logger.info(
                     f"Cleanup results: {deleted_results} blob eliminati per progetto {project_id}",
@@ -580,9 +585,9 @@ class ProjectService:
         # outcome: fail-open con breadcrumb
         # Cleanup comparison_keys (config tables) — chiavi di confronto associate
         # ai nodi del canvas, identificate da canvas_id == project_id
+        # Boundary: app.core.projects.cleanup
         try:
-            from app.core.projects.cleanup import delete_comparison_keys_for_project
-            delete_comparison_keys_for_project(project_id)
+            project_cleanup_module.delete_comparison_keys_for_project(project_id)
         except Exception as e:
             logger.warning(
                 f"Cleanup comparison_keys fallito per {project_id}: {e}",

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Dict, List, Optional, Tuple
 
 import app.core.files.db as files_db
+from app.config import settings
 from app.core.auth.visibility import is_resource_visible, is_shareable
 from app.core.dataframes import load_dispatch as _load_dispatch
 from app.core.files import multi_layer_upload as _multi_layer_upload
@@ -17,6 +18,7 @@ from app.core.files import raw_upload as _raw_upload
 from app.core.files import source_blob as _source_blob
 from app.core.files import source_metadata as _source_metadata
 from app.core.files import source_read as _source_read
+from app.core.files import upload as _upload
 from app.core.files.models import FileSource, FileSourceList
 from app.core.files.source_read import FileSourceLayersPayload, FileSourcePreviewPayload
 from app.core.files.preview_temp import FilePreviewTempPayload
@@ -275,9 +277,7 @@ class FileSourceService:
         srid: int = None,
         group_id: str = None,
     ) -> FileSource:
-        from app.config import settings
-        from app.core.files.upload import create_from_upload as _create_from_upload
-        return _create_from_upload(
+        return _upload.create_from_upload(
             file_content, filename, name, description,
             layer, sheet, selected_columns, srid, group_id,
             generate_file_id=self._generate_file_id,
@@ -299,7 +299,6 @@ class FileSourceService:
         description: str = "",
         group_id: str = None,
     ) -> FileSource:
-        from app.config import settings
         return _raw_upload.create_raw_from_upload(
             file_content, filename, name, description, group_id,
             generate_file_id=self._generate_file_id,
@@ -321,8 +320,6 @@ class FileSourceService:
         srid: int = None,
         group_id: str = None,
     ) -> List["FileSource"]:
-        from app.config import settings
-
         # Object-storage rollback cleanup is best-effort; BYTEA mode has no
         # storage_key and never calls this callback.
         def _delete_blob(storage_key: str) -> None:
@@ -369,7 +366,6 @@ class FileSourceService:
         )
 
     def update_file_source(self, file_id: str, data: Any) -> Optional[FileSource]:
-        from app.config import settings
         return _source_metadata.update_file_source(
             file_id,
             data,

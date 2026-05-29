@@ -11,6 +11,7 @@ from typing_extensions import TypedDict
 from dataclasses import dataclass
 
 from app.core.estrai.types import DatabaseSchema
+from app.shared.security import tls_policy as tls_policy_module
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -125,9 +126,8 @@ class DefaultConnectionFactory:
         applicata in `connections/service.py:_test_mssql`.
         """
         import pyodbc
-        from app.shared.security.tls_policy import tls_bypass_allowed
 
-        trust_cert = "yes" if tls_bypass_allowed() else "no"
+        trust_cert = "yes" if tls_policy_module.tls_bypass_allowed() else "no"
         base = (
             f"SERVER={conn.host},{conn.port};"
             f"DATABASE={conn.database};"

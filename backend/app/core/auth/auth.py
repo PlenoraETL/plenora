@@ -15,6 +15,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from app.config import settings as _settings
 from app.core.auth import db
 from app.core.auth import disclosure as _disclosure
+from app.core.auth import mfa as _mfa
 from app.core.security import login_rate_limiter as _rl
 from app.observability.audit_action import audit_action
 from app.shared.request_utils import get_client_ip
@@ -179,7 +180,6 @@ def login(data: LoginRequest, request: Request):
 
     # MFA challenge happens only after password verification; IP rate limiting
     # bounds the known disclosure that an account has MFA enabled.
-    from app.core.auth import mfa as _mfa
     if _mfa.is_enabled(user.id):
         if not data.mfa_code:
             _disclosure.raise_disclosure(_disclosure.mfa_required())
@@ -300,7 +300,6 @@ def change_password(
 @router.get("/mfa/status", response_model=MFAStatusResponse)
 def get_mfa_status(current_user: CurrentUser = Depends(get_current_user)):
     """Stato MFA dell'utente corrente. Qualsiasi autenticato."""
-    from app.core.auth import mfa as _mfa
     return MFAStatusResponse(**_mfa.status(current_user.user_id))
 
 
@@ -314,7 +313,6 @@ def mfa_enroll(current_user: CurrentUser = Depends(get_current_user)):
     perde l'attivazione finche' non chiama /mfa/verify col nuovo codice.
     Use-case: ri-enrollment dopo perdita device.
     """
-    from app.core.auth import mfa as _mfa
     data = _mfa.generate_enrollment(current_user.user_id, current_user.username)
     return MFAEnrollResponse(**data)
 
@@ -329,7 +327,6 @@ def mfa_verify(
     Conferma l'enrollment attivando MFA (enabled=TRUE). Richiede un
     codice TOTP valido dal secret ricevuto in /mfa/enroll.
     """
-    from app.core.auth import mfa as _mfa
     if not _mfa.verify_enrollment(current_user.user_id, data.code):
         _disclosure.raise_disclosure(_disclosure.mfa_code_invalid())
     return {"ok": True, "enabled": True}
@@ -346,7 +343,6 @@ def mfa_disable(
     non basta essere autenticati per disattivare, bisogna anche avere
     l'authenticator. Questo limita il danno da JWT rubati.
     """
-    from app.core.auth import mfa as _mfa
     if not _mfa.disable(current_user.user_id, data.code):
         _disclosure.raise_disclosure(_disclosure.mfa_code_invalid())
     return {"ok": True, "enabled": False}

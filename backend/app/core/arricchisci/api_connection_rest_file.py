@@ -14,6 +14,10 @@ import io
 from pathlib import Path
 from typing import Optional
 
+import requests
+
+from app.core.artifacts import resolver as artifact_resolver_module
+from app.core.artifacts import types as artifact_types_module
 from app.core.dataframes.values import is_dataframe
 from app.core.artifacts import (
     LatestProjectArtifactRef,
@@ -31,6 +35,11 @@ from app.core.arricchisci.execution_context import (
 )
 from app.core.arricchisci.types import JsonObject, JsonRows
 from app.core.files.exceptions import FileSourceResolutionError
+from app.core.io.local_cleanup import rmtree_safe
+from app.core.resources.exceptions import MemoryLimitExceededError
+from app.core.resources import resource_caps as resource_caps_module
+from app.core.results import blob_writer as blob_writer_module
+from app.shared.security.tls_policy import resolve_tls_verify
 from app.utils.logger import get_logger
 
 
@@ -152,8 +161,6 @@ class ApiConnectionRestFileMixin:
         Chiude sempre la response in un `finally` interno
         (`response.close` best-effort).
         """
-        from app.core.resources.exceptions import MemoryLimitExceededError
-
         total_bytes = 0
         body_deadline = start_time + timeout
         download_timed_out = False
@@ -458,8 +465,6 @@ class ApiConnectionRestFileMixin:
         l'output e' persistito direttamente come result_blob e i
         consumer ricaricano i bytes via ``ArtifactResolver.fetch_run_blob``.
         """
-        import requests
-
         start_time = time.time()
 
         parsed, err = self._parse_rest_file_config(api_config)
@@ -563,7 +568,6 @@ class ApiConnectionRestFileMixin:
             # usato in `enrichment_retry_http` e `oauth`. Post-fix:
             # delega allo stesso helper env-aware → bypass concesso solo
             # in dev/test/opt-in, bloccato in prod.
-            from app.shared.security.tls_policy import resolve_tls_verify
             auth_cfg = api_config.get('auth', {}) or {}
             verify_tls = resolve_tls_verify(
                 auth_cfg.get('verify_ssl', True),
@@ -587,11 +591,7 @@ class ApiConnectionRestFileMixin:
 
             # Cap: RESOURCE_MAX_BYTES (override via env). Lo stesso cap
             # gia' usato dal Resource Engine per i loader bytes-first.
-            from app.core.resources.resource_caps import (
-                resolve_resource_max_bytes,
-            )
-            from app.core.resources.exceptions import MemoryLimitExceededError
-            max_bytes = resolve_resource_max_bytes()
+            max_bytes = resource_caps_module.resolve_resource_max_bytes()
             try:
                 output_bytes, total_bytes, download_timed_out = (
                     self._download_binary_response_to_bytes(
@@ -640,8 +640,7 @@ class ApiConnectionRestFileMixin:
             # passthrough disco precedente, ma evita disco-leak su worker
             # Celery long-running e uniforma il contratto di scambio
             # inter-node (sempre result_id, mai path).
-            from app.core.results.blob_writer import save_result_blob_from_bytes
-            result_id = save_result_blob_from_bytes(
+            result_id = blob_writer_module.save_result_blob_from_bytes(
                 project_id=project_id,
                 data=output_bytes,
                 filename=output_filename,
@@ -729,7 +728,6 @@ class ApiConnectionRestFileMixin:
             # un unlink su tuple (che fallirebbe) in caso di future evoluzioni
             try:
                 if _owns_materialized_input and input_path and not isinstance(input_path, tuple):
-                    from app.core.io.local_cleanup import rmtree_safe
                     rmtree_safe(input_path, logger=logger)
             except Exception as _unlink_err:
                 logger.debug(
@@ -927,16 +925,15 @@ class ApiConnectionRestFileMixin:
                         upstream_result.get('filename') or 'upstream_output.bin'
                     )
                     if upstream_result_id and ctx is not None and ctx.project_id:
-                        from app.core.artifacts.resolver import ArtifactResolver
-                        from app.core.artifacts.types import (
-                            ArtifactResolutionError,
-                        )
                         try:
-                            blob = ArtifactResolver().fetch_run_blob(
-                                result_id=upstream_result_id,
-                                expected_project_id=ctx.project_id,
+                            blob = (
+                                artifact_resolver_module.ArtifactResolver()
+                                .fetch_run_blob(
+                                    result_id=upstream_result_id,
+                                    expected_project_id=ctx.project_id,
+                                )
                             )
-                        except ArtifactResolutionError as e:
+                        except artifact_types_module.ArtifactResolutionError as e:
                             logger.error(
                                 f"[GESTITO] file-processor input: fetch_run_blob "
                                 f"upstream {source_id} (result_id={upstream_result_id}) "

@@ -14,8 +14,10 @@ from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFil
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 
+from app.config import settings as _settings_cfg
 from app.core.auth.dependencies import get_current_user
 from app.core.files import db as files_db
+from app.core.files import service as file_service_module
 from app.shared.contracts.auth import CurrentUser
 from app.core.tickets import attachment_boundary as _attachment_boundary
 from app.core.tickets import db as tdb
@@ -51,7 +53,6 @@ _ALLOWED_EXTENSIONS = {
 # `Settings.DEFAULTS["TICKET_ATTACHMENT_MAX_BYTES"]=10 * 1024 * 1024`
 # Calcolato a import-time: per cambiare serve riavvio del processo
 # comportamento invariato pre-001D
-from app.config import settings as _settings_cfg
 _MAX_ATTACHMENT_SIZE_BYTES = int(_settings_cfg.get("TICKET_ATTACHMENT_MAX_BYTES"))
 
 
@@ -289,8 +290,7 @@ async def upload_attachment_endpoint(
     )
 
     # Salva via file_service (riusa storage dispatch DB/S3
-    from app.core.files.service import FileSourceService
-    fs = FileSourceService()
+    fs = file_service_module.FileSourceService()
     file_source = fs.create_raw_from_upload(
         file_content=io.BytesIO(content),
         filename=filename,
@@ -337,8 +337,7 @@ def delete_ticket_endpoint(
     result = svc.delete_ticket(ticket_id, current_user, hard=hard)
 
     if result.hard and result.orphaned_file_source_ids:
-        from app.core.files.service import FileSourceService
-        fs = FileSourceService()
+        fs = file_service_module.FileSourceService()
         for fs_id in result.orphaned_file_source_ids:
             try:
                 fs.delete_file_source(fs_id)
@@ -377,8 +376,7 @@ def download_attachment_endpoint(
     if not attachment or attachment.ticket_id != ticket_id:
         raise HTTPException(404, "Allegato non trovato")
 
-    from app.core.files.service import FileSourceService
-    fs = FileSourceService()
+    fs = file_service_module.FileSourceService()
     blob = fs.get_blob_bytes(
         attachment.file_source_id, expected_group_id=ticket.group_id,
     )
@@ -424,8 +422,9 @@ def delete_attachment_endpoint(
 
     # Best-effort: elimina anche il file_source sottostante (pulizia storage
     try:
-        from app.core.files.service import FileSourceService
-        FileSourceService().delete_file_source(attachment.file_source_id)
+        file_service_module.FileSourceService().delete_file_source(
+            attachment.file_source_id
+        )
     except Exception as e:
         logger.warning(
             f"Allegato {attachment_id} rimosso ma cleanup file_source "

@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from app import config as app_config
 from app.core.admin_backups.service import list_backups
 from app.core.admin_system_status.db_probe_store import (
     fetch_critical_table_rows,
@@ -495,8 +496,7 @@ def get_host_resources() -> AdminStatusBlock:
     usage_path = None
     psutil_error: Optional[BaseException] = None
     try:
-        from app.config import settings
-        data_dir_path = Path(settings.DATA_DIR)
+        data_dir_path = Path(app_config.settings.DATA_DIR)
         data_dir = str(data_dir_path)
         usage_path = _disk_usage_probe_path(data_dir_path)
         # R-2 (2026-04-27): psutil.disk_usage emette
@@ -752,8 +752,9 @@ def get_blacklist_status() -> AdminStatusBlock:
     # `JWT_BLACKLIST_STALE_THRESHOLD_SEC=1800`). Guard `ValueError` resta
     # safety per env malformata propagata dal type coercion
     try:
-        from app.config import settings as _settings
-        threshold = int(_settings.get("JWT_BLACKLIST_STALE_THRESHOLD_SEC"))
+        threshold = int(
+            app_config.settings.get("JWT_BLACKLIST_STALE_THRESHOLD_SEC")
+        )
     except (TypeError, ValueError):
         threshold = 1800
 
@@ -882,9 +883,8 @@ def get_db_schema_size() -> AdminStatusBlock:
     # BE-CONFIG-001D: default tipati `float` in `Settings.DEFAULTS`
     # `DB_SCHEMA_WARN_GB=1.0`, `DB_SCHEMA_ERROR_GB=5.0`). Override env
     # via `Settings._converti_tipo_env` (coercion `float`
-    from app.config import settings as _settings_cfg
-    warn_gb = float(_settings_cfg.get("DB_SCHEMA_WARN_GB"))
-    error_gb = float(_settings_cfg.get("DB_SCHEMA_ERROR_GB"))
+    warn_gb = float(app_config.settings.get("DB_SCHEMA_WARN_GB"))
+    error_gb = float(app_config.settings.get("DB_SCHEMA_ERROR_GB"))
     size_gb = size_bytes / (1024 ** 3)
     if size_gb >= error_gb:
         status = "error"

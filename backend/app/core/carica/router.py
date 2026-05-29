@@ -35,6 +35,7 @@ from app.shared import error_codes
 from app.shared.contracts.payloads import JsonObject, JsonRows, StringRows
 from app.core.auth.resource_access import assert_project_visible
 from app.shared.error_envelope import raise_typed_http
+from app.shared.security import tls_policy as tls_policy_module
 
 
 logger = get_logger("app.core.carica.router")
@@ -348,8 +349,7 @@ def _create_engine(connection: JsonObject):
             url = f"mysql+pymysql://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
         elif db_type == "mssql":
             # H-2 (2026-05-26): TrustServerCertificate gated da tls_bypass_allowed()
-            from app.shared.security.tls_policy import tls_bypass_allowed
-            trust_cert = "yes" if tls_bypass_allowed() else "no"
+            trust_cert = "yes" if tls_policy_module.tls_bypass_allowed() else "no"
             url = (
                 f"mssql+pyodbc://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
                 f"?driver=ODBC+Driver+18+for+SQL+Server"

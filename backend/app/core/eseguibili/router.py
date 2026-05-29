@@ -8,6 +8,7 @@ import json as _json
 
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from typing import List, Mapping, Optional
 
 from app.core.auth.dependencies import (
@@ -21,7 +22,10 @@ from app.core.auth.ownership import (
     compute_can_edit,
 )
 from app.config import settings
+from app.core.files.service import file_source_service
+from app.core.io.local_cleanup import rmtree_safe
 from app.utils.logger import get_logger
+from app.utils.mime_validator import MimeMismatchError, validate_no_executable
 from app.observability.audit_action import audit_action
 from app.core.auth.visibility import visible_resource_ids
 from app.shared.error_sanitizer import sanitize_http_detail
@@ -249,8 +253,6 @@ def _load_upload_meta(file_id: str) -> Optional[Mapping[str, object]]:
 def _delete_upload_meta(file_id: str) -> None:
     """Elimina l'upload temporaneo durable dopo l'uso."""
     try:
-        from app.core.files.service import file_source_service
-
         if file_source_service.delete_file_source(file_id):
             return
     except Exception as _delete_err:
@@ -264,7 +266,6 @@ def _delete_upload_meta(file_id: str) -> None:
 
     path = _upload_meta_path(file_id)
     try:
-        from app.core.io.local_cleanup import rmtree_safe
         if path.exists():
             rmtree_safe(path, logger=logger)
     except Exception as _unlink_err:
@@ -327,9 +328,6 @@ async def analyze_upload(
         # workflow eseguibile. Bloccare eseguibili reali e' la difesa
         # primaria (un binary su disk poi eseguito sarebbe RCE). Allowlist
         # stretta romperebbe i formati custom degli eseguibili (.dxf, .geojson
-        from app.utils.mime_validator import (
-            MimeMismatchError, validate_no_executable,
-        )
         try:
             validate_no_executable(
                 content=content, filename=file.filename or "upload",
@@ -450,7 +448,6 @@ def execute_eseguibile(
         # Cleanup: elimina il file_source upload temporaneo + metadata.
         if _local_upload_meta_fallback_allowed() and upload.get("path"):
             try:
-                from app.core.io.local_cleanup import rmtree_safe
                 rmtree_safe(str(upload["path"]), logger=logger)
             except Exception as _unlink_err:
                 logger.debug(
@@ -548,7 +545,6 @@ def download_eseguibile_output(
     if size:
         headers["Content-Length"] = str(size)
 
-    from fastapi.responses import StreamingResponse
     return StreamingResponse(
         stream["body"],
         media_type="application/octet-stream",

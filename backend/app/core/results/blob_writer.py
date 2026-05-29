@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Optional
 import uuid
 
+from app.core.io import object_storage as object_storage_module
+from app.core.resources import storage_reconciliation as reconciliation_module
 from app.core.results import store
 from app.core.results.retention import apply_results_retention
 from app.core.results.storage_policy import (
@@ -12,6 +14,7 @@ from app.core.results.storage_policy import (
     should_use_object_storage,
     storage_policy,
 )
+from app.infrastructure.storage import compensation as compensation_module
 from app.infrastructure.storage.compensation import CompensateOutcome
 from app.shared.resources.storage_layout import RESULTS_PREFIX
 from app.utils.logger import get_logger
@@ -32,9 +35,7 @@ def cleanup_uploaded_result_blob(
     result_id: str,
 ) -> CompensateOutcome:
     """Best-effort delete for an object blob whose DB row failed to persist."""
-    from app.infrastructure.storage.compensation import compensating_delete
-
-    return compensating_delete(
+    return compensation_module.compensating_delete(
         storage_key,
         domain="result",
         reason=reason,
@@ -53,9 +54,7 @@ def record_result_upload_intent(
     size_bytes: int,
 ) -> Optional[str]:
     """Record a pre-upload intent for result object-storage blobs."""
-    from app.core.resources.storage_reconciliation import record_upload_intent
-
-    return record_upload_intent(
+    return reconciliation_module.record_upload_intent(
         domain="result",
         storage_key=storage_key,
         reason="result_upload_intent_pre_db_row",
@@ -71,9 +70,8 @@ def record_result_upload_intent(
 def close_result_upload_intent(intent_id: Optional[str]) -> None:
     if not intent_id:
         return
-    from app.core.resources.storage_reconciliation import mark_done
 
-    mark_done(intent_id)
+    reconciliation_module.mark_done(intent_id)
 
 
 def close_failed_result_upload_intent(
@@ -84,9 +82,7 @@ def close_failed_result_upload_intent(
     if not intent_id:
         return
     if cleanup_outcome == "ok":
-        from app.core.resources.storage_reconciliation import mark_orphan_deleted
-
-        mark_orphan_deleted(intent_id)
+        reconciliation_module.mark_orphan_deleted(intent_id)
 
 
 def enforce_db_hard_cap(size: int, ctx: str) -> None:
@@ -105,9 +101,7 @@ def _storage_key(project_id: str, result_id: str) -> str:
 
 
 def _runtime_storage_upload_error(exc: Exception, *, result_id: str, filename: str | None = None) -> ResultSaveError:
-    from app.core.io.object_storage import aws_credentials_error_message
-
-    hint = aws_credentials_error_message(exc)
+    hint = object_storage_module.aws_credentials_error_message(exc)
     if hint is not None:
         suffix = f", file {filename}" if filename else ""
         return ResultSaveError(f"{hint} (result {result_id}{suffix})")
@@ -159,9 +153,7 @@ def save_result_blob_from_bytes(
             storage_key = _storage_key(project_id, result_id)
             upload_intent_id: Optional[str] = None
             try:
-                from app.core.io.object_storage import get_runtime_object_storage
-
-                storage = get_runtime_object_storage()
+                storage = object_storage_module.get_runtime_object_storage()
                 upload_intent_id = record_result_upload_intent(
                     storage_key,
                     project_id=project_id,
