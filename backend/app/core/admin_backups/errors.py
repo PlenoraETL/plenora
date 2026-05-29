@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-
-OBJECT_STORAGE_DISABLED = "object_storage_disabled"
-AWS_CRT_MISSING = "aws_crt_missing"
-AWS_CREDENTIALS_EXPIRED = "aws_credentials_expired"
-
+from app.shared.error_codes import (
+    AWS_CREDENTIALS_EXPIRED,
+    AWS_CRT_MISSING,
+    OBJECT_STORAGE_DISABLED,
+)
 
 KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     OBJECT_STORAGE_DISABLED,

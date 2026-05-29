@@ -30,7 +30,7 @@ from app.core.artifacts import (
 from app.core.connections import errors as connection_errors
 from app.core.connections.service import ConnectionService as _CS
 from app.core.resources.column_types import metadata_to_dict
-from app.db.query_executor import DefaultEngineFactory
+from app.core.query_execution.query_executor import DefaultEngineFactory
 from app.shared import error_codes
 from app.shared.contracts.payloads import JsonObject, JsonRows, StringRows
 from app.core.auth.resource_access import assert_project_visible

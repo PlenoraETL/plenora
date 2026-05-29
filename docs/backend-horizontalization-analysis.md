@@ -176,7 +176,7 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 - `source_loading.load_project_source_artifact()` confina la dipendenza da `Path` nell'adapter pandas/geopandas. I caller lavorano con resource reference; la materializzazione finale resta in un solo boundary.
 - Rischio principale: memoria per worker, non coerenza distribuita.
 
-### `backend/app/core/estrai/*`, `backend/app/db/query_executor.py`
+### `backend/app/core/estrai/*`, `backend/app/core/query_execution/*`
 
 - Query execution stateless rispetto al backend; dati da DB esterni.
 - `query_executor.py`: per CSV/Parquet streaming migliora scalabilita; per formati non streamable materializza tutto in RAM fino a `ESTRAI_MAX_ROWS`.

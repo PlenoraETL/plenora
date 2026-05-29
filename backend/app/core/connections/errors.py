@@ -1,23 +1,22 @@
 from __future__ import annotations
 
+from app.shared.error_codes import (
+    CONNECTION_DUPLICATE_NAME as _CONNECTION_DUPLICATE_NAME,
+    CONNECTION_IN_USE,
+    CONNECTION_NOT_FOUND,
+)
 
-CONNECTION_IN_USE = "connection_in_use"
-CONNECTION_NOT_FOUND = "connection_not_found"
-CONNECTION_DUPLICATE_NAME = "connection_duplicate_name"
-
+CONNECTION_DUPLICATE_NAME = _CONNECTION_DUPLICATE_NAME
 
 KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     CONNECTION_IN_USE,
     CONNECTION_NOT_FOUND,
+    CONNECTION_DUPLICATE_NAME,
 })
 
 
 class ConnectionDuplicateNameError(ValueError):
-    """Una connection con lo stesso name esiste gia' nel gruppo target.
-
-    Il router converte in HTTP 409 con body
-    `{error: CONNECTION_DUPLICATE_NAME, message: ...}`.
-    """
+    """Una connection con lo stesso name esiste gia' nel gruppo target."""
 
     def __init__(self, name: str, group_id: str) -> None:
         super().__init__(

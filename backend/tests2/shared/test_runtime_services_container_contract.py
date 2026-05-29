@@ -185,7 +185,7 @@ def test_build_runtime_services_constructs_in_canonical_order():
         patch("app.core.connections.service.ConnectionService", _ConnectionService),
         patch("app.core.estrai.database_inspector.DatabaseInspector", _DatabaseInspector),
         patch("app.core.estrai.query_generator.QueryGenerator", _QueryGenerator),
-        patch("app.db.query_executor.QueryExecutor", _QueryExecutor),
+        patch("app.core.query_execution.query_executor.QueryExecutor", _QueryExecutor),
         patch("app.core.features.features_service.FeaturesService", _FeaturesService),
         patch("app.core.estrai.executor.EstraiExecutor", _EstraiExecutor),
         patch("app.core.manipola.executor.ManipolaExecutor", _ManipolaExecutor),

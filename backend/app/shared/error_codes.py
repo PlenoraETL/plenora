@@ -5,20 +5,6 @@ PLENORA-ETL — Catalog dei codici stringa per error envelope
 
 from __future__ import annotations
 
-from app.core.admin_backups.errors import (
-    KNOWN_DOMAIN_CODES as ADMIN_BACKUPS_DOMAIN_CODES,
-)
-from app.core.connections.errors import (
-    KNOWN_DOMAIN_CODES as CONNECTIONS_DOMAIN_CODES,
-)
-from app.core.datasources.errors import (
-    KNOWN_DOMAIN_CODES as DATASOURCES_DOMAIN_CODES,
-)
-from app.core.tickets.errors import (
-    KNOWN_DOMAIN_CODES as TICKETS_DOMAIN_CODES,
-)
-
-
 # Generic / framework-level
 
 INTERNAL_ERROR = "internal_error"
@@ -258,6 +244,31 @@ AUTH_REVOCATION_UNAVAILABLE = "auth_revocation_unavailable"
 (ADR-0009): il client deve sapere se la revoca e' effettiva."""
 
 
+# Domain-specific — Admin backups family
+
+OBJECT_STORAGE_DISABLED = "object_storage_disabled"
+AWS_CRT_MISSING = "aws_crt_missing"
+AWS_CREDENTIALS_EXPIRED = "aws_credentials_expired"
+
+
+# Domain-specific — Connections family
+
+CONNECTION_IN_USE = "connection_in_use"
+CONNECTION_NOT_FOUND = "connection_not_found"
+CONNECTION_DUPLICATE_NAME = "connection_duplicate_name"
+
+
+# Domain-specific — Datasources family
+
+DATASOURCE_IN_USE = "datasource_in_use"
+DATASOURCE_NOT_FOUND = "datasource_not_found"
+
+
+# Domain-specific — Tickets family
+
+TICKET_NOT_FOUND = "ticket_not_found"
+
+
 # Catalog set — drift detection
 # `KNOWN_DOMAIN_CODES` espone l'intero catalog domain-specific
 # codici NON globali) come `frozenset[str]`. Usato dal test
@@ -321,12 +332,20 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     AUTH_RATE_LIMIT_EXCEEDED,
     # 503 — infra fail-loud
     AUTH_REVOCATION_UNAVAILABLE,
-}) | (
-    ADMIN_BACKUPS_DOMAIN_CODES
-    | CONNECTIONS_DOMAIN_CODES
-    | DATASOURCES_DOMAIN_CODES
-    | TICKETS_DOMAIN_CODES
-)
+    # Admin backups
+    OBJECT_STORAGE_DISABLED,
+    AWS_CRT_MISSING,
+    AWS_CREDENTIALS_EXPIRED,
+    # Connections
+    CONNECTION_IN_USE,
+    CONNECTION_NOT_FOUND,
+    CONNECTION_DUPLICATE_NAME,
+    # Datasources
+    DATASOURCE_IN_USE,
+    DATASOURCE_NOT_FOUND,
+    # Tickets
+    TICKET_NOT_FOUND,
+})
 
 # Codici globali (envelope-level): NON domain-specific
 # Mantenuto separato perche' il drift detection deve permettere

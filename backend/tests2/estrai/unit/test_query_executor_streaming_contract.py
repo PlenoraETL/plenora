@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.db.query_executor import QueryExecutor
+from app.core.query_execution.query_executor import QueryExecutor
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.estrai, pytest.mark.contract, pytest.mark.regression]
@@ -42,7 +42,7 @@ def test_query_executor_streaming_writer_legacy_tombstoned():
 def test_query_streaming_writer_class_legacy_tombstoned():
     """`QueryStreamingWriter` rimosso da `query_streaming`.
     Anti-regression sul port adapter dead."""
-    import app.db.query_streaming as qs
+    import app.core.query_execution.query_streaming as qs
     assert not hasattr(qs, "QueryStreamingWriter"), (
         "QueryStreamingWriter port adapter rimosso post-QUERY-1 step 2."
     )
@@ -73,7 +73,9 @@ def test_query_executor_uses_streaming_persist_path():
     from pathlib import Path
     import re
     backend_root = Path(__file__).resolve().parents[3]
-    raw = (backend_root / "app" / "db" / "query_executor.py").read_text(encoding="utf-8")
+    raw = (
+        backend_root / "app" / "core" / "query_execution" / "query_executor.py"
+    ).read_text(encoding="utf-8")
     # Strip comment lines (preserva il code-only signal).
     source = "\n".join(
         line for line in raw.splitlines()

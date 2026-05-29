@@ -125,7 +125,7 @@ def test_doc_references_canonical_entry_points(doc_text: str):
         "app/core/imdf/bundle_store.py",
         "app/core/intermediate/retention.py",
         "app/shared/resources/file_cleanup.py",
-        "app/db/query_result_persistence.py",
+        "app/core/query_execution/*",
         "app/db/migrations_runner.py",
         "app/db/sql_functions.py",
         "app/observability/health.py",

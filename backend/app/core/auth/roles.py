@@ -1,20 +1,15 @@
-"""
-Auth role constants.
+"""Compatibility re-exports for auth role constants."""
 
-Small shared boundary used by auth routers without importing the whole
-"""
-
-from __future__ import annotations
-
-
-VALID_ROLES: tuple[str, ...] = (
-    "esecutore",
-    "viewer",
-    "user",
-    "admin",
-    "superadmin",
+from app.shared.contracts.auth import (
+    ROLES_ABOVE_VIEWER,
+    ROLES_ADMIN_OR_ABOVE,
+    ROLES_KIOSK_ONLY,
+    VALID_ROLES,
 )
 
-ROLES_ADMIN_OR_ABOVE: tuple[str, ...] = ("admin", "superadmin")
-ROLES_ABOVE_VIEWER: tuple[str, ...] = ("user", "admin", "superadmin")
-ROLES_KIOSK_ONLY: tuple[str, ...] = ("esecutore",)
+__all__ = [
+    "VALID_ROLES",
+    "ROLES_ADMIN_OR_ABOVE",
+    "ROLES_ABOVE_VIEWER",
+    "ROLES_KIOSK_ONLY",
+]

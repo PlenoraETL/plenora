@@ -24,7 +24,7 @@ class TestQueryResultDataclass:
     def test_query_result_has_result_id_field(self):
         """Il dataclass deve esporre `result_id` per permettere ai
         caller downstream di propagarlo nel task result dict."""
-        from app.db.query_executor import QueryResult
+        from app.core.query_execution.query_executor import QueryResult
 
         # Deve accettare result_id keyword (anche se Optional)
         result = QueryResult(
@@ -35,7 +35,7 @@ class TestQueryResultDataclass:
         assert result.result_id == "res-abc"
 
     def test_query_result_result_id_defaults_to_none(self):
-        from app.db.query_executor import QueryResult
+        from app.core.query_execution.query_executor import QueryResult
 
         result = QueryResult(success=False, message="err")
         assert result.result_id is None or result.result_id == ""
@@ -46,7 +46,7 @@ class TestQueryResultDataclass:
 
 class TestResultBuilderPropagation:
     def test_success_accepts_result_id_keyword(self):
-        from app.db.query_executor import ResultBuilder
+        from app.core.query_execution.query_executor import ResultBuilder
 
         result = ResultBuilder.success(
             rows_count=100,
@@ -59,7 +59,7 @@ class TestResultBuilderPropagation:
         assert result.result_id == "res-xyz"
 
     def test_to_dict_includes_result_id_on_success(self):
-        from app.db.query_executor import ResultBuilder
+        from app.core.query_execution.query_executor import ResultBuilder
 
         result = ResultBuilder.success(
             rows_count=10,
@@ -74,7 +74,7 @@ class TestResultBuilderPropagation:
 
     def test_to_dict_omits_result_id_on_error(self):
         """Il dict di errore non deve esporre result_id (non esiste blob)."""
-        from app.db.query_executor import ResultBuilder
+        from app.core.query_execution.query_executor import ResultBuilder
 
         err = ResultBuilder.error("boom")
         d = ResultBuilder.to_dict(err)
@@ -91,7 +91,7 @@ class TestQueryExecutorEndToEnd:
         `result_id`, il flusso deve catturarlo e includerlo nel dict
         ritornato. Senza, il download via /api/tasks/{id}/download
         cade su 410 Gone perche' `task_info.result["result_id"]` e' None."""
-        from app.db.query_executor import QueryExecutor
+        from app.core.query_execution.query_executor import QueryExecutor
 
         # Mock dell'intero flusso dipendenze
         fake_rows = [(1, "a"), (2, "b")]
@@ -145,7 +145,7 @@ class TestPipelineArtifactInterop:
         `result_id` valorizzato deve produrre un `PipelineArtifact` con
         `artifact_kind == "blob"` quando wrappato via
         `PipelineArtifact.from_executor_result`."""
-        from app.db.query_executor import ResultBuilder
+        from app.core.query_execution.query_executor import ResultBuilder
         from app.core.artifacts.types import PipelineArtifact
 
         result = ResultBuilder.success(

@@ -267,7 +267,7 @@ class TestQueryExecutorPropagation:
     def _build_executor(self):
         """QueryExecutor con engine_factory mock (non usato perche'
         execute_raw e' mockato a sua volta)."""
-        from app.db.query_executor import QueryExecutor
+        from app.core.query_execution.query_executor import QueryExecutor
         return QueryExecutor(engine_factory=MagicMock())
 
     def _run_with_spy(self, executor, *, override, settings_mode="metadata_only"):
@@ -305,7 +305,7 @@ class TestQueryExecutorPropagation:
             kwargs["intermediate_mode_override"] = override
 
         with _patch_settings(_make_cfg(mode=settings_mode)), \
-             patch("app.db.query_result_persistence.save_pipeline_result_outcome",
+             patch("app.core.query_execution.query_result_persistence.save_pipeline_result_outcome",
                    return_value=SimpleNamespace(
                        result_id="r-1",
                        output_filename="out.json",
@@ -324,7 +324,7 @@ class TestQueryExecutorPropagation:
 
     def test_execute_query_signature_accetta_intermediate_mode_override(self):
         import inspect
-        from app.db.query_executor import QueryExecutor
+        from app.core.query_execution.query_executor import QueryExecutor
 
         sig = inspect.signature(QueryExecutor.execute_query)
         assert "intermediate_mode_override" in sig.parameters
@@ -333,7 +333,7 @@ class TestQueryExecutorPropagation:
     def test_execute_query_signature_kwarg_dopo_node_id(self):
         """Il nuovo kwarg deve seguire node_id nella firma."""
         import inspect
-        from app.db.query_executor import QueryExecutor
+        from app.core.query_execution.query_executor import QueryExecutor
 
         sig = inspect.signature(QueryExecutor.execute_query)
         params = list(sig.parameters.keys())
@@ -400,7 +400,7 @@ class TestQueryExecutorPropagation:
         )
 
         with _patch_settings(_make_cfg(mode="metadata_only")), \
-             patch("app.db.query_result_persistence.save_pipeline_result_outcome",
+             patch("app.core.query_execution.query_result_persistence.save_pipeline_result_outcome",
                    return_value=SimpleNamespace(
                        result_id="r-1",
                        output_filename="out.json",
@@ -460,7 +460,7 @@ class TestQueryExecutorPropagation:
         # sollevare IntermediateSettingsError perche' override "INVALID"
         # non passa la validation di resolve_intermediate_mode.
         with _patch_settings(_make_cfg(mode="metadata_only")), \
-             patch("app.db.query_result_persistence.save_pipeline_result_outcome",
+             patch("app.core.query_execution.query_result_persistence.save_pipeline_result_outcome",
                    return_value=SimpleNamespace(
                        result_id="r-1",
                        output_filename="out.json",
@@ -497,7 +497,7 @@ class TestQueryExecutorPropagation:
 
         writer_spy = MagicMock()
         with _patch_settings(_make_cfg(mode="metadata_only")), \
-             patch("app.db.query_result_persistence.save_pipeline_result_outcome",
+             patch("app.core.query_execution.query_result_persistence.save_pipeline_result_outcome",
                    return_value=SimpleNamespace(
                        result_id="r-1",
                        output_filename="out.json",

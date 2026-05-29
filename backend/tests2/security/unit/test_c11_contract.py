@@ -21,7 +21,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 def test_execute_raw_raises_when_rows_exceed_cap(monkeypatch):
     """Il loop fetchmany deve raise ValueError se il cumulativo supera
     ESTRAI_MAX_ROWS. Previene OOM su query mal filtrate."""
-    from app.db.query_executor import QueryExecutor
+    from app.core.query_execution.query_executor import QueryExecutor
 
     # Abbassa il cap per il test
     monkeypatch.setenv("ESTRAI_MAX_ROWS", "100")

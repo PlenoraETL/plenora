@@ -102,7 +102,7 @@ def test_storage_reconciliation_store_has_single_lazy_db_import() -> None:
 
 def test_query_executor_no_longer_carries_legacy_results_dir() -> None:
     """QueryExecutor persists via result blob ports, not instance result dirs."""
-    src = _read("db/query_executor.py")
+    src = _read("core/query_execution/query_executor.py")
     tree = ast.parse(src)
 
     query_executor = next(

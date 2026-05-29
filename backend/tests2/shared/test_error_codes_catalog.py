@@ -42,6 +42,7 @@ _CORE_ROOT = _BACKEND_ROOT / "app" / "core"
 EXPECTED_DOMAIN_CODES: Set[str] = {
     # batch 006
     "connection_in_use",
+    "connection_duplicate_name",
     "api_connection_in_use",
     "project_has_dependencies",
     "project_cleanup_partial",
@@ -148,6 +149,7 @@ _MIGRATED_DOMAIN_MODULES = {
         {
             "CONNECTION_IN_USE",
             "CONNECTION_NOT_FOUND",
+            "CONNECTION_DUPLICATE_NAME",
         },
     ),
     "app/core/carica/router.py": (
@@ -188,14 +190,15 @@ def test_known_global_codes_matches_expected_lock():
     assert error_codes.KNOWN_GLOBAL_CODES == EXPECTED_GLOBAL_CODES
 
 
-def test_catalog_count_domain_fiftytwo():
-    """52 codici domain (5 pre-existing + 6 batch 006 + 10 batch 009
+def test_catalog_count_domain_fiftythree():
+    """53 codici domain (5 pre-existing + 6 batch 006 + 10 batch 009
     not-found family + 1 batch 010 external-service +
     1 BE-GO-READY-MEMORY-OOM-001 memory_limit_exceeded +
     1 BE-GO-READY-ERROR-CODES-013 service_not_initialized +
     1 BE-GO-READY-ERROR-CODES-014 access_denied +
-    27 BE-GO-READY-AUTH-DOMAIN-PROMOTION-001 auth family)."""
-    assert len(EXPECTED_DOMAIN_CODES) == 52
+    27 BE-GO-READY-AUTH-DOMAIN-PROMOTION-001 auth family +
+    1 compatibility domain conflict code)."""
+    assert len(EXPECTED_DOMAIN_CODES) == 53
     assert len(error_codes.KNOWN_DOMAIN_CODES) == len(EXPECTED_DOMAIN_CODES)
 
 
@@ -207,8 +210,7 @@ def test_catalog_domain_and_global_disjoint():
 
 
 def test_catalog_constants_match_shared_owned_set_values():
-    """Shared-owned constants must match the aggregate catalog minus
-    domain-owned values exported by their domain modules."""
+    """Shared-owned constants must match the aggregate domain catalog."""
     domain_constants = {
         value
         for name, value in vars(error_codes).items()
@@ -218,13 +220,7 @@ def test_catalog_constants_match_shared_owned_set_values():
             and isinstance(value, str)
         )
     }
-    migrated_values = (
-        admin_backup_errors.KNOWN_DOMAIN_CODES
-        | connection_errors.KNOWN_DOMAIN_CODES
-        | datasource_errors.KNOWN_DOMAIN_CODES
-        | ticket_errors.KNOWN_DOMAIN_CODES
-    )
-    assert domain_constants == set(error_codes.KNOWN_DOMAIN_CODES) - migrated_values
+    assert domain_constants == set(error_codes.KNOWN_DOMAIN_CODES)
 
 
 def test_migrated_domain_modules_feed_shared_catalog():
@@ -234,15 +230,30 @@ def test_migrated_domain_modules_feed_shared_catalog():
     assert ticket_errors.KNOWN_DOMAIN_CODES <= error_codes.KNOWN_DOMAIN_CODES
 
 
-def test_migrated_domain_codes_are_not_reexported_by_shared_catalog():
+def test_migrated_domain_modules_expose_their_compat_catalogs():
+    assert admin_backup_errors.KNOWN_DOMAIN_CODES == {
+        error_codes.OBJECT_STORAGE_DISABLED,
+        error_codes.AWS_CRT_MISSING,
+        error_codes.AWS_CREDENTIALS_EXPIRED,
+    }
+    assert connection_errors.KNOWN_DOMAIN_CODES == {
+        error_codes.CONNECTION_IN_USE,
+        error_codes.CONNECTION_NOT_FOUND,
+        error_codes.CONNECTION_DUPLICATE_NAME,
+    }
+    assert datasource_errors.KNOWN_DOMAIN_CODES == {
+        error_codes.DATASOURCE_IN_USE,
+        error_codes.DATASOURCE_NOT_FOUND,
+    }
+    assert ticket_errors.KNOWN_DOMAIN_CODES == {error_codes.TICKET_NOT_FOUND}
+
+
+def test_migrated_domain_codes_are_canonical_in_shared_catalog():
     for const in _MIGRATED_DOMAIN_CONSTANTS:
-        assert not hasattr(error_codes, const), (
-            "Domain-owned error codes must be imported from their domain "
-            f"module, not re-exported by app.shared.error_codes: {const}"
-        )
+        assert getattr(error_codes, const) in error_codes.KNOWN_DOMAIN_CODES
 
 
-def test_migrated_domain_codes_are_not_defined_in_shared_catalog():
+def test_migrated_domain_codes_are_defined_in_shared_catalog():
     source = (_BACKEND_ROOT / "app" / "shared" / "error_codes.py").read_text(
         encoding="utf-8",
     )
@@ -251,10 +262,7 @@ def test_migrated_domain_codes_are_not_defined_in_shared_catalog():
         for const in _MIGRATED_DOMAIN_CONSTANTS
         if re.search(rf"^{const}\s*=", source, re.MULTILINE)
     }
-    assert centrally_defined == set(), (
-        "Domain-owned error codes must live in app/core/<domain>/errors.py; "
-        f"central definitions found: {sorted(centrally_defined)}"
-    )
+    assert centrally_defined == _MIGRATED_DOMAIN_CONSTANTS
 
 
 def test_migrated_domain_call_sites_use_domain_error_modules():

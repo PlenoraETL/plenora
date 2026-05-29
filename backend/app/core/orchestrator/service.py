@@ -15,7 +15,7 @@ from app.core.orchestrator import task_service as task_service_module
 from app.core.projects.service import ProjectService
 from app.core.projects.canvas_models import CanvasState
 from app.core.resources import memory_guard
-from app.db.query_executor import QueryExecutor
+from app.core.query_execution.query_executor import QueryExecutor
 from app.shared import error_codes
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution.executor_protocol import CanvasExecutorProtocol, ExecutionResult

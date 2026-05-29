@@ -16,7 +16,7 @@ from app.core.features import features_service as features_service_module
 from app.core.manipola import executor as manipola_executor_module
 from app.core.orchestrator import service as orchestrator_service_module
 from app.core.projects import service as project_service_module
-from app.db import query_executor as query_executor_module
+from app.core.query_execution import query_executor as query_executor_module
 
 
 __all__ = [

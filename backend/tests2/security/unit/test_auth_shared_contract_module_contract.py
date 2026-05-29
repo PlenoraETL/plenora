@@ -129,6 +129,7 @@ _EXPECTED_PUBLIC_SYMBOLS = {
     "LoginRequest",
     "TokenResponse",
     "UserCreate",
+    "UserUpdateRequest",
     "ChangePasswordRequest",
     "UserResponse",
     "ResetPasswordRequest",

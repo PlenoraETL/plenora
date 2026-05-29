@@ -15,10 +15,10 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 
 _TARGET_MODULES = (
-    "app/db/query_executor.py",
-    "app/db/query_session.py",
-    "app/db/query_streaming.py",
-    "app/db/query_engines.py",
+    "app/core/query_execution/query_executor.py",
+    "app/core/query_execution/query_session.py",
+    "app/core/query_execution/query_streaming.py",
+    "app/core/query_execution/query_engines.py",
     "app/db/pg_connection.py",
     "app/core/arricchisci/api_connection_management.py",
     "app/core/arricchisci/api_connection_generator_enricher.py",

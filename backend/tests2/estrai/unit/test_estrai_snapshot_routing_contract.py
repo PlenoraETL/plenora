@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-from app.db.query_result_persistence import PersistedQueryResult
+from app.core.query_execution.query_result_persistence import PersistedQueryResult
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -48,7 +48,7 @@ def _reset_policy_cache():
 
 
 def _build_executor():
-    from app.db.query_executor import QueryExecutor
+    from app.core.query_execution.query_executor import QueryExecutor
 
     factory = MagicMock()
     return QueryExecutor(engine_factory=factory, logger=MagicMock())
@@ -61,7 +61,7 @@ def _stub_save(monkeypatch):
         output_path="out.csv",
     ))
     monkeypatch.setattr(
-        "app.db.query_result_persistence.QueryResultPersistence.persist_dataframe_result",
+        "app.core.query_execution.query_result_persistence.QueryResultPersistence.persist_dataframe_result",
         fake_save,
     )
     return fake_save
@@ -227,7 +227,7 @@ def test_estrai_streaming_branch_uses_legacy_write_node_ok_streamed(monkeypatch)
     # `persist_streaming_query_to_storage` (singolo entry: orchestra
     # `execute_streaming_to_writer` + `StreamingResultBlobWriter`).
     # `_execute_streaming_to_file` + `persist_streamed_file` tombstoned.
-    from app.db.query_result_persistence import StreamedQueryResult
+    from app.core.query_execution.query_result_persistence import StreamedQueryResult
 
     monkeypatch.setattr(
         executor._result_persistence,

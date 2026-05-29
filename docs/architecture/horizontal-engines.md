@@ -40,7 +40,7 @@ Canonical surfaces:
 - `app/core/connections/arcgis_connection_store.py`
 - `app/core/connections/arcgis_models.py`
 - `app/core/datasources/*`
-- `app/db/query_executor.py`
+- `app/core/query_execution/*`
 
 Current ArcGIS shape:
 
@@ -310,8 +310,6 @@ Rules:
 Canonical surfaces:
 
 - `app/db/pg_connection.py`
-- `app/db/query_executor.py`
-- `app/db/query_result_persistence.py`
 - `app/db/migrations_runner.py`
 - `app/db/sql_functions.py`
 - Domain DB boundaries: `app/core/**/db.py`, `app/core/**/*_store.py`,
@@ -324,6 +322,8 @@ Rules:
 - Keep SQL and connection handling out of shared leaf contracts.
 - Routers and vertical services should not import `app.db.pg_connection`
   directly; route reads/writes through the local domain DB boundary.
+- Multi-database query execution lives in `app/core/query_execution`;
+  `app/db/query_*.py` files are compatibility shims, not DB foundations.
 - `app/core/task_runtime/*` is the only app-core surface allowed to import
   Celery, `workers.celery_app`, or concrete `workers.tasks.*` modules.
 

@@ -22,7 +22,7 @@ from app.core.carica.connection_store import fetch_connection_config
 from app.core.auth import visibility as visibility_module
 from app.core.intermediate import run_idempotency
 from app.core.projects import service as project_service_module
-from app.db.query_executor import DefaultEngineFactory
+from app.core.query_execution.query_executor import DefaultEngineFactory
 from app.shared.contracts.payloads import JsonObject, StringRows
 from app.shared.security import tls_policy as tls_policy_module
 from app.utils.logger import append_step, get_logger

@@ -38,6 +38,14 @@ def _parse(p: Path) -> ast.AST | None:
         return None
 
 
+def _import_targets(node: ast.AST) -> list[str]:
+    if isinstance(node, ast.ImportFrom) and node.module is not None:
+        return [node.module]
+    if isinstance(node, ast.Import):
+        return [alias.name for alias in node.names]
+    return []
+
+
 # Rule 1 — HTTPException(detail=str(e)) cross-reference
 
 
@@ -63,6 +71,72 @@ def test_value_error_str_e_lock_exists_in_catalog_test():
     assert "EXPECTED_VALUE_ERROR_STR_E_COUNTS" in text, (
         "Atteso: tabella `EXPECTED_VALUE_ERROR_STR_E_COUNTS` per il "
         "lock per-file. Vedi BE-GO-READY-ERROR-CODES-015."
+    )
+
+
+# Rule 1b — shared/db layering boundaries
+
+
+ALLOWLIST_SHARED_TO_CORE_IMPORTS: Set[str] = set()
+
+
+ALLOWLIST_DB_TO_CORE_IMPORTS: Set[str] = {
+    # Compatibility shim: app.db.query_result_persistence keeps the legacy
+    # patch target `save_pipeline_result_outcome` importable for tests and
+    # old callers while the canonical implementation lives in
+    # app.core.query_execution.
+    "app/db/query_result_persistence.py",
+    # Compatibility shims for the relocated query-execution package.
+    "app/db/query_engines.py",
+    "app/db/query_executor.py",
+    "app/db/query_session.py",
+    "app/db/query_streaming.py",
+}
+
+
+def _files_importing_prefix(root: Path, prefix: str) -> Set[str]:
+    hits: Set[str] = set()
+    for p in _iter_py(root):
+        tree = _parse(p)
+        if tree is None:
+            continue
+        for node in ast.walk(tree):
+            if any(target == prefix or target.startswith(f"{prefix}.")
+                   for target in _import_targets(node)):
+                hits.add(_rel(p))
+                break
+    return hits
+
+
+def test_shared_package_does_not_import_core_modules():
+    """Shared must remain a leaf package: no app.shared -> app.core imports."""
+    found = _files_importing_prefix(_APP_ROOT / "shared", "app.core")
+    extra = found - ALLOWLIST_SHARED_TO_CORE_IMPORTS
+    missing = ALLOWLIST_SHARED_TO_CORE_IMPORTS - found
+    assert not extra, (
+        "app/shared files importano app.core, violando il leaf boundary: "
+        f"{sorted(extra)}."
+    )
+    assert not missing, (
+        "Shared->core allowlist stale: "
+        f"{sorted(missing)}."
+    )
+
+
+def test_db_foundation_does_not_import_core_modules():
+    """app.db is foundation code; query execution lives under app.core."""
+    found = _files_importing_prefix(_APP_ROOT / "db", "app.core")
+    extra = found - ALLOWLIST_DB_TO_CORE_IMPORTS
+    missing = ALLOWLIST_DB_TO_CORE_IMPORTS - found
+    assert not extra, (
+        "app/db files importano app.core fuori dagli shim consentiti: "
+        f"{sorted(extra)}. Sposta la capability sopra app.db o passa da "
+        "un protocol/port."
+    )
+    assert not missing, (
+        "DB->core allowlist stale: "
+        f"{sorted(missing)}. Se uno shim non importa piu' app.core, "
+        "rimuovilo dall'allowlist."
     )
 
 
