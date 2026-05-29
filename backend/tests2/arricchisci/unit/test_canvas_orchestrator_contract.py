@@ -78,6 +78,8 @@ def test_orchestrator_module_exposes_pure_function_api():
     # come re-export tipati del context boundary.
     assert set(co.__all__) == {
         "execute_canvas_enrichment",
+        "run_enrichment_canvas",
+        "CanvasRunError",
         "init_execution_context",
         "get_execution_order",
         "run_single_enricher",

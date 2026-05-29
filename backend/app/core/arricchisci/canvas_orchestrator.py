@@ -34,6 +34,8 @@ logger = get_logger(__name__)
 
 __all__ = [
     "execute_canvas_enrichment",
+    "run_enrichment_canvas",
+    "CanvasRunError",
     "init_execution_context",
     "get_execution_order",
     "run_single_enricher",
@@ -41,6 +43,20 @@ __all__ = [
     "ArricchisciExecutionContext",
     "build_execution_context",
 ]
+
+
+class CanvasRunError(Exception):
+    """Errore bloccante durante l'esecuzione del loop canvas enrichment.
+
+    Porta il `payload` dict gia' formato per il caller (shape
+    `{"success": False, ...}`). Sostituisce i return-dict mid-loop con
+    un'unica via d'uscita, cosi' il loop vive in `run_enrichment_canvas`
+    e i caller (canonical / task) decidono come surfacearlo.
+    """
+
+    def __init__(self, payload: JsonObject) -> None:
+        super().__init__(str(payload.get("error", "canvas run error")))
+        self.payload = payload
 
 
 # Pure / orchestration helpers
@@ -175,6 +191,186 @@ def run_single_enricher(
     return result_df
 
 
+# Shared canvas run loop
+
+
+def run_enrichment_canvas(
+    svc: "ApiConnectionService",
+    project_id: str,
+    *,
+    graph: CanvasGraph,
+    ctx: ArricchisciExecutionContext,
+    api_connections: JsonObjectById,
+    execution_order: List[str],
+    groups,
+    force_recalculate: bool = False,
+    run_id: Optional[str] = None,
+    intermediate_mode_override: Optional[str] = None,
+) -> JsonObject:
+    """Esegue il loop canvas (gruppi single/parallel) e ritorna `node_results`.
+
+    Scheletro condiviso fra il path canonico e (Step C3b) il task standalone.
+    Gli errori bloccanti vengono sollevati come `CanvasRunError(payload)`; la
+    finalizzazione (find_final_result + save/finalize) resta nei caller.
+    """
+    edges = graph.edges
+    nodes = graph.raw_nodes
+    node_results: JsonObject = {}
+
+    for step_type, step_node_ids in groups:
+        if step_type == "single":
+            # ── Nodo singolo (sorgente, result, o enricher isolato) ──
+            node_id = step_node_ids[0]
+            node = graph.raw(node_id)
+            if not node:
+                continue
+            node_type = graph.get(node_id).type
+            node_data = node
+            logger.debug(f"Esecuzione nodo: {node_id} ({node_type})")
+
+            if node_type == "project_source":
+                node_results[node_id] = svc._load_source_project(
+                    node_data, force_recalculate, ctx=ctx,
+                )
+
+            elif node_type == "file_source":
+                if is_file_source_for_file_processor(
+                    node_id, edges, graph.raw_map, api_connections
+                ):
+                    node_results[node_id] = {
+                        "_passthrough_file_source": True,
+                        "file_source_id": graph.get(node_id).get_field("file_source_id"),
+                    }
+                else:
+                    node_results[node_id] = svc._load_file_source(
+                        node_data, ctx=ctx,
+                    )
+
+            elif node_type == "staticValues":
+                node_results[node_id] = svc._load_static_values(
+                    node_data, ctx=ctx,
+                )
+
+            elif node_type == "result":
+                input_edge = next(
+                    (e for e in edges if e["target"] == node_id), None
+                )
+                if input_edge:
+                    input_df = node_results.get(input_edge["source"])
+                    if input_df is not None:
+                        node_results[node_id] = input_df
+
+            elif node_type == "api_enrich":
+                # api_enrich emesso come step "single" quando
+                # cardinality-changing o isolato (RB.#15). `run_single_enricher`
+                # propaga ValueError su HTTP error → CanvasRunError sotto.
+                input_edge = next(
+                    (e for e in edges if e["target"] == node_id), None
+                )
+                input_df = (
+                    node_results.get(input_edge["source"])
+                    if input_edge else None
+                )
+                result = run_single_enricher(
+                    svc, node_data, api_connections, input_df
+                )
+                if isinstance(result, dict) and not result.get("success", True):
+                    raise CanvasRunError(result)
+                node_results[node_id] = result
+
+        else:
+            # ── Gruppo parallelo di api_enrich ──
+            first_node_id = step_node_ids[0]
+            input_edge = next(
+                (e for e in edges if e["target"] == first_node_id), None
+            )
+            input_df = (
+                node_results.get(input_edge["source"])
+                if input_edge else None
+            )
+
+            if input_df is None:
+                for prev_id in reversed(execution_order):
+                    if prev_id in node_results and is_dataframe(node_results[prev_id]):
+                        input_df = node_results[prev_id]
+                        break
+
+            if input_df is None:
+                raise CanvasRunError({
+                    "success": False,
+                    "error": (
+                        f"Input non trovato per gruppo parallelo {step_node_ids}"
+                    ),
+                })
+
+            # Filtra nodi file-processor (rest_file): non parallelizzabili
+            parallel_ids = []
+            for nid in step_node_ids:
+                nd = graph.raw(nid)
+                api_id = graph.get(nid).get_field("api_id") if nd else None
+                api_cfg = api_connections.get(api_id, {})
+                if api_cfg.get("connection_type") == "rest_file":
+                    if should_execute_node(nd, input_df):
+                        result = svc._execute_rest_file(
+                            nd, api_cfg, nodes, edges, nid, project_id,
+                            node_results=node_results, ctx=ctx,
+                        )
+                        if isinstance(result, dict) and not result.get(
+                            "success", True
+                        ):
+                            raise CanvasRunError(result)
+                        node_results[nid] = result
+                    else:
+                        node_results[nid] = input_df
+                else:
+                    parallel_ids.append(nid)
+
+            if parallel_ids:
+                logger.info(
+                    f"Esecuzione parallela: {len(parallel_ids)} nodi enricher"
+                )
+
+                def _execute_single(node_data, api_conns, in_df):
+                    return run_single_enricher(svc, node_data, api_conns, in_df)
+
+                group_results, group_error = execute_parallel_enrichers(
+                    node_ids=parallel_ids,
+                    input_df=input_df,
+                    node_map=graph.raw_map,
+                    api_connections=api_connections,
+                    execute_single_fn=_execute_single,
+                )
+                node_results.update(group_results)
+
+                if group_error:
+                    logger.error(
+                        f"[GESTITO] Errore api_enrich in gruppo "
+                        f"{parallel_ids}: {group_error}",
+                        op="execute", project_id=project_id,
+                    )
+                    raise CanvasRunError({
+                        "success": False,
+                        "user_error": True,
+                        "error": (
+                            f"Errore chiamata API upstream: {group_error}"
+                        ),
+                        "error_node_id": (
+                            parallel_ids[0] if parallel_ids else None
+                        ),
+                        "error_node_type": "api_enrich",
+                    })
+
+            if run_id:
+                for nid in step_node_ids:
+                    svc._write_intermediate_snapshot(
+                        run_id, nid, "api_enrich",
+                        node_results.get(nid),
+                        mode_override=intermediate_mode_override,
+                    )
+
+    return node_results
+
+
 # Top-level orchestrator
 
 
@@ -246,190 +442,18 @@ def execute_canvas_enrichment(
         )
         logger.info(f"Gruppi di esecuzione: {[(t, len(ids)) for t, ids in groups]}")
 
-        node_results: JsonObject = {}
-
-        for step_type, step_node_ids in groups:
-            if step_type == "single":
-                # ── Nodo singolo (sorgente, result, o enricher isolato) ──
-                node_id = step_node_ids[0]
-                node = graph.raw(node_id)
-                if not node:
-                    continue
-                node_type = graph.get(node_id).type
-                node_data = node
-                logger.debug(f"Esecuzione nodo: {node_id} ({node_type})")
-
-                if node_type == "project_source":
-                    node_results[node_id] = svc._load_source_project(
-                        node_data, force_recalculate, ctx=ctx,
-                    )
-
-                elif node_type == "file_source":
-                    if is_file_source_for_file_processor(
-                        node_id, edges, graph.raw_map, api_connections
-                    ):
-                        node_results[node_id] = {
-                            "_passthrough_file_source": True,
-                            "file_source_id": graph.get(node_id).get_field("file_source_id"),
-                        }
-                    else:
-                        node_results[node_id] = svc._load_file_source(
-                            node_data, ctx=ctx,
-                        )
-
-                elif node_type == "staticValues":
-                    node_results[node_id] = svc._load_static_values(
-                        node_data, ctx=ctx,
-                    )
-
-                elif node_type == "result":
-                    input_edge = next(
-                        (e for e in edges if e["target"] == node_id), None
-                    )
-                    if input_edge:
-                        input_df = node_results.get(input_edge["source"])
-                        if input_df is not None:
-                            node_results[node_id] = input_df
-
-                elif node_type == "api_enrich":
-                    # PR #22: api_enrich emesso come step "single" da
-                    # `compute_parallel_groups` quando RB.#15 flagga il
-                    # nodo come cardinality-changing (output_mapping con
-                    # `[]`/`[*]`) o quando e' un nodo isolato. Senza
-                    # questo branch il nodo veniva silenziosamente
-                    # saltato: `node_results[node_id]` non era mai
-                    # settato → `_find_final_result` cadeva su un
-                    # fallback upstream → task ritornava success=True
-                    # mascherando errori HTTP del generator (regression
-                    # di copertura del fix RB.#15 group_error
-                    # `run_single_enricher` fa il dispatch su
-                    # api_type=generator vs enricher e propaga
-                    # ValueError sollevato da `_call_generator_endpoint`
-                    # su HTTP error. Catturato dal boundary qui sotto
-                    # come {"success": False, "user_error": True, ...}
-                    input_edge = next(
-                        (e for e in edges if e["target"] == node_id), None
-                    )
-                    input_df = (
-                        node_results.get(input_edge["source"])
-                        if input_edge else None
-                    )
-                    result = run_single_enricher(
-                        svc, node_data, api_connections, input_df
-                    )
-                    # Propaga dict di errore senza convertirlo in success
-                    if isinstance(result, dict) and not result.get("success", True):
-                        return result
-                    node_results[node_id] = result
-
-            else:
-                # ── Gruppo parallelo di api_enrich ──
-                # Trova l'input_df comune: output del predecessore del
-                # primo nodo del gruppo
-                first_node_id = step_node_ids[0]
-                input_edge = next(
-                    (e for e in edges if e["target"] == first_node_id), None
-                )
-                input_df = (
-                    node_results.get(input_edge["source"])
-                    if input_edge else None
-                )
-
-                if input_df is None:
-                    # Fallback: prova a trovare l'ultimo risultato disponibile
-                    for prev_id in reversed(execution_order):
-                        if prev_id in node_results and is_dataframe(node_results[prev_id]):
-                            input_df = node_results[prev_id]
-                            break
-
-                if input_df is None:
-                    return {
-                        "success": False,
-                        "error": (
-                            f"Input non trovato per gruppo parallelo "
-                            f"{step_node_ids}"
-                        ),
-                    }
-
-                # Filtra nodi file-processor (rest_file) dal gruppo
-                # non sono parallelizzabili col meccanismo degli enricher
-                parallel_ids = []
-                for nid in step_node_ids:
-                    nd = graph.raw(nid)
-                    api_id = graph.get(nid).get_field("api_id") if nd else None
-                    api_cfg = api_connections.get(api_id, {})
-                    ctype = api_cfg.get("connection_type")
-                    if ctype == "rest_file":
-                        # Esegui in sequenza prima del gruppo parallelo
-                        if should_execute_node(nd, input_df):
-                            # typed ctx threaded through il rest-file
-                            # pipeline (group_id letto da `ctx` invece
-                            # di singleton
-                            result = svc._execute_rest_file(
-                                nd, api_cfg, nodes, edges, nid, project_id,
-                                node_results=node_results, ctx=ctx,
-                            )
-                            if isinstance(result, dict) and not result.get(
-                                "success", True
-                            ):
-                                return result
-                            node_results[nid] = result
-                        else:
-                            node_results[nid] = input_df
-                    else:
-                        parallel_ids.append(nid)
-
-                if parallel_ids:
-                    logger.info(
-                        f"Esecuzione parallela: {len(parallel_ids)} nodi enricher"
-                    )
-
-                    def _execute_single(node_data, api_conns, in_df):
-                        return run_single_enricher(svc, node_data, api_conns, in_df)
-
-                    group_results, group_error = execute_parallel_enrichers(
-                        node_ids=parallel_ids,
-                        input_df=input_df,
-                        node_map=graph.raw_map,
-                        api_connections=api_connections,
-                        execute_single_fn=_execute_single,
-                    )
-                    node_results.update(group_results)
-
-                    # Se il gruppo ha prodotto un errore, la pipeline
-                    # fallisce: inghiottire il group_error portava a
-                    # task "success" con output passthrough del nodo
-                    # upstream (es. solo la colonna seed di staticValues
-                    # mascherando errori upstream come HTTP 422 sul
-                    # generator API. Non esiste un caso legittimo in cui
-                    # un'eccezione dentro run_one debba essere ignorata
-                    # le skip via execute_if ritornano (None, None
-                    # non (None, errore
-                    if group_error:
-                        logger.error(
-                            f"[GESTITO] Errore api_enrich in gruppo "
-                            f"{parallel_ids}: {group_error}",
-                            op="execute", project_id=project_id,
-                        )
-                        return {
-                            "success": False,
-                            "user_error": True,
-                            "error": (
-                                f"Errore chiamata API upstream: {group_error}"
-                            ),
-                            "error_node_id": (
-                                parallel_ids[0] if parallel_ids else None
-                            ),
-                            "error_node_type": "api_enrich",
-                        }
-
-                if run_id:
-                    for nid in step_node_ids:
-                        svc._write_intermediate_snapshot(
-                            run_id, nid, "api_enrich",
-                            node_results.get(nid),
-                            mode_override=intermediate_mode_override,
-                        )
+        node_results = run_enrichment_canvas(
+            svc,
+            project_id,
+            graph=graph,
+            ctx=ctx,
+            api_connections=api_connections,
+            execution_order=execution_order,
+            groups=groups,
+            force_recalculate=force_recalculate,
+            run_id=run_id,
+            intermediate_mode_override=intermediate_mode_override,
+        )
 
         _result_cn = graph.result_node()
         if _result_cn:
@@ -460,6 +484,9 @@ def execute_canvas_enrichment(
         return svc._save_and_build_dataframe_response(
             final_result, output_name, output_format, project_id
         )
+
+    except CanvasRunError as e:
+        return e.payload
 
     except ValueError as e:
         # boundary: i ValueError sollevati dentro api_connector portano
