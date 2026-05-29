@@ -233,17 +233,19 @@ def test_fail_hard_safety_net_still_documented_for_path_b_explosion():
     """Anti-regression: il detector RB.#15 NON copre path B (output_mapping
     vuoto + response runtime FeatureCollection via `_auto_flatten`).
     In quel caso il nodo finisce in un batch parallel con altri, e se
-    runtime esplode -> `_merge_batch_parallel_node_results` raise
+    runtime esplode -> `validate_and_merge_parallel_columns` raise
     RuntimeError (fail-hard RB.#14). Questo test documenta che il
     fail-hard NON e' stato rimosso/indebolito da RB.#15.
 
-    Verifica strutturale: il helper esiste nel worker."""
-    from workers.tasks.enrichment_task import _merge_batch_parallel_node_results
+    Verifica strutturale: il merge guard esiste nel dataframe engine
+    (post B step C3b il task delega il parallelo a
+    `execute_parallel_enrichers`, che usa questo merge)."""
+    from app.core.dataframes.parallel_ops import validate_and_merge_parallel_columns
 
     # Helper presente, importabile, callable. Test di RB.#14 in
     # tests2/arricchisci/unit/test_batch_parallel_merge_contract.py
     # blindano il behavior su mismatch cardinalita'.
-    assert callable(_merge_batch_parallel_node_results)
+    assert callable(validate_and_merge_parallel_columns)
 
 
 def test_detector_handles_null_or_missing_paths_gracefully():

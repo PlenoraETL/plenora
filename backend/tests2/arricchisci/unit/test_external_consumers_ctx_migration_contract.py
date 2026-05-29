@@ -23,6 +23,9 @@ _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _ENRICHMENT_TASK_PY = (
     _BACKEND_ROOT / "workers" / "tasks" / "enrichment_task.py"
 )
+_CANVAS_ORCH_PY = (
+    _BACKEND_ROOT / "app" / "core" / "arricchisci" / "canvas_orchestrator.py"
+)
 
 
 # 1. Source-bound: no more direct mutation
@@ -114,19 +117,44 @@ def _scan_mixin_callsites(src: str) -> dict:
     return found
 
 
-def test_enrichment_task_threads_ctx_to_mixin_callsites():
-    """AST-bound: i 4 mixin callsite passano `ctx=ctx` esplicito."""
+def test_enrichment_task_threads_ctx_to_runner():
+    """Post B step C3b: il task non chiama piu' i loader direttamente — passa
+    il typed `ctx` a `run_enrichment_canvas`, che lo inoltra ai mixin
+    callsite. AST-bound: ogni call a `run_enrichment_canvas(...)` ha `ctx=`."""
     src = _ENRICHMENT_TASK_PY.read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    runner_calls = [
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "run_enrichment_canvas"
+    ]
+    assert runner_calls, (
+        "Atteso che enrichment_task chiami `run_enrichment_canvas(...)` "
+        "(delega del loop, B step C3b)."
+    )
+    for call in runner_calls:
+        assert any(kw.arg == "ctx" for kw in call.keywords), (
+            "REGRESSIONE typed context: la call a `run_enrichment_canvas(...)` "
+            "non passa `ctx=...`. Senza il typed context il tenant binding "
+            "non raggiunge i loader."
+        )
+
+
+def test_runner_threads_ctx_to_mixin_callsites():
+    """AST-bound: il loop condiviso `canvas_orchestrator` passa `ctx=ctx`
+    ai 4 mixin callsite (project_source/file_source/static_values/rest_file)."""
+    src = _CANVAS_ORCH_PY.read_text(encoding="utf-8")
     found = _scan_mixin_callsites(src)
     for name, calls in found.items():
         assert calls, (
             f"Atteso almeno 1 callsite di `{name}(...)` in "
-            f"enrichment_task.py."
+            f"canvas_orchestrator.py."
         )
         for lineno, has_ctx in calls:
             assert has_ctx, (
-                f"REGRESSIONE typed context closure: chiamata a `{name}(...)` in "
-                f"enrichment_task.py:{lineno} non passa `ctx=...`. "
+                f"REGRESSIONE typed context: chiamata a `{name}(...)` in "
+                f"canvas_orchestrator.py:{lineno} non passa `ctx=...`. "
                 f"Senza il kwarg, il reader non usa il typed boundary."
             )
 

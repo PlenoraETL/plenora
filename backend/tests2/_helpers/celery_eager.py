@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -144,19 +143,46 @@ def _make_tracked_api_cs(spies: HarnessSpies):
     return Tracked
 
 
-def _make_fake_executor():
-    """EnrichmentExecutor stub: ritorna un risultato vuoto."""
+def _make_build_enrichment_executor_stub():
+    """Stub di `build_enrichment_executor`: factory che ritorna un fake
+    executor con l'interfaccia usata dall'enrich_fn del task
+    (`execute` -> (df, result), `options`, `api_config`,
+    `detected_column_types`). Per i canvas senza nodi api_enrich non viene
+    mai chiamato; per gli altri ritorna un risultato vuoto coerente.
+    """
+
+    class _FakeOptions:
+        continue_on_error = True
+        stop_on_error_threshold = 0
+        generate_error_report = False
+
+    class _FakeStats:
+        success = 0
+        total_rows = 0
+        cached = 0
+        errors = 0
+
+        def to_dict(self):
+            return {}
+
+    class _FakeEnrichmentResult:
+        def __init__(self):
+            self.stats = _FakeStats()
+            self.errors = []
 
     class _FakeExecutor:
-        def __init__(self, *args, **kwargs):
-            pass
+        def __init__(self, api_config):
+            self.api_config = api_config or {}
+            self.options = _FakeOptions()
+            self.detected_column_types = {}
 
-        def execute(self, *args, **kwargs):
-            # Mai chiamato perche' il fake api_cs solleva _HarnessAbort
-            # sui loader prima.
-            return MagicMock(errors=[], rows_processed=0)
+        def execute(self, df):
+            return df, _FakeEnrichmentResult()
 
-    return _FakeExecutor
+    def _stub(node_data, api_config, *, progress_callback=None):
+        return _FakeExecutor(api_config)
+
+    return _stub
 
 
 def install_enrichment_task_mocks(
@@ -211,8 +237,11 @@ def install_enrichment_task_mocks(
         _make_tracked_api_cs(spies),
     )
 
-    # 5. EnrichmentExecutor (top-level import nel task module)
-    monkeypatch.setattr(et_mod, "EnrichmentExecutor", _make_fake_executor())
+    # 5. build_enrichment_executor (factory usata dall'enrich_fn del task)
+    monkeypatch.setattr(
+        et_mod, "build_enrichment_executor",
+        _make_build_enrichment_executor_stub(),
+    )
     monkeypatch.setattr(et_mod, "generate_error_report", lambda *a, **kw: None)
 
     # 6. Eseguibile DB lookup
