@@ -9,6 +9,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Callable, List, Mapping, Optional
 
+from croniter import croniter
+import pytz
+
 from app.config import settings
 from app.core.scheduler import db
 from app.core.scheduler.log_service import ScheduleLogService
@@ -70,11 +73,6 @@ def detect_missed_run(
     # Allinea entrambi a UTC-aware prima del confronto.
     if last_run.tzinfo is None:
         last_run = last_run.replace(tzinfo=timezone.utc)
-
-    try:
-        from croniter import croniter
-    except ImportError:
-        return None
 
     try:
         cron = croniter(cron_expression, now)
@@ -208,11 +206,6 @@ class ScheduleService:
         )
 
     def _validate_cron_expression(self, cron_expression: str) -> None:
-        try:
-            from croniter import croniter
-        except ImportError:
-            return
-
         if not croniter.is_valid(cron_expression):
             raise HTTPException(
                 status_code=400,
@@ -563,15 +556,10 @@ class ScheduleService:
                                   timezone: str) -> Optional[datetime]:
         """Calcola la prossima esecuzione dalla cron expression."""
         try:
-            from croniter import croniter
-            import pytz
             tz = pytz.timezone(timezone)
             now = datetime.now(tz)
             cron = croniter(cron_expression, now)
             return cron.get_next(datetime)
-        except ImportError:
-            logger.warning("croniter non installato — next_execution non calcolata")
-            return None
         except Exception as e:
             logger.error(f"[CRASH] Errore calcolo next_execution: {e}", exc_info=True)
             return None

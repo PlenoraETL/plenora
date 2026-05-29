@@ -14,6 +14,8 @@ import uuid
 from typing import Mapping, Optional, Sequence
 
 from app.utils.logger import get_logger
+from app.core.dataframes import frame_io as dataframe_frame_io
+from app.core.dataframes import tabular as dataframe_tabular
 from app.core.projects import access_context as project_access_context
 from app.core.files import db as files_db
 from app.core.files.service import file_source_service
@@ -137,11 +139,11 @@ def analyze_file_upload(
     Returns:
         dict con file_id, detected_columns, row_count, auto_mapping, preview_rows
     """
-    from app.core.dataframes.frame_io import _load_dataframe_from_bytes
-    from app.core.dataframes.tabular import dataframe_preview_records, non_null_head_values
-
     fmt = filename.rsplit(".", 1)[1].lower() if "." in filename else "bin"
-    df = _load_dataframe_from_bytes(file_content, format_hint=fmt)
+    df = dataframe_frame_io._load_dataframe_from_bytes(
+        file_content,
+        format_hint=fmt,
+    )
     if df is None or df.empty:
         raise ValueError("Il file caricato è vuoto o non è stato possibile leggerlo")
 
@@ -159,7 +161,10 @@ def analyze_file_upload(
             col_type = "bool"
         else:
             col_type = "str"
-        sample_values = [str(value) for value in non_null_head_values(df[col], 3)]
+        sample_values = [
+            str(value)
+            for value in dataframe_tabular.non_null_head_values(df[col], 3)
+        ]
         detected.append(
             DetectedUploadColumn(
                 name=str(col),
@@ -193,7 +198,7 @@ def analyze_file_upload(
                 break
 
     # Preview prime 10 righe (serializzabili
-    preview_rows = dataframe_preview_records(df, 10)
+    preview_rows = dataframe_tabular.dataframe_preview_records(df, 10)
 
     file_id = f"esec_upload_{uuid.uuid4().hex[:12]}"
 
@@ -289,10 +294,6 @@ def execute(
     Returns:
         dict con task_id, project_id (id dell'eseguibile), async flag
     """
-    from app.core.dataframes.frame_io import (
-        _load_dataframe_from_bytes,
-        load_dataframe_from_file,
-    )
     from app.core.orchestrator.task_service import task_service
 
     if not file_source_id and not file_path:
@@ -315,9 +316,9 @@ def execute(
         fmt = (
             filename.rsplit(".", 1)[1].lower() if "." in filename else "bin"
         )
-        df = _load_dataframe_from_bytes(blob, format_hint=fmt)
+        df = dataframe_frame_io._load_dataframe_from_bytes(blob, format_hint=fmt)
     else:
-        df = load_dataframe_from_file(file_path)
+        df = dataframe_frame_io.load_dataframe_from_file(file_path)
     if df is None or df.empty:
         raise ValueError("File sorgente vuoto o illeggibile")
 

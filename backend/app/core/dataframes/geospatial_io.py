@@ -11,8 +11,12 @@ from typing import Optional
 
 import pandas as pd
 
+from app.core.dataframes import (
+    geometry_serialization as geometry_serialization_module,
+)
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.geodata import detect_geometry_column, to_geodataframe
+from app.core.io import geospatial as geospatial_io_module
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -165,14 +169,12 @@ def geospatial_dataframe_to_bytes(
     if formato == "geojson":
         return gdf.to_json().encode("utf-8")
     if formato == "shp":
-        from app.core.io.geospatial import write_shapefile_zip_bytes
-        return write_shapefile_zip_bytes(gdf, name="layer")
+        return geospatial_io_module.write_shapefile_zip_bytes(gdf, name="layer")
     # GPKG/GeoPackage: write via pyogrio bytes (RAM-only).
     # NB: `layer=None` -> pyogrio usa "default" come layer name.
     # Passare "gpkg" come layer name e' vietato da OGR (prefisso
     # riservato GeoPackage).
-    from app.core.io.geospatial import write_vector_bytes
-    return write_vector_bytes(gdf, driver="GPKG")
+    return geospatial_io_module.write_vector_bytes(gdf, driver="GPKG")
 
 
 _GEOMETRY_LIKE_COLUMN_NAMES = {
@@ -204,10 +206,7 @@ def _converti_geometrie_secondarie_in_wkt(gdf):
                 # serie geometry-like che contiene mix Shapely +
                 # altro). Centralizza l'ultimo path WKT residuo
                 # rimasto fuori dalla single source of truth.
-                from app.core.dataframes.geometry_serialization import (
-                    geometry_series_to_wkt,
-                )
-                gdf[col] = geometry_series_to_wkt(
+                gdf[col] = geometry_serialization_module.geometry_series_to_wkt(
                     col_data, preserve_non_geometry=True
                 )
 
@@ -232,4 +231,3 @@ def _converti_geometrie_secondarie_in_wkt(gdf):
         )
 
     return gdf
-

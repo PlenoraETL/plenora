@@ -14,6 +14,9 @@ import zipfile
 from typing import BinaryIO, Optional
 from typing_extensions import TypedDict
 
+from app.core.dataframes import load_dispatch as load_dispatch_module
+from app.core.dataframes import preview_loader as preview_loader_module
+from app.core.io import geospatial as geospatial_io_module
 from app.utils.mime_validator import MimeMismatchError, validate_no_executable
 from app.core.io.zip_guards import (
     open_zip_bytes_safe,
@@ -84,12 +87,6 @@ def preview_file_temp(
     Raises:
         ValueError: formato non supportato o MIME mismatch (block-only).
     """
-    from app.core.dataframes.load_dispatch import (
-        list_excel_sheets_from_bytes,
-    )
-    from app.core.dataframes.preview_loader import preview_dataframe_from_bytes
-    from app.core.io.geospatial import list_vector_layers
-
     file_content.seek(0)
     raw_data = file_content.read()
     try:
@@ -146,7 +143,7 @@ def preview_file_temp(
 
     # Multi-layer/sheet senza selezione: restituisce lista disponibile.
     if format_type in ['gpkg', 'gdb'] and not layer:
-        available_layers = list_vector_layers(inner_bytes)
+        available_layers = geospatial_io_module.list_vector_layers(inner_bytes)
         if len(available_layers) > 1:
             return {
                 "columns": [],
@@ -160,7 +157,9 @@ def preview_file_temp(
             layer = available_layers[0]
 
     if format_type in ['xlsx', 'xls'] and not sheet:
-        available_sheets = list_excel_sheets_from_bytes(inner_bytes)
+        available_sheets = load_dispatch_module.list_excel_sheets_from_bytes(
+            inner_bytes
+        )
         if len(available_sheets) > 1:
             return {
                 "columns": [],
@@ -178,7 +177,7 @@ def preview_file_temp(
     # righe/feature invece del DataFrame intero. Per CSV/XLSX/JSON-lines
     # il row_count totale non e' disponibile cheap (None); per parquet
     # e geospatial viene da metadata.
-    df_preview, total_row_count = preview_dataframe_from_bytes(
+    df_preview, total_row_count = preview_loader_module.preview_dataframe_from_bytes(
         inner_bytes,
         format_type,
         layer=None if is_sheet else layer,

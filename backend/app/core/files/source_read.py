@@ -18,7 +18,9 @@ import gc
 from typing import Any, Callable, Optional, Tuple
 from typing_extensions import TypedDict
 
+from app.core.dataframes import load_dispatch as load_dispatch_module
 from app.core.dataframes.tabular import dataframe_preview_records
+from app.core.io import geospatial as geospatial_io_module
 from app.core.files.models import FileSourceLayersResponse, FileSourcePreview
 
 
@@ -63,8 +65,6 @@ def load_dataframe(
     Visibility remains fail-closed: callers inject the same
     `FileSourceService._assert_visible` callback.
     """
-    from app.core.dataframes.load_dispatch import load_by_format_bytes
-
     assert_visible(file_id, expected_group_id or "")
     file_source = get_file_source(file_id)
     if not file_source:
@@ -77,7 +77,7 @@ def load_dataframe(
     try:
         use_layer = layer or file_source.layer
         use_sheet = sheet or file_source.sheet
-        df, gdf = load_by_format_bytes(
+        df, gdf = load_dispatch_module.load_by_format_bytes(
             blob, file_source.format,
             layer=use_layer, sheet=use_sheet,
         )
@@ -103,9 +103,6 @@ def get_layers_info(
     logger: Any,
 ) -> FileSourceLayersPayload:
     """Return layer/sheet metadata for a persisted file source (RAM-only)."""
-    from app.core.dataframes.load_dispatch import list_excel_sheets_from_bytes
-    from app.core.io.geospatial import list_vector_layers
-
     assert_visible(file_id, expected_group_id or "")
     file_source = get_file_source(file_id)
     if not file_source:
@@ -118,9 +115,9 @@ def get_layers_info(
         if blob:
             try:
                 if file_source.format in ["gdb", "gpkg"]:
-                    layers = list_vector_layers(blob)
+                    layers = geospatial_io_module.list_vector_layers(blob)
                 elif file_source.format == "xlsx":
-                    sheets = list_excel_sheets_from_bytes(blob)
+                    sheets = load_dispatch_module.list_excel_sheets_from_bytes(blob)
             except Exception as e:
                 logger.debug(
                     f"get_layers_info inspect fallito per {file_id} "

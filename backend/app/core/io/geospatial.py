@@ -33,6 +33,8 @@ import zipfile
 from io import BytesIO
 from typing import Any, Optional
 
+from app.core.io import vsimem as vsimem_module
+
 
 def read_vector_bytes(
     data: bytes,
@@ -127,11 +129,8 @@ def write_shapefile_zip_bytes(
         `bytes` dello ZIP che contiene i 4-5 sidecar dello Shapefile.
     """
     import pyogrio
-    from app.core.io.vsimem import (
-        vsi_listdir, vsi_read_bytes, vsi_temp_dir,
-    )
 
-    with vsi_temp_dir(prefix="plenora_shp_") as vsi_root:
+    with vsimem_module.vsi_temp_dir(prefix="plenora_shp_") as vsi_root:
         shp_vsi_path = f"{vsi_root}/{name}.shp"
         pyogrio.write_dataframe(gdf, shp_vsi_path, driver="ESRI Shapefile")
 
@@ -139,12 +138,12 @@ def write_shapefile_zip_bytes(
         # `vsi_listdir` + `vsi_read_bytes` e zippiamoli in memoria.
         zip_buf = BytesIO()
         with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            for sidecar_name in sorted(vsi_listdir(vsi_root)):
+            for sidecar_name in sorted(vsimem_module.vsi_listdir(vsi_root)):
                 if not sidecar_name.startswith(f"{name}."):
                     # Defensive: ignora entry estranee (non dovrebbero esistere
                     # in una dir creata ad-hoc).
                     continue
-                data = vsi_read_bytes(f"{vsi_root}/{sidecar_name}")
+                data = vsimem_module.vsi_read_bytes(f"{vsi_root}/{sidecar_name}")
                 zf.writestr(sidecar_name, data)
         return zip_buf.getvalue()
 

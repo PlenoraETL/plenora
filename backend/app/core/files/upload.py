@@ -15,6 +15,8 @@ from __future__ import annotations
 import zipfile
 from typing import Any, BinaryIO, Callable, List, Optional
 
+from app.core.dataframes import load_dispatch as load_dispatch_module
+from app.core.io import geospatial as geospatial_io_module
 from app.core.resources.blob_dispatch import BlobDispatchResult
 from app.utils.mime_validator import MimeMismatchError
 from app.core.io.zip_guards import (
@@ -145,19 +147,15 @@ def create_from_upload(
     # Layer/sheet auto-pick (RAM-only) -- listing da bytes, niente piu'
     # chiamata a list_layers(tmp_path) / list_sheets(tmp_path).
     if format_type in ('gdb', 'gpkg') and not layer:
-        from app.core.io.geospatial import list_vector_layers
         try:
-            layers = list_vector_layers(inner_bytes)
+            layers = geospatial_io_module.list_vector_layers(inner_bytes)
             if len(layers) == 1:
                 layer = layers[0]
         except Exception as e:
             logger.debug(f"list_vector_layers fallito: {e}")
     elif format_type == 'xlsx' and not sheet:
-        from app.core.dataframes.load_dispatch import (
-            list_excel_sheets_from_bytes,
-        )
         try:
-            sheets = list_excel_sheets_from_bytes(inner_bytes)
+            sheets = load_dispatch_module.list_excel_sheets_from_bytes(inner_bytes)
             if len(sheets) == 1:
                 sheet = sheets[0]
         except Exception as e:
@@ -168,8 +166,7 @@ def create_from_upload(
     row_count = 0
     crs: Optional[str] = None
     try:
-        from app.core.dataframes.load_dispatch import load_by_format_bytes
-        df, gdf = load_by_format_bytes(
+        df, gdf = load_dispatch_module.load_by_format_bytes(
             inner_bytes, format_type, layer=layer, sheet=sheet,
         )
         if selected_columns:

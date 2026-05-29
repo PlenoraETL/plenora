@@ -26,7 +26,7 @@ _SCAN_ROOTS = (
 
 # Baseline corrente: ogni nuovo import locale aumenta accoppiamento nascosto.
 # La soglia puo' solo scendere; se sale, il reviewer deve giustificare il caso.
-MAX_LOCAL_IMPORTS = 297
+MAX_LOCAL_IMPORTS = 267
 MAX_LATE_MODULE_IMPORTS = 8
 
 

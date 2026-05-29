@@ -45,6 +45,10 @@ import io
 import uuid
 from typing import Optional
 
+from app.core.dataframes import export_writer as export_writer_module
+from app.core.dataframes import frame_io as frame_io_module
+from app.core.dataframes import geospatial_io as geospatial_io_module
+from app.core.io import object_storage as object_storage_module
 from app.core.results import store
 from app.core.results.blob_writer import (
     ResultSaveError,
@@ -161,8 +165,7 @@ class StreamingResultBlobWriter:
     # ── S3 multipart mode ─────────────────────────────────────────────
 
     def _init_s3(self) -> None:
-        from app.core.io.object_storage import get_runtime_object_storage
-        self._storage = get_runtime_object_storage()
+        self._storage = object_storage_module.get_runtime_object_storage()
         # Accesso al boto3 client + bucket via internal helpers del
         # backend S3. Usiamo `_client()` + `_extra_args()` + `bucket`
         # (parte dell'ABI interna del backend, stabile).
@@ -541,8 +544,6 @@ def save_dataframe_to_result_blob_streaming(
     Returns:
         result_id del blob persistito.
     """
-    from app.core.dataframes.export_writer import dataframe_to_export_chunks
-
     fmt_lower = (output_format or "").lower()
 
     # Formati che vanno via streaming nativo (CSV/JSON tabular + Parquet
@@ -564,34 +565,46 @@ def save_dataframe_to_result_blob_streaming(
     try:
         if fmt_lower in _STREAMING_FORMATS:
             # Vero streaming: chunks via queue+thread bridge.
-            for chunk in dataframe_to_export_chunks(df, fmt_lower):
+            for chunk in export_writer_module.dataframe_to_export_chunks(
+                df,
+                fmt_lower,
+            ):
                 writer.write(chunk)
         elif fmt_lower == "geojson":
             # GeoJSON: usa export_writer (json) se non-geo, altrimenti
             # geospatial path.
             try:
-                from app.core.dataframes.geospatial_io import (
-                    geospatial_dataframe_to_bytes,
-                )
                 # geojson da GeoDataFrame: usa il geospatial writer (singolo
                 # chunk; il GeoJSON e' un singolo doc JSON che non si
                 # divide row-by-row senza rompere il formato).
-                data = geospatial_dataframe_to_bytes(df, fmt_lower, geom_column, crs)
+                data = geospatial_io_module.geospatial_dataframe_to_bytes(
+                    df,
+                    fmt_lower,
+                    geom_column,
+                    crs,
+                )
                 writer.write(data)
             except Exception:
                 # Fallback su to_json records se geospatial_io fallisce
                 # (es. df non-geo).
-                for chunk in dataframe_to_export_chunks(df, "json"):
+                for chunk in export_writer_module.dataframe_to_export_chunks(
+                    df,
+                    "json",
+                ):
                     writer.write(chunk)
         elif fmt_lower in _PATH_BOUND_FORMATS:
             # Single-chunk: i writer binari richiedono buffer pieno
             # (footer-based: parquet/xlsx) o sono multi-file zippati (shp/gpkg/gdb).
-            from app.core.dataframes.frame_io import save_dataframe_to_bytes
-            data = save_dataframe_to_bytes(df, fmt_lower, geom_column=geom_column, crs=crs)
+            data = frame_io_module.save_dataframe_to_bytes(
+                df,
+                fmt_lower,
+                geom_column=geom_column,
+                crs=crs,
+            )
             writer.write(data)
         else:
             # Formato sconosciuto: prova CSV streaming come default.
-            for chunk in dataframe_to_export_chunks(df, "csv"):
+            for chunk in export_writer_module.dataframe_to_export_chunks(df, "csv"):
                 writer.write(chunk)
 
         result_id = writer.finalize()
