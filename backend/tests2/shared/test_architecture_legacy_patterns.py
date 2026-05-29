@@ -80,18 +80,10 @@ def test_value_error_str_e_lock_exists_in_catalog_test():
 ALLOWLIST_SHARED_TO_CORE_IMPORTS: Set[str] = set()
 
 
-ALLOWLIST_DB_TO_CORE_IMPORTS: Set[str] = {
-    # Compatibility shim: app.db.query_result_persistence keeps the legacy
-    # patch target `save_pipeline_result_outcome` importable for tests and
-    # old callers while the canonical implementation lives in
-    # app.core.query_execution.
-    "app/db/query_result_persistence.py",
-    # Compatibility shims for the relocated query-execution package.
-    "app/db/query_engines.py",
-    "app/db/query_executor.py",
-    "app/db/query_session.py",
-    "app/db/query_streaming.py",
-}
+# Migrazione completata: i vecchi shim `app/db/query_*` (relocati in
+# app.core.query_execution) sono stati rimossi — nessun caller residuo. `app.db`
+# e' ora fondazione pura: nessun import verso `app.core`.
+ALLOWLIST_DB_TO_CORE_IMPORTS: Set[str] = set()
 
 
 def _files_importing_prefix(root: Path, prefix: str) -> Set[str]:
