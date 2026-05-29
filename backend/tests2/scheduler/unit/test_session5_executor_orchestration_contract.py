@@ -91,27 +91,8 @@ def test_arricchisci_schema_inference_warning_has_exc_info():
     )
 
 
-# Path 4: arricchisci _nd extracted out of loop
-
-def test_arricchisci_nd_helper_defined_outside_loop():
-    """`_nd` helper in `preview()` deve essere definito FUORI dal for
-    loop (era ridefinito N volte ad ogni iterazione)."""
-    from app.core.arricchisci import executor
-
-    # _nd e' nel metodo `preview` non `execute`
-    src = inspect.getsource(executor.EnrichExecutor.preview)
-
-    # Trova il def _nd
-    def_idx = src.find("def _nd(")
-    assert def_idx >= 0, "_nd helper non trovato in preview()"
-    # Trova il for loop
-    for_idx = src.find("for node_id in execution_order")
-    assert for_idx >= 0, "for loop execution_order non trovato"
-    # def _nd DEVE essere PRIMA del for loop
-    assert def_idx < for_idx, (
-        "`_nd` deve essere definito PRIMA del for loop "
-        "(pre-fix: ridefinito ad ogni iterazione)"
-    )
+# Path 4 rimosso (B step C2): `preview()` non ha piu' un loop per-nodo
+# inline (ne' l'helper `_nd`) — delega al loop canonico `run_enrichment_canvas`.
 
 
 # Path 5: celery_app autoretry_for senza OSError
