@@ -11,7 +11,6 @@ import time
 import traceback as _tb
 import uuid as _uuid
 from collections.abc import MutableMapping
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, List
@@ -43,9 +42,14 @@ from app.core.results import pipeline_result as pipeline_result_module
 from app.core.results import store as result_store
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution import carica_dispatcher
+from app.shared.execution.canvas_graph import CanvasGraph
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
 from app.utils import debug_payload_builder as debug_payload_builder_module
-from app.core.arricchisci.enrichment_service import EnrichmentExecutor, generate_error_report
+from app.core.arricchisci.enrichment_service import (
+    EnrichmentExecutor,
+    build_enrichment_executor,
+    generate_error_report,
+)
 from app.core.arricchisci.models import EnrichmentOptions
 
 logger = get_logger(__name__)
@@ -691,75 +695,186 @@ def execute_enrichment_task(
                 except Exception as _sne:
                     logger.warning(f"[Task {task_id}] Intermediate write nodo {node_id} fallita: {_sne}")
 
-        for step_type, node_ids in parallel_groups:
-            # Progress base del gruppo = progress del primo nodo nel execution_order
-            idx_first = execution_order.index(node_ids[0])
-            base_progress = 10 + int((idx_first / len(execution_order)) * 80)
+        # ── Esecuzione canvas via runner condiviso (B step 3) ──
+        # Il task NON reimplementa piu' il loop: delega a
+        # `run_enrichment_canvas`, fornendo l'enricher avanzato (`enrich_fn`)
+        # e gli hook progress/snapshot. Il parallelo e' gestito dal runner
+        # (`execute_parallel_enrichers`), non piu' da un ThreadPool locale.
+        graph = CanvasGraph.from_canvas(canvas)
 
-            if len(node_ids) == 1:
-                # Single: niente overhead threading, lettura normale via input_edge
-                _run_single_node(node_ids[0], base_progress)
-                continue
+        _PROGRESS_MSG = {
+            "project_source": "Caricamento sorgente dati...",
+            "file_source": "Caricamento file...",
+            "staticValues": "Processamento valori statici...",
+        }
 
-            # Parallel: N nodi api_enrich indipendenti
-            # Modello "fan-out artificiale": anche se topologicamente nel
-            # canvas i nodi possono essere concatenati, logicamente consumano
-            # colonne gia' prodotte a monte e aggiungono colonne disgiunte.
-            # Per eseguirli in parallelo devono tutti vedere lo stesso
-            # input_df: quello del predecessore del PRIMO nodo del batch
-            first_node_id = node_ids[0]
-            first_input_edge = next(
-                (e for e in edges if e["target"] == first_node_id), None
-            )
-            common_input_df = None
-            if first_input_edge:
-                common_input_df = node_results.get(first_input_edge["source"])
-            if common_input_df is None:
-                # Fallback difensivo: se per qualche motivo non troviamo
-                # l'input comune, ripiega su esecuzione sequenziale (il
-                # vecchio comportamento, che usa input_edge per-nodo
-                logger.warning(
-                    f"[Task {task_id}] Batch parallelo senza input comune, "
-                    f"fallback a esecuzione sequenziale per {len(node_ids)} nodi"
-                )
-                for nid in node_ids:
-                    _run_single_node(nid, base_progress)
-                continue
+        def _node_base_progress(node_id_: str) -> int:
+            try:
+                idx = execution_order.index(node_id_)
+            except ValueError:
+                idx = 0
+            return 10 + int((idx / max(len(execution_order), 1)) * 80)
 
-            max_workers = min(len(node_ids), 10)
-            logger.info(
-                f"[Task {task_id}] Esecuzione parallela: {len(node_ids)} nodi "
-                f"(workers={max_workers}, input_rows={len(common_input_df)})"
-            )
+        def _before_node(node_id_: str, node_type_: str) -> None:
             update_task_progress(
-                self, base_progress,
-                f"Esecuzione parallela di {len(node_ids)} nodi...",
+                self,
+                _node_base_progress(node_id_),
+                _PROGRESS_MSG.get(node_type_, f"Esecuzione {node_type_}..."),
                 task_id=task_id,
             )
-            with ThreadPoolExecutor(max_workers=max_workers) as pool:
-                futures = {
-                    pool.submit(
-                        _run_single_node, nid, base_progress, common_input_df
-                    ): nid
-                    for nid in node_ids
-                }
-                for future in as_completed(futures):
-                    # future.result risolleva eventuali _EarlyTaskReturn o
-                    # altre eccezioni → propagate al global handler del task
-                    future.result()
 
-            # Merge helper module-level con guard fail-hard
-            # su cardinality mismatch (RB.#14). Side-effect: sovrascrive
-            # node_results[nid] di ogni nodo del il merged DataFrame
-            # cosi' i nodi a valle nel DAG leggono tutte le colonne. Solleva
-            # RuntimeError se un nodo ritorna len diverso da common_input_df
-            # bubble-up al global handler -> close_run(success=False
-            _merge_batch_parallel_node_results(
-                common_input_df=common_input_df,
-                node_results=node_results,
-                node_ids=node_ids,
-                task_id=task_id,
+        def _after_node(node_id_: str, node_type_: str, result_: object) -> None:
+            if not _run_id or node_type_ != "api_enrich":
+                return
+            try:
+                _df = result_ if is_nonempty_dataframe(result_) else None
+                if _df is not None:
+                    intermediate_snapshot.record_checkpoint_snapshot(
+                        run_id=_run_id,
+                        module="arricchisci",
+                        node_id=node_id_,
+                        node_type="api_enrich",
+                        df=_df,
+                        exec_time=0.0,
+                        status="ok",
+                        mode_override=intermediate_mode_override,
+                    )
+            except Exception as _sne:
+                logger.warning(
+                    f"[Task {task_id}] Intermediate write nodo {node_id_} fallita: {_sne}"
+                )
+
+        def _task_enrich_fn(node_data, api_conns, input_df):
+            nonlocal enrichment_stats, error_report_file, error_report_result_id
+            api_id = node_data.get("api_id") or (node_data.get("data") or {}).get("api_id")
+            api_config = api_conns.get(api_id)
+            if not api_config:
+                logger.error(
+                    f"[GESTITO] [Task {task_id}] API '{api_id}' non trovata nel "
+                    f"canvas del progetto {project_id}"
+                )
+                raise canvas_orchestrator_module.CanvasRunError({
+                    "success": False,
+                    "task_id": task_id,
+                    "project_id": project_id,
+                    "error": (
+                        f"Connessione API '{api_id}' non trovata. Verifica che la "
+                        "connessione esista e non sia stata eliminata."
+                    ),
+                    "enrichment_stats": enrichment_stats,
+                    "error_report": error_report_file,
+                    "error_report_result_id": error_report_result_id,
+                })
+            api_name = api_config.get("name", api_id)
+            if api_config.get("api_type", "enricher") == "generator" or input_df is None:
+                return api_connection_service._execute_api_generator(api_config, input_df)
+
+            merged = {
+                **{
+                    k: v for k, v in node_data.items()
+                    if k not in ("id", "type", "position", "data", "config")
+                },
+                **(node_data.get("data") or {}),
+            }
+
+            def _progress(_percent, message):
+                update_task_progress(self, 50, message, task_id=task_id)
+
+            executor = build_enrichment_executor(
+                merged, api_config, progress_callback=_progress
             )
+            result, enrichment_result = executor.execute(input_df)
+            enrichment_stats = enrichment_result.stats.to_dict()
+
+            if not executor.options.continue_on_error and enrichment_result.stats.errors > 0:
+                raise canvas_orchestrator_module.CanvasRunError({
+                    "success": False,
+                    "task_id": task_id,
+                    "project_id": project_id,
+                    "error": (
+                        f"{enrichment_result.stats.errors} righe fallite. "
+                        "Imposta continue_on_error=True per ignorare gli errori."
+                    ),
+                    "enrichment_stats": enrichment_stats,
+                    "error_report": error_report_file,
+                    "error_report_result_id": error_report_result_id,
+                })
+            threshold = executor.options.stop_on_error_threshold
+            if threshold > 0 and enrichment_result.stats.errors >= threshold:
+                raise canvas_orchestrator_module.CanvasRunError({
+                    "success": False,
+                    "task_id": task_id,
+                    "project_id": project_id,
+                    "error": (
+                        f"Superato il limite massimo di errori ({threshold}). "
+                        f"{enrichment_result.stats.errors} righe fallite su "
+                        f"{enrichment_result.stats.total_rows}."
+                    ),
+                    "enrichment_stats": enrichment_stats,
+                    "error_report": error_report_file,
+                    "error_report_result_id": error_report_result_id,
+                })
+
+            if not executor.api_config.get("output_mapping") and executor.detected_column_types:
+                detected = executor.detected_column_types
+                new_schema = [
+                    {"path": col, "name": col, "type": typ}
+                    for col, typ in detected.items()
+                ]
+                for col in (result.columns if hasattr(result, "columns") else []):
+                    if col not in detected:
+                        new_schema.append({"path": col, "name": col, "type": "str"})
+                try:
+                    api_connection_service.update_api_connection(
+                        api_id, {"schema_fields": new_schema}
+                    )
+                    logger.info(
+                        f"[Task {task_id}] Schema auto-rilevato: {list(detected.keys())}"
+                    )
+                except Exception as _e:
+                    logger.warning(f"[Task {task_id}] Aggiornamento schema fallito: {_e}")
+
+            if executor.options.generate_error_report and enrichment_result.errors:
+                error_report_bytes = generate_error_report(
+                    enrichment_result.errors,
+                    auth=executor.api_config.get("auth"),
+                )
+                if error_report_bytes:
+                    error_report_file = f"enrichment_errors_{task_id}.csv"
+                    error_report_result_id = result_blob_writer.save_result_blob_from_bytes(
+                        project_id=project_id,
+                        data=error_report_bytes,
+                        filename=error_report_file,
+                        fmt="csv",
+                        rows_count=len(enrichment_result.errors),
+                        group_id=_group_id or None,
+                    )
+            logger.info(
+                f"[Task {task_id}] {api_name}: "
+                f"{enrichment_result.stats.success}/{enrichment_result.stats.total_rows} OK, "
+                f"{enrichment_result.stats.cached} cache, "
+                f"{enrichment_result.stats.errors} errori"
+            )
+            return result
+
+        try:
+            node_results = canvas_orchestrator_module.run_enrichment_canvas(
+                api_connection_service,
+                project_id,
+                graph=graph,
+                ctx=ctx,
+                api_connections=api_connections,
+                execution_order=execution_order,
+                groups=parallel_groups,
+                force_recalculate=force_recalculate,
+                enrich_fn=_task_enrich_fn,
+                hooks=canvas_orchestrator_module.CanvasRunHooks(
+                    before_node=_before_node,
+                    after_node=_after_node,
+                ),
+            )
+        except canvas_orchestrator_module.CanvasRunError as _cre:
+            raise _EarlyTaskReturn(_cre.payload)
 
         update_task_progress(self, 90, "Salvataggio risultati...", task_id=task_id)
         

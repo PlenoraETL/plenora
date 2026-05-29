@@ -220,8 +220,6 @@ def run_enrichment_canvas(
     execution_order: List[str],
     groups,
     force_recalculate: bool = False,
-    run_id: Optional[str] = None,
-    intermediate_mode_override: Optional[str] = None,
     enrich_fn: Optional[Callable[[JsonObject, JsonObjectById, Any], Any]] = None,
     hooks: Optional[CanvasRunHooks] = None,
 ) -> JsonObject:
@@ -232,7 +230,9 @@ def run_enrichment_canvas(
     - `enrich_fn(node_data, api_conns, in_df) -> df` esegue un singolo nodo
       api_enrich. Default `run_single_enricher` (motore avanzato); il task ne
       passa una versione con stats/soglie/error-report.
-    - `hooks` aggiunge progress e snapshot per-nodo (default no-op).
+    - `hooks` aggiunge progress e snapshot per-nodo (default no-op). Lo snapshot
+      intermedio e' interamente delegato a `hooks.after_node` (il canonico passa
+      `_write_intermediate_snapshot`, il task `record_checkpoint_snapshot`).
     - Errori bloccanti → `CanvasRunError(payload)`; il finalize resta nei caller.
     """
     hooks = hooks or CanvasRunHooks()
@@ -414,15 +414,9 @@ def run_enrichment_canvas(
                         "error_node_type": "api_enrich",
                     })
 
-            for nid in step_node_ids:
-                if hooks.after_node is not None:
+            if hooks.after_node is not None:
+                for nid in step_node_ids:
                     hooks.after_node(nid, "api_enrich", node_results.get(nid))
-                if run_id:
-                    svc._write_intermediate_snapshot(
-                        run_id, nid, "api_enrich",
-                        node_results.get(nid),
-                        mode_override=intermediate_mode_override,
-                    )
 
     return node_results
 
@@ -498,6 +492,14 @@ def execute_canvas_enrichment(
         )
         logger.info(f"Gruppi di esecuzione: {[(t, len(ids)) for t, ids in groups]}")
 
+        def _canonical_after_node(node_id_, node_type_, result_):
+            # Snapshot intermedio per gli api_enrich (era inline nel loop).
+            if run_id and node_type_ == "api_enrich":
+                svc._write_intermediate_snapshot(
+                    run_id, node_id_, "api_enrich", result_,
+                    mode_override=intermediate_mode_override,
+                )
+
         node_results = run_enrichment_canvas(
             svc,
             project_id,
@@ -507,8 +509,7 @@ def execute_canvas_enrichment(
             execution_order=execution_order,
             groups=groups,
             force_recalculate=force_recalculate,
-            run_id=run_id,
-            intermediate_mode_override=intermediate_mode_override,
+            hooks=CanvasRunHooks(after_node=_canonical_after_node),
         )
 
         _result_cn = graph.result_node()
