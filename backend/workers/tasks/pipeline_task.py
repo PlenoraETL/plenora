@@ -14,6 +14,12 @@ from app.shared.contracts.payloads import JsonObject
 from workers.celery_app import celery_app, BaseTaskWithRetry
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, get_steps
 from app.config import settings
+from app.core.auth import async_user_recheck as async_user_recheck_module
+from app.core.intermediate import run_idempotency as run_idempotency_module
+from app.core.intermediate import run_lifecycle as run_lifecycle_module
+from app.core.projects import retention as project_retention
+from app.core.projects import runtime_context as project_runtime_context
+from app.utils import debug_payload_builder as debug_payload_builder_module
 
 logger = get_logger("workers.pipeline_task")
 
@@ -57,9 +63,7 @@ def _build_orchestrator() -> Any:
 def _get_project_info(project_id: str) -> JsonObject:
     """Legge metadata progetto tramite il boundary runtime del dominio projects."""
     try:
-        from app.core.projects.runtime_context import get_project_runtime_context
-
-        context = get_project_runtime_context(project_id)
+        context = project_runtime_context.get_project_runtime_context(project_id)
         if context is None:
             return {}
         return {
@@ -74,12 +78,9 @@ def _get_project_info(project_id: str) -> JsonObject:
 
 def _resolve_intermediate_retention_n(project_id: str) -> int | None:
     try:
-        from app.core.intermediate.run_lifecycle import get_default_runs_retention
-        from app.core.projects.retention import resolve_runs_retention_n
-
-        return resolve_runs_retention_n(
+        return project_retention.resolve_runs_retention_n(
             project_id,
-            default=get_default_runs_retention(),
+            default=run_lifecycle_module.get_default_runs_retention(),
         )
     except Exception as e:
         logger.debug(f"retention policy lookup fallito: {type(e).__name__}: {e}")
@@ -168,9 +169,7 @@ def execute_pipeline_task(
     task_id = self.request.id
 
     if run_id is not None:
-        from app.core.intermediate.run_idempotency import is_already_completed
-
-        if is_already_completed(run_id):
+        if run_idempotency_module.is_already_completed(run_id):
             logger.info(
                 f"[IDEMPOTENCY] Task PIPELINE {task_id}: run_id {run_id} "
                 f"gia' completato con successo, skip."
@@ -187,9 +186,7 @@ def execute_pipeline_task(
         run_id = str(_uuid.uuid4())
     _run_start = _time.time()
 
-    from app.core.auth.async_user_recheck import recheck_user_authorized
-
-    _revoked = recheck_user_authorized(
+    _revoked = async_user_recheck_module.recheck_user_authorized(
         user_id=user_id, project_id=project_id,
         task_id=task_id, run_id=run_id, task_name="PIPELINE",
     )
@@ -229,9 +226,7 @@ def execute_pipeline_task(
 
     # Apri run su intermediate storage tramite boundary di lifecycle.
     try:
-        from app.core.intermediate.run_lifecycle import create_run
-
-        create_run(
+        run_lifecycle_module.create_run(
             run_id=run_id,
             canvas_id=project_id,
             group_id=group_id,
@@ -320,9 +315,7 @@ def execute_pipeline_task(
             error_node_label = result.get("error_node_label")
 
             try:
-                from app.utils.debug_payload_builder import DebugPayloadBuilder
-
-                debug_payload = DebugPayloadBuilder().build(
+                debug_payload = debug_payload_builder_module.DebugPayloadBuilder().build(
                     run_id=run_id,
                     project_id=project_id,
                     steps=get_steps(),
@@ -372,9 +365,7 @@ def execute_pipeline_task(
 
         # Chiudi run intermediate storage tramite boundary di lifecycle.
         try:
-            from app.core.intermediate.run_lifecycle import close_run as close_intermediate_run
-
-            close_intermediate_run(
+            run_lifecycle_module.close_run(
                 run_id=run_id, input_hash="", output_hash="",
                 total_exec_time=_time.time() - _run_start, success=True,
                 retention_n=retention_n,
@@ -403,9 +394,7 @@ def execute_pipeline_task(
 
         # Costruisce debug_payload con traceback completo
         try:
-            from app.utils.debug_payload_builder import DebugPayloadBuilder
-
-            debug_payload = DebugPayloadBuilder().build(
+            debug_payload = debug_payload_builder_module.DebugPayloadBuilder().build(
                 run_id=run_id,
                 project_id=project_id,
                 steps=get_steps(),
@@ -436,9 +425,7 @@ def execute_pipeline_task(
 
         # Chiudi run intermediate storage tramite boundary di lifecycle.
         try:
-            from app.core.intermediate.run_lifecycle import close_run as close_intermediate_run
-
-            close_intermediate_run(
+            run_lifecycle_module.close_run(
                 run_id=run_id, input_hash="", output_hash="",
                 total_exec_time=_time.time() - _run_start, success=False,
                 retention_n=retention_n,
@@ -450,9 +437,7 @@ def execute_pipeline_task(
         # ogni task lascia aperto un handle che si accumula nel pool
         # Pattern ereditato dalla migrazione SQLite -> PG.
         try:
-            from app.core.intermediate.run_lifecycle import close_worker_connection
-
-            close_worker_connection()
+            run_lifecycle_module.close_worker_connection()
         except Exception as e:
             logger.debug(f"close_connection intermediate fallito post-crash: {type(e).__name__}: {e}")
 
@@ -479,9 +464,8 @@ def preview_pipeline_task(
     _update_progress(self, 0, "Inizializzazione preview...")
 
     # N9: re-check permessi al pickup (helper condiviso
-    from app.core.auth.async_user_recheck import recheck_user_authorized
 
-    _revoked = recheck_user_authorized(
+    _revoked = async_user_recheck_module.recheck_user_authorized(
         user_id=user_id, project_id=project_id,
         task_id=task_id, task_name="PREVIEW",
     )

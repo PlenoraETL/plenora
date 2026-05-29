@@ -8,10 +8,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Protocol
 
+from app import config as app_config
 from app.core.projects.canvas_models import CanvasState
+from app.core.resources import memory_guard
 from app.shared import error_codes
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution.executor_protocol import CanvasExecutorProtocol, ExecutionResult
+from app.shared.execution import output_contract_types_enricher
 from app.utils.logger import get_logger
 
 from app.core.artifacts import PipelineArtifact
@@ -118,10 +121,13 @@ class OrchestratorService:
         # early con 503 invece di avviare una pipeline pesante che farebbe
         # OOM kernel SIGKILL. Guard disabilitabile via cap <= 0.
         try:
-            from app.core.resources.memory_guard import check_worker_rss
-            from app.config import settings as _settings
-            _rss_cap = int(_settings.get("WORKER_RSS_MAX_BYTES", 1_500_000_000))
-            check_worker_rss(cap_bytes=_rss_cap, stage="pipeline_execute")
+            _rss_cap = int(
+                app_config.settings.get("WORKER_RSS_MAX_BYTES", 1_500_000_000)
+            )
+            memory_guard.check_worker_rss(
+                cap_bytes=_rss_cap,
+                stage="pipeline_execute",
+            )
         except ImportError:
             pass  # memory_guard non disponibile, skip
 
@@ -306,10 +312,7 @@ class OrchestratorService:
                 # Arricchisci canvas_types dal contratto pubblico del progetto
                 # per evitare che CARICA perda il tipo semantico quando MANIPOLA
                 # promuove silenziosamente int->float per NaN.
-                from app.shared.execution.output_contract_types_enricher import (
-                    enrich_canvas_types_from_output_contract,
-                )
-                enrich_canvas_types_from_output_contract(
+                output_contract_types_enricher.enrich_canvas_types_from_output_contract(
                     carica_node_data,
                     project_id,
                     self.project_service.get_project_output_contract,

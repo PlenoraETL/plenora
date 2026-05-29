@@ -16,6 +16,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app import config as app_config
+from app.observability.health import gather_liveness, gather_readiness
 from app.shared import error_codes
 from app.shared.error_envelope import (
     build_error_envelope_body,
@@ -49,9 +51,7 @@ def _default_deps() -> AppFactoryDeps:
 
 
 def _default_settings() -> Any:
-    from app.config import settings
-
-    return settings
+    return app_config.settings
 
 
 def _compute_doc_endpoints(env_value: str | None) -> tuple[str | None, str | None, str | None]:
@@ -317,8 +317,6 @@ def create_app(
     def root():
         """Banner root (non e' health check vero - vedi /health)."""
         return {"status": "ok", "service": "PLENORA-ETL API"}
-
-    from app.observability.health import gather_liveness, gather_readiness
 
     @app.get("/health")
     def health():

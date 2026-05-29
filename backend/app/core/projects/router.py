@@ -12,7 +12,7 @@ from app.utils.logger import get_logger
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 from app.observability.audit_action import audit_action
-from app.core.projects.canvas_models import CanvasState, Node, Edge
+from app.core.projects.canvas_models import CanvasState, Node, Edge, Column
 from app.core.projects.exceptions import (
     CanvasCorruptedError,
     ProjectCleanupPartialError,
@@ -31,12 +31,18 @@ from app.core.projects.usage import (
     list_owned_project_ids,
     list_projects_with_canvas_for_datasource_check,
 )
+from app.core.auth import visibility as auth_visibility
+from app.core import output_contract as output_contract_module
 from app.core.projects import canvas_access as _canvas_access
+from app.core.projects import schema_inference as schema_inference_module
+from app.core.projects import source_freshness as source_freshness_module
+from app.core.results import orphan_cleanup as orphan_cleanup_module
 from app.core.projects.types import (
     CanvasResourceRefs,
     JsonObject,
     StringMap,
 )
+from app.shared.execution import canvas_columns as canvas_columns_module
 from .models import ProjectCreate
 
 class ProjectCreateWithCanvas(ProjectCreate):
@@ -57,9 +63,8 @@ def init_projects(project_service: Any) -> None:
     """Inizializza il modulo. Chiamare da main.py dopo setup."""
     global _project_service, _schema_service, _validator
     _project_service = project_service
-    from app.core.projects.schema_inference import SchemaInferenceService, ConnectionValidator
-    _schema_service = SchemaInferenceService(project_service)
-    _validator = ConnectionValidator(_schema_service)
+    _schema_service = schema_inference_module.SchemaInferenceService(project_service)
+    _validator = schema_inference_module.ConnectionValidator(_schema_service)
 
 
 @router.post("", status_code=201)
@@ -278,13 +283,11 @@ def _annotate_inaccessible_canvas_refs(
     owner_group_id: Optional[str],
     is_superadmin: bool,
 ) -> None:
-    from app.core.auth.visibility import visible_resource_ids
-
     return _canvas_access.annotate_inaccessible_canvas_refs(
         canvas_dict,
         owner_group_id=owner_group_id,
         is_superadmin=is_superadmin,
-        visible_resource_ids_fn=visible_resource_ids,
+        visible_resource_ids_fn=auth_visibility.visible_resource_ids,
         visible_project_ids_fn=_visible_project_ids_strict,
     )
 
@@ -315,8 +318,7 @@ def get_project(
 
     if canvas is not None:
         try:
-            from app.core.output_contract import sync_canvas_with_output_contracts
-            sync_canvas_with_output_contracts(
+            output_contract_module.sync_canvas_with_output_contracts(
                 canvas=canvas,
                 project_id=project_id,
                 project_service=_project_service,
@@ -327,10 +329,7 @@ def get_project(
                 exc_info=True,
             )
         try:
-            from app.core.projects.source_freshness import (
-                annotate_canvas_project_source_freshness,
-            )
-            annotate_canvas_project_source_freshness(
+            source_freshness_module.annotate_canvas_project_source_freshness(
                 canvas,
                 expected_group_id=_metadata_group_id(metadata),
             )
@@ -474,8 +473,6 @@ def _assert_canvas_refs_visible_for_owner(
     default_connection_id: str | None = None,
 ) -> None:
     """Fail closed when a project canvas references resources from another group."""
-    from app.core.auth.visibility import visible_resource_ids
-
     refs = _collect_canvas_resource_refs(canvas)
     if default_connection_id:
         refs.setdefault("connections", set()).add(default_connection_id)
@@ -486,7 +483,7 @@ def _assert_canvas_refs_visible_for_owner(
         refs,
         owner_group_id=owner_group_id,
         is_superadmin=is_superadmin,
-        visible_resource_ids_fn=visible_resource_ids,
+        visible_resource_ids_fn=auth_visibility.visible_resource_ids,
         visible_project_ids_fn=_visible_project_ids_strict,
     )
     parts = _canvas_access.format_inaccessible_canvas_refs(invalid_refs)
@@ -526,8 +523,7 @@ def update_project_canvas(
     canvas = CanvasState(nodes=body.nodes, edges=body.edges)
 
     try:
-        from app.core.output_contract import sync_canvas_with_output_contracts
-        sync_canvas_with_output_contracts(
+        output_contract_module.sync_canvas_with_output_contracts(
             canvas=canvas,
             project_id=project_id,
             project_service=_project_service,
@@ -564,23 +560,18 @@ def update_project_canvas(
     # editor state. Updating it from canvas inference can make downstream
     # projects consume a schema that does not match the latest saved result.
     try:
-        from app.shared.execution.canvas_columns import (
-            compute_result_columns,
-            find_result_node,
-        )
-        result_node = find_result_node(canvas)
+        result_node = canvas_columns_module.find_result_node(canvas)
         if result_node is not None:
-            from app.core.projects.schema_inference import SchemaInferenceService
-
-            computed = compute_result_columns(
+            computed = canvas_columns_module.compute_result_columns(
                 canvas=canvas,
                 result_id=result_node.id,
                 project_id=project_id,
                 project_service=_project_service,
-                schema_inference_service_factory=SchemaInferenceService,
+                schema_inference_service_factory=(
+                    schema_inference_module.SchemaInferenceService
+                ),
             )
             if computed:
-                from app.core.projects.canvas_models import Column
                 result_node.columns = [Column(**c) for c in computed]
     except Exception as _ccerr:
         # Column recompute is diagnostic; malformed canvases continue through
@@ -591,10 +582,7 @@ def update_project_canvas(
         )
 
     try:
-        from app.core.projects.source_freshness import (
-            clear_canvas_project_source_freshness,
-        )
-        clear_canvas_project_source_freshness(canvas)
+        source_freshness_module.clear_canvas_project_source_freshness(canvas)
     except Exception as exc:
         logger.warning(
             f"clear freshness project_source fallito per {project_id}: {exc}",
@@ -734,10 +722,9 @@ def admin_cleanup_orphans(
 
     Returns: report dettagliato con conteggi e lista project_id rimossi.
     """
-    from app.core.results.orphan_cleanup import cleanup_orphans
     logger.info(
         f"admin_cleanup_orphans avviato da {current_user.user_id} "
         f"(dry_run={dry_run})",
         op="admin_cleanup_orphans"
     )
-    return cleanup_orphans(dry_run=dry_run)
+    return orphan_cleanup_module.cleanup_orphans(dry_run=dry_run)

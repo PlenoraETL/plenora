@@ -31,10 +31,16 @@ def test_pipeline_worker_uses_project_runtime_context_boundary():
                 raw_project_db_imports.append(node.lineno)
             if node.module == "app.core.projects.runtime_context":
                 runtime_context_imports.append(node.lineno)
+            if node.module == "app.core.projects":
+                for alias in node.names:
+                    if alias.name == "runtime_context":
+                        runtime_context_imports.append(node.lineno)
         elif isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.name == "app.core.projects.db":
                     raw_project_db_imports.append(node.lineno)
+                if alias.name == "app.core.projects.runtime_context":
+                    runtime_context_imports.append(node.lineno)
 
     assert not raw_project_db_imports, (
         "pipeline_task must not import app.core.projects.db directly; "
@@ -65,6 +71,8 @@ def test_pipeline_worker_uses_intermediate_run_lifecycle_boundary():
                 or "get_default_runs_retention" in imported_names
             )
         ):
+            lifecycle_imports.append(node.lineno)
+        if node.module == "app.core.intermediate" and "run_lifecycle" in imported_names:
             lifecycle_imports.append(node.lineno)
 
     assert not direct_db_imports, (
