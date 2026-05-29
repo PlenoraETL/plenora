@@ -5,7 +5,7 @@ Canvas-based enrichment orchestrator.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, List, Optional, TYPE_CHECKING
 
 from app.core.dataframes.values import is_dataframe
 from app.core.arricchisci.execution_context import (
@@ -165,8 +165,16 @@ def execute_canvas_enrichment(
     preview_limit: Optional[int] = None,
     run_id: Optional[str] = None,
     intermediate_mode_override: Optional[str] = None,
+    finalizer: Optional[Callable[[Any, str, str, str], JsonObject]] = None,
 ) -> JsonObject:
     """Orchestra l'esecuzione del canvas arricchisci.
+
+    `finalizer` (Step C unificazione preview): se fornito, viene chiamato
+    al posto di `_save_and_build_dataframe_response` sul DataFrame finale,
+    con la stessa firma `(final_df, output_name, output_format, project_id)`.
+    Default `None` → comportamento invariato (salva il blob). La preview lo
+    usa per costruire le righe in-memory senza persistere nulla, riusando
+    questo loop canonico invece di reimplementarlo.
 
     Il modulo contiene l'algoritmo canonico di esecuzione canvas.
     `ApiConnectionService.execute_enrichment` resta la facade
@@ -425,6 +433,8 @@ def execute_canvas_enrichment(
         if not is_dataframe(final_result):
             return {"success": False, "error": "Nessun DataFrame generato"}
 
+        if finalizer is not None:
+            return finalizer(final_result, output_name, output_format, project_id)
         return svc._save_and_build_dataframe_response(
             final_result, output_name, output_format, project_id
         )

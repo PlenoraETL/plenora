@@ -5,24 +5,48 @@ Keeps API enrichment behavior isolated from orchestration callers.
 """
 
 import time as _time
-from typing import Optional
+from typing import Any, Optional
 
 from app.core.projects.canvas_models import CanvasState
-from app.config import settings
 from app.utils.logger import get_logger, append_step
 from app.core.arricchisci.api_connector import api_connection_service
-from app.core.arricchisci.canvas_orchestrator import (
-    get_execution_order,
-    init_execution_context,
-)
-from app.core.arricchisci.enrichment_service import EnrichmentExecutor
-from app.core.arricchisci.models import EnrichmentOptions
+from app.core.arricchisci.canvas_orchestrator import execute_canvas_enrichment
 from app.core.arricchisci.types import JsonObject
-from app.core.arricchisci.parallel import should_execute_node
 from app.core.dataframes.tabular import dataframe_preview_records, non_null_head_values
 from app.core.output_contract import build_output_contract
 
 logger = get_logger(__name__)
+
+
+# ── Mappa dtype pandas → tipo Plenora (preview) ───────────────────────────
+_GEO_NAMES = {"geometry", "geom", "shape", "wkt", "wkb", "geo",
+              "the_geom", "geom_4326", "geom_wgs84"}
+_WKT_PFX = ("POINT", "LINESTRING", "POLYGON", "MULTIPOINT",
+            "MULTILINESTRING", "MULTIPOLYGON", "GEOMETRYCOLLECTION")
+
+
+def _preview_col_type(name: str, series) -> str:
+    if name.lower().strip() in _GEO_NAMES:
+        return "geometry"
+    dtype = str(series.dtype)
+    if dtype.startswith("int"):
+        return "int"
+    if dtype.startswith("float"):
+        return "real"
+    if dtype == "bool":
+        return "bool"
+    if dtype.startswith("datetime"):
+        return "date"
+    if dtype == "object":
+        for val in non_null_head_values(series, 3):
+            if not isinstance(val, str):
+                break
+            v = val.strip()
+            if v.upper().startswith(_WKT_PFX):
+                return "geometry"
+            if v.startswith("{") and '"type"' in v and '"coordinates"' in v:
+                return "geometry"
+    return "string"
 
 
 class EnrichExecutor:
@@ -191,193 +215,67 @@ class EnrichExecutor:
         return res
 
     def preview(self, project_id: str, canvas: CanvasState, limit: int = 10) -> JsonObject:
-        """
-        Preview ARRICCHISCI: replica il loop dell'enrichment_task ma in modo sincrono,
-        senza Celery, e tronca l'output a `limit` righe.
-        Gestisce FeatureCollection explosion come il task reale.
+        """Preview ARRICCHISCI: riusa il loop canonico `execute_canvas_enrichment`
+        con `preview_limit`, e un finalizer che costruisce le righe in-memory
+        senza persistere il blob.
+
+        Step C unificazione: elimina la reimplementazione sincrona del loop.
+        FeatureCollection explosion, parallel groups, rest_file e lo skip
+        `execute_if` sono ora ereditati dal path canonico invece di essere
+        ricodificati qui.
         """
         logger.info(f"Preview ARRICCHISCI: {project_id} (limit={limit})", op="preview", project_id=project_id)
-        try:
-            canvas_dict = canvas.model_dump()
-            nodes = canvas_dict.get("nodes", [])
-            edges = canvas_dict.get("edges", [])
+        canvas_dict = canvas.model_dump()
 
-            if not nodes:
-                return {"success": False, "message": "Nessun nodo nel canvas"}
+        def _finalize_preview(final_df, _output_name, _output_format, _project_id):
+            return self._build_preview_response(final_df, limit)
 
-            ctx = init_execution_context(api_connection_service, project_id, limit)
+        result = execute_canvas_enrichment(
+            api_connection_service,
+            project_id=project_id,
+            canvas=canvas_dict,
+            preview_limit=limit,
+            finalizer=_finalize_preview,
+        )
 
-            # Carica tutte le API connections con credenziali decifrate (1 query
-            api_connections = api_connection_service.list_api_connections_decrypted()
-
-            execution_order = get_execution_order(nodes, edges)
-            node_map = {n["id"]: n for n in nodes}
-            node_results = {}
-
-            result_df = None
-
-            # _nd: legge da root poi da data. Pre-fix (P1 etl-executors)
-            # era definito DENTRO il for loop, ricreando un function object
-            # ad ogni iterazione (N nodi → N defs). Non e' un late-binding
-            # bug (non cattura `node` dal loop), ma e' spreco + futura
-            # trap (se in futuro qualcuno aggiunge una capture, diventa
-            # silent bug). Estratta come closure-free a livello metodo.
-            def _nd(n, k, d=None):
-                v = n.get(k)
-                if v is not None:
-                    return v
-                return n.get("data", {}).get(k, d) if isinstance(n.get("data"), dict) else d
-
-            for node_id in execution_order:
-                node = node_map.get(node_id)
-                if not node:
-                    continue
-
-                node_type = node.get("type")
-
-                node_data = {k: _nd(node, k) for k in list(node.keys()) + list((node.get("data") or {}).keys())}
-                node_data.update(node)  # root keys override
-
-                if node_type == "staticValues":
-                    node_results[node_id] = api_connection_service._load_static_values(
-                        node_data,
-                        ctx=ctx,
-                    )
-
-                elif node_type == "file_source":
-                    node_results[node_id] = api_connection_service._load_file_source(
-                        node_data,
-                        ctx=ctx,
-                    )
-
-                elif node_type == "project_source":
-                    node_results[node_id] = api_connection_service._load_source_project(
-                        node_data,
-                        False,
-                        ctx=ctx,
-                    )
-
-                elif node_type == "api_enrich":
-                    api_id = node_data.get("api_id")
-                    api_config = api_connections.get(api_id)
-                    if not api_config:
-                        continue
-
-                    input_edge = next((e for e in edges if e["target"] == node_id), None)
-                    input_df = node_results.get(input_edge["source"]) if input_edge else None
-
-                    # ── execute_if: skip condizionale ──
-                    if not should_execute_node(node_data, input_df):
-                        logger.info(f"Preview: nodo {node_id} skippato (execute_if)")
-                        node_results[node_id] = input_df
-                        result_df = input_df
-                        continue
-
-                    if api_config.get("api_type", "enricher") == "generator" or input_df is None:
-                        result_df = api_connection_service._execute_api_generator(api_config, input_df)
-                        if isinstance(result_df, dict):
-                            result_df = None
-                    else:
-                        # Enricher standard — stesso path del task reale.
-                        # Dedup esplicito via loop (era una list-comprehension
-                        # con bug di precedenza: `m.get("column") or
-                        # m.get("path") not in seen_cols` valutava come
-                        # `column OR (path not in seen)`, quindi quando
-                        # `column` era truthy la dedup non scattava mai
-                        # e duplicati passavano all'EnrichmentExecutor che
-                        # sovrascriveva celle con valori later-in-list).
-                        raw_output_mapping = (
-                            node_data.get("output_mapping")
-                            or api_config.get("output_mapping", [])
-                            or []
-                        )
-                        seen_cols: set[str] = set()
-                        deduped: list = []
-                        for m in raw_output_mapping:
-                            key = m.get("column") or m.get("path")
-                            if key in seen_cols:
-                                continue
-                            seen_cols.add(key)
-                            deduped.append(m)
-
-                        exec_options = EnrichmentOptions(
-                            enable_deduplication=True,
-                            continue_on_error=True,
-                            generate_error_report=False,
-                            skip_null_params=True,
-                            rate_limit=api_config.get("options", {}).get("rate_limit", settings.API_DEFAULT_RATE_LIMIT),
-                        )
-                        api_cfg = {**api_config, "output_mapping": deduped}
-                        param_mapping = node_data.get("param_mapping", {})
-
-                        executor = EnrichmentExecutor(
-                            api_config=api_cfg,
-                            param_mapping=param_mapping,
-                            options=exec_options
-                        )
-                        # Tronca a `limit` righe PRIMA dell'enrichment
-                        # evita di chiamare l'API su tutto il dataset per una preview
-                        preview_input = input_df.head(limit) if len(input_df) > limit else input_df
-                        result_df, _ = executor.execute(preview_input)
-
-                    node_results[node_id] = result_df
-
-                elif node_type == "result":
-                    # Prendi l'ultimo DataFrame prodotto
-                    input_edge = next((e for e in edges if e["target"] == node_id), None)
-                    if input_edge:
-                        result_df = node_results.get(input_edge["source"])
-
-            if result_df is None:
-                return {"success": False, "message": "Nessun dato prodotto dalla preview"}
-            result_columns = list(getattr(result_df, "columns", []))
-            if hasattr(result_df, 'empty') and result_df.empty and not result_columns:
-                return {"success": False, "message": "Nessun dato prodotto dalla preview"}
-
-            total_count = len(result_df)
-            preview_df = result_df.head(limit)
-
-            # ── Mappa dtype pandas → tipo Plenora ──────────────────────
-            _GEO_NAMES = {"geometry", "geom", "shape", "wkt", "wkb", "geo",
-                          "the_geom", "geom_4326", "geom_wgs84"}
-            _WKT_PFX = ("POINT", "LINESTRING", "POLYGON", "MULTIPOINT",
-                        "MULTILINESTRING", "MULTIPOLYGON", "GEOMETRYCOLLECTION")
-
-            def _col_type(name: str, series) -> str:
-                if name.lower().strip() in _GEO_NAMES:
-                    return "geometry"
-                dtype = str(series.dtype)
-                if dtype.startswith("int"):
-                    return "int"
-                if dtype.startswith("float"):
-                    return "real"
-                if dtype == "bool":
-                    return "bool"
-                if dtype.startswith("datetime"):
-                    return "date"
-                if dtype == "object":
-                    for val in non_null_head_values(series, 3):
-                        if not isinstance(val, str):
-                            break
-                        v = val.strip()
-                        if v.upper().startswith(_WKT_PFX):
-                            return "geometry"
-                        if v.startswith("{") and '"type"' in v and '"coordinates"' in v:
-                            return "geometry"
-                return "string"
-
-            columns = [{"name": c, "type": _col_type(c, preview_df[c])} for c in preview_df.columns]
-            rows = dataframe_preview_records(result_df, limit)
-
+        # Mappa gli early-return del loop canonico (error dict / file-result)
+        # al contratto preview {success, message}. Quando il finalizer gira,
+        # `result` ha gia' la shape preview (success + rows/columns).
+        if not result.get("success"):
             return {
-                "success": True,
-                "columns": columns,
-                "rows": rows,
-                "total_count": total_count,
-                "preview_count": len(rows),
-                "truncated": total_count > limit
+                "success": False,
+                "message": result.get("error")
+                or result.get("message")
+                or "Nessun dato prodotto dalla preview",
             }
+        if result.get("output_type") == "file":
+            return {
+                "success": False,
+                "message": "Preview non disponibile per output di tipo file",
+            }
+        return result
 
-        except Exception as e:
-            logger.error(f"[GESTITO] Errore preview ARRICCHISCI: {e}", op="preview", exc_info=True)
-            return {"success": False, "message": str(e)}
+    def _build_preview_response(self, result_df: Any, limit: int) -> JsonObject:
+        """Costruisce la response di preview (colonne tipate + righe troncate)
+        dal DataFrame finale, senza persistere. Finalizer del loop canonico.
+        """
+        result_columns = list(getattr(result_df, "columns", []))
+        if hasattr(result_df, "empty") and result_df.empty and not result_columns:
+            return {"success": False, "message": "Nessun dato prodotto dalla preview"}
+
+        total_count = len(result_df)
+        preview_df = result_df.head(limit)
+        columns = [
+            {"name": c, "type": _preview_col_type(c, preview_df[c])}
+            for c in preview_df.columns
+        ]
+        rows = dataframe_preview_records(result_df, limit)
+
+        return {
+            "success": True,
+            "columns": columns,
+            "rows": rows,
+            "total_count": total_count,
+            "preview_count": len(rows),
+            "truncated": total_count > limit,
+        }

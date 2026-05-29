@@ -55,91 +55,84 @@ def test_executor_does_not_call_get_execution_order_via_singleton():
     )
 
 
-def test_executor_calls_canvas_orchestrator_get_execution_order():
-    """AST-based positive lock: `executor.py` deve chiamare
-    `get_execution_order(nodes, edges)` come funzione modulo-level
-    (Name call, non Attribute call su un'istanza)."""
+def test_executor_preview_delegates_to_canvas_orchestrator():
+    """Step C unificazione: `EnrichExecutor.preview` deve DELEGARE al loop
+    canonico `execute_canvas_enrichment(...)` invece di reimplementare il
+    loop per-nodo. Lock positivo: chiamata Name `execute_canvas_enrichment`.
+    """
     src = _EXECUTOR_PY.read_text(encoding="utf-8")
     tree = ast.parse(src)
-    found = False
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        f = node.func
-        # Plain `get_execution_order(...)` Name call.
-        if isinstance(f, ast.Name) and f.id == "get_execution_order":
-            found = True
-            break
+    found = any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "execute_canvas_enrichment"
+        for node in ast.walk(tree)
+    )
     assert found, (
-        "Atteso: executor.py chiama "
-        "`get_execution_order(nodes, edges)` come funzione "
-        "modulo-level (importata da "
-        "`app.core.arricchisci.canvas_orchestrator`)."
+        "Atteso: executor.py chiama `execute_canvas_enrichment(...)` "
+        "(la preview riusa il loop canonico, non lo reimplementa)."
     )
 
 
 # 2. Import esplicito top-level
 
 
-def test_executor_imports_canvas_orchestrator_helpers():
-    """Import top-level da `app.core.arricchisci.canvas_orchestrator`
-    per i due helper usati dalla preview: `get_execution_order` e
-    `init_execution_context` (no lazy import, no re-export via
-    api_connection_service)."""
+def test_executor_imports_execute_canvas_enrichment():
+    """Import top-level di `execute_canvas_enrichment` da canvas_orchestrator;
+    gli helper di reimplementazione loop (`get_execution_order`,
+    `init_execution_context`) non sono piu' importati in executor.py — la
+    preview delega al loop canonico."""
     src = _EXECUTOR_PY.read_text(encoding="utf-8")
     tree = ast.parse(src)
-    found = set()
+    imported = set()
     for node in tree.body:
         if not isinstance(node, ast.ImportFrom):
             continue
         if node.module != "app.core.arricchisci.canvas_orchestrator":
             continue
-        for alias in node.names:
-            if alias.name in {"get_execution_order", "init_execution_context"}:
-                found.add(alias.name)
-    assert found == {"get_execution_order", "init_execution_context"}, (
-        "Atteso: top-level import di `get_execution_order` e "
-        "`init_execution_context` da canvas_orchestrator in executor.py."
+        imported.update(alias.name for alias in node.names)
+    assert "execute_canvas_enrichment" in imported, (
+        "Atteso: top-level import di `execute_canvas_enrichment` da "
+        "canvas_orchestrator in executor.py."
+    )
+    assert not ({"get_execution_order", "init_execution_context"} & imported), (
+        "executor.py non deve piu' importare gli helper di reimplementazione "
+        "loop: la preview delega a `execute_canvas_enrichment`."
     )
 
 
 # 3. Preview ctx-strict callsites
 
 
-def test_executor_preview_passes_ctx_to_source_loaders():
-    """TE-031 regression guard: dopo TE-030B i source loader sono
-    ctx-strict. `EnrichExecutor.preview()` deve costruire `ctx` e
-    passarlo ai tre loader source/static, altrimenti la preview HTTP
-    fail-chiude per file_source/project_source nodes."""
+def test_executor_does_not_reimplement_canvas_loop():
+    """Step C guard (sostituisce TE-031): la preview non deve reintrodurre
+    la reimplementazione del loop per-nodo. I concern ctx-strict sui source
+    loader e l'ordine topologico sono ora del loop canonico
+    `execute_canvas_enrichment` (lockato da `test_canvas_orchestrator_contract`
+    e `test_mixin_ctx_migration_contract`). Quindi executor.py NON deve
+    chiamare direttamente i loader/generator ne' `get_execution_order`."""
     src = _EXECUTOR_PY.read_text(encoding="utf-8")
     tree = ast.parse(src)
-    target_methods = {
+    forbidden_name_calls = {"get_execution_order", "init_execution_context"}
+    forbidden_attr_calls = {
         "_load_static_values",
         "_load_file_source",
         "_load_source_project",
+        "_execute_api_generator",
     }
-    found = {name: False for name in target_methods}
-
+    violations = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-        func = node.func
-        if not isinstance(func, ast.Attribute):
-            continue
-        if func.attr not in target_methods:
-            continue
-        has_ctx_kw = any(
-            kw.arg == "ctx"
-            and isinstance(kw.value, ast.Name)
-            and kw.value.id == "ctx"
-            for kw in node.keywords
-        )
-        found[func.attr] = has_ctx_kw
-
-    missing = [name for name, ok in found.items() if not ok]
-    assert not missing, (
-        "EnrichExecutor.preview must pass `ctx=ctx` to source/static "
-        f"loaders. Missing ctx kwarg on: {missing}"
+        f = node.func
+        if isinstance(f, ast.Name) and f.id in forbidden_name_calls:
+            violations.append((f.id, node.lineno))
+        elif isinstance(f, ast.Attribute) and f.attr in forbidden_attr_calls:
+            violations.append((f.attr, node.lineno))
+    assert not violations, (
+        "REGRESSIONE Step C: executor.py ha reintrodotto la reimplementazione "
+        f"del loop canvas nella preview: {violations}. La preview deve delegare "
+        "a `execute_canvas_enrichment` con un finalizer."
     )
 
 
