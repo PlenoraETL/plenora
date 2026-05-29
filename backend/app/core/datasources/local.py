@@ -15,6 +15,9 @@ from app.core.datasources.interface import (
     DataSourcePermissionError,
     FileInfo,
 )
+from app.core.io import local_cleanup as local_cleanup_module
+from app.core.io import local_filesystem as local_filesystem_module
+from app.shared.resources import path_policy as path_policy_module
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -279,15 +282,10 @@ class LocalDataSource(DataSourceInterface):
         `io.local_filesystem.write_local_chunks` (single audit point
         per scritture filesystem locale). Peak RAM ~chunk_size.
         """
-        from app.core.io.local_filesystem import (
-            LocalFilesystemError,
-            write_local_chunks,
-        )
-
         full_path = self._abs(path)
         try:
-            write_local_chunks(full_path, chunks)
-        except LocalFilesystemError as exc:
+            local_filesystem_module.write_local_chunks(full_path, chunks)
+        except local_filesystem_module.LocalFilesystemError as exc:
             cause = exc.__cause__
             if isinstance(cause, PermissionError):
                 raise DataSourcePermissionError(
@@ -302,15 +300,10 @@ class LocalDataSource(DataSourceInterface):
         # (data plane endpoint, vedi razionale nel modulo). I PermissionError
         # / OSError sono wrappati come LocalFilesystemError; qui li
         # riconvertiamo in datasource-specific per preservare l'API contract.
-        from app.core.io.local_filesystem import (
-            LocalFilesystemError,
-            write_local_bytes,
-        )
-
         full_path = self._abs(path)
         try:
-            write_local_bytes(full_path, content)
-        except LocalFilesystemError as exc:
+            local_filesystem_module.write_local_bytes(full_path, content)
+        except local_filesystem_module.LocalFilesystemError as exc:
             cause = exc.__cause__
             if isinstance(cause, PermissionError):
                 raise DataSourcePermissionError(
@@ -323,13 +316,11 @@ class LocalDataSource(DataSourceInterface):
     def delete_file(self, path: str) -> None:
         # Boundary: data plane delete via `io.local_cleanup.delete_local_file`
         # (strict mode, solleva PermissionError / FileNotFoundError).
-        from app.core.io.local_cleanup import delete_local_file
-
         full_path = self._abs(path)
         if not os.path.exists(full_path):
             raise DataSourceFileNotFoundError(f"File non trovato: {path!r}")
         try:
-            delete_local_file(full_path)
+            local_cleanup_module.delete_local_file(full_path)
         except PermissionError as e:
             raise DataSourcePermissionError(f"Cancellazione negata: {full_path}") from e
 
@@ -352,8 +343,6 @@ class LocalDataSource(DataSourceInterface):
         Raises DataSourcePermissionError se l'input e' malformato o tenta
         di uscire dalla root configurata.
         """
-        from app.shared.resources.path_policy import assert_path_within
-
         root = self.config.root_path.rstrip("/\\")
         root_abs = _Path(root).resolve()
 
@@ -377,7 +366,10 @@ class LocalDataSource(DataSourceInterface):
         # ValueError in DataSourcePermissionError per uniformare il
         # tipo di eccezione che esce da questa datasource
         try:
-            resolved = assert_path_within(root_abs / relative, [root_abs])
+            resolved = path_policy_module.assert_path_within(
+                root_abs / relative,
+                [root_abs],
+            )
         except ValueError as e:
             raise DataSourcePermissionError(
                 f"Path traversal rifiutato: {relative!r} esce da {root_abs}"

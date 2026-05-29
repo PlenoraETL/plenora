@@ -11,6 +11,7 @@ from typing import Dict, Any, List, Mapping, MutableMapping, Optional, Protocol,
 
 from app.core.projects.canvas_models import CanvasState
 from app.utils.logger import get_logger, append_step
+from app.core.auth import visibility as visibility_module
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.geodata import extract_srid_from_column_type
 from app.core.dataframes.ports import FrameLike
@@ -28,6 +29,7 @@ from app.core.estrai.sql_errors import (
     translate_sql_error as _traduci_errore_sql,
 )
 from app.core.estrai.types import ColumnMetadataRows, JsonObject, StringMap
+from app.core import output_contract as output_contract_module
 from app.core.resources.column_types import (
     lookup_canvas_column_type,
 )
@@ -279,9 +281,7 @@ class EstraiExecutor:
         resource_table = (
             "arcgis_connections" if connection_type == "arcgis" else "connections"
         )
-        from app.core.auth.visibility import is_resource_visible
-
-        if not is_resource_visible(
+        if not visibility_module.is_resource_visible(
             resource_table,
             connection_id,
             str(group_id),
@@ -799,8 +799,6 @@ class EstraiExecutor:
         L'output_contract e' il boundary pubblico tra progetti. Il canvas
         resta stato editor.
         """
-        from app.core.output_contract import build_output_contract
-
         canvas_type_map = self._build_canvas_type_map(canvas)
         result_columns_by_physical = {}
         result_node = next((n for n in canvas.nodes if n.type == "result"), None)
@@ -819,7 +817,7 @@ class EstraiExecutor:
             col_type = lookup_canvas_column_type(col, canvas_type_map) or 'str'
             result_columns.append({"name": col, "type": col_type})
 
-        output_contract = build_output_contract(
+        output_contract = output_contract_module.build_output_contract(
             project_id=project_id,
             result_columns=result_columns,
             previous_contract=self.project_service.get_project_output_contract(project_id),

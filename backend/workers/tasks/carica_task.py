@@ -25,6 +25,7 @@ from app.core.artifacts import (
 )
 from app.core.auth.async_user_recheck import recheck_user_authorized
 from app.core.auth.visibility import is_resource_visible
+from app.core.carica import arcgis_write_boundary as arcgis_write_boundary_module
 from app.core.carica.executor import CaricaExecutor
 from app.core.carica.rest_config_parser import parse_carica_rest_config
 from app.core.carica.rest_write_boundary import execute_carica_rest_write
@@ -47,6 +48,7 @@ from app.core.intermediate.run_idempotency import is_already_completed
 from app.core.projects.runtime_context import get_project_runtime_context
 from app.core.projects.service import ProjectService
 from app.db.pg_connection import close_connection as _close_config_connection
+from app.runtime import services as runtime_services_module
 from app.utils.debug_payload_builder import DebugPayloadBuilder
 
 from workers.celery_app import celery_app, BaseTaskWithRetry
@@ -57,20 +59,12 @@ logger = get_logger("workers.carica_task")
 
 def create_default_arcgis_feature_writer() -> Any:
     """Lazy wrapper kept patchable without importing ArcGIS services at registration."""
-    from app.core.carica.arcgis_write_boundary import (
-        create_default_arcgis_feature_writer as _create_default,
-    )
-
-    return _create_default()
+    return arcgis_write_boundary_module.create_default_arcgis_feature_writer()
 
 
 def execute_carica_arcgis_write(**kwargs: Any) -> Any:
     """Lazy wrapper kept patchable without importing ArcGIS services at registration."""
-    from app.core.carica.arcgis_write_boundary import (
-        execute_carica_arcgis_write as _execute_boundary,
-    )
-
-    return _execute_boundary(**kwargs)
+    return arcgis_write_boundary_module.execute_carica_arcgis_write(**kwargs)
 
 
 class CaricaTaskResultPayload(TypedDict, total=False):
@@ -702,12 +696,10 @@ def _execute_arcgis_write(
     task_id: str,
 ) -> Mapping[str, object]:
     """Coordinate ArcGIS write progress while the domain owns provider writes."""
-    from app.core.carica.arcgis_write_boundary import CaricaArcGISWriteRequest
-
     _update_progress(task, 15, "Preparazione scrittura ArcGIS...")
 
     operation = carica_node_data.get("arcgis_operation", "add")
-    request = CaricaArcGISWriteRequest(
+    request = arcgis_write_boundary_module.CaricaArcGISWriteRequest(
         project_id=project_id,
         connection_id=carica_node_data.get("arcgis_connection_id", ""),
         operation=operation,
@@ -840,9 +832,7 @@ def _load_upstream_data(
         # Runtime composition owns the executor graph. CARICA must not rely on
         # OrchestratorService fallback builders, otherwise the worker path
         # diverges from the API/data-plane contract wiring.
-        from app.runtime.services import build_orchestrator_stack
-
-        orchestrator_stack = build_orchestrator_stack()
+        orchestrator_stack = runtime_services_module.build_orchestrator_stack()
         orchestrator = orchestrator_stack.orchestrator
 
         result = orchestrator.execute_pipeline(

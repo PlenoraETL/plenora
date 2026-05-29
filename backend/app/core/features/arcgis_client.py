@@ -11,6 +11,8 @@ from typing import Dict, Iterator, Mapping, Optional, Sequence, Tuple
 
 import requests
 
+from app.core.dataframes import geometry_parsing as geometry_parsing_module
+from app.core.dataframes import values as dataframe_values_module
 from app.shared.connections.esri_system_fields import ESRI_OID_FIELDS_LITERAL
 from app.shared.connections.arcgis_provider_results import (
     DeleteFeatureServiceItemsResult,
@@ -128,8 +130,6 @@ class ArcGISClient(
         operation: str = "add",
     ) -> Iterator[ArcGISJsonObject]:
         """Yield ESRI JSON features without materializing the full feature list."""
-        from app.core.dataframes.values import is_null_scalar
-
         has_geometry = False
         is_geodataframe = False
 
@@ -159,17 +159,11 @@ class ArcGISClient(
         geometry_iter = iter(df.geometry) if is_geodataframe else None
         spatial_ref = {"wkid": srid}
 
-        parse_geometry = None
-        if has_geometry and not is_geodataframe:
-            from app.core.dataframes.geometry_parsing import parse_geometry as _parse_geometry
-
-            parse_geometry = _parse_geometry
-
         for row in df.itertuples(index=False, name=None):
             attributes = {}
             for col, pos in attr_positions:
                 attribute_value = row[pos]
-                if is_null_scalar(attribute_value):
+                if dataframe_values_module.is_null_scalar(attribute_value):
                     attributes[col] = None
                 elif hasattr(attribute_value, "item"):
                     attributes[col] = attribute_value.item()
@@ -184,8 +178,8 @@ class ArcGISClient(
                     geom = next(geometry_iter)
                 elif geometry_pos is not None:
                     raw_geom = row[geometry_pos]
-                    if not is_null_scalar(raw_geom) and parse_geometry is not None:
-                        geom = parse_geometry(raw_geom)
+                    if not dataframe_values_module.is_null_scalar(raw_geom):
+                        geom = geometry_parsing_module.parse_geometry(raw_geom)
 
                 if geom is not None and not geom.is_empty:
                     feature["geometry"] = ArcGISClient._shapely_to_esri(geom, spatial_ref)
@@ -491,11 +485,10 @@ class ArcGISClient(
             pass
         
         if not geom_type.startswith("esri") and geometry_column in df.columns:
-            from app.core.dataframes.geometry_parsing import parse_geometry
             sample_values = non_null_head_values(df[geometry_column], 1)
             sample = sample_values[0] if sample_values else None
             if sample:
-                geom = parse_geometry(sample)
+                geom = geometry_parsing_module.parse_geometry(sample)
                 if geom is not None:
                     geom_type = self._esri_geometry_type(geom.geom_type)
                 else:
@@ -527,11 +520,12 @@ class ArcGISClient(
                     }
                     logger.debug(f"Extent calcolato dai dati: {extent}")
             elif geometry_column in df.columns:
-                from app.core.dataframes.geometry_parsing import parse_geometry_series
                 geom_values = non_null_head_values(df[geometry_column], 1000)
                 if geom_values:
                     geoms = [
-                        geom for geom in parse_geometry_series(object_series(geom_values)).dropna()
+                        geom for geom in geometry_parsing_module.parse_geometry_series(
+                            object_series(geom_values)
+                        ).dropna()
                         if geom is not None and not geom.is_empty
                     ]
                     if geoms:

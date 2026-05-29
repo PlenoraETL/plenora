@@ -19,9 +19,12 @@ from app.core.carica.models import (
     WriteStatus,
 )
 from app.core.carica.connection_store import fetch_connection_config
+from app.core.auth import visibility as visibility_module
 from app.core.intermediate import run_idempotency
+from app.core.projects import service as project_service_module
 from app.db.query_executor import DefaultEngineFactory
 from app.shared.contracts.payloads import JsonObject, StringRows
+from app.shared.security import tls_policy as tls_policy_module
 from app.utils.logger import append_step, get_logger
 from app.utils.logger import get_logger as _get_logger
 
@@ -332,14 +335,14 @@ class CaricaExecutor:
     ) -> None:
         if not project_id:
             return
-        from app.core.auth.visibility import is_resource_visible
-        from app.core.projects.service import ProjectService
 
-        metadata = ProjectService().get_project_metadata(project_id)
+        metadata = project_service_module.ProjectService().get_project_metadata(
+            project_id
+        )
         group_id = getattr(metadata, "group_id", None) if metadata else None
         if not group_id:
             raise ValueError("Gruppo progetto non determinabile")
-        if not is_resource_visible(
+        if not visibility_module.is_resource_visible(
             "connections",
             connection_id,
             str(group_id),
@@ -377,8 +380,7 @@ class CaricaExecutor:
             url = f"mysql+pymysql://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
         elif db_type == "mssql":
             # H-2 (2026-05-26): TrustServerCertificate gated da tls_bypass_allowed()
-            from app.shared.security.tls_policy import tls_bypass_allowed
-            trust_cert = "yes" if tls_bypass_allowed() else "no"
+            trust_cert = "yes" if tls_policy_module.tls_bypass_allowed() else "no"
             url = (
                 f"mssql+pyodbc://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
                 f"?driver=ODBC+Driver+18+for+SQL+Server"

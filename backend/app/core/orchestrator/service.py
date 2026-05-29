@@ -6,11 +6,16 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Mapping, Optional, Protocol
+from typing import Any, Mapping, Optional, Protocol
 
 from app import config as app_config
+from app.core.connections.service import ConnectionService
+from app.core.estrai.query_generator import QueryGenerator
+from app.core.orchestrator import task_service as task_service_module
+from app.core.projects.service import ProjectService
 from app.core.projects.canvas_models import CanvasState
 from app.core.resources import memory_guard
+from app.db.query_executor import QueryExecutor
 from app.shared import error_codes
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution.executor_protocol import CanvasExecutorProtocol, ExecutionResult
@@ -18,12 +23,6 @@ from app.shared.execution import output_contract_types_enricher
 from app.utils.logger import get_logger
 
 from app.core.artifacts import PipelineArtifact
-
-if TYPE_CHECKING:
-    from app.core.connections.service import ConnectionService
-    from app.core.estrai.query_generator import QueryGenerator
-    from app.core.projects.service import ProjectService
-    from app.db.query_executor import QueryExecutor
 
 logger = get_logger(__name__)
 ExecutorDispatch = Mapping[str, CanvasExecutorProtocol]
@@ -287,8 +286,6 @@ class OrchestratorService:
         logger.info(f"Trovati {len(carica_nodes)} nodi CARICA, avvio task", op="carica", project_id=project_id)
 
         try:
-            from app.core.orchestrator.task_service import task_service
-
             tasks = []
             # Campi di identità del nodo che NON devono essere sovrascritti dal
             # merge con `data{}`. Se l'utente, per errore o malizia, mette
@@ -324,7 +321,7 @@ class OrchestratorService:
                     f"data_keys: {list(nested_data.keys()) if nested_data else 'VUOTO'}",
                     op="carica", project_id=project_id
                 )
-                task_info = task_service.create_carica_task(
+                task_info = task_service_module.task_service.create_carica_task(
                     project_id=project_id,
                     canvas=canvas.model_dump(),
                     carica_node_data=carica_node_data,

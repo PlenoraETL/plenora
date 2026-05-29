@@ -7,11 +7,19 @@ Esegue un controllo read-only (senza side effect su ArcGIS) prima della
 from typing import Any, Dict, Optional
 
 from app.utils.logger import get_logger
+from app.core.connections import (
+    arcgis_connection_resolver as arcgis_resolver_module,
+)
 from app.core.dataframes.tabular import (
     duplicate_non_null_value_count,
     null_count_for_columns,
     unique_non_null_column_values,
 )
+from app.core.imdf import storage as imdf_storage
+from app.core.imdf import loader as imdf_loader_module
+from app.core.imdf.arcgis import service_discovery as service_discovery_module
+from app.core.imdf.arcgis import sql_helpers as sql_helpers_module
+from app.core.imdf import arcgis_uploader as arcgis_uploader_module
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
 from app.shared.connections.esri_system_fields import is_esri_system_field as _is_system_field
@@ -86,20 +94,10 @@ def validate_publish(
         Dict con la struttura del report (vedi docstring modulo).
         Non lancia eccezioni per errori di validazione — li riporta nel dict.
     """
-    from app.core.connections.arcgis_connection_resolver import resolve_arcgis_connection
-    from app.core.imdf.arcgis.service_discovery import (
-        _find_existing_service,
-        _is_service_name_available,
-        _list_user_folders,
-    )
-    from app.core.imdf.arcgis.sql_helpers import _chunked, _quote_sql_value
-    from app.core.imdf.arcgis_uploader import (
-        DEFAULT_MATCH_COLUMNS,
-        LAYER_ORDER,
-        PUBLISH_MODES,
-    )
-    from app.core.imdf.loader import load_imdf_layers
-    effective_match = {**DEFAULT_MATCH_COLUMNS, **(match_columns or {})}
+    effective_match = {
+        **arcgis_uploader_module.DEFAULT_MATCH_COLUMNS,
+        **(match_columns or {}),
+    }
 
     report: Dict[str, Any] = {
         "ok": True,
@@ -127,7 +125,7 @@ def validate_publish(
         elif sev == "warning":
             report["summary"]["warnings"] += 1
 
-    if mode not in PUBLISH_MODES:
+    if mode not in arcgis_uploader_module.PUBLISH_MODES:
         _add_top_issue("error", "INVALID_MODE", f"Modalita' '{mode}' non supportata")
         return report
 
@@ -135,8 +133,6 @@ def validate_publish(
     # `open_gdb_in_vsimem` carica `_gdb.zip` bytes in /vsimem via
     # ctypes adapter (`app.core.io.vsimem`); pyogrio legge via
     # path `/vsizip//vsimem/.../{site}.gdb` senza tmp dir su disco.
-    from app.core.imdf import storage as imdf_storage
-
     # Site_id richiesto per costruire il path interno allo zip.
     meta = imdf_storage.get_meta_only(bundle_task_id)
     if meta is None:
@@ -164,7 +160,7 @@ def validate_publish(
                     )
                     return report
                 try:
-                    bundle_layers = load_imdf_layers(vsi_path)
+                    bundle_layers = imdf_loader_module.load_imdf_layers(vsi_path)
                 except Exception as e:
                     _add_top_issue("error", "GDB_LOAD_FAILED", f"Caricamento GDB fallito: {e}")
                     return report
@@ -172,7 +168,10 @@ def validate_publish(
             _add_top_issue("error", "GDB_LOAD_FAILED", f"Hydration GDB /vsimem fallita: {e}")
             return report
 
-    layers_present = [n for n in LAYER_ORDER if n in bundle_layers and len(bundle_layers[n]) > 0]
+    layers_present = [
+        n for n in arcgis_uploader_module.LAYER_ORDER
+        if n in bundle_layers and len(bundle_layers[n]) > 0
+    ]
     if not layers_present:
         _add_top_issue("error", "BUNDLE_EMPTY", "Nessun layer IMDF popolato nel bundle")
         return report
@@ -180,7 +179,7 @@ def validate_publish(
     report["summary"]["layers_count"] = len(layers_present)
     report["summary"]["total_features"] = sum(len(bundle_layers[n]) for n in layers_present)
 
-    _resolved = resolve_arcgis_connection(connection_id)
+    _resolved = arcgis_resolver_module.resolve_arcgis_connection(connection_id)
     if _resolved is None:
         _add_top_issue("error", "CONNECTION_NOT_FOUND",
                        f"Connessione ArcGIS '{connection_id}' non trovata")
@@ -188,8 +187,10 @@ def validate_publish(
     conn, client = _resolved
 
     try:
-        existing_url, existing_item, existing_folder = _find_existing_service(
-            client, conn, fs_name
+        existing_url, existing_item, existing_folder = (
+            service_discovery_module._find_existing_service(
+                client, conn, fs_name
+            )
         )
     except Exception as e:
         _add_top_issue("warning", "FS_SEARCH_FAILED",
@@ -214,7 +215,7 @@ def validate_publish(
         _cur_title = None
         if _cur_id:
             try:
-                _folders = _list_user_folders(client, conn)
+                _folders = service_discovery_module._list_user_folders(client, conn)
                 _by_id = {f.get("id"): f.get("title") for f in _folders if f.get("id")}
                 _cur_title = _by_id.get(_cur_id)
             except Exception as e:
@@ -246,7 +247,9 @@ def validate_publish(
     # createService fallira'. Rileviamolo ora cosi' l'utente lo sa subito
     if mode == "replace" and not existing_url:
         try:
-            available, _err = _is_service_name_available(client, conn, fs_name)
+            available, _err = service_discovery_module._is_service_name_available(
+                client, conn, fs_name
+            )
             if not available:
                 _add_top_issue(
                     "error", "FS_NAME_RESERVED",
@@ -421,10 +424,10 @@ def validate_publish(
                         try:
                             # POST /query con returnCountOnly: più robusto di
                             # GET (URL length, content negotiation). Chunk 100
-                            for batch in _chunked(vals_unique, 100):
+                            for batch in sql_helpers_module._chunked(vals_unique, 100):
                                 where = (
                                     f"{match_col} IN ("
-                                    f"{','.join(_quote_sql_value(v) for v in batch)}"
+                                    f"{','.join(sql_helpers_module._quote_sql_value(v) for v in batch)}"
                                     f")"
                                 )
                                 total_overlap += _count_features_where_via_post(
@@ -484,8 +487,11 @@ def validate_publish(
                     total_match_hits = 0
                     match_query_failed = False
                     try:
-                        for batch in _chunked(vals_unique, 100):
-                            where = f"{match_col} IN ({','.join(_quote_sql_value(v) for v in batch)})"
+                        for batch in sql_helpers_module._chunked(vals_unique, 100):
+                            where = (
+                                f"{match_col} IN ("
+                                f"{','.join(sql_helpers_module._quote_sql_value(v) for v in batch)})"
+                            )
                             total_match_hits += _count_features_where_via_post(
                                 client, conn, existing_info["url"], where,
                             )

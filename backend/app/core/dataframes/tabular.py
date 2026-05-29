@@ -12,6 +12,8 @@ from typing import Any, Iterable, Iterator, List, Optional
 import numpy as np
 import pandas as pd
 
+from app.core.dataframes import geometry_serialization as geometry_serialization_module
+from app.core.dataframes import values as dataframe_values_module
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.shared.contracts.payloads import IntMap, JsonObject, JsonRows, StringMap
 from app.utils.logger import get_logger
@@ -796,15 +798,10 @@ def geometry_series_columns_to_wkt(df: pd.DataFrame) -> pd.DataFrame:
     None solo per i missing che passavano il check `is_null_scalar`,
     lasciando potenziali NaN nell'output.
     """
-    from app.core.dataframes.values import is_geometry_series
-    from app.core.dataframes.geometry_serialization import (
-        geometry_series_to_wkt,
-    )
-
     out = copy_frame_for_update(df)
     for col in out.columns:
-        if is_geometry_series(out[col]):
-            out[col] = geometry_series_to_wkt(out[col])
+        if dataframe_values_module.is_geometry_series(out[col]):
+            out[col] = geometry_serialization_module.geometry_series_to_wkt(out[col])
     return out
 
 
@@ -1043,13 +1040,11 @@ def join_columns_as_strings(df: pd.DataFrame, separator: str) -> Any:
     nell'output array, libera. Peak ~ batch_size * N_cols * avg_str_size.
     Semantica e dtype output (Series object) identici al legacy.
     """
-    import numpy as _np
-
     n = len(df)
     if n == 0:
         return empty_object_series()
 
-    out = _np.empty(n, dtype=object)
+    out = np.empty(n, dtype=object)
     for start in range(0, n, _JOIN_BATCH_SIZE):
         end = min(start + _JOIN_BATCH_SIZE, n)
         batch_frame = df.iloc[start:end].map(

@@ -12,7 +12,9 @@ import warnings as _warnings
 from typing import Any, Callable, MutableMapping, Optional
 
 import requests
+from urllib3.exceptions import InsecureRequestWarning
 
+from app import config as app_config
 from app.shared.security.tls_policy import resolve_tls_verify
 from app.infrastructure.http.session import get_shared_session
 from app.shared.contracts.payloads import HeadersMap, JsonObject, StringMap
@@ -51,9 +53,7 @@ def _get_shared_session() -> requests.Session:
 
 def _setting_int(name: str, default: int) -> int:
     try:
-        from app.config import settings
-
-        value = int(settings.get(name, default))
+        value = int(app_config.settings.get(name, default))
         return value if value > 0 else default
     except Exception:
         return default
@@ -61,9 +61,7 @@ def _setting_int(name: str, default: int) -> int:
 
 def _setting_float(name: str, default: float) -> float:
     try:
-        from app.config import settings
-
-        value = float(settings.get(name, default))
+        value = float(app_config.settings.get(name, default))
         return value if value > 0 else default
     except Exception:
         return default
@@ -85,14 +83,12 @@ def _get_token_cache_redis_client() -> Optional[Any]:
         except ImportError:
             return None
         try:
-            from app.config import settings
-
             timeout = _setting_int(
                 "OAUTH_TOKEN_CACHE_REDIS_TIMEOUT_SEC",
                 _TOKEN_CACHE_DEFAULT_REDIS_TIMEOUT_SEC,
             )
             _TOKEN_CACHE_CLIENT = redis.from_url(
-                settings.CELERY_BROKER_URL,
+                app_config.settings.CELERY_BROKER_URL,
                 socket_timeout=timeout,
                 socket_connect_timeout=timeout,
                 decode_responses=True,
@@ -588,7 +584,6 @@ def get_arcgis_token(auth: JsonObject) -> Optional[str]:
             # TLS in altri moduli.
             with _warnings.catch_warnings():
                 if not verify_ssl:
-                    from urllib3.exceptions import InsecureRequestWarning
                     _warnings.simplefilter("ignore", InsecureRequestWarning)
                 response = requests.post(
                     token_url,

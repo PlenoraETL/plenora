@@ -8,6 +8,8 @@ from typing import Optional, Tuple
 
 import pandas as pd
 
+from app.core.dataframes import frame_io as frame_io_module
+from app.core.dataframes import geometry_serialization as geometry_serialization_module
 from app.core.dataframes.ports import (
     DataLoaderProtocol,
     FrameIOEngine,
@@ -51,15 +53,13 @@ def load_by_format_bytes(
     izzata via geometry_series_to_wkt — la colonna nel df ha lo stesso
     nome della geometria attiva del gdf, NON necessariamente "geometry").
     """
-    from app.core.dataframes.frame_io import _load_dataframe_from_bytes
-
     fmt = _normalize_format(format_type)
     gdf: Optional[pd.DataFrame] = None
 
     if fmt in _GEOSPATIAL_FORMATS or fmt in _ZIP_LIKE_FORMATS:
         # _load_dataframe_from_bytes per gpkg/shp/zip/gdb passa via
         # pyogrio (vector bytes nativi) e ritorna GeoDataFrame.
-        gdf = _load_dataframe_from_bytes(
+        gdf = frame_io_module._load_dataframe_from_bytes(
             data, format_hint=fmt, sheet=sheet, layer=layer,
         )
         df = pd.DataFrame(gdf)
@@ -68,13 +68,12 @@ def load_by_format_bytes(
         geom_col = getattr(gdf, "geometry", None)
         geom_col_name = geom_col.name if geom_col is not None else None
         if geom_col_name and geom_col_name in df.columns:
-            from app.core.dataframes.geometry_serialization import (
-                geometry_series_to_wkt,
+            df[geom_col_name] = (
+                geometry_serialization_module.geometry_series_to_wkt(gdf.geometry)
             )
-            df[geom_col_name] = geometry_series_to_wkt(gdf.geometry)
         return df, gdf
 
-    df = _load_dataframe_from_bytes(
+    df = frame_io_module._load_dataframe_from_bytes(
         data, format_hint=fmt, sheet=sheet, layer=layer,
     )
     return df, None
@@ -123,10 +122,9 @@ def load_frame_by_format(
         geom_col = getattr(gdf, "geometry", None)
         geom_col_name = geom_col.name if geom_col is not None else None
         if geom_col_name and geom_col_name in df.columns:
-            from app.core.dataframes.geometry_serialization import (
-                geometry_series_to_wkt,
+            df[geom_col_name] = (
+                geometry_serialization_module.geometry_series_to_wkt(gdf.geometry)
             )
-            df[geom_col_name] = geometry_series_to_wkt(gdf.geometry)
     else:
         raise ValueError(f"Formato '{format_type}' non supportato")
 
