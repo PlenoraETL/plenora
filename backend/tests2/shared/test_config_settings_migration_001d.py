@@ -70,7 +70,9 @@ def _read(path: Path) -> str:
 
 
 def test_query_engine_factory_reads_mssql_fast_via_settings():
-    src = _read(_BACKEND_APP / "db" / "query_engines.py")
+    # Il query-execution layer e' stato relocato da app/db a
+    # app/core/query_execution (shim app/db/query_engines.py rimosso).
+    src = _read(_BACKEND_APP / "core" / "query_execution" / "query_engines.py")
     assert "_settings.get(\"MSSQL_FAST_EXECUTEMANY\")" in src
     assert "_os.getenv(\"MSSQL_FAST_EXECUTEMANY" not in src
     assert "os.getenv(\"MSSQL_FAST_EXECUTEMANY" not in src
