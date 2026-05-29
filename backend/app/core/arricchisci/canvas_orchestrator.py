@@ -296,8 +296,10 @@ def run_enrichment_canvas(
 
             elif node_type == "api_enrich":
                 # api_enrich emesso come step "single" quando
-                # cardinality-changing o isolato (RB.#15). `_enrich`
-                # propaga ValueError su HTTP error → CanvasRunError sotto.
+                # cardinality-changing o isolato (RB.#15). rest_file ed
+                # execute_if sono gestiti qui (serve il contesto loop:
+                # nodes/edges/node_results), in modo uniforme al branch
+                # parallelo; `enrich_fn` resta puro enricher/generator.
                 input_edge = next(
                     (e for e in edges if e["target"] == node_id), None
                 )
@@ -305,10 +307,30 @@ def run_enrichment_canvas(
                     node_results.get(input_edge["source"])
                     if input_edge else None
                 )
-                result = _enrich(node_data, api_connections, input_df)
-                if isinstance(result, dict) and not result.get("success", True):
-                    raise CanvasRunError(result)
-                node_results[node_id] = result
+                api_id = graph.get(node_id).get_field("api_id")
+                api_cfg = api_connections.get(api_id, {})
+                if api_cfg.get("connection_type") == "rest_file":
+                    if should_execute_node(node_data, input_df):
+                        result = svc._execute_rest_file(
+                            node_data, api_cfg, nodes, edges, node_id,
+                            project_id, node_results=node_results, ctx=ctx,
+                        )
+                        if isinstance(result, dict) and not result.get(
+                            "success", True
+                        ):
+                            raise CanvasRunError(result)
+                        node_results[node_id] = result
+                    else:
+                        node_results[node_id] = input_df
+                elif not should_execute_node(node_data, input_df):
+                    node_results[node_id] = input_df
+                else:
+                    result = _enrich(node_data, api_connections, input_df)
+                    if isinstance(result, dict) and not result.get(
+                        "success", True
+                    ):
+                        raise CanvasRunError(result)
+                    node_results[node_id] = result
 
             if hooks.after_node is not None:
                 hooks.after_node(node_id, node_type, node_results.get(node_id))
