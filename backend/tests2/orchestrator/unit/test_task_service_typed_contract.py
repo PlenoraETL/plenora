@@ -82,7 +82,7 @@ def test_get_task_status_uses_typed_result_payload_inside_core():
     )
 
     with patch(
-        "app.core.task_runtime.orchestrator.AsyncResult",
+        "celery.result.AsyncResult",
         return_value=async_result,
     ):
         task_info = TaskService().get_task_status("task-1")
@@ -111,7 +111,7 @@ def test_get_task_status_preserves_managed_failure_result_payload():
     )
 
     with patch(
-        "app.core.task_runtime.orchestrator.AsyncResult",
+        "celery.result.AsyncResult",
         return_value=async_result,
     ):
         task_info = TaskService().get_task_status("task-1")
@@ -142,7 +142,7 @@ def test_get_task_status_uses_pending_metadata_store_before_celery_metadata():
     )
 
     with patch(
-        "app.core.task_runtime.orchestrator.AsyncResult",
+        "celery.result.AsyncResult",
         return_value=async_result,
     ):
         task_info = TaskService(metadata_store=metadata_store).get_task_status(
@@ -268,7 +268,7 @@ def test_task_service_does_not_call_task_result_to_dict_internally(monkeypatch):
     )
 
     with patch(
-        "app.core.task_runtime.orchestrator.AsyncResult",
+        "celery.result.AsyncResult",
         return_value=async_result,
     ):
         task_info = TaskService().get_task_status("task-1")
@@ -335,7 +335,7 @@ def test_get_task_result_returns_typed_payload():
     )
 
     with patch(
-        "app.core.task_runtime.orchestrator.AsyncResult",
+        "celery.result.AsyncResult",
         return_value=async_result,
     ):
         result = TaskService().get_task_result("task-1")
@@ -350,7 +350,7 @@ def test_forget_task_result_delegates_to_celery_boundary():
     async_result = SimpleNamespace(forget=lambda: forget_calls.append("forgot"))
 
     with patch(
-        "app.core.task_runtime.orchestrator.AsyncResult",
+        "celery.result.AsyncResult",
         return_value=async_result,
     ) as async_result_cls:
         service = TaskService()
