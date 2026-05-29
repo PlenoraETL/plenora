@@ -350,11 +350,3 @@ class OrchestratorService:
                 "Nodo Output (result) non trovato nel canvas"
             ),
         )
-
-    def _is_connected_to_output(self, carica_node: Any, canvas: CanvasState) -> bool:
-        """Verifica che il nodo CARICA sia collegato al nodo Output (result)."""
-        wanted_id = carica_dispatcher.node_id(carica_node)
-        return any(
-            carica_dispatcher.node_id(node) == wanted_id
-            for node in carica_dispatcher.find_connected_carica_nodes(canvas)
-        )

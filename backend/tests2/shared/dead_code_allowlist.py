@@ -94,8 +94,11 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+resources[\\/]metadata\.py:\d+: unused method "),
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+resources[\\/]storage_layout\.py:\d+: unused function 'is_valid_prefix' "),
 
+    # Pydantic validators are invoked by the model, not referenced by name.
+    re.compile(r"backend[\\/]+app[\\/]+shared[\\/]contracts[\\/]auth\.py:\d+: unused method '_(reject_password|email_format|role_allowed|group_id_nonempty)' "),
+
     # Small utility public APIs.
-    re.compile(r"backend[\\/]+app[\\/]+db[\\/]query_engines\.py:\d+: unused method 'dispose_all' "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+query_execution[\\/]query_engines\.py:\d+: unused method 'dispose_all' "),
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]clock\.py:\d+: unused method "),
     re.compile(r"backend[\\/]+app[\\/]+infrastructure[\\/]http[\\/]async_client\.py:\d+: unused function 'get_async_client' "),
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]error_codes\.py:\d+: unused function 'http_status_code' "),
