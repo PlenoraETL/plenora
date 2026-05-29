@@ -9,9 +9,11 @@ from typing import Optional
 
 from app.config import settings
 from app.core.connections import db as connection_db
+from app.core.connections.errors import ConnectionDuplicateNameError
 from app.infrastructure.security.crypto import CredentialUnavailableError, is_encrypted
 from app.infrastructure.security.crypto import decrypt as _decrypt_password
 from app.infrastructure.security.crypto import encrypt as _encrypt_password
+from app.shared.security import tls_policy as tls_policy_module
 from app.core.connections.models import (
     DatabaseConnection,
     ConnectionCreate,
@@ -120,8 +122,6 @@ class ConnectionService:
         group_id: str | None = None,
         created_by: str | None = None,
     ) -> DatabaseConnection:
-        from app.core.connections.errors import ConnectionDuplicateNameError
-
         group_id = group_id or self.DEFAULT_GROUP
         # Unicita' (name, group_id): pre-check applicativo prima del DB
         # insert. Senza, due connections con stesso name nello stesso
@@ -296,8 +296,9 @@ class ConnectionService:
         # decryptare username/password. Gating env-aware via tls_policy:
         # in prod/staging si forza TrustServerCertificate=no, in dev/CI
         # rimane "yes" per supportare i certificati locali.
-        from app.shared.security.tls_policy import tls_bypass_allowed
-        trust_server_cert = "yes" if tls_bypass_allowed() else "no"
+        trust_server_cert = (
+            "yes" if tls_policy_module.tls_bypass_allowed() else "no"
+        )
         if trust_server_cert == "no":
             logger.info(
                 "[SECURITY] MSSQL test: TrustServerCertificate=no "

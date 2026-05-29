@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any, List, Protocol, runtime_checkable
 from typing_extensions import TypedDict
 
+from app import config as app_config
+
 logger = logging.getLogger(__name__)
 
 
@@ -526,9 +528,7 @@ class StorageBackendConfig:
 
 
 def _settings():
-    from app.config import settings
-
-    return settings
+    return app_config.settings
 
 
 def _get_setting(name: str, default: Any = None) -> Any:

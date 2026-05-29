@@ -12,6 +12,8 @@ from typing import Tuple
 
 import app.config as config
 from app.config import settings
+from app.infrastructure.storage import cloud_backends as cloud_backends_module
+from app.observability import runtime_ports as runtime_ports_module
 
 
 CheckOutcome = Tuple[bool, str]
@@ -127,16 +129,15 @@ def check_redis() -> CheckOutcome:
     disabilitabile: /ready senza bound sarebbe un footgun ops).
     """
     try:
-        from app.observability.runtime_ports import (
-            bounded_readiness_timeout,
-            ping_redis_broker,
-        )
-        timeout = bounded_readiness_timeout(
+        timeout = runtime_ports_module.bounded_readiness_timeout(
             settings,
             "READINESS_REDIS_TIMEOUT_SECONDS",
             2,
         )
-        if ping_redis_broker(settings.CELERY_BROKER_URL, timeout=timeout):
+        if runtime_ports_module.ping_redis_broker(
+            settings.CELERY_BROKER_URL,
+            timeout=timeout,
+        ):
             return True, "ok"
         return False, "PING non ha risposto True"
     except Exception as e:
@@ -238,28 +239,14 @@ def check_object_storage() -> CheckOutcome:
     storage cloud (latenza variabile, regional outages,
     credentials).
     """
-    try:
-        from app.infrastructure.storage.cloud_backends import (
-            ObjectStorageDisabledError,
-            get_runtime_object_storage,
-            object_storage_enabled,
-        )
-    except Exception as e:
-        # Import failure (modulo rotto / cycle): treat as fail-OPEN
-        # diagnostic, parallelo a `check_pool_headroom` /
-        # `check_migrations_aligned`. Un broken import del modulo
-        # cloud_backends sarebbe gia' stato catturato dal boot
-        # validate (`validate_storage_config`) o dai test
-        return True, f"check skipped: {type(e).__name__}"
-
-    if not object_storage_enabled():
+    if not cloud_backends_module.object_storage_enabled():
         # Modalita' DB-only / on-prem: capability disabilitata e'
         # configurazione legittima, non un errore
         return True, "skipped: capability disabled"
 
     try:
-        storage = get_runtime_object_storage()
-    except ObjectStorageDisabledError:
+        storage = cloud_backends_module.get_runtime_object_storage()
+    except cloud_backends_module.ObjectStorageDisabledError:
         # Race teorica: capability ON al check, OFF qui
         return True, "skipped: capability disabled (race)"
     except Exception as e:

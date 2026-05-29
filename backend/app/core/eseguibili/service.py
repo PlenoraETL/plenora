@@ -14,8 +14,10 @@ import uuid
 from typing import Mapping, Optional, Sequence
 
 from app.utils.logger import get_logger
+from app.core.projects import access_context as project_access_context
 from app.core.files import db as files_db
 from app.core.files.service import file_source_service
+from app.db import pg_connection as pg_connection_module
 
 from . import db as eseguibili_db
 from .models import (
@@ -48,9 +50,7 @@ def create_from_project(
         ValueError: se il progetto non esiste o non è di tipo arricchisci,
                     o se l'utente non ha accesso al gruppo.
     """
-    from app.core.projects.access_context import load_project_publish_context
-
-    proj = load_project_publish_context(source_project_id)
+    proj = project_access_context.load_project_publish_context(source_project_id)
     if not proj:
         raise ValueError(f"Progetto '{source_project_id}' non trovato")
 
@@ -293,7 +293,6 @@ def execute(
         _load_dataframe_from_bytes,
         load_dataframe_from_file,
     )
-    from app.core.files.service import file_source_service
     from app.core.orchestrator.task_service import task_service
 
     if not file_source_id and not file_path:
@@ -390,8 +389,7 @@ def execute(
     # senza migration) NON blocca l'esecuzione dell'eseguibile —
     # peggio caso il file resta orfano e va cancellato manualmente.
     try:
-        from app.db.pg_connection import unit_of_work
-        with unit_of_work() as conn:
+        with pg_connection_module.unit_of_work() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "UPDATE file_sources "

@@ -11,6 +11,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
+from psycopg import sql as _sql
+
+from app.db import pg_connection as pg_connection_module
 from app.environment import get_env
 from app.utils.logger import get_logger
 
@@ -64,10 +67,6 @@ def ensure_schema(schema: Optional[str] = None) -> str:
     Identifier quoting via `psycopg.sql.Identifier`: anche se DB_SCHEMA
     non viene da input utente, evitiamo string-format di identifier SQL.
     """
-    from psycopg import sql as _sql
-
-    from app.db.pg_connection import get_connection, put_connection
-
     name = schema if schema is not None else _resolved_schema()
     if not _SCHEMA_NAME_PATTERN.match(name):
         raise RuntimeError(
@@ -78,7 +77,7 @@ def ensure_schema(schema: Optional[str] = None) -> str:
     stmt = _sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
         _sql.Identifier(name)
     )
-    conn = get_connection()
+    conn = pg_connection_module.get_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(stmt)
@@ -91,7 +90,7 @@ def ensure_schema(schema: Optional[str] = None) -> str:
             pass
         raise
     finally:
-        put_connection(conn)
+        pg_connection_module.put_connection(conn)
     return name
 
 
@@ -108,15 +107,11 @@ def _schema_name(schema: Optional[str] = None) -> str:
 
 def _schema_migrations_table(schema: Optional[str] = None):
     """Identifier composto `<schema>.schema_migrations` con quoting sicuro."""
-    from psycopg import sql as _sql
-
     return _sql.Identifier(_schema_name(schema), "schema_migrations")
 
 
 def _create_tracking_table_statement(schema: Optional[str] = None):
     """Statement CREATE TABLE per la tracking table nello schema configurato."""
-    from psycopg import sql as _sql
-
     return _sql.SQL(
         """
         CREATE TABLE IF NOT EXISTS {} (
@@ -150,11 +145,7 @@ def _read_applied_migrations() -> tuple[List[str], bool]:
     Other DB errors are propagated so callers do not silently collapse
     introspection failures into "nothing applied".
     """
-    # Import locale per evitare side-effect al load del modulo
-    from app.db.pg_connection import get_connection, put_connection
-    from psycopg import sql as _sql
-
-    conn = get_connection()
+    conn = pg_connection_module.get_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -179,7 +170,7 @@ def _read_applied_migrations() -> tuple[List[str], bool]:
         )
         return [], False
     finally:
-        put_connection(conn)
+        pg_connection_module.put_connection(conn)
     return [r["filename"] for r in rows], True
 
 
@@ -238,16 +229,13 @@ def apply_pending_migrations() -> List[str]:
         Exception se una migration fallisce (l'app non deve partire
         con schema inconsistente).
     """
-    # Import locale (pg_connection potrebbe non essere init-ato al module load
-    from app.db.pg_connection import get_connection, put_connection
-
     # Bootstrap clean-install: lo schema applicativo deve esistere prima
     # del CREATE TABLE schema_migrations (che e' schema-qualified). Su DB
     # vuoto senza questo step il runner fallisce con InvalidSchemaName
     schema = ensure_schema()
 
     # Crea la tabella di tracking se non esiste (idempotente
-    conn = get_connection()
+    conn = pg_connection_module.get_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(_create_tracking_table_statement(schema))
@@ -259,7 +247,7 @@ def apply_pending_migrations() -> List[str]:
             pass
         raise
     finally:
-        put_connection(conn)
+        pg_connection_module.put_connection(conn)
 
     pending = list_pending_migrations()
     if not pending:
@@ -281,12 +269,11 @@ def apply_pending_migrations() -> List[str]:
         # connection con commit atomico. Se la migration fallisce
         # il rollback copre anche il tracking (non marchiamo come
         # applicata una migration che ha fallito
-        conn = get_connection()
+        conn = pg_connection_module.get_connection()
         try:
             conn.autocommit = False
             with conn.cursor() as cur:
                 cur.execute(sql)
-                from psycopg import sql as _sql
                 cur.execute(
                     _sql.SQL(
                         "INSERT INTO {} (filename) VALUES (%s) "
@@ -322,7 +309,7 @@ def apply_pending_migrations() -> List[str]:
                 conn.autocommit = False
             except Exception:
                 pass
-            put_connection(conn)
+            pg_connection_module.put_connection(conn)
 
     logger.info(
         f"[MIGRATIONS] Completato: {len(applied_now)} migration applicate"
