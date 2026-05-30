@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers, function_def_names
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
@@ -35,7 +37,7 @@ def test_pool_headroom_private_psycopg2_attrs_are_isolated_and_marked():
     src = _pg_source()
     headroom_section = src[src.index("def get_pool_headroom"):]
 
-    assert "def get_pool_headroom" in src
+    assert "get_pool_headroom" in function_def_names(src)
     assert "Best-effort" in headroom_section
     assert 'getattr(pool, "_used", {})' in headroom_section
     assert 'getattr(pool, "_pool", [])' in headroom_section
@@ -60,19 +62,18 @@ def test_custom_oid_typecasters_are_not_registered_globally():
     """psycopg2 must own JSON/date/timestamp parsing at the DB boundary."""
     src = _pg_source()
 
-    assert "register_type(" not in src
-    assert "new_type(" not in src
-    assert "_JSONB_OID" not in src
-    assert "_JSON_OID" not in src
-    assert "JSONB_AS_TEXT" not in src
-    assert "JSON_AS_TEXT" not in src
-    assert "_TIMESTAMPTZ_OID" not in src
-    assert "_TIMESTAMP_OID" not in src
-    assert "_DATE_OID" not in src
-    assert "TSTZ_AS_TEXT" not in src
-    assert "TS_AS_TEXT" not in src
-    assert "DATE_AS_TEXT" not in src
-    assert "_timestamp_as_text" not in src
+    # AST identifiers: no custom OID typecaster registration code present.
+    forbidden = {
+        "register_type", "new_type",
+        "_JSONB_OID", "_JSON_OID", "JSONB_AS_TEXT", "JSON_AS_TEXT",
+        "_TIMESTAMPTZ_OID", "_TIMESTAMP_OID", "_DATE_OID",
+        "TSTZ_AS_TEXT", "TS_AS_TEXT", "DATE_AS_TEXT", "_timestamp_as_text",
+    }
+    leaked = forbidden & all_identifiers(src)
+    assert not leaked, (
+        f"psycopg2 must own JSON/date/timestamp parsing; found custom "
+        f"typecaster code: {sorted(leaked)}"
+    )
 
 
 def test_runtime_sql_does_not_hardcode_plenora_schema_prefix():
