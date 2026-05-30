@@ -60,6 +60,11 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+features[\\/]+arcgis_client\.py:\d+: unused method 'update_renderer' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+features[\\/]+arcgis_auth\.py:\d+: unused method '_authenticate_(oauth2|token)' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+features[\\/]+features_service\.py:\d+: unused method 'write_features' "),
+    # Generic multi-layer FeatureService write (boundary protocol + impl):
+    # capability domain-neutral con copertura contract
+    # (test_arcgis_multilayer_write_contract). Consumer: publish IMDF-as-carica
+    # + futuri moduli multi-layer (wiring in arrivo).
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+(connections[\\/]+arcgis_writer_boundary|features[\\/]+features_service)\.py:\d+: unused method 'create_service_with_layers' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+features[\\/]+arcgis_feature_write_methods\.py:\d+: unused method 'apply_edits' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+files[\\/]service\.py:\d+: unused (method|function) '(_load_by_format|create_file_service|_rmtree_safe|model_(dump|validate)_json)' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+intermediate[\\/]node_snapshots_db\.py:\d+: unused function '(upsert_node_meta_extended|insert_node_rows)' "),

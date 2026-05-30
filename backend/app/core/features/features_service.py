@@ -7,7 +7,7 @@ Keeps provider-specific behavior behind a narrow integration boundary.
 import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 from app.utils.logger import get_logger
 from app.core.results.pipeline_result import save_pipeline_result_outcome
@@ -30,6 +30,7 @@ from app.core.features.arcgis_feature_writer import ArcGISFeatureWriteService
 from app.core.connections.arcgis_writer_boundary import (
     ArcGISColumnMappingsInput,
     ArcGISFeatureWritePublicResult,
+    ArcGISLayerSpec,
 )
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
@@ -626,6 +627,92 @@ class FeaturesService:
             folder_id=folder_id,
             column_mappings=column_mappings,
         )
+
+    def create_service_with_layers(
+        self,
+        connection_id: str,
+        service_name: str,
+        layers: Sequence[ArcGISLayerSpec],
+        source_srid: Optional[int] = None,
+        folder_id: str = "",
+    ) -> ArcGISFeatureWritePublicResult:
+        """Crea un Feature Service con N layer (generico, domain-neutral).
+
+        Layer 0 -> ``create_service_from_df`` (crea il servizio); layer 1..N ->
+        ``add_layer_to_service`` sul servizio appena creato. Nessuna conoscenza
+        del dominio chiamante: i `layers` arrivano gia' ordinati e tipizzati.
+        """
+        if not layers:
+            raise ValueError("Nessun layer fornito per il Feature Service")
+
+        conn_info = self._resolve_write_connection(connection_id)
+        srid = source_srid or 4326
+        out_layers: List[Mapping[str, object]] = []
+        errors: List[str] = []
+
+        first = layers[0]
+        first_result = self._writer.create_service_from_df(
+            conn_info,
+            service_name=service_name,
+            layer_name=first.layer_name,
+            df=first.df,
+            geometry_column=first.geometry_column,
+            source_srid=source_srid,
+            folder_id=folder_id,
+            column_mappings=None,
+        )
+        service_url = (
+            first_result.get("service_url", "")
+            if isinstance(first_result, Mapping) else ""
+        )
+        if not service_url:
+            return {
+                "success": False,
+                "service_url": "",
+                "item_id": "",
+                "layers": [],
+                "feature_count": 0,
+                "errors": [f"createService fallito: {first_result}"],
+            }
+        out_layers.append({
+            "id": 0,
+            "name": first.layer_name,
+            "url": f"{service_url}/0",
+            "feature_count": first_result.get("feature_count", 0),
+            "errors": list(first_result.get("errors", []) or []),
+        })
+
+        for idx, spec in enumerate(layers[1:], start=1):
+            try:
+                res = self._writer.add_layer_to_service(
+                    conn_info, service_url, spec.df, spec.layer_name, idx, srid,
+                )
+                out_layers.append({
+                    "id": idx,
+                    "name": spec.layer_name,
+                    "url": f"{service_url}/{idx}",
+                    "feature_count": res.feature_count,
+                    "errors": list(res.errors),
+                })
+            except Exception as exc:  # pragma: no cover - boundary best-effort
+                logger.error(
+                    f"create_service_with_layers: layer '{spec.layer_name}' fallito: {exc}",
+                    exc_info=True,
+                )
+                errors.append(f"add_layer '{spec.layer_name}': {exc}")
+                out_layers.append({
+                    "id": idx, "name": spec.layer_name, "url": "",
+                    "feature_count": 0, "errors": [str(exc)],
+                })
+
+        return {
+            "success": True,
+            "service_url": service_url,
+            "item_id": first_result.get("item_id", ""),
+            "layers": out_layers,
+            "feature_count": sum(int(l["feature_count"]) for l in out_layers),
+            "errors": errors,
+        }
 
     def _resolve_write_connection(self, connection_id: str) -> ArcGISConnectionInfo:
         connection = self.get_connection(connection_id)
