@@ -207,53 +207,6 @@ def test_add_layer_to_service_errors_is_tuple_not_list(real_client):
     assert isinstance(result.errors, tuple)
     assert result.errors == ("a", "b")
 
-
-# IMDF wrapper delegate — BE-IMDF-006B compat path
-
-
-def test_imdf_wrapper_delegates_to_client_method(real_client):
-    """`publish_ops._add_layer_to_service` deve delegare al metodo
-    pubblico del client e ritornare il dict legacy via
-    `to_compat_dict()`."""
-    from app.core.imdf.arcgis.publish_ops import _add_layer_to_service
-
-    conn = SimpleNamespace(server_url="https://arc.test", username="u")
-    gdf = _make_polygon_gdf()
-
-    result_dict = _add_layer_to_service(
-        real_client, conn,
-        "https://arc.test/server/rest/services/X/FeatureServer",
-        gdf, "L", layer_id=2,
-    )
-
-    # NOTE: legacy dict shape preservato
-    assert set(result_dict.keys()) == {"success", "feature_count", "errors"}
-    assert result_dict["success"] is True
-    assert result_dict["feature_count"] == 4
-    assert isinstance(result_dict["errors"], list)
-
-
-def test_imdf_wrapper_passes_arguments_through(real_client):
-    """Verifica che il wrapper passi conn/service_url/gdf/layer_name/
-    layer_id/srid invariati al metodo pubblico."""
-    from app.core.imdf.arcgis.publish_ops import _add_layer_to_service
-
-    real_client.add_layer_to_service = MagicMock(
-        return_value=AddLayerResult(success=True, feature_count=7, errors=())
-    )
-
-    conn = SimpleNamespace(server_url="https://arc.test", username="u")
-    gdf = _make_polygon_gdf()
-
-    result_dict = _add_layer_to_service(
-        real_client, conn,
-        "https://arc.test/server/rest/services/X/FeatureServer",
-        gdf, "MyLayer", layer_id=3, srid=3857,
-    )
-    assert result_dict["feature_count"] == 7
-
-    real_client.add_layer_to_service.assert_called_once_with(
-        conn,
-        "https://arc.test/server/rest/services/X/FeatureServer",
-        gdf, "MyLayer", 3, 3857,
-    )
+# (IMDF wrapper `publish_ops._add_layer_to_service` rimosso col cutover: il
+# provider `add_layer_to_service` e' coperto dai test sopra; l'orchestrazione
+# multi-layer e' nel writer condiviso, vedi test_arcgis_multilayer_write_contract.)

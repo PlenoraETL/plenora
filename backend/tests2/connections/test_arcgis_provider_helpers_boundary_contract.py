@@ -29,11 +29,5 @@ def test_arcgis_feature_helper_legacy_paths_are_removed() -> None:
     assert not (_BACKEND_ROOT / "app/core/features/arcgis_publish_modes.py").exists()
 
 
-def test_imdf_arcgis_wrappers_import_generic_helpers_from_connections() -> None:
-    sql_imports = _imports("app/core/imdf/arcgis/sql_helpers.py")
-    publish_imports = _imports("app/core/imdf/arcgis/publish_ops.py")
-
-    assert "app.core.connections.arcgis_sql_helpers" in sql_imports
-    assert "app.core.connections.arcgis_publish_modes" in publish_imports
-    assert "app.core.features" not in sql_imports
-    assert "app.core.features.arcgis_publish_modes" not in publish_imports
+# (Il subpackage `imdf/arcgis/` e' stato rimosso col cutover: la policy IMDF
+# usa direttamente i boundary `connections.arcgis_*` + il writer condiviso.)

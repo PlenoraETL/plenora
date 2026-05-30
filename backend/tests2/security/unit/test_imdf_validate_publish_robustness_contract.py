@@ -68,7 +68,7 @@ def fake_bundle(tmp_path, monkeypatch):
 def _install_stubs(monkeypatch, gdf, get_layer_schema_ret, capabilities="Query,Create,Update,Delete"):
     import app.core.imdf.validator as validator_mod
     import app.core.connections.arcgis_connection_resolver as adapter_mod
-    import app.core.imdf.arcgis.service_discovery as service_discovery_mod
+    import app.core.connections.arcgis_service_discovery as service_discovery_mod
 
     monkeypatch.setattr(
         validator_mod, "load_indoor_bundle_payload",
@@ -96,15 +96,15 @@ def _install_stubs(monkeypatch, gdf, get_layer_schema_ret, capabilities="Query,C
         lambda connection_id: (_FakeConnInfo(), fake_client),
     )
     monkeypatch.setattr(
-        service_discovery_mod, "_find_existing_service",
+        service_discovery_mod, "find_existing_feature_service",
         lambda *a, **kw: ("https://example.com/svc", "item-1", None),
     )
     monkeypatch.setattr(
-        service_discovery_mod, "_is_service_name_available",
+        service_discovery_mod, "is_service_name_available",
         lambda c, co, fn: (True, None),
     )
     monkeypatch.setattr(
-        service_discovery_mod, "_list_user_folders",
+        service_discovery_mod, "list_user_folders",
         lambda c, co: [], raising=False,
     )
 

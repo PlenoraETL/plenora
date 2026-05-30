@@ -87,28 +87,5 @@ def test_is_service_name_available_fail_opens_for_error_shaped_response(
     assert available is True
     assert error == "check fallito: service name check unavailable"
 
-
-def test_imdf_compat_helper_delegates_to_generic_provider_method(
-    conn: SimpleNamespace,
-) -> None:
-    from app.core.imdf.arcgis.service_discovery import _is_service_name_available
-
-    fake_client = MagicMock(name="ArcGISProvider")
-    fake_client.is_service_name_available.return_value = (False, None)
-
-    assert _is_service_name_available(fake_client, conn, "imdf_demo") == (False, None)
-    fake_client.is_service_name_available.assert_called_once_with(conn, "imdf_demo")
-
-
-def test_imdf_compat_helper_preserves_fail_open_on_provider_exception(
-    conn: SimpleNamespace,
-) -> None:
-    from app.core.imdf.arcgis.service_discovery import _is_service_name_available
-
-    fake_client = MagicMock(name="ArcGISProvider")
-    fake_client.is_service_name_available.side_effect = RuntimeError("boom")
-
-    available, error = _is_service_name_available(fake_client, conn, "imdf_demo")
-
-    assert available is True
-    assert error == "boom"
+# (I test del wrapper IMDF `_is_service_name_available` sono stati rimossi col
+# cutover: il fail-open vive a livello client/provider, coperto sopra.)

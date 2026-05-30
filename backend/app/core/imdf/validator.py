@@ -16,8 +16,8 @@ from app.core.dataframes.tabular import (
 from app.core.imdf import storage as imdf_storage
 from app.core.imdf.bundle_geo import layer_geodataframes_only
 from app.core.imdf.persist import load_indoor_bundle_payload
-from app.core.imdf.arcgis import service_discovery as service_discovery_module
-from app.core.imdf.arcgis import sql_helpers as sql_helpers_module
+import app.core.connections.arcgis_service_discovery as service_discovery_module
+import app.core.connections.arcgis_sql_helpers as sql_helpers_module
 from app.core.imdf import arcgis_uploader as arcgis_uploader_module
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.arcgis_provider import ArcGISProviderProtocol
@@ -186,7 +186,7 @@ def validate_publish(
 
     try:
         existing_url, existing_item, existing_folder = (
-            service_discovery_module._find_existing_service(
+            service_discovery_module.find_existing_feature_service(
                 client, conn, fs_name
             )
         )
@@ -213,7 +213,7 @@ def validate_publish(
         _cur_title = None
         if _cur_id:
             try:
-                _folders = service_discovery_module._list_user_folders(client, conn)
+                _folders = service_discovery_module.list_user_folders(client, conn)
                 _by_id = {f.get("id"): f.get("title") for f in _folders if f.get("id")}
                 _cur_title = _by_id.get(_cur_id)
             except Exception as e:
@@ -245,7 +245,7 @@ def validate_publish(
     # createService fallira'. Rileviamolo ora cosi' l'utente lo sa subito
     if mode == "replace" and not existing_url:
         try:
-            available, _err = service_discovery_module._is_service_name_available(
+            available, _err = service_discovery_module.is_service_name_available(
                 client, conn, fs_name
             )
             if not available:
@@ -422,10 +422,10 @@ def validate_publish(
                         try:
                             # POST /query con returnCountOnly: più robusto di
                             # GET (URL length, content negotiation). Chunk 100
-                            for batch in sql_helpers_module._chunked(vals_unique, 100):
+                            for batch in sql_helpers_module.chunked(vals_unique, 100):
                                 where = (
                                     f"{match_col} IN ("
-                                    f"{','.join(sql_helpers_module._quote_sql_value(v) for v in batch)}"
+                                    f"{','.join(sql_helpers_module.quote_sql_value(v) for v in batch)}"
                                     f")"
                                 )
                                 total_overlap += _count_features_where_via_post(
@@ -485,10 +485,10 @@ def validate_publish(
                     total_match_hits = 0
                     match_query_failed = False
                     try:
-                        for batch in sql_helpers_module._chunked(vals_unique, 100):
+                        for batch in sql_helpers_module.chunked(vals_unique, 100):
                             where = (
                                 f"{match_col} IN ("
-                                f"{','.join(sql_helpers_module._quote_sql_value(v) for v in batch)})"
+                                f"{','.join(sql_helpers_module.quote_sql_value(v) for v in batch)})"
                             )
                             total_match_hits += _count_features_where_via_post(
                                 client, conn, existing_info["url"], where,

@@ -20,7 +20,6 @@ _TARGET_BOUNDARY_MODULES = (
     "app/core/imdf/router.py",
     "app/core/imdf/publish_dispatcher.py",
     "app/core/imdf/arcgis_uploader.py",
-    "app/core/imdf/arcgis/publish_ops.py",
     "app/core/carica/router.py",
     "app/core/carica/models.py",
     "app/core/carica/executor.py",
