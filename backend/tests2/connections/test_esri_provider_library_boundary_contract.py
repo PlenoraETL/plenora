@@ -34,6 +34,7 @@ ARCGIS_SQL_HELPERS_MODULE = "app.core.connections.arcgis_sql_helpers"
 ARCGIS_PUBLISH_MODES_MODULE = "app.core.connections.arcgis_publish_modes"
 ARCGIS_SERVICE_DISCOVERY_MODULE = "app.core.connections.arcgis_service_discovery"
 ARCGIS_SERVICE_LIFECYCLE_MODULE = "app.core.connections.arcgis_service_lifecycle"
+ARCGIS_WRITER_BOUNDARY_MODULE = "app.core.connections.arcgis_writer_boundary"
 SHARED_PROVIDER_MODULE = "app.shared.connections.arcgis_provider"
 SHARED_CONNECTION_MODULE = "app.shared.connections.arcgis_connection"
 
@@ -157,6 +158,7 @@ def test_imdf_uses_arcgis_provider_protocol_resolver_or_neutral_helpers(
         ARCGIS_PUBLISH_MODES_MODULE,
         ARCGIS_SERVICE_DISCOVERY_MODULE,
         ARCGIS_SERVICE_LIFECYCLE_MODULE,
+        ARCGIS_WRITER_BOUNDARY_MODULE,
     }
     rel = _rel(src_file)
 

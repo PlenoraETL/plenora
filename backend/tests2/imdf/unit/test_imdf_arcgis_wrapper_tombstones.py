@@ -62,18 +62,25 @@ def test_imdf_arcgis_domain_adapters_do_not_grow_provider_logic(
     assert _called_attributes(fn) <= allowed_calls
 
 
-def test_imdf_renderer_path_uses_provider_layer_renderer_directly() -> None:
+def test_imdf_renderer_path_delegates_to_shared_writer() -> None:
+    """La policy IMDF applica i renderer via il writer condiviso, non chiamando
+    il client ArcGIS direttamente."""
     source = inspect.getsource(arcgis_uploader.upload_imdf_layers)
 
-    assert "client.update_layer_renderer" in source
+    assert "feature_writer.apply_layer_renderers" in source
+    assert "client.update_layer_renderer" not in source
     assert "client.update_renderer" not in source
 
 
-def test_imdf_uploader_uses_provider_add_layer_directly() -> None:
+def test_imdf_uploader_delegates_multilayer_to_shared_writer() -> None:
+    """I loop multi-layer (create/existing) sono nel writer condiviso; la policy
+    IMDF non chiama piu' i primitivi ArcGIS direttamente."""
     source = inspect.getsource(arcgis_uploader.upload_imdf_layers)
 
-    assert "client.add_layer_to_service" in source
-    assert "_publish_ops._add_layer_to_service" not in source
+    assert "feature_writer.create_service_with_layers" in source
+    assert "feature_writer.write_layers_to_existing_service" in source
+    assert "client.add_layer_to_service" not in source
+    assert "client.create_service" not in source
 
 
 def test_imdf_uploader_private_helper_facade_stays_tombstoned() -> None:

@@ -166,10 +166,15 @@ def execute_imdf_publish_task(
         _update_progress(self, 18, f"Upload su ArcGIS (mode={mode}, fs={fs_name})...")
 
         from app.core.imdf.arcgis_uploader import upload_imdf_layers
+        # Writer ArcGIS condiviso (adapter concreto): istanziato qui nel worker
+        # (fuori dal boundary IMDF), iniettato nella policy IMDF.
+        from app.core.features.features_service import FeaturesService
+
         publish_result = upload_imdf_layers(
             connection_id=connection_id,
             layers=gdf_layers,
             fs_name=fs_name,
+            feature_writer=FeaturesService(),
             folder_name=folder_name,
             apply_renderers=apply_renderers,
             renderers_data=renderers_data,
