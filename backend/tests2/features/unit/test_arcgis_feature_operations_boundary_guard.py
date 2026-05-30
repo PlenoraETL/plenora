@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers, imports_symbol_from
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.features, pytest.mark.contract]
 
@@ -208,13 +210,15 @@ def test_features_service_has_no_directory_storage_state() -> None:
     """Feature reads/writes go through provider/result boundaries, not local dirs."""
     src = _FEATURES_SERVICE_PATH.read_text(encoding="utf-8")
 
-    assert "_arcgis_dir" not in src
-    assert "_results_dir" not in src
-    assert "arcgis_dir:" not in src
-    assert "results_dir:" not in src
-    assert "arcgis_dir=" not in src
-    assert "results_dir=" not in src
-    assert "from app.config import settings" not in src
+    # AST identifiers (no comment/string false hits). The old check split each
+    # name into `:`-annotation and `=`-kwarg substrings; "identifier absent
+    # anywhere" is the union and matches the intent (no directory storage state).
+    identifiers = all_identifiers(src)
+    assert "_arcgis_dir" not in identifiers
+    assert "_results_dir" not in identifiers
+    assert "arcgis_dir" not in identifiers
+    assert "results_dir" not in identifiers
+    assert not imports_symbol_from(src, "app.config", "settings")
 
 
 def test_arcgis_feature_write_methods_does_not_import_concrete_client() -> None:

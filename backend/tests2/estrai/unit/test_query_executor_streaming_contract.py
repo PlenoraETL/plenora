@@ -67,33 +67,38 @@ def test_query_executor_uses_streaming_persist_path():
     `persist_streaming_query_to_storage`. Cattura regressioni che
     re-introducano il path-based legacy.
 
-    Strip dei commenti single-line `# ...` prima del match per evitare
-    falsi positivi dai tombstone comment che menzionano i nomi rimossi.
+    Il match gira sull'AST: gli identificatori sono colti solo come codice,
+    quindi i tombstone comment che menzionano i nomi rimossi non danno falsi
+    positivi (niente strip manuale dei commenti) e una riformattazione non puo'
+    reintrodurre il path legacy non visto.
     """
     from pathlib import Path
-    import re
-    backend_root = Path(__file__).resolve().parents[3]
-    raw = (
-        backend_root / "app" / "core" / "query_execution" / "query_executor.py"
-    ).read_text(encoding="utf-8")
-    # Strip comment lines (preserva il code-only signal).
-    source = "\n".join(
-        line for line in raw.splitlines()
-        if not re.match(r"^\s*#", line)
+
+    from tests2.shared._ast_identifiers import (
+        all_identifiers,
+        imports_symbol_from,
+        self_attribute_names,
+        uses_attribute,
     )
 
-    assert "persist_streaming_query_to_storage" in source, (
+    raw = (
+        Path(__file__).resolve().parents[3]
+        / "app" / "core" / "query_execution" / "query_executor.py"
+    ).read_text(encoding="utf-8")
+    identifiers = all_identifiers(raw)
+
+    assert "persist_streaming_query_to_storage" in identifiers, (
         "QueryExecutor deve invocare persist_streaming_query_to_storage "
         "nel branch _streamable."
     )
-    # Verifica che il vecchio pattern legacy NON sia tornato (codice, non commenti).
-    assert "QueryStreamingWriter" not in source, (
-        "QueryStreamingWriter import non deve tornare."
-    )
-    assert "self._streaming_writer" not in source, (
+    # Il vecchio pattern legacy NON deve essere tornato.
+    assert "QueryStreamingWriter" not in identifiers, "import legacy non deve tornare"
+    assert "_streaming_writer" not in self_attribute_names(raw), (
         "_streaming_writer attribute non deve tornare."
     )
-    assert "from app.core.results.result_store import save_result_blob" not in source
-    assert "csv.writer" not in source
-    assert "ParquetWriter" not in source
-    assert "pyarrow" not in source
+    assert not imports_symbol_from(
+        raw, "app.core.results.result_store", "save_result_blob"
+    )
+    assert not uses_attribute(raw, "csv", "writer")
+    assert "ParquetWriter" not in identifiers
+    assert "pyarrow" not in identifiers
