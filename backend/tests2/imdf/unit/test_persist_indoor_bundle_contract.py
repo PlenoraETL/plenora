@@ -96,6 +96,42 @@ def test_persist_meta_discriminator_and_summary(captured):
     assert meta["validation_summary"] == {"passed": True, "total_errors": 0, "total_warnings": 3}
 
 
+def test_load_reassembles_payload_from_storage(monkeypatch):
+    """load_indoor_bundle_payload ricompone il payload dalle sezioni storage."""
+    manifest = {
+        "schema_descriptor": {
+            "schema": "plenora.indoor.schema",
+            "version": "1.0",
+            "layers": {"Locale": {"identity": ["id"], "fields": []}},
+        },
+        "site_ids": ["S1"],
+    }
+    fc = {"type": "FeatureCollection", "features": [{"type": "Feature"}]}
+    monkeypatch.setattr(imdf_persist._imdf_storage, "read_manifest", lambda t: manifest)
+    monkeypatch.setattr(
+        imdf_persist._imdf_storage, "get_meta_only",
+        lambda t: {"site_id": "S1", "format": "plenora.indoor.bundle", "bundle_version": "1.0"},
+    )
+    monkeypatch.setattr(
+        imdf_persist._imdf_storage, "read_geojson",
+        lambda t, rel: fc if rel == "S1/Locale.geojson" else None,
+    )
+    monkeypatch.setattr(imdf_persist._imdf_storage, "read_validation", lambda t: {"passed": True})
+    monkeypatch.setattr(imdf_persist._imdf_storage, "read_renderers", lambda t: None)
+
+    payload = imdf_persist.load_indoor_bundle_payload("t1")
+    assert payload is not None
+    assert payload["schema"] == "plenora.indoor.bundle"
+    assert payload["version"] == "1.0"
+    assert payload["manifest"]["schema_descriptor"]["layers"]["Locale"]["identity"] == ["id"]
+    assert payload["layers"]["Locale"] == fc
+
+
+def test_load_returns_none_without_manifest(monkeypatch):
+    monkeypatch.setattr(imdf_persist._imdf_storage, "read_manifest", lambda t: None)
+    assert imdf_persist.load_indoor_bundle_payload("t1") is None
+
+
 def test_persist_without_site_skips_geojson(captured):
     payload = _payload()
     payload["metadata"]["site_ids"] = []

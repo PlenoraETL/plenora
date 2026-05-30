@@ -220,6 +220,49 @@ def persist_indoor_bundle(
     return {"storage_keys": storage_keys, "meta": meta}
 
 
+def load_indoor_bundle_payload(task_id: str) -> Optional[JsonObject]:
+    """Ricompone il payload ``plenora.indoor.bundle`` dalle sezioni su storage.
+
+    Inverso di ``persist_indoor_bundle``: legge ``manifest.json`` (con
+    ``schema_descriptor``) + ``{site}/{layer}.geojson`` per ogni layer
+    dichiarato + validation/renderers, e ricostruisce il payload consumabile da
+    ``bundle_loader.parse_indoor_bundle`` / ``bundle_geo``. Usato dal publish:
+    niente ``.gdb``, niente vsimem.
+
+    Returns:
+        Il payload, o ``None`` se manca il manifest (bundle assente/legacy).
+    """
+    manifest = _imdf_storage.read_manifest(task_id)
+    if not isinstance(manifest, dict):
+        return None
+    descriptor = manifest.get("schema_descriptor") or {}
+    meta = _imdf_storage.get_meta_only(task_id) or {}
+
+    site_ids = (
+        manifest.get("site_ids")
+        or meta.get("site_ids")
+        or ([meta["site_id"]] if meta.get("site_id") else [])
+    )
+    site_id = site_ids[0] if site_ids else ""
+
+    layers: Dict[str, Any] = {}
+    if site_id:
+        for layer_name in (descriptor.get("layers") or {}):
+            fc = _imdf_storage.read_geojson(task_id, f"{site_id}/{layer_name}.geojson")
+            if isinstance(fc, dict):
+                layers[layer_name] = fc
+
+    return {
+        "schema":     meta.get("format") or "plenora.indoor.bundle",
+        "version":    str(meta.get("bundle_version") or "1.0"),
+        "metadata":   {"site_ids": site_ids},
+        "manifest":   manifest,
+        "validation": _imdf_storage.read_validation(task_id),
+        "renderers":  _imdf_storage.read_renderers(task_id),
+        "layers":     layers,
+    }
+
+
 # Tombstone (QUERY-1 step 3): `persist_imdf_bundle_to_disk` rimosso.
 # Era il materializer locale `IMDF_BUNDLES_DIR/{task_id}/`. Tutti i
 # caller di produzione + script `imdf_real_e2e_check.py` usano

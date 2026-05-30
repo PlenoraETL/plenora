@@ -8,6 +8,8 @@ import time
 from datetime import datetime, timezone
 
 from app.config import settings
+from app.core.imdf import storage as imdf_storage
+from app.core.imdf.persist import load_indoor_bundle_payload
 from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger
 from workers.celery_app import celery_app
@@ -64,16 +66,6 @@ def execute_imdf_publish_task(
     try:
         _update_progress(self, 2, "Risoluzione bundle IMDF...")
 
-        # IMDF-5: hydration del .gdb fully-RAM via GDAL /vsimem (zero disk).
-        # `open_gdb_in_vsimem` carica `_gdb.zip` bytes via ctypes
-        # adapter (`app.core.io.vsimem`); pyogrio legge via path
-        # `/vsizip//vsimem/.../{site}.gdb`. Bundle senza `_gdb.zip` su
-        # storage non sono processabili (richiedono re-upload via
-        # `persist_imdf_bundle`).
-        from app.core.imdf import storage as imdf_storage
-        from app.core.imdf.loader import load_imdf_layers
-
-        # Site_id richiesto per costruire il path interno allo zip.
         meta = imdf_storage.get_meta_only(bundle_task_id)
         if meta is None:
             msg = (
@@ -87,26 +79,19 @@ def execute_imdf_publish_task(
                 "bundle_task_id": bundle_task_id, "error": msg,
                 "elapsed_time": round(time.time() - started_at, 2),
             }
-        site_id = (meta.get("site_id") or "").strip()
-        if not site_id:
-            msg = (
-                f"Bundle IMDF '{bundle_task_id}' senza site_id nel meta: "
-                f"impossibile risolvere il path interno della .gdb."
-            )
-            logger.error(f"[Task {task_id}] {msg}")
-            return {
-                "success": False, "task_id": task_id,
-                "bundle_task_id": bundle_task_id, "error": msg,
-                "elapsed_time": round(time.time() - started_at, 2),
-            }
 
-        _update_progress(self, 8, "Caricamento layer IMDF dal GDB...")
-
-        try:
-            with imdf_storage.open_gdb_in_vsimem(bundle_task_id, site_id) as vsi_path:
-                if vsi_path is None:
+        if meta.get("format") == "plenora.indoor.bundle":
+            # Path NUOVO: bundle plenora.indoor.bundle (sezioni JSON su storage).
+            # Niente .gdb / vsimem / pyogrio: i layer si ricompongono dal
+            # descrittore e diventano GeoDataFrame al boundary dataframe.
+            _update_progress(self, 8, "Caricamento layer dal bundle indoor...")
+            try:
+                from app.core.imdf.bundle_geo import layer_geodataframes_only
+                payload = load_indoor_bundle_payload(bundle_task_id)
+                if not payload or not payload.get("layers"):
                     msg = (
-                        f"Bundle IMDF '{bundle_task_id}' senza .gdb su storage."
+                        f"Bundle indoor '{bundle_task_id}' senza layer leggibili "
+                        f"su storage."
                     )
                     logger.error(f"[Task {task_id}] {msg}")
                     return {
@@ -114,18 +99,61 @@ def execute_imdf_publish_task(
                         "bundle_task_id": bundle_task_id, "error": msg,
                         "elapsed_time": round(time.time() - started_at, 2),
                     }
-                gdf_layers = load_imdf_layers(vsi_path)
+                gdf_layers = layer_geodataframes_only(payload, drop_z=True)
                 total_features = sum(len(gdf) for gdf in gdf_layers.values())
-        except Exception as e:
-            msg = f"Hydration GDB /vsimem fallita: {e}"
-            logger.error(f"[Task {task_id}] {msg}", exc_info=True)
-            return {
-                "success": False, "task_id": task_id,
-                "bundle_task_id": bundle_task_id, "error": msg,
-                "elapsed_time": round(time.time() - started_at, 2),
-            }
+            except Exception as e:
+                msg = f"Caricamento bundle indoor fallito: {e}"
+                logger.error(f"[Task {task_id}] {msg}", exc_info=True)
+                return {
+                    "success": False, "task_id": task_id,
+                    "bundle_task_id": bundle_task_id, "error": msg,
+                    "elapsed_time": round(time.time() - started_at, 2),
+                }
+        else:
+            # Path LEGACY: .gdb fully-RAM via GDAL /vsimem (ctypes adapter
+            # `app.core.io.vsimem`); pyogrio legge `/vsizip//vsimem/.../{site}.gdb`.
+            # Site_id richiesto per il path interno allo zip.
+            from app.core.imdf.loader import load_imdf_layers
+
+            site_id = (meta.get("site_id") or "").strip()
+            if not site_id:
+                msg = (
+                    f"Bundle IMDF '{bundle_task_id}' senza site_id nel meta: "
+                    f"impossibile risolvere il path interno della .gdb."
+                )
+                logger.error(f"[Task {task_id}] {msg}")
+                return {
+                    "success": False, "task_id": task_id,
+                    "bundle_task_id": bundle_task_id, "error": msg,
+                    "elapsed_time": round(time.time() - started_at, 2),
+                }
+
+            _update_progress(self, 8, "Caricamento layer IMDF dal GDB...")
+            try:
+                with imdf_storage.open_gdb_in_vsimem(bundle_task_id, site_id) as vsi_path:
+                    if vsi_path is None:
+                        msg = (
+                            f"Bundle IMDF '{bundle_task_id}' senza .gdb su storage."
+                        )
+                        logger.error(f"[Task {task_id}] {msg}")
+                        return {
+                            "success": False, "task_id": task_id,
+                            "bundle_task_id": bundle_task_id, "error": msg,
+                            "elapsed_time": round(time.time() - started_at, 2),
+                        }
+                    gdf_layers = load_imdf_layers(vsi_path)
+                    total_features = sum(len(gdf) for gdf in gdf_layers.values())
+            except Exception as e:
+                msg = f"Hydration GDB /vsimem fallita: {e}"
+                logger.error(f"[Task {task_id}] {msg}", exc_info=True)
+                return {
+                    "success": False, "task_id": task_id,
+                    "bundle_task_id": bundle_task_id, "error": msg,
+                    "elapsed_time": round(time.time() - started_at, 2),
+                }
+
         logger.info(
-            f"[Task {task_id}] GDB caricato: {len(gdf_layers)} layer, "
+            f"[Task {task_id}] layer caricati: {len(gdf_layers)} layer, "
             f"{total_features} features totali"
         )
 
