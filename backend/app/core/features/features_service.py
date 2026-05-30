@@ -27,6 +27,7 @@ from app.core.connections.arcgis_models import (
 from app.core.connections.arcgis_provider_factory import create_arcgis_provider
 from app.core.features.arcgis_feature_operations import ArcGISFeatureOperations
 from app.core.features.arcgis_feature_writer import ArcGISFeatureWriteService
+from app.core.connections.arcgis_publish_modes import publish_existing_layer_mode
 from app.core.connections.arcgis_writer_boundary import (
     ArcGISColumnMappingsInput,
     ArcGISFeatureWritePublicResult,
@@ -711,6 +712,81 @@ class FeaturesService:
             "item_id": first_result.get("item_id", ""),
             "layers": out_layers,
             "feature_count": sum(int(l["feature_count"]) for l in out_layers),
+            "errors": errors,
+        }
+
+    def write_layers_to_existing_service(
+        self,
+        connection_id: str,
+        service_url: str,
+        layers: Sequence[ArcGISLayerSpec],
+        mode: str,
+        source_srid: Optional[int] = None,
+    ) -> ArcGISFeatureWritePublicResult:
+        """Scrive N layer su un Feature Service ESISTENTE (generico).
+
+        ``mode`` in {append, upsert, update}; ogni layer e' matchato per nome col
+        servizio esistente. upsert/update usano ``spec.match_column``. Domain-
+        neutral: nessuna conoscenza del chiamante (gli errori sono grezzi; il
+        prefisso di dominio, se serve, lo aggiunge il caller).
+        """
+        conn_info = self._resolve_write_connection(connection_id)
+        srid = source_srid or 4326
+        try:
+            existing = self._client.list_layers(conn_info, service_url) or []
+        except Exception as exc:
+            return {
+                "success": False, "service_url": service_url,
+                "layers": [], "feature_count": 0, "errors": [f"list_layers: {exc}"],
+            }
+        by_name = {l["name"]: l for l in existing if l.get("name")}
+
+        out_layers: List[Mapping[str, object]] = []
+        errors: List[str] = []
+        for spec in layers:
+            info = by_name.get(spec.layer_name)
+            if not info:
+                msg = f"Layer '{spec.layer_name}' non trovato nel FS esistente"
+                errors.append(msg)
+                out_layers.append({
+                    "id": None, "name": spec.layer_name, "url": "",
+                    "feature_count": 0, "errors": [msg],
+                })
+                continue
+            res = publish_existing_layer_mode(
+                client=self._client,
+                conn=conn_info,
+                layer_url=info["url"],
+                gdf=spec.df,
+                mode=mode,
+                match_col=spec.match_column or None,
+                target_srid=srid,
+            )
+            primary = res.updated_count if mode == "update" else res.added_count
+            out_layers.append({
+                "id": info.get("id"),
+                "name": spec.layer_name,
+                "url": info["url"],
+                "feature_count": primary,
+                "added_count": res.added_count,
+                "updated_count": res.updated_count,
+                "deleted_count": res.deleted_count,
+                "skipped_count": res.skipped_count,
+                "errors": list(res.errors),
+            })
+
+        real_activity = any(
+            (l.get("added_count", 0) or 0)
+            + (l.get("updated_count", 0) or 0)
+            + (l.get("deleted_count", 0) or 0) > 0
+            for l in out_layers
+        )
+        has_errors = any(l["errors"] for l in out_layers) or bool(errors)
+        return {
+            "success": real_activity and not has_errors,
+            "service_url": service_url,
+            "layers": out_layers,
+            "feature_count": sum(int(l.get("feature_count", 0) or 0) for l in out_layers),
             "errors": errors,
         }
 

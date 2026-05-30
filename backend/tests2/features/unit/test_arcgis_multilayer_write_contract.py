@@ -117,3 +117,87 @@ def test_add_layer_failure_is_isolated_per_layer():
     b = next(l for l in res["layers"] if l["name"] == "B")
     assert b["feature_count"] == 0 and b["errors"]
     assert any("add_layer 'B'" in e for e in res["errors"])
+
+
+# --- write_layers_to_existing_service (append/upsert/update) ---
+
+class _FakeModeResult:
+    def __init__(self, added=0, updated=0, deleted=0, skipped=0, errors=()):
+        self.added_count = added
+        self.updated_count = updated
+        self.deleted_count = deleted
+        self.skipped_count = skipped
+        self.errors = list(errors)
+
+
+class _FakeClientWithLayers:
+    def __init__(self, layers, fail=False):
+        self._layers = layers
+        self._fail = fail
+
+    def list_layers(self, conn, service_url):
+        if self._fail:
+            raise RuntimeError("list down")
+        return self._layers
+
+
+def _svc_existing(client, mode_results, monkeypatch):
+    import app.core.features.features_service as fs
+    svc = fs.FeaturesService.__new__(fs.FeaturesService)
+    svc._client = client
+    svc._resolve_write_connection = lambda connection_id: object()
+    calls = []
+
+    def _fake_mode(*, client, conn, layer_url, gdf, mode, match_col, target_srid):
+        calls.append((layer_url, mode, match_col))
+        return mode_results.pop(0)
+
+    monkeypatch.setattr(fs, "publish_existing_layer_mode", _fake_mode)
+    return svc, calls
+
+
+def test_existing_append_matches_layers_by_name(monkeypatch):
+    client = _FakeClientWithLayers([
+        {"name": "A", "url": "https://x/A", "id": 0},
+        {"name": "B", "url": "https://x/B", "id": 1},
+    ])
+    svc, calls = _svc_existing(
+        client, [_FakeModeResult(added=3), _FakeModeResult(added=2)], monkeypatch,
+    )
+    res = svc.write_layers_to_existing_service(
+        "c", "https://x", [ArcGISLayerSpec("A", [1]), ArcGISLayerSpec("B", [1])], "append",
+    )
+    assert res["success"] is True
+    assert calls == [("https://x/A", "append", None), ("https://x/B", "append", None)]
+    assert res["feature_count"] == 5
+
+
+def test_existing_update_uses_updated_count_and_match_column(monkeypatch):
+    client = _FakeClientWithLayers([{"name": "A", "url": "https://x/A", "id": 0}])
+    svc, calls = _svc_existing(client, [_FakeModeResult(updated=4)], monkeypatch)
+    res = svc.write_layers_to_existing_service(
+        "c", "https://x", [ArcGISLayerSpec("A", [1], match_column="id")], "update",
+    )
+    assert calls == [("https://x/A", "update", "id")]
+    assert res["layers"][0]["feature_count"] == 4  # updated, not added
+
+
+def test_existing_unmatched_layer_is_error(monkeypatch):
+    client = _FakeClientWithLayers([{"name": "A", "url": "https://x/A", "id": 0}])
+    svc, _ = _svc_existing(client, [_FakeModeResult(added=1)], monkeypatch)
+    res = svc.write_layers_to_existing_service(
+        "c", "https://x",
+        [ArcGISLayerSpec("A", [1]), ArcGISLayerSpec("GHOST", [1])], "append",
+    )
+    # A scritto (added=1) ma GHOST manca -> errore -> success False
+    assert res["success"] is False
+    assert any("GHOST" in e for e in res["errors"])
+
+
+def test_existing_list_layers_failure_returns_unsuccessful(monkeypatch):
+    svc, _ = _svc_existing(_FakeClientWithLayers([], fail=True), [], monkeypatch)
+    res = svc.write_layers_to_existing_service(
+        "c", "https://x", [ArcGISLayerSpec("A", [1])], "append",
+    )
+    assert res["success"] is False
+    assert any("list_layers" in e for e in res["errors"])

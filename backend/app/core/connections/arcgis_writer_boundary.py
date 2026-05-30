@@ -24,13 +24,18 @@ class ArcGISLayerSpec:
     """Un layer da pubblicare in un Feature Service multi-layer.
 
     Domain-neutral: descrive solo `cosa` pubblicare (nome + dati + colonna
-    geometria), senza alcuna conoscenza del dominio chiamante (IMDF, export,
-    ...). Il chiamante decide quali layer, in quale ordine, e l'eventuale
-    stile (applicato in un passo separato)."""
+    geometria + eventuale chiave d'identita' per upsert/update), senza alcuna
+    conoscenza del dominio chiamante (IMDF, export, ...). Il chiamante decide
+    quali layer, in quale ordine, e l'eventuale stile (passo separato).
+
+    ``match_column`` e' usato solo dalle modalita' ``upsert``/``update`` su
+    servizio esistente; ignorato in create/append.
+    """
 
     layer_name: str
     df: FrameLike
     geometry_column: str = "geometry"
+    match_column: str = ""
 
 
 class ArcGISFeatureWriter(Protocol):
@@ -78,6 +83,23 @@ class ArcGISFeatureWriter(Protocol):
         Layer 0 creates the service; layers 1..N are appended. Returns a mapping
         with ``service_url``, ``item_id`` and a per-layer ``layers`` list. Any
         caller (IMDF, exports, ...) supplies its own ordered layer specs.
+        """
+        ...
+
+    def write_layers_to_existing_service(
+        self,
+        connection_id: str,
+        service_url: str,
+        layers: Sequence[ArcGISLayerSpec],
+        mode: str,
+        source_srid: Optional[int] = None,
+    ) -> ArcGISFeatureWritePublicResult:
+        """Write N layers to an EXISTING Feature Service (generic, domain-neutral).
+
+        ``mode`` is one of ``append`` / ``upsert`` / ``update``; each layer is
+        matched to the existing service by name. ``upsert``/``update`` use the
+        per-layer ``match_column``. Returns a per-layer ``layers`` list with
+        added/updated/deleted/skipped counts.
         """
         ...
 
