@@ -7,6 +7,14 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._ast_identifiers import (
+    all_identifiers,
+    call_has_keyword,
+    function_param_names,
+    handler_catches,
+    self_attribute_names,
+)
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
@@ -173,8 +181,9 @@ def test_query_executor_no_longer_carries_legacy_results_dir() -> None:
     init_args = [arg.arg for arg in init_fn.args.args + init_fn.args.kwonlyargs]
 
     assert "results_dir" not in init_args
-    assert "RESULTS_DIR" not in src
-    assert "_results_dir" not in src
+    identifiers = all_identifiers(src)
+    assert "RESULTS_DIR" not in identifiers
+    assert "_results_dir" not in identifiers
 
 
 def test_runtime_factories_do_not_thread_legacy_results_dirs() -> None:
@@ -189,13 +198,16 @@ def test_runtime_factories_do_not_thread_legacy_results_dirs() -> None:
         / "carica_task.py"
     ).read_text(encoding="utf-8")
 
-    assert "results_dir" not in runtime_src
-    assert "settings:" not in runtime_src
-    assert "build_runtime_services(settings=" not in _read("app_factory.py")
-    assert "build_orchestrator_stack(\n            settings=" not in carica_task_src
-    assert "results_dir=" not in scheduler_src
-    assert "results_dir=" not in arricchisci_source_src
-    assert "except ImportError" not in arricchisci_source_src
+    assert "results_dir" not in all_identifiers(runtime_src)
+    # No legacy `settings` parameter threaded through the runtime factories
+    # (was the brittle `"settings:" not in src` annotation-substring check).
+    assert "settings" not in function_param_names(runtime_src)
+    assert not call_has_keyword(_read("app_factory.py"), "build_runtime_services", "settings")
+    # Formatting-independent: the old check matched an exact newline+indent.
+    assert not call_has_keyword(carica_task_src, "build_orchestrator_stack", "settings")
+    assert "results_dir" not in all_identifiers(scheduler_src)
+    assert "results_dir" not in all_identifiers(arricchisci_source_src)
+    assert not handler_catches(arricchisci_source_src, "ImportError")
 
 
 def test_arricchisci_and_manipola_no_dead_result_dir_state() -> None:
@@ -207,9 +219,10 @@ def test_arricchisci_and_manipola_no_dead_result_dir_state() -> None:
         "core/manipola/project_source_runtime.py",
     ):
         src = _read(relative)
-        assert "results_base_dir" not in src
-        assert "self.results_dir" not in src
-        assert "self.data_dir" not in src
+        assert "results_base_dir" not in all_identifiers(src)
+        self_attrs = self_attribute_names(src)
+        assert "results_dir" not in self_attrs
+        assert "data_dir" not in self_attrs
 
 
 def test_selected_light_app_imports_are_not_repeated_inside_functions() -> None:
