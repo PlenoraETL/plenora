@@ -46,7 +46,11 @@ def auth_module_ast() -> ast.Module:
 
 @pytest.fixture(scope="module")
 def auth_models_module_ast() -> ast.Module:
-    return ast.parse(_AUTH_MODELS_PY.read_text(encoding="utf-8"))
+    # I DTO auth (LoginRequest, ...) sono stati spostati in
+    # app.shared.contracts.auth; core/auth/models.py li re-esporta.
+    return ast.parse(
+        (_BACKEND / "app" / "shared" / "contracts" / "auth.py").read_text(encoding="utf-8")
+    )
 
 
 @pytest.fixture(scope="module")

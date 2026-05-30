@@ -94,7 +94,8 @@ def test_token_blacklist_reads_timeout_via_settings():
 
 def test_admin_system_status_reads_stale_threshold_via_settings():
     src = _read(_BACKEND_APP / "core" / "admin_system_status" / "service.py")
-    assert "_settings.get(\"JWT_BLACKLIST_STALE_THRESHOLD_SEC\")" in src
+    # alias attuale: `from app import config as app_config` → app_config.settings
+    assert "app_config.settings.get(\"JWT_BLACKLIST_STALE_THRESHOLD_SEC\")" in src
     assert "os.getenv(\"JWT_BLACKLIST_STALE_THRESHOLD_SEC" not in src
 
 

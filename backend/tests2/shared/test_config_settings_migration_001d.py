@@ -92,8 +92,9 @@ def test_tickets_router_reads_attachment_max_via_settings():
 
 def test_admin_system_status_reads_db_schema_thresholds_via_settings():
     src = _read(_BACKEND_APP / "core" / "admin_system_status" / "service.py")
-    assert "_settings_cfg.get(\"DB_SCHEMA_WARN_GB\")" in src
-    assert "_settings_cfg.get(\"DB_SCHEMA_ERROR_GB\")" in src
+    # alias attuale: `from app import config as app_config` → app_config.settings
+    assert "app_config.settings.get(\"DB_SCHEMA_WARN_GB\")" in src
+    assert "app_config.settings.get(\"DB_SCHEMA_ERROR_GB\")" in src
     assert "os.getenv(\"DB_SCHEMA_WARN_GB" not in src
     assert "os.getenv(\"DB_SCHEMA_ERROR_GB" not in src
 

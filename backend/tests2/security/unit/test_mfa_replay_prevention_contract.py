@@ -85,7 +85,7 @@ class TestVerifyCodeAntiReplay:
              patch.object(mfa, "decrypt", return_value="ABCDEFGHIJKLMNOP"), \
              patch("pyotp.TOTP") as MockTOTP, \
              patch.object(mfa, "_try_register_used_code", return_value=False) as spy_register, \
-             patch.object(mfa, "unit_of_work") as spy_uow:
+             patch.object(mfa.mfa_store, "touch_last_verified") as spy_touch:
 
             MockTOTP.return_value.verify.return_value = True
 
@@ -96,9 +96,9 @@ class TestVerifyCodeAntiReplay:
             "verify_code deve ritornare False senza accettare il TOTP."
         )
         spy_register.assert_called_once_with("u-1", "123456")
-        # Il DB UPDATE last_verified_at NON deve essere eseguito quando
-        # il codice viene rifiutato come replay.
-        spy_uow.assert_not_called()
+        # Il DB UPDATE last_verified_at (mfa_store.touch_last_verified) NON
+        # deve essere eseguito quando il codice viene rifiutato come replay.
+        spy_touch.assert_not_called()
 
     def test_success_calls_register_before_db_update(self):
         fake_row = {
@@ -114,23 +114,14 @@ class TestVerifyCodeAntiReplay:
             call_order.append("register")
             return True
 
-        class _FakeSession:
-            def execute(self, *_a, **_kw):
-                pass
-
-        class _FakeUow:
-            def __enter__(self):
-                call_order.append("db_update")
-                return _FakeSession()
-
-            def __exit__(self, *_a):
-                pass
+        def _touch_spy(*_a, **_kw):
+            call_order.append("db_update")
 
         with patch.object(mfa, "_row_for", return_value=fake_row), \
              patch.object(mfa, "decrypt", return_value="ABCDEFGHIJKLMNOP"), \
              patch("pyotp.TOTP") as MockTOTP, \
              patch.object(mfa, "_try_register_used_code", side_effect=_register_spy), \
-             patch.object(mfa, "unit_of_work", return_value=_FakeUow()):
+             patch.object(mfa.mfa_store, "touch_last_verified", side_effect=_touch_spy):
 
             MockTOTP.return_value.verify.return_value = True
 
