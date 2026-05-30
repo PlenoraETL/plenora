@@ -15,6 +15,8 @@ from app.core.dataframes.tabular import (
 )
 from app.core.imdf import storage as imdf_storage
 from app.core.imdf import loader as imdf_loader_module
+from app.core.imdf.bundle_geo import layer_geodataframes_only
+from app.core.imdf.persist import load_indoor_bundle_payload
 from app.core.imdf.arcgis import service_discovery as service_discovery_module
 from app.core.imdf.arcgis import sql_helpers as sql_helpers_module
 from app.core.imdf import arcgis_uploader as arcgis_uploader_module
@@ -139,6 +141,23 @@ def validate_publish(
             f"Bundle '{bundle_task_id}' senza meta su storage."
         )
         return report
+    elif meta.get("format") == "plenora.indoor.bundle":
+        # Path NUOVO: layer dal bundle (descriptor-driven), niente GDB/vsimem.
+        # I GeoDataFrame ereditano i tipi DICHIARATI dal descrittore (coercion
+        # in bundle_loader), quindi il confronto schema sotto usa di fatto lo
+        # schema dichiarato.
+        payload = load_indoor_bundle_payload(bundle_task_id)
+        if not payload or not payload.get("layers"):
+            _add_top_issue(
+                "error", "BUNDLE_MISSING",
+                f"Bundle indoor '{bundle_task_id}' senza layer leggibili su storage."
+            )
+            return report
+        try:
+            bundle_layers = layer_geodataframes_only(payload, drop_z=True)
+        except Exception as e:
+            _add_top_issue("error", "BUNDLE_LOAD_FAILED", f"Caricamento bundle indoor fallito: {e}")
+            return report
     else:
         site_id = (meta.get("site_id") or "").strip()
         if not site_id:
@@ -166,10 +185,13 @@ def validate_publish(
             _add_top_issue("error", "GDB_LOAD_FAILED", f"Hydration GDB /vsimem fallita: {e}")
             return report
 
-    layers_present = [
-        n for n in arcgis_uploader_module.LAYER_ORDER
-        if n in bundle_layers and len(bundle_layers[n]) > 0
-    ]
+    # Descriptor-driven: ogni layer popolato (incl. Opening), ordine canonico
+    # LAYER_ORDER con gli extra accodati.
+    _layer_order = arcgis_uploader_module.LAYER_ORDER
+    layers_present = [n for n in bundle_layers if len(bundle_layers[n]) > 0]
+    layers_present.sort(
+        key=lambda n: _layer_order.index(n) if n in _layer_order else len(_layer_order)
+    )
     if not layers_present:
         _add_top_issue("error", "BUNDLE_EMPTY", "Nessun layer IMDF popolato nel bundle")
         return report
