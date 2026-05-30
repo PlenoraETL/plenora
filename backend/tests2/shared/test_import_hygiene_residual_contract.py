@@ -17,30 +17,85 @@ def _read(relative: str) -> str:
     return (_BACKEND_APP / relative).read_text(encoding="utf-8")
 
 
-def test_file_service_does_not_fallback_to_local_model_shims() -> None:
-    src = _read("core/files/service.py")
+def _handler_catches(handler: ast.ExceptHandler, exc_name: str) -> bool:
+    """True if an `except` handler catches `exc_name` (bare or in a tuple)."""
+    caught = handler.type
+    if caught is None:
+        return False
+    candidates = caught.elts if isinstance(caught, ast.Tuple) else [caught]
+    return any(isinstance(c, ast.Name) and c.id == exc_name for c in candidates)
 
-    assert "except ImportError" not in src
-    assert "class FileSource:" not in src
-    assert "class ColumnInfo:" not in src
-    assert "_AppFileSource" not in src
-    assert "_AppColumnInfo" not in src
-    assert "_USE_APP_MODELS" not in src
+
+def _referenced_names(tree: ast.AST) -> set[str]:
+    """All identifiers referenced as Name nodes or bound by imports."""
+    names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            names |= {alias.asname or alias.name for alias in node.names}
+    return names
+
+
+def test_file_service_does_not_fallback_to_local_model_shims() -> None:
+    """files/service must use canonical models with no local fallback shim.
+
+    Checked on the AST (not substring): robust to comments/docstrings/formatting.
+    The old substring guard false-failed on any comment mentioning these names
+    and false-passed on a reformatted `except (ImportError, ...)`.
+    """
+    tree = ast.parse(_read("core/files/service.py"))
+
+    classdefs = {n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)}
+    assert "FileSource" not in classdefs, "no local FileSource shim class"
+    assert "ColumnInfo" not in classdefs, "no local ColumnInfo shim class"
+
+    catches_import_error = any(
+        isinstance(h, ast.ExceptHandler) and _handler_catches(h, "ImportError")
+        for h in ast.walk(tree)
+    )
+    assert not catches_import_error, "no except-ImportError model fallback"
+
+    names = _referenced_names(tree)
+    for forbidden in ("_AppFileSource", "_AppColumnInfo", "_USE_APP_MODELS"):
+        assert forbidden not in names, f"no {forbidden} shim toggle"
 
 
 def test_dataframe_schema_uses_canonical_column_info_model() -> None:
     src = _read("core/dataframes/schema.py")
+    tree = ast.parse(src)
 
-    assert "from app.core.projects.canvas_models import ColumnInfo" in src
-    assert "except ImportError" not in src
+    imports_canonical = any(
+        isinstance(n, ast.ImportFrom)
+        and n.module == "app.core.projects.canvas_models"
+        and any(alias.name == "ColumnInfo" for alias in n.names)
+        for n in ast.walk(tree)
+    )
+    assert imports_canonical, "schema must import ColumnInfo from canvas_models"
+
+    catches_import_error = any(
+        isinstance(h, ast.ExceptHandler) and _handler_catches(h, "ImportError")
+        for h in ast.walk(tree)
+    )
+    assert not catches_import_error, "no except-ImportError fallback"
+
+    # "fallback dataclass" is a prose marker (comment/docstring), inherently
+    # textual — keep as a raw-source guard against documenting a shim.
     assert "fallback dataclass" not in src
 
 
 def test_ticket_metrics_does_not_mask_internal_import_failures() -> None:
-    src = _read("core/admin_system_status/tickets_metrics.py")
+    tree = ast.parse(_read("core/admin_system_status/tickets_metrics.py"))
 
-    assert "_TICKETS_IMPORT_ERROR" not in src
-    assert "except Exception as exc" not in src
+    assert "_TICKETS_IMPORT_ERROR" not in _referenced_names(tree), (
+        "no import-error masking sentinel"
+    )
+    # Broad `except Exception` around the internal import would swallow real
+    # failures; AST check also catches `as <any>` / reformatted variants the
+    # old `"except Exception as exc"` substring missed.
+    masks_exception = any(
+        isinstance(h, ast.ExceptHandler) and _handler_catches(h, "Exception")
+        for h in ast.walk(tree)
+    )
+    assert not masks_exception, "no broad except-Exception masking internal imports"
 
 
 def test_selected_stdlib_imports_are_not_repeated_inside_functions() -> None:
