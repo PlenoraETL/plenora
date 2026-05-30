@@ -529,7 +529,10 @@ def execute_enrichment_task(
                 if n.get("type") == "api_enrich"
             )
             needs_full_bytes = is_eseguibile or (
-                has_imdf_upstream and ext == ".zip"
+                # .zip = bundle IMDF legacy (GDB); .json = nuovo
+                # plenora.indoor.bundle self-describing. Entrambi richiedono i
+                # bytes completi per estrazione/parse.
+                has_imdf_upstream and ext in (".zip", ".json")
             )
 
             # Tenta metadata short-circuit prima del full fetch.
@@ -622,7 +625,42 @@ def execute_enrichment_task(
             # caller. La tmp dir interna del bundle resta finche' IMDF-2 non
             # sposta manifest/validation/renderers/geojson in-memory.
             imdf_metadata: Optional[JsonObject] = None
-            if has_imdf_upstream and ext == ".zip":
+            if has_imdf_upstream and ext == ".json":
+                # Nuovo path: plenora.indoor.bundle (JSON self-describing dal
+                # convertitore). Persist per-sezione via persist_indoor_bundle,
+                # niente round-trip GDB. Vedi design note 13 / bundle_loader.
+                try:
+                    _payload = json_mod.loads(output_bytes)
+                    # schema == bundle_loader.BUNDLE_SCHEMA
+                    if isinstance(_payload, dict) and _payload.get("schema") == "plenora.indoor.bundle":
+                        bundle_persisted = False
+                        try:
+                            imdf_persist.persist_indoor_bundle(
+                                _payload, task_id=task_id, project_id=project_id,
+                            )
+                            bundle_persisted = True
+                        except Exception as _persist_e:
+                            logger.warning(
+                                f"[Task {task_id}] Persistenza indoor bundle fallita: {_persist_e}"
+                            )
+                        _sites = (_payload.get("metadata") or {}).get("site_ids") or []
+                        imdf_metadata = {
+                            "site_id":        _sites[0] if _sites else None,
+                            "has_gdb":        False,
+                            "has_ifc":        False,
+                            "has_renderers":  _payload.get("renderers") is not None,
+                            "bundle_task_id": task_id if bundle_persisted else None,
+                            "format":         "plenora.indoor.bundle",
+                        }
+                        logger.info(
+                            f"[Task {task_id}] indoor bundle persistito: "
+                            f"site={imdf_metadata['site_id']} "
+                            f"layers={len(_payload.get('layers') or {})}"
+                        )
+                except Exception as _imdf_e:
+                    logger.warning(f"[Task {task_id}] Parse indoor bundle fallito: {_imdf_e}")
+                    imdf_metadata = {"error": str(_imdf_e)}
+            elif has_imdf_upstream and ext == ".zip":
                 try:
                     bundle = imdf_loader.extract_imdf_zip_bytes(output_bytes)
 
