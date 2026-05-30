@@ -5,6 +5,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from tests2.shared._ast_identifiers import all_identifiers, calls_method, has_fstring
+
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _APP = _BACKEND_ROOT / "app"
@@ -42,11 +44,12 @@ def test_group_cleanup_helper_uses_table_allowlist():
     src = helper_path.read_text(encoding="utf-8")
     tree = ast.parse(src)
 
-    assert "_DELETE_GROUP_ROWS_SQL" in src
-    assert "delete_group_rows_for_table" in src
-    assert "format(" not in src
-    assert "f\"" not in src
-    assert "f'" not in src
+    identifiers = all_identifiers(src)
+    assert "_DELETE_GROUP_ROWS_SQL" in identifiers
+    assert "delete_group_rows_for_table" in identifiers
+    # No dynamic SQL: neither str.format nor f-strings (AST, robust to comments).
+    assert not calls_method(src, "format")
+    assert not has_fstring(src)
 
     delete_literals = [
         node.value
@@ -78,21 +81,22 @@ def test_domain_cleanup_modules_keep_public_boundaries_and_use_table_helper():
     for cleanup_path in _DOMAIN_CLEANUPS:
         src = cleanup_path.read_text(encoding="utf-8")
         tree = ast.parse(src)
+        identifiers = all_identifiers(src)
 
         if cleanup_path.parts[-2] == "scheduler":
             assert _imports_module(tree, "app.db.cleanup_sql")
-            assert "delete_group_rows(" in src
+            assert "delete_group_rows" in identifiers
             continue
 
         if cleanup_path.parts[-2] == "files":
             assert _imports_module(tree, "app.core.files")
-            assert "list_file_source_ids_for_group(" in src
-            assert "delete_file_source(" in src
+            assert "list_file_source_ids_for_group" in identifiers
+            assert "delete_file_source" in identifiers
             assert not _imports_module(tree, "app.db.group_cleanup")
         else:
             assert _imports_module(tree, "app.db.group_cleanup")
-            assert "delete_group_rows_for_table(" in src
-        assert "app.db.pg_connection" not in src
+            assert "delete_group_rows_for_table" in identifiers
+        assert not _imports_module(tree, "app.db.pg_connection")
 
         delete_literals = [
             node.value
@@ -108,8 +112,10 @@ def test_low_level_cleanup_primitive_does_not_know_domain_tables():
     helper_path = _APP / "db" / "cleanup_sql.py"
     src = helper_path.read_text(encoding="utf-8")
 
+    # Table names are SQL string identifiers (live only in string literals),
+    # so this stays a raw-source check by design.
     for table_name in _KNOWN_GROUP_TABLES:
         assert table_name not in src
-    assert "format(" not in src
-    assert "f\"" not in src
-    assert "f'" not in src
+    # No dynamic SQL construction (AST, robust to comments/strings).
+    assert not calls_method(src, "format")
+    assert not has_fstring(src)

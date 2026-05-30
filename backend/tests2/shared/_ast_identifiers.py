@@ -85,6 +85,80 @@ def module_classdefs(source: str) -> set[str]:
     }
 
 
+def function_def_names(source: str) -> set[str]:
+    """Names of every ``def``/``async def`` in ``source`` (faithful for the
+    ``"def foo" not in src`` family — matches a definition, not a call)."""
+    return {
+        n.name
+        for n in ast.walk(ast.parse(source))
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+
+
+def imports_module(source: str, dotted: str) -> bool:
+    """True if ``source`` imports ``dotted`` (``import dotted`` or
+    ``from dotted import ...`` / ``from dotted.sub import ...``)."""
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            if any(a.name == dotted or a.name.startswith(dotted + ".") for a in node.names):
+                return True
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            if node.module == dotted or node.module.startswith(dotted + "."):
+                return True
+    return False
+
+
+def imported_names(source: str) -> set[str]:
+    """Every name appearing in an import statement: module dotted paths, their
+    root packages, and imported/aliased symbol names. Faithful, robust
+    replacement for iterating ``import``/``from`` lines and substring-matching.
+    """
+    names: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                names.add(alias.name)
+                names.add(alias.name.split(".")[0])
+                if alias.asname:
+                    names.add(alias.asname)
+        elif isinstance(node, ast.ImportFrom):
+            if node.module:
+                names.add(node.module)
+                names.add(node.module.split(".")[0])
+            for alias in node.names:
+                names.add(alias.name)
+                if alias.asname:
+                    names.add(alias.asname)
+    return names
+
+
+def has_fstring(source: str) -> bool:
+    """True if ``source`` contains any f-string (security guard for SQL built
+    by interpolation — robust vs. an ``f"`` substring inside a comment)."""
+    return any(isinstance(n, ast.JoinedStr) for n in ast.walk(ast.parse(source)))
+
+
+def calls_method(source: str, method: str) -> bool:
+    """True if ``source`` calls ``<anything>.<method>(...)``."""
+    return any(
+        isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and n.func.attr == method
+        for n in ast.walk(ast.parse(source))
+    )
+
+
+def uses_attribute(source: str, obj: str, attr: str) -> bool:
+    """True if ``source`` accesses ``<obj>.<attr>`` (e.g. ``csv.writer``)."""
+    return any(
+        isinstance(n, ast.Attribute)
+        and n.attr == attr
+        and isinstance(n.value, ast.Name)
+        and n.value.id == obj
+        for n in ast.walk(ast.parse(source))
+    )
+
+
 def handler_catches(source: str, exc_name: str) -> bool:
     """True if any ``except`` handler catches ``exc_name`` (bare or in a tuple)."""
     for node in ast.walk(ast.parse(source)):

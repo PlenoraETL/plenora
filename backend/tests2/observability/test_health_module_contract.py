@@ -12,6 +12,13 @@ from unittest.mock import patch
 
 import pytest
 
+from tests2.shared._ast_identifiers import (
+    all_identifiers,
+    function_def_names,
+    imported_names,
+    imports_module,
+)
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.observability, pytest.mark.contract]
 
@@ -301,19 +308,14 @@ def test_check_pool_headroom_does_not_import_private_pool_symbols():
     import app.observability.health as h
 
     src = Path(h.__file__).read_text(encoding="utf-8")
-    forbidden = ("_get_pool", "_POOL_MAX")
-    for line in src.splitlines():
-        stripped = line.strip()
-        if not (stripped.startswith("import ") or stripped.startswith("from ")):
-            continue
-        for sym in forbidden:
-            assert sym not in line, (
-                f"app/observability/health.py importa ancora il simbolo "
-                f"privato {sym!r} a riga: {line!r}. Usa "
-                f"`pg_connection.get_pool_headroom()` come public helper."
-            )
+    forbidden = {"_get_pool", "_POOL_MAX"}
+    leaked = forbidden & imported_names(src)
+    assert not leaked, (
+        f"app/observability/health.py importa ancora simboli privati {leaked}. "
+        "Usa `pg_connection.get_pool_headroom()` come public helper."
+    )
     # Public helper consumed.
-    assert "get_pool_headroom" in src
+    assert "get_pool_headroom" in all_identifiers(src)
 
 
 # 6. check_migrations_aligned — fail-OPEN on exception
@@ -739,19 +741,16 @@ def test_check_object_storage_does_not_import_boto3_directly():
     import app.observability.health as h
 
     src = Path(h.__file__).read_text(encoding="utf-8")
-    forbidden = ("boto3", "botocore", "s3transfer")
-    for line in src.splitlines():
-        stripped = line.strip()
-        if not (stripped.startswith("import ") or stripped.startswith("from ")):
-            continue
-        for sym in forbidden:
-            assert sym not in line, (
-                f"app/observability/health.py importa SDK cloud {sym!r} "
-                f"a riga: {line!r}. Usa cloud_backends boundary."
-            )
+    forbidden = {"boto3", "botocore", "s3transfer"}
+    leaked = forbidden & imported_names(src)
+    assert not leaked, (
+        f"app/observability/health.py importa SDK cloud {leaked}. "
+        "Usa cloud_backends boundary."
+    )
     # Boundary consumato.
-    assert "object_storage_enabled" in src
-    assert "get_runtime_object_storage" in src
+    identifiers = all_identifiers(src)
+    assert "object_storage_enabled" in identifiers
+    assert "get_runtime_object_storage" in identifiers
 
 
 # 9. Source-bound: main.py delegates to gather_*, no inline _check_*
@@ -764,15 +763,17 @@ def test_app_factory_delegates_health_routes_to_health_module():
     )
     src = app_factory_py.read_text(encoding="utf-8")
     # Le route delegano agli helper estratti.
-    assert "gather_liveness" in src
-    assert "gather_readiness" in src
-    assert "from app.observability.health import" in src
+    identifiers = all_identifiers(src)
+    assert "gather_liveness" in identifiers
+    assert "gather_readiness" in identifiers
+    assert imports_module(src, "app.observability.health")
     # Le 4 funzioni `_check_*` originali NON devono piu' essere
-    # definite in main.py (sono state estratte).
-    assert "def _check_postgres" not in src
-    assert "def _check_redis" not in src
-    assert "def _check_pool_headroom" not in src
-    assert "def _check_migrations_aligned" not in src
+    # definite qui (sono state estratte nel modulo health).
+    defs = function_def_names(src)
+    assert "_check_postgres" not in defs
+    assert "_check_redis" not in defs
+    assert "_check_pool_headroom" not in defs
+    assert "_check_migrations_aligned" not in defs
 
 
 # 10. check_reconciliation_backlog — threshold-based readiness
@@ -974,10 +975,11 @@ def test_check_reconciliation_backlog_does_not_import_db_directly():
     import app.observability.health as h
 
     src = Path(h.__file__).read_text(encoding="utf-8")
+    identifiers = all_identifiers(src)
     # Public boundary consumed.
-    assert "count_active_by_state_domain" in src
+    assert "count_active_by_state_domain" in identifiers
     # `check_reconciliation_backlog` chiamata in `gather_readiness`.
-    assert "check_reconciliation_backlog" in src
+    assert "check_reconciliation_backlog" in identifiers
 
 
 def test_settings_defaults_expose_backlog_thresholds():
