@@ -333,17 +333,33 @@ def test_datasource_scan_state_db_boundary_uses_datasources_row(monkeypatch):
 
 
 def test_datasource_service_has_no_scan_state_filesystem_fallback():
-    """scan_state runtime deve restare DB-only in ottica multi-pod."""
+    """scan_state runtime deve restare DB-only in ottica multi-pod.
+
+    Le ex-funzioni del fallback filesystem non devono piu' esistere come
+    attributi del modulo: check runtime sulla superficie d'API, rename-resilient
+    (non scatta su commenti/docstring e coglie un rename che lascerebbe il
+    fallback vivo, cosa che il vecchio match-su-stringa non faceva). Il
+    comportamento DB-only e' coperto dai sibling
+    `test_get_scan_state_returns_empty_when_file_absent` e
+    `test_save_scan_state_writes_db_not_legacy_file`.
+    """
     from pathlib import Path
 
     import app.core.datasources.service as datasource_service
 
-    source = Path(datasource_service.__file__).read_text(encoding="utf-8")
+    for legacy_attr in ("_scan_dir", "_scan_state_path", "_load_legacy_scan_state"):
+        assert not hasattr(datasource_service, legacy_attr), (
+            f"{legacy_attr}: fallback filesystem legacy riapparso nel service"
+        )
 
-    assert "datasources_scan" not in source
-    assert "_scan_dir" not in source
-    assert "_scan_state_path" not in source
-    assert "_load_legacy_scan_state" not in source
+    # `datasources_scan` e' un identificatore di TABELLA legacy: vive solo dentro
+    # string-literal SQL, non e' osservabile a runtime ne' via attributo, e
+    # `python_code_only()` lo striperebbe insieme alle stringhe. Resta quindi un
+    # check strutturale sul sorgente grezzo (intent: nessuna query lo referenzia).
+    source = Path(datasource_service.__file__).read_text(encoding="utf-8")
+    assert "datasources_scan" not in source, (
+        "il service non deve referenziare la tabella legacy datasources_scan"
+    )
 
 
 def test_get_scan_state_ignores_corrupted_legacy_file_and_returns_empty(tmp_path, monkeypatch):
