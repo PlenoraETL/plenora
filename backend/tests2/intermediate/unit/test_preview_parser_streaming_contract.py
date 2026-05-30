@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._ast_identifiers import top_level_imported_modules
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
@@ -212,25 +214,15 @@ def test_parser_module_does_not_import_pyarrow_at_module_edge():
     boundary contract documented in the module header."""
     text = _PREVIEW_PARSER_PY.read_text(encoding="utf-8")
 
-    # Find the module-edge import block (everything before the
-    # first ``def`` / ``class``). Top-level pyarrow / pandas
-    # imports there are forbidden. Strip docstrings/comments
-    # first so the module header (which legitimately mentions
-    # the lazy-import contract in prose) does not false-positive.
-    import re
-    code_only = re.sub(r'"""[\s\S]*?"""', "", text)
-    code_only = re.sub(r"'''[\s\S]*?'''", "", code_only)
-    code_only = re.sub(r"#.*$", "", code_only, flags=re.MULTILINE)
-
-    match = re.search(r"(?m)^(?:def|class)\s", code_only)
-    assert match, "preview_parser.py must define functions/classes"
-    module_edge = code_only[: match.start()]
-
-    assert "import pyarrow" not in module_edge, (
+    # Module-edge imports = direct children of the module body (AST), so a
+    # lazy `import pyarrow` inside parse_parquet_preview is correctly allowed
+    # and the prose mentioning the contract in the header can't false-trip.
+    edge = top_level_imported_modules(text)
+    assert "pyarrow" not in edge, (
         "pyarrow must be imported LAZILY inside "
         "parse_parquet_preview, not at the module edge."
     )
-    assert "import pandas" not in module_edge, (
+    assert "pandas" not in edge, (
         "pandas must be imported LAZILY inside "
         "parse_parquet_preview, not at the module edge."
     )

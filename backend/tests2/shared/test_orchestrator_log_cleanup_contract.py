@@ -6,6 +6,8 @@ from typing import List, Tuple
 
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers, imports_module
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
@@ -120,10 +122,9 @@ def test_orchestrator_router_uses_domain_cleanup_not_db_service():
 
     src = open(orchestrator_router.__file__, encoding="utf-8").read()
     legacy_module = "app.db." + "log_runs" + "_db_" + "service"
-    assert "from app.db.pg_connection" not in src
-    assert "import app.db.pg_connection" not in src
+    assert not imports_module(src, "app.db.pg_connection")
     assert legacy_module not in src
-    assert "delete_task_log_runs" in src
+    assert "delete_task_log_runs" in all_identifiers(src)
 
 
 def test_orchestrator_log_cleanup_owns_sql_not_db_service():

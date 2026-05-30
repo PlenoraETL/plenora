@@ -21,6 +21,7 @@ import pytest
 
 from app.core.carica.conflict_checker import ConflictChecker
 from app.core.carica.ddl_generator import DDLGenerator
+from tests2.shared._ast_identifiers import imports_symbol_from
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -184,7 +185,7 @@ def test_helpers_delegate_to_ddl_no_inline_branching():
 
 def test_module_imports_ddl_generator():
     text = _read(_CHECKER_PY)
-    assert "from app.core.carica.ddl_generator import DDLGenerator" in text
+    assert imports_symbol_from(text, "app.core.carica.ddl_generator", "DDLGenerator")
 
 
 # 4. Caller WriterPreflightLifecycleMixin.check_conflicts injects self.ddl

@@ -12,6 +12,7 @@ from unittest.mock import patch
 import pytest
 
 from app.core.resources.exceptions import MemoryLimitExceededError
+from tests2.shared._ast_identifiers import imports_module
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
@@ -23,9 +24,8 @@ def test_memory_guard_module_does_not_import_fastapi():
     src = (Path(__file__).resolve().parent.parent.parent
            / "app" / "core" / "resources" / "memory_guard.py")
     text = src.read_text(encoding="utf-8")
-    assert "from fastapi" not in text
-    assert "from starlette" not in text
-    assert "import fastapi" not in text
+    assert not imports_module(text, "fastapi")
+    assert not imports_module(text, "starlette")
 
 
 # 2. Guard behavior

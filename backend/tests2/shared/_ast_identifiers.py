@@ -132,6 +132,23 @@ def imported_names(source: str) -> set[str]:
     return names
 
 
+def top_level_imported_modules(source: str) -> set[str]:
+    """Module names imported at MODULE level (direct children of the module
+    body), excluding imports nested inside functions/classes — i.e. the
+    "module edge". Use to assert a heavy dependency is imported lazily, not
+    eagerly. Faithful to a comment-stripped "before first def/class" scan."""
+    names: set[str] = set()
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                names.add(alias.name)
+                names.add(alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            names.add(node.module)
+            names.add(node.module.split(".")[0])
+    return names
+
+
 def has_fstring(source: str) -> bool:
     """True if ``source`` contains any f-string (security guard for SQL built
     by interpolation — robust vs. an ``f"`` substring inside a comment)."""

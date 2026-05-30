@@ -22,6 +22,13 @@ from typing import List
 import pytest
 
 import app.bootstrap as bootstrap_module
+from tests2.shared._ast_identifiers import (
+    all_identifiers,
+    function_def_names,
+    imports_module,
+    imports_symbol_from,
+    uses_attribute,
+)
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -387,10 +394,10 @@ def test_app_factory_imports_bootstrap_and_calls_it_in_factory_path():
     text = _read(_APP_FACTORY_PY)
 
     # Import + call present.
-    assert "from app.bootstrap import bootstrap" in text, (
+    assert imports_symbol_from(text, "app.bootstrap", "bootstrap"), (
         "app_factory.py must import the bootstrap boundary."
     )
-    assert "def create_app(" in text
+    assert "create_app" in function_def_names(text)
     bootstrap_call = re.search(
         r"^\s{4}resolved_deps\.bootstrap\(\)\s*$",
         text,
@@ -433,11 +440,12 @@ def test_teardown_is_idempotent_under_current_close_contract(monkeypatch):
 def test_main_lifespan_delegates_to_teardown_source_bound():
     text = _read(_APP_FACTORY_PY)
 
-    assert "from app.bootstrap import bootstrap, teardown" in text
-    assert "resolved_deps.teardown()" in text
-    code_only = _strip_line_comments(text)
-    assert "close_pool()" not in code_only
-    assert "from app.db.pg_connection import close_pool" not in code_only
+    assert imports_symbol_from(text, "app.bootstrap", "bootstrap")
+    assert imports_symbol_from(text, "app.bootstrap", "teardown")
+    assert uses_attribute(text, "resolved_deps", "teardown")
+    # close_pool must not be referenced inline (delegated to teardown()).
+    assert "close_pool" not in all_identifiers(text)
+    assert not imports_symbol_from(text, "app.db.pg_connection", "close_pool")
 
 
 def _strip_line_comments(text: str) -> str:
@@ -461,21 +469,24 @@ def _strip_line_comments(text: str) -> str:
 def test_app_factory_no_longer_inlines_the_four_steps():
     """The 4 statements that bootstrap() now owns must be removed
     from the app factory (comments mentioning the names are OK)."""
-    code_only = _strip_line_comments(_read(_APP_FACTORY_PY))
+    text = _read(_APP_FACTORY_PY)
+    code_only = _strip_line_comments(text)
+    identifiers = all_identifiers(text)
 
     # `settings.validate_startup()` should no longer appear inline.
-    assert "settings.validate_startup()" not in code_only, (
+    assert not uses_attribute(text, "settings", "validate_startup"), (
         "app_factory.py must delegate validate_startup() to bootstrap()."
     )
     # `validate_storage_config()` likewise.
-    assert "validate_storage_config()" not in code_only, (
+    assert "validate_storage_config" not in identifiers, (
         "app_factory.py must delegate validate_storage_config() to bootstrap()."
     )
     # `init_all_dbs()` likewise.
-    assert "init_all_dbs()" not in code_only, (
+    assert "init_all_dbs" not in identifiers, (
         "app_factory.py must delegate init_all_dbs() to bootstrap()."
     )
-    # The 3 SSL pops must not be inline anymore.
+    # The 3 SSL pops must not be inline anymore (string-literal env keys, so
+    # this stays a code-only substring check).
     for key in ("REQUESTS_CA_BUNDLE", "SSL_CERT_FILE", "CURL_CA_BUNDLE"):
         assert f"os.environ.pop('{key}'" not in code_only, (
             f"app_factory.py must delegate the {key} pop to bootstrap()."
@@ -487,8 +498,7 @@ def test_bootstrap_module_does_not_import_main():
     """Boundary purity: `app.bootstrap` must not import `app.main`
     (would create a cycle and defeat the testability goal)."""
     text = _read(_BOOTSTRAP_PY)
-    assert "from app.main" not in text
-    assert "import app.main" not in text
+    assert not imports_module(text, "app.main")
 
 
 def test_bootstrap_module_uses_lazy_imports_for_heavy_modules():
