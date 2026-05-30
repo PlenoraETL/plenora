@@ -136,7 +136,14 @@ def integration_backend_server(integration_env):
         workdir=INTEGRATION_ROOT.parent.parent,
         env=integration_env,
     )
-    wait_for_http_ready(f"{url}/", timeout_s=30.0, process=proc)
+    # Boot warm ~2s, ma l'import di app.main tira geopandas/gdal/pandas: sotto
+    # saturazione (es. subito dopo la suite unit completa) l'import puo' non
+    # produrre nemmeno il primo log entro 30s, facendo scattare il timeout come
+    # ERROR ("still running / no output") invece di un boot reale fallito. 60s
+    # da' margine senza mascherare un crash (l'exit-code del child resta
+    # diagnosticato da wait_for_http_ready). Override via env per CI lente.
+    _backend_boot_timeout = float(integration_env.get("INTEGRATION_BOOT_TIMEOUT_S", "60"))
+    wait_for_http_ready(f"{url}/", timeout_s=_backend_boot_timeout, process=proc)
     try:
         yield {"base_url": url, "process": proc}
     finally:
@@ -166,7 +173,9 @@ def integration_fake_api_server(integration_env):
         workdir=INTEGRATION_ROOT.parent.parent,
         env=integration_env,
     )
-    wait_for_http_ready(f"{url}/health", timeout_s=20.0, process=proc)
+    # Stesso razionale del backend: import pesante sotto carico. 40s di margine.
+    _fake_api_timeout = float(integration_env.get("INTEGRATION_BOOT_TIMEOUT_S", "60")) * 2 / 3
+    wait_for_http_ready(f"{url}/health", timeout_s=_fake_api_timeout, process=proc)
     try:
         yield {"base_url": url, "process": proc}
     finally:
