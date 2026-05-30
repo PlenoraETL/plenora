@@ -9,8 +9,9 @@ from __future__ import annotations
 import json
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, List, Optional
+from typing import Iterable, Iterator, List, Optional, TypedDict
 
+from app.config import settings as _settings
 from app.core.io.object_storage import object_storage_enabled
 from app.core.io.local_cleanup import rmtree_safe
 from app.core.resources.bounded_reader import read_stream_bounded
@@ -28,6 +29,18 @@ logger = get_logger(__name__)
 PREFIX = IMDF_BUNDLES_PREFIX
 META_SUFFIX = ".meta.json"
 BundleFiles = dict[str, bytes]
+
+
+class StorageObjectStream(TypedDict, total=False):
+    """Shape ritornata da `*.get_object_stream(key)` (cloud backend).
+
+    Vedi `app.infrastructure.storage.cloud_backends`: `body` e' un iterable
+    di chunk bytes (streaming-friendly), `size` i bytes totali, `content_type`
+    il MIME. `total=False` perche' i consumer leggono solo `body`."""
+
+    body: Iterable[bytes]
+    size: int
+    content_type: str
 
 
 def _storage():
@@ -66,7 +79,7 @@ def _gdb_zip_key(task_id: str) -> str:
 
 
 def _read_storage_stream_bytes(
-    stream: dict,
+    stream: StorageObjectStream,
     *,
     key: str,
     stage: str,
@@ -81,7 +94,6 @@ def _read_storage_stream_bytes(
 
 
 def _local_dir(task_id: str) -> Path:
-    from app.config import settings as _settings
     return _settings.IMDF_BUNDLES_DIR / task_id
 
 

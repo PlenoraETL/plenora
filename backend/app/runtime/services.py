@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.core.arricchisci import api_connector as api_connector_module
 from app.core.arricchisci import executor as enrich_executor_module
@@ -12,11 +12,17 @@ from app.core.datasources import service as datasource_service_module
 from app.core.estrai import database_inspector as database_inspector_module
 from app.core.estrai import executor as estrai_executor_module
 from app.core.estrai import query_generator as query_generator_module
-from app.core.features import features_service as features_service_module
 from app.core.manipola import executor as manipola_executor_module
 from app.core.orchestrator import service as orchestrator_service_module
 from app.core.projects import service as project_service_module
 from app.core.query_execution import query_executor as query_executor_module
+
+if TYPE_CHECKING:
+    # Lazy at runtime: importing FeaturesService eagerly pulls in the
+    # concrete ArcGIS write stack (arcgis_feature_writer/client) into every
+    # Celery worker bootstrap. The boundary contract keeps task registration
+    # provider-free; the real import lives inside build_orchestrator_stack.
+    from app.core.features import features_service as features_service_module
 
 
 __all__ = [
@@ -103,6 +109,7 @@ def build_orchestrator_stack(
     )
     query_generator = query_generator_module.QueryGenerator()
     query_executor = query_executor_module.QueryExecutor()
+    from app.core.features import features_service as features_service_module
     features_service = features_service_module.FeaturesService()
 
     orchestrator = None

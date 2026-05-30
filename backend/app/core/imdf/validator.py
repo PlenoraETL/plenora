@@ -7,9 +7,7 @@ Esegue un controllo read-only (senza side effect su ArcGIS) prima della
 from typing import Any, Dict, Optional
 
 from app.utils.logger import get_logger
-from app.core.connections import (
-    arcgis_connection_resolver as arcgis_resolver_module,
-)
+import app.core.connections.arcgis_connection_resolver as arcgis_resolver_module
 from app.core.dataframes.tabular import (
     duplicate_non_null_value_count,
     null_count_for_columns,

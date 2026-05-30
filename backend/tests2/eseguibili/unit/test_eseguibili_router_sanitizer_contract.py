@@ -68,7 +68,13 @@ def test_analyze_upload_mime_reject_sanitizes_detail(client, monkeypatch):
     def raise_mime(content, filename):
         raise mime_validator.MimeMismatchError(sporco)
 
-    monkeypatch.setattr(mime_validator, "validate_no_executable", raise_mime)
+    # Il router importa `validate_no_executable` per nome (vedi import in
+    # router.py), quindi tiene un riferimento legato all'import: va patchato
+    # il nome nel namespace del modulo router, non `mime_validator....`
+    # (che il router non rilegge a runtime, rendendo il patch inefficace).
+    monkeypatch.setattr(
+        eseguibili_router_module, "validate_no_executable", raise_mime,
+    )
 
     response = client.post(
         "/api/eseguibili/ese-1/analyze-upload",

@@ -1150,10 +1150,22 @@ def test_auth_engine_018_owner_deps_use_domain_access_boundaries():
         "ownership/access helpers instead of raw DB leaves: "
         f"{violations}"
     )
+    # Riconosci entrambe le forme di dipendenza dal boundary di dominio:
+    #   from app.core.files.ownership import X   (ImportFrom.module)
+    #   import app.core.files.ownership as files_ownership  (Import.alias.name)
+    # La seconda e' richiesta perche' owner_dependencies chiama gli helper
+    # via attributo-modulo (`files_ownership.load_file_owner_context`), cosi'
+    # i test possono intercettare il seam del dominio senza raggiungere il db.
     imported_modules = {
         node.module
         for node in ast.walk(tree)
         if isinstance(node, ast.ImportFrom) and node.module is not None
+    }
+    imported_modules |= {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
     }
     expected_boundaries = {
         "app.core.projects.access_context",
