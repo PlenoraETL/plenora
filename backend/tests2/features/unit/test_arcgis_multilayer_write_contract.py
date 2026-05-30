@@ -201,3 +201,47 @@ def test_existing_list_layers_failure_returns_unsuccessful(monkeypatch):
     )
     assert res["success"] is False
     assert any("list_layers" in e for e in res["errors"])
+
+
+# --- apply_layer_renderers ---
+
+class _RendererClient:
+    def __init__(self, fail_urls=()):
+        self.calls = []
+        self._fail = set(fail_urls)
+
+    def update_layer_renderer(self, *, conn, layer_url, drawing_info):
+        self.calls.append((layer_url, drawing_info))
+        if layer_url in self._fail:
+            raise RuntimeError("boom")
+        return {"success": True}
+
+
+def _svc_renderer(client):
+    import app.core.features.features_service as fs
+    svc = fs.FeaturesService.__new__(fs.FeaturesService)
+    svc._client = client
+    svc._resolve_write_connection = lambda connection_id: object()
+    return svc
+
+
+def test_apply_renderers_applies_each_and_counts():
+    client = _RendererClient()
+    res = _svc_renderer(client).apply_layer_renderers("c", {
+        "https://x/0": {"type": "simple"},
+        "https://x/1": {"type": "unique"},
+        "https://x/2": None,   # skip
+    })
+    assert res["applied"] == 2
+    assert res["errors"] == []
+    assert [c[0] for c in client.calls] == ["https://x/0", "https://x/1"]
+
+
+def test_apply_renderers_isolates_failures():
+    client = _RendererClient(fail_urls={"https://x/1"})
+    res = _svc_renderer(client).apply_layer_renderers("c", {
+        "https://x/0": {"type": "simple"},
+        "https://x/1": {"type": "simple"},
+    })
+    assert res["applied"] == 1
+    assert any("https://x/1" in e for e in res["errors"])

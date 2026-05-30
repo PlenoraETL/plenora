@@ -790,6 +790,32 @@ class FeaturesService:
             "errors": errors,
         }
 
+    def apply_layer_renderers(
+        self,
+        connection_id: str,
+        renderers: Mapping[str, Mapping[str, object]],
+    ) -> ArcGISFeatureWritePublicResult:
+        """Applica i renderer per-layer (generico). ``renderers``: {layer_url ->
+        drawing_info}. Ritorna ``{applied, errors}``."""
+        conn_info = self._resolve_write_connection(connection_id)
+        applied = 0
+        errors: List[str] = []
+        for layer_url, drawing_info in renderers.items():
+            if not drawing_info:
+                continue
+            try:
+                res = self._client.update_layer_renderer(
+                    conn=conn_info, layer_url=layer_url, drawing_info=drawing_info,
+                )
+                if isinstance(res, Mapping) and res.get("success"):
+                    applied += 1
+                else:
+                    errors.append(f"renderer {layer_url}: {res}")
+            except Exception as exc:  # pragma: no cover - boundary best-effort
+                logger.warning(f"apply_layer_renderers {layer_url}: {exc}")
+                errors.append(f"renderer {layer_url}: {exc}")
+        return {"applied": applied, "errors": errors}
+
     def _resolve_write_connection(self, connection_id: str) -> ArcGISConnectionInfo:
         connection = self.get_connection(connection_id)
         if not connection:

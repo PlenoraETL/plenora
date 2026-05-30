@@ -103,6 +103,19 @@ class ArcGISFeatureWriter(Protocol):
         """
         ...
 
+    def apply_layer_renderers(
+        self,
+        connection_id: str,
+        renderers: Mapping[str, Mapping[str, object]],
+    ) -> ArcGISFeatureWritePublicResult:
+        """Apply per-layer renderers (generic, domain-neutral).
+
+        ``renderers`` maps a layer URL to its ArcGIS ``drawing_info``. Returns
+        ``{applied, errors}``. The caller decides which style goes on which
+        layer (e.g. IMDF reads them from the bundle).
+        """
+        ...
+
 
 def normalize_arcgis_column_mappings(
     column_mappings: ArcGISColumnMappingsInput,
