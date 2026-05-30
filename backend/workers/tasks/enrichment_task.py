@@ -25,7 +25,6 @@ from app.core.dataframes.values import is_nonempty_dataframe
 from app.core.eseguibili import db as eseguibili_db
 from app.core.eseguibili import storage as eseg_storage
 from app.core.files import service as files_service
-from app.core.imdf import loader as imdf_loader
 from app.core.imdf import persist as imdf_persist
 from app.core.intermediate import run_idempotency as run_idempotency_module
 from app.core.intermediate import run_lifecycle as run_lifecycle_module
@@ -529,10 +528,9 @@ def execute_enrichment_task(
                 if n.get("type") == "api_enrich"
             )
             needs_full_bytes = is_eseguibile or (
-                # .zip = bundle IMDF legacy (GDB); .json = nuovo
-                # plenora.indoor.bundle self-describing. Entrambi richiedono i
-                # bytes completi per estrazione/parse.
-                has_imdf_upstream and ext in (".zip", ".json")
+                # IMDF: output JSON plenora.indoor.bundle -> serve il body
+                # completo per il parse.
+                has_imdf_upstream and ext == ".json"
             )
 
             # Tenta metadata short-circuit prima del full fetch.
@@ -659,42 +657,6 @@ def execute_enrichment_task(
                         )
                 except Exception as _imdf_e:
                     logger.warning(f"[Task {task_id}] Parse indoor bundle fallito: {_imdf_e}")
-                    imdf_metadata = {"error": str(_imdf_e)}
-            elif has_imdf_upstream and ext == ".zip":
-                try:
-                    bundle = imdf_loader.extract_imdf_zip_bytes(output_bytes)
-
-                    # IMDF-3: single-call persistence verso storage canonico.
-                    # `persist_imdf_bundle` orchestra upload bundle.files +
-                    # .gdb zip + meta. Niente piu' local dir intermedio +
-                    # save_bundle separato.
-                    bundle_persisted = False
-                    try:
-                        imdf_persist.persist_imdf_bundle(
-                            bundle, task_id=task_id, project_id=project_id,
-                        )
-                        bundle_persisted = True
-                    except Exception as _persist_e:
-                        logger.warning(
-                            f"[Task {task_id}] Persistenza bundle fallita: {_persist_e}"
-                        )
-
-                    imdf_metadata = {
-                        "site_id":        bundle.site_id,
-                        "has_gdb":        bundle.has_gdb,
-                        "has_ifc":        bundle.has_ifc,
-                        "has_renderers":  bundle.has_renderers,
-                        "bundle_task_id": task_id if bundle_persisted else None,
-                    }
-                    logger.info(
-                        f"[Task {task_id}] IMDF metadata estratti: "
-                        f"site={imdf_metadata['site_id']} "
-                        f"has_gdb={imdf_metadata['has_gdb']} "
-                        f"has_ifc={imdf_metadata['has_ifc']} "
-                        f"has_renderers={imdf_metadata['has_renderers']}"
-                    )
-                except Exception as _imdf_e:
-                    logger.warning(f"[Task {task_id}] Estrazione metadati IMDF fallita: {_imdf_e}")
                     imdf_metadata = {"error": str(_imdf_e)}
 
             # Routing finale: eseguibili (S3) vs arricchisci (DB result_blob).

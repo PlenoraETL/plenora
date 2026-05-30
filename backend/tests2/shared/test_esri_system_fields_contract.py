@@ -162,25 +162,6 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_loader_aliases_esri_system_fields_to_shared():
-    src = _read(_BACKEND_APP / "core" / "imdf" / "loader.py")
-    assert (
-        "from app.shared.connections.esri_system_fields import "
-        "ESRI_SYSTEM_FIELDS_LITERAL as ESRI_SYSTEM_FIELDS"
-        in src
-    )
-    # Niente piu' definizione inline del set
-    assert '"OBJECTID",\n    "objectid",\n    "GLOBALID",' not in src
-
-
-def test_loader_alias_identity_with_shared():
-    """`loader.ESRI_SYSTEM_FIELDS` deve essere lo STESSO oggetto del
-    canonical `ESRI_SYSTEM_FIELDS_LITERAL`, cosi' i caller che fanno
-    `c in ESRI_SYSTEM_FIELDS` osservano l'identico set."""
-    from app.core.imdf import loader
-    assert loader.ESRI_SYSTEM_FIELDS is ESRI_SYSTEM_FIELDS_LITERAL
-
-
 def test_validator_uses_shared_helper():
     src = _read(_BACKEND_APP / "core" / "imdf" / "validator.py")
     assert (

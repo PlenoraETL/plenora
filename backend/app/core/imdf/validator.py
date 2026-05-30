@@ -14,7 +14,6 @@ from app.core.dataframes.tabular import (
     unique_non_null_column_values,
 )
 from app.core.imdf import storage as imdf_storage
-from app.core.imdf import loader as imdf_loader_module
 from app.core.imdf.bundle_geo import layer_geodataframes_only
 from app.core.imdf.persist import load_indoor_bundle_payload
 from app.core.imdf.arcgis import service_discovery as service_discovery_module
@@ -129,11 +128,8 @@ def validate_publish(
         _add_top_issue("error", "INVALID_MODE", f"Modalita' '{mode}' non supportata")
         return report
 
-    # IMDF-5: hydration del .gdb fully-RAM via GDAL /vsimem.
-    # `open_gdb_in_vsimem` carica `_gdb.zip` bytes in /vsimem via
-    # ctypes adapter (`app.core.io.vsimem`); pyogrio legge via
-    # path `/vsizip//vsimem/.../{site}.gdb` senza tmp dir su disco.
-    # Site_id richiesto per costruire il path interno allo zip.
+    # I layer si caricano dal plenora.indoor.bundle (sezioni su storage);
+    # il branch sotto discrimina sul `format` del meta.
     meta = imdf_storage.get_meta_only(bundle_task_id)
     if meta is None:
         _add_top_issue(
@@ -159,31 +155,13 @@ def validate_publish(
             _add_top_issue("error", "BUNDLE_LOAD_FAILED", f"Caricamento bundle indoor fallito: {e}")
             return report
     else:
-        site_id = (meta.get("site_id") or "").strip()
-        if not site_id:
-            _add_top_issue(
-                "error", "BUNDLE_MISSING",
-                f"Bundle '{bundle_task_id}' senza site_id nel meta — "
-                f"impossibile risolvere il path interno della .gdb."
-            )
-            return report
-
-        try:
-            with imdf_storage.open_gdb_in_vsimem(bundle_task_id, site_id) as vsi_path:
-                if vsi_path is None:
-                    _add_top_issue(
-                        "error", "BUNDLE_MISSING",
-                        f"Bundle '{bundle_task_id}' senza .gdb su storage."
-                    )
-                    return report
-                try:
-                    bundle_layers = imdf_loader_module.load_imdf_layers(vsi_path)
-                except Exception as e:
-                    _add_top_issue("error", "GDB_LOAD_FAILED", f"Caricamento GDB fallito: {e}")
-                    return report
-        except Exception as e:
-            _add_top_issue("error", "GDB_LOAD_FAILED", f"Hydration GDB /vsimem fallita: {e}")
-            return report
+        # Formato legacy (GDB) rimosso: solo plenora.indoor.bundle e' supportato.
+        _add_top_issue(
+            "error", "BUNDLE_UNSUPPORTED_FORMAT",
+            f"Bundle '{bundle_task_id}' in formato non supportato "
+            f"({meta.get('format') or 'legacy/GDB'}): rigenera l'arricchimento."
+        )
+        return report
 
     # Descriptor-driven: ogni layer popolato (incl. Opening), ordine canonico
     # LAYER_ORDER con gli extra accodati.

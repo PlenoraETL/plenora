@@ -14,7 +14,7 @@ match_columns per l'upsert.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple, TypedDict
 
 from app.core.dataframes.geodata import geodataframe_from_geojson_records
 from app.core.imdf.bundle_loader import iter_layer_records
@@ -22,6 +22,21 @@ from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class LayerGeoEntry(TypedDict):
+    """Layer pronto per il publish: GeoDataFrame + identity (match_columns) +
+    renderer_ref."""
+
+    gdf: Any  # GeoDataFrame (geopandas non importato qui per il boundary)
+    identity: Tuple[str, ...]
+    renderer_ref: Optional[str]
+
+
+# Alias semantici (evitano `Dict[...]` nudo nelle return annotation, come
+# JsonObject/StringMap altrove). name -> entry / name -> GeoDataFrame.
+LayerGeoEntries = Dict[str, LayerGeoEntry]
+LayerFrames = Dict[str, Any]
 
 
 def _descriptor_crs(payload: JsonObject) -> str:
@@ -33,7 +48,7 @@ def build_layer_geodataframes(
     payload: JsonObject,
     *,
     drop_z: bool = True,
-) -> Dict[str, Dict[str, Any]]:
+) -> LayerGeoEntries:
     """Trasforma ogni layer dichiarato dal descrittore in un GeoDataFrame.
 
     Returns:
@@ -42,7 +57,7 @@ def build_layer_geodataframes(
         sono saltati a monte da ``iter_layer_records``.
     """
     crs = _descriptor_crs(payload)
-    out: Dict[str, Dict[str, Any]] = {}
+    out: LayerGeoEntries = {}
     for lr in iter_layer_records(payload):
         gdf = geodataframe_from_geojson_records(
             lr.records, lr.geometries, crs=crs, drop_z=drop_z,
@@ -59,7 +74,7 @@ def build_layer_geodataframes(
     return out
 
 
-def layer_geodataframes_only(payload: JsonObject, *, drop_z: bool = True) -> Dict[str, Any]:
+def layer_geodataframes_only(payload: JsonObject, *, drop_z: bool = True) -> LayerFrames:
     """Variante che ritorna solo ``{layer_name: GeoDataFrame}`` — shape compat
     con ``loader.load_imdf_layers`` per il consumo da ``upload_imdf_layers``."""
     return {

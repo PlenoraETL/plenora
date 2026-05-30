@@ -18,25 +18,9 @@ pytestmark = [
 ]
 
 
-# Fix 2: imdf/loader.extract_imdf_zip cleanup tmp on extraction error
-# Post QUERY-1 step 3 (commit a5f26bf6): `extract_imdf_zip(path, dest_dir)`
-# tombstonato. Il flow runtime e' `extract_imdf_zip_bytes(data)` fully-RAM
-# (no mkdtemp, no safe_extractall, niente disk touch). Il leak da
-# mkdtemp + extract_failure e' impossibile by-construction.
-
-
-def test_extract_imdf_zip_path_tombstone_post_query_1_step3():
-    """Sentinel: `extract_imdf_zip(path)` path-based rimosso.
-    Sostituto canonical: `extract_imdf_zip_bytes(bytes)` (RAM-only)."""
-    from app.core.imdf import loader
-
-    assert not hasattr(loader, "extract_imdf_zip"), (
-        "imdf.loader.extract_imdf_zip ancora esposto: refactor "
-        "RAM-only incompleto. Sostituto: extract_imdf_zip_bytes."
-    )
-    assert callable(getattr(loader, "extract_imdf_zip_bytes", None)), (
-        "extract_imdf_zip_bytes assente: il sostituto RAM-only deve esistere."
-    )
+# Fix 2 (rimosso): `imdf/loader` interamente tombstonato col cutover a
+# plenora.indoor.bundle — niente piu' extract_imdf_zip*/GDB, quindi nessun
+# tmp-leak da estrazione, by-construction.
 
 
 # Fix 3: api_connector._rest_file _cleanup_tmp on error path

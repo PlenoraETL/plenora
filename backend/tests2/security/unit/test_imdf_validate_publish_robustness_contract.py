@@ -3,7 +3,6 @@ test_imdf_validate_publish_robustness_contract.py
 
 Contract test per i check "robustezza pre-publish" aggiunti a
 """
-from contextlib import contextmanager
 import importlib
 
 import pytest
@@ -11,7 +10,6 @@ import pytest
 importlib.import_module("app.utils.logger")
 importlib.import_module("app.core.features.features_service")
 importlib.import_module("app.core.features.arcgis_client")
-importlib.import_module("app.core.imdf.loader")
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
@@ -59,25 +57,27 @@ def fake_bundle(tmp_path, monkeypatch):
     monkeypatch.setattr(
         storage_mod,
         "get_meta_only",
-        lambda task_id: {"site_id": "fake", "project_id": "proj-1"}
+        lambda task_id: {"site_id": "fake", "project_id": "proj-1",
+                         "format": "plenora.indoor.bundle"}
         if task_id == "task-robust"
         else None,
     )
-
-    @contextmanager
-    def _fake_vsimem(task_id, site_id):
-        yield str(bundle_dir / "fake.gdb")
-
-    monkeypatch.setattr(storage_mod, "open_gdb_in_vsimem", _fake_vsimem)
     return bundle_dir
 
 
 def _install_stubs(monkeypatch, gdf, get_layer_schema_ret, capabilities="Query,Create,Update,Delete"):
-    import app.core.imdf.loader as loader_mod
+    import app.core.imdf.validator as validator_mod
     import app.core.connections.arcgis_connection_resolver as adapter_mod
     import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 
-    monkeypatch.setattr(loader_mod, "load_imdf_layers", lambda gdb: {"Locale": gdf})
+    monkeypatch.setattr(
+        validator_mod, "load_indoor_bundle_payload",
+        lambda task_id: {"layers": {"Locale": gdf}, "manifest": {}},
+    )
+    monkeypatch.setattr(
+        validator_mod, "layer_geodataframes_only",
+        lambda payload, **_kw: {"Locale": gdf},
+    )
 
     class _FakeArcgisClient:
         def list_layers(self, conn, url):

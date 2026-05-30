@@ -3,7 +3,6 @@ test_imdf_validate_publish_schema_contract.py
 
 Contract test per la schema-compat logic di validate_publish:
 """
-from contextlib import contextmanager
 import importlib
 
 import pytest
@@ -14,7 +13,6 @@ import pytest
 importlib.import_module("app.utils.logger")
 importlib.import_module("app.core.features.features_service")
 importlib.import_module("app.core.features.arcgis_client")
-importlib.import_module("app.core.imdf.loader")
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
@@ -79,16 +77,11 @@ def fake_bundle(tmp_path, monkeypatch):
     monkeypatch.setattr(
         storage_mod,
         "get_meta_only",
-        lambda task_id: {"site_id": "fake", "project_id": "proj-1"}
+        lambda task_id: {"site_id": "fake", "project_id": "proj-1",
+                         "format": "plenora.indoor.bundle"}
         if task_id == "task-xyz"
         else None,
     )
-
-    @contextmanager
-    def _fake_vsimem(task_id, site_id):
-        yield str(bundle_dir / "fake.gdb")
-
-    monkeypatch.setattr(storage_mod, "open_gdb_in_vsimem", _fake_vsimem)
     return bundle_dir
 
 
@@ -96,7 +89,7 @@ def fake_bundle(tmp_path, monkeypatch):
 def stub_externals_with_fs_schema(monkeypatch):
     """Stub con FS esistente + schema esteso per testare la logica
     schema-compat."""
-    import app.core.imdf.loader as loader_mod
+    import app.core.imdf.validator as validator_mod
     import app.core.connections.arcgis_connection_resolver as adapter_mod
     import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 
@@ -108,8 +101,12 @@ def stub_externals_with_fs_schema(monkeypatch):
         "geometry": "geometry",
     })
     monkeypatch.setattr(
-        loader_mod, "load_imdf_layers",
-        lambda gdb: {"Locale": fake_gdf},
+        validator_mod, "load_indoor_bundle_payload",
+        lambda task_id: {"layers": {"Locale": fake_gdf}, "manifest": {}},
+    )
+    monkeypatch.setattr(
+        validator_mod, "layer_geodataframes_only",
+        lambda payload, **_kw: {"Locale": fake_gdf},
     )
 
     class _FakeArcgisClient:
@@ -243,7 +240,7 @@ def test_append_detects_duplicate_business_keys(fake_bundle, monkeypatch):
     """Append in ArcGIS non de-duplica: se il bundle contiene chiavi
     business che gia' esistono sul FS, dopo il publish ci sono feature
     duplicate. Il validator deve emettere un warning quantitativo."""
-    import app.core.imdf.loader as loader_mod
+    import app.core.imdf.validator as validator_mod
     import app.core.connections.arcgis_connection_resolver as adapter_mod
     import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 
@@ -273,9 +270,14 @@ def test_append_detects_duplicate_business_keys(fake_bundle, monkeypatch):
                 return _UnitIdSeries(self._unit_ids)
             return _FakeSeries("geometry")
 
+    _gdf_append = _GDFAppend()
     monkeypatch.setattr(
-        loader_mod, "load_imdf_layers",
-        lambda gdb: {"Locale": _GDFAppend()},
+        validator_mod, "load_indoor_bundle_payload",
+        lambda task_id: {"layers": {"Locale": _gdf_append}, "manifest": {}},
+    )
+    monkeypatch.setattr(
+        validator_mod, "layer_geodataframes_only",
+        lambda payload, **_kw: {"Locale": _gdf_append},
     )
 
     class _FakeArcgisClient:
@@ -338,7 +340,7 @@ def test_append_detects_duplicate_business_keys(fake_bundle, monkeypatch):
 def test_append_no_duplicates_no_warning(fake_bundle, monkeypatch):
     """Se tutte le chiavi bundle sono nuove (nessun overlap con FS),
     append non deve emettere warning duplicati."""
-    import app.core.imdf.loader as loader_mod
+    import app.core.imdf.validator as validator_mod
     import app.core.connections.arcgis_connection_resolver as adapter_mod
     import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 
@@ -367,7 +369,15 @@ def test_append_no_duplicates_no_warning(fake_bundle, monkeypatch):
                 return _UnitIdSeries(self._unit_ids)
             return _FakeSeries("geometry")
 
-    monkeypatch.setattr(loader_mod, "load_imdf_layers", lambda gdb: {"Locale": _GDFFresh()})
+    _gdf_fresh = _GDFFresh()
+    monkeypatch.setattr(
+        validator_mod, "load_indoor_bundle_payload",
+        lambda task_id: {"layers": {"Locale": _gdf_fresh}, "manifest": {}},
+    )
+    monkeypatch.setattr(
+        validator_mod, "layer_geodataframes_only",
+        lambda payload, **_kw: {"Locale": _gdf_fresh},
+    )
 
     class _FakeArcgisClient:
         def list_layers(self, conn, url):

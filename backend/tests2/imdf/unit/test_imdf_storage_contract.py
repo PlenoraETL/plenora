@@ -209,9 +209,8 @@ def test_delete_bundle_removes_s3_and_local(fake_storage, fake_settings, tmp_pat
     _write_bundle(local)
 
     count = st.delete_bundle("task-1")
-    # Fixed keys (meta + gdb zip) sempre tentati = 2,
-    # piu' i 2 file individuali = 4.
-    assert count == 4
+    # Key fisso (meta) sempre tentato = 1, piu' i 2 file individuali = 3.
+    assert count == 3
     assert "imdf-bundles/task-1.meta.json" not in fake_storage.objects
     assert "imdf-bundles/task-1/files/plenora_metadata.json" not in fake_storage.objects
     assert "imdf-bundles/task-1/files/S1/building.geojson" not in fake_storage.objects
@@ -220,11 +219,11 @@ def test_delete_bundle_removes_s3_and_local(fake_storage, fake_settings, tmp_pat
 
 def test_delete_bundle_idempotent_when_nothing(fake_storage, fake_settings):
     """delete su task inesistente non fallisce (storage delete e' idempotente).
-    IMDF-5: count riflette i tentativi sui key fissi (meta + gdb zip)."""
+    Count riflette il tentativo sul key fisso (meta)."""
     from app.core.imdf import storage as st
 
     count = st.delete_bundle("task-nope")
-    assert count == 2
+    assert count == 1
 
 
 def test_delete_bundle_can_skip_local_cleanup(fake_storage, fake_settings, tmp_path):
@@ -240,6 +239,6 @@ def test_delete_bundle_can_skip_local_cleanup(fake_storage, fake_settings, tmp_p
 
     count = st.delete_bundle("task-1", cleanup_local=False)
 
-    # 2 fixed keys + 0 files (questo seed non ha files individuali).
-    assert count == 2
+    # 1 fixed key (meta) + 0 files (questo seed non ha files individuali).
+    assert count == 1
     assert local.exists()

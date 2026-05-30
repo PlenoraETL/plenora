@@ -38,12 +38,12 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-# Lock attuale: 736 occorrenze totali in `app/` (esclusi tests/,
+# Lock attuale: 724 occorrenze totali in `app/` (esclusi tests/,
 # scripts/, migrations/). Diminuirebbe ad ogni narrow incrementale;
 # aumentarne il valore richiede commit con motivazione esplicita.
-# Top offender file (15+ broad-catch): sharepoint.py, imdf/validator.py,
-# carica/writer_replace_strategies.py, carica/executor.py.
-_EXPECT_BROAD_BUDGET = 736
+# 736 -> 724: cutover IMDF a plenora.indoor.bundle (rimossi loader.py,
+# persist_imdf_bundle, open_gdb_in_vsimem e i branch legacy GDB).
+_EXPECT_BROAD_BUDGET = 724
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

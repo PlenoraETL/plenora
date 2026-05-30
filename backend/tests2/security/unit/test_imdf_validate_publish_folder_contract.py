@@ -3,8 +3,6 @@ test_imdf_validate_publish_folder_contract.py
 
 Contract test per il supporto del parametro `folder` in validate_publish.
 """
-from contextlib import contextmanager
-
 import pytest
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
@@ -68,16 +66,11 @@ def fake_bundle(tmp_path, monkeypatch):
     monkeypatch.setattr(
         storage_mod,
         "get_meta_only",
-        lambda task_id: {"site_id": "fake", "project_id": "proj-1"}
+        lambda task_id: {"site_id": "fake", "project_id": "proj-1",
+                         "format": "plenora.indoor.bundle"}
         if task_id == "task-abc"
         else None,
     )
-
-    @contextmanager
-    def _fake_vsimem(task_id, site_id):
-        yield str(bundle_dir / "fake.gdb")
-
-    monkeypatch.setattr(storage_mod, "open_gdb_in_vsimem", _fake_vsimem)
     return bundle_dir
 
 
@@ -86,14 +79,18 @@ def stub_externals(monkeypatch):
     """Monkeypatcha tutte le dipendenze esterne di validate_publish:
     loader, resolve_arcgis_connection, _find_existing_service,
     _is_service_name_available."""
-    import app.core.imdf.loader as loader_mod
+    import app.core.imdf.validator as validator_mod
     import app.core.connections.arcgis_connection_resolver as adapter_mod
     import app.core.imdf.arcgis.service_discovery as service_discovery_mod
 
-    # Layer finti (solo Locale per avere un layer presente)
+    # Layer finti via il nuovo path (load_indoor_bundle_payload + geo).
     monkeypatch.setattr(
-        loader_mod, "load_imdf_layers",
-        lambda gdb: {"Locale": _FakeGDF(3)},
+        validator_mod, "load_indoor_bundle_payload",
+        lambda task_id: {"layers": {"Locale": _FakeGDF(3)}, "manifest": {}},
+    )
+    monkeypatch.setattr(
+        validator_mod, "layer_geodataframes_only",
+        lambda payload, **_kw: {"Locale": _FakeGDF(3)},
     )
 
     class _FakeArcgisClient:

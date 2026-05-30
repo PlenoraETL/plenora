@@ -40,9 +40,9 @@ def execute_imdf_publish_task(
     """Pubblica un bundle IMDF persistito su ArcGIS.
 
     Args:
-        bundle_task_id: task_id del precedente arricchimento IMDF. La funzione
-            risolve la cartella `IMDF_BUNDLES_DIR/{bundle_task_id}/` e cerca
-            il .gdb + renderers.json al suo interno.
+        bundle_task_id: task_id del precedente arricchimento che ha prodotto il
+            plenora.indoor.bundle persistito su storage (sezioni
+            manifest/validation/renderers/{site}/*.geojson).
         publisher_config: JSON object con:
             - connection_id (str, richiesto)
             - folder (str, opzionale)
@@ -110,47 +110,19 @@ def execute_imdf_publish_task(
                     "elapsed_time": round(time.time() - started_at, 2),
                 }
         else:
-            # Path LEGACY: .gdb fully-RAM via GDAL /vsimem (ctypes adapter
-            # `app.core.io.vsimem`); pyogrio legge `/vsizip//vsimem/.../{site}.gdb`.
-            # Site_id richiesto per il path interno allo zip.
-            from app.core.imdf.loader import load_imdf_layers
-
-            site_id = (meta.get("site_id") or "").strip()
-            if not site_id:
-                msg = (
-                    f"Bundle IMDF '{bundle_task_id}' senza site_id nel meta: "
-                    f"impossibile risolvere il path interno della .gdb."
-                )
-                logger.error(f"[Task {task_id}] {msg}")
-                return {
-                    "success": False, "task_id": task_id,
-                    "bundle_task_id": bundle_task_id, "error": msg,
-                    "elapsed_time": round(time.time() - started_at, 2),
-                }
-
-            _update_progress(self, 8, "Caricamento layer IMDF dal GDB...")
-            try:
-                with imdf_storage.open_gdb_in_vsimem(bundle_task_id, site_id) as vsi_path:
-                    if vsi_path is None:
-                        msg = (
-                            f"Bundle IMDF '{bundle_task_id}' senza .gdb su storage."
-                        )
-                        logger.error(f"[Task {task_id}] {msg}")
-                        return {
-                            "success": False, "task_id": task_id,
-                            "bundle_task_id": bundle_task_id, "error": msg,
-                            "elapsed_time": round(time.time() - started_at, 2),
-                        }
-                    gdf_layers = load_imdf_layers(vsi_path)
-                    total_features = sum(len(gdf) for gdf in gdf_layers.values())
-            except Exception as e:
-                msg = f"Hydration GDB /vsimem fallita: {e}"
-                logger.error(f"[Task {task_id}] {msg}", exc_info=True)
-                return {
-                    "success": False, "task_id": task_id,
-                    "bundle_task_id": bundle_task_id, "error": msg,
-                    "elapsed_time": round(time.time() - started_at, 2),
-                }
+            # Formato legacy (GDB) rimosso: solo plenora.indoor.bundle e'
+            # supportato. Un bundle senza questo formato va rigenerato.
+            msg = (
+                f"Bundle '{bundle_task_id}' in formato non supportato "
+                f"({meta.get('format') or 'legacy/GDB'}): rigenera l'arricchimento "
+                f"per produrre un plenora.indoor.bundle."
+            )
+            logger.error(f"[Task {task_id}] {msg}")
+            return {
+                "success": False, "task_id": task_id,
+                "bundle_task_id": bundle_task_id, "error": msg,
+                "elapsed_time": round(time.time() - started_at, 2),
+            }
 
         logger.info(
             f"[Task {task_id}] layer caricati: {len(gdf_layers)} layer, "
@@ -159,7 +131,7 @@ def execute_imdf_publish_task(
 
         _update_progress(
             self, 15,
-            f"GDB caricato ({len(gdf_layers)} layer, {total_features} feat). Preparazione upload..."
+            f"Layer caricati ({len(gdf_layers)} layer, {total_features} feat). Preparazione upload..."
         )
 
         renderers_data = None

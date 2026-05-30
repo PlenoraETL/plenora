@@ -7,7 +7,6 @@ emesse da `core/imdf/validator.validate_publish`.
 from __future__ import annotations
 
 import importlib
-from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock
@@ -16,7 +15,6 @@ import pytest
 
 # Pre-import che il validator e i collaborator usano a runtime, cosi'
 # eventuali side-effect di import sono noti prima dei monkeypatch.
-importlib.import_module("app.core.imdf.loader")
 importlib.import_module("app.core.imdf.arcgis.service_discovery")
 import app.core.imdf.validator as validator_mod
 
@@ -87,23 +85,20 @@ def patch_collaborators(monkeypatch):
         lambda conn_id: (fake_conn_info, fake_client),
     )
 
-    # loader.load_imdf_layers stub
-    monkeypatch.setattr(
-        "app.core.imdf.loader.load_imdf_layers",
-        lambda gdb_path, **_kw: knobs.bundle_layers,
-    )
+    # Nuovo path plenora.indoor.bundle: il validator carica i layer via
+    # load_indoor_bundle_payload + layer_geodataframes_only (nomi legati nel
+    # modulo validator). Meta con format=plenora.indoor.bundle per il branch.
     monkeypatch.setattr(
         "app.core.imdf.storage.get_meta_only",
-        lambda bundle_task_id: {"site_id": "site-test"},
+        lambda bundle_task_id: {"site_id": "site-test", "format": "plenora.indoor.bundle"},
     )
-
-    @contextmanager
-    def _fake_open_gdb_in_vsimem(bundle_task_id, site_id):
-        yield f"/vsizip//vsimem/{bundle_task_id}/{site_id}.gdb"
-
     monkeypatch.setattr(
-        "app.core.imdf.storage.open_gdb_in_vsimem",
-        _fake_open_gdb_in_vsimem,
+        validator_mod, "load_indoor_bundle_payload",
+        lambda task_id: {"layers": knobs.bundle_layers, "manifest": {}},
+    )
+    monkeypatch.setattr(
+        validator_mod, "layer_geodataframes_only",
+        lambda payload, **_kw: knobs.bundle_layers,
     )
 
     # ArcGIS discovery helpers (private, lazy-imported by validator)

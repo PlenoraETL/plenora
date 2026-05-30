@@ -158,10 +158,10 @@ def test_imdf_router_delegates_delete_to_bundle_store() -> None:
     assert "_imdf_bundle_store.delete_bundle" in router_src
 
 
-def test_imdf_publish_and_validator_no_legacy_bundle_store_hydration() -> None:
-    """Post QUERY-1 step 3: validator + publish task usano
-    `open_gdb_in_vsimem` (storage-direct RAM). Niente piu'
-    `bundle_store.ensure_local_bundle + find_gdb_dir` legacy."""
+def test_imdf_publish_and_validator_use_indoor_bundle_no_gdb() -> None:
+    """Cutover plenora.indoor.bundle: validator + publish task caricano i
+    layer dal bundle (load_indoor_bundle_payload + bundle_geo), senza GDB.
+    Niente piu' `bundle_store.ensure_local_bundle` ne' `open_gdb_in_vsimem`."""
     publish_src = (_BACKEND_ROOT / "workers/tasks/imdf_publish_task.py").read_text(
         encoding="utf-8"
     )
@@ -169,18 +169,14 @@ def test_imdf_publish_and_validator_no_legacy_bundle_store_hydration() -> None:
         encoding="utf-8"
     )
 
-    assert "bundle_store.ensure_local_bundle" not in publish_src, (
-        "publish task NON deve piu' usare bundle_store.ensure_local_bundle "
-        "(tombstoned post-QUERY-1 step 3)."
-    )
-    assert "bundle_store.ensure_local_bundle" not in validator_src, (
-        "validator NON deve piu' usare bundle_store.ensure_local_bundle "
-        "(tombstoned post-QUERY-1 step 3)."
-    )
+    for src, name in ((publish_src, "publish task"), (validator_src, "validator")):
+        assert "bundle_store.ensure_local_bundle" not in src, (
+            f"{name} NON deve usare bundle_store.ensure_local_bundle (legacy)."
+        )
+        assert "open_gdb_in_vsimem" not in src, (
+            f"{name} NON deve piu' usare open_gdb_in_vsimem (GDB tombstoned)."
+        )
+        assert "load_indoor_bundle_payload" in src, (
+            f"{name} deve caricare i layer dal plenora.indoor.bundle."
+        )
     assert ".rglob(\"*.gdb\")" not in publish_src
-    assert "open_gdb_in_vsimem" in publish_src, (
-        "publish task deve usare imdf_storage.open_gdb_in_vsimem."
-    )
-    assert "open_gdb_in_vsimem" in validator_src, (
-        "validator deve usare imdf_storage.open_gdb_in_vsimem."
-    )
