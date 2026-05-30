@@ -318,22 +318,42 @@ def test_temp_inventory_classification_buckets_match_brief():
 # The scan walks each Python file in app/+workers/ and finds
 # every ``Call`` whose callee resolves to one of the temp
 # constructors. Each site MUST appear in this inventory by
-# (rel_path, lineno). Adding a new tempfile callsite without
-# an inventory entry fails the ratchet.
+# (rel_path, enclosing_qualname). Keying on the enclosing
+# function/class (not the line number) keeps inventory entries
+# stable across unrelated line shifts in the same file. Adding a
+# new tempfile callsite without an inventory entry fails the ratchet.
 
-_TEMP_INVENTORY: dict[tuple[str, int], tuple[str, str]] = {}
+_TEMP_INVENTORY: dict[tuple[str, str], tuple[str, str]] = {}
 
 
-def _scan_temp_callsites() -> set[tuple[str, int]]:
-    """Find every ``NamedTemporaryFile`` / ``mkdtemp`` /
-    ``TemporaryDirectory`` Call in app/+workers/.
+def _calls_with_enclosing_qualname(tree: ast.AST):
+    """Yield ``(qualname, Call)`` for every Call node, where ``qualname`` is
+    the dotted path of enclosing function/class scopes (``"<module>"`` at top
+    level). Refactor-stable key vs. the raw line number.
     """
-    by_file = _scan_callsites(lambda node: _call_name(node) in _TEMP_TARGETS)
-    return {
-        (rel, lineno)
-        for rel, lines in by_file.items()
-        for lineno in lines
-    }
+    def _walk(node: ast.AST, scope: list[str]):
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                _walk(child, scope + [child.name])
+            else:
+                if isinstance(child, ast.Call):
+                    yield (".".join(scope) if scope else "<module>", child)
+                yield from _walk(child, scope)
+
+    yield from _walk(tree, [])
+
+
+def _scan_temp_callsites() -> set[tuple[str, str]]:
+    """Find every ``NamedTemporaryFile`` / ``mkdtemp`` /
+    ``TemporaryDirectory`` Call in app/+workers/, keyed by
+    (rel_path, enclosing_qualname).
+    """
+    found: set[tuple[str, str]] = set()
+    for rel, tree in _iter_python_modules():
+        for qualname, node in _calls_with_enclosing_qualname(tree):
+            if _call_name(node) in _TEMP_TARGETS:
+                found.add((rel, qualname))
+    return found
 
 
 def test_temp_materialization_inventory_is_complete():
@@ -353,7 +373,7 @@ def test_temp_materialization_inventory_is_complete():
     assert not missing, (
         "New temp materialization callsites are not in the "
         "inventory. Each MUST be classified explicitly:\n"
-        + "\n".join(f"  {rel}:{ln}" for rel, ln in sorted(missing))
+        + "\n".join(f"  {rel}::{qual}" for rel, qual in sorted(missing))
         + "\nAdd to `_TEMP_INVENTORY` with a "
         "(CATEGORY, rationale) tuple. Categories: "
         "PATH_REQUIRED_FILE, DIR_MULTIFILE, STAGING_INGESTION, "
@@ -364,7 +384,7 @@ def test_temp_materialization_inventory_is_complete():
     assert not stale, (
         "Inventory contains entries that no longer exist in "
         "source (refactored away?). Trim them:\n"
-        + "\n".join(f"  {rel}:{ln}" for rel, ln in sorted(stale))
+        + "\n".join(f"  {rel}::{qual}" for rel, qual in sorted(stale))
     )
 
 
