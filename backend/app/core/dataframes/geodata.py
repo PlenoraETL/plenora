@@ -9,6 +9,8 @@ from typing import Optional, Any
 
 import pandas as pd
 import geopandas as gpd
+import shapely
+from shapely.geometry import shape as _shapely_shape
 
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.geometry_parsing import (
@@ -51,6 +53,37 @@ def geodataframe_from_rows(
 ) -> Any:
     """Build a GeoDataFrame from row dictionaries."""
     return gpd.GeoDataFrame(rows, geometry=geometry, crs=crs)
+
+
+def geodataframe_from_geojson_records(
+    records: list[dict[str, Any]],
+    geometries: list[Optional[dict]],
+    *,
+    crs: str = "EPSG:4326",
+    drop_z: bool = False,
+) -> Any:
+    """Assembla un GeoDataFrame da record piatti + geometrie GeoJSON.
+
+    ``records`` e ``geometries`` sono allineati per indice; le geometrie sono
+    dict GeoJSON (o None). Usato dal path IMDF bundle per trasformare i layer
+    appiattiti dal descrittore in GeoDataFrame senza uscire dal boundary
+    dataframe. ``drop_z`` appiattisce 3D->2D (ArcGIS FeatureService 2D).
+    """
+    geoms: list[Any] = []
+    for g in geometries:
+        if not g:
+            geoms.append(None)
+            continue
+        geom = _shapely_shape(g)
+        if drop_z and getattr(geom, "has_z", False):
+            geom = shapely.force_2d(geom)
+        geoms.append(geom)
+
+    if not records:
+        return gpd.GeoDataFrame({"geometry": gpd.GeoSeries(geoms, crs=crs)}, crs=crs)
+
+    df = pd.DataFrame.from_records(records)
+    return gpd.GeoDataFrame(df, geometry=gpd.GeoSeries(geoms, crs=crs), crs=crs)
 
 
 def geodataframe_from_geometry_series(
