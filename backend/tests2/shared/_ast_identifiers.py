@@ -200,6 +200,19 @@ def imports_symbol_from(source: str, module: str, symbol: str) -> bool:
     return False
 
 
+def imports_symbol_as(source: str, module: str, symbol: str, asname: str) -> bool:
+    """True if ``source`` has ``from <module> import <symbol> as <asname>``
+    (robust to line-wrapping of the import statement)."""
+    for node in ast.walk(ast.parse(source)):
+        if (
+            isinstance(node, ast.ImportFrom)
+            and node.module == module
+            and any(a.name == symbol and a.asname == asname for a in node.names)
+        ):
+            return True
+    return False
+
+
 def call_has_keyword(source: str, func_name: str, keyword: str) -> bool:
     """True if ``source`` calls ``func_name(...)`` with a ``keyword=`` argument.
 

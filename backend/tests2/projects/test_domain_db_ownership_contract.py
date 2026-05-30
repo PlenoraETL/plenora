@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers, imports_module
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
@@ -62,9 +64,9 @@ def test_projects_router_uses_project_owned_usage_boundary() -> None:
     router_src = inspect.getsource(projects_router)
     helper_src = inspect.getsource(projects_router._visible_project_ids_strict)
 
-    assert "from app.core.projects.usage import" in router_src
+    assert imports_module(router_src, "app.core.projects.usage")
     assert "app.core.projects.db" not in router_src
-    assert "list_owned_project_ids(" in helper_src
+    assert "list_owned_project_ids" in all_identifiers(helper_src)
     legacy_import = "from app.db.config." + "projects import list_owned_project_ids"
     assert legacy_import not in router_src
 

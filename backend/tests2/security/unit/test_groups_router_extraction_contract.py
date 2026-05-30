@@ -10,6 +10,12 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._ast_identifiers import (
+    function_def_names,
+    imports_symbol_as,
+    imports_symbol_from,
+)
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
@@ -160,13 +166,16 @@ def test_api_composition_mounts_groups_router():
     api_src = (_BACKEND_ROOT / "app" / "core" / "api.py").read_text(
         encoding="utf-8"
     )
-    main_src = (_BACKEND_ROOT / "app" / "main.py").read_text(
+    # NB: il mount reale e' in `app_factory.create_app` (main.py lo ha solo in
+    # un commento storico). Il vecchio check passava su quel commento — falso
+    # positivo smascherato dalla conversione AST.
+    factory_src = (_BACKEND_ROOT / "app" / "app_factory.py").read_text(
         encoding="utf-8"
     )
-    assert "from app.core.auth.groups_router import groups_router" in api_src
+    assert imports_symbol_from(api_src, "app.core.auth.groups_router", "groups_router")
     assert "api_router.include_router(groups_router)" in api_src
-    assert "from app.core.api import api_router" in main_src
-    assert 'app.include_router(api_router, prefix="/api")' in main_src
+    assert imports_symbol_from(factory_src, "app.core.api", "api_router")
+    assert 'app.include_router(api_router, prefix="/api")' in factory_src
 
 
 # 6. No circular import (top-level imports)
@@ -213,18 +222,16 @@ def test_groups_router_uses_lazy_proxies_for_dependencies():
     src = (
         _BACKEND_ROOT / "app" / "core" / "auth" / "groups_router.py"
     ).read_text(encoding="utf-8")
-    assert "def _get_current_user_proxy(" in src
-    assert "def require_admin(" in src
-    assert "def require_superadmin(" in src
-    # Lazy: l'import deve essere dentro la funzione (cerco la
-    # sequenza "def <name>(...):\n    ... from app.core.auth.auth import").
-    assert "from app.core.auth.dependencies import get_current_user" in src
-    assert (
-        "from app.core.auth.dependencies import require_admin as _require_admin"
-        in src
+    defs = function_def_names(src)
+    assert "_get_current_user_proxy" in defs
+    assert "require_admin" in defs
+    assert "require_superadmin" in defs
+    # Gli import (lazy, dentro le funzioni) sono colti da imports_symbol_from
+    # che attraversa anche gli scope nidificati.
+    assert imports_symbol_from(src, "app.core.auth.dependencies", "get_current_user")
+    assert imports_symbol_as(
+        src, "app.core.auth.dependencies", "require_admin", "_require_admin"
     )
-    assert (
-        "from app.core.auth.dependencies import "
-        "require_superadmin as _require_superadmin"
-        in src
+    assert imports_symbol_as(
+        src, "app.core.auth.dependencies", "require_superadmin", "_require_superadmin"
     )

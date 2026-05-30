@@ -13,6 +13,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests2.shared._ast_identifiers import imports_symbol_from
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
@@ -277,7 +279,7 @@ def test_app_factory_consumes_runtime_services_factory():
     src = _read(_APP_FACTORY_PY)
 
     # Factory consumed.
-    assert "from app.runtime import build_runtime_services" in src
+    assert imports_symbol_from(src, "app.runtime", "build_runtime_services")
     assert "resolved_deps.build_runtime_services(" in src
 
     # Module-globals are still defined (monkeypatch surface), but

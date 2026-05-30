@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from app.shared.resources import storage_layout
+from tests2.shared._ast_identifiers import imports_symbol_from
 
 
 # Naming rules
@@ -88,7 +89,9 @@ def test_file_storage_dispatch_uses_shared_prefix():
         backend_root / "app" / "core" / "resources" / "blob_dispatch.py"
     ).read_text(encoding="utf-8")
 
-    assert "from app.shared.resources.storage_layout import FILE_SOURCES_PREFIX" in source
+    assert imports_symbol_from(
+        source, "app.shared.resources.storage_layout", "FILE_SOURCES_PREFIX"
+    )
     assert "_OBJECT_STORAGE_PREFIX" not in source
 
 

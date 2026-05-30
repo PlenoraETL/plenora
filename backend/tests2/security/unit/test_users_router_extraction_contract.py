@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._ast_identifiers import imports_symbol_from
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
@@ -160,13 +162,16 @@ def test_api_composition_mounts_users_router():
     api_src = (_BACKEND_ROOT / "app" / "core" / "api.py").read_text(
         encoding="utf-8"
     )
-    main_src = (_BACKEND_ROOT / "app" / "main.py").read_text(
+    # NB: il mount reale e' in `app_factory.create_app` (main.py lo ha solo in
+    # un commento storico). Il vecchio check passava su quel commento — falso
+    # positivo smascherato dalla conversione AST.
+    factory_src = (_BACKEND_ROOT / "app" / "app_factory.py").read_text(
         encoding="utf-8"
     )
-    assert "from app.core.auth.users_router import users_router" in api_src
+    assert imports_symbol_from(api_src, "app.core.auth.users_router", "users_router")
     assert "api_router.include_router(users_router)" in api_src
-    assert "from app.core.api import api_router" in main_src
-    assert 'app.include_router(api_router, prefix="/api")' in main_src
+    assert imports_symbol_from(factory_src, "app.core.api", "api_router")
+    assert 'app.include_router(api_router, prefix="/api")' in factory_src
 
 
 # 6. Auth.py non importa users_router prima delle dependency necessarie
