@@ -88,7 +88,11 @@ def _patch_cascade(
             "app.core.projects.service.project_db.get_project_row",
             return_value=_mock_project_row()
         ), patch(
-            "app.core.eseguibili.db.list_eseguibili_by_source",
+            # `service` does `from app.core.eseguibili.db import
+            # list_eseguibili_by_source` at module level, so it holds a cached
+            # copy: patch the call-site binding on `service`, not the `db`
+            # module (same rule documented for `intermediate.cleanup` below).
+            "app.core.projects.service.list_eseguibili_by_source",
             return_value=[]
         ), patch(
             "app.core.projects.service.ProjectService._find_dependent_projects",

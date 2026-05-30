@@ -96,12 +96,14 @@ def test_analyze_upload_mime_reject_sanitizes_detail(client, monkeypatch):
 def test_analyze_upload_value_error_sanitizes_detail(client, monkeypatch):
     """Il service solleva ValueError con path temp + URL + token:
     il detail deve essere sanitizzato."""
-    from app.utils import mime_validator
     from app.core.eseguibili import service as eseguibili_service
 
-    # MIME pass-through.
+    # MIME pass-through. Patch the name the router actually calls (bound on the
+    # router module via `from ... import validate_no_executable`), not the
+    # mime_validator module, otherwise the real validator runs.
     monkeypatch.setattr(
-        mime_validator, "validate_no_executable", lambda content, filename: None,
+        eseguibili_router_module, "validate_no_executable",
+        lambda content, filename: None,
     )
 
     sporco = (

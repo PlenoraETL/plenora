@@ -57,7 +57,10 @@ def test_load_upstream_data_does_not_fallback_to_latest_project_result_after_fai
     # "progetto non trovato in pre-cache" -> il flow procede come previsto
     # dal test (fail-closed su _project_group_id, execute via orchestrator
     # stub).
-    with patch("app.core.projects.runtime_context.get_project_runtime_context", return_value=None), \
+    # carica_task imports get_project_runtime_context by name at module level,
+    # so patch its cached binding on carica_task (patching the runtime_context
+    # module would miss the copy the task actually calls).
+    with patch("workers.tasks.carica_task.get_project_runtime_context", return_value=None), \
          patch(
              "app.runtime.services.build_orchestrator_stack",
              return_value=SimpleNamespace(orchestrator=orchestrator),
