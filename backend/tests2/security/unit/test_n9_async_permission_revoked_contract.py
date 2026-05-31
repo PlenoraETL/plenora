@@ -645,6 +645,18 @@ def test_tasks_reference_intermediate_create_run(task_name, task_module):
     """
     mod = importlib.import_module(task_module)
     task = getattr(mod, task_name)
+    if task_name == "execute_enrichment_task":
+        # #28-B: l'apertura dell'intermediate run e' delegata a
+        # EnrichmentRunMode.begin_run (StandardRunMode). L'invariante regge,
+        # solo indiretta: task -> begin_run -> create_run.
+        from app.core.arricchisci.enrichment_run_mode import StandardRunMode
+        assert _references_name(task, "begin_run"), (
+            f"{task_name} non delega l'apertura run a run_mode.begin_run."
+        )
+        assert _references_name(StandardRunMode.begin_run, "create_run"), (
+            "StandardRunMode.begin_run non referenzia run_lifecycle.create_run."
+        )
+        return
     assert _references_name(task, "create_run"), (
         f"{task_name} non referenzia run_lifecycle.create_run — "
         "allineamento incompleto (log_runs ha user_id, intermediate.runs no)."

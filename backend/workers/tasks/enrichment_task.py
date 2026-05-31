@@ -9,7 +9,6 @@ import json as json_mod
 import threading
 import time
 import traceback as _tb
-import uuid as _uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List
@@ -18,19 +17,17 @@ from app.core.artifacts import resolver as artifact_resolver_module
 from app.core.auth import async_user_recheck as async_user_recheck_module
 from app.core.arricchisci import api_connector as api_connector_module
 from app.core.arricchisci import canvas_orchestrator as canvas_orchestrator_module
+from app.core.arricchisci import enrichment_run_mode
 from app.core.arricchisci import execution_context as execution_context_module
 from app.core.arricchisci import parallel as parallel_module
 from app.core.dataframes import export_writer as dataframe_export_writer
 from app.core.dataframes.values import is_nonempty_dataframe
-from app.core.eseguibili import db as eseguibili_db
 from app.core.eseguibili import storage as eseg_storage
 from app.core.files import service as files_service
 from app.core.intermediate import run_idempotency as run_idempotency_module
-from app.core.intermediate import run_lifecycle as run_lifecycle_module
 from app.core.intermediate import snapshot as intermediate_snapshot
 from app.core.intermediate import writer as intermediate_writer
 from app.core import output_contract as output_contract_module
-from app.core.projects import retention as project_retention
 from app.core.projects import service as project_service_module
 from app.core.results import blob_writer as result_blob_writer
 from app.core.results import pipeline_result as pipeline_result_module
@@ -111,9 +108,11 @@ def execute_enrichment_task(
 
     start_time = time.time()
 
-    # Per is_eseguibile, skip: gli eseguibili hanno flusso di auth
-    # separato (token eseguibile) e non passano per user_id interattivo
-    if not is_eseguibile:
+    # #28-B: la run-mode incapsula le divergenze standard vs eseguibile
+    # (auth recheck, logger project_id, group_id + intermediate run).
+    run_mode = enrichment_run_mode.for_task(is_eseguibile)
+
+    if run_mode.should_recheck_auth():
         _revoked = async_user_recheck_module.recheck_user_authorized(
             user_id=user_id, project_id=project_id,
             task_id=task_id, run_id=run_id or "", task_name="ENRICHMENT",
@@ -122,10 +121,7 @@ def execute_enrichment_task(
             _revoked.update({"task_id": task_id, "project_id": project_id})
             return _revoked
 
-    # Per gli eseguibili non propaghiamo project_id ai logger: il PostgresLogHandler
-    # lo userebbe come colonna `logs.project_id` creando tracce persistenti che
-    # vogliamo evitare
-    _log_pid = "" if is_eseguibile else project_id
+    _log_pid = run_mode.log_project_id(project_id)
 
     logger.info(f"[Task {task_id}] Avvio enrichment per progetto {project_id}", project_id=_log_pid)
 
@@ -150,36 +146,10 @@ def execute_enrichment_task(
     # `_load_*` / `_execute_rest_file` falliscono fail-closed con
     # "Contesto di sicurezza non determinabile (group_id mancante)"
     _run_start = time.time()
-    _group_id = ""
-    _retention_n = None
-    if is_eseguibile:
-        _run_id = None
-        try:
-            _eseg = eseguibili_db.get_eseguibile(project_id)
-            _group_id = (_eseg.get("group_id") or "") if _eseg else ""
-        except Exception as _ge:
-            logger.warning(
-                f"[Task {task_id}] Eseguibile group_id lookup fallito "
-                f"(non bloccante): {_ge}"
-            )
-    else:
-        _run_id = str(_uuid.uuid4())
-        try:
-            _meta = project_service_module.ProjectService().get_project_metadata(project_id)
-            _group_id = getattr(_meta, 'group_id', 'unknown') if _meta else 'unknown'
-            _retention_n = project_retention.resolve_runs_retention_n(
-                project_id,
-                default=run_lifecycle_module.get_default_runs_retention(),
-            )
-            run_lifecycle_module.create_run(
-                run_id=_run_id,
-                canvas_id=project_id,
-                group_id=_group_id,
-                user_id=user_id,
-            )
-        except Exception as _rie:
-            logger.warning(f"[Task {task_id}] Intermediate: apertura run fallita (non bloccante): {_rie}")
-            _run_id = None
+    _ctx = run_mode.begin_run(project_id=project_id, user_id=user_id, task_id=task_id)
+    _run_id = _ctx.run_id
+    _group_id = _ctx.group_id
+    _retention_n = _ctx.retention_n
 
     # Per eseguibili: niente log_runs/logs su DB
     if not is_eseguibile:
