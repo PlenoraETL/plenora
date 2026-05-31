@@ -246,6 +246,21 @@ def run_enrichment_canvas(
     nodes = graph.raw_nodes
     node_results: JsonObject = {}
 
+    # #37 — reference-counting per liberare la RAM dei nodi intermedi appena
+    # TUTTI i loro consumatori topologici hanno girato: il picco scende da
+    # Sum(tutti i DataFrame della run) a Sum(quelli ancora "vivi"). I nodi
+    # terminali (out-degree 0, es. `result`) non vengono mai evictati perche'
+    # nessun consumatore ne decrementa il contatore → restano per il caller
+    # (`_find_final_result`).
+    inputs_of: dict = {}
+    consumers_remaining: dict = {}
+    for _e in edges:
+        _s, _t = _e.get("source"), _e.get("target")
+        if _s is None or _t is None:
+            continue
+        inputs_of.setdefault(_t, []).append(_s)
+        consumers_remaining[_s] = consumers_remaining.get(_s, 0) + 1
+
     for step_type, step_node_ids in groups:
         if step_type == "single":
             # ── Nodo singolo (sorgente, result, o enricher isolato) ──
@@ -417,6 +432,22 @@ def run_enrichment_canvas(
             if hooks.after_node is not None:
                 for nid in step_node_ids:
                     hooks.after_node(nid, "api_enrich", node_results.get(nid))
+
+        # #37 — eviction: i nodi appena prodotti hanno consumato i loro input;
+        # decrementa il contatore di ciascun input e libera dalla RAM quelli i
+        # cui consumatori sono tutti esauriti (solo DataFrame: i marker sono
+        # piccoli e il caller potrebbe ancora leggerli).
+        for _produced in step_node_ids:
+            for _src in inputs_of.get(_produced, ()):
+                consumers_remaining[_src] = consumers_remaining.get(_src, 0) - 1
+                if consumers_remaining[_src] <= 0:
+                    _val = node_results.get(_src)
+                    if _val is not None and is_dataframe(_val):
+                        del node_results[_src]
+                        logger.debug(
+                            f"RAM evict: nodo intermedio '{_src}' liberato "
+                            f"(tutti i consumatori hanno girato)"
+                        )
 
     return node_results
 
