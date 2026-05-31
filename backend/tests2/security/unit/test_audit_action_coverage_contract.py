@@ -50,10 +50,6 @@ _REQUIRED_AUDIT_DECORATORS: list[tuple[str, str, str]] = [
     ("scheduler/router.py",   "toggle_schedule",         "schedule.toggle"),
     ("scheduler/router.py",   "update_schedule_catchup", "schedule.catchup"),
     ("scheduler/router.py",   "run_schedule_now",        "schedule.run_now"),
-    # imdf (publish + validate + delete bundle)
-    ("imdf/router.py",        "publish_imdf",                "imdf.publish"),
-    ("imdf/router.py",        "validate_publish_endpoint",   "imdf.validate_publish"),
-    ("imdf/router.py",        "delete_bundle",               "imdf.bundle.delete"),
     # eseguibili (CRUD + analyze + execute)
     ("eseguibili/router.py",  "create_eseguibile",   "eseguibile.create"),
     ("eseguibili/router.py",  "update_eseguibile",   "eseguibile.update"),

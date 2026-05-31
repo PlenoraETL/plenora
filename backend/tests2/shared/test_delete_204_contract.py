@@ -80,13 +80,6 @@ DELETE_204_ROUTE_CASES = [
         "DELETE /api/files/{id}",
         id="files",
     ),
-    pytest.param(
-        "app.core.imdf.router",
-        "router",
-        "/imdf/bundles/{bundle_task_id}",
-        "DELETE /api/imdf/bundles/{bundle_task_id}",
-        id="imdf-bundles",
-    ),
 ]
 
 

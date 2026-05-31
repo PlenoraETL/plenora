@@ -17,7 +17,6 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _TARGET_MODULES = (
     "backend/workers/tasks/carica_task.py",
     "backend/workers/tasks/enrichment_task.py",
-    "backend/workers/tasks/imdf_publish_task.py",
     "backend/workers/tasks/pipeline_task.py",
 )
 

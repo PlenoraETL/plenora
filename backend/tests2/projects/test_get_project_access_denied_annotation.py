@@ -288,21 +288,6 @@ def _make_dirty_carica_arcgis_canvas() -> CanvasState:
     )
 
 
-def _make_dirty_imdf_publisher_canvas() -> CanvasState:
-    return CanvasState(
-        nodes=[
-            Node(id="src", type="source", position={"x": 0, "y": 0}, columns=[]),
-            Node(
-                id="imdf_pub",
-                type="imdf_publisher",
-                position={"x": 200, "y": 0},
-                imdf_arcgis_connection_id="arcgis_Arcgis_Online_Urby_IMDF_OLD",
-            ),
-        ],
-        edges=[Edge(id="e1", source="src", target="imdf_pub")],
-    )
-
-
 def test_get_project_annotates_inaccessible_arcgis_connection_on_carica_arcgis_node():
     """Canvas con carica_arcgis che punta a connection di altro gruppo
     -> response 200 con nodo marcato access_denied=true e
@@ -333,32 +318,6 @@ def test_get_project_annotates_inaccessible_arcgis_connection_on_carica_arcgis_n
     assert "Connessione ArcGIS" in ag_node["data"]["access_denied_reason"]
     # Nodo non rimosso
     assert len(nodes) == 2
-
-
-def test_get_project_annotates_inaccessible_arcgis_connection_on_imdf_publisher_node():
-    """Stesso pattern per imdf_publisher.imdf_arcgis_connection_id."""
-    metadata = _make_metadata(group_id="g1")
-    canvas = _make_dirty_imdf_publisher_canvas()
-
-    fake_svc = MagicMock()
-    fake_svc.get_project_metadata.return_value = metadata
-    fake_svc.get_project_canvas.return_value = canvas
-    fake_svc.get_project_output_contract.return_value = []
-
-    def _fake_visible(resource_table, group_id, is_superadmin=False):
-        if resource_table == "arcgis_connections":
-            return {"arcgis_Arcgis_Online_Plenora_IMDF_NEW"}
-        return set()
-
-    with patch("app.core.projects.router._project_service", fake_svc), patch(
-        "app.core.auth.visibility.visible_resource_ids", side_effect=_fake_visible
-    ):
-        resp = get_project("p1", _User())
-
-    pub_node = next(n for n in resp["canvas"]["nodes"] if n["id"] == "imdf_pub")
-    assert pub_node["data"]["access_denied"] is True
-    assert pub_node["data"]["inaccessible_resource_type"] == "arcgis_connection"
-    assert "arcgis_Arcgis_Online_Urby_IMDF_OLD" in pub_node["data"]["access_denied_reason"]
 
 
 def test_get_project_does_not_annotate_arcgis_connection_when_visible():
@@ -424,7 +383,7 @@ def test_get_project_does_not_persist_canvas_during_arcgis_annotation():
     """Sicurezza: GET resta read-only anche per il ramo arcgis_connection.
     Nessuna scrittura sul canvas durante l'annotazione."""
     metadata = _make_metadata(group_id="g1")
-    canvas = _make_dirty_imdf_publisher_canvas()
+    canvas = _make_dirty_carica_arcgis_canvas()
 
     fake_svc = MagicMock()
     fake_svc.get_project_metadata.return_value = metadata

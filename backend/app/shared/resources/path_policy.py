@@ -90,34 +90,3 @@ def assert_path_within(
 # quindi accettiamo alfanumerico + dash/underscore. Primo char alfanumerico
 # no `-`/`_` iniziale). Esclude `.`, `/`, `\`, spazi, null bytes e caratteri
 # di controllo — sufficiente per bloccare path traversal
-_IMDF_TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$")
-
-
-def validate_imdf_task_id(bundle_task_id: str, root: Path) -> Path:
-    """Valida formato `bundle_task_id` IMDF + path traversal contro `root`.
-
-    Due livelli di difesa:
-      1. Regex whitelist `_IMDF_TASK_ID_RE` sul formato (no slash, no dots,
-         no null bytes, max 128 char, primo char alfanumerico).
-      2. `assert_path_within(root / bundle_task_id, [root])` come safety
-         net — se nonostante la regex l'input sfugge, solleva `ValueError`.
-
-    Ritorna il `Path` resolved del bundle dir (utile al caller per evitare
-    un secondo `resolve`). NON verifica che la dir esista — quello e'
-    responsabilita' del caller (check `BUNDLE_MISSING` o simile).
-
-    Args:
-        bundle_task_id: stringa da validare.
-        root: directory root `IMDF_BUNDLES_DIR` (Path, preferibilmente
-            gia' resolved dal caller).
-
-    Raises:
-        ValueError: id vuoto, formato non conforme alla regex, oppure
-            path resolved fuori da `root`.
-    """
-    if not bundle_task_id or not _IMDF_TASK_ID_RE.match(bundle_task_id):
-        raise ValueError(
-            "bundle_task_id non valido (ammessi solo [A-Za-z0-9_-], "
-            "primo char alfanumerico, max 128 char)"
-        )
-    return assert_path_within(root / bundle_task_id, [root])

@@ -22,7 +22,6 @@ from app.core.eseguibili.router import router as eseguibili_router
 from app.core.estrai.router import functions_router
 from app.core.features.routes import router as features_router
 from app.core.files.router import router as files_router
-from app.core.imdf.router import router as imdf_router
 from app.core.intermediate.router import router as intermediate_router
 from app.core.logs.router import router as logs_router
 from app.core.logs.runs_router import router as runs_router
@@ -84,9 +83,6 @@ api_router.include_router(intermediate_router)
 
 # Eseguibili: catene on-demand.
 api_router.include_router(eseguibili_router)
-
-# IMDF: publish async su ArcGIS.
-api_router.include_router(imdf_router)
 
 # Admin Backups: superadmin only.
 api_router.include_router(admin_backups_router)

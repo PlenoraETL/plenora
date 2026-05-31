@@ -1,10 +1,8 @@
 /**
- * ResultNodeStandardView — view del ResultNode per il ramo NON-IMDF
- * (upstream qualsiasi diverso da api_enrich con output_kind='imdf').
+ * ResultNodeStandardView — unica view del ResultNode (per ogni upstream).
  *
- * Il componente si monta solo quando isImdfMode=false (ramo ternario
- * del parent); non ha una prop isImdfMode perche' la sua presenza nel
- * tree lo implica.
+ * (Post-collasso IMDF a una-run non esiste piu' una vista IMDF dedicata:
+ * il bundle e' un artefatto JSON come gli altri.)
  *
  * Owna:
  *   - dispatch a `OutputSettingsPanel` (filename + format + geo + distinct + limit);

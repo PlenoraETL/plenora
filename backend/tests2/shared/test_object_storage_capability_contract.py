@@ -275,17 +275,6 @@ def test_file_sources_delete_skips_s3_cleanup_when_disabled(monkeypatch):
     assert fake_cur.execute.call_count == 3
 
 
-def test_imdf_storage_list_task_ids_returns_empty_when_disabled():
-    from app.core.imdf import storage as imdf_storage
-    with _patch_capability(False, "s3"):
-        assert imdf_storage.list_task_ids() == []
-
-
-def test_imdf_storage_get_meta_only_returns_none_when_disabled():
-    from app.core.imdf import storage as imdf_storage
-    with _patch_capability(False, "s3"):
-        assert imdf_storage.get_meta_only("any-task") is None
-
 
 # D. Admin backups
 

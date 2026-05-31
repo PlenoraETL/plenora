@@ -585,7 +585,6 @@ def test_router_constant_refs_find_baseline():
         "TASK_NOT_FOUND",
         "SCHEDULE_NOT_FOUND",
         "RUN_NOT_FOUND",
-        "BUNDLE_NOT_FOUND",
         "API_CONNECTION_NOT_FOUND",
         "FILE_SOURCE_NOT_FOUND",
         # batch 010 (external-service family)

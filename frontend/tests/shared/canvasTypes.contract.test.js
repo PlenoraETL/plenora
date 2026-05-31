@@ -19,10 +19,10 @@ import * as ct from '../../src/constants/canvasTypes';
 import { WRITE_MODES as DB_WRITE_MODES } from '../../src/components/nodes/carica/DbDestinationSection';
 
 describe('canvasTypes lockin', () => {
-  it('NODE_TYPES contiene esattamente i 14 valori del canvas', () => {
+  it('NODE_TYPES contiene esattamente i 13 valori del canvas', () => {
     expect([...ct.NODE_TYPES].sort()).toEqual([
       'api_enrich', 'carica', 'carica_arcgis', 'comment',
-      'datasource_node', 'feature_source', 'file_source', 'imdf_publisher',
+      'datasource_node', 'feature_source', 'file_source',
       'multi_join', 'project_source', 'result', 'source',
       'staticValues', 'transform',
     ]);

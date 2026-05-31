@@ -69,10 +69,4 @@ describe('api error contract', () => {
     await expect(listDataSources()).rejects.toThrow('datasources unavailable');
   });
 
-  it('imdf api propagates metadata failures', async () => {
-    const error = new Error('bundle metadata failed');
-    httpMock.get.mockRejectedValueOnce(error);
-    const { getImdfBundleMetadata } = await import('../../src/api/imdf');
-    await expect(getImdfBundleMetadata('bundle-1')).rejects.toThrow('bundle metadata failed');
-  });
 });

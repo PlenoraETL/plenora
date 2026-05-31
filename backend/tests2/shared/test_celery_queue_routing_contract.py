@@ -35,7 +35,6 @@ def test_celery_app_routes_heavy_data_tasks_to_data_plane_queue():
         '"pipeline.preview"',
         '"carica.execute"',
         '"tasks.execute_enrichment"',
-        '"tasks.execute_imdf_publish"',
         '"workers.tasks.schedule_task.schedule_pipeline_task"',
     ):
         assert task_name in celery_text

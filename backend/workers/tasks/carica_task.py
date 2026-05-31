@@ -4,6 +4,7 @@ Task Celery per il modulo CARICA — esecuzione asincrona con progresso Redis.
 Runs background execution while preserving backend runtime contracts.
 """
 
+import json
 import time as _time
 import traceback
 import uuid as _uuid
@@ -26,6 +27,7 @@ from app.core.artifacts import (
 from app.core.auth.async_user_recheck import recheck_user_authorized
 from app.core.auth.visibility import is_resource_visible
 from app.core.carica import arcgis_write_boundary as arcgis_write_boundary_module
+from app.core.carica.multilayer_artifact_registry import resolve_multilayer_artifact
 from app.core.carica.executor import CaricaExecutor
 from app.core.carica.rest_config_parser import parse_carica_rest_config
 from app.core.carica.rest_write_boundary import execute_carica_rest_write
@@ -227,54 +229,68 @@ def execute_carica_task(
                 }
 
         _update_progress(self, 5, "Caricamento dati dal nodo Output...")
-        df = _load_upstream_data(project_id, canvas, force_recalculate, output_format)
 
-        if df is None:
-            logger.warning("Nessun dato dal nodo upstream — DataFrame None")
-            close_run(
-                run_id=run_id, status="failure",
-                duration_ms=int((_time.time() - _run_start) * 1000),
-                error_module="carica",
-                error_message="Nessun dato disponibile dal nodo Output upstream.",
+        # Multi-layer (es. IMDF bundle): se l'artefatto upstream e' riconosciuto
+        # da un adapter registrato, il sink ArcGIS scrive N layer in una-run,
+        # senza passare dal DataFrame singolo. CARICA resta generico: interroga
+        # il registry, non conosce i formati verticali (la direzione di
+        # accoppiamento e' verticale->orizzontale, l'adapter lo registra il
+        # composition root).
+        result = None
+        if write_branch == 'arcgis':
+            result = _maybe_multilayer_arcgis_write(
+                self, project_id, canvas, carica_node_data, task_id,
             )
-            return {
-                "status": "validation_error",
-                "success": False,
-                "error_message": "Nessun dato disponibile dal nodo Output upstream.",
-                "rows_written": 0,
-                "total_rows": 0,
-            }
 
-        if len(df) == 0:
-            # 0 righe è un caso legittimo — completato con successo senza scrivere nulla
-            logger.info("Dataset vuoto (0 righe) — CARICA completato senza scritture")
-            close_run(
-                run_id=run_id, status="success",
-                rows_out=0,
-                duration_ms=int((_time.time() - _run_start) * 1000),
+        if result is None:
+            df = _load_upstream_data(project_id, canvas, force_recalculate, output_format)
+
+            if df is None:
+                logger.warning("Nessun dato dal nodo upstream — DataFrame None")
+                close_run(
+                    run_id=run_id, status="failure",
+                    duration_ms=int((_time.time() - _run_start) * 1000),
+                    error_module="carica",
+                    error_message="Nessun dato disponibile dal nodo Output upstream.",
+                )
+                return {
+                    "status": "validation_error",
+                    "success": False,
+                    "error_message": "Nessun dato disponibile dal nodo Output upstream.",
+                    "rows_written": 0,
+                    "total_rows": 0,
+                }
+
+            if len(df) == 0:
+                # 0 righe è un caso legittimo — completato con successo senza scrivere nulla
+                logger.info("Dataset vuoto (0 righe) — CARICA completato senza scritture")
+                close_run(
+                    run_id=run_id, status="success",
+                    rows_out=0,
+                    duration_ms=int((_time.time() - _run_start) * 1000),
+                )
+                return {
+                    "status": "completed",
+                    "success": True,
+                    "message": "Dataset vuoto: nessuna riga da scrivere.",
+                    "rows_written": 0,
+                    "total_rows": 0,
+                }
+
+            logger.info(f"DataFrame caricato: {len(df)} righe, {len(df.columns)} colonne")
+            _update_progress(
+                self, 10,
+                f"Dati caricati: {len(df)} righe. Avvio scrittura..."
             )
-            return {
-                "status": "completed",
-                "success": True,
-                "message": "Dataset vuoto: nessuna riga da scrivere.",
-                "rows_written": 0,
-                "total_rows": 0,
-            }
 
-        logger.info(f"DataFrame caricato: {len(df)} righe, {len(df.columns)} colonne")
-        _update_progress(
-            self, 10,
-            f"Dati caricati: {len(df)} righe. Avvio scrittura..."
-        )
-
-        if write_branch == 'datasource':
-            result = _execute_datasource_write(self, df, carica_node_data, project_id, task_id)
-        elif write_branch == 'rest':
-            result = _execute_rest_write(self, df, carica_node_data, project_id, task_id)
-        elif write_branch == 'arcgis':
-            result = _execute_arcgis_write(self, df, carica_node_data, project_id, task_id)
-        else:
-            result = _execute_db_write(self, df, carica_node_data, project_id, task_id, triggered_by, run_id)
+            if write_branch == 'datasource':
+                result = _execute_datasource_write(self, df, carica_node_data, project_id, task_id)
+            elif write_branch == 'rest':
+                result = _execute_rest_write(self, df, carica_node_data, project_id, task_id)
+            elif write_branch == 'arcgis':
+                result = _execute_arcgis_write(self, df, carica_node_data, project_id, task_id)
+            else:
+                result = _execute_db_write(self, df, carica_node_data, project_id, task_id, triggered_by, run_id)
 
         is_success = result.get("success", False)
         rows_written = result.get("rows_written", 0) or 0
@@ -686,6 +702,100 @@ class _RequestsRestHttpClient:
 def create_default_rest_http_client() -> _RequestsRestHttpClient:
     """Create the default HTTP client injected into the REST write boundary."""
     return _RequestsRestHttpClient()
+
+
+def _maybe_multilayer_arcgis_write(
+    task: Any,
+    project_id: str,
+    canvas: JsonObject,
+    carica_node_data: JsonObject,
+    task_id: str,
+) -> Optional[JsonObject]:
+    """Pubblica N layer su ArcGIS se l'artefatto upstream e' un bundle multi-layer.
+
+    Recupera i BYTES grezzi dell'ultimo artefatto del progetto (non il DataFrame
+    coerced) e li interroga via il registry multi-layer: CARICA resta generico,
+    gli adapter verticali (es. IMDF ``plenora.indoor.bundle``) sono registrati al
+    composition root. Se nessun adapter riconosce il payload -> ``None`` e il
+    chiamante ricade sul path mono-layer (DataFrame).
+    """
+    try:
+        _ctx = get_project_runtime_context(project_id)
+        group_id = _ctx.group_id if _ctx else None
+    except Exception as exc:
+        logger.warning(f"[GESTITO] multilayer: lookup group_id fallito: {exc}")
+        return None
+    if not group_id:
+        logger.error(
+            f"[SECURITY] multilayer: group_id non determinabile per {project_id}, "
+            f"skip detection bundle (fallback mono-layer)"
+        )
+        return None
+
+    try:
+        fetched = SourceLoader().resolve_project_file_bytes(
+            LatestProjectArtifactRef(project_id=project_id),
+            expected_group_id=group_id,
+        )
+    except SourceLoadingError as exc:
+        logger.error(f"[SECURITY] multilayer: fetch artefatto fallito: {exc}")
+        return None
+    except Exception as exc:
+        logger.warning(f"[GESTITO] multilayer: fetch artefatto fallito: {exc}")
+        return None
+    if not fetched:
+        return None
+
+    raw_bytes, _filename = fetched
+    try:
+        payload = json.loads(raw_bytes)
+    except (ValueError, UnicodeDecodeError):
+        return None  # non-JSON -> non e' un bundle multi-layer
+    if not isinstance(payload, dict):
+        return None
+
+    artifact = resolve_multilayer_artifact(payload)
+    if artifact is None:
+        return None  # nessun adapter registrato riconosce il payload
+
+    _update_progress(
+        task, 10,
+        f"Bundle multi-layer: {len(artifact.layers)} layer. Avvio publish ArcGIS...",
+    )
+
+    raw_op = carica_node_data.get("arcgis_operation") or "create_service"
+    operation = "create_service" if raw_op == "create_service" else (
+        "append" if raw_op in ("add", "append") else raw_op
+    )
+    request = arcgis_write_boundary_module.CaricaArcGISMultiLayerRequest(
+        project_id=project_id,
+        connection_id=carica_node_data.get("arcgis_connection_id", ""),
+        operation=operation,
+        source_srid=carica_node_data.get("source_srid"),
+        service_name=carica_node_data.get("arcgis_new_service_name", ""),
+        service_url=carica_node_data.get("arcgis_service_url", ""),
+        folder_id=carica_node_data.get("arcgis_folder_id", ""),
+        renderers=artifact.renderers_by_layer_name or None,
+    )
+
+    outcome = arcgis_write_boundary_module.execute_carica_arcgis_multilayer_write(
+        layers=list(artifact.layers),
+        request=request,
+        feature_writer=create_default_arcgis_feature_writer(),
+    )
+    result = outcome.to_task_result()
+    if outcome.success:
+        _update_progress(
+            task, 100,
+            f"ArcGIS multi-layer completato: {outcome.rows_written} features",
+        )
+        logger.info(
+            f"Task CARICA ArcGIS multi-layer {task_id} completato: "
+            f"{outcome.rows_written} features"
+        )
+    else:
+        _update_progress(task, -1, outcome.error_message or outcome.message)
+    return result
 
 
 def _execute_arcgis_write(

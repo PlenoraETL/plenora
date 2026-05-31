@@ -95,11 +95,6 @@ def test_file_storage_dispatch_uses_shared_prefix():
     assert "_OBJECT_STORAGE_PREFIX" not in source
 
 
-def test_imdf_storage_uses_shared_prefix():
-    from app.core.imdf import storage as imdf_storage
-    assert imdf_storage.PREFIX == storage_layout.IMDF_BUNDLES_PREFIX
-
-
 def test_eseguibili_storage_uses_shared_prefix():
     from app.core.eseguibili import storage as eseguibili_storage
     assert eseguibili_storage.PREFIX == storage_layout.ESEGUIBILI_OUTPUTS_PREFIX

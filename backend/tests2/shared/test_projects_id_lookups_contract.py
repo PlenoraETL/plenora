@@ -173,14 +173,3 @@ def test_projects_router_uses_helper_not_pg_connection():
     assert "import app.db.pg_connection" not in src
     # And the helper is referenced.
     assert "list_owned_project_ids" in src
-
-
-def test_imdf_router_uses_helper_not_pg_connection():
-    """`imdf/router.list_bundles` must delegate to
-    the IMDF project access boundary and not import `pg_connection` directly."""
-    from app.core.imdf import router as imdf_router
-
-    src = open(imdf_router.__file__, encoding="utf-8").read()
-    assert "from app.db.pg_connection" not in src
-    assert "import app.db.pg_connection" not in src
-    assert "project_access.list_project_ids_visible_to_group" in src

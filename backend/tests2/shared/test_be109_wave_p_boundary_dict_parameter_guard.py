@@ -15,14 +15,10 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 
 _TARGET_BOUNDARY_MODULES = (
-    "app/core/imdf/validator.py",
-    "app/core/imdf/storage.py",
-    "app/core/imdf/router.py",
-    "app/core/imdf/publish_dispatcher.py",
-    "app/core/imdf/arcgis_uploader.py",
     "app/core/carica/router.py",
     "app/core/carica/models.py",
     "app/core/carica/executor.py",
+    "app/core/carica/arcgis_write_boundary.py",
     "app/core/carica/conflict_request_loader.py",
     "app/core/carica/column_mapper.py",
     "app/core/carica/ddl_generator.py",

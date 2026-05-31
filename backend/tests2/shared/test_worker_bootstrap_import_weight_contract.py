@@ -36,7 +36,6 @@ tasks = [
     "carica.execute",
     "pipeline.execute",
     "tasks.execute_enrichment",
-    "tasks.execute_imdf_publish",
     "workers.tasks.schedule_task.schedule_pipeline_task",
     "cleanroom.ping",
     "cleanroom.beat_ping",

@@ -408,11 +408,6 @@ def test_canvas_put_superadmin_can_save_any_ref():
             "arcgis_connection_id",
             "arcgis_Arcgis_Online_Urby_OLD",
         ),
-        (
-            "imdf_publisher",
-            "imdf_arcgis_connection_id",
-            "arcgis_Arcgis_Online_Urby_IMDF_OLD",
-        ),
     ],
 )
 def test_canvas_put_rejects_arcgis_connection_not_visible_to_owner_group(
@@ -471,16 +466,9 @@ def test_canvas_put_accepts_when_arcgis_connection_is_visible():
                 position={"x": 200, "y": 0},
                 arcgis_connection_id="arcgis_safe",
             ),
-            Node(
-                id="imdf_pub",
-                type="imdf_publisher",
-                position={"x": 400, "y": 0},
-                imdf_arcgis_connection_id="arcgis_safe_imdf",
-            ),
         ],
         edges=[
             Edge(id="e1", source="src", target="carica_ag"),
-            Edge(id="e2", source="src", target="imdf_pub"),
         ],
     )
 
@@ -488,7 +476,7 @@ def test_canvas_put_accepts_when_arcgis_connection_is_visible():
 
     def _fake_visible(resource_table, group_id, is_superadmin=False):
         if resource_table == "arcgis_connections":
-            return {"arcgis_safe", "arcgis_safe_imdf"}
+            return {"arcgis_safe"}
         return set()
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(

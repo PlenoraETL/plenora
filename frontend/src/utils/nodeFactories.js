@@ -180,13 +180,6 @@ function createResultNode(node, options = {}) {
       availableColumns: [],
       isManipulate,
       isArricchisci,
-      // Modalita' "Pubblicazione IMDF" — campi dormienti finche' non
-      // viene cablato il publisher node (saranno usati per leggere/salvare
-      // la config ArcGIS associata al result in modalita' IMDF).
-      imdf_arcgis_connection_id: nd(node, 'imdf_arcgis_connection_id', null),
-      imdf_arcgis_folder:        nd(node, 'imdf_arcgis_folder',        null),
-      imdf_fs_name_template:     nd(node, 'imdf_fs_name_template',     null),
-      imdf_apply_renderers:      nd(node, 'imdf_apply_renderers',      false),
     },
   };
 }
@@ -258,37 +251,9 @@ function createCaricanArcGISNode(node) {
       arcgis_match_column:     nd(node, 'arcgis_match_column', ''),
       arcgis_new_service_name: nd(node, 'arcgis_new_service_name', ''),
       arcgis_new_layer_name:   nd(node, 'arcgis_new_layer_name', 'Layer 0'),
+      source_srid:             nd(node, 'source_srid', null),
       column_mappings:         nd(node, 'column_mappings', []),
       availableColumns: [],
-    },
-  };
-}
-
-/**
- * Crea un nodo IMDF Publisher da dati backend.
- * Il nodo pubblica il bundle IMDF prodotto dall'upstream `api_enrich`
- * (Processor File con output_kind='imdf') su una connessione ArcGIS,
- * estraendo il GDB e creando/rimpiazzando un Feature Service.
- *
- * @param {Object} node - Dati nodo dal backend
- * @returns {Object} Nodo ReactFlow type='imdf_publisher'
- */
-function createImdfPublisherNode(node) {
-  return {
-    id:       node.id,
-    type:     'imdf_publisher',
-    position: node.position,
-    data: {
-      // RB.#12/#13 (2026-04-27): preserva i flag annotati dal backend
-      // RB.7.B (access_denied, access_denied_reason,
-      // inaccessible_resource_type). Vedi createCaricanArcGISNode per
-      // il razionale completo.
-      ...node.data,
-      imdf_arcgis_connection_id: nd(node, 'imdf_arcgis_connection_id', ''),
-      imdf_arcgis_folder:        nd(node, 'imdf_arcgis_folder',        ''),
-      imdf_fs_name_template:     nd(node, 'imdf_fs_name_template',     ''),
-      imdf_apply_renderers:      nd(node, 'imdf_apply_renderers',      false),
-      imdf_publish_mode:         nd(node, 'imdf_publish_mode',         'replace'),
     },
   };
 }
@@ -515,9 +480,6 @@ export function deserializeNodes(rawNodes, options = {}) {
 
       case 'carica_arcgis':
         return createCaricanArcGISNode(node);
-
-      case 'imdf_publisher':
-        return createImdfPublisherNode(node);
 
       case 'staticValues':
         return createStaticValuesNode(node);

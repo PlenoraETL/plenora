@@ -47,13 +47,12 @@ def scheduler():
 
 def test_tick_calls_sync_heartbeat_and_all_cleanups(scheduler):
     """tick() del leader deve orchestrare: _sync_from_db,
-    _write_heartbeat, i 4 cleanup jobs, poi delegare a super().tick()."""
+    _write_heartbeat, i cleanup jobs, poi delegare a super().tick()."""
     with patch.object(scheduler, "_try_become_leader", return_value=True), \
          patch.object(scheduler, "_sync_from_db") as sync, \
          patch.object(scheduler, "_write_heartbeat") as heartbeat, \
          patch.object(scheduler, "_check_stuck_tasks") as stuck, \
          patch.object(scheduler, "_cleanup_eseguibili_outputs") as outputs, \
-         patch.object(scheduler, "_cleanup_imdf_bundles") as bundles, \
          patch.object(scheduler, "_cleanup_old_logs") as logs, \
          patch.object(Scheduler, "tick", return_value=42.0) as super_tick:
         result = scheduler.tick()
@@ -62,7 +61,6 @@ def test_tick_calls_sync_heartbeat_and_all_cleanups(scheduler):
     heartbeat.assert_called_once()
     stuck.assert_called_once()
     outputs.assert_called_once()
-    bundles.assert_called_once()
     logs.assert_called_once()
     super_tick.assert_called_once()
     assert result == 42.0
@@ -75,7 +73,6 @@ def test_tick_delegates_event_t_to_super_when_provided(scheduler):
          patch.object(scheduler, "_write_heartbeat"), \
          patch.object(scheduler, "_check_stuck_tasks"), \
          patch.object(scheduler, "_cleanup_eseguibili_outputs"), \
-         patch.object(scheduler, "_cleanup_imdf_bundles"), \
          patch.object(scheduler, "_cleanup_old_logs"), \
          patch.object(Scheduler, "tick", return_value=1.0) as super_tick:
         scheduler.tick(event_t=("tick", 100, object()))

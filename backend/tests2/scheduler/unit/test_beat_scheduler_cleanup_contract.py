@@ -48,59 +48,6 @@ def test_beat_janitors_use_shared_filesystem_cleanup_boundary() -> None:
     assert ".unlink(missing_ok=True)" not in src
 
 
-def test_cleanup_imdf_bundles_removes_only_expired(tmp_path, monkeypatch):
-    scheduler = _make_scheduler()
-    now = 1_000_000.0
-    monkeypatch.setattr(time, "time", lambda: now)
-
-    bundles_dir = tmp_path / "bundles"
-    fresh = bundles_dir / "fresh"
-    boundary = bundles_dir / "boundary"
-    expired = bundles_dir / "expired"
-
-    fresh.mkdir(parents=True)
-    boundary.mkdir(parents=True)
-    expired.mkdir(parents=True)
-
-    import os
-
-    os.utime(fresh, (now - 60, now - 60))
-    os.utime(boundary, (now - 48 * 3600, now - 48 * 3600))
-    os.utime(expired, (now - 48 * 3600 - 10, now - 48 * 3600 - 10))
-
-    with patch(
-        "app.config.settings",
-        new=SimpleNamespace(IMDF_BUNDLES_DIR=bundles_dir, IMDF_BUNDLE_TTL_HOURS=48),
-    ):
-        scheduler._cleanup_imdf_bundles()
-
-    assert fresh.exists()
-    assert boundary.exists()
-    assert not expired.exists()
-
-
-def test_cleanup_imdf_bundles_skips_when_gate_not_elapsed(tmp_path, monkeypatch):
-    scheduler = _make_scheduler()
-    now = 1_000_000.0
-    scheduler._last_imdf_bundles_cleanup = now - 60
-    monkeypatch.setattr(time, "time", lambda: now)
-
-    bundles_dir = tmp_path / "bundles"
-    expired = bundles_dir / "expired"
-    expired.mkdir(parents=True)
-    import os
-
-    os.utime(expired, (now - 48 * 3600 - 10, now - 48 * 3600 - 10))
-
-    with patch(
-        "app.config.settings",
-        new=SimpleNamespace(IMDF_BUNDLES_DIR=bundles_dir, IMDF_BUNDLE_TTL_HOURS=48),
-    ):
-        scheduler._cleanup_imdf_bundles()
-
-    assert expired.exists()
-
-
 def test_cleanup_eseguibili_outputs_removes_only_expired(tmp_path, monkeypatch):
     scheduler = _make_scheduler()
     now = 2_000_000.0

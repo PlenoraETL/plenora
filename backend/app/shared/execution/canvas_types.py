@@ -45,7 +45,7 @@ from typing import Literal, get_args
 NodeTypeLiteral = Literal[
     "source", "result", "project_source", "file_source", "feature_source",
     "transform", "api_enrich", "staticValues", "carica", "carica_arcgis",
-    "multi_join", "comment", "datasource_node", "imdf_publisher",
+    "multi_join", "comment", "datasource_node",
 ]
 VALID_NODE_TYPES: tuple[str, ...] = get_args(NodeTypeLiteral)
 

@@ -162,17 +162,6 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_validator_uses_shared_helper():
-    src = _read(_BACKEND_APP / "core" / "imdf" / "validator.py")
-    assert (
-        "from app.shared.connections.esri_system_fields import "
-        "is_esri_system_field as _is_system_field"
-        in src
-    )
-    # Niente piu' set SYS_NORMALIZED locale
-    assert "SYS_NORMALIZED = {" not in src
-
-
 def test_arcgis_client_uses_shared_oid_set():
     src = _read(_BACKEND_APP / "core" / "features" / "arcgis_client.py")
     assert "from app.shared.connections.esri_system_fields import ESRI_OID_FIELDS_LITERAL" in src

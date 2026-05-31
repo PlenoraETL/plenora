@@ -64,7 +64,7 @@ _FE_KEYS_NOT_ON_BE_NODE: frozenset[str] = frozenset({
     "tableNode", "featureLayerNode", "result", "projectSource",
     "fileSource", "datasourceNode", "transform", "api_enrich",
     "staticValues", "multi_join", "carica", "caricaArcgis",
-    "comment", "imdf_publisher",
+    "comment",
 
     # Campi serializzati per gli **Edge**, non per i Node. Il regex
     # parser non distingue il blocco edge da quello node nel file.

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Sequence
 
 from app.core.connections.arcgis_writer_boundary import (
     ArcGISColumnMappingsInput,
     ArcGISFeatureWriter,
+    ArcGISLayerSpec,
 )
 from app.utils.logger import get_logger
 
@@ -69,6 +70,30 @@ class CaricaArcGISWriteRequest:
     service_name: str = ""
     layer_name: str = "Layer 0"
     folder_id: str = ""
+
+
+@dataclass(frozen=True)
+class CaricaArcGISMultiLayerRequest:
+    """CARICA request for an N-layer ArcGIS Feature Service write.
+
+    Domain-neutral: descrive solo `dove` (servizio nuovo o esistente) e `come`
+    (operation/srid/folder/renderer). I layer veri sono `Sequence[ArcGISLayerSpec]`
+    passati a parte. Qualsiasi modulo (IMDF, export, ...) puo' usarlo: la policy
+    di quali layer/ordine/match-key/renderer e' del chiamante (per IMDF arriva
+    dal descrittore del bundle).
+    """
+
+    project_id: str
+    connection_id: str
+    operation: str  # create_service | append | upsert | update
+    source_srid: Optional[int] = None
+    service_name: str = ""  # create_service: nome del nuovo Feature Service
+    service_url: str = ""  # append/upsert/update: URL del servizio esistente
+    folder_id: str = ""
+    # Renderer per-layer keyed by LAYER NAME (non URL): gli URL per-layer si
+    # conoscono solo DOPO il write, quindi vengono risolti nome->URL dal
+    # risultato. Best-effort: un errore non fa fallire la pubblicazione.
+    renderers: Optional[Mapping[str, Mapping[str, object]]] = None
 
 
 @dataclass(frozen=True)
@@ -206,6 +231,117 @@ def execute_carica_arcgis_write(
     )
 
 
+def execute_carica_arcgis_multilayer_write(
+    *,
+    layers: Sequence[ArcGISLayerSpec],
+    request: CaricaArcGISMultiLayerRequest,
+    feature_writer: ArcGISFeatureWriter,
+) -> CaricaArcGISWriteOutcome:
+    """Validate and execute an N-layer CARICA ArcGIS write.
+
+    `create_service` crea un Feature Service con tutti i layer; gli altri mode
+    (`append`/`upsert`/`update`) scrivono su un servizio esistente matchando per
+    nome layer. I renderer (opzionali) sono applicati best-effort dopo la
+    scrittura: un loro errore NON fa fallire la pubblicazione (sono cosmetici).
+    """
+    total_rows = sum(len(spec.df) for spec in layers)
+
+    if not request.connection_id:
+        return _validation_error("Nessuna connessione ArcGIS configurata", total_rows)
+    if not layers:
+        return _validation_error("Nessun layer da pubblicare", total_rows)
+
+    try:
+        if request.operation == "create_service":
+            if not request.service_name:
+                raise ValueError("Nome servizio ArcGIS non specificato")
+            raw_mapping = feature_writer.create_service_with_layers(
+                connection_id=request.connection_id,
+                service_name=request.service_name,
+                layers=layers,
+                source_srid=request.source_srid,
+                folder_id=request.folder_id,
+            )
+        else:
+            if not request.service_url:
+                raise ValueError("URL servizio ArcGIS non specificato")
+            raw_mapping = feature_writer.write_layers_to_existing_service(
+                connection_id=request.connection_id,
+                service_url=request.service_url,
+                layers=layers,
+                mode=request.operation,
+                source_srid=request.source_srid,
+            )
+        raw_result = ArcGISFeatureWriteResult.from_mapping(raw_mapping)
+    except ValueError as exc:
+        return _validation_error(str(exc), total_rows)
+    except Exception as exc:
+        logger.error(
+            "[GESTITO] Errore scrittura ArcGIS multi-layer CARICA: %s", exc, exc_info=True
+        )
+        return CaricaArcGISWriteOutcome(
+            status="write_error",
+            success=False,
+            rows_written=0,
+            rows_inserted=0,
+            rows_updated=0,
+            total_rows=total_rows,
+            message="Errore scrittura ArcGIS (consulta log)",
+            error="carica_arcgis_write_failed",
+            error_message="Errore scrittura ArcGIS (consulta log)",
+        )
+
+    if not raw_result.success:
+        message = "; ".join(str(e) for e in raw_result.errors) or (
+            "Scrittura ArcGIS multi-layer fallita"
+        )
+        return CaricaArcGISWriteOutcome(
+            status="write_error",
+            success=False,
+            rows_written=0,
+            rows_inserted=0,
+            rows_updated=0,
+            total_rows=total_rows,
+            message="Errore scrittura ArcGIS (consulta log)",
+            error="carica_arcgis_write_failed",
+            error_message=message,
+            errors=raw_result.errors,
+            include_errors=True,
+        )
+
+    service_url = raw_result.service_url
+    if request.renderers:
+        url_renderers = _resolve_layer_renderers(raw_mapping, request.renderers)
+        if url_renderers:
+            try:
+                feature_writer.apply_layer_renderers(
+                    connection_id=request.connection_id,
+                    renderers=url_renderers,
+                )
+            except Exception as exc:
+                # Best-effort: i renderer sono cosmetici, non fanno fallire il write.
+                logger.warning("[GESTITO] Applicazione renderer ArcGIS fallita: %s", exc)
+
+    rows = raw_result.rows_written
+    rows_inserted, rows_updated = _arcgis_write_counts(request.operation, rows)
+    return CaricaArcGISWriteOutcome(
+        status="completed",
+        success=True,
+        project_id=request.project_id,
+        rows_written=rows,
+        rows_inserted=rows_inserted,
+        rows_updated=rows_updated,
+        total_rows=total_rows,
+        columns_count=0,
+        message=raw_result.message or f"Pubblicazione ArcGIS completata: {rows} features",
+        service_url=service_url,
+        layer_url=raw_result.layer_url,
+        item_id=raw_result.item_id,
+        errors=raw_result.errors,
+        include_errors=raw_result.include_errors,
+    )
+
+
 def _create_service(
     *,
     df: Any,
@@ -251,6 +387,30 @@ def _write_existing_layer(
             column_mappings=request.column_mappings,
         ),
     )
+
+
+def _resolve_layer_renderers(
+    raw_mapping: Mapping[str, object],
+    renderers_by_name: Mapping[str, Mapping[str, object]],
+) -> Mapping[str, Mapping[str, object]]:
+    """Risolve i renderer keyed-by-name in keyed-by-URL usando i layer scritti.
+
+    Il risultato del write espone una lista ``layers`` con ``{name, url}`` per
+    ogni layer (gli URL sono noti solo dopo la scrittura). Per ogni layer con un
+    renderer dichiarato e un URL valido, produce ``{url: drawing_info}``.
+    """
+    written = raw_mapping.get("layers")
+    if not isinstance(written, (list, tuple)):
+        return {}
+    resolved: "dict[str, Mapping[str, object]]" = {}
+    for entry in written:
+        if not isinstance(entry, Mapping):
+            continue
+        name = entry.get("name")
+        url = entry.get("url")
+        if isinstance(name, str) and isinstance(url, str) and url and name in renderers_by_name:
+            resolved[url] = renderers_by_name[name]
+    return resolved
 
 
 def _validation_error(message: str, total_rows: int) -> CaricaArcGISWriteOutcome:

@@ -290,18 +290,6 @@ class Node(BaseModel):
     distinct: Optional[bool] = False
     limit: Optional[int] = None
     geomColumn: Optional[str] = None
-    # Prende in ingresso un api_enrich con output_kind='imdf', legge il bundle
-    # IMDF prodotto dal Processor File e chiama l'uploader (estrazione GDB +
-    # creazione FeatureService ArcGIS + apply renderers). I campi sono sul Node
-    # base perche' Pydantic non supporta variante di schema per type literal
-    # La pubblicazione NON e' piu' automatica: l'utente la triggera dal nodo
-    # dopo aver verificato il risultato dell'arricchimento
-    imdf_arcgis_connection_id: Optional[str] = None
-    imdf_arcgis_folder: Optional[str] = None
-    imdf_fs_name_template: Optional[str] = None
-    imdf_apply_renderers: Optional[bool] = False
-    # Modalita' pubblicazione: 'replace' (default) | 'append' | 'upsert'
-    imdf_publish_mode: Optional[Literal["replace", "append", "upsert"]] = "replace"
 
     group_by_enabled: Optional[bool] = False
     group_by_columns: Optional[List[str]] = []
@@ -336,6 +324,9 @@ class Node(BaseModel):
     arcgis_match_column: Optional[str] = None
     arcgis_new_service_name: Optional[str] = None
     arcgis_new_layer_name: Optional[str] = None
+    # SRID sorgente dei dati in ingresso (EPSG). Letto da carica_task per la
+    # scrittura ArcGIS (mono e multi-layer); None -> il writer assume 4326.
+    source_srid: Optional[int] = None
 
     # CARICA REST sink. Il FE (canvasSerializer.js) li serializza ai
     # top-level del nodo carica con `dest_type=rest`; senza il typing
@@ -412,7 +403,7 @@ class Edge(BaseModel):
     # JoinModal.
     join_type: Optional[Literal[
         "left", "inner", "right", "outer", "full", "cross",
-        "output", "carica", "carica_arcgis", "imdf_publisher",
+        "output", "carica", "carica_arcgis",
     ]] = "left"
     source_column: Optional[str] = ""
     target_column: Optional[str] = ""

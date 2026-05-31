@@ -43,7 +43,9 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # aumentarne il valore richiede commit con motivazione esplicita.
 # 736 -> 724: cutover IMDF a plenora.indoor.bundle (rimossi loader.py,
 # persist_imdf_bundle, open_gdb_in_vsimem e i branch legacy GDB).
-_EXPECT_BROAD_BUDGET = 724
+# 724 -> 697: collasso IMDF a una-run (rimossi validator, storage, persist,
+# arcgis_uploader, publish_dispatcher, bundle_store, bundle_access, router).
+_EXPECT_BROAD_BUDGET = 697
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

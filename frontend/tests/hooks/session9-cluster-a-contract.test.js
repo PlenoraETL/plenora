@@ -35,17 +35,6 @@ describe('Sessione 9 cluster A hooks unmount safety', () => {
     expect(preWindow).toMatch(/if\s*\(\s*!\s*mountedRef\.current\s*\)\s*return/);
   });
 
-  it('useImdfBundles.handleDeleteBundle ha mountedRef guard post-await', () => {
-    const src = readSrc('components/nodes/result/useImdfBundles.js');
-    // Verifica import
-    expect(src).toContain('useMountedRef');
-    // Verifica guard nel handleDeleteBundle
-    const idx = src.indexOf('const handleDeleteBundle =');
-    expect(idx).toBeGreaterThan(-1);
-    const window = src.slice(idx, idx + 800);
-    expect(window).toMatch(/if\s*\(\s*!\s*mountedRef\.current\s*\)\s*return/);
-  });
-
   it('useCanvasCore dataNodes usa useMemo con dep [nodes]', () => {
     const src = readSrc('hooks/useCanvasCore.js');
     const idx = src.indexOf('const dataNodes =');

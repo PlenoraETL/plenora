@@ -46,9 +46,36 @@ const CaricanArcGISNode = memo(({ data, id }) => {
   const arcgisNewLayerName = data.arcgis_new_layer_name || 'Layer 0';
   const arcgisFolderId = data.arcgis_folder_id || '';
   const arcgisMatchColumn = data.arcgis_match_column || '';
+  const arcgisSourceSrid = data.source_srid ?? '';
   const columnMappings = data.column_mappings || [];
   const availableColumns = data.availableColumns || [];
   const executeResult = data.executeResult || null;
+
+  // Multi-layer: se a monte c'e' un api_enrich con output_kind='imdf', l'upstream
+  // e' un bundle `plenora.indoor.bundle`. In quel caso il sink ArcGIS scrive N
+  // layer in una-run (vedi carica_task._maybe_multilayer_arcgis_write): layer,
+  // chiavi di match e renderer arrivano dal bundle, quindi i campi mono-layer
+  // (layer url / match column / nome layer) non servono. Il backend rileva il
+  // bundle dai bytes; qui adattiamo solo la UX.
+  const isMultiLayerUpstream = useCanvasStore((state) => {
+    const edges = state.edges || [];
+    const nodes = state.nodes || [];
+    const byId = new Map(nodes.map(n => [n.id, n]));
+    const seen = new Set();
+    let frontier = edges.filter(e => e.target === id).map(e => e.source);
+    while (frontier.length) {
+      const next = [];
+      for (const src of frontier) {
+        if (seen.has(src)) continue;
+        seen.add(src);
+        const node = byId.get(src);
+        if (node?.type === 'api_enrich' && node.data?.output_kind === 'imdf') return true;
+        edges.filter(e => e.target === src).forEach(e => next.push(e.source));
+      }
+      frontier = next;
+    }
+    return false;
+  });
 
   // RB.7.C: backend (RB.7.B) marca data.access_denied=true quando la
   // connessione ArcGIS riferita dal canvas non e' visibile al gruppo del
@@ -59,13 +86,20 @@ const CaricanArcGISNode = memo(({ data, id }) => {
   const isAccessDenied = !!data.access_denied;
   const accessDeniedReason = data.access_denied_reason || '';
 
-  const arcgisOperations = [
-    { value: 'add', label: '+ Add Features', desc: 'Aggiungi features al layer esistente' },
-    { value: 'update', label: 'Update Features', desc: 'Aggiorna features esistenti per colonna chiave' },
-    { value: 'upsert', label: 'Upsert Features', desc: 'Aggiorna se esiste, inserisci se nuovo' },
-    { value: 'delete', label: 'Delete Features', desc: 'Elimina features per colonna chiave' },
-    { value: 'create_service', label: 'Crea Servizio', desc: 'Crea nuovo Feature Service + carica dati' },
-  ];
+  const arcgisOperations = isMultiLayerUpstream
+    ? [
+        { value: 'create_service', label: 'Crea Servizio (N layer)', desc: 'Crea un Feature Service con tutti i layer del bundle' },
+        { value: 'add', label: '+ Add Features', desc: 'Aggiunge le features di ogni layer al servizio esistente (match per nome)' },
+        { value: 'upsert', label: 'Upsert Features', desc: 'Aggiorna/inserisce per chiave (dal bundle) su ogni layer' },
+        { value: 'update', label: 'Update Features', desc: 'Aggiorna per chiave (dal bundle) su ogni layer' },
+      ]
+    : [
+        { value: 'add', label: '+ Add Features', desc: 'Aggiungi features al layer esistente' },
+        { value: 'update', label: 'Update Features', desc: 'Aggiorna features esistenti per colonna chiave' },
+        { value: 'upsert', label: 'Upsert Features', desc: 'Aggiorna se esiste, inserisci se nuovo' },
+        { value: 'delete', label: 'Delete Features', desc: 'Elimina features per colonna chiave' },
+        { value: 'create_service', label: 'Crea Servizio', desc: 'Crea nuovo Feature Service + carica dati' },
+      ];
 
   useEffect(() => {
     loadArcgisConnections();
@@ -268,7 +302,10 @@ const CaricanArcGISNode = memo(({ data, id }) => {
   const isValid = !isAccessDenied && (
     arcgisOperation === 'create_service'
       ? (arcgisConnectionId && arcgisNewServiceName)
-      : (arcgisConnectionId && arcgisLayerUrl && matchColumnValid)
+      : isMultiLayerUpstream
+        // multi-layer: basta il Feature Service; il match e' per nome layer (dal bundle)
+        ? (arcgisConnectionId && arcgisServiceUrl)
+        : (arcgisConnectionId && arcgisLayerUrl && matchColumnValid)
   );
 
   const arcgisDestFields = (arcgisLayerSchema?.fields || [])
@@ -324,6 +361,14 @@ const CaricanArcGISNode = memo(({ data, id }) => {
             </div>
           )}
 
+          {/* Multi-layer (bundle IMDF): badge informativo */}
+          {isMultiLayerUpstream && (
+            <div className="carica-arcgis-node__hint" style={{ background: 'rgba(124,58,237,0.10)', border: '1px solid rgba(124,58,237,0.35)', borderRadius: 6, padding: '6px 8px', color: '#7C3AED' }}>
+              📦 Bundle multi-layer (IMDF): i layer, le chiavi di match e i renderer
+              arrivano dal bundle. Configura solo la destinazione.
+            </div>
+          )}
+
           {/* Operazione */}
           <div className="carica-arcgis-node__section">
             <label className="carica-arcgis-node__label">Operazione</label>
@@ -359,6 +404,24 @@ const CaricanArcGISNode = memo(({ data, id }) => {
             </select>
           </div>
 
+          {/* SRID sorgente (CRS dei dati in ingresso). Non in multi-layer:
+              il CRS di ogni layer arriva dal descrittore del bundle. */}
+          {!isMultiLayerUpstream && arcgisConnectionId && (
+            <div className="carica-arcgis-node__section">
+              <label className="carica-arcgis-node__label">SRID sorgente (EPSG)</label>
+              <input
+                type="number"
+                value={arcgisSourceSrid}
+                onChange={(e) => handleUpdate('source_srid', e.target.value === '' ? null : parseInt(e.target.value, 10))}
+                placeholder="4326 (default)"
+                className="carica-arcgis-node__input"
+              />
+              <div className="carica-arcgis-node__hint">
+                CRS dei dati in ingresso. Vuoto = 4326 (WGS84).
+              </div>
+            </div>
+          )}
+
           {/* CREA NUOVO SERVIZIO */}
           {arcgisOperation === 'create_service' && arcgisConnectionId && (
             <>
@@ -387,18 +450,22 @@ const CaricanArcGISNode = memo(({ data, id }) => {
                   className="carica-arcgis-node__input"
                 />
               </div>
-              <div className="carica-arcgis-node__section">
-                <label className="carica-arcgis-node__label">Nome Layer</label>
-                <input
-                  type="text"
-                  value={arcgisNewLayerName}
-                  onChange={(e) => handleUpdate('arcgis_new_layer_name', e.target.value)}
-                  placeholder="Layer 0"
-                  className="carica-arcgis-node__input"
-                />
-              </div>
+              {!isMultiLayerUpstream && (
+                <div className="carica-arcgis-node__section">
+                  <label className="carica-arcgis-node__label">Nome Layer</label>
+                  <input
+                    type="text"
+                    value={arcgisNewLayerName}
+                    onChange={(e) => handleUpdate('arcgis_new_layer_name', e.target.value)}
+                    placeholder="Layer 0"
+                    className="carica-arcgis-node__input"
+                  />
+                </div>
+              )}
               <div className="carica-arcgis-node__hint">
-                Verra creato un nuovo Feature Service con schema derivato dai dati della pipeline
+                {isMultiLayerUpstream
+                  ? 'Verra creato un Feature Service con tutti i layer del bundle (nomi, schema, chiavi e renderer dal bundle)'
+                  : 'Verra creato un nuovo Feature Service con schema derivato dai dati della pipeline'}
               </div>
             </>
           )}
@@ -425,8 +492,15 @@ const CaricanArcGISNode = memo(({ data, id }) => {
                 </select>
               </div>
 
-              {/* Layer */}
-              {arcgisServiceUrl && (
+              {/* Multi-layer: nessuna selezione layer singola — match per nome dal bundle */}
+              {isMultiLayerUpstream && arcgisServiceUrl && (
+                <div className="carica-arcgis-node__hint">
+                  Tutti i layer del bundle verranno scritti sul servizio, matchati per nome.
+                </div>
+              )}
+
+              {/* Layer (solo mono-layer) */}
+              {!isMultiLayerUpstream && arcgisServiceUrl && (
                 <div className="carica-arcgis-node__section">
                   <label className="carica-arcgis-node__label">Layer Destinazione</label>
                   <select
@@ -486,8 +560,9 @@ const CaricanArcGISNode = memo(({ data, id }) => {
             </div>
           )}
 
-          {/* MAPPING COLONNE */}
-          {(arcgisLayerUrl || arcgisOperation === 'create_service') && (
+          {/* MAPPING COLONNE — non in multi-layer: lo schema/i campi di ogni
+              layer arrivano dal descrittore del bundle, non si mappano qui. */}
+          {!isMultiLayerUpstream && (arcgisLayerUrl || arcgisOperation === 'create_service') && (
             <div className="carica-arcgis-node__section">
               <div className="carica-arcgis-node__section-header"
                 onClick={() => setShowMapping(!showMapping)}>
@@ -586,6 +661,13 @@ const CaricanArcGISNode = memo(({ data, id }) => {
                 <div className="carica-arcgis-node__preview-item">
                   <span className="carica-arcgis-node__preview-label">Nuovo:</span>
                   <span className="carica-arcgis-node__preview-value">{arcgisNewServiceName}</span>
+                </div>
+              ) : isMultiLayerUpstream ? (
+                <div className="carica-arcgis-node__preview-item">
+                  <span className="carica-arcgis-node__preview-label">Servizio:</span>
+                  <span className="carica-arcgis-node__preview-value" title={arcgisServiceUrl}>
+                    {arcgisServices.find(s => s.url === arcgisServiceUrl)?.name || '...'}
+                  </span>
                 </div>
               ) : (
                 <div className="carica-arcgis-node__preview-item">

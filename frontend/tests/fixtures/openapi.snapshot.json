@@ -113,7 +113,7 @@
         "type": "object"
       },
       "ArcGISConnection": {
-        "description": "Configurazione completa di una connessione ArcGIS.\n\nTipi di server:\n- arcgis_online: ArcGIS Online (https://www.arcgis.com)\n- arcgis_enterprise: ArcGIS Enterprise/Portal\n- arcgis_server: ArcGIS Server standalone (senza Portal)\n\nTipi di autenticazione:\n- token: username/password → token REST\n- public: nessuna autenticazione (servizi pubblici)",
+        "description": "Configurazione completa di una connessione ArcGIS.\n\nTipi di server:\n- arcgis_online: ArcGIS Online (https://www.arcgis.com)\n- arcgis_enterprise: ArcGIS Enterprise/Portal\n- arcgis_server: ArcGIS Server standalone (senza Portal)\n\nTipi di autenticazione:\n- token: username/password -> token REST\n- public: nessuna autenticazione (servizi pubblici)",
         "properties": {
           "auth_type": {
             "default": "token",
@@ -2490,8 +2490,7 @@
                   "cross",
                   "output",
                   "carica",
-                  "carica_arcgis",
-                  "imdf_publisher"
+                  "carica_arcgis"
                 ],
                 "type": "string"
               },
@@ -3526,261 +3525,6 @@
           }
         },
         "title": "HavingCondition",
-        "type": "object"
-      },
-      "ImdfBundleSummary": {
-        "properties": {
-          "age_hours": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Age Hours"
-          },
-          "building_count": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Building Count"
-          },
-          "has_gdb": {
-            "title": "Has Gdb",
-            "type": "boolean"
-          },
-          "level_count": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Level Count"
-          },
-          "project_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project Id"
-          },
-          "saved_at": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Saved At"
-          },
-          "site_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Site Id"
-          },
-          "size_mb": {
-            "title": "Size Mb",
-            "type": "number"
-          },
-          "task_id": {
-            "title": "Task Id",
-            "type": "string"
-          },
-          "unit_count": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Unit Count"
-          },
-          "validation_summary": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Validation Summary"
-          }
-        },
-        "required": [
-          "task_id",
-          "has_gdb",
-          "size_mb"
-        ],
-        "title": "ImdfBundleSummary",
-        "type": "object"
-      },
-      "ImdfPublishRequest": {
-        "description": "Request body per POST /api/imdf/publish.",
-        "properties": {
-          "apply_renderers": {
-            "default": false,
-            "description": "Applica stili del renderers.json (solo modalita' replace)",
-            "title": "Apply Renderers",
-            "type": "boolean"
-          },
-          "bundle_task_id": {
-            "description": "task_id dell'arricchimento che ha prodotto il bundle IMDF",
-            "title": "Bundle Task Id",
-            "type": "string"
-          },
-          "connection_id": {
-            "description": "ID connessione ArcGIS",
-            "title": "Connection Id",
-            "type": "string"
-          },
-          "folder": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Cartella ArcGIS dove creare il FS (root se None)",
-            "title": "Folder"
-          },
-          "fs_name": {
-            "description": "Nome Feature Service da creare / aggiornare",
-            "title": "Fs Name",
-            "type": "string"
-          },
-          "match_columns": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "type": "string"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Override per-layer delle colonne business-key (solo upsert). Chiavi: Localita, OperaPrincipale, Livello, Locale, Details",
-            "title": "Match Columns"
-          },
-          "mode": {
-            "default": "replace",
-            "description": "Modalita': 'replace' (default), 'append', 'upsert', 'update'",
-            "title": "Mode",
-            "type": "string"
-          }
-        },
-        "required": [
-          "bundle_task_id",
-          "connection_id",
-          "fs_name"
-        ],
-        "title": "ImdfPublishRequest",
-        "type": "object"
-      },
-      "ImdfPublishResponse": {
-        "properties": {
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "status": {
-            "default": "pending",
-            "title": "Status",
-            "type": "string"
-          },
-          "task_id": {
-            "title": "Task Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "task_id",
-          "message"
-        ],
-        "title": "ImdfPublishResponse",
-        "type": "object"
-      },
-      "ImdfValidateRequest": {
-        "description": "Request body per POST /api/imdf/validate-publish.",
-        "properties": {
-          "bundle_task_id": {
-            "title": "Bundle Task Id",
-            "type": "string"
-          },
-          "connection_id": {
-            "title": "Connection Id",
-            "type": "string"
-          },
-          "folder": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Folder"
-          },
-          "fs_name": {
-            "title": "Fs Name",
-            "type": "string"
-          },
-          "match_columns": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "type": "string"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Match Columns"
-          },
-          "mode": {
-            "default": "replace",
-            "title": "Mode",
-            "type": "string"
-          }
-        },
-        "required": [
-          "bundle_task_id",
-          "connection_id",
-          "fs_name"
-        ],
-        "title": "ImdfValidateRequest",
         "type": "object"
       },
       "LastBackupRunStatus": {
@@ -4988,68 +4732,6 @@
             "default": "error",
             "title": "If Table Exists"
           },
-          "imdf_apply_renderers": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": false,
-            "title": "Imdf Apply Renderers"
-          },
-          "imdf_arcgis_connection_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Imdf Arcgis Connection Id"
-          },
-          "imdf_arcgis_folder": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Imdf Arcgis Folder"
-          },
-          "imdf_fs_name_template": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Imdf Fs Name Template"
-          },
-          "imdf_publish_mode": {
-            "anyOf": [
-              {
-                "enum": [
-                  "replace",
-                  "append",
-                  "upsert"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": "replace",
-            "title": "Imdf Publish Mode"
-          },
           "join_key_ids": {
             "anyOf": [
               {
@@ -5527,6 +5209,17 @@
             ],
             "title": "Source Project Id"
           },
+          "source_srid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Srid"
+          },
           "static_parameters": {
             "anyOf": [
               {},
@@ -5703,8 +5396,7 @@
               "carica_arcgis",
               "multi_join",
               "comment",
-              "datasource_node",
-              "imdf_publisher"
+              "datasource_node"
             ],
             "title": "Type",
             "type": "string"
@@ -7481,7 +7173,7 @@
       },
       "UserUpdateRequest": {
         "additionalProperties": false,
-        "description": "Body tipizzato per `PUT /auth/users/{user_id}` (admin update).\n\nTutti i campi sono opzionali: aggiorna solo quelli passati. La\nwhitelist per ruolo (admin vs superadmin) e gli effetti collaterali\n(self-demotion, group_id check) restano nel router, ma la validazione\ndi shape/type/format e' schema-first qui.\n\n`extra=\"forbid\"`: rifiuta qualsiasi campo non in schema (es. `password`\nstorica), evitando drop silenzioso che storicamente faceva credere\nall'utente di aver cambiato la password mentre restava la vecchia.\nIl caso `password` viene intercettato con messaggio user-friendly\nda `_reject_password` invece del generico 422 \"extra inputs\".",
+        "description": "Body tipizzato per `PUT /auth/users/{user_id}` (admin update).",
         "properties": {
           "email": {
             "anyOf": [
@@ -8637,7 +8329,7 @@
     },
     "/api/auth/groups/{group_id}": {
       "delete": {
-        "description": "Cascade delete gruppo (solo superadmin).\nElimina in ordine: schedules, api_connections, datasources, file_sources,\nconnections, projects (+ results.db + intermediate.db), users, log.db, gruppo.\nBlocca solo se il gruppo è 'default'.",
+        "description": "Cascade delete gruppo (solo superadmin).\nElimina in ordine: schedules, api_connections, datasources, file_sources,\nconnections, projects (+ results/intermediate cleanup), users, log.db, gruppo.\nBlocca solo se il gruppo è 'default'.",
         "operationId": "delete_group_api_auth_groups__group_id__delete",
         "parameters": [
           {
@@ -11753,242 +11445,6 @@
         ]
       }
     },
-    "/api/imdf/bundles": {
-      "get": {
-        "description": "Lista i bundle IMDF disponibili con metadata base.\n\nIMDF-4: storage-first symmetrico a GET /bundles/{id}. La fonte di\nverita' e' object storage (`imdf.storage.list_task_ids`); il meta\nper-bundle e' letto via `imdf.storage.get_meta_only(task_id)`.\nNiente piu' `bundles_dir.iterdir()` + per-task `read_metadata` dal\nfilesystem locale per il path normale. La cache locale resta una\nfallback union per i bundle pre-IMDF-3 ancora solo su disco\n(es. ambienti dev con storage off).\n\nArgs:\n    project_id: se valorizzato, filtra solo i bundle generati per quel\n        progetto (letto da plenora_metadata dentro ogni bundle).",
-        "operationId": "list_bundles_api_imdf_bundles_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "project_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Project Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ImdfBundleSummary"
-                  },
-                  "title": "Response List Bundles Api Imdf Bundles Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "List Bundles",
-        "tags": [
-          "imdf"
-        ]
-      }
-    },
-    "/api/imdf/bundles/{bundle_task_id}": {
-      "delete": {
-        "description": "Cancella un bundle IMDF da storage canonico + cache locale.\n\nIMDF-4 step 4: ACL check storage-first (no hydrate locale per\nleggere meta). Bundle pre-IMDF-3 senza meta su storage falliscono\n404 — il delete di cache locale eventualmente presente puo' essere\nfatto manualmente da admin.\n\n- Validazione path-traversal via `_safe_bundle_dir`\n- Verifica group access via `assert_bundle_group_access_from_meta`\n- 404 se il bundle non esiste su storage\n- Rimozione da storage + cleanup cache locale",
-        "operationId": "delete_bundle_api_imdf_bundles__bundle_task_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "bundle_task_id",
-            "required": true,
-            "schema": {
-              "title": "Bundle Task Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Delete Bundle",
-        "tags": [
-          "imdf"
-        ]
-      },
-      "get": {
-        "description": "Ritorna i metadata completi di un bundle IMDF persistito (manifest,\nvalidation, renderers, geojson, site_id) — stessa struttura che il task\ndi enrichment salva in `result.imdf`. Usato dal frontend per rehydratare\nil canvas store dopo un refresh.\n\nIMDF-4: storage-first. L'endpoint legge meta/manifest/validation/\nrenderers/geojson direttamente da object storage via\n``imdf.storage.read_*``. Niente piu' ``ensure_local_bundle`` + scan\nfilesystem per la response normale. Il ``has_gdb``/``has_ifc`` viene\ndai flag nel meta (scritti da persist al save time). Fallback su\ncache locale solo se il meta su storage manca (bundle legacy in zip\nlayout, hydrated dal `_hydrate_local_cache`).",
-        "operationId": "get_bundle_metadata_api_imdf_bundles__bundle_task_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "bundle_task_id",
-            "required": true,
-            "schema": {
-              "title": "Bundle Task Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Get Bundle Metadata",
-        "tags": [
-          "imdf"
-        ]
-      }
-    },
-    "/api/imdf/publish": {
-      "post": {
-        "description": "Lancia un task Celery per pubblicare il bundle IMDF su ArcGIS.\n\nIl bundle deve essere stato persistito da un precedente arricchimento\n(enrichment_task salva in IMDF_BUNDLES_DIR/{task_id}/). Se il bundle non\nesiste (o e' scaduto), il task ritorna un errore.",
-        "operationId": "publish_imdf_api_imdf_publish_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ImdfPublishRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ImdfPublishResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Publish Imdf",
-        "tags": [
-          "imdf"
-        ]
-      }
-    },
-    "/api/imdf/validate-publish": {
-      "post": {
-        "description": "Esegue un controllo read-only PRIMA della pubblicazione.\n\nRitorna un dict strutturato col report: layer coinvolti, schema compat,\nimpatto della modalita' (replace/append/upsert/update) con delta per layer,\ndata quality issues. Non fa NESSUNA modifica ne' sul bundle ne' sul FS\nArcGIS — serve solo a dare all'utente il quadro prima di confermare.",
-        "operationId": "validate_publish_endpoint_api_imdf_validate_publish_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ImdfValidateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Validate Publish Endpoint",
-        "tags": [
-          "imdf"
-        ]
-      }
-    },
     "/api/logs": {
       "get": {
         "operationId": "get_logs_api_logs_get",
@@ -12569,7 +12025,7 @@
     },
     "/api/projects/admin/cleanup-orphans": {
       "post": {
-        "description": "Cleanup degli orfani cross-DB (results.db / intermediate.db).\n\nTrova e cancella righe in `results.db` e `intermediate.db` che fanno\nriferimento a `project_id` non più esistenti in `config.projects`. Sono\ncreati quando un progetto viene cancellato senza passare per\n`delete_project` (cancellazione DB diretta, restore parziale, crash, ecc.).\n\nSolo superadmin. Per default è dry-run (audit) — passare `?dry_run=false`\nper eseguire effettivamente il cleanup.\n\nReturns: report dettagliato con conteggi e lista project_id rimossi.",
+        "description": "Cleanup degli orfani cross-DB (results / intermediate storage).\n\nTrova e cancella record result/intermediate che fanno\nriferimento a `project_id` non più esistenti in `config.projects`. Sono\ncreati quando un progetto viene cancellato senza passare per\n`delete_project` (cancellazione DB diretta, restore parziale, crash, ecc.).\n\nSolo superadmin. Per default è dry-run (audit) — passare `?dry_run=false`\nper eseguire effettivamente il cleanup.\n\nReturns: report dettagliato con conteggi e lista project_id rimossi.",
         "operationId": "admin_cleanup_orphans_api_projects_admin_cleanup_orphans_post",
         "parameters": [
           {
@@ -13385,7 +12841,7 @@
     },
     "/api/runs/compare/l2": {
       "get": {
-        "description": "Confronto L2 tra due run sullo stesso nodo.\nRitorna righe aggiunte in B (non presenti in A) e rimosse da A (non\npresenti in B), confrontando tramite row_hash.\n\nsemantics (2026-04-28): dispatch su\n`persistence_mode` di entrambe le run. L'endpoint NON finge un\ndiff completo se i dati non sono entrambi su `node_rows`:\n  - full_pg + full_pg (o legacy NULL): 200, diff completo come prima.\n  - preview_only + preview_only: 200, diff parziale dichiarato\n    (`partial=true`, `reason=\"preview_only\"`).\n  - metadata_only su almeno un lato: 422 \"diff_available=false,\n    reason=metadata_only_no_rows\".\n  - full_artifact + complete: 501 \"non ancora implementato\"\n    (diff completo da artifact = ).\n  - full_artifact pending/failed/missing: 422 \"non pronto\".\n  - mode mismatch (preview_only vs full_pg): 422 conservativo.\n\nDopo il refactor a tabella unificata plenora.node_rows, il diff\nfull e' una singola query con NOT EXISTS che sfrutta l'indice\n(run_id, node_id, row_hash).",
+        "description": "Confronto L2 tra due run sullo stesso nodo.\nRitorna righe aggiunte in B (non presenti in A) e rimosse da A (non\npresenti in B), confrontando tramite row_hash.\n\nsemantics (2026-04-28): dispatch su\n`persistence_mode` di entrambe le run. L'endpoint NON finge un\ndiff completo se i dati non sono entrambi su `node_rows`:\n  - full_pg + full_pg (o NULL): 200, diff completo come prima.\n  - preview_only + preview_only: 200, diff parziale dichiarato\n    (`partial=true`, `reason=\"preview_only\"`).\n  - metadata_only su almeno un lato: 422 \"diff_available=false,\n    reason=metadata_only_no_rows\".\n  - full_artifact + complete: 501 \"non ancora implementato\"\n    (diff completo da artifact = ).\n  - full_artifact pending/failed/missing: 422 \"non pronto\".\n  - mode mismatch (preview_only vs full_pg): 422 conservativo.\n\nDopo il refactor a tabella unificata plenora.node_rows, il diff\nfull e' una singola query con NOT EXISTS che sfrutta l'indice\n(run_id, node_id, row_hash).",
         "operationId": "compare_runs_l2_api_runs_compare_l2_get",
         "parameters": [
           {

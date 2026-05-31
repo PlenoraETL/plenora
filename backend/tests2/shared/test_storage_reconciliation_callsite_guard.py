@@ -91,13 +91,6 @@ _CALLSITE_CLASSIFICATION: dict[str, tuple[Classification, str]] = {
         "`eseguibili-outputs/` prefix (7-day TTL). The task_id "
         "IS the lifecycle key - no DB-row pairing required.",
     ),
-    "app/core/imdf/storage.py": (
-        "intentionally_excluded",
-        "Bundle pair (zip + meta.json) with dedicated "
-        "delete_bundle endpoint + S3 lifecycle on "
-        "`imdf-bundles/` prefix. Operator-triggered cleanup; "
-        "lifecycle is the safety net.",
-    ),
     "app/core/resources/blob_dispatch.py": (
         "tracked",
         "W2 race covered by upload_intent self-clearing pattern "

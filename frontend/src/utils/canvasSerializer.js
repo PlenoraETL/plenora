@@ -163,13 +163,6 @@ const serializers = {
       order_by_columns:  nd(node, 'order_by_columns',  []),
       having_enabled:    nd(node, 'having_enabled',    false),
       having_conditions: nd(node, 'having_conditions', []),
-      // Modalita' "Pubblicazione IMDF" (per ora dormienti; verranno
-      // popolati quando aggiungeremo il publisher node — i campi sono
-      // gia' nel modello Pydantic Node).
-      imdf_arcgis_connection_id: nd(node, 'imdf_arcgis_connection_id', null),
-      imdf_arcgis_folder:        nd(node, 'imdf_arcgis_folder',        null),
-      imdf_fs_name_template:     nd(node, 'imdf_fs_name_template',     null),
-      imdf_apply_renderers:      nd(node, 'imdf_apply_renderers',      false),
     };
   },
 
@@ -209,16 +202,8 @@ const serializers = {
     arcgis_match_column:     nd(node, 'arcgis_match_column',     ''),
     arcgis_new_service_name: nd(node, 'arcgis_new_service_name'),
     arcgis_new_layer_name:   nd(node, 'arcgis_new_layer_name',   'Layer 0'),
+    source_srid:             nd(node, 'source_srid',             null),
     column_mappings:         nd(node, 'column_mappings',         []),
-  }),
-
-  imdf_publisher: (node) => ({
-    id: node.id, type: 'imdf_publisher', position: node.position,
-    imdf_arcgis_connection_id: nd(node, 'imdf_arcgis_connection_id', null),
-    imdf_arcgis_folder:        nd(node, 'imdf_arcgis_folder',        null),
-    imdf_fs_name_template:     nd(node, 'imdf_fs_name_template',     null),
-    imdf_apply_renderers:      nd(node, 'imdf_apply_renderers',      false),
-    imdf_publish_mode:         nd(node, 'imdf_publish_mode',         'replace'),
   }),
 
   staticValues: (node) => ({

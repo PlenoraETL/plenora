@@ -282,10 +282,10 @@ def run_enrichment_canvas(
                     node_data, ctx=ctx,
                 )
 
-            elif node_type in ("result", "imdf_publisher"):
-                # `result` e `imdf_publisher` propagano l'output del
-                # predecessore (passthrough nel DAG; il publish IMDF vero
-                # avviene nel post-processing del caller task).
+            elif node_type == "result":
+                # `result` propaga l'output del predecessore (passthrough nel
+                # DAG). Il publish ArcGIS — anche IMDF — e' un nodo carica_arcgis
+                # downstream, eseguito in-pipeline come ogni altro sink.
                 input_edge = next(
                     (e for e in edges if e["target"] == node_id), None
                 )

@@ -161,41 +161,19 @@ def test_eseguibili_storage_has_common_methods():
     assert eseguibili_storage.PREFIX == "eseguibili-outputs"
 
 
-def test_imdf_storage_has_equivalent_methods():
-    """`app.core.imdf.storage` espone `delete_bundle` (equivalente al
-    `delete` del Protocol) e `list_task_ids` (enumeration via
-    sidecar)."""
-    from app.core.imdf import storage as imdf_storage
-    assert callable(getattr(imdf_storage, "delete_bundle", None))
-    assert callable(getattr(imdf_storage, "list_task_ids", None))
-    assert imdf_storage.PREFIX == "imdf-bundles"
-
-
 def test_specialized_methods_are_per_wrapper():
     """Documenta in test le SPECIALIZATIONS che restano per-wrapper:
-    - eseguibili: `open_stream(key)` per streaming download;
-    - IMDF: `get_meta_only(task_id)` per sidecar accessor +
-      `read_manifest/validation/renderers/geojson` per bundle read
-      storage-first (post QUERY-1 step 3, ex-`ensure_local_bundle`).
+    - eseguibili: `open_stream(key)` per streaming download.
+
+    (Post-collasso IMDF a una-run il wrapper `imdf.storage` non esiste piu':
+    il bundle non viene persistito, e' carica_arcgis a leggerlo in-pipeline.)
 
     Il Protocol common denominator NON cattura queste capabilities;
     ogni eventuale futuro consumer cross-cluster che ne ha bisogno
     dovra' depend-on l'impl concrete o un Protocol esteso."""
     from app.core.eseguibili import storage as ese_storage
-    from app.core.imdf import storage as imdf_storage
 
     assert callable(getattr(ese_storage, "open_stream", None))
-    assert getattr(imdf_storage, "open_stream", None) is None  # IMDF non lo expose
-
-    # Post QUERY-1 step 3: `ensure_local_bundle` tombstonato; al suo posto
-    # i reader storage-first (`read_manifest`, `read_validation`,
-    # `read_renderers`, `read_geojson`) e l'adapter `/vsimem` per pyogrio
-    # (`open_gdb_in_vsimem`).
-    assert getattr(imdf_storage, "ensure_local_bundle", None) is None, (
-        "ensure_local_bundle deve restare tombstonato (refactor RAM-only)."
-    )
-    assert callable(getattr(imdf_storage, "get_meta_only", None))
-    assert callable(getattr(imdf_storage, "read_manifest", None))
     # Eseguibili non ha sidecar accessor
     assert getattr(ese_storage, "get_meta_only", None) is None
 
@@ -204,15 +182,10 @@ def test_specialized_methods_are_per_wrapper():
 
 
 def test_prefixes_aligned_with_storage_layout():
-    """Audit: i prefix dei due wrapper coincidono con le constants
-    centralizzate in `app.shared.resources.storage_layout` (BE-DATA-PLANE-001A).
+    """Audit: il prefix del wrapper eseguibili coincide con la constant
+    centralizzata in `app.shared.resources.storage_layout` (BE-DATA-PLANE-001A).
     Sentinel cross-cluster."""
     from app.core.eseguibili import storage as ese_storage
-    from app.core.imdf import storage as imdf_storage
-    from app.shared.resources.storage_layout import (
-        ESEGUIBILI_OUTPUTS_PREFIX,
-        IMDF_BUNDLES_PREFIX,
-    )
+    from app.shared.resources.storage_layout import ESEGUIBILI_OUTPUTS_PREFIX
 
     assert ese_storage.PREFIX == ESEGUIBILI_OUTPUTS_PREFIX
-    assert imdf_storage.PREFIX == IMDF_BUNDLES_PREFIX

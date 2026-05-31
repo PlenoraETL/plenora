@@ -119,6 +119,14 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+auth[\\/]mfa\.py:\d+: unused function 'vacuum_expired_used_codes' "),
     re.compile(r"backend[\\/]+app[\\/]environment\.py:\d+: unused function 'is_hardened_environment' "),
     re.compile(r"backend[\\/]+workers[\\/]+tasks[\\/]+.+_task\.py:\d+: unused method "),
+
+    # Capability orizzontali il cui unico consumer era il path differito IMDF
+    # (validator/project_access), rimosso col collasso a una-run. Restano come
+    # capability riusabili (ArcGIS schema/type bucketing, count-where, project
+    # visibility ACL) — es. per un futuro preflight ArcGIS condiviso.
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+features[\\/]arcgis_read\.py:\d+: unused method 'count_features_where' "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+projects[\\/]access_context\.py:\d+: unused function '(load_project_visibility_resource|list_project_ids_visible_to_group)' "),
+    re.compile(r"backend[\\/]+app[\\/]+shared[\\/]connections[\\/]esri_types\.py:\d+: unused method '(map_esri_field_to_schema_bucket|map_pandas_dtype_to_schema_bucket)' "),
 )
 
 

@@ -82,12 +82,6 @@ def annotate_inaccessible_canvas_refs(
             )
             if arcgis_connection_id:
                 arcgis_connection_ids.add(arcgis_connection_id)
-        elif node_type == "imdf_publisher":
-            arcgis_connection_id = node.get(
-                "imdf_arcgis_connection_id"
-            ) or node_data.get("imdf_arcgis_connection_id")
-            if arcgis_connection_id:
-                arcgis_connection_ids.add(arcgis_connection_id)
 
     if (
         not file_source_ids
@@ -197,16 +191,6 @@ def annotate_denied_refs(
                     f"Connessione ArcGIS '{arcgis_connection_id}' non visibile al gruppo del progetto"
                 )
                 node_data["inaccessible_resource_type"] = "arcgis_connection"
-        elif node_type == "imdf_publisher":
-            arcgis_connection_id = node.get(
-                "imdf_arcgis_connection_id"
-            ) or node_data.get("imdf_arcgis_connection_id")
-            if arcgis_connection_id and arcgis_connection_id not in visible_arcgis_connections:
-                node_data["access_denied"] = True
-                node_data["access_denied_reason"] = (
-                    f"Connessione ArcGIS '{arcgis_connection_id}' non visibile al gruppo del progetto"
-                )
-                node_data["inaccessible_resource_type"] = "arcgis_connection"
 
 
 def collect_canvas_resource_refs(canvas: CanvasState) -> CanvasResourceRefs:
@@ -248,12 +232,6 @@ def collect_canvas_resource_refs(canvas: CanvasState) -> CanvasResourceRefs:
         elif node.type == "carica_arcgis":
             arcgis_connection_id = getattr(node, "arcgis_connection_id", None) or (
                 node_data.get("arcgis_connection_id") if node_data else None
-            )
-            if arcgis_connection_id:
-                arcgis_connection_ids.add(arcgis_connection_id)
-        elif node.type == "imdf_publisher":
-            arcgis_connection_id = getattr(node, "imdf_arcgis_connection_id", None) or (
-                node_data.get("imdf_arcgis_connection_id") if node_data else None
             )
             if arcgis_connection_id:
                 arcgis_connection_ids.add(arcgis_connection_id)

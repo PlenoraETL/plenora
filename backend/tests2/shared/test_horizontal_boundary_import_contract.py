@@ -233,18 +233,6 @@ def _is_task_runtime_path(rel_path: str) -> bool:
             ),
         ),
         (
-            "app/core/imdf/publish_dispatcher.py",
-            (
-                "app.config",
-                "app.core.features",
-                "app.db",
-                "celery",
-                "fastapi",
-                "requests",
-                "httpx",
-            ),
-        ),
-        (
             "app/core/eseguibili/output_store.py",
             (
                 "app.core.features",

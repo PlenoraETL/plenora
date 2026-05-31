@@ -1,20 +1,17 @@
 /**
  * ResultNode.jsx — Nodo output unificato (ESTRAI, MANIPOLA, ARRICCHISCI)
  *
- * Nodo terminale della pipeline. Decide la modalita' (IMDF vs standard) in
- * base all'upstream e delega la view corrispondente a un subcomponente.
+ * Nodo terminale della pipeline. Delega la view a ResultNodeStandardView.
+ * (Post-collasso IMDF a una-run: niente piu' vista IMDF dedicata; l'output
+ * IMDF e' un bundle JSON come ogni altro artefatto, pubblicato via il nodo
+ * carica_arcgis downstream.)
  *
  * Owna:
  *   - subscriptions canvas (edges, upstream node, hasOnPreview/Execute)
  *   - calcolo upstreamColumns (richiede useReactFlow)
- *   - detection isImdfMode (upstream=api_enrich con output_kind='imdf')
  *   - logica validazione: runValidation + handleValidate/Execute/Preview
- *   - ValidationModal (condivisa tra IMDF view e standard view)
- *   - header + delete (comune a entrambi i rami)
- *
- * Delega:
- *   - ResultNodeImdfView: view quando isImdfMode=true
- *   - ResultNodeStandardView: view altrimenti
+ *   - ValidationModal
+ *   - header + delete
  */
 import React, { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
 import { Handle, Position, useReactFlow, useStore } from 'reactflow';
@@ -23,7 +20,6 @@ import { validateManipolaCanvas } from '../../utils/validateManipolaCanvas';
 import { validateEstraiCanvas } from '../../utils/validateEstraiCanvas';
 import { validateArricchisciCanvas } from '../../utils/validateArricchisciCanvas';
 import useCanvasStore from '../../store/useCanvasStore';
-import ResultNodeImdfView from './result/ResultNodeImdfView';
 import ResultNodeStandardView from './result/ResultNodeStandardView';
 import { useConfirm } from '../../context/ConfirmContext';
 import './ResultNode.css';
@@ -84,19 +80,6 @@ const ResultNode = memo(({ data, id }) => {
     }));
   }, [id, getEdges, getNodes, incomingEdgeCount, sourceColumnsSignature]);
 
-  // Detection: upstream api_enrich con output_kind? Se sì, result si specializza (IMDF).
-  // Legge dallo store per reattivita' a updateNodeData sull'upstream.
-  const upstreamOutputKind = useCanvasStore((state) => {
-    const edges = state.edges || [];
-    const nodes = state.nodes || [];
-    const incomingEdges = edges.filter(e => e.target === id);
-    if (incomingEdges.length === 0) return null;
-    const sourceNode = nodes.find(n => n.id === incomingEdges[0].source);
-    if (!sourceNode || sourceNode.type !== 'api_enrich') return null;
-    return sourceNode.data?.output_kind || null;
-  });
-  const isImdfMode = upstreamOutputKind === 'imdf';
-
   // Tipi progetto (per header icon/title + runValidation)
   const isManipulate = data.isManipulate || false;
   const isArricchisci = data.isArricchisci || false;
@@ -108,7 +91,7 @@ const ResultNode = memo(({ data, id }) => {
     manipola: { icon: '🔧', title: 'Output Manipola', executeLabel: 'Esegui Pipeline' },
     arricchisci: { icon: '🔗', title: 'Output Arricchisci', executeLabel: 'Esegui Arricchimento' },
   };
-  const { icon, title, executeLabel } = config[nodeVariant];
+  const { icon, title } = config[nodeVariant];
 
   // Stato validazione (condiviso: ValidationModal aperta sia da standard sia da IMDF)
   const [showValidation, setShowValidation] = useState(false);
@@ -262,25 +245,16 @@ const ResultNode = memo(({ data, id }) => {
       </div>
 
       <div className="result-node__body">
-        {isImdfMode ? (
-          <ResultNodeImdfView
-            hasOnExecute={hasOnExecute}
-            onExecute={handleExecuteWithValidation}
-            nodeVariant={nodeVariant}
-            executeLabel={executeLabel}
-          />
-        ) : (
-          <ResultNodeStandardView
-            data={data}
-            id={id}
-            upstreamColumns={upstreamColumns}
-            hasOnPreview={hasOnPreview}
-            hasOnExecute={hasOnExecute}
-            onValidate={handleValidate}
-            onExecute={handleExecuteWithValidation}
-            onPreview={handlePreviewWithValidation}
-          />
-        )}
+        <ResultNodeStandardView
+          data={data}
+          id={id}
+          upstreamColumns={upstreamColumns}
+          hasOnPreview={hasOnPreview}
+          hasOnExecute={hasOnExecute}
+          onValidate={handleValidate}
+          onExecute={handleExecuteWithValidation}
+          onPreview={handlePreviewWithValidation}
+        />
 
         <ValidationModal
           isOpen={showValidation}

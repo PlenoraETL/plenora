@@ -34,7 +34,6 @@ celery_app = Celery(
         "workers.tasks.schedule_task",
         "workers.tasks.admin_backup_task",
         "workers.tasks.pipeline_task",
-        "workers.tasks.imdf_publish_task",
         "workers.tasks.cleanroom_task",
         "workers.tasks.cleanroom_beat_task",
         "workers.tasks.cleanup_temp_files_task",
@@ -69,7 +68,6 @@ celery_app.conf.update(
         "pipeline.preview": {"queue": settings.CELERY_QUEUE_DATA_PLANE},
         "carica.execute": {"queue": settings.CELERY_QUEUE_DATA_PLANE},
         "tasks.execute_enrichment": {"queue": settings.CELERY_QUEUE_DATA_PLANE},
-        "tasks.execute_imdf_publish": {"queue": settings.CELERY_QUEUE_DATA_PLANE},
         "workers.tasks.admin_backup_task.run_manual_backup_task": {
             "queue": settings.CELERY_QUEUE_CONTROL_PLANE,
         },

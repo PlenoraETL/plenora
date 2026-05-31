@@ -86,7 +86,6 @@ def test_first_tick_acquires_leader_lock_when_key_absent():
          patch.object(scheduler, "_write_heartbeat"), \
          patch.object(scheduler, "_check_stuck_tasks"), \
          patch.object(scheduler, "_cleanup_eseguibili_outputs"), \
-         patch.object(scheduler, "_cleanup_imdf_bundles"), \
          patch.object(scheduler, "_cleanup_old_logs"), \
          patch.object(Scheduler, "tick", return_value=1.0):
         scheduler.tick()
@@ -129,7 +128,6 @@ def test_leader_refreshes_ttl_on_subsequent_ticks():
          patch.object(scheduler, "_write_heartbeat"), \
          patch.object(scheduler, "_check_stuck_tasks"), \
          patch.object(scheduler, "_cleanup_eseguibili_outputs"), \
-         patch.object(scheduler, "_cleanup_imdf_bundles"), \
          patch.object(scheduler, "_cleanup_old_logs"), \
          patch.object(Scheduler, "tick", return_value=1.0):
         scheduler.tick()
@@ -144,7 +142,6 @@ def test_leader_refreshes_ttl_on_subsequent_ticks():
          patch.object(scheduler, "_write_heartbeat"), \
          patch.object(scheduler, "_check_stuck_tasks"), \
          patch.object(scheduler, "_cleanup_eseguibili_outputs"), \
-         patch.object(scheduler, "_cleanup_imdf_bundles"), \
          patch.object(scheduler, "_cleanup_old_logs"), \
          patch.object(Scheduler, "tick", return_value=1.0):
         scheduler.tick()
@@ -172,7 +169,6 @@ def test_leader_loses_lock_to_another_process_and_logs_warning(caplog):
          patch.object(scheduler, "_write_heartbeat"), \
          patch.object(scheduler, "_check_stuck_tasks"), \
          patch.object(scheduler, "_cleanup_eseguibili_outputs"), \
-         patch.object(scheduler, "_cleanup_imdf_bundles"), \
          patch.object(scheduler, "_cleanup_old_logs"), \
          patch.object(Scheduler, "tick"), \
          caplog.at_level(logging.WARNING, logger="workers.beat_scheduler"):
@@ -209,7 +205,6 @@ def test_redis_unavailable_falls_back_to_single_instance_leader(monkeypatch):
          patch.object(scheduler, "_write_heartbeat"), \
          patch.object(scheduler, "_check_stuck_tasks"), \
          patch.object(scheduler, "_cleanup_eseguibili_outputs"), \
-         patch.object(scheduler, "_cleanup_imdf_bundles"), \
          patch.object(scheduler, "_cleanup_old_logs"), \
          patch.object(Scheduler, "tick", return_value=1.0):
         scheduler.tick()

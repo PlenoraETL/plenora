@@ -111,22 +111,6 @@ def test_carica_task_arcgis_old_interpolation_removed():
     assert 'f"Errore scrittura ArcGIS: {str(e)}"' not in src
 
 
-# SITO 5 — imdf_publish_task.py:260-268
-
-
-def test_imdf_publish_task_has_canonical_token():
-    src = _read("workers/tasks/imdf_publish_task.py")
-    assert '"error": "imdf_publish_failed"' in src
-    assert '"message": "Errore pubblicazione IMDF (consulta log)"' in src
-
-
-def test_imdf_publish_task_no_str_e_in_error_field():
-    """Il vecchio `"error": str(e),` nel return dict non deve piu' esistere."""
-    src = _read("workers/tasks/imdf_publish_task.py")
-    pattern = re.compile(r'^\s*"error": str\(e\),\s*$', re.MULTILINE)
-    assert not pattern.search(src)
-
-
 # SITO 6 — execution_manager.py:883-885 (_execute_carica)
 
 
@@ -169,7 +153,6 @@ def test_no_str_e_in_return_dict_error_field_across_all_sites():
     files = [
         "workers/tasks/schedule_task.py",
         "workers/tasks/carica_task.py",
-        "workers/tasks/imdf_publish_task.py",
         "app/core/scheduler/execution_manager.py",
     ]
     # Whitelist per contenuto: la linea che contiene la stringa marker
@@ -199,14 +182,13 @@ def test_no_str_e_in_return_dict_error_field_across_all_sites():
 
 
 def test_all_6_canonical_tokens_present_across_files():
-    """Sanity aggregata: tutti i 6 token canonici ratificati esistono almeno
+    """Sanity aggregata: tutti i token canonici ratificati esistono almeno
     una volta ciascuno nel file atteso."""
     expectations = [
         ("workers/tasks/schedule_task.py", "schedule_task_fatal"),
         ("workers/tasks/carica_task.py", "carica_task_fatal"),
         ("workers/tasks/carica_task.py", "carica_datasource_write_failed"),
         ("workers/tasks/carica_task.py", "carica_arcgis_write_failed"),
-        ("workers/tasks/imdf_publish_task.py", "imdf_publish_failed"),
         ("app/core/scheduler/execution_manager.py", "carica_scheduler_failed"),
     ]
     missing = []

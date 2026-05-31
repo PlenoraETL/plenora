@@ -25,7 +25,6 @@ from app.core.dataframes.values import is_nonempty_dataframe
 from app.core.eseguibili import db as eseguibili_db
 from app.core.eseguibili import storage as eseg_storage
 from app.core.files import service as files_service
-from app.core.imdf import persist as imdf_persist
 from app.core.intermediate import run_idempotency as run_idempotency_module
 from app.core.intermediate import run_lifecycle as run_lifecycle_module
 from app.core.intermediate import snapshot as intermediate_snapshot
@@ -613,51 +612,12 @@ def execute_enrichment_task(
                 except (UnicodeDecodeError, ValueError, Exception) as val_err:
                     raise ValueError(f"Output non valido ({ext}): {val_err}") from val_err
 
-            # Se nel canvas c'e' almeno un nodo api_enrich con
-            # output_kind='imdf', il file zip prodotto e' un IMDF: estraiamo
-            # manifest.json + validation.json e li includiamo inline nel task
-            # result come `result['imdf']`. `has_imdf_upstream` calcolato
-            # sopra (pre-fetch check).
-            # IMDF-1 (Phase6 step 1): `extract_imdf_zip_bytes` apre lo zip
-            # via `ZipFile(BytesIO(...))`, niente piu' bounce su disco lato
-            # caller. La tmp dir interna del bundle resta finche' IMDF-2 non
-            # sposta manifest/validation/renderers/geojson in-memory.
-            imdf_metadata: Optional[JsonObject] = None
-            if has_imdf_upstream and ext == ".json":
-                # Nuovo path: plenora.indoor.bundle (JSON self-describing dal
-                # convertitore). Persist per-sezione via persist_indoor_bundle,
-                # niente round-trip GDB. Vedi design note 13 / bundle_loader.
-                try:
-                    _payload = json_mod.loads(output_bytes)
-                    # schema == bundle_loader.BUNDLE_SCHEMA
-                    if isinstance(_payload, dict) and _payload.get("schema") == "plenora.indoor.bundle":
-                        bundle_persisted = False
-                        try:
-                            imdf_persist.persist_indoor_bundle(
-                                _payload, task_id=task_id, project_id=project_id,
-                            )
-                            bundle_persisted = True
-                        except Exception as _persist_e:
-                            logger.warning(
-                                f"[Task {task_id}] Persistenza indoor bundle fallita: {_persist_e}"
-                            )
-                        _sites = (_payload.get("metadata") or {}).get("site_ids") or []
-                        imdf_metadata = {
-                            "site_id":        _sites[0] if _sites else None,
-                            "has_gdb":        False,
-                            "has_ifc":        False,
-                            "has_renderers":  _payload.get("renderers") is not None,
-                            "bundle_task_id": task_id if bundle_persisted else None,
-                            "format":         "plenora.indoor.bundle",
-                        }
-                        logger.info(
-                            f"[Task {task_id}] indoor bundle persistito: "
-                            f"site={imdf_metadata['site_id']} "
-                            f"layers={len(_payload.get('layers') or {})}"
-                        )
-                except Exception as _imdf_e:
-                    logger.warning(f"[Task {task_id}] Parse indoor bundle fallito: {_imdf_e}")
-                    imdf_metadata = {"error": str(_imdf_e)}
+            # IMDF (plenora.indoor.bundle) NON ha piu' un path dedicato qui: e'
+            # un arricchimento come gli altri. Il bundle JSON prodotto dal
+            # convertitore viene salvato come normale result_blob del progetto;
+            # il publish ArcGIS multi-layer avviene in-pipeline nel nodo
+            # carica_arcgis downstream (vedi carica_task._maybe_multilayer_arcgis_write
+            # + bundle_arcgis_adapter), in una sola run, senza persist dedicata.
 
             # Routing finale: eseguibili (S3) vs arricchisci (DB result_blob).
             result_id: Optional[str] = None
@@ -767,8 +727,6 @@ def execute_enrichment_task(
                 "error_report_result_id": None,
                 "message": f"Processamento completato: {final_name}",
             }
-            if imdf_metadata is not None:
-                result["imdf"] = imdf_metadata
             if is_eseguibile:
                 # URL relativo; il frontend lo compone con il base host
                 result["download_url"] = f"/api/eseguibili/{project_id}/download/{task_id}"

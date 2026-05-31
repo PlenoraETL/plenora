@@ -74,8 +74,6 @@ def test_ci_cleanroom_workflow_step_probes_canonical_surface(
          "Probe must reference workers.tasks.schedule_task."),
         ('workers.tasks.pipeline_task',
          "Probe must reference workers.tasks.pipeline_task."),
-        ('workers.tasks.imdf_publish_task',
-         "Probe must reference workers.tasks.imdf_publish_task."),
         # 3. Broker connectivity
         ('ensure_connection',
          "Probe must call ensure_connection() against the broker."),
@@ -164,7 +162,6 @@ def test_celery_app_includes_canonical_task_modules(celery_app_text: str):
         "workers.tasks.carica_task",
         "workers.tasks.schedule_task",
         "workers.tasks.pipeline_task",
-        "workers.tasks.imdf_publish_task",
     ):
         assert f'"{module_path}"' in celery_app_text, (
             f"workers/celery_app.py include=[...] is missing "

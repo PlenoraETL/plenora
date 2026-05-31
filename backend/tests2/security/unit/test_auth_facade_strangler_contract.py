@@ -43,8 +43,6 @@ _PHASE2_PER_NAME_BAN: dict[Path, frozenset[str]] = {
         frozenset({"CurrentUser"}),
     _APP / "core" / "orchestrator" / "router.py":
         frozenset({"CurrentUser", "assert_group_access"}),
-    _APP / "core" / "imdf" / "router.py":
-        frozenset({"CurrentUser", "assert_resource_visible"}),
 }
 
 
@@ -405,53 +403,6 @@ def test_phase2_orchestrator_imports_assert_group_access_from_ownership():
     ), (
         "orchestrator/router.py must import assert_group_access from "
         "app.core.auth.ownership."
-    )
-
-
-def test_phase2_imdf_lazy_assert_resource_visible_migrated_to_leaf():
-    """BE-GO-READY-AUTH-ENGINE-020 closed R-019.1: imdf/router.py
-    no longer carries a body-local lazy `from app.core.auth.auth
-    import assert_resource_visible`; the import is now top-level
-    `from app.core.auth.ownership import assert_resource_visible`.
-    The 2 IMDF test files monkeypatch the consuming router-module
-    surface (`app.core.imdf.router.assert_resource_visible`)
-    instead of the facade.
-
-    This lock supersedes the prior typed-context residual contract
-    (`test_phase2_imdf_lazy_assert_resource_visible_kept_on_facade_residual`):
-    the lazy facade import MUST NOT reappear, and the leaf import
-    MUST be present.
-    """
-    path = _APP / "core" / "imdf" / "router.py"
-    text = path.read_text(encoding="utf-8")
-    # AST scan for the banned facade import (more robust than a
-    # raw substring grep because the migration audit comment in
-    # imdf/router.py mentions the old line as historical context).
-    tree = ast.parse(text, filename=str(path))
-    facade_imports = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom)
-        and node.module == _FACADE_MODULE
-        and any(a.name == "assert_resource_visible" for a in node.names)
-    ]
-    assert facade_imports == [], (
-        "imdf/router.py regressed to facade import for "
-        "assert_resource_visible at line(s) "
-        f"{[n.lineno for n in facade_imports]}. "
-        "Use `from app.core.auth.ownership import "
-        "assert_resource_visible` instead."
-    )
-    assert "from app.core.imdf import bundle_access as _bundle_access" in text
-    bundle_access_text = (
-        _APP / "core" / "imdf" / "bundle_access.py"
-    ).read_text(encoding="utf-8")
-    assert (
-        "from app.core.auth.ownership import assert_resource_visible"
-        in bundle_access_text
-    ), (
-        "IMDF ownership must pass through the bundle access leaf, which "
-        "imports `assert_resource_visible` from app.core.auth.ownership."
     )
 
 
@@ -1257,7 +1208,6 @@ def test_auth_engine_018_projects_router_no_standard_deps_from_facade():
 
 _AUTH_ENGINE_019_MIGRATED_FILES = (
     _APP / "core" / "orchestrator" / "router.py",
-    _APP / "core" / "imdf" / "router.py",
     _APP / "core" / "datasources" / "router.py",
     _APP / "core" / "arricchisci" / "router.py",
     _APP / "core" / "auth" / "shares_router.py",

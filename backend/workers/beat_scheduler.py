@@ -20,7 +20,6 @@ from celery.schedules import crontab
 from celery.utils.log import get_logger
 from app import config as app_config
 from app.core.eseguibili import output_store
-from app.core.imdf import bundle_store
 from app.core.io import object_storage as object_storage_module
 from app.core.scheduler.job_dispatcher import (
     SCHEDULE_PIPELINE_TASK_NAME,
@@ -266,7 +265,6 @@ class PlenoraBeatScheduler(Scheduler):
     _last_logs_archive: float = 0.0
     _last_audit_archive: float = 0.0
     _last_schedule_logs_retention: float = 0.0
-    _last_imdf_bundles_cleanup: float = 0.0
     _last_temp_orphan_cleanup: float = 0.0
     _last_storage_reconcile: float = 0.0
 
@@ -289,7 +287,6 @@ class PlenoraBeatScheduler(Scheduler):
         self._write_heartbeat()
         self._check_stuck_tasks()
         self._cleanup_eseguibili_outputs()
-        self._cleanup_imdf_bundles()
         self._archive_old_logs()
         self._cleanup_old_logs()
         self._cleanup_old_schedule_logs()
@@ -789,32 +786,6 @@ class PlenoraBeatScheduler(Scheduler):
                 logger.info(f"Cleanup eseguibili_outputs: rimosse {removed} directory orfane")
         except Exception as e:
             logger.warning(f"Errore cleanup eseguibili_outputs: {e}")
-
-    # Cleanup bundle IMDF orfani
-
-    def _cleanup_imdf_bundles(self) -> None:
-        """Ogni 30 minuti rimuove i bundle IMDF su disco piu' vecchi di
-        settings.IMDF_BUNDLE_TTL_HOURS (default 48h).
-
-        I bundle vengono persistiti dopo ogni arricchimento IMDF per permettere
-        la pubblicazione ArcGIS on-demand (nodo imdf_publisher). Senza cleanup
-        la cartella cresce indefinitamente (ogni bundle pesa ~10-50MB).
-        """
-        now = _t.time()
-        if now - self._last_imdf_bundles_cleanup < 1800:  # 30 minuti
-            return
-        self._last_imdf_bundles_cleanup = now
-
-        try:
-            ttl_seconds = app_config.settings.IMDF_BUNDLE_TTL_HOURS * 3600
-            removed = bundle_store.purge_expired_local_bundles(
-                now_ts=now,
-                ttl_seconds=ttl_seconds,
-            )
-            if removed:
-                logger.info(f"Cleanup imdf_bundles: rimossi {removed} bundle scaduti")
-        except Exception as e:
-            logger.warning(f"Errore cleanup imdf_bundles: {e}")
 
     # Cleanup orfani DATA_DIR/temp/
 

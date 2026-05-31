@@ -35,7 +35,6 @@ import ResultNode from '../components/nodes/ResultNode';
 import CaricanNode from '../components/nodes/CaricanNode';
 import CaricanArcGISNode from '../components/nodes/CaricanArcGISNode';
 import '../components/nodes/CaricanArcGISNode.css';
-import ImdfPublisherNode from '../components/nodes/ImdfPublisherNode';
 import PlenoraLogo from '../components/common/PlenoraLogo';
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
 
@@ -80,7 +79,7 @@ const ARRICCHISCI_SOURCE_TYPES = ['estrai', 'manipola', 'arricchisci'];
 
 // Costanti stabili fuori dal componente — evita re-render loop in ReactFlow StoreUpdater
 // Qualsiasi oggetto/funzione inline nelle props di ReactFlow causa Maximum update depth
-const NODE_COLORS = { project_source: '#4CAF50', file_source: '#3F51B5', api_enrich: '#FF6B35', result: '#2196F3', staticValues: '#667eea', carica: '#7c3aed', imdf_publisher: '#7C3AED' };
+const NODE_COLORS = { project_source: '#4CAF50', file_source: '#3F51B5', api_enrich: '#FF6B35', result: '#2196F3', staticValues: '#667eea', carica: '#7c3aed' };
 const nodeColorFn = (node) => NODE_COLORS[node.type] || '#999';
 const FIT_VIEW_OPTIONS = { padding: 0.2 };
 
@@ -88,7 +87,6 @@ const nodeTypes = {
   project_source: ProjectSourceNode, file_source: FileSourceNode,
   api_enrich: ApiEnrichNode, result: ResultNode,
   staticValues: StaticValuesNode, carica: CaricanNode, carica_arcgis: CaricanArcGISNode, caricaArcgis: CaricanArcGISNode,
-  imdf_publisher: ImdfPublisherNode
 };
 
 const defaultEdgeOptions = {
@@ -445,40 +443,6 @@ const ArricchisciEditorContent = () => {
       label: 'Carica ArcGIS', animated: true, style: { stroke: '#2DD4BF', strokeWidth: 2 }, data: { join_type: 'carica_arcgis' } }));
   }, [setNodes, setEdges]);
 
-  const handleAddImdfPublisherNode = useCallback(() => {
-    const currentNodes = nodesRef.current;
-    // Richiede un api_enrich con output_kind='imdf' come sorgente
-    const imdfEnrich = currentNodes.find(n =>
-      n.type === 'api_enrich' && (n.data?.output_kind === 'imdf')
-    );
-    if (!imdfEnrich) {
-      toast.warning('Serve prima un nodo Processore File con output IMDF');
-      return;
-    }
-    if (currentNodes.some(n => n.type === 'imdf_publisher')) {
-      toast.warning('Puoi avere solo un nodo IMDF Publisher per progetto');
-      return;
-    }
-    const newNode = {
-      id: `imdf_publisher_${Date.now()}`, type: 'imdf_publisher',
-      position: { x: imdfEnrich.position.x + 400, y: imdfEnrich.position.y + 220 },
-      data: {
-        imdf_arcgis_connection_id: '',
-        imdf_arcgis_folder:        '',
-        imdf_fs_name_template:     '',
-        imdf_apply_renderers:      true,
-      }
-    };
-    setNodes(nds => nds.concat(newNode));
-    setEdges(eds => eds.concat({
-      id: `edge_imdf_pub_${Date.now()}`,
-      source: imdfEnrich.id, target: newNode.id,
-      label: 'IMDF', animated: true,
-      style: { stroke: '#7C3AED', strokeWidth: 2 },
-      data: { join_type: 'imdf_publisher' }
-    }));
-  }, [setNodes, setEdges, toast]);
-
   const onConnect = useCallback((params) => {
     // Normalizza handles: undefined → 'input'/'output'
     const cleanParams = { ...params };
@@ -515,8 +479,6 @@ const ArricchisciEditorContent = () => {
   const hasResultNode  = nodes.some(n => n.type === 'result');
   const hasCaricanNode = nodes.some(n => n.type === 'carica');
   const hasCaricanArcGISNode = nodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis');
-  const hasImdfEnrich        = nodes.some(n => n.type === 'api_enrich' && n.data?.output_kind === 'imdf');
-  const hasImdfPublisherNode = nodes.some(n => n.type === 'imdf_publisher');
 
   // beforeCanvas slot
   const accessDeniedBanner = <AccessDeniedBanner nodes={nodes} />;
@@ -554,7 +516,6 @@ const ArricchisciEditorContent = () => {
               <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--output" onClick={handleAddResultNode}>📁 Output</button>
               <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--carica" onClick={handleAddCaricanNode} disabled={!hasResultNode || hasCaricanNode} title="Aggiungi nodo per caricare su database">💾 Carica DB</button>
               <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--carica" onClick={handleAddCaricanArcGISNode} disabled={!hasResultNode || hasCaricanArcGISNode} title="Aggiungi nodo Carica ArcGIS" style={{ borderColor: 'rgba(45,212,191,0.4)', color: '#2DD4BF' }}>🌐 Carica ArcGIS</button>
-              <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--carica" onClick={handleAddImdfPublisherNode} disabled={!hasImdfEnrich || hasImdfPublisherNode} title="Pubblica il bundle IMDF su un Feature Service ArcGIS (richiede upstream IMDF)" style={{ borderColor: 'rgba(124,58,237,0.4)', color: '#7C3AED' }}>🗺️ Pubblica IMDF</button>
             </>
           )}
           <ValidationStatusBadge />

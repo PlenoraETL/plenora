@@ -23,11 +23,11 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
 def test_node_types_lockin():
-    """Lock dei 14 node types attualmente supportati dal canvas."""
+    """Lock dei node types attualmente supportati dal canvas."""
     assert set(ct.VALID_NODE_TYPES) == {
         "source", "result", "project_source", "file_source", "feature_source",
         "transform", "api_enrich", "staticValues", "carica", "carica_arcgis",
-        "multi_join", "comment", "datasource_node", "imdf_publisher",
+        "multi_join", "comment", "datasource_node",
     }
     # Sentinel: se qualcuno cambia un caso (es. "result" -> "Result") il
     # canvas non valida piu' — qui catturiamo prima del deploy.

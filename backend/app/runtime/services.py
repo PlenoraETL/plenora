@@ -33,6 +33,23 @@ __all__ = [
 ]
 
 
+def _register_multilayer_artifact_adapters() -> None:
+    """Registra gli adapter verticali (artefatto -> multi-layer) al composition root.
+
+    CARICA (sink ArcGIS multi-layer) resta generico: i formati verticali — IMDF
+    ``plenora.indoor.bundle``, futuri export — si registrano QUI, non dentro
+    CARICA. La direzione di accoppiamento resta verticale -> orizzontale.
+    Idempotente: la registrazione dedupe per tipo. Eseguito a import-time perche'
+    ``carica_task`` importa questo modulo al load, prima di ogni write ArcGIS.
+    """
+    from app.core.imdf import bundle_arcgis_adapter
+
+    bundle_arcgis_adapter.register()
+
+
+_register_multilayer_artifact_adapters()
+
+
 @dataclass(frozen=True)
 class OrchestratorStack:
     """Small runtime bundle for callers that only need pipeline execution."""

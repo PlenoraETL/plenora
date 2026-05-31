@@ -1,8 +1,14 @@
 """
-IMDF module — lettura ed elaborazione output del servizio imdf.plenora.it.
+IMDF module — adattatore del formato ``plenora.indoor.bundle``.
 
-Lo zip IMDF prodotto contiene:
+Dopo il collasso a una-run, IMDF e' un semplice *format adapter*: il
+convertitore esterno (imdf.plenora.it) emette un bundle JSON self-describing;
+qui lo si legge e lo si traduce in layer GeoDataFrame + spec ArcGIS.
 
-Boundary D3: i moduli runtime reali sono loader, persist, storage, router,
-validator e arcgis_uploader.
+Moduli:
+- ``bundle_loader``: parse del contratto ``plenora.indoor.bundle`` (core puro).
+- ``bundle_geo``: assembla i layer in GeoDataFrame (boundary dataframes).
+- ``bundle_arcgis_adapter``: registra l'adapter bundle -> N ``ArcGISLayerSpec``
+  nel registry multi-layer di CARICA (il publish ArcGIS e' un nodo carica_arcgis
+  downstream, in-pipeline).
 """

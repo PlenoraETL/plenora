@@ -431,7 +431,6 @@ def test_reconcile_storage_called_from_tick():
          patch.object(sched, "_write_heartbeat"), \
          patch.object(sched, "_check_stuck_tasks"), \
          patch.object(sched, "_cleanup_eseguibili_outputs"), \
-         patch.object(sched, "_cleanup_imdf_bundles"), \
          patch.object(sched, "_archive_old_logs"), \
          patch.object(sched, "_cleanup_old_logs"), \
          patch.object(sched, "_cleanup_old_schedule_logs"), \
