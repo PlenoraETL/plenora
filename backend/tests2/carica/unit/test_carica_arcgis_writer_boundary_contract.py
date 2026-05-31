@@ -18,7 +18,7 @@ from app.core.carica.arcgis_write_boundary import (
 )
 from app.core.carica.rest_write_boundary import RestBatchSummary
 from app.core.connections.arcgis_writer_boundary import ArcGISFeatureWriter
-from workers.tasks.carica_task import _execute_arcgis_write
+from app.core.carica.dispatch import execute_arcgis_write
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.carica, pytest.mark.contract]
@@ -201,7 +201,6 @@ def test_carica_arcgis_boundary_delegates_service_create_to_feature_writer() -> 
 
 
 def test_worker_delegates_arcgis_provider_write_to_carica_boundary() -> None:
-    task = SimpleNamespace(update_state=lambda **kwargs: None)
     df = pd.DataFrame([{"id": 1, "name": "A"}])
     writer = object()
     outcome = CaricaArcGISWriteOutcome(
@@ -218,14 +217,13 @@ def test_worker_delegates_arcgis_provider_write_to_carica_boundary() -> None:
     )
 
     with patch(
-        "workers.tasks.carica_task.create_default_arcgis_feature_writer",
+        "app.core.carica.dispatch.create_default_arcgis_feature_writer",
         return_value=writer,
     ) as create_writer, patch(
-        "workers.tasks.carica_task.execute_carica_arcgis_write",
+        "app.core.carica.dispatch.execute_carica_arcgis_write",
         return_value=outcome,
     ) as execute_boundary:
-        result = _execute_arcgis_write(
-            task=task,
+        result = execute_arcgis_write(
             df=df,
             carica_node_data={
                 "arcgis_connection_id": "arc-1",
@@ -239,6 +237,7 @@ def test_worker_delegates_arcgis_provider_write_to_carica_boundary() -> None:
             },
             project_id="proj-1",
             task_id="task-1",
+            progress=lambda _p, _m: None,
         )
 
     create_writer.assert_called_once_with()

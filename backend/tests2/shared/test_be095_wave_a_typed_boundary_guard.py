@@ -181,9 +181,10 @@ def test_task_result_payload_no_longer_has_broad_payload_field() -> None:
 
 
 def test_carica_worker_arcgis_branch_stays_on_writer_boundary() -> None:
-    tree = _parse("workers/tasks/carica_task.py")
+    # #18/#20: il dispatch ArcGIS vive in carica/dispatch.py (worker thin).
+    tree = _parse("app/core/carica/dispatch.py")
     functions = _functions_by_name(tree)
-    arcgis_write = functions["_execute_arcgis_write"].node
+    arcgis_write = functions["execute_arcgis_write"].node
 
     forbidden_calls = {
         "ArcGISClient",

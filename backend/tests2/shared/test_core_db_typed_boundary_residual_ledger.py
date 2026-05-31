@@ -276,10 +276,10 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
         "task status serialization is an explicit router/API boundary mapper",
     ),
     BoundaryEntry(
-        "workers/tasks/carica_task.py",
-        "_execute_arcgis_write",
+        "app/core/carica/dispatch.py",
+        "execute_arcgis_write",
         "DONE",
-        "Carica worker returns the typed ArcGIS task-result alias produced by the domain outcome serializer",
+        "Carica dispatch returns the typed ArcGIS task-result alias produced by the domain outcome serializer",
     ),
     BoundaryEntry(
         "app/core/features/arcgis_feature_operations.py",

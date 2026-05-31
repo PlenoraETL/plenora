@@ -74,7 +74,7 @@ def test_carica_task_outer_preserves_admin_internal_message():
 
 
 def test_carica_task_datasource_has_canonical_token():
-    src = _read("workers/tasks/carica_task.py")
+    src = _read("app/core/carica/dispatch.py")
     assert "'error': 'carica_datasource_write_failed'" in src
     assert "'message': 'Errore scrittura DataSource (consulta log)'" in src
     assert "'error_message': 'Errore scrittura DataSource (consulta log)'" in src
@@ -83,7 +83,7 @@ def test_carica_task_datasource_has_canonical_token():
 def test_carica_task_datasource_no_str_e_in_return():
     """Il vecchio `'error_message': str(e)` non deve piu' esistere nel return
     dict del branch DataSource write."""
-    src = _read("workers/tasks/carica_task.py")
+    src = _read("app/core/carica/dispatch.py")
     # Pattern Previous behavior: `'error_message': str(e),` — verificare assenza.
     # Il canale `DebugPayloadBuilder(failure={..., "error_message": str(e)})`
     # resta legittimo (keyword arg nested dict, non return dict).
@@ -98,7 +98,7 @@ def test_carica_task_datasource_no_str_e_in_return():
 
 
 def test_carica_task_arcgis_has_canonical_token():
-    src = _read("workers/tasks/carica_task.py")
+    src = _read("app/core/carica/dispatch.py")
     assert '"error": "carica_arcgis_write_failed"' in src
     assert '"message": "Errore scrittura ArcGIS (consulta log)"' in src
     assert '"error_message": "Errore scrittura ArcGIS (consulta log)"' in src
@@ -187,8 +187,9 @@ def test_all_6_canonical_tokens_present_across_files():
     expectations = [
         ("workers/tasks/schedule_task.py", "schedule_task_fatal"),
         ("workers/tasks/carica_task.py", "carica_task_fatal"),
-        ("workers/tasks/carica_task.py", "carica_datasource_write_failed"),
-        ("workers/tasks/carica_task.py", "carica_arcgis_write_failed"),
+        # #18/#20: i sink dispatch (datasource/arcgis/...) vivono in carica/dispatch.py
+        ("app/core/carica/dispatch.py", "carica_datasource_write_failed"),
+        ("app/core/carica/dispatch.py", "carica_arcgis_write_failed"),
         ("app/core/scheduler/execution_manager.py", "carica_scheduler_failed"),
     ]
     missing = []

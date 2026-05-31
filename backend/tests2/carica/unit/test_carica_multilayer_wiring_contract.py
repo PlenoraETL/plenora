@@ -1,6 +1,6 @@
-"""Contract: wiring una-run di carica_task verso il publish ArcGIS multi-layer.
+"""Contract: dispatch una-run verso il publish ArcGIS multi-layer.
 
-`_maybe_multilayer_arcgis_write` recupera i bytes dell'artefatto upstream, li
+`maybe_multilayer_arcgis_write` recupera i bytes dell'artefatto upstream, li
 interroga via il registry generico e — se un adapter li riconosce (es. IMDF
 bundle) — pubblica N layer. Altrimenti ritorna None (fallback mono-layer).
 """
@@ -9,11 +9,10 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
-from unittest.mock import MagicMock
 
 import pytest
 
-import workers.tasks.carica_task as ct
+import app.core.carica.dispatch as ct
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.carica, pytest.mark.contract]
@@ -95,7 +94,6 @@ def _patch_common(monkeypatch, fetched_bytes, fake_writer):
 
     monkeypatch.setattr(ct, "SourceLoader", _FakeLoader)
     monkeypatch.setattr(ct, "create_default_arcgis_feature_writer", lambda: fake_writer)
-    monkeypatch.setattr(ct, "_update_progress", lambda *a, **k: None)
 
 
 def test_bundle_upstream_routes_to_multilayer_publish(monkeypatch):
@@ -107,8 +105,8 @@ def test_bundle_upstream_routes_to_multilayer_publish(monkeypatch):
         "arcgis_operation": "create_service",
         "arcgis_new_service_name": "MyIndoorSvc",
     }
-    result = ct._maybe_multilayer_arcgis_write(
-        MagicMock(), "p1", {}, node, "t1",
+    result = ct.maybe_multilayer_arcgis_write(
+        "p1", {}, node, "t1", progress=lambda *a: None,
     )
 
     assert result is not None
@@ -122,7 +120,7 @@ def test_bundle_upstream_routes_to_multilayer_publish(monkeypatch):
 def test_non_bundle_json_falls_back_to_none(monkeypatch):
     fake = _FakeWriter()
     _patch_common(monkeypatch, b'{"schema": "qualcos.altro"}', fake)
-    result = ct._maybe_multilayer_arcgis_write(MagicMock(), "p1", {}, {}, "t1")
+    result = ct.maybe_multilayer_arcgis_write("p1", {}, {}, "t1", progress=lambda *a: None)
     assert result is None
     assert fake.create_calls == []
 
@@ -130,14 +128,14 @@ def test_non_bundle_json_falls_back_to_none(monkeypatch):
 def test_non_json_artifact_falls_back_to_none(monkeypatch):
     fake = _FakeWriter()
     _patch_common(monkeypatch, b"id,name\n1,foo\n", fake)
-    result = ct._maybe_multilayer_arcgis_write(MagicMock(), "p1", {}, {}, "t1")
+    result = ct.maybe_multilayer_arcgis_write("p1", {}, {}, "t1", progress=lambda *a: None)
     assert result is None
 
 
 def test_no_upstream_artifact_returns_none(monkeypatch):
     fake = _FakeWriter()
     _patch_common(monkeypatch, None, fake)
-    result = ct._maybe_multilayer_arcgis_write(MagicMock(), "p1", {}, {}, "t1")
+    result = ct.maybe_multilayer_arcgis_write("p1", {}, {}, "t1", progress=lambda *a: None)
     assert result is None
 
 
@@ -145,5 +143,5 @@ def test_missing_group_id_skips_detection(monkeypatch):
     fake = _FakeWriter()
     _patch_common(monkeypatch, _bundle_bytes(), fake)
     monkeypatch.setattr(ct, "get_project_runtime_context", lambda pid: SimpleNamespace(group_id=None))
-    result = ct._maybe_multilayer_arcgis_write(MagicMock(), "p1", {}, {}, "t1")
+    result = ct.maybe_multilayer_arcgis_write("p1", {}, {}, "t1", progress=lambda *a: None)
     assert result is None

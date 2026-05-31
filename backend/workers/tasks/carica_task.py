@@ -4,15 +4,12 @@ Task Celery per il modulo CARICA — esecuzione asincrona con progresso Redis.
 Runs background execution while preserving backend runtime contracts.
 """
 
-import json
 import time as _time
 import traceback
 import uuid as _uuid
-from pathlib import PurePosixPath
-from typing import Any, Mapping, Optional, cast
-from typing_extensions import TypedDict
+from typing import Any, Optional, cast
 
-from app.shared.contracts.payloads import HeadersMap, JsonObject
+from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
 from app.config import settings
 from app.core.artifacts import (
@@ -25,26 +22,18 @@ from app.core.artifacts import (
     SourceRef,
 )
 from app.core.auth.async_user_recheck import recheck_user_authorized
-from app.core.auth.visibility import is_resource_visible
-from app.core.carica import arcgis_write_boundary as arcgis_write_boundary_module
-from app.core.carica.multilayer_artifact_registry import resolve_multilayer_artifact
-from app.core.carica.executor import CaricaExecutor
-from app.core.carica.rest_config_parser import parse_carica_rest_config
-from app.core.carica.rest_write_boundary import execute_carica_rest_write
+from app.core.carica import dispatch as carica_dispatch
+from app.core.carica.dispatch import CaricaTaskResultPayload
 from app.core.carica.target_lock import (
     CaricaTargetLockHandle,
     acquire_carica_target_lock,
     release_carica_target_lock,
     resolve_carica_target_lock,
 )
-from app.core.connections.rest_sink import RestSinkHttpResponse
-from app.core.connections.service import ConnectionService
-from app.core.dataframes.export_writer import dataframe_to_export_chunks
 from app.core.dataframes.frame_io import (
     load_dataframe_from_artifact,
     load_dataframe_from_file,
 )
-from app.core.datasources.service import DataSourceService
 from app.core.intermediate.cleanup import close_worker_connection
 from app.core.intermediate.run_idempotency import is_already_completed
 from app.core.projects.runtime_context import get_project_runtime_context
@@ -59,32 +48,6 @@ from workers.celery_app import celery_app, BaseTaskWithRetry
 logger = get_logger("workers.carica_task")
 
 
-def create_default_arcgis_feature_writer() -> Any:
-    """Lazy wrapper kept patchable without importing ArcGIS services at registration."""
-    return arcgis_write_boundary_module.create_default_arcgis_feature_writer()
-
-
-def execute_carica_arcgis_write(**kwargs: Any) -> Any:
-    """Lazy wrapper kept patchable without importing ArcGIS services at registration."""
-    return arcgis_write_boundary_module.execute_carica_arcgis_write(**kwargs)
-
-
-class CaricaTaskResultPayload(TypedDict, total=False):
-    status: str
-    success: bool
-    message: str
-    error: str
-    error_message: str
-    project_id: str
-    task_id: str
-    run_id: str
-    result_id: str
-    output_file: str
-    output_filename: str
-    rows_written: int
-    rows_count: int
-    columns_count: int
-    total_rows: int
 
 
 @celery_app.task(
@@ -186,9 +149,13 @@ def execute_carica_task(
 
     _update_progress(self, 0, "Inizializzazione CARICA...")
 
+    # Astrae lo stato Celery per il dispatch (carica/dispatch.py, Celery-free).
+    def progress(percent: int, message: str) -> None:
+        _update_progress(self, percent, message)
+
     target_lock_handle: CaricaTargetLockHandle | None = None
     try:
-        write_branch = _select_carica_write_branch(carica_node_data)
+        write_branch = carica_dispatch.select_carica_write_branch(carica_node_data)
         target_lock_handle = _acquire_target_lock_or_return_busy(
             carica_node_data=carica_node_data,
             project_id=project_id,
@@ -238,8 +205,8 @@ def execute_carica_task(
         # composition root).
         result = None
         if write_branch == 'arcgis':
-            result = _maybe_multilayer_arcgis_write(
-                self, project_id, canvas, carica_node_data, task_id,
+            result = carica_dispatch.maybe_multilayer_arcgis_write(
+                project_id, canvas, carica_node_data, task_id, progress=progress,
             )
 
         if result is None:
@@ -284,13 +251,17 @@ def execute_carica_task(
             )
 
             if write_branch == 'datasource':
-                result = _execute_datasource_write(self, df, carica_node_data, project_id, task_id)
+                result = carica_dispatch.execute_datasource_write(
+                    df, carica_node_data, project_id, task_id, progress=progress)
             elif write_branch == 'rest':
-                result = _execute_rest_write(self, df, carica_node_data, project_id, task_id)
+                result = carica_dispatch.execute_rest_write(
+                    df, carica_node_data, project_id, task_id, progress=progress)
             elif write_branch == 'arcgis':
-                result = _execute_arcgis_write(self, df, carica_node_data, project_id, task_id)
+                result = carica_dispatch.execute_arcgis_write(
+                    df, carica_node_data, project_id, task_id, progress=progress)
             else:
-                result = _execute_db_write(self, df, carica_node_data, project_id, task_id, triggered_by, run_id)
+                result = carica_dispatch.execute_db_write(
+                    df, carica_node_data, project_id, task_id, triggered_by, run_id, progress=progress)
 
         is_success = result.get("success", False)
         rows_written = result.get("rows_written", 0) or 0
@@ -411,18 +382,6 @@ def execute_carica_task(
             logger.debug(f"close_connection config fallito: {type(e).__name__}: {e}")
 
 
-def _select_carica_write_branch(carica_node_data: JsonObject) -> str:
-    """Return the write branch for a CARICA node without executing writes."""
-    node_type = carica_node_data.get('type', '')
-    dest_type = carica_node_data.get('dest_type', 'db')
-
-    if node_type == 'datasource_node':
-        return 'datasource'
-    if dest_type == 'rest':
-        return 'rest'
-    if dest_type == 'arcgis' or node_type == 'carica_arcgis':
-        return 'arcgis'
-    return 'db'
 
 
 def _acquire_target_lock_or_return_busy(
@@ -474,393 +433,9 @@ def _acquire_target_lock_or_return_busy(
     return handle
 
 
-def _execute_datasource_write(task, df, carica_node_data, project_id, task_id):
-    """Scrive il DataFrame su un DataSource (local/FTP/SFTP/SharePoint)."""
-    datasource_id = carica_node_data.get('datasource_id', '')
-    dest_folder = carica_node_data.get('dest_folder', '') or ''
-    dest_filename = carica_node_data.get('dest_filename', '') or f'output_{project_id}'
-    dest_format = carica_node_data.get('dest_format', 'csv') or 'csv'
-
-    if not datasource_id:
-        return {
-            'status': 'connection_error',
-            'success': False,
-            'error_message': 'datasource_id mancante nel nodo',
-            'rows_written': 0,
-            'total_rows': len(df),
-        }
-
-    try:
-        metadata = ProjectService().get_project_metadata(project_id)
-        group_id = getattr(metadata, "group_id", None) if metadata else None
-        if not group_id or not is_resource_visible(
-            "datasources",
-            datasource_id,
-            str(group_id),
-            is_superadmin=False,
-        ):
-            return {
-                'status': 'connection_error',
-                'success': False,
-                'error': 'datasource_not_visible',
-                'message': 'DataSource non visibile al gruppo del progetto',
-                'error_message': 'DataSource non visibile al gruppo del progetto',
-                'rows_written': 0,
-                'total_rows': len(df),
-            }
-    except Exception:
-        logger.error('[SECURITY] Errore verifica visibilita DataSource', exc_info=True)
-        return {
-            'status': 'connection_error',
-            'success': False,
-            'error': 'datasource_visibility_check_failed',
-            'message': 'Verifica DataSource fallita',
-            'error_message': 'Verifica DataSource fallita',
-            'rows_written': 0,
-            'total_rows': len(df),
-        }
-
-    _update_progress(task, 20, f'Serializzazione DataFrame ({dest_format})...')
-
-    # RAM-C (2026-05-26): streaming export end-to-end. Sostituisce il
-    # pattern RAM-2 (`dataframe_to_export_bytes` ritornava bytes interi)
-    # con `dataframe_to_export_chunks` (yielda chunks). Combinato con
-    # `ds_service.write_chunks` permette write streaming dal worker al
-    # backend datasource senza materializzare la versione serializzata
-    # in RAM. Peak teorico: ~40k righe in flight (chunksize=10k, queue
-    # maxsize=4) invece di sum(serialized_rows).
-    #
-    # XLSX/xls: dataframe_to_export_chunks cade su yield single chunk
-    # (no streaming openpyxl), comportamento equivalente a pre-RAM-C
-    # ma API uniforme.
-    _update_progress(task, 50, f'Scrittura su DataSource {datasource_id}...')
-
-    try:
-        ds_service = DataSourceService()
-
-        # Componi path: dest_folder + dest_filename + .ext
-        ext = f'.{dest_format}' if not dest_filename.endswith(f'.{dest_format}') else ''
-        # Sanitizza per prevenire path traversal
-        safe_folder = PurePosixPath(dest_folder).as_posix().replace('..', '').strip('/')
-        safe_filename = PurePosixPath(dest_filename).name  # solo il nome, no directory
-        path = f'{safe_folder}/{safe_filename}{ext}'.lstrip('/')
-
-        ds_service.write_chunks(
-            datasource_id, path, dataframe_to_export_chunks(df, dest_format),
-        )
-
-        _update_progress(task, 100, f'Scrittura completata: {path}')
-        logger.info(f'Task CARICA DS {task_id} completato: {path}')
-
-        return {
-            'status': 'success',
-            'success': True,
-            'rows_written': len(df),
-            'rows_failed': 0,
-            'total_rows': len(df),
-            'datasource_id': datasource_id,
-            'path': path,
-            'message': f'Scritti {len(df)} righe su {path}',
-        }
-
-    except Exception as e:
-        logger.error(f'[CRASH] Errore scrittura DataSource: {e}', exc_info=True)
-        # intent: boundary branch DataSource write / outcome: fail-closed sanitizzato
-        return {
-            'status': 'connection_error',
-            'success': False,
-            'error': 'carica_datasource_write_failed',
-            'message': 'Errore scrittura DataSource (consulta log)',
-            'error_message': 'Errore scrittura DataSource (consulta log)',
-            'rows_written': 0,
-            'total_rows': len(df),
-        }
 
 
-def _execute_db_write(task, df, carica_node_data, project_id, task_id, triggered_by, run_id=None):
-    """Esegue il caricamento su database (percorso originale).
 
-    Args:
-        run_id: propagato all'executor come self-defense layer (N15). Il task
-            fa gia' il check idempotency a inizio prima di arrivare qui, quindi
-            nel happy path il guard executor e' un no-op (ri-verifica lo stesso
-            run_id). Lo passiamo per coerenza: tutti i callsite dell'executor
-            opt-in al guard quando hanno un run_id.
-    """
-    def progress_callback(batch_progress):
-        overall_percent = 10 + int(batch_progress.percent * 0.85)
-        _update_progress(task, overall_percent, batch_progress.message)
-
-    # Passa connection_service per decriptare correttamente le password
-    executor = CaricaExecutor(connection_service=ConnectionService())
-
-    result = executor.execute(
-        df=df,
-        node_data=carica_node_data,
-        project_id=project_id,
-        progress_callback=progress_callback,
-        triggered_by=triggered_by,
-        run_id=run_id,
-    )
-
-    result_dict = result.to_dict()
-    is_success = result.status.value in ('success', 'completed', 'partial_success')
-    result_dict["success"] = is_success
-    result_dict["rows_count"] = result.rows_written
-    result_dict["columns_count"] = result_dict.get("columns_count") or len(df.columns)
-    if not is_success and not result_dict.get("message"):
-        result_dict["message"] = result_dict.get("error_message", f"Errore: {result.status.value}")
-    
-    _update_progress(task, 100 if is_success else -1, 
-                     f"Completato: {result.rows_written} righe scritte" if is_success 
-                     else result_dict.get("error_message", "Errore"))
-    
-    logger.info(f"Task CARICA DB {task_id} completato: {result.status.value}")
-    return result_dict
-
-
-def _execute_rest_write(
-    task: Any,
-    df: Any,
-    carica_node_data: JsonObject,
-    project_id: str,
-    task_id: str,
-) -> CaricaTaskResultPayload:
-    """Coordinate REST write progress while the domain owns REST payload writes."""
-    _update_progress(task, 15, "Preparazione scrittura REST...")
-
-    try:
-        parsed_config = parse_carica_rest_config(carica_node_data)
-        _update_progress(task, 25, "Scrittura REST...")
-        outcome = execute_carica_rest_write(
-            df=df,
-            config=parsed_config.sink_config,
-            http_client=create_default_rest_http_client(),
-        )
-        result = cast(CaricaTaskResultPayload, outcome.to_task_result())
-
-        is_success = result.get("success", False)
-        rows = result.get("rows_written", 0) or 0
-        if not is_success:
-            _update_progress(
-                task,
-                -1,
-                result.get("error_message") or result.get("message") or "Errore scrittura REST",
-            )
-            return result
-
-        _update_progress(task, 100, f"REST completato: {rows} righe scritte")
-        logger.info(f"Task CARICA REST {task_id} completato: {rows} righe")
-        return result
-
-    except Exception as e:
-        logger.error(f"[GESTITO] Errore scrittura REST: {e}", exc_info=True)
-        return {
-            "status": "write_error",
-            "success": False,
-            "error": "carica_rest_write_failed",
-            "message": "Errore scrittura REST (consulta log)",
-            "error_message": "Errore scrittura REST (consulta log)",
-            "rows_written": 0,
-            "total_rows": len(df),
-        }
-
-
-class _RequestsRestHttpClient:
-    """Synchronous HTTP adapter for the Celery REST write edge."""
-
-    def request(
-        self,
-        *,
-        method: str,
-        url: str,
-        headers: HeadersMap,
-        json: Any,
-        timeout: float,
-    ) -> Any:
-        import requests
-
-        response = requests.request(
-            method=method,
-            url=url,
-            headers=headers,
-            json=json,
-            timeout=timeout,
-        )
-        response_body: Any
-        try:
-            response_body = response.json()
-        except ValueError:
-            response_body = None
-        return RestSinkHttpResponse(
-            status_code=response.status_code,
-            body=response_body,
-            text=response.text,
-        )
-
-
-def create_default_rest_http_client() -> _RequestsRestHttpClient:
-    """Create the default HTTP client injected into the REST write boundary."""
-    return _RequestsRestHttpClient()
-
-
-def _maybe_multilayer_arcgis_write(
-    task: Any,
-    project_id: str,
-    canvas: JsonObject,
-    carica_node_data: JsonObject,
-    task_id: str,
-) -> Optional[JsonObject]:
-    """Pubblica N layer su ArcGIS se l'artefatto upstream e' un bundle multi-layer.
-
-    Recupera i BYTES grezzi dell'ultimo artefatto del progetto (non il DataFrame
-    coerced) e li interroga via il registry multi-layer: CARICA resta generico,
-    gli adapter verticali (es. IMDF ``plenora.indoor.bundle``) sono registrati al
-    composition root. Se nessun adapter riconosce il payload -> ``None`` e il
-    chiamante ricade sul path mono-layer (DataFrame).
-    """
-    try:
-        _ctx = get_project_runtime_context(project_id)
-        group_id = _ctx.group_id if _ctx else None
-    except Exception as exc:
-        logger.warning(f"[GESTITO] multilayer: lookup group_id fallito: {exc}")
-        return None
-    if not group_id:
-        logger.error(
-            f"[SECURITY] multilayer: group_id non determinabile per {project_id}, "
-            f"skip detection bundle (fallback mono-layer)"
-        )
-        return None
-
-    try:
-        fetched = SourceLoader().resolve_project_file_bytes(
-            LatestProjectArtifactRef(project_id=project_id),
-            expected_group_id=group_id,
-        )
-    except SourceLoadingError as exc:
-        logger.error(f"[SECURITY] multilayer: fetch artefatto fallito: {exc}")
-        return None
-    except Exception as exc:
-        logger.warning(f"[GESTITO] multilayer: fetch artefatto fallito: {exc}")
-        return None
-    if not fetched:
-        return None
-
-    raw_bytes, _filename = fetched
-    try:
-        payload = json.loads(raw_bytes)
-    except (ValueError, UnicodeDecodeError):
-        return None  # non-JSON -> non e' un bundle multi-layer
-    if not isinstance(payload, dict):
-        return None
-
-    artifact = resolve_multilayer_artifact(payload)
-    if artifact is None:
-        return None  # nessun adapter registrato riconosce il payload
-
-    _update_progress(
-        task, 10,
-        f"Bundle multi-layer: {len(artifact.layers)} layer. Avvio publish ArcGIS...",
-    )
-
-    raw_op = carica_node_data.get("arcgis_operation") or "create_service"
-    operation = "create_service" if raw_op == "create_service" else (
-        "append" if raw_op in ("add", "append") else raw_op
-    )
-    request = arcgis_write_boundary_module.CaricaArcGISMultiLayerRequest(
-        project_id=project_id,
-        connection_id=carica_node_data.get("arcgis_connection_id", ""),
-        operation=operation,
-        source_srid=carica_node_data.get("source_srid"),
-        service_name=carica_node_data.get("arcgis_new_service_name", ""),
-        service_url=carica_node_data.get("arcgis_service_url", ""),
-        folder_id=carica_node_data.get("arcgis_folder_id", ""),
-        renderers=artifact.renderers_by_layer_name or None,
-    )
-
-    outcome = arcgis_write_boundary_module.execute_carica_arcgis_multilayer_write(
-        layers=list(artifact.layers),
-        request=request,
-        feature_writer=create_default_arcgis_feature_writer(),
-    )
-    result = outcome.to_task_result()
-    if outcome.success:
-        _update_progress(
-            task, 100,
-            f"ArcGIS multi-layer completato: {outcome.rows_written} features",
-        )
-        logger.info(
-            f"Task CARICA ArcGIS multi-layer {task_id} completato: "
-            f"{outcome.rows_written} features"
-        )
-    else:
-        _update_progress(task, -1, outcome.error_message or outcome.message)
-    return result
-
-
-def _execute_arcgis_write(
-    task: Any,
-    df: Any,
-    carica_node_data: JsonObject,
-    project_id: str,
-    task_id: str,
-) -> Mapping[str, object]:
-    """Coordinate ArcGIS write progress while the domain owns provider writes."""
-    _update_progress(task, 15, "Preparazione scrittura ArcGIS...")
-
-    operation = carica_node_data.get("arcgis_operation", "add")
-    request = arcgis_write_boundary_module.CaricaArcGISWriteRequest(
-        project_id=project_id,
-        connection_id=carica_node_data.get("arcgis_connection_id", ""),
-        operation=operation,
-        geometry_column=carica_node_data.get("geometry_column", "geometry"),
-        source_srid=carica_node_data.get("source_srid"),
-        batch_size=carica_node_data.get("batch_size"),
-        column_mappings=carica_node_data.get("column_mappings", []),
-        layer_url=carica_node_data.get("arcgis_layer_url", ""),
-        match_column=carica_node_data.get("arcgis_match_column", ""),
-        service_name=carica_node_data.get("arcgis_new_service_name", ""),
-        layer_name=carica_node_data.get("arcgis_new_layer_name", "Layer 0"),
-        folder_id=carica_node_data.get("arcgis_folder_id", ""),
-    )
-
-    _update_progress(task, 25, f"Scrittura ArcGIS ({operation})...")
-
-    try:
-        if operation == "create_service":
-            _update_progress(task, 30, f"Creazione servizio '{request.service_name}'...")
-        else:
-            _update_progress(task, 30, f"Scrittura features ({operation})...")
-
-        outcome = execute_carica_arcgis_write(
-            df=df,
-            request=request,
-            feature_writer=create_default_arcgis_feature_writer(),
-        )
-        result = outcome.to_task_result()
-        rows = outcome.rows_written
-
-        if not outcome.success:
-            _update_progress(task, -1, outcome.error_message or outcome.message)
-            return result
-
-        _update_progress(task, 100, f"ArcGIS completato: {rows} features")
-        logger.info(f"Task CARICA ArcGIS {task_id} completato: {rows} features")
-        return result
-
-    except Exception as e:
-        # Canale admin log: preserva str(e) per postmortem
-        logger.error(f"[GESTITO] Errore scrittura ArcGIS: {e}", exc_info=True)
-        # intent: boundary branch ArcGIS write / outcome: fail-closed sanitizzato
-        return {
-            "status": "write_error",
-            "success": False,
-            "error": "carica_arcgis_write_failed",
-            "message": "Errore scrittura ArcGIS (consulta log)",
-            "error_message": "Errore scrittura ArcGIS (consulta log)",
-            "rows_written": 0,
-            "total_rows": len(df),
-        }
 
 
 def _update_progress(task, percent: int, message: str):

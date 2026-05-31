@@ -7,9 +7,9 @@ import pandas as pd
 import pytest
 
 from app.core.connections.rest_sink import RestSinkHttpResponse
-from workers.tasks.carica_task import (
-    _execute_rest_write,
-    _select_carica_write_branch,
+from app.core.carica.dispatch import (
+    execute_rest_write,
+    select_carica_write_branch,
 )
 
 
@@ -17,15 +17,15 @@ pytestmark = [pytest.mark.unit, pytest.mark.carica, pytest.mark.contract]
 
 
 def test_carica_write_branch_selects_rest_without_stealing_existing_branches() -> None:
-    assert _select_carica_write_branch({"dest_type": "rest"}) == "rest"
-    assert _select_carica_write_branch({"dest_type": "db"}) == "db"
-    assert _select_carica_write_branch({}) == "db"
+    assert select_carica_write_branch({"dest_type": "rest"}) == "rest"
+    assert select_carica_write_branch({"dest_type": "db"}) == "db"
+    assert select_carica_write_branch({}) == "db"
 
-    assert _select_carica_write_branch({"dest_type": "arcgis"}) == "arcgis"
-    assert _select_carica_write_branch({"type": "carica_arcgis"}) == "arcgis"
+    assert select_carica_write_branch({"dest_type": "arcgis"}) == "arcgis"
+    assert select_carica_write_branch({"type": "carica_arcgis"}) == "arcgis"
 
     assert (
-        _select_carica_write_branch(
+        select_carica_write_branch(
             {"type": "datasource_node", "dest_type": "rest"}
         )
         == "datasource"
@@ -34,7 +34,7 @@ def test_carica_write_branch_selects_rest_without_stealing_existing_branches() -
 
 def test_rest_write_branch_delegates_to_carica_rest_boundary(monkeypatch) -> None:
     df = pd.DataFrame([{"id": 1, "name": "A"}, {"id": 2, "name": "B"}])
-    task = SimpleNamespace(update_state=MagicMock())
+    progress_messages: list[str] = []
     node_data = {
         "dest_type": "rest",
         "rest": {
@@ -56,16 +56,16 @@ def test_rest_write_branch_delegates_to_carica_rest_boundary(monkeypatch) -> Non
     )
 
     monkeypatch.setattr(
-        "workers.tasks.carica_task.create_default_rest_http_client",
+        "app.core.carica.dispatch.create_default_rest_http_client",
         lambda: fake_client,
     )
 
-    result = _execute_rest_write(
-        task=task,
+    result = execute_rest_write(
         df=df,
         carica_node_data=node_data,
         project_id="proj-1",
         task_id="task-1",
+        progress=lambda _p, m: progress_messages.append(m),
     )
 
     assert result["status"] == "completed"
@@ -76,10 +76,6 @@ def test_rest_write_branch_delegates_to_carica_rest_boundary(monkeypatch) -> Non
     fake_client.request.assert_called_once()
     assert fake_client.request.call_args.kwargs["url"] == "https://api.example.test/items"
     assert fake_client.request.call_args.kwargs["method"] == "POST"
-    progress_messages = [
-        call.kwargs["meta"]["message"]
-        for call in task.update_state.call_args_list
-    ]
     assert progress_messages == [
         "Preparazione scrittura REST...",
         "Scrittura REST...",
