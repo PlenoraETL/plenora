@@ -82,18 +82,45 @@ def read_csv_safe_bytes(data: bytes, *, source_label: str = "in-memory CSV") -> 
     return _read_csv_with_encodings(io.BytesIO(data), label=source_label)
 
 
+def _compact_decimal(value: Decimal) -> str:
+    """Normalizza un singolo Decimal in stringa compatta (no zeri di coda)."""
+    if not value.is_finite():
+        return str(value)
+    text = format(value.normalize(), "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def normalize_object_decimals(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalizza i ``Decimal`` (PG NUMERIC) in stringhe compatte, PER-VALORE.
+
+    A differenza di ``_compact_whole_number_floats`` NON fa inferenza di colonna
+    (niente promozione a Int64 decisa su tutti i valori): mappa ogni Decimal
+    via ``_compact_decimal``. Essendo per-valore e' **streaming-safe** (per-batch
+    da' lo stesso risultato del whole-df), quindi usabile sia nel path bytes che
+    nei producer chunk senza divergenze cross-chunk. NON muta l'input.
+    """
+    if df is None or df.empty:
+        return df
+    result = df
+    for col in list(result.columns):
+        s = result[col]
+        if s.dtype != object:
+            continue
+        non_nan = s.dropna()
+        if non_nan.empty or not all(isinstance(v, Decimal) for v in non_nan):
+            continue
+        if result is df:
+            result = copy_frame_for_update(df)
+        result[col] = s.map(lambda v: None if pd.isna(v) else _compact_decimal(v))
+    return result
+
+
 def _compact_whole_number_floats(df: pd.DataFrame) -> pd.DataFrame:
     """Normalize whole-number floats and Decimal values for tabular output."""
     if df is None or df.empty:
         return df
-
-    def _compact_decimal(value: Decimal) -> str:
-        if not value.is_finite():
-            return str(value)
-        text = format(value.normalize(), "f")
-        if "." in text:
-            text = text.rstrip("0").rstrip(".")
-        return text or "0"
 
     result = df
     for col in list(result.columns):
@@ -138,39 +165,6 @@ def _compact_whole_number_floats(df: pd.DataFrame) -> pd.DataFrame:
                 except (TypeError, ValueError):
                     continue
     return result
-
-
-def tabular_dataframe_to_bytes(df: pd.DataFrame, formato: str) -> bytes:
-    """Serialize a DataFrame to bytes for non-geospatial formats."""
-    df = _compact_whole_number_floats(df)
-    if formato == "csv":
-        buf = io.StringIO()
-        df.to_csv(buf, index=False, encoding="utf-8", float_format="%.15g")
-        return buf.getvalue().encode("utf-8")
-
-    if formato == "xlsx":
-        buf = io.BytesIO()
-        df.to_excel(buf, index=False)
-        return buf.getvalue()
-
-    if formato == "json":
-        records = sanitize_for_json(df.to_dict(orient="records"))
-        return json.dumps(records, indent=2, default=str, ensure_ascii=False).encode("utf-8")
-
-    if formato == "parquet":
-        # Pre-fix: `df.to_parquet(buf, index=False)` senza `engine=` esplicito.
-        # Pandas usa l'engine "auto" che, su install dove sia fastparquet
-        # sia pyarrow sono presenti (o solo fastparquet), puo' degradare
-        # Int64 nullable a float64 silenziosamente nel round-trip — vedi
-        # fix D1 in sessione precedente che esplicitava `dtype_backend=
-        # "numpy_nullable"` sul read path. Allineiamo il write path con
-        # engine="pyarrow" esplicito: pyarrow e' un dep diretto di
-        # requirements.txt e gestisce Int64/Float64 nullable nativamente.
-        buf = io.BytesIO()
-        df.to_parquet(buf, index=False, engine="pyarrow")
-        return buf.getvalue()
-
-    raise ValueError(f"Formato '{formato}' non supportato")
 
 
 def make_unique_column_names(
@@ -1225,6 +1219,7 @@ def iter_dataframe_rows(df: pd.DataFrame) -> Iterator[Any]:
 __all__ = [
     "append_record_rows",
     "_compact_whole_number_floats",
+    "normalize_object_decimals",
     "_read_csv_safe",
     "apply_string_ops_to_string_subset",
     "concat_dataframes",
@@ -1299,7 +1294,6 @@ __all__ = [
     "sort_rows_reset_index",
     "series_null_ratio",
     "stringify_columns_preserving_nulls",
-    "tabular_dataframe_to_bytes",
     "table_diff_dataframe",
     "unique_non_null_column_values",
     "unique_rows_for_columns",

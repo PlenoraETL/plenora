@@ -29,12 +29,33 @@ API:
 from __future__ import annotations
 
 import io
+import json
 import queue
 import threading
 from typing import Any, Iterator
 
+from app.core.dataframes.tabular import (
+    normalize_object_decimals,
+    sanitize_for_json,
+)
+
 
 _DEFAULT_CHUNKSIZE = 10_000
+
+
+def _records_json_inner(df_slice: Any) -> str:
+    """Serializza uno slice in items JSON canonici SENZA le parentesi quadre.
+
+    Profilo data-safe unico (convergenza serializzazione): record sanitizzati
+    (`sanitize_for_json`) + `json.dumps(default=str)` -> date ISO (non epoch-ms),
+    NaN->null, numpy/Decimal/shapely normalizzati. Applicato per-batch così lo
+    streaming resta RAM-bounded e l'output coincide col path bytes.
+    """
+    compact = normalize_object_decimals(df_slice)
+    records = sanitize_for_json(compact.to_dict(orient="records"))
+    body = json.dumps(records, default=str, ensure_ascii=False)
+    # `records` -> sempre un array JSON `[...]`; restituiamo l'interno.
+    return body[1:-1] if body.startswith("[") and body.endswith("]") else body
 _DEFAULT_QUEUE_MAXSIZE = 4  # bounded buffer: ~4 * chunksize rows in flight
 _SENTINEL = object()
 
@@ -44,11 +65,17 @@ def _to_csv_minimal_copy(df: Any, buf: io.BytesIO, chunksize: int) -> None:
     text-mode senza materializzare la stringa Python intera. Il
     `chunksize` divide la serializzazione interna di pandas in batch
     da N righe, riducendo il peak intermedio."""
+    df = normalize_object_decimals(df)  # PG NUMERIC -> stringa compatta
     text_buf = io.TextIOWrapper(
         buf, encoding="utf-8", write_through=True, newline="",
     )
     try:
-        df.to_csv(text_buf, index=False, chunksize=chunksize, encoding="utf-8")
+        # float_format="%.15g": precisione piena + compatta i whole-float
+        # (5.0 -> "5"), profilo CSV canonico condiviso col path bytes.
+        df.to_csv(
+            text_buf, index=False, chunksize=chunksize,
+            encoding="utf-8", float_format="%.15g",
+        )
         text_buf.flush()
     finally:
         # `detach()` riporta ownership del BytesIO al caller senza
@@ -66,7 +93,11 @@ def _to_json_minimal_copy(df: Any, buf: io.BytesIO) -> None:
         buf, encoding="utf-8", write_through=True, newline="",
     )
     try:
-        df.to_json(text_buf, orient="records", force_ascii=False)
+        # Profilo JSON canonico data-safe (vedi _records_json_inner): record
+        # sanitizzati + json.dumps(default=str). Date ISO, NaN->null.
+        text_buf.write("[")
+        text_buf.write(_records_json_inner(df))
+        text_buf.write("]")
         text_buf.flush()
     finally:
         text_buf.detach()
@@ -103,10 +134,13 @@ def dataframe_to_export_bytes(
     if fmt in ("xlsx", "xls"):
         # pandas Excel writer e' nativamente binary su buffer.
         df.to_excel(buf, index=False)
+    elif fmt == "parquet":
+        # engine="pyarrow" esplicito: gestisce Int64/Float64 nullable
+        # nativamente (no degrado a float64 nel round-trip).
+        df.to_parquet(buf, index=False, engine="pyarrow")
     elif fmt == "json" or fmt == "geojson":
-        # geojson nel flow CARICA usa to_json(records) — stessa
-        # semantica di JSON tabulare (il caller MANIPOLA serializza
-        # gia' le geometry come WKT/GeoJSON string nel df).
+        # Profilo JSON canonico data-safe (record sanitizzati + ISO date),
+        # condiviso col path streaming via _records_json_inner.
         _to_json_minimal_copy(df, buf)
     else:
         # CSV come default + per fmt='csv' esplicito.
@@ -162,11 +196,15 @@ def _csv_producer(
     df: Any, qbuf: _QueueBuf, chunksize: int, err_holder: list,
 ) -> None:
     try:
+        df = normalize_object_decimals(df)  # PG NUMERIC -> stringa compatta
         text_buffer = io.TextIOWrapper(
             qbuf, encoding="utf-8", write_through=True, newline="",
         )
         try:
-            df.to_csv(text_buffer, index=False, chunksize=chunksize, encoding="utf-8")
+            df.to_csv(
+                text_buffer, index=False, chunksize=chunksize,
+                encoding="utf-8", float_format="%.15g",
+            )
             text_buffer.flush()
         finally:
             text_buffer.detach()
@@ -213,12 +251,9 @@ def _json_producer(df: Any, qbuf: _QueueBuf, err_holder: list) -> None:
                 # regex del boundary gate (kwarg-only -> classificato
                 # come buffer-write, non path-write).
                 batch_slice = df.iloc[start:end]
-                batch_json = batch_slice.to_json(orient="records", force_ascii=False)
-                # Sanity: batch_json deve essere wrapped in `[...]`.
-                if batch_json.startswith("[") and batch_json.endswith("]"):
-                    inner = batch_json[1:-1]
-                else:
-                    inner = batch_json
+                # Profilo JSON canonico data-safe per-batch (RAM-bounded):
+                # record sanitizzati + json.dumps(default=str). Date ISO.
+                inner = _records_json_inner(batch_slice)
                 if not inner:
                     continue
                 if first:

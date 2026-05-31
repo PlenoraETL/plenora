@@ -133,7 +133,6 @@ def test_files_dataframe_io_reexports_tabular_helpers_from_dataframes_boundary()
     assert dataframe_io.sort_rows_reset_index is tabular.sort_rows_reset_index
     assert dataframe_io.series_null_ratio is tabular.series_null_ratio
     assert dataframe_io.stringify_columns_preserving_nulls is tabular.stringify_columns_preserving_nulls
-    assert dataframe_io.tabular_dataframe_to_bytes is tabular.tabular_dataframe_to_bytes
     assert dataframe_io.unique_non_null_column_values is tabular.unique_non_null_column_values
     assert dataframe_io.unique_rows_for_columns is tabular.unique_rows_for_columns
     assert dataframe_io.window_function_values is tabular.window_function_values
@@ -368,7 +367,6 @@ def test_files_dataframe_io_reexports_frame_io_boundary() -> None:
     from app.core.dataframes import frame_io
     from app.core.dataframes import frame_io as dataframe_io
 
-    assert dataframe_io.DefaultFrameFileIO is frame_io.DefaultFrameFileIO
     assert dataframe_io.find_latest_output_file is frame_io.find_latest_output_file
     assert dataframe_io.load_dataframe_from_file is frame_io.load_dataframe_from_file
     assert dataframe_io.save_dataframe_to_bytes is frame_io.save_dataframe_to_bytes

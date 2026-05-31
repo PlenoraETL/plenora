@@ -19,6 +19,7 @@ from shapely.errors import GEOSException
 
 from app import config as app_config
 from app.core.dataframes.frame_copy import copy_frame_for_update
+from app.core.dataframes.export_writer import dataframe_to_export_bytes
 from app.core.dataframes.geospatial_io import geospatial_dataframe_to_bytes
 from app.core.dataframes.geometry_parsing import parse_geometry_series
 from app.core.dataframes.tabular import (
@@ -98,7 +99,6 @@ from app.core.dataframes.tabular import (
     sort_rows_reset_index,
     series_null_ratio,
     stringify_columns_preserving_nulls,
-    tabular_dataframe_to_bytes,
     table_diff_dataframe,
     unique_non_null_column_values,
     unique_rows_for_columns,
@@ -180,7 +180,6 @@ __all__ = [
     "unique_non_null_column_values",
     "unique_rows_for_columns",
     "window_function_values",
-    "DefaultFrameFileIO",
     "append_record_rows",
     "dataframe_from_records",
     "dataframe_from_rows",
@@ -209,30 +208,8 @@ __all__ = [
     "save_dataframe_to_bytes",
     "object_series",
     "pivot_table_dataframe",
-    "tabular_dataframe_to_bytes",
     "table_diff_dataframe",
 ]
-
-
-class DefaultFrameFileIO:
-    """Default path/bytes I/O adapter for callers that want an injectable port."""
-
-    def load_dataframe_from_file(
-        self,
-        file_path: Union[str, Path],
-        sheet: Optional[str] = None,
-        layer: Optional[str] = None,
-    ) -> pd.DataFrame:
-        return load_dataframe_from_file(file_path, sheet=sheet, layer=layer)
-
-    def save_dataframe_to_bytes(
-        self,
-        df: pd.DataFrame,
-        format: str = "csv",
-        geom_column: Optional[str] = None,
-        crs: str = "EPSG:4326",
-    ) -> bytes:
-        return save_dataframe_to_bytes(df, format, geom_column, crs)
 
 
 def _normalize_format_hint(format_hint: Optional[str]) -> Optional[str]:
@@ -667,10 +644,15 @@ def save_dataframe_to_bytes(
     geom_column: Optional[str] = None,
     crs: str = "EPSG:4326",
 ) -> bytes:
-    """Serialize a DataFrame, dispatching explicit file I/O boundaries by format."""
+    """Serialize a DataFrame, dispatching explicit file I/O boundaries by format.
+
+    Geo -> geospatial_io; tutto il resto (csv/json/xlsx/parquet) -> il
+    dispatcher unico di serializzazione in export_writer (profilo data-safe
+    condiviso col path streaming). Niente piu' serializzatore tabular parallelo.
+    """
     formato = format.lower()
 
     if formato in _GEOSPATIAL_FORMATS:
         return geospatial_dataframe_to_bytes(df, formato, geom_column, crs)
 
-    return tabular_dataframe_to_bytes(df, formato)
+    return dataframe_to_export_bytes(df, formato)

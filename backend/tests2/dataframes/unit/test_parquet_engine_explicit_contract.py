@@ -44,10 +44,10 @@ def test_tabular_dataframe_to_bytes_preserves_int64_nullable():
     """Pre-fix: engine non specificato → su install con fastparquet preferito,
     Int64 con null diventa float64 silenziosamente nel round-trip.
     Post-fix: engine="pyarrow" preserva Int64Dtype + pd.NA."""
-    from app.core.dataframes.tabular import tabular_dataframe_to_bytes
+    from app.core.dataframes.frame_io import save_dataframe_to_bytes
 
     df_in = _nullable_int_df()
-    blob = tabular_dataframe_to_bytes(df_in, "parquet")
+    blob = save_dataframe_to_bytes(df_in, "parquet")
 
     df_out = pd.read_parquet(io.BytesIO(blob), dtype_backend="numpy_nullable")
 
@@ -65,7 +65,7 @@ def test_tabular_dataframe_to_bytes_preserves_int64_nullable():
 def test_tabular_to_bytes_passes_pyarrow_engine_explicit(monkeypatch):
     """Spy su to_parquet: verifica che engine='pyarrow' sia passato
     esplicito (non implicito 'auto')."""
-    from app.core.dataframes.tabular import tabular_dataframe_to_bytes
+    from app.core.dataframes.frame_io import save_dataframe_to_bytes
 
     calls_kwargs: list[dict] = []
     original = pd.DataFrame.to_parquet
@@ -75,7 +75,7 @@ def test_tabular_to_bytes_passes_pyarrow_engine_explicit(monkeypatch):
         return original(self, path_or_buf, **kwargs)
 
     monkeypatch.setattr(pd.DataFrame, "to_parquet", _spy)
-    tabular_dataframe_to_bytes(_nullable_int_df(), "parquet")
+    save_dataframe_to_bytes(_nullable_int_df(), "parquet")
 
     assert calls_kwargs, "to_parquet non e' stato chiamato"
     assert calls_kwargs[0].get("engine") == "pyarrow", (

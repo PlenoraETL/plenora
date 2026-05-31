@@ -56,9 +56,9 @@ def test_csv_writer_no_trailing_dot_zero_on_int_promoted_to_float(
     """``age`` ha 1 NaN -> pandas promuove a float64 -> writer ingenuo
     scriveva ``34.0``. Dopo il fix scrive ``34`` (vuoto per NaN).
     Regression-guard sul commit 525c4340."""
-    from app.core.dataframes.frame_io import tabular_dataframe_to_bytes
+    from app.core.dataframes.frame_io import save_dataframe_to_bytes
 
-    raw = tabular_dataframe_to_bytes(tortured_tabular_df, "csv").decode("utf-8")
+    raw = save_dataframe_to_bytes(tortured_tabular_df, "csv").decode("utf-8")
     rows = [r for r in raw.splitlines() if r]
 
     # header sanity
@@ -89,9 +89,9 @@ def test_csv_writer_decimal_from_postgres_numeric_compact(
     writer scrive ``str(Decimal("36.5000000000000000"))`` con 16 zeri.
     Regression-guard sul commit 666fa513 (streaming) +
     ``_compact_whole_number_floats`` (non-streaming)."""
-    from app.core.dataframes.frame_io import tabular_dataframe_to_bytes
+    from app.core.dataframes.frame_io import save_dataframe_to_bytes
 
-    raw = tabular_dataframe_to_bytes(tortured_tabular_df, "csv").decode("utf-8")
+    raw = save_dataframe_to_bytes(tortured_tabular_df, "csv").decode("utf-8")
     rows = [r for r in raw.splitlines() if r]
     # Posizione `avg_decimal` nell'header
     header = rows[0].split(",")
@@ -106,9 +106,9 @@ def test_csv_writer_decimal_from_postgres_numeric_compact(
 
 
 def test_csv_writer_unicode_and_emoji_preserved(tortured_tabular_df: pd.DataFrame):
-    from app.core.dataframes.frame_io import tabular_dataframe_to_bytes
+    from app.core.dataframes.frame_io import save_dataframe_to_bytes
 
-    raw = tabular_dataframe_to_bytes(tortured_tabular_df, "csv").decode("utf-8")
+    raw = save_dataframe_to_bytes(tortured_tabular_df, "csv").decode("utf-8")
     assert "Marco Müller" in raw
     assert "北京 用户" in raw
     assert "Emoji 🎉 user" in raw
@@ -118,9 +118,9 @@ def test_csv_writer_internal_commas_and_quotes_escaped(
     tortured_tabular_df: pd.DataFrame,
 ):
     """pandas to_csv deve quotare valori con virgole/virgolette interne."""
-    from app.core.dataframes.frame_io import tabular_dataframe_to_bytes
+    from app.core.dataframes.frame_io import save_dataframe_to_bytes
 
-    raw = tabular_dataframe_to_bytes(tortured_tabular_df, "csv").decode("utf-8")
+    raw = save_dataframe_to_bytes(tortured_tabular_df, "csv").decode("utf-8")
     # virgola interna -> wrapping con virgolette
     assert '"Cliente VIP, premium"' in raw
     # virgolette interne -> raddoppiate
@@ -129,9 +129,9 @@ def test_csv_writer_internal_commas_and_quotes_escaped(
 
 def test_json_writer_decimal_and_unicode(tortured_tabular_df: pd.DataFrame):
     """JSON: Decimal -> numero / stringa compatti, Unicode preservato."""
-    from app.core.dataframes.frame_io import tabular_dataframe_to_bytes
+    from app.core.dataframes.frame_io import save_dataframe_to_bytes
 
-    raw = tabular_dataframe_to_bytes(tortured_tabular_df, "json").decode("utf-8")
+    raw = save_dataframe_to_bytes(tortured_tabular_df, "json").decode("utf-8")
     parsed = json.loads(raw)
     assert isinstance(parsed, list)
     assert len(parsed) == 4
@@ -153,9 +153,9 @@ def test_xlsx_writer_produces_valid_excel(tortured_tabular_df: pd.DataFrame):
     """XLSX: verifica che il blob sia un ZIP valido + readable con openpyxl.
     Non sanity-checkiamo i valori cell-by-cell (Excel ha la sua gestione
     tipi che pandas rispetta), solo che la pipeline non crasha."""
-    from app.core.dataframes.frame_io import tabular_dataframe_to_bytes
+    from app.core.dataframes.frame_io import save_dataframe_to_bytes
 
-    raw = tabular_dataframe_to_bytes(tortured_tabular_df, "xlsx")
+    raw = save_dataframe_to_bytes(tortured_tabular_df, "xlsx")
     assert len(raw) > 0
     # XLSX = ZIP container (signature `PK\x03\x04`)
     assert raw[:4] == b"PK\x03\x04", "XLSX deve essere un ZIP valido"
@@ -171,10 +171,10 @@ def test_xlsx_writer_produces_valid_excel(tortured_tabular_df: pd.DataFrame):
 
 def test_csv_writer_empty_dataframe_does_not_crash():
     """Un DF vuoto deve produrre solo l'header senza errori."""
-    from app.core.dataframes.frame_io import tabular_dataframe_to_bytes
+    from app.core.dataframes.frame_io import save_dataframe_to_bytes
 
     df = pd.DataFrame(columns=["a", "b"])
-    raw = tabular_dataframe_to_bytes(df, "csv").decode("utf-8")
+    raw = save_dataframe_to_bytes(df, "csv").decode("utf-8")
     assert raw.strip().splitlines() == ["a,b"]
 
 

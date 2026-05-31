@@ -551,9 +551,10 @@ def save_dataframe_to_result_blob_streaming(
     # streaming set.
     _STREAMING_FORMATS = {"csv", "json", "parquet"}
 
-    # Formati che cadono su single-chunk (geo binari, xlsx, gdb).
+    # Formati che cadono su single-chunk (geo binari, xlsx).
     # Parquet ora e' fuori da qui: row-group writer real-time.
-    _PATH_BOUND_FORMATS = {"shp", "gpkg", "gdb", "xlsx", "xls"}
+    # (gdb NON e' scrivibile: multi-file, rifiutato da io/geospatial; rimosso.)
+    _PATH_BOUND_FORMATS = {"shp", "gpkg", "xlsx", "xls"}
 
     writer = StreamingResultBlobWriter(
         project_id=project_id,
