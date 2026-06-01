@@ -127,6 +127,15 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+features[\\/]arcgis_read\.py:\d+: unused method 'count_features_where' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+projects[\\/]access_context\.py:\d+: unused function '(load_project_visibility_resource|list_project_ids_visible_to_group)' "),
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]connections[\\/]esri_types\.py:\d+: unused method '(map_esri_field_to_schema_bucket|map_pandas_dtype_to_schema_bucket)' "),
+
+    # Fondazione Epic Canvas Validation (Fase 0): tipi/protocol/accessor il cui
+    # consumer in produzione è l'engine `canvas_validation` di Fase 1 (orchestratore
+    # + i 4 validate_node + hook PUT), non ancora costruito. `validate_node` /
+    # `available_columns` sono inoltre false-positive strutturali del Protocol
+    # (corpo `...`). Rimuovere queste righe quando Fase 1 li aggancia.
+    re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+execution[\\/]+validation_protocol\.py:\d+: unused (method 'validate_node'|variable 'available_columns') "),
+    re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+execution[\\/]+validation_types\.py:\d+: unused method '(by_severity|for_node)' "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+projects[\\/]+schema_inference\.py:\d+: unused method 'infer_node_schema_typed' "),
 )
 
 

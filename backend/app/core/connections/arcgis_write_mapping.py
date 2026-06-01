@@ -7,6 +7,14 @@ from typing import Mapping, Sequence
 
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import select_and_rename_columns
+from app.shared.execution.mapping_rules import check_mapping
+
+# Prefissi storici dei ValueError ArcGIS, per codice Issue (backward-compat).
+_ARCGIS_ERR_PREFIX = {
+    "mapping.dup_source": "column_mappings ArcGIS contiene sorgenti duplicate: ",
+    "mapping.dup_dest": "column_mappings ArcGIS contiene destinazioni duplicate: ",
+    "mapping.source_missing": "column_mappings ArcGIS riferimento colonne sorgente mancanti: ",
+}
 
 
 @dataclass(frozen=True)
@@ -87,29 +95,16 @@ class ArcGISWriteMappingContract:
             for mapping in self.mappings
             if mapping.source_column and mapping.dest_column and not mapping.skip
         )
+        # Validazione (dup-source / dup-dest / source-missing) via regola pura
+        # condivisa; rilancia il ValueError storico dal primo Issue (ordine
+        # preservato da check_mapping). Il check match-column resta post-mapping.
+        issues = check_mapping(set(df.columns), active)
+        if issues:
+            first = issues[0]
+            cols = list(first.suggestion["columns"]) if first.suggestion else []
+            raise ValueError(_ARCGIS_ERR_PREFIX[first.code] + ", ".join(cols))
+
         sources = [mapping.source_column for mapping in active]
-        duplicate_sources = _duplicates(sources)
-        if duplicate_sources:
-            raise ValueError(
-                "column_mappings ArcGIS contiene sorgenti duplicate: "
-                + ", ".join(duplicate_sources)
-            )
-
-        dests = [mapping.dest_column for mapping in active]
-        duplicate_dests = _duplicates(dests)
-        if duplicate_dests:
-            raise ValueError(
-                "column_mappings ArcGIS contiene destinazioni duplicate: "
-                + ", ".join(duplicate_dests)
-            )
-
-        missing_sources = [source for source in sources if source not in df.columns]
-        if missing_sources:
-            raise ValueError(
-                "column_mappings ArcGIS riferimento colonne sorgente mancanti: "
-                + ", ".join(missing_sources)
-            )
-
         selected_columns = list(sources)
         if geometry_column in df.columns and geometry_column not in selected_columns:
             selected_columns.append(geometry_column)
@@ -141,13 +136,3 @@ class ArcGISWriteMappingContract:
 def _string_value(mapping: Mapping[object, object], key: str) -> str:
     value = mapping.get(key)
     return value.strip() if isinstance(value, str) else ""
-
-
-def _duplicates(values: Sequence[str]) -> list[str]:
-    seen: set[str] = set()
-    duplicates: list[str] = []
-    for value in values:
-        if value in seen and value not in duplicates:
-            duplicates.append(value)
-        seen.add(value)
-    return duplicates
