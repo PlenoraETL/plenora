@@ -22,10 +22,37 @@ from app.shared.execution.executor_protocol import CanvasExecutorProtocol, Execu
 from app.shared.execution import carica_dispatcher
 from app.utils.logger import get_logger
 
+from app.config import settings
 from app.core.artifacts import PipelineArtifact
 
 logger = get_logger(__name__)
 ExecutorDispatch = Mapping[str, CanvasExecutorProtocol]
+
+
+def _canvas_validation_gate(project_id, project_type, canvas):
+    """Gate a esecuzione (Epic Canvas Validation §12), dietro feature-flag.
+
+    Se ``CANVAS_VALIDATION_GATE_ENABLED`` e il canvas ha errori di validazione →
+    ritorna un ``PipelineArtifact`` di failure (il run NON parte). Altrimenti
+    ``None``. Ri-valida fresco (autorevole, niente stato stale). Flag default off
+    → nessun cambio di comportamento finché non acceso.
+    """
+    if not settings.get("CANVAS_VALIDATION_GATE_ENABLED", False):
+        return None
+    from app.core.projects.canvas_validation import validate_canvas
+
+    report = validate_canvas(canvas, project_id=project_id, project_type=project_type)
+    if not report.has_errors:
+        return None
+    errs = [i.message for i in report.by_severity("error")]
+    logger.warning(
+        f"Esecuzione bloccata da validazione canvas: {len(errs)} errori",
+        op="validate", project_id=project_id,
+    )
+    return PipelineArtifact.failure(
+        project_id=project_id,
+        message=f"Validazione canvas fallita ({len(errs)} errori): " + "; ".join(errs[:5]),
+    )
 
 
 class EstraiExecutorProtocol(CanvasExecutorProtocol, Protocol):
@@ -195,6 +222,11 @@ class OrchestratorService:
                 message=f"Progetto {project_id} non trovato",
             )
 
+        # Gate a esecuzione (Epic Canvas Validation §12): blocca il run se il
+        # canvas ha errori di validazione (dietro feature-flag, default off).
+        gate = _canvas_validation_gate(project_id, metadata.project_type, canvas)
+        if gate is not None:
+            return gate
 
         return self._execute_loaded_pipeline(
             project_id=project_id,

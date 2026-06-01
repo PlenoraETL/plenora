@@ -185,6 +185,11 @@ class Settings:
         "MINIO_ACCESS_KEY": None,
         "MINIO_SECRET_KEY": None,
 
+        # Canvas Validation (Epic §12): se True l'esecuzione è bloccata quando
+        # validate_canvas trova errori (gate a esecuzione). Default False =
+        # nessun cambio di comportamento finché non acceso.
+        "CANVAS_VALIDATION_GATE_ENABLED": False,
+
         "LOG_ARCHIVE_ENABLED": False,
         # Prefisso deterministico delle object key archive. Default senza
         # auto-derivazione <env>: ops override esplicito in .env per separare
