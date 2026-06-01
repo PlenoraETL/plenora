@@ -89,6 +89,18 @@ export const updateCanvas = async (projectId, canvas) => {
 };
 
 /**
+ * Valida l'intero canvas del progetto (Epic Canvas Validation §12).
+ * Orizzontale: il backend valida la catena cross-progetto (strutturale +
+ * per-nodo + DB-dependent) sul canvas SALVATO. Persiste `canvas_validated`.
+ * @param {string} projectId
+ * @returns {Promise<{valid: boolean, has_errors: boolean, issues: Array}>}
+ */
+export const validateProjectCanvas = async (projectId) => {
+  const response = await http.post(`/projects/${projectId}/validate`);
+  return response.data;
+};
+
+/**
  * Elimina un progetto.
  * @param {string} projectId
  * @returns {Promise<Object>}

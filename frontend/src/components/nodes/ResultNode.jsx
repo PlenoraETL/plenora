@@ -9,16 +9,15 @@
  * Owna:
  *   - subscriptions canvas (edges, upstream node, hasOnPreview/Execute)
  *   - calcolo upstreamColumns (richiede useReactFlow)
- *   - logica validazione: runValidation + handleValidate/Execute/Preview
+ *   - logica validazione: validateViaBackend + handleValidate/Execute/Preview
  *   - ValidationModal
  *   - header + delete
  */
 import React, { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
 import { Handle, Position, useReactFlow, useStore } from 'reactflow';
 import ValidationModal from '../modals/ValidationModal';
-import { validateManipolaCanvas } from '../../utils/validateManipolaCanvas';
-import { validateEstraiCanvas } from '../../utils/validateEstraiCanvas';
-import { validateArricchisciCanvas } from '../../utils/validateArricchisciCanvas';
+import { validateProjectCanvas } from '../../api/projects';
+import { backendReportToResult, validationRequestFailedResult } from '../../utils/backendValidationResult';
 import useCanvasStore from '../../store/useCanvasStore';
 import ResultNodeStandardView from './result/ResultNodeStandardView';
 import { useConfirm } from '../../context/ConfirmContext';
@@ -80,7 +79,7 @@ const ResultNode = memo(({ data, id }) => {
     }));
   }, [id, getEdges, getNodes, incomingEdgeCount, sourceColumnsSignature]);
 
-  // Tipi progetto (per header icon/title + runValidation)
+  // Tipi progetto (per header icon/title + variante view)
   const isManipulate = data.isManipulate || false;
   const isArricchisci = data.isArricchisci || false;
 
@@ -111,18 +110,20 @@ const ResultNode = memo(({ data, id }) => {
     }
   };
 
-  const runValidation = (availableConnectionIds = null) => {
-    const state = useCanvasStore.getState();
-    const allNodes = state.nodes || [];
-    const allEdges = state.edges || [];
-    if (isManipulate) {
-      const registry = state.transformsRegistry || null;
-      return validateManipolaCanvas(allNodes, allEdges, registry);
+  // Validazione orizzontale via backend (Epic CanvasVal §12): salva-poi-valida,
+  // così il backend valida ESATTAMENTE il canvas che vedi (update_canvas azzera
+  // canvas_validated, POST /validate lo risetta in base all'esito). Single source
+  // of truth: niente più validazione JS per-famiglia.
+  const validateViaBackend = async () => {
+    const store = useCanvasStore.getState();
+    try {
+      await store.handleSaveQuiet();
+      const data = await validateProjectCanvas(store.projectId);
+      return backendReportToResult(data);
+    } catch (e) {
+      console.error('Validazione backend fallita:', e);
+      return validationRequestFailedResult();
     }
-    if (isArricchisci) {
-      return validateArricchisciCanvas(allNodes, allEdges, availableConnectionIds);
-    }
-    return validateEstraiCanvas(allNodes, allEdges);
   };
 
   // Broadcast post-validation: aggiorna lo store con i nodeId delle issue
@@ -142,17 +143,7 @@ const ResultNode = memo(({ data, id }) => {
   };
 
   const handleValidate = async () => {
-    let availableConnectionIds = null;
-    if (isArricchisci) {
-      try {
-        const { listApiConnections } = await import('../../api/apiConnections');
-        const res = await listApiConnections();
-        availableConnectionIds = new Set((res.api_connections || res.connections || []).map(c => c.id));
-      } catch (e) {
-        console.warn('Impossibile caricare connessioni per validazione:', e);
-      }
-    }
-    const result = runValidation(availableConnectionIds);
+    const result = await validateViaBackend();
     broadcastHighlights(result);
     setValidationResult(result);
     setShowValidation(true);
@@ -162,15 +153,7 @@ const ResultNode = memo(({ data, id }) => {
   // ImdfView chiama onExecute() senza args → default force_recalculate=false
   // (equivalente al comportamento pre-split, executionMode='cache' iniziale).
   const handleExecuteWithValidation = async (options = { force_recalculate: false }) => {
-    let availableConnectionIds = null;
-    if (isArricchisci) {
-      try {
-        const { listApiConnections } = await import('../../api/apiConnections');
-        const res = await listApiConnections();
-        availableConnectionIds = new Set((res.api_connections || res.connections || []).map(c => c.id));
-      } catch (e) { /* fallback senza check */ }
-    }
-    const result = runValidation(availableConnectionIds);
+    const result = await validateViaBackend();
     broadcastHighlights(result);
     if (!result.isValid) {
       setValidationResult(result);
@@ -181,8 +164,8 @@ const ResultNode = memo(({ data, id }) => {
     if (onExecute) onExecute(id, options);
   };
 
-  const handlePreviewWithValidation = () => {
-    const result = runValidation();
+  const handlePreviewWithValidation = async () => {
+    const result = await validateViaBackend();
     broadcastHighlights(result);
     if (!result.isValid) {
       setValidationResult(result);
