@@ -6,6 +6,7 @@ Read-only, non blocca nulla. Registry pulito → strutturale-only deterministico
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -85,6 +86,33 @@ def test_validate_clean_canvas_is_valid(monkeypatch):
     assert body["issues"] == []
     # canvas valido → canvas_validated True (§12)
     projects_router_module._project_service.set_canvas_validated.assert_called_once_with("p", True)
+
+
+def test_validate_reports_api_connection_stale(monkeypatch):
+    # endpoint inietta gli id connessioni esistenti; api_id non presente → STALE.
+    e = _node("e", "api_enrich"); e.data = {"api_id": "gone"}
+    nodes = [_node("s", "file_source"), e, _node("r", "result")]
+    canvas = _canvas(nodes, [_edge("s", "e"), _edge("e", "r")])
+
+    svc = MagicMock()
+    svc.get_project_metadata.return_value = MagicMock(id="p", group_id="g", project_type="arricchisci")
+    svc.get_project_canvas.return_value = canvas
+    monkeypatch.setattr(projects_router_module, "_project_service", svc)
+    monkeypatch.setattr(projects_router_module, "assert_group_access", lambda *a, **k: None)
+    # connessione "gone" NON tra quelle esistenti
+    monkeypatch.setattr(
+        "app.core.arricchisci.db.list_api_connection_rows",
+        lambda *a, **k: [SimpleNamespace(id="other")],
+    )
+    app = FastAPI()
+    app.dependency_overrides[require_not_esecutore] = lambda: _user()
+    app.include_router(projects_router, prefix="/api")
+    client = TestClient(app, raise_server_exceptions=False)
+
+    res = client.post("/api/projects/p/validate")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert any(i["code"] == "ARRICCHISCI_API_CONNECTION_STALE" for i in body["issues"])
 
 
 def test_validate_reports_cycle(monkeypatch):

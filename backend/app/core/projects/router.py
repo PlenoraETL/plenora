@@ -730,7 +730,20 @@ def validate_project_canvas(
                 return None
             return (_project_service.get_project_canvas(pid), getattr(md, "project_type", None))
 
-        report = validate_project_chain(project_id, _load)
+        # ARRICCHISCI_API_CONNECTION_STALE è DB-dependent: l'endpoint (boundary
+        # DB-aware) fornisce gli id delle connessioni API esistenti; il gate
+        # orizzontale non lo fa. Usiamo TUTTE le connessioni (no filtro gruppo) per
+        # non flaggare falsamente connessioni condivise/cross-group (#A mai falso
+        # blocco): STALE scatta solo se l'api_id non esiste affatto.
+        try:
+            from app.core.arricchisci.db import list_api_connection_rows
+            available_api_ids = {row.id for row in list_api_connection_rows()}
+        except Exception:
+            available_api_ids = None  # degrada: salta STALE, non rompe la validazione
+
+        report = validate_project_chain(
+            project_id, _load, available_api_connection_ids=available_api_ids,
+        )
         result = report.to_dict()
         result["valid"] = not report.has_errors
         _project_service.set_canvas_validated(project_id, not report.has_errors)

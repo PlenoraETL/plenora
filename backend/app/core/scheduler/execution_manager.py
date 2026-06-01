@@ -217,6 +217,37 @@ class ExecutionManager:
                 "schedule e progetto appartengono a gruppi diversi"
             )
 
+        # Gate canvas-validation per i run schedulati (Epic CanvasVal §12.5), dietro
+        # lo STESSO feature-flag del gate a esecuzione (default off → nessun cambio
+        # in prod). Se il progetto non è validato (stato persistito ``canvas_validated``)
+        # il run schedulato NON parte: si registra un evento PIPELINE_FAILED (il canale
+        # notifiche dello scheduler, visibile in dashboard) e si ritorna failed.
+        from app.config import settings as _settings
+        if _settings.get("CANVAS_VALIDATION_GATE_ENABLED", False) and not getattr(
+            project_meta, "canvas_validated", False
+        ):
+            logger.warning(
+                f"[GESTITO] Run schedulato bloccato: progetto {project_id} non validato "
+                f"(schedule {schedule_id})"
+            )
+            entry = self.log_service.create_log_entry(
+                schedule_id=schedule_id,
+                event="PIPELINE_FAILED",
+                triggered_by=triggered_by,
+                level="ERROR",
+                error_message=(
+                    "Run schedulato bloccato: il canvas del progetto non è validato. "
+                    "Apri il progetto e premi Valida prima di schedularne l'esecuzione."
+                ),
+                pipeline_info={"project_id": project_id, "project_name": config.pipeline.project_name},
+            )
+            self.log_service.write_log(entry)
+            return {
+                "success": False,
+                "status": "failed",
+                "message": "Canvas non validato: run schedulato bloccato",
+            }
+
         _group_id = getattr(project_meta, "group_id", "") or ""
 
         # P0 fix (bug-hunter orchestration): `open_run` + `create_intermediate_run`

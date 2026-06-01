@@ -38,6 +38,7 @@ class _StaticCanvasService:
 
 def validate_canvas(
     canvas: Any, *, project_id: str = "", project_type: str | None = None,
+    available_api_connection_ids: set | None = None,
 ) -> ValidationReport:
     """Valida un canvas. Ritorna un ``ValidationReport``.
 
@@ -49,6 +50,12 @@ def validate_canvas(
     ``project_type`` (estrai/manipola/arricchisci) abilita le regole
     *type-specific* senza falsi positivi (es. in estrai ogni edge inter-tabella è
     un join; in manipola è data-flow). None → le regole type-specific sono saltate.
+
+    ``available_api_connection_ids`` (DB-dependent, iniettato dal boundary DB-aware
+    — l'endpoint /validate): se fornito, abilita ARRICCHISCI_API_CONNECTION_STALE
+    per gli api_enrich il cui ``api_id`` non è tra le connessioni esistenti. None →
+    regola saltata (es. dal gate orizzontale, che resta disaccoppiato da arricchisci;
+    il runtime fallisce comunque in chiaro su api_id mancante).
     """
     issues: List[Issue] = []
     nodes = list(getattr(canvas, "nodes", None) or [])
@@ -91,7 +98,7 @@ def validate_canvas(
 
     # 4. Strutturali canvas-level (porting fedele dei RULE_ID FE).
     issues.extend(_structural_extra_issues(nodes, edges))
-    issues.extend(_type_specific_issues(nodes, edges, project_type))
+    issues.extend(_type_specific_issues(nodes, edges, project_type, available_api_connection_ids))
     issues.extend(_source_node_issues(nodes, edges))
     issues.extend(_column_name_conflict_issues(nodes))
     issues.extend(_result_geo_issue(nodes, edges))
@@ -228,7 +235,10 @@ def _backward_reachable(start_id, edges: list) -> set:
     return seen
 
 
-def _type_specific_issues(nodes: list, edges: list, project_type: str | None) -> List[Issue]:
+def _type_specific_issues(
+    nodes: list, edges: list, project_type: str | None,
+    available_api_connection_ids: set | None = None,
+) -> List[Issue]:
     """Regole gated dal project_type (estrai/arricchisci/manipola)."""
     out: List[Issue] = []
     if project_type == "estrai":
@@ -266,6 +276,23 @@ def _type_specific_issues(nodes: list, edges: list, project_type: str | None) ->
             out.append(Issue(node_id=str(n.id), severity=sev, code="ARRICCHISCI_NODE_ISOLATED",
                              message=f'Nodo "{label}" non collegato ad altri nodi.',
                              suggestion=None))
+        # ARRICCHISCI_API_CONNECTION_STALE (DB-dependent): solo se la lista delle
+        # connessioni esistenti è iniettata (endpoint /validate). api_id referenziato
+        # ma non più esistente → connessione eliminata.
+        if available_api_connection_ids is not None:
+            for n in nodes:
+                if getattr(n, "type", None) != "api_enrich":
+                    continue
+                data = getattr(n, "data", None) or {}
+                api_id = data.get("api_id")
+                if api_id and api_id not in available_api_connection_ids:
+                    label = data.get("label") or data.get("api_name") or n.id
+                    out.append(Issue(
+                        node_id=str(n.id), severity="error",
+                        code="ARRICCHISCI_API_CONNECTION_STALE",
+                        message=f'Nodo "{label}": la connessione API è stata eliminata. Seleziona una nuova connessione.',
+                        suggestion={"api_id": api_id},
+                    ))
     elif project_type == "manipola":
         # RESULT_NO_SOURCE: nessuna sorgente nel percorso verso il result.
         for r in (n for n in nodes if getattr(n, "type", None) == "result"):
@@ -444,6 +471,7 @@ CanvasLoader = Callable[[str], Optional[Tuple[Any, Optional[str]]]]
 
 def validate_project_chain(
     project_id: str, load: CanvasLoader, *, _seen: Optional[set] = None,
+    available_api_connection_ids: set | None = None,
 ) -> ValidationReport:
     """Valida un progetto + ricorsivamente i progetti a monte (project_source).
 
@@ -452,6 +480,9 @@ def validate_project_chain(
     risolve ``project_id -> (canvas, project_type)`` (o ``None`` se non
     accessibile: l'authz/visibilità è responsabilità del loader del chiamante).
     Cycle-guard via ``_seen`` (catene cross-progetto cicliche → stop).
+
+    ``available_api_connection_ids`` (group-scoped, iniettato dall'endpoint
+    /validate) abilita ARRICCHISCI_API_CONNECTION_STALE su tutta la catena.
     """
     seen = _seen if _seen is not None else set()
     if project_id in seen:
@@ -463,7 +494,10 @@ def validate_project_chain(
         return ValidationReport()
     canvas, project_type = loaded
 
-    issues = list(validate_canvas(canvas, project_id=project_id, project_type=project_type).issues)
+    issues = list(validate_canvas(
+        canvas, project_id=project_id, project_type=project_type,
+        available_api_connection_ids=available_api_connection_ids,
+    ).issues)
 
     for node in (getattr(canvas, "nodes", None) or []):
         if getattr(node, "type", None) != "project_source":
@@ -471,7 +505,10 @@ def validate_project_chain(
         data = getattr(node, "data", None) or {}
         src_pid = getattr(node, "source_project_id", None) or data.get("source_project_id")
         if src_pid:
-            issues.extend(validate_project_chain(src_pid, load, _seen=seen).issues)
+            issues.extend(validate_project_chain(
+                src_pid, load, _seen=seen,
+                available_api_connection_ids=available_api_connection_ids,
+            ).issues)
 
     return ValidationReport(issues=tuple(issues))
 

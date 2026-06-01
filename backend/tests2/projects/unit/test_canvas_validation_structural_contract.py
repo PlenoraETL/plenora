@@ -245,6 +245,37 @@ def test_arricchisci_node_isolated_only_for_arricchisci():
     assert "ARRICCHISCI_NODE_ISOLATED" not in _codes(_validate(_canvas(nodes, edges), project_type="manipola"))
 
 
+def _arricchisci_canvas_with_api(api_id):
+    s = _node("s", "file_source"); e = _node("e", "api_enrich"); r = _node("r", "result")
+    e.data = {"api_id": api_id}
+    return _canvas([s, e, r], [_edge("s", "e"), _edge("e", "r")])
+
+
+def test_api_connection_stale_when_id_not_in_available():
+    from app.core.projects.canvas_validation import validate_canvas
+    report = validate_canvas(
+        _arricchisci_canvas_with_api("gone"), project_type="arricchisci",
+        available_api_connection_ids={"exists"},
+    )
+    assert "ARRICCHISCI_API_CONNECTION_STALE" in [i.code for i in report.issues]
+
+
+def test_api_connection_not_stale_when_id_present():
+    from app.core.projects.canvas_validation import validate_canvas
+    report = validate_canvas(
+        _arricchisci_canvas_with_api("good"), project_type="arricchisci",
+        available_api_connection_ids={"good"},
+    )
+    assert "ARRICCHISCI_API_CONNECTION_STALE" not in [i.code for i in report.issues]
+
+
+def test_api_connection_stale_skipped_when_ids_not_injected():
+    # default None (path gate orizzontale) → STALE saltato (resta disaccoppiato dal DB)
+    from app.core.projects.canvas_validation import validate_canvas
+    report = validate_canvas(_arricchisci_canvas_with_api("gone"), project_type="arricchisci")
+    assert "ARRICCHISCI_API_CONNECTION_STALE" not in [i.code for i in report.issues]
+
+
 def test_column_name_conflict_is_warning():
     s1 = _node("s1", "file_source"); s1.data = {"columns": [{"name": "id", "visible": True}]}
     s2 = _node("s2", "file_source"); s2.data = {"columns": [{"name": "id", "visible": True}]}
