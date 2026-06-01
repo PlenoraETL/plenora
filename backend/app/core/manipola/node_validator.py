@@ -17,6 +17,9 @@ Onora lo status (#A): con upstream ``indeterminate`` un ref mancante è ``warnin
 
 from __future__ import annotations
 
+import json
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, List
 
 from app.core.manipola.transforms.formula import _validate_formula_ast
@@ -29,6 +32,22 @@ from app.shared.execution.validation_protocol import register_node_validator
 from app.shared.execution.validation_types import Issue
 
 _MANIPOLA_NODE_TYPES = ("transform", "multi_join")
+
+_REGISTRY_PATH = Path(__file__).resolve().parent / "transforms_registry.json"
+
+
+@lru_cache(maxsize=1)
+def _valid_transform_ops() -> frozenset:
+    """Op-id che il runtime sa eseguire (chiavi di ``transforms`` nel registry).
+
+    STESSA fonte di ``PluginExecutor._carica_registry`` (`data['transforms']`) →
+    no-drift. Se il registry non è leggibile ritorna vuoto → il check membership
+    viene saltato (niente falsi positivi)."""
+    try:
+        data = json.loads(_REGISTRY_PATH.read_text(encoding="utf-8"))
+        return frozenset((data.get("transforms") or {}).keys())
+    except Exception:
+        return frozenset()
 
 
 class ManipolaNodeValidator:
@@ -51,6 +70,16 @@ class ManipolaNodeValidator:
                 message="Nodo trasformazione senza operazione selezionata.",
                 suggestion=None,
             ))
+        else:
+            # #B: op orfana — presente nel Literal ma assente dal registry eseguibile
+            # (es. legacy merge/query_db) → passerebbe il PUT ma fallirebbe a runtime.
+            valid_ops = _valid_transform_ops()
+            if valid_ops and transform_op not in valid_ops:
+                issues.append(Issue(
+                    node_id=node_id, severity="error", code="TRANSFORM_OP_UNKNOWN",
+                    message=f"Operazione '{transform_op}' non riconosciuta dal motore di trasformazione.",
+                    suggestion={"op": transform_op},
+                ))
 
         upstream_cols = [c for c in upstream.columns if isinstance(c, dict)]
         names = {c["name"] for c in upstream_cols if c.get("name")}

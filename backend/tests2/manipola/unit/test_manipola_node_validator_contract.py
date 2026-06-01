@@ -111,6 +111,19 @@ def test_transform_op_missing_is_error():
     assert "TRANSFORM_OP_MISSING" in _codes(issues)
 
 
+def test_transform_op_unknown_is_error():
+    # op orfana: nel Literal ma assente dal registry eseguibile → #B false-OK chiuso
+    node = _node(config={"column": "a"}, transform_op="merge")
+    issues = _v().validate_node(node, upstream=_upstream(["a"]))
+    assert "TRANSFORM_OP_UNKNOWN" in _codes(issues)
+
+
+def test_known_op_not_flagged_unknown():
+    node = _node(config={"column": "a"}, transform_op="filter")
+    issues = _v().validate_node(node, upstream=_upstream(["a"]))
+    assert "TRANSFORM_OP_UNKNOWN" not in _codes(issues)
+
+
 def test_register_manipola_validator():
     from app.shared.execution import validation_protocol as vp
     vp.clear_node_validators()
