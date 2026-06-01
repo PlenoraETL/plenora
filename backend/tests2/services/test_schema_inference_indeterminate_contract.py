@@ -122,6 +122,28 @@ def test_indeterminate_propagates_downstream():
     assert typed.status == "indeterminate"
 
 
+def test_multi_input_combiner_with_one_indeterminate_input_is_indeterminate():
+    # join: left file_source CERTAIN ([id,name]) + right project_source INDETERMINATE.
+    # L'output è NON-vuoto (porta le colonne left) ma PARZIALE (mancano le right).
+    # Deve risultare `indeterminate`, NON `certain`: marcarlo certain causerebbe un
+    # FALSO BLOCCO sui ref alle colonne del lato destro a valle.
+    # Generalizza a tutti i 7 handler multi-input (join/cross_join/table_diff/
+    # concat/sjoin/geo_overlay/geo_nearest) → fix centrale in _record_node_status.
+    left = _node("L", "file_source", data={"columns": [
+        {"name": "id", "type": "int", "visible": True},
+        {"name": "name", "type": "str", "visible": True},
+    ]})
+    right = _node("R", "project_source", source_project_id=None)  # indeterminate (307)
+    join = _node("j", "transform", transform_op="join",
+                 config={"left_on": "id", "right_on": "rid"})
+    svc = _svc_with_canvas(_canvas(
+        [left, right, join], [_edge("L", "j"), _edge("R", "j")],
+    ))
+    typed = svc.infer_node_schema_typed("proj", "j")
+    assert typed.columns, "atteso schema non-vuoto (colonne del lato left)"
+    assert typed.status == "indeterminate"
+
+
 def test_certain_source_downstream_stays_certain():
     # file_source con colonne -> result: certain, colonne propagate
     f = _node("f1", "file_source", data={"columns": [

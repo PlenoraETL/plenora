@@ -220,26 +220,32 @@ class SchemaInferenceService:
         if node_type_handler is not None:
             schema = node_type_handler(context)
 
-        self._record_node_status(node, schema, context)
+        self._record_node_status(node, context)
         self._schema_cache[node.id] = schema
         return schema
 
-    def _record_node_status(self, node, schema, context: _NodeSchemaContext) -> None:
+    def _record_node_status(self, node, context: _NodeSchemaContext) -> None:
         """Determina (status, reason) per il nodo, dopo il calcolo dello schema.
 
-        Precedenza: una reason specifica già registrata da un handler critico
-        (project_source 307/312/321, result 260) vince. Altrimenti: colonne
-        presenti → ``certain``; vuoto → eredita ``indeterminate`` da un upstream
-        indeterminate (no falso blocco a valle), altrimenti ``certain`` (vuoto
-        dichiarato/edge).
+        Precedenza:
+        1. reason specifica già registrata da un handler critico
+           (project_source 307/312/321, result 260) → vince;
+        2. **un qualsiasi upstream indeterminate → indeterminate**, anche con
+           schema NON-vuoto: i combinatori multi-input (join/cross_join/
+           table_diff/concat/sjoin/geo_overlay/geo_nearest) producono uno schema
+           *parziale* quando un input è indeterminate (mancano le sue colonne);
+           marcarlo ``certain`` causerebbe un FALSO BLOCCO sui ref a valle. Il
+           check va PRIMA di guardare ``schema`` (regola centrale: copre tutti i
+           combinatori presenti e futuri, niente fix per-handler);
+        3. altrimenti ``certain`` (colonne presenti, o vuoto dichiarato/edge).
         """
         if node.id in self._status_cache:
             return  # reason specifica già fissata dall'handler critico
-        if schema:
-            self._status_cache[node.id] = ("certain", "")
-            return
         inherited = self._inherited_indeterminate(node, context.edges_by_target)
-        self._status_cache[node.id] = inherited or ("certain", "")
+        if inherited is not None:
+            self._status_cache[node.id] = inherited
+            return
+        self._status_cache[node.id] = ("certain", "")
 
     def _inherited_indeterminate(
         self, node, edges_by_target: dict
