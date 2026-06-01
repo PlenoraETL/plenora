@@ -704,6 +704,31 @@ def validate_all_connections(
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
+@router.post("/{project_id}/validate")
+def validate_project_canvas(
+    project_id: str,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+) -> JsonObject:
+    """Valida l'intero canvas del progetto (Epic Canvas Validation).
+
+    Orizzontale, read-only: strutturale + per-nodo (i ``validate_node`` registrati
+    al composition-root). Ritorna il ``ValidationReport`` tipizzato. Non blocca
+    nulla (il gate a esecuzione e' separato); e' la valida-on-demand del pulsante.
+    """
+    metadata = _project_service.get_project_metadata(project_id)
+    assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
+    try:
+        from app.core.projects.canvas_validation import validate_canvas
+
+        canvas = _project_service.get_project_canvas(project_id)
+        report = validate_canvas(canvas, project_id=project_id)
+        result = report.to_dict()
+        result["valid"] = not report.has_errors
+        return result
+    except Exception:
+        raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
+
+
 @router.post("/admin/cleanup-orphans")
 @audit_action(action="admin.cleanup_orphans")
 def admin_cleanup_orphans(

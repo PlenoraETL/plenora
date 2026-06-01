@@ -12672,6 +12672,56 @@
         ]
       }
     },
+    "/api/projects/{project_id}/validate": {
+      "post": {
+        "description": "Valida l'intero canvas del progetto (Epic Canvas Validation).\n\nOrizzontale, read-only: strutturale + per-nodo (i ``validate_node`` registrati\nal composition-root). Ritorna il ``ValidationReport`` tipizzato. Non blocca\nnulla (il gate a esecuzione e' separato); e' la valida-on-demand del pulsante.",
+        "operationId": "validate_project_canvas_api_projects__project_id__validate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Validate Project Canvas Api Projects  Project Id  Validate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Validate Project Canvas",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
     "/api/projects/{project_id}/validate-all": {
       "get": {
         "description": "Valida tutte le connessioni del progetto.",
