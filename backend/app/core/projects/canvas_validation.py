@@ -91,7 +91,7 @@ def validate_canvas(
 
     # 4. Strutturali canvas-level (porting fedele dei RULE_ID FE).
     issues.extend(_structural_extra_issues(nodes, edges))
-    issues.extend(_estrai_type_specific_issues(nodes, project_type))
+    issues.extend(_type_specific_issues(nodes, edges, project_type))
     issues.extend(_source_node_issues(nodes, edges))
     issues.extend(_result_geo_issue(nodes, edges))
 
@@ -177,17 +177,7 @@ def _result_geo_issue(nodes: list, edges: list) -> List[Issue]:
         fmt = str(((getattr(r, "data", None) or {}).get("format") or "")).lower()
         if fmt not in _GEO_OUTPUT_FORMATS:
             continue
-        # nodi backward-reachable dal result
-        inputs_by_target: Dict[str, List[str]] = {}
-        for e in edges:
-            inputs_by_target.setdefault(getattr(e, "target", None), []).append(getattr(e, "source", None))
-        seen, stack = set(), [r.id]
-        while stack:
-            nid = stack.pop()
-            for src in inputs_by_target.get(nid, []):
-                if src and src not in seen:
-                    seen.add(src)
-                    stack.append(src)
+        seen = _backward_reachable(r.id, edges)
         has_geom = any(
             str(t).lower().startswith("geometry")
             for nid in seen
@@ -203,18 +193,48 @@ def _result_geo_issue(nodes: list, edges: list) -> List[Issue]:
     return out
 
 
-def _estrai_type_specific_issues(nodes: list, project_type: str | None) -> List[Issue]:
-    """Regole valide SOLO per progetti estrai (gated dal project_type)."""
-    if project_type != "estrai":
-        return []
+def _backward_reachable(start_id, edges: list) -> set:
+    """Set di nodi backward-reachable da ``start_id`` (risalendo gli edge)."""
+    inputs_by_target: Dict[str, List[str]] = {}
+    for e in edges:
+        inputs_by_target.setdefault(getattr(e, "target", None), []).append(getattr(e, "source", None))
+    seen, stack = set(), [start_id]
+    while stack:
+        for src in inputs_by_target.get(stack.pop(), []):
+            if src and src not in seen:
+                seen.add(src)
+                stack.append(src)
+    return seen
+
+
+def _type_specific_issues(nodes: list, edges: list, project_type: str | None) -> List[Issue]:
+    """Regole gated dal project_type (estrai/arricchisci/manipola)."""
     out: List[Issue] = []
-    for n in nodes:
-        if getattr(n, "type", None) in _ESTRAI_UNSUPPORTED_SOURCE_TYPES:
-            out.append(Issue(
-                node_id=str(n.id), severity="error", code="SOURCE_UNSUPPORTED",
-                message="ESTRAI supporta solo tabelle database e layer ArcGIS come sorgenti.",
-                suggestion={"node_type": n.type},
-            ))
+    if project_type == "estrai":
+        for n in nodes:
+            if getattr(n, "type", None) in _ESTRAI_UNSUPPORTED_SOURCE_TYPES:
+                out.append(Issue(
+                    node_id=str(n.id), severity="error", code="SOURCE_UNSUPPORTED",
+                    message="ESTRAI supporta solo tabelle database e layer ArcGIS come sorgenti.",
+                    suggestion={"node_type": n.type},
+                ))
+    elif project_type == "arricchisci":
+        if not any(getattr(n, "type", None) == "api_enrich" for n in nodes):
+            out.append(Issue(node_id="", severity="error", code="ARRICCHISCI_NO_ENRICHER",
+                             message="Aggiungi almeno un nodo API Enrich.", suggestion=None))
+        if not any(getattr(n, "type", None) in _SOURCE_NODE_TYPES for n in nodes):
+            out.append(Issue(node_id="", severity="error", code="ARRICCHISCI_NO_SOURCES",
+                             message='Nessuna sorgente dati. Aggiungi un nodo "Progetto", "File" o "Valori Statici".',
+                             suggestion=None))
+    elif project_type == "manipola":
+        # RESULT_NO_SOURCE: nessuna sorgente nel percorso verso il result.
+        for r in (n for n in nodes if getattr(n, "type", None) == "result"):
+            reachable = _backward_reachable(r.id, edges)
+            by_id = {n.id: n for n in nodes}
+            if not any(getattr(by_id.get(nid), "type", None) in _SOURCE_NODE_TYPES for nid in reachable):
+                out.append(Issue(node_id=str(r.id), severity="error", code="RESULT_NO_SOURCE",
+                                 message="Nessuna sorgente dati collegata al percorso di output.",
+                                 suggestion=None))
     return out
 
 

@@ -209,3 +209,29 @@ def test_result_geo_with_geometry_ok():
     r = _node("r", "result"); r.data = {"format": "geojson"}
     report = _validate(_canvas([s, r], [_edge("s", "r")]))
     assert "RESULT_GEO_NO_GEOMETRY" not in _codes(report)
+
+
+def test_arricchisci_no_enricher_no_sources():
+    codes = _codes(_validate(_canvas([_node("r", "result")], []), project_type="arricchisci"))
+    assert "ARRICCHISCI_NO_ENRICHER" in codes
+    assert "ARRICCHISCI_NO_SOURCES" in codes
+
+
+def test_arricchisci_complete_no_structural_error():
+    nodes = [_node("s", "file_source"), _node("e", "api_enrich"), _node("r", "result")]
+    edges = [_edge("s", "e"), _edge("e", "r")]
+    codes = _codes(_validate(_canvas(nodes, edges), project_type="arricchisci"))
+    assert "ARRICCHISCI_NO_ENRICHER" not in codes
+    assert "ARRICCHISCI_NO_SOURCES" not in codes
+
+
+def test_result_no_source_manipola():
+    nodes = [_node("t", "transform"), _node("r", "result")]
+    edges = [_edge("t", "r")]  # nessun source nel percorso
+    assert "RESULT_NO_SOURCE" in _codes(_validate(_canvas(nodes, edges), project_type="manipola"))
+
+
+def test_result_with_source_manipola_ok():
+    nodes = [_node("s", "file_source"), _node("t", "transform"), _node("r", "result")]
+    edges = [_edge("s", "t"), _edge("t", "r")]
+    assert "RESULT_NO_SOURCE" not in _codes(_validate(_canvas(nodes, edges), project_type="manipola"))
