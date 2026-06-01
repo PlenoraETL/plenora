@@ -71,6 +71,8 @@ def test_validate_empty_canvas_is_invalid(monkeypatch):
     assert body["valid"] is False
     assert body["has_errors"] is True
     assert any(i["code"] == "CANVAS_EMPTY" for i in body["issues"])
+    # stato persistito = esito: canvas invalido → canvas_validated False (§12)
+    projects_router_module._project_service.set_canvas_validated.assert_called_once_with("p", False)
 
 
 def test_validate_clean_canvas_is_valid(monkeypatch):
@@ -81,6 +83,8 @@ def test_validate_clean_canvas_is_valid(monkeypatch):
     body = res.json()
     assert body["valid"] is True
     assert body["issues"] == []
+    # canvas valido → canvas_validated True (§12)
+    projects_router_module._project_service.set_canvas_validated.assert_called_once_with("p", True)
 
 
 def test_validate_reports_cycle(monkeypatch):

@@ -272,6 +272,7 @@ def test_project_service_list_projects_uses_typed_project_rows(monkeypatch):
                 "group_id": "default",
                 "created_at": now,
                 "updated_at": now,
+                "canvas_validated": False,
             }
         ]
     }
@@ -322,6 +323,7 @@ def test_project_service_create_project_uses_typed_post_write_row(monkeypatch):
         "group_id": "grp-1",
         "created_at": now,
         "updated_at": now,
+        "canvas_validated": False,
     }
 
 
@@ -361,6 +363,7 @@ def test_project_service_metadata_uses_typed_project_detail_row(monkeypatch):
         "group_id": "default",
         "created_at": now,
         "updated_at": now,
+        "canvas_validated": False,
     }
 
 
@@ -406,6 +409,7 @@ def test_project_service_exposes_explicit_typed_row_serializers():
         "group_id": "default",
         "created_at": now,
         "updated_at": now,
+        "canvas_validated": False,
     }
     assert detail_metadata.model_dump() == {
         "id": "p-detail",
@@ -416,6 +420,7 @@ def test_project_service_exposes_explicit_typed_row_serializers():
         "group_id": "grp-1",
         "created_at": now,
         "updated_at": now,
+        "canvas_validated": False,
     }
 
 
@@ -455,6 +460,7 @@ def test_project_service_get_project_converts_typed_row_at_public_compat_edge(
             "group_id": "grp-1",
             "created_at": None,
             "updated_at": None,
+            "canvas_validated": False,
         },
         "canvas": {"nodes": [], "edges": []},
         "id": "p1",
@@ -503,5 +509,9 @@ def test_project_service_update_canvas_uses_typed_post_write_row(monkeypatch):
     )
 
     assert not hasattr(project_db, "update_project")
+
+    # update_canvas cascata l'invalidazione ai progetti a valle (Epic CanvasVal
+    # §12) → la scansione delle dipendenze non deve toccare il DB reale.
+    monkeypatch.setattr(project_db, "list_project_canvas_check_rows", lambda: [])
 
     assert ProjectService().update_canvas("p1", CanvasState()) is True

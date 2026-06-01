@@ -126,6 +126,7 @@ class ProjectService:
             ),
             created_at=row.created_at,
             updated_at=row.updated_at,
+            canvas_validated=row.canvas_validated or False,
         )
 
     @staticmethod
@@ -144,6 +145,7 @@ class ProjectService:
             ),
             created_at=row.created_at,
             updated_at=row.updated_at,
+            canvas_validated=row.canvas_validated or False,
         )
 
     def create_project(
@@ -326,6 +328,11 @@ class ProjectService:
     def update_canvas(self, project_id: str, canvas: CanvasState) -> bool:
         """Salva canvas e aggiorna updated_at. False se il progetto non esiste.
 
+        Invalida lo stato di validazione (Epic CanvasVal §12): salvare il canvas
+        azzera ``canvas_validated`` del progetto E lo cascata a False su tutti i
+        progetti a valle (manipola/arricchisci che lo usano come ``project_source``),
+        perché un cambio a monte può invalidarne la catena certificata.
+
         Raises:
             ProjectLineageCycleError: se i `project_source` nel canvas +
                 le dipendenze transitive degli altri progetti formano un
@@ -338,9 +345,29 @@ class ProjectService:
         self._assert_no_lineage_cycle(project_id, canvas)
 
         updated_row = project_db.update_project_row(
-            project_id, canvas=canvas.model_dump()
+            project_id, canvas=canvas.model_dump(), canvas_validated=False
         )
-        return updated_row is not None
+        if updated_row is None:
+            return False
+
+        # Cascade: ogni progetto a valle perde la certificazione (la sua catena
+        # include questo canvas, ora cambiato). Idempotente (set a False).
+        for dep in self._find_dependent_projects(project_id, group_id=row.group_id):
+            project_db.update_project_row(dep["id"], canvas_validated=False)
+
+        return True
+
+    def set_canvas_validated(self, project_id: str, value: bool) -> bool:
+        """Persisti lo stato di validazione canvas (Epic CanvasVal §12).
+
+        Chiamato da POST /validate con ``not report.has_errors`` → lo stato
+        memorizzato riflette sempre l'esito dell'ultima validazione. False se il
+        progetto non esiste.
+        """
+        if not project_db.get_project_row(project_id):
+            return False
+        project_db.update_project_row(project_id, canvas_validated=value)
+        return True
 
     def get_project_output_contract(
         self,

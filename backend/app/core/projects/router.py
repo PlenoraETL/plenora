@@ -711,9 +711,11 @@ def validate_project_canvas(
 ) -> JsonObject:
     """Valida l'intero canvas del progetto (Epic Canvas Validation).
 
-    Orizzontale, read-only: strutturale + per-nodo (i ``validate_node`` registrati
-    al composition-root). Ritorna il ``ValidationReport`` tipizzato. Non blocca
-    nulla (il gate a esecuzione e' separato); e' la valida-on-demand del pulsante.
+    Orizzontale: strutturale + per-nodo (i ``validate_node`` registrati al
+    composition-root). Ritorna il ``ValidationReport`` tipizzato. Non blocca nulla
+    (il gate a esecuzione e' separato); e' la valida-on-demand del pulsante.
+    Persiste lo stato (``canvas_validated``) con l'esito: True se la catena valida
+    senza errori, altrimenti False (Epic CanvasVal §12).
     """
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
@@ -731,6 +733,7 @@ def validate_project_canvas(
         report = validate_project_chain(project_id, _load)
         result = report.to_dict()
         result["valid"] = not report.has_errors
+        _project_service.set_canvas_validated(project_id, not report.has_errors)
         return result
     except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")

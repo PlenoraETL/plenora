@@ -20,6 +20,7 @@ _ALLOWED_UPDATE_FIELDS: dict[str, frozenset[str]] = {
         "description",
         "connection_id",
         "canvas",
+        "canvas_validated",
         "output_contract",
         "updated_at",
         "retention_n",

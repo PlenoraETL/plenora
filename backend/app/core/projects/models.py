@@ -46,6 +46,9 @@ class ProjectMetadata(BaseModel):
     group_id: str = "default"
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    # Stato di validazione canvas persistito (Epic CanvasVal §12): True dopo una
+    # POST /validate senza errori; resettato a False a ogni salvataggio del canvas.
+    canvas_validated: bool = False
 
     @field_validator("created_at", "updated_at", mode="before")
     @classmethod

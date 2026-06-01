@@ -98,6 +98,15 @@ def _optional_int(row: Mapping[str, object], key: str) -> int | None:
     return value
 
 
+def _optional_bool(row: Mapping[str, object], key: str) -> bool | None:
+    value = row.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise ValueError(f"Malformed project DB row: {key} must be a bool or null")
+    return value
+
+
 def _normalize_json_column(
     row: Mapping[str, object],
     key: str,
@@ -186,6 +195,7 @@ class ProjectRow:
     updated_at: datetime | str | None
     created_by: str | None
     description: str | None = None
+    canvas_validated: bool = False
 
     @classmethod
     def from_mapping(cls, row: Mapping[str, object]) -> "ProjectRow":
@@ -199,6 +209,7 @@ class ProjectRow:
             updated_at=_optional_datetime_or_str(row, "updated_at"),
             created_by=_optional_str(row, "created_by"),
             description=_optional_str(row, "description"),
+            canvas_validated=_optional_bool(row, "canvas_validated") or False,
         )
 
 
@@ -218,6 +229,7 @@ class ProjectDetailRow:
     output_contract: object | None = None
     description: str | None = None
     retention_n: int | None = None
+    canvas_validated: bool = False
 
     @classmethod
     def from_mapping(cls, row: Mapping[str, object]) -> "ProjectDetailRow":
@@ -236,6 +248,7 @@ class ProjectDetailRow:
             created_by=_optional_str(row, "created_by"),
             description=_optional_str(row, "description"),
             retention_n=_optional_int(row, "retention_n"),
+            canvas_validated=_optional_bool(row, "canvas_validated") or False,
         )
 
 
@@ -413,7 +426,7 @@ class ProjectRepository:
         # colonna list per evitare drift se aggiungiamo altri campi.
         _COLS = (
             "id, group_id, name, project_type, connection_id, "
-            "created_at, updated_at, created_by, description"
+            "created_at, updated_at, created_by, description, canvas_validated"
         )
         if group_id is None:
             if project_type:
