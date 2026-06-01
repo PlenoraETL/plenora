@@ -240,49 +240,6 @@ def test_count_features_where_raises_on_arcgis_error_payload(
         )
 
 
-# Validator wrapper backward-compat
-
-
-def test_validator_wrapper_delegates_to_client_method(client_with_fake_http, conn):
-    """`validator._count_features_where_via_post` deve delegare a
-    `client.count_features_where` (BE-IMDF-002 thin wrapper).
-
-    Sostituiamo il method via MagicMock e verifichiamo la chiamata
-    pass-through, cosi' i test che monkeypatchano il symbol modulo-
-    level continuano a vedere il path delegato."""
-    from app.core.imdf import validator as validator_mod
-
-    fake_client = SimpleNamespace(
-        count_features_where=MagicMock(return_value=99),
-    )
-
-    n = validator_mod._count_features_where_via_post(
-        fake_client, conn, "https://arc.test/layer/0", "WHERE clause"
-    )
-
-    assert n == 99
-    fake_client.count_features_where.assert_called_once_with(
-        conn, "https://arc.test/layer/0", "WHERE clause"
-    )
-
-
-def test_validator_wrapper_propagates_runtime_error():
-    """Se il metodo client solleva, il wrapper propaga (fail-loud)."""
-    from app.core.imdf import validator as validator_mod
-
-    fake_client = SimpleNamespace(
-        count_features_where=MagicMock(side_effect=RuntimeError("boom")),
-    )
-
-    with pytest.raises(RuntimeError, match="boom"):
-        validator_mod._count_features_where_via_post(
-            fake_client,
-            SimpleNamespace(server_url="x"),
-            "https://arc.test/layer/0",
-            "1=1",
-        )
-
-
 # _get_feature_count rimane separato (semantica display-only fail-soft)
 
 

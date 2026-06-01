@@ -6,17 +6,12 @@ Verifica i due helper consolidati:
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from app.shared.connections.esri_types import EsriTypeMapper
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
-
-
-_BACKEND_APP = Path(__file__).resolve().parent.parent.parent.parent / "app"
 
 
 # 1. map_esri_field_to_schema_bucket: esri-type → schema bucket
@@ -206,37 +201,7 @@ def test_coarse_buckets_diverge_for_real_mismatches():
     assert fs_bucket == "string"
 
 
-# 5. Validator wrapper backward-compat (BE-IMDF-003 thin delegate)
-
-
-def test_validator_coarse_from_esri_delegates():
-    from app.core.imdf import validator
-    assert validator._coarse_type_from_esri("esriFieldTypeString") == "string"
-    assert validator._coarse_type_from_esri("esriFieldTypeInteger") == "int"
-    assert validator._coarse_type_from_esri("esriFieldTypeDouble") == "float"
-    assert validator._coarse_type_from_esri("esriFieldTypeDate") == "date"
-    assert validator._coarse_type_from_esri("esriFieldTypeGeometry") == "geometry"
-    assert validator._coarse_type_from_esri("esriFieldTypeBlob") == "other"
-    assert validator._coarse_type_from_esri(None) == "other"  # type: ignore[arg-type]
-
-
-def test_validator_coarse_from_dtype_delegates():
-    import pandas as pd
-    from app.core.imdf import validator
-    assert validator._coarse_type_from_dtype(pd.Series([1]).dtype) == "int"
-    assert validator._coarse_type_from_dtype(pd.Series([1.0]).dtype) == "float"
-    assert validator._coarse_type_from_dtype(pd.Series(["a"]).dtype) == "string"
-    assert validator._coarse_type_from_dtype("object") == "string"
-    assert validator._coarse_type_from_dtype("category") == "other"
-
-
-def test_validator_symbols_remain_module_level():
-    """Per i test che monkeypatchano i simboli modulo-level (e per
-    parita' col pre-IMDF-003), entrambi i simboli devono restare
-    sotto `validator`."""
-    from app.core.imdf import validator
-    assert callable(validator._coarse_type_from_esri)
-    assert callable(validator._coarse_type_from_dtype)
+# 5. ESRI type mapping vive in shared connections, non nel client concreto
 
 
 def test_esri_type_mapper_not_reexported_via_arcgis_client():
@@ -246,19 +211,3 @@ def test_esri_type_mapper_not_reexported_via_arcgis_client():
 
     assert callable(EsriTypeMapper.map_field_type)
     assert not hasattr(arcgis_client, "EsriTypeMapper")
-
-
-# 6. Source-bound: il validator delega senza re-implementare il match
-
-
-def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
-
-
-def test_validator_uses_shared_mapper():
-    src = _read(_BACKEND_APP / "core" / "imdf" / "validator.py")
-    assert "EsriTypeMapper.map_esri_field_to_schema_bucket" in src
-    assert "EsriTypeMapper.map_pandas_dtype_to_schema_bucket" in src
-    # Niente piu' implementazione inline con i match substring
-    assert '"string" in t or "guid" in t or "xml" in t' not in src
-    assert '"datetime" in s or "date" in s' not in src
