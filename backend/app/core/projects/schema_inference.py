@@ -15,7 +15,7 @@ from app.core.projects.types import (
     StringMap,
     TransformHandlerRegistry,
 )
-from app.shared.execution.schema_types import ColumnSchema
+from app.shared.execution.schema_types import ColumnSchema, InferredSchema
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -79,32 +79,6 @@ class _NodeSchemaContext:
     nodes_by_id: dict
     edges_by_target: dict
     project_id: str
-
-
-@dataclass(frozen=True)
-class InferredSchema:
-    """Schema inferito per un nodo, con esito esplicito.
-
-    Disambigua i tre significati che oggi collassano su `[]`:
-    - colonne note (``certain``);
-    - schema genuinamente vuoto ma certo (sorgente dichiarata senza colonne);
-    - schema **non inferibile** (``indeterminate``: upstream non risolto / output
-      non dichiarato) → l'engine di validazione emette un *warning*, mai un blocco.
-
-    ``columns`` è ``SchemaRows`` (liste di dict, come ``infer_node_schema``) per
-    restare consistente col metodo pubblico esistente.
-
-    Lo ``status`` è preciso: ``indeterminate``+reason ai 4 punti critici
-    (260 result senza input · 307 project_source senza source · 312 metadata
-    upstream assente · 321 output_contract upstream assente) e propagato a valle
-    (un nodo vuoto a causa di un upstream indeterminate eredita lo stato). Gli
-    edge (134 canvas assente · 142 nodo assente · 380 crash lettura metadata)
-    restano ``certain`` (problemi strutturali, presi da altri controlli).
-    """
-
-    columns: SchemaRows
-    status: str = "certain"  # "certain" | "indeterminate"
-    reason: str = ""
 
 
 class SchemaInferenceService:

@@ -133,7 +133,7 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     # + i 4 validate_node + hook PUT), non ancora costruito. `validate_node` /
     # `available_columns` sono inoltre false-positive strutturali del Protocol
     # (corpo `...`). Rimuovere queste righe quando Fase 1 li aggancia.
-    re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+execution[\\/]+validation_protocol\.py:\d+: unused (method 'validate_node'|variable 'available_columns') "),
+    re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+execution[\\/]+validation_protocol\.py:\d+: unused (method 'validate_node'|variable 'upstream') "),
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+execution[\\/]+validation_types\.py:\d+: unused method '(by_severity|for_node)' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+projects[\\/]+schema_inference\.py:\d+: unused method 'infer_node_schema_typed' "),
 )

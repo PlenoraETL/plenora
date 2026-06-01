@@ -9,7 +9,27 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from app.shared.contracts.payloads import ObjectMap
+from app.shared.contracts.payloads import JsonRows, ObjectMap
+
+
+@dataclass(frozen=True)
+class InferredSchema:
+    """Schema inferito per un nodo, con esito esplicito (Epic Canvas Validation).
+
+    Disambigua i tre significati che collassavano su ``[]``: colonne note
+    (``certain``), vuoto-ma-certo (sorgente dichiarata senza colonne), e
+    **non inferibile** (``indeterminate``: upstream non risolto / output non
+    dichiarato → l'engine emette un *warning*, mai un blocco).
+
+    ``status`` è preciso e propagato a valle (un nodo indeterminate a monte rende
+    indeterminate i discendenti). Vive in ``shared`` (non in ``projects``) così che
+    sia il protocol di validazione sia i motori che implementano ``validate_node``
+    possano riceverlo senza dipendere da ``projects/``.
+    """
+
+    columns: JsonRows
+    status: str = "certain"  # "certain" | "indeterminate"
+    reason: str = ""
 
 
 @dataclass
@@ -37,4 +57,4 @@ class ColumnSchema:
         return payload
 
 
-__all__ = ["ColumnSchema"]
+__all__ = ["ColumnSchema", "InferredSchema"]

@@ -81,7 +81,7 @@ def _clean_registry():
 
 
 class _DummyValidator:
-    def validate_node(self, node, *, available_columns):
+    def validate_node(self, node, *, upstream):
         return []
 
 

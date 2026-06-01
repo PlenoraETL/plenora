@@ -7,23 +7,28 @@ via ``validator_for(node_type)`` senza importarli.
 
 Direzione delle dipendenze: motori → ``shared``, mai ``shared`` → motori.
 
-NB: la firma di ``validate_node`` è provvisoria (stabilizza in Fase 1.6, quando i
-4 validatori vengono scritti). Per ora: il nodo + l'insieme dei nomi-colonna
-disponibili a monte (coerente con ``check_mapping(columns: set[str], spec)``, #B).
+``validate_node`` riceve l'``InferredSchema`` upstream — **colonne + status**, non
+solo i nomi. È deliberato: lo ``status`` (``certain``/``indeterminate``, calcolato
+e propagato in 0.1) è ciò che decide error-vs-warning. Se l'upstream è
+``indeterminate``, una colonna mancante è un *warning* (potrebbe esistere a
+runtime), non un *error* — altrimenti il falso-blocco rientrerebbe dalla porta del
+validatore e tutto il lavoro di status di 0.1 sarebbe sprecato.
+
+NB: i parametri del singolo motore possono crescere in 1.6 (es. multi-input), ma
+``upstream`` con lo status è il contratto minimo non negoziabile.
 """
 
 from __future__ import annotations
 
 from typing import AbstractSet, Any, List, MutableMapping, Optional, Protocol, runtime_checkable
 
+from app.shared.execution.schema_types import InferredSchema
 from app.shared.execution.validation_types import Issue
 
 
 @runtime_checkable
 class SupportsNodeValidation(Protocol):
-    def validate_node(
-        self, node: Any, *, available_columns: AbstractSet[str]
-    ) -> List[Issue]:
+    def validate_node(self, node: Any, *, upstream: InferredSchema) -> List[Issue]:
         ...
 
 
