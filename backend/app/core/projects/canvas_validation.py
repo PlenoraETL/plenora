@@ -12,15 +12,38 @@ ref cross-tenant (``find_inaccessible_canvas_refs``) resta al boundary del route
 
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any, Dict, List
 
 from app.core.projects.canvas_access import find_orphan_processing_nodes
+from app.core.projects.schema_inference import SchemaInferenceService
 from app.shared.execution.graph import GraphCycleError, kahn_topological_order
+from app.shared.execution.schema_types import InferredSchema
+from app.shared.execution.validation_protocol import validator_for
 from app.shared.execution.validation_types import Issue, ValidationReport
 
 
-def validate_canvas(canvas: Any) -> ValidationReport:
-    """Valida la struttura di un canvas. Ritorna un ``ValidationReport``."""
+class _StaticCanvasService:
+    """Adapter minimo: espone il canvas PASSATO come ``get_project_canvas``.
+
+    Cruciale: a PUT si valida il canvas in arrivo (non ancora salvato), quindi
+    l'inferenza schema deve girare su QUESTO canvas, non su quello persistito.
+    """
+
+    def __init__(self, canvas: Any) -> None:
+        self._canvas = canvas
+
+    def get_project_canvas(self, _project_id: str) -> Any:
+        return self._canvas
+
+
+def validate_canvas(canvas: Any, *, project_id: str = "") -> ValidationReport:
+    """Valida un canvas. Ritorna un ``ValidationReport``.
+
+    Strutturale (sempre) + per-nodo via i ``validate_node`` registrati al
+    composition-root (#D), scoperti con ``validator_for(node.type)`` — nessun
+    import diretto dei motori. Ogni validatore riceve l'``InferredSchema`` upstream
+    (colonne + status) per decidere error-vs-warning (no falso-blocco).
+    """
     issues: List[Issue] = []
     nodes = list(getattr(canvas, "nodes", None) or [])
     edges = list(getattr(canvas, "edges", None) or [])
@@ -60,7 +83,57 @@ def validate_canvas(canvas: Any) -> ValidationReport:
             suggestion=None,
         ))
 
+    # 4. Validazione per-nodo via registry (#D): schema/colonne/regole di motore.
+    issues.extend(_validate_nodes(canvas, nodes, edges, node_ids, project_id))
+
     return ValidationReport(issues=tuple(issues))
+
+
+def _validate_nodes(
+    canvas: Any, nodes: list, edges: list, node_ids: set, project_id: str,
+) -> List[Issue]:
+    """Dispatch ai ``validate_node`` registrati, passando l'upstream tipizzato."""
+    relevant = [n for n in nodes if validator_for(n.type) is not None]
+    if not relevant:
+        return []  # nessun motore registrato → niente inferenza (fast path)
+
+    service = SchemaInferenceService(_StaticCanvasService(canvas))
+    inputs_by_target: Dict[str, List[str]] = {}
+    for e in edges:
+        s, t = getattr(e, "source", None), getattr(e, "target", None)
+        if s in node_ids and t in node_ids:
+            inputs_by_target.setdefault(t, []).append(s)
+
+    out: List[Issue] = []
+    for node in relevant:
+        upstream = _upstream_for_node(
+            inputs_by_target.get(node.id, []), service, project_id,
+        )
+        out.extend(validator_for(node.type).validate_node(node, upstream=upstream))
+    return out
+
+
+def _upstream_for_node(
+    input_ids: List[str], service: SchemaInferenceService, project_id: str,
+) -> InferredSchema:
+    """Merge degli schemi tipizzati dei nodi in input.
+
+    Una sola input → il suo InferredSchema. Multi-input → unione colonne +
+    status ``indeterminate`` se QUALSIASI input è indeterminate (no falso-blocco
+    a valle). Nessun input → vuoto certo.
+    """
+    if not input_ids:
+        return InferredSchema(columns=[], status="certain")
+    typed = [service.infer_node_schema_typed(project_id, sid) for sid in input_ids]
+    if len(typed) == 1:
+        return typed[0]
+    merged_cols: list = []
+    status = "certain"
+    for t in typed:
+        merged_cols.extend(t.columns)
+        if t.status == "indeterminate":
+            status = "indeterminate"
+    return InferredSchema(columns=merged_cols, status=status)
 
 
 __all__ = ["validate_canvas"]
