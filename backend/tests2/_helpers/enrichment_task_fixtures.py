@@ -67,3 +67,31 @@ def make_minimal_rest_file_canvas() -> Dict[str, Any]:
             {"source": "src1", "target": "api1"},
         ],
     }
+
+
+def make_source_result_canvas() -> Dict[str, Any]:
+    """Canvas `project_source` → `result` per una run-A-COMPLETAMENTO.
+
+    Quando l'harness e' configurato con `final_df`, `_load_source_project`
+    ritorna quel DataFrame invece di sollevare `_HarnessAbort`: il nodo
+    `result` propaga l'output e il task raggiunge il FINALIZE (persist output
+    + close_run + response), permettendo di caratterizzare la divergenza
+    standard-vs-eseguibile su quel ramo.
+    """
+    return {
+        "nodes": [
+            {
+                "id": "src1",
+                "type": "project_source",
+                "data": {"project_id": "test-proj"},
+            },
+            {
+                "id": "res1",
+                "type": "result",
+                "data": {"format": "csv", "fileName": "output"},
+            },
+        ],
+        "edges": [
+            {"source": "src1", "target": "res1"},
+        ],
+    }

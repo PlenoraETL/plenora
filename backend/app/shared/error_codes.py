@@ -46,6 +46,15 @@ CARICA_LAUNCH_FAILED = "carica_launch_failed"
 CARICA_SCHEDULER_FAILED = "carica_scheduler_failed"
 """500-state: lancio carica da scheduler fallito (execution_manager)."""
 
+CARICA_ARCGIS_WRITE_FAILED = "carica_arcgis_write_failed"
+"""500-state: scrittura su ArcGIS fallita nel dispatch carica."""
+
+CARICA_DATASOURCE_WRITE_FAILED = "carica_datasource_write_failed"
+"""500-state: scrittura su datasource (DB/FTP/SharePoint) fallita nel dispatch carica."""
+
+CARICA_REST_WRITE_FAILED = "carica_rest_write_failed"
+"""500-state: scrittura su endpoint REST fallita nel dispatch carica."""
+
 SCHEDULE_EXECUTION_FATAL = "schedule_execution_fatal"
 """500-state: errore fatale schedule execution (execution_manager)."""
 
@@ -262,6 +271,10 @@ CONNECTION_DUPLICATE_NAME = "connection_duplicate_name"
 
 DATASOURCE_IN_USE = "datasource_in_use"
 DATASOURCE_NOT_FOUND = "datasource_not_found"
+DATASOURCE_NOT_VISIBLE = "datasource_not_visible"
+"""403-state: datasource non visibile al gruppo nel dispatch carica."""
+DATASOURCE_VISIBILITY_CHECK_FAILED = "datasource_visibility_check_failed"
+"""500-state: verifica visibilita' datasource fallita nel dispatch carica."""
 
 
 # Domain-specific — Tickets family
@@ -286,6 +299,11 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     PROJECT_CLEANUP_PARTIAL,
     CARICA_LAUNCH_FAILED,
     CARICA_SCHEDULER_FAILED,
+    CARICA_ARCGIS_WRITE_FAILED,
+    CARICA_DATASOURCE_WRITE_FAILED,
+    CARICA_REST_WRITE_FAILED,
+    DATASOURCE_NOT_VISIBLE,
+    DATASOURCE_VISIBILITY_CHECK_FAILED,
     SCHEDULE_EXECUTION_FATAL,
     PROJECT_NOT_FOUND,
     TASK_NOT_FOUND,

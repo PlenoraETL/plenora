@@ -269,6 +269,16 @@ def load_upload_metadata(file_source_id: str) -> Optional[Mapping[str, object]]:
     }
 
 
+def get_eseguibile_group_id(eseguibile_id: str) -> str:
+    """Boundary: group_id dell'eseguibile per il tenant-binding a valle.
+
+    Espone il dato cross-domain (lo usa il worker arricchisci) senza far
+    bucare il leaf `eseguibili.db` ad altri domini.
+    """
+    row = eseguibili_db.get_eseguibile(eseguibile_id)
+    return (row.get("group_id") or "") if row else ""
+
+
 # EXECUTE — sostituisce sorgente nel canvas e lancia task
 
 def execute(

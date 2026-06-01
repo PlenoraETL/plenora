@@ -52,6 +52,12 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
     "aws_credentials_expired",
     "carica_launch_failed",
     "carica_scheduler_failed",
+    # dispatch carica (#18/#20) — write/visibility family
+    "carica_arcgis_write_failed",
+    "carica_datasource_write_failed",
+    "carica_rest_write_failed",
+    "datasource_not_visible",
+    "datasource_visibility_check_failed",
     "schedule_execution_fatal",
     # batch 009 — Not-Found family
     "project_not_found",
@@ -191,14 +197,15 @@ def test_known_global_codes_matches_expected_lock():
 
 
 def test_catalog_count_domain_fiftythree():
-    """53 codici domain (5 pre-existing + 6 batch 006 + 10 batch 009
+    """58 codici domain (5 pre-existing + 6 batch 006 + 10 batch 009
     not-found family + 1 batch 010 external-service +
     1 BE-GO-READY-MEMORY-OOM-001 memory_limit_exceeded +
     1 BE-GO-READY-ERROR-CODES-013 service_not_initialized +
     1 BE-GO-READY-ERROR-CODES-014 access_denied +
     27 BE-GO-READY-AUTH-DOMAIN-PROMOTION-001 auth family +
-    1 compatibility domain conflict code)."""
-    assert len(EXPECTED_DOMAIN_CODES) == 53
+    1 compatibility domain conflict code +
+    5 dispatch carica #18/#20 write/visibility family)."""
+    assert len(EXPECTED_DOMAIN_CODES) == 58
     assert len(error_codes.KNOWN_DOMAIN_CODES) == len(EXPECTED_DOMAIN_CODES)
 
 

@@ -6,7 +6,7 @@ Canvas-based enrichment orchestrator.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, List, MutableMapping, Optional, TYPE_CHECKING
 
 from app.core.dataframes.values import is_dataframe
 from app.core.arricchisci.execution_context import (
@@ -252,8 +252,8 @@ def run_enrichment_canvas(
     # terminali (out-degree 0, es. `result`) non vengono mai evictati perche'
     # nessun consumatore ne decrementa il contatore → restano per il caller
     # (`_find_final_result`).
-    inputs_of: dict = {}
-    consumers_remaining: dict = {}
+    inputs_of: MutableMapping[str, List[str]] = {}
+    consumers_remaining: MutableMapping[str, int] = {}
     for _e in edges:
         _s, _t = _e.get("source"), _e.get("target")
         if _s is None or _t is None:

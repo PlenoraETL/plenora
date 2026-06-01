@@ -45,7 +45,10 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # persist_imdf_bundle, open_gdb_in_vsimem e i branch legacy GDB).
 # 724 -> 697: collasso IMDF a una-run (rimossi validator, storage, persist,
 # arcgis_uploader, publish_dispatcher, bundle_store, bundle_access, router).
-_EXPECT_BROAD_BUDGET = 697
+# 697 -> 705: safety-net I/O non-bloccanti landati nei commit di
+# orizzontalizzazione / dispatch carica / RAM-eviction (+6) e i due fallback
+# di EnrichmentRunMode.begin_run (apertura run / lookup group_id eseguibile, +2).
+_EXPECT_BROAD_BUDGET = 705
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

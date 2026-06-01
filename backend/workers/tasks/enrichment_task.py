@@ -20,17 +20,14 @@ from app.core.arricchisci import canvas_orchestrator as canvas_orchestrator_modu
 from app.core.arricchisci import enrichment_run_mode
 from app.core.arricchisci import execution_context as execution_context_module
 from app.core.arricchisci import parallel as parallel_module
-from app.core.dataframes import export_writer as dataframe_export_writer
 from app.core.dataframes.values import is_nonempty_dataframe
 from app.core.eseguibili import storage as eseg_storage
 from app.core.files import service as files_service
 from app.core.intermediate import run_idempotency as run_idempotency_module
 from app.core.intermediate import snapshot as intermediate_snapshot
 from app.core.intermediate import writer as intermediate_writer
-from app.core import output_contract as output_contract_module
 from app.core.projects import service as project_service_module
 from app.core.results import blob_writer as result_blob_writer
-from app.core.results import pipeline_result as pipeline_result_module
 from app.core.results import store as result_store
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution import carica_dispatcher
@@ -152,7 +149,7 @@ def execute_enrichment_task(
     _retention_n = _ctx.retention_n
 
     # Per eseguibili: niente log_runs/logs su DB
-    if not is_eseguibile:
+    if run_mode.logs_run():
         open_run(
             run_id=_run_id or task_id,
             project_id=project_id,
@@ -496,7 +493,7 @@ def execute_enrichment_task(
                 for n in nodes
                 if n.get("type") == "api_enrich"
             )
-            needs_full_bytes = is_eseguibile or (
+            needs_full_bytes = run_mode.needs_full_bytes() or (
                 # IMDF: output JSON plenora.indoor.bundle -> serve il body
                 # completo per il parse.
                 has_imdf_upstream and ext == ".json"
@@ -592,7 +589,7 @@ def execute_enrichment_task(
             # Routing finale: eseguibili (S3) vs arricchisci (DB result_blob).
             result_id: Optional[str] = None
 
-            if is_eseguibile:
+            if run_mode.is_eseguibile:
                 # Upload su object storage (S3 via cloud_backends). Niente FS
                 # locale persistente: backend+worker multi-host safe. Il
                 # frontend scarica via GET /api/eseguibili/{id}/download/{task_id}
@@ -697,16 +694,14 @@ def execute_enrichment_task(
                 "error_report_result_id": None,
                 "message": f"Processamento completato: {final_name}",
             }
-            if is_eseguibile:
-                # URL relativo; il frontend lo compone con il base host
-                result["download_url"] = f"/api/eseguibili/{project_id}/download/{task_id}"
+            run_mode.decorate_result(result, project_id=project_id, task_id=task_id)
 
             logger.info(
                 f"[Task {task_id}] Executable completato in "
                 f"{elapsed_time:.2f}s - {final_name}"
             )
 
-            if not is_eseguibile:
+            if run_mode.triggers_downstream_carica():
                 try:
                     carica_info = _trigger_carica_if_present(
                         project_id=project_id,
@@ -736,65 +731,14 @@ def execute_enrichment_task(
         # gestiscono il dispatch internamente.
         final_filename = f"{output_filename}.{final_format}"
         elapsed_time = time.time() - start_time
-        result_id: Optional[str] = None
-
-        if is_eseguibile:
-            # Eseguibile con output DataFrame → S3 via storage module.
-            # Sessione C (2026-05-26): streaming end-to-end via
-            # `dataframe_to_export_chunks` (queue+thread bridge) +
-            # `eseguibili_storage.save_chunks` (S3 multipart real-time).
-            # Pre-fix: `save_dataframe_to_bytes + save_bytes(bytes)`
-            # picco `df + bytes_serializzati`. Post: streaming, peak
-            # solo chunk_buffer (~8MB part_size) per CSV/JSON.
-            # Formati binari (xlsx/parquet/shp/gpkg/gdb): single-chunk
-            # fallback by-design (writer footer-based o multi-file).
-            fmt_lower = (final_format or "").lower()
-            # SHP esce zippato: rinomina il filename su storage in `.zip`.
-            storage_filename = (
-                Path(final_filename).with_suffix(".zip").name
-                if fmt_lower == "shp"
-                else final_filename
-            )
-            eseg_storage.save_chunks(
-                task_id,
-                storage_filename,
-                dataframe_export_writer.dataframe_to_export_chunks(final_df, fmt_lower),
-            )
-            saved_path = Path(storage_filename)  # per metadata payload
-            logger.info(
-                f"[Task {task_id}] Output eseguibile (df) su storage streaming: "
-                f"eseguibili-outputs/{task_id}/{storage_filename}"
-            )
-        else:
-            # Arricchisci standard: typed pipeline-result boundary.
-            saved = pipeline_result_module.save_pipeline_result_outcome(
-                project_id=project_id,
-                df=final_df,
-                output_format=final_format,
-                filename_stem=output_filename,
-                rows_count=len(final_df),
-            )
-            result_id = saved.result_id
-            saved_path = Path(saved.output_filename)
-            logger.info(f"[Task {task_id}] Risultato persistito: {result_id}")
-
-            _project_service = project_service_module.ProjectService()
-            output_contract = output_contract_module.build_output_contract(
-                project_id=project_id,
-                result_columns=[
-                    {"name": col, "type": str(final_df[col].dtype)}
-                    for col in final_df.columns
-                ],
-                previous_contract=_project_service.get_project_output_contract(project_id),
-            )
-            _project_service.update_project_output_contract(
-                project_id,
-                output_contract.model_dump(),
-            )
-            logger.info(
-                f"[Task {task_id}] output_contract salvato: "
-                f"{len(output_contract.columns)} colonne"
-            )
+        result_id, saved_path = run_mode.persist_dataframe_result(
+            project_id=project_id,
+            task_id=task_id,
+            final_df=final_df,
+            final_format=final_format,
+            output_filename=output_filename,
+            final_filename=final_filename,
+        )
 
         update_task_progress(self, 100, "Completato!", task_id=task_id)
 
@@ -818,12 +762,11 @@ def execute_enrichment_task(
             "error_report": error_report_file,
             "error_report_result_id": error_report_result_id,
         }
-        if is_eseguibile:
-            result["download_url"] = f"/api/eseguibili/{project_id}/download/{task_id}"
+        run_mode.decorate_result(result, project_id=project_id, task_id=task_id)
 
         logger.info(f"[Task {task_id}] Completato in {elapsed_time:.2f}s - {len(final_df)} righe", project_id=_log_pid)
 
-        if _run_id and result_node and not is_eseguibile:
+        if _run_id and result_node and run_mode.logs_run():
             try:
                 intermediate_snapshot.record_final_snapshot(
                     run_id=_run_id,
@@ -838,7 +781,7 @@ def execute_enrichment_task(
             except Exception as _sne:
                 logger.warning(f"[Task {task_id}] Intermediate write result node fallita: {_sne}")
 
-        if _run_id and not is_eseguibile:
+        if _run_id and run_mode.logs_run():
             _exec_time = time.time() - _run_start
             _rid_c = _run_id
             _retention_c = _retention_n
@@ -857,7 +800,7 @@ def execute_enrichment_task(
                     logger.debug(f"cleanup async close_run fallito: {type(e).__name__}: {e}")
             threading.Thread(target=_async_close, daemon=True).start()
 
-        if not is_eseguibile:
+        if run_mode.logs_run():
             _elapsed_ms = int((time.time() - _run_start) * 1000)
             _rows_ok = result.get("rows_processed", 0) or 0
             append_step({
@@ -900,7 +843,7 @@ def execute_enrichment_task(
         # Nota: _EarlyTaskReturn e' definita come classe locale dentro il try
         # quindi qui la riconosciamo via name matching sul __class__
         if type(e).__name__ == "_EarlyTaskReturn" and hasattr(e, "payload"):
-            if _run_id and not is_eseguibile:
+            if _run_id and run_mode.logs_run():
                 try:
                     intermediate_writer.close_run(
                         run_id=_run_id,
@@ -912,7 +855,7 @@ def execute_enrichment_task(
                     )
                 except Exception as e_inner:
                     logger.debug(f"close_run intermediate fallito (early return): {type(e_inner).__name__}: {e_inner}")
-            if not is_eseguibile:
+            if run_mode.logs_run():
                 _elapsed_ms_er = int((time.time() - _run_start) * 1000)
                 close_run(
                     run_id=_run_id or task_id,
@@ -923,7 +866,7 @@ def execute_enrichment_task(
                 )
             _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
             return e.payload
-        if _run_id and not is_eseguibile:
+        if _run_id and run_mode.logs_run():
             try:
                 intermediate_writer.close_run(
                     run_id=_run_id,
@@ -942,7 +885,7 @@ def execute_enrichment_task(
             project_id=_log_pid,
         )
 
-        if not is_eseguibile:
+        if run_mode.logs_run():
             try:
                 _debug_payload = debug_payload_builder_module.DebugPayloadBuilder().build(
                     run_id=_run_id or task_id,

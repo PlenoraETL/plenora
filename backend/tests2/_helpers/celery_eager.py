@@ -130,15 +130,32 @@ class HarnessSpies:
     saved_pipeline_results: List[Dict[str, Any]] = field(default_factory=list)
     saved_result_blobs: List[Dict[str, Any]] = field(default_factory=list)
     output_contract_saves: List[Dict[str, Any]] = field(default_factory=list)
+    # Run-a-completamento (final_df): spie su finalize + output divergente.
+    eseg_saves: List[Dict[str, Any]] = field(default_factory=list)
+    logger_close_runs: List[Dict[str, Any]] = field(default_factory=list)
+    append_steps: List[Dict[str, Any]] = field(default_factory=list)
+    intermediate_close_runs: List[Dict[str, Any]] = field(default_factory=list)
+    final_snapshots: List[Dict[str, Any]] = field(default_factory=list)
+    carica_triggers: List[Dict[str, Any]] = field(default_factory=list)
+    debug_payloads: List[Dict[str, Any]] = field(default_factory=list)
 
 
-def _make_tracked_api_cs(spies: HarnessSpies):
+def _make_tracked_api_cs(spies: HarnessSpies, final_df: Any = None):
     instances = spies.api_cs_instances
 
     class Tracked(FakeApiConnectionService):
         def __init__(self):
             super().__init__()
             instances.append(self)
+
+        def _load_source_project(self, *args, **kwargs):
+            # Run-a-completamento: se l'harness fornisce un final_df, il source
+            # lo ritorna (il nodo result lo propaga → il task raggiunge il
+            # finalize). Altrimenti comportamento legacy: abort sul loader.
+            self._call_log.append(("_load_source_project", args, kwargs))
+            if final_df is not None:
+                return final_df
+            raise _HarnessAbort("loader-invoked", marker="_load_source_project")
 
     return Tracked
 
@@ -191,6 +208,7 @@ def install_enrichment_task_mocks(
     final_df: Any = None,
     is_already_completed_returns: bool = False,
     revoked_payload: Optional[Dict[str, Any]] = None,
+    persist_raises: bool = False,
 ) -> HarnessSpies:
     """Installa monkeypatch su tutte le dep di `execute_enrichment_task`.
 
@@ -228,13 +246,40 @@ def install_enrichment_task_mocks(
     # 3. Logger / run lifecycle no-op (top-level imports → patch su modulo task)
     import workers.tasks.enrichment_task as et_mod
 
-    for fn_name in ("open_run", "close_run", "set_run_context", "append_step"):
-        monkeypatch.setattr(et_mod, fn_name, lambda *a, **kw: None)
+    monkeypatch.setattr(et_mod, "open_run", lambda *a, **kw: None)
+    monkeypatch.setattr(et_mod, "set_run_context", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        et_mod, "close_run", lambda *a, **kw: spies.logger_close_runs.append(kw),
+    )
+    monkeypatch.setattr(
+        et_mod, "append_step",
+        lambda *a, **kw: spies.append_steps.append(a[0] if a else kw),
+    )
 
-    # 4. ApiConnectionService → tracked
+    # Fake eseguibili storage (ramo eseguibile run-a-completamento). Patchato al
+    # SOURCE (non su et_mod) così che sia task che enrichment_run_mode vedano il
+    # fake. Consuma i chunk del generator per non lasciare thread producer appesi.
+    import app.core.eseguibili.storage as _eseg_src
+
+    def _fake_eseg_save_chunks(task_id, filename, chunks):
+        for _ in chunks:
+            pass
+        spies.eseg_saves.append(
+            {"task_id": task_id, "filename": filename, "kind": "chunks"}
+        )
+
+    def _fake_eseg_save_bytes(task_id, filename, data):
+        spies.eseg_saves.append(
+            {"task_id": task_id, "filename": filename, "kind": "bytes"}
+        )
+
+    monkeypatch.setattr(_eseg_src, "save_chunks", _fake_eseg_save_chunks, raising=False)
+    monkeypatch.setattr(_eseg_src, "save_bytes", _fake_eseg_save_bytes, raising=False)
+
+    # 4. ApiConnectionService → tracked (con final_df per run-a-completamento)
     monkeypatch.setattr(
         "app.core.arricchisci.api_connector.ApiConnectionService",
-        _make_tracked_api_cs(spies),
+        _make_tracked_api_cs(spies, final_df),
     )
 
     # 5. build_enrichment_executor (factory usata dall'enrich_fn del task)
@@ -317,6 +362,8 @@ def install_enrichment_task_mocks(
         from app.core.results.pipeline_result import PipelineResultSave
 
         spies.saved_pipeline_results.append(kwargs)
+        if persist_raises:
+            raise RuntimeError("persist boom (harness persist_raises)")
         return PipelineResultSave(
             result_id="fake-result-id-df",
             output_filename=kwargs.get("filename_stem", "output") + ".csv",
@@ -336,27 +383,41 @@ def install_enrichment_task_mocks(
     )
 
     # 10. snapshot / writer.close_run (lazy intermediate)
+    _rec_snapshot = lambda **kw: spies.final_snapshots.append(kw)
     snap_name = "app.core.intermediate.snapshot"
     if snap_name in sys.modules:
-        monkeypatch.setattr(
-            f"{snap_name}.record_final_snapshot", lambda **kw: None,
-        )
+        monkeypatch.setattr(f"{snap_name}.record_final_snapshot", _rec_snapshot)
     else:
         stub = _types.ModuleType(snap_name)
-        stub.record_final_snapshot = lambda **kw: None
+        stub.record_final_snapshot = _rec_snapshot
         monkeypatch.setitem(sys.modules, snap_name, stub)
 
+    _rec_iclose = lambda **kw: spies.intermediate_close_runs.append(kw)
     writer_name = "app.core.intermediate.writer"
     if writer_name in sys.modules:
-        monkeypatch.setattr(f"{writer_name}.close_run", lambda **kw: None)
+        monkeypatch.setattr(f"{writer_name}.close_run", _rec_iclose)
     else:
         stub = _types.ModuleType(writer_name)
-        stub.close_run = lambda **kw: None
+        stub.close_run = _rec_iclose
         monkeypatch.setitem(sys.modules, writer_name, stub)
 
-    # 12. _trigger_carica_if_present (module helper, no-op)
+    # 11. DebugPayloadBuilder (failure finalize) — patch al SOURCE così il task
+    # (che usa `debug_payload_builder_module.DebugPayloadBuilder`) vede il fake.
+    class _FakeDebugPayloadBuilder:
+        def build(self, *a, **kw):
+            spies.debug_payloads.append(kw or {"args": a})
+            return {}
+
     monkeypatch.setattr(
-        et_mod, "_trigger_carica_if_present", lambda **kw: None,
+        "app.utils.debug_payload_builder.DebugPayloadBuilder",
+        _FakeDebugPayloadBuilder,
+        raising=False,
+    )
+
+    # 12. _trigger_carica_if_present (module helper)
+    monkeypatch.setattr(
+        et_mod, "_trigger_carica_if_present",
+        lambda **kw: spies.carica_triggers.append(kw),
     )
     monkeypatch.setattr(
         et_mod, "_cleanup_temp_file_sources", lambda *a, **kw: None,
