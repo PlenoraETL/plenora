@@ -718,13 +718,17 @@ def validate_project_canvas(
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
     try:
-        from app.core.projects.canvas_validation import validate_canvas
+        from app.core.projects.canvas_validation import validate_project_chain
 
-        canvas = _project_service.get_project_canvas(project_id)
-        report = validate_canvas(
-            canvas, project_id=project_id,
-            project_type=getattr(metadata, "project_type", None),
-        )
+        def _load(pid):
+            # I ref project_source sono già autorizzati al PUT
+            # (find_inaccessible_canvas_refs); qui risolviamo canvas+tipo.
+            md = _project_service.get_project_metadata(pid)
+            if not md:
+                return None
+            return (_project_service.get_project_canvas(pid), getattr(md, "project_type", None))
+
+        report = validate_project_chain(project_id, _load)
         result = report.to_dict()
         result["valid"] = not report.has_errors
         return result

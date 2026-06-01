@@ -12,7 +12,7 @@ ref cross-tenant (``find_inaccessible_canvas_refs``) resta al boundary del route
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from app.core.projects.canvas_access import find_orphan_processing_nodes
 from app.core.projects.schema_inference import SchemaInferenceService
@@ -419,4 +419,42 @@ def _upstream_for_node(
     return InferredSchema(columns=merged_cols, status=status)
 
 
-__all__ = ["validate_canvas"]
+# (canvas, project_type) | None se non accessibile/inesistente.
+CanvasLoader = Callable[[str], Optional[Tuple[Any, Optional[str]]]]
+
+
+def validate_project_chain(
+    project_id: str, load: CanvasLoader, *, _seen: Optional[set] = None,
+) -> ValidationReport:
+    """Valida un progetto + ricorsivamente i progetti a monte (project_source).
+
+    Validare dalla coda certifica l'intera catena (§12.3): per ogni
+    ``project_source`` ricorre nel progetto sorgente e aggrega gli Issue. ``load``
+    risolve ``project_id -> (canvas, project_type)`` (o ``None`` se non
+    accessibile: l'authz/visibilità è responsabilità del loader del chiamante).
+    Cycle-guard via ``_seen`` (catene cross-progetto cicliche → stop).
+    """
+    seen = _seen if _seen is not None else set()
+    if project_id in seen:
+        return ValidationReport()
+    seen.add(project_id)
+
+    loaded = load(project_id)
+    if loaded is None:
+        return ValidationReport()
+    canvas, project_type = loaded
+
+    issues = list(validate_canvas(canvas, project_id=project_id, project_type=project_type).issues)
+
+    for node in (getattr(canvas, "nodes", None) or []):
+        if getattr(node, "type", None) != "project_source":
+            continue
+        data = getattr(node, "data", None) or {}
+        src_pid = getattr(node, "source_project_id", None) or data.get("source_project_id")
+        if src_pid:
+            issues.extend(validate_project_chain(src_pid, load, _seen=seen).issues)
+
+    return ValidationReport(issues=tuple(issues))
+
+
+__all__ = ["validate_canvas", "validate_project_chain", "CanvasLoader"]
