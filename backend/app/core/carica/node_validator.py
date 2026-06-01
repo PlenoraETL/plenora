@@ -3,8 +3,9 @@
 Riusa la regola pura condivisa ``check_mapping`` per il sottoinsieme comune
 (source-exists / dup-source / dup-dest) e copre le **regole extra di carica** che
 ``check_mapping`` non ha (erano in ``ColumnMapper.validate_mapping``, dead-in-prod):
-≥1-attivo, max-1-geometria, match-column (UPDATE/UPSERT) — altrimenti il PUT
-sotto-validerebbe carica (false-OK, viola #B).
+max-1-geometria, match-column (UPDATE/UPSERT) — altrimenti il PUT sotto-validerebbe
+carica (false-OK, viola #B). NB: nessun mapping attivo NON è un errore (carica fa
+auto_map a runtime) → si ritorna ``[]``.
 
 Onora lo status (#A): se l'upstream è ``indeterminate`` (schema a monte non
 risolvibile), una colonna sorgente mancante è un **warning**, non un error — la
@@ -17,6 +18,9 @@ from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any, List
 
+import re
+
+from app.core.carica.dispatch import select_carica_write_branch
 from app.shared.execution.mapping_rules import check_mapping
 from app.shared.execution.schema_types import InferredSchema
 from app.shared.execution.validation_protocol import register_node_validator
@@ -24,6 +28,63 @@ from app.shared.execution.validation_types import Issue
 
 # I node.type che rappresentano un nodo CARICA (allineato a CARICA_NODE_TYPES).
 _CARICA_NODE_TYPES = ("carica", "carica_arcgis", "datasource_node")
+
+_HTTP_RE = re.compile(r"^https?://", re.IGNORECASE)
+
+
+def _err(node_id: str, code: str, message: str) -> Issue:
+    return Issue(node_id=node_id, severity="error", code=code, message=message, suggestion=None)
+
+
+def _carica_config_issues(node_type: str, data: dict, node_id: str) -> List[Issue]:
+    """Config-completeness del nodo CARICA (porting fedele dei RULE_ID FE).
+
+    Il branch (db/rest/arcgis/datasource) è scelto con la STESSA logica del
+    runtime (`select_carica_write_branch`) → no-drift.
+    """
+    branch = select_carica_write_branch({**data, "type": node_type})
+    out: List[Issue] = []
+
+    if branch == "db":
+        if not data.get("connection_id"):
+            out.append(_err(node_id, "CARICA_DB_CONNECTION_MISSING",
+                            "Carica DB: seleziona una connessione database."))
+        if not data.get("schema_name"):
+            out.append(_err(node_id, "CARICA_DB_SCHEMA_MISSING",
+                            "Carica DB: seleziona uno schema di destinazione."))
+        if not data.get("table_name"):
+            out.append(_err(node_id, "CARICA_DB_TABLE_MISSING",
+                            "Carica DB: specifica il nome della tabella di destinazione."))
+        if data.get("write_mode") in ("upsert", "update") and not (data.get("match_columns") or []):
+            out.append(_err(node_id, "CARICA_DB_MATCH_COLUMNS_MISSING",
+                            f'Carica DB: modalità "{data.get("write_mode")}" richiede almeno '
+                            'una colonna chiave in "Colonne di corrispondenza".'))
+
+    elif branch == "rest":
+        url = (data.get("rest_url") or "").strip()
+        if not url or not _HTTP_RE.match(url):
+            out.append(_err(node_id, "CARICA_REST_URL_MISSING",
+                            "Carica REST: specifica un endpoint HTTP/HTTPS valido."))
+        if (data.get("rest_method") or "POST") not in ("POST", "PUT", "PATCH"):
+            out.append(_err(node_id, "CARICA_REST_METHOD_INVALID",
+                            "Carica REST: metodo non supportato."))
+
+    elif branch == "arcgis":
+        op = data.get("arcgis_operation") or "add"
+        if not data.get("arcgis_connection_id"):
+            out.append(_err(node_id, "CARICA_ARCGIS_CONNECTION_MISSING",
+                            "Carica ArcGIS: seleziona una connessione ArcGIS."))
+        if op in ("add", "update", "upsert", "delete") and not data.get("arcgis_layer_url"):
+            out.append(_err(node_id, "CARICA_ARCGIS_LAYER_URL_MISSING",
+                            "Carica ArcGIS: seleziona il layer di destinazione."))
+        if op == "create_service" and not data.get("arcgis_new_service_name"):
+            out.append(_err(node_id, "CARICA_ARCGIS_NEW_SERVICE_NAME_MISSING",
+                            "Carica ArcGIS: specifica il nome del nuovo Feature Service."))
+        if op in ("update", "upsert", "delete") and not (data.get("arcgis_match_column") or "").strip():
+            out.append(_err(node_id, "CARICA_ARCGIS_MATCH_COLUMN_MISSING",
+                            f'Carica ArcGIS: seleziona la colonna chiave per l\'operazione "{op}".'))
+
+    return out
 
 
 def _normalize(raw: Any) -> SimpleNamespace:
@@ -48,20 +109,26 @@ class CaricaNodeValidator:
     def validate_node(self, node: Any, *, upstream: InferredSchema) -> List[Issue]:
         data = getattr(node, "data", None) or {}
         node_id = getattr(node, "id", "")
+        node_type = getattr(node, "type", "") or ""
+
+        # Config-completeness (connessione/tabella/url/match...) — fire SEMPRE,
+        # indipendente dai mapping.
+        issues_cfg = _carica_config_issues(node_type, data, node_id)
+
         raw_mappings = data.get("column_mappings") or []
         active = [m for m in (_normalize(r) for r in raw_mappings)
                   if m.source_column and m.dest_column and not m.skip]
 
-        # Nessun mapping esplicito: a runtime carica fa auto_map → niente da
-        # validare a PUT (validare ora darebbe falsi positivi).
+        # Nessun mapping esplicito: a runtime carica fa auto_map → niente
+        # col-resolution da validare a PUT (darebbe falsi positivi).
         if not active:
-            return []
+            return issues_cfg
 
         columns = {
             c["name"] for c in upstream.columns
             if isinstance(c, dict) and c.get("name")
         }
-        issues = check_mapping(columns, active, node_id=node_id)
+        issues = issues_cfg + check_mapping(columns, active, node_id=node_id)
 
         # #A: con upstream indeterminate, "source mancante" è un warning, non error.
         if upstream.status == "indeterminate":
