@@ -42,6 +42,16 @@ class ManipolaNodeValidator:
             config = {}
 
         issues: List[Issue] = []
+
+        # 0. Operazione selezionata? (porting fedele TRANSFORM_OP_MISSING)
+        transform_op = getattr(node, "transform_op", None) or data.get("transform_op")
+        if not transform_op:
+            issues.append(Issue(
+                node_id=node_id, severity="error", code="TRANSFORM_OP_MISSING",
+                message="Nodo trasformazione senza operazione selezionata.",
+                suggestion=None,
+            ))
+
         upstream_cols = [c for c in upstream.columns if isinstance(c, dict)]
         names = {c["name"] for c in upstream_cols if c.get("name")}
 

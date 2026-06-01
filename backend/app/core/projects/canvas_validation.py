@@ -83,10 +83,47 @@ def validate_canvas(canvas: Any, *, project_id: str = "") -> ValidationReport:
             suggestion=None,
         ))
 
-    # 4. Validazione per-nodo via registry (#D): schema/colonne/regole di motore.
+    # 4. Strutturali canvas-level (porting fedele dei RULE_ID FE).
+    issues.extend(_structural_extra_issues(nodes, edges))
+
+    # 5. Validazione per-nodo via registry (#D): schema/colonne/regole di motore.
     issues.extend(_validate_nodes(canvas, nodes, edges, node_ids, project_id))
 
     return ValidationReport(issues=tuple(issues))
+
+
+def _structural_extra_issues(nodes: list, edges: list) -> List[Issue]:
+    """Invarianti canvas-level: canvas vuoto, nodo result/carica unico e collegato."""
+    out: List[Issue] = []
+    if not nodes:
+        return [Issue(node_id="", severity="error", code="CANVAS_EMPTY",
+                      message="Canvas vuoto. Aggiungi almeno una sorgente e un nodo Output.",
+                      suggestion=None)]
+
+    result_nodes = [n for n in nodes if getattr(n, "type", None) == "result"]
+    if not result_nodes:
+        out.append(Issue(node_id="", severity="error", code="RESULT_NODE_MISSING",
+                         message='Nodo Output mancante. Aggiungi un nodo "Output".',
+                         suggestion=None))
+    elif len(result_nodes) > 1:
+        out.append(Issue(node_id="", severity="error", code="RESULT_NODE_DUPLICATED",
+                         message=f"Troppi nodi Output ({len(result_nodes)}). Può essercene solo uno.",
+                         suggestion=None))
+
+    carica_nodes = [n for n in nodes if getattr(n, "type", None) == "carica"]
+    if len(carica_nodes) > 1:
+        out.append(Issue(node_id="", severity="error", code="CARICA_DUPLICATED",
+                         message=f"Troppi nodi Carica ({len(carica_nodes)}). Può essercene solo uno.",
+                         suggestion=None))
+
+    # RESULT_NOT_CONNECTED: ogni result senza edge entrante.
+    targets = {getattr(e, "target", None) for e in edges}
+    for rn in result_nodes:
+        if rn.id not in targets:
+            out.append(Issue(node_id=str(rn.id), severity="error", code="RESULT_NOT_CONNECTED",
+                             message="Nodo Output non connesso. Collega almeno una sorgente all'output.",
+                             suggestion=None))
+    return out
 
 
 def _validate_nodes(

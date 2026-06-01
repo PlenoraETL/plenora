@@ -20,8 +20,11 @@ from app.shared.execution.schema_types import InferredSchema
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-def _node(node_id="t1", config=None):
-    return SimpleNamespace(id=node_id, type="transform", data={}, config=config or {})
+def _node(node_id="t1", config=None, transform_op="filter"):
+    # transform_op di default valorizzato → i test col-ref non scattano TRANSFORM_OP_MISSING
+    return SimpleNamespace(
+        id=node_id, type="transform", data={}, config=config or {}, transform_op=transform_op,
+    )
 
 
 def _upstream(names, status="certain", ids=None):
@@ -100,6 +103,12 @@ def test_valid_formula_no_issue_and_refs_not_checked():
     # formula valida; i suoi ref (a, to_numeric) NON sono validati come colonne
     node = _node(config={"formula": "to_numeric(a) + 1"})
     assert _v().validate_node(node, upstream=_upstream(["a"])) == []
+
+
+def test_transform_op_missing_is_error():
+    node = _node(config={"column": "a"}, transform_op=None)
+    issues = _v().validate_node(node, upstream=_upstream(["a"]))
+    assert "TRANSFORM_OP_MISSING" in _codes(issues)
 
 
 def test_register_manipola_validator():

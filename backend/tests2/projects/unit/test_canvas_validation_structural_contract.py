@@ -14,6 +14,15 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
+@pytest.fixture(autouse=True)
+def _no_node_validators():
+    # Strutturale-only deterministico: nessun validate_node registrato.
+    from app.shared.execution import validation_protocol as vp
+    vp.clear_node_validators()
+    yield
+    vp.clear_node_validators()
+
+
 def _node(node_id, ntype):
     n = MagicMock()
     n.id = node_id
@@ -45,10 +54,10 @@ def _codes(report):
     return sorted(i.code for i in report.issues)
 
 
-def test_empty_canvas_has_no_issues():
+def test_empty_canvas_is_error():
     report = _validate(_canvas([], []))
-    assert report.issues == ()
-    assert report.has_errors is False
+    assert _codes(report) == ["CANVAS_EMPTY"]
+    assert report.has_errors is True
 
 
 def test_valid_dag_has_no_issues():
@@ -87,3 +96,27 @@ def test_source_node_alone_is_not_orphan():
     # un source-like senza incoming non è orfano (è una sorgente)
     report = _validate(_canvas([_node("s", "file_source")], []))
     assert "structure.orphan" not in _codes(report)
+
+
+def test_result_node_missing_is_error():
+    # canvas non vuoto ma senza nodo result
+    report = _validate(_canvas([_node("s", "file_source")], []))
+    assert "RESULT_NODE_MISSING" in _codes(report)
+
+
+def test_result_node_duplicated_is_error():
+    nodes = [_node("s", "file_source"), _node("r1", "result"), _node("r2", "result")]
+    report = _validate(_canvas(nodes, [_edge("s", "r1"), _edge("s", "r2")]))
+    assert "RESULT_NODE_DUPLICATED" in _codes(report)
+
+
+def test_carica_duplicated_is_error():
+    nodes = [_node("r", "result"), _node("c1", "carica"), _node("c2", "carica")]
+    report = _validate(_canvas(nodes, [_edge("r", "c1"), _edge("r", "c2")]))
+    assert "CARICA_DUPLICATED" in _codes(report)
+
+
+def test_result_not_connected_is_error():
+    nodes = [_node("s", "file_source"), _node("r", "result")]
+    report = _validate(_canvas(nodes, []))  # result senza edge entrante
+    assert "RESULT_NOT_CONNECTED" in _codes(report)
