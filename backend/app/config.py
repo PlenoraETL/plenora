@@ -186,9 +186,11 @@ class Settings:
         "MINIO_SECRET_KEY": None,
 
         # Canvas Validation (Epic §12): se True l'esecuzione è bloccata quando
-        # validate_canvas trova errori (gate a esecuzione). Default False =
-        # nessun cambio di comportamento finché non acceso.
-        "CANVAS_VALIDATION_GATE_ENABLED": False,
+        # la catena del progetto non valida (gate a esecuzione, re-valida live) e
+        # i run schedulati di progetti con canvas_validated=False sono bloccati.
+        # Default True: il modello §12 è attivo (pulsante Valida + stato persistito
+        # + FE in place). Override a False in .env per disattivarlo.
+        "CANVAS_VALIDATION_GATE_ENABLED": True,
 
         "LOG_ARCHIVE_ENABLED": False,
         # Prefisso deterministico delle object key archive. Default senza

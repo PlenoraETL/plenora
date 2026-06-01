@@ -26,6 +26,16 @@ from app.core.scheduler.models import (
 
 
 
+@pytest.fixture(autouse=True)
+def _canvas_validation_gate_off(monkeypatch):
+    """Disabilita il gate canvas-validation (default ON, Epic CanvasVal §12) per la
+    suite scheduler-mechanics: questi test verificano lock/release/orphan/scheduled_for
+    DOPO il gate e usano project_meta senza canvas_validated. Il gate ha copertura
+    dedicata in test_execution_manager_canvas_validation_gate.py, che ripatcha
+    settings.get e ha quindi la precedenza su questa env."""
+    monkeypatch.setenv("CANVAS_VALIDATION_GATE_ENABLED", "false")
+
+
 @pytest.fixture
 def tick():
     """Forza un tick deterministico del loop heartbeat parked sul wait virtuale.

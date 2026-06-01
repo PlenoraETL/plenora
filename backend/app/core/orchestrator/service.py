@@ -29,30 +29,26 @@ logger = get_logger(__name__)
 ExecutorDispatch = Mapping[str, CanvasExecutorProtocol]
 
 
-def _canvas_validation_gate(project_id, load):
+def _canvas_validation_gate(project_id, canvas_validated):
     """Gate a esecuzione (Epic Canvas Validation §12), dietro feature-flag.
 
-    Se ``CANVAS_VALIDATION_GATE_ENABLED`` e la **catena** del progetto ha errori
-    di validazione → ritorna un ``PipelineArtifact`` di failure (il run NON parte).
-    Altrimenti ``None``. Valida l'intera catena cross-progetto via
-    ``validate_project_chain`` (``load(pid) -> (canvas, project_type) | None``),
-    fresco (autorevole, niente stato stale). Flag default off → nessun cambio.
+    Se ``CANVAS_VALIDATION_GATE_ENABLED`` (default ON) e il progetto NON è validato
+    → ritorna un ``PipelineArtifact`` di failure (il run NON parte). Si fida dello
+    **stato persistito** ``canvas_validated`` (coerente col gate scheduler), tenuto
+    fresco dal cascade cross-progetto su ``update_canvas`` e settato da POST
+    /validate. Niente re-validazione live: cheap, niente I/O extra a ogni run.
     """
     if not settings.get("CANVAS_VALIDATION_GATE_ENABLED", False):
         return None
-    from app.core.projects.canvas_validation import validate_project_chain
-
-    report = validate_project_chain(project_id, load)
-    if not report.has_errors:
+    if canvas_validated:
         return None
-    errs = [i.message for i in report.by_severity("error")]
     logger.warning(
-        f"Esecuzione bloccata da validazione canvas: {len(errs)} errori",
+        "Esecuzione bloccata: canvas del progetto non validato",
         op="validate", project_id=project_id,
     )
     return PipelineArtifact.failure(
         project_id=project_id,
-        message=f"Validazione canvas fallita ({len(errs)} errori): " + "; ".join(errs[:5]),
+        message="Canvas non validato: apri il progetto e premi Valida prima di eseguire.",
     )
 
 
@@ -223,17 +219,9 @@ class OrchestratorService:
                 message=f"Progetto {project_id} non trovato",
             )
 
-        # Gate a esecuzione (Epic Canvas Validation §12): blocca il run se la
-        # catena del progetto ha errori (dietro feature-flag, default off).
-        def _load_for_validation(pid):
-            md = self.project_service.get_project_metadata(pid)
-            if not md:
-                return None
-            if pid == project_id:
-                return (canvas, getattr(md, "project_type", None))  # già caricato
-            return (self.project_service.get_project_canvas(pid), getattr(md, "project_type", None))
-
-        gate = _canvas_validation_gate(project_id, _load_for_validation)
+        # Gate a esecuzione (Epic Canvas Validation §12): blocca il run se il
+        # progetto non è validato (stato persistito, dietro feature-flag).
+        gate = _canvas_validation_gate(project_id, getattr(metadata, "canvas_validated", False))
         if gate is not None:
             return gate
 
