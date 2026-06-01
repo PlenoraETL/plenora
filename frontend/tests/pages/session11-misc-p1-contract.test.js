@@ -16,23 +16,6 @@ function readSrc(relPath) {
 
 
 describe('Sessione 11 misc P1', () => {
-  it('useCanvasValidation useEffect deps: no piu nodes.length ridondante', () => {
-    const src = readSrc('hooks/useCanvasValidation.js');
-    // Trova l'useEffect target (con validateOnChange + debounceMs)
-    const idx = src.indexOf('if (!validateOnChange || nodes.length === 0)');
-    expect(idx).toBeGreaterThan(-1);
-    // I prossimi ~600 char includono il closing }, [...]) dell'useEffect
-    const window = src.slice(idx, idx + 1200);
-    // Cerca il blocco deps `}, [...]`
-    const depsMatch = window.match(/\}\s*,\s*\[([^\]]+)\]\)/);
-    expect(depsMatch).toBeTruthy();
-    const depsStr = depsMatch[1];
-    // Anti-regression: nodes.length NON deve essere nelle deps
-    expect(depsStr).not.toMatch(/\bnodes\.length\b/);
-    // Le deps essenziali invece restano
-    expect(depsStr).toMatch(/nodesFingerprint/);
-  });
-
   it('ProjectSourceNode logga warning aggregato su drift schema', () => {
     const src = readSrc('components/nodes/ProjectSourceNode.jsx');
     expect(src).toContain('_missingLogicalCount');

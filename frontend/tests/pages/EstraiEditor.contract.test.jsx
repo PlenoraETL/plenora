@@ -28,16 +28,6 @@ const {
   deleteNodeMock: vi.fn(),
   toastMock: globalThis.__frontendTestHelpers.createToastMock(vi),
   reactFlowStateRef: { current: { nodes: [], edges: [] } },
-  // Mutable ref usato solo da useCanvasValidation per permettere
-  // override per-test (validation-failure path).
-  validationStateRef: {
-    current: {
-      isValid: true,
-      errors: [],
-      disconnectedNodeIds: [],
-      getNodeStyle: () => ({}),
-    },
-  },
 }));
 
 let currentProjectId = 'proj-1';
@@ -108,7 +98,7 @@ vi.mock('../../src/hooks', () => ({
     handleExecute: vi.fn(),
     downloadTaskResult: vi.fn(),
   }),
-  useCanvasValidation: () => validationStateRef.current,
+  useValidationHighlights: () => {},
   useEdgeHandlers: () => ({
     onConnect: vi.fn(),
     onEdgeClick: vi.fn(),
@@ -230,13 +220,6 @@ describe('EstraiEditor', () => {
       sourceType: 'database',
       reload: vi.fn(),
     };
-    // Reset default safe per validation (override per-test).
-    validationStateRef.current = {
-      isValid: true,
-      errors: [],
-      disconnectedNodeIds: [],
-      getNodeStyle: () => ({}),
-    };
   });
 
   it('redirects to home when the route projectId is invalid', async () => {
@@ -343,14 +326,7 @@ describe('EstraiEditor', () => {
     expect(toastMock.success).not.toHaveBeenCalled();
   });
 
-  it('saves drafts even when the live canvas validation is invalid', async () => {
-    validationStateRef.current = {
-      isValid: false,
-      errors: ['Nodo orphan', 'Mapping mancante'],
-      disconnectedNodeIds: [],
-      getNodeStyle: () => ({}),
-    };
-
+  it('saves drafts regardless of validation (validazione on-demand, non blocca il save)', async () => {
     render(<EstraiEditor />);
     await screen.findByText('Estrai Orders');
     await userEvent.click(screen.getByRole('button', { name: /salva/i }));

@@ -29,7 +29,7 @@ import '../components/nodes/DataSourceNode.css';
 import { calculateOutputColumnsRecursive } from '../utils/columnUtils';
 import { createEdgeFromData, deserializeNodes } from '../utils/nodeFactories';
 import { getLayerSchema } from '../api/features';
-import { usePreview, useExecution, useCanvasValidation, useEdgeHandlers, useCanvasCore, useCaricarica, useCanvasSave, useUnsavedChangesGuard } from '../hooks';
+import { usePreview, useExecution, useValidationHighlights, useEdgeHandlers, useCanvasCore, useCaricarica, useCanvasSave, useUnsavedChangesGuard } from '../hooks';
 import { useEditorData } from '../hooks/useEditorData';
 import { describeAccessDeniedNodes } from '../utils/canvasAccessControl';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
@@ -95,7 +95,11 @@ function EstraiEditor() {
     onBeforeExecute: handleSaveQuiet,
     getCanvas: () => ({ nodes: nodesRef.current, edges: edgesRef.current })
   });
-  const validation = useCanvasValidation(dataNodes, edges, { validateOnChange: true, debounceMs: 300 });
+  // Highlight backend-driven (Epic CanvasVal §12): i nodi con issue sono
+  // evidenziati dallo store (setValidationHighlights, popolato da Valida/Esegui
+  // via ResultNode). Coerente con Manipola/Arricchisci. La validazione live
+  // in-memory è stata rimossa: la validazione è on-demand (pulsante → backend).
+  useValidationHighlights(setNodes);
   const edgeHandlers = useEdgeHandlers(nodes, setEdges, { resultNodeType: 'resultNode' });
   useEffect(() => {
     // H-9 (2026-05-26): early-return su loading PRIMA del check
@@ -125,12 +129,6 @@ function EstraiEditor() {
     // ciclo di vita store. Includerli rifirerebbe il load a ogni re-render.
   }, [project, projectConnection, loading]);
 
-  useEffect(() => {
-    if (validation.disconnectedNodeIds.length === 0) return;
-    setNodes(nds => nds.map(node => ({
-      ...node, style: node.type === 'comment' ? node.style : validation.getNodeStyle(node.id)
-    })));
-  }, [validation.disconnectedNodeIds, setNodes, validation]);
 
   useEffect(() => {
     if (dataNodes.length === 0) return;
@@ -610,7 +608,7 @@ function EstraiEditor() {
 
   // afterCanvas slot: QueryPreview overlay sul canvas.
   const afterCanvas = (
-    <QueryPreview nodes={dataNodes} edges={edges} validationErrors={validation.errors} />
+    <QueryPreview nodes={dataNodes} edges={edges} />
   );
 
   // modals slot: lazy-loaded modal stack.

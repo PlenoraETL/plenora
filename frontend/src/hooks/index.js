@@ -9,7 +9,6 @@
  *   useCaricarica         → gestione scrittura su DB/ArcGIS
  *   useCanvasCore         → stato nodi/edges condiviso (wrapper Zustand)
  *   useCanvasSave         → salvataggio draft uniforme tra editor
- *   useCanvasValidation   → validazione canvas in tempo reale
  *   useCanvasKeyboard     → shortcut tastiera (Delete, Ctrl+S, ...)
  *   useEdgeHandlers       → gestione connessioni tra nodi e modal join
  *   useColumnPropagation  → calcolo colonne lungo il grafo
@@ -25,7 +24,6 @@ export { useExecution }                             from './useExecution';
 export { useCaricarica }                            from './useCaricarica';
 export { useCanvasCore }                            from './useCanvasCore';
 export { useCanvasSave }                            from './useCanvasSave';
-export { useCanvasValidation }                      from './useCanvasValidation';
 export { useCanvasKeyboard }                        from './useCanvasKeyboard';
 export { useEdgeHandlers }                          from './useEdgeHandlers';
 export { default as useColumnPropagation }          from './useColumnPropagation';
