@@ -12,61 +12,13 @@ from app.core.projects.types import (
     JsonObject,
     SchemaMap,
     SchemaRows,
-    StringMap,
     TransformHandlerRegistry,
 )
+from app.shared.execution.config_column_refs import resolve_config_column_refs
 from app.shared.execution.schema_types import ColumnSchema, InferredSchema
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-SCALAR_COLUMN_CONFIG_KEYS = frozenset({
-    "aggregate_column",
-    "by_column",
-    "column",
-    "geom_column",
-    "geometry_column",
-    "group_by",
-    "group_column",
-    "id_column",
-    "index_col",
-    "input_geom",
-    "lat_column",
-    "left_geom",
-    "left_geom_column",
-    "left_on",
-    "lon_column",
-    "mask_geom",
-    "old_name",
-    "order_column",
-    "partition_column",
-    "pivot_col",
-    "point_geom_column",
-    "polygon_geom_column",
-    "right_geom",
-    "right_geom_column",
-    "right_on",
-    "source_column",
-    "stratify_column",
-    "target_column",
-    "value_col",
-    "wkt_column",
-})
-
-LIST_COLUMN_CONFIG_KEYS = frozenset({
-    "column_order",
-    "columns",
-    "compare_columns",
-    "group_by",
-    "group_by_columns",
-    "id_columns",
-    "join_keys",
-    "left_keys",
-    "right_keys",
-    "subset",
-    "value_columns",
-})
 
 
 def _stable_column_id(*parts: str) -> str:
@@ -504,6 +456,12 @@ class SchemaInferenceService:
         config: JsonObject,
         input_schemas: List[List[ColumnSchema]],
     ) -> JsonObject:
+        """Risolve i ref-colonna by-id → nome corrente, via la regola condivisa.
+
+        Costruisce ``id_to_name`` dagli schemi in input e delega a
+        ``config_column_refs.resolve_config_column_refs`` — STESSA logica che usa
+        il validatore manipola (no-drift strutturale).
+        """
         if not isinstance(config, dict):
             return config
         id_to_name = {
@@ -512,61 +470,7 @@ class SchemaInferenceService:
             for col in schema
             if getattr(col, "id", None)
         }
-        if not id_to_name:
-            return config
-
-        out = dict(config)
-        for key, value in list(out.items()):
-            if key.endswith("_column_id"):
-                base = key[:-10]
-                if base in out and value:
-                    out[base] = id_to_name.get(str(value), out[base])
-            elif key.endswith("_column_ids"):
-                base = key[:-11]
-                if base in out and isinstance(value, list) and value:
-                    current_values = out.get(base)
-                    if not isinstance(current_values, list):
-                        current_values = []
-                    out[base] = [
-                        id_to_name.get(str(column_id), current_values[idx] if idx < len(current_values) else None)
-                        for idx, column_id in enumerate(value)
-                    ]
-
-        for key, value in list(out.items()):
-            if not isinstance(value, list):
-                continue
-            if key in {"aggregations", "aggs"}:
-                out[key] = [
-                    self._resolve_schema_dict_ref(item, id_to_name, "column")
-                    for item in value
-                ]
-            elif key == "renames":
-                out[key] = [
-                    self._resolve_schema_dict_ref(item, id_to_name, "old_name", "old_name_id")
-                    for item in value
-                ]
-            elif key == "maskings":
-                out[key] = [
-                    self._resolve_schema_dict_ref(item, id_to_name, "column")
-                    for item in value
-                ]
-
-        return out
-
-    @staticmethod
-    def _resolve_schema_dict_ref(
-        item: Any,
-        id_to_name: StringMap,
-        name_field: str,
-        id_field: str = "column_id",
-    ) -> Any:
-        if not isinstance(item, dict):
-            return item
-        out = dict(item)
-        column_id = out.get(id_field)
-        if column_id and str(column_id) in id_to_name:
-            out[name_field] = id_to_name[str(column_id)]
-        return out
+        return resolve_config_column_refs(config, id_to_name)
 
     def _build_transform_handlers(
         self,

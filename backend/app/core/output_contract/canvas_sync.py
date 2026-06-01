@@ -20,52 +20,13 @@ ProjectSourceSyncResult = tuple[bool, ColumnMigrationsByNode]
 ExpressionRefs = list[ColumnPayload]
 
 
-SCALAR_COLUMN_CONFIG_KEYS = frozenset({
-    "aggregate_column",
-    "by_column",
-    "column",
-    "geom_column",
-    "geometry_column",
-    "group_by",
-    "group_column",
-    "id_column",
-    "index_col",
-    "input_geom",
-    "lat_column",
-    "left_geom",
-    "left_geom_column",
-    "left_on",
-    "lon_column",
-    "mask_geom",
-    "old_name",
-    "order_column",
-    "partition_column",
-    "pivot_col",
-    "point_geom_column",
-    "polygon_geom_column",
-    "right_geom",
-    "right_geom_column",
-    "right_on",
-    "source_column",
-    "stratify_column",
-    "target_column",
-    "value_col",
-    "wkt_column",
-})
-
-LIST_COLUMN_CONFIG_KEYS = frozenset({
-    "column_order",
-    "columns",
-    "compare_columns",
-    "group_by",
-    "group_by_columns",
-    "id_columns",
-    "join_keys",
-    "left_keys",
-    "right_keys",
-    "subset",
-    "value_columns",
-})
+# Key-set condivise: sorgente unica in shared/execution/config_column_refs
+# (de-duplicate; erano copiate qui e in schema_inference). Re-export per i caller
+# che le importano da questo modulo.
+from app.shared.execution.config_column_refs import (  # noqa: E402
+    LIST_COLUMN_CONFIG_KEYS,
+    SCALAR_COLUMN_CONFIG_KEYS,
+)
 
 DICT_COLUMN_REFERENCE_LISTS = {
     "aggregations": ("column", "column_id"),

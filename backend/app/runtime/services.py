@@ -54,8 +54,10 @@ def _register_canvas_node_validators() -> None:
     senza importarli — la direzione resta motori -> shared. Idempotente.
     """
     from app.core.carica.node_validator import register_carica_validator
+    from app.core.manipola.node_validator import register_manipola_validator
 
     register_carica_validator()
+    register_manipola_validator()
 
 
 _register_multilayer_artifact_adapters()
