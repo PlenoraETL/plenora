@@ -67,7 +67,7 @@ const nodeTypes = {
   // React Flow `nodeTypes` chiave deve combaciare con `node.type`. Il
   // deserializer (`nodeFactories.createDataSourceNode`) e tutti gli altri
   // pattern del FE — EstraiEditor, QueryPreview, useEdgeHandlers,
-  // graphUtils, validateEstraiCanvas — usano la chiave camelCase
+  // graphUtils — usano la chiave camelCase
   // `datasourceNode`. Manteniamo `datasource_node` come alias per
   // i nodi appena aggiunti via `handleAddDataSourceNode` (vedi sotto)
   // finché quel path non viene allineato al deserializer.
@@ -118,9 +118,9 @@ const ManipolaEditorContent = () => {
   });
   // I 3 throws fail-fast (canvas vuoto / Output mancante / sorgente mancante)
   // erano duplicati delle regole CANVAS_EMPTY / RESULT_NODE_MISSING /
-  // RESULT_NO_SOURCE in `validateManipolaCanvas`. Il flow `ResultNode.handleExecute
-  // WithValidation` esegue `runValidation()` PRIMA di chiamare `onExecute`:
-  // se la validazione fallisce apre il modal e ritorna; quindi questo
+  // RESULT_NO_SOURCE, ora coperte dalla validazione backend. Il flow
+  // `ResultNode.handleExecuteWithValidation` valida (POST /validate) PRIMA di
+  // chiamare `onExecute`: se fallisce apre il modal e ritorna; quindi questo
   // `onBeforeExecute` viene raggiunto solo a validation-passed.
   const execution = useExecution(projectId, {
     onBeforeExecute: handleSaveQuiet,

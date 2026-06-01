@@ -1,12 +1,8 @@
 /**
- * graphUtils.js — Utility condivise per la gestione dei grafi canvas
- *
- * Funzioni pure estratte da validateEstraiCanvas e validateManipolaCanvas
- * dove erano duplicate identicamente.
- *
- * Importato da:
- *   - utils/validateEstraiCanvas.js
- *   - utils/validateManipolaCanvas.js
+ * graphUtils.js — Utility pure condivise per la gestione dei grafi canvas
+ * (detectCycle, getNodeName). Erano usate dai validatori canvas per-famiglia
+ * (rimossi con la migrazione a validazione backend, Epic CanvasVal §12);
+ * restano qui come utility di grafo generiche e testate (graphUtils.contract).
  */
 
 /**

@@ -1,8 +1,12 @@
 /**
  * canvasValidationContract.js — Contratto FE per la validazione canvas.
  *
- * Single-source-of-truth tipologico (typed-ish via JSDoc) per il risultato
- * delle 3 funzioni `validate*Canvas` e per il hook `useCanvasValidation`.
+ * Single-source-of-truth tipologico (typed-ish via JSDoc) per il
+ * `CanvasValidationResult` consumato dalla UI (ValidationModal, badge, highlight).
+ * Post-migrazione (Epic CanvasVal §12) la validazione è on-demand via backend:
+ * `utils/backendValidationResult.js` mappa la risposta di POST /validate in questo
+ * shape usando `createIssue`/`buildResult`. Le `RULE_IDS` restano l'enum stabile
+ * condiviso FE/BE (il backend emette issue con gli stessi `code`).
  *
  * Esporta:
  *   - typedef `Severity`, `ValidationIssue`, `CanvasValidationResult` (JSDoc)
@@ -19,9 +23,10 @@
  *     restano verdi.
  *
  * Boundary FE/BE:
- *   - `RULE_IDS` sono stringhe stabili enum-like; il backend potra' emettere
- *     issue con gli stessi `id` per l'handshake FE/BE.
- *   - `ValidationIssue.source` distingue origine ('frontend' | 'backend').
+ *   - `RULE_IDS` sono stringhe stabili enum-like; il backend emette issue con
+ *     gli stessi `code`, mappati su questi `id` (handshake FE/BE).
+ *   - `ValidationIssue.source` distingue origine ('frontend' | 'backend'); dopo
+ *     la migrazione gli issue arrivano col `source: 'backend'`.
  */
 
 /**

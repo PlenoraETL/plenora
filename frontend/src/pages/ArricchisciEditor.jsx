@@ -138,9 +138,9 @@ const ArricchisciEditorContent = () => {
   const execution = useExecution(projectId, {
     executeFunction: executeEnrichmentAsync,
     // Tutti i guard (CANVAS_EMPTY, ARRICCHISCI_NO_SOURCES, ARRICCHISCI_NO_ENRICHER)
-    // sono coperti da `validateArricchisciCanvas` (chiamato da `ResultNode.
-    // handleExecuteWithValidation` prima di `onExecute`). onBeforeExecute
-    // raggiunto solo a validation-passed.
+    // sono coperti dalla validazione backend (POST /validate), chiamata da
+    // `ResultNode.handleExecuteWithValidation` prima di `onExecute`.
+    // onBeforeExecute raggiunto solo a validation-passed.
     onBeforeExecute: () => handleSaveQuiet(),
   });
   const caricarica = useCaricarica(projectId, {
