@@ -247,6 +247,25 @@ def _type_specific_issues(nodes: list, edges: list, project_type: str | None) ->
             out.append(Issue(node_id="", severity="error", code="ARRICCHISCI_NO_SOURCES",
                              message='Nessuna sorgente dati. Aggiungi un nodo "Progetto", "File" o "Valori Statici".',
                              suggestion=None))
+        # ARRICCHISCI_NODE_ISOLATED (porting fedele FE): nodo source/api_enrich/result
+        # non toccato da alcun edge → isolato. Error per api_enrich/result (rompono il
+        # flusso), warning per le sorgenti (potrebbero essere in costruzione).
+        connected = set()
+        for e in edges:
+            connected.add(getattr(e, "source", None))
+            connected.add(getattr(e, "target", None))
+        for n in nodes:
+            ntype = getattr(n, "type", None)
+            if ntype not in _SOURCE_NODE_TYPES and ntype not in ("api_enrich", "result"):
+                continue
+            if n.id in connected:
+                continue
+            data = getattr(n, "data", None) or {}
+            label = data.get("label") or data.get("api_name") or ntype
+            sev = "error" if ntype in ("api_enrich", "result") else "warning"
+            out.append(Issue(node_id=str(n.id), severity=sev, code="ARRICCHISCI_NODE_ISOLATED",
+                             message=f'Nodo "{label}" non collegato ad altri nodi.',
+                             suggestion=None))
     elif project_type == "manipola":
         # RESULT_NO_SOURCE: nessuna sorgente nel percorso verso il result.
         for r in (n for n in nodes if getattr(n, "type", None) == "result"):

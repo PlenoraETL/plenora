@@ -223,6 +223,26 @@ def test_arricchisci_complete_no_structural_error():
     codes = _codes(_validate(_canvas(nodes, edges), project_type="arricchisci"))
     assert "ARRICCHISCI_NO_ENRICHER" not in codes
     assert "ARRICCHISCI_NO_SOURCES" not in codes
+    assert "ARRICCHISCI_NODE_ISOLATED" not in codes  # tutto collegato
+
+
+def test_arricchisci_node_isolated_error_for_enricher_warning_for_source():
+    # 'e' (api_enrich) e 'iso' (source) non toccati da alcun edge → isolati.
+    # api_enrich/result = error (rompono il flusso); source = warning.
+    nodes = [_node("s", "file_source"), _node("e", "api_enrich"),
+             _node("r", "result"), _node("iso", "file_source")]
+    edges = [_edge("s", "r")]
+    report = _validate(_canvas(nodes, edges), project_type="arricchisci")
+    iso = {i.node_id: i for i in report.issues if i.code == "ARRICCHISCI_NODE_ISOLATED"}
+    assert iso["e"].severity == "error"
+    assert iso["iso"].severity == "warning"
+    assert "s" not in iso and "r" not in iso  # collegati → non isolati
+
+
+def test_arricchisci_node_isolated_only_for_arricchisci():
+    nodes = [_node("s", "file_source"), _node("e", "api_enrich"), _node("r", "result")]
+    edges = [_edge("s", "r")]  # 'e' isolato
+    assert "ARRICCHISCI_NODE_ISOLATED" not in _codes(_validate(_canvas(nodes, edges), project_type="manipola"))
 
 
 def test_column_name_conflict_is_warning():

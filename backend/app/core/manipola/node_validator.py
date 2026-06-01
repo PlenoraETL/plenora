@@ -37,17 +37,26 @@ _REGISTRY_PATH = Path(__file__).resolve().parent / "transforms_registry.json"
 
 
 @lru_cache(maxsize=1)
-def _valid_transform_ops() -> frozenset:
-    """Op-id che il runtime sa eseguire (chiavi di ``transforms`` nel registry).
+def _transforms_registry() -> dict:
+    """Mappa op-id -> definizione del registry (`data['transforms']`).
 
-    STESSA fonte di ``PluginExecutor._carica_registry`` (`data['transforms']`) →
-    no-drift. Se il registry non è leggibile ritorna vuoto → il check membership
-    viene saltato (niente falsi positivi)."""
+    STESSA fonte di ``PluginExecutor._carica_registry`` → no-drift. Se il registry
+    non è leggibile ritorna vuoto → i check basati su di esso vengono saltati."""
     try:
         data = json.loads(_REGISTRY_PATH.read_text(encoding="utf-8"))
-        return frozenset((data.get("transforms") or {}).keys())
+        return data.get("transforms") or {}
     except Exception:
-        return frozenset()
+        return {}
+
+
+def _valid_transform_ops() -> frozenset:
+    """Op-id che il runtime sa eseguire (chiavi di ``transforms``)."""
+    return frozenset(_transforms_registry().keys())
+
+
+def _is_empty_param_value(val: Any) -> bool:
+    """Param vuoto, stessa nozione del validatore FE (T2)."""
+    return val is None or val == "" or (isinstance(val, (list, dict)) and len(val) == 0)
 
 
 class ManipolaNodeValidator:
@@ -110,6 +119,41 @@ class ManipolaNodeValidator:
                     message=f"Formula non valida: {exc}",
                     suggestion=None,
                 ))
+
+        # 3. completezza/coerenza dei parametri rispetto al registry (porting
+        #    fedele di TRANSFORM_PARAM_REQUIRED [T2] e TRANSFORM_GEOMETRY_TYPE_INVALID
+        #    [T4] dal validatore FE). Le definizioni param vengono dalla STESSA
+        #    fonte del runtime (transforms_registry.json) → no-drift.
+        op_def = _transforms_registry().get(transform_op) if transform_op else None
+        if op_def:
+            col_type = {c["name"]: (c.get("type") or "") for c in upstream_cols if c.get("name")}
+            for param in (op_def.get("parameters") or []):
+                pid = param.get("id")
+                if not pid:
+                    continue
+                val = config.get(pid)
+                # T2: parametro obbligatorio non configurato → errore deterministico
+                # (completezza di config, non dipende dai dati a monte).
+                if param.get("required") and _is_empty_param_value(val):
+                    label = param.get("label") or pid
+                    issues.append(Issue(
+                        node_id=node_id, severity="error", code="TRANSFORM_PARAM_REQUIRED",
+                        message=f"Parametro obbligatorio '{label}' non configurato.",
+                        suggestion={"param": pid},
+                    ))
+                    continue
+                # T4: param geometry_column che punta a una colonna nota NON di tipo
+                # geometry → errore. #A: con upstream indeterminate i tipi possono
+                # essere parziali → warning (mai falso blocco).
+                if param.get("type") == "geometry_column" and not _is_empty_param_value(val):
+                    resolved_name = id_to_name.get(str(val), val)
+                    if resolved_name in col_type and not str(col_type[resolved_name]).startswith("geometry"):
+                        geom_sev = "warning" if upstream.status == "indeterminate" else "error"
+                        issues.append(Issue(
+                            node_id=node_id, severity=geom_sev, code="TRANSFORM_GEOMETRY_TYPE_INVALID",
+                            message=f"La colonna '{resolved_name}' non è di tipo geometry.",
+                            suggestion={"param": pid, "column": resolved_name},
+                        ))
 
         return issues
 

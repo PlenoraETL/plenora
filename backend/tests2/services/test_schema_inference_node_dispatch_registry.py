@@ -103,6 +103,7 @@ def test_node_dispatch_registry_contains_incrementally_migrated_types():
     assert _parse_node_dispatch_registry() == {
         "source",
         "file_source",
+        "feature_source",
         "project_source",
         "transform",
         "api_enrich",
@@ -286,6 +287,35 @@ def test_file_source_node_registry_handler_matches_direct_file_source_schema():
     direct = service._infer_file_source_schema(node)
 
     assert _pairs(via_registry) == _pairs(direct)
+    assert [col.source_node for col in via_registry] == [node.id, node.id]
+
+
+def test_feature_source_node_registry_handler_infers_declared_columns():
+    # feature_source (ArcGIS feature layer) porta colonne dichiarate sul nodo
+    # nella stessa forma di file_source; la registry deve inferirle (non saltarle).
+    service = SchemaInferenceService(project_service=None)
+    node = _node(
+        "feat1",
+        "feature_source",
+        data={
+            "columns": [
+                {"name": "objectid", "type": "int"},
+                {"name": "skip", "type": "str", "visible": False},
+                {"name": "geom", "type": "geometry:polygon:4326"},
+            ],
+        },
+    )
+
+    via_registry = service._infer_node_schema(
+        node=node,
+        nodes_by_id={node.id: node},
+        edges_by_target={},
+        project_id="project-1",
+    )
+    direct = service._infer_file_source_schema(node)
+
+    assert _pairs(via_registry) == _pairs(direct)
+    assert _pairs(via_registry) == [("objectid", "int", False), ("geom", "geometry:polygon:4326", False)]
     assert [col.source_node for col in via_registry] == [node.id, node.id]
 
 

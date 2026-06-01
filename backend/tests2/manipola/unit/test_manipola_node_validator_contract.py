@@ -20,8 +20,9 @@ from app.shared.execution.schema_types import InferredSchema
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-def _node(node_id="t1", config=None, transform_op="filter"):
-    # transform_op di default valorizzato → i test col-ref non scattano TRANSFORM_OP_MISSING
+def _node(node_id="t1", config=None, transform_op="distinct"):
+    # transform_op di default valorizzato e SENZA param required (distinct) → i test
+    # col-ref/formula non scattano né TRANSFORM_OP_MISSING né TRANSFORM_PARAM_REQUIRED.
     return SimpleNamespace(
         id=node_id, type="transform", data={}, config=config or {}, transform_op=transform_op,
     )
@@ -122,6 +123,49 @@ def test_known_op_not_flagged_unknown():
     node = _node(config={"column": "a"}, transform_op="filter")
     issues = _v().validate_node(node, upstream=_upstream(["a"]))
     assert "TRANSFORM_OP_UNKNOWN" not in _codes(issues)
+
+
+def test_required_param_missing_is_error():
+    # 'filter' richiede il param 'column'; config vuoto → TRANSFORM_PARAM_REQUIRED.
+    node = _node(config={}, transform_op="filter")
+    issues = _v().validate_node(node, upstream=_upstream(["a"]))
+    assert "TRANSFORM_PARAM_REQUIRED" in _codes(issues)
+    req = [i for i in issues if i.code == "TRANSFORM_PARAM_REQUIRED"][0]
+    assert req.severity == "error"
+    assert req.suggestion == {"param": "column"}
+
+
+def test_required_param_present_not_flagged():
+    node = _node(config={"column": "a"}, transform_op="filter")
+    issues = _v().validate_node(node, upstream=_upstream(["a"]))
+    assert "TRANSFORM_PARAM_REQUIRED" not in _codes(issues)
+
+
+def test_geometry_column_param_on_non_geometry_is_error():
+    # geo_buffer.geom_column punta a 'plain' (tipo str, non geometry) → invalido.
+    node = _node(config={"geom_column": "plain", "distance": 10}, transform_op="geo_buffer")
+    up = InferredSchema(columns=[{"name": "plain", "type": "str"}], status="certain")
+    issues = _v().validate_node(node, upstream=up)
+    assert "TRANSFORM_GEOMETRY_TYPE_INVALID" in _codes(issues)
+    geo = [i for i in issues if i.code == "TRANSFORM_GEOMETRY_TYPE_INVALID"][0]
+    assert geo.severity == "error"
+    assert geo.suggestion == {"param": "geom_column", "column": "plain"}
+
+
+def test_geometry_column_param_on_geometry_ok():
+    node = _node(config={"geom_column": "geom", "distance": 10}, transform_op="geo_buffer")
+    up = InferredSchema(columns=[{"name": "geom", "type": "geometry:point:4326"}], status="certain")
+    issues = _v().validate_node(node, upstream=up)
+    assert "TRANSFORM_GEOMETRY_TYPE_INVALID" not in _codes(issues)
+
+
+def test_geometry_type_invalid_is_warning_when_indeterminate():
+    # #A: upstream indeterminate → mai falso blocco (warning, non error).
+    node = _node(config={"geom_column": "plain", "distance": 10}, transform_op="geo_buffer")
+    up = InferredSchema(columns=[{"name": "plain", "type": "str"}], status="indeterminate")
+    issues = _v().validate_node(node, upstream=up)
+    geo = [i for i in issues if i.code == "TRANSFORM_GEOMETRY_TYPE_INVALID"]
+    assert geo and geo[0].severity == "warning"
 
 
 def test_register_manipola_validator():
