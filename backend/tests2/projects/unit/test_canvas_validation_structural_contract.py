@@ -177,3 +177,35 @@ def test_source_unsupported_only_for_estrai():
     edges = [_edge("s", "r")]
     assert "SOURCE_UNSUPPORTED" in _codes(_validate(_canvas(nodes, edges), project_type="estrai"))
     assert "SOURCE_UNSUPPORTED" not in _codes(_validate(_canvas(nodes, edges), project_type="manipola"))
+
+
+# --- sorgenti + result-geo (universali, no inferenza) ---
+
+
+def test_source_isolated_is_warning():
+    s = _node("s", "file_source")  # nessun edge
+    report = _validate(_canvas([s, _node("r", "result")], []))
+    assert "SOURCE_ISOLATED" in _codes(report)
+
+
+def test_source_no_visible_columns_is_error():
+    s = _node("s", "file_source")
+    s.data = {"columns": [{"name": "a", "visible": False}]}  # ha colonne ma tutte nascoste
+    report = _validate(_canvas([s, _node("r", "result")], [_edge("s", "r")]))
+    assert "SOURCE_NO_VISIBLE_COLUMNS" in _codes(report)
+
+
+def test_result_geo_no_geometry_is_error():
+    s = _node("s", "file_source")
+    s.data = {"columns": [{"name": "a", "type": "str", "visible": True}]}
+    r = _node("r", "result"); r.data = {"format": "geojson"}
+    report = _validate(_canvas([s, r], [_edge("s", "r")]))
+    assert "RESULT_GEO_NO_GEOMETRY" in _codes(report)
+
+
+def test_result_geo_with_geometry_ok():
+    s = _node("s", "file_source")
+    s.data = {"columns": [{"name": "geom", "type": "geometry:point", "visible": True}]}
+    r = _node("r", "result"); r.data = {"format": "geojson"}
+    report = _validate(_canvas([s, r], [_edge("s", "r")]))
+    assert "RESULT_GEO_NO_GEOMETRY" not in _codes(report)

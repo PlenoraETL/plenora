@@ -53,11 +53,13 @@ def _register_canvas_node_validators() -> None:
     L'orchestratore ``canvas_validation`` li scopre via ``validator_for(node.type)``
     senza importarli — la direzione resta motori -> shared. Idempotente.
     """
+    from app.core.arricchisci.node_validator import register_arricchisci_validator
     from app.core.carica.node_validator import register_carica_validator
     from app.core.manipola.node_validator import register_manipola_validator
 
     register_carica_validator()
     register_manipola_validator()
+    register_arricchisci_validator()
 
 
 _register_multilayer_artifact_adapters()

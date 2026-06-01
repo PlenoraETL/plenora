@@ -92,6 +92,8 @@ def validate_canvas(
     # 4. Strutturali canvas-level (porting fedele dei RULE_ID FE).
     issues.extend(_structural_extra_issues(nodes, edges))
     issues.extend(_estrai_type_specific_issues(nodes, project_type))
+    issues.extend(_source_node_issues(nodes, edges))
+    issues.extend(_result_geo_issue(nodes, edges))
 
     # 5. Join sugli edge (config + risoluzione colonne di join).
     issues.extend(_edge_join_issues(canvas, nodes, edges, node_ids, project_id, project_type))
@@ -108,6 +110,97 @@ _JOIN_SKIP_TARGET_TYPES = frozenset({"result", "carica", "carica_arcgis"})
 
 # Sorgenti non supportate da ESTRAI (SQL-only): porting fedele del FE.
 _ESTRAI_UNSUPPORTED_SOURCE_TYPES = frozenset({"staticValues", "datasource_node"})
+
+# Tipi-nodo sorgente (per ISOLATED); sottoinsieme con colonne dichiarate (NO_VISIBLE).
+_SOURCE_NODE_TYPES = frozenset({
+    "source", "feature_source", "project_source", "file_source",
+    "staticValues", "datasource_node",
+})
+_DECLARED_COLUMN_SOURCE_TYPES = frozenset({
+    "source", "feature_source", "project_source", "file_source",
+})
+_GEO_OUTPUT_FORMATS = frozenset({"geojson", "gpkg", "shp"})
+
+
+def _raw_columns(node) -> list:
+    cols = getattr(node, "columns", None)
+    if not isinstance(cols, list):
+        data = getattr(node, "data", None)
+        cols = data.get("columns") if isinstance(data, dict) else None
+    return cols if isinstance(cols, list) else []
+
+
+def _visible_columns(node) -> list:
+    """[(name, type)] delle colonne VISIBILI (tollera Column-obj e dict)."""
+    out = []
+    for c in _raw_columns(node):
+        if isinstance(c, dict):
+            if c.get("visible", True) is False:
+                continue
+            out.append((c.get("alias") or c.get("name") or "", str(c.get("type") or "")))
+        else:
+            if getattr(c, "visible", True) is False:
+                continue
+            out.append((getattr(c, "alias", None) or getattr(c, "name", "") or "", str(getattr(c, "type", None) or "")))
+    return out
+
+
+def _source_node_issues(nodes: list, edges: list) -> List[Issue]:
+    """SOURCE_ISOLATED (warning) + SOURCE_NO_VISIBLE_COLUMNS (error). No inferenza."""
+    out: List[Issue] = []
+    touched = {getattr(e, "source", None) for e in edges} | {getattr(e, "target", None) for e in edges}
+    for n in nodes:
+        ntype = getattr(n, "type", None)
+        if ntype not in _SOURCE_NODE_TYPES:
+            continue
+        if n.id not in touched:
+            out.append(Issue(
+                node_id=str(n.id), severity="warning", code="SOURCE_ISOLATED",
+                message="Sorgente non collegata ad alcun nodo — verrà ignorata durante l'esecuzione.",
+                suggestion=None,
+            ))
+        if ntype in _DECLARED_COLUMN_SOURCE_TYPES and _raw_columns(n) and not _visible_columns(n):
+            out.append(Issue(
+                node_id=str(n.id), severity="error", code="SOURCE_NO_VISIBLE_COLUMNS",
+                message="Tutte le colonne sono state deselezionate. Seleziona almeno una colonna.",
+                suggestion=None,
+            ))
+    return out
+
+
+def _result_geo_issue(nodes: list, edges: list) -> List[Issue]:
+    """RESULT_GEO_NO_GEOMETRY: format geo ma nessuna colonna geometry nel percorso."""
+    nodes_by_id = {n.id: n for n in nodes}
+    results = [n for n in nodes if getattr(n, "type", None) == "result"]
+    out: List[Issue] = []
+    for r in results:
+        fmt = str(((getattr(r, "data", None) or {}).get("format") or "")).lower()
+        if fmt not in _GEO_OUTPUT_FORMATS:
+            continue
+        # nodi backward-reachable dal result
+        inputs_by_target: Dict[str, List[str]] = {}
+        for e in edges:
+            inputs_by_target.setdefault(getattr(e, "target", None), []).append(getattr(e, "source", None))
+        seen, stack = set(), [r.id]
+        while stack:
+            nid = stack.pop()
+            for src in inputs_by_target.get(nid, []):
+                if src and src not in seen:
+                    seen.add(src)
+                    stack.append(src)
+        has_geom = any(
+            str(t).lower().startswith("geometry")
+            for nid in seen
+            for _name, t in _visible_columns(nodes_by_id.get(nid))
+            if nodes_by_id.get(nid) is not None
+        )
+        if not has_geom:
+            out.append(Issue(
+                node_id=str(r.id), severity="error", code="RESULT_GEO_NO_GEOMETRY",
+                message=f'Formato "{fmt.upper()}" richiede una colonna geometry, ma nessuna è disponibile nel percorso.',
+                suggestion={"format": fmt},
+            ))
+    return out
 
 
 def _estrai_type_specific_issues(nodes: list, project_type: str | None) -> List[Issue]:
