@@ -81,6 +81,32 @@ class _NodeSchemaContext:
     project_id: str
 
 
+@dataclass(frozen=True)
+class InferredSchema:
+    """Schema inferito per un nodo, con esito esplicito.
+
+    Disambigua i tre significati che oggi collassano su `[]`:
+    - colonne note (``certain``);
+    - schema genuinamente vuoto ma certo (sorgente dichiarata senza colonne);
+    - schema **non inferibile** (``indeterminate``: upstream non risolto / output
+      non dichiarato) → l'engine di validazione emette un *warning*, mai un blocco.
+
+    ``columns`` è ``SchemaRows`` (liste di dict, come ``infer_node_schema``) per
+    restare consistente col metodo pubblico esistente.
+
+    Lo ``status`` è preciso: ``indeterminate``+reason ai 4 punti critici
+    (260 result senza input · 307 project_source senza source · 312 metadata
+    upstream assente · 321 output_contract upstream assente) e propagato a valle
+    (un nodo vuoto a causa di un upstream indeterminate eredita lo stato). Gli
+    edge (134 canvas assente · 142 nodo assente · 380 crash lettura metadata)
+    restano ``certain`` (problemi strutturali, presi da altri controlli).
+    """
+
+    columns: SchemaRows
+    status: str = "certain"  # "certain" | "indeterminate"
+    reason: str = ""
+
+
 class SchemaInferenceService:
     """Infers column schemas through a canvas node graph."""
     
@@ -89,6 +115,8 @@ class SchemaInferenceService:
         self._transform_handlers = TransformSchemaHandlers(ColumnSchema)
 
         self._schema_cache: Dict[str, List[ColumnSchema]] = {}
+        # node_id -> (status, reason). Popolato in parallelo a _schema_cache.
+        self._status_cache: Dict[str, Tuple[str, str]] = {}
     
     def infer_all_schemas(self, project_id: str) -> SchemaMap:
         """
@@ -98,8 +126,9 @@ class SchemaInferenceService:
             Dict mapping node_id -> lista di colonne con tipo
         """
         logger.info(f"Inferenza schema per progetto: {project_id}")
-        
+
         self._schema_cache = {}
+        self._status_cache = {}
 
         canvas = self.project_service.get_project_canvas(project_id)
         if not canvas:
@@ -128,7 +157,8 @@ class SchemaInferenceService:
         Utile per aggiornamenti incrementali.
         """
         self._schema_cache = {}
-        
+        self._status_cache = {}
+
         canvas = self.project_service.get_project_canvas(project_id)
         if not canvas:
             return []
@@ -148,7 +178,22 @@ class SchemaInferenceService:
             project_id=project_id
         )
         return [col.to_dict() for col in schema]
-    
+
+    def infer_node_schema_typed(self, project_id: str, node_id: str) -> InferredSchema:
+        """Come ``infer_node_schema`` ma con esito esplicito (``InferredSchema``).
+
+        Faccia tipizzata per l'engine di validazione (Epic Canvas Validation):
+        condivide la STESSA computazione del metodo pubblico (``.columns`` ==
+        ``infer_node_schema(...)``) e vi aggiunge lo ``status``. Nessuna
+        duplicazione di logica → niente drift.
+        """
+        rows = self.infer_node_schema(project_id, node_id)
+        # `infer_node_schema` popola `_status_cache` per il nodo (e i suoi
+        # antenati) durante il calcolo. Canvas/nodo assente (134/142) → il nodo
+        # non è calcolato → default `certain` (problema strutturale, preso altrove).
+        status, reason = self._status_cache.get(node_id, ("certain", ""))
+        return InferredSchema(columns=rows, status=status, reason=reason)
+
     def _infer_node_schema(
         self,
         node,
@@ -175,8 +220,39 @@ class SchemaInferenceService:
         if node_type_handler is not None:
             schema = node_type_handler(context)
 
+        self._record_node_status(node, schema, context)
         self._schema_cache[node.id] = schema
         return schema
+
+    def _record_node_status(self, node, schema, context: _NodeSchemaContext) -> None:
+        """Determina (status, reason) per il nodo, dopo il calcolo dello schema.
+
+        Precedenza: una reason specifica già registrata da un handler critico
+        (project_source 307/312/321, result 260) vince. Altrimenti: colonne
+        presenti → ``certain``; vuoto → eredita ``indeterminate`` da un upstream
+        indeterminate (no falso blocco a valle), altrimenti ``certain`` (vuoto
+        dichiarato/edge).
+        """
+        if node.id in self._status_cache:
+            return  # reason specifica già fissata dall'handler critico
+        if schema:
+            self._status_cache[node.id] = ("certain", "")
+            return
+        inherited = self._inherited_indeterminate(node, context.edges_by_target)
+        self._status_cache[node.id] = inherited or ("certain", "")
+
+    def _inherited_indeterminate(
+        self, node, edges_by_target: dict
+    ) -> Optional[Tuple[str, str]]:
+        """``('indeterminate', reason)`` se un nodo a monte è indeterminate."""
+        for edge in edges_by_target.get(node.id, []):
+            src = getattr(edge, "source", None)
+            if src and self._status_cache.get(src, ("certain", ""))[0] == "indeterminate":
+                return (
+                    "indeterminate",
+                    f"schema a monte non risolvibile (nodo '{src}')",
+                )
+        return None
 
     def _build_node_type_handlers(
         self,
@@ -257,8 +333,12 @@ class SchemaInferenceService:
         )
         if input_schemas:
             return input_schemas[0]
+        self._status_cache[context.node.id] = (
+            "indeterminate",
+            "result senza input risolvibile a monte",
+        )
         return []
-    
+
     def _infer_source_schema(self, node) -> List[ColumnSchema]:
         """
         Schema per nodo source (tabella database).
@@ -304,11 +384,19 @@ class SchemaInferenceService:
         
         if not source_project_id:
             logger.warning(f"Nodo {node.id} senza source_project_id")
+            self._status_cache[node.id] = (
+                "indeterminate",
+                "project_source senza source_project_id (nodo incompleto)",
+            )
             return []
-        
+
         source_context = load_project_source_schema_context(source_project_id)
         if not source_context:
             logger.warning(f"Metadata non trovato per progetto {source_project_id}")
+            self._status_cache[node.id] = (
+                "indeterminate",
+                f"metadata del progetto sorgente '{source_project_id}' non risolvibile",
+            )
             return []
 
         try:
@@ -317,6 +405,11 @@ class SchemaInferenceService:
                 logger.warning(
                     f"output_contract mancante per project_source {source_project_id}. "
                     "Schema vuoto."
+                )
+                self._status_cache[node.id] = (
+                    "indeterminate",
+                    f"output_contract del sorgente '{source_project_id}' assente "
+                    "(progetto non ancora eseguito?)",
                 )
                 return []
             contract_columns = [
