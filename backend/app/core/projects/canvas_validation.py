@@ -93,6 +93,7 @@ def validate_canvas(
     issues.extend(_structural_extra_issues(nodes, edges))
     issues.extend(_type_specific_issues(nodes, edges, project_type))
     issues.extend(_source_node_issues(nodes, edges))
+    issues.extend(_column_name_conflict_issues(nodes))
     issues.extend(_result_geo_issue(nodes, edges))
 
     # 5. Join sugli edge (config + risoluzione colonne di join).
@@ -164,6 +165,26 @@ def _source_node_issues(nodes: list, edges: list) -> List[Issue]:
                 node_id=str(n.id), severity="error", code="SOURCE_NO_VISIBLE_COLUMNS",
                 message="Tutte le colonne sono state deselezionate. Seleziona almeno una colonna.",
                 suggestion=None,
+            ))
+    return out
+
+
+def _column_name_conflict_issues(nodes: list) -> List[Issue]:
+    """COLUMN_NAME_CONFLICT (warning): stesso nome-colonna finale in più sorgenti."""
+    by_name: Dict[str, set] = {}
+    for n in nodes:
+        if getattr(n, "type", None) not in _DECLARED_COLUMN_SOURCE_TYPES:
+            continue
+        for name, _t in _visible_columns(n):
+            if name:
+                by_name.setdefault(name, set()).add(n.id)
+    out: List[Issue] = []
+    for name, srcs in by_name.items():
+        if len(srcs) > 1:
+            out.append(Issue(
+                node_id="", severity="warning", code="COLUMN_NAME_CONFLICT",
+                message=f'Conflitto nome colonna: "{name}" appare in più sorgenti. Aggiungi un alias per disambiguare.',
+                suggestion={"column": name, "nodes": sorted(str(s) for s in srcs)},
             ))
     return out
 

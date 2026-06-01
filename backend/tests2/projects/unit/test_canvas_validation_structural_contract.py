@@ -225,6 +225,23 @@ def test_arricchisci_complete_no_structural_error():
     assert "ARRICCHISCI_NO_SOURCES" not in codes
 
 
+def test_column_name_conflict_is_warning():
+    s1 = _node("s1", "file_source"); s1.data = {"columns": [{"name": "id", "visible": True}]}
+    s2 = _node("s2", "file_source"); s2.data = {"columns": [{"name": "id", "visible": True}]}
+    r = _node("r", "result")
+    report = _validate(_canvas([s1, s2, r], [_edge("s1", "r"), _edge("s2", "r")]))
+    codes = [(i.code, i.severity) for i in report.issues]
+    assert ("COLUMN_NAME_CONFLICT", "warning") in codes
+
+
+def test_no_column_conflict_distinct_names():
+    s1 = _node("s1", "file_source"); s1.data = {"columns": [{"name": "a", "visible": True}]}
+    s2 = _node("s2", "file_source"); s2.data = {"columns": [{"name": "b", "visible": True}]}
+    r = _node("r", "result")
+    report = _validate(_canvas([s1, s2, r], [_edge("s1", "r"), _edge("s2", "r")]))
+    assert "COLUMN_NAME_CONFLICT" not in _codes(report)
+
+
 def test_result_no_source_manipola():
     nodes = [_node("t", "transform"), _node("r", "result")]
     edges = [_edge("t", "r")]  # nessun source nel percorso
