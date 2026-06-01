@@ -31,10 +31,17 @@ def _node(node_id, ntype):
     return n
 
 
-def _edge(source, target):
+def _edge(source, target, **join):
     e = MagicMock()
     e.source = source
     e.target = target
+    # default del vero Edge backend (campi join falsy → non-join/data-flow)
+    e.id = join.get("id", f"{source}->{target}")
+    e.source_column = join.get("source_column", "")
+    e.target_column = join.get("target_column", "")
+    e.is_spatial = join.get("is_spatial", False)
+    e.source_geom_column = join.get("source_geom_column", None)
+    e.target_geom_column = join.get("target_geom_column", None)
     return e
 
 
@@ -120,3 +127,33 @@ def test_result_not_connected_is_error():
     nodes = [_node("s", "file_source"), _node("r", "result")]
     report = _validate(_canvas(nodes, []))  # result senza edge entrante
     assert "RESULT_NOT_CONNECTED" in _codes(report)
+
+
+# --- join sugli edge (false-positive-free: solo join configurati / spatial) ---
+
+
+def test_dataflow_edge_not_flagged_as_join():
+    # edge senza colonne join (data-flow manipola) → NESSUN flag join (no falso positivo)
+    nodes = [_node("s", "file_source"), _node("t", "transform"), _node("r", "result")]
+    edges = [_edge("s", "t"), _edge("t", "r")]
+    report = _validate(_canvas(nodes, edges))
+    assert "JOIN_NOT_CONFIGURED" not in _codes(report)
+    assert "JOIN_COLUMN_NOT_FOUND" not in _codes(report)
+
+
+def test_join_spatial_no_geom_is_error():
+    nodes = [_node("a", "file_source"), _node("b", "file_source"), _node("r", "result")]
+    edges = [_edge("a", "b", is_spatial=True), _edge("b", "r")]  # spatial senza geom
+    report = _validate(_canvas(nodes, edges))
+    assert "JOIN_SPATIAL_NO_GEOM" in _codes(report)
+
+
+def test_join_column_not_found_is_warning():
+    s = _node("s", "file_source")
+    s.data = {"columns": [{"name": "a", "visible": True}]}
+    t = _node("t", "transform")
+    r = _node("r", "result")
+    edges = [_edge("s", "t", source_column="ghost", target_column="a"), _edge("t", "r")]
+    report = _validate(_canvas([s, t, r], edges))
+    codes = [(i.code, i.severity) for i in report.issues]
+    assert ("JOIN_COLUMN_NOT_FOUND", "warning") in codes

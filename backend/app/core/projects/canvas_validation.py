@@ -86,10 +86,88 @@ def validate_canvas(canvas: Any, *, project_id: str = "") -> ValidationReport:
     # 4. Strutturali canvas-level (porting fedele dei RULE_ID FE).
     issues.extend(_structural_extra_issues(nodes, edges))
 
-    # 5. Validazione per-nodo via registry (#D): schema/colonne/regole di motore.
+    # 5. Join sugli edge (config + risoluzione colonne di join).
+    issues.extend(_edge_join_issues(canvas, nodes, edges, node_ids, project_id))
+
+    # 6. Validazione per-nodo via registry (#D): schema/colonne/regole di motore.
     issues.extend(_validate_nodes(canvas, nodes, edges, node_ids, project_id))
 
     return ValidationReport(issues=tuple(issues))
+
+
+# Edge verso questi target non sono join (sono output verso sink).
+_JOIN_SKIP_TARGET_TYPES = frozenset({"result", "carica", "carica_arcgis"})
+
+
+def _edge_join_issues(
+    canvas: Any, nodes: list, edges: list, node_ids: set, project_id: str,
+) -> List[Issue]:
+    """Validazione join sugli edge (porting fedele dei RULE_ID FE).
+
+    Solo regole **false-positive-free** senza conoscere il tipo di progetto:
+    - JOIN_SPATIAL_NO_GEOM (error): edge ``is_spatial`` (marker esplicito) senza
+      colonne geometry.
+    - JOIN_COLUMN_NOT_FOUND (warning): edge con ``source_column``/``target_column``
+      VALORIZZATE (= join configurato) i cui ref non risolvono contro lo schema
+      inferito. Onora #A (schema indeterminate → skip).
+
+    NON emette JOIN_NOT_CONFIGURED: un edge con colonne join vuote è
+    indistinguibile (senza il project-type) tra "join non configurato" (estrai) e
+    "data-flow" (manipola) → la flaggerebbe come falso positivo. È estrai-specifica
+    e va gated dal tipo di progetto (deferita). Campi join = attributi top-level
+    dell'Edge (il serializer FE li solleva da edge.data).
+    """
+    nodes_by_id = {n.id: n for n in nodes}
+    join_edges = [
+        e for e in edges
+        if getattr(e, "source", None) in node_ids and getattr(e, "target", None) in node_ids
+        and getattr(nodes_by_id.get(e.target), "type", None) not in _JOIN_SKIP_TARGET_TYPES
+    ]
+    if not join_edges:
+        return []
+
+    service = SchemaInferenceService(_StaticCanvasService(canvas))
+    cache: Dict[str, tuple] = {}
+
+    def _cols(node_id: str) -> tuple:
+        if node_id not in cache:
+            typed = service.infer_node_schema_typed(project_id, node_id)
+            names = {c["name"] for c in typed.columns if isinstance(c, dict) and c.get("name")}
+            cache[node_id] = (names, typed.status)
+        return cache[node_id]
+
+    out: List[Issue] = []
+    for e in join_edges:
+        eid = getattr(e, "id", "")
+        if getattr(e, "is_spatial", False):
+            if not getattr(e, "source_geom_column", None) or not getattr(e, "target_geom_column", None):
+                out.append(Issue(
+                    node_id=str(e.target), severity="error", code="JOIN_SPATIAL_NO_GEOM",
+                    message="Join spaziale non configurato: mancano le colonne geometry.",
+                    suggestion={"edge_id": eid},
+                ))
+            continue
+        sc = getattr(e, "source_column", None)
+        tc = getattr(e, "target_column", None)
+        # Colonne join non valorizzate: indistinguibile data-flow vs join non
+        # configurato senza il project-type → NON flaggare (no falso positivo).
+        if not sc or not tc:
+            continue
+        s_names, s_status = _cols(e.source)
+        if s_status != "indeterminate" and sc not in s_names:
+            out.append(Issue(
+                node_id=str(e.source), severity="warning", code="JOIN_COLUMN_NOT_FOUND",
+                message=f"Join: colonna '{sc}' non trovata nel nodo sorgente.",
+                suggestion={"column": sc, "edge_id": eid},
+            ))
+        t_names, t_status = _cols(e.target)
+        if t_status != "indeterminate" and tc not in t_names:
+            out.append(Issue(
+                node_id=str(e.target), severity="warning", code="JOIN_COLUMN_NOT_FOUND",
+                message=f"Join: colonna '{tc}' non trovata nel nodo target.",
+                suggestion={"column": tc, "edge_id": eid},
+            ))
+    return out
 
 
 def _structural_extra_issues(nodes: list, edges: list) -> List[Issue]:

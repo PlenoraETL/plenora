@@ -40,6 +40,9 @@ def _node(node_id, ntype):
 
 def _edge(source, target):
     e = MagicMock(); e.source = source; e.target = target
+    e.id = f"{source}->{target}"
+    e.source_column = ""; e.target_column = ""; e.is_spatial = False
+    e.source_geom_column = None; e.target_geom_column = None
     return e
 
 
