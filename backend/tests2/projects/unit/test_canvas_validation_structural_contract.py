@@ -52,9 +52,9 @@ def _canvas(nodes, edges):
     return c
 
 
-def _validate(canvas):
+def _validate(canvas, project_type=None):
     from app.core.projects.canvas_validation import validate_canvas
-    return validate_canvas(canvas)
+    return validate_canvas(canvas, project_type=project_type)
 
 
 def _codes(report):
@@ -157,3 +157,23 @@ def test_join_column_not_found_is_warning():
     report = _validate(_canvas([s, t, r], edges))
     codes = [(i.code, i.severity) for i in report.issues]
     assert ("JOIN_COLUMN_NOT_FOUND", "warning") in codes
+
+
+# --- regole estrai-specific (gated dal project_type) ---
+
+
+def test_join_not_configured_only_for_estrai():
+    nodes = [_node("a", "source"), _node("b", "source"), _node("r", "result")]
+    edges = [_edge("a", "b"), _edge("b", "r")]  # a→b edge senza colonne join
+    # estrai: edge inter-tabella non configurato = errore
+    assert "JOIN_NOT_CONFIGURED" in _codes(_validate(_canvas(nodes, edges), project_type="estrai"))
+    # manipola / nessun tipo: data-flow → NON flaggato (no falso positivo)
+    assert "JOIN_NOT_CONFIGURED" not in _codes(_validate(_canvas(nodes, edges), project_type="manipola"))
+    assert "JOIN_NOT_CONFIGURED" not in _codes(_validate(_canvas(nodes, edges)))
+
+
+def test_source_unsupported_only_for_estrai():
+    nodes = [_node("s", "staticValues"), _node("r", "result")]
+    edges = [_edge("s", "r")]
+    assert "SOURCE_UNSUPPORTED" in _codes(_validate(_canvas(nodes, edges), project_type="estrai"))
+    assert "SOURCE_UNSUPPORTED" not in _codes(_validate(_canvas(nodes, edges), project_type="manipola"))

@@ -721,7 +721,10 @@ def validate_project_canvas(
         from app.core.projects.canvas_validation import validate_canvas
 
         canvas = _project_service.get_project_canvas(project_id)
-        report = validate_canvas(canvas, project_id=project_id)
+        report = validate_canvas(
+            canvas, project_id=project_id,
+            project_type=getattr(metadata, "project_type", None),
+        )
         result = report.to_dict()
         result["valid"] = not report.has_errors
         return result

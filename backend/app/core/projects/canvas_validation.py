@@ -36,13 +36,19 @@ class _StaticCanvasService:
         return self._canvas
 
 
-def validate_canvas(canvas: Any, *, project_id: str = "") -> ValidationReport:
+def validate_canvas(
+    canvas: Any, *, project_id: str = "", project_type: str | None = None,
+) -> ValidationReport:
     """Valida un canvas. Ritorna un ``ValidationReport``.
 
     Strutturale (sempre) + per-nodo via i ``validate_node`` registrati al
     composition-root (#D), scoperti con ``validator_for(node.type)`` — nessun
     import diretto dei motori. Ogni validatore riceve l'``InferredSchema`` upstream
     (colonne + status) per decidere error-vs-warning (no falso-blocco).
+
+    ``project_type`` (estrai/manipola/arricchisci) abilita le regole
+    *type-specific* senza falsi positivi (es. in estrai ogni edge inter-tabella è
+    un join; in manipola è data-flow). None → le regole type-specific sono saltate.
     """
     issues: List[Issue] = []
     nodes = list(getattr(canvas, "nodes", None) or [])
@@ -85,9 +91,10 @@ def validate_canvas(canvas: Any, *, project_id: str = "") -> ValidationReport:
 
     # 4. Strutturali canvas-level (porting fedele dei RULE_ID FE).
     issues.extend(_structural_extra_issues(nodes, edges))
+    issues.extend(_estrai_type_specific_issues(nodes, project_type))
 
     # 5. Join sugli edge (config + risoluzione colonne di join).
-    issues.extend(_edge_join_issues(canvas, nodes, edges, node_ids, project_id))
+    issues.extend(_edge_join_issues(canvas, nodes, edges, node_ids, project_id, project_type))
 
     # 6. Validazione per-nodo via registry (#D): schema/colonne/regole di motore.
     issues.extend(_validate_nodes(canvas, nodes, edges, node_ids, project_id))
@@ -99,8 +106,28 @@ def validate_canvas(canvas: Any, *, project_id: str = "") -> ValidationReport:
 _JOIN_SKIP_TARGET_TYPES = frozenset({"result", "carica", "carica_arcgis"})
 
 
+# Sorgenti non supportate da ESTRAI (SQL-only): porting fedele del FE.
+_ESTRAI_UNSUPPORTED_SOURCE_TYPES = frozenset({"staticValues", "datasource_node"})
+
+
+def _estrai_type_specific_issues(nodes: list, project_type: str | None) -> List[Issue]:
+    """Regole valide SOLO per progetti estrai (gated dal project_type)."""
+    if project_type != "estrai":
+        return []
+    out: List[Issue] = []
+    for n in nodes:
+        if getattr(n, "type", None) in _ESTRAI_UNSUPPORTED_SOURCE_TYPES:
+            out.append(Issue(
+                node_id=str(n.id), severity="error", code="SOURCE_UNSUPPORTED",
+                message="ESTRAI supporta solo tabelle database e layer ArcGIS come sorgenti.",
+                suggestion={"node_type": n.type},
+            ))
+    return out
+
+
 def _edge_join_issues(
     canvas: Any, nodes: list, edges: list, node_ids: set, project_id: str,
+    project_type: str | None = None,
 ) -> List[Issue]:
     """Validazione join sugli edge (porting fedele dei RULE_ID FE).
 
@@ -149,9 +176,16 @@ def _edge_join_issues(
             continue
         sc = getattr(e, "source_column", None)
         tc = getattr(e, "target_column", None)
-        # Colonne join non valorizzate: indistinguibile data-flow vs join non
-        # configurato senza il project-type → NON flaggare (no falso positivo).
         if not sc or not tc:
+            # In ESTRAI ogni edge inter-tabella è un join → colonne mancanti =
+            # join non configurato (error). In manipola è data-flow → skip
+            # (senza project-type, non flaggare: sarebbe un falso positivo).
+            if project_type == "estrai":
+                out.append(Issue(
+                    node_id=str(e.target), severity="error", code="JOIN_NOT_CONFIGURED",
+                    message="Join non configurato: mancano le colonne di collegamento.",
+                    suggestion={"edge_id": eid},
+                ))
             continue
         s_names, s_status = _cols(e.source)
         if s_status != "indeterminate" and sc not in s_names:
