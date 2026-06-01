@@ -43,7 +43,8 @@ def _canvas(nodes, edges=None):
 def _gate(project_type, canvas, *, flag, monkeypatch):
     from app.core.orchestrator import service as svc
     monkeypatch.setattr(svc.settings, "get", lambda k, d=None: flag if k == "CANVAS_VALIDATION_GATE_ENABLED" else d)
-    return svc._canvas_validation_gate("p", project_type, canvas)
+    load = lambda pid: (canvas, project_type) if pid == "p" else None
+    return svc._canvas_validation_gate("p", load)
 
 
 def test_gate_off_never_blocks(monkeypatch):

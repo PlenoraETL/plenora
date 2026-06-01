@@ -29,19 +29,20 @@ logger = get_logger(__name__)
 ExecutorDispatch = Mapping[str, CanvasExecutorProtocol]
 
 
-def _canvas_validation_gate(project_id, project_type, canvas):
+def _canvas_validation_gate(project_id, load):
     """Gate a esecuzione (Epic Canvas Validation §12), dietro feature-flag.
 
-    Se ``CANVAS_VALIDATION_GATE_ENABLED`` e il canvas ha errori di validazione →
-    ritorna un ``PipelineArtifact`` di failure (il run NON parte). Altrimenti
-    ``None``. Ri-valida fresco (autorevole, niente stato stale). Flag default off
-    → nessun cambio di comportamento finché non acceso.
+    Se ``CANVAS_VALIDATION_GATE_ENABLED`` e la **catena** del progetto ha errori
+    di validazione → ritorna un ``PipelineArtifact`` di failure (il run NON parte).
+    Altrimenti ``None``. Valida l'intera catena cross-progetto via
+    ``validate_project_chain`` (``load(pid) -> (canvas, project_type) | None``),
+    fresco (autorevole, niente stato stale). Flag default off → nessun cambio.
     """
     if not settings.get("CANVAS_VALIDATION_GATE_ENABLED", False):
         return None
-    from app.core.projects.canvas_validation import validate_canvas
+    from app.core.projects.canvas_validation import validate_project_chain
 
-    report = validate_canvas(canvas, project_id=project_id, project_type=project_type)
+    report = validate_project_chain(project_id, load)
     if not report.has_errors:
         return None
     errs = [i.message for i in report.by_severity("error")]
@@ -222,9 +223,17 @@ class OrchestratorService:
                 message=f"Progetto {project_id} non trovato",
             )
 
-        # Gate a esecuzione (Epic Canvas Validation §12): blocca il run se il
-        # canvas ha errori di validazione (dietro feature-flag, default off).
-        gate = _canvas_validation_gate(project_id, metadata.project_type, canvas)
+        # Gate a esecuzione (Epic Canvas Validation §12): blocca il run se la
+        # catena del progetto ha errori (dietro feature-flag, default off).
+        def _load_for_validation(pid):
+            md = self.project_service.get_project_metadata(pid)
+            if not md:
+                return None
+            if pid == project_id:
+                return (canvas, getattr(md, "project_type", None))  # già caricato
+            return (self.project_service.get_project_canvas(pid), getattr(md, "project_type", None))
+
+        gate = _canvas_validation_gate(project_id, _load_for_validation)
         if gate is not None:
             return gate
 
