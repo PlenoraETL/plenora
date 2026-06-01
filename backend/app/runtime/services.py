@@ -47,7 +47,19 @@ def _register_multilayer_artifact_adapters() -> None:
     bundle_arcgis_adapter.register()
 
 
+def _register_canvas_node_validators() -> None:
+    """Registra i ``validate_node`` dei motori al composition-root (#D).
+
+    L'orchestratore ``canvas_validation`` li scopre via ``validator_for(node.type)``
+    senza importarli — la direzione resta motori -> shared. Idempotente.
+    """
+    from app.core.carica.node_validator import register_carica_validator
+
+    register_carica_validator()
+
+
 _register_multilayer_artifact_adapters()
+_register_canvas_node_validators()
 
 
 @dataclass(frozen=True)
