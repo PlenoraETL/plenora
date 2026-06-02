@@ -105,9 +105,10 @@ def get_runs(
         conditions.append("ts_start <= %s")
         params.append(before)
 
-    # Isolamento per gruppo
+    # Isolamento per gruppo: i tenant vedono SOLO il proprio gruppo; gli eventi di
+    # sistema (group_id='') sono ristretti ai superadmin (Backend master Part II #9).
     if current_user.role != "superadmin":
-        conditions.append("(group_id = %s OR group_id = '')")
+        conditions.append("group_id = %s")
         params.append(current_user.group_id)
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""

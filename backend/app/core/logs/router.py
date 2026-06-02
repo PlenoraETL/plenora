@@ -114,7 +114,7 @@ def get_logs(
     # Filtro per gruppo (superadmin vede tutto, altri solo il proprio gruppo
     gf = group_filter(current_user)
     if gf is not None:
-        conditions.append("(group_id = %s OR group_id = '')")
+        conditions.append("group_id = %s")
         params.append(gf)
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
@@ -153,7 +153,7 @@ def get_log_stats(
         params.append(after)
     gf = group_filter(current_user)
     if gf is not None:
-        conditions.append("(group_id = %s OR group_id = '')")
+        conditions.append("group_id = %s")
         params.append(gf)
 
     where = f"WHERE {' AND '.join(conditions)}" if conditions else ""

@@ -113,3 +113,20 @@ def test_get_logs_no_project_id_skips_assertion(monkeypatch, _stub_db):
         limit=100, offset=0,
     )
     assert visible_mock.call_count == 0
+
+
+def test_get_logs_non_superadmin_excludes_system_group_logs(monkeypatch, _stub_db):
+    """#9: i log di sistema (group_id='') NON sono visibili ai tenant non-superadmin
+    → la WHERE filtra solo sul proprio gruppo, niente `group_id = ''`."""
+    from app.core.logs import router as logs_router
+
+    logs_router.get_logs(
+        level=None, module=None, op=None,
+        project_id=None,
+        search=None, after=None, before=None,
+        current_user=_user(role="user", group_id="group_A"),
+        limit=100, offset=0,
+    )
+    sql = _stub_db["fetchall"].call_args.args[0]
+    assert "group_id = %s" in sql
+    assert "group_id = ''" not in sql
