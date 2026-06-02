@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Protocol, Tuple
+from typing import List, NamedTuple, Optional, Protocol, Tuple
 
 from app.core.dataframes.ports import FrameLike
 from app.core.connections.arcgis_writer_boundary import (
@@ -19,6 +19,13 @@ from app.shared.connections.arcgis_provider import (
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class LayerWriteResult(NamedTuple):
+    """Esito della scrittura di un singolo layer aggiunto a un servizio esistente."""
+
+    feature_count: int
+    errors: list
 
 
 class ArcGISFeatureWriteProviderProtocol(
@@ -82,6 +89,40 @@ class ArcGISFeatureWriteService:
             df=mapped.df,
             geometry_column=mapped.geometry_column,
             folder_id=folder_id,
+        )
+
+    def add_layer_to_service(
+        self,
+        conn_info: ArcGISConnectionInfo,
+        service_url: str,
+        df: FrameLike,
+        layer_name: str,
+        layer_id: int,
+        source_srid: Optional[int] = None,
+        geometry_column: str = "geometry",
+    ) -> "LayerWriteResult":
+        """Aggiunge un layer a un Feature Service esistente (publish multi-layer).
+
+        Gemello di ``create_service_from_df`` per i layer 1..N: il servizio +
+        layer 0 nascono da create_service, qui si aggiungono i successivi.
+        """
+        if source_srid and hasattr(df, "set_crs") and getattr(df, "crs", None) is None:
+            df = df.set_crs(epsg=source_srid)
+        mapped = normalize_arcgis_column_mappings(None).apply(
+            df, geometry_column=geometry_column,
+        )
+        res = self._client.add_layer_to_service(
+            conn_info,
+            service_url,
+            layer_name,
+            mapped.df,
+            layer_id,
+            geometry_column=mapped.geometry_column,
+            srid=source_srid or 4326,
+        )
+        return LayerWriteResult(
+            feature_count=int(res.get("feature_count", 0) or 0),
+            errors=list(res.get("errors", []) or []),
         )
 
     def write_features_df_core(
