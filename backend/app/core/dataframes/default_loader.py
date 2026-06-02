@@ -59,29 +59,15 @@ class DefaultDataLoader:
                 continue
 
         # Fallback permissivo last-resort: scarta le righe malformate. È lossy →
-        # NON deve essere silenzioso (Backend master Part II #3). Stima best-effort
-        # delle righe scartate dal conteggio righe grezze (approssimato: campi
-        # multi-riga gonfiano il conteggio).
+        # NON deve essere silenzioso (Backend master Part II #3): WARNING esplicito.
+        # Niente conteggio via open() diretto: rispetta il boundary I/O
+        # (app/core/io) — il segnale chiave e' che il path lossy e' stato usato.
         df = pd.read_csv(path, encoding="latin-1", sep=";", on_bad_lines="skip")
-        try:
-            with open(path, "r", encoding="latin-1", errors="replace") as fh:
-                raw_lines = sum(1 for line in fh if line.strip())
-            skipped = max(raw_lines - 1, 0) - len(df)  # -1 header
-            if skipped > 0:
-                _logger.warning(
-                    "CSV %s: usato il fallback permissivo, ~%d righe malformate scartate (on_bad_lines=skip)",
-                    path, skipped,
-                )
-            else:
-                _logger.warning(
-                    "CSV %s: usato il fallback permissivo (on_bad_lines=skip): righe malformate potrebbero essere state scartate",
-                    path,
-                )
-        except Exception:
-            _logger.warning(
-                "CSV %s: usato il fallback permissivo (on_bad_lines=skip): righe malformate potrebbero essere state scartate",
-                path,
-            )
+        _logger.warning(
+            "CSV %s: usato il fallback permissivo (on_bad_lines=skip): eventuali "
+            "righe malformate sono state scartate",
+            path,
+        )
         return df
 
     def load_excel(self, path: Path, sheet: Optional[str] = None) -> pd.DataFrame:
