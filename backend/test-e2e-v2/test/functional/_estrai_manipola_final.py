@@ -149,6 +149,10 @@ def _wait_task_terminal(ctx: E2EContext, task_id: str) -> dict[str, Any]:
 
 
 def _execute_project_raw(ctx: E2EContext, project_id: str, *, force_recalculate: bool) -> dict[str, Any]:
+    # Gate canvas-validation attivo (Epic CanvasVal §12): un progetto non validato
+    # non parte (409). update_canvas azzera canvas_validated, quindi prima di
+    # (ri)eseguire validiamo come il pulsante Esegui del FE (salva→valida→esegui).
+    ctx.validate_project(project_id)
     task = ctx.api_json(
         "POST",
         f"/projects/{project_id}/execute",
