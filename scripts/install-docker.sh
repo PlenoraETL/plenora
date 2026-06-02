@@ -525,7 +525,7 @@ seed_bootstrap_superadmin() {
     local script
     script='import os, uuid
 from app.core.auth import db
-from app.shared.password_hashing import hash_password
+from app.core.security.password_hashing import hash_password
 
 username = os.environ["PLENORA_BOOTSTRAP_ADMIN_USERNAME"]
 password = os.environ["PLENORA_BOOTSTRAP_ADMIN_PASSWORD"]

@@ -486,7 +486,7 @@ seed_e2e_admin() {
     local script
     script='import os, uuid
 from app.core.auth import db
-from app.shared.password_hashing import hash_password
+from app.core.security.password_hashing import hash_password
 
 username = os.environ["PLENORA_E2E_USERNAME"]
 password = os.environ["PLENORA_E2E_PASSWORD"]
