@@ -227,6 +227,19 @@ class E2EContext:
             payload=canvas,
         )
 
+    def validate_project(self, project_id: str) -> dict[str, Any]:
+        """POST /validate (Epic Canvas Validation §12).
+
+        Valida la catena del progetto sul canvas SALVATO e persiste lo stato
+        ``canvas_validated``. Ritorna ``{valid, has_errors, issues:[...]}`` (HTTP 200
+        anche con errori: e' il chiamante a decidere). Solleva solo su HTTP != 200.
+        """
+        return _json_request(
+            "POST",
+            f"/projects/{project_id}/validate",
+            token=self.token,
+        )
+
     def delete_project(self, project_id: str) -> None:
         _json_request(
             "DELETE",
@@ -337,6 +350,13 @@ class E2EContext:
         return result
 
     def execute_project(self, project_id: str, *, force_recalculate: bool = True) -> dict[str, Any]:
+        # Gate canvas-validation attivo (Epic Canvas Validation §12): un progetto non
+        # validato non parte. Valida-prima come il pulsante "Esegui" del FE
+        # (salva→valida→esegui); il canvas e' gia' salvato via update_canvas, quindi
+        # qui basta validare. I test che verificano il BLOCCO usano /execute raw.
+        report = self.validate_project(project_id)
+        if report.get("has_errors"):
+            fail(f"Validation failed before execute: {report.get('issues')!r}")
         task = _json_request(
             "POST",
             f"/projects/{project_id}/execute",

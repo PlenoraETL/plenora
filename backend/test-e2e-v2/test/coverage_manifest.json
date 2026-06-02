@@ -284,6 +284,23 @@
           }
         }
       ]
+    },
+    {
+      "id": "canvas_validation",
+      "title": "Canvas Validation",
+      "items": [
+        {
+          "id": "canvas_validation_gate",
+          "title": "Canvas validation: validate endpoint, execution gate, cross-project cascade",
+          "status": "covered",
+          "required": true,
+          "covers": ["invalid canvas reported by POST /validate", "valid canvas certified (canvas_validated persisted)", "execution gate blocks an unvalidated project", "cross-project cascade invalidation"],
+          "evidence": {
+            "tests": ["test_701-test_704"],
+            "modules": []
+          }
+        }
+      ]
     }
   ]
 }
