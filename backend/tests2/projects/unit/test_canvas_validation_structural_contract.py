@@ -211,10 +211,26 @@ def test_result_geo_with_geometry_ok():
     assert "RESULT_GEO_NO_GEOMETRY" not in _codes(report)
 
 
-def test_arricchisci_no_enricher_no_sources():
+def test_arricchisci_no_enricher():
     codes = _codes(_validate(_canvas([_node("r", "result")], []), project_type="arricchisci"))
     assert "ARRICCHISCI_NO_ENRICHER" in codes
+
+
+def test_arricchisci_no_sources_only_when_enricher_needs_one():
+    # enricher con param required non-fixed → richiede sorgente → NO_SOURCES scatta
+    e = _node("e", "api_enrich")
+    e.data = {"parameters": [{"name": "addr", "required": True, "mode": "mapped"}]}
+    codes = _codes(_validate(_canvas([e, _node("r", "result")], [_edge("e", "r")]), project_type="arricchisci"))
     assert "ARRICCHISCI_NO_SOURCES" in codes
+
+
+def test_arricchisci_generator_enricher_no_false_no_sources():
+    # enricher GENERATORE (nessun param required) → non richiede sorgente →
+    # ARRICCHISCI_NO_SOURCES NON deve scattare (parità FE, fix E2E v2)
+    e = _node("e", "api_enrich")
+    e.data = {"parameters": [{"name": "opt", "required": False, "mode": "mapped"}]}
+    codes = _codes(_validate(_canvas([e, _node("r", "result")], [_edge("e", "r")]), project_type="arricchisci"))
+    assert "ARRICCHISCI_NO_SOURCES" not in codes
 
 
 def test_arricchisci_complete_no_structural_error():

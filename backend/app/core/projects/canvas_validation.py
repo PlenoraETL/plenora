@@ -235,6 +235,27 @@ def _backward_reachable(start_id, edges: list) -> set:
     return seen
 
 
+def _arricchisci_node_needs_source(node) -> bool:
+    """True se l'api_enrich richiede una sorgente dati a monte (parità FE
+    ``nodeNeedsSource``): ha un parametro ``required``, ``mode != 'fixed'``, non in
+    ``static_parameters``. Gli enricher-generatori (nessun param così) NON la
+    richiedono → non devono triggerare ARRICCHISCI_NO_SOURCES.
+    """
+    data = getattr(node, "data", None) or {}
+    params = data.get("parameters")
+    if not isinstance(params, list):
+        return False
+    static_params = data.get("static_parameters")
+    static_params = static_params if isinstance(static_params, dict) else {}
+    return any(
+        isinstance(p, dict)
+        and p.get("required")
+        and p.get("mode") != "fixed"
+        and p.get("name") not in static_params
+        for p in params
+    )
+
+
 def _type_specific_issues(
     nodes: list, edges: list, project_type: str | None,
     available_api_connection_ids: set | None = None,
@@ -250,10 +271,16 @@ def _type_specific_issues(
                     suggestion={"node_type": n.type},
                 ))
     elif project_type == "arricchisci":
-        if not any(getattr(n, "type", None) == "api_enrich" for n in nodes):
+        enrich_nodes = [n for n in nodes if getattr(n, "type", None) == "api_enrich"]
+        if not enrich_nodes:
             out.append(Issue(node_id="", severity="error", code="ARRICCHISCI_NO_ENRICHER",
                              message="Aggiungi almeno un nodo API Enrich.", suggestion=None))
-        if not any(getattr(n, "type", None) in _SOURCE_NODE_TYPES for n in nodes):
+        # ARRICCHISCI_NO_SOURCES solo se MANCA una sorgente E almeno un enricher la
+        # RICHIEDE (porting fedele FE: gli enricher-generatori producono dati senza
+        # sorgente → non vanno bloccati). Senza questa guardia si bloccavano ~118
+        # pipeline generator valide (scoperto via E2E v2).
+        has_sources = any(getattr(n, "type", None) in _SOURCE_NODE_TYPES for n in nodes)
+        if not has_sources and any(_arricchisci_node_needs_source(n) for n in enrich_nodes):
             out.append(Issue(node_id="", severity="error", code="ARRICCHISCI_NO_SOURCES",
                              message='Nessuna sorgente dati. Aggiungi un nodo "Progetto", "File" o "Valori Statici".',
                              suggestion=None))
