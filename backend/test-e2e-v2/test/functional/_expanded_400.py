@@ -86,10 +86,10 @@ def _static_parquet_helpers() -> None:
 def _static_parquet_loader_port() -> None:
     ports = _read_text("backend/app/core/dataframes/ports.py")
     default_loader = _read_text("backend/app/core/dataframes/default_loader.py")
-    dispatch = _read_text("backend/app/core/dataframes/load_dispatch.py")
+    frame_io = _read_text("backend/app/core/dataframes/frame_io.py")
     assert_true("def load_parquet" in ports, "dataframe port must expose load_parquet")
     assert_true("def load_parquet" in default_loader, "default dataframe loader must implement load_parquet")
-    assert_true('"parquet"' in dispatch and ".load_parquet" in dispatch, "load_dispatch must route parquet")
+    assert_true('format_hint == "parquet"' in frame_io, "frame_io bytes path must route parquet")
 
 
 def _static_oracle_preflight_normalization() -> None:

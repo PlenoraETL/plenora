@@ -349,7 +349,23 @@ def build_enrichment_executor(
     """
     node_om = node_data.get("output_mapping")
     api_om = api_config.get("output_mapping", [])
-    raw_output_mapping = node_om if node_om else api_om
+    if node_om and api_om:
+        # Il nodo sceglie QUALI path includere (selezione/ordine utente), ma il
+        # nome colonna di ciascun path e' risolto dalla connessione CORRENTE
+        # (single source of truth): un rename lato connessione propaga ai
+        # progetti esistenti senza perdere la selezione del nodo (che potrebbe
+        # essere uno snapshot stale del mapping).
+        api_by_path = {
+            m.get("path"): m
+            for m in api_om
+            if isinstance(m, dict) and m.get("path")
+        }
+        raw_output_mapping = [
+            api_by_path.get(m.get("path"), m) if isinstance(m, dict) else m
+            for m in node_om
+        ]
+    else:
+        raw_output_mapping = node_om if node_om else api_om
     seen_cols: set[str] = set()
     deduped: list = []
     for mapping in (raw_output_mapping or []):

@@ -121,9 +121,16 @@ class EnrichExecutor:
                     and len(output_columns) == len(result_names)
                     else result_names
                 )
+                # path = identita' stabile della colonna API. Carico l'output_mapping
+                # CORRENTE dalla connessione (il nodo nel canvas puo' essere stale
+                # dopo un rename lato connessione): mappa column -> path cosi'
+                # build_output_contract riusa l'id colonna attraverso il rename del
+                # nome fisico. Lo schema-inference da solo legge il nodo stale e
+                # mancherebbe il match.
+                source_name_by_column = self._api_source_names_by_column(canvas)
                 result_columns = [
                     {
-                        "source_name": str(col),
+                        "source_name": source_name_by_column.get(str(col), str(col)),
                         "name": str(physical_name),
                         "type": "str",
                     }
@@ -147,7 +154,11 @@ class EnrichExecutor:
                         result_columns = [
                             {
                                 "id": getattr(by_name.get(col), "id", None),
-                                "source_name": getattr(by_name.get(col), "source_name", None) or col,
+                                "source_name": (
+                                    source_name_by_column.get(str(col))
+                                    or getattr(by_name.get(col), "source_name", None)
+                                    or col
+                                ),
                                 "name": physical_name,
                                 "type": "str",
                             }
@@ -213,6 +224,35 @@ class EnrichExecutor:
             "error":       res.get("message") if not res.get("success") else None,
         })
         return res
+
+    def _api_source_names_by_column(self, canvas: CanvasState) -> dict[str, str]:
+        """Mappa physical column name -> path dell'output_mapping API (identita'
+        stabile), letto dalla connessione CORRENTE di ogni nodo api_enrich.
+
+        Il nodo nel canvas puo' avere un output_mapping stale dopo un rename
+        lato connessione; usiamo la connessione per riusare l'id colonna nel
+        contract attraverso il rename del nome fisico.
+        """
+        out: dict[str, str] = {}
+        for node in getattr(canvas, "nodes", None) or []:
+            if getattr(node, "type", None) != "api_enrich":
+                continue
+            data = getattr(node, "data", None) or {}
+            api_id = getattr(node, "api_id", None) or data.get("api_id")
+            if not api_id:
+                continue
+            try:
+                conn = api_connection_service.get_api_connection(api_id)
+            except Exception:
+                conn = None
+            for mapping in ((conn or {}).get("output_mapping") or []):
+                if not isinstance(mapping, dict):
+                    continue
+                column = mapping.get("column") or mapping.get("target_column") or mapping.get("name")
+                path = mapping.get("path")
+                if column and path:
+                    out[str(column)] = str(path)
+        return out
 
     def preview(self, project_id: str, canvas: CanvasState, limit: int = 10) -> JsonObject:
         """Preview ARRICCHISCI: riusa il loop canonico `execute_canvas_enrichment`

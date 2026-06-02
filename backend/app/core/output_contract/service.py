@@ -168,6 +168,7 @@ def node_columns_from_contract(
     """
     previous_visible_by_id: dict[str, bool] = {}
     previous_visible_by_name: dict[str, bool] = {}
+    previous_visible_by_source: dict[str, bool] = {}
     for col in previous_node_columns or []:
         col_id = _field(col, "id", None) or _field(col, "column_id", None)
         if col_id:
@@ -176,6 +177,12 @@ def node_columns_from_contract(
             name = _field(col, name_key, None)
             if name:
                 previous_visible_by_name[str(name)] = bool(_field(col, "visible", True))
+        # source_name e' l'identita' stabile: se l'upstream sostituisce l'id
+        # della colonna E ne rinomina il physical, ne' id ne' name matchano
+        # piu' — il fallback su source_name conserva comunque la visibilita'.
+        source = _field(col, "source_name", None)
+        if source:
+            previous_visible_by_source[str(source)] = bool(_field(col, "visible", True))
 
     if isinstance(contract, OutputContract):
         columns = [c.model_dump() for c in contract.columns]
@@ -211,7 +218,10 @@ def node_columns_from_contract(
                 col_id,
                 previous_visible_by_name.get(
                     physical_name,
-                    True,
+                    previous_visible_by_source.get(
+                        str(col.get("source_name") or ""),
+                        True,
+                    ),
                 ),
             ),
         })

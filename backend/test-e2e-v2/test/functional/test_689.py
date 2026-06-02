@@ -98,15 +98,22 @@ def _producer_manipola_canvas(source_project_id: str, contract: dict, fmt: str) 
     }
 
 
-def _pass_through_arricchisci_canvas(source_project_id: str, contract: dict, fmt: str) -> dict:
+def _pass_through_arricchisci_canvas(
+    source_project_id: str, contract: dict, fmt: str, enrich_api_id: str
+) -> dict:
+    from _arricchisci_contract_final import _with_noop_enricher
     source = _project_source(source_project_id, contract)
-    return {
+    canvas = {
         "nodes": [
             source,
             result_node(format=fmt, fileName=f"e2e_test_689_arricchisci_{fmt}"),
         ],
         "edges": [edge("e-source-result", "source-1", "result-1")],
     }
+    # Un arricchisci deve avere un enricher (regola ARRICCHISCI_NO_ENRICHER):
+    # inseriamo un api_enrich no-op (aggiunge solo la colonna costante _enrich,
+    # preserva righe/valori upstream) per rendere il pass-through valido.
+    return _with_noop_enricher(canvas, enrich_api_id)
 
 
 def _consumer_manipola_canvas(source_project_id: str, contract: dict, fmt: str) -> dict:
@@ -179,6 +186,8 @@ def _assert_manipola_rows(ctx: E2EContext, project_id: str, label: str) -> None:
 
 def test(ctx: E2EContext) -> None:
     ensure_plenora_test_network_access()
+    from _arricchisci_contract_final import _noop_enrich_api
+    enrich_api_id = _noop_enrich_api(ctx, "test_689")
     connection_id = ctx.create_connection(
         postgres_fixture_connection_payload(unique_name("e2e_v2_test_689_postgres"))
     )
@@ -201,6 +210,7 @@ def test(ctx: E2EContext) -> None:
                 estrai_by_format[fmt][0],
                 estrai_by_format[fmt][1],
                 "csv",
+                enrich_api_id,
             ),
         )
         _assert_consumer_rows(ctx, arr_consumer_id, f"estrai {fmt}->arricchisci")
@@ -224,6 +234,7 @@ def test(ctx: E2EContext) -> None:
                         base_id,
                         base_contract,
                         producer_format,
+                        enrich_api_id,
                     ),
                 )
 
@@ -247,6 +258,7 @@ def test(ctx: E2EContext) -> None:
                     producer_id,
                     producer_contract,
                     "csv",
+                    enrich_api_id,
                 ),
             )
             _assert_consumer_rows(

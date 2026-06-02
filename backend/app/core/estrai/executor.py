@@ -806,6 +806,20 @@ class EstraiExecutor:
             physical_name = getattr(canvas_col, "alias", None) or getattr(canvas_col, "name", None)
             if physical_name:
                 result_columns_by_physical[str(physical_name)] = canvas_col
+        # Fallback: i source/transform node portano il mapping alias->nome DB.
+        # Senza questo, quando il result node non ha colonne esplicite, una
+        # colonna aliasata cadeva sul ramo `{"name": col}` con source_name =
+        # alias (es. "age_public"), incoerente con il path update_canvas che
+        # risolve al nome DB ("age"). L'incoerenza faceva mintare un id nuovo
+        # a ogni rename dell'alias (rompendo la stabilita' id cross-progetto).
+        # Il result node, se presente, ha precedenza (mappa gia' popolata sopra).
+        for node in canvas.nodes:
+            if node.type == "result":
+                continue
+            for canvas_col in (getattr(node, "columns", None) or []):
+                physical_name = getattr(canvas_col, "alias", None) or getattr(canvas_col, "name", None)
+                if physical_name and str(physical_name) not in result_columns_by_physical:
+                    result_columns_by_physical[str(physical_name)] = canvas_col
 
         col_names = res.get("columns", [])
         result_columns = []

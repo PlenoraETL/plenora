@@ -15,7 +15,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, MutableMapping, Optional, Tuple
+from typing import Any, Mapping, MutableMapping, Optional, Tuple
 
 from app.core import output_contract as output_contract_module
 from app.core.dataframes import export_writer as dataframe_export_writer
@@ -70,8 +70,14 @@ class EnrichmentRunMode:
     def persist_dataframe_result(
         self, *, project_id: str, task_id: str, final_df: Any,
         final_format: str, output_filename: str, final_filename: str,
+        source_names: Optional[Mapping[str, str]] = None,
     ) -> Tuple[Optional[str], Path]:
-        """Persiste il DataFrame finale. Ritorna (result_id|None, saved_path)."""
+        """Persiste il DataFrame finale. Ritorna (result_id|None, saved_path).
+
+        ``source_names`` mappa physical_name → identita' stabile (es. il
+        ``path`` dell'output_mapping API): consente a build_output_contract
+        di riusare l'id colonna attraverso un rename del nome fisico.
+        """
         raise NotImplementedError
 
     def decorate_result(self, result: MutableMapping[str, Any], *, project_id: str, task_id: str) -> None:
@@ -114,6 +120,7 @@ class StandardRunMode(EnrichmentRunMode):
 
     def persist_dataframe_result(
         self, *, project_id, task_id, final_df, final_format, output_filename, final_filename,
+        source_names=None,
     ):
         # Arricchisci standard: typed pipeline-result boundary (DB) + output_contract.
         saved = pipeline_result_module.save_pipeline_result_outcome(
@@ -131,7 +138,11 @@ class StandardRunMode(EnrichmentRunMode):
         output_contract = output_contract_module.build_output_contract(
             project_id=project_id,
             result_columns=[
-                {"name": col, "type": str(final_df[col].dtype)}
+                {
+                    "name": col,
+                    "source_name": (source_names or {}).get(col, col),
+                    "type": str(final_df[col].dtype),
+                }
                 for col in final_df.columns
             ],
             previous_contract=_project_service.get_project_output_contract(project_id),
@@ -175,6 +186,7 @@ class EseguibileRunMode(EnrichmentRunMode):
 
     def persist_dataframe_result(
         self, *, project_id, task_id, final_df, final_format, output_filename, final_filename,
+        source_names=None,
     ):
         # Eseguibile: output DataFrame → object storage (S3) via streaming chunks.
         # Niente DB result/output_contract. result_id resta None (il frontend

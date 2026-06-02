@@ -519,10 +519,17 @@ class SchemaInferenceService:
             )
             if not name or name in existing:
                 continue
+            # L'identita' stabile di una colonna API e' il `path` della
+            # risposta (es. "email", "response.items.records[*].age"), NON
+            # il nome fisico mappato: rinominare la colonna in output_mapping
+            # (path invariato) deve preservare l'id nel contract. source_name
+            # = path consente a build_output_contract di riusare l'id via
+            # source_name attraverso il rename. Fallback al nome per gli
+            # output_mapping storici senza `path`.
             result.append(ColumnSchema(
                 name=name,
                 type=mapping.get("type", "str"),
-                source_name=name,
+                source_name=mapping.get("path") or name,
                 source_node=node.id,
                 is_calculated=True,
             ))

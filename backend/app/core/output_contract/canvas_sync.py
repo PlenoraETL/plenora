@@ -49,6 +49,7 @@ def sync_canvas_with_output_contracts(
     changed, column_migrations_by_node = _sync_project_source_columns(
         canvas,
         project_service,
+        project_id=project_id,
     )
     changed = _sync_transform_expression_configs(
         canvas=canvas,
@@ -68,9 +69,18 @@ def sync_canvas_with_output_contracts(
 def _sync_project_source_columns(
     canvas: Any,
     project_service: Any,
+    *,
+    project_id: str | None = None,
 ) -> ProjectSourceSyncResult:
     changed = False
     column_migrations_by_node: dict[str, dict[str, dict[str, Any] | None]] = {}
+    # Ponte 2-hop: i config-ref del canvas possono puntare a una colonna
+    # tramite un suo nome *precedente* registrato nell'output_contract del
+    # progetto stesso (es. il vecchio physical_name "old_age" per la colonna
+    # id "col-age"). La migration del project_source riconcilia upstream
+    # prev→next per id; aggiungiamo le chiavi name: dei nomi storici propri
+    # cosi' anche i ref espressi con quei nomi vengono riscritti.
+    own_name_by_id = _own_contract_name_by_id(project_service, project_id)
     for node in getattr(canvas, "nodes", []) or []:
         if getattr(node, "type", None) != "project_source":
             continue
@@ -85,10 +95,9 @@ def _sync_project_source_columns(
             output_contract,
             previous_node_columns=previous_columns,
         )
-        column_migrations_by_node[node.id] = _build_column_migrations(
-            previous_columns,
-            next_columns,
-        )
+        migration = _build_column_migrations(previous_columns, next_columns)
+        _augment_migration_with_own_names(migration, own_name_by_id)
+        column_migrations_by_node[node.id] = migration
         if _column_fingerprint(previous_columns) == _column_fingerprint(next_columns):
             continue
         node.columns = [Column(**c) for c in next_columns]
@@ -659,6 +668,66 @@ def _build_column_migrations(
         for key in _column_lookup_keys(previous):
             _put_unique_migration(migrations, key, current)
     return migrations
+
+
+def _own_contract_name_by_id(
+    project_service: Any,
+    project_id: str | None,
+) -> dict[str, list[str]]:
+    """Map ``column_id -> [physical names recorded in the project's own
+    output_contract]``.
+
+    Serve da ponte 2-hop: i config-ref possono usare un nome storico della
+    colonna (il physical_name esposto in precedenza dal progetto stesso)
+    diverso dal nome corrente del project_source.
+    """
+
+    if not project_id:
+        return {}
+    try:
+        contract = project_service.get_project_output_contract(project_id)
+    except Exception:
+        return {}
+    columns: list[Any] = []
+    if isinstance(contract, dict):
+        columns = contract.get("columns") or []
+    else:
+        columns = getattr(contract, "columns", None) or []
+    names_by_id: dict[str, list[str]] = {}
+    for col in columns:
+        col_id = str(_field(col, "id", None) or _field(col, "column_id", None) or "")
+        if not col_id:
+            continue
+        for name_key in ("physical_name", "display_name", "name", "source_name"):
+            name = _field(col, name_key, None)
+            if name:
+                names_by_id.setdefault(col_id, [])
+                if str(name) not in names_by_id[col_id]:
+                    names_by_id[col_id].append(str(name))
+    return names_by_id
+
+
+def _augment_migration_with_own_names(
+    migration: ColumnMigrationMap,
+    own_name_by_id: dict[str, list[str]],
+) -> None:
+    """Aggiunge chiavi ``name:<nome storico proprio>`` alla migration per ogni
+    colonna che ha gia' una migration per id (riscritta o rimossa upstream)."""
+
+    if not own_name_by_id:
+        return
+    for col_id, names in own_name_by_id.items():
+        target = migration.get(f"id:{col_id}")
+        if f"id:{col_id}" not in migration:
+            continue
+        for name in names:
+            _put_unique_migration(migration, f"name:{name}", target)
+
+
+def _field(obj: Any, key: str, default: Any) -> Any:
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
 
 
 def _same_column_reference(previous: dict[str, Any], current: dict[str, Any]) -> bool:

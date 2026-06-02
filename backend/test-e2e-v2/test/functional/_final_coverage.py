@@ -287,11 +287,11 @@ def _static_rest_sink_validation_and_redaction() -> None:
 
 def _static_datasource_write_paths() -> None:
     service = _read_text("backend/app/core/datasources/service.py")
-    task = _read_text("backend/workers/tasks/carica_task.py")
+    dispatch = _read_text("backend/app/core/carica/dispatch.py")
     for backend in ("ftp.py", "sftp.py", "local.py", "sharepoint.py"):
         assert_true("def write_file" in _read_text(f"backend/app/core/datasources/{backend}"), f"{backend} must implement write_file")
     assert_true("def write_file" in service, "DataSourceService must expose write_file")
-    assert_true("_execute_datasource_write" in task, "CARICA task must support datasource writes")
+    assert_true("execute_datasource_write" in dispatch, "CARICA dispatch must support datasource writes")
 
 
 def _static_datasource_upload_mime_guard() -> None:
@@ -301,7 +301,7 @@ def _static_datasource_upload_mime_guard() -> None:
 
 
 def _static_datasource_path_sanitization() -> None:
-    source = _read_text("backend/workers/tasks/carica_task.py")
+    source = _read_text("backend/app/core/carica/dispatch.py")
     assert_true("PurePosixPath(dest_folder)" in source, "CARICA datasource write must normalize destination folder")
     assert_true(".replace('..', '')" in source, "CARICA datasource write must strip path traversal")
     assert_true("PurePosixPath(dest_filename).name" in source, "CARICA datasource write must keep only filename")
@@ -644,7 +644,14 @@ def _carica_invalid_mapping_rollback(ctx: E2EContext) -> None:
     if not connection_id:
         return
     node = _carica_mode_node(connection_id, schema_name, table_name, write_mode="append")
-    node["column_mappings"].append({"source_column": "age", "dest_column": "not_existing_dest", "dest_type": "INTEGER"})
+    # Mappa una sorgente valida su una colonna di destinazione inesistente
+    # (NON duplicare la sorgente: un secondo mapping "age" verrebbe bloccato a
+    # validazione come mapping.dup_source, mascherando il path che vogliamo
+    # esercitare). Sorgenti uniche => la validazione passa e il fallimento
+    # "Colonne non trovate" emerge a runtime, con rollback (rows_written=0).
+    for _m in node["column_mappings"]:
+        if _m.get("source_column") == "age":
+            _m["dest_column"] = "not_existing_dest"
     node["data"]["column_mappings"] = node["column_mappings"]
     canvas = json.loads(json.dumps(active_canvas))
     canvas["nodes"].append(node)

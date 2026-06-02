@@ -133,6 +133,11 @@ def execute_enrichment_task(
     # download. Niente piu' path filesystem.
     error_report_file = None  # filename display, e.g. enrichment_errors_{task_id}.csv
     error_report_result_id = None
+    # physical_name -> path dell'output_mapping API risolto a runtime (dalla
+    # connessione, non dal nodo che puo' essere stale). Il `path` e' l'identita'
+    # stabile della colonna API: consente a build_output_contract di riusare
+    # l'id colonna attraverso un rename del nome fisico in output_mapping.
+    source_names_by_column: dict[str, str] = {}
 
     # Apre run intermedio (non bloccante).
     # Per gli eseguibili saltiamo `intermediate.create_run` perche' l'eseguibile
@@ -285,6 +290,13 @@ def execute_enrichment_task(
             nonlocal enrichment_stats, error_report_file, error_report_result_id
             api_id = node_data.get("api_id") or (node_data.get("data") or {}).get("api_id")
             api_config = api_conns.get(api_id)
+            for _m in (api_config or {}).get("output_mapping") or []:
+                if not isinstance(_m, dict):
+                    continue
+                _col = _m.get("column") or _m.get("target_column") or _m.get("name")
+                _path = _m.get("path")
+                if _col and _path:
+                    source_names_by_column[str(_col)] = str(_path)
             if not api_config:
                 logger.error(
                     f"[GESTITO] [Task {task_id}] API '{api_id}' non trovata nel "
@@ -738,6 +750,7 @@ def execute_enrichment_task(
             final_format=final_format,
             output_filename=output_filename,
             final_filename=final_filename,
+            source_names=source_names_by_column,
         )
 
         update_task_progress(self, 100, "Completato!", task_id=task_id)

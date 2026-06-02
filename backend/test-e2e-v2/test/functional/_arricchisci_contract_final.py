@@ -35,9 +35,48 @@ from _estrai_manipola_final import (
     _node_by_id,
     _source_result_canvas,
 )
-
-
 CaseFn = Callable[[], None]
+
+
+def _noop_enrich_api(ctx: E2EContext, suffix: str) -> str:
+    """Crea una connessione enricher 'no-op': path statico ``/data/single_object``
+    (nessun param richiesto) che mappa una sola colonna costante ``_enrich``.
+
+    Rende un canvas project_source/static -> result un arricchisci VALIDO
+    (regola ARRICCHISCI_NO_ENRICHER) senza richiedere colonne dalla sorgente,
+    preservando conteggio righe e id delle colonne upstream: aggiunge solo
+    ``_enrich`` (stesso valore per ogni riga).
+    """
+    # import lazy: _arricchisci_api_final importa da questo modulo (ciclo).
+    from _arricchisci_api_final import _create_api, _output_mapping
+    return _create_api(
+        ctx,
+        name=f"e2e_v2_{suffix}_noop_enrich",
+        path="/data/single_object",
+        output_mapping=_output_mapping(("email", "_enrich")),
+    )
+
+
+def _with_noop_enricher(canvas: dict[str, Any], enrich_api_id: str) -> dict[str, Any]:
+    """Inserisce un nodo api_enrich 'no-op' tra l'ultimo nodo non-result e il
+    nodo result del canvas (source/static -> api_enrich -> result)."""
+    from _arricchisci_api_final import _api_node, _output_mapping
+    nodes = canvas["nodes"]
+    edges = canvas["edges"]
+    result = next(n for n in nodes if n.get("type") == "result")
+    result_id = result["id"]
+    # nodo che alimentava il result diventa upstream dell'enricher
+    feeder_edge = next(e for e in edges if e["target"] == result_id)
+    feeder_source = feeder_edge["source"]
+    api = _api_node(
+        enrich_api_id,
+        param_mapping={},
+        output_mapping=_output_mapping(("email", "_enrich")),
+    )
+    new_edges = [e for e in edges if e is not feeder_edge]
+    new_edges.append(edge("e-feeder-enrich", feeder_source, api["id"]))
+    new_edges.append(edge("e-enrich-result", api["id"], result_id))
+    return {"nodes": [*nodes, api], "edges": new_edges}
 
 
 def _ctx_case(fn: Callable[[E2EContext], None]) -> CaseFn:
@@ -142,7 +181,10 @@ def test_462(ctx: E2EContext) -> None:
     arr_id, arr_contract, result = _create_executed_arricchisci(
         ctx,
         name="e2e_v2_test_462_arricchisci_consumes_estrai",
-        canvas=_arricchisci_source_canvas(upstream_id, upstream_contract),
+        canvas=_with_noop_enricher(
+            _arricchisci_source_canvas(upstream_id, upstream_contract),
+            _noop_enrich_api(ctx, "test_462"),
+        ),
     )
     assert_true(int(result.get("rows_count") or 0) > 0, "ARRICCHISCI must exchange upstream ESTRAI rows")
     by_physical = _columns_by_physical(arr_contract)
@@ -171,11 +213,14 @@ def test_463(ctx: E2EContext) -> None:
     arr_id, arr_contract, _ = _create_executed_arricchisci(
         ctx,
         name="e2e_v2_test_463_arricchisci_visibility",
-        canvas=_arricchisci_source_canvas(
-            upstream_id,
-            contract,
-            source_node=source,
-            file_name="e2e_arricchisci_hidden_years",
+        canvas=_with_noop_enricher(
+            _arricchisci_source_canvas(
+                upstream_id,
+                contract,
+                source_node=source,
+                file_name="e2e_arricchisci_hidden_years",
+            ),
+            _noop_enrich_api(ctx, "test_463"),
         ),
     )
     assert_true("years" not in _columns_by_physical(arr_contract), "ARRICCHISCI hidden project_source column must stay out of output_contract")
@@ -217,7 +262,10 @@ def test_465(ctx: E2EContext) -> None:
     arr_id = ctx.create_project(
         name="e2e_v2_test_465_arricchisci_stale_fail",
         project_type="arricchisci",
-        canvas=_arricchisci_source_canvas(upstream_id, contract),
+        canvas=_with_noop_enricher(
+            _arricchisci_source_canvas(upstream_id, contract),
+            _noop_enrich_api(ctx, "test_465"),
+        ),
     )
     time.sleep(1.1)
     ctx.update_canvas(upstream_id, _active_customers_canvas_with_age_alias(connection_id, age_alias="years"))
@@ -237,7 +285,10 @@ def test_466(ctx: E2EContext) -> None:
     arr_id = ctx.create_project(
         name="e2e_v2_test_466_arricchisci_stale_recalc",
         project_type="arricchisci",
-        canvas=_arricchisci_source_canvas(upstream_id, contract),
+        canvas=_with_noop_enricher(
+            _arricchisci_source_canvas(upstream_id, contract),
+            _noop_enrich_api(ctx, "test_466"),
+        ),
     )
     time.sleep(1.1)
     pending_canvas = _active_customers_canvas_with_age_alias(connection_id, age_alias="years")
@@ -260,7 +311,10 @@ def test_467(ctx: E2EContext) -> None:
     arr_id, contract1, _ = _create_executed_arricchisci(
         ctx,
         name="e2e_v2_test_467_arricchisci_id_stable",
-        canvas=_arricchisci_source_canvas(upstream_id, contract),
+        canvas=_with_noop_enricher(
+            _arricchisci_source_canvas(upstream_id, contract),
+            _noop_enrich_api(ctx, "test_467"),
+        ),
     )
     first = _columns_by_physical(contract1)["years"]
     ctx.execute_project(arr_id, force_recalculate=True)
@@ -282,7 +336,10 @@ def test_468(ctx: E2EContext) -> None:
     arr_id, arr_contract, _ = _create_executed_arricchisci(
         ctx,
         name="e2e_v2_test_468_arricchisci_producer",
-        canvas=_arricchisci_source_canvas(upstream_id, upstream_contract),
+        canvas=_with_noop_enricher(
+            _arricchisci_source_canvas(upstream_id, upstream_contract),
+            _noop_enrich_api(ctx, "test_468"),
+        ),
     )
     public_id = _columns_by_physical(arr_contract)["age_public"]["id"]
     formula = transform_node(
@@ -357,7 +414,10 @@ def test_469(ctx: E2EContext) -> None:
     arr_id, arr_contract, _ = _create_executed_arricchisci(
         ctx,
         name="e2e_v2_test_469_arricchisci_consumes_manipola",
-        canvas=_arricchisci_source_canvas(manipola_id, manipola_contract),
+        canvas=_with_noop_enricher(
+            _arricchisci_source_canvas(manipola_id, manipola_contract),
+            _noop_enrich_api(ctx, "test_469"),
+        ),
     )
     assert_true("double_years" in _columns_by_physical(arr_contract), "ARRICCHISCI must expose calculated MANIPOLA producer columns")
     rows = ctx.preview_project(arr_id, limit=5).get("rows") or []
@@ -377,12 +437,18 @@ def test_470(ctx: E2EContext) -> None:
     arr_a_id, arr_a_contract, _ = _create_executed_arricchisci(
         ctx,
         name="e2e_v2_test_470_arricchisci_a",
-        canvas=_arricchisci_source_canvas(upstream_id, contract),
+        canvas=_with_noop_enricher(
+            _arricchisci_source_canvas(upstream_id, contract),
+            _noop_enrich_api(ctx, "test_470a"),
+        ),
     )
     arr_b_id, arr_b_contract, result = _create_executed_arricchisci(
         ctx,
         name="e2e_v2_test_470_arricchisci_b",
-        canvas=_arricchisci_source_canvas(arr_a_id, arr_a_contract),
+        canvas=_with_noop_enricher(
+            _arricchisci_source_canvas(arr_a_id, arr_a_contract),
+            _noop_enrich_api(ctx, "test_470b"),
+        ),
     )
     assert_true(int(result.get("rows_count") or 0) > 0, "ARRICCHISCI -> ARRICCHISCI must exchange rows")
     assert_true("years" in _columns_by_physical(arr_b_contract), "ARRICCHISCI -> ARRICCHISCI must exchange output_contract")
@@ -394,10 +460,13 @@ def test_471(ctx: E2EContext) -> None:
     arr_id, arr_contract, result = _create_executed_arricchisci(
         ctx,
         name="e2e_v2_test_471_arricchisci_static_producer",
-        canvas=_static_values_canvas([
-            {"name": "seed", "value": "7"},
-            {"name": "label", "value": "alpha"},
-        ]),
+        canvas=_with_noop_enricher(
+            _static_values_canvas([
+                {"name": "seed", "value": "7"},
+                {"name": "label", "value": "alpha"},
+            ]),
+            _noop_enrich_api(ctx, "test_471"),
+        ),
     )
     assert_equal(result.get("rows_count"), 1, "ARRICCHISCI static producer must emit one row")
     assert_true({"seed", "label"} <= set(_columns_by_physical(arr_contract)), "ARRICCHISCI static output_contract must expose static fields")
@@ -408,25 +477,32 @@ def test_471(ctx: E2EContext) -> None:
         canvas=_source_result_canvas(arr_id, arr_contract),
     )
     rows = ctx.preview_project(downstream_id, limit=3).get("rows") or []
-    assert_true(len(rows) == 1 and set(rows[0]) == {"seed", "label"}, "MANIPOLA must consume ARRICCHISCI static output_contract columns")
+    assert_true(len(rows) == 1 and set(rows[0]) == {"seed", "label", "_enrich"}, "MANIPOLA must consume ARRICCHISCI static output_contract columns")
     assert_equal(str(rows[0]["seed"]), "7", "MANIPOLA must consume ARRICCHISCI static seed value")
     assert_equal(rows[0]["label"], "alpha", "MANIPOLA must consume ARRICCHISCI static label value")
 
 
 def test_472(ctx: E2EContext) -> None:
+    enrich_api_id = _noop_enrich_api(ctx, "test_472")
     arr_id, contract1, _ = _create_executed_arricchisci(
         ctx,
         name="e2e_v2_test_472_arricchisci_static_id_stable",
-        canvas=_static_values_canvas([
-            {"name": "seed", "value": "7"},
-            {"name": "label", "value": "alpha"},
-        ]),
+        canvas=_with_noop_enricher(
+            _static_values_canvas([
+                {"name": "seed", "value": "7"},
+                {"name": "label", "value": "alpha"},
+            ]),
+            enrich_api_id,
+        ),
     )
     first = _columns_by_physical(contract1)["seed"]
-    next_canvas = _static_values_canvas([
-        {"name": "seed", "value": "8"},
-        {"name": "label", "value": "beta"},
-    ])
+    next_canvas = _with_noop_enricher(
+        _static_values_canvas([
+            {"name": "seed", "value": "8"},
+            {"name": "label", "value": "beta"},
+        ]),
+        enrich_api_id,
+    )
     ctx.update_canvas(arr_id, next_canvas)
     ctx.execute_project(arr_id, force_recalculate=True)
     contract2 = ctx.get_project(arr_id).get("output_contract") or {}
@@ -460,7 +536,10 @@ def test_473(ctx: E2EContext) -> None:
     arr_id, arr_contract, _ = _create_executed_arricchisci(
         ctx,
         name="e2e_v2_test_473_arricchisci_dup_alias",
-        canvas=_arricchisci_source_canvas(upstream_id, upstream_contract),
+        canvas=_with_noop_enricher(
+            _arricchisci_source_canvas(upstream_id, upstream_contract),
+            _noop_enrich_api(ctx, "test_473"),
+        ),
     )
     physical = [column["physical_name"] for column in arr_contract.get("columns") or []]
     assert_equal(len(physical), len(set(physical)), "ARRICCHISCI output_contract physical names must remain unique")
