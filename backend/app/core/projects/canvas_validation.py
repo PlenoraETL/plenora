@@ -113,7 +113,7 @@ def validate_canvas(
 
 
 # Edge verso questi target non sono join (sono output verso sink).
-_JOIN_SKIP_TARGET_TYPES = frozenset({"result", "carica", "carica_arcgis"})
+_JOIN_SKIP_TARGET_TYPES = frozenset({"result", "carica", "carica_arcgis", "datasource_node"})
 
 
 # Sorgenti non supportate da ESTRAI (SQL-only): porting fedele del FE.
@@ -263,8 +263,13 @@ def _type_specific_issues(
     """Regole gated dal project_type (estrai/arricchisci/manipola)."""
     out: List[Issue] = []
     if project_type == "estrai":
+        # SOURCE_UNSUPPORTED solo se il nodo agisce da SORGENTE (ha un edge uscente
+        # che alimenta la pipeline). Un datasource_node usato come TARGET di scrittura
+        # (es. CARICA su FTP/file: edge result→datasource, nessun uscente) NON va
+        # flaggato (falso-positivo scoperto via E2E v2).
+        _estrai_outgoing = {getattr(e, "source", None) for e in edges}
         for n in nodes:
-            if getattr(n, "type", None) in _ESTRAI_UNSUPPORTED_SOURCE_TYPES:
+            if getattr(n, "type", None) in _ESTRAI_UNSUPPORTED_SOURCE_TYPES and n.id in _estrai_outgoing:
                 out.append(Issue(
                     node_id=str(n.id), severity="error", code="SOURCE_UNSUPPORTED",
                     message="ESTRAI supporta solo tabelle database e layer ArcGIS come sorgenti.",
@@ -356,6 +361,8 @@ def _edge_join_issues(
         e for e in edges
         if getattr(e, "source", None) in node_ids and getattr(e, "target", None) in node_ids
         and getattr(nodes_by_id.get(e.target), "type", None) not in _JOIN_SKIP_TARGET_TYPES
+        # un edge che PARTE da un result è output/scrittura, mai un join
+        and getattr(nodes_by_id.get(getattr(e, "source", None)), "type", None) != "result"
     ]
     if not join_edges:
         return []
