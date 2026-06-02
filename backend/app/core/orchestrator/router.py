@@ -22,6 +22,7 @@ from app.core.orchestrator.task_service import (
     TaskType,
 )
 from app.core.orchestrator import task_service as task_service_module
+from app.core.orchestrator.service import canvas_validation_gate_blocks
 from app.core.orchestrator import log_cleanup as orchestrator_log_cleanup
 from app.core.orchestrator.execution_contract import (
     build_pipeline_execution_contract,
@@ -156,6 +157,16 @@ def execute_project_pipeline(
         project_service = getattr(_orchestrator, "project_service", None)
         if project_service is None:
             project_service = project_service_module.ProjectService()
+        # Gate canvas-validation (Epic CanvasVal §12): un progetto non validato non
+        # parte. Fail-fast qui (nessun task spawnato); il gate scheduler è separato.
+        _gate_meta = project_service.get_project_metadata(project_id)
+        if _gate_meta is not None and canvas_validation_gate_blocks(
+            getattr(_gate_meta, "canvas_validated", False)
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Canvas non validato: apri il progetto e premi Valida prima di eseguire.",
+            )
         try:
             execution_contract = build_pipeline_execution_contract(
                 project_id=project_id,

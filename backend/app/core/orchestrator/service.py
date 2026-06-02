@@ -29,27 +29,18 @@ logger = get_logger(__name__)
 ExecutorDispatch = Mapping[str, CanvasExecutorProtocol]
 
 
-def _canvas_validation_gate(project_id, canvas_validated):
-    """Gate a esecuzione (Epic Canvas Validation §12), dietro feature-flag.
+def canvas_validation_gate_blocks(canvas_validated: bool) -> bool:
+    """True se il gate canvas-validation (§12) deve bloccare l'esecuzione.
 
-    Se ``CANVAS_VALIDATION_GATE_ENABLED`` (default ON) e il progetto NON è validato
-    → ritorna un ``PipelineArtifact`` di failure (il run NON parte). Si fida dello
-    **stato persistito** ``canvas_validated`` (coerente col gate scheduler), tenuto
-    fresco dal cascade cross-progetto su ``update_canvas`` e settato da POST
-    /validate. Niente re-validazione live: cheap, niente I/O extra a ogni run.
+    Gate ON (``CANVAS_VALIDATION_GATE_ENABLED``, default True) + progetto NON
+    validato (stato persistito ``canvas_validated``, tenuto fresco dal cascade
+    cross-progetto + settato da POST /validate). Usato agli entry-point top-level
+    (handler API /execute, scheduler), NON nei metodi di esecuzione condivisi
+    (che girano anche per sub-esecuzioni interne valide).
     """
     if not settings.get("CANVAS_VALIDATION_GATE_ENABLED", False):
-        return None
-    if canvas_validated:
-        return None
-    logger.warning(
-        "Esecuzione bloccata: canvas del progetto non validato",
-        op="validate", project_id=project_id,
-    )
-    return PipelineArtifact.failure(
-        project_id=project_id,
-        message="Canvas non validato: apri il progetto e premi Valida prima di eseguire.",
-    )
+        return False
+    return not canvas_validated
 
 
 class EstraiExecutorProtocol(CanvasExecutorProtocol, Protocol):
@@ -219,12 +210,10 @@ class OrchestratorService:
                 message=f"Progetto {project_id} non trovato",
             )
 
-        # Gate a esecuzione (Epic Canvas Validation §12): blocca il run se il
-        # progetto non è validato (stato persistito, dietro feature-flag).
-        gate = _canvas_validation_gate(project_id, getattr(metadata, "canvas_validated", False))
-        if gate is not None:
-            return gate
-
+        # NB: il gate canvas-validation (§12) NON vive qui: execute_pipeline è
+        # chiamato anche da sub-esecuzioni interne (carica, arricchisci-upstream)
+        # che gatererebbe erroneamente. Il gate sta agli entry-point top-level:
+        # l'handler API POST /{id}/execute (fail-fast) e ExecutionManager (scheduler).
         return self._execute_loaded_pipeline(
             project_id=project_id,
             project_type=metadata.project_type,

@@ -10,8 +10,6 @@ Scenario (Epic Canvas Validation §12, gate ON di default):
 
 from __future__ import annotations
 
-import time
-
 from _e2e import (
     E2EContext,
     assert_true,
@@ -63,37 +61,18 @@ def test(ctx: E2EContext) -> None:
         f"un progetto appena creato non deve risultare validato: {metadata}",
     )
 
-    # /execute RAW (bypassa il validate-first dell'harness) → atteso BLOCCO.
-    task = _json_request(
+    # /execute RAW (bypassa il validate-first dell'harness) → atteso BLOCCO
+    # FAIL-FAST: il gate all'handler rifiuta con 409 senza spawnare alcun task.
+    resp = _json_request(
         "POST",
         f"/projects/{project_id}/execute",
         token=ctx.token,
         payload={"force_recalculate": True},
+        expected=(409,),
     )
-    task_id = task.get("task_id") if isinstance(task, dict) else None
-    assert_true(task_id, f"execute deve ritornare un task_id: {task!r}")
-
-    # Poll tollerante: il blocco puo' presentarsi come task terminato con
-    # result.success=false o con un messaggio di validazione.
-    deadline = time.time() + 60
-    final = None
-    while time.time() < deadline:
-        status = _json_request(
-            "GET", f"/tasks/{task_id}", token=ctx.token, expected=(200, 404)
-        )
-        state = str((status or {}).get("status") or "").lower()
-        if state in {"success", "failure", "failed", "revoked"}:
-            final = status
-            break
-        time.sleep(0.5)
-
-    assert_true(final is not None, "il task di esecuzione non e' terminato in tempo")
-    result = (final or {}).get("result") or {}
-    message = str(result.get("message") or "")
-    blocked = result.get("success") is False or "validat" in message.lower()
     assert_true(
-        blocked,
-        f"l'esecuzione di un progetto NON validato deve essere bloccata dal gate: {final!r}",
+        "validat" in str(resp).lower(),
+        f"il 409 deve citare la validazione mancante: {resp!r}",
     )
 
     # Contro-prova: dopo /validate (canvas valido) il run parte.

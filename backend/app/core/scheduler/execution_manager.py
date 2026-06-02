@@ -222,10 +222,8 @@ class ExecutionManager:
         # in prod). Se il progetto non è validato (stato persistito ``canvas_validated``)
         # il run schedulato NON parte: si registra un evento PIPELINE_FAILED (il canale
         # notifiche dello scheduler, visibile in dashboard) e si ritorna failed.
-        from app.config import settings as _settings
-        if _settings.get("CANVAS_VALIDATION_GATE_ENABLED", False) and not getattr(
-            project_meta, "canvas_validated", False
-        ):
+        from app.core.orchestrator.service import canvas_validation_gate_blocks
+        if canvas_validation_gate_blocks(getattr(project_meta, "canvas_validated", False)):
             logger.warning(
                 f"[GESTITO] Run schedulato bloccato: progetto {project_id} non validato "
                 f"(schedule {schedule_id})"
