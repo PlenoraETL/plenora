@@ -279,8 +279,16 @@ class ArcGISFeatureWriteService:
             match_column,
             match_values,
         )
-        for error in query_errors:
-            logger.error(f"Errore query OBJECTID per upsert: {error}")
+        if query_errors:
+            for error in query_errors:
+                logger.error(f"Errore query OBJECTID per upsert: {error}")
+            # OID-partial (Backend master Part II #22): se la risoluzione OBJECTID è
+            # inaffidabile, le chiavi non risolte verrebbero classificate come "add"
+            # anche se esistono già sul FS → DUPLICATI. Interrompi.
+            raise ValueError(
+                f"Risoluzione OBJECTID fallita per {len(query_errors)} batch su "
+                f"'{match_column}': upsert interrotto per evitare duplicati."
+            )
 
         to_update = []
         to_add = []
@@ -321,8 +329,15 @@ class ArcGISFeatureWriteService:
             match_column,
             match_values,
         )
-        for error in query_errors:
-            logger.error(f"Errore query OBJECTID per match: {error}")
+        if query_errors:
+            for error in query_errors:
+                logger.error(f"Errore query OBJECTID per match: {error}")
+            # OID-partial (Backend master Part II #22): la risoluzione è inaffidabile
+            # → non procedere su un subset (update/delete silenziosamente parziale).
+            raise ValueError(
+                f"Risoluzione OBJECTID fallita per {len(query_errors)} batch su "
+                f"'{match_column}': operazione interrotta per evitare update/delete parziali."
+            )
 
         logger.info(f"Risolti {len(oid_map)} OBJECTID su {len(match_values)} valori match")
 

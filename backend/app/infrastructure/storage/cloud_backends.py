@@ -706,9 +706,20 @@ def _resolve_runtime_bucket(config: "StorageBackendConfig | None" = None) -> "st
     if bucket:
         return bucket
     if cfg.backup_bucket:
+        # Fail-loud in ambiente hardened (prod/staging): mischiare runtime artifacts
+        # e backup amministrativi viola IAM boundary + lifecycle policy (Backend
+        # master Part II #5). Retro-compat solo in dev/test, con WARNING.
+        from app.environment import is_hardened_environment
+
+        if is_hardened_environment():
+            raise StorageConfigError(
+                "OBJECT_STORAGE_BUCKET non configurato in ambiente hardened: "
+                "rifiuto il fallback su BACKUP_BUCKET per non mischiare runtime "
+                "artifacts e backup amministrativi. Configurare OBJECT_STORAGE_BUCKET."
+            )
         logger.warning(
             "OBJECT_STORAGE_BUCKET non configurato: fallback su "
-            "BACKUP_BUCKET=%s per retro-compatibilita'. Configurare "
+            "BACKUP_BUCKET=%s per retro-compatibilita' (solo non-prod). Configurare "
             "OBJECT_STORAGE_BUCKET (runtime artifacts) distinto da "
             "BACKUP_BUCKET (backup amministrativi).",
             cfg.backup_bucket,

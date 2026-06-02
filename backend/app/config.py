@@ -603,11 +603,19 @@ class Settings:
             try:
                 return int(env_value)
             except ValueError:
+                logger.warning(
+                    "Env %s=%r non e' un int valido: uso il default %r (Backend master #17)",
+                    key, env_value, default_value,
+                )
                 return default_value
         elif isinstance(default_value, float):
             try:
                 return float(env_value)
             except ValueError:
+                logger.warning(
+                    "Env %s=%r non e' un float valido: uso il default %r (Backend master #17)",
+                    key, env_value, default_value,
+                )
                 return default_value
         return env_value
 

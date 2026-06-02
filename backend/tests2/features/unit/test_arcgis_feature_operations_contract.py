@@ -163,3 +163,30 @@ def test_arcgis_feature_write_service_write_add_preserves_existing_result_shape(
         "errors": [],
     }
     client.add_dataframe_features.assert_called_once()
+
+
+def test_resolve_objectids_aborts_on_partial_oid_query_failure():
+    # Backend master Part II #22: se la query OBJECTID fallisce su qualche batch,
+    # la risoluzione è inaffidabile → abort (no update/delete parziale silenzioso;
+    # in upsert eviterebbe duplicati). NON procedere col subset risolto.
+    client = MagicMock()
+    client.query_oid_by_key.return_value = ({"A": 11}, ["batch 2: timeout"])
+    svc = ArcGISFeatureWriteService(client)
+    features = [{"attributes": {"KEY": "A"}}, {"attributes": {"KEY": "B"}}]
+
+    with pytest.raises(ValueError, match="OBJECTID"):
+        svc.resolve_objectids_for_update(
+            _conn_info(), "https://example.test/FeatureServer/0", features, "KEY",
+        )
+
+
+def test_resolve_objectids_proceeds_when_no_query_errors():
+    client = MagicMock()
+    client.query_oid_by_key.return_value = ({"A": 11, "B": 12}, [])
+    svc = ArcGISFeatureWriteService(client)
+    features = [{"attributes": {"KEY": "A"}}, {"attributes": {"KEY": "B"}}]
+
+    resolved = svc.resolve_objectids_for_update(
+        _conn_info(), "https://example.test/FeatureServer/0", features, "KEY",
+    )
+    assert [f["attributes"]["OBJECTID"] for f in resolved] == [11, 12]

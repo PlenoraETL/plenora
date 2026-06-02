@@ -5,6 +5,7 @@ This module stays independent from QueryExecutor so engine construction can be
 tested without importing the executor orchestration layer.
 """
 
+import hashlib
 from typing import Protocol
 from urllib.parse import quote_plus
 
@@ -46,8 +47,16 @@ class DefaultEngineFactory:
         self._engine_cache = {}
 
     def _connection_key(self, conn: EngineConnection) -> str:
-        """Chiave univoca per identificare una connessione nel pool."""
-        return f"{conn.type}:{conn.host}:{conn.port}:{conn.database}:{conn.username}"
+        """Chiave univoca per identificare una connessione nel pool.
+
+        Include una **cred-version** (hash della password) così editare la password
+        invalida l'engine cached: senza, restava l'engine stale con le vecchie
+        credenziali (Backend master Part II #8). Hash, non password in chiaro →
+        non finisce nei log di eviction (`key=%s`).
+        """
+        secret = getattr(conn, "password", "") or ""
+        cred_ver = hashlib.sha256(secret.encode("utf-8")).hexdigest()[:12]
+        return f"{conn.type}:{conn.host}:{conn.port}:{conn.database}:{conn.username}:{cred_ver}"
 
     def create_engine(self, conn: EngineConnection) -> Engine:
         """
