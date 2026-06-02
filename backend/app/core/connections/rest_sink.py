@@ -169,7 +169,13 @@ class RestFeatureSink:
         attempted_count = 0
         for batch in self._iter_batches(records):
             attempted_count += len(batch)
-            batch_results.append(self._send_batch(batch))
+            result = self._send_batch(batch)
+            batch_results.append(result)
+            # Circuit-breaker auth (Backend master Part II #21): un 401/403 non si
+            # risolve da solo batch-per-batch (credenziali errate / accesso negato) →
+            # interrompi invece di martellare l'endpoint con i batch restanti.
+            if not result.success and result.status_code in (401, 403):
+                break
 
         written_count = sum(result.sent_count for result in batch_results if result.success)
         failed_count = attempted_count - written_count

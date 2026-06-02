@@ -221,6 +221,27 @@ def _normalize_format_hint(format_hint: Optional[str]) -> Optional[str]:
     return normalized or None
 
 
+def _prefer_nullable_int(original: pd.Series, converted: pd.Series) -> pd.Series:
+    """Evita la perdita di precisione su interi con null (Backend master Part II #4).
+
+    ``pd.to_numeric`` declassa a float64 una colonna di interi che contiene null
+    (int64 non ammette NaN) → i valori > 2^53 sono GIÀ arrotondati in ``converted``.
+    Se i valori sono interi, riconverti dalle STRINGHE originali a ``Int64``
+    (nullable): preserva sia la precisione sia i null (``pd.NA``). Stringhe con
+    parte frazionaria (es. "42.0") fanno fallire l'astype → fallback al float
+    ``converted`` (resta float, comportamento corretto).
+    """
+    if not pd.api.types.is_float_dtype(converted):
+        return converted  # già int (nessun null) → niente perdita
+    non_null = converted.dropna()
+    if non_null.empty or not ((non_null % 1) == 0).all():
+        return converted  # valori frazionari → resta float
+    try:
+        return original.astype("Int64")
+    except (TypeError, ValueError):
+        return converted
+
+
 def _coerce_json_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Coerce string/object columns to numeric when 100% convertibili.
 
@@ -247,7 +268,7 @@ def _coerce_json_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
         original_count = series.notna().sum()
         converted_count = converted.notna().sum()
         if original_count > 0 and converted_count == original_count:
-            cols_to_convert.append((col, converted))
+            cols_to_convert.append((col, _prefer_nullable_int(series, converted)))
         elif is_string:
             cols_to_convert.append((col, series.astype(object)))
 
