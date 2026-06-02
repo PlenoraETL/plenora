@@ -58,6 +58,7 @@ def publish_existing_layer_mode(
     """Apply one existing-service publish mode to one ArcGIS layer."""
     outcome = ArcGISPublishModeLayerResult()
 
+    failed_delete_keys: set = set()
     if mode == "update":
         _update_existing_layer(
             client,
@@ -69,7 +70,7 @@ def publish_existing_layer_mode(
             outcome,
         )
     elif mode == "upsert":
-        _delete_existing_matches_for_upsert(
+        failed_delete_keys = _delete_existing_matches_for_upsert(
             client,
             conn,
             layer_url,
@@ -90,6 +91,12 @@ def publish_existing_layer_mode(
             mode,
             target_srid,
             outcome,
+            # Atomicità upsert (no-rollback server-side): le chiavi il cui delete è
+            # fallito NON vanno re-inserite, altrimenti la riga vecchia (non
+            # cancellata) + la nuova = DUPLICATO. Le escludiamo dall'add: tengono il
+            # valore vecchio (visibile via outcome.errors), corretto al prossimo upsert.
+            match_col=match_col if mode == "upsert" else None,
+            exclude_keys=failed_delete_keys,
         )
 
     return outcome
@@ -210,13 +217,20 @@ def _delete_existing_matches_for_upsert(
     gdf: object,
     match_col: Optional[str],
     outcome: ArcGISPublishModeLayerResult,
-) -> None:
+) -> set:
+    """Cancella le righe esistenti che matchano le chiavi del gdf (per upsert).
+
+    Ritorna l'insieme delle **chiavi il cui delete è fallito** (batch in errore o
+    eccezione): il chiamante le esclude dall'add per evitare duplicati (la riga
+    vecchia non cancellata + la nuova). Set vuoto se nessuna chiave / no match_col.
+    """
+    failed_keys: set = set()
     if not match_col:
         outcome.errors.append("nessuna match column (skip)")
-        return
+        return failed_keys
     if match_col not in gdf.columns:
         outcome.errors.append(f"colonna '{match_col}' assente nel GDB (skip)")
-        return
+        return failed_keys
 
     values = unique_non_null_column_values(gdf, match_col)
     for batch in chunked(values, 200):
@@ -226,9 +240,12 @@ def _delete_existing_matches_for_upsert(
             outcome.deleted_count += int(delete_result.get("deleted_count", 0) or 0)
             if not delete_result.get("success"):
                 outcome.errors.extend(delete_result.get("errors", []) or [])
+                failed_keys.update(batch)
         except Exception as exc:
             logger.error(f"deleteFeatures: {exc}", exc_info=True)
             outcome.errors.append(f"deleteFeatures: {exc}")
+            failed_keys.update(batch)
+    return failed_keys
 
 
 def _add_existing_layer_features(
@@ -239,10 +256,32 @@ def _add_existing_layer_features(
     mode: str,
     target_srid: int,
     outcome: ArcGISPublishModeLayerResult,
+    match_col: Optional[str] = None,
+    exclude_keys: Optional[set] = None,
 ) -> None:
+    add_gdf = gdf
+    # Upsert atomicity guard: non re-inserire le righe le cui chiavi non sono state
+    # cancellate (delete fallito) → eviterebbe il duplicato vecchia+nuova. Le righe
+    # senza chiave (match_col NULL) sono inserti nuovi → restano.
+    if exclude_keys and match_col and match_col in gdf.columns:
+        before = int(len(gdf))
+        add_gdf = filter_rows_by_column_predicate(
+            gdf,
+            match_col,
+            lambda value: is_null_scalar(value) or value not in exclude_keys,
+        )
+        excluded = before - int(len(add_gdf))
+        if excluded > 0:
+            outcome.skipped_count += excluded
+            outcome.errors.append(
+                f"{excluded} feature non inserite: delete del match fallito "
+                "(upsert non atomico → evitati duplicati; riprova al prossimo run)"
+            )
+        if int(len(add_gdf)) == 0:
+            return
     try:
         features = client.dataframe_to_esri_features(
-            gdf,
+            add_gdf,
             "geometry",
             target_srid,
             operation="append",
