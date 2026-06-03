@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import inspect
 
+from tests2.shared._ast_identifiers import all_identifiers
+
 
 def test_shared_oauth_helper_accepts_extra_form_data():
     """La funzione shared accetta `extra_form_data` per quirk provider-specific."""
@@ -37,11 +39,14 @@ def test_arcgis_delegates_to_shared_oauth_helper():
     # cerchiamo nel source completo del file
     source = inspect.getsource(arcgis_auth)
 
-    assert "_fetch_oauth2_client_credentials_token" in source, (
+    # AST-bound: la delega allo helper shared e' un identificatore.
+    assert "_fetch_oauth2_client_credentials_token" in all_identifiers(source), (
         "arcgis_auth deve delegare a _fetch_oauth2_client_credentials_token "
         "invece di mantenere una copia parallela del grant flow."
     )
-    # Sanity: il quirk ArcGIS (`f=json`) deve essere ancora preservato
+    # Sanity: il quirk ArcGIS (`f=json`) deve essere ancora preservato.
+    # RAW-source: "f"/"json" sono VALORI string-literal (extra_form_data),
+    # non identificatori -> non catturabili da all_identifiers.
     assert '"f"' in source and '"json"' in source, (
         "Il delegate deve passare `extra_form_data={'f': 'json'}` per "
         "preservare il comportamento dell'endpoint legacy ArcGIS."

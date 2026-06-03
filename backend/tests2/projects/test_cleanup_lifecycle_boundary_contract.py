@@ -2,9 +2,16 @@ from __future__ import annotations
 
 import ast
 import inspect
+import textwrap
 from pathlib import Path
 
 import pytest
+
+from tests2.shared._ast_identifiers import (
+    all_identifiers,
+    imports_symbol_from,
+    uses_attribute,
+)
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -28,11 +35,18 @@ def _imported_modules(src: str) -> set[str]:
 def test_project_delete_uses_project_cleanup_boundary() -> None:
     from app.core.projects.service import ProjectService
 
-    src = inspect.getsource(ProjectService.delete_project)
+    # dedent: getsource di un metodo e' indentato (livello classe) -> ast.parse
+    # negli helper richiede codice a livello-modulo.
+    src = textwrap.dedent(inspect.getsource(ProjectService.delete_project))
 
-    assert "app.core.projects.cleanup" in src
-    assert "delete_comparison_keys_for_project" in src
-    assert "from app.core.projects.db import delete_comparison_keys" not in src
+    # AST-bound: delete_project delega al boundary projects.cleanup tramite
+    # l'alias modulo `project_cleanup_module`. Pre-migrazione l'assert
+    # "app.core.projects.cleanup" in src matchava solo un COMMENTO, non il
+    # codice reale (la conversione AST espone il falso-positivo).
+    assert uses_attribute(src, "project_cleanup_module", "delete_comparison_keys_for_project")
+    assert "delete_comparison_keys_for_project" in all_identifiers(src)
+    # non deve inline-importare la funzione db low-level, scavalcando il boundary
+    assert not imports_symbol_from(src, "app.core.projects.db", "delete_comparison_keys")
 
 
 def test_project_cleanup_boundary_delegates_comparison_keys(monkeypatch) -> None:
