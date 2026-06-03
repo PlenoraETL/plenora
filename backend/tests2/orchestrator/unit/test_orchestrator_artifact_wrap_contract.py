@@ -220,8 +220,8 @@ def test_orchestrator_wraps_estrai_executor_result_as_blob_artifact():
         estrai_executor=estrai_executor,
     )
 
-    # Niente CARICA → _find_all_carica_nodes ritorna []
-    svc._find_all_carica_nodes = MagicMock(return_value=[])
+    # Niente CARICA → fase carica no-op
+    svc._execute_carica_if_present = MagicMock(return_value=None)
 
     artifact = svc.execute_pipeline("p1")
 
@@ -253,7 +253,7 @@ def test_orchestrator_wraps_failure_result_as_none_artifact():
         mock_project_service,
         manipola_executor=manipola_executor,
     )
-    svc._find_all_carica_nodes = MagicMock(return_value=[])
+    svc._execute_carica_if_present = MagicMock(return_value=None)
 
     artifact = svc.execute_pipeline("p1")
 

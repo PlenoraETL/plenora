@@ -58,7 +58,7 @@ def test_orchestrator_accepts_injected_executors_without_default_construction() 
         manipola_executor=_FakeExecutor(),
         enrich_executor=_FakeExecutor(),
     )
-    svc._find_all_carica_nodes = MagicMock(return_value=[])
+    svc._execute_carica_if_present = MagicMock(return_value=None)
 
     artifact = svc.execute_pipeline(
         "proj-di",
@@ -113,7 +113,7 @@ def test_orchestrator_executes_control_plane_contract_without_project_lookup(
         manipola_executor=_FakeExecutor(),
         enrich_executor=_FakeExecutor(),
     )
-    svc._find_all_carica_nodes = MagicMock(return_value=[])
+    svc._execute_carica_if_present = MagicMock(return_value=None)
 
     artifact = svc.execute_pipeline_from_contract(
         project_id="proj-contract",

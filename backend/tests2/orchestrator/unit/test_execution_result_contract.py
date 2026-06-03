@@ -175,7 +175,7 @@ def test_orchestrator_execute_pipeline_passes_through_via_execution_result():
         "format": "csv",
     })
     svc = _make_orchestrator(mock_ps, estrai_executor=estrai_executor)
-    svc._find_all_carica_nodes = MagicMock(return_value=[])
+    svc._execute_carica_if_present = MagicMock(return_value=None)
 
     artifact = svc.execute_pipeline("proj-x")
 
@@ -205,7 +205,7 @@ def test_orchestrator_execute_pipeline_accepts_native_execution_result_without_t
 
     estrai_executor = _ExecutorStub(native_result)
     svc = _make_orchestrator(mock_ps, estrai_executor=estrai_executor)
-    svc._find_all_carica_nodes = MagicMock(return_value=[])
+    svc._execute_carica_if_present = MagicMock(return_value=None)
 
     artifact = svc.execute_pipeline("proj-native-service")
 
@@ -278,7 +278,7 @@ def test_orchestrator_execute_pipeline_error_key_preserved():
         "user_error": True,
     })
     svc = _make_orchestrator(mock_ps, enrich_executor=enrich_executor)
-    svc._find_all_carica_nodes = MagicMock(return_value=[])
+    svc._execute_carica_if_present = MagicMock(return_value=None)
 
     artifact = svc.execute_pipeline("proj-y")
 
@@ -463,7 +463,7 @@ def test_orchestrator_artifact_payload_accessible_after_execute_pipeline():
     }
     estrai_executor = _ExecutorStub(raw_executor_dict)
     svc = _make_orchestrator(mock_ps, estrai_executor=estrai_executor)
-    svc._find_all_carica_nodes = MagicMock(return_value=[])
+    svc._execute_carica_if_present = MagicMock(return_value=None)
 
     artifact = svc.execute_pipeline("proj-typed")
 
