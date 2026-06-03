@@ -4,6 +4,7 @@ import pytest
 
 from app.core.estrai import executor
 from app.core.estrai.sql_errors import is_user_error_message, translate_sql_error
+from tests2.shared._ast_identifiers import all_identifiers, imports_module
 
 
 @pytest.mark.parametrize(
@@ -89,6 +90,9 @@ def test_is_user_error_message_matches_existing_patterns(message):
 def test_executor_delegates_sql_error_translation_to_domain_module():
     source = inspect.getsource(executor)
 
-    assert "from app.core.estrai.sql_errors import" in source
-    assert "SQL_ERROR_TRANSLATIONS" not in source
-    assert "USER_ERROR_PATTERNS" not in source
+    # AST-bound: import reale + assenza delle tabelle di traduzione come codice
+    # (l'executor deve DELEGARE a sql_errors, non ridefinirle inline).
+    assert imports_module(source, "app.core.estrai.sql_errors")
+    identifiers = all_identifiers(source)
+    assert "SQL_ERROR_TRANSLATIONS" not in identifiers
+    assert "USER_ERROR_PATTERNS" not in identifiers

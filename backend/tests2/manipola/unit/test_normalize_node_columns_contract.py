@@ -15,6 +15,7 @@ import inspect
 import pytest
 
 from app.core.manipola.source_loading import normalize_node_columns
+from tests2.shared._ast_identifiers import all_identifiers
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
@@ -94,11 +95,12 @@ class TestCentralizationArchitectural:
 
     def test_source_loading_no_inline_normalize_loop(self):
         from app.core.manipola import source_loading as sl
+        # RAW-source (NON convertibile a identifier): l'identificatore
+        # `node_columns_normalized` esiste legittimamente al callsite post-fix
+        # (`node_columns_normalized = normalize_node_columns(...)`). Il marker
+        # univoco del loop pre-fix e' lo STATEMENT di init `... = []`, non il
+        # nome -> serve il match testuale, non all_identifiers.
         src = inspect.getsource(sl)
-        # Conta literal occurrence del loop duplicato originale.
-        # Il guard accetta `normalize_node_columns(` chiamato; vieta
-        # `node_columns_normalized = []` come variable init (pattern
-        # univoco del loop pre-fix).
         count = src.count("node_columns_normalized = []")
         assert count == 0, (
             f"regressione: il loop inline normalize_node_columns "
@@ -109,10 +111,12 @@ class TestCentralizationArchitectural:
     def test_datasource_node_loading_delegates(self):
         from app.core.manipola import datasource_node_loading as dnl
         src = inspect.getsource(dnl)
-        assert "normalize_node_columns(" in src, (
+        # AST-bound: la delega allo helper e' una call -> identificatore.
+        assert "normalize_node_columns" in all_identifiers(src), (
             "regressione: datasource_node_loading.py non delega piu' "
             "a normalize_node_columns — duplicazione reintrodotta?"
         )
+        # RAW-source (vedi sopra): solo lo statement di init del loop e' vietato.
         count = src.count("node_columns_normalized = []")
         assert count == 0, (
             f"regressione: loop inline reintrodotto in "

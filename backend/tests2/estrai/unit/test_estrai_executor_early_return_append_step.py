@@ -31,6 +31,8 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
@@ -209,12 +211,15 @@ def test_estrai_and_carica_executors_have_append_step_usage():
     from app.core.carica import executor as carica_executor
 
     for mod, label in [(estrai_executor, "estrai"), (carica_executor, "carica")]:
-        source = inspect.getsource(mod)
-        assert "append_step" in source, (
+        # AST-bound: identificatori usati come CODICE (non in commenti/stringhe),
+        # robusto a menzioni in docstring/log. append_step/_failure_step sono
+        # nomi di funzione importati/definiti.
+        identifiers = all_identifiers(inspect.getsource(mod))
+        assert "append_step" in identifiers, (
             f"{label}/executor.py deve usare append_step per emettere step log. "
             f"Senza, le run di {label} sono invisibili nel run step log UI."
         )
-        assert "_failure_step" in source, (
+        assert "_failure_step" in identifiers, (
             f"{label}/executor.py deve avere helper _failure_step per "
             f"single-exit-point — anti-regression contro early-return che "
             f"bypassano append_step."
