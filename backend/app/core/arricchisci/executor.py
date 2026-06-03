@@ -13,7 +13,7 @@ from app.core.arricchisci.api_connector import api_connection_service
 from app.core.arricchisci.canvas_orchestrator import execute_canvas_enrichment
 from app.core.arricchisci.types import JsonObject
 from app.core.dataframes.tabular import dataframe_preview_records, non_null_head_values
-from app.core.output_contract import build_output_contract
+from app.core.output_contract import persist_output_contract
 
 logger = get_logger(__name__)
 
@@ -191,14 +191,10 @@ class EnrichExecutor:
                     # task Celery, append_step di success non veniva mai
                     # emesso, e il blob restava orfano dal contract.
                     try:
-                        output_contract = build_output_contract(
+                        persist_output_contract(
+                            project_service=self.project_service,
                             project_id=project_id,
                             result_columns=result_columns,
-                            previous_contract=self.project_service.get_project_output_contract(project_id),
-                        )
-                        self.project_service.update_project_output_contract(
-                            project_id,
-                            output_contract.model_dump(),
                         )
                     except Exception as contract_err:
                         logger.error(

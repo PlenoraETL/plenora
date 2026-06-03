@@ -135,7 +135,8 @@ class StandardRunMode(EnrichmentRunMode):
         logger.info(f"[Task {task_id}] Risultato persistito: {result_id}")
 
         _project_service = project_service_module.ProjectService()
-        output_contract = output_contract_module.build_output_contract(
+        dumped_contract = output_contract_module.persist_output_contract(
+            project_service=_project_service,
             project_id=project_id,
             result_columns=[
                 {
@@ -145,14 +146,10 @@ class StandardRunMode(EnrichmentRunMode):
                 }
                 for col in final_df.columns
             ],
-            previous_contract=_project_service.get_project_output_contract(project_id),
-        )
-        _project_service.update_project_output_contract(
-            project_id, output_contract.model_dump(),
         )
         logger.info(
             f"[Task {task_id}] output_contract salvato: "
-            f"{len(output_contract.columns)} colonne"
+            f"{len(dumped_contract.get('columns', []))} colonne"
         )
         return result_id, saved_path
 

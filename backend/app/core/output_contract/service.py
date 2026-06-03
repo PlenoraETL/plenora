@@ -138,6 +138,39 @@ def build_output_contract(
     )
 
 
+def persist_output_contract(
+    *,
+    project_service: Any,
+    project_id: str,
+    result_columns: list[Any],
+) -> ColumnPayload:
+    """Build the project's output contract and persist it; return the dump.
+
+    Unica fonte di verita' della sequenza *build(previous) + update + dump*,
+    condivisa dai finalizer di estrai/manipola/arricchisci + enrichment_run_mode
+    (prima riscritta inline in ognuno). La policy d'errore resta del CALLER
+    (estrai propaga; manipola/arricchisci wrappano in try/except + flag
+    ``contract_update_failed``): questo helper non la decide.
+
+    Il ``previous_contract=`` e' OBBLIGATORIO e centralizzato qui: e' cio' che
+    preserva l'identita' delle colonne (``id``) attraverso i rename
+    (``source_name`` -> stesso id). Ometterlo significherebbe id-churn ad ogni
+    run, che romperebbe i ref a colonna nei progetti a valle.
+
+    ``project_service`` e' iniettato (duck-typed: deve esporre
+    ``get_project_output_contract`` e ``update_project_output_contract``): cosi'
+    questo modulo resta privo di dipendenze verso ``app.core.projects``.
+    """
+    output_contract = build_output_contract(
+        project_id=project_id,
+        result_columns=result_columns,
+        previous_contract=project_service.get_project_output_contract(project_id),
+    )
+    dumped = output_contract.model_dump()
+    project_service.update_project_output_contract(project_id, dumped)
+    return dumped
+
+
 def column_types_from_contract(contract: Any) -> ColumnTypeMap:
     """Return ``physical_name -> logical_type`` from an output contract."""
     if isinstance(contract, OutputContract):

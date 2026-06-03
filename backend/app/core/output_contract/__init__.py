@@ -6,6 +6,7 @@ from .service import (
     column_types_from_contract,
     ensure_dataframe_matches_contract,
     node_columns_from_contract,
+    persist_output_contract,
 )
 from .canvas_sync import sync_canvas_with_output_contracts
 
@@ -16,5 +17,6 @@ __all__ = [
     "column_types_from_contract",
     "ensure_dataframe_matches_contract",
     "node_columns_from_contract",
+    "persist_output_contract",
     "sync_canvas_with_output_contracts",
 ]

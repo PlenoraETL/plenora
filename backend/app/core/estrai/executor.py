@@ -831,16 +831,11 @@ class EstraiExecutor:
             col_type = lookup_canvas_column_type(col, canvas_type_map) or 'str'
             result_columns.append({"name": col, "type": col_type})
 
-        output_contract = output_contract_module.build_output_contract(
+        res["output_contract"] = output_contract_module.persist_output_contract(
+            project_service=self.project_service,
             project_id=project_id,
             result_columns=result_columns,
-            previous_contract=self.project_service.get_project_output_contract(project_id),
         )
-        self.project_service.update_project_output_contract(
-            project_id,
-            output_contract.model_dump(),
-        )
-        res["output_contract"] = output_contract.model_dump()
 
     # SQL HELPERS (per percorso database
 

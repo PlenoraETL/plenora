@@ -38,7 +38,7 @@ from app.core.intermediate.snapshot import (
     record_final_snapshot,
 )
 from app.core.resources.exceptions import MemoryLimitExceededError
-from app.core.output_contract import build_output_contract
+from app.core.output_contract import persist_output_contract
 from app.shared.resources.metadata import ResourceMetadata
 from .plugin_executor import get_executor
 from .source_loading import load_file_sources
@@ -422,14 +422,10 @@ class ManipolaExecutor:
             # — log ERROR + flag contract_update_failed nel save_result
             # cosi' caller/UI sanno che il contract e' drift.
             try:
-                output_contract = build_output_contract(
+                persist_output_contract(
+                    project_service=self.project_service,
                     project_id=project_id,
                     result_columns=result_columns,
-                    previous_contract=self.project_service.get_project_output_contract(project_id),
-                )
-                self.project_service.update_project_output_contract(
-                    project_id,
-                    output_contract.model_dump(),
                 )
             except Exception as contract_err:
                 logger.error(
