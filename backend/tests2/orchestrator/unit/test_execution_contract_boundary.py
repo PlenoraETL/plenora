@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.orchestrator, pytest.mark.contract]
 
@@ -211,5 +213,8 @@ def test_scheduler_pipeline_path_uses_execution_contract_boundary():
         / "execution_manager.py"
     ).read_text(encoding="utf-8")
 
-    assert "build_pipeline_execution_contract" in source
-    assert "execute_pipeline_from_contract" in source
+    # AST-bound: l'execution_manager deve usare il boundary contract (entrambi
+    # identificatori-funzione), robusto a menzioni in commenti/stringhe.
+    identifiers = all_identifiers(source)
+    assert "build_pipeline_execution_contract" in identifiers
+    assert "execute_pipeline_from_contract" in identifiers
