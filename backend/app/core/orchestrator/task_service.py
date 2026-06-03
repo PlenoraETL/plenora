@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from types import MappingProxyType
-from typing import Mapping, Optional, List, Protocol, TypeAlias
+from typing import Any, Callable, Mapping, Optional, List, Protocol, TypeAlias
 from typing_extensions import TypedDict
 from datetime import datetime, timezone
 from enum import Enum
@@ -14,6 +14,7 @@ from app.core.orchestrator.task_metadata_store import (
     default_task_metadata_store,
 )
 from app.core.task_runtime import CeleryTaskRuntime, TaskRuntimePort
+from app.shared.execution import carica_dispatcher
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -422,6 +423,88 @@ class TaskService:
                 log_label="carica",
             )
         )
+
+    def launch_carica_tasks_for_canvas(
+        self,
+        project_id: str,
+        canvas: Any,
+        *,
+        output_contract_loader: Callable[[str], object],
+        output_format: str = "geojson",
+        triggered_by: str = "manual",
+        message_suffix: str = "",
+        resilient: bool = True,
+        on_unconnected: Optional[Callable[[Any], None]] = None,
+        on_missing_output: Optional[Callable[[], None]] = None,
+    ) -> Optional[dict]:
+        """Trova i nodi CARICA collegati al Result e ne lancia i task.
+
+        Unica fonte di verita' del LOOP di lancio CARICA, condivisa dal path
+        pipeline (``OrchestratorService._execute_carica_if_present``) e dal
+        path enrichment standalone (``enrichment_task._trigger_carica_if_present``).
+        Prima entrambi riscrivevano a mano find + build + submit con meccaniche
+        di lancio divergenti (``create_carica_task`` vs ``submit_task`` grezzo +
+        import diretto di ``execute_carica_task``) e default diversi: qui
+        collassano sull'unico wrapper canonico ``create_carica_task``.
+
+        ``resilient`` seleziona la policy d'errore (le due restano distinte e
+        testate):
+          - ``True``  (enrichment): un nodo che fallisce il lancio viene loggato
+            e saltato, gli altri partono comunque.
+          - ``False`` (orchestrator): la prima eccezione propaga, cosi' il
+            chiamante puo' restituire l'errore sanitizzato ``carica_launch_failed``.
+
+        Ritorna ``{"tasks": [{task_id, node_id}, ...], "message": ...}`` oppure
+        ``None`` se non c'e' alcun nodo CARICA collegato / nessuno e' partito.
+        """
+        carica_nodes = carica_dispatcher.find_connected_carica_nodes(
+            canvas,
+            on_unconnected=on_unconnected,
+            on_missing_output=on_missing_output,
+        )
+        if not carica_nodes:
+            return None
+
+        canvas_payload = (
+            canvas.model_dump() if hasattr(canvas, "model_dump") else canvas
+        )
+        tasks: list[dict] = []
+        for carica_node in carica_nodes:
+            node_id = carica_dispatcher.node_id(carica_node)
+            try:
+                carica_node_data = carica_dispatcher.build_carica_node_data(
+                    carica_node,
+                    project_id=project_id,
+                    output_contract_loader=output_contract_loader,
+                )
+                task_info = self.create_carica_task(
+                    project_id=project_id,
+                    canvas=canvas_payload,
+                    carica_node_data=carica_node_data,
+                    output_format=output_format,
+                    triggered_by=triggered_by,
+                )
+                logger.info(
+                    f"Task CARICA avviato: {task_info.task_id} (nodo: {node_id}, "
+                    f"connection_id: '{carica_node_data.get('connection_id', 'MANCANTE')}', "
+                    f"dest_type: '{carica_node_data.get('dest_type', 'MANCANTE')}')"
+                )
+                tasks.append({"task_id": task_info.task_id, "node_id": node_id})
+            except Exception as exc:
+                if not resilient:
+                    raise
+                logger.error(
+                    f"[GESTITO] Errore creazione task CARICA per nodo {node_id}: {exc}",
+                    exc_info=True,
+                )
+
+        if not tasks:
+            return None
+        return {
+            "tasks": tasks,
+            "message": f"{len(tasks)} task CARICA avviati{message_suffix}",
+        }
+
     def create_pipeline_task(
         self,
         project_id: str,

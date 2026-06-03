@@ -2,6 +2,15 @@
 C1 â€” sanitize str(e) in _execute_carica_if_present.
 
 Fix S3 / F1 dell'Audit finding: il boundary `OrchestratorService._execute_carica_if_present`
+deve restituire un errore sanitizzato (token canonico, niente str(e)) quando il
+lancio del task CARICA fallisce.
+
+Post-unificazione executor canonico: il loop di lancio CARICA vive ora nel
+launcher condiviso ``task_service.launch_carica_tasks_for_canvas`` (chiamato con
+``resilient=False`` dall'orchestrator). L'orchestrator mantiene il wrapper
+all-or-nothing che traduce qualsiasi eccezione di lancio in
+``carica_launch_failed``. I test patchano ``find_connected_carica_nodes`` (prima
+mockavano il rimosso ``svc._find_all_carica_nodes``).
 """
 
 from __future__ import annotations
@@ -26,8 +35,9 @@ class _ExecutorStub:
 
 
 def _make_orchestrator_with_carica_node():
-    """Builder: OrchestratorService con manipola_executor mockato a success,
-    _find_all_carica_nodes con 1 nodo, canvas mock."""
+    """Builder: OrchestratorService con estrai_executor a success + un nodo
+    CARICA fittizio. Ritorna ``(svc, fake_carica_node)``; i test patchano
+    ``find_connected_carica_nodes`` per restituire il nodo."""
     from app.core.orchestrator.service import OrchestratorService
 
     mock_project_service = MagicMock()
@@ -57,21 +67,28 @@ def _make_orchestrator_with_carica_node():
         "type": "carica",
         "data": {"connection_id": "conn-1", "dest_type": "pg"},
     })
-    svc._find_all_carica_nodes = MagicMock(return_value=[fake_carica_node])
 
-    return svc
+    return svc, fake_carica_node
+
+
+def _patch_find(fake_carica_node):
+    """Patch del find condiviso usato dal launcher canonico."""
+    return patch(
+        "app.shared.execution.carica_dispatcher.find_connected_carica_nodes",
+        return_value=[fake_carica_node],
+    )
 
 
 def test_carica_launch_failure_returns_sanitized_error_string():
-    """Quando create_carica_task solleva â†’ artifact["carica"]["error"] e'
+    """Quando il lancio del task solleva â†’ artifact["carica"]["error"] e'
     il token canonico 'carica_launch_failed', NON str(e)."""
-    svc = _make_orchestrator_with_carica_node()
+    svc, fake_node = _make_orchestrator_with_carica_node()
 
     sensitive_exc = RuntimeError(
         "postgresql://user:secret@internal-db:5432/config path /internal/xyz"
     )
 
-    with patch(
+    with _patch_find(fake_node), patch(
         "app.core.orchestrator.task_service.task_service.submit_task",
         side_effect=sensitive_exc,
     ), patch(
@@ -88,12 +105,12 @@ def test_carica_launch_failure_returns_sanitized_error_string():
 def test_carica_launch_failure_does_not_leak_exception_args():
     """Il dict returned NON deve contenere il valore str(e) in nessun campo
     (niente credenziali/path/url interni al FE)."""
-    svc = _make_orchestrator_with_carica_node()
+    svc, fake_node = _make_orchestrator_with_carica_node()
 
     leak_marker = "LEAK_CANARY_a1b2c3d4_secret_password"
     exc = ValueError(leak_marker)
 
-    with patch(
+    with _patch_find(fake_node), patch(
         "app.core.orchestrator.task_service.task_service.submit_task",
         side_effect=exc,
     ), patch(
@@ -112,10 +129,10 @@ def test_carica_launch_failure_does_not_leak_exception_args():
 def test_carica_launch_failure_logs_exception_with_exc_info():
     """Il dettaglio tecnico sanitizzato fuori dalla response deve restare
     presente nel log backend (exc_info=True gia' in posto)."""
-    svc = _make_orchestrator_with_carica_node()
+    svc, fake_node = _make_orchestrator_with_carica_node()
     exc = RuntimeError("tecnicamente-dettagliato-solo-log")
 
-    with patch(
+    with _patch_find(fake_node), patch(
         "app.core.orchestrator.task_service.task_service.submit_task",
         side_effect=exc,
     ), patch(
@@ -142,15 +159,15 @@ def test_carica_launch_failure_logs_exception_with_exc_info():
 
 
 def test_carica_launch_success_unchanged_contract():
-    """Sanity: se create_carica_task ha successo, il dict CARICA continua
-    ad avere la shape legacy `{tasks: [...], message: ...}` â€” il fix non
-    tocca il path success."""
-    svc = _make_orchestrator_with_carica_node()
+    """Sanity: se il lancio ha successo, il dict CARICA continua ad avere la
+    shape legacy `{tasks: [...], message: ...}` â€” il fix non tocca il path
+    success."""
+    svc, fake_node = _make_orchestrator_with_carica_node()
 
     fake_task_info = MagicMock()
     fake_task_info.task_id = "ct-xyz"
 
-    with patch(
+    with _patch_find(fake_node), patch(
         "app.core.orchestrator.task_service.task_service.submit_task",
         return_value=fake_task_info,
     ), patch(

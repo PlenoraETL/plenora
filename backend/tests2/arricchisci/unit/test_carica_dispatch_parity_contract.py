@@ -103,24 +103,34 @@ def test_enrichment_carica_dispatch_enriches_canvas_types_from_contract():
     assert canvas_types["col_b"] == "geometry"
 
 
-def test_carica_dispatch_runtime_paths_use_shared_helper():
-    """Orchestrator ed enrichment devono usare lo stesso dispatch helper."""
+def test_carica_dispatch_runtime_paths_delegate_to_shared_launcher():
+    """Orchestrator ed enrichment devono DELEGARE allo stesso launcher canonico.
+
+    Post-unificazione executor canonico: il loop find/build/lancio CARICA vive
+    in un'unica funzione ``task_service.launch_carica_tasks_for_canvas``. I due
+    call-site (orchestrator + enrichment) non devono piu' riscriverlo a mano —
+    devono solo chiamare il launcher. Garanzia piu' forte del precedente
+    "usano gli stessi sub-helper"."""
     orchestrator_src = (
         _BACKEND_ROOT / "app" / "core" / "orchestrator" / "service.py"
     ).read_text(encoding="utf-8")
     enrichment_src = (
         _BACKEND_ROOT / "workers" / "tasks" / "enrichment_task.py"
     ).read_text(encoding="utf-8")
+    task_service_src = (
+        _BACKEND_ROOT / "app" / "core" / "orchestrator" / "task_service.py"
+    ).read_text(encoding="utf-8")
 
     for src in (orchestrator_src, enrichment_src):
-        assert "carica_dispatcher.find_connected_carica_nodes" in src
-        assert "carica_dispatcher.build_carica_node_data" in src
-        assert ("Replica " + "la logica") not in src
-        copied_orchestrator_comment = (
-            "Stessa logica di "
-            "OrchestratorService._execute_carica_if_present"
-        )
-        assert copied_orchestrator_comment not in src
+        # delega al launcher unico
+        assert "launch_carica_tasks_for_canvas" in src
+        # il loop NON deve essere riscritto nei due call-site
+        assert "carica_dispatcher.find_connected_carica_nodes" not in src
+        assert "carica_dispatcher.build_carica_node_data" not in src
+
+    # il loop canonico vive nel launcher condiviso (unica fonte di verita')
+    assert "carica_dispatcher.find_connected_carica_nodes" in task_service_src
+    assert "carica_dispatcher.build_carica_node_data" in task_service_src
 
     assert "NODE_RESERVED_FIELDS" not in orchestrator_src
     assert "NODE_RESERVED_FIELDS" not in enrichment_src

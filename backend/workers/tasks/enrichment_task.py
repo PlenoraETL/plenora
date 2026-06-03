@@ -1026,77 +1026,32 @@ def _trigger_carica_if_present(
 ) -> Optional[JsonObject]:
     """Cerca nodi CARICA collegati all'output e lancia i relativi task.
 
+    Delega al launcher canonico condiviso
+    (``task_service.launch_carica_tasks_for_canvas``), lo STESSO usato dal path
+    orchestrator (``OrchestratorService._execute_carica_if_present``): identica
+    meccanica find/build/lancio via il wrapper ``create_carica_task``. Pre-fix
+    questa funzione riscriveva a mano ``submit_task`` + importava direttamente
+    ``execute_carica_task`` (bypassando l'indirection ``runtime.carica_task()``).
+    Policy d'errore per-nodo resiliente (``resilient=True``): un nodo che non
+    parte viene loggato e saltato, gli altri partono comunque.
+
     Returns: JSON object {"tasks": [{task_id, node_id}, ...], "message": ...} oppure None se
              nessun nodo carica trovato. Il frontend usa questo per fare polling sui task.
     """
-    carica_nodes = carica_dispatcher.find_connected_carica_nodes(
+    from app.core.orchestrator.task_service import task_service
+
+    return task_service.launch_carica_tasks_for_canvas(
+        project_id,
         canvas,
+        output_contract_loader=(
+            project_service_module.ProjectService().get_project_output_contract
+        ),
+        output_format=output_format,
+        triggered_by="manual",
+        resilient=True,
+        message_suffix=" dopo arricchimento",
         on_unconnected=lambda node: logger.warning(
             f"Nodo {carica_dispatcher.node_type(node)} "
             f"({carica_dispatcher.node_id(node)}) non collegato al nodo Output, skip"
         ),
     )
-
-    if not carica_nodes:
-        return None
-
-    logger.info(
-        f"Trovati {len(carica_nodes)} nodi CARICA dopo arricchimento, avvio task",
-        project_id=project_id
-    )
-
-    from app.core.orchestrator.task_service import (
-        CaricaTaskPayload,
-        TaskSubmitRequest,
-        TaskType,
-        task_service,
-    )
-    from workers.tasks.carica_task import execute_carica_task
-
-    tasks = []
-    _output_contract_loader = (
-        project_service_module.ProjectService().get_project_output_contract
-    )
-    for carica_node in carica_nodes:
-        node_id = carica_dispatcher.node_id(carica_node)
-        try:
-            carica_node_data = carica_dispatcher.build_carica_node_data(
-                carica_node,
-                project_id=project_id,
-                output_contract_loader=_output_contract_loader,
-            )
-
-            task_info = task_service.submit_task(
-                TaskSubmitRequest(
-                    celery_task=execute_carica_task,
-                    task_type=TaskType.CARICA,
-                    project_id=project_id,
-                    payload=CaricaTaskPayload(
-                        project_id=project_id,
-                        canvas=canvas,
-                        carica_node_data=carica_node_data,
-                        output_format=output_format,
-                        triggered_by="manual",
-                    ),
-                    queued_message="Task CARICA in coda...",
-                    log_label="carica",
-                )
-            )
-            logger.info(
-                f"Task CARICA avviato: {task_info.task_id} (nodo: {node_id})",
-                project_id=project_id
-            )
-            tasks.append({"task_id": task_info.task_id, "node_id": node_id})
-        except Exception as e:
-            logger.error(
-                f"[GESTITO] Errore creazione task CARICA per nodo {node_id}: {e}",
-                project_id=project_id, exc_info=True
-            )
-
-    if not tasks:
-        return None
-
-    return {
-        "tasks": tasks,
-        "message": f"{len(tasks)} task CARICA avviati dopo arricchimento",
-    }

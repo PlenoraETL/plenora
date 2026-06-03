@@ -296,75 +296,35 @@ class OrchestratorService:
         """
         Controlla se nel canvas c'è un nodo CARICA collegato al nodo Output.
         Se presente, avvia il task Celery per il caricamento su database.
+
+        Delega il loop di lancio al launcher canonico condiviso
+        (``task_service.launch_carica_tasks_for_canvas``), usato anche dal path
+        enrichment standalone. Policy d'errore all-or-nothing (``resilient=False``):
+        un fallimento di lancio propaga e viene tradotto qui nell'errore
+        sanitizzato ``CARICA_LAUNCH_FAILED`` (nessun dettaglio tecnico al FE).
         """
-        carica_nodes = self._find_all_carica_nodes(canvas)
-        if not carica_nodes:
-            return None
-
-        logger.info(f"Trovati {len(carica_nodes)} nodi CARICA, avvio task", op="carica", project_id=project_id)
-
         try:
-            tasks = []
-            for carica_node in carica_nodes:
-                carica_node_data = carica_dispatcher.build_carica_node_data(
-                    carica_node,
-                    project_id=project_id,
-                    output_contract_loader=(
-                        self.project_service.get_project_output_contract
-                    ),
-                )
-                node_data = getattr(carica_node, "data", None)
-                nested_data = (
-                    carica_node.get("data")
-                    if isinstance(carica_node, dict)
-                    else node_data
-                ) or {}
-                node_id = carica_dispatcher.node_id(carica_node)
-                logger.info(
-                    f"Nodo {node_id} — connection_id: '{carica_node_data.get('connection_id', 'MANCANTE')}', "
-                    f"dest_type: '{carica_node_data.get('dest_type', 'MANCANTE')}', "
-                    f"table: '{carica_node_data.get('table_name', 'MANCANTE')}', "
-                    f"data_keys: {list(nested_data.keys()) if nested_data else 'VUOTO'}",
-                    op="carica", project_id=project_id
-                )
-                task_info = task_service_module.task_service.create_carica_task(
-                    project_id=project_id,
-                    canvas=canvas.model_dump(),
-                    carica_node_data=carica_node_data,
-                    output_format="geojson",
-                    force_recalculate=False,
-                    triggered_by="pipeline",
-                )
-                logger.info(
-                    f"Task CARICA avviato: {task_info.task_id} (nodo: {node_id})",
-                    op="carica",
-                    project_id=project_id,
-                )
-                tasks.append({"task_id": task_info.task_id, "node_id": node_id})
-
-            return {
-                "tasks": tasks,
-                "message": f"{len(tasks)} task CARICA avviati"
-            }
+            return task_service_module.task_service.launch_carica_tasks_for_canvas(
+                project_id,
+                canvas,
+                output_contract_loader=self.project_service.get_project_output_contract,
+                output_format="geojson",
+                triggered_by="pipeline",
+                resilient=False,
+                on_unconnected=lambda node: logger.warning(
+                    f"Nodo {carica_dispatcher.node_type(node)} "
+                    f"({carica_dispatcher.node_id(node)}) non collegato al nodo Output"
+                ),
+                on_missing_output=lambda: logger.warning(
+                    "Nodo Output (result) non trovato nel canvas"
+                ),
+            )
 
         # intent: optional feature — pipeline success indipendente da launch CARICA
-        # outcome: fail-open sanitizzato (stringa opaca al FE, dettaglio tecnico solo nel log
+        # outcome: fail-open sanitizzato (stringa opaca al FE, dettaglio tecnico solo nel log)
         except Exception as e:
             logger.error(f"[CRASH] Errore avvio task CARICA: {e}", op="carica", project_id=project_id, exc_info=True)
             return {
                 "error": error_codes.CARICA_LAUNCH_FAILED,
                 "message": "Errore nell'avvio del caricamento (consulta log)"
             }
-
-    def _find_all_carica_nodes(self, canvas: CanvasState) -> list:
-        """Trova tutti i nodi CARICA collegati al nodo Output."""
-        return carica_dispatcher.find_connected_carica_nodes(
-            canvas,
-            on_unconnected=lambda node: logger.warning(
-                f"Nodo {carica_dispatcher.node_type(node)} "
-                f"({carica_dispatcher.node_id(node)}) non collegato al nodo Output"
-            ),
-            on_missing_output=lambda: logger.warning(
-                "Nodo Output (result) non trovato nel canvas"
-            ),
-        )
