@@ -111,18 +111,21 @@ class ArcGISFeatureWriteService:
         mapped = normalize_arcgis_column_mappings(None).apply(
             df, geometry_column=geometry_column,
         )
+        # Delega al metodo client tipato esistente (mixin
+        # ArcGISFeatureWriteMethodsMixin.add_layer_to_service -> AddLayerResult):
+        # addToDefinition(layer_id) + addFeatures. Il writer adatta soltanto
+        # column-mapping/CRS e converte AddLayerResult -> LayerWriteResult.
         res = self._client.add_layer_to_service(
             conn_info,
             service_url,
-            layer_name,
             mapped.df,
+            layer_name,
             layer_id,
-            geometry_column=mapped.geometry_column,
-            srid=source_srid or 4326,
+            source_srid or 4326,
         )
         return LayerWriteResult(
-            feature_count=int(res.get("feature_count", 0) or 0),
-            errors=list(res.get("errors", []) or []),
+            feature_count=int(getattr(res, "feature_count", 0) or 0),
+            errors=list(getattr(res, "errors", ()) or ()),
         )
 
     def write_features_df_core(
