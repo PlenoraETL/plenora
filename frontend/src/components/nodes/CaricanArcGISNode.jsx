@@ -19,6 +19,7 @@ import {
   getLayerSchema,
   listFolders,
 } from '../../api/features';
+import { humanizeError } from '../../utils/errorMessages';
 import './CaricanArcGISNode.css';
 
 const CaricanArcGISNode = memo(({ data, id }) => {
@@ -176,7 +177,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
       const res = await browseServices(connId);
       setArcgisServices(Array.isArray(res) ? res : res.services || []);
     } catch (error) {
-      setArcgisError(`Errore servizi: ${error.message}`);
+      setArcgisError(humanizeError(error).message);
       setArcgisServices([]);
     } finally {
       setIsLoadingServices(false);
@@ -190,7 +191,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
       const res = await browseLayers(connId, serviceUrl);
       setArcgisLayers(res.layers || res || []);
     } catch (error) {
-      setArcgisError(`Errore layer: ${error.message}`);
+      setArcgisError(humanizeError(error).message);
       setArcgisLayers([]);
     } finally {
       setIsLoadingLayers(false);

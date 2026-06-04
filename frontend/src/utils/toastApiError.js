@@ -18,19 +18,20 @@
  * tre parametri espliciti.
  */
 
-const DEFAULT_UNKNOWN = 'errore sconosciuto';
+import { humanizeError } from './errorMessages';
 
 /**
  * @param {{error: (msg: string) => void}} toast - istanza toast (da `useToast`).
  * @param {unknown} err - eccezione catturata.
  * @param {string} prefix - prefisso user-facing (es. "Errore eliminazione").
- * @param {string} [unknownMessage] - fallback se err non ha message.
+ *
+ * Da Epic A: l'errore passa per `humanizeError`, che traduce i codici
+ * strutturati del backend (es. `connection_in_use`) in messaggi azionabili e
+ * non espone mai stack/SDK/"Request failed...". Il `prefix` resta come contesto.
  */
-export function toastApiError(toast, err, prefix, unknownMessage = DEFAULT_UNKNOWN) {
-  const msg = (err && typeof err === 'object' && 'message' in err && err.message)
-    ? String(err.message)
-    : unknownMessage;
-  toast.error(`${prefix}: ${msg}`);
+export function toastApiError(toast, err, prefix) {
+  const { message } = humanizeError(err);
+  toast.error(prefix ? `${prefix}: ${message}` : message);
 }
 
 export default toastApiError;

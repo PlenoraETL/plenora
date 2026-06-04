@@ -5,6 +5,7 @@
 import React, { useState } from 'react';
 import { fetchOpenApiSchema } from '../../api/apiConnections';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
+import { humanizeError } from '../../utils/errorMessages';
 import './OpenAPIImportModal.css';
 
 function OpenAPIImportModal({ onClose, onImport }) {
@@ -118,7 +119,7 @@ const parseOpenAPISchema = (schema) => {
       }
       setParsedSpec(parsed); setSelectedEndpoints([]);
       autoDetectAuth(parsed.securitySchemes||{}, parsed.baseUrl);
-    } catch(e) { setError(e.message); }
+    } catch(e) { setError(humanizeError(e).message); }
     finally { setLoading(false); }
   };
 
@@ -129,7 +130,7 @@ const parseOpenAPISchema = (schema) => {
       const schema = JSON.parse(await file.text());
       const parsed = parseOpenAPISchema(schema);
       setParsedSpec(parsed); setSelectedEndpoints([]);
-    } catch(e) { setError(`Errore lettura file: ${e.message}`); }
+    } catch(e) { setError('File non valido: assicurati che sia un file JSON OpenAPI corretto.'); }
     finally { setLoading(false); }
   };
 
