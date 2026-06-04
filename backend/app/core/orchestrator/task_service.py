@@ -436,7 +436,7 @@ class TaskService:
         resilient: bool = True,
         on_unconnected: Optional[Callable[[Any], None]] = None,
         on_missing_output: Optional[Callable[[], None]] = None,
-    ) -> Optional[dict]:
+    ) -> Optional[Mapping[str, Any]]:
         """Trova i nodi CARICA collegati al Result e ne lancia i task.
 
         Unica fonte di verita' del LOOP di lancio CARICA, condivisa dal path

@@ -17,7 +17,7 @@ NON porta qui (richiede contesto DB, vedi probe 2026-06-01):
 from __future__ import annotations
 
 import re
-from typing import Any, List
+from typing import Any, List, Mapping
 
 from app.shared.execution.schema_types import InferredSchema
 from app.shared.execution.validation_protocol import register_node_validator
@@ -55,7 +55,7 @@ class ArricchisciNodeValidator:
         return issues
 
 
-def _missing_required_param_mappings(data: dict, upstream: InferredSchema) -> List[str]:
+def _missing_required_param_mappings(data: Mapping[str, Any], upstream: InferredSchema) -> List[str]:
     """Porting fedele di ARRICCHISCI_PARAM_MAPPING_MISSING dal validatore FE.
 
     Per ogni parametro obbligatorio (``required``, ``mode != 'fixed'``, non in

@@ -137,7 +137,7 @@ def execute_enrichment_task(
     # connessione, non dal nodo che puo' essere stale). Il `path` e' l'identita'
     # stabile della colonna API: consente a build_output_contract di riusare
     # l'id colonna attraverso un rename del nome fisico in output_mapping.
-    source_names_by_column: dict[str, str] = {}
+    source_names_by_column = {}  # column -> api source name (costruito sotto)
 
     # Apre run intermedio (non bloccante).
     # Per gli eseguibili saltiamo `intermediate.create_run` perche' l'eseguibile

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Mapping
 
 from app.core.output_contract.service import node_columns_from_contract
 from app.core.projects.canvas_models import Column
@@ -698,7 +698,7 @@ def _build_column_migrations(
 def _own_contract_name_by_id(
     project_service: Any,
     project_id: str | None,
-) -> dict[str, list[str]]:
+) -> Mapping[str, list[str]]:
     """Map ``column_id -> [physical names recorded in the project's own
     output_contract]``.
 

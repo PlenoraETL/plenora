@@ -5,7 +5,7 @@ Keeps API enrichment behavior isolated from orchestration callers.
 """
 
 import time as _time
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from app.core.projects.canvas_models import CanvasState
 from app.utils.logger import get_logger, append_step
@@ -221,7 +221,7 @@ class EnrichExecutor:
         })
         return res
 
-    def _api_source_names_by_column(self, canvas: CanvasState) -> dict[str, str]:
+    def _api_source_names_by_column(self, canvas: CanvasState) -> Mapping[str, str]:
         """Mappa physical column name -> path dell'output_mapping API (identita'
         stabile), letto dalla connessione CORRENTE di ogni nodo api_enrich.
 
@@ -229,7 +229,7 @@ class EnrichExecutor:
         lato connessione; usiamo la connessione per riusare l'id colonna nel
         contract attraverso il rename del nome fisico.
         """
-        out: dict[str, str] = {}
+        out = {}  # column -> api source name (costruito sotto)
         for node in getattr(canvas, "nodes", None) or []:
             if getattr(node, "type", None) != "api_enrich":
                 continue
