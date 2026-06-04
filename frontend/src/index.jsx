@@ -25,5 +25,14 @@ if (SENTRY_DSN) {
     .catch(() => { /* tracking non bloccante: se Sentry non carica, l'app prosegue */ });
 }
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<App />);
+async function bootstrap() {
+  // #50: mock server dev (MSW) — opt-in via VITE_USE_MOCKS, import dinamico,
+  // mai in produzione (flag non impostato nel build dell'immagine).
+  if (import.meta.env.VITE_USE_MOCKS === 'true') {
+    const { worker } = await import('./mocks/browser');
+    await worker.start({ onUnhandledRequest: 'bypass' });
+  }
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+}
+
+bootstrap();
