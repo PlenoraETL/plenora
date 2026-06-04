@@ -752,13 +752,6 @@ def get_canvas_version(version_id: str, project_id: str) -> Mapping[str, object]
     )
 
 
-def delete_canvas_version(version_id: str, project_id: str) -> None:
-    _execute(
-        "DELETE FROM project_canvas_versions WHERE id = %s AND project_id = %s",
-        (version_id, project_id),
-    )
-
-
 def prune_canvas_versions(project_id: str, keep: int = 30) -> None:
     """Mantiene solo le `keep` versioni più recenti del progetto."""
     _execute(
