@@ -118,28 +118,29 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
    * Centro del viewport in coordinate canvas.
    * Richiede reactFlowInstance oppure oggetto { screenToFlowPosition }.
    */
-  const getViewportCenter = useCallback((reactFlowInstance) => {
+  const getViewportCenter = useCallback(() => {
+    // Calcolo DOM-only del centro della vista corrente in coordinate flow:
+    // leggiamo la transform CSS applicata da React Flow a `.react-flow__viewport`
+    // (matrix(zoom,0,0,zoom,tx,ty)) + le dimensioni del pannello `.react-flow`.
+    // Non dipende da screenToFlowPosition/instance → funziona in tutti gli editor.
+    const HALF_W = 120;
+    const HALF_H = 55;
+    const jitter = () => (Math.random() - 0.5) * 40;
     try {
-      const fn = reactFlowInstance?.screenToFlowPosition;
-      if (!fn) return { x: 400, y: 300 };
-      // Centro del PANNELLO canvas, non della finestra: il canvas è sfalsato
-      // da sidebar + topbar, quindi window/2 non è il centro visivo. Usiamo il
-      // bounding rect dell'elemento .react-flow (fallback a window se assente).
       const pane = document.querySelector('.react-flow');
-      const rect = pane?.getBoundingClientRect();
-      const screenX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
-      const screenY = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
-      const center = fn({ x: screenX, y: screenY });
-      // React Flow posiziona il nodo dal suo angolo TOP-LEFT: se mettessimo il
-      // top-left al centro, il corpo del nodo risulterebbe spostato in basso a
-      // destra. Sottraiamo metà di un nodo "tipico" così il CORPO è centrato.
-      // Jitter lieve per non sovrapporre nodi aggiunti in serie.
-      const HALF_W = 120;
-      const HALF_H = 55;
-      return {
-        x: center.x - HALF_W + (Math.random() - 0.5) * 40,
-        y: center.y - HALF_H + (Math.random() - 0.5) * 40,
-      };
+      const vpEl = document.querySelector('.react-flow__viewport');
+      if (!pane || !vpEl) return { x: 400, y: 300 };
+      const rect = pane.getBoundingClientRect();
+      const m = new DOMMatrixReadOnly(getComputedStyle(vpEl).transform);
+      const zoom = m.a || 1;     // scaleX
+      const tx = m.e;            // translateX (px)
+      const ty = m.f;            // translateY (px)
+      // Centro visivo del pannello (coord schermo relative al pannello) → flow.
+      const cx = (rect.width / 2 - tx) / zoom;
+      const cy = (rect.height / 2 - ty) / zoom;
+      // React Flow posiziona il nodo dal suo angolo TOP-LEFT: sottraiamo metà
+      // di un nodo "tipico" così il CORPO risulta centrato, non lo spigolo.
+      return { x: cx - HALF_W + jitter(), y: cy - HALF_H + jitter() };
     } catch {
       return { x: 400, y: 300 };
     }
