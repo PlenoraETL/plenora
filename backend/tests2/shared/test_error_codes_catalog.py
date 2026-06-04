@@ -843,7 +843,9 @@ EXPECTED_VALUE_ERROR_STR_E_COUNTS: Dict[str, int] = {
     "backend/app/core/carica/conflict_request_loader.py": 1,
     "backend/app/core/datasources/router.py": 5,
     "backend/app/core/eseguibili/router.py": 4,
-    "backend/app/core/estrai/router.py": 1,
+    # 1 -> 3: preview-formula (#26) usa 2 HTTPException(detail=str(e)) per i
+    # messaggi di validazione dinamica (espressione/alias non validi).
+    "backend/app/core/estrai/router.py": 3,
     "backend/app/core/features/routes.py": 9,
     "backend/app/core/files/router.py": 7,
     "backend/app/core/files/upload_boundary.py": 2,
@@ -887,7 +889,7 @@ def test_value_error_str_e_total_count_lock():
     """Sanity check: somma per-file == 42. Lock indipendente che
     cattura desync fra `EXPECTED_VALUE_ERROR_STR_E_COUNTS` e somma
     intesa nel commit message."""
-    assert sum(EXPECTED_VALUE_ERROR_STR_E_COUNTS.values()) == 36
+    assert sum(EXPECTED_VALUE_ERROR_STR_E_COUNTS.values()) == 38
 
 
 def test_value_error_str_e_pattern_in_accepted_fallback():

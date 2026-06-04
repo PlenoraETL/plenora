@@ -327,6 +327,17 @@ def pytest_collection_modifyitems(config, items):
         # group itself.
         item.add_marker(pytest.mark.integration)
 
+        # Gate corsia integration: questi test richiedono servizi reali (DB
+        # esterni, worker Celery, backend HTTP live) forniti dallo stack
+        # `backend/test-e2e-v2`. Nel run unit di default i servizi non ci sono e
+        # i fixture-setup ERRORavano; ora SKIPpano in modo pulito. Per eseguirli
+        # davvero: `URBY_RUN_INTEGRATION=1` con lo stack e2e-v2 attivo.
+        if os.getenv("URBY_RUN_INTEGRATION") != "1":
+            item.add_marker(pytest.mark.skip(
+                reason="integration: richiede servizi reali (e2e-v2). "
+                       "Esegui con URBY_RUN_INTEGRATION=1."
+            ))
+
         if filename in _TIER1_INSTALL_VALIDATION_FILES:
             item.add_marker(pytest.mark.install_validation)
         else:

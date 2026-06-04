@@ -48,7 +48,11 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # 697 -> 705: safety-net I/O non-bloccanti landati nei commit di
 # orizzontalizzazione / dispatch carica / RAM-eviction (+6) e i due fallback
 # di EnrichmentRunMode.begin_run (apertura run / lookup group_id eseguibile, +2).
-_EXPECT_BROAD_BUDGET = 705
+# 705 -> 716: chiusura Sprint 2 — endpoint API ai boundary con catch
+# difensivo che ritorna {success:false, message} invece di 500:
+# preview-formula (#26), latest-by-project (#11), clone/rename/versions (#8/#12),
+# canvas_sync applied_migrations (#2). +11.
+_EXPECT_BROAD_BUDGET = 716
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"
