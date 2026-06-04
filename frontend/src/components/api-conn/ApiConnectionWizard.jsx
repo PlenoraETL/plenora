@@ -3,19 +3,18 @@
  *
  * Owna:
  *
- *  - lo stato wizard-owned (formData, wizardStep, wizardStepError,
- *    customHeadersList, testParams, testResult, testRawResponse,
- *    testing, showAdvancedConfig);
+ *  - lo stato wizard-owned (formData, wizardStep, customHeadersList,
+ *    testParams, testResult, testRawResponse, testing, showAdvancedConfig);
  *  - il setup iniziale del seed (new / edit / template);
  *  - le callback CRUD (parameters, custom headers, output mapping);
  *  - handleSave, handleTest;
- *  - la step bar, il body dispatcher per i 6 step e il footer
- *    Indietro / Avanti / Salva con la validazione.
+ *  - la definizione dei 6 step (label + content + validazione).
  *
- * Mantiene il contratto dialog `aria-labelledby="acm-wizard-title"`.
+ * Il CHROME (overlay/dialog/step-bar/footer/a11y) e' delegato al componente
+ * condiviso `common/Wizard` (classe "wizard" del FE).
  */
-import React, { useState, useEffect, useRef } from 'react';
-import useDialogFocus from '../../hooks/useDialogFocus';
+import React, { useState, useEffect } from 'react';
+import Wizard from '../common/Wizard';
 import { useToast } from '../../hooks/useToast';
 import {
   createApiConnection,
@@ -47,8 +46,6 @@ export const EMPTY_FORM = {
   request:  { body_type:'multipart', file_fields:[], static_fields:[], timeout:600 },
   response: { format:'binary_file', output_extension:'.zip' },
 };
-
-const WIZARD_STEPS = ['Tipo','Info','Parametri','Auth','Batch','Test'];
 
 // Costruisce formData dalla connessione esistente (edit). Mergia con
 // EMPTY_FORM per i campi strutturati: senza il merge, un payload server
@@ -129,7 +126,6 @@ export default function ApiConnectionWizard({ isOpen, seed, onClose, onSaved }) 
   const toast = useToast();
 const [editingApi, setEditingApi] = useState(null);
   const [wizardStep, setWizardStep] = useState(0);
-  const [wizardStepError, setWizardStepError] = useState(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [customHeadersList, setCustomHeadersList] = useState([]);
   const [testParams, setTestParams] = useState({});
@@ -138,10 +134,7 @@ const [editingApi, setEditingApi] = useState(null);
   const [testing, setTesting] = useState(false);
   const [showAdvancedConfig, setShowAdvancedConfig] = useState(false);
 
-  // Dialog focus management (a11y).
-  const wizardDialogRef = useRef(null);
-  useDialogFocus(isOpen, onClose, wizardDialogRef);
-useEffect(() => {
+  useEffect(() => {
     if (!isOpen) return;
     if (!seed || seed.kind === 'new') {
       setEditingApi(null);
@@ -346,130 +339,86 @@ const getCustomHeadersObject = () => {
       }));
     }
   };
-const onClickNext = () => {
-    // Validazione step Parametri:
+  const validateParamsStep = () => {
     // - rest_file: serve almeno un campo file
     // - enricher "tradizionale": serve almeno un parametro mappato a colonna
-    if (wizardStep === 2 && formData.connection_type === 'rest_file') {
+    if (formData.connection_type === 'rest_file') {
       const hasFile = (formData.request?.file_fields || []).some(ff => ff.name && ff.name.trim());
-      if (!hasFile) {
-        setWizardStepError('Aggiungi almeno un campo file per il Processore File (es. "file" per il servizio IMDF).');
-        return;
-      }
-    } else if (wizardStep === 2 && formData.api_type === 'enricher') {
+      if (!hasFile) return 'Aggiungi almeno un campo file per il Processore File (es. "file" per il servizio IMDF).';
+    } else if (formData.api_type === 'enricher') {
       const hasMapped = formData.parameters.some(p => p.mode === 'mapped');
-      if (!hasMapped) {
-        setWizardStepError('Un arricchitore richiede almeno un parametro mappato a una colonna. Se non hai parametri dinamici, torna al passo 1 e scegli "Generatore".');
-        return;
-      }
+      if (!hasMapped) return 'Un arricchitore richiede almeno un parametro mappato a una colonna. Se non hai parametri dinamici, torna al passo 1 e scegli "Generatore".';
     }
-    setWizardStepError(null);
-    setWizardStep(s => s + 1);
+    return null;
   };
 
+  const steps = [
+    { label: 'Tipo', content: <Step0ChooseType formData={formData} setFormData={setFormData} /> },
+    {
+      label: 'Info',
+      canAdvance: !!formData.name && !!formData.url,
+      content: <Step1BasicInfo formData={formData} setFormData={setFormData} />,
+    },
+    {
+      label: 'Parametri',
+      validate: validateParamsStep,
+      content: (
+        <Step2Params
+          formData={formData}
+          setFormData={setFormData}
+          addParameter={addParameter}
+          updateParameter={updateParameter}
+          removeParameter={removeParameter}
+        />
+      ),
+    },
+    {
+      label: 'Auth',
+      content: (
+        <Step3Auth
+          formData={formData}
+          setFormData={setFormData}
+          customHeadersList={customHeadersList}
+          addCustomHeader={addCustomHeader}
+          updateCustomHeader={updateCustomHeader}
+          removeCustomHeader={removeCustomHeader}
+        />
+      ),
+    },
+    { label: 'Batch', content: <Step4Batch formData={formData} setFormData={setFormData} /> },
+    {
+      label: 'Test',
+      content: (
+        <Step5TestSave
+          formData={formData}
+          setFormData={setFormData}
+          testParams={testParams}
+          setTestParams={setTestParams}
+          testResult={testResult}
+          testRawResponse={testRawResponse}
+          testing={testing}
+          showAdvancedConfig={showAdvancedConfig}
+          setShowAdvancedConfig={setShowAdvancedConfig}
+          handleTest={handleTest}
+          toggleOutputField={toggleOutputField}
+          updateOutputColumn={updateOutputColumn}
+          handleResponseConfigChange={handleResponseConfigChange}
+        />
+      ),
+    },
+  ];
+
   return (
-    <div className="acm__overlay" onClick={onClose}>
-      <div
-        ref={wizardDialogRef}
-        className="acm__wizard"
-        onClick={e => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="acm-wizard-title"
-        tabIndex={-1}
-      >
-        <div className="acm__wizard-header">
-          <div className="acm__wizard-title" id="acm-wizard-title">{editingApi ? `Modifica — ${editingApi.name}` : 'Nuovo Connettore'}</div>
-          <button type="button" className="acm__modal-close" onClick={onClose} aria-label="Chiudi">✕</button>
-        </div>
-
-        <div className="acm__wizard-steps">
-          {WIZARD_STEPS.map((s, i) => (
-            <div key={i} className={`acm__wstep${wizardStep === i ? ' acm__wstep--active' : ''}${wizardStep > i ? ' acm__wstep--done' : ''}`} onClick={() => setWizardStep(i)}>
-              <div className="acm__wstep-num">{wizardStep > i ? '✓' : i + 1}</div>
-              <div className="acm__wstep-label">{s}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="acm__wizard-body">
-          {wizardStep === 0 && (
-            <Step0ChooseType formData={formData} setFormData={setFormData} />
-          )}
-          {wizardStep === 1 && (
-            <Step1BasicInfo formData={formData} setFormData={setFormData} />
-          )}
-          {wizardStep === 2 && (
-            <Step2Params
-              formData={formData}
-              setFormData={setFormData}
-              wizardStepError={wizardStepError}
-              addParameter={addParameter}
-              updateParameter={updateParameter}
-              removeParameter={removeParameter}
-            />
-          )}
-          {wizardStep === 3 && (
-            <Step3Auth
-              formData={formData}
-              setFormData={setFormData}
-              customHeadersList={customHeadersList}
-              addCustomHeader={addCustomHeader}
-              updateCustomHeader={updateCustomHeader}
-              removeCustomHeader={removeCustomHeader}
-            />
-          )}
-          {wizardStep === 4 && (
-            <Step4Batch formData={formData} setFormData={setFormData} />
-          )}
-          {wizardStep === 5 && (
-            <Step5TestSave
-              formData={formData}
-              setFormData={setFormData}
-              testParams={testParams}
-              setTestParams={setTestParams}
-              testResult={testResult}
-              testRawResponse={testRawResponse}
-              testing={testing}
-              showAdvancedConfig={showAdvancedConfig}
-              setShowAdvancedConfig={setShowAdvancedConfig}
-              handleTest={handleTest}
-              toggleOutputField={toggleOutputField}
-              updateOutputColumn={updateOutputColumn}
-              handleResponseConfigChange={handleResponseConfigChange}
-            />
-          )}
-        </div>
-
-        <div className="acm__wizard-footer">
-          <button
-            type="button"
-            className="acm__btn acm__btn--ghost"
-            onClick={wizardStep === 0 ? onClose : () => { setWizardStepError(null); setWizardStep(s => s - 1); }}
-          >
-            {wizardStep === 0 ? 'Annulla' : '← Indietro'}
-          </button>
-          {wizardStep < 5 ? (
-            <button
-              type="button"
-              className="acm__btn acm__btn--primary"
-              onClick={onClickNext}
-              disabled={wizardStep === 1 && (!formData.name || !formData.url)}
-            >
-              Avanti →
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="acm__btn acm__btn--ok"
-              onClick={handleSave}
-              disabled={!formData.name || !formData.url}
-            >
-              💾 Salva API
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+    <Wizard
+      isOpen={isOpen}
+      onClose={onClose}
+      title={editingApi ? `Modifica — ${editingApi.name}` : 'Nuovo Connettore'}
+      step={wizardStep}
+      onStepChange={setWizardStep}
+      steps={steps}
+      onComplete={handleSave}
+      completeLabel="💾 Salva API"
+      completeDisabled={!formData.name || !formData.url}
+    />
   );
 }

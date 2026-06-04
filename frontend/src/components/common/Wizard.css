@@ -1,0 +1,171 @@
+/* Wizard.css — chrome condiviso dei modal multi-step (componente Wizard.jsx).
+   Usa i token globali (styles/base/variables.css) -> coerente + dark-mode. */
+
+.wizard__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal, 1000);
+  padding: 20px;
+}
+
+.wizard__dialog {
+  background: var(--color-bg-primary, #fff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 720px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .35);
+  overflow: hidden;
+}
+
+/* Header */
+.wizard__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px 16px;
+  border-bottom: 1px solid var(--color-border-light, #f3f4f6);
+  flex-shrink: 0;
+}
+.wizard__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text-primary, #1f2937);
+}
+.wizard__close {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--color-text-muted, #6b7280);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+.wizard__close:hover {
+  background: var(--color-bg-hover, #e5e7eb);
+  color: var(--color-text-primary, #1f2937);
+}
+
+/* Step bar */
+.wizard__steps {
+  display: flex;
+  align-items: center;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--color-border-light, #f3f4f6);
+  background: var(--color-bg-secondary, #f9fafb);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.wizard__step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 10px;
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--color-text-muted, #6b7280);
+  background: transparent;
+  border: none;
+  position: relative;
+  white-space: nowrap;
+}
+.wizard__step:disabled { cursor: default; }
+.wizard__step::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: transparent;
+  transition: background .15s;
+}
+.wizard__step--active { color: var(--color-text-primary, #1f2937); font-weight: 700; }
+.wizard__step--active::after { background: var(--color-primary, #3b82f6); }
+.wizard__step--done { color: var(--color-success, #10b981); }
+.wizard__step--done::after { background: var(--color-success, #10b981); }
+.wizard__step-num {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700;
+  background: var(--color-bg-tertiary, #f3f4f6);
+  border: 1px solid var(--color-border, #e5e7eb);
+}
+.wizard__step--active .wizard__step-num {
+  background: var(--color-primary, #3b82f6);
+  border-color: var(--color-primary, #3b82f6);
+  color: #fff;
+}
+.wizard__step--done .wizard__step-num {
+  background: var(--color-success-light, #d1fae5);
+  border-color: var(--color-success, #10b981);
+  color: var(--color-success-dark, #059669);
+}
+.wizard__step-label { display: none; }
+@media (min-width: 600px) { .wizard__step-label { display: block; } }
+
+/* Body (scrollabile) */
+.wizard__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 22px;
+}
+.wizard__body::-webkit-scrollbar { width: 4px; }
+.wizard__body::-webkit-scrollbar-thumb { background: var(--color-gray-300, #d1d5db); border-radius: 9px; }
+
+.wizard__step-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  background: var(--color-danger-light, #fee2e2);
+  border: 1px solid var(--color-danger, #ef4444);
+  color: var(--color-danger-dark, #dc2626);
+}
+
+/* Footer */
+.wizard__footer {
+  padding: 16px 22px;
+  border-top: 1px solid var(--color-border-light, #f3f4f6);
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.wizard__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.wizard__btn:disabled { opacity: .4; cursor: not-allowed; }
+.wizard__btn--primary { background: var(--color-primary, #3b82f6); color: #fff; }
+.wizard__btn--primary:hover:not(:disabled) { background: var(--color-primary-dark, #2563eb); }
+.wizard__btn--ghost {
+  background: transparent;
+  border-color: var(--color-border, #e5e7eb);
+  color: var(--color-text-secondary, #4b5563);
+}
+.wizard__btn--ghost:hover:not(:disabled) { background: var(--color-bg-hover, #e5e7eb); color: var(--color-text-primary, #1f2937); }
+.wizard__btn--ok {
+  background: var(--color-success, #10b981);
+  color: #fff;
+}
+.wizard__btn--ok:hover:not(:disabled) { background: var(--color-success-dark, #059669); }
