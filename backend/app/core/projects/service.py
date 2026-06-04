@@ -127,6 +127,7 @@ class ProjectService:
             created_at=row.created_at,
             updated_at=row.updated_at,
             canvas_validated=row.canvas_validated or False,
+            tags=list(getattr(row, "tags", None) or []),
         )
 
     @staticmethod
@@ -146,6 +147,7 @@ class ProjectService:
             created_at=row.created_at,
             updated_at=row.updated_at,
             canvas_validated=row.canvas_validated or False,
+            tags=list(getattr(row, "tags", None) or []),
         )
 
     def create_project(
@@ -225,8 +227,9 @@ class ProjectService:
         project_id: str,
         name: Optional[str] = None,
         description: Optional[str] = None,
+        tags: Optional[list] = None,
     ) -> Optional[ProjectMetadata]:
-        """Aggiorna nome e/o descrizione del progetto (rename).
+        """Aggiorna nome, descrizione e/o tag del progetto.
 
         Tocca solo i metadati: NON modifica il canvas né lo stato di
         validazione. Ritorna None se il progetto non esiste; i metadati
@@ -237,6 +240,16 @@ class ProjectService:
             fields["name"] = name
         if description is not None:
             fields["description"] = description
+        if tags is not None:
+            # Normalizza: stringhe non vuote, trimmed, deduplicate, max 20.
+            seen: set[str] = set()
+            clean: list[str] = []
+            for t in tags:
+                s = str(t).strip()
+                if s and s.lower() not in seen:
+                    seen.add(s.lower())
+                    clean.append(s)
+            fields["tags"] = clean[:20]
         if not fields:
             return self.get_project_metadata(project_id)
         row = project_db.update_project_row(project_id, **fields)

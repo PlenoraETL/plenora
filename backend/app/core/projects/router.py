@@ -215,9 +215,10 @@ def clone_project(
 
 
 class ProjectDetailsUpdate(BaseModel):
-    """Aggiornamento metadati progetto (rename / descrizione)."""
+    """Aggiornamento metadati progetto (rename / descrizione / tag)."""
     name: Optional[str] = None
     description: Optional[str] = None
+    tags: Optional[List[str]] = None
 
 
 @router.patch("/{project_id}")
@@ -245,7 +246,7 @@ def update_project_details(
         name = name[:255]
 
     updated = _project_service.update_project_details(
-        project_id, name=name, description=data.description,
+        project_id, name=name, description=data.description, tags=data.tags,
     )
     return {"metadata": updated.model_dump()}
 

@@ -49,6 +49,8 @@ class ProjectMetadata(BaseModel):
     # Stato di validazione canvas persistito (Epic CanvasVal §12): True dopo una
     # POST /validate senza errori; resettato a False a ogni salvataggio del canvas.
     canvas_validated: bool = False
+    # Tag liberi per organizzare i progetti nella dashboard (#10).
+    tags: List[str] = Field(default_factory=list)
 
     @field_validator("created_at", "updated_at", mode="before")
     @classmethod

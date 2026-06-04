@@ -17,10 +17,24 @@ function ProjectCard({
   onDelete,
   onClone,
   onRename,
+  onSetTags,
   onSchedule,
 }) {
   const [editing, setEditing] = useState(false);
   const [tempName, setTempName] = useState(project.name);
+  const [addingTag, setAddingTag] = useState(false);
+  const [tagDraft, setTagDraft] = useState('');
+
+  const tags = Array.isArray(project.tags) ? project.tags : [];
+  const addTag = () => {
+    const t = tagDraft.trim();
+    setTagDraft('');
+    setAddingTag(false);
+    if (t && !tags.some(x => x.toLowerCase() === t.toLowerCase())) {
+      onSetTags([...tags, t]);
+    }
+  };
+  const removeTag = (t) => onSetTags(tags.filter(x => x !== t));
 
   const startRename = (e) => {
     e.stopPropagation();
@@ -84,6 +98,38 @@ function ProjectCard({
             </div>
           ))}
         </div>
+
+        {/* Tag (#10): chip rimovibili + aggiunta inline (solo se onSetTags). */}
+        {(tags.length > 0 || onSetTags) && (
+          <div className="pl__card-tags" onClick={e => e.stopPropagation()}>
+            {tags.map(t => (
+              <span key={t} className="pl__tag">
+                {t}
+                {onSetTags && (
+                  <button type="button" className="pl__tag-x" title="Rimuovi tag"
+                    onClick={() => removeTag(t)}>×</button>
+                )}
+              </span>
+            ))}
+            {onSetTags && (addingTag ? (
+              <input
+                className="pl__tag-input"
+                value={tagDraft}
+                autoFocus
+                placeholder="tag…"
+                onChange={e => setTagDraft(e.target.value)}
+                onBlur={addTag}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') addTag();
+                  else if (e.key === 'Escape') { setTagDraft(''); setAddingTag(false); }
+                }}
+              />
+            ) : (
+              <button type="button" className="pl__tag-add" title="Aggiungi tag"
+                onClick={() => setAddingTag(true)}>＋ tag</button>
+            ))}
+          </div>
+        )}
         <div className="pl__card-footer">
           <span className={`pl__status ${statusMod}`}>{statusLabel}</span>
           <div className="pl__card-actions">

@@ -196,6 +196,7 @@ class ProjectRow:
     created_by: str | None
     description: str | None = None
     canvas_validated: bool = False
+    tags: object | None = None
 
     @classmethod
     def from_mapping(cls, row: Mapping[str, object]) -> "ProjectRow":
@@ -210,6 +211,7 @@ class ProjectRow:
             created_by=_optional_str(row, "created_by"),
             description=_optional_str(row, "description"),
             canvas_validated=_optional_bool(row, "canvas_validated") or False,
+            tags=_normalize_json_column(row, "tags", fallback=[]),
         )
 
 
@@ -230,6 +232,7 @@ class ProjectDetailRow:
     description: str | None = None
     retention_n: int | None = None
     canvas_validated: bool = False
+    tags: object | None = None
 
     @classmethod
     def from_mapping(cls, row: Mapping[str, object]) -> "ProjectDetailRow":
@@ -249,6 +252,7 @@ class ProjectDetailRow:
             description=_optional_str(row, "description"),
             retention_n=_optional_int(row, "retention_n"),
             canvas_validated=_optional_bool(row, "canvas_validated") or False,
+            tags=_normalize_json_column(row, "tags", fallback=[]),
         )
 
 
@@ -426,7 +430,7 @@ class ProjectRepository:
         # colonna list per evitare drift se aggiungiamo altri campi.
         _COLS = (
             "id, group_id, name, project_type, connection_id, "
-            "created_at, updated_at, created_by, description, canvas_validated"
+            "created_at, updated_at, created_by, description, canvas_validated, tags"
         )
         if group_id is None:
             if project_type:
@@ -512,6 +516,9 @@ class ProjectRepository:
             fields["canvas"] = json.dumps(fields["canvas"])
         if "output_contract" in fields and isinstance(fields["output_contract"], dict):
             fields["output_contract"] = json.dumps(fields["output_contract"])
+        # tags è jsonb: serializza la lista (psycopg non adatta list→jsonb).
+        if "tags" in fields and isinstance(fields["tags"], (list, dict)):
+            fields["tags"] = json.dumps(fields["tags"])
         # Pre-fix (P1 entities): isoformat string invece di datetime nativo.
         # Vedi nota in create_project_row sopra.
         fields["updated_at"] = datetime.now(timezone.utc)

@@ -63,6 +63,7 @@ function ProjectList() {
   const [search,            setSearch]            = useState('');
   // #11 filtri smart: stato ultima run + ordinamento.
   const [statusFilter,      setStatusFilter]      = useState('all');   // all|success|failure|running|never
+  const [tagFilter,         setTagFilter]         = useState('all');   // all|<tag>
   const [sortBy,            setSortBy]            = useState('recent'); // recent|oldest|name
   const { theme } = useTheme();
 
@@ -131,6 +132,17 @@ function ProjectList() {
       // per evitare "[object Object]" nel toast.
       const detailText = typeof detail === 'string' ? detail : err.message;
       toast.error('Errore eliminazione: ' + (detailText || 'errore sconosciuto'));
+    }
+  };
+
+  const handleSetTags = async (project, tags) => {
+    const prev = project.tags || [];
+    updateProjectLocal(project.id, { tags });   // optimistic
+    try {
+      await updateProject(project.id, { tags });
+    } catch (err) {
+      updateProjectLocal(project.id, { tags: prev });  // rollback
+      toastApiError(toast, err, 'Errore aggiornamento tag');
     }
   };
 
@@ -218,6 +230,13 @@ function ProjectList() {
   const manipolaProjects   = useMemo(() => projects.filter(p => p.project_type === 'manipola'), [projects]);
   const arricchisciProjects= useMemo(() => projects.filter(p => p.project_type === 'arricchisci'), [projects]);
 
+  // #10: unione di tutti i tag presenti (per il dropdown di filtro).
+  const allTags = useMemo(() => {
+    const s = new Set();
+    projects.forEach(p => (p.tags || []).forEach(t => s.add(t)));
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  }, [projects]);
+
   // Search testuale (usata anche dalla sezione Eseguibili, che non ha run/stato).
   const filterBySearch = (list) =>
     search.trim()
@@ -243,15 +262,18 @@ function ProjectList() {
         return statusFilter === 'never' ? !st : st === statusFilter;
       });
     }
+    if (tagFilter !== 'all') {
+      out = out.filter(p => (p.tags || []).includes(tagFilter));
+    }
     const sorted = [...out];
     if (sortBy === 'name')        sorted.sort((a, b) => a.name.localeCompare(b.name));
     else if (sortBy === 'oldest') sorted.sort((a, b) => ts(a) - ts(b));
     else                          sorted.sort((a, b) => ts(b) - ts(a)); // recent
     return sorted;
-  }, [search, statusFilter, sortBy, runStatusByProject]);
+  }, [search, statusFilter, tagFilter, sortBy, runStatusByProject]);
 
   // Filtri non-default attivi? (per badge "azzera").
-  const filtersActive = statusFilter !== 'all' || sortBy !== 'recent';
+  const filtersActive = statusFilter !== 'all' || tagFilter !== 'all' || sortBy !== 'recent';
 
   if (loading) {
     return <ProjectListSkeleton />;
@@ -297,6 +319,17 @@ function ProjectList() {
               <option value="running">⟳ In esecuzione</option>
               <option value="never">○ Mai eseguiti</option>
             </select>
+            {allTags.length > 0 && (
+              <select
+                className={`pl__filter-select${tagFilter !== 'all' ? ' pl__filter-select--active' : ''}`}
+                aria-label="Filtra per tag"
+                value={tagFilter}
+                onChange={e => setTagFilter(e.target.value)}
+              >
+                <option value="all">Tutti i tag</option>
+                {allTags.map(t => <option key={t} value={t}>🏷 {t}</option>)}
+              </select>
+            )}
             <select
               className="pl__filter-select"
               aria-label="Ordina"
@@ -311,7 +344,7 @@ function ProjectList() {
               <button
                 type="button"
                 className="pl__btn pl__btn--ghost pl__btn--sm"
-                onClick={() => { setStatusFilter('all'); setSortBy('recent'); }}
+                onClick={() => { setStatusFilter('all'); setTagFilter('all'); setSortBy('recent'); }}
                 title="Azzera filtri"
               >
                 ✕ Filtri
@@ -392,6 +425,7 @@ function ProjectList() {
                   onDelete={() => handleDeleteProject(project.id, project.name)}
                   onClone={canCreateProj ? () => handleCloneProject(project) : null}
                   onRename={canCreateProj ? (newName) => handleRenameProject(project, newName) : null}
+                  onSetTags={canCreateProj ? (tags) => handleSetTags(project, tags) : null}
                   onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
                 />
               );
@@ -430,6 +464,7 @@ function ProjectList() {
                   onDelete={() => handleDeleteProject(project.id, project.name)}
                   onClone={canCreateProj ? () => handleCloneProject(project) : null}
                   onRename={canCreateProj ? (newName) => handleRenameProject(project, newName) : null}
+                  onSetTags={canCreateProj ? (tags) => handleSetTags(project, tags) : null}
                   onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
                 />
               );
@@ -463,6 +498,7 @@ function ProjectList() {
                 onDelete={() => handleDeleteProject(project.id, project.name)}
                 onClone={canCreateProj ? () => handleCloneProject(project) : null}
                 onRename={canCreateProj ? (newName) => handleRenameProject(project, newName) : null}
+                onSetTags={canCreateProj ? (tags) => handleSetTags(project, tags) : null}
                 onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
               />
             ))}
