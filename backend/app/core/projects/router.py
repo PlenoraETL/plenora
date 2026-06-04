@@ -316,12 +316,17 @@ def get_project(
     canvas = _project_service.get_project_canvas(project_id)
     output_contract = _project_service.get_project_output_contract(project_id)
 
+    # #2 (trasparenza rename): raccoglie i rename di colonna auto-applicati ai
+    # project_source (rinominati a monte) per notificarli al FE invece di
+    # riscriverli in silenzio.
+    applied_migrations: list = []
     if canvas is not None:
         try:
             output_contract_module.sync_canvas_with_output_contracts(
                 canvas=canvas,
                 project_id=project_id,
                 project_service=_project_service,
+                applied_migrations=applied_migrations,
             )
         except Exception as exc:
             logger.warning(
@@ -351,6 +356,7 @@ def get_project(
         "metadata": metadata.model_dump(),
         "canvas": canvas_dict,
         "output_contract": output_contract,
+        "applied_migrations": applied_migrations,
     }
 
 

@@ -43,13 +43,22 @@ def sync_canvas_with_output_contracts(
     canvas: Any,
     project_id: str,
     project_service: Any,
+    applied_migrations: list | None = None,
 ) -> bool:
-    """Normalize project_source columns and formula refs on a canvas."""
+    """Normalize project_source columns and formula refs on a canvas.
+
+    `applied_migrations` (opzionale, #2 trasparenza): se passata una lista, vi
+    vengono accodati i rename effettivamente applicati ai project_source —
+    ``{node_id, renames:[{from,to}]}`` — così il caller (GET canvas) può
+    notificarli all'utente invece di riscriverli in silenzio. Default None =
+    comportamento invariato.
+    """
 
     changed, column_migrations_by_node = _sync_project_source_columns(
         canvas,
         project_service,
         project_id=project_id,
+        applied_migrations=applied_migrations,
     )
     changed = _sync_transform_expression_configs(
         canvas=canvas,
@@ -71,6 +80,7 @@ def _sync_project_source_columns(
     project_service: Any,
     *,
     project_id: str | None = None,
+    applied_migrations: list | None = None,
 ) -> ProjectSourceSyncResult:
     changed = False
     column_migrations_by_node: dict[str, dict[str, dict[str, Any] | None]] = {}
@@ -100,6 +110,21 @@ def _sync_project_source_columns(
         column_migrations_by_node[node.id] = migration
         if _column_fingerprint(previous_columns) == _column_fingerprint(next_columns):
             continue
+        if applied_migrations is not None:
+            prev_by_id = {
+                str(c.get("id") or c.get("column_id")): c
+                for c in previous_columns
+                if c.get("id") or c.get("column_id")
+            }
+            renames = [
+                {"from": str(prev.get("name")), "to": str(nc.get("name"))}
+                for nc in next_columns
+                for prev in [prev_by_id.get(str(nc.get("id") or nc.get("column_id") or ""))]
+                if prev and prev.get("name") and nc.get("name")
+                and prev.get("name") != nc.get("name")
+            ]
+            if renames:
+                applied_migrations.append({"node_id": node.id, "renames": renames})
         node.columns = [Column(**c) for c in next_columns]
         if isinstance(getattr(node, "data", None), dict):
             node.data["columns"] = next_columns

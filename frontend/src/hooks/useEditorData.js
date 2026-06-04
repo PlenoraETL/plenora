@@ -60,6 +60,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useToast } from './useToast';
 import { getProject, listProjects }    from '../api/projects';
 import { listConnections, getConnectionTables } from '../api/connections';
 import { listFeatureConnections }       from '../api/features';
@@ -85,6 +86,7 @@ export function useEditorData(projectId, options = {}) {
 
   // sourceTypes stabilizzato con ref: evita che un array literal nelle deps
   // di useCallback causi un nuovo riferimento ad ogni render → loop infinito.
+  const toast = useToast();
   const sourceTypesRef = useRef(sourceTypes);
   // Pre-fix: `[sourceTypes?.join(',')]` quando `sourceTypes` era undefined
   // produceva dep `undefined` → React passava sempre `Object.is(undefined,
@@ -206,6 +208,19 @@ useEffect(() => {
         const projectData = await getProject(projectId);
         if (cancelled) return;
         setProject(projectData);
+
+        // #2 (trasparenza): notifica i rename di colonna auto-applicati ai
+        // project_source (rinominati a monte) invece di riscriverli in silenzio.
+        const migs = projectData?.applied_migrations || [];
+        if (migs.length > 0) {
+          const renames = migs.flatMap((m) => m.renames || []);
+          const preview = renames.slice(0, 3).map((r) => `${r.from}→${r.to}`).join(', ');
+          const more = renames.length > 3 ? ` +${renames.length - 3}` : '';
+          toast.info(
+            `Aggiornati ${renames.length} riferimenti a colonne rinominate a monte: ${preview}${more}`,
+            10000,
+          );
+        }
 
         // 2. Connessioni DB (sempre)
         let allConnections = [];
