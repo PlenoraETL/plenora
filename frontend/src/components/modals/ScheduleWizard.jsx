@@ -7,6 +7,7 @@ import { useToast } from '../../hooks/useToast';
 import { listProjects, listConnections } from '../../api';
 import { createSchedule, updateSchedule, getSchedule } from '../../api/schedules';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
+import Wizard from '../common/Wizard';
 import './ScheduleWizard.css';
 
 const STEPS = [
@@ -187,48 +188,26 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
     <ModalWrapper isOpen={true} onClose={onClose} title="Schedule" size="lg" loading loadingText="Caricamento dati..." />
   );
 
-  return (
-    <ModalWrapper
-      isOpen={true}
-      onClose={onClose}
-      title={editId ? 'Modifica Schedule' : 'Nuovo Schedule'}
-      icon={editId ? '✏️' : '⏰'}
-      size="lg"
-      closeOnOverlay={!saving}
-      closeOnEsc={!saving}
-      footer={
-        <>
-          {step > 1 && (
-            <ModalButton variant="secondary" onClick={goBack}>← Indietro</ModalButton>
-          )}
-          <ModalButton variant="secondary" onClick={onClose}>Annulla</ModalButton>
-          {step < 6 ? (
-            <ModalButton variant="primary" onClick={goNext}>Avanti →</ModalButton>
-          ) : (
-            <ModalButton variant="primary" onClick={handleSubmit} loading={saving}>
-              {editId ? '💾 Salva Modifiche' : '✅ Crea Schedule'}
-            </ModalButton>
-          )}
-        </>
-      }
-    >
-        {/* Step bar */}
-        <div className="wiz-steps">
-          {STEPS.map(s => (
-            <button type="button" key={s.num}
-              className={`wiz-step${step === s.num ? ' wiz-step--active' : ''}${step > s.num ? ' wiz-step--done' : ''}`}
-              onClick={() => goToStep(s.num)}>
-              <span className="wiz-step__num">{step > s.num ? '✓' : s.icon}</span>
-              <span className="wiz-step__label">{s.label}</span>
-            </button>
-          ))}
-        </div>
+  const navFooter = (
+    <>
+      {step > 1 && (
+        <ModalButton variant="secondary" onClick={goBack}>← Indietro</ModalButton>
+      )}
+      <ModalButton variant="secondary" onClick={onClose}>Annulla</ModalButton>
+      {step < 6 ? (
+        <ModalButton variant="primary" onClick={goNext}>Avanti →</ModalButton>
+      ) : (
+        <ModalButton variant="primary" onClick={handleSubmit} loading={saving}>
+          {editId ? '💾 Salva Modifiche' : '✅ Crea Schedule'}
+        </ModalButton>
+      )}
+    </>
+  );
 
-        {/* Body */}
-        <div className="wiz-body">
-
-          {/* STEP 1 — Pipeline */}
-          {step === 1 && (
+  const steps = [
+    {
+      label: STEPS[0].label,
+      content: (
             <div className="wiz-section">
               <div className="wiz-section__header">
                 <div className="wiz-section__title">Seleziona la pipeline</div>
@@ -263,10 +242,11 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                 </div>
               )}
             </div>
-          )}
-
-          {/* STEP 2 — Frequenza */}
-          {step === 2 && (
+          ),
+    },
+    {
+      label: STEPS[1].label,
+      content: (
             <div className="wiz-section">
               <div className="wiz-section__header">
                 <div className="wiz-section__title">Frequenza di esecuzione</div>
@@ -315,10 +295,11 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                 </div>
               </div>
             </div>
-          )}
-
-          {/* STEP 3 — Esecuzione */}
-          {step === 3 && (
+          ),
+    },
+    {
+      label: STEPS[2].label,
+      content: (
             <div className="wiz-section">
               <div className="wiz-section__header">
                 <div className="wiz-section__title">Opzioni di esecuzione</div>
@@ -350,10 +331,11 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                 <span className="wiz-hint">Se la pipeline è già in esecuzione, quante volte accodare prima di saltare</span>
               </div>
             </div>
-          )}
-
-          {/* STEP 4 — Destinazione */}
-          {step === 4 && (
+          ),
+    },
+    {
+      label: STEPS[3].label,
+      content: (
             <div className="wiz-section">
               <div className="wiz-section__header">
                 <div className="wiz-section__title">Destinazione dati</div>
@@ -432,10 +414,11 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                 </div>
               )}
             </div>
-          )}
-
-          {/* STEP 5 — Errori */}
-          {step === 5 && (
+          ),
+    },
+    {
+      label: STEPS[4].label,
+      content: (
             <div className="wiz-section">
               <div className="wiz-section__header">
                 <div className="wiz-section__title">Gestione errori</div>
@@ -472,10 +455,11 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                 <span>Log righe saltate nel report</span>
               </label>
             </div>
-          )}
-
-          {/* STEP 6 — Riepilogo */}
-          {step === 6 && (
+          ),
+    },
+    {
+      label: STEPS[5].label,
+      content: (
             <div className="wiz-section">
               <div className="wiz-section__header">
                 <div className="wiz-section__title">Riepilogo</div>
@@ -520,9 +504,23 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
                 ))}
               </div>
             </div>
-          )}
-        </div>
-    </ModalWrapper>
+          ),
+    },
+  ];
+
+  return (
+    <Wizard
+      isOpen
+      onClose={onClose}
+      title={editId ? 'Modifica Schedule' : 'Nuovo Schedule'}
+      icon={editId ? '✏️' : '⏰'}
+      step={step - 1}
+      onStepChange={(i) => goToStep(i + 1)}
+      steps={steps}
+      footer={navFooter}
+      closeOnEsc={!saving}
+      closeOnOverlay={!saving}
+    />
   );
 }
 

@@ -44,12 +44,15 @@ export default function Wizard({
   // footer: override del footer di default (Indietro/Avanti/Completa). Per i
   // wizard "bespoke" con navigazione side-effectful o azioni non standard
   // (es. UploadModal): riusano chrome + step-bar + a11y, footer proprio.
+  // footer={null} -> nessuna barra footer (bottoni nel body).
   footer,
+  closeOnEsc = true,
+  closeOnOverlay = true,
   className = '',
 }) {
   const dialogRef = useRef(null);
   const [stepError, setStepError] = useState(null);
-  useDialogFocus(isOpen, onClose, dialogRef);
+  useDialogFocus(isOpen, onClose, dialogRef, { closeOnEsc });
 
   // Reset dell'errore di step ad ogni cambio step (gestito centralmente qui,
   // non piu' duplicato dentro ogni step content).
@@ -73,7 +76,7 @@ export default function Wizard({
   };
 
   return createPortal(
-    <div className={`wizard__overlay ${className}`} onClick={onClose}>
+    <div className={`wizard__overlay ${className}`} onClick={closeOnOverlay ? onClose : undefined}>
       <div
         ref={dialogRef}
         className="wizard__dialog"
@@ -118,6 +121,7 @@ export default function Wizard({
           {current.content}
         </div>
 
+        {footer !== null && (
         <div className="wizard__footer">
           {footer !== undefined ? footer : (
             <>
@@ -146,6 +150,7 @@ export default function Wizard({
             </>
           )}
         </div>
+        )}
       </div>
     </div>,
     document.body
