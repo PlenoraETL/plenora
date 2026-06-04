@@ -8,6 +8,7 @@ import React from 'react';
  */
 function ProjectCard({
   project,
+  runStatus,
   accentClass,
   modLabel,
   meta,
@@ -16,14 +17,18 @@ function ProjectCard({
   onDelete,
   onSchedule,
 }) {
-  const status = project.last_status;
+  // Stato dell'ultima run (#11): preferisce `runStatus` dalla mappa log_runs
+  // (status: success | failure | running), fallback al campo legacy del
+  // progetto. Nessuna run → "Mai eseguito".
+  const status = runStatus?.status || project.last_status;
 
   const statusLabel = status === 'success' ? 'Completato'
     : status === 'running' ? 'In esecuzione'
-    : status === 'error'   ? 'Errore'
-    : 'Idle';
+    : (status === 'failure' || status === 'error') ? 'Errore'
+    : 'Mai eseguito';
   const statusMod = status === 'success' ? 'pl__status--ok'
-    : status === 'error' ? 'pl__status--err'
+    : (status === 'failure' || status === 'error') ? 'pl__status--err'
+    : status === 'running' ? 'pl__status--run'
     : '';
 
   return (

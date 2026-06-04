@@ -131,6 +131,42 @@ def get_runs(
     }
 
 
+# GET /api/pipeline-runs/latest-by-project
+# NB: dichiarato PRIMA di `/{run_id}` altrimenti "latest-by-project" verrebbe
+# catturato come run_id dal path param.
+
+@router.get("/latest-by-project")
+def get_latest_run_by_project(
+    current_user: CurrentUser = Depends(require_not_esecutore),
+) -> RunPayload:
+    """Stato dell'ultima run per ciascun progetto (filtri dashboard #11).
+
+    Una riga per `project_id` via `DISTINCT ON`, ordinata per `ts_start` desc.
+    Scoping per gruppo identico a `get_runs` (i non-superadmin vedono solo il
+    proprio gruppo). Risposta compatta `{project_id: {status, ts_start}}` —
+    pensata per costruire una mappa client-side senza paginare le run.
+    """
+    conditions = ["project_id IS NOT NULL", "project_id <> ''"]
+    params: list[Any] = []
+    if current_user.role != "superadmin":
+        conditions.append("group_id = %s")
+        params.append(current_user.group_id)
+
+    where = f"WHERE {' AND '.join(conditions)}"
+    rows = _fetchall(
+        f"SELECT DISTINCT ON (project_id) project_id, status, ts_start "
+        f"FROM log_runs {where} ORDER BY project_id, ts_start DESC",
+        tuple(params),
+    )
+    return {
+        "statuses": {
+            r["project_id"]: {"status": r.get("status"), "ts_start": r.get("ts_start")}
+            for r in rows
+            if r.get("project_id")
+        }
+    }
+
+
 # GET /api/runs/{run_id}
 
 @router.get("/{run_id}")

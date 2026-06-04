@@ -521,6 +521,33 @@
 }
 .pl__status--ok::before  { background: var(--pl-ok);  box-shadow: 0 0 5px var(--pl-ok); }
 .pl__status--err::before { background: var(--pl-err); }
+.pl__status--run::before {
+  background: var(--pl-blue);
+  box-shadow: 0 0 5px var(--pl-blue);
+  animation: pl-status-pulse 1.2s ease-in-out infinite;
+}
+@keyframes pl-status-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* #11 — filtri smart (select stato/ordinamento nella topbar) */
+.pl__filter-select {
+  height: 34px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--pl-border);
+  border-radius: 8px;
+  background: var(--pl-surface);
+  color: var(--pl-text);
+  font-size: 12.5px;
+  font-family: var(--pl-font-m);
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%238791a3' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  transition: border-color 0.15s;
+}
+.pl__filter-select:hover { border-color: var(--pl-border-hi); }
+.pl__filter-select:focus { outline: none; border-color: var(--pl-blue); }
+.pl__filter-select--active { border-color: var(--pl-blue); color: var(--pl-blue); }
 
 /* ─────────────────────────────────────────────────────────────────────────
    EMPTY STATE

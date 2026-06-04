@@ -38,3 +38,12 @@ export const getLogRun = async (runId, includeLogs = true, logLimit = 200) => {
   return response.data;
 };
 
+/**
+ * Stato dell'ultima run per ciascun progetto (per i filtri della dashboard, #11).
+ * @returns {Promise<{statuses: Object<string, {status: string, ts_start: string}>}>}
+ */
+export const getLatestRunByProject = async () => {
+  const response = await http.get('/pipeline-runs/latest-by-project');
+  return response.data;
+};
+

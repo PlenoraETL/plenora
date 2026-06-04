@@ -45,6 +45,7 @@ function ProjectList() {
     eseguibili,
     projectSources,
     projectFileSources,
+    runStatusByProject,
     loading,
     reload: loadData,
   } = useProjectListData();
@@ -56,6 +57,9 @@ function ProjectList() {
   const [executeEseguibileId, setExecuteEseguibileId] = useState(null); // id eseguibile da lanciare nel wizard
   const [showEsegSelector, setShowEsegSelector] = useState(false);      // selettore progetto sorgente per nuovo eseguibile
   const [search,            setSearch]            = useState('');
+  // #11 filtri smart: stato ultima run + ordinamento.
+  const [statusFilter,      setStatusFilter]      = useState('all');   // all|success|failure|running|never
+  const [sortBy,            setSortBy]            = useState('recent'); // recent|oldest|name
   const { theme } = useTheme();
 
 
@@ -182,10 +186,40 @@ function ProjectList() {
   const manipolaProjects   = useMemo(() => projects.filter(p => p.project_type === 'manipola'), [projects]);
   const arricchisciProjects= useMemo(() => projects.filter(p => p.project_type === 'arricchisci'), [projects]);
 
+  // Search testuale (usata anche dalla sezione Eseguibili, che non ha run/stato).
   const filterBySearch = (list) =>
     search.trim()
       ? list.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
       : list;
+
+  // #11: search + filtro stato ultima run + ordinamento. Applicato alle 3
+  // sezioni progetto. Lo stato run viene da `runStatusByProject` (log_runs):
+  // success | failure | running, oppure assente = "mai eseguito".
+  const ts = (p) => {
+    const d = new Date(p.updated_at || p.created_at || 0).getTime();
+    return Number.isNaN(d) ? 0 : d;
+  };
+  const applyFilters = useCallback((list) => {
+    let out = list;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      out = out.filter(p => p.name.toLowerCase().includes(q));
+    }
+    if (statusFilter !== 'all') {
+      out = out.filter(p => {
+        const st = runStatusByProject[p.id]?.status;
+        return statusFilter === 'never' ? !st : st === statusFilter;
+      });
+    }
+    const sorted = [...out];
+    if (sortBy === 'name')        sorted.sort((a, b) => a.name.localeCompare(b.name));
+    else if (sortBy === 'oldest') sorted.sort((a, b) => ts(a) - ts(b));
+    else                          sorted.sort((a, b) => ts(b) - ts(a)); // recent
+    return sorted;
+  }, [search, statusFilter, sortBy, runStatusByProject]);
+
+  // Filtri non-default attivi? (per badge "azzera").
+  const filtersActive = statusFilter !== 'all' || sortBy !== 'recent';
 
   if (loading) {
     return (
@@ -225,6 +259,39 @@ function ProjectList() {
                 onChange={e => setSearch(e.target.value)}
               />
             </div>
+            {/* #11 filtri smart: stato ultima run + ordinamento */}
+            <select
+              className={`pl__filter-select${statusFilter !== 'all' ? ' pl__filter-select--active' : ''}`}
+              aria-label="Filtra per stato"
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+            >
+              <option value="all">Tutti gli stati</option>
+              <option value="success">✓ Completati</option>
+              <option value="failure">✕ Falliti</option>
+              <option value="running">⟳ In esecuzione</option>
+              <option value="never">○ Mai eseguiti</option>
+            </select>
+            <select
+              className="pl__filter-select"
+              aria-label="Ordina"
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value)}
+            >
+              <option value="recent">Più recenti</option>
+              <option value="oldest">Meno recenti</option>
+              <option value="name">Nome A–Z</option>
+            </select>
+            {filtersActive && (
+              <button
+                type="button"
+                className="pl__btn pl__btn--ghost pl__btn--sm"
+                onClick={() => { setStatusFilter('all'); setSortBy('recent'); }}
+                title="Azzera filtri"
+              >
+                ✕ Filtri
+              </button>
+            )}
             <ThemeToggle classPrefix="pl" />
             <button type="button" className="pl__btn pl__btn--ghost" onClick={loadData}>⟳ Aggiorna</button>
             {canCreateProj && (
@@ -269,17 +336,18 @@ function ProjectList() {
             subtitle="Estrazione da sorgenti SQL e GIS"
             onNew={() => openModalForType('estrai')}
             canCreate={canCreateProj}
-            empty={filterBySearch(estraiProjects).length === 0}
+            empty={applyFilters(estraiProjects).length === 0}
             emptyIcon="↓"
             emptyTitle="Nessun progetto Estrai"
             emptyText="Crea il tuo primo progetto per estrarre dati"
           >
-            {filterBySearch(estraiProjects).map(project => {
+            {applyFilters(estraiProjects).map(project => {
               const conn = getConn(project.default_connection_id);
               return (
                 <ProjectCard
                   key={project.id}
                   project={project}
+                  runStatus={runStatusByProject[project.id]}
                   accentClass="pl__card-accent--estrai"
                   modLabel="↓ Estrai"
                   meta={[
@@ -301,12 +369,12 @@ function ProjectList() {
             subtitle="Trasformazione e join spaziale"
             onNew={() => openModalForType('manipola')}
             canCreate={canCreateProj}
-            empty={filterBySearch(manipolaProjects).length === 0}
+            empty={applyFilters(manipolaProjects).length === 0}
             emptyIcon="⚙"
             emptyTitle="Nessun progetto Manipola"
             emptyText="Crea un pipeline di trasformazione"
           >
-            {filterBySearch(manipolaProjects).map(project => {
+            {applyFilters(manipolaProjects).map(project => {
               const srcProjects = getSourceProjects(project.id);
               const fileIds = projectFileSources[project.id] || [];
               const fileNames = fileIds.map(id => files.find(f => f.id === id)?.name).filter(Boolean);
@@ -315,6 +383,7 @@ function ProjectList() {
                 <ProjectCard
                   key={project.id}
                   project={project}
+                  runStatus={runStatusByProject[project.id]}
                   accentClass="pl__card-accent--manipola"
                   modLabel="⚙ Manipola"
                   meta={[
@@ -336,15 +405,16 @@ function ProjectList() {
             subtitle="API enrichment geospaziale"
             onNew={() => openModalForType('arricchisci')}
             canCreate={canCreateProj}
-            empty={filterBySearch(arricchisciProjects).length === 0}
+            empty={applyFilters(arricchisciProjects).length === 0}
             emptyIcon="◈"
             emptyTitle="Nessun progetto Arricchisci"
             emptyText="Crea un nuovo pipeline di arricchimento"
           >
-            {filterBySearch(arricchisciProjects).map(project => (
+            {applyFilters(arricchisciProjects).map(project => (
               <ProjectCard
                 key={project.id}
                 project={project}
+                runStatus={runStatusByProject[project.id]}
                 accentClass="pl__card-accent--arricchisci"
                 modLabel="◈ Arricchisci"
                 meta={[

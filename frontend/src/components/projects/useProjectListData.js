@@ -26,6 +26,7 @@ import { listFeatureConnections } from '../../api/features';
 import { getFiles } from '../../api/files';
 import { listSchedules } from '../../api/schedules';
 import { listDataSources } from '../../api/datasources';
+import { getLatestRunByProject } from '../../api/logRuns';
 import { useToast } from '../../hooks/useToast';
 import { useMountedRef } from '../../hooks/useMountedRef';
 
@@ -48,6 +49,8 @@ export function useProjectListData() {
   const [eseguibili, setEseguibili] = useState([]);
   const [projectSources, setProjectSources] = useState({});
   const [projectFileSources, setProjectFileSources] = useState({});
+  // #11: stato dell'ultima run per progetto { project_id: {status, ts_start} }.
+  const [runStatusByProject, setRunStatusByProject] = useState({});
   const [loading, setLoading] = useState(true);
 
   // Guard contro reload concorrenti + setState post-unmount.
@@ -80,6 +83,7 @@ export function useProjectListData() {
         listFeatureConnections(),
         listEseguibili(),
         listDataSources(),
+        getLatestRunByProject(),
       ]);
 
       // Cancel guard: se nel frattempo un altro reload e' stato avviato
@@ -96,6 +100,7 @@ export function useProjectListData() {
         arcgisRes,
         eseguibiliRes,
         dataSourcesRes,
+        runStatusRes,
       ] = results;
 
       const projectsData = projectsRes.status === 'fulfilled' ? projectsRes.value : { projects: [] };
@@ -106,9 +111,13 @@ export function useProjectListData() {
       const arcgisData = arcgisRes.status === 'fulfilled' ? arcgisRes.value : { connections: [] };
       const eseguibiliData = eseguibiliRes.status === 'fulfilled' ? eseguibiliRes.value : [];
       const dataSourcesData = dataSourcesRes.status === 'fulfilled' ? dataSourcesRes.value : [];
+      const runStatusData = runStatusRes.status === 'fulfilled' ? runStatusRes.value : { statuses: {} };
 
-      // Segnaliamo all'utente le fetch fallite (toast.warning aggregato)
+      // Segnaliamo all'utente le fetch fallite (toast.warning aggregato).
+      // `stato run` è omesso di proposito: è un arricchimento non-critico per i
+      // filtri della dashboard, un suo fallimento non merita un warning.
       const failedServices = results
+        .slice(0, 8)
         .map((r, i) => r.status === 'rejected'
           ? ['progetti', 'connessioni', 'API', 'file', 'schedule', 'ArcGIS', 'eseguibili', 'datasources'][i]
           : null)
@@ -126,6 +135,7 @@ export function useProjectListData() {
       setSchedules(schedulesData.schedules || []);
       setEseguibili(Array.isArray(eseguibiliData) ? eseguibiliData : (eseguibiliData?.items || []));
       setDataSources(dataSourcesData?.datasources || []);
+      setRunStatusByProject(runStatusData?.statuses || {});
 
       const sourcesMap = {};
       const fileSourcesMap = {};
@@ -162,6 +172,7 @@ export function useProjectListData() {
     eseguibili,
     projectSources,
     projectFileSources,
+    runStatusByProject,
     loading,
     reload,
   };
