@@ -20,8 +20,14 @@ import { validateProjectCanvas } from '../../api/projects';
 import { backendReportToResult, validationRequestFailedResult } from '../../utils/backendValidationResult';
 import useCanvasStore from '../../store/useCanvasStore';
 import ResultNodeStandardView from './result/ResultNodeStandardView';
+import ResultInlinePreview from './result/ResultInlinePreview';
+import useInlinePreview from '../../hooks/useInlinePreview';
 import { useConfirm } from '../../context/ConfirmContext';
 import './ResultNode.css';
+
+// #5: righe caricate nell'anteprima inline auto post-run (la modale completa
+// resta a 100). Volutamente piccolo: gira su cache subito dopo l'esecuzione.
+const INLINE_PREVIEW_LIMIT = 10;
 
 /**
  * Componente nodo risultato (output) UNIFICATO
@@ -39,6 +45,35 @@ const ResultNode = memo(({ data, id }) => {
   // Sottoscrizioni reattive per i bottoni Preview/Esegui (propagate alle view)
   const hasOnPreview = useCanvasStore(s => !!s.editorActionsRef?.current?.onPreview);
   const hasOnExecute = useCanvasStore(s => !!s.editorActionsRef?.current?.onExecute);
+
+  // Anteprima inline post-run (#5): il nodo reagisce a `lastTaskResult` (già
+  // nello store apposta) e auto-carica le prime righe senza aprire la modale.
+  const projectId = useCanvasStore(s => s.projectId);
+  const lastTaskResult = useCanvasStore(s => s.lastTaskResult);
+  const inlinePreview = useInlinePreview(projectId);
+  const inlineRunRef = useRef(inlinePreview.run);
+  inlineRunRef.current = inlinePreview.run;
+  // Init al token già presente: un risultato lingering (da un progetto
+  // precedente) non deve scatenare un fetch spurio al mount — solo un
+  // cambio reale post-mount avvia l'anteprima.
+  const lastRunTokenRef = useRef(lastTaskResult?.task_id || null);
+
+  // Auto-trigger una sola volta per esecuzione riuscita (dedup su task_id).
+  useEffect(() => {
+    if (!lastTaskResult?.success) return;
+    const token = lastTaskResult.task_id || null;
+    if (token && token === lastRunTokenRef.current) return;
+    lastRunTokenRef.current = token;
+    inlineRunRef.current(INLINE_PREVIEW_LIMIT);
+  }, [lastTaskResult]);
+
+  // Cambio progetto/canvas → azzera l'anteprima e il dedup-token.
+  const inlineClearRef = useRef(inlinePreview.clear);
+  inlineClearRef.current = inlinePreview.clear;
+  useEffect(() => {
+    lastRunTokenRef.current = null;
+    inlineClearRef.current();
+  }, [projectId]);
 
   // Conta edge in entrata — utile per invalidare il memo di upstreamColumns
   const incomingEdgeCount = useStore((state) => {
@@ -237,6 +272,12 @@ const ResultNode = memo(({ data, id }) => {
           onValidate={handleValidate}
           onExecute={handleExecuteWithValidation}
           onPreview={handlePreviewWithValidation}
+        />
+
+        <ResultInlinePreview
+          state={inlinePreview}
+          onExpand={handlePreviewWithValidation}
+          onRefresh={() => inlinePreview.run(INLINE_PREVIEW_LIMIT)}
         />
 
         <ValidationModal
