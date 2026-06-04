@@ -745,3 +745,44 @@
 }
 .pl__modal-row-arrow { color: var(--pl-text-sub); font-size: 16px; }
 
+
+/* ── Skeleton screen (Epic C) ────────────────────────────────────── */
+.pl__skel {
+  position: relative;
+  overflow: hidden;
+  background: var(--pl-surface-2, rgba(255,255,255,0.04));
+  border-radius: 8px;
+}
+.pl__skel::after {
+  content: '';
+  position: absolute; inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255,255,255,0.07),
+    transparent
+  );
+  animation: pl-shimmer 1.3s ease-in-out infinite;
+}
+[data-theme='light'] .pl__skel::after {
+  background: linear-gradient(90deg, transparent, rgba(0,0,0,0.05), transparent);
+}
+@keyframes pl-shimmer { 100% { transform: translateX(100%); } }
+
+.pl__skel--field { width: 200px; height: 34px; }
+.pl__skel--chip  { width: 90px;  height: 34px; }
+.pl__skel--stat  { height: 64px; border: 1px solid var(--pl-border); }
+.pl__skel--title { width: 180px; height: 22px; }
+
+.pl__skel-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  min-height: 120px;
+}
+.pl__skel--line { height: 12px; }
+.pl__skel--line-lg { width: 70%; height: 16px; }
+.pl__skel--line-md { width: 90%; }
+.pl__skel--line-sm { width: 45%; }

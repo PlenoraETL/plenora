@@ -11,6 +11,7 @@ import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import { role } from '../../utils/permissions';
 import { humanizeError, ERROR_MESSAGES } from '../../utils/errorMessages';
+import { useSmoothProgress } from '../../hooks/useSmoothProgress';
 import './ExecutionModal.css';
 
 // Etichette umane per i bare status token dei task carica (quando il backend
@@ -77,6 +78,9 @@ function ExecutionModal({
   const isSuper = role.isSuperadmin(user);
   const showConfig = awaitingLaunch && !isExecuting && !result && typeof onLaunch === 'function';
   const [intermediateMode, setIntermediateMode] = useState('');
+  // Progress percepita fluida (Epic C): se il backend resta a 0% la barra
+  // striscia comunque verso un tetto, così non sembra bloccata.
+  const smoothProgress = useSmoothProgress(progress, isExecuting);
 
   // Calcola il numero di colonne
   const getColumnsCount = () => {
@@ -213,41 +217,32 @@ function ExecutionModal({
       {/* Loading State con Progress Bar */}
       {isExecuting && (
         <div className="execution-modal__loading">
-          {isAsync ? (
-            <>
-              <div className="execution-modal__progress-container">
-                <div className="execution-modal__progress-bar">
-                  <div 
-                    className="execution-modal__progress-fill"
-                    style={{ 
-                      width: `${progress}%`,
-                      backgroundColor: getProgressColor()
-                    }}
-                  />
-                </div>
-                <div className="execution-modal__progress-text">
-                  {progress}%
-                </div>
+          <>
+            <div className="execution-modal__progress-container">
+              <div className="execution-modal__progress-bar">
+                <div
+                  className="execution-modal__progress-fill"
+                  style={{
+                    width: `${smoothProgress}%`,
+                    backgroundColor: getProgressColor()
+                  }}
+                />
               </div>
-              
-              <p className="execution-modal__progress-message">
-                {progressMessage || 'Elaborazione in corso...'}
-              </p>
-              
-              <div className="execution-modal__task-status">
-                {taskStatus === 'pending' && '⏳ In coda...'}
-                {taskStatus === 'progress' && '⚙️ In esecuzione...'}
-                {taskStatus === 'started' && '🚀 Avviato...'}
+              <div className="execution-modal__progress-text">
+                {smoothProgress}%
               </div>
-            </>
-          ) : (
-            <>
-              <div className="execution-modal__spinner">⏳</div>
-              <p className="execution-modal__loading-text">
-                Esecuzione in corso...
-              </p>
-            </>
-          )}
+            </div>
+
+            <p className="execution-modal__progress-message">
+              {progressMessage || 'Elaborazione in corso...'}
+            </p>
+
+            <div className="execution-modal__task-status">
+              {taskStatus === 'pending' && '⏳ In coda...'}
+              {taskStatus === 'progress' && '⚙️ In esecuzione...'}
+              {taskStatus === 'started' && '🚀 Avviato...'}
+            </div>
+          </>
         </div>
       )}
 

@@ -12,6 +12,7 @@ import NewProjectModal from '../components/projects/NewProjectModal';
 import EsegSelectorModal from '../components/projects/EsegSelectorModal';
 import ProjectSection from '../components/projects/ProjectSection';
 import ProjectCard from '../components/projects/ProjectCard';
+import ProjectListSkeleton from '../components/projects/ProjectListSkeleton';
 import EseguibiliSection from '../components/projects/EseguibiliSection';
 import { useProjectListData } from '../components/projects/useProjectListData';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
@@ -222,14 +223,7 @@ function ProjectList() {
   const filtersActive = statusFilter !== 'all' || sortBy !== 'recent';
 
   if (loading) {
-    return (
-      <div className="pl pl--loading">
-        <div className="pl__loading-inner">
-          <div className="pl__loading-icon">⬡</div>
-          Caricamento...
-        </div>
-      </div>
-    );
+    return <ProjectListSkeleton />;
   }
 
   return (
