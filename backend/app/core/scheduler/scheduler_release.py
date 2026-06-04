@@ -6,9 +6,7 @@ import random
 import time
 from typing import Callable, Protocol
 
-import psycopg
-import psycopg.errors
-
+from app.shared.resilience import is_transient
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -45,10 +43,12 @@ def release_lock_with_retry(
                 concurrency.release(schedule_id)
                 release_success = True
                 break
-            except (
-                psycopg.OperationalError,
-                psycopg.errors.DeadlockDetected,
-            ) as transient_err:
+            except Exception as transient_err:
+                # Whitelist transitori centralizzata (#3): PG OperationalError/
+                # DeadlockDetected + connection (08xxx) + 57Pxx. I non-transitori
+                # (bug logici) propagano all'except esterno (log [CRITICO]).
+                if not is_transient(transient_err):
+                    raise
                 last_transient_err = transient_err
                 elapsed = monotonic() - retry_start
                 if (

@@ -321,6 +321,8 @@ def test_release_retry_mechanics_live_outside_execution_manager():
     assert "time.sleep(backoff" not in execution_src
     assert "release_lock_with_retry(self.concurrency, schedule_id)" in execution_src
 
-    assert "psycopg.OperationalError" in release_src
+    # La classificazione transitori delega al classificatore centrale
+    # (#3): `is_transient` sostituisce il tuple hardcoded psycopg.*.
+    assert "is_transient" in release_src
     assert "random.uniform" in release_src
     assert "time.sleep" in release_src
