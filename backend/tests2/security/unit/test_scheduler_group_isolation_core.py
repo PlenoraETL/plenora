@@ -68,8 +68,15 @@ def _make_manager(schedule_config) -> ExecutionManager:
     return manager
 
 
-def _project_meta(group_id):
-    return SimpleNamespace(id="proj-1", group_id=group_id, project_type="estrai")
+def _project_meta(group_id, canvas_validated=True):
+    # canvas_validated=True di default: il gate di validazione canvas (Epic
+    # CanvasVal, ora nello scheduler) blocca l'esecuzione di canvas non validati
+    # PRIMA del concurrency lock. I test di isolamento gruppo che falliscono al
+    # check di gruppo non lo raggiungono; il sanity "same group" deve passarlo.
+    return SimpleNamespace(
+        id="proj-1", group_id=group_id, project_type="estrai",
+        canvas_validated=canvas_validated,
+    )
 
 
 # Cross-group blocked
