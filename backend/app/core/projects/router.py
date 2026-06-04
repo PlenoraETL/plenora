@@ -251,6 +251,63 @@ def update_project_details(
     return {"metadata": updated.model_dump()}
 
 
+class CreateVersionRequest(BaseModel):
+    """Snapshot canvas: etichetta opzionale."""
+    label: Optional[str] = None
+
+
+@router.post("/{project_id}/versions", status_code=201)
+@audit_action(action="project.version_create", target_param="project_id")
+def create_canvas_version(
+    project_id: str,
+    data: CreateVersionRequest,
+    current_user: CurrentUser = Depends(require_user_or_above),
+) -> JsonObject:
+    """Salva uno snapshot del canvas corrente (#12). Mantiene le ultime 30."""
+    metadata = _project_service.get_project_metadata(project_id)
+    assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
+    version = _project_service.create_canvas_version(
+        project_id, label=data.label,
+        group_id=current_user.group_id, created_by=current_user.user_id,
+    )
+    if version is None:
+        raise_typed_http(error_codes.PROJECT_NOT_FOUND, status_code=404, message="Progetto non trovato")
+    return version
+
+
+@router.get("/{project_id}/versions")
+def list_canvas_versions(
+    project_id: str,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+) -> JsonObject:
+    """Elenco delle versioni salvate del canvas (metadati, senza il blob)."""
+    metadata = _project_service.get_project_metadata(project_id)
+    assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
+    return {"versions": _project_service.list_canvas_versions(project_id)}
+
+
+@router.post("/{project_id}/versions/{version_id}/restore")
+@audit_action(action="project.version_restore", target_param="project_id")
+def restore_canvas_version(
+    project_id: str,
+    version_id: str,
+    current_user: CurrentUser = Depends(require_user_or_above),
+) -> JsonObject:
+    """Ripristina il canvas del progetto a una versione salvata."""
+    metadata = _project_service.get_project_metadata(project_id)
+    assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
+    try:
+        canvas = _project_service.restore_canvas_version(project_id, version_id)
+    except ProjectLineageCycleError as e:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "validation_error", "message": str(e)[:500]},
+        )
+    if canvas is None:
+        raise_typed_http(error_codes.RUN_NOT_FOUND, status_code=404, message="Versione non trovata")
+    return {"canvas": canvas.model_dump()}
+
+
 @router.get("")
 def list_projects(
     current_user: CurrentUser = Depends(require_not_esecutore),

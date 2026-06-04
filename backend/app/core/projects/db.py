@@ -715,6 +715,60 @@ def get_project_retention_n(project_id: str) -> int | None:
     return project_repository.get_project_retention_n(project_id)
 
 
+# ── Versioning canvas (#12) ─────────────────────────────────────────────────
+
+def insert_canvas_version(
+    version_id: str,
+    project_id: str,
+    group_id: str | None,
+    label: str | None,
+    canvas: object,
+    created_by: str | None,
+) -> None:
+    _execute(
+        "INSERT INTO project_canvas_versions "
+        "(id, project_id, group_id, label, canvas, created_by) "
+        "VALUES (%s, %s, %s, %s, %s, %s)",
+        (version_id, project_id, group_id, label,
+         json.dumps(canvas) if isinstance(canvas, (dict, list)) else canvas,
+         created_by),
+    )
+
+
+def list_canvas_versions(project_id: str) -> list[Mapping[str, object]]:
+    return _fetchall(
+        "SELECT id, label, created_at, created_by "
+        "FROM project_canvas_versions WHERE project_id = %s "
+        "ORDER BY created_at DESC",
+        (project_id,),
+    )
+
+
+def get_canvas_version(version_id: str, project_id: str) -> Mapping[str, object] | None:
+    return _fetchone(
+        "SELECT id, canvas FROM project_canvas_versions "
+        "WHERE id = %s AND project_id = %s",
+        (version_id, project_id),
+    )
+
+
+def delete_canvas_version(version_id: str, project_id: str) -> None:
+    _execute(
+        "DELETE FROM project_canvas_versions WHERE id = %s AND project_id = %s",
+        (version_id, project_id),
+    )
+
+
+def prune_canvas_versions(project_id: str, keep: int = 30) -> None:
+    """Mantiene solo le `keep` versioni più recenti del progetto."""
+    _execute(
+        "DELETE FROM project_canvas_versions WHERE project_id = %s AND id NOT IN ("
+        " SELECT id FROM project_canvas_versions WHERE project_id = %s "
+        " ORDER BY created_at DESC LIMIT %s)",
+        (project_id, project_id, keep),
+    )
+
+
 def list_owned_project_ids(
     project_ids: Iterable[str],
     *,

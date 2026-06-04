@@ -44,6 +44,7 @@ const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'))
 const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
 const ConnectionSelectorModal = lazy(() => import('../components/arricchisci/ConnectionSelectorModal'));
 const EnrichmentConfirmModal = lazy(() => import('../components/modals/EnrichmentConfirmModal'));
+const CanvasVersionsModal = lazy(() => import('../components/modals/CanvasVersionsModal'));
 import { usePreview, useExecution, useCanvasCore, useMultiModal, useEnrichmentValidation, useCaricarica, useCanvasSave, useUnsavedChangesGuard, useValidationHighlights } from '../hooks';
 import { useToast } from '../hooks/useToast';
 import { useTheme } from '../hooks/useTheme';
@@ -129,6 +130,7 @@ const ArricchisciEditorContent = () => {
   const [showEnrichDropdown, setShowEnrichDropdown] = useState(false);
 
   const modals = useMultiModal(['template', 'openapi', 'manual', 'datasource']);
+  const [showVersions, setShowVersions] = useState(false);
 
   const enrichmentValidation = useEnrichmentValidation();
   const preview   = usePreview(projectId, handleSaveQuiet);
@@ -512,6 +514,7 @@ const ArricchisciEditorContent = () => {
                 </div>
                 )}
               </div>
+              <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--versions" onClick={() => setShowVersions(true)} title="Versioni del canvas (snapshot / ripristino)">🕘 Versioni</button>
               <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--static" onClick={handleAddStaticValuesNode} title="Aggiungi valori statici con variabili template">📝 Valori Statici</button>
               <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--output" onClick={handleAddResultNode}>📁 Output</button>
               <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--carica" onClick={handleAddCaricanNode} disabled={!hasResultNode || hasCaricanNode} title="Aggiungi nodo per caricare su database">💾 Carica DB</button>
@@ -547,6 +550,9 @@ const ArricchisciEditorContent = () => {
   const modalsSlot = (
     <ModalErrorBoundary>
       <Suspense fallback={null}>
+      {showVersions && (
+        <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
+      )}
       <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title="🔗 Esegui Arricchimento" projectType="arricchisci" progress={execution.progress} progressMessage={execution.progressMessage} taskStatus={execution.taskStatus} onCancel={execution.cancelTask} caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user} />
       <CaricaricaModal isOpen={caricarica.showModal} onClose={() => caricarica.closeModal()} isExecuting={caricarica.isExecuting} result={caricarica.result} progress={caricarica.progress} progressMessage={caricarica.progressMessage} taskStatus={caricarica.taskStatus} caricaricaInfo={caricarica.caricaricaInfo} onCancel={caricarica.cancelTask} />
       <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}

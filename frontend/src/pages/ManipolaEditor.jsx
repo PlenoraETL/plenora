@@ -35,6 +35,7 @@ import PlenoraLogo from '../components/common/PlenoraLogo';
 // Modali lazy-loaded
 const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
 const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'));
+const CanvasVersionsModal = lazy(() => import('../components/modals/CanvasVersionsModal'));
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
 import AnnotationNode from '../components/nodes/AnnotationNode';
 import DataSourceNode from '../components/nodes/DataSourceNode';
@@ -82,6 +83,7 @@ const defaultEdgeOptions = {
 
 const ManipolaEditorContent = () => {
   const { projectId } = useParams();
+  const [showVersions, setShowVersions] = useState(false);
 
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -534,6 +536,7 @@ const ManipolaEditorContent = () => {
           {!isReadOnly && (
             <>
               <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--static" onClick={handleAddStaticValuesNode} title="Aggiungi valori statici con variabili template">📝 Valori Statici</button>
+              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--versions" onClick={() => setShowVersions(true)} title="Versioni del canvas (snapshot / ripristino)">🕘 Versioni</button>
               <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--annotation" onClick={handleAddCommentNode} title="Aggiungi annotazione al canvas">💬 Nota</button>
               <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--transform" onClick={handleAddTransformNode}>+ Transform</button>
               <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--join" onClick={handleAddMultiJoinNode} title="Unisci più sorgenti dati">🔗 Multi-Join</button>
@@ -572,6 +575,9 @@ const ManipolaEditorContent = () => {
   const modals = (
     <ModalErrorBoundary>
       <Suspense fallback={null}>
+        {showVersions && (
+          <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
+        )}
         <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title="🔄 Esecuzione Pipeline Manipola" projectType="manipola" caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user} />
         <ExecutionModal isOpen={caricaExecution.showModal} onClose={() => caricaExecution.closeModal()} isExecuting={caricaExecution.isExecuting} result={caricaExecution.result} title="📤 Caricamento Dati" projectType="arricchisci" progress={caricaExecution.progress} progressMessage={caricaExecution.progressMessage} taskStatus={caricaExecution.taskStatus} onCancel={caricaExecution.cancelTask} />
         <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}

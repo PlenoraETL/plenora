@@ -255,6 +255,48 @@ class ProjectService:
         row = project_db.update_project_row(project_id, **fields)
         return self.project_detail_row_to_metadata(row) if row else None
 
+    # ── Versioning canvas (#12) ────────────────────────────────────────────
+
+    def create_canvas_version(
+        self,
+        project_id: str,
+        label: Optional[str] = None,
+        group_id: Optional[str] = None,
+        created_by: Optional[str] = None,
+    ) -> Optional[dict]:
+        """Salva uno snapshot del canvas corrente. None se il progetto/canvas
+        non esiste. Mantiene al più le 30 versioni più recenti."""
+        canvas = self.get_project_canvas(project_id)
+        if canvas is None:
+            return None
+        version_id = uuid.uuid4().hex
+        clean_label = (label or "").strip()[:120] or None
+        project_db.insert_canvas_version(
+            version_id, project_id, group_id, clean_label,
+            canvas.model_dump(), created_by,
+        )
+        project_db.prune_canvas_versions(project_id, keep=30)
+        return {"id": version_id, "label": clean_label}
+
+    def list_canvas_versions(self, project_id: str) -> list[dict]:
+        return [dict(r) for r in project_db.list_canvas_versions(project_id)]
+
+    def restore_canvas_version(
+        self, project_id: str, version_id: str
+    ) -> Optional[CanvasState]:
+        """Ripristina il canvas del progetto a una versione salvata. None se la
+        versione non esiste. Passa per update_canvas → resetta canvas_validated
+        e cascata ai progetti a valle (come ogni salvataggio)."""
+        row = project_db.get_canvas_version(version_id, project_id)
+        if row is None:
+            return None
+        raw = row.get("canvas")
+        canvas_dict = raw if isinstance(raw, dict) else json.loads(raw)
+        canvas_dict = {k: v for k, v in canvas_dict.items() if not str(k).startswith("_")}
+        canvas = CanvasState(**canvas_dict)
+        self.update_canvas(project_id, canvas)
+        return canvas
+
     def rollback_created_project(
         self,
         project_id: str,

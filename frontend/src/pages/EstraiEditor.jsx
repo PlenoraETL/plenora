@@ -21,6 +21,7 @@ const JoinModal = lazy(() => import('../components/modals/JoinModal'));
 const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
 const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'));
 const CaricaricaModal = lazy(() => import('../components/modals/CaricaricaModal'));
+const CanvasVersionsModal = lazy(() => import('../components/modals/CanvasVersionsModal'));
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
 import AnnotationNode from '../components/nodes/AnnotationNode';
 import { ConfirmProvider } from '../context/ConfirmContext';
@@ -80,6 +81,7 @@ function EstraiEditor() {
   const [viewSearchQuery, setViewSearchQuery]     = useState('');
   const [viewsCollapsed, setViewsCollapsed]       = useState(false);
   const [tablesCollapsed, setTablesCollapsed]     = useState(false);
+  const [showVersions, setShowVersions]           = useState(false);
   const [visibleTableCount, setVisibleTableCount] = useState(TABLES_PAGE_SIZE);
   const [visibleViewCount,  setVisibleViewCount]  = useState(TABLES_PAGE_SIZE);
   const { theme, setTheme: toggleTheme } = useTheme();
@@ -407,6 +409,10 @@ function EstraiEditor() {
 
           {!isReadOnly && (
             <>
+              <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--versions"
+                onClick={() => setShowVersions(true)} title="Versioni del canvas (snapshot / ripristino)">
+                🕘 Versioni
+              </button>
               <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--annotation"
                 onClick={handleAddCommentNode} title="Aggiungi annotazione">
                 💬 Nota
@@ -633,6 +639,11 @@ function EstraiEditor() {
   const modals = (
     <ModalErrorBoundary>
       <Suspense fallback={null}>
+        {showVersions && (
+          <CanvasVersionsModal
+            isOpen onClose={() => setShowVersions(false)} projectId={projectId}
+          />
+        )}
         {edgeHandlers.showJoinModal && (
           <JoinModal
             edge={edgeHandlers.editingEdge || edgeHandlers.pendingEdge}

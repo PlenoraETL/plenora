@@ -82,6 +82,26 @@ export const updateProject = async (projectId, fields) => {
   return response.data;
 };
 
+/* ── Versioning canvas (#12) ─────────────────────────────────────────────── */
+
+/** Salva uno snapshot del canvas corrente. @returns {Promise<{id, label}>} */
+export const createCanvasVersion = async (projectId, label = null) => {
+  const response = await http.post(`/projects/${projectId}/versions`, { label: label || null });
+  return response.data;
+};
+
+/** Elenco versioni salvate. @returns {Promise<{versions: Array}>} */
+export const listCanvasVersions = async (projectId) => {
+  const response = await http.get(`/projects/${projectId}/versions`);
+  return response.data;
+};
+
+/** Ripristina il canvas a una versione. @returns {Promise<{canvas}>} */
+export const restoreCanvasVersion = async (projectId, versionId) => {
+  const response = await http.post(`/projects/${projectId}/versions/${versionId}/restore`);
+  return response.data;
+};
+
 /**
  * Restituisce tutti i progetti dell'utente.
  * @returns {Promise<Object>} { projects: [...] }
