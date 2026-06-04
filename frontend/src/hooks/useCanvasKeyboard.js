@@ -34,7 +34,10 @@ export function useCanvasKeyboard(options) {
     edges,
     onDeleteNode,
     setEdges,
-    enabled = true
+    enabled = true,
+    onUndo,          // #24: Ctrl/Cmd+Z
+    onRedo,          // #24: Ctrl/Cmd+Shift+Z o Ctrl/Cmd+Y
+    onBeforeDelete,  // #24: snapshot pre-delete (per rendere annullabile la cancellazione)
   } = options;
 
   // Pre-fix (P2 frontend-hooks): `handleKeyDown` aveva `[nodes,
@@ -62,10 +65,31 @@ export function useCanvasKeyboard(options) {
       return;
     }
 
+    // Undo/Redo (#24). Cmd/Ctrl+Z = undo; +Shift o Cmd/Ctrl+Y = redo.
+    if (event.metaKey || event.ctrlKey) {
+      const k = event.key.toLowerCase();
+      if (k === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) onRedo?.(); else onUndo?.();
+        return;
+      }
+      if (k === 'y') {
+        event.preventDefault();
+        onRedo?.();
+        return;
+      }
+    }
+
     // Gestisci Delete/Backspace
     if (event.key === 'Delete' || event.key === 'Backspace') {
-      // Elimina nodi selezionati
       const selectedNodes = nodesRef.current.filter(n => n.selected);
+      const selectedEdges0 = edgesRef.current.filter(e => e.selected);
+      // Snapshot PRE-delete una sola volta se c'è qualcosa da eliminare, così
+      // la cancellazione (nodo o edge) è annullabile con Ctrl+Z.
+      if ((selectedNodes.length > 0 || selectedEdges0.length > 0) && onBeforeDelete) {
+        onBeforeDelete();
+      }
+      // Elimina nodi selezionati
       if (selectedNodes.length > 0 && onDeleteNode) {
         selectedNodes.forEach(node => {
           onDeleteNode(node.id);
@@ -80,7 +104,7 @@ export function useCanvasKeyboard(options) {
         );
       }
     }
-  }, [onDeleteNode, setEdges]);
+  }, [onDeleteNode, setEdges, onUndo, onRedo, onBeforeDelete]);
 
   useEffect(() => {
     if (!enabled) return;

@@ -58,6 +58,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactFlow, { Background, Controls, MiniMap } from 'reactflow';
+import useCanvasStore from '../../store/useCanvasStore';
 
 import { isValidProjectId } from '../../utils/validateRouteParam';
 import { CanvasErrorBoundary } from '../common/ErrorBoundary';
@@ -146,6 +147,12 @@ canvasConfig = EMPTY_OBJ,
     children,
   } = slots;
 
+  // Undo/redo (#24): snapshot pre-interazione su drag-start e connessione,
+  // così spostamenti e nuovi edge sono annullabili con Ctrl+Z. takeSnapshot
+  // è no-op in sola lettura e dedup-safe.
+  const takeSnapshot = useCanvasStore(s => s.takeSnapshot);
+  const handleConnect = (conn) => { takeSnapshot(); onConnect?.(conn); };
+
   // Security guard: redirect a '/' se projectId non valido.
   useEffect(() => {
     if (!isValidProjectId(projectId)) {
@@ -215,7 +222,8 @@ canvasConfig = EMPTY_OBJ,
               edges={edges}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
+              onConnect={handleConnect}
+              onNodeDragStart={takeSnapshot}
               onEdgeClick={onEdgeClick}
               onEdgeContextMenu={onEdgeContextMenu}
               onInit={onInit}

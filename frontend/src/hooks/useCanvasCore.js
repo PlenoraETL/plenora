@@ -35,6 +35,12 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
   const handleSaveQuiet = useCanvasStore(s => s.handleSaveQuiet);
   const init           = useCanvasStore(s => s.init);
   const setReadOnly    = useCanvasStore(s => s.setReadOnly);
+  // Undo/redo (#24)
+  const undo           = useCanvasStore(s => s.undo);
+  const redo           = useCanvasStore(s => s.redo);
+  const takeSnapshot   = useCanvasStore(s => s.takeSnapshot);
+  const canUndo        = useCanvasStore(s => s.past.length > 0);
+  const canRedo        = useCanvasStore(s => s.future.length > 0);
 
   // Per i viewer (sola lettura) tutte le mutazioni del canvas (deleteNode,
   // updateNodeData, toggle*, *CalculatedColumn, updateColumnAlias,
@@ -87,6 +93,9 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
     edges,
     onDeleteNode: isReadOnly ? () => {} : deleteNode,
     setEdges: isReadOnly ? () => {} : setEdges,
+    onUndo: isReadOnly ? () => {} : undo,
+    onRedo: isReadOnly ? () => {} : redo,
+    onBeforeDelete: isReadOnly ? () => {} : takeSnapshot,
   });
 
 
@@ -139,6 +148,13 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
     // Operazioni nodi
     updateNodeData,
     deleteNode,
+
+    // Undo/redo (#24)
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    takeSnapshot,
 
     // Salvataggio
     handleSaveQuiet,

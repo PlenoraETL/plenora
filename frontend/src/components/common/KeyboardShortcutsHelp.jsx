@@ -22,8 +22,10 @@ const SHORTCUTS = [
   {
     group: 'Canvas (editor)',
     items: [
-      { keys: ['Canc'],        label: 'Elimina il nodo o il collegamento selezionato' },
-      { keys: ['Backspace'],   label: 'Elimina il nodo o il collegamento selezionato' },
+      { keys: ['Canc'],            label: 'Elimina il nodo o il collegamento selezionato' },
+      { keys: ['⌘/Ctrl', 'Z'],     label: 'Annulla (undo) l’ultima modifica' },
+      { keys: ['⌘/Ctrl', '⇧', 'Z'], label: 'Ripristina (redo)' },
+      { keys: ['⌘/Ctrl', 'Y'],     label: 'Ripristina (redo) — alternativa' },
     ],
   },
 ];

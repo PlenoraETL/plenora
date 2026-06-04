@@ -19,6 +19,14 @@ import { applyNodeChanges, applyEdgeChanges } from 'reactflow';
 import { updateCanvas } from '../api';
 import { serializeCanvas } from '../utils/canvasSerializer';
 
+// Undo/redo: profondità massima dello stack (oltre, si scarta il più vecchio).
+const HISTORY_LIMIT = 50;
+// Coalesce leading-edge: edit rapidi entro questa finestra (es. digitazione in
+// un campo del nodo) producono UNA sola snapshot (pre-burst), non una per
+// keystroke. lastSnapshotTs è module-level: lo store è singleton.
+const SNAPSHOT_COALESCE_MS = 350;
+let lastSnapshotTs = 0;
+
 const useCanvasStore = create(
   devtools(
     (set, get) => {
@@ -40,6 +48,14 @@ const useCanvasStore = create(
       edges:     [],
       projectId: null,
       mode:      'manipola',   // 'estrai' | 'manipola' | 'arricchisci'
+
+      // Undo/redo (#24): stack di snapshot {nodes, edges}. takeSnapshot()
+      // registra lo stato PRE-mutazione (chiamato dalle azioni discrete +
+      // drag-start/connect/delete); dedup per reference (gli array sono
+      // immutabili → due snapshot consecutivi senza modifiche sono === e
+      // vengono saltati). Cap a HISTORY_LIMIT per non crescere illimitato.
+      past:   [],
+      future: [],
 
       /**
        * Ultimo task result completato per questo canvas. Aggiornato da
@@ -129,7 +145,66 @@ const useCanvasStore = create(
         get().editorActionsRef.current = {};
         // NOTA: non resettiamo isReadOnly perché viene impostato subito dopo da
         // useCanvasCore (dipende dal ruolo utente, non dal progetto).
-        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, validationHighlights: [], lastValidationSummary: null }, false, 'reset');
+        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, validationHighlights: [], lastValidationSummary: null, past: [], future: [] }, false, 'reset');
+      },
+
+      // ── Undo/Redo (#24) ───────────────────────────────────────────────
+      /** Registra lo stato corrente nello stack `past` (da chiamare PRIMA di
+       *  mutare). Dedup per reference: se lo stato non è cambiato dall'ultimo
+       *  snapshot, no-op. Svuota `future` (nuovo ramo). No-op in sola lettura. */
+      takeSnapshot: () => {
+        const { nodes, edges, past, isReadOnly } = get();
+        if (isReadOnly) return;
+        const top = past[past.length - 1];
+        // dedup per reference: nessuna modifica dall'ultima snapshot.
+        if (top && top.nodes === nodes && top.edges === edges) return;
+        // coalesce: burst di edit rapidi (digitazione) → una sola snapshot.
+        const now = Date.now();
+        if (now - lastSnapshotTs < SNAPSHOT_COALESCE_MS) return;
+        lastSnapshotTs = now;
+        set({ past: [...past, { nodes, edges }].slice(-HISTORY_LIMIT), future: [] }, false, 'takeSnapshot');
+      },
+
+      /** Annulla l'ultima modifica strutturale del canvas. */
+      undo: () => {
+        const { past, isReadOnly } = get();
+        if (isReadOnly || past.length === 0) return;
+        lastSnapshotTs = 0;  // il prossimo edit dopo un undo deve poter snapshottare subito
+        set(
+          state => {
+            const previous = state.past[state.past.length - 1];
+            return {
+              nodes: previous.nodes,
+              edges: previous.edges,
+              past: state.past.slice(0, -1),
+              future: [{ nodes: state.nodes, edges: state.edges }, ...state.future].slice(0, HISTORY_LIMIT),
+              ...dirtyAndClearHighlights(),
+            };
+          },
+          false,
+          'undo',
+        );
+      },
+
+      /** Ripristina la modifica annullata. */
+      redo: () => {
+        const { future, isReadOnly } = get();
+        if (isReadOnly || future.length === 0) return;
+        lastSnapshotTs = 0;
+        set(
+          state => {
+            const next = state.future[0];
+            return {
+              nodes: next.nodes,
+              edges: next.edges,
+              past: [...state.past, { nodes: state.nodes, edges: state.edges }].slice(-HISTORY_LIMIT),
+              future: state.future.slice(1),
+              ...dirtyAndClearHighlights(),
+            };
+          },
+          false,
+          'redo',
+        );
       },
 
       /** Imposta le connessioni DB disponibili nell'editor. */
@@ -266,6 +341,7 @@ const useCanvasStore = create(
       /** Aggiorna i data di un nodo. Sostituisce onUpdate/onChange nei props. */
       updateNodeData: (nodeId, updates) => {
         if (get().isReadOnly) return;
+        get().takeSnapshot();
         set(
           state => ({
             nodes: state.nodes.map(n =>
@@ -284,6 +360,7 @@ const useCanvasStore = create(
       /** Elimina nodo e tutti gli edges collegati. Sostituisce onDelete nei props. */
       deleteNode: (nodeId) => {
         if (get().isReadOnly) return;
+        get().takeSnapshot();
         set(
           state => ({
             nodes: state.nodes.filter(n => n.id !== nodeId),
@@ -298,6 +375,7 @@ const useCanvasStore = create(
       /** Toggle visibilità di una singola colonna. Sostituisce onToggleColumn. */
       toggleColumn: (nodeId, columnIndex) => {
         if (get().isReadOnly) return;
+        get().takeSnapshot();
         set(
           state => ({
             nodes: state.nodes.map(n => {
@@ -316,6 +394,7 @@ const useCanvasStore = create(
       /** Toggle visibilità di tutte le colonne. Sostituisce onToggleAllColumns. */
       toggleAllColumns: (nodeId, makeVisible) => {
         if (get().isReadOnly) return;
+        get().takeSnapshot();
         set(
           state => ({
             nodes: state.nodes.map(n => {
@@ -338,6 +417,7 @@ const useCanvasStore = create(
       /** Aggiunge una colonna calcolata a un nodo. Sostituisce onAddCalculatedColumn. */
       addCalculatedColumn: (nodeId, columnDef) => {
         if (get().isReadOnly) return;
+        get().takeSnapshot();
         set(
           state => ({
             nodes: state.nodes.map(n => {
@@ -360,6 +440,7 @@ const useCanvasStore = create(
       /** Rimuove una colonna calcolata da un nodo. Sostituisce onDeleteCalculatedColumn. */
       removeCalculatedColumn: (nodeId, columnIndex) => {
         if (get().isReadOnly) return;
+        get().takeSnapshot();
         set(
           state => ({
             nodes: state.nodes.map(n => {
@@ -382,6 +463,7 @@ const useCanvasStore = create(
       /** Aggiorna alias colonna. Sostituisce onUpdateColumnAlias. */
       updateColumnAlias: (nodeId, columnIndex, newAlias) => {
         if (get().isReadOnly) return;
+        get().takeSnapshot();
         set(
           state => ({
             nodes: state.nodes.map(n => {
