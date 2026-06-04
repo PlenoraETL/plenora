@@ -161,6 +161,13 @@ export function useProjectListData() {
 
   useEffect(() => { reload(); }, [reload]);
 
+  // #optimistic-delete (Epic C): rimozione locale immediata di un progetto
+  // dalla lista (source of truth) senza round-trip né flash di loading. Il
+  // chiamante ripristina con reload() se la DELETE fallisce.
+  const removeProjectLocal = useCallback((id) => {
+    setProjects(prev => prev.filter(p => p.id !== id));
+  }, []);
+
   return {
     projects,
     connections,
@@ -175,6 +182,7 @@ export function useProjectListData() {
     runStatusByProject,
     loading,
     reload,
+    removeProjectLocal,
   };
 }
 

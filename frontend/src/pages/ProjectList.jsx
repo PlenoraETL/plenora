@@ -49,6 +49,7 @@ function ProjectList() {
     runStatusByProject,
     loading,
     reload: loadData,
+    removeProjectLocal,
   } = useProjectListData();
 
   // UI state
@@ -91,10 +92,15 @@ function ProjectList() {
       variant: 'danger',
     });
     if (!ok) return;
+    // Optimistic (Epic C): la card sparisce subito; su errore ripristiniamo
+    // lo stato reale con loadData(). Niente attesa del round-trip.
+    removeProjectLocal(id);
     try {
       await deleteProject(id);
-      loadData();
+      toast.success(`"${name}" eliminato`);
+      return;
     } catch (err) {
+      loadData();   // ripristina la card eliminata ottimisticamente
       // 409 cascade: il progetto ha dipendenze (eseguibili + progetti
       // downstream). Parsing via hub unificato (api/errors.js).
       const cascade = handleCascade409(err);
