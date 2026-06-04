@@ -67,6 +67,7 @@ const TableNode = memo(({ data, id }) => {
   const noneVisible = visibleCount === 0;
 
   // Selective subscription avoids re-renders when unrelated store state changes.
+  const projectId            = useCanvasStore(s => s.projectId);
   const updateNodeData       = useCanvasStore(s => s.updateNodeData);
   const deleteNode           = useCanvasStore(s => s.deleteNode);
   const confirm              = useConfirm();
@@ -401,6 +402,9 @@ const TableNode = memo(({ data, id }) => {
         onSave={handleSaveCalculatedColumn}
         columns={columns}
         dbType={dbType}
+        projectId={projectId}
+        tableName={tableName}
+        tableAlias={alias || 't'}
       />
 
 

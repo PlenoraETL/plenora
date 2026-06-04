@@ -418,3 +418,36 @@
   font-size: 11px;
   color: var(--plen-text, #1f2937);
 }
+
+/* #26 — anteprima formula su riga campione */
+.column-builder-sample {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--plen-surface-2, rgba(255,255,255,0.04));
+  border: 1px solid var(--plen-border, rgba(255,255,255,0.08));
+}
+.column-builder-sample__label {
+  color: var(--plen-text-dim, #8A93A6);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.column-builder-sample__val {
+  font-family: var(--plen-font-mono, monospace);
+  color: var(--plen-text, #E6EAF2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.column-builder-sample--error { border-color: rgba(245,166,35,0.5); }
+.column-builder-sample__err {
+  color: #F5A623;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.column-builder-sample--success { border-color: rgba(52,193,122,0.4); }

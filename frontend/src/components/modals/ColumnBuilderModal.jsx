@@ -7,7 +7,7 @@
  *
  * Dipende da: API /api/catalog/functions per la lista funzioni disponibili
  */
-import { getFunctionsCatalog, translateFunction } from '../../api/transforms';
+import { getFunctionsCatalog, translateFunction, previewFormula } from '../../api/transforms';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useToast } from '../../hooks/useToast';
 import { getColumnTypeIcon, getColumnTypeLabel } from '../../utils/columnUtils';
@@ -19,13 +19,16 @@ import './ColumnBuilderModal.css';
  * ColumnBuilderModal - Modal per costruire espressioni di colonne calcolate
  * REFACTORED: Usa ModalWrapper per struttura base
  */
-function ColumnBuilderModal({ 
-  isOpen, 
-  onClose, 
-  onSave, 
-  columns = [], 
+function ColumnBuilderModal({
+  isOpen,
+  onClose,
+  onSave,
+  columns = [],
   dbType = 'postgres',
-  existingColumn = null 
+  existingColumn = null,
+  projectId = null,
+  tableName = null,
+  tableAlias = 't',
 }) {
   const toast = useToast();
   // State
@@ -43,6 +46,9 @@ function ColumnBuilderModal({
   const [sqlPreview, setSqlPreview] = useState('');
   const [isManualEdit, setIsManualEdit] = useState(false);
   const [manualSql, setManualSql] = useState('');
+  // #26 anteprima formula su riga campione reale.
+  const [sample, setSample] = useState({ status: 'idle', value: null, error: null });
+  const canSample = !!(projectId && tableName);
 
   // Carica catalogo funzioni
   useEffect(() => {
@@ -143,6 +149,7 @@ function ColumnBuilderModal({
       // il preview cosi' l'utente vede "Configura un'espressione
       // valida" se prova a salvare.
       setSqlPreview('');
+      setSample({ status: 'idle', value: null, error: null });
       return;
     }
 
@@ -197,6 +204,31 @@ function ColumnBuilderModal({
       setSqlPreview(data.sql || '');
     } catch (err) {
       console.error('Errore preview SQL:', err);
+      return;
+    }
+
+    // #26: valuta la formula su una riga campione reale (solo se abbiamo il
+    // contesto progetto+tabella, es. ColumnBuilder aperto da un TableNode).
+    if (!canSample) return;
+    setSample({ status: 'loading', value: null, error: null });
+    try {
+      const res = await previewFormula({
+        project_id: projectId,
+        table_name: tableName,
+        table_alias: tableAlias || 't',
+        db_type: dbType,
+        column_name: columnName,
+        ...(useNested && nestedExpression
+          ? { expression: nestedExpression }
+          : { function_name: selectedFunction, params }),
+      });
+      if (res.success) {
+        setSample({ status: res.empty ? 'empty' : 'success', value: res.value, error: null });
+      } else {
+        setSample({ status: 'error', value: null, error: res.message || 'Errore anteprima' });
+      }
+    } catch (err) {
+      setSample({ status: 'error', value: null, error: humanizeError(err).message });
     }
   };
 
@@ -502,6 +534,23 @@ function ColumnBuilderModal({
             {currentFunctionDef && (
               <div className="column-builder-result-type">
                 Tipo risultato: {getColumnTypeIcon(currentFunctionDef.output_type)} {getColumnTypeLabel(currentFunctionDef.output_type)}
+              </div>
+            )}
+
+            {/* #26 — anteprima della formula su una riga campione reale */}
+            {!isManualEdit && canSample && sample.status !== 'idle' && (
+              <div className={`column-builder-sample column-builder-sample--${sample.status}`}>
+                <span className="column-builder-sample__label">▶ Su riga campione:</span>
+                {sample.status === 'loading' && <span className="column-builder-sample__val">…</span>}
+                {sample.status === 'success' && (
+                  <code className="column-builder-sample__val" title={sample.value ?? 'NULL'}>
+                    {sample.value === null || sample.value === undefined ? 'NULL' : sample.value}
+                  </code>
+                )}
+                {sample.status === 'empty' && <span className="column-builder-sample__val">tabella vuota</span>}
+                {sample.status === 'error' && (
+                  <span className="column-builder-sample__err" title={sample.error}>{sample.error}</span>
+                )}
               </div>
             )}
           </div>

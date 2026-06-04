@@ -44,3 +44,15 @@ export const translateFunction = async (payload) => {
   const response = await http.post('/functions/translate', payload);
   return response.data;
 };
+
+/**
+ * Valuta una formula (colonna calcolata) su una riga campione reale del
+ * progetto (#26). Solo modalità builder (function_name+params o expression).
+ * @param {Object} payload { project_id, table_name, db_type, table_alias,
+ *   column_name, function_name, params } oppure { ..., expression }
+ * @returns {Promise<{success: boolean, value?: string|null, empty?: boolean, message?: string}>}
+ */
+export const previewFormula = async (payload) => {
+  const response = await http.post('/functions/preview-formula', payload);
+  return response.data;
+};
