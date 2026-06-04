@@ -4,6 +4,7 @@ Provides pytest fixtures for tests2 tests.
 Centralizes local pytest setup for the surrounding test package.
 """
 
+import gc
 import os
 from pathlib import Path
 import shutil
@@ -235,6 +236,24 @@ def pytest_collection_modifyitems(config, items):
             and not run_cleanroom_excluded
         ):
             item.add_marker(skip_cleanroom_excluded)
+
+    # GC-thrash guard: le guardie architetturali AST-scan (es.
+    # test_db_service_facade_strangler_contract, test_app_models_shim_*) parse-ano
+    # ~1000+ file ciascuna. Con il grande grafo di import (app/, workers/, moduli
+    # di test) vivo in gen2, ogni alloc del parser innesca un ciclo GC che
+    # ri-scansiona quel set -> costo quadratico: la dir-lane `tests2/shared` (e la
+    # full-lane monolitica) si impallavano. `gc.freeze()` da solo non basta perche'
+    # i test importano altro codice DOPO la collection (la tassa ritorna). La suite
+    # non dipende dal collector ciclico per correttezza (il refcounting libera
+    # subito; le run complete giravano gia' con gc ON), quindi lo disabilitiamo per
+    # la durata della sessione e lo ripristiniamo in pytest_unconfigure.
+    gc.collect()
+    gc.freeze()
+    gc.disable()
+
+
+def pytest_unconfigure(config: object) -> None:
+    gc.enable()
 
 
 # DB-init isolation at session bootstrap

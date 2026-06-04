@@ -6,7 +6,6 @@ Read-only, non blocca nulla. Registry pulito → strutturale-only deterministico
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -99,10 +98,11 @@ def test_validate_reports_api_connection_stale(monkeypatch):
     svc.get_project_canvas.return_value = canvas
     monkeypatch.setattr(projects_router_module, "_project_service", svc)
     monkeypatch.setattr(projects_router_module, "assert_group_access", lambda *a, **k: None)
-    # connessione "gone" NON tra quelle esistenti
+    # connessione "gone" NON tra quelle esistenti. Il router risolve gli id via il
+    # SERVICE arricchisci (boundary di dominio), non più il leaf .db: mockiamo quello.
     monkeypatch.setattr(
-        "app.core.arricchisci.db.list_api_connection_rows",
-        lambda *a, **k: [SimpleNamespace(id="other")],
+        "app.core.arricchisci.api_connector.api_connection_service.list_api_connections",
+        lambda *a, **k: [{"id": "other"}],
     )
     app = FastAPI()
     app.dependency_overrides[require_not_esecutore] = lambda: _user()

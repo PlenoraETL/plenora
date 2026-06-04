@@ -326,7 +326,7 @@ def execute_enrichment_task(
                 **(node_data.get("data") or {}),
             }
 
-            def _progress(_percent, message):
+            def _progress(_percent: int, message: str):
                 update_task_progress(self, 50, message, task_id=task_id)
 
             executor = build_enrichment_executor(

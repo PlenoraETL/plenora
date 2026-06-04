@@ -200,12 +200,18 @@ def _scan_findings() -> list[tuple[str, int, str, str]]:
                     content = abs_path.read_text(encoding="utf-8")
                 except (OSError, UnicodeDecodeError):
                     continue
-                for i, line in enumerate(content.splitlines(), 1):
+                lines = content.splitlines()
+                for i, line in enumerate(lines, 1):
                     if _is_skip_line(line):
                         continue
                     for pname, pre in PATTERNS:
                         if pre.search(line):
-                            if _is_buffer_write(pname, line):
+                            # La call puo' essere multi-riga: `df.to_csv(` con il
+                            # primo arg (il buffer) sulla riga successiva. Includi
+                            # la riga dopo nella finestra cosi' il buffer-skip RAM
+                            # riconosce `to_csv(... buf)` anche se spezzato.
+                            window = line if i >= len(lines) else f"{line} {lines[i]}"
+                            if _is_buffer_write(pname, window):
                                 break
                             findings.append((rel_path, i, pname, line.strip()[:120]))
                             break

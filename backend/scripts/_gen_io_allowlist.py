@@ -280,20 +280,26 @@ def scan() -> list[tuple[str, int, str, str]]:
                     continue
                 try:
                     with open(path, encoding="utf-8") as fh:
-                        for i, line in enumerate(fh, 1):
-                            stripped = line.lstrip()
-                            if stripped.startswith("#"):
-                                continue
-                            if stripped.startswith('"""') or stripped.startswith("'''"):
-                                continue
-                            for pname, pre in PATTERNS:
-                                if pre.search(line):
-                                    if _is_buffer_write(pname, line):
-                                        break
-                                    findings.append((path, i, pname, line.strip()[:100]))
-                                    break
+                        lines = fh.readlines()
                 except (UnicodeDecodeError, OSError):
                     continue
+                for i, line in enumerate(lines, 1):
+                    stripped = line.lstrip()
+                    if stripped.startswith("#"):
+                        continue
+                    if stripped.startswith('"""') or stripped.startswith("'''"):
+                        continue
+                    for pname, pre in PATTERNS:
+                        if pre.search(line):
+                            # Call multi-riga: `df.to_csv(` con il primo arg (il
+                            # buffer) sulla riga successiva. Includi la riga dopo
+                            # nella finestra per il buffer-skip RAM (allineato al
+                            # contract test in tests2/io_boundary).
+                            window = line if i >= len(lines) else f"{line} {lines[i]}"
+                            if _is_buffer_write(pname, window):
+                                break
+                            findings.append((path, i, pname, line.strip()[:100]))
+                            break
     return findings
 
 

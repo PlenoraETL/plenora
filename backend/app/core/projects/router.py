@@ -872,7 +872,7 @@ def validate_project_canvas(
     try:
         from app.core.projects.canvas_validation import validate_project_chain
 
-        def _load(pid):
+        def _load(pid: str):
             # I ref project_source sono già autorizzati al PUT
             # (find_inaccessible_canvas_refs); qui risolviamo canvas+tipo.
             md = _project_service.get_project_metadata(pid)
