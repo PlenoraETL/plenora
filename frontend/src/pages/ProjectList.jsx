@@ -13,6 +13,7 @@ import EsegSelectorModal from '../components/projects/EsegSelectorModal';
 import ProjectSection from '../components/projects/ProjectSection';
 import ProjectCard from '../components/projects/ProjectCard';
 import ProjectListSkeleton from '../components/projects/ProjectListSkeleton';
+import QuickStart from '../components/projects/QuickStart';
 import EseguibiliSection from '../components/projects/EseguibiliSection';
 import { useProjectListData } from '../components/projects/useProjectListData';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
@@ -329,6 +330,14 @@ function ProjectList() {
               </div>
             ))}
           </div>
+          {projects.length === 0 ? (
+            <QuickStart
+              hasDataSource={connections.length + arcgisConnections.length + apiConnections.length + dataSources.length > 0}
+              canCreate={canCreateProj}
+              onNewProject={openModalForType}
+            />
+          ) : (
+            <>
 <ProjectSection
             id="pl-section-estrai"
             chipClass="pl__chip--estrai"
@@ -435,6 +444,8 @@ function ProjectList() {
             onExecute={(item) => setExecuteEseguibileId(item.id)}
             onDelete={(item) => handleDeleteEseguibile(item.id, item.name)}
           />
+            </>
+          )}
 
         </div>{/* /content */}
       </div>{/* /main */}

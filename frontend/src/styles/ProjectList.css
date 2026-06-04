@@ -786,3 +786,77 @@
 .pl__skel--line-lg { width: 70%; height: 16px; }
 .pl__skel--line-md { width: 90%; }
 .pl__skel--line-sm { width: 45%; }
+
+/* ── Quick Start onboarding (Epic B) ─────────────────────────────── */
+.pl__qs {
+  max-width: 620px;
+  margin: 24px auto;
+  padding: 32px 28px;
+  background: var(--pl-surface);
+  border: 1px solid var(--pl-border);
+  border-radius: 14px;
+  box-shadow: var(--pl-shadow);
+  text-align: center;
+}
+.pl__qs-icon {
+  font-size: 30px;
+  color: var(--pl-blue);
+  opacity: 0.9;
+  margin-bottom: 8px;
+}
+.pl__qs-title {
+  font-family: var(--pl-font-d);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 0 0 6px;
+  color: var(--pl-text);
+}
+.pl__qs-sub {
+  color: var(--pl-text-sub);
+  font-size: 13px;
+  margin: 0 0 22px;
+}
+.pl__qs-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.pl__qs-step {
+  display: flex;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--pl-border);
+  border-radius: 10px;
+  background: var(--pl-bg);
+}
+.pl__qs-step--done { opacity: 0.7; }
+.pl__qs-step-badge {
+  flex-shrink: 0;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--pl-font-m);
+  font-size: 13px; font-weight: 700;
+  background: var(--pl-surface-3);
+  color: var(--pl-text-sub);
+}
+.pl__qs-step--done .pl__qs-step-badge {
+  background: var(--pl-ok);
+  color: #04210f;
+}
+.pl__qs-step-title {
+  font-size: 14px; font-weight: 600;
+  color: var(--pl-text);
+  margin-bottom: 3px;
+}
+.pl__qs-step-desc {
+  font-size: 12px;
+  color: var(--pl-text-sub);
+  line-height: 1.45;
+}
+.pl__qs-step-btn { margin-top: 10px; }
