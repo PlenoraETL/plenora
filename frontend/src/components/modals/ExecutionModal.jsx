@@ -10,7 +10,28 @@ import { downloadProjectFile } from '../../api/projects';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import { role } from '../../utils/permissions';
+import { humanizeError, ERROR_MESSAGES } from '../../utils/errorMessages';
 import './ExecutionModal.css';
+
+// Etichette umane per i bare status token dei task carica (quando il backend
+// non fornisce né un codice né un error_message più specifico).
+const CARICA_STATUS_LABELS = {
+  write_error: 'Scrittura fallita.',
+  connection_error: 'Connessione fallita.',
+  validation_error: 'Dati non validi.',
+  failure: 'Esecuzione fallita.',
+};
+
+// Testo errore umano per un task carica (Epic A): codice strutturato mappato →
+// messaggio curato; altrimenti error_message del backend (tradotto se è un bare
+// status token); infine fallback per status.
+function caricaTaskErrorText(t) {
+  if (t.error && ERROR_MESSAGES[t.error]) return ERROR_MESSAGES[t.error].message;
+  const em = t.error_message && String(t.error_message).trim();
+  if (em) return CARICA_STATUS_LABELS[em] || em;
+  if (t.error) return humanizeError({ code: t.error }).message;
+  return CARICA_STATUS_LABELS[t.status] || 'Errore sconosciuto.';
+}
 
 // R-25 PR-B5: lista mode supportati lato BE (vedi
 // orchestrator/router.py:133-143 + arricchisci/router.py:792-801).
@@ -378,7 +399,7 @@ function ExecutionModal({
                         {t.status === 'success'
                           ? `${(t.rows_written || 0).toLocaleString()} righe scritte`
                           : (t.status === 'failure' || t.status === 'validation_error' || t.status === 'write_error' || t.status === 'connection_error')
-                          ? (t.error_message || t.error || 'Errore sconosciuto')
+                          ? caricaTaskErrorText(t)
                           : (t.message || 'In coda...')}
                       </span>
                     </div>
@@ -420,7 +441,9 @@ function ExecutionModal({
                 {taskStatus === 'revoked' ? 'Task annullato' : 'Errore esecuzione'}
               </h4>
               <p className="execution-modal__error-message">
-                {result.message || result.error || 'Errore sconosciuto'}
+                {taskStatus === 'revoked'
+                  ? (result.message || 'Task annullato')
+                  : humanizeError(result).message}
               </p>
             </div>
           )}

@@ -81,6 +81,11 @@ const startCaricaPolling = useCallback((caricaTask) => {
           : isBusinessError
           ? (data.result?.error_message || data.result?.message || businessStatus)
           : null;
+        // Codice strutturato (es. carica_arcgis_write_failed) propagato dal
+        // backend: lo conserviamo così il modal lo traduce in un messaggio
+        // umano azionabile (Epic A). Prima veniva scartato (error: null).
+        const effectiveCode = data.result?.error
+          || (data.status === 'failure' ? data.error : null);
 
         setCaricaTasks(prev => prev.map(t =>
           t.task_id === task_id
@@ -89,7 +94,7 @@ const startCaricaPolling = useCallback((caricaTask) => {
                 status: effectiveStatus,
                 message: data.result?.message || data.error || data.message || '',
                 rows_written: data.result?.rows_written || 0,
-                error: null,
+                error: effectiveStatus === 'failure' ? effectiveCode : null,
                 error_message: effectiveError,
               }
             : t
@@ -164,7 +169,10 @@ const startMainPolling = useCallback((taskIdToWatch) => {
         return true;
       } else if (data.status === 'failure') {
         setIsExecuting(false);
-        setResult({ success: false, message: data.error || 'Errore durante l\'esecuzione' });
+        // `code: data.error` → se il backend ha propagato un codice strutturato
+        // (es. memory_limit_exceeded) il modal lo traduce; altrimenti resta il
+        // messaggio originale (es. errore SQL, già informativo). Epic A.
+        setResult({ success: false, message: data.error || 'Errore durante l\'esecuzione', code: data.error });
         return true;
       } else if (data.status === 'revoked') {
         setIsExecuting(false);
