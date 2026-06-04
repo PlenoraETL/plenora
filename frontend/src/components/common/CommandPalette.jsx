@@ -22,6 +22,9 @@ const COMMANDS = [
   { label: 'Log',                      hint: 'Esecuzioni e log tecnici', path: '/logs',               icon: '📋' },
   { label: 'Eseguibili',               hint: 'Pipeline pubblicate',     path: '/eseguibili',          icon: '▶' },
   { label: 'Ticket',                   hint: 'Supporto',                path: '/tickets',             icon: '🎫' },
+  // Comando-azione (non navigazione): apre la guida scorciatoie (#33).
+  { label: 'Scorciatoie da tastiera',  hint: 'Guida tasti (?)',         icon: '⌨️',
+    action: () => window.dispatchEvent(new CustomEvent('plenora:open-shortcuts')) },
 ];
 
 export default function CommandPalette() {
@@ -64,7 +67,8 @@ export default function CommandPalette() {
   const go = useCallback((cmd) => {
     if (!cmd) return;
     setOpen(false);
-    navigate(cmd.path);
+    if (typeof cmd.action === 'function') cmd.action();
+    else navigate(cmd.path);
   }, [navigate]);
 
   const onKeyDown = (e) => {
@@ -104,7 +108,7 @@ export default function CommandPalette() {
             results.map((cmd, i) => (
               <button
                 type="button"
-                key={cmd.path}
+                key={cmd.path || cmd.label}
                 className={`cmdk__item${i === active ? ' cmdk__item--active' : ''}`}
                 onMouseEnter={() => setActive(i)}
                 onClick={() => go(cmd)}

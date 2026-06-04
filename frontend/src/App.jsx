@@ -16,6 +16,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppErrorBoundary } from './components/common/ErrorBoundary';
 import { ToastProvider } from './context/ToastContext';
 import CommandPalette from './components/common/CommandPalette';
+import KeyboardShortcutsHelp from './components/common/KeyboardShortcutsHelp';
 import { role, can } from './utils/permissions';
 
 // Lazy loading: ogni pagina viene caricata solo quando la route viene visitata.
@@ -152,6 +153,7 @@ function App() {
           <ToastProvider>
             <div className="app">
               <CommandPalette />
+              <KeyboardShortcutsHelp />
               <AppRoutes />
             </div>
           </ToastProvider>

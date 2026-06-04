@@ -1,0 +1,30 @@
+/* KeyboardShortcutsHelp.css — contenuto della guida scorciatoie (#33). */
+
+.kbd-help { display: flex; flex-direction: column; gap: 16px; }
+.kbd-help__group-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--color-text-muted, #6b7280);
+  margin-bottom: 8px;
+}
+.kbd-help__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 0;
+}
+.kbd-help__keys { display: inline-flex; gap: 4px; min-width: 130px; flex-shrink: 0; }
+.kbd-help__key {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--plen-font-mono, monospace);
+  color: var(--color-text-primary, #1f2937);
+  background: var(--color-bg-tertiary, #f3f4f6);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 2px 7px;
+}
+.kbd-help__label { font-size: 13px; color: var(--color-text-secondary, #4b5563); }
