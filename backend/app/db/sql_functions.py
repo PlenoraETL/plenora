@@ -939,6 +939,70 @@ class SqlFunctionTranslator(
 
 # FUNZIONI HELPER PUBBLICHE
 
+# Esempi d'uso per funzione (#20 roadmap: cheatsheet inline nel modal formula).
+# Una riga per funzione: sintassi di chiamata + (dove utile) il risultato. I nomi
+# dei parametri keyword (separator=, unit=, value=, format=, col2=) rispecchiano
+# quelli reali del catalogo. Tenuto come dict separato per non gonfiare i 49
+# costruttori FunctionDef; mergiato in get_function_catalog().
+FUNCTION_EXAMPLES: dict[str, str] = {
+    # Geometriche
+    "CENTROID":    "CENTROID(geom) → punto centrale della geometria",
+    "BUFFER":      "BUFFER(geom, 100) → area entro 100 m (unità della proiezione)",
+    "TRANSFORM":   "TRANSFORM(geom, 4326) → riproietta in EPSG:4326",
+    "AREA":        "AREA(geom) → es. 1532.7 (m² in proiezione metrica)",
+    "LENGTH":      "LENGTH(geom) → lunghezza della linea",
+    "PERIMETER":   "PERIMETER(geom) → perimetro del poligono",
+    "SIMPLIFY":    "SIMPLIFY(geom, 5) → geometria con meno vertici (tolleranza 5)",
+    "CONVEX_HULL": "CONVEX_HULL(geom) → poligono che racchiude tutti i punti",
+    "ENVELOPE":    "ENVELOPE(geom) → bounding box rettangolare (MBR)",
+    # Numeriche
+    "ROUND":    "ROUND(prezzo, 2) → 12.3456 diventa 12.35",
+    "ABS":      "ABS(saldo) → -50 diventa 50",
+    "CEIL":     "CEIL(7.2) → 8",
+    "FLOOR":    "FLOOR(7.8) → 7",
+    "MATH":     "MATH(prezzo, '*', value=1.22) → prezzo × 1.22 · oppure MATH(a, '+', col2=b)",
+    "MOD":      "MOD(numero, 2) → resto della divisione (0 = pari)",
+    "POWER":    "POWER(lato, 2) → lato²",
+    "SQRT":     "SQRT(area) → radice quadrata",
+    "SIGN":     "SIGN(saldo) → -1, 0 o 1 in base al segno",
+    "GREATEST": "GREATEST(q1, q2, q3) → il valore più alto",
+    "LEAST":    "LEAST(q1, q2, q3) → il valore più basso",
+    # Stringa
+    "UPPER":     "UPPER(nome) → \"rossi\" diventa \"ROSSI\"",
+    "LOWER":     "LOWER(email) → \"Mario@X\" diventa \"mario@x\"",
+    "TRIM":      "TRIM(codice) → \"  AB12  \" diventa \"AB12\"",
+    "CONCAT":    "CONCAT(nome, cognome, separator=' ') → \"Mario Rossi\"",
+    "SUBSTRING": "SUBSTRING(cf, 1, 3) → i primi 3 caratteri",
+    "REPLACE":   "REPLACE(tel, '+39', '') → rimuove il prefisso",
+    "LEFT":      "LEFT(cap, 2) → le prime 2 cifre",
+    "RIGHT":     "RIGHT(anno, 2) → \"2024\" diventa \"24\"",
+    "POSITION":  "POSITION(email, '@') → posizione della @ (0 se assente)",
+    "LTRIM":     "LTRIM(testo) → toglie gli spazi a sinistra",
+    "RTRIM":     "RTRIM(testo) → toglie gli spazi a destra",
+    # Data
+    "YEAR":         "YEAR(data) → 2024",
+    "MONTH":        "MONTH(data) → 6",
+    "DAY":          "DAY(data) → 15",
+    "NOW":          "NOW() → 2024-06-15 14:30:00",
+    "CURRENT_DATE": "CURRENT_DATE() → 2024-06-15",
+    "DATE_DIFF":    "DATE_DIFF(fine, inizio) → numero di giorni tra le due date",
+    "DATE_ADD":     "DATE_ADD(data, 30, unit='day') → data + 30 giorni",
+    "DATE_TRUNC":   "DATE_TRUNC(data, 'month') → primo giorno del mese",
+    "DATE_FORMAT":  "DATE_FORMAT(data, 'DD/MM/YYYY') → \"15/06/2024\"",
+    "EXTRACT":      "EXTRACT(data, 'hour') → l'ora (0-23)",
+    # Condizionali
+    "COALESCE":  "COALESCE(cell, tel, '—') → primo valore non vuoto",
+    "NULLIF":    "NULLIF(valore, 0) → NULL se il valore è 0",
+    "CASE_WHEN": "CASE_WHEN(eta, '>=', 18, 'adulto', 'minore') → \"adulto\" o \"minore\"",
+    "IIF":       "IIF(saldo, '<', 0, 'rosso', 'ok') → \"rosso\" se negativo, \"ok\" altrimenti",
+    # Cast
+    "TO_INTEGER": "TO_INTEGER(prezzo) → \"12.9\" diventa 12",
+    "TO_FLOAT":   "TO_FLOAT(testo) → \"3.14\" diventa 3.14",
+    "TO_STRING":  "TO_STRING(numero) → 42 diventa \"42\"",
+    "TO_DATE":    "TO_DATE(testo, format='DD/MM/YYYY') → \"15/06/2024\" diventa una data",
+}
+
+
 def get_function_catalog() -> JsonObject:
     """
     Restituisce il catalogo funzioni in formato serializzabile per il frontend.
@@ -956,6 +1020,7 @@ def get_function_catalog() -> JsonObject:
             "label": func_def.label,
             "category": func_def.category.value,
             "description": func_def.description,
+            "example": FUNCTION_EXAMPLES.get(nome, ""),
             "input_type": func_def.input_type,
             "output_type": func_def.output_type,
             "params": [

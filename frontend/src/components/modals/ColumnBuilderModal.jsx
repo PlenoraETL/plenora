@@ -98,6 +98,28 @@ function ColumnBuilderModal({
     return catalog.functions[selectedFunction];
   }, [catalog, selectedFunction]);
 
+  // Cheatsheet (#20): tutte le funzioni con esempio, raggruppate per categoria.
+  // Mostrata in modalità SQL manuale come riferimento rapido.
+  const cheatsheet = useMemo(() => {
+    if (!catalog?.functions) return [];
+    const labels = {
+      geometric: '🗺 Geometriche', numeric: '🔢 Numeriche', string: '🔤 Stringa',
+      date: '📅 Data', conditional: '🔀 Condizionali', cast: '🔄 Conversione',
+    };
+    const byCat = {};
+    Object.entries(catalog.functions).forEach(([name, f]) => {
+      if (!f.example) return;
+      (byCat[f.category] = byCat[f.category] || []).push({ name, label: f.label, example: f.example });
+    });
+    return Object.keys(labels)
+      .filter(cat => byCat[cat])
+      .map(cat => ({
+        cat,
+        label: labels[cat] || cat,
+        fns: byCat[cat].sort((a, b) => a.label.localeCompare(b.label)),
+      }));
+  }, [catalog]);
+
   // Aggiorna preview SQL quando cambia l'espressione.
   //  - debounce 350ms per evitare un POST /functions/translate per
   //    ogni keystroke nel wizard
@@ -399,6 +421,12 @@ function ColumnBuilderModal({
                   {currentFunctionDef.description}
                 </div>
               )}
+              {currentFunctionDef?.example && (
+                <div className="column-builder-func-example">
+                  <span className="column-builder-func-example__tag">es.</span>
+                  <code>{currentFunctionDef.example}</code>
+                </div>
+              )}
             </div>
 
             {/* Parametri */}
@@ -438,13 +466,30 @@ function ColumnBuilderModal({
             </div>
 
             {isManualEdit ? (
-              <textarea
-                value={manualSql}
-                onChange={e => setManualSql(e.target.value)}
-                placeholder="Scrivi l'espressione SQL manualmente..."
-                className="column-builder-sql-textarea"
-                rows={4}
-              />
+              <>
+                <textarea
+                  value={manualSql}
+                  onChange={e => setManualSql(e.target.value)}
+                  placeholder="Scrivi l'espressione SQL manualmente..."
+                  className="column-builder-sql-textarea"
+                  rows={4}
+                />
+                {cheatsheet.length > 0 && (
+                  <details className="column-builder-cheatsheet">
+                    <summary>📖 Cheatsheet funzioni ed esempi</summary>
+                    {cheatsheet.map(group => (
+                      <div key={group.cat} className="column-builder-cheatsheet__group">
+                        <div className="column-builder-cheatsheet__cat">{group.label}</div>
+                        {group.fns.map(fn => (
+                          <div key={fn.name} className="column-builder-cheatsheet__row">
+                            <code className="column-builder-cheatsheet__ex">{fn.example}</code>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </details>
+                )}
+              </>
             ) : (
               <div className="column-builder-preview">
                 <code className="column-builder-preview-code">
