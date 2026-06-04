@@ -4,6 +4,7 @@
   "private": true,
   "description": "Frontend per Canvas Query Builder - Gestione configurazioni query DB",
   "dependencies": {
+    "@sentry/react": "^10.56.0",
     "axios": "^1.6.2",
     "deck.gl": "^8.9.35",
     "leaflet": "^1.9.4",

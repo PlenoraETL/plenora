@@ -15,6 +15,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppErrorBoundary } from './components/common/ErrorBoundary';
 import { ToastProvider } from './context/ToastContext';
+import CommandPalette from './components/common/CommandPalette';
 import { role, can } from './utils/permissions';
 
 // Lazy loading: ogni pagina viene caricata solo quando la route viene visitata.
@@ -150,6 +151,7 @@ function App() {
         <AuthProvider>
           <ToastProvider>
             <div className="app">
+              <CommandPalette />
               <AppRoutes />
             </div>
           </ToastProvider>

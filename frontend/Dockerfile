@@ -17,6 +17,10 @@ COPY frontend/ ./
 ARG VITE_API_URL=http://localhost:5004
 ENV VITE_API_URL=${VITE_API_URL}
 
+# #35: Sentry DSN (opzionale). Vuoto di default -> Sentry no-op a runtime.
+ARG VITE_SENTRY_DSN=""
+ENV VITE_SENTRY_DSN=${VITE_SENTRY_DSN}
+
 RUN npm run build
 
 FROM nginx:1.27-alpine AS runtime
