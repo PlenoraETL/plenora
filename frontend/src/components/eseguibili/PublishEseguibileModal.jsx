@@ -9,6 +9,7 @@ import React, { useState } from 'react';
 import { createEseguibile } from '../../api';
 import { useToast } from '../../hooks/useToast';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
+import { humanizeError } from '../../utils/errorMessages';
 import './PublishEseguibileModal.css';
 
 // Preset di icone comuni — l'utente può sceglierne una o digitarne un'altra
@@ -44,7 +45,7 @@ function PublishEseguibileModal({ project, onClose, onSuccess }) {
       onSuccess && onSuccess(result);
       onClose();
     } catch (e) {
-      setError(e?.message || 'Errore pubblicazione');
+      setError(humanizeError(e).message);
     } finally {
       setSubmitting(false);
     }

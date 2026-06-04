@@ -20,6 +20,7 @@ import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useAuth } from '../context/AuthContext';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import { useToast } from '../hooks/useToast';
+import { toastApiError } from '../utils/toastApiError';
 import {
   addComment, deleteAttachment, deleteTicket, getTicket, getTicketsMeta,
   openAttachment, updateTicket, uploadAttachment,
@@ -72,7 +73,7 @@ export default function TicketDetail() {
       const result = await getTicket(id);
       setData(result);
     } catch (e) {
-      toast.error(e.message || 'Errore caricamento ticket');
+      toastApiError(toast, e, 'Errore caricamento ticket');
       if (e.response?.status === 404) navigate('/tickets');
     } finally {
       setLoading(false);
@@ -91,7 +92,7 @@ export default function TicketDetail() {
       toast.success(`Status aggiornato a "${newStatus}"`);
       load();
     } catch (e) {
-      toast.error(e.message || 'Errore aggiornamento');
+      toastApiError(toast, e, 'Errore aggiornamento');
     } finally {
       setSaving(false);
     }
@@ -103,7 +104,7 @@ export default function TicketDetail() {
       await updateTicket(id, { [field]: value });
       load();
     } catch (e) {
-      toast.error(e.message || `Errore aggiornamento ${field}`);
+      toastApiError(toast, e, `Errore aggiornamento ${field}`);
     } finally {
       setSaving(false);
     }
@@ -122,7 +123,7 @@ export default function TicketDetail() {
       setCommentBody('');
       load();
     } catch (err) {
-      toast.error(err.message || 'Errore invio commento');
+      toastApiError(toast, err, 'Errore invio commento');
     } finally {
       setSaving(false);
     }
@@ -136,9 +137,7 @@ export default function TicketDetail() {
         await uploadAttachment(id, file);
         toast.success(`Allegato "${file.name}" caricato`);
       } catch (err) {
-        toast.error(
-          err.message || `Errore upload ${file.name}`,
-        );
+        toastApiError(toast, err, `Errore upload ${file.name}`);
       }
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -165,7 +164,7 @@ export default function TicketDetail() {
       toast.success('Ticket eliminato');
       navigate('/tickets');
     } catch (e) {
-      toast.error(e.message || 'Errore eliminazione ticket');
+      toastApiError(toast, e, 'Errore eliminazione ticket');
     }
   };
 
@@ -173,7 +172,7 @@ export default function TicketDetail() {
     try {
       await openAttachment(id, attachmentId, filename);
     } catch (e) {
-      toast.error(e.message || 'Errore apertura allegato');
+      toastApiError(toast, e, 'Errore apertura allegato');
     }
   };
 
@@ -189,7 +188,7 @@ export default function TicketDetail() {
       await deleteAttachment(id, attachmentId);
       load();
     } catch (e) {
-      toast.error(e.message || 'Errore rimozione allegato');
+      toastApiError(toast, e, 'Errore rimozione allegato');
     }
   };
 

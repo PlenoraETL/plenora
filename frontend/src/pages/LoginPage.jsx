@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import { role } from '../utils/permissions';
 import { useTheme } from '../hooks/useTheme';
 import PlenoraLogo from '../components/common/PlenoraLogo';
+import { humanizeError } from '../utils/errorMessages';
 import '../styles/LoginPage.css';
 
 // Helper: dove mandare l'utente dopo il login in base al ruolo.
@@ -137,7 +138,7 @@ export default function LoginPage() {
         setNeedsMfa(true);
         setError("Inserisci il codice MFA per completare l'accesso.");
       } else {
-        setError(err.message || 'Credenziali non valide.');
+        setError(humanizeError(err).message);
       }
     } finally {
       setLoading(false);

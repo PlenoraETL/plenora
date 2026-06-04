@@ -17,6 +17,8 @@ import ChangePasswordModal from '../components/ChangePasswordModal';
 import AppSidebar from '../components/AppSidebar';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
 import { can, role } from '../utils/permissions';
+import { toastApiError } from '../utils/toastApiError';
+import { humanizeError } from '../utils/errorMessages';
 import '../styles/UserManager.css';
 function RoleBadge({ role }) {
   const labels = {
@@ -75,7 +77,7 @@ function UserModal({ user, groups, currentUser, onClose, onSave }) {
       await onSave(payload);
       onClose();
     } catch (e) {
-      setError(e.message || 'Errore salvataggio');
+      setError(humanizeError(e).message);
     } finally {
       setLoading(false);
     }
@@ -178,7 +180,7 @@ function ResetPasswordModal({ user, onClose, onSave }) {
     if (newPassword.length < 12) return setError('Minimo 12 caratteri');
     setLoading(true); setError('');
     try { await onSave(newPassword); onClose(); }
-    catch (e) { setError(e.message || 'Errore reset'); }
+    catch (e) { setError(humanizeError(e).message); }
     finally { setLoading(false); }
   };
 
@@ -220,7 +222,7 @@ function GroupModal({ onClose, onSave }) {
     if (!/^[a-z0-9_-]+$/.test(form.group_id)) return setError('ID gruppo: solo lettere minuscole, numeri, - e _');
     setLoading(true); setError('');
     try { await onSave(form); onClose(); }
-    catch (e) { setError(e.message || 'Errore creazione gruppo'); }
+    catch (e) { setError(humanizeError(e).message); }
     finally { setLoading(false); }
   };
 
@@ -316,7 +318,7 @@ function ConfirmDeleteGroupModal({ group, onClose, onConfirm }) {
   const handleConfirm = async () => {
     setDeleting(true); setError('');
     try { await onConfirm(); onClose(); }
-    catch (e) { setError(e.message || 'Errore durante l\'eliminazione'); setDeleting(false); }
+    catch (e) { setError(humanizeError(e).message); setDeleting(false); }
   };
 
   const summaryItems = summary ? [
@@ -420,7 +422,7 @@ export default function UserManager() {
       // il dettaglio errore — non distinguibile 403 (utente non
       // autorizzato, redirect mancante) da 500 (DB down). Post-fix:
       // catturiamo `e` e mostriamo `e?.message` come fallback.
-      toast.error(e?.message || 'Errore caricamento dati');
+      toastApiError(toast, e, 'Errore caricamento dati');
     } finally {
       setLoading(false);
     }

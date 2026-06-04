@@ -14,6 +14,7 @@ import React, { useState, useRef } from 'react';
 import { createTicket } from '../api/tickets';
 import { useToast } from '../hooks/useToast';
 import useDialogFocus from '../hooks/useDialogFocus';
+import { toastApiError } from '../utils/toastApiError';
 
 
 export default function TicketCreateModal({ meta, userRole, onClose, onCreated }) {
@@ -52,7 +53,7 @@ export default function TicketCreateModal({ meta, userRole, onClose, onCreated }
       });
       onCreated?.(created);
     } catch (err) {
-      toast.error(err.message || 'Errore creazione ticket');
+      toastApiError(toast, err, 'Errore creazione ticket');
     } finally {
       setSubmitting(false);
     }

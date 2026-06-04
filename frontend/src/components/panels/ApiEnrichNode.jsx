@@ -17,6 +17,7 @@ import { getApiConnection } from '../../api/apiConnections';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Handle, Position, useReactFlow, useStore } from 'reactflow';
 import { getColumnTypeIcon, getColumnTypeLabel } from '../../utils/columnUtils';
+import { humanizeError } from '../../utils/errorMessages';
 import useCanvasStore from '../../store/useCanvasStore';
 import './ApiEnrichNode.css';
 import RunHistoryModal from '../modals/RunHistoryModal';
@@ -860,7 +861,7 @@ function ExtraFileSlot({ field, label, current, onUploaded, onRemoved }) {
         size:             fs.file_size || file.size,
       });
     } catch (err) {
-      setError(err?.message || 'Upload fallito');
+      setError(humanizeError(err).message);
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = '';

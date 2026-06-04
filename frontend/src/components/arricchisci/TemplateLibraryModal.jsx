@@ -5,6 +5,7 @@
 import { getTemplates } from '../../api/templates';
 import React, { useState, useEffect, useMemo } from 'react';
 import ModalWrapper from '../common/ModalWrapper';
+import { humanizeError } from '../../utils/errorMessages';
 import './TemplateLibraryModal.css';
 
 const CATEGORIES = {
@@ -117,7 +118,7 @@ function TemplateLibraryModal({ onClose, onSelectTemplate }) {
         const data = await getTemplates();
         if (data.success) setTemplates(data.templates || []);
         else throw new Error(data.error || 'Errore caricamento template');
-      } catch (err) { setError(err.message); }
+      } catch (err) { setError(humanizeError(err).message); }
       finally { setLoading(false); }
     };
     load();

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { createProject } from '../../api';
 import { useToast } from '../../hooks/useToast';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
+import { toastApiError } from '../../utils/toastApiError';
 
 const TYPE_META = {
   estrai:      { icon: '↓', label: 'Estrai',      btn: '↓ Estrai' },
@@ -51,7 +52,7 @@ function NewProjectModal({
       onCreated?.();
       onClose?.();
     } catch (err) {
-      toast.error('Errore creazione: ' + (err.message || 'errore sconosciuto'));
+      toastApiError(toast, err, 'Errore creazione');
     } finally {
       setCreating(false);
     }

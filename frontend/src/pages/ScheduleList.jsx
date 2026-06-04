@@ -276,7 +276,7 @@ function ScheduleList() {
       setSchedules(prev => prev.map(s =>
         s.id === id ? { ...s, runtime: { ...(s.runtime || {}), status: prevStatus } } : s
       ));
-      toast.error('Errore: ' + (e.message || 'errore sconosciuto'));
+      toastApiError(toast, e, 'Errore');
       setRunningManual(prev => { const n={...prev}; delete n[id]; return n; });
       setRunStartTimes(prev => { const n={...prev}; delete n[id]; return n; });
     }

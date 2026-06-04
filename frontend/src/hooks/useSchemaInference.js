@@ -7,6 +7,7 @@
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { getProjectSchemas, getNodeSchema, validateProjectConnection, validateAllProjectSources } from '../api';
+import { humanizeError } from '../utils/errorMessages';
 import { useMountedRef } from './useMountedRef';
 
 /**
@@ -71,7 +72,7 @@ export function useSchemaInference(projectId) {
       console.error('[useSchemaInference] Errore caricamento schemi:', err);
       if (!mountedRef.current) return;
       if (myRequestId !== requestIdRef.current) return;
-      setError(err.message);
+      setError(humanizeError(err).message);
     } finally {
       if (mountedRef.current && myRequestId === requestIdRef.current) {
         setLoading(false);

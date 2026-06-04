@@ -18,6 +18,7 @@ import { useTaskPolling } from '../../hooks/useTaskPolling';
 import useDialogFocus from '../../hooks/useDialogFocus';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import { toastApiError } from '../../utils/toastApiError';
+import { humanizeError } from '../../utils/errorMessages';
 import './EseguibileExecuteWizard.css';
 
 const OUTPUT_FORMATS = [
@@ -80,7 +81,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
         setOutputName(data.default_output_name || '');
       } catch (e) {
         if (!mounted) return;
-        setError(e?.message || 'Errore caricamento');
+        setError(humanizeError(e).message);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -102,7 +103,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
       setMapping({ ...result.auto_mapping });
       setStep(2);
     } catch (e) {
-      setError(e?.message || 'Errore upload');
+      setError(humanizeError(e).message);
     } finally {
       setUploading(false);
     }
@@ -129,7 +130,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
       setTaskMessage('Task in coda...');
       startTaskPolling(resp.task_id);
     } catch (e) {
-      setError(e?.message || 'Errore esecuzione');
+      setError(humanizeError(e).message);
       setExecuting(false);
     }
   };

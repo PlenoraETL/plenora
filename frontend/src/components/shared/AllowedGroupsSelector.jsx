@@ -22,6 +22,7 @@ import { listGroups } from '../../api/users';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../hooks/useToast';
 import { can } from '../../utils/permissions';
+import { humanizeError } from '../../utils/errorMessages';
 import './AllowedGroupsSelector.css';
 
 const MAGIC_ALL = '*';
@@ -87,7 +88,7 @@ function AllowedGroupsSelector({
       } else {
         console.error('[AllowedGroupsSelector] listGroups fallita:', groupsRes.reason);
         setAllGroups([]);
-        setError(`Caricamento gruppi fallito: ${groupsRes.reason?.message || 'errore'}`);
+        setError(`Caricamento gruppi fallito: ${humanizeError(groupsRes.reason).message}`);
       }
 
       // Shares: 404 è "nessuna share" (non è errore), gli altri errori sì
@@ -104,7 +105,7 @@ function AllowedGroupsSelector({
         setInitialSelected([]);
       } else {
         console.error('[AllowedGroupsSelector] getShares fallita:', sharesRes.reason);
-        setError(prev => prev || `Caricamento condivisioni fallito: ${sharesRes.reason?.message || 'errore'}`);
+        setError(prev => prev || `Caricamento condivisioni fallito: ${humanizeError(sharesRes.reason).message}`);
       }
     } finally {
       setLoading(false);

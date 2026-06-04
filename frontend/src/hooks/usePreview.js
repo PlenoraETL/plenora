@@ -8,6 +8,7 @@
  */
 import { useState, useCallback, useRef } from 'react';
 import { previewProject } from '../api';
+import { humanizeError } from '../utils/errorMessages';
 import { useTaskPolling } from './useTaskPolling';
 
 const POLL_INTERVAL = 1000;
@@ -98,7 +99,7 @@ export function usePreview(projectId, onBeforePreview = null) {
     } catch (err) {
       console.error('[usePreview] Errore:', err);
       setLoading(false);
-      setError(err.message || 'Errore durante la preview');
+      setError(humanizeError(err).message);
     }
   }, [projectId, onBeforePreview, startPolling, mountedRef]);
 

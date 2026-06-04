@@ -65,6 +65,7 @@ import { getProject, listProjects }    from '../api/projects';
 import { listConnections, getConnectionTables } from '../api/connections';
 import { listFeatureConnections }       from '../api/features';
 import { getFiles }                     from '../api/files';
+import { humanizeError }                from '../utils/errorMessages';
 
 /**
  * Hook per il caricamento dati iniziale degli editor URBY-ETL.
@@ -248,7 +249,7 @@ useEffect(() => {
       } catch (err) {
         if (cancelled) return;
         console.error('[useEditorData] Errore caricamento:', err);
-        setError(err.message || 'Errore caricamento progetto');
+        setError(humanizeError(err).message);
       } finally {
         if (!cancelled) setLoading(false);
       }

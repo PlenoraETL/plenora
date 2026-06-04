@@ -12,6 +12,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useToast } from '../../hooks/useToast';
 import { getColumnTypeIcon, getColumnTypeLabel } from '../../utils/columnUtils';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
+import { humanizeError } from '../../utils/errorMessages';
 import './ColumnBuilderModal.css';
 
 /**
@@ -76,7 +77,7 @@ function ColumnBuilderModal({
       const data = await getFunctionsCatalog();
       setCatalog(data);
     } catch (err) {
-      setError(`Errore caricamento catalogo: ${err.message}`);
+      setError(humanizeError(err).message);
     } finally {
       setLoading(false);
     }

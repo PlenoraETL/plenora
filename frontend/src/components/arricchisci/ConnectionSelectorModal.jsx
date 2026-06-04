@@ -8,6 +8,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { listApiConnections } from '../../api/apiConnections';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
+import { humanizeError } from '../../utils/errorMessages';
 import './ConnectionSelectorModal.css';
 
 /**
@@ -44,7 +45,7 @@ function ConnectionSelectorModal({
         setConnections(data.api_connections || []);
       } catch (err) {
         console.error(`Errore caricamento connessioni ${category}:`, err);
-        setError(err.message);
+        setError(humanizeError(err).message);
       } finally {
         setLoading(false);
       }

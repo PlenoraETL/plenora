@@ -11,6 +11,7 @@ import React, { useState, useEffect, memo } from 'react';
 import { Handle, Position } from 'reactflow';
 import { getFile } from '../../api/files';
 import { getColumnTypeIcon, getColumnTypeLabel, normalizeColumnType } from '../../utils/columnUtils';
+import { humanizeError } from '../../utils/errorMessages';
 import useCanvasStore from '../../store/useCanvasStore';
 import './FileSourceNode.css';
 
@@ -62,7 +63,7 @@ const FileSourceNode = ({ id, data }) => {
       
     } catch (err) {
       console.error(`[FileSourceNode] Errore caricamento file ${fileId}:`, err);
-      setError(`Errore: ${err.message}`);
+      setError(humanizeError(err).message);
     } finally {
       setLoading(false);
     }

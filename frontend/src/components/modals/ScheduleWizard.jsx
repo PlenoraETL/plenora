@@ -8,6 +8,7 @@ import { listProjects, listConnections } from '../../api';
 import { createSchedule, updateSchedule, getSchedule } from '../../api/schedules';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import Wizard from '../common/Wizard';
+import { toastApiError } from '../../utils/toastApiError';
 import './ScheduleWizard.css';
 
 const STEPS = [
@@ -178,7 +179,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
       toast.success(editId ? 'Schedule aggiornato' : 'Schedule creato');
       onCreated();
     } catch (e) {
-      toast.error('Errore: ' + (e.message || 'errore sconosciuto'));
+      toastApiError(toast, e, 'Errore');
     } finally {
       setSaving(false);
     }

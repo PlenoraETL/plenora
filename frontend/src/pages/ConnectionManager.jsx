@@ -107,7 +107,7 @@ function ConnectionManager() {
       // Catch globale per errori NON gestiti da allSettled (es. typo nel
       // codice sopra). Toast esplicito invece di silent console.error.
       console.error('[ConnectionManager] loadConnections fallito:', err);
-      toast.error(err?.message || 'Errore caricamento connessioni');
+      toastApiError(toast, err, 'Errore caricamento connessioni');
     } finally {
       setLoading(false);
     }
@@ -154,7 +154,7 @@ function ConnectionManager() {
       }
       handleCloseModal(); loadConnections();
     } catch (err) {
-      toast.error(`Errore: ${err.message}`);
+      toastApiError(toast, err, 'Errore');
     } finally { setSaving(false); }
   };
 

@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import AppSidebar from '../components/AppSidebar';
 import { getRuntimeConfig } from '../api/adminRuntimeConfig';
 import { useToast } from '../hooks/useToast';
+import { toastApiError } from '../utils/toastApiError';
 import '../styles/AdminRuntimeConfigPage.css';
 
 const ESSENTIAL_KEYS = new Set([
@@ -130,7 +131,7 @@ export default function AdminRuntimeConfigPage() {
     try {
       setData(await getRuntimeConfig());
     } catch (e) {
-      toast.error(e.message || 'Errore caricamento configurazione');
+      toastApiError(toast, e, 'Errore caricamento configurazione');
     } finally {
       setLoading(false);
     }

@@ -11,6 +11,7 @@ import React, { useState, useEffect, memo } from 'react';
 import { Handle, Position } from 'reactflow';
 import { getProject } from '../../api';
 import { getColumnTypeIcon, getColumnTypeLabel, isGeometryType, getColumnSRID, normalizeColumnType } from '../../utils/columnUtils';
+import { humanizeError } from '../../utils/errorMessages';
 import useCanvasStore from '../../store/useCanvasStore';
 import './ProjectSourceNode.css';
 
@@ -124,7 +125,7 @@ const ProjectSourceNode = ({ id, data }) => {
       
     } catch (err) {
       console.error(`[ProjectSourceNode] Errore caricamento progetto ${projectId}:`, err);
-      setError(`Errore caricamento: ${err.message}`);
+      setError(humanizeError(err).message);
     } finally {
       setLoading(false);
     }

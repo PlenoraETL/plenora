@@ -13,6 +13,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
+import { humanizeError } from '../../utils/errorMessages';
 import {
   listFeatureConnections,
   createFeatureConnection,
@@ -97,7 +98,7 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
       const data = await listFeatureConnections();
       setConnections(data.connections || data || []);
     } catch (err) {
-      setError(`Errore caricamento connessioni: ${err.message}`);
+      setError(humanizeError(err).message);
     } finally {
       setLoadingConnections(false);
     }
@@ -113,7 +114,7 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
       const data = await browseServices(conn.id);
       setServices(data.services || data || []);
     } catch (err) {
-      setError(`Errore browse servizi: ${err.message}`);
+      setError(humanizeError(err).message);
       setServices([]);
     } finally {
       setLoadingServices(false);
@@ -130,7 +131,7 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
       const data = await browseLayers(selectedConnection.id, service.url);
       setLayers(data.layers || data || []);
     } catch (err) {
-      setError(`Errore browse layer: ${err.message}`);
+      setError(humanizeError(err).message);
       setLayers([]);
     } finally {
       setLoadingLayers(false);

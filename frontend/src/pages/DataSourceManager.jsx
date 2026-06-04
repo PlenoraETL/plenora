@@ -16,6 +16,8 @@ import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import AppSidebar from '../components/AppSidebar';
 import ThemeToggle from '../components/common/ThemeToggle';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
+import { toastApiError } from '../utils/toastApiError';
+import { humanizeError } from '../utils/errorMessages';
 import useDialogFocus from '../hooks/useDialogFocus';
 import { can, role } from '../utils/permissions';
 import '../styles/DataSourceManager.css';
@@ -93,7 +95,7 @@ export default function DataSourceManager() {
 
   const load = useCallback(async () => {
     try { setLoading(true); setError(null); const d = await listDataSources(); setDatasources(d.datasources || []); }
-    catch (e) { setError(e.message); }
+    catch (e) { setError(humanizeError(e).message); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -117,7 +119,7 @@ export default function DataSourceManager() {
     try {
       if (editing) await updateDataSource(editing.id, payload); else await createDataSource(payload);
       closeModal(); await load();
-    } catch (e) { setFormError(e.message); }
+    } catch (e) { setFormError(humanizeError(e).message); }
     finally { setSaving(false); }
   };
 
@@ -149,7 +151,7 @@ export default function DataSourceManager() {
         );
         return;
       }
-      toast.error(`Errore: ${e.message}`);
+      toastApiError(toast, e, 'Errore');
     } finally {
       setDeletingId(null);
     }

@@ -74,7 +74,7 @@ export function useInlinePreview(projectId) {
       }
     } catch (err) {
       console.error('[useInlinePreview] Errore:', err);
-      setError(err.message || 'Errore durante l\'anteprima');
+      setError(humanizeError(err).message);
       setStatus('error');
     }
   }, [projectId, startPolling, mountedRef]);

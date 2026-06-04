@@ -18,6 +18,7 @@ import AppSidebar from '../components/AppSidebar';
 import TicketCreateModal from '../components/TicketCreateModal';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../hooks/useToast';
+import { toastApiError } from '../utils/toastApiError';
 import { getTicketsMeta, listTickets } from '../api/tickets';
 import '../styles/TicketsList.css';
 
@@ -92,7 +93,7 @@ export default function TicketsList() {
       });
       setTickets(result);
     } catch (e) {
-      toast.error(e.message || 'Errore caricamento ticket');
+      toastApiError(toast, e, 'Errore caricamento ticket');
     } finally {
       setLoading(false);
     }

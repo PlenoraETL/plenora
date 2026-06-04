@@ -35,6 +35,7 @@ import { describeAccessDeniedNodes } from '../utils/canvasAccessControl';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
 import useCanvasStore from '../store/useCanvasStore';
 import { useToast } from '../hooks/useToast';
+import { toastApiError } from '../utils/toastApiError';
 import { useTheme } from '../hooks/useTheme';
 import '../styles/EstraiEditor.css';
 import '../components/nodes/StaticValuesNode.css';
@@ -163,7 +164,7 @@ function EstraiEditor() {
     }
     let schema;
     try { schema = await getLayerSchema(originNode.data.connection_id, relation.related_url); }
-    catch (err) { toast.error(`Errore caricamento schema: ${err.message}`); return; }
+    catch (err) { toastApiError(toast, err, 'Errore caricamento schema'); return; }
     const newNodeId = `fl_${Date.now()}`;
     const columns   = (schema.fields || []).map(f => ({ name: f.name, type: f.field_type || f.type || 'str', alias: null, visible: true }));
     const newNode   = {
