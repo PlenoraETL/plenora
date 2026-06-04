@@ -1,11 +1,25 @@
 metadata:
   generated_at: '2026-05-25'
-  baseline_total: 0
-  by_pattern: {}
-  by_phase: {}
+  baseline_total: 2
+  by_pattern:
+    df_to_csv_path: 2
+  by_phase:
+    Phase5-export-csv-xlsx: 2
   note: 'Auto-generated dal sweep filesystem-pattern. Aggiungere motivo/target/replacement quando si migra. Il contract test
     legge questa lista come allowlist: NUOVI usi fuori lista falliscono, ESISTENTI sono tollerati con motivo esplicito di
     fase di migrazione.'
   policy: 'Decrementale: ogni migrazione che chiude un callsite DEVE rimuoverlo dalla allowlist. A fine refactor la lista
     deve essere vuota (criterio in refactor_io_storage_ram_only.md sezione ''Criterio di fine refactor'').'
-allowed_callsites: []
+allowed_callsites:
+- file: app/core/dataframes/export_writer.py
+  line: 75
+  pattern: df_to_csv_path
+  snippet: df.to_csv(
+  phase: Phase5-export-csv-xlsx
+  status: active-legacy
+- file: app/core/dataframes/export_writer.py
+  line: 204
+  pattern: df_to_csv_path
+  snippet: df.to_csv(
+  phase: Phase5-export-csv-xlsx
+  status: active-legacy
