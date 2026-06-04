@@ -20,6 +20,7 @@ from app.core.projects.models import (
     ProjectMetadata,
     ProjectCreate,
     ProjectList,
+    CanvasVersionRef,
 )
 from app.core.projects.canvas_models import (
     CanvasState,
@@ -263,7 +264,7 @@ class ProjectService:
         label: Optional[str] = None,
         group_id: Optional[str] = None,
         created_by: Optional[str] = None,
-    ) -> Optional[dict]:
+    ) -> Optional[CanvasVersionRef]:
         """Salva uno snapshot del canvas corrente. None se il progetto/canvas
         non esiste. Mantiene al più le 30 versioni più recenti."""
         canvas = self.get_project_canvas(project_id)
@@ -276,10 +277,18 @@ class ProjectService:
             canvas.model_dump(), created_by,
         )
         project_db.prune_canvas_versions(project_id, keep=30)
-        return {"id": version_id, "label": clean_label}
+        return CanvasVersionRef(id=version_id, label=clean_label)
 
-    def list_canvas_versions(self, project_id: str) -> list[dict]:
-        return [dict(r) for r in project_db.list_canvas_versions(project_id)]
+    def list_canvas_versions(self, project_id: str) -> list[CanvasVersionRef]:
+        return [
+            CanvasVersionRef(
+                id=str(r.get("id")),
+                label=r.get("label"),
+                created_at=r.get("created_at"),
+                created_by=r.get("created_by"),
+            )
+            for r in project_db.list_canvas_versions(project_id)
+        ]
 
     def restore_canvas_version(
         self, project_id: str, version_id: str

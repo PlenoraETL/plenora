@@ -202,7 +202,23 @@ _HTTP_FIXTURES = frozenset({
 })
 
 
+# Fixture che avviano servizi reali (backend HTTP, fake-API, worker Celery):
+# i test che li usano richiedono lo stack e2e-v2 e non possono girare nel run
+# unit di default.
+_LIVE_SERVICE_FIXTURES = _HTTP_FIXTURES | frozenset({"celery_worker"})
+
+
 def pytest_collection_modifyitems(config, items):
+    run_live = os.getenv("URBY_RUN_INTEGRATION") == "1"
     for item in items:
-        if _HTTP_FIXTURES & set(item.fixturenames):
+        fixturenames = set(item.fixturenames)
+        if _HTTP_FIXTURES & fixturenames:
             item.add_marker(pytest.mark.requires_backend_http_service)
+        # Gate: senza servizi reali (default) questi test ERRORavano al boot
+        # delle fixture; ora SKIPpano puliti. Per eseguirli: URBY_RUN_INTEGRATION=1
+        # con lo stack backend/test-e2e-v2 attivo.
+        if not run_live and (_LIVE_SERVICE_FIXTURES & fixturenames):
+            item.add_marker(pytest.mark.skip(
+                reason="richiede servizi reali (e2e-v2). "
+                       "Esegui con URBY_RUN_INTEGRATION=1."
+            ))

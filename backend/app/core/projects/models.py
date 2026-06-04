@@ -58,6 +58,18 @@ class ProjectMetadata(BaseModel):
         return _coerce_datetime(value)
 
 
+class CanvasVersionRef(BaseModel):
+    """Riferimento tipizzato a una versione salvata del canvas (#12).
+
+    Boundary tipizzato (no broad dict return): id sempre presente; gli altri
+    campi sono popolati in elenco e assenti nella risposta di creazione.
+    """
+    id: str
+    label: Optional[str] = None
+    created_at: Optional[datetime] = None
+    created_by: Optional[str] = None
+
+
 class ProjectCreate(BaseModel):
     """Dati per creare un nuovo progetto."""
     name: str = Field(..., min_length=1, max_length=255)

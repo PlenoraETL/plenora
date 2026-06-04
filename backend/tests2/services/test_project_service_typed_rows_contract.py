@@ -42,6 +42,7 @@ def test_project_list_db_leaf_returns_immutable_project_rows(monkeypatch):
             created_at=now,
             updated_at=now,
             created_by="user-1",
+            tags=[],
         )
     ]
     with pytest.raises(FrozenInstanceError):
@@ -82,6 +83,7 @@ def test_project_detail_db_leaf_returns_immutable_project_row(monkeypatch):
         updated_at=now,
         created_by="user-1",
         retention_n=3,
+        tags=[],
     )
     with pytest.raises(FrozenInstanceError):
         row.name = "changed"
@@ -273,6 +275,7 @@ def test_project_service_list_projects_uses_typed_project_rows(monkeypatch):
                 "created_at": now,
                 "updated_at": now,
                 "canvas_validated": False,
+                "tags": [],
             }
         ]
     }
@@ -324,6 +327,7 @@ def test_project_service_create_project_uses_typed_post_write_row(monkeypatch):
         "created_at": now,
         "updated_at": now,
         "canvas_validated": False,
+        "tags": [],
     }
 
 
@@ -364,6 +368,7 @@ def test_project_service_metadata_uses_typed_project_detail_row(monkeypatch):
         "created_at": now,
         "updated_at": now,
         "canvas_validated": False,
+        "tags": [],
     }
 
 
@@ -410,6 +415,7 @@ def test_project_service_exposes_explicit_typed_row_serializers():
         "created_at": now,
         "updated_at": now,
         "canvas_validated": False,
+        "tags": [],
     }
     assert detail_metadata.model_dump() == {
         "id": "p-detail",
@@ -421,6 +427,7 @@ def test_project_service_exposes_explicit_typed_row_serializers():
         "created_at": now,
         "updated_at": now,
         "canvas_validated": False,
+        "tags": [],
     }
 
 
@@ -461,6 +468,7 @@ def test_project_service_get_project_converts_typed_row_at_public_compat_edge(
             "created_at": None,
             "updated_at": None,
             "canvas_validated": False,
+            "tags": [],
         },
         "canvas": {"nodes": [], "edges": []},
         "id": "p1",

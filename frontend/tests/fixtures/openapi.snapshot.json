@@ -948,6 +948,24 @@
         "title": "ChangePasswordRequest",
         "type": "object"
       },
+      "CloneProjectRequest": {
+        "description": "Richiesta clone progetto. `name` opzionale → default 'Copia di …'.",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "CloneProjectRequest",
+        "type": "object"
+      },
       "Column": {
         "additionalProperties": true,
         "description": "Colonna di una tabella/dataset nel canvas.\n\n``extra=\"allow\"`` — simmetrico al fix di ``Node`` (commit fc86a999).\nIl frontend serializza per ogni colonna metadata extra (``selected``,\n``fromApi``, ``path`` per output_mapping, ecc.) che il backend NON\nmodella esplicitamente ma deve preservare nel round-trip\nPUT->GET->PUT del canvas. Senza ``extra=\"allow\"`` i campi extra\nvenivano droppati silenziosamente, rompendo p.es. la validation\nFE che si aspetta ``columns[i].fromApi`` per i fixed-param marker.",
@@ -1620,6 +1638,24 @@
           "canvas"
         ],
         "title": "CreateTaskRequest",
+        "type": "object"
+      },
+      "CreateVersionRequest": {
+        "description": "Snapshot canvas: etichetta opzionale.",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          }
+        },
+        "title": "CreateVersionRequest",
         "type": "object"
       },
       "DataSource": {
@@ -5531,6 +5567,88 @@
         "title": "Position",
         "type": "object"
       },
+      "PreviewFormulaRequest": {
+        "description": "Richiesta anteprima formula su una riga campione reale (#26).",
+        "properties": {
+          "column_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Name"
+          },
+          "db_type": {
+            "title": "Db Type",
+            "type": "string"
+          },
+          "expression": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expression"
+          },
+          "function_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Function Name"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "table_alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "t",
+            "title": "Table Alias"
+          },
+          "table_name": {
+            "title": "Table Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "table_name",
+          "db_type"
+        ],
+        "title": "PreviewFormulaRequest",
+        "type": "object"
+      },
       "ProjectCreateWithCanvas": {
         "properties": {
           "canvas": {
@@ -5578,6 +5696,49 @@
           "name"
         ],
         "title": "ProjectCreateWithCanvas",
+        "type": "object"
+      },
+      "ProjectDetailsUpdate": {
+        "description": "Aggiornamento metadati progetto (rename / descrizione / tag).",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          }
+        },
+        "title": "ProjectDetailsUpdate",
         "type": "object"
       },
       "ResetPasswordRequest": {
@@ -11398,6 +11559,55 @@
         ]
       }
     },
+    "/api/functions/preview-formula": {
+      "post": {
+        "description": "Valuta una colonna calcolata su UNA riga campione reale del progetto (#26).\n\nSolo modalità builder (ri-traduce server-side l'espressione → niente SQL\narbitrario dal client). Identificatori validati a whitelist; group-access\nsul progetto. Errori SQL → {success:false, message} per feedback inline.",
+        "operationId": "preview_formula_api_functions_preview_formula_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewFormulaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Preview Formula Api Functions Preview Formula Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Preview Formula",
+        "tags": [
+          "functions"
+        ]
+      }
+    },
     "/api/functions/translate": {
       "post": {
         "description": "Traduce un'espressione astratta in SQL per un tipo di database specifico.",
@@ -11831,6 +12041,35 @@
         ]
       }
     },
+    "/api/pipeline-runs/latest-by-project": {
+      "get": {
+        "description": "Stato dell'ultima run per ciascun progetto (filtri dashboard #11).\n\nUna riga per `project_id` via `DISTINCT ON`, ordinata per `ts_start` desc.\nScoping per gruppo identico a `get_runs` (i non-superadmin vedono solo il\nproprio gruppo). Risposta compatta `{project_id: {status, ts_start}}` —\npensata per costruire una mappa client-side senza paginare le run.",
+        "operationId": "get_latest_run_by_project_api_pipeline_runs_latest_by_project_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Latest Run By Project Api Pipeline Runs Latest By Project Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Latest Run By Project",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
     "/api/pipeline-runs/{run_id}": {
       "get": {
         "description": "Dettaglio run: metadati + steps + (opzionale) log tecnici correlati.\ndebug_payload escluso — usa /runs/{run_id}/payload per il Debug Agent.",
@@ -12161,6 +12400,64 @@
         "tags": [
           "projects"
         ]
+      },
+      "patch": {
+        "description": "Rinomina (e/o aggiorna la descrizione di) un progetto.\n\nSolo metadati: non tocca canvas né validazione. Group-access richiesto;\nviewer escluso (require_user_or_above). Nome non vuoto, cap 255.",
+        "operationId": "update_project_details_api_projects__project_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectDetailsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Project Details Api Projects  Project Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Project Details",
+        "tags": [
+          "projects"
+        ]
       }
     },
     "/api/projects/{project_id}/canvas": {
@@ -12270,6 +12567,66 @@
           }
         ],
         "summary": "Get Project Raw Canvas",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/clone": {
+      "post": {
+        "description": "Clona un progetto esistente (canvas + impostazioni) in uno nuovo.\n\nSolo progetti visibili al proprio gruppo (assert_group_access). Il nuovo\nprogetto eredita type/connessione/descrizione, copia il canvas as-is e\nl'output_contract (con producer_project_id riscritto); canvas_validated è\nresettato dal salvataggio canvas. Viewer non può clonare (require_user_or_above).",
+        "operationId": "clone_project_api_projects__project_id__clone_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloneProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Clone Project Api Projects  Project Id  Clone Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Clone Project",
         "tags": [
           "projects"
         ]
@@ -12674,7 +13031,7 @@
     },
     "/api/projects/{project_id}/validate": {
       "post": {
-        "description": "Valida l'intero canvas del progetto (Epic Canvas Validation).\n\nOrizzontale, read-only: strutturale + per-nodo (i ``validate_node`` registrati\nal composition-root). Ritorna il ``ValidationReport`` tipizzato. Non blocca\nnulla (il gate a esecuzione e' separato); e' la valida-on-demand del pulsante.",
+        "description": "Valida l'intero canvas del progetto (Epic Canvas Validation).\n\nOrizzontale: strutturale + per-nodo (i ``validate_node`` registrati al\ncomposition-root). Ritorna il ``ValidationReport`` tipizzato. Non blocca nulla\n(il gate a esecuzione e' separato); e' la valida-on-demand del pulsante.\nPersiste lo stato (``canvas_validated``) con l'esito: True se la catena valida\nsenza errori, altrimenti False (Epic CanvasVal §12).",
         "operationId": "validate_project_canvas_api_projects__project_id__validate_post",
         "parameters": [
           {
@@ -12827,6 +13184,173 @@
           }
         ],
         "summary": "Validate Connection",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/versions": {
+      "get": {
+        "description": "Elenco delle versioni salvate del canvas (metadati, senza il blob).",
+        "operationId": "list_canvas_versions_api_projects__project_id__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Canvas Versions Api Projects  Project Id  Versions Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Canvas Versions",
+        "tags": [
+          "projects"
+        ]
+      },
+      "post": {
+        "description": "Salva uno snapshot del canvas corrente (#12). Mantiene le ultime 30.",
+        "operationId": "create_canvas_version_api_projects__project_id__versions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Canvas Version Api Projects  Project Id  Versions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Canvas Version",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/versions/{version_id}/restore": {
+      "post": {
+        "description": "Ripristina il canvas del progetto a una versione salvata.",
+        "operationId": "restore_canvas_version_api_projects__project_id__versions__version_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Restore Canvas Version Api Projects  Project Id  Versions  Version Id  Restore Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Restore Canvas Version",
         "tags": [
           "projects"
         ]

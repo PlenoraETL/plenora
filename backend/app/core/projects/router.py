@@ -272,7 +272,7 @@ def create_canvas_version(
     )
     if version is None:
         raise_typed_http(error_codes.PROJECT_NOT_FOUND, status_code=404, message="Progetto non trovato")
-    return version
+    return version.model_dump()
 
 
 @router.get("/{project_id}/versions")
@@ -283,7 +283,7 @@ def list_canvas_versions(
     """Elenco delle versioni salvate del canvas (metadati, senza il blob)."""
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
-    return {"versions": _project_service.list_canvas_versions(project_id)}
+    return {"versions": [v.model_dump() for v in _project_service.list_canvas_versions(project_id)]}
 
 
 @router.post("/{project_id}/versions/{version_id}/restore")
