@@ -886,8 +886,14 @@ def validate_project_canvas(
         # non flaggare falsamente connessioni condivise/cross-group (#A mai falso
         # blocco): STALE scatta solo se l'api_id non esiste affatto.
         try:
-            from app.core.arricchisci.db import list_api_connection_rows
-            available_api_ids = {row.id for row in list_api_connection_rows()}
+            # Via il SERVICE arricchisci (boundary di dominio), non il leaf .db:
+            # niente import cross-domain di app.core.<domain>.db nel router projects.
+            # group_id=None = tutte le connessioni (no falso STALE su cross-group).
+            from app.core.arricchisci.api_connector import api_connection_service
+            available_api_ids = {
+                c["id"] for c in api_connection_service.list_api_connections(group_id=None)
+                if c.get("id")
+            }
         except Exception:
             available_api_ids = None  # degrada: salta STALE, non rompe la validazione
 
