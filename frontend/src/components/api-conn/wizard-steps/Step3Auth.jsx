@@ -20,8 +20,8 @@ export default function Step3Auth({
     <div className="acm__wstep-content">
       <div className="acm__wlabel">🔐 Autenticazione</div>
       <div className="acm__auth-opts">
-        {[{value:'none',label:'Nessuna',icon:'🔓'},{value:'api_key',label:'API Key',icon:'🔑'},{value:'basic_auth',label:'Basic Auth',icon:'👤'},{value:'oauth2_password',label:'OAuth2 Password',icon:'🔐'},{value:'oauth2_client_credentials',label:'OAuth2 Client Creds',icon:'🏢'},{value:'arcgis_token',label:'ArcGIS Token',icon:'🌐'}].map(opt=>(
-          <label key={opt.value} className={`acm__auth-opt${formData.auth.type===opt.value?' acm__auth-opt--on':''}`}>
+        {[{value:'none',label:'Nessuna',icon:'🔓',desc:'API pubblica, nessuna credenziale'},{value:'api_key',label:'API Key',icon:'🔑',desc:'Chiave statica in header o query param'},{value:'basic_auth',label:'Basic Auth',icon:'👤',desc:'Username + password (header Authorization: Basic)'},{value:'oauth2_password',label:'OAuth2 Password',icon:'🔐',desc:'Username+password → token (auto-rinnovato alla scadenza)'},{value:'oauth2_client_credentials',label:'OAuth2 Client Creds',icon:'🏢',desc:'Client ID+Secret → token machine-to-machine'},{value:'arcgis_token',label:'ArcGIS Token',icon:'🌐',desc:'Token service ESRI (iniettato come ?token=…)'}].map(opt=>(
+          <label key={opt.value} title={opt.desc} className={`acm__auth-opt${formData.auth.type===opt.value?' acm__auth-opt--on':''}`}>
             <input type="radio" name="authType" value={opt.value} checked={formData.auth.type===opt.value} onChange={e=>setFormData({...formData,auth:{type:e.target.value}})}/>
             <span>{opt.icon}</span> {opt.label}
           </label>
@@ -34,6 +34,7 @@ export default function Step3Auth({
             <div className="acm__field-group"><div className="acm__label">Nome chiave *</div><input className="acm__input" value={formData.auth.key_name||''} onChange={e=>setFormData({...formData,auth:{...formData.auth,key_name:e.target.value}})} placeholder="X-API-Key"/></div>
             <div className="acm__field-group"><div className="acm__label">Valore *</div><input type="password" className="acm__input" value={formData.auth.key_value||''} onChange={e=>setFormData({...formData,auth:{...formData.auth,key_value:e.target.value}})} placeholder="La tua API key"/></div>
           </div>
+          <div className="acm__field-hint acm__field-hint--mb-sm">Dove inserire la chiave: <strong>Header</strong> (es. <code>X-API-Key: …</code>) o <strong>Query param</strong> (es. <code>?api_key=…</code> nell'URL).</div>
           <div className="acm__auth-pos">
             {['header','query'].map(loc=>(
               <label key={loc} className={`acm__auth-opt${(formData.auth.location||'header')===loc?' acm__auth-opt--on':''}`}>

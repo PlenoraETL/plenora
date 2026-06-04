@@ -121,7 +121,7 @@ export default function Step2Params({
         </>
       ) : (
       <>
-      <div className="acm__info-box">{formData.api_type==='enricher'?<>📥 <strong>Mappato</strong> = da colonna &nbsp;|&nbsp; 📌 <strong>Fisso</strong> = costante</>:<>ℹ️ Parametri fissi per la chiamata API</>}</div>
+      <div className="acm__info-box">{formData.api_type==='enricher'?<>📥 <strong>Mappato</strong> = il valore è preso da una <strong>colonna del dataset</strong> (diverso per ogni riga) &nbsp;|&nbsp; 📌 <strong>Fisso</strong> = valore <strong>costante</strong>, uguale per tutte le righe (es. <code>f=json</code>, <code>limit=100</code>). Supporta <code>{'{{NOW}}'}</code>/<code>{'{{TODAY}}'}</code>.</>:<>ℹ️ Parametri <strong>fissi</strong> inviati a ogni chiamata (costanti, uguali per tutte le righe generate). Supporta <code>{'{{NOW}}'}</code>/<code>{'{{TODAY}}'}</code>.</>}</div>
       <div className="acm__params-list">
         {formData.parameters.map((p,i)=>(
           <div key={i} className="acm__param-row">
@@ -152,6 +152,7 @@ export default function Step2Params({
               <option value="">Nessuna</option><option value="offset">Offset/Limit</option><option value="cursor">Cursor/Token</option><option value="link">Link (next URL)</option>
             </select>
           </div>
+          <div className="acm__field-hint acm__field-hint--mb-sm"><strong>Offset</strong>: incrementa offset+limit a ogni pagina. <strong>Cursor</strong>: usa un token preso dalla risposta. <strong>Link</strong>: segue l'URL "next" nel body. Si ferma a Max righe o quando la risposta è vuota.</div>
           {formData.pagination?.type && (
             <div className="acm__pagination-fields">
               <div className="acm__param-row">

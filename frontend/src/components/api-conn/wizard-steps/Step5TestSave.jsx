@@ -54,6 +54,7 @@ export default function Step5TestSave({
               <input type="checkbox" checked={showAdvancedConfig} onChange={e=>setShowAdvancedConfig(e.target.checked)}/>
               <span>🔧 Struttura dati complessa (array annidati)</span>
             </label>
+            <div className="acm__field-hint acm__field-hint--mb-sm">Attiva solo se la risposta ha array annidati o richiede iterazione/trasformazioni. Per JSON piatto basta selezionare i campi sotto.</div>
             {showAdvancedConfig && testRawResponse && (
               <div className="acm__response-builder">
                 <ResponseConfigBuilder sampleData={testRawResponse} initialConfig={{preset:formData.response_preset,root_path:formData.response_config?.root_path||'',iterate_on:formData.response_config?.iterate_on||[],mappings:formData.response_config?.mappings||[],transforms:formData.response_config?.transforms||[]}} onChange={handleResponseConfigChange}/>
@@ -79,6 +80,7 @@ export default function Step5TestSave({
               {formData.output_mapping.length > 0 && (
                 <div className="acm__selected-fields">
                   <div className="acm__wlabel">Campi selezionati ({formData.output_mapping.length})</div>
+                  <div className="acm__field-hint acm__field-hint--mb-sm"><strong>path nella risposta</strong> → <strong>nome colonna</strong> in output. Un campo che è una lista può generare più righe.</div>
                   {formData.output_mapping.map((m,i)=>(
                     <div key={i} className="acm__selected-row">
                       <span className="acm__selected-path">{m.path}</span>

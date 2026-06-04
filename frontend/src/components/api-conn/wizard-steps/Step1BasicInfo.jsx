@@ -23,13 +23,16 @@ export default function Step1BasicInfo({ formData, setFormData }) {
         <div className="acm__field-group acm__field-group--flex-3">
           <div className="acm__label">URL Endpoint *</div>
           <input className="acm__input acm__input--mono" autoComplete="off" value={formData.url} onChange={e=>setFormData({...formData,url:e.target.value})} placeholder="https://api.example.com/endpoint"/>
+          <div className="acm__field-hint">Usa <code>{'{nome}'}</code> per un parametro nel path (es. <code>/geocode/{'{lat}'}/{'{lon}'}</code>). Solo HTTPS per URL esterni.</div>
         </div>
         <div className="acm__field-group acm__field-group--flex-1">
           <div className="acm__label">Metodo</div>
-          <select className="acm__select" value={formData.method} onChange={e=>setFormData({...formData,method:e.target.value})}>
+          <select className="acm__select" value={formData.method} onChange={e=>setFormData({...formData,method:e.target.value})}
+            title="GET = parametri in query string · POST = parametri nel body JSON (o multipart se Processore File)">
             <option value="GET">GET</option>
             <option value="POST">POST</option>
           </select>
+          <div className="acm__field-hint">GET = query · POST = body JSON</div>
         </div>
       </div>
       <details className="acm__details">

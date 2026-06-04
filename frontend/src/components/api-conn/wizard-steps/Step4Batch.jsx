@@ -43,6 +43,7 @@ export default function Step4Batch({ formData, setFormData }) {
             <option value="array">Array di oggetti — {`[{"city":"Rome"}, ...]`}</option>
             <option value="flat_array">Array piatto — {`["Rome", "Milan", ...]`}</option>
           </select>
+          <div className="acm__field-hint"><strong>Array di oggetti</strong>: più parametri per riga. <strong>Array piatto</strong>: una sola colonna come lista di valori.</div>
         </div>
         <div className="acm__field-row">
           <label className="acm__label">Endpoint override (opzionale)</label>

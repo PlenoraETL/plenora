@@ -43,6 +43,7 @@ export default function Step0ChooseType({ formData, setFormData }) {
         ))}
       </div>
       <div className="acm__wlabel acm__wlabel--mt-md">Categoria</div>
+      <div className="acm__field-hint acm__field-hint--mb-sm">Solo per organizzare e filtrare le connessioni nel catalogo — non cambia il comportamento dell'API.</div>
       <div className="acm__pill-group">
         {CATEGORIES_NEW.map(c=>(
           <button type="button" key={c.id}
