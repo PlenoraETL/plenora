@@ -15,6 +15,7 @@ function ProjectCard({
   scheduleCount,
   onOpen,
   onDelete,
+  onClone,
   onSchedule,
 }) {
   // Stato dell'ultima run (#11): preferisce `runStatus` dalla mappa log_runs
@@ -59,8 +60,15 @@ function ProjectCard({
                 ⏰ <span className="pl__schedule-badge">{scheduleCount}</span>
               </button>
             )}
+            {onClone && (
+              <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm"
+                onClick={e => { e.stopPropagation(); onClone(); }}
+                title="Clona progetto"
+              >⧉</button>
+            )}
             <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm"
               onClick={e => { e.stopPropagation(); onDelete(); }}
+              title="Elimina progetto"
             >🗑</button>
             <button type="button" className="pl__btn pl__btn--primary pl__btn--sm"
               onClick={e => { e.stopPropagation(); onOpen(); }}

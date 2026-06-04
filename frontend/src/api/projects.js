@@ -59,6 +59,19 @@ export const createProject = async (name, description = '', type = 'estrai', con
 };
 
 /**
+ * Clona un progetto esistente (canvas + impostazioni) in uno nuovo (#8).
+ * @param {string} projectId - id del progetto sorgente
+ * @param {string|null} newName - nome del clone (default BE "Copia di …")
+ * @returns {Promise<{metadata: Object, canvas: Object|null}>}
+ */
+export const cloneProject = async (projectId, newName = null) => {
+  const response = await http.post(`/projects/${projectId}/clone`, {
+    name: newName || null,
+  });
+  return response.data;
+};
+
+/**
  * Restituisce tutti i progetti dell'utente.
  * @returns {Promise<Object>} { projects: [...] }
  */

@@ -28,6 +28,7 @@ export { default }         from './http';
 
 export {
   createProject,
+  cloneProject,
   listProjects,
   getProject,
   updateCanvas,

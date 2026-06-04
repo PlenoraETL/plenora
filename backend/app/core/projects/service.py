@@ -170,6 +170,56 @@ class ProjectService:
         logger.info(f"Progetto creato: {project_id} (created_by={created_by})", op="create_project")
         return self.project_detail_row_to_metadata(row)
 
+    def clone_project(
+        self,
+        source_project_id: str,
+        new_name: str,
+        group_id: Optional[str] = None,
+        created_by: Optional[str] = None,
+    ) -> Optional[ProjectMetadata]:
+        """Duplica un progetto in uno nuovo (id nuovo).
+
+        Copia metadata (type, connessione, descrizione) + canvas as-is +
+        output_contract (con ``producer_project_id`` riscritto al nuovo id e
+        ``canvas_validated`` resettato dal salvataggio canvas). Ritorna None se
+        la sorgente non esiste.
+
+        Il canvas è copiato AS-IS: i node id interni restano coerenti con gli
+        edge; i nodi ``project_source`` restano legati alle stesse sorgenti (il
+        clone legge dagli stessi progetti). Nessun ciclo introdotto: il clone
+        non è referenziato da nessuno.
+        """
+        source = self.get_project_metadata(source_project_id)
+        if source is None:
+            return None
+
+        cloned = self.create_project(
+            ProjectCreate(
+                name=new_name,
+                description=source.description,
+                project_type=source.project_type,
+                default_connection_id=source.default_connection_id,
+            ),
+            group_id=group_id,
+            created_by=created_by,
+        )
+
+        source_canvas = self.get_project_canvas(source_project_id)
+        if source_canvas is not None and (source_canvas.nodes or source_canvas.edges):
+            self.update_canvas(cloned.id, source_canvas)
+
+        source_contract = self.get_project_output_contract(source_project_id)
+        if source_contract:
+            cloned_contract = dict(source_contract)
+            cloned_contract["producer_project_id"] = cloned.id
+            self.update_project_output_contract(cloned.id, cloned_contract)
+
+        logger.info(
+            f"Progetto clonato: {source_project_id} -> {cloned.id} (created_by={created_by})",
+            op="clone_project",
+        )
+        return cloned
+
     def rollback_created_project(
         self,
         project_id: str,

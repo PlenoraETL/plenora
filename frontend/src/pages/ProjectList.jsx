@@ -7,7 +7,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useToast } from '../hooks/useToast';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { deleteProject, deleteEseguibile } from '../api';
+import { deleteProject, deleteEseguibile, cloneProject } from '../api';
 import NewProjectModal from '../components/projects/NewProjectModal';
 import EsegSelectorModal from '../components/projects/EsegSelectorModal';
 import ProjectSection from '../components/projects/ProjectSection';
@@ -130,6 +130,17 @@ function ProjectList() {
       // per evitare "[object Object]" nel toast.
       const detailText = typeof detail === 'string' ? detail : err.message;
       toast.error('Errore eliminazione: ' + (detailText || 'errore sconosciuto'));
+    }
+  };
+
+  const handleCloneProject = async (project) => {
+    try {
+      const res = await cloneProject(project.id);
+      const newName = res?.metadata?.name || `Copia di ${project.name}`;
+      toast.success(`Progetto clonato: "${newName}"`);
+      loadData();
+    } catch (err) {
+      toastApiError(toast, err, 'Errore clonazione');
     }
   };
 
@@ -366,6 +377,7 @@ function ProjectList() {
                   scheduleCount={getScheduleCount(project.id)}
                   onOpen={() => handleOpenProject(project)}
                   onDelete={() => handleDeleteProject(project.id, project.name)}
+                  onClone={canCreateProj ? () => handleCloneProject(project) : null}
                   onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
                 />
               );
@@ -402,6 +414,7 @@ function ProjectList() {
                   scheduleCount={getScheduleCount(project.id)}
                   onOpen={() => handleOpenProject(project)}
                   onDelete={() => handleDeleteProject(project.id, project.name)}
+                  onClone={canCreateProj ? () => handleCloneProject(project) : null}
                   onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
                 />
               );
@@ -433,6 +446,7 @@ function ProjectList() {
                 scheduleCount={getScheduleCount(project.id)}
                 onOpen={() => handleOpenProject(project)}
                 onDelete={() => handleDeleteProject(project.id, project.name)}
+                onClone={canCreateProj ? () => handleCloneProject(project) : null}
                 onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
               />
             ))}

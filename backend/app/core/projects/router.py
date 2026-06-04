@@ -164,6 +164,56 @@ def create_project(
     return response
 
 
+class CloneProjectRequest(BaseModel):
+    """Richiesta clone progetto. `name` opzionale → default 'Copia di …'."""
+    name: Optional[str] = None
+
+
+@router.post("/{project_id}/clone", status_code=201)
+@audit_action(action="project.clone", target_param="project_id")
+def clone_project(
+    project_id: str,
+    data: CloneProjectRequest,
+    current_user: CurrentUser = Depends(require_user_or_above),
+) -> JsonObject:
+    """Clona un progetto esistente (canvas + impostazioni) in uno nuovo.
+
+    Solo progetti visibili al proprio gruppo (assert_group_access). Il nuovo
+    progetto eredita type/connessione/descrizione, copia il canvas as-is e
+    l'output_contract (con producer_project_id riscritto); canvas_validated è
+    resettato dal salvataggio canvas. Viewer non può clonare (require_user_or_above).
+    """
+    source = _project_service.get_project_metadata(project_id)
+    assert_group_access(source, current_user, f"Progetto '{project_id}'")
+
+    new_name = ((data.name or "").strip() or f"Copia di {source.name}")[:255]
+
+    try:
+        cloned = _project_service.clone_project(
+            source_project_id=project_id,
+            new_name=new_name,
+            group_id=current_user.group_id,
+            created_by=current_user.user_id,
+        )
+    except ProjectLineageCycleError as e:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "validation_error", "message": str(e)[:500]},
+        )
+
+    if cloned is None:
+        raise_typed_http(
+            error_codes.PROJECT_NOT_FOUND, status_code=404,
+            message="Progetto sorgente non trovato",
+        )
+
+    canvas = _project_service.get_project_canvas(cloned.id)
+    return {
+        "metadata": cloned.model_dump(),
+        "canvas": canvas.model_dump() if canvas else None,
+    }
+
+
 @router.get("")
 def list_projects(
     current_user: CurrentUser = Depends(require_not_esecutore),
