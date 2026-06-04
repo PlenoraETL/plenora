@@ -281,6 +281,24 @@ function EstraiEditor() {
       style: { width: 250, height: 150 },
       data: { level: '', label: '', title: '', color: '#fbbf24' } }));
   }, [setNodes, getViewportCenter, reactFlowInstance]);
+  // Costruisce un nodo tabella/vista (condiviso da drop e click-to-add).
+  const buildTableNode = useCallback((tableName, isView, position) => {
+    const tableColumns = (isView ? views[tableName] : catalog[tableName]) || [];
+    return {
+      id: `node_${Date.now()}`, type: 'tableNode', position,
+      data: { label: tableName, table_name: tableName, alias: null, type: 'source',
+        columns: tableColumns.map(col => ({ name: typeof col === 'object' ? col.name : col,
+          type: typeof col === 'object' ? col.type || 'str' : 'str', alias: null, visible: true })),
+        filters: [], calculated_columns: [], db_type: projectConnection?.type || 'postgres' },
+    };
+  }, [catalog, views, projectConnection]);
+
+  // Click su una tabella/vista del catalogo → la aggiunge al CENTRO del canvas
+  // (il drag resta per il posizionamento preciso).
+  const addTableAtCenter = useCallback((tableName, isView = false) => {
+    setNodes(nds => nds.concat(buildTableNode(tableName, isView, getViewportCenter(reactFlowInstance))));
+  }, [setNodes, buildTableNode, getViewportCenter, reactFlowInstance]);
+
   const onDrop = useCallback((event) => {
     event.preventDefault();
     if (!reactFlowInstance) return;
@@ -308,13 +326,8 @@ function EstraiEditor() {
     const tableName = event.dataTransfer.getData('tableName');
     if (!tableName) return;
     const isView = event.dataTransfer.getData('isView') === 'true';
-    const tableColumns = (isView ? views[tableName] : catalog[tableName]) || [];
-    setNodes(nds => nds.concat({ id: `node_${Date.now()}`, type: 'tableNode', position,
-      data: { label: tableName, table_name: tableName, alias: null, type: 'source',
-        columns: tableColumns.map(col => ({ name: typeof col === 'object' ? col.name : col,
-          type: typeof col === 'object' ? col.type || 'str' : 'str', alias: null, visible: true })),
-        filters: [], calculated_columns: [], db_type: projectConnection?.type || 'postgres' } }));
-  }, [reactFlowInstance, catalog, views, setNodes, projectConnection]);
+    setNodes(nds => nds.concat(buildTableNode(tableName, isView, position)));
+  }, [reactFlowInstance, setNodes, buildTableNode]);
 
   const onDragOver = useCallback((event) => {
     event.preventDefault();
@@ -491,7 +504,9 @@ function EstraiEditor() {
                             <div
                               key={t}
                               className="estrai-sidebar__table-item"
+                              title="Click per aggiungere al centro · trascina per posizionare"
                               draggable
+                              onClick={() => addTableAtCenter(t, false)}
                               onDragStart={e => {
                                 e.dataTransfer.setData('tableName', t);
                                 e.dataTransfer.effectAllowed = 'move';
@@ -551,7 +566,9 @@ function EstraiEditor() {
                                   <div
                                     key={`view_${v}`}
                                     className="estrai-sidebar__table-item estrai-sidebar__table-item--view"
+                                    title="Click per aggiungere al centro · trascina per posizionare"
                                     draggable
+                                    onClick={() => addTableAtCenter(v, true)}
                                     onDragStart={e => {
                                       e.dataTransfer.setData('tableName', v);
                                       e.dataTransfer.setData('isView', 'true');
@@ -693,6 +710,12 @@ function EstraiEditor() {
           nodeTypes,
           isReadOnly,
           readOnlyProps,
+          // Zoom iniziale meno spinto: fitView centra il contenuto ma senza
+          // superare 0.8× (l'utente può comunque zoomare fino a maxZoom a mano).
+          fitView: true,
+          fitViewOptions: { padding: 0.25, maxZoom: 0.8 },
+          minZoom: 0.3,
+          maxZoom: 2,
         }}
         canvasHandlers={{
           onNodesChange,

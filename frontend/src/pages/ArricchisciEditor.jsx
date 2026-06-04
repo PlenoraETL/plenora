@@ -81,7 +81,7 @@ const ARRICCHISCI_SOURCE_TYPES = ['estrai', 'manipola', 'arricchisci'];
 // Qualsiasi oggetto/funzione inline nelle props di ReactFlow causa Maximum update depth
 const NODE_COLORS = { project_source: '#4CAF50', file_source: '#3F51B5', api_enrich: '#FF6B35', result: '#2196F3', staticValues: '#667eea', carica: '#7c3aed' };
 const nodeColorFn = (node) => NODE_COLORS[node.type] || '#999';
-const FIT_VIEW_OPTIONS = { padding: 0.2 };
+const FIT_VIEW_OPTIONS = { padding: 0.2, maxZoom: 0.8 };
 
 const nodeTypes = {
   project_source: ProjectSourceNode, file_source: FileSourceNode,
@@ -609,7 +609,7 @@ const ArricchisciEditorContent = () => {
         defaultEdgeOptions,
         fitView: true,
         fitViewOptions: FIT_VIEW_OPTIONS,
-        minZoom: 0.5,
+        minZoom: 0.3,
         maxZoom: 2,
         backgroundProps: { color: '#ddd', gap: 20 },
         miniMapProps: { className: 'arricchisci-minimap', nodeColor: nodeColorFn, zoomable: true, pannable: true },

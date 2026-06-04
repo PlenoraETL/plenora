@@ -122,10 +122,18 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
     try {
       const fn = reactFlowInstance?.screenToFlowPosition;
       if (!fn) return { x: 400, y: 300 };
-      const center = fn({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+      // Centro del PANNELLO canvas, non della finestra: il canvas è sfalsato
+      // da sidebar + topbar, quindi window/2 non è il centro visivo. Usiamo il
+      // bounding rect dell'elemento .react-flow (fallback a window se assente).
+      const pane = document.querySelector('.react-flow');
+      const rect = pane?.getBoundingClientRect();
+      const screenX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+      const screenY = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
+      const center = fn({ x: screenX, y: screenY });
+      // Jitter lieve per non sovrapporre perfettamente nodi aggiunti in serie.
       return {
-        x: center.x + (Math.random() - 0.5) * 50,
-        y: center.y + (Math.random() - 0.5) * 50,
+        x: center.x + (Math.random() - 0.5) * 40,
+        y: center.y + (Math.random() - 0.5) * 40,
       };
     } catch {
       return { x: 400, y: 300 };
