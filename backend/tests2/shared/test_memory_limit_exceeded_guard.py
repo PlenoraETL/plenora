@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from app.shared import error_codes
 from app.shared.error_envelope import build_error_response
 from app.core.resources.exceptions import MemoryLimitExceededError
+from tests2.shared._ast_identifiers import all_identifiers, imports_module
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -42,10 +43,8 @@ def test_exception_module_does_not_import_fastapi():
 
     src_path = Path(exc_mod.__file__)
     src = src_path.read_text(encoding="utf-8")
-    assert "from fastapi" not in src
-    assert "from starlette" not in src
-    assert "import fastapi" not in src
-    assert "import starlette" not in src
+    assert not imports_module(src, "fastapi")
+    assert not imports_module(src, "starlette")
 
 
 def test_exception_carries_typed_attributes():
@@ -260,6 +259,7 @@ def test_app_factory_registers_memory_limit_exceeded_handler():
         / "app" / "app_factory.py"
     )
     src = app_factory_py.read_text(encoding="utf-8")
+    # RAW: decorator statement pattern — not a plain identifier
     assert "@app.exception_handler(MemoryLimitExceededError)" in src
     # Import dell'eccezione dal modulo shared.
-    assert "MemoryLimitExceededError" in src
+    assert "MemoryLimitExceededError" in all_identifiers(src)

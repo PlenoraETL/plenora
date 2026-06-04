@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers, uses_attribute
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
@@ -82,17 +84,18 @@ def test_handle_failure_failed_branch_has_canonical_error_token():
     manager_src = _read_manager_src()
     src = _read_runtime_src()
 
+    # RAW: stringa-literal dict key/value, non identificatore
     assert '"error": "schedule_execution_fatal"' not in manager_src, (
         "failure finalization must stay in scheduler_execution_runtime.py; "
         "ExecutionManager should call handle_failure directly"
     )
-    assert "decide_after_failure" not in manager_src
-    assert "DebugPayloadBuilder" not in manager_src
-    assert "schedule_pipeline_task.apply_async" not in manager_src
-    assert "decide_after_failure" in src
-    assert "DebugPayloadBuilder" in src
-    assert "schedule_pipeline_task.apply_async" not in src
-    assert "enqueue_schedule_run" in src
+    assert "decide_after_failure" not in all_identifiers(manager_src)
+    assert "DebugPayloadBuilder" not in all_identifiers(manager_src)
+    assert not uses_attribute(manager_src, "schedule_pipeline_task", "apply_async")
+    assert "decide_after_failure" in all_identifiers(src)
+    assert "DebugPayloadBuilder" in all_identifiers(src)
+    assert not uses_attribute(src, "schedule_pipeline_task", "apply_async")
+    assert "enqueue_schedule_run" in all_identifiers(src)
     # Token fatal presente
     assert '"error": "schedule_execution_fatal"' in src, (
         "token canonico `schedule_execution_fatal` non trovato nel file"

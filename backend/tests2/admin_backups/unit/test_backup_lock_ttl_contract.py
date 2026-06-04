@@ -20,6 +20,8 @@ import inspect
 
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
@@ -86,6 +88,7 @@ class TestRefreshLockOwnerGuard:
         impedire UPDATE cross-owner."""
         from app.core.admin_backups import backup_run_store
         src = inspect.getsource(backup_run_store.refresh_manual_backup_lock)
+        # RAW: SQL literal fragment ("owner_token = %s" e' contenuto di una stringa SQL, non un identificatore codice)
         assert "owner_token = %s" in src, (
             "regressione: refresh_manual_backup_lock non filtra per "
             "owner_token nel WHERE — un heartbeat zombi potrebbe "
@@ -102,7 +105,7 @@ class TestBackupTaskHeartbeatIntegration:
         `_start_lock_heartbeat`."""
         from workers.tasks import admin_backup_task
         src = inspect.getsource(admin_backup_task)
-        assert "_start_lock_heartbeat" in src, (
+        assert "_start_lock_heartbeat" in all_identifiers(src), (
             "regressione: thread heartbeat rimosso dal task — il "
             "lock non viene piu' rinnovato durante l'esecuzione, "
             "scade dopo TTL e altri worker possono race-acquisire."

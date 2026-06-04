@@ -28,7 +28,11 @@ isolamento, no infrastruttura. Mappa a Go come
 
 from __future__ import annotations
 
+import textwrap
+
 import pytest
+
+from tests2.shared._ast_identifiers import all_identifiers
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract, pytest.mark.regression]
@@ -171,14 +175,14 @@ def test_source_loading_uses_basename_normalizer():
     source = inspect.getsource(source_loading)
 
     # Verifica che _expected_filename usi Path(...).name
-    expected_filename_src = inspect.getsource(source_loading._expected_filename)
-    assert ".name" in expected_filename_src or "Path(" in expected_filename_src, (
+    expected_filename_src = textwrap.dedent(inspect.getsource(source_loading._expected_filename))
+    assert "name" in all_identifiers(expected_filename_src) or "Path" in all_identifiers(expected_filename_src), (
         "_expected_filename deve usare `Path(raw).name` per stripping "
         "directory component. Anti-regression P0 path traversal."
     )
 
     # Verifica che assert_path_within sia importato/usato in source_loading
-    assert "assert_path_within" in source, (
+    assert "assert_path_within" in all_identifiers(source), (
         "source_loading.py deve invocare assert_path_within come backstop "
         "defense-in-depth contro path traversal residui."
     )
@@ -188,6 +192,7 @@ def test_source_loading_uses_basename_normalizer():
     src_no_comments = "\n".join(
         line for line in source.splitlines() if not line.lstrip().startswith("#")
     )
+    # RAW: pattern complesso keyword=expr (statement/expression pattern, non un identificatore semplice)
     assert "is_superadmin=expected_group_id is None" not in src_no_comments, (
         "Detected bypass pattern `is_superadmin=expected_group_id is None`: "
         "superadmin bypass cross-tenant. Usa `is_superadmin=False` fisso."

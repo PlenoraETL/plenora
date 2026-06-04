@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers, function_def_names
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
@@ -68,6 +70,7 @@ def test_auth_middleware_no_longer_writes_request_state_auth_fields():
     )
     for field in _FORBIDDEN_FIELDS:
         forbidden = f"request.state.{field} ="
+        # RAW: assignment-statement pattern (includes "=" operator); not a plain identifier
         assert forbidden not in src, (
             f"app/core/auth/auth_middleware.py still assigns "
             f"`{forbidden} ...`. The 4 auth fields on request.state were "
@@ -75,7 +78,7 @@ def test_auth_middleware_no_longer_writes_request_state_auth_fields():
             "Use `Depends(get_current_user)` for auth context instead."
         )
     # Also no helper that clears them.
-    assert "_clear_request_state" not in src, (
+    assert "_clear_request_state" not in function_def_names(src), (
         "Helper `_clear_request_state` was removed alongside the dead "
         "writes; reintroducing it suggests the dead writes are coming back."
     )
@@ -122,6 +125,8 @@ def test_request_id_state_remains_legitimate():
     src = (
         _BACKEND_ROOT / "app" / "core" / "auth" / "request_id_middleware.py"
     ).read_text(encoding="utf-8")
+    # RAW: 3-level chained attribute access pattern (request.state.request_id);
+    # uses_attribute only handles 2-level chains and cannot express this faithfully
     assert "request.state.request_id" in src, (
         "RequestIdMiddleware must still write `request.state.request_id`. "
         "If it was removed, the auth_middleware cleanup spilled into the "
@@ -137,10 +142,12 @@ def test_jwt_middleware_propagates_to_contextvars_only():
         _BACKEND_ROOT / "app" / "core" / "auth" / "auth_middleware.py"
     ).read_text(encoding="utf-8")
     # Canonical surface present.
-    assert "set_log_group" in src
-    assert "set_user_id" in src
+    assert "set_log_group" in all_identifiers(src)
+    assert "set_user_id" in all_identifiers(src)
     # No request.state writes for auth fields.
     for field in _FORBIDDEN_FIELDS:
+        # RAW: 3-level chained attribute access pattern (request.state.<field>);
+        # uses_attribute only handles 2-level chains and cannot express this faithfully
         assert f"request.state.{field}" not in src, (
             f"JWTMiddleware references request.state.{field}; "
             "it should propagate auth ONLY via ContextVar."

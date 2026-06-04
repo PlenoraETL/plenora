@@ -7,6 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers, uses_attribute
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
@@ -37,9 +39,9 @@ def test_admin_backup_service_does_not_spawn_local_processes():
 
     source = Path(service.__file__).read_text(encoding="utf-8")
 
-    assert "subprocess.Popen" not in source
-    assert "BACKUP_SCRIPT" not in source
-    assert "MANUAL_LOG_FILE" not in source
+    assert not uses_attribute(source, "subprocess", "Popen")
+    assert "BACKUP_SCRIPT" not in all_identifiers(source)
+    assert "MANUAL_LOG_FILE" not in all_identifiers(source)
 
 
 def test_trigger_manual_backup_uses_db_lock_before_enqueue(monkeypatch):

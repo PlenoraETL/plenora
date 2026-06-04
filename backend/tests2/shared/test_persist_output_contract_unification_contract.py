@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers, function_def_names
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
@@ -87,12 +89,12 @@ def test_finalizers_delegate_to_persist_helper():
     }
     for name, path in finalizers.items():
         src = path.read_text(encoding="utf-8")
-        assert "persist_output_contract" in src, (
+        assert "persist_output_contract" in all_identifiers(src), (
             f"{name} non delega a persist_output_contract"
         )
         # nessuna riscrittura inline della sequenza: la CALL a
         # update_project_output_contract( vive solo nel helper condiviso
-        assert "update_project_output_contract(" not in src, (
+        assert "update_project_output_contract" not in all_identifiers(src), (
             f"{name} richiama ancora update_project_output_contract inline "
             f"invece di delegare a persist_output_contract"
         )
@@ -104,7 +106,8 @@ def test_persist_helper_owns_previous_contract_invariant():
     service_src = (
         _BACKEND_ROOT / "app" / "core" / "output_contract" / "service.py"
     ).read_text(encoding="utf-8")
-    assert "def persist_output_contract" in service_src
+    assert "persist_output_contract" in function_def_names(service_src)
+    # RAW: "previous_contract=" e' un pattern param-def/kwarg-assignment, non puro identificatore
     assert "previous_contract=" in service_src
-    assert "get_project_output_contract" in service_src
-    assert "update_project_output_contract" in service_src
+    assert "get_project_output_contract" in all_identifiers(service_src)
+    assert "update_project_output_contract" in all_identifiers(service_src)

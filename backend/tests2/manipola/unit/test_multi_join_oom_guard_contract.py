@@ -9,6 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+from tests2.shared._ast_identifiers import all_identifiers
+
 import pandas as pd
 import pytest
 
@@ -191,10 +193,13 @@ def test_executor_source_has_estimate_before_merge():
     estimate_pos = src.index("_estimate_merge_output_rows(")
     merge_pos = src.index("result = merge_dataframes(")
 
+    # RAW: assignment-statement pattern, not a bare identifier
     assert 'MULTI_JOIN_STAGE = "manipola_multi_join"' in src
+    # RAW: method-call with string-literal key, not a code identifier
     assert 'settings.get("MULTI_JOIN_MAX_OUTPUT_ROWS"' in src
     assert estimate_pos < merge_pos
-    assert "MemoryLimitExceededError" in src
+    assert "MemoryLimitExceededError" in all_identifiers(src)
+    # RAW: string-literal value, not an identifier
     assert '"multi_join_output"' in src
 
 
@@ -204,8 +209,10 @@ def test_app_factory_recognizes_manipola_multi_join_stage():
         / "app" / "app_factory.py"
     )
     src = app_factory_py.read_text(encoding="utf-8")
-    assert "_ROW_COUNT_STAGES" in src
+    assert "_ROW_COUNT_STAGES" in all_identifiers(src)
+    # RAW: string-literal value, not a code identifier
     assert '"manipola_multi_join"' in src
+    # RAW: string-literal value, not a code identifier
     assert '"manipola_cross_join"' in src
 
 
@@ -215,6 +222,9 @@ def test_app_factory_multi_join_message_has_specific_hint():
         / "app" / "app_factory.py"
     )
     src = app_factory_py.read_text(encoding="utf-8")
+    # RAW: string-literal value, not a code identifier
     assert '"genererebbe"' in src
+    # RAW: prose/message fragment, not a code identifier
     assert "chiavi non-unique" in src
+    # RAW: comparison-statement pattern, not a bare identifier
     assert 'exc.stage == "manipola_multi_join"' in src

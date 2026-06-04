@@ -10,6 +10,13 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._ast_identifiers import (
+    function_def_names,
+    imports_module,
+    imports_symbol_as,
+    uses_attribute,
+)
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
@@ -61,23 +68,28 @@ def test_delete_result_calls_record_pending_inside_transaction():
     source = _read_source(_RESULTS_CLEANUP)
     body = _slice_function(source, "def delete_result(")
 
+    # RAW: statement/structural pattern, not a pure identifier
     assert "with transaction() as conn:" in body, (
         "delete_result must run inside a `with transaction()` block — "
         "record_pending and DELETE row must commit atomically."
     )
-    assert "from app.core.resources import storage_reconciliation as reconciliation" in source, (
+    assert imports_symbol_as(
+        source, "app.core.resources", "storage_reconciliation", "reconciliation"
+    ), (
         "delete_result must import record_pending from the typed "
         "boundary module."
     )
-    assert "reconciliation.record_pending(" in body, (
+    assert uses_attribute(body, "reconciliation", "record_pending"), (
         "delete_result must call record_pending. Without it the W1 "
         "race window has no application-side trail."
     )
+    # RAW: string literal value (kwarg value, not identifier)
     assert 'domain="result_blob"' in body, (
         "record_pending in delete_result must declare "
         'domain="result_blob" so the reconciler beat hook can route '
         "the entry."
     )
+    # RAW: string literal value (kwarg value, not identifier)
     assert 'operation="delete"' in body, (
         "record_pending in delete_result must declare "
         'operation="delete" — upload_intent is not the W1 shape.'
@@ -115,22 +127,27 @@ def test_delete_results_for_project_calls_record_pending_inside_transaction():
     source = _read_source(_RESULTS_CLEANUP)
     body = _slice_function(source, "def delete_results_for_project(")
 
+    # RAW: statement/structural pattern, not a pure identifier
     assert "with transaction() as conn:" in body, (
         "delete_results_for_project must run inside a `with "
         "transaction()` block."
     )
-    assert "from app.core.resources import storage_reconciliation as reconciliation" in source, (
+    assert imports_symbol_as(
+        source, "app.core.resources", "storage_reconciliation", "reconciliation"
+    ), (
         "delete_results_for_project must import record_pending from "
         "the typed boundary module."
     )
-    assert "reconciliation.record_pending(" in body, (
+    assert uses_attribute(body, "reconciliation", "record_pending"), (
         "delete_results_for_project must call record_pending per row "
         "with a non-NULL storage_key."
     )
+    # RAW: string literal value (kwarg value, not identifier)
     assert 'domain="result_blob"' in body, (
         "record_pending in delete_results_for_project must declare "
         'domain="result_blob".'
     )
+    # RAW: string literal value (kwarg value, not identifier)
     assert 'operation="delete"' in body, (
         "record_pending in delete_results_for_project must declare "
         'operation="delete".'
@@ -173,27 +190,27 @@ def test_delete_result_paths_wire_compensating_delete_and_mark_outcomes():
     for fn in ("def delete_result(", "def delete_results_for_project("):
         body = _slice_function(source, fn)
 
-        assert (
-            "from app.infrastructure.storage import compensation as storage_compensation"
-            in source
+        assert imports_symbol_as(
+            source, "app.infrastructure.storage", "compensation", "storage_compensation"
         ), (
             f"{fn} must import compensating_delete from the unified "
             "helper module."
         )
-        assert "storage_compensation.compensating_delete(" in body, (
+        assert uses_attribute(body, "storage_compensation", "compensating_delete"), (
             f"{fn} must invoke compensating_delete after the commit."
         )
+        # RAW: string literal value (kwarg value, not identifier)
         assert 'domain="result_blob"' in body, (
             f"{fn} compensating_delete must use domain='result_blob' "
             "so logs and reconciler routing are consistent with "
             "record_pending."
         )
-        assert "reconciliation.mark_done" in body, (
+        assert uses_attribute(body, "reconciliation", "mark_done"), (
             f"{fn} must call mark_done on outcome ok/skipped — "
             "without it pending rows accumulate forever even on the "
             "happy path."
         )
-        assert "reconciliation.mark_failed_attempt" in body, (
+        assert uses_attribute(body, "reconciliation", "mark_failed_attempt"), (
             f"{fn} must call mark_failed_attempt on outcome failed — "
             "without it the reconciler beat hook never re-tries."
         )
@@ -205,16 +222,16 @@ def test_delete_result_paths_wire_compensating_delete_and_mark_outcomes():
 def test_results_cleanup_owns_delete_surface():
     source = _read_source(_RESULTS_CLEANUP)
 
-    assert "def delete_result(" in source
-    assert "def delete_results_for_project(" in source
+    assert "delete_result" in function_def_names(source)
+    assert "delete_results_for_project" in function_def_names(source)
 
 
 def test_results_cleanup_uses_repository_for_pg_connection():
     cleanup_source = _read_source(_RESULTS_CLEANUP)
     repository_source = _read_source(_RESULTS_CLEANUP_REPOSITORY)
 
-    assert "app.db.pg_connection" not in cleanup_source
-    assert "from app.db.pg_connection import" in repository_source
+    assert not imports_module(cleanup_source, "app.db.pg_connection")
+    assert imports_module(repository_source, "app.db.pg_connection")
 
 
 def test_storage_reconciliation_exposes_record_pending_surface():
@@ -231,7 +248,7 @@ def test_storage_reconciliation_exposes_record_pending_surface():
             "delete_result / delete_results_for_project imports."
         )
 
-    assert "def record_pending(" in source, (
+    assert "record_pending" in function_def_names(source), (
         "record_pending function definition missing — boundary "
         "contract relied on by W1 callsites."
     )

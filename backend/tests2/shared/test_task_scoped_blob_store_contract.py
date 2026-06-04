@@ -12,6 +12,8 @@ from typing import get_type_hints
 
 import pytest
 
+from tests2.shared._ast_identifiers import imports_module, uses_attribute
+
 from app.shared.resources.task_scoped_blob_store import (
     TaskBlobSaveResult,
     TaskScopedBlobStore,
@@ -116,24 +118,42 @@ def test_module_has_no_heavy_imports():
     src = (
         _BACKEND_APP / "shared" / "resources" / "task_scoped_blob_store.py"
     ).read_text(encoding="utf-8")
-    forbidden = [
-        "import pandas",
-        "from pandas",
-        "import geopandas",
-        "import requests",
-        "from requests",
-        "import boto3",
-        "from app.infrastructure.storage.cloud_backends",
-        "from app.config",
-        "import os",
-        "os.getenv",
-        "os.environ",
-    ]
-    for pattern in forbidden:
-        assert pattern not in src, (
-            f"task_scoped_blob_store.py NON deve contenere {pattern!r}: "
-            "il modulo deve restare pure protocol/dataclass."
-        )
+    assert not imports_module(src, "pandas"), (
+        "task_scoped_blob_store.py NON deve contenere 'import pandas'/'from pandas': "
+        "il modulo deve restare pure protocol/dataclass."
+    )
+    assert not imports_module(src, "geopandas"), (
+        "task_scoped_blob_store.py NON deve contenere 'import geopandas': "
+        "il modulo deve restare pure protocol/dataclass."
+    )
+    assert not imports_module(src, "requests"), (
+        "task_scoped_blob_store.py NON deve contenere 'import requests'/'from requests': "
+        "il modulo deve restare pure protocol/dataclass."
+    )
+    assert not imports_module(src, "boto3"), (
+        "task_scoped_blob_store.py NON deve contenere 'import boto3': "
+        "il modulo deve restare pure protocol/dataclass."
+    )
+    assert not imports_module(src, "app.infrastructure.storage.cloud_backends"), (
+        "task_scoped_blob_store.py NON deve contenere 'from app.infrastructure.storage.cloud_backends': "
+        "il modulo deve restare pure protocol/dataclass."
+    )
+    assert not imports_module(src, "app.config"), (
+        "task_scoped_blob_store.py NON deve contenere 'from app.config': "
+        "il modulo deve restare pure protocol/dataclass."
+    )
+    assert not imports_module(src, "os"), (
+        "task_scoped_blob_store.py NON deve contenere 'import os': "
+        "il modulo deve restare pure protocol/dataclass."
+    )
+    assert not uses_attribute(src, "os", "getenv"), (
+        "task_scoped_blob_store.py NON deve contenere 'os.getenv': "
+        "il modulo deve restare pure protocol/dataclass."
+    )
+    assert not uses_attribute(src, "os", "environ"), (
+        "task_scoped_blob_store.py NON deve contenere 'os.environ': "
+        "il modulo deve restare pure protocol/dataclass."
+    )
 
 
 def test_module_only_has_dataclass_and_protocol():

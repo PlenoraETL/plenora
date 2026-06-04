@@ -11,8 +11,11 @@ Bug coperti:
 from __future__ import annotations
 
 import inspect
+import textwrap
 
 import pytest
+
+from tests2.shared._ast_identifiers import all_identifiers, call_has_keyword, uses_attribute
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract, pytest.mark.regression]
@@ -129,7 +132,8 @@ def test_get_system_status_has_audit_action_decorator():
 
     src = _inspect.getsource(ss_router)
     # Anti-regression: il decorator deve essere presente con action canonica
-    assert "@audit_action(action=" in src, "audit_action decorator missing"
+    assert call_has_keyword(src, "audit_action", "action"), "audit_action decorator missing"
+    # RAW: string literal — valore dell'action, non un identificatore
     assert "admin.system_status.read" in src, (
         "audit_action action name non canonico — atteso "
         "'admin.system_status.read'"
@@ -144,15 +148,12 @@ def test_change_password_calls_rate_limit_check():
     from app.core.auth import auth as auth_module
 
     src = inspect.getsource(auth_module.change_password)
-    src_no_comments = "\n".join(
-        line for line in src.splitlines() if not line.lstrip().startswith("#")
-    )
 
-    assert "_check_rate_limit" in src_no_comments, (
+    assert "_check_rate_limit" in all_identifiers(textwrap.dedent(src)), (
         "change_password deve chiamare _check_rate_limit(client_ip) "
         "come fa /login (stesso threat model: brute-force)"
     )
-    assert "_record_failed_login" in src_no_comments, (
+    assert "_record_failed_login" in all_identifiers(textwrap.dedent(src)), (
         "change_password deve registrare i failed attempt per "
         "trigger del rate limit progressive"
     )
@@ -167,17 +168,14 @@ def test_token_blacklist_read_fail_logs_at_error_level():
     from app.core.security import token_blacklist
 
     src = inspect.getsource(token_blacklist.is_jti_blacklisted)
-    src_no_comments = "\n".join(
-        line for line in src.splitlines() if not line.lstrip().startswith("#")
-    )
 
     # logger.error invece di logger.warning per il fail path
-    assert "logger.error" in src_no_comments, (
+    assert uses_attribute(textwrap.dedent(src), "logger", "error"), (
         "is_jti_blacklisted deve loggare il fail di Redis read a "
         "livello ERROR (era WARNING pre-fix)"
     )
-    # Tag SECURITY per filtering in monitoring
-    assert "[SECURITY]" in src_no_comments, (
+    # RAW: string literal — tag nel messaggio di log, non un identificatore
+    assert "[SECURITY]" in src, (
         "Il messaggio deve avere tag [SECURITY] per visibilita' "
         "in alerting/monitoring"
     )

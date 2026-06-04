@@ -18,6 +18,7 @@ from app.shared.error_envelope import (
     normalize_http_exception_detail,
     raise_typed_http,
 )
+from tests2.shared._ast_identifiers import imports_module, imports_symbol_from
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -379,15 +380,22 @@ def test_app_factory_registers_envelope_handlers():
         / "app" / "app_factory.py"
     )
     src = app_factory_py.read_text(encoding="utf-8")
+    # RAW: decorator statement pattern, not a pure identifier
     assert "@app.exception_handler(Exception)" in src
+    # RAW: decorator statement pattern, not a pure identifier
     assert "@app.exception_handler(StarletteHTTPException)" in src
+    # RAW: decorator statement pattern, not a pure identifier
     assert "@app.exception_handler(RequestValidationError)" in src
+    # RAW: decorator statement pattern, not a pure identifier
     assert "@app.exception_handler(CanvasCorruptedError)" in src
     # Helper imports
-    assert "from app.shared.error_envelope import" in src
-    assert "from app.shared import error_codes" in src
+    assert imports_module(src, "app.shared.error_envelope"), \
+        "app_factory.py must import from app.shared.error_envelope"
+    assert imports_symbol_from(src, "app.shared", "error_codes"), \
+        "app_factory.py must import error_codes from app.shared"
     # RequestValidationError import from FastAPI for the new 422 handler
-    assert "from fastapi.exceptions import RequestValidationError" in src
+    assert imports_symbol_from(src, "fastapi.exceptions", "RequestValidationError"), \
+        "app_factory.py must import RequestValidationError from fastapi.exceptions"
 
 
 # 5. RequestValidationError (422) — BE-GO-READY-ERROR-CONTRACT-004

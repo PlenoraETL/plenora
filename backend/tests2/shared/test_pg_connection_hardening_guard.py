@@ -292,4 +292,5 @@ def test_adapt_params_cannot_global_replace_question_placeholders():
         "sql.replace('?', '%s'). Remove the adapter or make it fail closed "
         f"on legacy placeholders. Replace calls at lines: {replace_calls}"
     )
+    # RAW: expression-pattern - checking .replace("?", "%s") with specific literal args; no AST helper covers positional-arg values on method calls
     assert ".replace(\"?\", \"%s\")" not in source and ".replace('?', '%s')" not in source

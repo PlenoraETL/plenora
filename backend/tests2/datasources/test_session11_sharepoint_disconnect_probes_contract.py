@@ -12,9 +12,12 @@ warning esplicito se NESSUNA probe ha successo.
 from __future__ import annotations
 
 import inspect
+import textwrap
 from unittest.mock import MagicMock
 
 import pytest
+
+from tests2.shared._ast_identifiers import uses_attribute
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
@@ -25,9 +28,11 @@ def test_sharepoint_disconnect_has_multiple_probes():
     sessione HTTP + un tentativo di `ctx.close()` API pubblica."""
     from app.core.datasources import sharepoint
 
-    src = inspect.getsource(sharepoint.SharePointDataSource.disconnect)
+    src = textwrap.dedent(inspect.getsource(sharepoint.SharePointDataSource.disconnect))
 
     # Le 4 probe canoniche
+    # RAW: le probe appaiono come string-literal (primo elem dei tuple in session_candidates),
+    # non come identificatori di codice — all_identifiers non le vede
     for probe in [
         "_session",
         "session",
@@ -40,9 +45,11 @@ def test_sharepoint_disconnect_has_multiple_probes():
         )
 
     # Tentativo API pubblica
-    assert "ctx.close()" in src
+    assert uses_attribute(src, "ctx", "close"), "disconnect deve tentare ctx.close()"
     # Log warning quando nessuna probe ha successo
+    # RAW: statement/pattern sintattico con keyword di controllo
     assert "if not closed:" in src
+    # RAW: string-literal di prosa nel corpo del log warning
     assert "nessuna delle 4 probe" in src or "probe" in src.lower()
 
 

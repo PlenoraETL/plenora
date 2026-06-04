@@ -16,6 +16,12 @@ from app.shared.connections.esri_system_fields import (
     is_esri_system_field,
     normalize_field_name,
 )
+from tests2.shared._ast_identifiers import (
+    all_identifiers,
+    imports_module,
+    imports_symbol_from,
+    uses_attribute,
+)
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
@@ -133,27 +139,46 @@ def test_module_has_no_heavy_imports():
     src = (
         _BACKEND_APP / "shared" / "connections" / "esri_system_fields.py"
     ).read_text(encoding="utf-8")
-    forbidden = [
-        "import pandas",
-        "from pandas",
-        "import geopandas",
-        "from geopandas",
-        "import requests",
-        "from requests",
-        "import boto3",
-        "import shapely",
-        "from shapely",
-        "import pyogrio",
-        "os.getenv",
-        "os.environ",
-        "from app.config",
-        "from app.infrastructure.storage.cloud_backends",
-    ]
-    for pattern in forbidden:
-        assert pattern not in src, (
-            f"esri_system_fields.py NON deve contenere {pattern!r}: "
-            "il modulo deve restare pure."
-        )
+    assert not imports_module(src, "pandas"), (
+        "esri_system_fields.py NON deve contenere 'import pandas'/'from pandas': "
+        "il modulo deve restare pure."
+    )
+    assert not imports_module(src, "geopandas"), (
+        "esri_system_fields.py NON deve contenere 'import geopandas'/'from geopandas': "
+        "il modulo deve restare pure."
+    )
+    assert not imports_module(src, "requests"), (
+        "esri_system_fields.py NON deve contenere 'import requests'/'from requests': "
+        "il modulo deve restare pure."
+    )
+    assert not imports_module(src, "boto3"), (
+        "esri_system_fields.py NON deve contenere 'import boto3': "
+        "il modulo deve restare pure."
+    )
+    assert not imports_module(src, "shapely"), (
+        "esri_system_fields.py NON deve contenere 'import shapely'/'from shapely': "
+        "il modulo deve restare pure."
+    )
+    assert not imports_module(src, "pyogrio"), (
+        "esri_system_fields.py NON deve contenere 'import pyogrio': "
+        "il modulo deve restare pure."
+    )
+    assert not uses_attribute(src, "os", "getenv"), (
+        "esri_system_fields.py NON deve contenere 'os.getenv': "
+        "il modulo deve restare pure."
+    )
+    assert not uses_attribute(src, "os", "environ"), (
+        "esri_system_fields.py NON deve contenere 'os.environ': "
+        "il modulo deve restare pure."
+    )
+    assert not imports_module(src, "app.config"), (
+        "esri_system_fields.py NON deve contenere 'from app.config': "
+        "il modulo deve restare pure."
+    )
+    assert not imports_module(src, "app.infrastructure.storage.cloud_backends"), (
+        "esri_system_fields.py NON deve contenere 'from app.infrastructure.storage.cloud_backends': "
+        "il modulo deve restare pure."
+    )
 
 
 # Source-bound: i 3 call site usano lo shared
@@ -164,9 +189,10 @@ def _read(path: Path) -> str:
 
 def test_arcgis_client_uses_shared_oid_set():
     src = _read(_BACKEND_APP / "core" / "features" / "arcgis_client.py")
-    assert "from app.shared.connections.esri_system_fields import ESRI_OID_FIELDS_LITERAL" in src
-    assert "skip_cols.update(ESRI_OID_FIELDS_LITERAL)" in src
+    assert imports_symbol_from(src, "app.shared.connections.esri_system_fields", "ESRI_OID_FIELDS_LITERAL")
+    assert uses_attribute(src, "skip_cols", "update") and "ESRI_OID_FIELDS_LITERAL" in all_identifiers(src)
     # Niente piu' literal set inline (la riga `{"OBJECTID", "objectid", ...}`)
+    # RAW: pattern specifico con literal set di stringhe, non un identificatore
     assert (
         'skip_cols.update({"OBJECTID", "objectid", "GLOBALID", "globalid", "GlobalID"})'
         not in src

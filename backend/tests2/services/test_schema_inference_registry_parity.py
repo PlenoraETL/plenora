@@ -16,6 +16,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.core.projects.schema_inference import ColumnSchema, SchemaInferenceService
+from tests2.shared._ast_identifiers import function_def_names
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -151,7 +152,7 @@ def test_schema_inference_service_does_not_magic_delegate_schema_handlers():
     source = inspect.getsource(SchemaInferenceService)
     service = _service()
 
-    assert "def __getattr__" not in source
+    assert "__getattr__" not in function_def_names(source)
     assert not hasattr(service, "_schema_join")
     assert callable(service._build_transform_handlers(edges_by_target={})["join"])
 

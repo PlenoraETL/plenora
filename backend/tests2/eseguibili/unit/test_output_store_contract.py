@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._ast_identifiers import uses_attribute
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.eseguibili, pytest.mark.contract]
 
@@ -96,7 +98,8 @@ def test_save_task_owner_fails_closed_when_object_storage_unavailable(
 def test_task_owner_store_has_no_local_read_write_fallback() -> None:
     src = _OUTPUT_STORE.read_text(encoding="utf-8")
 
-    assert "path.write_bytes(payload)" not in src
+    assert not uses_attribute(src, "path", "write_bytes")
+    # RAW: compound statement pattern (return + nested calls, not a plain identifier)
     assert "return _load_owner_payload(path.read_bytes())" not in src
 
 

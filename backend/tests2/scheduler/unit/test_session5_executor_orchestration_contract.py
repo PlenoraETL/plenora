@@ -17,8 +17,11 @@ Bug coperti:
 from __future__ import annotations
 
 import inspect
+import textwrap
 
 import pytest
+
+from tests2.shared._ast_identifiers import uses_attribute
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
@@ -44,12 +47,13 @@ def test_manipola_applica_trasformazioni_has_generic_exception_catch():
     window = src_no_comments[idx:idx + 2500]
 
     # Deve avere `except Exception` come catch-all (non solo ValueError/MemoryLimit)
+    # RAW: "except Exception" e' un compound sintattico (except clause), non un semplice identificatore
     assert "except Exception" in window, (
         "manipola execute deve avere except Exception catch-all per "
         "KeyError/AttributeError/TypeError dei plugin transform "
         "(no piu' propagation senza append_step)"
     )
-    # Logger.error + exc_info per triageability
+    # RAW: "exc_info=True" e' un keyword=value compound; call_has_keyword richiede func_name specifico
     assert "exc_info=True" in window
 
 
@@ -60,14 +64,15 @@ def test_manipola_carica_sorgenti_statiche_has_logger_error():
     `exc_info=True` e includere il node.id per triageability."""
     from app.core.manipola import executor
 
-    src = inspect.getsource(
+    src = textwrap.dedent(inspect.getsource(
         executor.ManipolaExecutor._carica_sorgenti_statiche
-    )
+    ))
 
-    assert "logger.error" in src, (
+    assert uses_attribute(src, "logger", "error"), (
         "_carica_sorgenti_statiche deve loggare a ERROR su exception "
         "(pre-fix: solo return dict senza traccia diagnostica)"
     )
+    # RAW: "exc_info=True" e' un keyword=value compound (non solo identificatore); call_has_keyword richiede func_name specifico
     assert "exc_info=True" in src
 
 
@@ -83,9 +88,11 @@ def test_arricchisci_schema_inference_warning_has_exc_info():
     src = inspect.getsource(executor.EnrichExecutor.execute)
 
     # Cerca il warning della schema inference
+    # RAW: la stringa e' un messaggio di log/prosa, non un identificatore codice
     idx = src.find("output_contract arricchisci: schema id non disponibili")
     assert idx >= 0
     window = src[idx:idx + 200]
+    # RAW: "exc_info=True" e' un keyword=value compound; call_has_keyword richiede func_name specifico
     assert "exc_info=True" in window, (
         "Schema inference warning deve avere exc_info=True per traceback"
     )
@@ -123,7 +130,9 @@ def test_beat_scheduler_catchup_audit_before_send_task():
 
     src = inspect.getsource(beat_scheduler.PlenoraBeatScheduler._emit_single_catchup)
 
+    # RAW: "INSERT INTO schedule_catchup_history" e' un SQL literal, non un identificatore codice
     insert_idx = src.find("INSERT INTO schedule_catchup_history")
+    # RAW: il test verifica ORDINE (insert_idx < send_task_idx); gli helper AST restituiscono bool non posizione
     send_task_idx = src.find("self.app.send_task(")
 
     assert insert_idx >= 0 and send_task_idx >= 0
@@ -145,6 +154,7 @@ def test_scheduler_runtime_enqueue_before_set_running():
     src = inspect.getsource(runtime_mod)
 
     # Localizza il retry block
+    # RAW: 'if decision["action"] == "retry":' e' uno statement con dict-key literal, non un identificatore
     retry_idx = src.find('if decision["action"] == "retry":')
     assert retry_idx >= 0
     window = src[retry_idx:retry_idx + 2000]
@@ -154,7 +164,9 @@ def test_scheduler_runtime_enqueue_before_set_running():
         line for line in window.splitlines() if not line.lstrip().startswith("#")
     )
 
+    # RAW: il test verifica ORDINE (enqueue_idx < status_idx); gli helper AST restituiscono bool non posizione
     enqueue_idx = window_no_comments.find("enqueue_schedule_run(")
+    # RAW: "set_runtime_status(schedule_id, RuntimeStatus.RUNNING)" e' uno statement completo con argomenti, non identificatore semplice
     status_idx = window_no_comments.find("set_runtime_status(schedule_id, RuntimeStatus.RUNNING)")
 
     assert enqueue_idx >= 0 and status_idx >= 0

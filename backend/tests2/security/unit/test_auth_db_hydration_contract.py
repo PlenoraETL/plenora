@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from tests2.shared._ast_identifiers import all_identifiers
 from app.core.auth.db import (
     GroupRow,
     GroupSummaryRow,
@@ -249,5 +250,6 @@ def test_auth_db_hydration_functions_validate_with_strict_pydantic_adapters():
         assert validate_calls, f"{function_name} must hydrate through {adapter_name}"
 
     source = _AUTH_DB_PATH.read_text(encoding="utf-8")
+    src_identifiers = all_identifiers(source)
     for strict_type in ("StrictStr", "StrictBool", "StrictInt", "TypeAdapter"):
-        assert strict_type in source
+        assert strict_type in src_identifiers

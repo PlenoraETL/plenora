@@ -15,6 +15,8 @@ import inspect
 
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers, uses_attribute
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
@@ -45,7 +47,8 @@ def test_storage_dispatch_sanitizes_filename_via_basename():
         line for line in src.splitlines() if not line.lstrip().startswith("#")
     )
 
-    assert "safe_filename" in src_no_comments
+    assert "safe_filename" in all_identifiers(src_no_comments)
+    # RAW: espressione-pattern complessa (Path(str(filename)).name), non solo identificatore
     assert "_Path(str(filename)).name" in src_no_comments or "Path(str(filename)).name" in src_no_comments
 
 
@@ -54,9 +57,10 @@ def test_rest_file_processor_sanitizes_output_extension():
     from app.core.arricchisci import api_connection_rest_file
 
     src = inspect.getsource(api_connection_rest_file)
-    assert "re.match" in src or "re.fullmatch" in src
-    # Regex anti-traversal su output_extension
+    assert uses_attribute(src, "re", "match") or uses_attribute(src, "re", "fullmatch")
+    # RAW: literal regex character-class content, non un identificatore
     assert "[A-Za-z0-9_]" in src
+    # RAW: stringa-log + statement di assegnazione, non identificatori
     assert "fallback a '.bin'" in src or "output_ext = '.bin'" in src
 
 
@@ -107,8 +111,8 @@ def test_eseguibili_temp_name_uses_hash_signature():
 
     # Anti-regression: niente piu' uuid.uuid4().hex per temp_name
     # (puo' essere usato altrove ma non per costruire temp_name)
-    assert "hashlib.sha256" in src_no_comments
-    assert "_df_signature" in src_no_comments
+    assert uses_attribute(src_no_comments, "hashlib", "sha256")
+    assert "_df_signature" in all_identifiers(src_no_comments)
     # Il temp_name deve usare la signature, non uuid4
     temp_name_idx = src_no_comments.find('temp_name = f"__exec_temp_')
     assert temp_name_idx >= 0

@@ -17,6 +17,8 @@ import json
 import pandas as pd
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
@@ -79,12 +81,13 @@ def test_load_dataframe_json_uses_canonical_coerce_helper(tmp_path):
     json_idx = src_no_comments.find('estensione == ".json"')
     assert json_idx >= 0, "Branch json non trovato"
     window = src_no_comments[json_idx:json_idx + 1000]
-    assert "_coerce_json_dataframe_columns" in window, (
+    assert "_coerce_json_dataframe_columns" in all_identifiers(src), (
         "Branch .json deve delegare a _coerce_json_dataframe_columns "
         "(helper canonico) invece di loop in-place duplicato"
     )
     # Anti-regression: nessun loop `df[col] = converted` inline
     # Sintassi Python esatta - assignment a colonna dataframe
+    # RAW: statement-pattern con subscript assignment, non un identificatore
     assert "df[col] = converted" not in window, (
         "Detected mutation in-place residua nel branch .json: usa helper"
     )

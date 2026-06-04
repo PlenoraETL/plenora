@@ -11,6 +11,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers, uses_attribute
+
 from app.core.resources.exceptions import MemoryLimitExceededError
 
 
@@ -170,14 +172,16 @@ def test_app_factory_recognizes_manipola_cross_join_stage():
     )
     src = app_factory_py.read_text(encoding="utf-8")
     # Stage routing — `manipola_cross_join` membership in _ROW_COUNT_STAGES
-    assert "_ROW_COUNT_STAGES" in src
+    assert "_ROW_COUNT_STAGES" in all_identifiers(src)
+    # RAW: string literal value (stage name as dict entry / frozenset element)
     assert '"manipola_cross_join"' in src
-    # Action label per row-count
+    # RAW: statement pattern (assignment with string rhs)
     assert 'suggested_action = "reduce_inputs_or_raise_cap"' in src
-    # Locked: status code split unchanged from batch 002 contract
+    # RAW: statement pattern (ternary assignment)
     assert "status_code = 503 if is_rss else 413" in src
-    # Locked: original suggested_action ternary still present (batch 002)
+    # RAW: string literal value
     assert '"retry_later_or_contact_admin"' in src
+    # RAW: string literal value
     assert '"split_file_or_contact_admin"' in src
 
 
@@ -190,12 +194,13 @@ def test_app_factory_renders_row_count_message_for_cross_join():
         / "app" / "app_factory.py"
     )
     src = app_factory_py.read_text(encoding="utf-8")
-    # Il messaggio cross-join usa verbo `genererebbe` (preflight).
+    # RAW: string literal value (Italian verb in f-string)
     assert '"genererebbe"' in src
-    assert "exc.observed_bytes" in src
-    assert "exc.limit_bytes" in src
-    # Narrative parametrica row-count: stage + righe.
+    assert uses_attribute(src, "exc", "observed_bytes")
+    assert uses_attribute(src, "exc", "limit_bytes")
+    # RAW: prose/string literal content in f-string
     assert "Lo stage" in src
+    # RAW: string literal fragment (Italian word)
     assert "righe" in src
 
 
@@ -208,5 +213,7 @@ def test_app_factory_adds_row_count_keys_to_details_for_row_count_stages():
         / "app" / "app_factory.py"
     )
     src = app_factory_py.read_text(encoding="utf-8")
+    # RAW: statement pattern (dict-key assignment with attribute rhs)
     assert 'details["limit_rows"] = exc.limit_bytes' in src
+    # RAW: statement pattern (dict-key assignment with attribute rhs)
     assert 'details["observed_rows"] = exc.observed_bytes' in src

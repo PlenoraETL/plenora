@@ -12,6 +12,12 @@ from typing import get_type_hints
 
 import pytest
 
+from tests2.shared._ast_identifiers import (
+    all_identifiers,
+    imports_module,
+    uses_attribute,
+)
+
 from app.shared.resources.external_artifact_processor import (
     ArtifactResult,
     ArtifactSource,
@@ -168,27 +174,50 @@ def test_module_has_no_heavy_imports():
     ).read_text(
         encoding="utf-8",
     )
-    forbidden = [
-        "import requests",
-        "from requests",
-        "import httpx",
-        "from httpx",
-        "import pandas",
-        "from pandas",
-        "import boto3",
-        "from app.infrastructure.storage.cloud_backends",
-        "from app.config",
-        "import os",
-        "os.getenv",
-        "os.environ",
-        "open(",
-        "Path(",
-    ]
-    for pattern in forbidden:
-        assert pattern not in src, (
-            f"external_artifact_processor.py NON deve contenere {pattern!r}: "
-            "modulo deve restare pure protocol/dataclass."
-        )
+    assert not imports_module(src, "requests"), (
+        "external_artifact_processor.py NON deve contenere 'import requests'/'from requests': "
+        "modulo deve restare pure protocol/dataclass."
+    )
+    assert not imports_module(src, "httpx"), (
+        "external_artifact_processor.py NON deve contenere 'import httpx'/'from httpx': "
+        "modulo deve restare pure protocol/dataclass."
+    )
+    assert not imports_module(src, "pandas"), (
+        "external_artifact_processor.py NON deve contenere 'import pandas'/'from pandas': "
+        "modulo deve restare pure protocol/dataclass."
+    )
+    assert not imports_module(src, "boto3"), (
+        "external_artifact_processor.py NON deve contenere 'import boto3': "
+        "modulo deve restare pure protocol/dataclass."
+    )
+    assert not imports_module(src, "app.infrastructure.storage.cloud_backends"), (
+        "external_artifact_processor.py NON deve contenere 'from app.infrastructure.storage.cloud_backends': "
+        "modulo deve restare pure protocol/dataclass."
+    )
+    assert not imports_module(src, "app.config"), (
+        "external_artifact_processor.py NON deve contenere 'from app.config': "
+        "modulo deve restare pure protocol/dataclass."
+    )
+    assert not imports_module(src, "os"), (
+        "external_artifact_processor.py NON deve contenere 'import os': "
+        "modulo deve restare pure protocol/dataclass."
+    )
+    assert not uses_attribute(src, "os", "getenv"), (
+        "external_artifact_processor.py NON deve contenere 'os.getenv': "
+        "modulo deve restare pure protocol/dataclass."
+    )
+    assert not uses_attribute(src, "os", "environ"), (
+        "external_artifact_processor.py NON deve contenere 'os.environ': "
+        "modulo deve restare pure protocol/dataclass."
+    )
+    assert "open" not in all_identifiers(src), (
+        "external_artifact_processor.py NON deve contenere 'open(': "
+        "modulo deve restare pure protocol/dataclass."
+    )
+    assert "Path" not in all_identifiers(src), (
+        "external_artifact_processor.py NON deve contenere 'Path(': "
+        "modulo deve restare pure protocol/dataclass."
+    )
 
 
 # 6. Parity audit: Protocol common denominator vs current mixin
@@ -223,7 +252,7 @@ def test_no_runtime_wiring_between_protocol_and_mixin():
     aggiornare il piano."""
     from app.core.arricchisci import api_connection_rest_file as mod
     src = Path(mod.__file__).read_text(encoding="utf-8")
-    assert "from app.shared.resources.external_artifact_processor" not in src, (
+    assert not imports_module(src, "app.shared.resources.external_artifact_processor"), (
         "BE-REST-001A e' audit-only. Wiring del Protocol nel mixin "
         "richiede REST-002 (extraction completa con test isolati)."
     )

@@ -15,6 +15,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
@@ -173,18 +175,19 @@ def test_auto_mapping_delegates_to_canonical_dispatch():
     riappare e questo test fallisce.
     """
     src = _extract_auto_mapping_body_source()
-    assert "empty_dataframe_from_column_metadata" in src, (
+    assert "empty_dataframe_from_column_metadata" in all_identifiers(src), (
         "auto_mapping non usa il dataframe boundary. Refactor dataframe "
         "richiede delega a app.core.dataframes.schema, non dispatch inline."
     )
     from app.core.dataframes.schema import empty_dataframe_from_column_metadata
 
     helper_src = inspect.getsource(empty_dataframe_from_column_metadata)
-    assert "canvas_type_to_pandas_dtype" in helper_src, (
+    assert "canvas_type_to_pandas_dtype" in all_identifiers(helper_src), (
         "empty_dataframe_from_column_metadata non usa canvas_type_to_pandas_dtype. "
         "Il dispatch canonico deve restare la fonte unica."
     )
     # Guardia contro reintroduzione dell'if/elif storico
+    # RAW: pattern multi-token (tuple di literal string), non identificatori singoli
     forbidden_patterns = [
         '"int", "integer"', "'int', 'integer'",
         '"real", "float", "double"', "'real', 'float', 'double'",

@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from tests2.shared._ast_identifiers import handler_catches
+
 
 def _make_response(*, status_code: int, json_side_effect: Exception | None = None,
                    json_return: object = None, text: str = ""):
@@ -75,10 +77,11 @@ def test_real_call_path_catches_json_decode_error():
 
     source = inspect.getsource(enrichment_retry_http)
     # Il fix deve essere presente: error_type tipizzato + cattura ValueError
+    # RAW: valore string-literal usato come error_type, non un identificatore codice
     assert "invalid_json_response" in source, (
         "Il fix JSON-decode contract deve esporre error_type "
         "'invalid_json_response' per non crashare il worker."
     )
-    assert "JSONDecodeError" in source or "ValueError" in source, (
+    assert handler_catches(source, "JSONDecodeError") or handler_catches(source, "ValueError"), (
         "Il fix deve catturare JSONDecodeError o ValueError sul body 200."
     )

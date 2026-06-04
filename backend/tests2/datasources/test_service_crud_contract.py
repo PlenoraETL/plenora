@@ -357,6 +357,8 @@ def test_datasource_service_has_no_scan_state_filesystem_fallback():
     # `python_code_only()` lo striperebbe insieme alle stringhe. Resta quindi un
     # check strutturale sul sorgente grezzo (intent: nessuna query lo referenzia).
     source = Path(datasource_service.__file__).read_text(encoding="utf-8")
+    # RAW: "datasources_scan" è un nome di tabella SQL legacy (string literal nelle query),
+    # non un identificatore Python — all_identifiers() lo stripperebbe insieme alle stringhe.
     assert "datasources_scan" not in source, (
         "il service non deve referenziare la tabella legacy datasources_scan"
     )

@@ -80,5 +80,7 @@ def test_project_router_uses_typed_metadata_attributes_only() -> None:
 
     source = inspect.getsource(router_mod)
 
+    # RAW: expression-pattern (isinstance call with two positional args) — no AST helper covers this exact shape
     assert 'isinstance(metadata, dict)' not in source
+    # RAW: dict-access via .get() with a string-literal key — not a bare identifier, keep as substring guard
     assert 'metadata.get("group_id")' not in source

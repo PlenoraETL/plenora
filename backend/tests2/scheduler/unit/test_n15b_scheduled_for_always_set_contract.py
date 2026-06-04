@@ -12,6 +12,8 @@ from unittest.mock import patch
 
 import pytest
 
+from tests2.shared._ast_identifiers import uses_attribute
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
@@ -30,11 +32,12 @@ def test_task_source_has_scheduled_for_fallback_logic():
     Pattern accettabile: 'if scheduled_for is None' + datetime now/utcnow.
     """
     src = _task_source()
+    # RAW: statement/espressione-pattern, non identificatori
     assert "scheduled_for is None" in src or "scheduled_for = scheduled_for or" in src, (
         "Task non ha fallback per scheduled_for=None — N15b gap aperto."
     )
     # Deve referenziare qualche forma di 'now' + iso + timezone-aware
-    has_now = "datetime.now" in src or "datetime.utcnow" in src
+    has_now = uses_attribute(src, "datetime", "now") or uses_attribute(src, "datetime", "utcnow")
     assert has_now, "Fallback non computa un timestamp 'now'."
 
 

@@ -22,6 +22,7 @@ Anti-regression preservato tramite:
 from __future__ import annotations
 
 import pytest
+from tests2.shared._ast_identifiers import all_identifiers
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
@@ -58,7 +59,9 @@ def test_pipeline_result_dispatches_bytes_first_only():
     from app.core.results import pipeline_result
 
     src = inspect.getsource(pipeline_result.save_pipeline_result_outcome)
+    # RAW: "save_dataframe_to_bytes" appare solo nella docstring della funzione
+    # (non come identificatore codice) — all_identifiers() non lo vedrebbe.
     assert "save_dataframe_to_bytes" in src
-    assert "save_dataframe(" not in src, (
+    assert "save_dataframe" not in all_identifiers(src), (
         "save_pipeline_result_outcome usa ancora save_dataframe path-based"
     )

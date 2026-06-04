@@ -10,6 +10,12 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._ast_identifiers import (
+    all_identifiers,
+    calls_method,
+    function_def_names,
+)
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
@@ -96,6 +102,7 @@ def test_count_active_by_state_domain_sql_excludes_terminals():
     `done` count)."""
     src = _read("app/core/resources/storage_reconciliation.py")
     # Source-bound assertion on the SQL constant.
+    # RAW: SQL string literal fragment, not an identifier
     assert "WHERE state IN ('pending', 'lost')" in src, (
         "count_active_by_state_domain SQL must filter `state IN "
         "('pending', 'lost')` so terminals don't dilute the active count."
@@ -109,6 +116,7 @@ def test_prune_terminal_older_than_sql_only_touches_terminals():
     src = _read("app/core/resources/storage_reconciliation.py")
     # The SQL is split across multiple lines with whitespace; check
     # for the canonical fragment.
+    # RAW: SQL string literal fragment, not an identifier
     assert "state IN ('done', 'orphan_deleted')" in src, (
         "prune_terminal_older_than SQL must restrict to terminal "
         "states only. Pruning `pending` or `lost` would delete "
@@ -117,11 +125,12 @@ def test_prune_terminal_older_than_sql_only_touches_terminals():
     # Bounded by LIMIT (PG doesn't support DELETE...LIMIT directly,
     # so the helper must use a sub-SELECT with LIMIT). Locate the
     # `_PRUNE_TERMINAL_SQL =` block and assert it contains LIMIT.
-    if "_PRUNE_TERMINAL_SQL" in src:
+    if "_PRUNE_TERMINAL_SQL" in all_identifiers(src):
         # Take a window of ~600 chars after the assignment to capture
         # the multi-line SQL.
         idx = src.index("_PRUNE_TERMINAL_SQL")
         window = src[idx : idx + 600]
+        # RAW: SQL keyword inside a windowed string slice, not an identifier
         assert "LIMIT" in window, (
             "prune_terminal_older_than must enforce a per-call LIMIT to "
             "stay bounded; without it a single tick could lock the table."
@@ -137,15 +146,16 @@ def test_beat_scheduler_reconcile_invokes_mark_lost():
     bounce between `pending` and `failed_attempt` indefinitely."""
     src = _read("workers/beat_scheduler.py")
     # The function definition exists.
-    assert "def _reconcile_storage" in src
+    assert "_reconcile_storage" in function_def_names(src)
     # `mark_lost` is invoked from the reconciler — match either
     # `_recon.mark_lost(` or direct `mark_lost(` style.
-    assert "mark_lost(" in src, (
+    assert calls_method(src, "mark_lost"), (
         "_reconcile_storage must invoke mark_lost so attempts >= max "
         "moves entries to the terminal `lost` state."
     )
     # The max-attempts gate must reference the cap explicitly.
-    assert "max_attempts" in src
+    assert "max_attempts" in all_identifiers(src)
+    # RAW: ">=" is a Python operator token, not an identifier
     assert ">=" in src, (
         "_reconcile_storage must promote to lost when attempts >= cap."
     )
@@ -155,11 +165,12 @@ def test_beat_scheduler_reconcile_invokes_count_active_by_state_domain():
     """Operational summary must be emitted every reconciler tick.
     Drop it and ops loses the only signal of accumulating backlog."""
     src = _read("workers/beat_scheduler.py")
-    assert "count_active_by_state_domain" in src, (
+    assert "count_active_by_state_domain" in all_identifiers(src), (
         "_reconcile_storage must invoke count_active_by_state_domain "
         "to emit the per-tick summary log "
         "`event=storage_reconciliation_summary`."
     )
+    # RAW: string literal event name used in ops alerting
     assert "storage_reconciliation_summary" in src, (
         "The summary log event name must be preserved — ops "
         "alerting filters on this exact event string."
@@ -170,10 +181,11 @@ def test_beat_scheduler_reconcile_invokes_prune_terminal_older_than():
     """Bounded retention prune must run every tick. Drop it and the
     reconciliation log table grows without limit."""
     src = _read("workers/beat_scheduler.py")
-    assert "prune_terminal_older_than" in src, (
+    assert "prune_terminal_older_than" in all_identifiers(src), (
         "_reconcile_storage must invoke prune_terminal_older_than "
         "to keep the table size bounded."
     )
+    # RAW: string literal event name used in ops alerting
     assert "storage_reconciliation_prune_tick" in src, (
         "The prune tick log event name must be preserved — ops "
         "uses it to verify retention is active."
@@ -190,6 +202,7 @@ def test_beat_scheduler_reconcile_reads_boundedness_settings():
         "STORAGE_RECONCILE_TERMINAL_RETENTION_DAYS",
         "STORAGE_RECONCILE_PRUNE_BATCH_SIZE",
     ):
+        # RAW: settings keys are string literals passed to _read_int(), not code identifiers
         assert key in src, (
             f"Setting {key!r} must be read by _reconcile_storage so "
             "ops can tune the boundedness behavior at runtime."
@@ -268,12 +281,14 @@ def test_log_event_names_locked_in_source():
     src_beat = _read("workers/beat_scheduler.py")
 
     # Per-row outcomes (boundary).
+    # RAW: "event=..." are string literal log values, not code identifiers
     assert "event=storage_reconciliation_mark_failed" in src_recon
     assert "event=storage_reconciliation_fetch_failed" in src_recon
     assert "event=storage_reconciliation_count_failed" in src_recon
     assert "event=storage_reconciliation_prune_failed" in src_recon
 
     # Per-tick aggregate (beat hook).
+    # RAW: "event=..." are string literal log values, not code identifiers
     assert "event=storage_reconciliation_beat_tick" in src_beat
     assert "event=storage_reconciliation_summary" in src_beat
     assert "event=storage_reconciliation_prune_tick" in src_beat

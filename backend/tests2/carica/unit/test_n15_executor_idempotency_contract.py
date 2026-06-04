@@ -14,6 +14,7 @@ import pytest
 
 from app.core.carica.executor import CaricaExecutor
 from app.core.carica.models import WriteStatus
+from tests2.shared._ast_identifiers import imports_module
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -291,4 +292,4 @@ def test_carica_executor_has_no_direct_pg_connection_import():
     source_file = inspect.getsourcefile(CaricaExecutor)
     assert source_file is not None
     src = Path(source_file).read_text(encoding="utf-8")
-    assert "app.db.pg_connection" not in src
+    assert not imports_module(src, "app.db.pg_connection")

@@ -9,6 +9,8 @@ from types import ModuleType
 
 import pytest
 
+from tests2.shared._ast_identifiers import uses_attribute
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
@@ -94,12 +96,15 @@ def test_script_reports_operational_failure(capsys) -> None:
 def test_script_source_is_read_only_and_uses_canvas_graph() -> None:
     source = _SCRIPT_PATH.read_text(encoding="utf-8")
 
-    assert "CanvasGraph.from_canvas" in source
+    assert uses_attribute(source, "CanvasGraph", "from_canvas")
+    # RAW: SQL string literal content — not an identifier
     assert "SELECT id, name, canvas" in source
     banned_write_markers = (
+        # RAW: SQL statement fragments — not identifiers
         "UPDATE projects",
         "DELETE FROM projects",
         "INSERT INTO projects",
+        # RAW: call-pattern strings with trailing "(" — not pure identifiers
         "update_project(",
         "delete_project(",
         "create_project(",

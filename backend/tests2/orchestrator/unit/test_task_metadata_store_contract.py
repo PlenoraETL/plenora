@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+from tests2.shared._ast_identifiers import all_identifiers
+
 import pytest
 
 from app.core.orchestrator.task_metadata_store import (
@@ -88,9 +90,10 @@ def test_task_metadata_store_default_runtime_has_no_local_fallback_wrapper():
 
     source = Path(task_metadata_store.__file__).read_text(encoding="utf-8")
 
-    assert "_LOCAL_FALLBACK_ENVS" not in source
-    assert "TaskMetadataStoreWithDevFallback" not in source
-    assert "default_task_metadata_store" in source
+    assert "_LOCAL_FALLBACK_ENVS" not in all_identifiers(source)
+    assert "TaskMetadataStoreWithDevFallback" not in all_identifiers(source)
+    assert "default_task_metadata_store" in all_identifiers(source)
+    # RAW: statement pattern (multi-token return expression, not a plain identifier)
     assert "return RedisTaskMetadataStore(" in source
 
 

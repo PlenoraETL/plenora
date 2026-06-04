@@ -18,6 +18,8 @@ import re
 from pathlib import Path
 from typing import List
 
+from tests2.shared._ast_identifiers import imports_symbol_from, uses_attribute
+
 import pytest
 
 import app.bootstrap as bootstrap_module
@@ -43,19 +45,8 @@ def test_celery_app_imports_three_bootstrap_signals():
     `beat_init` are imported from `celery.signals`. Drift = a
     contributor removed one and broke the parity invariant."""
     src = _read(_CELERY_APP_PY)
-    # Match a multi-line `from celery.signals import (...)` block.
-    m = re.search(
-        r"from\s+celery\.signals\s+import\s+\(([^)]+)\)",
-        src,
-        re.DOTALL,
-    )
-    assert m is not None, (
-        "Expected `from celery.signals import (...)` block in "
-        "workers/celery_app.py."
-    )
-    imported = m.group(1)
     for signal_name in ("worker_init", "worker_process_init", "beat_init"):
-        assert signal_name in imported, (
+        assert imports_symbol_from(src, "celery.signals", signal_name), (
             f"`celery.signals.{signal_name}` not imported in "
             f"workers/celery_app.py. The bootstrap parity contract "
             f"requires all three signals."
@@ -68,9 +59,8 @@ def test_celery_app_connects_handler_to_each_bootstrap_signal():
     removed or its connect was disconnected."""
     src = _read(_CELERY_APP_PY)
     for signal_name in ("worker_init", "worker_process_init", "beat_init"):
-        decorator = f"@{signal_name}.connect"
-        assert decorator in src, (
-            f"Expected `{decorator}` decorator in "
+        assert uses_attribute(src, signal_name, "connect"), (
+            f"Expected `@{signal_name}.connect` decorator in "
             f"workers/celery_app.py. Required for bootstrap parity."
         )
 
@@ -95,6 +85,7 @@ def test_handler_for_worker_process_init_uses_force_reset_true():
         "workers/celery_app.py."
     )
     body = m.group(1)
+    # RAW: expression-pattern including literal boolean value True (not just the keyword name)
     assert "force_reset=True" in body, (
         "`worker_process_init` handler must invoke "
         "`_bootstrap_worker_process(force_reset=True)`. "
@@ -122,6 +113,7 @@ def test_handlers_for_worker_init_and_beat_init_do_not_force_reset():
             f"Could not locate `{signal_name}` handler body."
         )
         body = m.group(1)
+        # RAW: expression-pattern including literal boolean value True (not just the keyword name)
         assert "force_reset=True" not in body, (
             f"`{signal_name}` handler must NOT pass "
             f"force_reset=True. force_reset is the post-fork "

@@ -499,11 +499,17 @@ def test_tick_wires_reconcile_storage_call():
     runtime; this test is hermetic)."""
     from pathlib import Path
 
+    from tests2.shared._ast_identifiers import (
+        all_identifiers,
+        calls_method,
+        function_def_names,
+    )
+
     src_path = (
         Path(__file__).resolve().parent.parent.parent
         / "workers" / "beat_scheduler.py"
     )
     src = src_path.read_text(encoding="utf-8")
-    assert "self._reconcile_storage()" in src
-    assert "def _reconcile_storage" in src
-    assert "_last_storage_reconcile" in src
+    assert calls_method(src, "_reconcile_storage")
+    assert "_reconcile_storage" in function_def_names(src)
+    assert "_last_storage_reconcile" in all_identifiers(src)

@@ -14,20 +14,23 @@ Post-fix: gating env-aware via `tls_policy.tls_bypass_allowed()`.
 from __future__ import annotations
 
 import inspect
+import textwrap
+
+from tests2.shared._ast_identifiers import all_identifiers
 
 
 def test_mssql_test_connection_uses_tls_policy_gate():
     """`_test_mssql` deve consultare `tls_bypass_allowed` per Trust* flag."""
     from app.core.connections import service
 
-    source = inspect.getsource(service.ConnectionService._test_mssql)
+    source = textwrap.dedent(inspect.getsource(service.ConnectionService._test_mssql))
 
-    # Anti-regressione contro re-introduzione di "yes" hardcoded
+    # RAW: stringa literal con caratteri non-identificatore (="yes" con virgolette)
     assert "TrustServerCertificate=yes\"" not in source, (
         "TrustServerCertificate=yes hardcoded e' un security regression: "
         "in prod accetta MITM. Usa il gate env-aware tls_bypass_allowed()."
     )
-    assert "tls_bypass_allowed" in source, (
+    assert "tls_bypass_allowed" in all_identifiers(source), (
         "Il fix MSSQL TrustServerCertificate deve delegare a "
         "tls_policy.tls_bypass_allowed() per gating env-aware."
     )

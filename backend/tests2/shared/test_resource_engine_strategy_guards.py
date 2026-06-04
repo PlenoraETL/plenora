@@ -12,6 +12,8 @@ from typing import get_args
 
 import pytest
 
+from tests2.shared._ast_identifiers import function_def_names
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
@@ -234,7 +236,7 @@ def test_resource_ref_post_init_is_present_in_source():
     one-id-set guards (the dataclass would then accept empty /
     ambiguous refs)."""
     text = _TYPES_PY.read_text(encoding="utf-8")
-    assert "def __post_init__" in text, (
+    assert "__post_init__" in function_def_names(text), (
         "ResourceRef.__post_init__ is the structural enforcement of "
         "mandatory tenant binding (`expected_group_id`) and "
         "mutual-exclusion of id fields. It must remain in source."

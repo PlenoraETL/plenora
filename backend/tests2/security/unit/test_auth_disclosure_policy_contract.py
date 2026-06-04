@@ -21,6 +21,7 @@ from fastapi import HTTPException
 
 from app.core.auth import disclosure
 from app.shared import error_codes
+from tests2.shared._ast_identifiers import imports_module, imports_symbol_from
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
@@ -480,13 +481,13 @@ def test_auth_py_imports_disclosure_module():
     policy decisions. The actual usage is locked by the per-const
     tests above; this is the import-presence sanity check."""
     text = _read(_AUTH_PY)
-    assert "from app.core.auth import disclosure" in text
+    assert imports_symbol_from(text, "app.core.auth", "disclosure")
 
 
 def test_ownership_py_imports_disclosure_module():
     """Symmetric for ownership.py."""
     text = _read(_OWNERSHIP_PY)
-    assert "from app.core.auth import disclosure" in text
+    assert imports_symbol_from(text, "app.core.auth", "disclosure")
 
 
 def test_disclosure_module_does_not_import_db_or_router():
@@ -494,23 +495,35 @@ def test_disclosure_module_does_not_import_db_or_router():
     router, request, or any side-effecting auth machinery. Only
     `error_codes` + `error_envelope.raise_typed_http` are allowed."""
     text = _read(_DISCLOSURE_PY)
-    forbidden = [
-        "import app.db.",
-        "from app.db.",
-        "from fastapi import",  # routers/Depends/Request out of scope
-        "import app.core.auth.auth",
-        "from app.core.auth.auth",
-        "import app.core.auth.ownership",
-        "import app.core.auth.mfa",
-        "import app.core.security.token_blacklist",
-        "import app.core.security.password_hashing",
-        "import app.core.security.login_rate_limiter",
-        "import app.core.security.token_blacklist",
-        "import app.core.security.password_hashing",
-        "import app.core.security.login_rate_limiter",
-    ]
-    for line in forbidden:
-        assert line not in text, (
-            f"disclosure.py must remain pure (no side-effecting "
-            f"imports). Found forbidden import: {line!r}"
-        )
+    assert not imports_module(text, "app.db"), (
+        "disclosure.py must remain pure (no side-effecting imports). "
+        "Found forbidden import: 'app.db.*'"
+    )
+    assert not imports_module(text, "fastapi"), (
+        "disclosure.py must remain pure (no side-effecting imports). "
+        "Found forbidden import: 'from fastapi import'"
+    )
+    assert not imports_module(text, "app.core.auth.auth"), (
+        "disclosure.py must remain pure (no side-effecting imports). "
+        "Found forbidden import: 'app.core.auth.auth'"
+    )
+    assert not imports_module(text, "app.core.auth.ownership"), (
+        "disclosure.py must remain pure (no side-effecting imports). "
+        "Found forbidden import: 'app.core.auth.ownership'"
+    )
+    assert not imports_module(text, "app.core.auth.mfa"), (
+        "disclosure.py must remain pure (no side-effecting imports). "
+        "Found forbidden import: 'app.core.auth.mfa'"
+    )
+    assert not imports_module(text, "app.core.security.token_blacklist"), (
+        "disclosure.py must remain pure (no side-effecting imports). "
+        "Found forbidden import: 'app.core.security.token_blacklist'"
+    )
+    assert not imports_module(text, "app.core.security.password_hashing"), (
+        "disclosure.py must remain pure (no side-effecting imports). "
+        "Found forbidden import: 'app.core.security.password_hashing'"
+    )
+    assert not imports_module(text, "app.core.security.login_rate_limiter"), (
+        "disclosure.py must remain pure (no side-effecting imports). "
+        "Found forbidden import: 'app.core.security.login_rate_limiter'"
+    )

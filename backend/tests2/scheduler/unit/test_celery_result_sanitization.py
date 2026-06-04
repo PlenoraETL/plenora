@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
@@ -66,7 +68,8 @@ def test_carica_task_outer_preserves_admin_internal_message():
     src = _read("workers/tasks/carica_task.py")
     # error_msg_internal: nuova variabile sanitize che preserva str(e)
     # destinata solo a canali admin.
-    assert "error_msg_internal" in src
+    assert "error_msg_internal" in all_identifiers(src)
+    # RAW: pattern di kwarg con valore specifico (error_message=error_msg_internal) — non e' un semplice identificatore
     assert 'error_message=error_msg_internal' in src
 
 

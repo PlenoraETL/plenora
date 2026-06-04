@@ -21,6 +21,8 @@ import inspect
 
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
@@ -33,18 +35,18 @@ def test_source_read_load_dataframe_is_bytes_first_no_tempfile():
 
     src = inspect.getsource(source_read.load_dataframe)
 
-    assert "_cleanup_temp_path" not in src, (
+    assert "_cleanup_temp_path" not in all_identifiers(src), (
         "load_dataframe non deve piu' usare _cleanup_temp_path post-Phase4 "
         "(bytes-first via load_by_format_bytes). Se torna, e' una regressione "
         "verso il path-mode che il pattern Sessione 11 doveva proteggere."
     )
-    assert "temp_file_for" not in src, (
+    assert "temp_file_for" not in all_identifiers(src), (
         "load_dataframe non deve materializzare tempfile post-Phase4 "
         "(bytes-first). Se torna, contraddice il refactor che ha "
         "eliminato il bounce su disco."
     )
     # Conferma che il path nuovo bytes-first sia in uso.
-    assert "load_by_format_bytes" in src, (
+    assert "load_by_format_bytes" in all_identifiers(src), (
         "load_dataframe deve consumare il blob via load_by_format_bytes "
         "(bytes-first contract). Se la helper cambia nome, aggiornare qui."
     )

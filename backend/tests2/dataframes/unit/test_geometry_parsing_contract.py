@@ -33,6 +33,7 @@ from app.core.dataframes.geometry_parsing import (
     parse_geometry,
     parse_geometry_series,
 )
+from tests2.shared._ast_identifiers import call_has_keyword
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
@@ -155,10 +156,11 @@ class TestWkbHexNoVectorizedFastPath:
         ma il body deve essere `return series.apply(parse_geometry)`.
         """
         src = inspect.getsource(parse_geometry_series)
+        # RAW: expression-pattern (specific call with argument): checks that looks_like_wkb_hex(sample_str) call is present
         assert "looks_like_wkb_hex(sample_str)" in src, (
             "il check WKB hex deve restare presente"
         )
-        assert "shapely.from_wkb(values, hex=True" not in src, (
+        assert not call_has_keyword(src, "from_wkb", "hex"), (
             "regressione: WKB hex vettoriale reintrodotto nonostante "
             "il benchmark sfavorevole; ramo EWKB delicato"
         )

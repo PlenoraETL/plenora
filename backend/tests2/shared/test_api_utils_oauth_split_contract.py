@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._ast_identifiers import imports_module
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
@@ -60,7 +62,7 @@ def test_runtime_code_does_not_import_shared_api_utils():
     for path in APP_DIR.rglob("*.py"):
         rel = path.relative_to(APP_DIR).as_posix()
         src = path.read_text(encoding="utf-8")
-        if "app.shared.api_utils" in src:
+        if imports_module(src, "app.shared.api_utils"):
             offenders.append(rel)
 
     assert offenders == []

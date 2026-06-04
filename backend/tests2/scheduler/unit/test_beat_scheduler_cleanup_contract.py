@@ -13,6 +13,8 @@ import pytest
 
 from workers.beat_scheduler import PlenoraBeatScheduler
 
+from tests2.shared._ast_identifiers import uses_attribute, call_has_keyword
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
 
@@ -43,9 +45,9 @@ def test_beat_janitors_use_shared_filesystem_cleanup_boundary() -> None:
     # Audit follow-up 2026-05-26: il modulo cleanup e' stato spostato
     # in `app/core/io/local_cleanup.py` come boundary I/O orizzontale.
     assert "app.core.io.local_cleanup" in imports
-    assert "shutil.rmtree" not in src
-    assert "_shutil.rmtree" not in src
-    assert ".unlink(missing_ok=True)" not in src
+    assert not uses_attribute(src, "shutil", "rmtree")
+    assert not uses_attribute(src, "_shutil", "rmtree")
+    assert not call_has_keyword(src, "unlink", "missing_ok")
 
 
 def test_cleanup_eseguibili_outputs_removes_only_expired(tmp_path, monkeypatch):

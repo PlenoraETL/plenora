@@ -20,6 +20,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers, uses_attribute
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
@@ -123,14 +125,14 @@ def test_carica_dispatch_runtime_paths_delegate_to_shared_launcher():
 
     for src in (orchestrator_src, enrichment_src):
         # delega al launcher unico
-        assert "launch_carica_tasks_for_canvas" in src
+        assert "launch_carica_tasks_for_canvas" in all_identifiers(src)
         # il loop NON deve essere riscritto nei due call-site
-        assert "carica_dispatcher.find_connected_carica_nodes" not in src
-        assert "carica_dispatcher.build_carica_node_data" not in src
+        assert not uses_attribute(src, "carica_dispatcher", "find_connected_carica_nodes")
+        assert not uses_attribute(src, "carica_dispatcher", "build_carica_node_data")
 
     # il loop canonico vive nel launcher condiviso (unica fonte di verita')
-    assert "carica_dispatcher.find_connected_carica_nodes" in task_service_src
-    assert "carica_dispatcher.build_carica_node_data" in task_service_src
+    assert uses_attribute(task_service_src, "carica_dispatcher", "find_connected_carica_nodes")
+    assert uses_attribute(task_service_src, "carica_dispatcher", "build_carica_node_data")
 
-    assert "NODE_RESERVED_FIELDS" not in orchestrator_src
-    assert "NODE_RESERVED_FIELDS" not in enrichment_src
+    assert "NODE_RESERVED_FIELDS" not in all_identifiers(orchestrator_src)
+    assert "NODE_RESERVED_FIELDS" not in all_identifiers(enrichment_src)

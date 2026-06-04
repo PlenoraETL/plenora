@@ -6,9 +6,12 @@ Lock i 6 invariant dell'estrazione:
 
 from __future__ import annotations
 
+import textwrap
 from pathlib import Path
 
 import pytest
+
+from tests2.shared._ast_identifiers import all_identifiers
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.arricchisci, pytest.mark.contract]
@@ -37,20 +40,35 @@ def test_execute_enrichment_no_longer_inline_in_api_connector():
     src = (
         _BACKEND_ROOT / "app" / "core" / "arricchisci" / "api_connector.py"
     ).read_text(encoding="utf-8")
-    forbidden = [
-        # Body markers tipici dell'orchestrator Previous contract.
-        "step_node_ids[0]",
-        "compute_parallel_groups(",
-        "execute_parallel_enrichers(",
-        "node_results[node_id] = self._load_static_values",
-        "_passthrough_file_source",
-    ]
-    for pat in forbidden:
-        assert pat not in src, (
-            f"REGRESSIONE: pattern `{pat}` ancora presente in "
-            f"api_connector.py dopo BE-GO-READY-TRANSFORMATION-"
-            f"ENGINE-011. Il body deve vivere in canvas_orchestrator.py."
-        )
+    _ids = all_identifiers(src)
+    # Body markers tipici dell'orchestrator Previous contract.
+    assert "compute_parallel_groups" not in _ids, (
+        "REGRESSIONE: pattern `compute_parallel_groups(` ancora presente in "
+        "api_connector.py dopo BE-GO-READY-TRANSFORMATION-"
+        "ENGINE-011. Il body deve vivere in canvas_orchestrator.py."
+    )
+    assert "execute_parallel_enrichers" not in _ids, (
+        "REGRESSIONE: pattern `execute_parallel_enrichers(` ancora presente in "
+        "api_connector.py dopo BE-GO-READY-TRANSFORMATION-"
+        "ENGINE-011. Il body deve vivere in canvas_orchestrator.py."
+    )
+    assert "_passthrough_file_source" not in _ids, (
+        "REGRESSIONE: pattern `_passthrough_file_source` ancora presente in "
+        "api_connector.py dopo BE-GO-READY-TRANSFORMATION-"
+        "ENGINE-011. Il body deve vivere in canvas_orchestrator.py."
+    )
+    # RAW: subscript expression, non pure identifier
+    assert "step_node_ids[0]" not in src, (
+        "REGRESSIONE: pattern `step_node_ids[0]` ancora presente in "
+        "api_connector.py dopo BE-GO-READY-TRANSFORMATION-"
+        "ENGINE-011. Il body deve vivere in canvas_orchestrator.py."
+    )
+    # RAW: statement multi-token, non pure identifier
+    assert "node_results[node_id] = self._load_static_values" not in src, (
+        "REGRESSIONE: pattern `node_results[node_id] = self._load_static_values` ancora presente in "
+        "api_connector.py dopo BE-GO-READY-TRANSFORMATION-"
+        "ENGINE-011. Il body deve vivere in canvas_orchestrator.py."
+    )
 
 
 def test_orchestrator_module_exposes_pure_function_api():
@@ -101,14 +119,15 @@ def test_api_connection_service_execute_enrichment_is_thin_wrapper():
 
     from app.core.arricchisci.api_connector import ApiConnectionService
 
-    src = inspect.getsource(ApiConnectionService.execute_enrichment)
-    assert "execute_canvas_enrichment" in src, (
+    src = textwrap.dedent(inspect.getsource(ApiConnectionService.execute_enrichment))
+    _ids = all_identifiers(src)
+    assert "execute_canvas_enrichment" in _ids, (
         "REGRESSIONE: `ApiConnectionService.execute_enrichment` non "
         "delega piu' a `canvas_orchestrator.execute_canvas_enrichment`."
     )
     # Il wrapper deve essere thin: niente body BFS canvas-graph.
-    assert "compute_parallel_groups" not in src
-    assert "step_node_ids" not in src
+    assert "compute_parallel_groups" not in _ids
+    assert "step_node_ids" not in _ids
 
 
 def test_arricchisci_owned_files_do_not_use_plain_keep_compat_markers():

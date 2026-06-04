@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._ast_identifiers import all_identifiers, imports_module
+
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
@@ -224,8 +226,8 @@ def test_removed_cross_domain_db_import_tombstones_stay_absent() -> None:
 def test_auth_db_does_not_import_intermediate_db() -> None:
     src = (_CORE_ROOT / "auth" / "db.py").read_text(encoding="utf-8")
 
-    assert "app.core.intermediate.db" not in src
-    assert "delete_all_runs_for_canvas" not in src
+    assert not imports_module(src, "app.core.intermediate.db")
+    assert "delete_all_runs_for_canvas" not in all_identifiers(src)
 
 
 def test_intermediate_db_facade_does_not_import_projects_db() -> None:
@@ -246,4 +248,5 @@ def test_intermediate_db_facade_does_not_import_projects_db() -> None:
             imported_modules.update(alias.name for alias in node.names)
 
     assert "app.core.projects.db" not in imported_modules
+    # RAW: partial dotted-path fragment, not a single identifier; AST import check above already covers the main case
     assert "projects.db" not in src

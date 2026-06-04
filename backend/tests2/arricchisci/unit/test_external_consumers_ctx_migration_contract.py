@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from tests2.shared._ast_identifiers import calls_method, imports_symbol_as
+
 
 pytestmark = [
     pytest.mark.unit,
@@ -81,11 +83,10 @@ def test_enrichment_task_imports_and_uses_typed_context():
     esplicitamente. Il worker NON muta `svc._current_group_id`
     direttamente."""
     src = _ENRICHMENT_TASK_PY.read_text(encoding="utf-8")
-    assert (
-        "from app.core.arricchisci import execution_context "
-        "as execution_context_module" in src
+    assert imports_symbol_as(
+        src, "app.core.arricchisci", "execution_context", "execution_context_module"
     ), "Atteso import del modulo execution_context."
-    assert "ArricchisciExecutionContext(" in src, (
+    assert calls_method(src, "ArricchisciExecutionContext"), (
         "Atteso costruzione esplicita di ArricchisciExecutionContext."
     )
 

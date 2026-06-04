@@ -318,11 +318,14 @@ def test_router_registry_does_not_import_router_modules_at_top_level():
 
 def test_app_factory_imports_all_bindings_and_dispatcher():
     """Positive lock: app factory imports every binding and invokes dispatcher."""
+    from tests2.shared._ast_identifiers import all_identifiers
+
     src = _read_source("app/app_factory.py")
+    ids = all_identifiers(src)
 
     for binding_attr, *_ in [case.values for case in BINDING_CASES]:
-        assert binding_attr in src, f"app/app_factory.py must import {binding_attr}"
-    assert "bind_router_services(" in src, (
+        assert binding_attr in ids, f"app/app_factory.py must import {binding_attr}"
+    assert "bind_router_services" in ids, (
         "app/app_factory.py must invoke bind_router_services()"
     )
 
@@ -343,6 +346,7 @@ def test_app_factory_has_no_legacy_direct_router_init_literals():
     src = _read_source("app/app_factory.py")
 
     for binding_attr, _, _, _, init_name, bad_call in [case.values for case in BINDING_CASES]:
+        # RAW: bad_call is a full call-expression pattern (e.g. "init_orchestrator(orchestrator)"), not a plain identifier
         assert bad_call not in src, (
             "app/app_factory.py should call router init through "
             f"bind_router_services(runtime_services, {binding_attr}) "
@@ -410,6 +414,7 @@ def test_app_factory_init_order_is_canonical():
 
     positions = []
     for label, literal in markers:
+        # RAW: literal is a full call-expression pattern (e.g. "bind_router_services(runtime_services, CONNECTIONS_BINDING)"), not a plain identifier
         idx = src.find(literal)
         assert idx >= 0, (
             f"Expected `{literal}` in app/app_factory.py; bootstrap order "
