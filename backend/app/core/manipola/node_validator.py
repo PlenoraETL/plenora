@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, Mapping
 
 from app.core.manipola.transforms.formula import _validate_formula_ast
 from app.shared.execution.config_column_refs import (
@@ -37,7 +37,7 @@ _REGISTRY_PATH = Path(__file__).resolve().parent / "transforms_registry.json"
 
 
 @lru_cache(maxsize=1)
-def _transforms_registry() -> dict:
+def _transforms_registry() -> Mapping[str, Any]:
     """Mappa op-id -> definizione del registry (`data['transforms']`).
 
     STESSA fonte di ``PluginExecutor._carica_registry`` → no-drift. Se il registry
