@@ -130,10 +130,15 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
       const screenX = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
       const screenY = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
       const center = fn({ x: screenX, y: screenY });
-      // Jitter lieve per non sovrapporre perfettamente nodi aggiunti in serie.
+      // React Flow posiziona il nodo dal suo angolo TOP-LEFT: se mettessimo il
+      // top-left al centro, il corpo del nodo risulterebbe spostato in basso a
+      // destra. Sottraiamo metà di un nodo "tipico" così il CORPO è centrato.
+      // Jitter lieve per non sovrapporre nodi aggiunti in serie.
+      const HALF_W = 120;
+      const HALF_H = 55;
       return {
-        x: center.x + (Math.random() - 0.5) * 40,
-        y: center.y + (Math.random() - 0.5) * 40,
+        x: center.x - HALF_W + (Math.random() - 0.5) * 40,
+        y: center.y - HALF_H + (Math.random() - 0.5) * 40,
       };
     } catch {
       return { x: 400, y: 300 };
