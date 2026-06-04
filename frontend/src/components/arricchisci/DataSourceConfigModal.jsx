@@ -3,8 +3,8 @@
  * Wizard 4 step: Tipo → Credenziali → Percorso → Test
  * Redesign Plenora design system
  */
-import React, { useState, useRef } from 'react';
-import useDialogFocus from '../../hooks/useDialogFocus';
+import React, { useState } from 'react';
+import Wizard from '../common/Wizard';
 import './DataSourceConfigModal.css';
 
 const DATASOURCE_TYPES = [
@@ -43,9 +43,6 @@ const STEPS = ['Tipo', 'Credenziali', 'Percorso', 'Test'];
 const FILE_EXTS = ['.csv','.xlsx','.xls','.json','.xml','.txt'];
 
 function DataSourceConfigModal({ onClose, onSave }) {
-  const dialogRef = useRef(null);
-  // Componente montato solo quando aperto (controlled dal caller).
-  useDialogFocus(true, onClose, dialogRef);
   const [step, setStep] = useState(0);
   const [formData, setFormData] = useState({
     name: '', description: '', source_type: '',
@@ -74,50 +71,11 @@ function DataSourceConfigModal({ onClose, onSave }) {
     datasource: { type:formData.source_type, credentials:formData.credentials, path_pattern:formData.path_pattern, file_types:formData.file_types, recursive:formData.recursive, schedule:formData.schedule },
   });
 
-  const canNext = () => {
-    if (step === 0) return formData.name && formData.source_type;
-    if (step === 1) return Object.keys(formData.credentials).length > 0;
-    return true;
-  };
-
-  return (
-    <div className="dsm__overlay" onClick={onClose}>
-      <div
-        ref={dialogRef}
-        className="dsm__modal"
-        onClick={e => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="dscm-title"
-        tabIndex={-1}
-      >
-
-        {/* Header */}
-        <div className="dsm__header">
-          <div className="dsm__header-left">
-            <span className="dsm__header-icon">📁</span>
-            <div>
-              <div className="dsm__title" id="dscm-title">Configura Data Source</div>
-              <div className="dsm__subtitle">Collega sorgente file remota — SharePoint · FTP · SFTP · S3</div>
-            </div>
-          </div>
-          <button type="button" className="dsm__close" onClick={onClose} aria-label="Chiudi">✕</button>
-        </div>
-
-        {/* Step bar */}
-        <div className="dsm__steps">
-          {STEPS.map((s,i) => (
-            <div key={i} className={`dsm__step${step===i?' dsm__step--active':''}${step>i?' dsm__step--done':''}`}
-              onClick={() => step > i && setStep(i)}>
-              <div className="dsm__step-num">{step>i?'✓':i+1}</div>
-              <div className="dsm__step-label">{s}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Body */}
-        <div className="dsm__body">
-{step === 0 && (
+  const steps = [
+    {
+      label: STEPS[0],
+      canAdvance: !!(formData.name && formData.source_type),
+      content: (
             <div className="dsm__section">
               <div className="dsm__field-group">
                 <div className="dsm__label">Nome connessione *</div>
@@ -141,8 +99,12 @@ function DataSourceConfigModal({ onClose, onSave }) {
                 ))}
               </div>
             </div>
-          )}
-{step === 1 && selectedSource && (
+          ),
+    },
+    {
+      label: STEPS[1],
+      canAdvance: Object.keys(formData.credentials).length > 0,
+      content: selectedSource ? (
             <div className="dsm__section">
               <div className="dsm__cred-header">
                 <span className="dsm__cred-icon">{selectedSource.icon}</span>
@@ -165,8 +127,11 @@ function DataSourceConfigModal({ onClose, onSave }) {
                 );
               })}
             </div>
-          )}
-{step === 2 && (
+          ) : null,
+    },
+    {
+      label: STEPS[2],
+      content: (
             <div className="dsm__section">
               <div className="dsm__field-group">
                 <div className="dsm__label">Percorso o Pattern *</div>
@@ -197,8 +162,11 @@ function DataSourceConfigModal({ onClose, onSave }) {
                 <span>Cerca nelle sottocartelle (ricorsivo)</span>
               </label>
             </div>
-          )}
-{step === 3 && (
+          ),
+    },
+    {
+      label: STEPS[3],
+      content: (
             <div className="dsm__section">
               <div className="dsm__summary">
                 {[
@@ -230,27 +198,24 @@ function DataSourceConfigModal({ onClose, onSave }) {
                 💡 <strong>Nota:</strong> I Data Source funzionano come <em>Generatori</em>. Quando eseguiti, scaricano i file dal percorso specificato e li rendono disponibili come dataset.
               </div>
             </div>
-          )}
-        </div>
+          ),
+    },
+  ];
 
-        {/* Footer */}
-        <div className="dsm__footer">
-          <button type="button" className="dsm__btn dsm__btn--ghost" onClick={step===0?onClose:()=>setStep(s=>s-1)}>
-            {step===0?'Annulla':'← Indietro'}
-          </button>
-          {step < 3 ? (
-            <button type="button" className="dsm__btn dsm__btn--primary" onClick={()=>setStep(s=>s+1)} disabled={!canNext()}>
-              Avanti →
-            </button>
-          ) : (
-            <button type="button" className="dsm__btn dsm__btn--ok" onClick={handleSave}
-              disabled={!formData.name||!formData.source_type||!formData.path_pattern}>
-              💾 Salva Data Source
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+  return (
+    <Wizard
+      isOpen
+      onClose={onClose}
+      icon="📁"
+      title="Configura Data Source"
+      subtitle="Collega sorgente file remota — SharePoint · FTP · SFTP · S3"
+      step={step}
+      onStepChange={setStep}
+      steps={steps}
+      onComplete={handleSave}
+      completeLabel="💾 Salva Data Source"
+      completeDisabled={!formData.name || !formData.source_type || !formData.path_pattern}
+    />
   );
 }
 

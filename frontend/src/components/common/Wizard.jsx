@@ -30,6 +30,8 @@ export default function Wizard({
   isOpen,
   onClose,
   title,
+  subtitle,
+  icon,
   step,
   onStepChange,
   steps = [],
@@ -39,6 +41,10 @@ export default function Wizard({
   completing = false,
   cancelLabel = 'Annulla',
   allowJump = true,
+  // footer: override del footer di default (Indietro/Avanti/Completa). Per i
+  // wizard "bespoke" con navigazione side-effectful o azioni non standard
+  // (es. UploadModal): riusano chrome + step-bar + a11y, footer proprio.
+  footer,
   className = '',
 }) {
   const dialogRef = useRef(null);
@@ -78,7 +84,13 @@ export default function Wizard({
         tabIndex={-1}
       >
         <div className="wizard__header">
-          <div className="wizard__title" id="wizard-title">{title}</div>
+          <div className="wizard__header-left">
+            {icon && <span className="wizard__header-icon">{icon}</span>}
+            <div className="wizard__title-group">
+              <div className="wizard__title" id="wizard-title">{title}</div>
+              {subtitle && <div className="wizard__subtitle">{subtitle}</div>}
+            </div>
+          </div>
           <button type="button" className="wizard__close" onClick={onClose} aria-label="Chiudi">✕</button>
         </div>
 
@@ -107,27 +119,31 @@ export default function Wizard({
         </div>
 
         <div className="wizard__footer">
-          <button type="button" className="wizard__btn wizard__btn--ghost" onClick={goBack}>
-            {step === 0 ? cancelLabel : '← Indietro'}
-          </button>
-          {isLast ? (
-            <button
-              type="button"
-              className="wizard__btn wizard__btn--ok"
-              onClick={onComplete}
-              disabled={completeDisabled || completing}
-            >
-              {completing ? 'Attendere…' : completeLabel}
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="wizard__btn wizard__btn--primary"
-              onClick={goNext}
-              disabled={current.canAdvance === false}
-            >
-              Avanti →
-            </button>
+          {footer !== undefined ? footer : (
+            <>
+              <button type="button" className="wizard__btn wizard__btn--ghost" onClick={goBack}>
+                {step === 0 ? cancelLabel : '← Indietro'}
+              </button>
+              {isLast ? (
+                <button
+                  type="button"
+                  className="wizard__btn wizard__btn--ok"
+                  onClick={onComplete}
+                  disabled={completeDisabled || completing}
+                >
+                  {completing ? 'Attendere…' : completeLabel}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="wizard__btn wizard__btn--primary"
+                  onClick={goNext}
+                  disabled={current.canAdvance === false}
+                >
+                  Avanti →
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
