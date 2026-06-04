@@ -72,6 +72,17 @@ export const cloneProject = async (projectId, newName = null) => {
 };
 
 /**
+ * Aggiorna i metadati di un progetto (rename / descrizione) — #8 rename.
+ * @param {string} projectId
+ * @param {{name?: string, description?: string}} fields
+ * @returns {Promise<{metadata: Object}>}
+ */
+export const updateProject = async (projectId, fields) => {
+  const response = await http.patch(`/projects/${projectId}`, fields);
+  return response.data;
+};
+
+/**
  * Restituisce tutti i progetti dell'utente.
  * @returns {Promise<Object>} { projects: [...] }
  */

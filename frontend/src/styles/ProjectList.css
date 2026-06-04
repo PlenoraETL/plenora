@@ -860,3 +860,17 @@
   line-height: 1.45;
 }
 .pl__qs-step-btn { margin-top: 10px; }
+
+/* Inline rename progetto (#8 rename) */
+.pl__card-name-input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--pl-text);
+  background: var(--pl-bg);
+  border: 1px solid var(--pl-blue);
+  border-radius: 6px;
+  padding: 2px 6px;
+  outline: none;
+}

@@ -168,6 +168,12 @@ export function useProjectListData() {
     setProjects(prev => prev.filter(p => p.id !== id));
   }, []);
 
+  // Aggiornamento locale immediato di campi di un progetto (es. rename),
+  // senza round-trip né flash di loading. Rollback = ri-applicare il vecchio valore.
+  const updateProjectLocal = useCallback((id, patch) => {
+    setProjects(prev => prev.map(p => (p.id === id ? { ...p, ...patch } : p)));
+  }, []);
+
   return {
     projects,
     connections,
@@ -183,6 +189,7 @@ export function useProjectListData() {
     loading,
     reload,
     removeProjectLocal,
+    updateProjectLocal,
   };
 }
 

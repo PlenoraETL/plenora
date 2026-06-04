@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 /**
  * Card di un singolo progetto (Estrai / Manipola / Arricchisci).
@@ -16,8 +16,28 @@ function ProjectCard({
   onOpen,
   onDelete,
   onClone,
+  onRename,
   onSchedule,
 }) {
+  const [editing, setEditing] = useState(false);
+  const [tempName, setTempName] = useState(project.name);
+
+  const startRename = (e) => {
+    e.stopPropagation();
+    setTempName(project.name);
+    setEditing(true);
+  };
+  const commitRename = () => {
+    setEditing(false);
+    const v = tempName.trim();
+    if (v && v !== project.name) onRename(v);
+    else setTempName(project.name);
+  };
+  const cancelRename = () => {
+    setTempName(project.name);
+    setEditing(false);
+  };
+
   // Stato dell'ultima run (#11): preferisce `runStatus` dalla mappa log_runs
   // (status: success | failure | running), fallback al campo legacy del
   // progetto. Nessuna run → "Mai eseguito".
@@ -37,7 +57,22 @@ function ProjectCard({
       <div className={`pl__card-accent ${accentClass}`} />
       <div className="pl__card-body">
         <div className="pl__card-header-row">
-          <div className="pl__card-name">{project.name}</div>
+          {editing ? (
+            <input
+              className="pl__card-name-input"
+              value={tempName}
+              autoFocus
+              onClick={e => e.stopPropagation()}
+              onChange={e => setTempName(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={e => {
+                if (e.key === 'Enter') commitRename();
+                else if (e.key === 'Escape') cancelRename();
+              }}
+            />
+          ) : (
+            <div className="pl__card-name">{project.name}</div>
+          )}
           <span className="pl__card-mod">{modLabel}</span>
         </div>
         <div className="pl__card-desc">{project.description || 'Nessuna descrizione'}</div>
@@ -59,6 +94,12 @@ function ProjectCard({
               >
                 ⏰ <span className="pl__schedule-badge">{scheduleCount}</span>
               </button>
+            )}
+            {onRename && (
+              <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm"
+                onClick={startRename}
+                title="Rinomina progetto"
+              >✎</button>
             )}
             {onClone && (
               <button type="button" className="pl__btn pl__btn--ghost pl__btn--sm"

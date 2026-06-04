@@ -214,6 +214,42 @@ def clone_project(
     }
 
 
+class ProjectDetailsUpdate(BaseModel):
+    """Aggiornamento metadati progetto (rename / descrizione)."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+@router.patch("/{project_id}")
+@audit_action(action="project.update", target_param="project_id")
+def update_project_details(
+    project_id: str,
+    data: ProjectDetailsUpdate,
+    current_user: CurrentUser = Depends(require_user_or_above),
+) -> JsonObject:
+    """Rinomina (e/o aggiorna la descrizione di) un progetto.
+
+    Solo metadati: non tocca canvas né validazione. Group-access richiesto;
+    viewer escluso (require_user_or_above). Nome non vuoto, cap 255.
+    """
+    metadata = _project_service.get_project_metadata(project_id)
+    assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
+
+    name = data.name.strip() if data.name is not None else None
+    if name is not None:
+        if not name:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "validation_error", "message": "Il nome non può essere vuoto"},
+            )
+        name = name[:255]
+
+    updated = _project_service.update_project_details(
+        project_id, name=name, description=data.description,
+    )
+    return {"metadata": updated.model_dump()}
+
+
 @router.get("")
 def list_projects(
     current_user: CurrentUser = Depends(require_not_esecutore),

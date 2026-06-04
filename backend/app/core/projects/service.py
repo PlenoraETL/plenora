@@ -220,6 +220,28 @@ class ProjectService:
         )
         return cloned
 
+    def update_project_details(
+        self,
+        project_id: str,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> Optional[ProjectMetadata]:
+        """Aggiorna nome e/o descrizione del progetto (rename).
+
+        Tocca solo i metadati: NON modifica il canvas né lo stato di
+        validazione. Ritorna None se il progetto non esiste; i metadati
+        aggiornati altrimenti.
+        """
+        fields: dict[str, object] = {}
+        if name is not None:
+            fields["name"] = name
+        if description is not None:
+            fields["description"] = description
+        if not fields:
+            return self.get_project_metadata(project_id)
+        row = project_db.update_project_row(project_id, **fields)
+        return self.project_detail_row_to_metadata(row) if row else None
+
     def rollback_created_project(
         self,
         project_id: str,

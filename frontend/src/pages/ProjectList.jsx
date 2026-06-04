@@ -7,7 +7,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useToast } from '../hooks/useToast';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { deleteProject, deleteEseguibile, cloneProject } from '../api';
+import { deleteProject, deleteEseguibile, cloneProject, updateProject } from '../api';
 import NewProjectModal from '../components/projects/NewProjectModal';
 import EsegSelectorModal from '../components/projects/EsegSelectorModal';
 import ProjectSection from '../components/projects/ProjectSection';
@@ -51,6 +51,7 @@ function ProjectList() {
     loading,
     reload: loadData,
     removeProjectLocal,
+    updateProjectLocal,
   } = useProjectListData();
 
   // UI state
@@ -130,6 +131,18 @@ function ProjectList() {
       // per evitare "[object Object]" nel toast.
       const detailText = typeof detail === 'string' ? detail : err.message;
       toast.error('Errore eliminazione: ' + (detailText || 'errore sconosciuto'));
+    }
+  };
+
+  const handleRenameProject = async (project, newName) => {
+    const name = (newName || '').trim();
+    if (!name || name === project.name) return;
+    updateProjectLocal(project.id, { name });   // optimistic, niente flash
+    try {
+      await updateProject(project.id, { name });
+    } catch (err) {
+      updateProjectLocal(project.id, { name: project.name });  // rollback
+      toastApiError(toast, err, 'Errore rinomina');
     }
   };
 
@@ -378,6 +391,7 @@ function ProjectList() {
                   onOpen={() => handleOpenProject(project)}
                   onDelete={() => handleDeleteProject(project.id, project.name)}
                   onClone={canCreateProj ? () => handleCloneProject(project) : null}
+                  onRename={canCreateProj ? (newName) => handleRenameProject(project, newName) : null}
                   onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
                 />
               );
@@ -415,6 +429,7 @@ function ProjectList() {
                   onOpen={() => handleOpenProject(project)}
                   onDelete={() => handleDeleteProject(project.id, project.name)}
                   onClone={canCreateProj ? () => handleCloneProject(project) : null}
+                  onRename={canCreateProj ? (newName) => handleRenameProject(project, newName) : null}
                   onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
                 />
               );
@@ -447,6 +462,7 @@ function ProjectList() {
                 onOpen={() => handleOpenProject(project)}
                 onDelete={() => handleDeleteProject(project.id, project.name)}
                 onClone={canCreateProj ? () => handleCloneProject(project) : null}
+                onRename={canCreateProj ? (newName) => handleRenameProject(project, newName) : null}
                 onSchedule={() => navigate(`/schedules?project_id=${project.id}`)}
               />
             ))}
