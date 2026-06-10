@@ -1,0 +1,24 @@
+# Lane test2 in container — `./test2-docker.sh [args pytest]`.
+#
+# File compose separato dallo scaffold (docker-compose.yml) perche' la lane
+# unit/contract non ha bisogno di postgres/redis/frontend e non deve toccare
+# la network esterna `plenora`.
+#
+# Il working tree backend/ e' bind-mounted su /app: i test girano sul codice
+# corrente, la rebuild serve solo al cambio dei requirements.
+
+services:
+
+  test2:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.test2
+    image: plenora-test2:latest
+    # uid/gid host (esportati da test2-docker.sh) cosi' .pytest-run e
+    # eventuali artifact dei test restano dell'utente host.
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      HOME: /tmp
+    volumes:
+      - ./backend:/app
+    network_mode: none

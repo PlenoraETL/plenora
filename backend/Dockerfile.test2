@@ -1,0 +1,29 @@
+# Plenora test2 lane — estende l'immagine backend con le dipendenze dev/test.
+#
+# Prerequisito: l'immagine `plenora-backend:scaffold` deve esistere
+# (`docker compose build backend`). Il codice NON viene ricopiato: a runtime
+# docker-compose.test2.yml monta ./backend su /app, quindi i test girano sul
+# working tree corrente senza rebuild. Rebuild necessaria solo quando cambiano
+# requirements.txt o requirements-dev.txt.
+#
+# Motivazione: suite riproducibile con lo stack pinnato del container
+# (python conda-forge + gdal/pyogrio identici al runtime), indipendente dal
+# python rolling dell'host (CachyOS). NB: i container condividono il kernel
+# dell'host — questa lane isola dalle *librerie* host, non da bug kernel.
+
+FROM plenora-backend:scaffold
+
+USER root
+
+COPY backend/requirements-dev.txt /tmp/requirements-dev.txt
+
+RUN pip install -r /tmp/requirements-dev.txt && rm /tmp/requirements-dev.txt
+
+# L'utente effettivo viene impostato da docker-compose.test2.yml (uid host)
+# perche' /app e' un bind mount e .pytest-run deve restare scrivibile/rimovibile
+# dall'utente host.
+
+WORKDIR /app
+
+ENTRYPOINT ["python", "-m", "pytest"]
+CMD ["tests2", "-q"]
