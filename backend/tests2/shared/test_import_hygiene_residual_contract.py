@@ -68,16 +68,21 @@ def test_file_service_does_not_fallback_to_local_model_shims() -> None:
 
 
 def test_dataframe_schema_uses_canonical_column_info_model() -> None:
+    """La sede canonica di ColumnInfo e' app.shared.execution.column_info
+    (contratto strutturale, Epic B roadmap accoppiamento): dataframes non
+    deve tornare a importarlo dal dominio projects."""
     src = _read("core/dataframes/schema.py")
     tree = ast.parse(src)
 
     imports_canonical = any(
         isinstance(n, ast.ImportFrom)
-        and n.module == "app.core.projects.canvas_models"
+        and n.module == "app.shared.execution.column_info"
         and any(alias.name == "ColumnInfo" for alias in n.names)
         for n in ast.walk(tree)
     )
-    assert imports_canonical, "schema must import ColumnInfo from canvas_models"
+    assert imports_canonical, (
+        "schema must import ColumnInfo from app.shared.execution.column_info"
+    )
 
     catches_import_error = any(
         isinstance(h, ast.ExceptHandler) and _handler_catches(h, "ImportError")

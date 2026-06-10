@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 
-from app.core.projects.canvas_models import ColumnInfo
+from app.shared.execution.column_info import ColumnInfo
 
 
 class FileSource(BaseModel):

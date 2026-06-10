@@ -297,6 +297,29 @@ def test_horizontal_boundaries_do_not_import_forbidden_runtime_modules(
     assert violations == [], f"{rel_path} has forbidden imports: {violations}"
 
 
+def test_dataframes_engine_does_not_import_projects_domain() -> None:
+    """L'engine orizzontale dataframes non deve dipendere dal dominio
+    projects: i contratti strutturali condivisi (es. ColumnInfo) vivono in
+    app.shared.execution (Epic B roadmap accoppiamento)."""
+    violations: dict[str, list[str]] = {}
+
+    dataframes_root = _APP_CORE_ROOT / "dataframes"
+    for path in sorted(dataframes_root.rglob("*.py")):
+        rel_path = _rel_path(path)
+        forbidden = sorted(
+            module
+            for module in _imports(rel_path)
+            if _matches_import(module, "app.core.projects")
+        )
+        if forbidden:
+            violations[rel_path] = forbidden
+
+    assert violations == {}, (
+        "app.core.dataframes must not import app.core.projects; structural "
+        f"contracts belong in app.shared.execution. Violations: {violations}"
+    )
+
+
 def test_app_core_does_not_gain_new_direct_celery_imports() -> None:
     violations: dict[str, list[str]] = {}
 

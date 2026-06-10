@@ -13,6 +13,7 @@ from app.shared.execution.canvas_types import (
     TransactionModeLiteral,
     WriteModeLiteral,
 )
+from app.shared.execution.column_info import ColumnInfo  # noqa: F401  re-export compatibile
 from app.utils.logger import get_logger
 
 _canvas_logger = get_logger(__name__)
@@ -42,12 +43,8 @@ ColumnType = Literal[
 ]
 
 
-# INFO COLONNA
-
-class ColumnInfo(BaseModel):
-    """Informazioni di base su una colonna (nome e tipo)."""
-    name: str
-    type: str = "str"
+# INFO COLONNA: ColumnInfo e' re-esportato dall'import in testa al file;
+# sede canonica app.shared.execution.column_info.
 
 
 # CANVAS — NODI E ARCHI

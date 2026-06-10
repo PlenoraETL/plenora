@@ -15,7 +15,7 @@ from app.core.dataframes.tabular import (
     float_series_non_null_whole_numbers,
     non_null_head_values,
 )
-from app.core.projects.canvas_models import ColumnInfo
+from app.shared.execution.column_info import ColumnInfo
 
 _logger = logging.getLogger(__name__)
 
