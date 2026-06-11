@@ -35,7 +35,19 @@ def load_file_owner_context(file_id: str) -> Optional[FileOwnerContext]:
     )
 
 
+class FileSourceAccess:
+    """Adapter concreto del port ``auth.ports.FileSourceReader``.
+
+    Vive nel dominio proprietario: ``auth.resource_access`` consuma il port
+    senza importare ``files.db`` direttamente.
+    """
+
+    def get_file_source(self, file_source_id: str):
+        return files_db.get_file_source(file_source_id)
+
+
 __all__ = [
     "FileOwnerContext",
+    "FileSourceAccess",
     "load_file_owner_context",
 ]

@@ -4,17 +4,67 @@ Helper centralizzati per i check di autorizzazione sulle risorse
 cross-cutting (`project_id`, `file_source_id`) usati dai router HTTP.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Optional
+
 from fastapi import HTTPException
 
 from app.shared.contracts.auth import CurrentUser
-from app.core.files.db import FileSourcePublicRow
 from app.core.auth.ownership import (
     assert_group_access,
     assert_resource_visible,
 )
+from app.core.auth.ports import FileSourceReader, ProjectMetadataReader
+from app.core.files.ownership import FileSourceAccess
+from app.core.projects.access_context import ProjectMetadataAccess
 from app.core.projects.models import ProjectMetadata
-from app.core.projects.service import ProjectService
-from app.core.files.db import get_file_source as _get_file_source
+
+if TYPE_CHECKING:
+    from app.core.files.db import FileSourcePublicRow
+
+
+# Port bindings (Epic C roadmap): i reader sono iniettabili dal composition
+# root (`bind_resource_readers`); il fallback lazy costruisce gli adapter dei
+# domini proprietari, cosi' worker e contesti senza bootstrap esplicito
+# mantengono il comportamento storico.
+_project_metadata_reader: Optional[ProjectMetadataReader] = None
+_file_source_reader: Optional[FileSourceReader] = None
+
+
+def bind_resource_readers(
+    *,
+    project_metadata_reader: Optional[ProjectMetadataReader] = None,
+    file_source_reader: Optional[FileSourceReader] = None,
+) -> None:
+    """Inietta i reader (composition root o fake nei test). Idempotente;
+    passare None lascia invariato il binding corrente."""
+    global _project_metadata_reader, _file_source_reader
+    if project_metadata_reader is not None:
+        _project_metadata_reader = project_metadata_reader
+    if file_source_reader is not None:
+        _file_source_reader = file_source_reader
+
+
+def reset_resource_readers() -> None:
+    """Torna al fallback lazy (per i test che hanno iniettato fake)."""
+    global _project_metadata_reader, _file_source_reader
+    _project_metadata_reader = None
+    _file_source_reader = None
+
+
+def _require_project_metadata_reader() -> ProjectMetadataReader:
+    global _project_metadata_reader
+    if _project_metadata_reader is None:
+        _project_metadata_reader = ProjectMetadataAccess()
+    return _project_metadata_reader
+
+
+def _require_file_source_reader() -> FileSourceReader:
+    global _file_source_reader
+    if _file_source_reader is None:
+        _file_source_reader = FileSourceAccess()
+    return _file_source_reader
 
 
 def assert_project_access(
@@ -30,7 +80,7 @@ def assert_project_access(
     """
     if not project_id:
         raise HTTPException(status_code=400, detail="project_id mancante")
-    meta = ProjectService().get_project_metadata(project_id)
+    meta = _require_project_metadata_reader().get_project_metadata(project_id)
     if not meta:
         raise HTTPException(status_code=404, detail=f"Progetto '{project_id}' non trovato")
     assert_group_access(meta, current_user, f"Progetto '{project_id}'")
@@ -46,7 +96,7 @@ def assert_project_visible(
     `assert_project_access`."""
     if not project_id:
         raise HTTPException(status_code=400, detail="project_id mancante")
-    meta = ProjectService().get_project_metadata(project_id)
+    meta = _require_project_metadata_reader().get_project_metadata(project_id)
     if not meta:
         raise HTTPException(status_code=404, detail=f"Progetto '{project_id}' non trovato")
     assert_resource_visible(meta, "projects", current_user, f"Progetto '{project_id}'")
@@ -65,7 +115,7 @@ def assert_file_source_access(
     """
     if not file_source_id:
         raise HTTPException(status_code=400, detail="file_source_id mancante")
-    row = _get_file_source(file_source_id)
+    row = _require_file_source_reader().get_file_source(file_source_id)
     if not row:
         raise HTTPException(status_code=404, detail=f"File source '{file_source_id}' non trovato")
     assert_resource_visible(row, "file_sources", current_user, f"File source '{file_source_id}'")

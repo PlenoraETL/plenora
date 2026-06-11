@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from app.core.projects import db as project_db
+from app.core.projects import service as project_service_module
 from app.core.projects.types import OwnershipResource
 
 
@@ -81,3 +82,17 @@ def load_project_publish_context(project_id: str) -> Optional[ProjectPublishCont
 def list_project_ids_visible_to_group(group_id: str) -> set[str]:
     """Return project IDs owned by a group for project-only visibility checks."""
     return project_db.list_project_ids_for_group(group_id)
+
+
+class ProjectMetadataAccess:
+    """Adapter concreto del port ``auth.ports.ProjectMetadataReader``.
+
+    Vive nel dominio proprietario: ``auth.resource_access`` consuma il port
+    senza costruire ``ProjectService``. La costruzione resta per-chiamata
+    via attributo di modulo (stessa semantica del chiamante storico: i patch
+    wholesale su ``app.core.projects.service.ProjectService`` continuano a
+    intercettare).
+    """
+
+    def get_project_metadata(self, project_id: str):
+        return project_service_module.ProjectService().get_project_metadata(project_id)

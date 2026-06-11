@@ -7,9 +7,12 @@ from typing import TYPE_CHECKING, Any
 
 from app.core.arricchisci import api_connector as api_connector_module
 from app.core.arricchisci import executor as enrich_executor_module
+from app.core.auth import resource_access as resource_access_module
 from app.core.connections import service as connection_service_module
 from app.core.datasources import service as datasource_service_module
 from app.core.estrai import database_inspector as database_inspector_module
+from app.core.files.ownership import FileSourceAccess
+from app.core.projects.access_context import ProjectMetadataAccess
 from app.core.estrai import executor as estrai_executor_module
 from app.core.estrai import query_generator as query_generator_module
 from app.core.manipola import executor as manipola_executor_module
@@ -208,6 +211,14 @@ def build_runtime_services() -> RuntimeServices:
     database_inspector = database_inspector_module.DatabaseInspector()
     orchestrator_stack = build_orchestrator_stack(
         connection_service=connection_service,
+    )
+
+    # Epic C: binding esplicito dei reader consumati da auth.resource_access.
+    # Stessi adapter del fallback lazy — qui il wiring diventa visibile e
+    # i contesti bootstrap-pieni non dipendono dal fallback.
+    resource_access_module.bind_resource_readers(
+        project_metadata_reader=ProjectMetadataAccess(),
+        file_source_reader=FileSourceAccess(),
     )
 
     return RuntimeServices(

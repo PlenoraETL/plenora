@@ -136,6 +136,11 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+execution[\\/]+validation_protocol\.py:\d+: unused (method 'validate_node'|variable 'upstream') "),
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+execution[\\/]+validation_types\.py:\d+: unused method '(by_severity|for_node)' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+projects[\\/]+schema_inference\.py:\d+: unused method 'infer_node_schema_typed' "),
+
+    # Porte resource_access (Epic C roadmap accoppiamento): seam di test per
+    # ripristinare il fallback lazy dopo l'iniezione di reader fake
+    # (tests2/shared/test_auth_resource_access_port_contract.py).
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+auth[\\/]+resource_access\.py:\d+: unused function 'reset_resource_readers' "),
 )
 
 
