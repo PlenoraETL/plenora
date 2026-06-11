@@ -1,0 +1,113 @@
+# Dependency Matrix — Domini Backend
+
+Data baseline: 2026-06-11 (branch `main`)
+Strumento: `backend/scripts/dependency_graph.py`
+Baseline versionata: `backend/tests2/shared/config/core_dependency_baseline.json`
+Guardia "non peggiorare": `backend/tests2/shared/test_core_dependency_matrix.py`
+
+Questo documento e' il contratto architetturale sugli import tra i domini di
+`backend/app/core`. Nasce dalla roadmap accoppiamento (Epic A) e va aggiornato
+ogni volta che la baseline viene rigenerata.
+
+## Come rigenerare
+
+Dalla root `backend/` (in locale o nel container test2):
+
+```sh
+# report leggibile (SCC, gradi, edge)
+python scripts/dependency_graph.py
+
+# consolidare la baseline dopo una riduzione di coupling
+python scripts/dependency_graph.py --write-baseline \
+    tests2/shared/config/core_dependency_baseline.json
+```
+
+Con la lane containerizzata:
+
+```sh
+docker compose -f docker-compose.test2.yml run --rm --entrypoint python test2 \
+    scripts/dependency_graph.py
+```
+
+La guardia fallisce solo su coupling NUOVO (edge non censiti, nuove coppie
+cicliche); il debito storico censito nella baseline non blocca lo sviluppo.
+Rimuovere coupling non rompe mai il test: rigenerare la baseline nello stesso
+PR per consolidare il progresso.
+
+## Classificazione dei domini
+
+| Classe | Domini | Ruolo |
+|---|---|---|
+| Verticali | `arricchisci`, `carica`, `estrai`, `manipola`, `features`, `imdf` | step applicativi della pipeline ETL |
+| Engine orizzontali | `auth`, `connections`, `dataframes`, `orchestrator`, `resources`, `results`, `scheduler` | servizi trasversali consumati dai verticali |
+| Applicativi centrali | `projects`, `files`, `datasources`, `eseguibili`, `artifacts`, `intermediate`, `output_contract`, `query_execution` | modelli e storage condivisi del prodotto |
+| Foundation | `io`, `security`, `task_runtime`, `runtime` | infrastruttura pura, zero import verso altri domini core (verificato: out-degree 0/1) |
+| Admin & support | `admin_backups`, `admin_runtime_config`, `admin_system_status`, `logs`, `tickets` | superfici operative |
+
+`app.shared.*` non e' un dominio: e' la sede dei contratti strutturali
+(es. `ColumnInfo` in `app.shared.execution.column_info`) ed e' importabile da
+chiunque.
+
+## Regole di import
+
+1. **Tutti → `app.shared`**: sempre ammesso. I tipi usati come contratto tra
+   domini vanno qui, non in un dominio applicativo.
+2. **Verticali → engine / applicativi centrali / foundation**: ammesso.
+3. **Engine → verticali**: vietato. Eccezioni legacy censite sotto, ognuna con
+   percorso di rimozione.
+4. **Engine ↔ applicativi centrali**: tollerato oggi (e' il grosso del ciclo a
+   17), in riduzione progressiva tramite porte (Epic C/D/F/G).
+5. **Foundation → core**: vietato (gia' blindato da
+   `test_architecture_legacy_patterns.py` e dalle guardie boundary).
+6. **Admin & support → verticali**: vietato; verso engine/foundation ammesso.
+7. **Nessun nuovo edge** rispetto alla baseline senza motivazione qui dentro e
+   rigenerazione consapevole della baseline (guardia
+   `test_no_new_cross_domain_edges`).
+
+## Eccezioni legacy censite (engine → verticali e coupling inverso)
+
+| Edge | Natura | Percorso di rimozione |
+|---|---|---|
+| `auth -> arricchisci` | cleanup registry importa i cleanup di 7 domini | Epic E: registry in `core/lifecycle/` |
+| `scheduler -> carica` | import diretto executor in `execution_manager.py` | G4 (PR 5): port dal composition root |
+| `orchestrator -> carica` | lazy, dispatch pipeline | Epic G: `PipelineDispatchPort` |
+| `orchestrator -> estrai` | dispatch nodo estrazione | Epic G |
+| `connections -> features` | wrapper compatibilita' legacy | Fase 6: rimozione shim |
+| `projects -> arricchisci` | lazy, dependency check | Epic F: porta dependency checks |
+| `projects -> scheduler` | lazy, cleanup/dipendenze | Epic F |
+| `auth -> projects` / `auth -> files` | `resource_access` istanzia servizi | Epic C (PR 2): `ProjectMetadataReader` / `FileSourceReader` |
+
+## Stato misurato (baseline 2026-06-11)
+
+- **30 domini**, **141 edge cross-domain**.
+- **SCC maggiore: 17 domini** — `arricchisci`, `artifacts`, `auth`, `carica`,
+  `connections`, `datasources`, `eseguibili`, `estrai`, `features`, `files`,
+  `intermediate`, `orchestrator`, `output_contract`, `projects`,
+  `query_execution`, `results`, `scheduler`.
+  - Rispetto allo snapshot 2026-06-04 (18 domini) **`dataframes` e' uscito dal
+    ciclo** (PR 1 roadmap: `ColumnInfo` in `app.shared.execution`, guardia
+    `test_dataframes_engine_does_not_import_projects_domain`). Milestone 2
+    raggiunta.
+- **13 singoletti**: tutti gli admin, `dataframes`, `imdf`, `io`, `logs`,
+  `manipola`, `resources`, `runtime`, `security`, `task_runtime`, `tickets`.
+  Notevole: `manipola` (out=9, in=0) e `imdf` sono verticali puri consumatori,
+  gia' fuori dal ciclo.
+- **Hub piu' centrali** (out/in): `auth` 7/19, `projects` 7/13,
+  `dataframes` 2/15, `resources` 1/11, `io` 0/11.
+- **Foundation confermata dai numeri**: `io`, `security`, `task_runtime` hanno
+  out-degree 0.
+
+Target roadmap: SCC sotto 12, poi sotto 8, poi nessuna componente grande tra
+verticali ed engine. Ricalcolare a ogni PR di riduzione e aggiornare questa
+sezione.
+
+## Aggiornamento del documento
+
+Quando un PR riduce coupling:
+
+1. rigenerare la baseline (`--write-baseline`);
+2. aggiornare "Stato misurato" (dimensione SCC, edge count);
+3. spuntare/rimuovere l'eccezione legacy corrispondente dalla tabella.
+
+Quando un PR introduce coupling intenzionale (raro): aggiungere la riga di
+motivazione nelle eccezioni PRIMA di rigenerare la baseline.
