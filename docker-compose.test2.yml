@@ -4,8 +4,12 @@
 # unit/contract non ha bisogno di postgres/redis/frontend e non deve toccare
 # la network esterna `plenora`.
 #
-# Il working tree backend/ e' bind-mounted su /app: i test girano sul codice
-# corrente, la rebuild serve solo al cambio dei requirements.
+# Il working tree e' bind-mounted su /repo (workdir /repo/backend): i test
+# girano sul codice corrente, la rebuild serve solo al cambio dei requirements.
+# Serve il repo INTERO, non solo backend/: molte guardie shared risolvono la
+# repo root come parent di backend/ e leggono docs/, scripts/, deploy.sh,
+# docker-compose*.yml, Dockerfile — con il solo backend/ montato puntavano a
+# path inesistenti (/docs, /backend/...) e fallivano in blocco.
 
 services:
 
@@ -19,6 +23,7 @@ services:
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     environment:
       HOME: /tmp
+    working_dir: /repo/backend
     volumes:
-      - ./backend:/app
+      - .:/repo
     network_mode: none
