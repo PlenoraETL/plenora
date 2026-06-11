@@ -84,7 +84,12 @@ def test_load_project_sources_blocks_cross_tenant_via_resolver():
 
     from app.core.artifacts import ArtifactResolutionError
 
+    # freshness gate (a monte del resolver) interroga projects.db: va
+    # neutralizzato per restare hermetic — None = "nessun gate".
     with patch(
+        "app.core.manipola.project_source_runtime.get_project_source_freshness",
+        return_value=None,
+    ), patch(
         "app.core.artifacts.ArtifactResolver.materialize_latest",
         side_effect=ArtifactResolutionError("project denied"),
     ):
@@ -114,6 +119,9 @@ def test_load_project_sources_fail_closed_when_source_project_missing():
     from app.core.artifacts import ArtifactResolutionError
 
     with patch(
+        "app.core.manipola.project_source_runtime.get_project_source_freshness",
+        return_value=None,
+    ), patch(
         "app.core.artifacts.ArtifactResolver.materialize_latest",
         side_effect=ArtifactResolutionError("project denied"),
     ):
@@ -230,6 +238,9 @@ def test_explicit_group_id_is_forwarded_to_resolver():
     # project_source_runtime fa `from app.core.artifacts import ArtifactResolver`,
     # quindi il binding va patchato sul consumer.
     with patch(
+        "app.core.manipola.project_source_runtime.get_project_source_freshness",
+        return_value=None,
+    ), patch(
         "app.core.manipola.project_source_runtime.ArtifactResolver",
         return_value=_StubResolver(),
     ):

@@ -69,10 +69,15 @@ def test_load_source_project_propagates_group_id_via_source_loader():
         captured["group_id"] = expected_group_id
         return pd.DataFrame({"x": [1]})
 
+    # Post-load il wrapper consulta l'output contract (projects.db): va
+    # neutralizzato per restare hermetic — None + columns vuote = pass-through.
     with patch(
         "app.core.arricchisci.api_connection_source_loading.SourceLoader",
-    ) as loader_cls:
+    ) as loader_cls, patch(
+        "app.core.arricchisci.api_connection_source_loading.ProjectService",
+    ) as project_service_cls:
         loader_cls.return_value.load.side_effect = _fake_load
+        project_service_cls.return_value.get_project_output_contract.return_value = None
         df = svc._load_source_project(
             {"source_project_id": "proj-1", "columns": []},
             force_recalculate=False,

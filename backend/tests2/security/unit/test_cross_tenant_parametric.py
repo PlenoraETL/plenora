@@ -46,7 +46,12 @@ def _manipola_project_source_denied():
 
     from app.core.artifacts import ArtifactResolutionError
 
+    # freshness gate (a monte del resolver) interroga projects.db: va
+    # neutralizzato per restare hermetic — None = "nessun gate".
     with patch(
+        "app.core.manipola.project_source_runtime.get_project_source_freshness",
+        return_value=None,
+    ), patch(
         "app.core.artifacts.ArtifactResolver.materialize_latest",
         side_effect=ArtifactResolutionError("project denied"),
     ):
