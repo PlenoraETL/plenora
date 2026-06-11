@@ -13,6 +13,21 @@ from app.core.auth.auth import get_current_user
 from app.core.orchestrator.router import tasks_router
 
 
+@pytest.fixture(autouse=True)
+def _reset_orchestrator_module_singleton():
+    """Salva/ripristina `router._orchestrator` attorno a ogni test.
+
+    Alcuni test inizializzano il router con `init_orchestrator(MagicMock(...))`
+    senza ripristino: il global restava sporco per il resto del processo e i
+    test successivi (es. breadcrumb full-cleanup) leggevano il project_service
+    del mock stantio invece del fallback, mancando i patch di classe."""
+    import app.core.orchestrator.router as router_mod
+
+    original = router_mod._orchestrator
+    yield
+    router_mod._orchestrator = original
+
+
 @pytest.fixture
 def current_user() -> CurrentUser:
     return CurrentUser(

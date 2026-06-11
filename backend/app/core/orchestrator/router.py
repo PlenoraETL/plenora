@@ -125,6 +125,16 @@ def init_orchestrator(orchestrator: object) -> None:
     _orchestrator = orchestrator
 
 
+def _project_service() -> project_service_module.ProjectService:
+    """ProjectService dell'orchestrator iniettato (composition root);
+    fallback alla costruzione diretta per contesti senza wiring
+    (Epic D roadmap accoppiamento: unica via residua, da rimuovere)."""
+    service = getattr(_orchestrator, "project_service", None)
+    if service is not None:
+        return service
+    return project_service_module.ProjectService()
+
+
 @pipeline_router.post("/{project_id}/execute")
 def execute_project_pipeline(
     project_id: str,
@@ -154,9 +164,7 @@ def execute_project_pipeline(
 
     try:
         force_recalculate = request.force_recalculate if request else False
-        project_service = getattr(_orchestrator, "project_service", None)
-        if project_service is None:
-            project_service = project_service_module.ProjectService()
+        project_service = _project_service()
         # Gate canvas-validation (Epic CanvasVal §12): un progetto non validato non
         # parte. Fail-fast qui (nessun task spawnato); il gate scheduler è separato.
         _gate_meta = project_service.get_project_metadata(project_id)
@@ -339,7 +347,7 @@ def create_task(
             enrich_canvas_types_from_output_contract(
                 request.carica_node_data,
                 request.project_id,
-                project_service_module.ProjectService().get_project_output_contract,
+                _project_service().get_project_output_contract,
             )
             task_info = task_service_module.task_service.create_carica_task(
                 project_id=request.project_id,
@@ -491,7 +499,7 @@ def cleanup_task_completely(
             detail="Task non trovato o senza progetto associato — cleanup non eseguibile",
         )
     try:
-        _meta = project_service_module.ProjectService().get_project_metadata(project_id)
+        _meta = _project_service().get_project_metadata(project_id)
     except Exception as e:
         logger.warning(
             f"[GESTITO] full-cleanup tenant check: project lookup project_id={project_id} fallito: {e}",

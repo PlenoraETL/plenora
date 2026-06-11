@@ -18,6 +18,7 @@ __all__ = [
     "ARRICCHISCI_BINDING",
     "DATASOURCES_BINDING",
     "CARICA_BINDING",
+    "ESTRAI_BINDING",
 ]
 
 
@@ -185,4 +186,26 @@ CARICA_BINDING = RouterBinding(
     name="carica",
     init_fn=_carica_init,
     extract=lambda services: (services.connection_service,),
+)
+
+
+def _estrai_init(*args: Any, **kwargs: Any) -> None:
+    """Lazy thunk: import + invoke ``init_estrai``.
+
+    Il preview formula di EstrAi consuma project/connection/query executor
+    iniettati (Epic D roadmap accoppiamento) invece di costruirli inline.
+    """
+    from app.core.estrai.router import init_estrai
+
+    init_estrai(*args, **kwargs)
+
+
+ESTRAI_BINDING = RouterBinding(
+    name="estrai",
+    init_fn=_estrai_init,
+    extract=lambda services: (
+        services.project_service,
+        services.connection_service,
+        services.query_executor,
+    ),
 )

@@ -299,6 +299,7 @@ def create_app(
         CARICA_BINDING,
         CONNECTIONS_BINDING,
         DATASOURCES_BINDING,
+        ESTRAI_BINDING,
         ORCHESTRATOR_BINDING,
         PROJECTS_BINDING,
         bind_router_services,
@@ -310,6 +311,7 @@ def create_app(
     bind_router_services(runtime_services, DATASOURCES_BINDING)
     bind_router_services(runtime_services, CARICA_BINDING)
     bind_router_services(runtime_services, ORCHESTRATOR_BINDING)
+    bind_router_services(runtime_services, ESTRAI_BINDING)
 
     app.include_router(api_router, prefix="/api")
 

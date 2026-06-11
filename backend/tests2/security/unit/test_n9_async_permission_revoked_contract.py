@@ -59,6 +59,18 @@ def _use_in_memory_task_metadata_store(monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def _reset_orchestrator_module_singleton():
+    """Il client di questo file chiama init_orchestrator(MagicMock(...)):
+    senza ripristino il global resta sporco per i test successivi del
+    processo (il fallback _project_service() leggerebbe il mock stantio)."""
+    import app.core.orchestrator.router as router_mod
+
+    original = router_mod._orchestrator
+    yield
+    router_mod._orchestrator = original
+
+
 # Helpers â€” bytecode probe (refactor-resilient)
 
 def _underlying(callable_or_task):

@@ -29,6 +29,37 @@ logger = get_logger(__name__)
 
 functions_router = APIRouter(prefix="/functions", tags=["functions"])
 
+# Servizi iniettati dal composition root via ESTRAI_BINDING (Epic D roadmap
+# accoppiamento). Il fallback per-chiamata preserva il comportamento storico
+# nei contesti senza wiring (unit test su app parziali).
+_project_service = None
+_connection_service = None
+_query_executor = None
+
+
+def init_estrai(
+    project_service: ProjectService,
+    connection_service: ConnectionService,
+    query_executor: QueryExecutor,
+) -> None:
+    """Inizializza il modulo. Chiamare da app_factory dopo setup."""
+    global _project_service, _connection_service, _query_executor
+    _project_service = project_service
+    _connection_service = connection_service
+    _query_executor = query_executor
+
+
+def _get_project_service() -> ProjectService:
+    return _project_service if _project_service is not None else ProjectService()
+
+
+def _get_connection_service() -> ConnectionService:
+    return _connection_service if _connection_service is not None else ConnectionService()
+
+
+def _get_query_executor() -> QueryExecutor:
+    return _query_executor if _query_executor is not None else QueryExecutor()
+
 # Identificatore SQL semplice (allineato ai validator di sql_functions.py).
 _IDENT_RE = re.compile(r'^[A-Za-z_][A-Za-z0-9_]{0,62}$')
 
@@ -179,13 +210,13 @@ async def preview_formula(
         raise HTTPException(status_code=400, detail=str(e))
 
     # 2. Progetto + group access (404 se assente, 403 se altro gruppo).
-    meta = ProjectService().get_project_metadata(request.project_id)
+    meta = _get_project_service().get_project_metadata(request.project_id)
     assert_group_access(meta, current_user, f"Progetto '{request.project_id}'")
     if not getattr(meta, "default_connection_id", None):
         return {"success": False, "message": "Connessione non configurata per il progetto"}
 
     # 3. Connessione database (le sorgenti ArcGIS non hanno anteprima formula SQL).
-    connection = ConnectionService().get_connection(meta.default_connection_id)
+    connection = _get_connection_service().get_connection(meta.default_connection_id)
     if not connection:
         return {"success": False, "message": "Anteprima formula disponibile solo su connessioni database"}
 
@@ -199,7 +230,7 @@ async def preview_formula(
     # 5. Esecuzione: gli errori SQL (funzione inesistente, tipo errato, ...) sono
     #    feedback utile per l'utente → niente 500, ritorniamo il messaggio.
     try:
-        rows, _columns = QueryExecutor().execute_raw(connection, sql, {})
+        rows, _columns = _get_query_executor().execute_raw(connection, sql, {})
     except Exception as e:
         logger.info(f"preview-formula: esecuzione fallita ({type(e).__name__})")
         return {"success": False, "message": str(e)}

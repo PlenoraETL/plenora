@@ -9,6 +9,7 @@ from app.runtime.router_registry import (
     CARICA_BINDING,
     CONNECTIONS_BINDING,
     DATASOURCES_BINDING,
+    ESTRAI_BINDING,
     ORCHESTRATOR_BINDING,
     PROJECTS_BINDING,
     RouterBinding,
@@ -26,4 +27,5 @@ __all__ = [
     "ARRICCHISCI_BINDING",
     "DATASOURCES_BINDING",
     "CARICA_BINDING",
+    "ESTRAI_BINDING",
 ]

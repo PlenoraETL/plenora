@@ -77,6 +77,15 @@ BINDING_CASES = [
         "init_carica_service(connection_service)",
         id="carica",
     ),
+    pytest.param(
+        "ESTRAI_BINDING",
+        "estrai",
+        ("project_service", "connection_service", "query_executor"),
+        "app.core.estrai.router",
+        "init_estrai",
+        "init_estrai(project_service, connection_service, query_executor)",
+        id="estrai",
+    ),
 ]
 
 
