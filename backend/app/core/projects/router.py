@@ -471,6 +471,7 @@ def get_project(
                 project_id=project_id,
                 project_service=_project_service,
                 applied_migrations=applied_migrations,
+                schema_inference_factory=schema_inference_module.SchemaInferenceService,
             )
         except Exception as exc:
             logger.warning(
@@ -677,6 +678,7 @@ def update_project_canvas(
             canvas=canvas,
             project_id=project_id,
             project_service=_project_service,
+            schema_inference_factory=schema_inference_module.SchemaInferenceService,
         )
     except Exception as exc:
         logger.warning(

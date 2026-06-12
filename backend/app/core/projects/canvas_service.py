@@ -116,10 +116,15 @@ class ProjectCanvasService:
                 original_error=e,
             )
         try:
+            # B4: la schema inference e' di projects — la iniettiamo noi,
+            # output_contract non importa piu' questo dominio.
+            from app.core.projects.schema_inference import SchemaInferenceService
+
             sync_canvas_with_output_contracts(
                 canvas=canvas,
                 project_id=project_id,
                 project_service=self._owner,
+                schema_inference_factory=SchemaInferenceService,
             )
         except Exception as e:
             logger.warning(

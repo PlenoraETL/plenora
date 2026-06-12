@@ -64,6 +64,9 @@ chiunque.
    rigenerazione consapevole della baseline (guardia
    `test_no_new_cross_domain_edges`).
 
+La mappa completa degli shim di compatibilita' (Fase 6) e' in
+[legacy-shims.md](legacy-shims.md).
+
 ## Eccezioni legacy censite (engine → verticali e coupling inverso)
 
 | Edge | Natura | Percorso di rimozione |
@@ -77,12 +80,21 @@ chiunque.
 | `projects -> scheduler` | lazy, cleanup/dipendenze | Epic F |
 | `auth -> projects` / `auth -> files` | `resource_access` istanzia servizi | Epic C (PR 2): `ProjectMetadataReader` / `FileSourceReader` |
 
-## Stato misurato (baseline 2026-06-12, post Epic E)
+## Stato misurato (baseline 2026-06-12, post Epic E/F + B4)
 
+- **SCC maggiore: 16 domini** — con B4 (`Column` in
+  `app.shared.execution.canvas_column` + schema inference iniettata dai
+  chiamanti projects) il 2-ciclo `projects <-> output_contract` e' spezzato
+  e **`output_contract` esce dal ciclo** (secondo dominio liberato dopo
+  `dataframes`). Guardia dedicata:
+  `test_canvas_column_shared_contract.py`.
 - **31 domini** (nuovo: `lifecycle`, foundation con out-degree 0),
-  **139 edge cross-domain** (erano 141: rimossi `auth -> arricchisci`,
-  `auth -> connections`, `auth -> datasources`; aggiunto
-  `auth -> lifecycle`). `auth` scende da out-degree 7 a 5.
+  **138 edge cross-domain** (erano 141: rimossi `auth -> arricchisci`,
+  `auth -> connections`, `auth -> datasources`,
+  `output_contract -> projects`; aggiunto `auth -> lifecycle`).
+  `auth` scende da out-degree 7 a 5.
+
+### Snapshot precedente (post Epic E)
 
 ### Snapshot precedente (2026-06-11)
 

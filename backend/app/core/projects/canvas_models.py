@@ -55,29 +55,9 @@ class Position(BaseModel):
     y: float
 
 
-class Column(BaseModel):
-    """Colonna di una tabella/dataset nel canvas.
-
-    ``extra="allow"`` — simmetrico al fix di ``Node`` (commit fc86a999).
-    Il frontend serializza per ogni colonna metadata extra (``selected``,
-    ``fromApi``, ``path`` per output_mapping, ecc.) che il backend NON
-    modella esplicitamente ma deve preservare nel round-trip
-    PUT->GET->PUT del canvas. Senza ``extra="allow"`` i campi extra
-    venivano droppati silenziosamente, rompendo p.es. la validation
-    FE che si aspetta ``columns[i].fromApi`` per i fixed-param marker.
-    """
-    model_config = ConfigDict(extra="allow")
-    id: Optional[str] = None
-    name: str
-    alias: Optional[str] = None
-    visible: bool = True
-    type: str = "str"
-
-    def __getitem__(self, key: str):
-        return getattr(self, key)
-
-    def get(self, key: str, default=None):
-        return getattr(self, key, default)
+# B4 roadmap: la sede canonica di Column e' app.shared.execution.canvas_column
+# (contratto strutturale puro); qui resta il re-export compatibile.
+from app.shared.execution.canvas_column import Column  # noqa: F401, E402
 
 
 class Filter(BaseModel):

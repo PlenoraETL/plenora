@@ -6,7 +6,9 @@ import re
 from typing import Any, Mapping
 
 from app.core.output_contract.service import node_columns_from_contract
-from app.core.projects.canvas_models import Column
+# B4 roadmap: Column dal contratto shared — niente dipendenza dal dominio
+# projects per un puro modello dati (spezza il 2-ciclo projects<->output_contract).
+from app.shared.execution.canvas_column import Column
 
 ColumnPayload = dict[str, Any]
 ColumnPayloadRows = list[ColumnPayload]
@@ -44,6 +46,7 @@ def sync_canvas_with_output_contracts(
     project_id: str,
     project_service: Any,
     applied_migrations: list | None = None,
+    schema_inference_factory: Any = None,
 ) -> bool:
     """Normalize project_source columns and formula refs on a canvas.
 
@@ -65,12 +68,14 @@ def sync_canvas_with_output_contracts(
         project_id=project_id,
         project_service=project_service,
         column_migrations_by_node=column_migrations_by_node,
+        schema_inference_factory=schema_inference_factory,
     ) or changed
     changed = _sync_api_enrich_column_configs(
         canvas=canvas,
         project_id=project_id,
         project_service=project_service,
         column_migrations_by_node=column_migrations_by_node,
+        schema_inference_factory=schema_inference_factory,
     ) or changed
     return changed
 
@@ -138,6 +143,7 @@ def _sync_transform_expression_configs(
     project_id: str,
     project_service: Any,
     column_migrations_by_node: dict[str, dict[str, dict[str, Any] | None]] | None = None,
+    schema_inference_factory: Any = None,
 ) -> bool:
     column_migrations_by_node = column_migrations_by_node or {}
     nodes_by_id = {n.id: n for n in getattr(canvas, "nodes", []) or []}
@@ -146,7 +152,9 @@ def _sync_transform_expression_configs(
     for edge in edges:
         edges_by_target.setdefault(edge.target, []).append(edge)
 
-    schema_context = _build_schema_context(canvas, project_service)
+    schema_context = _build_schema_context(
+        canvas, project_service, schema_inference_factory
+    )
 
     changed = False
     for node in getattr(canvas, "nodes", []) or []:
@@ -205,6 +213,7 @@ def _sync_api_enrich_column_configs(
     project_id: str,
     project_service: Any,
     column_migrations_by_node: dict[str, dict[str, dict[str, Any] | None]] | None = None,
+    schema_inference_factory: Any = None,
 ) -> bool:
     """Rewrite api_enrich input column mappings after upstream contract changes."""
 
@@ -215,7 +224,9 @@ def _sync_api_enrich_column_configs(
     for edge in edges:
         edges_by_target.setdefault(edge.target, []).append(edge)
 
-    schema_context = _build_schema_context(canvas, project_service)
+    schema_context = _build_schema_context(
+        canvas, project_service, schema_inference_factory
+    )
     changed = False
     for node in getattr(canvas, "nodes", []) or []:
         if getattr(node, "type", None) != "api_enrich":
@@ -633,11 +644,16 @@ def _columns_by_current_name(columns: list[dict[str, Any]]) -> ColumnByName:
 def _build_schema_context(
     canvas: Any,
     project_service: Any,
+    schema_inference_factory: Any = None,
 ) -> SchemaContext | None:
+    """B4 roadmap: la schema inference appartiene al dominio projects — il
+    chiamante la inietta (i 3 call-site di sync sono in projects). Senza
+    factory il contesto e' None, stato gia' supportato da tutti i consumer
+    (era l'esito del ramo except)."""
+    if schema_inference_factory is None:
+        return None
     try:
-        from app.core.projects.schema_inference import SchemaInferenceService
-
-        schema_service = SchemaInferenceService(project_service)
+        schema_service = schema_inference_factory(project_service)
         nodes_by_id = {n.id: n for n in getattr(canvas, "nodes", []) or []}
         edges_by_target = schema_service._group_edges_by_target(
             getattr(canvas, "edges", []) or []
