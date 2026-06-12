@@ -50,6 +50,21 @@ services:
       start_period: 3s
     restart: unless-stopped
 
+  # Plenora 2.0 (Fase 1): broker target della migrazione Dramatiq.
+  # Convive con redis finche' il cutover non e' completo (Fase 5 rimuove
+  # redis). Nessuna porta host: solo rete compose.
+  rabbitmq:
+    image: rabbitmq:4-alpine
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
   backend:
     build:
       context: .
@@ -153,6 +168,7 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  rabbitmq-data:
   data-dir:
 
 networks:
