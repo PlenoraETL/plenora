@@ -66,15 +66,53 @@ def test_group_cleanup_helper_uses_table_allowlist():
 
 
 def test_group_cleanup_remains_domain_owned_and_registry_driven():
-    registry_path = _APP / "core" / "auth" / "cleanup_registry.py"
-    registry_src = registry_path.read_text(encoding="utf-8")
-    registry_tree = ast.parse(registry_src)
+    """Epic E: la composizione domain-owned vive nel wiring composition
+    root (app/runtime), il meccanismo nel lifecycle neutro."""
+    wiring_path = _APP / "runtime" / "group_cleanup_wiring.py"
+    wiring_src = wiring_path.read_text(encoding="utf-8")
+    wiring_tree = ast.parse(wiring_src)
 
-    assert not _imports_module(registry_tree, "app.db.cleanup_sql")
+    assert not _imports_module(wiring_tree, "app.db.cleanup_sql")
     for cleanup_path in _DOMAIN_CLEANUPS:
         module_name = cleanup_path.relative_to(_BACKEND_ROOT).with_suffix("")
         dotted = ".".join(module_name.parts)
-        assert dotted in registry_src
+        assert dotted in wiring_src
+
+
+def test_auth_does_not_import_vertical_cleanup_modules():
+    """Guardia E5: `auth` non importa i cleanup degli altri domini —
+    aggiungere un dominio al cascade delete tocca il wiring composition
+    root, mai auth. Unico cleanup ammesso: `auth.user_cleanup` (proprio)."""
+    forbidden_prefixes = tuple(
+        ".".join(p.relative_to(_BACKEND_ROOT).with_suffix("").parts)
+        for p in _DOMAIN_CLEANUPS
+        if p.parts[-2] != "auth"
+    ) + ("app.core.projects.cleanup",)
+
+    violations: dict[str, list[str]] = {}
+    for path in sorted((_APP / "core" / "auth").rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        offending = sorted(
+            node.module
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            and node.module in forbidden_prefixes
+            # Eccezione censita: il wrapper compatibile re-esporta
+            # delete_intermediate_runs_for_group_project via lazy
+            # import dal boundary projects.cleanup (storico).
+            and not (
+                path.name == "cleanup_registry.py"
+                and node.module == "app.core.projects.cleanup"
+            )
+        )
+        if offending:
+            violations[path.name] = offending
+
+    assert violations == {}, (
+        "auth non deve importare i cleanup verticali (Epic E): "
+        f"{violations}. La composizione vive in "
+        "app/runtime/group_cleanup_wiring.py"
+    )
 
 
 def test_domain_cleanup_modules_keep_public_boundaries_and_use_table_helper():

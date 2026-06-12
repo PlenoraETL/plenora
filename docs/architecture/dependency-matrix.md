@@ -41,7 +41,7 @@ PR per consolidare il progresso.
 | Verticali | `arricchisci`, `carica`, `estrai`, `manipola`, `features`, `imdf` | step applicativi della pipeline ETL |
 | Engine orizzontali | `auth`, `connections`, `dataframes`, `orchestrator`, `resources`, `results`, `scheduler` | servizi trasversali consumati dai verticali |
 | Applicativi centrali | `projects`, `files`, `datasources`, `eseguibili`, `artifacts`, `intermediate`, `output_contract`, `query_execution` | modelli e storage condivisi del prodotto |
-| Foundation | `io`, `security`, `task_runtime`, `runtime` | infrastruttura pura, zero import verso altri domini core (verificato: out-degree 0/1) |
+| Foundation | `io`, `security`, `task_runtime`, `runtime`, `lifecycle` | infrastruttura pura, zero import verso altri domini core (verificato: out-degree 0/1). `lifecycle` ospita il registry del group cleanup (Epic E); la composizione dei default e' in `app/runtime/group_cleanup_wiring.py` |
 | Admin & support | `admin_backups`, `admin_runtime_config`, `admin_system_status`, `logs`, `tickets` | superfici operative |
 
 `app.shared.*` non e' un dominio: e' la sede dei contratti strutturali
@@ -68,7 +68,7 @@ chiunque.
 
 | Edge | Natura | Percorso di rimozione |
 |---|---|---|
-| `auth -> arricchisci` | cleanup registry importa i cleanup di 7 domini | Epic E: registry in `core/lifecycle/` |
+| ~~`auth -> arricchisci`~~ | ~~cleanup registry importa i cleanup di 7 domini~~ | **FATTO (Epic E, 2026-06-12)**: registry neutro in `core/lifecycle/group_cleanup.py`, composizione in `app/runtime/group_cleanup_wiring.py`, wrapper compat in auth. Rimossi anche `auth -> connections` e `auth -> datasources`. Nuovo edge dichiarato: `auth -> lifecycle` (one-way, lifecycle ha out-degree 0: nessun ciclo). |
 | `scheduler -> carica` | import diretto executor in `execution_manager.py` | G4 (PR 5): port dal composition root |
 | `orchestrator -> carica` | lazy, dispatch pipeline | Epic G: `PipelineDispatchPort` |
 | `orchestrator -> estrai` | dispatch nodo estrazione | Epic G |
@@ -77,7 +77,14 @@ chiunque.
 | `projects -> scheduler` | lazy, cleanup/dipendenze | Epic F |
 | `auth -> projects` / `auth -> files` | `resource_access` istanzia servizi | Epic C (PR 2): `ProjectMetadataReader` / `FileSourceReader` |
 
-## Stato misurato (baseline 2026-06-11)
+## Stato misurato (baseline 2026-06-12, post Epic E)
+
+- **31 domini** (nuovo: `lifecycle`, foundation con out-degree 0),
+  **139 edge cross-domain** (erano 141: rimossi `auth -> arricchisci`,
+  `auth -> connections`, `auth -> datasources`; aggiunto
+  `auth -> lifecycle`). `auth` scende da out-degree 7 a 5.
+
+### Snapshot precedente (2026-06-11)
 
 - **30 domini**, **141 edge cross-domain**.
 - **SCC maggiore: 17 domini** — `arricchisci`, `artifacts`, `auth`, `carica`,

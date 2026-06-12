@@ -43,6 +43,15 @@ _GROUP_CLEANUP_PATH = (
 _CLEANUP_REGISTRY_PATH = (
     _BACKEND_ROOT / "app" / "core" / "auth" / "cleanup_registry.py"
 )
+# Epic E: il meccanismo del registry vive nel lifecycle neutro, la
+# composizione dei default al composition root. `cleanup_registry` in
+# auth resta come wrapper compatibile.
+_LIFECYCLE_REGISTRY_PATH = (
+    _BACKEND_ROOT / "app" / "core" / "lifecycle" / "group_cleanup.py"
+)
+_CLEANUP_WIRING_PATH = (
+    _BACKEND_ROOT / "app" / "runtime" / "group_cleanup_wiring.py"
+)
 
 
 def _superadmin_user():
@@ -226,53 +235,65 @@ def test_delete_group_cascade_runs_handlers_before_final_auth_delete_failure(mon
 def test_group_cleanup_imports_intermediate_cleanup_boundary_only():
     group_cleanup_src = _GROUP_CLEANUP_PATH.read_text(encoding="utf-8")
     registry_src = _CLEANUP_REGISTRY_PATH.read_text(encoding="utf-8")
+    wiring_src = _CLEANUP_WIRING_PATH.read_text(encoding="utf-8")
 
     assert "app.core.intermediate.cleanup" not in group_cleanup_src
     assert "app.core.intermediate.cleanup" not in registry_src
+    assert "app.core.intermediate.cleanup" not in wiring_src
     assert "app.core.projects.cleanup" in registry_src
     assert "app.core.results.cleanup" not in registry_src
+    assert "app.core.results.cleanup" not in wiring_src
     assert "app.core.intermediate.db" not in registry_src
+    assert "app.core.intermediate.db" not in wiring_src
     assert "delete_all_runs_for_canvas" not in registry_src
+    assert "delete_all_runs_for_canvas" not in wiring_src
 
 
 def test_group_cleanup_registry_composes_domain_owned_handlers():
-    registry_src = _CLEANUP_REGISTRY_PATH.read_text(encoding="utf-8")
+    """Epic E: la composizione domain-owned vive nel wiring composition
+    root, non in auth. Il wrapper auth non deve importare i cleanup
+    verticali (guardia E5 in test_group_cleanup_policy_contract)."""
+    wiring_src = _CLEANUP_WIRING_PATH.read_text(encoding="utf-8")
+    lifecycle_src = _LIFECYCLE_REGISTRY_PATH.read_text(encoding="utf-8")
 
-    assert "app.core.scheduler.cleanup" in registry_src
-    assert "app.core.arricchisci.cleanup" in registry_src
-    assert "app.core.datasources.cleanup" in registry_src
-    assert "app.core.connections.cleanup" in registry_src
-    assert "app.core.files.cleanup" in registry_src
-    assert "app.core.auth.user_cleanup" in registry_src
-    assert "delete_file_sources_for_group" in registry_src
-    assert "delete_users_for_group" in registry_src
-    assert "delete_log_runs_for_group" in registry_src
-    assert "app.db.pg_connection" not in registry_src
-    assert "_delete_group_scoped" not in registry_src
-    assert "DELETE FROM schedules WHERE group_id" not in registry_src
-    assert "DELETE FROM api_connections WHERE group_id" not in registry_src
-    assert "DELETE FROM datasources WHERE group_id" not in registry_src
-    assert "DELETE FROM connections WHERE group_id" not in registry_src
-    assert "DELETE FROM file_sources WHERE group_id" not in registry_src
-    assert "DELETE FROM users WHERE group_id" not in registry_src
-    assert "DELETE FROM log_runs WHERE group_id" not in registry_src
+    assert "app.core.scheduler.cleanup" in wiring_src
+    assert "app.core.arricchisci.cleanup" in wiring_src
+    assert "app.core.datasources.cleanup" in wiring_src
+    assert "app.core.connections.cleanup" in wiring_src
+    assert "app.core.files.cleanup" in wiring_src
+    assert "app.core.auth.user_cleanup" in wiring_src
+    assert "delete_file_sources_for_group" in wiring_src
+    assert "delete_users_for_group" in wiring_src
+    assert "delete_log_runs_for_group" in wiring_src
+    for src in (wiring_src, lifecycle_src):
+        assert "app.db.pg_connection" not in src
+        assert "_delete_group_scoped" not in src
+        assert "DELETE FROM schedules WHERE group_id" not in src
+        assert "DELETE FROM api_connections WHERE group_id" not in src
+        assert "DELETE FROM datasources WHERE group_id" not in src
+        assert "DELETE FROM connections WHERE group_id" not in src
+        assert "DELETE FROM file_sources WHERE group_id" not in src
+        assert "DELETE FROM users WHERE group_id" not in src
+        assert "DELETE FROM log_runs WHERE group_id" not in src
 
 
 def test_group_cleanup_registry_does_not_unpack_project_cleanup_report():
-    registry_src = _CLEANUP_REGISTRY_PATH.read_text(encoding="utf-8")
+    wiring_src = _CLEANUP_WIRING_PATH.read_text(encoding="utf-8")
 
-    assert "_cleanup_projects" not in registry_src
-    assert "project_report.projects" not in registry_src
-    assert "project_report.results" not in registry_src
-    assert "project_report.intermediate_runs" not in registry_src
-    assert "GROUP_PROJECT_CLEANUP_REPORT_KEYS" in registry_src
-    assert "delete_projects_for_group_report" in registry_src
+    assert "_cleanup_projects" not in wiring_src
+    assert "project_report.projects" not in wiring_src
+    assert "project_report.results" not in wiring_src
+    assert "project_report.intermediate_runs" not in wiring_src
+    assert "GROUP_PROJECT_CLEANUP_REPORT_KEYS" in wiring_src
+    assert "delete_projects_for_group_report" in wiring_src
 
 
 def test_group_cleanup_registry_execute_calls_do_not_use_dynamic_sql():
     sources = {
         "group_cleanup.py": _GROUP_CLEANUP_PATH.read_text(encoding="utf-8"),
         "cleanup_registry.py": _CLEANUP_REGISTRY_PATH.read_text(encoding="utf-8"),
+        "lifecycle/group_cleanup.py": _LIFECYCLE_REGISTRY_PATH.read_text(encoding="utf-8"),
+        "group_cleanup_wiring.py": _CLEANUP_WIRING_PATH.read_text(encoding="utf-8"),
     }
 
     unsafe_calls = []

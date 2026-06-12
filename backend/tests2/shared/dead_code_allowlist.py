@@ -141,6 +141,11 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     # ripristinare il fallback lazy dopo l'iniezione di reader fake
     # (tests2/shared/test_auth_resource_access_port_contract.py).
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+auth[\\/]+resource_access\.py:\d+: unused function 'reset_resource_readers' "),
+
+    # Wrapper compat cleanup_registry (Epic E): __getattr__ e' il modulo-level
+    # hook PEP 562 che materializza GROUP_CLEANUP_HANDLERS lazy — invocato
+    # dall'interprete, mai per nome.
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+auth[\\/]+cleanup_registry\.py:\d+: unused function '__getattr__' "),
 )
 
 
