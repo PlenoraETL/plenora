@@ -120,6 +120,36 @@ def test_execute_carica_runs_through_injected_fake_runner():
     assert result["rows_written"] == 3
 
 
+def test_orchestrator_factory_is_injectable():
+    """G3: lo scheduler consuma un orchestrator costruito da factory
+    iniettabile — i test usano un fake runner senza patchare
+    build_orchestrator_stack."""
+    fake_orchestrator = object()
+    manager = ExecutionManager(orchestrator_factory=lambda: fake_orchestrator)
+    assert manager._get_orchestrator() is fake_orchestrator
+
+
+def test_default_orchestrator_factory_uses_composition_root(monkeypatch):
+    """Senza iniezione, l'orchestrator viene dallo stack composition-root
+    con la ConnectionService della manager (identita')."""
+    sentinel_stack = SimpleNamespace(orchestrator=object())
+    captured: dict = {}
+
+    def fake_build(**kwargs):
+        captured.update(kwargs)
+        return sentinel_stack
+
+    monkeypatch.setattr(
+        "app.core.scheduler.execution_manager.build_orchestrator_stack",
+        fake_build,
+    )
+    connection_sentinel = object()
+    manager = ExecutionManager(connection_service=connection_sentinel)
+
+    assert manager._get_orchestrator() is sentinel_stack.orchestrator
+    assert captured == {"connection_service": connection_sentinel}
+
+
 def test_default_factory_is_composition_root_builder():
     """Senza iniezione, la factory e' quella del composition root: lo
     scheduler non costruisce CaricaExecutor in proprio."""

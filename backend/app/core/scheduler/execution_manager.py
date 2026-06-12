@@ -86,6 +86,7 @@ class ExecutionManager:
         *,
         connection_service: Optional[ConnectionService] = None,
         carica_executor_factory: Optional[Callable[..., object]] = None,
+        orchestrator_factory: Optional[Callable[..., object]] = None,
     ):
         self.schedule_service = ScheduleService()
         self.log_service = ScheduleLogService()
@@ -100,6 +101,20 @@ class ExecutionManager:
         self._carica_executor_factory = (
             carica_executor_factory or build_scheduled_carica_executor
         )
+        # G3 roadmap: la pipeline schedulata consuma un orchestrator
+        # costruito da una factory iniettabile (default: composition
+        # root). I test scheduler usano un fake runner senza patchare
+        # build_orchestrator_stack.
+        self._orchestrator_factory = (
+            orchestrator_factory or self._build_default_orchestrator
+        )
+
+    def _build_default_orchestrator(self) -> object:
+        """Default composition-root: stack orchestrator completo."""
+        stack = build_orchestrator_stack(
+            connection_service=self._get_connection_service(),
+        )
+        return stack.orchestrator
 
     def _get_connection_service(self) -> ConnectionService:
         """ConnectionService lazy singleton per questa istanza di ExecutionManager."""
@@ -108,16 +123,9 @@ class ExecutionManager:
         return self._connection_service
 
     def _get_orchestrator(self):
-        """
-        Crea un'istanza dell'OrchestratorService con tutte le dipendenze.
-        
-        Importato lazy per evitare circular imports e perché i servizi
-        richiedono settings già inizializzati.
-        """
-        stack = build_orchestrator_stack(
-            connection_service=self._get_connection_service(),
-        )
-        return stack.orchestrator
+        """Orchestrator per l'esecuzione schedulata, via factory iniettata
+        (G3): fake nei test, stack composition-root in produzione."""
+        return self._orchestrator_factory()
     
     def execute(
         self,
