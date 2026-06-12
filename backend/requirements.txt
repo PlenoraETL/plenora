@@ -48,6 +48,10 @@ redis>=7.4.0
 croniter>=6.2.2
 pytz>=2026.2
 
+# Plenora 2.0 (Fase 1, transizione): Dramatiq + RabbitMQ affiancano
+# Celery+Redis durante la migrazione; i pin legacy spariscono in Fase 5.
+dramatiq[rabbitmq]>=1.18.0
+
 # Data / Geospatial
 # pandas 3.0 ha breaking changes su Index/Series API e fillna behavior
 # -> pin esatto. numpy 2.4 stabile, ABI compat con pandas 3.0 garantita.
