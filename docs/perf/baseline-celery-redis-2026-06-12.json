@@ -1,0 +1,51 @@
+{
+  "stack": "celery+redis (baseline pre-migrazione)",
+  "health_unauthenticated_control": {
+    "n": 200,
+    "p50_ms": 0.8,
+    "p95_ms": 0.95,
+    "p99_ms": 1.06,
+    "mean_ms": 0.82
+  },
+  "authenticated_request_blacklist_path": {
+    "n": 200,
+    "p50_ms": 1.83,
+    "p95_ms": 2.09,
+    "p99_ms": 2.25,
+    "mean_ms": 1.84
+  },
+  "task_dispatch_and_status": {
+    "dispatch": {
+      "n": 20,
+      "p50_ms": 1.59,
+      "p95_ms": 44.51,
+      "p99_ms": 44.51,
+      "mean_ms": 3.82
+    },
+    "roundtrip": {
+      "n": 20,
+      "p50_ms": 608.67,
+      "p95_ms": 615.19,
+      "p99_ms": 615.19,
+      "mean_ms": 546.18
+    },
+    "status_read": {
+      "n": 234,
+      "p50_ms": 0.44,
+      "p95_ms": 1.16,
+      "p99_ms": 1.72,
+      "mean_ms": 0.55
+    }
+  },
+  "login_rate_limit": {
+    "attempt_latency": {
+      "n": 60,
+      "p50_ms": 3.83,
+      "p95_ms": 32.5,
+      "p99_ms": 53.56,
+      "mean_ms": 8.79
+    },
+    "attempts_per_sec": 113.7,
+    "first_429_at_attempt": 11
+  }
+}
