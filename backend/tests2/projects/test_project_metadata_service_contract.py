@@ -106,6 +106,73 @@ def test_metadata_service_perimeter_stays_read_only():
     }, f"perimetro inatteso: {sorted(public)}"
 
 
+# F3 — ProjectCanvasService
+
+
+def test_facade_exposes_canvas_sub_service():
+    from app.core.projects.canvas_service import ProjectCanvasService
+
+    service = ProjectService()
+    assert isinstance(service.canvas, ProjectCanvasService)
+
+
+def test_update_canvas_via_facade_respects_lineage_patch(monkeypatch):
+    """Il patch di classe storico su _assert_no_lineage_cycle deve
+    restare efficace attraverso la delega al sub-service canvas."""
+    from app.core.projects.canvas_models import CanvasState
+
+    guard_calls: list[str] = []
+    monkeypatch.setattr(
+        ProjectService,
+        "_assert_no_lineage_cycle",
+        lambda self, project_id, canvas: guard_calls.append(project_id),
+    )
+    monkeypatch.setattr(
+        ProjectService,
+        "_find_dependent_projects",
+        lambda self, project_id, group_id=None: [],
+    )
+    monkeypatch.setattr(
+        "app.core.projects.canvas_service.project_db.get_project_row",
+        lambda project_id, group_id=None: SimpleNamespace(group_id="grp-1"),
+    )
+    monkeypatch.setattr(
+        "app.core.projects.canvas_service.project_db.update_project_row",
+        lambda project_id, **fields: object(),
+    )
+
+    ok = ProjectService().update_canvas("p-1", CanvasState())
+
+    assert ok is True
+    assert guard_calls == ["p-1"]
+
+
+def test_canvas_service_perimeter_is_closed():
+    from app.core.projects.canvas_service import ProjectCanvasService
+
+    public = {
+        name
+        for name in dir(ProjectCanvasService)
+        if not name.startswith("_")
+    }
+    assert public == {
+        "get_project_canvas",
+        "get_project_raw_canvas",
+        "update_canvas",
+        "set_canvas_validated",
+        "create_canvas_version",
+        "list_canvas_versions",
+        "restore_canvas_version",
+    }, f"perimetro inatteso: {sorted(public)}"
+
+
+def test_raw_project_canvas_reexport_identity():
+    """Il re-export compatibile in service punta alla stessa classe."""
+    from app.core.projects import canvas_service, service
+
+    assert service.RawProjectCanvas is canvas_service.RawProjectCanvas
+
+
 # F4 — ProjectOutputContractService
 
 

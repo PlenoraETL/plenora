@@ -63,7 +63,11 @@ def test_update_canvas_accepts_canvas_without_project_sources():
     canvas = CanvasState(nodes=[], edges=[])
     canvases = {"A": None}
 
-    with patch("app.core.projects.service.project_db", _fake_project_db_with(canvases)):
+    # Epic F (F3): update_canvas vive nel sub-service canvas — il fake db
+    # va patchato su entrambi i namespace (facade e canvas_service).
+    _fake_db = _fake_project_db_with(canvases)
+    with patch("app.core.projects.service.project_db", _fake_db), \
+         patch("app.core.projects.canvas_service.project_db", _fake_db):
         svc = ProjectService()
         assert svc.update_canvas("A", canvas) is True
 
@@ -78,7 +82,11 @@ def test_update_canvas_accepts_linear_chain_without_cycle():
     }
     new_canvas_A = _canvas_with_sources(["B"])
 
-    with patch("app.core.projects.service.project_db", _fake_project_db_with(canvases)):
+    # Epic F (F3): update_canvas vive nel sub-service canvas — il fake db
+    # va patchato su entrambi i namespace (facade e canvas_service).
+    _fake_db = _fake_project_db_with(canvases)
+    with patch("app.core.projects.service.project_db", _fake_db), \
+         patch("app.core.projects.canvas_service.project_db", _fake_db):
         svc = ProjectService()
         result = svc.update_canvas("A", new_canvas_A)
         assert result is True
@@ -92,7 +100,11 @@ def test_update_canvas_rejects_self_reference():
     canvases = {"A": None}
     new_canvas_A = _canvas_with_sources(["A"])
 
-    with patch("app.core.projects.service.project_db", _fake_project_db_with(canvases)):
+    # Epic F (F3): update_canvas vive nel sub-service canvas — il fake db
+    # va patchato su entrambi i namespace (facade e canvas_service).
+    _fake_db = _fake_project_db_with(canvases)
+    with patch("app.core.projects.service.project_db", _fake_db), \
+         patch("app.core.projects.canvas_service.project_db", _fake_db):
         svc = ProjectService()
         with pytest.raises(ProjectLineageCycleError) as exc:
             svc.update_canvas("A", new_canvas_A)
@@ -109,7 +121,11 @@ def test_update_canvas_rejects_a_to_b_to_a_cycle():
     }
     new_canvas_A = _canvas_with_sources(["B"])
 
-    with patch("app.core.projects.service.project_db", _fake_project_db_with(canvases)):
+    # Epic F (F3): update_canvas vive nel sub-service canvas — il fake db
+    # va patchato su entrambi i namespace (facade e canvas_service).
+    _fake_db = _fake_project_db_with(canvases)
+    with patch("app.core.projects.service.project_db", _fake_db), \
+         patch("app.core.projects.canvas_service.project_db", _fake_db):
         svc = ProjectService()
         with pytest.raises(ProjectLineageCycleError) as exc:
             svc.update_canvas("A", new_canvas_A)
@@ -124,7 +140,11 @@ def test_cycle_error_message_is_readable():
     canvases = {"A": None}
     new_canvas_A = _canvas_with_sources(["A"])
 
-    with patch("app.core.projects.service.project_db", _fake_project_db_with(canvases)):
+    # Epic F (F3): update_canvas vive nel sub-service canvas — il fake db
+    # va patchato su entrambi i namespace (facade e canvas_service).
+    _fake_db = _fake_project_db_with(canvases)
+    with patch("app.core.projects.service.project_db", _fake_db), \
+         patch("app.core.projects.canvas_service.project_db", _fake_db):
         svc = ProjectService()
         with pytest.raises(ProjectLineageCycleError) as exc:
             svc.update_canvas("A", new_canvas_A)
@@ -141,7 +161,11 @@ def test_update_canvas_returns_false_for_missing_project():
     canvases = {}  # A non esiste
     canvas = CanvasState(nodes=[], edges=[])
 
-    with patch("app.core.projects.service.project_db", _fake_project_db_with(canvases)):
+    # Epic F (F3): update_canvas vive nel sub-service canvas — il fake db
+    # va patchato su entrambi i namespace (facade e canvas_service).
+    _fake_db = _fake_project_db_with(canvases)
+    with patch("app.core.projects.service.project_db", _fake_db), \
+         patch("app.core.projects.canvas_service.project_db", _fake_db):
         svc = ProjectService()
         assert svc.update_canvas("A", canvas) is False
 
@@ -159,7 +183,11 @@ def test_cycle_detection_ignores_unreachable_projects():
     }
     new_canvas_A = _canvas_with_sources(["B"])
 
-    with patch("app.core.projects.service.project_db", _fake_project_db_with(canvases)):
+    # Epic F (F3): update_canvas vive nel sub-service canvas — il fake db
+    # va patchato su entrambi i namespace (facade e canvas_service).
+    _fake_db = _fake_project_db_with(canvases)
+    with patch("app.core.projects.service.project_db", _fake_db), \
+         patch("app.core.projects.canvas_service.project_db", _fake_db):
         svc = ProjectService()
         result = svc.update_canvas("A", new_canvas_A)
         assert result is True
