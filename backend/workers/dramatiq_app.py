@@ -73,4 +73,36 @@ def cleanroom_ping() -> str:
     return "pong"
 
 
-__all__ = ["TASK_QUEUE_ROUTES", "broker", "broker_url", "cleanroom_ping", "queue_for"]
+@dramatiq.actor(
+    actor_name="cleanroom.beat_ping",
+    queue_name=queue_for("cleanroom.beat_ping"),
+)
+def cleanroom_beat_ping() -> str:
+    """Return the canonical "beat_pong" string. Pure no-op."""
+    return "beat_pong"
+
+
+@dramatiq.actor(
+    actor_name="workers.tasks.cleanup_temp_files_task.run",
+    queue_name=queue_for("workers.tasks.cleanup_temp_files_task.run"),
+)
+def cleanup_temp_files() -> dict:
+    """Sweep temp file scaduti — stesso corpo del task Celery omonimo.
+
+    Import lazy: il modulo legacy importa celery_app, che il bootstrap
+    Dramatiq non deve pagare finche' l'actor non viene eseguito.
+    """
+    from workers.tasks.cleanup_temp_files_task import run_cleanup_temp_files
+
+    return dict(run_cleanup_temp_files())
+
+
+__all__ = [
+    "TASK_QUEUE_ROUTES",
+    "broker",
+    "broker_url",
+    "cleanroom_beat_ping",
+    "cleanroom_ping",
+    "cleanup_temp_files",
+    "queue_for",
+]

@@ -60,14 +60,7 @@ def _list_expired_temp_file_ids() -> list[str]:
     return [row["id"] for row in rows]
 
 
-@celery_app.task(
-    name="workers.tasks.cleanup_temp_files_task.run",
-    bind=True,
-    max_retries=0,  # idempotente, nessun retry necessario
-    acks_late=True,
-    reject_on_worker_lost=True,
-)
-def run(self) -> CleanupResult:
+def run_cleanup_temp_files() -> CleanupResult:
     """Beat sweep: cancella file_sources temp scaduti.
 
     Strategia:
@@ -146,3 +139,17 @@ def run(self) -> CleanupResult:
         "deleted_failed": deleted_failed,
         "duration_ms": duration_ms,
     }
+
+
+@celery_app.task(
+    name="workers.tasks.cleanup_temp_files_task.run",
+    bind=True,
+    max_retries=0,  # idempotente, nessun retry necessario
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
+def run(self) -> CleanupResult:
+    """Involucro Celery: il corpo condiviso (Plenora 2.0, Fase 1) vive in
+    run_cleanup_temp_files, registrato anche come actor Dramatiq in
+    workers/dramatiq_app.py."""
+    return run_cleanup_temp_files()

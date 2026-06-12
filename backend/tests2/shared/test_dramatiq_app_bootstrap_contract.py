@@ -45,6 +45,29 @@ def test_cleanroom_ping_actor_keeps_celery_name_and_default_queue():
     assert cleanroom_ping.fn() == "pong"
 
 
+def test_cleanroom_beat_ping_actor_parity():
+    from workers.dramatiq_app import cleanroom_beat_ping
+
+    assert cleanroom_beat_ping.actor_name == "cleanroom.beat_ping"
+    assert cleanroom_beat_ping.fn() == "beat_pong"
+
+
+def test_cleanup_temp_files_actor_routes_to_control_plane_and_shares_body():
+    from app.config import settings
+    from workers.dramatiq_app import cleanup_temp_files
+
+    assert cleanup_temp_files.actor_name == (
+        "workers.tasks.cleanup_temp_files_task.run"
+    )
+    assert cleanup_temp_files.queue_name == settings.CELERY_QUEUE_CONTROL_PLANE
+
+    # Corpo condiviso: l'actor delega alla stessa funzione del task Celery
+    # (lazy import nel body — verifica per identita' del simbolo sorgente).
+    import inspect
+
+    assert "run_cleanup_temp_files" in inspect.getsource(cleanup_temp_files.fn)
+
+
 def test_broker_url_overridable_via_env(monkeypatch):
     from workers import dramatiq_app
 
