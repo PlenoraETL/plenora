@@ -15,9 +15,18 @@ from app.shared import error_codes
 from app.shared.contracts.auth import CurrentUser
 
 
+def _get_project_service() -> ProjectService:
+    """Delegato all'accessor del router orchestrator (stack iniettato dal
+    composition root, fallback compat). Import lazy: il router importa
+    questo modulo a module-level, l'inverso creerebbe un ciclo."""
+    from app.core.orchestrator.router import _project_service
+
+    return _project_service()
+
+
 def assert_project_group(project_id: str, current_user: CurrentUser) -> None:
     """Verify that the current user can access the project."""
-    meta = ProjectService().get_project_metadata(project_id)
+    meta = _get_project_service().get_project_metadata(project_id)
     if not meta:
         raise HTTPException(
             status_code=404,
@@ -63,7 +72,7 @@ def assert_task_group(task_id: str, current_user: CurrentUser, *, logger: Any) -
             )
         return
 
-    meta = ProjectService().get_project_metadata(project_id)
+    meta = _get_project_service().get_project_metadata(project_id)
     if meta:
         assert_group_access(meta, current_user, f"Task '{task_id}'")
     elif project_id.startswith("exec_"):

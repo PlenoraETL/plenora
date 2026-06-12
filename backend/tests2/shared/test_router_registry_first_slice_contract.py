@@ -86,6 +86,15 @@ BINDING_CASES = [
         "init_estrai(project_service, connection_service, query_executor)",
         id="estrai",
     ),
+    pytest.param(
+        "CARICA_DISPATCH_BINDING",
+        "carica_dispatch",
+        ("project_service", "connection_service", "datasource_service"),
+        "app.core.carica.dispatch",
+        "init_carica_dispatch",
+        "init_carica_dispatch(project_service, connection_service, datasource_service)",
+        id="carica_dispatch",
+    ),
 ]
 
 

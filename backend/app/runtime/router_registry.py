@@ -18,6 +18,7 @@ __all__ = [
     "ARRICCHISCI_BINDING",
     "DATASOURCES_BINDING",
     "CARICA_BINDING",
+    "CARICA_DISPATCH_BINDING",
     "ESTRAI_BINDING",
 ]
 
@@ -186,6 +187,29 @@ CARICA_BINDING = RouterBinding(
     name="carica",
     init_fn=_carica_init,
     extract=lambda services: (services.connection_service,),
+)
+
+
+def _carica_dispatch_init(*args: Any, **kwargs: Any) -> None:
+    """Lazy thunk: import + invoke ``init_carica_dispatch``.
+
+    Il dispatch CARICA (sink db/datasource/rest/arcgis) consuma
+    project/connection/datasource service dal composition root invece di
+    costruirli inline (Epic D roadmap accoppiamento).
+    """
+    from app.core.carica.dispatch import init_carica_dispatch
+
+    init_carica_dispatch(*args, **kwargs)
+
+
+CARICA_DISPATCH_BINDING = RouterBinding(
+    name="carica_dispatch",
+    init_fn=_carica_dispatch_init,
+    extract=lambda services: (
+        services.project_service,
+        services.connection_service,
+        services.datasource_service,
+    ),
 )
 
 

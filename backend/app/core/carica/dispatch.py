@@ -42,6 +42,38 @@ from app.core.projects.service import ProjectService
 
 logger = get_logger("app.core.carica.dispatch")
 
+# Servizi iniettati dal composition root via CARICA_DISPATCH_BINDING
+# (Epic D roadmap accoppiamento). Fallback per-chiamata per i contesti
+# senza wiring (worker standalone, unit test su moduli parziali).
+_project_service: Optional[ProjectService] = None
+_connection_service: Optional[ConnectionService] = None
+_datasource_service: Optional[DataSourceService] = None
+
+
+def init_carica_dispatch(
+    project_service: ProjectService,
+    connection_service: ConnectionService,
+    datasource_service: DataSourceService,
+) -> None:
+    """Inizializza il modulo. Chiamare da app_factory dopo setup."""
+    global _project_service, _connection_service, _datasource_service
+    _project_service = project_service
+    _connection_service = connection_service
+    _datasource_service = datasource_service
+
+
+def _get_project_service() -> ProjectService:
+    return _project_service if _project_service is not None else ProjectService()
+
+
+def _get_connection_service() -> ConnectionService:
+    return _connection_service if _connection_service is not None else ConnectionService()
+
+
+def _get_datasource_service() -> DataSourceService:
+    return _datasource_service if _datasource_service is not None else DataSourceService()
+
+
 # Callback di progresso iniettato dal worker (astrae lo stato Celery): (percent, message).
 # percent negativo = errore.
 ProgressFn = Callable[[int, str], None]
@@ -146,7 +178,7 @@ def execute_datasource_write(
         }
 
     try:
-        metadata = ProjectService().get_project_metadata(project_id)
+        metadata = _get_project_service().get_project_metadata(project_id)
         group_id = getattr(metadata, "group_id", None) if metadata else None
         if not group_id or not is_resource_visible(
             "datasources",
@@ -179,7 +211,7 @@ def execute_datasource_write(
     progress(50, f'Scrittura su DataSource {datasource_id}...')
 
     try:
-        ds_service = DataSourceService()
+        ds_service = _get_datasource_service()
 
         # Componi path: dest_folder + dest_filename + .ext
         ext = f'.{dest_format}' if not dest_filename.endswith(f'.{dest_format}') else ''
@@ -233,7 +265,7 @@ def execute_db_write(
         progress(overall_percent, batch_progress.message)
 
     # Passa connection_service per decriptare correttamente le password
-    executor = CaricaExecutor(connection_service=ConnectionService())
+    executor = CaricaExecutor(connection_service=_get_connection_service())
 
     result = executor.execute(
         df=df,

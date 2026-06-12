@@ -7,6 +7,7 @@ from app.runtime.services import RuntimeServices, build_runtime_services
 from app.runtime.router_registry import (
     ARRICCHISCI_BINDING,
     CARICA_BINDING,
+    CARICA_DISPATCH_BINDING,
     CONNECTIONS_BINDING,
     DATASOURCES_BINDING,
     ESTRAI_BINDING,
@@ -27,5 +28,6 @@ __all__ = [
     "ARRICCHISCI_BINDING",
     "DATASOURCES_BINDING",
     "CARICA_BINDING",
+    "CARICA_DISPATCH_BINDING",
     "ESTRAI_BINDING",
 ]
