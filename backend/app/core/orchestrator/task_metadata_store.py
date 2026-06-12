@@ -1,12 +1,20 @@
-"""Distributed metadata store for pending orchestrator tasks."""
+"""Distributed metadata store for pending orchestrator tasks.
+
+Plenora 2.0 (Fase 0): primo consumer pilota del protocol condiviso
+``app.shared.kv.KeyValueStore`` — questo modulo non possiede piu' un
+client Redis proprio; il backend (oggi Redis, in Fase 4 PostgreSQL) e'
+iniettabile e il mapping JSON/TTL resta qui.
+"""
 
 from __future__ import annotations
 
 import json
 import threading
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Optional, Protocol
 
+from app.shared.kv import KeyValueStore
+from app.shared.kv.redis_store import RedisKeyValueStore
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -45,20 +53,16 @@ def _normal_ttl(ttl_seconds: int | None) -> int:
     return ttl_seconds
 
 
-def _redis_module() -> Any:
-    try:
-        import redis
-    except Exception as exc:
-        raise TaskMetadataStoreUnavailable(str(exc)) from exc
-    return redis
-
-
 def _key(task_id: str) -> str:
     return f"{_KEY_PREFIX}{task_id}"
 
 
 class RedisTaskMetadataStore:
-    """Redis-backed store using the configured Celery broker URL."""
+    """Store su KeyValueStore (default: Redis via Celery broker URL).
+
+    Il nome resta per compatibilita' (test e default runtime); il
+    backend e' il protocol condiviso, iniettabile via ``kv_store``.
+    """
 
     def __init__(
         self,
@@ -66,27 +70,15 @@ class RedisTaskMetadataStore:
         *,
         ttl_seconds: int = _DEFAULT_TTL_SECONDS,
         timeout_seconds: int = _DEFAULT_TIMEOUT_SECONDS,
+        kv_store: Optional[KeyValueStore] = None,
     ) -> None:
-        self._broker_url = broker_url
         self._ttl_seconds = _normal_ttl(ttl_seconds)
-        self._timeout_seconds = timeout_seconds if timeout_seconds > 0 else _DEFAULT_TIMEOUT_SECONDS
-        self._client: Any | None = None
-        self._client_lock = threading.Lock()
-
-    def _redis_client(self) -> Any:
-        if self._client is not None:
-            return self._client
-        with self._client_lock:
-            if self._client is not None:
-                return self._client
-            redis = _redis_module()
-            self._client = redis.from_url(
-                self._broker_url,
-                socket_timeout=self._timeout_seconds,
-                socket_connect_timeout=self._timeout_seconds,
-                decode_responses=True,
-            )
-            return self._client
+        resolved_timeout = (
+            timeout_seconds if timeout_seconds > 0 else _DEFAULT_TIMEOUT_SECONDS
+        )
+        self._kv: KeyValueStore = kv_store or RedisKeyValueStore(
+            broker_url, timeout_seconds=resolved_timeout
+        )
 
     def put(self, metadata: PendingTaskMetadata) -> None:
         payload = json.dumps(
@@ -98,20 +90,16 @@ class RedisTaskMetadataStore:
             separators=(",", ":"),
         )
         try:
-            self._redis_client().setex(_key(metadata.task_id), self._ttl_seconds, payload)
+            self._kv.set(
+                _key(metadata.task_id), payload, ttl_seconds=self._ttl_seconds
+            )
         except Exception as exc:
             raise TaskMetadataStoreUnavailable(str(exc)) from exc
 
     def get(self, task_id: str) -> PendingTaskMetadata | None:
-        try:
-            raw_payload = self._redis_client().get(_key(task_id))
-        except Exception as exc:
-            logger.warning("Redis pending task metadata lookup failed task_id=%s: %s", task_id, exc)
-            return None
+        raw_payload = self._kv.get(_key(task_id))
         if not raw_payload:
             return None
-        if isinstance(raw_payload, bytes):
-            raw_payload = raw_payload.decode("utf-8")
         try:
             payload = json.loads(str(raw_payload))
         except json.JSONDecodeError:

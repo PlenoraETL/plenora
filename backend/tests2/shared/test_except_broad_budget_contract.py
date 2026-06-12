@@ -52,7 +52,11 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # difensivo che ritorna {success:false, message} invece di 500:
 # preview-formula (#26), latest-by-project (#11), clone/rename/versions (#8/#12),
 # canvas_sync applied_migrations (#2). +11.
-_EXPECT_BROAD_BUDGET = 716
+# +6 (2026-06-12, Plenora 2.0 Fase 0): RedisKeyValueStore — catch broad
+# intenzionali al boundary infrastrutturale (letture fail-soft, scritture
+# fail-loud con wrap in KeyValueStoreUnavailable); redis-py e' dipendenza
+# opzionale quindi il narrowing a RedisError richiederebbe import eager.
+_EXPECT_BROAD_BUDGET = 722
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

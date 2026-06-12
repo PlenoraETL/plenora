@@ -146,6 +146,12 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     # hook PEP 562 che materializza GROUP_CLEANUP_HANDLERS lazy — invocato
     # dall'interprete, mai per nome.
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+auth[\\/]+cleanup_registry\.py:\d+: unused function '__getattr__' "),
+
+    # Fondazione Plenora 2.0 Fase 0 (KeyValueStore): scan_keys/lock servono
+    # ai consumer di Fase 4 (blacklist JWT, lock oauth) non ancora migrati;
+    # il protocol ha corpo `...` (falso positivo strutturale). Rimuovere
+    # queste righe quando la Fase 4 li aggancia.
+    re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+kv[\\/]+(store|memory_store|redis_store)\.py:\d+: unused method '(scan_keys|acquire_lock|release_lock|exists|delete|get|set)' "),
 )
 
 
