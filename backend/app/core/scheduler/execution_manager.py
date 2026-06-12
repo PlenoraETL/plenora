@@ -8,7 +8,7 @@ import time
 import uuid as _uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 from typing_extensions import TypedDict
 
 from app.core.scheduler import db as scheduler_db
@@ -26,7 +26,6 @@ from app.core.scheduler.scheduler_execution_runtime import (
 from app.core.scheduler.scheduler_preflight import pre_check_destination_connection
 from app.utils.logger import get_logger, open_run, close_run, set_run_context
 from app.core import artifacts as artifact_module
-from app.core.carica import executor as carica_executor_module
 from app.core.carica import models as carica_models
 from app.core.connections.service import ConnectionService
 from app.core.dataframes import frame_io as dataframe_frame_io
@@ -35,7 +34,10 @@ from app.core.intermediate import run_lifecycle as intermediate_run_lifecycle
 from app.core.intermediate import runs_db as intermediate_runs_db
 from app.core.orchestrator import execution_contract as execution_contract_module
 from app.core.projects import service as project_service_module
-from app.runtime.services import build_orchestrator_stack
+from app.runtime.services import (
+    build_orchestrator_stack,
+    build_scheduled_carica_executor,
+)
 
 logger = get_logger(__name__)
 
@@ -79,16 +81,27 @@ class ExecutionManager:
     Il metodo principale è execute, chiamato dal task Celery.
     """
     
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        connection_service: Optional[ConnectionService] = None,
+        carica_executor_factory: Optional[Callable[..., object]] = None,
+    ):
         self.schedule_service = ScheduleService()
         self.log_service = ScheduleLogService()
         self.concurrency = ConcurrencyManager()
         self.policy = PolicyEngine()
-        # ConnectionService singleton — riusata in _get_orchestrator
+        # ConnectionService iniettabile (G4); default lazy per il caller
+        # storico (schedule_task) — riusata in _get_orchestrator,
         # _pre_check_connection, _execute_carica
-        self._connection_service = None
+        self._connection_service = connection_service
+        # Factory composition-root per la scrittura CARICA schedulata:
+        # i test iniettano qui un fake runner senza toccare carica.
+        self._carica_executor_factory = (
+            carica_executor_factory or build_scheduled_carica_executor
+        )
 
-    def _get_connection_service(self):
+    def _get_connection_service(self) -> ConnectionService:
         """ConnectionService lazy singleton per questa istanza di ExecutionManager."""
         if self._connection_service is None:
             self._connection_service = ConnectionService()
@@ -758,7 +771,7 @@ class ExecutionManager:
                 "column_mappings": [],  # auto-mapping da CaricaExecutor
             }
 
-            carica_executor = carica_executor_module.CaricaExecutor(
+            carica_executor = self._carica_executor_factory(
                 connection_service=self._get_connection_service()
             )
 

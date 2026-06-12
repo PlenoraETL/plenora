@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 from app.core.arricchisci import api_connector as api_connector_module
 from app.core.arricchisci import executor as enrich_executor_module
 from app.core.auth import resource_access as resource_access_module
+from app.core.carica import executor as carica_executor_module
 from app.core.connections import service as connection_service_module
 from app.core.datasources import service as datasource_service_module
 from app.core.estrai import database_inspector as database_inspector_module
@@ -33,7 +34,24 @@ __all__ = [
     "RuntimeServices",
     "build_orchestrator_stack",
     "build_runtime_services",
+    "build_scheduled_carica_executor",
 ]
+
+
+def build_scheduled_carica_executor(
+    *,
+    connection_service: Any = None,
+) -> carica_executor_module.CaricaExecutor:
+    """Factory composition-root per la scrittura CARICA schedulata (G4).
+
+    Lo scheduler consuma questa factory invece di importare
+    ``carica.executor`` direttamente: la costruzione del verticale resta
+    qui, dietro il boundary runtime, e i test scheduler possono iniettare
+    un fake runner via ``ExecutionManager(carica_executor_factory=...)``.
+    """
+    return carica_executor_module.CaricaExecutor(
+        connection_service=connection_service
+    )
 
 
 def _register_multilayer_artifact_adapters() -> None:
