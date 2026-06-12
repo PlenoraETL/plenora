@@ -77,9 +77,21 @@ def test_config_module_does_not_crash_when_loaded_in_production(monkeypatch, cap
 
     app_config = importlib.import_module("app.config")
 
-    with caplog.at_level(logging.WARNING, logger="app.config"):
-        app_config = importlib.reload(app_config)
+    # Il reload REBINDA `app.config.settings` a un NUOVO oggetto Settings,
+    # mentre i consumer gia' importati (`from app.config import settings`)
+    # tengono il vecchio: i patch dei test a valle su
+    # `app.config.settings.<attr>` colpirebbero l'oggetto nuovo e i
+    # consumer leggerebbero quello vecchio non patchato (visto su
+    # test_execution_manager_canvas_validation_gate in run congiunta).
+    # Ripristiniamo l'oggetto originale a fine test.
+    original_settings = app_config.settings
+    try:
+        with caplog.at_level(logging.WARNING, logger="app.config"):
+            app_config = importlib.reload(app_config)
 
-    # Non crasha. Il warning potrebbe non essere catturato se .env non esiste
-    # sull'host corrente — non lo asseriamo, vogliamo solo la robustezza.
-    assert app_config.Settings is not None
+        # Non crasha. Il warning potrebbe non essere catturato se .env non
+        # esiste sull'host corrente — non lo asseriamo, vogliamo solo la
+        # robustezza.
+        assert app_config.Settings is not None
+    finally:
+        app_config.settings = original_settings

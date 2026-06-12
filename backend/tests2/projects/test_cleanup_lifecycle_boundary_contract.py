@@ -33,11 +33,16 @@ def _imported_modules(src: str) -> set[str]:
 
 
 def test_project_delete_uses_project_cleanup_boundary() -> None:
-    from app.core.projects.service import ProjectService
+    # Epic F (F5): l'implementazione della delete vive nel sub-service
+    # lifecycle; la facade delega. Il contratto sul boundary si applica
+    # all'implementazione reale.
+    from app.core.projects.lifecycle_service import ProjectLifecycleService
 
     # dedent: getsource di un metodo e' indentato (livello classe) -> ast.parse
     # negli helper richiede codice a livello-modulo.
-    src = textwrap.dedent(inspect.getsource(ProjectService.delete_project))
+    src = textwrap.dedent(
+        inspect.getsource(ProjectLifecycleService.delete_project)
+    )
 
     # AST-bound: delete_project delega al boundary projects.cleanup tramite
     # l'alias modulo `project_cleanup_module`. Pre-migrazione l'assert

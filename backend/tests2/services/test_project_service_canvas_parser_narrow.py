@@ -36,6 +36,9 @@ def _attach_handler(logger_name: str):
 
 
 _PROJ_SVC_LOGGER = "app.core.projects.service"
+# Epic F (F5): _find_dependent_projects vive nel sub-service lifecycle,
+# i suoi warning escono dal logger di quel modulo.
+_LIFECYCLE_LOGGER = "app.core.projects.lifecycle_service"
 
 
 @dataclass(frozen=True)
@@ -88,7 +91,7 @@ def test_find_dependent_projects_skips_malformed_json_canvas(monkeypatch):
     )
 
     svc = ProjectService()
-    handler, target_logger = _attach_handler(_PROJ_SVC_LOGGER)
+    handler, target_logger = _attach_handler(_LIFECYCLE_LOGGER)
     try:
         deps = svc._find_dependent_projects(target_pid)
     finally:
@@ -158,7 +161,7 @@ def test_find_dependent_projects_narrow_catches_typeerror_in_json_loads(monkeypa
     )
 
     svc = ProjectService()
-    handler, target_logger = _attach_handler(_PROJ_SVC_LOGGER)
+    handler, target_logger = _attach_handler(_LIFECYCLE_LOGGER)
     try:
         with patch("json.loads", side_effect=TypeError("stub TypeError")):
             deps = svc._find_dependent_projects("target")

@@ -88,11 +88,11 @@ def _patch_cascade(
             "app.core.projects.service.project_db.get_project_row",
             return_value=_mock_project_row()
         ), patch(
-            # `service` does `from app.core.eseguibili.db import
-            # list_eseguibili_by_source` at module level, so it holds a cached
-            # copy: patch the call-site binding on `service`, not the `db`
-            # module (same rule documented for `intermediate.cleanup` below).
-            "app.core.projects.service.list_eseguibili_by_source",
+            # Epic F (F5): delete_project vive nel sub-service lifecycle, che
+            # importa `list_eseguibili_by_source` a module level — il binding
+            # da patchare e' il call-site su `lifecycle_service` (stessa
+            # regola documentata per `intermediate.cleanup` sotto).
+            "app.core.projects.lifecycle_service.list_eseguibili_by_source",
             return_value=[]
         ), patch(
             "app.core.projects.service.ProjectService._find_dependent_projects",
@@ -210,8 +210,10 @@ def test_delete_project_best_effort_when_schedule_orphan_fails():
     eseguiti, db.delete_project chiamato, return True. Warning con exc_info."""
     from app.core.projects.service import ProjectService
 
+    # Epic F (F5): delete_project vive nel sub-service lifecycle, i suoi
+    # warning escono dal logger di quel modulo.
     with patch(
-        "app.core.projects.service.logger"
+        "app.core.projects.lifecycle_service.logger"
     ) as mock_logger, _patch_cascade(
         schedules_side_effect=RuntimeError("scheduler DB connection reset")
     ) as mock_db_delete:
@@ -235,7 +237,7 @@ def test_delete_project_best_effort_when_comparison_keys_fails():
     from app.core.projects.service import ProjectService
 
     with patch(
-        "app.core.projects.service.logger"
+        "app.core.projects.lifecycle_service.logger"
     ) as mock_logger, _patch_cascade(
         comparison_keys_side_effect=RuntimeError("config DB lock")
     ) as mock_db_delete:

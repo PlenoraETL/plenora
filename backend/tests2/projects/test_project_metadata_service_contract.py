@@ -173,6 +173,102 @@ def test_raw_project_canvas_reexport_identity():
     assert service.RawProjectCanvas is canvas_service.RawProjectCanvas
 
 
+# F5 — ProjectLifecycleService
+
+
+def test_facade_exposes_lifecycle_sub_service():
+    from app.core.projects.lifecycle_service import ProjectLifecycleService
+
+    service = ProjectService()
+    assert isinstance(service.lifecycle, ProjectLifecycleService)
+
+
+def test_delete_project_via_facade_respects_dependent_patch(monkeypatch):
+    """Il patch di classe su _find_dependent_projects resta efficace nel
+    blocco dipendenze della delete (delega owner-backref)."""
+    from app.core.projects.exceptions import ProjectHasDependenciesError
+
+    monkeypatch.setattr(
+        "app.core.projects.lifecycle_service.project_db.get_project_row",
+        lambda project_id, group_id=None: SimpleNamespace(group_id="grp-1"),
+    )
+    monkeypatch.setattr(
+        "app.core.projects.lifecycle_service.list_eseguibili_by_source",
+        lambda project_id: [],
+    )
+    monkeypatch.setattr(
+        ProjectService,
+        "_find_dependent_projects",
+        lambda self, project_id, group_id=None: [
+            {"id": "dep-1", "name": "Dep", "project_type": "manipola"}
+        ],
+    )
+
+    with pytest.raises(ProjectHasDependenciesError):
+        ProjectService().delete_project("p-1")
+
+
+def test_clone_project_chains_through_facade_methods(monkeypatch):
+    """clone passa dai metodi della facade (owner-backref): i patch sui
+    metodi pubblici intercettano ogni step."""
+    calls: list[str] = []
+    cloned_meta = SimpleNamespace(id="p-new")
+
+    monkeypatch.setattr(
+        ProjectService,
+        "get_project_metadata",
+        lambda self, project_id, group_id=None: SimpleNamespace(
+            description="d", project_type="manipola", default_connection_id=None,
+        ),
+    )
+    monkeypatch.setattr(
+        ProjectService,
+        "create_project",
+        lambda self, data, group_id=None, created_by=None: (
+            calls.append("create"), cloned_meta
+        )[1],
+    )
+    monkeypatch.setattr(
+        ProjectService,
+        "get_project_canvas",
+        lambda self, project_id: None,
+    )
+    monkeypatch.setattr(
+        ProjectService,
+        "get_project_output_contract",
+        lambda self, project_id: None,
+    )
+
+    result = ProjectService().clone_project("p-src", "Nuovo")
+
+    assert result is cloned_meta
+    assert calls == ["create"]
+
+
+def test_lifecycle_service_perimeter_is_closed():
+    from app.core.projects.lifecycle_service import ProjectLifecycleService
+
+    public = {
+        name
+        for name in dir(ProjectLifecycleService)
+        if not name.startswith("_")
+    }
+    assert public == {
+        "clone_project",
+        "delete_project",
+        "find_dependent_projects",
+    }, f"perimetro inatteso: {sorted(public)}"
+
+
+def test_dependency_payload_reexport_identity():
+    from app.core.projects import lifecycle_service, service
+
+    assert (
+        service.ProjectDependencyPayload
+        is lifecycle_service.ProjectDependencyPayload
+    )
+
+
 # F4 — ProjectOutputContractService
 
 
