@@ -104,3 +104,76 @@ def test_metadata_service_perimeter_stays_read_only():
         "get_project_metadata",
         "project_exists",
     }, f"perimetro inatteso: {sorted(public)}"
+
+
+# F4 — ProjectOutputContractService
+
+
+def test_facade_exposes_output_contract_sub_service():
+    from app.core.projects.output_contract_service import (
+        ProjectOutputContractService,
+    )
+
+    service = ProjectService()
+    assert isinstance(service.output_contract, ProjectOutputContractService)
+
+
+def test_facade_output_contract_reads_delegate(monkeypatch):
+    contract = {"columns": [{"name": "a", "type": "string"}]}
+    monkeypatch.setattr(
+        "app.core.projects.output_contract_service.project_db.get_project_row",
+        lambda project_id: SimpleNamespace(output_contract=contract),
+    )
+
+    assert ProjectService().get_project_output_contract("p-1") == contract
+
+
+def test_facade_output_contract_update_delegates(monkeypatch):
+    captured: dict = {}
+
+    def _update(project_id, *, output_contract):
+        captured["project_id"] = project_id
+        captured["contract"] = output_contract
+        return object()
+
+    monkeypatch.setattr(
+        "app.core.projects.output_contract_service.project_db."
+        "update_project_output_contract_row",
+        _update,
+    )
+
+    ok = ProjectService().update_project_output_contract(
+        "p-1", {"columns": []}
+    )
+
+    assert ok is True
+    assert captured == {"project_id": "p-1", "contract": {"columns": []}}
+
+
+def test_output_contract_method_patch_on_facade_still_wins(monkeypatch):
+    """I 7 patch di metodo storici su ProjectService.* devono restare
+    efficaci: la delega non bypassa il metodo della facade."""
+    monkeypatch.setattr(
+        ProjectService,
+        "get_project_output_contract",
+        lambda self, project_id: {"patched": True},
+    )
+    assert ProjectService().get_project_output_contract("x") == {
+        "patched": True
+    }
+
+
+def test_output_contract_service_perimeter_is_closed():
+    from app.core.projects.output_contract_service import (
+        ProjectOutputContractService,
+    )
+
+    public = {
+        name
+        for name in dir(ProjectOutputContractService)
+        if not name.startswith("_")
+    }
+    assert public == {
+        "get_project_output_contract",
+        "update_project_output_contract",
+    }, f"perimetro inatteso: {sorted(public)}"

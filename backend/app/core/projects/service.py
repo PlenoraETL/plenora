@@ -43,6 +43,7 @@ from app.core.projects.exceptions import (
     ProjectLineageCycleError,
 )
 from app.core.projects.metadata_service import ProjectMetadataService
+from app.core.projects.output_contract_service import ProjectOutputContractService
 from app.core.projects.repository import (
     DbProjectCanvasKeyRepository,
     ProjectCanvasKeyRepository,
@@ -94,9 +95,10 @@ class ProjectService:
         self._project_repository = (
             project_repository or DbProjectCanvasKeyRepository()
         )
-        # Epic F (F2): sub-service di lettura metadata. I nuovi chiamanti
-        # dipendono da `metadata` (interfaccia stretta), la facade delega.
+        # Epic F (F2/F4): sub-service a interfaccia stretta. I nuovi
+        # chiamanti dipendono da questi; la facade delega.
         self.metadata = ProjectMetadataService(self)
+        self.output_contract = ProjectOutputContractService()
 
     def _generate_project_id(self, name: str) -> str:
         """Genera ID univoco leggibile: {nome_safe}_{timestamp}_{uuid8}."""
@@ -499,21 +501,19 @@ class ProjectService:
         self,
         project_id: str,
     ) -> Mapping[str, object] | None:
-        row = project_db.get_project_row(project_id)
-        if not row:
-            return None
-        contract = row.output_contract
-        return contract if isinstance(contract, Mapping) else None
+        """Delega al sub-service output_contract (Epic F)."""
+        return self.output_contract.get_project_output_contract(project_id)
 
     def update_project_output_contract(
         self,
         project_id: str,
         output_contract: Mapping[str, object],
     ) -> bool:
-        return project_db.update_project_output_contract_row(
+        """Delega al sub-service output_contract (Epic F)."""
+        return self.output_contract.update_project_output_contract(
             project_id,
-            output_contract=output_contract,
-        ) is not None
+            output_contract,
+        )
 
     def _assert_no_lineage_cycle(self, project_id: str, canvas: CanvasState) -> None:
         """Verifica che salvare `canvas` per `project_id` non introduca
