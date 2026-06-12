@@ -376,6 +376,10 @@ _BOUNDARY_FROZEN_SNAPSHOT: dict[str, int] = {
     "scripts/backup_db.py": 1,
     "scripts/test_restore.py": 1,
     "scripts/export_openapi_manifest.py": 1,
+    # Dev tooling roadmap accoppiamento (2026-06-12): scrive la baseline
+    # JSON del grafo import (tests2/shared/config/) via --write-baseline.
+    # Eseguito a mano/in lane, mai nel runtime applicativo.
+    "scripts/dependency_graph.py": 1,
     # Data plane endpoints (Punto 3 follow-up 2026-05-26: il regex
     # `open_write_mode` ora intercetta anche `open(var, "w")`).
     # `local.py` non e' piu' qui post audit follow-up 2026-05-26:

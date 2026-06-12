@@ -247,6 +247,13 @@ def test_connection_service_create_uses_typed_create_return(monkeypatch) -> None
         "_generate_connection_id",
         lambda self, name: "conn-1",
     )
+    # Pre-check unicita' (name, group_id) aggiunto dopo questo test:
+    # interroga il DB e va neutralizzato per restare hermetic.
+    monkeypatch.setattr(
+        connection_db,
+        "list_connection_configs",
+        lambda group_id: [],
+    )
     monkeypatch.setattr(
         connection_db,
         "create_connection",

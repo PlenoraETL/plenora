@@ -50,6 +50,12 @@ _POOL_MAX = 12
 # postgresql.conf. Scope: solo le connessioni del nostro pool
 # Default 300000ms = 5min. Imposta 0 per disabilitare
 _IDLE_IN_TRANSACTION_MS = 300000
+
+# Attesa massima di getconn() prima di PoolTimeout. Il default psycopg_pool
+# e' 30s; la lane test no-DB lo abbassa (DB_POOL_TIMEOUT_SECONDS=2) cosi'
+# un accesso DB non mockato fallisce in secondi invece di accumulare
+# mezzi minuti silenziosi.
+_POOL_TIMEOUT_SECONDS = 30
 _POOL_CONFIG_LOADED = False
 
 
@@ -60,12 +66,17 @@ def _validate_pool_params(
     pool_min: int,
     pool_max: int,
     idle_in_transaction_ms: int,
+    pool_timeout_seconds: int = 30,
 ) -> None:
     errors = []
     if pool_min < 0:
         errors.append(f"DB_POOL_MIN={pool_min} deve essere >= 0")
     if pool_max < 1:
         errors.append(f"DB_POOL_MAX={pool_max} deve essere >= 1")
+    if pool_timeout_seconds < 1:
+        errors.append(
+            f"DB_POOL_TIMEOUT_SECONDS={pool_timeout_seconds} deve essere >= 1"
+        )
     if pool_min > pool_max:
         errors.append(
             f"DB_POOL_MIN={pool_min} > DB_POOL_MAX={pool_max}: "
@@ -92,7 +103,7 @@ def _load_pool_config() -> None:
     to initialize the pool.
     """
     global _DATABASE_URL, _DB_SCHEMA, _POOL_MIN, _POOL_MAX
-    global _IDLE_IN_TRANSACTION_MS, _POOL_CONFIG_LOADED
+    global _IDLE_IN_TRANSACTION_MS, _POOL_TIMEOUT_SECONDS, _POOL_CONFIG_LOADED
 
     if _POOL_CONFIG_LOADED:
         return
@@ -106,10 +117,12 @@ def _load_pool_config() -> None:
     idle_in_transaction_ms = _read_int_env(
         "DB_IDLE_IN_TRANSACTION_TIMEOUT_MS", 300000
     )
+    pool_timeout_seconds = _read_int_env("DB_POOL_TIMEOUT_SECONDS", 30)
     _validate_pool_params(
         pool_min=pool_min,
         pool_max=pool_max,
         idle_in_transaction_ms=idle_in_transaction_ms,
+        pool_timeout_seconds=pool_timeout_seconds,
     )
 
     _DATABASE_URL = database_url
@@ -117,6 +130,7 @@ def _load_pool_config() -> None:
     _POOL_MIN = pool_min
     _POOL_MAX = pool_max
     _IDLE_IN_TRANSACTION_MS = idle_in_transaction_ms
+    _POOL_TIMEOUT_SECONDS = pool_timeout_seconds
     _POOL_CONFIG_LOADED = True
 
 
@@ -217,6 +231,7 @@ def _get_pool() -> ConnectionPool:
                     conninfo=_DATABASE_URL,
                     min_size=_POOL_MIN,
                     max_size=_POOL_MAX,
+                    timeout=_POOL_TIMEOUT_SECONDS,
                     configure=_configure_connection,
                     reset=_reset_connection,
                     open=True,

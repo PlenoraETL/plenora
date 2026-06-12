@@ -52,11 +52,11 @@ def test_l2_full_pg_full_pg_returns_full_diff(superadmin_user):
         "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         side_effect=_fake_meta,
     ), patch(
-        "app.db.pg_connection.fetchall",
+        "app.core.intermediate.node_snapshots_db.list_node_row_hash_diff",
         return_value=[],
     ), patch(
-        "app.db.pg_connection.fetchone",
-        return_value={"cnt": 0},
+        "app.core.intermediate.node_snapshots_db.count_node_rows",
+        return_value=0,
     ):
         response = client.get("/api/runs/compare/l2?run_id_a=rA&run_id_b=rB&node_id=n1")
 
@@ -84,11 +84,11 @@ def test_l2_null_persistence_mode_treated_as_full_pg(superadmin_user):
         "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         side_effect=_fake_meta,
     ), patch(
-        "app.db.pg_connection.fetchall",
+        "app.core.intermediate.node_snapshots_db.list_node_row_hash_diff",
         return_value=[],
     ), patch(
-        "app.db.pg_connection.fetchone",
-        return_value={"cnt": 0},
+        "app.core.intermediate.node_snapshots_db.count_node_rows",
+        return_value=0,
     ):
         response = client.get("/api/runs/compare/l2?run_id_a=rA&run_id_b=rB&node_id=n1")
 
@@ -115,11 +115,11 @@ def test_l2_preview_only_pair_is_partial(superadmin_user):
         "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         side_effect=_fake_meta,
     ), patch(
-        "app.db.pg_connection.fetchall",
+        "app.core.intermediate.node_snapshots_db.list_node_row_hash_diff",
         return_value=[],
     ), patch(
-        "app.db.pg_connection.fetchone",
-        return_value={"cnt": 0},
+        "app.core.intermediate.node_snapshots_db.count_node_rows",
+        return_value=0,
     ):
         response = client.get("/api/runs/compare/l2?run_id_a=rA&run_id_b=rB&node_id=n1")
 
@@ -401,11 +401,11 @@ def test_l2_does_not_return_500_on_any_documented_mode(superadmin_user):
             "app.core.intermediate.router.node_snapshots_db.get_node_meta",
             side_effect=_fake_meta,
         ), patch(
-            "app.db.pg_connection.fetchall",
+            "app.core.intermediate.node_snapshots_db.list_node_row_hash_diff",
             return_value=[],
         ), patch(
-            "app.db.pg_connection.fetchone",
-            return_value={"cnt": 0},
+            "app.core.intermediate.node_snapshots_db.count_node_rows",
+            return_value=0,
         ):
             response = client.get(
                 "/api/runs/compare/l2?run_id_a=rA&run_id_b=rB&node_id=n1"

@@ -23,6 +23,9 @@ services:
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     environment:
       HOME: /tmp
+      # Lane no-DB: un accesso PG non mockato deve fallire in 2s
+      # (PoolTimeout), non accumulare i 30s di default per chiamata.
+      DB_POOL_TIMEOUT_SECONDS: "2"
     working_dir: /repo/backend
     volumes:
       - .:/repo

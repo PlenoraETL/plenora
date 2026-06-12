@@ -84,7 +84,9 @@ def test_upstream_failure_does_not_leak_source_project_id():
     dataframes: dict = {}
 
     # Bypass create_run upstream e open_run upstream (DB-bound).
-    with patch("app.utils.logger.open_run"), \
+    with patch("app.core.manipola.project_source_runtime.get_project_source_freshness",
+               return_value=None), \
+         patch("app.utils.logger.open_run"), \
          patch("app.core.manipola.project_source_runtime.create_intermediate_run"), \
          patch("app.core.manipola.project_source_runtime.close_intermediate_run"), \
          patch("app.utils.logger.close_run"), \
@@ -121,7 +123,9 @@ def test_upstream_failure_result_is_wrappable_without_pid_mismatch():
     ])
     dataframes: dict = {}
 
-    with patch("app.utils.logger.open_run"), \
+    with patch("app.core.manipola.project_source_runtime.get_project_source_freshness",
+               return_value=None), \
+         patch("app.utils.logger.open_run"), \
          patch("app.core.manipola.project_source_runtime.create_intermediate_run"), \
          patch("app.core.manipola.project_source_runtime.close_intermediate_run"), \
          patch("app.utils.logger.close_run"), \
@@ -163,7 +167,9 @@ def test_upstream_failure_message_includes_source_project_id():
     ])
     dataframes: dict = {}
 
-    with patch("app.utils.logger.open_run"), \
+    with patch("app.core.manipola.project_source_runtime.get_project_source_freshness",
+               return_value=None), \
+         patch("app.utils.logger.open_run"), \
          patch("app.core.manipola.project_source_runtime.create_intermediate_run"), \
          patch("app.core.manipola.project_source_runtime.close_intermediate_run"), \
          patch("app.utils.logger.close_run"), \
@@ -234,7 +240,9 @@ def test_upstream_success_path_unchanged():
         ]
     }
 
-    with patch("app.utils.logger.open_run"), \
+    with patch("app.core.manipola.project_source_runtime.get_project_source_freshness",
+               return_value=None), \
+         patch("app.utils.logger.open_run"), \
          patch("app.core.manipola.project_source_runtime.create_intermediate_run"), \
          patch("app.core.manipola.project_source_runtime.close_intermediate_run"), \
          patch("app.utils.logger.close_run"), \

@@ -2769,6 +2769,7 @@ compatibilita' con bundle pre-IMDF-3.
 | `scripts/test_restore.py` | 1 | Test harness restore DB. Esegue solo manualmente. |
 | `scripts/export_openapi_manifest.py` | 1 | Dump OpenAPI su file per integrazione esterna. One-shot. |
 | `scripts/imdf_real_e2e_check.py` | 2 | E2E IMDF locale: scarica bundle reale + estrae + valida. Tool di smoke test. |
+| `scripts/dependency_graph.py` | 1 | Tool roadmap accoppiamento (2026-06-12): scrive la baseline JSON del grafo import (`--write-baseline`). Eseguito a mano o in lane test, mai nel runtime applicativo. |
 
 **Policy**: `scripts/` resta esplicitamente fuori dal boundary
 (`_EXCLUDED_ROOTS = ("scripts",)` in `_gen_io_allowlist.py`). Modifiche

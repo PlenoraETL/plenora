@@ -25,6 +25,12 @@ def _make_manager() -> ExecutionManager:
     manager.policy = MagicMock()
     manager._connection_service = None
     manager._get_connection_service = MagicMock(return_value=MagicMock())
+    # __new__ salta __init__: la factory composition-root (G4) va
+    # ricostruita a mano — qui il default reale, cosi' il patch su
+    # app.core.carica.executor.CaricaExecutor resta efficace.
+    from app.runtime.services import build_scheduled_carica_executor
+
+    manager._carica_executor_factory = build_scheduled_carica_executor
     return manager
 
 

@@ -17,6 +17,36 @@ from workers.beat_scheduler import PlenoraBeatScheduler
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
 
 
+@pytest.fixture(autouse=True)
+def _neutralize_db_bound_maintenance():
+    """Il tick da leader esegue 10 step di manutenzione; questo file ne
+    blinda solo alcuni (sync/heartbeat/stuck/cleanup) e i restanti —
+    aggiunti dopo la scrittura di questi test — andavano sul DB/coda
+    reali: nella lane no-DB ogni tick costava 30s di PoolTimeout
+    (apparente hang della suite). Qui il contratto sotto test e' la
+    leader election, non la manutenzione: la si azzera in blocco a
+    livello di classe (i patch per-istanza dei singoli test vincono
+    comunque)."""
+    maintenance = (
+        "_sync_from_db",
+        "_emit_catchup_runs",
+        "_write_heartbeat",
+        "_check_stuck_tasks",
+        "_cleanup_eseguibili_outputs",
+        "_archive_old_logs",
+        "_cleanup_old_logs",
+        "_cleanup_old_schedule_logs",
+        "_archive_old_audit_actions",
+        "_cleanup_orphan_temp_files",
+        "_reconcile_storage",
+    )
+    with patch.multiple(
+        PlenoraBeatScheduler,
+        **{name: MagicMock() for name in maintenance},
+    ):
+        yield
+
+
 class _FakeRedis:
     """Emula il subset di redis-py usato dalla leader election."""
 

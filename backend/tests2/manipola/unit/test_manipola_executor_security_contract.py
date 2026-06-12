@@ -127,7 +127,12 @@ def test_load_project_sources_blocks_cross_tenant_source_project():
         build_node("project_source", source_project_id="proj-99", columns=[]),
     )
 
+    # freshness gate (a monte del resolver) interroga projects.db: va
+    # neutralizzato per restare hermetic — None = "nessun gate".
     with patch(
+        "app.core.manipola.project_source_runtime.get_project_source_freshness",
+        return_value=None,
+    ), patch(
         "app.core.artifacts.ArtifactResolver.materialize_latest",
         side_effect=ArtifactResolutionError("cross-tenant"),
     ):

@@ -12,6 +12,10 @@ pytestmark = [pytest.mark.unit, pytest.mark.arricchisci, pytest.mark.contract, p
 def connector():
     from app.core.arricchisci.api_connector import ApiConnectionService
     svc = ApiConnectionService.__new__(ApiConnectionService)
+    # Il parse valida l'URL con risoluzione DNS reale (anti-SSRF): nella
+    # lane no-network l'host non risolve e il parse fallisce prima di
+    # arrivare al contratto sotto test (il timeout). Neutralizzata qui.
+    svc._validate_outbound_url = lambda url: None
     return svc
 
 
