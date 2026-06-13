@@ -77,7 +77,9 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # 725 -> 719 (2026-06-13, Plenora 2.0 Fase 5 F5.3b): osservabilita' admin
 # PG-derived. Rimossi i catch di get_redis_status, get_workers_status (celery
 # inspect) e delle funzioni Redis/Celery di probes.py; net -6.
-_EXPECT_BROAD_BUDGET = 719
+# +2 (2026-06-13, Plenora 2.0 Fase 5 F5.4): cron_schedule.beat_timezone —
+# fallback su ZoneInfo (settings assente / tz invalida) -> default Europe/Rome.
+_EXPECT_BROAD_BUDGET = 721
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

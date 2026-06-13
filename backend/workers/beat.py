@@ -5,9 +5,9 @@ il loop e' APScheduler (nativo Windows/Linux/container, niente fork), la
 logica resta in ``PlenoraBeatScheduler`` (leader election su PostgreSQL,
 sync schedule dal DB, catchup, manutenzione, emit via layer dispatch).
 
-L'app Celery viene passata SOLO come riferimento per la matematica cron di
-``ScheduleEntry`` (now()/timezone), NON per il broker: l'emit dei task va
-via ``dispatch_task_by_name`` (Fase 3 F3.2).
+Plenora 2.0 Fase 5: l'engine e' celery-free (la date-math cron/interval e'
+su croniter, vedi app.core.scheduler.cron_schedule); l'emit dei task va via
+``dispatch_task_by_name`` (Dramatiq).
 
 Avvio: ``python -m workers.beat``.
 """
@@ -20,7 +20,6 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 
 from app.utils.logger import get_logger
 from workers.beat_scheduler import DEFAULT_MAX_INTERVAL, PlenoraBeatScheduler
-from workers.celery_app import celery_app
 
 logger = get_logger(__name__)
 
@@ -28,12 +27,11 @@ _TICK_JOB_ID = "plenora-beat-tick"
 
 
 def build_engine() -> PlenoraBeatScheduler:
-    """Istanzia l'engine di scheduling senza far partire Celery beat.
+    """Istanzia l'engine di scheduling (celery-free).
 
-    ``lazy=True``: niente setup_schedule a init (gli schedule vengono
-    caricati dal DB a ogni tick via ``_sync_from_db``). ``app=celery_app``
-    serve solo a ScheduleEntry/crontab per now()/timezone."""
-    return PlenoraBeatScheduler(app=celery_app, lazy=True)
+    Gli schedule vengono caricati dal DB a ogni tick via ``_sync_from_db``;
+    la date-math cron/interval e' su croniter."""
+    return PlenoraBeatScheduler()
 
 
 def build_scheduler(engine: PlenoraBeatScheduler) -> BlockingScheduler:

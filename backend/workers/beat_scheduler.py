@@ -1,11 +1,14 @@
 """
-PlenoraBeatScheduler — subclass di celery.beat.Scheduler con:
+PlenoraBeatScheduler — scheduler del beat celery-free (Plenora 2.0 Fase 5):
 
 - schedule caricati dal DB Postgres (tabella `schedules`)
+- date-math cron/interval su croniter (app.core.scheduler.cron_schedule)
+- emit dei task via layer dispatch (Dramatiq), loop guidato da APScheduler
 """
 
 import json
 import importlib
+import logging
 import os
 import os as _os
 import socket
@@ -15,9 +18,13 @@ from datetime import datetime, timezone, timedelta
 from datetime import datetime as _dt, timedelta as _td, timezone as _tz
 from pathlib import Path as _Path
 from typing import Any, Optional
-from celery.beat import Scheduler, ScheduleEntry
-from celery.schedules import crontab
-from celery.utils.log import get_logger
+from app.core.scheduler.cron_schedule import (
+    BeatEntry,
+    CronSchedule,
+    beat_now,
+    beat_timezone,
+)
+from app.core.scheduler.beat_schedule_config import beat_schedule_config
 from app import config as app_config
 from app.core.eseguibili import output_store
 from app.core.io import object_storage as object_storage_module
@@ -33,7 +40,10 @@ from app.core.resources import storage_reconciliation as storage_reconciliation_
 from app.core.io.local_cleanup import rmtree_safe
 from app.infrastructure.storage import compensation as storage_compensation
 
-logger = get_logger(__name__)
+# Logger stdlib propagante (era celery.utils.log.get_logger): i record
+# raggiungono root, cosi' caplog e gli handler globali li catturano. NON
+# usare app.utils.logger qui (wrapper con propagate=False -> caplog cieco).
+logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_INTERVAL = 60.0
 
@@ -75,27 +85,33 @@ def _pg_transaction():
     return _ORIGINAL_PG_UNIT_OF_WORK()
 
 
-class PlenoraBeatScheduler(Scheduler):
+class PlenoraBeatScheduler:
     """
     Beat Scheduler custom che legge gli schedule da PostgreSQL.
-    
+
+    Plenora 2.0 Fase 5: non eredita piu' da celery.beat.Scheduler. La
+    date-math degli schedule (cron/interval) e' su croniter (vedi
+    app.core.scheduler.cron_schedule), il trasporto dei task sul layer
+    dispatch (Dramatiq). Il loop e' guidato da APScheduler (workers/beat.py).
+
     Ogni max_interval secondi:
     1. Carica tutti gli schedule attivi dal DB
     2. Per ognuno verifica se è scaduto (cron/interval)
-    3. Lancia il task Celery se necessario
+    3. Dispatcha il task se necessario
     4. Aggiorna last_run nel DB
     5. Scrive heartbeat nel DB
     """
 
     max_interval = DEFAULT_MAX_INTERVAL
 
-    def __init__(self, *args: object, **kwargs: object) -> None:
+    def __init__(self) -> None:
         self._db_loaded = False
         self._leader_id = f"{os.getpid()}@{socket.gethostname()}"
         self._is_leader = False
+        self.data: dict[str, BeatEntry] = {}
+        self.max_interval = DEFAULT_MAX_INTERVAL
         # Plenora 2.0 Fase 3: lock leader su PostgreSQL (iniettabile nei test).
         self._leader_store = beat_leader_store
-        super().__init__(*args, **kwargs)
         logger.info(
             f"PlenoraBeatScheduler avviato (schedule + leader lock da "
             f"Postgres, leader_id={self._leader_id})"
@@ -538,7 +554,7 @@ class PlenoraBeatScheduler(Scheduler):
                 last_run_at = self._parse_dt(row.get("last_run"))
 
                 if entry_name not in self.data:
-                    self.data[entry_name] = ScheduleEntry(
+                    self.data[entry_name] = BeatEntry(
                         name=entry_name,
                         task=SCHEDULE_PIPELINE_TASK_NAME,
                         schedule=schedule,
@@ -548,7 +564,7 @@ class PlenoraBeatScheduler(Scheduler):
                             # Pre-fix: `**scheduled_run_kwargs(triggered_by="cron")`
                             # pre-calcolava `scheduled_for=now()` al sync-time
                             # (ogni 60s). Cosmi e' una stringa frozen dentro
-                            # entry.kwargs, riusata a ogni tick Celery — la
+                            # entry.kwargs, riusata a ogni tick — la
                             # idempotency key CARICA `schedule-{id}-{scheduled_for}-carica`
                             # restava costante fra tick consecutivi, e il
                             # secondo tick veniva marked SKIPPED_IDEMPOTENT.
@@ -556,14 +572,11 @@ class PlenoraBeatScheduler(Scheduler):
                             # schedule_pipeline_task lo determina al ricevimento
                             # del task (a tick-time) usando datetime.now().
                         },
-                        app=self.app,
-                        last_run_at=last_run_at or self.app.now(),
+                        last_run_at=last_run_at or beat_now(),
                     )
                     logger.info(f"Schedule aggiunto: '{row.get('name', sid)}' cron={row['cron_expression']}")
                 else:
-                    # Aggiorna schedule se cambiato. `ScheduleEntry.update`
-                    # non accetta `schedule=` come kwarg (signature Celery e'
-                    # `update(other: ScheduleEntry)`), quindi ricreiamo l'entry
+                    # Aggiorna schedule se cambiato: ricreiamo l'entry
                     # preservando `last_run_at`. Senza questo fix il cambio
                     # di cron a caldo veniva swallowed come crash silenzioso
                     # loggato "[CRASH] Errore sync") e lo schedule continuava
@@ -571,7 +584,7 @@ class PlenoraBeatScheduler(Scheduler):
                     entry = self.data[entry_name]
                     if str(entry.schedule) != str(schedule):
                         logger.info(f"Schedule modificato: '{row.get('name', sid)}' cron={row['cron_expression']} (era {entry.schedule})")
-                        self.data[entry_name] = ScheduleEntry(
+                        self.data[entry_name] = BeatEntry(
                             name=entry_name,
                             task=SCHEDULE_PIPELINE_TASK_NAME,
                             schedule=schedule,
@@ -582,7 +595,6 @@ class PlenoraBeatScheduler(Scheduler):
                                 # dal task wrapper (vedi nota sopra a
                                 # riga ~515 sull'entry-creation path).
                             },
-                            app=self.app,
                             last_run_at=entry.last_run_at,
                         )
 
@@ -621,13 +633,13 @@ class PlenoraBeatScheduler(Scheduler):
             tz_name = schedule_section.get("timezone")
             if not tz_name:
                 return
-            beat_tz = str(getattr(self.app.conf, "timezone", "")) or "UTC"
+            beat_tz = str(beat_timezone())
             if tz_name != beat_tz:
                 logger.warning(
                     "[Scheduler] schedule %s configurato con "
-                    "timezone='%s' ma Celery beat tz='%s' — il cron "
+                    "timezone='%s' ma beat tz='%s' — il cron "
                     "verra' interpretato in '%s', NON in '%s'. "
-                    "Allineare la timezone Celery oppure normalizzare "
+                    "Allineare BEAT_TIMEZONE oppure normalizzare "
                     "l'espressione cron a '%s'.",
                     schedule_id, tz_name, beat_tz, beat_tz, tz_name, beat_tz,
                 )
@@ -638,20 +650,9 @@ class PlenoraBeatScheduler(Scheduler):
             )
 
     def _parse_cron(self, cron_expr: str) -> Optional[object]:
-        """Parsa espressione cron in un oggetto schedule Celery."""
+        """Parsa espressione cron (5 campi) in un CronSchedule croniter."""
         try:
-            parts = cron_expr.strip().split()
-            if len(parts) != 5:
-                logger.warning(f"Cron non valido: {cron_expr!r}")
-                return None
-            minute, hour, day_of_month, month_of_year, day_of_week = parts
-            return crontab(
-                minute=minute,
-                hour=hour,
-                day_of_month=day_of_month,
-                month_of_year=month_of_year,
-                day_of_week=day_of_week,
-            )
+            return CronSchedule(cron_expr)
         except Exception as e:
             logger.warning(f"Errore parsing cron {cron_expr!r}: {e}")
             return None
@@ -1496,28 +1497,19 @@ class PlenoraBeatScheduler(Scheduler):
         logger.info(f"Beat avviato con {len(self.data)} schedule attivi")
 
     def _merge_config_beat_schedule(self) -> None:
-        """Merge `self.app.conf.beat_schedule` entries into `self.data`.
+        """Merge le entry config-based (NON DB) in `self.data`.
 
+        Plenora 2.0 Fase 5: la sorgente e' `beat_schedule_config()`
+        (celery-free, app.core.scheduler.beat_schedule_config), non piu'
+        `celery_app.conf.beat_schedule`. Gli schedule DB-driven (namespace
+        `urby:schedule:<id>`) restano di `_sync_from_db`; le entry config
+        (qualunque altro nome) sopravvivono ai sync DB successivi (il
+        cleanup loop filtra solo per il prefix `urby:schedule:`).
 
-        PlenoraBeatScheduler caricava SOLO schedule dal DB via
-        `_sync_from_db`; config-based `beat_schedule` (la API
-        Celery standard per definire entry programmatiche) era
-        ignorato. Questo shim aggiunge un caricamento idempotente
-        delle entry NON `urby:schedule:`-namespace, cosi':
-
-          - DB schedules (namespace `urby:schedule:<id>`) restano
-            l'ownership di `_sync_from_db` (incluso eviction loop);
-          - config entries (qualunque altro nome) sono caricate UNA
-            VOLTA in `setup_schedule` e sopravvivono ai sync DB
-            successivi (il cleanup loop di `_sync_from_db` filtra
-            solo per il prefix `urby:schedule:`).
-
-        Idempotente: chiamabile multiple volte senza side-effect.
-        Best-effort: errori per-entry vengono loggati e non bloccano
-        il caricamento delle altre entry o l'avvio del beat.
+        Idempotente; best-effort per-entry.
         """
         try:
-            config_schedule = getattr(self.app.conf, "beat_schedule", None) or {}
+            config_schedule = beat_schedule_config() or {}
         except Exception as e:
             logger.warning(f"[CONFIG-BEAT] Errore lettura beat_schedule: {e}")
             return
@@ -1545,15 +1537,14 @@ class PlenoraBeatScheduler(Scheduler):
                         f"[CONFIG-BEAT] Entry {name!r} senza task/schedule, skip"
                     )
                     continue
-                self.data[name] = ScheduleEntry(
+                self.data[name] = BeatEntry(
                     name=name,
                     task=task,
                     schedule=schedule,
                     args=tuple(entry.get("args") or ()),
                     kwargs=dict(entry.get("kwargs") or {}),
                     options=dict(entry.get("options") or {}),
-                    app=self.app,
-                    last_run_at=self.app.now(),
+                    last_run_at=beat_now(),
                 )
                 logger.info(
                     f"[CONFIG-BEAT] Entry caricata: {name!r} task={task!r}"
@@ -1591,4 +1582,3 @@ class PlenoraBeatScheduler(Scheduler):
             except Exception as e:
                 logger.warning(f"[LEADER] Errore release su close: {e}")
         logger.info("PlenoraBeatScheduler chiuso")
-        super().close()
