@@ -148,6 +148,38 @@ class BaseTaskWithRetry(celery_app.Task):
     retry_backoff_max = 600
     retry_jitter = True
 
+    def after_return(
+        self,
+        status: str,
+        retval: object,
+        task_id: str,
+        args: tuple,
+        kwargs: dict,
+        einfo: object,
+    ) -> None:
+        """Plenora 2.0 Fase 2: persiste l'esito finale del task su
+        PostgreSQL (task_result_store), rimpiazzo del result backend
+        Redis sul lato scrittura. Centralizzato qui = vale per ogni task
+        Celery (base di default via ``celery_app.Task``), senza toccare i
+        singoli corpi. Best-effort: il finalize non altera l'esito del
+        task. Le LETTURE migrano a PG in F2.3; qui si popola la sorgente.
+
+        Import locale: il bootstrap del modulo celery non deve dipendere a
+        import-time dall'orchestrator."""
+        try:
+            from app.core.orchestrator.task_progress import finalize_from_celery
+
+            finalize_from_celery(
+                task_id, status, retval, einfo, name=self.name
+            )
+        except Exception:
+            logger.warning(
+                "after_return finalize su PG fallito task_id=%s", task_id,
+                exc_info=True,
+            )
+        finally:
+            super().after_return(status, retval, task_id, args, kwargs, einfo)
+
 
 celery_app.Task = BaseTaskWithRetry
 

@@ -34,7 +34,10 @@ _SCAN_ROOTS = (
 # 278 -> 279 (Plenora 2.0, Fase 2 F2.1): default_task_result_store() importa
 # app.config.settings localmente, stesso pattern di default_task_metadata_store
 # (evita di aggiungere un edge top-level orchestrator->config al grafo).
-MAX_LOCAL_IMPORTS = 279
+# 279 -> 280 (Plenora 2.0, Fase 2 F2.2): BaseTaskWithRetry.after_return importa
+# localmente finalize_from_celery dall'orchestrator (il bootstrap del modulo
+# celery non deve dipendere a import-time dall'orchestrator).
+MAX_LOCAL_IMPORTS = 280
 MAX_LATE_MODULE_IMPORTS = 8
 
 

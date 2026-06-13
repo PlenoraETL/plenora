@@ -56,7 +56,12 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # intenzionali al boundary infrastrutturale (letture fail-soft, scritture
 # fail-loud con wrap in KeyValueStoreUnavailable); redis-py e' dipendenza
 # opzionale quindi il narrowing a RedisError richiederebbe import eager.
-_EXPECT_BROAD_BUDGET = 722
+# +2 (2026-06-13, Plenora 2.0 Fase 2 F2.2): task_progress.report_task_progress
+# e finalize_task_result — safety-net best-effort sulla scrittura stato/esito
+# task su PG; un errore di persistenza (DB giu', serializzazione) non deve mai
+# far fallire il task (il polling Celery resta valido finche' la lettura non
+# migra a PG in F2.3).
+_EXPECT_BROAD_BUDGET = 724
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

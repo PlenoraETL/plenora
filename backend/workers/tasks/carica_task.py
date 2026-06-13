@@ -36,6 +36,7 @@ from app.core.dataframes.frame_io import (
 )
 from app.core.intermediate.cleanup import close_worker_connection
 from app.core.intermediate.run_idempotency import is_already_completed
+from app.core.orchestrator.task_progress import report_task_progress
 from app.core.projects.runtime_context import get_project_runtime_context
 from app.core.projects.service import ProjectService
 from app.db.pg_connection import close_connection as _close_config_connection
@@ -439,13 +440,18 @@ def _acquire_target_lock_or_return_busy(
 
 
 def _update_progress(task, percent: int, message: str):
-    """Aggiorna il progresso del task in Redis.
+    """Aggiorna il progresso del task.
 
     Usa sempre lo stato 'PROGRESS' (mai 'FAILURE') per evitare che Celery
     interpreti il task come terminato. Il frontend determina lo stato
     reale dal contenuto del messaggio e dalla percentuale.
 
     Un percent negativo indica errore.
+
+    Plenora 2.0 Fase 2 (F2.2): oltre allo stato Celery (transitorio,
+    rimosso a fine fase) scrive il progress anche su PostgreSQL via
+    report_task_progress, keyed sul task_id. La doppia scrittura tiene
+    valido il polling Celery finche' la LETTURA non migra a PG (F2.3).
     """
     try:
         task.update_state(
@@ -458,6 +464,14 @@ def _update_progress(task, percent: int, message: str):
         )
     except Exception as e:
         logger.warning(f"Errore aggiornamento progresso: {e}")
+
+    report_task_progress(
+        getattr(getattr(task, "request", None), "id", None),
+        percent,
+        message,
+        is_error=percent < 0,
+        name="carica.execute",
+    )
 
 
 def _load_upstream_data(

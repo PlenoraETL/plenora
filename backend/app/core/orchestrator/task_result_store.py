@@ -21,6 +21,7 @@ import threading
 from dataclasses import dataclass
 from typing import Optional, Protocol
 
+from app.db import pg_connection
 from app.db.pg_connection import unit_of_work
 from app.utils.logger import get_logger
 
@@ -93,28 +94,31 @@ class PgTaskResultStore:
     ) -> None:
         ttl = _normal_ttl(ttl_seconds) if ttl_seconds is not None else self._ttl_seconds
         payload_json = json.dumps(payload, separators=(",", ":")) if payload is not None else None
-        with unit_of_work() as session:
-            # name via COALESCE(EXCLUDED, esistente): una write di progress
-            # successiva che non porta il nome non lo azzera.
-            session.execute(
-                """
-                INSERT INTO task_results (
-                    task_id, state, name, payload,
-                    created_at, updated_at, expires_at
-                )
-                VALUES (
-                    %s, %s, %s, %s::jsonb,
-                    now(), now(), now() + (%s * interval '1 second')
-                )
-                ON CONFLICT (task_id) DO UPDATE
-                SET state = EXCLUDED.state,
-                    name = COALESCE(EXCLUDED.name, task_results.name),
-                    payload = EXCLUDED.payload,
-                    updated_at = now(),
-                    expires_at = EXCLUDED.expires_at
-                """,
-                (task_id, state, name, payload_json, ttl),
+        # Scrittura via pg_connection.execute (non unit_of_work diretto): e'
+        # il path che i task usano a runtime, e l'autouse della lane
+        # (_stub_pg_connection_execute) lo no-oppa nei unit test → niente
+        # accesso DB reale quando un task viene eseguito in unit.
+        # name via COALESCE(EXCLUDED, esistente): una write di progress
+        # successiva che non porta il nome non lo azzera.
+        pg_connection.execute(
+            """
+            INSERT INTO task_results (
+                task_id, state, name, payload,
+                created_at, updated_at, expires_at
             )
+            VALUES (
+                %s, %s, %s, %s::jsonb,
+                now(), now(), now() + (%s * interval '1 second')
+            )
+            ON CONFLICT (task_id) DO UPDATE
+            SET state = EXCLUDED.state,
+                name = COALESCE(EXCLUDED.name, task_results.name),
+                payload = EXCLUDED.payload,
+                updated_at = now(),
+                expires_at = EXCLUDED.expires_at
+            """,
+            (task_id, state, name, payload_json, ttl),
+        )
 
     def get(self, task_id: str) -> Optional[TaskResultRecord]:
         with unit_of_work() as session:
@@ -142,17 +146,15 @@ class PgTaskResultStore:
         )
 
     def forget(self, task_id: str) -> None:
-        with unit_of_work() as session:
-            session.execute(
-                "DELETE FROM task_results WHERE task_id = %s", (task_id,)
-            )
+        pg_connection.execute(
+            "DELETE FROM task_results WHERE task_id = %s", (task_id,)
+        )
 
     def cleanup_expired(self) -> int:
-        with unit_of_work() as session:
-            cur = session.execute(
-                "DELETE FROM task_results "
-                "WHERE expires_at IS NOT NULL AND expires_at <= now()"
-            )
+        cur = pg_connection.execute(
+            "DELETE FROM task_results "
+            "WHERE expires_at IS NOT NULL AND expires_at <= now()"
+        )
         return int(getattr(cur, "rowcount", 0) or 0)
 
 
