@@ -13,6 +13,10 @@ from app.core.orchestrator.task_metadata_store import (
     TaskMetadataStore,
     default_task_metadata_store,
 )
+from app.core.orchestrator.task_revocation_store import (
+    TaskRevocationStore,
+    default_task_revocation_store,
+)
 from app.core.task_runtime import TaskRuntimePort
 from app.core.task_runtime.dispatch import dispatch_task_by_name
 from app.core.orchestrator.pg_task_runtime import PgResultTaskRuntime
@@ -323,12 +327,16 @@ class TaskService:
         self,
         runtime: TaskRuntimePort | None = None,
         metadata_store: TaskMetadataStore | None = None,
+        revocation_store: TaskRevocationStore | None = None,
     ):
         # Plenora 2.0 Fase 2 (F2.3): il runtime di default legge stato/esito
         # da PostgreSQL (task_result_store), non piu' dal result backend
-        # Redis di Celery. Le operazioni broker restano Celery (delegate).
+        # Redis di Celery.
         self.runtime = runtime or PgResultTaskRuntime()
         self.metadata_store = metadata_store or default_task_metadata_store()
+        # Fase 5 (F5.2): annullamento cooperativo su PG (rimpiazzo di
+        # celery app.control.revoke).
+        self.revocation_store = revocation_store or default_task_revocation_store()
 
     @property
     def app(self) -> object:
@@ -704,17 +712,22 @@ class TaskService:
     
     def cancel_task(self, task_id: str) -> bool:
         """
-        Annulla un task in esecuzione.
-        
+        Annulla un task in esecuzione (annullamento cooperativo su PG).
+
+        Plenora 2.0 Fase 5 (F5.2): scrive un flag di revoca su PostgreSQL al
+        posto di `celery app.control.revoke` (Dramatiq non revoca per id). Il
+        task lo controlla ai checkpoint di progress e aborta sollevando
+        TaskRevoked → stato terminale REVOKED.
+
         Args:
             task_id: ID del task
-            
+
         Returns:
-            True se annullato con successo
+            True se la revoca e' stata registrata con successo
         """
         try:
-            self.runtime.revoke(task_id, terminate=True)
-            logger.info(f"Task {task_id} annullato")
+            self.revocation_store.revoke(task_id)
+            logger.info(f"Task {task_id} revoca registrata (annullamento cooperativo)")
             return True
         except Exception as e:
             logger.error(f"[CRASH] Errore annullamento task {task_id}: {e}", exc_info=True)

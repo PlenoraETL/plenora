@@ -20,6 +20,10 @@ from app.core.orchestrator.task_result_store import (
     TaskResultStore,
     default_task_result_store,
 )
+from app.core.orchestrator.task_revocation_store import (
+    TaskRevocationStore,
+    default_task_revocation_store,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -27,12 +31,30 @@ logger = get_logger(__name__)
 PROGRESS_STATE = "PROGRESS"
 SUCCESS_STATE = "SUCCESS"
 FAILURE_STATE = "FAILURE"
+REVOKED_STATE = "REVOKED"
 
-# Stati Celery terminali su cui ha senso scrivere l'esito finale. RETRY e
-# REVOKED non sono esiti definitivi: il task ripartira' o e' stato annullato.
+# Stati Celery terminali su cui ha senso scrivere l'esito finale. RETRY non
+# e' un esito definitivo (il task ripartira'); REVOKED e' gestito a parte.
 _FINAL_CELERY_STATES = frozenset({SUCCESS_STATE, FAILURE_STATE})
 
 _default_store: Optional[TaskResultStore] = None
+_revocation_store: Optional[TaskRevocationStore] = None
+
+
+class TaskRevoked(BaseException):
+    """Annullamento cooperativo di un task (Plenora 2.0, Fase 5 F5.2).
+
+    Sottoclasse di ``BaseException`` (non ``Exception``) di proposito: deve
+    attraversare i ``except Exception`` dei corpi task (eseguendone i
+    ``finally`` per rilasciare lock/connessioni) e arrivare all'actor.
+    Gli actor la dichiarano in ``throws=(TaskRevoked,)`` cosi' Dramatiq non
+    ritenta e logga l'evento come atteso; ``finalize_from_celery`` la mappa
+    sullo stato terminale ``REVOKED``.
+    """
+
+    def __init__(self, task_id: Optional[str] = None) -> None:
+        super().__init__(task_id or "")
+        self.task_id = task_id
 
 
 def _resolve_store(store: Optional[TaskResultStore]) -> TaskResultStore:
@@ -42,6 +64,33 @@ def _resolve_store(store: Optional[TaskResultStore]) -> TaskResultStore:
     if _default_store is None:
         _default_store = default_task_result_store()
     return _default_store
+
+
+def _resolve_revocation_store(
+    store: Optional[TaskRevocationStore],
+) -> TaskRevocationStore:
+    if store is not None:
+        return store
+    global _revocation_store
+    if _revocation_store is None:
+        _revocation_store = default_task_revocation_store()
+    return _revocation_store
+
+
+def raise_if_task_revoked(
+    task_id: Optional[str],
+    *,
+    store: Optional[TaskRevocationStore] = None,
+) -> None:
+    """Solleva ``TaskRevoked`` se il task e' stato annullato.
+
+    Punto di annullamento cooperativo: i corpi task lo attraversano via i
+    checkpoint di progress (``report_task_progress``). Fail-soft: un errore
+    di lettura del flag non revoca (vedi ``is_revoked``)."""
+    if not task_id:
+        return
+    if _resolve_revocation_store(store).is_revoked(task_id):
+        raise TaskRevoked(task_id)
 
 
 def report_task_progress(
@@ -60,6 +109,11 @@ def report_task_progress(
     ``_update_progress`` in carica/pipeline)."""
     if not task_id:
         return
+    # Checkpoint di annullamento cooperativo: se il task e' stato revocato,
+    # solleva TaskRevoked PRIMA di scrivere il progress (vedi F5.2). Fuori
+    # dal try best-effort sotto: la TaskRevoked deve propagare, non essere
+    # inghiottita.
+    raise_if_task_revoked(task_id)
     payload = {
         "progress": max(0, int(percent)),
         "message": message,
@@ -101,6 +155,26 @@ def finalize_task_result(
         )
 
 
+def finalize_revoked(
+    task_id: Optional[str],
+    *,
+    name: Optional[str] = None,
+    store: Optional[TaskResultStore] = None,
+) -> None:
+    """Scrive l'esito terminale ``REVOKED`` (task annullato cooperativamente)."""
+    finalize_task_result(
+        task_id,
+        state=REVOKED_STATE,
+        payload={
+            "success": False,
+            "status": "revoked",
+            "message": "Task annullato",
+        },
+        name=name,
+        store=store,
+    )
+
+
 def finalize_from_celery(
     task_id: Optional[str],
     status: str,
@@ -110,12 +184,18 @@ def finalize_from_celery(
     name: Optional[str] = None,
     store: Optional[TaskResultStore] = None,
 ) -> None:
-    """Adatta i parametri di ``Task.after_return`` allo store.
+    """Adatta i parametri di ``Task.after_return`` (o del middleware Dramatiq)
+    allo store.
 
-    Solo gli stati terminali (SUCCESS/FAILURE) vengono persistiti. Su
-    SUCCESS la payload e' il dict di ritorno del task (semantica Celery
-    ``result``); su FAILURE una payload minima e sanitizzata (niente
-    ``str(exc)`` raw nel canale letto dal FE — vedi get_task_status)."""
+    Un'eccezione ``TaskRevoked`` mappa sullo stato terminale ``REVOKED``
+    (annullamento cooperativo). Altrimenti solo SUCCESS/FAILURE vengono
+    persistiti: su SUCCESS la payload e' il dict di ritorno del task
+    (semantica Celery ``result``); su FAILURE una payload minima e
+    sanitizzata (niente ``str(exc)`` raw nel canale letto dal FE)."""
+    exc = getattr(einfo, "exception", None)
+    if isinstance(exc, TaskRevoked):
+        finalize_revoked(task_id, name=name, store=store)
+        return
     if status not in _FINAL_CELERY_STATES:
         return
     if status == SUCCESS_STATE:
@@ -124,7 +204,6 @@ def finalize_from_celery(
             task_id, state=SUCCESS_STATE, payload=payload, name=name, store=store
         )
         return
-    exc = getattr(einfo, "exception", None)
     payload = {
         "success": False,
         "error": type(exc).__name__ if exc is not None else "TaskFailure",
@@ -134,11 +213,25 @@ def finalize_from_celery(
     )
 
 
+def _set_revocation_store_for_tests(store: Optional[TaskRevocationStore]) -> None:
+    global _revocation_store
+    _revocation_store = store
+
+
+def _reset_revocation_store_for_tests() -> None:
+    global _revocation_store
+    _revocation_store = None
+
+
 __all__ = [
     "FAILURE_STATE",
     "PROGRESS_STATE",
+    "REVOKED_STATE",
     "SUCCESS_STATE",
+    "TaskRevoked",
     "finalize_from_celery",
+    "finalize_revoked",
     "finalize_task_result",
+    "raise_if_task_revoked",
     "report_task_progress",
 ]

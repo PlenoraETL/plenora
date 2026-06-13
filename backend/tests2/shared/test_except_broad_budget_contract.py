@@ -67,7 +67,10 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # 732 -> 721 (2026-06-13, Plenora 2.0 Fase 5 F5.1): rimossi RedisKeyValueStore
 # (app/shared/kv/redis_store.py) e il ramo redis.exceptions di resilience/transient
 # — il backend KV e' interamente su PostgreSQL, niente piu' dipendenza redis-py.
-_EXPECT_BROAD_BUDGET = 721
+# +1 (2026-06-13, Plenora 2.0 Fase 5 F5.2): PgTaskRevocationStore.is_revoked —
+# fail-soft sulla lettura del flag di annullamento (un errore di lettura NON
+# deve revocare un task valido); boundary infrastrutturale intenzionale.
+_EXPECT_BROAD_BUDGET = 722
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

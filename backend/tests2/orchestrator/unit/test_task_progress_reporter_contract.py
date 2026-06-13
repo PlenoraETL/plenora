@@ -10,15 +10,21 @@ from __future__ import annotations
 
 import pytest
 
+from app.core.orchestrator import task_progress as task_progress_module
 from app.core.orchestrator.task_progress import (
     FAILURE_STATE,
     PROGRESS_STATE,
+    REVOKED_STATE,
     SUCCESS_STATE,
+    TaskRevoked,
     finalize_from_celery,
+    finalize_revoked,
     finalize_task_result,
+    raise_if_task_revoked,
     report_task_progress,
 )
 from app.core.orchestrator.task_result_store import InMemoryTaskResultStore
+from app.core.orchestrator.task_revocation_store import InMemoryTaskRevocationStore
 
 
 pytestmark = [
@@ -26,6 +32,18 @@ pytestmark = [
     pytest.mark.orchestrator,
     pytest.mark.contract,
 ]
+
+
+@pytest.fixture(autouse=True)
+def _reset_revocation_store():
+    # Default lane-safe: store in-memory vuoto (nessun task revocato, niente
+    # tentativo di lettura PG). I test sull'annullamento iniettano un store
+    # con il flag via _set_revocation_store_for_tests.
+    task_progress_module._set_revocation_store_for_tests(
+        InMemoryTaskRevocationStore()
+    )
+    yield
+    task_progress_module._reset_revocation_store_for_tests()
 
 
 class _RaisingStore:
@@ -154,5 +172,77 @@ def test_finalize_from_celery_failure_is_sanitized():
 def test_finalize_from_celery_skips_non_terminal_states(status):
     store = InMemoryTaskResultStore()
     finalize_from_celery("t1", status, {"x": 1}, None, store=store)
-    # Stati non terminali: nessuna scrittura.
+    # Stati non terminali (senza eccezione): nessuna scrittura.
     assert store.get("t1") is None
+
+
+# Annullamento cooperativo (Plenora 2.0, Fase 5 F5.2)
+
+
+def test_raise_if_task_revoked_raises_when_flag_set():
+    revocations = InMemoryTaskRevocationStore()
+    revocations.revoke("t1")
+
+    with pytest.raises(TaskRevoked):
+        raise_if_task_revoked("t1", store=revocations)
+
+
+def test_raise_if_task_revoked_noop_when_not_revoked():
+    raise_if_task_revoked("t1", store=InMemoryTaskRevocationStore())
+    raise_if_task_revoked(None, store=InMemoryTaskRevocationStore())
+
+
+def test_task_revoked_is_base_exception_not_exception():
+    # Deve attraversare i `except Exception` dei corpi task: NON e' Exception.
+    assert issubclass(TaskRevoked, BaseException)
+    assert not issubclass(TaskRevoked, Exception)
+
+
+def test_report_progress_raises_taskrevoked_and_skips_write_when_revoked():
+    revocations = InMemoryTaskRevocationStore()
+    revocations.revoke("t1")
+    task_progress_module._set_revocation_store_for_tests(revocations)
+    result_store = InMemoryTaskResultStore()
+
+    with pytest.raises(TaskRevoked):
+        report_task_progress("t1", 50, "in corso", store=result_store)
+
+    # Il checkpoint aborta PRIMA di scrivere il progress.
+    assert result_store.get("t1") is None
+
+
+def test_report_progress_writes_when_not_revoked():
+    task_progress_module._set_revocation_store_for_tests(
+        InMemoryTaskRevocationStore()
+    )
+    store = InMemoryTaskResultStore()
+    report_task_progress("t1", 10, "ok", store=store)
+    assert store.get("t1") is not None
+
+
+def test_finalize_revoked_writes_revoked_state():
+    store = InMemoryTaskResultStore()
+    finalize_revoked("t1", name="carica.execute", store=store)
+
+    record = store.get("t1")
+    assert record is not None
+    assert record.state == REVOKED_STATE
+    assert record.payload == {
+        "success": False,
+        "status": "revoked",
+        "message": "Task annullato",
+    }
+
+
+def test_finalize_from_celery_maps_taskrevoked_to_revoked():
+    store = InMemoryTaskResultStore()
+
+    class _Einfo:
+        exception = TaskRevoked("t1")
+
+    # Anche se il middleware passa status="FAILURE", una TaskRevoked mappa REVOKED.
+    finalize_from_celery("t1", "FAILURE", None, _Einfo(), store=store)
+
+    record = store.get("t1")
+    assert record is not None
+    assert record.state == REVOKED_STATE

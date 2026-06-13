@@ -22,6 +22,7 @@ from dramatiq.brokers.rabbitmq import RabbitmqBroker
 from dramatiq.middleware import CurrentMessage, Middleware
 
 from app.config import settings
+from app.core.orchestrator.task_progress import TaskRevoked
 
 # Nessun path nell'URL = vhost di default "/" (un trailing "//" verrebbe
 # interpretato da pika come vhost vuoto -> 530 NOT_ALLOWED).
@@ -49,6 +50,8 @@ class _TaskResultMiddleware(Middleware):
         result: object = None,
         exception: object = None,
     ) -> None:
+        # finalize_from_celery mappa TaskRevoked -> REVOKED (F5.2),
+        # SUCCESS/FAILURE altrimenti.
         from app.core.orchestrator.task_progress import finalize_from_celery
 
         status = "FAILURE" if exception is not None else "SUCCESS"
@@ -186,7 +189,11 @@ def run_manual_backup_task(*, owner_token: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-@dramatiq.actor(actor_name="carica.execute", queue_name=queue_for("carica.execute"))
+@dramatiq.actor(
+    actor_name="carica.execute",
+    queue_name=queue_for("carica.execute"),
+    throws=(TaskRevoked,),
+)
 def carica_execute(**kwargs: object) -> object:
     """CARICA — stesso corpo del task Celery carica.execute."""
     from workers.tasks.carica_task import execute_carica_task
@@ -197,7 +204,9 @@ def carica_execute(**kwargs: object) -> object:
 
 
 @dramatiq.actor(
-    actor_name="pipeline.execute", queue_name=queue_for("pipeline.execute")
+    actor_name="pipeline.execute",
+    queue_name=queue_for("pipeline.execute"),
+    throws=(TaskRevoked,),
 )
 def pipeline_execute(**kwargs: object) -> object:
     """PIPELINE execute — stesso corpo del task Celery pipeline.execute."""
@@ -209,7 +218,9 @@ def pipeline_execute(**kwargs: object) -> object:
 
 
 @dramatiq.actor(
-    actor_name="pipeline.preview", queue_name=queue_for("pipeline.preview")
+    actor_name="pipeline.preview",
+    queue_name=queue_for("pipeline.preview"),
+    throws=(TaskRevoked,),
 )
 def pipeline_preview(**kwargs: object) -> object:
     """PIPELINE preview — stesso corpo del task Celery pipeline.preview."""
@@ -223,6 +234,7 @@ def pipeline_preview(**kwargs: object) -> object:
 @dramatiq.actor(
     actor_name="tasks.execute_enrichment",
     queue_name=queue_for("tasks.execute_enrichment"),
+    throws=(TaskRevoked,),
 )
 def execute_enrichment(**kwargs: object) -> object:
     """ARRICCHISCI — stesso corpo del task Celery tasks.execute_enrichment."""
