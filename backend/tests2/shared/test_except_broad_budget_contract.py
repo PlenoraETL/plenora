@@ -64,7 +64,11 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # +1 (2026-06-13, Plenora 2.0 Fase 1 cutover): DramatiqTaskRuntime._actor_queue_name
 # risolve la coda dell'actor con fallback "default" se il broker non espone
 # get_actor (fake nei test) o l'actor non e' registrato — best-effort di routing.
-_EXPECT_BROAD_BUDGET = 725
+# +7 (2026-06-13, Plenora 2.0 Fase 4 F4.1): PgKeyValueStore (app/shared/kv/pg_store.py)
+# — boundary KV su PG: letture fail-soft (None/[]/False), scritture fail-loud
+# (KeyValueStoreUnavailable). Stesso pattern di RedisKeyValueStore (+6 in Fase 0),
+# 7 metodi del protocol (get/set/delete/exists/scan_keys/acquire_lock/release_lock).
+_EXPECT_BROAD_BUDGET = 732
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

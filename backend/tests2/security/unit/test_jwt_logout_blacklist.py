@@ -20,17 +20,19 @@ pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
 @pytest.fixture
-def fake_redis():
-    """FakeStrictRedis in-memory, decode_responses=True (come prod)."""
-    import fakeredis
-    return fakeredis.FakeStrictRedis(decode_responses=True)
+def mem_backend():
+    """KeyValueStore in-memory come backend della blacklist (Fase 4: il
+    backend e' il KeyValueStore su PG; il fake in-process ha la stessa
+    semantica, zero rete)."""
+    from app.shared.kv import InMemoryKeyValueStore
+    return InMemoryKeyValueStore()
 
 
 @pytest.fixture
-def patched_blacklist(fake_redis):
-    """Inietta fakeredis nel modulo blacklist; ripristina a None dopo."""
+def patched_blacklist(mem_backend):
+    """Inietta il backend in-memory nel modulo blacklist; reset dopo."""
     from app.core.security import token_blacklist as tb
-    tb._set_client_for_tests(fake_redis)
+    tb._set_client_for_tests(mem_backend)
     yield tb
     tb._reset_client_for_tests()
 
@@ -140,7 +142,7 @@ def test_protected_endpoint_ok_when_jti_not_blacklisted(auth_client):
 # 4. Logout → jti blacklistato → 401 sul prossimo uso
 
 
-def test_logout_blacklists_jti_and_next_request_401(auth_client, fake_redis):
+def test_logout_blacklists_jti_and_next_request_401(auth_client, mem_backend):
     tc, auth_mod = auth_client
     tok = _issue_token(auth_mod)
     payload = auth_mod.decode_token(tok)
@@ -158,8 +160,8 @@ def test_logout_blacklists_jti_and_next_request_401(auth_client, fake_redis):
     assert body["blacklisted"] is True
     assert body["ttl"] > 0
 
-    # Chiave presente in fakeredis
-    assert fake_redis.exists(f"plenora:jwt_blacklist:{jti}") == 1
+    # Chiave presente nel backend KV
+    assert mem_backend.exists(f"plenora:jwt_blacklist:{jti}") is True
 
     # Dopo il logout → 401 su endpoint protetto.
     # Post BE-GO-READY-AUTH-DOMAIN-PROMOTION-001: HTTPException emette
@@ -290,19 +292,29 @@ def test_blacklist_check_fail_open_on_redis_down(auth_client):
 # 11. TTL della chiave ≈ exp - now
 
 
-def test_blacklist_ttl_matches_remaining_token_lifetime(auth_client, fake_redis):
+def test_blacklist_ttl_matches_remaining_token_lifetime(auth_client):
     tc, auth_mod = auth_client
-    tok = _issue_token(auth_mod)
-    payload = auth_mod.decode_token(tok)
-    jti = payload["jti"]
+    from app.core.security import token_blacklist as tb
+    from app.shared.kv import InMemoryKeyValueStore
 
+    # Backend che registra il ttl_seconds passato a set() dal blacklist_jti.
+    backend_ttls: list = []
+
+    class _RecordingBackend(InMemoryKeyValueStore):
+        def set(self, key, value, *, ttl_seconds=None):
+            backend_ttls.append(ttl_seconds)
+            super().set(key, value, ttl_seconds=ttl_seconds)
+
+    tb._set_client_for_tests(_RecordingBackend())
+
+    tok = _issue_token(auth_mod)
     tc.post("/api/auth/logout", headers={"Authorization": f"Bearer {tok}"})
 
-    ttl_stored = fake_redis.ttl(f"plenora:jwt_blacklist:{jti}")
-    # Il token dura ACCESS_TOKEN_EXPIRE_HOURS * 3600 secondi. Consenti
-    # scostamento fino a 5s per la differenza tra emissione e logout.
+    # Il backend (PG in prod) riceve ttl = exp - now ~= ACCESS_TOKEN_EXPIRE_HOURS*3600.
     expected = auth_mod.ACCESS_TOKEN_EXPIRE_HOURS * 3600
-    assert expected - 5 <= ttl_stored <= expected
+    stored = [t for t in backend_ttls if t is not None]
+    assert stored, "blacklist_jti non ha scritto sul backend con TTL"
+    assert expected - 5 <= stored[0] <= expected
 
 
 # 12. Blacklist di un jti NON impatta altri jti
@@ -329,13 +341,13 @@ def test_blacklist_is_per_jti(auth_client):
 # 13. blacklist_jti util: ttl<=0 o jti vuoto → no-op
 
 
-def test_blacklist_jti_noop_on_invalid_input(patched_blacklist, fake_redis):
+def test_blacklist_jti_noop_on_invalid_input(patched_blacklist, mem_backend):
     tb = patched_blacklist
     assert tb.blacklist_jti("", 100) is False
     assert tb.blacklist_jti("abc", 0) is False
     assert tb.blacklist_jti("abc", -5) is False
-    # Nulla deve essere scritto
-    assert len(fake_redis.keys("plenora:jwt_blacklist:*")) == 0
+    # Nulla deve essere scritto sul backend
+    assert mem_backend.scan_keys("plenora:jwt_blacklist:") == []
 
 
 def test_is_jti_blacklisted_noop_on_empty_jti(patched_blacklist):
@@ -368,10 +380,11 @@ def test_metrics_increment_on_write_fail_redis_down(patched_blacklist):
     assert m["last_ok_epoch"] is None
 
 
-def test_metrics_increment_on_read_ok(patched_blacklist):
+def test_metrics_increment_on_read_ok(patched_blacklist, mem_backend):
     tb = patched_blacklist
-    tb._reset_metrics_for_tests()
-    tb.blacklist_jti("abc", 60)
+    # Scrive sul backend bypassando la cache: il read e' un cache miss che
+    # colpisce il backend -> read_ok (un cache hit NON conta come read backend).
+    mem_backend.set("plenora:jwt_blacklist:abc", "1", ttl_seconds=60)
     tb._reset_metrics_for_tests()
     assert tb.is_jti_blacklisted("abc") is True
     m = tb.get_metrics()
@@ -389,7 +402,7 @@ def test_metrics_increment_on_read_fail_redis_down(patched_blacklist):
     assert m["counters"]["client_missing"] == 1
 
 
-def test_get_blacklist_status_ok_with_fakeredis(patched_blacklist):
+def test_get_blacklist_status_ok_with_pg_backend(patched_blacklist):
     tb = patched_blacklist
     tb._reset_metrics_for_tests()
     tb.blacklist_jti("abc", 60)  # un'op reale → aggiorna last_ok
@@ -438,79 +451,21 @@ def test_get_blacklist_status_error_when_exists_raises(patched_blacklist):
     assert "simulated" in status["error"]
 
 
-def test_healthcheck_does_not_create_key(patched_blacklist, fake_redis):
-    """Il probe EXISTS non deve creare la chiave healthcheck in Redis."""
+def test_healthcheck_does_not_create_key(patched_blacklist, mem_backend):
+    """Il probe exists non deve creare la chiave healthcheck nel backend."""
     tb = patched_blacklist
     tb.get_blacklist_status()
-    assert fake_redis.exists("plenora:jwt_blacklist:healthcheck") == 0
+    assert mem_backend.exists("plenora:jwt_blacklist:healthcheck") is False
 
 
-# Env JWT_BLACKLIST_REDIS_TIMEOUT_SEC
+# Lazy-init del backend (Plenora 2.0 Fase 4: PostgreSQL, non piu' Redis)
 
 
-def test_redis_timeout_env_override_parses(monkeypatch, patched_blacklist):
-    """Il timeout viene letto dall'env e passato al from_url."""
-    # Reset client e disabilita l'iniezione esplicita: il prossimo _get_client
-    # dovra' chiamare redis.from_url.
+def test_get_client_lazy_inits_pg_backend(patched_blacklist):
+    """Senza iniezione esplicita, _get_client ritorna un PgKeyValueStore."""
+    from app.shared.kv import PgKeyValueStore
+
     tb = patched_blacklist
     tb._reset_client_for_tests()  # torna allo stato lazy-init
-
-    captured = {}
-
-    class FakeRedisModule:
-        @staticmethod
-        def from_url(url, **kwargs):
-            captured["url"] = url
-            captured["kwargs"] = kwargs
-            return "ok-sentinel"
-
-    import sys
-    monkeypatch.setitem(sys.modules, "redis", FakeRedisModule)
-    monkeypatch.setenv("JWT_BLACKLIST_REDIS_TIMEOUT_SEC", "7")
-
     client = tb._get_client()
-    assert client == "ok-sentinel"
-    assert captured["kwargs"]["socket_timeout"] == 7
-    assert captured["kwargs"]["socket_connect_timeout"] == 7
-
-
-def test_redis_timeout_env_fallback_on_invalid(monkeypatch, patched_blacklist):
-    """Env con valore non-int → fallback a default 1s."""
-    tb = patched_blacklist
-    tb._reset_client_for_tests()
-
-    captured = {}
-
-    class FakeRedisModule:
-        @staticmethod
-        def from_url(url, **kwargs):
-            captured["kwargs"] = kwargs
-            return object()
-
-    import sys
-    monkeypatch.setitem(sys.modules, "redis", FakeRedisModule)
-    monkeypatch.setenv("JWT_BLACKLIST_REDIS_TIMEOUT_SEC", "not-a-number")
-
-    tb._get_client()
-    assert captured["kwargs"]["socket_timeout"] == 1
-
-
-def test_redis_timeout_env_fallback_on_zero(monkeypatch, patched_blacklist):
-    """timeout <= 0 → clamp a 1 (evita blocco infinito o connect instantaneo)."""
-    tb = patched_blacklist
-    tb._reset_client_for_tests()
-
-    captured = {}
-
-    class FakeRedisModule:
-        @staticmethod
-        def from_url(url, **kwargs):
-            captured["kwargs"] = kwargs
-            return object()
-
-    import sys
-    monkeypatch.setitem(sys.modules, "redis", FakeRedisModule)
-    monkeypatch.setenv("JWT_BLACKLIST_REDIS_TIMEOUT_SEC", "0")
-
-    tb._get_client()
-    assert captured["kwargs"]["socket_timeout"] == 1
+    assert isinstance(client, PgKeyValueStore)

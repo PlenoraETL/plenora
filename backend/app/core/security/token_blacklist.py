@@ -1,44 +1,45 @@
 """
-JWT blacklist via Redis — revocation list per jti.
+JWT blacklist su PostgreSQL + cache in-memory — revocation list per jti.
 
-Quando un client fa `POST /auth/logout`, il suo `jti` viene scritto
+Plenora 2.0 Fase 4: il backend e' il KeyValueStore (PostgreSQL, tabella
+kv_store) al posto di Redis. La lettura `is_jti_blacklisted` e' sul percorso
+auth per-richiesta: davanti a PG c'e' una cache in-memory (process-local) che
+memorizza sia i revocati ("1") sia i validi ("0") con TTL breve, cosi' il caso
+comune (token validi) e' servito dalla RAM e resta nel budget di latenza.
+
+Trade-off cache negativa: un jti revocato via logout puo' restare accettato
+fino al TTL della cache negativa (default 5s, JWT_BLACKLIST_CACHE_TTL_SEC) sui
+processi che lo avevano gia' visto come valido. Stesso processo: la write
+sovrascrive subito la cache, revoca immediata.
 """
 
 from __future__ import annotations
 
-import importlib
 import threading
 import time
 from typing import Any, Optional
 
 from app.shared.contracts.payloads import IntMap, JsonObject
+from app.shared.kv import InMemoryKeyValueStore, KeyValueStore
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 _BLACKLIST_KEY_PREFIX = "plenora:jwt_blacklist:"
-# Chiave di healthcheck: un EXISTS su questa chiave costa O(1) e non
-# scrive nulla (no side effect). Usata da `get_blacklist_status` per
-# sondare connettivita' + autorizzazioni Redis
+# Chiave sentinel per l'healthcheck: un exists O(1) senza side effect.
 _HEALTHCHECK_KEY = f"{_BLACKLIST_KEY_PREFIX}healthcheck"
 
+_DEFAULT_CACHE_TTL_SEC = 5
+
 _client_lock = threading.Lock()
-_client: Optional[Any] = None  # redis.Redis-like instance
-# Se True, `_get_client` ritorna `_client` cosi' com'e' senza tentare
-# il lazy-init. Usato dai test per iniettare fakeredis oppure forzare
-# `None` (simulazione Redis down) senza che il codice provi a ricollegarsi
-# al Redis locale
+# Backend KeyValueStore (sorgente di verita', PostgreSQL in produzione).
+_client: Optional[KeyValueStore] = None
+# Se True, `_get_client` ritorna `_client` cosi' com'e' (iniezione test).
 _client_explicit: bool = False
 
-# Contatori sincroni protetti da lock. Esposti via get_metrics →
-# admin_system_status.get_blacklist_status → dashboard admin
-# Scelta in-process vs. Redis INCR
-# in-process: zero overhead sulla hot path, azzerato a ogni restart
-# del backend. Ok per "health at a glance" nella dashboard
-# Redis INCR: persistente cross-restart ma aggiunge 1 round-trip
-# per ogni check di blacklist (raddoppia la latenza dell'auth hot
-# path). Non vale la pena: se serve storia persistente, meglio log
-# aggregation (Grafana/Loki) sui warning
+# Cache process-local davanti al backend: assorbe la hot path (read auth).
+_cache: InMemoryKeyValueStore = InMemoryKeyValueStore()
+
 _metrics_lock = threading.Lock()
 _metrics: IntMap = {
     "write_ok": 0,
@@ -47,14 +48,10 @@ _metrics: IntMap = {
     "read_fail": 0,
     "client_missing": 0,
 }
-# Timestamp dell'ultima operazione andata a buon fine (write OR read
-# Serve per l'alert "blacklist inoperante da X minuti": se ora - last_ok
-# supera la soglia, la dashboard mostra warning. Epoch seconds UTC
 _last_ok_epoch: Optional[float] = None
 
 
 def _record_metric(name: str, mark_ok: bool = False) -> None:
-    """Incrementa un contatore, opzionalmente aggiorna `last_ok_epoch`."""
     global _last_ok_epoch
     with _metrics_lock:
         _metrics[name] = _metrics.get(name, 0) + 1
@@ -62,54 +59,36 @@ def _record_metric(name: str, mark_ok: bool = False) -> None:
             _last_ok_epoch = time.time()
 
 
-def _get_client() -> Optional[Any]:
-    """Lazy init + cache del client Redis. None se init fallisce.
+def _cache_ttl_seconds() -> int:
+    """TTL della cache (positiva e negativa). Configurabile via settings."""
+    try:
+        from app.config import settings
 
-    Non rialzamo all'init: il caller decide cosa fare (fail-open/
-    fail-loud). Il log e' a livello warning perche' in dev e' comune
-    avere Redis off senza che sia un problema.
-    """
+        ttl = int(settings.get("JWT_BLACKLIST_CACHE_TTL_SEC"))
+        return ttl if ttl > 0 else _DEFAULT_CACHE_TTL_SEC
+    except (TypeError, ValueError):
+        return _DEFAULT_CACHE_TTL_SEC
+
+
+def _get_client() -> Optional[KeyValueStore]:
+    """Lazy init del backend KeyValueStore (PostgreSQL). None se fallisce.
+
+    Non rialza all'init: il caller decide la policy (fail-open/fail-loud)."""
     global _client
     if _client_explicit:
         return _client
     if _client is not None:
         return _client
     with _client_lock:
-        if _client_explicit:
-            return _client
-        if _client is not None:
+        if _client_explicit or _client is not None:
             return _client
         try:
-            import redis  # type: ignore
-        except ImportError:
-            logger.warning("redis-py non installato: blacklist disabilitata")
-            return None
-        try:
-            # Import locale: evita import circolare all'import di
-            # app.shared (config potrebbe a sua volta importare shared
-            from app.config import settings
-            # Timeout configurabile via env (default 1s). Alzarlo in deploy
-            # con Redis remoto / network latente; mantenerlo basso in
-            # single-host per non bloccare il request handler se Redis
-            # va giu' (fail-open kicks in dopo il timeout
-            # BE-CONFIG-001C: default tipato in `Settings.DEFAULTS`
-            # `JWT_BLACKLIST_REDIS_TIMEOUT_SEC=1`). Guard `<= 0` resta
-            # safety per valori legali ma non sensati
-            try:
-                timeout = int(settings.get("JWT_BLACKLIST_REDIS_TIMEOUT_SEC"))
-                if timeout <= 0:
-                    timeout = 1
-            except (TypeError, ValueError):
-                timeout = 1
-            _client = redis.from_url(
-                settings.CELERY_BROKER_URL,
-                socket_timeout=timeout,
-                socket_connect_timeout=timeout,
-                decode_responses=True,
-            )
+            from app.shared.kv import PgKeyValueStore
+
+            _client = PgKeyValueStore()
             return _client
         except Exception as e:
-            logger.warning("Redis blacklist client init failed: %s", e)
+            logger.warning("KeyValueStore blacklist init failed: %s", e)
             return None
 
 
@@ -118,18 +97,14 @@ def _key(jti: str) -> str:
 
 
 def blacklist_jti(jti: str, ttl_seconds: int) -> bool:
-    """Aggiunge `jti` alla blacklist per `ttl_seconds`.
+    """Aggiunge `jti` alla blacklist (PostgreSQL) per `ttl_seconds`.
 
-    Ritorna True se scritto in Redis, False se jti vuoto / ttl<=0 /
-    Redis non raggiungibile. Il caller (/auth/logout) trasforma
-    False in 503.
-
-    TTL idealmente = `exp - now` del token. Dopo quel tempo la
-    chiave scade da sola e non sprechiamo RAM per token gia'
-    naturalmente invalidi.
+    Ritorna True se scritto, False se input invalido / backend giu'.
+    Il caller (/auth/logout) trasforma False in 503. La cache locale viene
+    popolata a "revocato" (sovrascrive un'eventuale entry negativa) cosi' la
+    revoca e' immediata nel processo corrente.
     """
     if not jti or ttl_seconds <= 0:
-        # Invalid input is not a Redis write failure.
         return False
     client = _get_client()
     if client is None:
@@ -137,48 +112,46 @@ def blacklist_jti(jti: str, ttl_seconds: int) -> bool:
         _record_metric("write_fail")
         return False
     try:
-        client.setex(_key(jti), ttl_seconds, "1")
+        client.set(_key(jti), "1", ttl_seconds=ttl_seconds)
+        _cache.set(_key(jti), "1", ttl_seconds=_cache_ttl_seconds())
         _record_metric("write_ok", mark_ok=True)
         return True
     except Exception as e:
-        logger.warning("Redis blacklist write failed (jti=%s): %s", jti, e)
+        logger.warning("Blacklist write failed (jti=%s): %s", jti, e)
         _record_metric("write_fail")
         return False
 
 
 def is_jti_blacklisted(jti: Optional[str]) -> bool:
-    """True se `jti` e' presente in blacklist. Fail-open su Redis giu'.
+    """True se `jti` e' in blacklist. Cache-first, fail-open su backend giu'.
 
-    SECURITY TRADE-OFF: il fail-open e' deliberato. Far ritornare True
-    (token bloccato) su Redis down causerebbe DoS totale: TUTTI i token
-    diventerebbero invalidi finche' Redis non torna su. Il prezzo del
-    fail-open e' che durante un'outage Redis i token gia' revocati via
-    logout tornano validi per il loro TTL residuo.
+    Cache hit ("1"=revocato / "0"=valido) -> risposta dalla RAM. Miss ->
+    lettura PG, poi cache del risultato (positiva o negativa) con TTL breve.
 
-    Mitigation:
-      1. Log `[SECURITY]` a livello ERROR (non WARNING) per visibilita'
-         operativa — un'outage prolungata e' security-relevant.
-      2. Metric `read_fail` + `last_ok` timestamp esposti via
-         `get_blacklist_status` → dashboard admin mostra
-         "blacklist inoperante da X minuti".
-      3. Pre-fix (P1 security-auth): log solo a WARNING, facile da
-         missare nel rumore generale. Post-fix: ERROR + tag SECURITY.
+    SECURITY TRADE-OFF: fail-open deliberato (backend giu' -> token accettato),
+    per non trasformare un'outage del backend in DoS totale dell'auth. Errore
+    loggato [SECURITY] ERROR + metrica read_fail. La cache NON viene popolata
+    sul fail-open (si ritenta al prossimo check).
     """
     if not jti:
-        # Empty jti is not a real blacklist lookup.
         return False
+    key = _key(jti)
+    cached = _cache.get(key)
+    if cached is not None:
+        return cached == "1"
     client = _get_client()
     if client is None:
         _record_metric("client_missing")
         _record_metric("read_fail")
         return False
     try:
-        result = bool(client.exists(_key(jti)))
+        revoked = bool(client.exists(key))
+        _cache.set(key, "1" if revoked else "0", ttl_seconds=_cache_ttl_seconds())
         _record_metric("read_ok", mark_ok=True)
-        return result
+        return revoked
     except Exception as e:
         logger.error(
-            "[SECURITY] Redis blacklist read failed — fail-open attivo "
+            "[SECURITY] Blacklist read failed — fail-open attivo "
             "(token revocati restano accettati fino a TTL): jti=%s, "
             "error=%s: %s",
             jti, type(e).__name__, e,
@@ -188,12 +161,7 @@ def is_jti_blacklisted(jti: Optional[str]) -> bool:
 
 
 def get_metrics() -> JsonObject:
-    """Snapshot dei contatori in-process + timestamp last_ok.
-
-    Esposto via `admin_system_status.get_blacklist_status` alla
-    dashboard admin. Azzerato a ogni restart del backend (in-process,
-    non persistente — per lo storico serve log aggregation).
-    """
+    """Snapshot dei contatori in-process + timestamp last_ok."""
     with _metrics_lock:
         snapshot = dict(_metrics)
         last_ok = _last_ok_epoch
@@ -204,41 +172,20 @@ def get_metrics() -> JsonObject:
 
 
 def get_blacklist_status(stale_threshold_seconds: int = 1800) -> JsonObject:
-    """Health probe: tenta un EXISTS su una chiave sentinel.
+    """Health probe: tenta un exists su una chiave sentinel del backend PG.
 
-    Ritorna un dict con `status` ∈ {ok, unknown, error} + diagnostica:
-      - ok: Redis ha risposto, blacklist operativa
-      - unknown: redis-py non installato (dev env / container senza dep),
-        oppure client non ancora inizializzato → None
-      - error: Redis raggiungibile ma l'EXISTS ha sollevato (auth/ACL,
-        timeout, disconnessione transitoria)
-
-    Include `minutes_since_last_ok` calcolato su `_last_ok_epoch`
-    (ultima write/read riuscita). Se il valore supera
-    `stale_threshold_seconds` (default 30 min) il caller puo' alzare un
-    alert "blacklist inoperante": anche se il check sentinel passa, il
-    fatto che nessuna operazione reale sia riuscita recentemente e'
-    sospetto (es. Redis risponde a PING ma rigetta i client auth).
-
-    Design graceful degradation (contratto comune con admin_system_status):
-    mai solleva, sempre ritorna dict.
+    status in {ok, warn, unknown, error}. Graceful: mai solleva, sempre dict.
     """
     client = _get_client()
     if client is None:
-        try:
-            importlib.import_module("redis")
-            message = "Client Redis non inizializzato"
-        except ImportError:
-            message = "redis-py non installato — blacklist disabilitata"
         return {
             "status": "unknown",
-            "message": message,
+            "message": "Backend KeyValueStore non inizializzato",
             "counters": get_metrics()["counters"],
             "last_ok_epoch": _last_ok_epoch,
             "minutes_since_last_ok": None,
         }
 
-    # Sentinel EXISTS: non crea la chiave, non modifica stato
     try:
         client.exists(_HEALTHCHECK_KEY)
         check_ok = True
@@ -246,7 +193,7 @@ def get_blacklist_status(stale_threshold_seconds: int = 1800) -> JsonObject:
     except Exception as e:
         check_ok = False
         check_error = str(e)[:200]
-        logger.warning("Blacklist healthcheck EXISTS failed: %s", e)
+        logger.warning("Blacklist healthcheck exists failed: %s", e)
 
     minutes_since_last_ok: Optional[float] = None
     if _last_ok_epoch is not None:
@@ -260,7 +207,7 @@ def get_blacklist_status(stale_threshold_seconds: int = 1800) -> JsonObject:
         status = "warn" if stale else "ok"
         if stale:
             message = (
-                f"Redis risponde ma nessuna operazione blacklist riuscita "
+                f"Backend risponde ma nessuna operazione blacklist riuscita "
                 f"da {minutes_since_last_ok} minuti "
                 f"(soglia {stale_threshold_seconds // 60} min)"
             )
@@ -276,7 +223,7 @@ def get_blacklist_status(stale_threshold_seconds: int = 1800) -> JsonObject:
 
     return {
         "status": "error",
-        "message": "Redis raggiungibile ma EXISTS fallito",
+        "message": "Backend raggiungibile ma exists fallito",
         "error": check_error,
         "counters": get_metrics()["counters"],
         "last_ok_epoch": _last_ok_epoch,
@@ -285,7 +232,7 @@ def get_blacklist_status(stale_threshold_seconds: int = 1800) -> JsonObject:
 
 
 def _reset_metrics_for_tests() -> None:
-    """Test-only: azzera contatori e last_ok per isolare i test."""
+    """Test-only: azzera contatori e last_ok."""
     global _last_ok_epoch
     with _metrics_lock:
         for k in list(_metrics.keys()):
@@ -293,21 +240,21 @@ def _reset_metrics_for_tests() -> None:
         _last_ok_epoch = None
 
 
-def _set_client_for_tests(client: Optional[Any]) -> None:
-    """Test-only: inietta un client custom (es. fakeredis) o None per
-    simulare Redis down. Setta il flag `_client_explicit` cosi' il
-    lazy-init non sovrascrive l'iniezione: passare None qui significa
-    davvero "Redis non disponibile", non "non ancora inizializzato".
-    """
+def _set_client_for_tests(client: Optional[KeyValueStore]) -> None:
+    """Test-only: inietta un KeyValueStore backend (es. InMemoryKeyValueStore)
+    o None per simulare il backend giu'. Setta `_client_explicit` e azzera la
+    cache locale per isolare i test."""
     global _client, _client_explicit
     with _client_lock:
         _client = client
         _client_explicit = True
+    _cache.__init__()  # reset cache process-local
 
 
 def _reset_client_for_tests() -> None:
-    """Test-only: torna allo stato default (lazy-init al prossimo uso)."""
+    """Test-only: torna allo stato default (lazy-init) e azzera la cache."""
     global _client, _client_explicit
     with _client_lock:
         _client = None
         _client_explicit = False
+    _cache.__init__()

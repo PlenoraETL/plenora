@@ -107,7 +107,10 @@ class Settings:
         # In prod/cluster impostare True per fail-closed (nessun login
         # se il bucket distribuito non e' consultabile).
         "LOGIN_RL_REDIS_REQUIRED": False,
-        "JWT_BLACKLIST_REDIS_TIMEOUT_SEC": 1,
+        # Plenora 2.0 Fase 4: la blacklist JWT e' su PostgreSQL con cache
+        # in-memory davanti (positiva+negativa). TTL della cache: bilancia
+        # latenza auth (cache hit) vs finestra di revoca cross-processo.
+        "JWT_BLACKLIST_CACHE_TTL_SEC": 5,
         # Soglia "stale" per la blacklist JWT mostrata nella dashboard
         # admin (`admin_system_status/service.py`). Sopra questa soglia
         # l'ultima sync e' considerata stantia e segnalata come warning

@@ -28,7 +28,7 @@ _BACKEND_APP = Path(__file__).resolve().parent.parent.parent / "app"
         ("LOGIN_WINDOW_SECONDS", int, 60),
         ("LOGIN_LOCKOUT_SECONDS", int, 300),
         ("LOGIN_RL_REDIS_TIMEOUT_SEC", int, 1),
-        ("JWT_BLACKLIST_REDIS_TIMEOUT_SEC", int, 1),
+        ("JWT_BLACKLIST_CACHE_TTL_SEC", int, 5),
         ("JWT_BLACKLIST_STALE_THRESHOLD_SEC", int, 1800),
     ],
 )
@@ -52,7 +52,7 @@ def test_default_present_and_typed(key, expected_type, expected_default):
         ("LOGIN_WINDOW_SECONDS", "120", 120),
         ("LOGIN_LOCKOUT_SECONDS", "600", 600),
         ("LOGIN_RL_REDIS_TIMEOUT_SEC", "3", 3),
-        ("JWT_BLACKLIST_REDIS_TIMEOUT_SEC", "2", 2),
+        ("JWT_BLACKLIST_CACHE_TTL_SEC", "2", 2),
         ("JWT_BLACKLIST_STALE_THRESHOLD_SEC", "900", 900),
     ],
 )
@@ -86,10 +86,10 @@ def test_login_rate_limiter_reads_timeout_via_settings():
     assert "os.getenv(\"LOGIN_RL_REDIS_TIMEOUT_SEC" not in src
 
 
-def test_token_blacklist_reads_timeout_via_settings():
+def test_token_blacklist_reads_cache_ttl_via_settings():
     src = _read(_BACKEND_APP / "core" / "security" / "token_blacklist.py")
-    assert "settings.get(\"JWT_BLACKLIST_REDIS_TIMEOUT_SEC\")" in src
-    assert "os.getenv(\"JWT_BLACKLIST_REDIS_TIMEOUT_SEC" not in src
+    assert "settings.get(\"JWT_BLACKLIST_CACHE_TTL_SEC\")" in src
+    assert "os.getenv(\"JWT_BLACKLIST_CACHE_TTL_SEC" not in src
 
 
 def test_admin_system_status_reads_stale_threshold_via_settings():
