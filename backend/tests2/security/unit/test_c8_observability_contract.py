@@ -42,7 +42,7 @@ def main_client():
 
     with (
         patch.object(health_mod, "check_postgres", return_value=(True, "ok")),
-        patch.object(health_mod, "check_redis", return_value=(True, "ok")),
+        patch.object(health_mod, "check_broker", return_value=(True, "ok")),
         patch.object(health_mod, "check_pool_headroom", return_value=(True, "1/12 in uso, 11 free")),
         patch.object(health_mod, "check_migrations_aligned", return_value=(True, "aligned")),
         patch.object(health_mod, "check_object_storage", return_value=(True, "ok")),
@@ -93,14 +93,14 @@ def test_health_returns_200_when_process_responds(main_client):
     }
 
 
-def test_health_stays_200_when_redis_fails():
+def test_health_stays_200_when_broker_fails():
     import app.main as main_mod
     import app.observability.health as health_mod
 
     with (
         patch.object(
             health_mod,
-            "check_redis",
+            "check_broker",
             return_value=(False, "ConnectionError: boom"),
         ),
     ):
@@ -113,7 +113,7 @@ def test_health_stays_200_when_redis_fails():
     assert list(body["checks"].keys()) == ["process"]
 
 
-def test_ready_returns_503_when_redis_fails():
+def test_ready_returns_503_when_broker_fails():
     import app.main as main_mod
     import app.observability.health as health_mod
 
@@ -121,7 +121,7 @@ def test_ready_returns_503_when_redis_fails():
         patch.object(health_mod, "check_postgres", return_value=(True, "ok")),
         patch.object(
             health_mod,
-            "check_redis",
+            "check_broker",
             return_value=(False, "ConnectionError: boom"),
         ),
         patch.object(health_mod, "check_pool_headroom", return_value=(True, "ok")),
@@ -153,7 +153,7 @@ def test_ready_returns_503_when_redis_fails():
     assert response.status_code == 503
     body = response.json()
     assert body["status"] == "not_ready"
-    assert body["checks"]["redis"]["ok"] is False
+    assert body["checks"]["broker"]["ok"] is False
 
 
 def test_ready_returns_503_when_pool_or_migrations_are_not_ready():
@@ -162,7 +162,7 @@ def test_ready_returns_503_when_pool_or_migrations_are_not_ready():
 
     with (
         patch.object(health_mod, "check_postgres", return_value=(True, "ok")),
-        patch.object(health_mod, "check_redis", return_value=(True, "ok")),
+        patch.object(health_mod, "check_broker", return_value=(True, "ok")),
         patch.object(health_mod, "check_pool_headroom", return_value=(False, "pool saturo")),
         patch.object(health_mod, "check_migrations_aligned", return_value=(False, "2 pending")),
         patch.object(health_mod, "check_object_storage", return_value=(True, "ok")),

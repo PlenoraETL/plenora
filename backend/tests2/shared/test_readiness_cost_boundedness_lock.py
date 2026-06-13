@@ -28,7 +28,7 @@ _TASK_RUNTIME_PROBES_PY = (
 
 _READINESS_CHECKS_OK = {
     "check_postgres": (True, "ok"),
-    "check_redis": (True, "ok"),
+    "check_broker": (True, "ok"),
     "check_pool_headroom": (True, "ok"),
     "check_migrations_aligned": (True, "ok"),
     "check_object_storage": (True, "ok"),
@@ -39,7 +39,7 @@ _READINESS_CHECKS_OK = {
 
 _READINESS_EXPECTED_ORDER = [
     "postgres",
-    "redis",
+    "broker",
     "pool_headroom",
     "migrations",
     "object_storage",
@@ -281,6 +281,23 @@ def test_redis_check_uses_socket_connect_timeout():
         "socket_connect_timeout=N)`. Without it, an unreachable "
         "Redis (e.g. Redis pod restarting in k8s) would block "
         "/ready for ~75s on the kernel SYN retransmit timeout."
+    )
+
+
+def test_rabbitmq_check_uses_bounded_connection_timeout():
+    """Source-bound lock sul probe broker di /ready (Plenora 2.0 Fase 5):
+    `ping_rabbitmq_broker` apre una connessione pika che DEVE limitare sia
+    il TCP handshake sia l'apertura del canale. Senza i timeout, un broker
+    irraggiungibile bloccherebbe /ready sulla finestra SYN del kernel."""
+    text = _TASK_RUNTIME_PROBES_PY.read_text(encoding="utf-8")
+    code_only = _python_code_only(text)
+    assert "socket_timeout" in code_only, (
+        "ping_rabbitmq_broker() must bound the pika connection with "
+        "`socket_timeout=N`."
+    )
+    assert "blocked_connection_timeout" in code_only, (
+        "ping_rabbitmq_broker() must bound the pika connection with "
+        "`blocked_connection_timeout=N`."
     )
 
 

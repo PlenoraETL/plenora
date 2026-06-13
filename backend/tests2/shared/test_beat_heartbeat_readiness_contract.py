@@ -281,7 +281,7 @@ def test_gather_readiness_includes_beat_heartbeat_key():
 
     # Stub all 8 checks to OK; we only assert the keyset shape.
     with patch.object(h, "check_postgres", return_value=(True, "ok")), \
-         patch.object(h, "check_redis", return_value=(True, "ok")), \
+         patch.object(h, "check_broker", return_value=(True, "ok")), \
          patch.object(h, "check_pool_headroom", return_value=(True, "ok")), \
          patch.object(h, "check_migrations_aligned", return_value=(True, "ok")), \
          patch.object(h, "check_object_storage", return_value=(True, "ok")), \
@@ -306,7 +306,7 @@ def test_gather_readiness_returns_503_on_stale_beat():
     from app.observability import health as h
 
     with patch.object(h, "check_postgres", return_value=(True, "ok")), \
-         patch.object(h, "check_redis", return_value=(True, "ok")), \
+         patch.object(h, "check_broker", return_value=(True, "ok")), \
          patch.object(h, "check_pool_headroom", return_value=(True, "ok")), \
          patch.object(h, "check_migrations_aligned", return_value=(True, "ok")), \
          patch.object(h, "check_object_storage", return_value=(True, "ok")), \
@@ -345,7 +345,7 @@ def test_gather_readiness_default_disabled_keeps_200_without_beat():
         return None
 
     with patch.object(h, "check_postgres", return_value=(True, "ok")), \
-         patch.object(h, "check_redis", return_value=(True, "ok")), \
+         patch.object(h, "check_broker", return_value=(True, "ok")), \
          patch.object(h, "check_pool_headroom", return_value=(True, "ok")), \
          patch.object(h, "check_migrations_aligned", return_value=(True, "ok")), \
          patch.object(h, "check_object_storage", return_value=(True, "ok")), \

@@ -407,6 +407,12 @@ class Settings:
         # un /health senza timeout sarebbe un footgun ops
         "READINESS_REDIS_TIMEOUT_SECONDS": 2,
 
+        # Timeout (secondi) per la PING del broker RabbitMQ in check_broker
+        # (Plenora 2.0 Fase 5: il broker e' RabbitMQ/Dramatiq, non piu'
+        # Redis/Celery). Stessa logica di bound di READINESS_REDIS_TIMEOUT:
+        # cap <= 0 cade al fallback hardcoded di 2s.
+        "READINESS_BROKER_TIMEOUT_SECONDS": 2,
+
         # Timeout (secondi) per `SELECT 1` dentro check_postgres
         # Applicato a livello di statement via `SET LOCAL
         # statement_timeout = Nms` sulla transaction del probe
@@ -674,6 +680,14 @@ class Settings:
     @property
     def CELERY_BROKER_URL(self) -> str:
         return self._str_setting("CELERY_BROKER_URL", "redis://localhost:6379/0")
+
+    @property
+    def DRAMATIQ_BROKER_URL(self) -> str:
+        # Broker RabbitMQ del worker Dramatiq (Plenora 2.0). Nessun path =
+        # vhost di default "/". Allineato a workers.dramatiq_app.broker_url().
+        return self._str_setting(
+            "DRAMATIQ_BROKER_URL", "amqp://guest:guest@rabbitmq:5672"
+        )
 
     @property
     def CELERY_RESULT_BACKEND(self) -> str:

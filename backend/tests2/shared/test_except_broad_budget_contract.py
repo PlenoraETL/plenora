@@ -70,7 +70,11 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # +1 (2026-06-13, Plenora 2.0 Fase 5 F5.2): PgTaskRevocationStore.is_revoked —
 # fail-soft sulla lettura del flag di annullamento (un errore di lettura NON
 # deve revocare un task valido); boundary infrastrutturale intenzionale.
-_EXPECT_BROAD_BUDGET = 722
+# +3 (2026-06-13, Plenora 2.0 Fase 5 F5.3a): probe broker RabbitMQ per /ready —
+# probes._pika_module (SDK opzionale), RabbitmqRuntimePort.ping close best-effort,
+# health.check_broker fail-closed. Boundary infrastrutturale (rimpiazzo della
+# PING Redis sul path readiness).
+_EXPECT_BROAD_BUDGET = 725
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

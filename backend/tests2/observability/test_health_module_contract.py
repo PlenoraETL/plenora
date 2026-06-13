@@ -25,7 +25,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.observability, pytest.mark.contract]
 
 _READINESS_CHECKS_OK = {
     "check_postgres": (True, "ok"),
-    "check_redis": (True, "ok"),
+    "check_broker": (True, "ok"),
     "check_pool_headroom": (True, "1/12 in uso, 11 free"),
     "check_migrations_aligned": (True, "aligned"),
     "check_object_storage": (True, "ok"),
@@ -35,7 +35,7 @@ _READINESS_CHECKS_OK = {
 }
 
 _READINESS_KEYS = {
-    "postgres", "redis", "pool_headroom", "migrations",
+    "postgres", "broker", "pool_headroom", "migrations",
     "object_storage", "reconciliation_backlog",
     "beat_heartbeat", "bootstrap_complete",
 }
@@ -246,6 +246,42 @@ def test_check_redis_fail_closed_on_exception():
     assert detail == "ConnectionError: boom"
 
 
+# 4b. check_broker (RabbitMQ) — fail-CLOSED on exception (Plenora 2.0 Fase 5)
+
+
+def test_check_broker_ok_when_connection_open():
+    import app.observability.health as h
+
+    with patch.object(
+        h.runtime_ports_module, "ping_rabbitmq_broker", return_value=True
+    ):
+        ok, detail = h.check_broker()
+    assert ok is True
+    assert detail == "ok"
+
+
+def test_check_broker_failed_when_connection_not_open():
+    import app.observability.health as h
+
+    with patch.object(
+        h.runtime_ports_module, "ping_rabbitmq_broker", return_value=False
+    ):
+        ok, _ = h.check_broker()
+    assert ok is False
+
+
+def test_check_broker_fail_closed_on_exception():
+    import app.observability.health as h
+
+    def _raise(*a, **kw):
+        raise RuntimeError("broker down")
+
+    with patch.object(h.runtime_ports_module, "ping_rabbitmq_broker", _raise):
+        ok, detail = h.check_broker()
+    assert ok is False
+    assert detail == "RuntimeError: broker down"
+
+
 # 5. check_pool_headroom — fail-OPEN on exception (preserved fallback)
 
 
@@ -404,7 +440,7 @@ def test_gather_liveness_does_not_call_dependency_checks():
 
     with (
         patch.object(h, "check_postgres", side_effect=_explode),
-        patch.object(h, "check_redis", side_effect=_explode),
+        patch.object(h, "check_broker", side_effect=_explode),
     ):
         payload = h.gather_liveness()
 

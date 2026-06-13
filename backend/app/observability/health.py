@@ -24,6 +24,7 @@ __all__ = [
     "HealthPayload",
     "check_postgres",
     "check_redis",
+    "check_broker",
     "check_pool_headroom",
     "check_migrations_aligned",
     "check_object_storage",
@@ -140,6 +141,30 @@ def check_redis() -> CheckOutcome:
         ):
             return True, "ok"
         return False, "PING non ha risposto True"
+    except Exception as e:
+        return False, f"{type(e).__name__}: {e}"
+
+
+def check_broker() -> CheckOutcome:
+    """Probe bounded del broker RabbitMQ (Plenora 2.0 Fase 5).
+
+    Rimpiazza la PING Redis sul path di readiness: il broker dei task e'
+    RabbitMQ (Dramatiq). Apre/chiude una connessione pika con timeout
+    limitato. Timeout da ``READINESS_BROKER_TIMEOUT_SECONDS`` (default 2;
+    <= 0 ricade su 2). Fail-closed su eccezione.
+    """
+    try:
+        timeout = runtime_ports_module.bounded_readiness_timeout(
+            settings,
+            "READINESS_BROKER_TIMEOUT_SECONDS",
+            2,
+        )
+        if runtime_ports_module.ping_rabbitmq_broker(
+            settings.DRAMATIQ_BROKER_URL,
+            timeout=timeout,
+        ):
+            return True, "ok"
+        return False, "connessione broker non aperta"
     except Exception as e:
         return False, f"{type(e).__name__}: {e}"
 
@@ -552,7 +577,7 @@ def gather_readiness() -> HealthPayload:
 
     Liveness (`gather_liveness`) NON include questi check: /health
     resta process-only, mentre /ready espone i deep dependency probes
-    bounded (PG SELECT 1 + Redis PING) e i diagnostic checks.
+    bounded (PG SELECT 1 + RabbitMQ broker probe) e i diagnostic checks.
     """
     checks: dict = {}
     status_code = 200
@@ -562,9 +587,9 @@ def gather_readiness() -> HealthPayload:
     if not pg_ok:
         status_code = 503
 
-    redis_ok, redis_detail = check_redis()
-    checks["redis"] = {"ok": redis_ok, "detail": redis_detail}
-    if not redis_ok:
+    broker_ok, broker_detail = check_broker()
+    checks["broker"] = {"ok": broker_ok, "detail": broker_detail}
+    if not broker_ok:
         status_code = 503
 
     pool_ok, pool_detail = check_pool_headroom()
