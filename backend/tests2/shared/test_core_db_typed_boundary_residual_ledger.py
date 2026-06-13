@@ -254,8 +254,9 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     BoundaryEntry(
         "app/core/orchestrator/task_service.py",
         "ActiveTaskInfo",
-        "DONE",
-        "active/reserved Celery task rows are typed inside TaskService",
+        "REMOVED",
+        "Plenora 2.0 Fase 5: list_active_tasks/ActiveTaskInfo rimossi (inspect "
+        "worker Celery eliminato, nessun consumer)",
     ),
     BoundaryEntry(
         "app/core/orchestrator/task_service.py",

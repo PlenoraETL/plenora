@@ -1,14 +1,14 @@
-"""Runtime di lettura stato/esito task su PostgreSQL (Plenora 2.0, F2.3).
+"""Runtime di lettura stato/esito task su PostgreSQL (Plenora 2.0).
 
-Implementa ``TaskRuntimePort`` leggendo da ``task_result_store`` invece
-che dal result backend Redis di Celery (``AsyncResult``). E' il FLIP di
-lettura della Fase 2: dopo che i worker scrivono stato/progress/esito su
-PG (F2.2/F2.4), l'orchestratore li rilegge da qui.
+Implementa ``TaskRuntimePort`` leggendo stato/progress/esito da
+``task_result_store`` (PG), dove li scrivono i worker Dramatiq. I metodi
+``*_task()`` ritornano le funzioni-corpo dei task (con attributo ``name``)
+per il dispatch by-name di ``submit_task``.
 
-Le operazioni di BROKER (revoke, listing dei task attivi, handle dei task
-per il dispatch, ``app``) restano su Celery e sono delegate a un
-``CeleryTaskRuntime`` interno: la Fase 2 sposta solo lo stato/esito, non
-il broker (quello e' Fase 1).
+Plenora 2.0 Fase 5 (F5.6): niente piu' delega a Celery. Lo stato non e' piu'
+il result backend Redis (``AsyncResult``); il revoke e' cooperativo su PG
+(vedi task_service.cancel_task + revocation_store); l'inspect dei worker
+Celery e' stato rimosso (osservabilita' admin derivata da PG).
 
 Vive nel dominio orchestrator (non in task_runtime) per non creare un
 ciclo: orchestrator dipende gia' da task_runtime, l'inverso no.
@@ -16,9 +16,9 @@ ciclo: orchestrator dipende gia' da task_runtime, l'inverso no.
 
 from __future__ import annotations
 
-from typing import Mapping, Optional
+from typing import Optional
 
-from app.core.task_runtime import CeleryTaskRuntime, DelayTask, TaskRuntimePort
+from app.core.task_runtime import DelayTask
 from app.core.orchestrator.task_result_store import (
     PENDING_STATE,
     TaskResultRecord,
@@ -67,24 +67,14 @@ class StoredTaskResult:
 
 
 class PgResultTaskRuntime:
-    """TaskRuntimePort con stato/esito su PG e broker delegato a Celery."""
+    """TaskRuntimePort con stato/esito su PostgreSQL (Plenora 2.0, celery-free)."""
 
     def __init__(
         self,
         *,
-        broker: Optional[TaskRuntimePort] = None,
         store: Optional[TaskResultStore] = None,
     ) -> None:
-        self._broker = broker or CeleryTaskRuntime()
         self._store = store or default_task_result_store()
-
-    @property
-    def app(self) -> object:
-        return self._broker.app
-
-    @app.setter
-    def app(self, app: object) -> None:
-        self._broker.app = app
 
     # --- stato/esito: PostgreSQL ---
 
@@ -96,30 +86,29 @@ class PgResultTaskRuntime:
     def forget_result(self, task_id: str) -> None:
         self.get_result(task_id).forget()
 
-    # --- broker: delega a Celery (Fase 1) ---
-
-    def revoke(self, task_id: str, *, terminate: bool = False) -> None:
-        self._broker.revoke(task_id, terminate=terminate)
-
-    def task_lists(
-        self,
-    ) -> tuple[
-        Mapping[str, list[Mapping[str, object]]],
-        Mapping[str, list[Mapping[str, object]]],
-    ]:
-        return self._broker.task_lists()
+    # --- handle dei task per il dispatch by-name (espongono `name`) ---
+    # Import lazy: evita un edge top-level orchestrator->workers nel grafo e
+    # tiene leggero l'import dell'orchestratore.
 
     def enrichment_task(self) -> DelayTask:
-        return self._broker.enrichment_task()
+        from workers.tasks.enrichment_task import execute_enrichment_task
+
+        return execute_enrichment_task
 
     def carica_task(self) -> DelayTask:
-        return self._broker.carica_task()
+        from workers.tasks.carica_task import execute_carica_task
+
+        return execute_carica_task
 
     def pipeline_task(self) -> DelayTask:
-        return self._broker.pipeline_task()
+        from workers.tasks.pipeline_task import execute_pipeline_task
+
+        return execute_pipeline_task
 
     def preview_task(self) -> DelayTask:
-        return self._broker.preview_task()
+        from workers.tasks.pipeline_task import preview_pipeline_task
+
+        return preview_pipeline_task
 
 
 __all__ = ["PgResultTaskRuntime", "StoredTaskResult"]

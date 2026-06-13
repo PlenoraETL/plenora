@@ -7,7 +7,6 @@ from app.core.task_runtime.dispatch import (
     dispatch_task_by_name,
 )
 from app.core.task_runtime.orchestrator import (
-    CeleryTaskRuntime,
     DelayTask,
     TaskLaunchResult,
     TaskRuntimePort,
@@ -21,7 +20,6 @@ from app.core.task_runtime.probes import (
 )
 
 __all__ = [
-    "CeleryTaskRuntime",
     "DelayTask",
     "RabbitmqClientUnavailable",
     "RabbitmqRuntimePort",

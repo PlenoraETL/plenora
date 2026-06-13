@@ -79,7 +79,9 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # inspect) e delle funzioni Redis/Celery di probes.py; net -6.
 # +2 (2026-06-13, Plenora 2.0 Fase 5 F5.4): cron_schedule.beat_timezone —
 # fallback su ZoneInfo (settings assente / tz invalida) -> default Europe/Rome.
-_EXPECT_BROAD_BUDGET = 721
+# 721 -> 720 (2026-06-13, Plenora 2.0 Fase 5 F5.6): rimosso list_active_tasks
+# (dead code, inspect worker Celery) col suo catch broad.
+_EXPECT_BROAD_BUDGET = 720
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

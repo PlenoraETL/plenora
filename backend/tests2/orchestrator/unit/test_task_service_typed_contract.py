@@ -10,7 +10,6 @@ from unittest.mock import patch
 import pytest
 
 from app.core.orchestrator.task_service import (
-    ActiveTaskInfo,
     CeleryLaunchResult,
     PipelineTaskPayload,
     TaskInfo,
@@ -282,50 +281,8 @@ def test_task_service_does_not_call_task_result_to_dict_internally(monkeypatch):
     assert task_info.result.result_id == "result-1"
 
 
-def test_list_active_tasks_returns_typed_task_rows():
-    inspect = SimpleNamespace(
-        active=lambda: {
-            "worker-1": [
-                {"id": "task-active-1", "name": "pipeline.execute"},
-            ]
-        },
-        reserved=lambda: {
-            "worker-2": [
-                {"id": "task-reserved-1", "name": "pipeline.preview"},
-            ]
-        },
-    )
-    app = SimpleNamespace(
-        control=SimpleNamespace(inspect=lambda: inspect),
-    )
-
-    metadata_store = InMemoryTaskMetadataStore()
-    service = TaskService(metadata_store=metadata_store)
-    service.app = app
-
-    tasks = service.list_active_tasks()
-
-    assert tasks == [
-        ActiveTaskInfo(
-            task_id="task-active-1",
-            name="pipeline.execute",
-            worker="worker-1",
-            status="active",
-        ),
-        ActiveTaskInfo(
-            task_id="task-reserved-1",
-            name="pipeline.preview",
-            worker="worker-2",
-            status="reserved",
-        ),
-    ]
-    assert all(isinstance(task, ActiveTaskInfo) for task in tasks)
-    assert tasks[0].to_dict() == {
-        "task_id": "task-active-1",
-        "name": "pipeline.execute",
-        "worker": "worker-1",
-        "status": "active",
-    }
+# Plenora 2.0 Fase 5 (F5.6): list_active_tasks/ActiveTaskInfo rimossi (dead
+# code: nessun endpoint li usava; l'inspect dei worker Celery non esiste piu').
 
 
 def test_get_task_result_returns_typed_payload():

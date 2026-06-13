@@ -1,9 +1,11 @@
-"""Contratti del runtime di lettura stato task su PG (Plenora 2.0, F2.3).
+"""Contratti del runtime di lettura stato task su PG (Plenora 2.0).
 
-Il FLIP di lettura: l'orchestratore legge stato/esito da task_result_store
-invece che da AsyncResult Celery. StoredTaskResult riproduce la semantica
-``AsyncResult`` (info==result==payload, riga assente -> PENDING). Le
-operazioni broker restano delegate a Celery. Store InMemory: lane no-DB.
+L'orchestratore legge stato/esito da task_result_store (PG). StoredTaskResult
+riproduce la semantica storica ``AsyncResult`` (info==result==payload, riga
+assente -> PENDING). Plenora 2.0 Fase 5 (F5.6): il runtime e' celery-free —
+niente piu' delega broker (revoke/task_lists/app rimossi); i metodi ``*_task()``
+ritornano le funzioni-corpo dei task (con attributo ``name``). Store InMemory:
+lane no-DB.
 """
 
 from __future__ import annotations
@@ -22,36 +24,6 @@ pytestmark = [
     pytest.mark.orchestrator,
     pytest.mark.contract,
 ]
-
-
-class _FakeBroker:
-    def __init__(self) -> None:
-        self.app = object()
-        self.revoked: list[tuple] = []
-        self.handles = {
-            "enrichment": object(),
-            "carica": object(),
-            "pipeline": object(),
-            "preview": object(),
-        }
-
-    def revoke(self, task_id, *, terminate=False):
-        self.revoked.append((task_id, terminate))
-
-    def task_lists(self):
-        return ({"w": [{"id": "a"}]}, {"w": [{"id": "b"}]})
-
-    def enrichment_task(self):
-        return self.handles["enrichment"]
-
-    def carica_task(self):
-        return self.handles["carica"]
-
-    def pipeline_task(self):
-        return self.handles["pipeline"]
-
-    def preview_task(self):
-        return self.handles["preview"]
 
 
 # StoredTaskResult — semantica AsyncResult
@@ -88,13 +60,13 @@ def test_stored_result_forget_removes_from_store():
     assert store.get("t1") is None
 
 
-# PgResultTaskRuntime — read da PG, broker delegato
+# PgResultTaskRuntime — read da PG
 
 
 def test_get_result_reads_from_store():
     store = InMemoryTaskResultStore()
     store.put("t1", state="PROGRESS", payload={"progress": 30}, name="carica.execute")
-    runtime = PgResultTaskRuntime(broker=_FakeBroker(), store=store)
+    runtime = PgResultTaskRuntime(store=store)
 
     result = runtime.get_result("t1")
     assert result.state == "PROGRESS"
@@ -103,39 +75,31 @@ def test_get_result_reads_from_store():
 
 
 def test_get_result_unknown_task_is_pending():
-    runtime = PgResultTaskRuntime(broker=_FakeBroker(), store=InMemoryTaskResultStore())
+    runtime = PgResultTaskRuntime(store=InMemoryTaskResultStore())
     assert runtime.get_result("ignoto").state == "PENDING"
 
 
 def test_forget_result_deletes_from_store():
     store = InMemoryTaskResultStore()
     store.put("t1", state="SUCCESS", payload={"success": True})
-    PgResultTaskRuntime(broker=_FakeBroker(), store=store).forget_result("t1")
+    PgResultTaskRuntime(store=store).forget_result("t1")
     assert store.get("t1") is None
 
 
-def test_broker_operations_delegate_to_celery_runtime():
-    broker = _FakeBroker()
-    runtime = PgResultTaskRuntime(broker=broker, store=InMemoryTaskResultStore())
+def test_task_handles_return_named_task_bodies():
+    """I metodi *_task() ritornano le funzioni-corpo con il nome registrato
+    (usato dal dispatch by-name di submit_task), senza Celery."""
+    runtime = PgResultTaskRuntime(store=InMemoryTaskResultStore())
 
-    runtime.revoke("t1", terminate=True)
-    assert broker.revoked == [("t1", True)]
-
-    active, reserved = runtime.task_lists()
-    assert active == {"w": [{"id": "a"}]}
-    assert reserved == {"w": [{"id": "b"}]}
-
-    assert runtime.enrichment_task() is broker.handles["enrichment"]
-    assert runtime.carica_task() is broker.handles["carica"]
-    assert runtime.pipeline_task() is broker.handles["pipeline"]
-    assert runtime.preview_task() is broker.handles["preview"]
+    assert runtime.carica_task().name == "carica.execute"
+    assert runtime.pipeline_task().name == "pipeline.execute"
+    assert runtime.preview_task().name == "pipeline.preview"
+    assert runtime.enrichment_task().name == "tasks.execute_enrichment"
 
 
-def test_app_property_delegates_to_broker():
-    broker = _FakeBroker()
-    runtime = PgResultTaskRuntime(broker=broker, store=InMemoryTaskResultStore())
-    assert runtime.app is broker.app
-
-    sentinel = object()
-    runtime.app = sentinel
-    assert broker.app is sentinel
+def test_runtime_has_no_broker_delegation():
+    """Plenora 2.0 Fase 5: niente piu' revoke/task_lists/app (delega Celery)."""
+    runtime = PgResultTaskRuntime(store=InMemoryTaskResultStore())
+    assert not hasattr(runtime, "revoke")
+    assert not hasattr(runtime, "task_lists")
+    assert not hasattr(runtime, "app")

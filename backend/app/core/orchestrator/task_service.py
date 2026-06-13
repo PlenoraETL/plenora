@@ -30,13 +30,6 @@ JsonValue: TypeAlias = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"
 JsonMapping: TypeAlias = Mapping[str, JsonValue]
 
 
-class ActiveTaskPublicPayload(TypedDict):
-    task_id: str
-    name: str
-    worker: str
-    status: str
-
-
 class TaskStatus(str, Enum):
     """Stati possibili di un task."""
     PENDING = "pending"      # In coda, non ancora avviato
@@ -288,38 +281,6 @@ class TaskInfo:
     completed_at: Optional[str] = None
 
 
-@dataclass(frozen=True)
-class ActiveTaskInfo:
-    """Typed core contract for a Celery worker task listing row."""
-
-    task_id: str
-    name: str
-    worker: str
-    status: str
-
-    @classmethod
-    def from_celery_task(
-        cls,
-        worker: str,
-        task: Mapping[str, object],
-        status: str,
-    ) -> "ActiveTaskInfo":
-        return cls(
-            task_id=str(task["id"]),
-            name=str(task["name"]),
-            worker=worker,
-            status=status,
-        )
-
-    def to_dict(self) -> ActiveTaskPublicPayload:
-        return {
-            "task_id": self.task_id,
-            "name": self.name,
-            "worker": self.worker,
-            "status": self.status,
-        }
-
-
 class TaskService:
     """Servizio per gestione task asincroni."""
 
@@ -337,16 +298,6 @@ class TaskService:
         # Fase 5 (F5.2): annullamento cooperativo su PG (rimpiazzo di
         # celery app.control.revoke).
         self.revocation_store = revocation_store or default_task_revocation_store()
-
-    @property
-    def app(self) -> object:
-        """Compatibility access to the underlying runtime app."""
-
-        return self.runtime.app
-
-    @app.setter
-    def app(self, app: object) -> None:
-        self.runtime.app = app
 
     def submit_task(self, request: TaskSubmitRequest) -> TaskInfo:
         """Launch a task by-name and record the pending task metadata.
@@ -754,37 +705,7 @@ class TaskService:
     def forget_task_result(self, task_id: str) -> None:
         """Forget the runtime result record for a task."""
         self.runtime.forget_result(task_id)
-    
-    # LISTA TASK ATTIVI
-    
-    def list_active_tasks(self) -> List[ActiveTaskInfo]:
-        """
-        Lista i task attualmente in esecuzione.
-        
-        Returns:
-            Lista di task attivi
-        """
-        try:
-            active, reserved = self.runtime.task_lists()
-            
-            tasks: List[ActiveTaskInfo] = []
-            
-            # Task in esecuzione
-            for worker, worker_tasks in active.items():
-                for task in worker_tasks:
-                    tasks.append(ActiveTaskInfo.from_celery_task(worker, task, "active"))
-            
-            # Task in coda
-            for worker, worker_tasks in reserved.items():
-                for task in worker_tasks:
-                    tasks.append(ActiveTaskInfo.from_celery_task(worker, task, "reserved"))
-            
-            return tasks
-            
-        except Exception as e:
-            logger.error(f"[CRASH] Errore listing task: {e}", exc_info=True)
-            return []
-    
+
     # PULIZIA TASK SCADUTI
 
     def cleanup_old_results(self, max_age_hours: int = 24) -> int:
