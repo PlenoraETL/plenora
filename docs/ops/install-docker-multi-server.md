@@ -335,10 +335,11 @@ docker run -d \
   -v plenora-data:/data \
   --entrypoint python \
   $REGISTRY/backend:$PLENORA_TAG \
-  -m celery -A workers.celery_app beat \
-  -S workers.beat_scheduler.PlenoraBeatScheduler \
-  --loglevel=info
+  -m workers.beat
 ```
+
+> Plenora 2.0 (Fase 3): il beat gira su APScheduler (`python -m workers.beat`),
+> non piu' su `celery beat`. Leader-lock e schedule su PostgreSQL.
 
 Do not scale beat until standby behavior has been validated in the target
 Redis environment.

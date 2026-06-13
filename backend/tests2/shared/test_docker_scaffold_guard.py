@@ -210,11 +210,10 @@ def test_compose_worker_uses_pool_solo_and_beat_uses_plenora_scheduler():
         "Switching to prefork in the scaffold would diverge "
         "from the validated path without justification."
     )
-    assert "PlenoraBeatScheduler" in text, (
-        "docker-compose.yml beat service must use "
-        "`-S workers.beat_scheduler.PlenoraBeatScheduler` -- "
-        "the canonical Plenora beat scheduler with Redis "
-        "leader-lock."
+    assert "workers.beat" in text, (
+        "docker-compose.yml beat service must launch `python -m workers.beat` "
+        "-- Plenora 2.0 Fase 3: il beat gira su APScheduler (runner "
+        "workers.beat), non piu' su celery beat. Leader-lock su PostgreSQL."
     )
 
 

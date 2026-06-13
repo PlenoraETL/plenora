@@ -45,20 +45,17 @@ def spawn_celery_beat(
     env: Optional[dict] = None,
     loglevel: str = "warning",
 ) -> ManagedProcess:
-    """Avvia Celery beat con lo scheduler custom del progetto."""
+    """Avvia il beat del progetto.
+
+    Plenora 2.0 Fase 3: il beat gira su APScheduler (``python -m workers.beat``),
+    non piu' su ``celery beat -S``. La logica (leader su PG, sync, catchup,
+    emit via dispatch) e' invariata. Il nome resta per compat dei chiamanti."""
     return spawn_process(
-        name="celery-beat",
+        name="plenora-beat",
         command=[
             sys.executable,
             "-m",
-            "celery",
-            "-A",
-            "workers.celery_app",
-            "beat",
-            "-S",
-            "workers.beat_scheduler.PlenoraBeatScheduler",
-            "--loglevel",
-            loglevel,
+            "workers.beat",
         ],
         workdir=workdir,
         env=env,

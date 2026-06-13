@@ -32,7 +32,7 @@ export CELERY_RESULT_BACKEND="redis://localhost:6379/0"
 
 uvicorn app.main:app --reload --port 5004
 celery -A workers.celery_app worker --loglevel=info
-celery -A workers.celery_app beat --loglevel=info
+python -m workers.beat
 ```
 
 See [runtime-prereqs.md](../ops/runtime-prereqs.md) for the full runtime

@@ -114,7 +114,7 @@ Worker and beat:
 ```bash
 cd backend
 celery -A workers.celery_app worker --loglevel=info
-celery -A workers.celery_app beat --loglevel=info
+python -m workers.beat
 ```
 
 Smoke checks:

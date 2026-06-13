@@ -143,10 +143,12 @@ services:
         condition: service_healthy
       backend:
         condition: service_started
-    # Singleton enforced by Redis SETNX leader-lock. Scaling beat up
-    # is safe (additional replicas go to standby) but unnecessary.
-    entrypoint: ["python", "-m", "celery", "-A", "workers.celery_app", "beat"]
-    command: ["-S", "workers.beat_scheduler.PlenoraBeatScheduler", "--loglevel=info"]
+    # Plenora 2.0 Fase 3: il beat gira su APScheduler (workers.beat), non piu'
+    # su celery beat. Singleton garantito dal leader-lock su PostgreSQL
+    # (beat_leader_locks): scalare il beat e' safe (le repliche extra vanno in
+    # standby) ma non necessario.
+    entrypoint: ["python", "-m", "workers.beat"]
+    command: []
     healthcheck:
       disable: true
     restart: unless-stopped

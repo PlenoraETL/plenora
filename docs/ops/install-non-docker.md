@@ -155,8 +155,11 @@ Terminal 3:
 
 ```bash
 source venv/bin/activate
-celery -A workers.celery_app beat --loglevel=info
+python -m workers.beat
 ```
+
+> Plenora 2.0 (Fase 3): il beat gira su APScheduler (`python -m workers.beat`),
+> non piu' su `celery beat`. Leader-lock e schedule su PostgreSQL.
 
 ## 7. Backend Smoke
 

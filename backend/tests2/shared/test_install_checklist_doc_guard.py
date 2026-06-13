@@ -278,8 +278,9 @@ def test_checklist_has_marco_command_sequence(checklist_section: str):
          "the operator can see boot logs in real time."),
         ("celery -A workers.celery_app worker", "Marco command "
          "sequence must show the foreground celery worker."),
-        ("celery -A workers.celery_app beat", "Marco command "
-         "sequence must show the foreground celery beat."),
+        ("python -m workers.beat", "Marco command sequence must show "
+         "the foreground beat (Plenora 2.0 Fase 3: APScheduler runner "
+         "workers.beat, non piu' celery beat)."),
         ("/health", "Marco command sequence must include the "
          "/health smoke."),
         ("/ready", "Marco command sequence must include the "

@@ -1,11 +1,13 @@
 [Unit]
-Description=PLENORA-ETL Celery Beat
-After=network.target redis.service
+Description=PLENORA-ETL Beat (APScheduler)
+After=network.target redis.service postgresql.service
 
 [Service]
 User=ubuntu
 WorkingDirectory=/home/ubuntu/plenora-etl/backend
-ExecStart=/home/ubuntu/plenora-etl/backend/venv/bin/celery -A workers.celery_app beat -S workers.beat_scheduler.PlenoraBeatScheduler --loglevel=info
+# Plenora 2.0 Fase 3: il beat gira su APScheduler (workers.beat), non piu' su
+# celery beat. Leader-lock e schedule su PostgreSQL.
+ExecStart=/home/ubuntu/plenora-etl/backend/venv/bin/python -m workers.beat
 Restart=always
 RestartSec=5
 EnvironmentFile=/home/ubuntu/plenora-etl/backend/.env

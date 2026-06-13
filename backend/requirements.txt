@@ -52,6 +52,11 @@ pytz>=2026.2
 # Celery+Redis durante la migrazione; i pin legacy spariscono in Fase 5.
 dramatiq[rabbitmq]>=1.18.0
 
+# Plenora 2.0 (Fase 3): runner del beat su APScheduler al posto di Celery beat
+# (nativo Windows/Linux/container). 3.x ha BlockingScheduler; la 4.x e' un
+# rewrite in beta.
+APScheduler>=3.10,<4
+
 # Data / Geospatial
 # pandas 3.0 ha breaking changes su Index/Series API e fillna behavior
 # -> pin esatto. numpy 2.4 stabile, ABI compat con pandas 3.0 garantita.
