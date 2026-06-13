@@ -620,7 +620,8 @@ def test_create_task_wrappers_delegate_to_generic_submit(
     assert request.project_id == "project-1"
     assert dict(task_payload_to_celery_kwargs(request.payload)) == expected_kwargs
     assert request.queued_message == expected_message
-    assert hasattr(request.celery_task, "delay")
+    # Plenora 2.0: dispatch by-name -> il task espone `name`, non piu' `.delay`.
+    assert hasattr(request.celery_task, "name")
     assert task_info.task_type is expected_task_type
     assert task_info.status is TaskStatus.PENDING
 

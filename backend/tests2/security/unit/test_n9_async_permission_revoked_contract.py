@@ -9,6 +9,7 @@ from __future__ import annotations
 import importlib
 import inspect
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional
 from unittest.mock import MagicMock
 
@@ -160,12 +161,10 @@ def _task_service_signature_target(service_method):
 
 
 def _patch_pipeline_eager_success(monkeypatch):
+    # Plenora 2.0 Fase 5: il task e' una funzione pura, invocata direttamente
+    # con un self-shim (niente piu' Celery eager). Vedi i call site.
     from workers.tasks import pipeline_task as pt
-    from workers.celery_app import celery_app
 
-    monkeypatch.setattr(celery_app.conf, "task_always_eager", True)
-    monkeypatch.setattr(celery_app.conf, "task_eager_propagates", True)
-    monkeypatch.setattr(pt.execute_pipeline_task, "update_state", lambda *a, **kw: None)
     monkeypatch.setattr(
         "app.core.intermediate.run_idempotency.is_already_completed",
         lambda run_id: False,
@@ -408,13 +407,12 @@ def test_pipeline_task_passes_user_id_to_open_run(monkeypatch):
         lambda *args, **kwargs: {"run_id": kwargs.get("run_id", "r-1")},
     )
 
-    # Invoca il task in eager mode con user_id concreto.
-    pt.execute_pipeline_task.apply(
-        kwargs={
-            "project_id": "proj_1",
-            "user_id": "usr_x",
-            "run_id": "r-1",
-        },
+    # Invoca il task (funzione pura) con self-shim e user_id concreto.
+    _shim = SimpleNamespace(
+        request=SimpleNamespace(id="r-1"), name="pipeline.execute"
+    )
+    pt.execute_pipeline_task(
+        _shim, project_id="proj_1", user_id="usr_x", run_id="r-1"
     )
 
     assert captured_open_run.get("user_id") == "usr_x", (
@@ -703,12 +701,11 @@ def test_pipeline_task_passes_user_id_to_intermediate_create_run(monkeypatch):
         "app.core.intermediate.run_lifecycle.create_run", spy_create_run,
     )
 
-    pt.execute_pipeline_task.apply(
-        kwargs={
-            "project_id": "proj_1",
-            "user_id": "usr_x",
-            "run_id": "r-1",
-        },
+    _shim = SimpleNamespace(
+        request=SimpleNamespace(id="r-1"), name="pipeline.execute"
+    )
+    pt.execute_pipeline_task(
+        _shim, project_id="proj_1", user_id="usr_x", run_id="r-1"
     )
 
     # Il task puo' passare user_id come kwarg o come positional finale.

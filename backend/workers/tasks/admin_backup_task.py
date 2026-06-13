@@ -1,11 +1,13 @@
-"""Celery task boundary for administrative database backups."""
+"""Backup amministrativo del database (corpo task, Plenora 2.0 Fase 5).
+
+Funzione pura ``run_manual_backup``: l'actor Dramatiq omonimo (vedi
+workers/dramatiq_app.py) la invoca passando il message_id come task_id.
+"""
 
 from __future__ import annotations
 
 import threading
 
-from workers.celery_app import celery_app
-from app.config import settings
 from app.core.admin_backups.backup_run_store import (
     refresh_manual_backup_lock,
     release_manual_backup_lock,
@@ -116,19 +118,3 @@ def run_manual_backup(
             release_manual_backup_lock(owner_token=owner_token)
         except Exception:
             logger.warning("release lock backup manuale fallita", exc_info=True)
-
-
-@celery_app.task(
-    name="workers.tasks.admin_backup_task.run_manual_backup_task",
-    bind=True,
-    max_retries=0,
-    acks_late=True,
-    reject_on_worker_lost=True,
-    soft_time_limit=settings.CELERY_TASK_TIMEOUT - 60,
-    time_limit=settings.CELERY_TASK_TIMEOUT,
-)
-def run_manual_backup_task(self, *, owner_token: str) -> dict[str, object]:
-    """Involucro Celery: il corpo condiviso (Plenora 2.0, Fase 1) vive in
-    run_manual_backup, registrato anche come actor Dramatiq in
-    workers/dramatiq_app.py."""
-    return run_manual_backup(owner_token=owner_token, task_id=self.request.id)

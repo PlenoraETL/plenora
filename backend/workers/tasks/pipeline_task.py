@@ -11,7 +11,6 @@ from collections.abc import Mapping as _Mapping
 from typing import Any, Optional
 
 from app.shared.contracts.payloads import JsonObject
-from workers.celery_app import celery_app, BaseTaskWithRetry
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, get_steps
 from app.config import settings
 from app.core.auth import async_user_recheck as async_user_recheck_module
@@ -116,14 +115,9 @@ def _normalize_execution_contract(
     return contract
 
 
-@celery_app.task(
-    bind=True,
-    base=BaseTaskWithRetry,
-    name="pipeline.execute",
-    max_retries=0,
-    soft_time_limit=settings.CELERY_TASK_TIMEOUT,
-    time_limit=settings.CELERY_TASK_HARD_LIMIT,
-)
+# Plenora 2.0 Fase 5: corpo task come funzione pura (no @celery_app.task).
+# `self` e' il self-shim dell'actor Dramatiq (request.id/name). Fail-fast
+# senza retry (no doppie scritture): garantito dall'actor con max_retries=0.
 def execute_pipeline_task(
     self,
     project_id: str,
@@ -426,14 +420,7 @@ def execute_pipeline_task(
         raise
 
 
-@celery_app.task(
-    bind=True,
-    base=BaseTaskWithRetry,
-    name="pipeline.preview",
-    max_retries=0,
-    soft_time_limit=settings.CELERY_PREVIEW_TIMEOUT,
-    time_limit=settings.CELERY_PREVIEW_HARD_LIMIT,
-)
+# Plenora 2.0 Fase 5: corpo task come funzione pura (no @celery_app.task).
 def preview_pipeline_task(
     self,
     project_id: str,
@@ -493,3 +480,10 @@ def preview_pipeline_task(
     except Exception as e:
         logger.error(f"[CRASH] Task PREVIEW {task_id} fallito: {e}", exc_info=True)
         raise
+
+
+# Plenora 2.0 Fase 5: nomi registrati dei task (erano @celery_app.task(name=...)).
+# Soddisfano il protocol DelayTask.name (dispatch by-name di submit_task) e
+# combaciano con gli actor Dramatiq in workers/dramatiq_app.py.
+execute_pipeline_task.name = "pipeline.execute"
+preview_pipeline_task.name = "pipeline.preview"

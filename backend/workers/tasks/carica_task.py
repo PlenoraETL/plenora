@@ -43,24 +43,15 @@ from app.db.pg_connection import close_connection as _close_config_connection
 from app.runtime import services as runtime_services_module
 from app.utils.debug_payload_builder import DebugPayloadBuilder
 
-from workers.celery_app import celery_app, BaseTaskWithRetry
-
 
 logger = get_logger("workers.carica_task")
 
 
-
-
-@celery_app.task(
-    bind=True,
-    base=BaseTaskWithRetry,
-    name="carica.execute",
-    # Database writes are fail-fast: automatic retries can duplicate partial
-    # append+per_batch writes when no unique constraint is present.
-    max_retries=0,
-    soft_time_limit=settings.CELERY_TASK_TIMEOUT,
-    time_limit=settings.CELERY_TASK_HARD_LIMIT,
-)
+# Plenora 2.0 Fase 5: corpo task come funzione pura (niente @celery_app.task).
+# `self` e' un self-shim fornito dall'actor Dramatiq (request.id/name); vedi
+# workers/dramatiq_app.py. Retry/timeouts non sono piu' decorator Celery: la
+# write fail-fast (no retry, niente doppie scritture append+per_batch) e'
+# garantita dall'actor con max_retries=0.
 def execute_carica_task(
     self,
     project_id: str,
@@ -579,3 +570,9 @@ def _load_upstream_data(
             exc_info=True,
         )
         return None
+
+
+# Plenora 2.0 Fase 5: nome registrato del task (era @celery_app.task(name=...)).
+# Soddisfa il protocol DelayTask.name usato da submit_task per il dispatch
+# by-name e combacia con l'actor Dramatiq in workers/dramatiq_app.py.
+execute_carica_task.name = "carica.execute"

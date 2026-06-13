@@ -254,25 +254,27 @@ def test_beat_task_is_pure_noop(beat_task_text: str):
 
 
 def test_beat_task_uses_canonical_name(beat_task_text: str):
-    assert f'name="{_CANONICAL_TASK_NAME}"' in beat_task_text, (
-        f"workers/tasks/cleanroom_beat_task.py must register the "
-        f"task with name={_CANONICAL_TASK_NAME!r}. The smoke step "
-        "in ci-cleanroom.yml will send to this exact name."
+    # Plenora 2.0 Fase 5: il nome canonico vive ora sull'actor Dramatiq
+    # (cleanroom_beat_ping), non piu' sul decoratore Celery. Lo smoke
+    # dispatcha verso questo actor_name.
+    from workers.dramatiq_app import cleanroom_beat_ping
+
+    assert cleanroom_beat_ping.actor_name == _CANONICAL_TASK_NAME, (
+        f"l'actor Dramatiq deve registrare il nome canonico "
+        f"{_CANONICAL_TASK_NAME!r}. Lo smoke dispatcha verso questo nome."
     )
 
 
 def test_beat_task_does_not_ignore_result(beat_task_text: str):
-    assert "ignore_result=False" in beat_task_text, (
-        "workers/tasks/cleanroom_beat_task.py must declare "
-        "ignore_result=False explicitly. AsyncResult.get / backend "
-        "polling cannot observe completion of an ignored-result "
-        "task - the smoke would silently pass without verifying "
-        "anything."
-    )
-    code_only = _python_code_only(beat_task_text)
-    assert "ignore_result=True" not in code_only, (
-        "ignore_result=True is incompatible with the bounded smoke "
-        "pattern in install-non-docker.md section 12.7.5."
+    # Plenora 2.0 Fase 5: l'esito non e' ignorato — il broker Dramatiq ha il
+    # middleware di finalize che scrive il risultato su PG (osservabile dallo
+    # smoke), simmetrico al vecchio ignore_result=False di Celery.
+    from workers.dramatiq_app import broker
+
+    middleware_names = {type(m).__name__ for m in broker.middleware}
+    assert "_TaskResultMiddleware" in middleware_names, (
+        "il broker Dramatiq deve finalizzare l'esito su PG (result-bearing): "
+        "senza, lo smoke non potrebbe osservare il completamento del task."
     )
 
 

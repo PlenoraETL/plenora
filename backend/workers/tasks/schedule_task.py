@@ -6,22 +6,14 @@ Runs background execution while preserving backend runtime contracts.
 
 from datetime import datetime, timezone
 
-from workers.celery_app import celery_app
 from app.utils.logger import get_logger
-from app.config import settings
 
 logger = get_logger(__name__)
 
 
-@celery_app.task(
-    name="workers.tasks.schedule_task.schedule_pipeline_task",
-    bind=True,
-    max_retries=0,          # Retry gestito dal PolicyEngine, non da Celery
-    acks_late=True,
-    reject_on_worker_lost=True,
-    soft_time_limit=settings.CELERY_SCHEDULE_TIMEOUT,
-    time_limit=settings.CELERY_SCHEDULE_HARD_LIMIT,
-)
+# Plenora 2.0 Fase 5: corpo task come funzione pura (no @celery_app.task).
+# `self` e' il self-shim dell'actor Dramatiq. Retry gestito dal PolicyEngine,
+# non dal broker.
 def schedule_pipeline_task(
     self,
     schedule_id: str,
@@ -130,11 +122,7 @@ def schedule_pipeline_task(
         }
 
 
-@celery_app.task(
-    name="workers.tasks.schedule_task.beat_heartbeat",
-    max_retries=0,
-    ignore_result=True,
-)
+# Plenora 2.0 Fase 5: funzione pura (no @celery_app.task).
 def beat_heartbeat():
     """
     Heartbeat periodico scritto da Beat ogni 60 secondi.
@@ -158,3 +146,8 @@ def beat_heartbeat():
             f"[HEARTBEAT] INSERT beat_heartbeat fallito "
             f"(healthcheck vedra' beat stale): {e}"
         )
+
+
+# Plenora 2.0 Fase 5: nomi registrati (erano @celery_app.task(name=...)).
+schedule_pipeline_task.name = "workers.tasks.schedule_task.schedule_pipeline_task"
+beat_heartbeat.name = "workers.tasks.schedule_task.beat_heartbeat"

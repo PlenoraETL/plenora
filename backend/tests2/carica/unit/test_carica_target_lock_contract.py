@@ -279,7 +279,7 @@ def test_task_uses_target_lock_before_loading_upstream_and_releases_in_finally(m
         update_state=MagicMock(),
     )
 
-    result = carica_task.execute_carica_task.__wrapped__.__func__(
+    result = carica_task.execute_carica_task(
         fake_self,
         project_id="project-1",
         canvas={},
@@ -343,7 +343,7 @@ def test_task_fails_fast_when_target_lock_is_busy(monkeypatch):
         update_state=MagicMock(),
     )
 
-    result = carica_task.execute_carica_task.__wrapped__.__func__(
+    result = carica_task.execute_carica_task(
         fake_self,
         project_id="project-1",
         canvas={},

@@ -63,11 +63,9 @@ def test_pipeline_task_emits_skipped_idempotent_status_on_hit(monkeypatch):
     Behavior-bound vero: cattura sia la stringa sia il fatto che il
     return parte SUBITO (no esecuzione orchestrator).
     """
-    from workers.celery_app import celery_app
-    from workers.tasks import pipeline_task as pt
+    from types import SimpleNamespace
 
-    monkeypatch.setattr(celery_app.conf, "task_always_eager", True)
-    monkeypatch.setattr(celery_app.conf, "task_eager_propagates", True)
+    from workers.tasks import pipeline_task as pt
 
     monkeypatch.setattr(
         "app.core.intermediate.run_idempotency.is_already_completed",
@@ -78,9 +76,11 @@ def test_pipeline_task_emits_skipped_idempotent_status_on_hit(monkeypatch):
     fake_orchestrator = MagicMock()
     monkeypatch.setattr(pt, "_build_orchestrator", lambda: fake_orchestrator)
 
-    result = pt.execute_pipeline_task.apply(
-        kwargs={"project_id": "p1", "run_id": "r1"},
-    ).get()
+    # Plenora 2.0 Fase 5: chiamata diretta con self-shim (no piu' Celery eager).
+    shim = SimpleNamespace(
+        request=SimpleNamespace(id="r1"), name="pipeline.execute"
+    )
+    result = pt.execute_pipeline_task(shim, project_id="p1", run_id="r1")
 
     assert isinstance(result, dict)
     assert result.get("status") == "skipped_idempotent", (
@@ -100,11 +100,9 @@ def test_pipeline_task_uses_passed_run_id_when_provided(monkeypatch):
     spy su is_already_completed cattura il run_id ricevuto -> deve
     essere quello passato dal caller, non un UUID fresh.
     """
-    from workers.celery_app import celery_app
-    from workers.tasks import pipeline_task as pt
+    from types import SimpleNamespace
 
-    monkeypatch.setattr(celery_app.conf, "task_always_eager", True)
-    monkeypatch.setattr(celery_app.conf, "task_eager_propagates", True)
+    from workers.tasks import pipeline_task as pt
 
     captured_run_ids = []
 
@@ -118,9 +116,13 @@ def test_pipeline_task_uses_passed_run_id_when_provided(monkeypatch):
     )
 
     fixed_run_id = "stable-run-12345"
-    result = pt.execute_pipeline_task.apply(
-        kwargs={"project_id": "p1", "run_id": fixed_run_id},
-    ).get()
+    # Plenora 2.0 Fase 5: chiamata diretta con self-shim.
+    shim = SimpleNamespace(
+        request=SimpleNamespace(id=fixed_run_id), name="pipeline.execute"
+    )
+    result = pt.execute_pipeline_task(
+        shim, project_id="p1", run_id=fixed_run_id
+    )
 
     assert captured_run_ids == [fixed_run_id], (
         f"is_already_completed deve ricevere il run_id passato dal caller, "

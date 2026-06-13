@@ -16,22 +16,14 @@ import pytest
 
 
 @pytest.fixture
-def celery_eager(monkeypatch):
-    """Forza Celery in eager mode per la durata del test.
+def celery_eager():
+    """No-op (Plenora 2.0 Fase 5).
 
-    Eager: `.apply()` / `.delay()` / `.apply_async()` eseguono il task
-    sincronamente in-process invece di publicarlo sul broker Redis. Le
-    eccezioni vengono propagate al chiamante (`task_eager_propagates`).
-
-    Ritorna l'oggetto `celery_app` cosi' i test possono accedere ai
-    task se serve.
+    I corpi dei task sono ora funzioni pure (niente piu' Celery/eager): i
+    test li invocano direttamente via ``invoke_enrichment_task`` (con un
+    self-shim). Il fixture resta per compatibilita' di firma dei test.
     """
-    from workers.celery_app import celery_app
-
-    monkeypatch.setattr(celery_app.conf, "task_always_eager", True)
-    monkeypatch.setattr(celery_app.conf, "task_eager_propagates", True)
-    monkeypatch.setattr(celery_app.conf, "task_store_eager_result", False)
-    return celery_app
+    return None
 
 
 # 2. Fake ApiConnectionService — spy sui tenant binding
@@ -441,21 +433,24 @@ def invoke_enrichment_task(
     is_eseguibile: bool = False, output_format: str = "csv",
     user_id: Optional[str] = "test-user",
 ) -> Dict[str, Any]:
-    """Invoca `execute_enrichment_task` in eager mode e ritorna il dict.
+    """Invoca `execute_enrichment_task` (funzione pura) e ritorna il dict.
 
-    Richiede che `celery_eager` fixture sia gia' attiva nel test.
-    `task_eager_propagates=True` propaga le eccezioni — ma la task
-    ha try/except top-level che cattura tutto e ritorna un error dict,
-    quindi non vediamo MAI un raise reale qui (eccetto _HarnessAbort
-    che il task converte in error dict).
+    Plenora 2.0 Fase 5: chiamata diretta con un self-shim (request.id/name)
+    al posto di `.apply()` eager Celery. Il task ha try/except top-level che
+    cattura tutto e ritorna un error dict (anche _HarnessAbort).
     """
+    from types import SimpleNamespace
+
     from workers.tasks.enrichment_task import execute_enrichment_task
 
-    res = execute_enrichment_task.apply(
-        args=[project_id, canvas, output_format, False, None,
-              is_eseguibile, run_id, user_id],
+    shim = SimpleNamespace(
+        request=SimpleNamespace(id=run_id or "test-task"),
+        name="tasks.execute_enrichment",
     )
-    return res.get(disable_sync_subtasks=False)
+    return execute_enrichment_task(
+        shim, project_id, canvas, output_format, False, None,
+        is_eseguibile, run_id, user_id,
+    )
 
 
 # 4. Spy su update_task_progress per verificare task_id propagation

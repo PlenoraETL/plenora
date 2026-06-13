@@ -13,21 +13,19 @@ from workers.tasks import carica_task
 pytestmark = [pytest.mark.unit, pytest.mark.carica, pytest.mark.contract]
 
 
-def test_carica_task_is_configured_with_max_retries_zero():
-    """carica_task decorator deve dichiarare max_retries=0 per evitare
-    retry automatici che duplicherebbero write su DB cliente in
+def test_carica_actor_is_configured_with_max_retries_zero():
+    """L'actor Dramatiq carica.execute deve dichiarare max_retries=0 per
+    evitare retry automatici che duplicherebbero write su DB cliente in
     modalita' append + per_batch.
 
-    Replacement R-04b di `inspect.getsource(carica_task)` + lines scan:
-    osservazione runtime dell'attributo Celery `Task.max_retries` esposto
-    dal task. Behavior-bound: cattura l'effective configuration usata
-    dal worker, non la stringa nel source.
+    Plenora 2.0 Fase 5: il corpo e' una funzione pura; la policy no-retry
+    vive ora sull'actor Dramatiq (era l'attributo Celery Task.max_retries).
     """
-    task = carica_task.execute_carica_task
-    # Celery Task subclass espone max_retries come attribute di classe;
-    # se override non passato al decorator, e' l'app default (3).
-    assert task.max_retries == 0, (
-        f"execute_carica_task.max_retries={task.max_retries} (atteso 0). "
+    from workers.dramatiq_app import carica_execute
+
+    max_retries = carica_execute.options.get("max_retries")
+    assert max_retries == 0, (
+        f"carica.execute actor max_retries={max_retries} (atteso 0). "
         "Retry automatico duplicherebbe write su DB cliente in "
         "append/per_batch mode."
     )

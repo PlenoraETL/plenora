@@ -173,7 +173,7 @@ def test_execute_enrichment_task_propagates_result_id_in_dataframe_branch(
     if code is None:
         # Celery wraps the task; il source originale e' su .run o .__call__.
         # Fallback: getattr su `run`.
-        code = execute_enrichment_task.run.__code__
+        code = execute_enrichment_task.__code__
 
     all_consts = list(_walk_co_consts(code))
     assert "result_id" in all_consts, (
@@ -208,7 +208,7 @@ def test_execute_enrichment_task_propagates_result_id_in_file_branch(
 
     code = (execute_enrichment_task.__wrapped__.__code__
             if hasattr(execute_enrichment_task, "__wrapped__")
-            else execute_enrichment_task.run.__code__)
+            else execute_enrichment_task.__code__)
 
     # Verifica che NESSUN bytecode op rimuova la chiave 'result_id' dal
     # dict (cioe' nessun DELETE_SUBSCR su una key 'result_id').
@@ -412,7 +412,7 @@ def test_execute_enrichment_task_imdf_branch_has_no_undefined_locals():
 
     code = (execute_enrichment_task.__wrapped__.__code__
             if hasattr(execute_enrichment_task, "__wrapped__")
-            else execute_enrichment_task.run.__code__)
+            else execute_enrichment_task.__code__)
 
     forbidden_names = ("files_list", "geojson_layers")
     found = []

@@ -12,7 +12,6 @@ import traceback as _tb
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List
-from workers.celery_app import celery_app
 from app.core.artifacts import resolver as artifact_resolver_module
 from app.core.auth import async_user_recheck as async_user_recheck_module
 from app.core.arricchisci import api_connector as api_connector_module
@@ -43,7 +42,8 @@ from app.core.arricchisci.enrichment_service import (
 logger = get_logger(__name__)
 
 
-@celery_app.task(bind=True, name="tasks.execute_enrichment", max_retries=0)
+# Plenora 2.0 Fase 5: corpo task come funzione pura (no @celery_app.task).
+# `self` e' il self-shim dell'actor Dramatiq (request.id/name).
 def execute_enrichment_task(
     self,
     project_id: str,
@@ -1054,3 +1054,8 @@ def _trigger_carica_if_present(
             f"({carica_dispatcher.node_id(node)}) non collegato al nodo Output, skip"
         ),
     )
+
+
+# Plenora 2.0 Fase 5: nome registrato del task (era @celery_app.task(name=...)).
+# Soddisfa DelayTask.name (dispatch by-name) e combacia con l'actor Dramatiq.
+execute_enrichment_task.name = "tasks.execute_enrichment"

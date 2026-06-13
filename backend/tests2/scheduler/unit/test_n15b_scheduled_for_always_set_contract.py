@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import inspect
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -16,6 +17,14 @@ from tests2.shared._ast_identifiers import uses_attribute
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
+
+# Plenora 2.0 Fase 5: il corpo schedule_pipeline_task e' una funzione pura;
+# l'actor Dramatiq inietta un self-shim (request.id/name). Nei test lo
+# forniamo direttamente.
+_SHIM = SimpleNamespace(
+    request=SimpleNamespace(id="test-task"),
+    name="workers.tasks.schedule_task.schedule_pipeline_task",
+)
 
 
 def _task_source() -> str:
@@ -60,7 +69,7 @@ def test_task_preserves_explicit_scheduled_for():
         "app.core.scheduler.execution_manager.ExecutionManager",
         return_value=_MockManager(),
     ):
-        schedule_task.schedule_pipeline_task.run(
+        schedule_task.schedule_pipeline_task(_SHIM, 
             "sched-1",
             triggered_by="catchup",
             scheduled_for="2026-04-17T10:00:00+00:00",
@@ -89,7 +98,7 @@ def test_task_computes_scheduled_for_when_none_for_cron():
         "app.core.scheduler.execution_manager.ExecutionManager",
         return_value=_MockManager(),
     ):
-        schedule_task.schedule_pipeline_task.run(
+        schedule_task.schedule_pipeline_task(_SHIM, 
             "sched-1",
             triggered_by="cron",
             # NO scheduled_for
@@ -120,7 +129,7 @@ def test_task_computes_scheduled_for_when_none_for_manual():
         "app.core.scheduler.execution_manager.ExecutionManager",
         return_value=_MockManager(),
     ):
-        schedule_task.schedule_pipeline_task.run(
+        schedule_task.schedule_pipeline_task(_SHIM, 
             "sched-1",
             triggered_by="manual",
         )
@@ -149,9 +158,9 @@ def test_two_cron_invocations_without_scheduled_for_get_different_values():
         "app.core.scheduler.execution_manager.ExecutionManager",
         return_value=_MockManager(),
     ):
-        schedule_task.schedule_pipeline_task.run("s", triggered_by="cron")
+        schedule_task.schedule_pipeline_task(_SHIM, "s", triggered_by="cron")
         time.sleep(0.002)  # garantisce differenza a microsecondi
-        schedule_task.schedule_pipeline_task.run("s", triggered_by="cron")
+        schedule_task.schedule_pipeline_task(_SHIM, "s", triggered_by="cron")
 
     assert len(captured) == 2
     assert captured[0] != captured[1], (

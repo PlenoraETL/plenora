@@ -5,6 +5,7 @@ Il beat, quando emette un catchup run, passa un `scheduled_for` ISO al
 """
 
 import inspect
+from types import SimpleNamespace
 
 import pytest
 from unittest.mock import patch
@@ -13,6 +14,12 @@ from workers.tasks.schedule_task import schedule_pipeline_task
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
+
+# Plenora 2.0 Fase 5: corpo task funzione pura, self-shim iniettato dall'actor.
+_SHIM = SimpleNamespace(
+    request=SimpleNamespace(id="test-task"),
+    name="workers.tasks.schedule_task.schedule_pipeline_task",
+)
 
 
 def test_schedule_pipeline_task_accepts_scheduled_for_kwarg():
@@ -41,7 +48,8 @@ def test_task_propagates_scheduled_for_to_execution_manager():
         "app.core.scheduler.execution_manager.ExecutionManager",
         return_value=_MockManager(),
     ):
-        schedule_task.schedule_pipeline_task.run(
+        schedule_task.schedule_pipeline_task(
+            _SHIM,
             "sched-1",
             triggered_by="catchup",
             scheduled_for="2026-04-17T10:00:00+00:00",

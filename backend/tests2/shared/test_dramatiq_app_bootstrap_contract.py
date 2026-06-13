@@ -148,8 +148,8 @@ def test_shim_actors_keep_name_queue_and_share_body(attr, actor_name, queue_attr
     actor = getattr(dramatiq_app, attr)
     assert actor.actor_name == actor_name
     assert actor.queue_name == getattr(settings, queue_attr)
-    # Corpo condiviso: l'actor delega al corpo del task Celery via shim.
-    assert "_invoke_celery_task_body" in inspect.getsource(actor.fn)
+    # Corpo condiviso: l'actor delega al corpo del task (funzione pura) via shim.
+    assert "_invoke_task_body" in inspect.getsource(actor.fn)
 
 
 def test_beat_heartbeat_actor_name_and_scheduler_queue():
@@ -172,7 +172,7 @@ def test_broker_has_task_result_finalize_middleware():
     assert "CurrentMessage" in names
 
 
-def test_invoke_celery_task_body_injects_message_id_as_self_request_id(monkeypatch):
+def test_invoke_task_body_injects_message_id_as_self_request_id(monkeypatch):
     from types import SimpleNamespace
 
     from workers import dramatiq_app
@@ -181,16 +181,15 @@ def test_invoke_celery_task_body_injects_message_id_as_self_request_id(monkeypat
 
     captured = {}
 
-    def _raw(self, **kwargs):
+    def _body(self, **kwargs):
         captured["task_id"] = self.request.id
         captured["name"] = self.name
         captured["kwargs"] = kwargs
         return {"ok": True}
 
-    fake_task = SimpleNamespace(__wrapped__=SimpleNamespace(__func__=_raw))
-
-    result = dramatiq_app._invoke_celery_task_body(
-        fake_task, name="carica.execute", kwargs={"project_id": "p1"}
+    # Plenora 2.0 Fase 5: i corpi sono funzioni pure; lo shim le chiama dirette.
+    result = dramatiq_app._invoke_task_body(
+        _body, name="carica.execute", kwargs={"project_id": "p1"}
     )
 
     assert result == {"ok": True}
@@ -201,10 +200,12 @@ def test_invoke_celery_task_body_injects_message_id_as_self_request_id(monkeypat
     }
 
 
-def test_real_celery_tasks_expose_wrapped_for_shim_invocation():
-    # Lo shim degli actor invoca task.__wrapped__ (.__func__): qui si blinda
-    # che i task Celery reali espongano davvero il seam, senza eseguirne il
-    # corpo (no DB). Se Celery cambiasse il wrapping, questo test lo rileva.
+def test_real_task_bodies_are_plain_callables_for_shim_invocation():
+    # Plenora 2.0 Fase 5: i corpi dei task sono funzioni pure (niente piu'
+    # @celery_app.task / __wrapped__): lo shim le invoca direttamente. Qui si
+    # blinda che restino callable accettando `self` come primo argomento.
+    import inspect
+
     from workers.tasks.carica_task import execute_carica_task
     from workers.tasks.pipeline_task import (
         execute_pipeline_task,
@@ -220,9 +221,14 @@ def test_real_celery_tasks_expose_wrapped_for_shim_invocation():
         execute_enrichment_task,
         schedule_pipeline_task,
     ):
-        wrapped = task.__wrapped__
-        raw = getattr(wrapped, "__func__", wrapped)
-        assert callable(raw), f"{task.name}: __wrapped__ non risolvibile per lo shim"
+        assert callable(task), f"{task.__name__}: corpo non callable per lo shim"
+        assert not hasattr(task, "__wrapped__"), (
+            f"{task.__name__}: non deve piu' essere un task Celery wrappato"
+        )
+        params = list(inspect.signature(task).parameters)
+        assert params and params[0] == "self", (
+            f"{task.__name__}: primo parametro deve essere il self-shim"
+        )
 
 
 def test_broker_url_overridable_via_env(monkeypatch):
