@@ -18,6 +18,7 @@ import os
 
 import dramatiq
 from dramatiq.brokers.rabbitmq import RabbitmqBroker
+from dramatiq.middleware import CurrentMessage
 
 from app.config import settings
 
@@ -31,7 +32,19 @@ def broker_url() -> str:
 
 
 broker = RabbitmqBroker(url=broker_url())
+# CurrentMessage espone il messaggio in esecuzione all'actor: e' il
+# rimpiazzo Dramatiq di `self.request.id` (bind=True) di Celery, usato
+# dai task che mettono il task_id nel result payload (admin_backup; in
+# Fase 2 anche carica/pipeline).
+broker.add_middleware(CurrentMessage())
 dramatiq.set_broker(broker)
+
+
+def current_message_id() -> str | None:
+    """message_id del messaggio Dramatiq in esecuzione, o None fuori da un
+    actor. Equivalente di `self.request.id` lato Celery."""
+    message = CurrentMessage.get_current_message()
+    return message.message_id if message is not None else None
 
 
 # Routing actor -> coda: stessa tabella di celery_app.task_routes (stessa
@@ -97,6 +110,26 @@ def cleanup_temp_files() -> dict:
     return dict(run_cleanup_temp_files())
 
 
+@dramatiq.actor(
+    actor_name="workers.tasks.admin_backup_task.run_manual_backup_task",
+    queue_name=queue_for(
+        "workers.tasks.admin_backup_task.run_manual_backup_task"
+    ),
+)
+def run_manual_backup_task(*, owner_token: str) -> dict:
+    """Backup manuale — stesso corpo del task Celery omonimo.
+
+    Il task_id (nel Celery: self.request.id) e' rimpiazzato dal
+    message_id Dramatiq corrente. Import lazy come gli altri actor:
+    il modulo legacy importa celery_app.
+    """
+    from workers.tasks.admin_backup_task import run_manual_backup
+
+    return dict(
+        run_manual_backup(owner_token=owner_token, task_id=current_message_id())
+    )
+
+
 __all__ = [
     "TASK_QUEUE_ROUTES",
     "broker",
@@ -104,5 +137,7 @@ __all__ = [
     "cleanroom_beat_ping",
     "cleanroom_ping",
     "cleanup_temp_files",
+    "current_message_id",
     "queue_for",
+    "run_manual_backup_task",
 ]

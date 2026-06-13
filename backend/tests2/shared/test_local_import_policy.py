@@ -26,7 +26,12 @@ _SCAN_ROOTS = (
 
 # Baseline corrente: ogni nuovo import locale aumenta accoppiamento nascosto.
 # La soglia puo' solo scendere; se sale, il reviewer deve giustificare il caso.
-MAX_LOCAL_IMPORTS = 277
+# 277 -> 278 (Plenora 2.0, Fase 1 fetta 4): l'actor Dramatiq admin_backup in
+# workers/dramatiq_app.py importa lazy run_manual_backup dal modulo task
+# legacy. Stessa motivazione degli altri actor (cleanup_temp_files,
+# cleanroom): il bootstrap Dramatiq non deve pagare l'import di celery_app
+# finche' l'actor non viene eseguito.
+MAX_LOCAL_IMPORTS = 278
 MAX_LATE_MODULE_IMPORTS = 8
 
 

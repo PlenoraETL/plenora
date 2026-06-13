@@ -113,9 +113,13 @@ class TestBackupTaskHeartbeatIntegration:
 
     def test_task_starts_heartbeat_before_backup(self):
         """Sequenza: heartbeat start PRIMA di `backup_db.main()`,
-        stop event PRIMA del release nel finally."""
+        stop event PRIMA del release nel finally.
+
+        Dalla Fase 1 (doppia registrazione Celery+Dramatiq) la logica
+        vive nel corpo condiviso `run_manual_backup`; l'involucro
+        `run_manual_backup_task` lo delega soltanto."""
         from workers.tasks import admin_backup_task
-        src = inspect.getsource(admin_backup_task.run_manual_backup_task)
+        src = inspect.getsource(admin_backup_task.run_manual_backup)
         # Ordine: start_heartbeat ... backup_db.main() ... stop ... release
         i_start = src.find("_start_lock_heartbeat(")
         i_backup = src.find("backup_db.main(")

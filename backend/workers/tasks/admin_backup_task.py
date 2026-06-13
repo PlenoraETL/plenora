@@ -69,17 +69,18 @@ def _start_lock_heartbeat(owner_token: str) -> tuple[threading.Event, threading.
     return stop_event, thread
 
 
-@celery_app.task(
-    name="workers.tasks.admin_backup_task.run_manual_backup_task",
-    bind=True,
-    max_retries=0,
-    acks_late=True,
-    reject_on_worker_lost=True,
-    soft_time_limit=settings.CELERY_TASK_TIMEOUT - 60,
-    time_limit=settings.CELERY_TASK_TIMEOUT,
-)
-def run_manual_backup_task(self, *, owner_token: str) -> dict[str, object]:
-    """Run the existing backup job inside a worker, not the API process."""
+def run_manual_backup(
+    *, owner_token: str, task_id: str | None
+) -> dict[str, object]:
+    """Corpo condiviso (Plenora 2.0, Fase 1) del backup manuale.
+
+    Esegue il job di backup dentro un worker (non nel processo API),
+    tenendo vivo il lock con un thread heartbeat e rilasciandolo nel
+    finally. `task_id` e' iniettato dall'involucro: Celery passa
+    `self.request.id`, l'actor Dramatiq passa il message_id corrente
+    (vedi workers/dramatiq_app.py). Il valore finisce solo nel result
+    payload — la logica non vi dipende.
+    """
 
     stop_heartbeat, heartbeat_thread = _start_lock_heartbeat(owner_token)
     exit_code = 0
@@ -90,7 +91,7 @@ def run_manual_backup_task(self, *, owner_token: str) -> dict[str, object]:
         return {
             "success": True,
             "status": "completed",
-            "task_id": self.request.id,
+            "task_id": task_id,
         }
     except SystemExit as exc:
         exit_code = exc.code if isinstance(exc.code, int) else 1
@@ -98,7 +99,7 @@ def run_manual_backup_task(self, *, owner_token: str) -> dict[str, object]:
             return {
                 "success": True,
                 "status": "completed",
-                "task_id": self.request.id,
+                "task_id": task_id,
             }
         logger.error("Backup manuale fallito con exit_code=%s", exit_code)
         raise RuntimeError(f"manual_backup_failed:{exit_code}") from exc
@@ -115,3 +116,19 @@ def run_manual_backup_task(self, *, owner_token: str) -> dict[str, object]:
             release_manual_backup_lock(owner_token=owner_token)
         except Exception:
             logger.warning("release lock backup manuale fallita", exc_info=True)
+
+
+@celery_app.task(
+    name="workers.tasks.admin_backup_task.run_manual_backup_task",
+    bind=True,
+    max_retries=0,
+    acks_late=True,
+    reject_on_worker_lost=True,
+    soft_time_limit=settings.CELERY_TASK_TIMEOUT - 60,
+    time_limit=settings.CELERY_TASK_TIMEOUT,
+)
+def run_manual_backup_task(self, *, owner_token: str) -> dict[str, object]:
+    """Involucro Celery: il corpo condiviso (Plenora 2.0, Fase 1) vive in
+    run_manual_backup, registrato anche come actor Dramatiq in
+    workers/dramatiq_app.py."""
+    return run_manual_backup(owner_token=owner_token, task_id=self.request.id)

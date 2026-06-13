@@ -68,6 +68,34 @@ def test_cleanup_temp_files_actor_routes_to_control_plane_and_shares_body():
     assert "run_cleanup_temp_files" in inspect.getsource(cleanup_temp_files.fn)
 
 
+def test_admin_backup_actor_routes_to_control_plane_and_shares_body():
+    from app.config import settings
+    from workers.dramatiq_app import run_manual_backup_task
+
+    assert run_manual_backup_task.actor_name == (
+        "workers.tasks.admin_backup_task.run_manual_backup_task"
+    )
+    assert run_manual_backup_task.queue_name == (
+        settings.CELERY_QUEUE_CONTROL_PLANE
+    )
+
+    # Corpo condiviso: l'actor delega alla stessa funzione del task Celery
+    # e inietta il message_id come task_id (rimpiazzo di self.request.id).
+    import inspect
+
+    src = inspect.getsource(run_manual_backup_task.fn)
+    assert "run_manual_backup" in src
+    assert "current_message_id" in src
+
+
+def test_current_message_id_none_outside_actor():
+    # Fuori da un actor in esecuzione non c'e' messaggio corrente: il
+    # rimpiazzo di self.request.id ricade su None (come Celery eager).
+    from workers.dramatiq_app import current_message_id
+
+    assert current_message_id() is None
+
+
 def test_broker_url_overridable_via_env(monkeypatch):
     from workers import dramatiq_app
 
