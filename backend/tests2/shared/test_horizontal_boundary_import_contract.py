@@ -14,6 +14,14 @@ _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _APP_CORE_ROOT = _BACKEND_ROOT / "app" / "core"
 
 _TASK_RUNTIME_PREFIX = "app/core/task_runtime/"
+# Plenora 2.0 Fase 5: pg_task_runtime e' il TaskRuntime su PostgreSQL —
+# espone gli handle-corpo dei task (workers.tasks.*) per il dispatch by-name.
+# E' un boundary di runtime a tutti gli effetti; vive in orchestrator/ (non in
+# task_runtime/) solo per non creare un ciclo orchestrator<->task_runtime
+# (vedi pg_task_runtime.py). Import lazy: nessun edge top-level nel grafo.
+_TASK_RUNTIME_EXEMPT_FILES = frozenset(
+    {"app/core/orchestrator/pg_task_runtime.py"}
+)
 
 def _imports(rel_path: str) -> set[str]:
     tree = ast.parse((_BACKEND_ROOT / rel_path).read_text(encoding="utf-8"))
@@ -39,7 +47,10 @@ def _matches_import(module: str, prefix: str) -> bool:
 
 
 def _is_task_runtime_path(rel_path: str) -> bool:
-    return rel_path.startswith(_TASK_RUNTIME_PREFIX)
+    return (
+        rel_path.startswith(_TASK_RUNTIME_PREFIX)
+        or rel_path in _TASK_RUNTIME_EXEMPT_FILES
+    )
 
 
 @pytest.mark.parametrize(

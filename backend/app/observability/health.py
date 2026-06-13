@@ -65,7 +65,7 @@ def check_postgres() -> CheckOutcome:
     Timeout letto da `READINESS_PG_TIMEOUT_SECONDS` (default 2). Cap
     <= 0 ricade sul fallback hardcoded di 2s (non disabilitabile:
     /ready senza bound sarebbe un footgun ops, stessa policy di
-    `READINESS_REDIS_TIMEOUT_SECONDS`).
+    `READINESS_BROKER_TIMEOUT_SECONDS`).
 
     Return (ok, detail). Fail-CLOSED su exception: PG e' dipendenza
     obbligatoria, niente fail-OPEN come i diagnostic checks.

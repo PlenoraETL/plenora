@@ -33,7 +33,7 @@ class Settings:
 
     Accesso:
         from app.config import settings
-        settings.CELERY_BROKER_URL
+        settings.DRAMATIQ_BROKER_URL
         settings.get("API_TIMEOUT", 30)
     """
 
@@ -53,8 +53,6 @@ class Settings:
         "DB_QUERY_TIMEOUT": 30,
         "SUPPORTED_DB_TYPES": ["postgres", "mssql", "mysql", "oracle", "sqlite"],
 
-        "CELERY_BROKER_URL":            "redis://localhost:6379/0",
-        "CELERY_RESULT_BACKEND":        "redis://localhost:6379/0",
         "CELERY_QUEUE_DEFAULT":         "default",
         "CELERY_QUEUE_DATA_PLANE":      "data-plane",
         "CELERY_QUEUE_CONTROL_PLANE":   "control-plane",
@@ -84,7 +82,6 @@ class Settings:
         # di flap Redis con due beat attivi). Override a True per
         # deployment single-instance dove nessun altro beat gira mai
         "SCHEDULE_BEAT_LEADER_FAIL_OPEN":           False,
-        "CELERY_MAX_RETRIES":           3,
         "TASK_PROGRESS_POLL_INTERVAL":  1,
         "CELERY_RESULT_EXPIRES":        86400,
 
@@ -141,10 +138,9 @@ class Settings:
         "ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED": False,
         "ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED": False,
         "ARRICCHISCI_RATE_LIMIT_REDIS_KEY_PREFIX": "plenora:arricchisci:rl",
-        # Cache distribuita opzionale per token OAuth/API provider. Usa Redis
-        # via CELERY_BROKER_URL quando disponibile; se Redis non c'e', i
-        # caller degradano alla cache locale storica.
-        "OAUTH_TOKEN_CACHE_REDIS_TIMEOUT_SEC": 1,
+        # Cache distribuita per token OAuth/API provider su PostgreSQL
+        # (Plenora 2.0 Fase 4, KeyValueStore); i caller degradano alla cache
+        # locale storica se il backend non e' disponibile.
         "OAUTH_TOKEN_CACHE_LOCK_TTL_SEC": 30,
         "OAUTH_TOKEN_CACHE_WAIT_TIMEOUT_SEC": 5,
 
@@ -394,18 +390,6 @@ class Settings:
         # quando il reconciler beat non e' running. Cap <= 0 disabilita
         # il branch (escape hatch ops
         "READINESS_BEAT_HEARTBEAT_MAX_AGE_SECONDS": 0,
-
-        # Timeout (secondi) per la PING Redis dentro check_redis
-        # Applicato sia a `socket_connect_timeout` (TCP handshake
-        # che a `socket_timeout` (operazione PING dopo handshake
-        # Senza socket_timeout, una Redis che accetta la connessione
-        # ma stalla nel rispondere bloccherebbe /health e /ready oltre
-        # il connect_timeout. Default 2s mantiene il comportamento
-        # storico; operatori possono ridurlo (es. 1s) in deploy
-        # k8s con SLO stretti, o alzarlo (es. 5s) in reti rumorose
-        # Cap <= 0 cade al fallback hardcoded di 2s (non disabilitabile
-        # un /health senza timeout sarebbe un footgun ops
-        "READINESS_REDIS_TIMEOUT_SECONDS": 2,
 
         # Timeout (secondi) per la PING del broker RabbitMQ in check_broker
         # (Plenora 2.0 Fase 5: il broker e' RabbitMQ/Dramatiq, non piu'
@@ -678,20 +662,12 @@ class Settings:
         return self._int_setting("API_TIMEOUT", 30)
 
     @property
-    def CELERY_BROKER_URL(self) -> str:
-        return self._str_setting("CELERY_BROKER_URL", "redis://localhost:6379/0")
-
-    @property
     def DRAMATIQ_BROKER_URL(self) -> str:
         # Broker RabbitMQ del worker Dramatiq (Plenora 2.0). Nessun path =
         # vhost di default "/". Allineato a workers.dramatiq_app.broker_url().
         return self._str_setting(
             "DRAMATIQ_BROKER_URL", "amqp://guest:guest@rabbitmq:5672"
         )
-
-    @property
-    def CELERY_RESULT_BACKEND(self) -> str:
-        return self._str_setting("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 
     @property
     def CELERY_QUEUE_DEFAULT(self) -> str:
@@ -732,10 +708,6 @@ class Settings:
     @property
     def CELERY_RESULT_EXPIRES(self) -> int:
         return self._int_setting("CELERY_RESULT_EXPIRES", 86400)
-
-    @property
-    def CELERY_MAX_RETRIES(self) -> int:
-        return self._int_setting("CELERY_MAX_RETRIES", 3)
 
     @property
     def MAX_PREVIEW_ROWS(self) -> int:

@@ -6,10 +6,9 @@ scadenza real-time (TTL) emula beat_leader_locks condiviso tra piu' beat.
 """
 
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-from celery.beat import Scheduler
 
 from workers.beat_scheduler import PlenoraBeatScheduler
 
@@ -139,8 +138,7 @@ def test_scenario_4_close_releases_lock_so_next_beat_acquires_immediately():
     assert beat_a._try_become_leader() is True
     assert beat_b._try_become_leader() is False
 
-    with patch.object(Scheduler, "close"):
-        beat_a.close()
+    beat_a.close()
 
     assert store.current_beat_leader() is None
     assert beat_b._try_become_leader() is True
@@ -159,8 +157,7 @@ def test_scenario_4b_close_does_not_release_lock_taken_by_another_after_ttl(monk
     assert store.current_beat_leader() == "pid-b@host-b"
 
     # A chiama close() tardivamente: NON deve cancellare il lock di B.
-    with patch.object(Scheduler, "close"):
-        beat_a.close()
+    beat_a.close()
 
     assert store.current_beat_leader() == "pid-b@host-b"
 

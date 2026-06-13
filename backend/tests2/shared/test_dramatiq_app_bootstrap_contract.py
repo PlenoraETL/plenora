@@ -15,18 +15,32 @@ pytest.importorskip("dramatiq", reason="dramatiq non installato (Fase 1)")
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-def test_queue_routes_match_celery_task_routes():
-    from workers.celery_app import celery_app
+def test_queue_routes_map_tasks_to_canonical_queues():
+    # Plenora 2.0 Fase 5: rimosso celery_app; la topologia di routing
+    # (data-plane / control-plane / scheduler) e' ora la sorgente di verita'
+    # di workers.dramatiq_app, blindata qui esplicitamente.
+    from app.config import settings
     from workers.dramatiq_app import TASK_QUEUE_ROUTES
 
-    celery_routes = {
-        name: route["queue"]
-        for name, route in (celery_app.conf.task_routes or {}).items()
+    expected = {
+        "pipeline.execute": settings.CELERY_QUEUE_DATA_PLANE,
+        "pipeline.preview": settings.CELERY_QUEUE_DATA_PLANE,
+        "carica.execute": settings.CELERY_QUEUE_DATA_PLANE,
+        "tasks.execute_enrichment": settings.CELERY_QUEUE_DATA_PLANE,
+        "workers.tasks.admin_backup_task.run_manual_backup_task": (
+            settings.CELERY_QUEUE_CONTROL_PLANE
+        ),
+        "workers.tasks.cleanup_temp_files_task.run": (
+            settings.CELERY_QUEUE_CONTROL_PLANE
+        ),
+        "workers.tasks.schedule_task.schedule_pipeline_task": (
+            settings.CELERY_QUEUE_DATA_PLANE
+        ),
+        "workers.tasks.schedule_task.beat_heartbeat": (
+            settings.CELERY_QUEUE_SCHEDULER
+        ),
     }
-    assert TASK_QUEUE_ROUTES == celery_routes, (
-        "La tabella di routing Dramatiq deve restare identica a "
-        "celery_app.task_routes finche' i due stack convivono"
-    )
+    assert TASK_QUEUE_ROUTES == expected
 
 
 def test_default_queue_matches_celery_default():

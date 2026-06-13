@@ -56,37 +56,27 @@ def test_database_url_redacted_without_credentials():
     assert str(result).startswith("postgresql://")
 
 
-def test_celery_broker_url_redacted():
-    """CELERY_BROKER_URL con eventuale auth password → redaction."""
+def test_broker_url_redacted():
+    """DRAMATIQ_BROKER_URL con eventuale auth password → redaction.
+
+    Plenora 2.0 Fase 5: il broker e' RabbitMQ (amqp), non piu' Redis."""
     from app.core.admin_runtime_config.service import _serialize_value
 
     result = _serialize_value(
-        "CELERY_BROKER_URL",
-        "redis://:redis-password@redis.internal:6379/0",
+        "DRAMATIQ_BROKER_URL",
+        "amqp://guest:broker-password@rabbitmq.internal:5672",
     )
-    assert "redis-password" not in str(result)
-    assert "redis.internal" not in str(result)
-    assert str(result).startswith("redis://")
-    assert "/0" in str(result)  # DB number preserved
-
-
-def test_celery_result_backend_redacted():
-    """CELERY_RESULT_BACKEND idem (stessa famiglia)."""
-    from app.core.admin_runtime_config.service import _serialize_value
-
-    result = _serialize_value(
-        "CELERY_RESULT_BACKEND",
-        "redis://redis.internal:6379/1",
-    )
-    assert "redis.internal" not in str(result)
+    assert "broker-password" not in str(result)
+    assert "rabbitmq.internal" not in str(result)
+    assert str(result).startswith("amqp://")
 
 
 def test_url_redact_keys_contains_known_targets():
-    """Sanity: il modulo espone _URL_REDACT_KEYS con almeno DATABASE_URL,
-    CELERY_BROKER_URL, CELERY_RESULT_BACKEND."""
+    """Sanity: il modulo espone _URL_REDACT_KEYS con almeno DATABASE_URL e
+    DRAMATIQ_BROKER_URL (il broker amqp)."""
     from app.core.admin_runtime_config.service import _URL_REDACT_KEYS
 
-    expected = {"DATABASE_URL", "CELERY_BROKER_URL", "CELERY_RESULT_BACKEND"}
+    expected = {"DATABASE_URL", "DRAMATIQ_BROKER_URL"}
     assert expected.issubset(set(_URL_REDACT_KEYS))
 
 

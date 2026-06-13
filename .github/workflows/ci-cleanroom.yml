@@ -7,37 +7,44 @@ jobs:
   cleanroom:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify Celery cleanroom readiness
+      - name: Verify Dramatiq cleanroom readiness
         run: |
           python - <<'PY'
           import importlib
-          from workers.celery_app import celery_app
-          assert celery_app.main == "dataflow_tasks"
+
+          # Importare il bootstrap del worker registra tutti gli actor con i
+          # nomi storici dei task. set_broker usa RabbitmqBroker lazy: nessuna
+          # connessione al broker a import-time (questo job non ha RabbitMQ).
+          import workers.dramatiq_app as dramatiq_app
+
           for module_name in (
               "workers.tasks.enrichment_task",
               "workers.tasks.carica_task",
               "workers.tasks.schedule_task",
               "workers.tasks.pipeline_task",
-              "workers.tasks.imdf_publish_task",
           ):
               importlib.import_module(module_name)
-          celery_app.connection().ensure_connection(max_retries=1, timeout=5)
+
+          registered = {
+              getattr(dramatiq_app, attr).actor_name
+              for attr in dir(dramatiq_app)
+              if hasattr(getattr(dramatiq_app, attr), "actor_name")
+          }
+          for actor_name in (
+              "cleanroom.ping",
+              "cleanroom.beat_ping",
+              "carica.execute",
+              "pipeline.execute",
+              "tasks.execute_enrichment",
+              "workers.tasks.schedule_task.schedule_pipeline_task",
+              "workers.tasks.schedule_task.beat_heartbeat",
+          ):
+              assert actor_name in registered, f"actor mancante: {actor_name}"
+
+          # Il runner del beat (APScheduler) deve risolvere (ExecStart del
+          # systemd plenora-beat.service: python -m workers.beat).
           from workers.beat_scheduler import PlenoraBeatScheduler
           assert PlenoraBeatScheduler
-          PY
-      - name: Verify Celery worker enqueue smoke
-        run: |
-          python - <<'PY'
-          from workers.celery_app import celery_app
-          result = celery_app.send_task("cleanroom.ping")
-          assert result.get(timeout=30) == "pong"
-          PY
-      - name: Verify Celery beat tick smoke
-        env:
-          PLENORA_CLEANROOM_BEAT_PING: "1"
-        run: |
-          python - <<'PY'
-          from workers.celery_app import celery_app
-          result = celery_app.send_task("cleanroom.beat_ping")
-          assert result.get(timeout=30) == "beat_pong"
+          from workers.beat import run as beat_run
+          assert beat_run
           PY

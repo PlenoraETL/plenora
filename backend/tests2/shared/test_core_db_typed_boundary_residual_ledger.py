@@ -253,19 +253,6 @@ _LEDGER: tuple[BoundaryEntry, ...] = (
     ),
     BoundaryEntry(
         "app/core/orchestrator/task_service.py",
-        "ActiveTaskInfo",
-        "REMOVED",
-        "Plenora 2.0 Fase 5: list_active_tasks/ActiveTaskInfo rimossi (inspect "
-        "worker Celery eliminato, nessun consumer)",
-    ),
-    BoundaryEntry(
-        "app/core/orchestrator/task_service.py",
-        "TaskInfo.to_dict",
-        "REMOVED",
-        "task info serialization is owned by app.core.orchestrator.router_mappers.task_info_to_dict",
-    ),
-    BoundaryEntry(
-        "app/core/orchestrator/task_service.py",
         "TaskService.get_task_result",
         "DONE",
         "completed-task Celery results are normalized into TaskResultPayload",

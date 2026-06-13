@@ -143,7 +143,7 @@ def test_compose_declares_five_canonical_services():
     # start of an indented line.
     expected_services = (
         "  postgres:",
-        "  redis:",
+        "  rabbitmq:",
         "  backend:",
         "  worker:",
         "  beat:",
@@ -159,7 +159,7 @@ def test_compose_declares_five_canonical_services():
 
 def test_compose_declares_named_volumes():
     text = _COMPOSE.read_text(encoding="utf-8")
-    for vol in ("postgres-data", "redis-data", "data-dir"):
+    for vol in ("postgres-data", "rabbitmq-data", "data-dir"):
         assert vol in text, (
             f"docker-compose.yml must declare named volume "
             f"{vol!r}. Anonymous volumes get garbage-collected "
@@ -180,13 +180,14 @@ def test_compose_postgres_has_pg_isready_healthcheck():
     )
 
 
-def test_compose_redis_has_ping_healthcheck():
+def test_compose_rabbitmq_has_ping_healthcheck():
     text = _COMPOSE.read_text(encoding="utf-8")
-    assert "redis-cli" in text and "PING" in text, (
-        "docker-compose.yml redis service must declare a "
-        "`redis-cli PING` healthcheck so the backend's "
-        "`depends_on: service_healthy` waits for Redis to "
-        "accept connections."
+    assert "rabbitmq-diagnostics" in text and "ping" in text, (
+        "docker-compose.yml rabbitmq service must declare a "
+        "`rabbitmq-diagnostics -q ping` healthcheck so the worker / "
+        "beat / backend `depends_on: service_healthy` waits for the "
+        "broker to accept connections (Plenora 2.0 Fase 5: il broker e' "
+        "RabbitMQ, non piu' Redis)."
     )
 
 
@@ -417,7 +418,7 @@ def test_compose_worker_and_beat_share_backend_image():
     text = _COMPOSE.read_text(encoding="utf-8")
     # The canonical plenora application image tag. It must appear in
     # exactly the three app-tier services (backend, worker, beat).
-    # postgres:17-alpine and redis:7-alpine are infrastructure images
+    # postgres:17-alpine and rabbitmq:4-alpine are infrastructure images
     # and do not use this tag.
     canonical = "plenora-backend:scaffold"
     count = text.count(canonical)

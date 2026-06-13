@@ -7,7 +7,6 @@ Scopo: cristallizzare il comportamento ATTUALE del beat scheduler
 from unittest.mock import MagicMock, patch
 
 import pytest
-from celery.beat import Scheduler
 
 from workers.beat_scheduler import PlenoraBeatScheduler
 

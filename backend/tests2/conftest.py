@@ -361,7 +361,7 @@ def _kill_stray_test_subprocesses() -> None:
         return
 
     patterns = (
-        "celery -A workers.celery_app worker",
+        "dramatiq workers.dramatiq_app",
         "uvicorn app.main:app",
         "uvicorn tests2.functional.fakes",
     )

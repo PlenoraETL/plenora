@@ -6,8 +6,8 @@ Bug coperti:
 2. manipola/executor.py:_carica_sorgenti_statiche — no logger.error
 3. arricchisci/executor.py:133-136 — exc_info=True mancante
 4. arricchisci/executor.py:219 — `_nd` ridefinito nel loop (waste)
-5. celery_app.py — `autoretry_for` includeva OSError (catturava
-   FileNotFoundError/PermissionError permanent)
+5. (storico) celery_app.py — `autoretry_for` includeva OSError; rimosso
+   col cutover Dramatiq (Fase 5), gli actor sono max_retries=0
 6. beat_scheduler.py — catchup audit fail-open DOPO send_task
    (duplicati al prossimo tick se INSERT fallisce)
 7. scheduler_execution_runtime.py:174 — set_runtime_status(RUNNING)
@@ -102,22 +102,12 @@ def test_arricchisci_schema_inference_warning_has_exc_info():
 # inline (ne' l'helper `_nd`) — delega al loop canonico `run_enrichment_canvas`.
 
 
-# Path 5: celery_app autoretry_for senza OSError
-
-def test_celery_app_autoretry_excludes_oserror():
-    """`BaseTaskWithRetry.autoretry_for` non deve includere OSError
-    generico (catturava FileNotFoundError/PermissionError permanent)."""
-    from workers.celery_app import BaseTaskWithRetry
-
-    autoretry = BaseTaskWithRetry.autoretry_for
-    assert OSError not in autoretry, (
-        "OSError NON deve essere in autoretry_for (catturava sottoclassi "
-        "permanent come FileNotFoundError, PermissionError). Pre-fix: "
-        "retry N volte su errori permanenti bloccava il worker."
-    )
-    # Le sottoclassi transient specifiche restano
-    assert ConnectionError in autoretry
-    assert TimeoutError in autoretry
+# Path 5 (storico): celery_app.py BaseTaskWithRetry.autoretry_for senza
+# OSError. Rimosso in Plenora 2.0 Fase 5 (fetta 7): niente piu' celery_app
+# ne' BaseTaskWithRetry; gli actor Dramatiq sono tutti max_retries=0 (niente
+# autoretry, i corpi ritornano dict su errore) -> il bug di OSError nella
+# lista autoretry non e' piu' rappresentabile. Parita' no-retry blindata da
+# tests2/carica/unit/test_carica_task_retry_policy_contract.py.
 
 
 # Path 6: beat_scheduler catchup audit insert PRIMA di send_task

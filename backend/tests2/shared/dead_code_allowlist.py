@@ -29,8 +29,8 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     # worker_boot; _RequestIdMiddleware propaga il correlation id via broker).
     re.compile(r"backend[\\/]+workers[\\/]+dramatiq_app\.py:\d+: unused method '(after_process_message|before_process_message|before_enqueue|before_worker_boot)' "),
 
-    # Celery tasks and signal callbacks are registered by decorators.
-    re.compile(r"backend[\\/]+workers[\\/]+celery_app\.py:\d+: unused function "),
+    # Task bodies (funzioni pure) sono invocate dagli actor Dramatiq via
+    # import lazy / shim, non per nome a import-time.
     re.compile(r"backend[\\/]+workers[\\/]+tasks[\\/]+.+\.py:\d+: unused function "),
     re.compile(r"backend[\\/]+workers[\\/]+beat_scheduler\.py:\d+: unused method '(setup_schedule|sync|tick)' "),
 

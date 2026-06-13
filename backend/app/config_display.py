@@ -22,9 +22,8 @@ def print_config(settings: Any) -> None:
     print(f"  DB_QUERY_TIMEOUT:    {settings.DB_QUERY_TIMEOUT}s")
     print(f"  API_TIMEOUT:         {settings.API_TIMEOUT}s")
     print(f"  CELERY_TASK_TIMEOUT: {settings.CELERY_TASK_TIMEOUT}s")
-    print("\nCELERY (Redis)")
-    print(f"  BROKER_URL:          {settings.CELERY_BROKER_URL}")
-    print(f"  RESULT_BACKEND:      {settings.CELERY_RESULT_BACKEND}")
+    print("\nTASK QUEUE (Dramatiq / RabbitMQ)")
+    print(f"  BROKER_URL:          {settings.DRAMATIQ_BROKER_URL}")
     print("=" * 60)
 
 

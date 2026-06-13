@@ -7,7 +7,7 @@ restano di competenza di ``_sync_from_db`` (namespace ``urby:schedule:``).
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping
 
 from app.core.scheduler.cron_schedule import IntervalSchedule
 
@@ -18,10 +18,11 @@ def _env_flag(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
 
 
-def beat_schedule_config() -> dict[str, dict[str, Any]]:
+def beat_schedule_config() -> Mapping[str, Mapping[str, Any]]:
     """Entry config-based del beat (interval-based), celery-free.
 
-    Ogni entry: ``{task, schedule (Schedule), kwargs, options}``.
+    Ogni entry: ``{task, schedule (Schedule), kwargs, options}``. Ritorno
+    tipato ``Mapping`` (non ``dict`` broad) per il typed-boundary guard.
     """
     from app.config import settings
 

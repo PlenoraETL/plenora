@@ -424,7 +424,8 @@ def test_reconcile_storage_called_from_tick():
     chain (when leadership is acquired)."""
     sched = _make_scheduler()
 
-    # Bypass leader election + super().tick().
+    # Bypass leader election. Plenora 2.0 Fase 5: il beat e' celery-free,
+    # tick() non chiama piu' un super().tick() di celery.beat.Scheduler.
     with patch.object(sched, "_try_become_leader", return_value=True), \
          patch.object(sched, "_sync_from_db"), \
          patch.object(sched, "_emit_catchup_runs"), \
@@ -436,8 +437,7 @@ def test_reconcile_storage_called_from_tick():
          patch.object(sched, "_cleanup_old_schedule_logs"), \
          patch.object(sched, "_archive_old_audit_actions"), \
          patch.object(sched, "_cleanup_orphan_temp_files"), \
-         patch.object(sched, "_reconcile_storage") as recon_mock, \
-         patch("celery.beat.Scheduler.tick", return_value=42.0):
+         patch.object(sched, "_reconcile_storage") as recon_mock:
         sched.tick()
 
     recon_mock.assert_called_once()

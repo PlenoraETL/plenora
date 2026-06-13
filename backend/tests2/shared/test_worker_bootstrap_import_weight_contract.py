@@ -1,4 +1,11 @@
-"""Contract tests for Celery worker bootstrap import weight."""
+"""Contract: import weight del bootstrap worker Dramatiq.
+
+Plenora 2.0 Fase 5: importare ``workers.dramatiq_app`` registra tutti gli
+actor (con i nomi storici dei task) SENZA tirare dentro i service
+provider/write concreti — i corpi dei task fanno import lazy dei moduli
+applicativi solo quando l'actor viene eseguito. Tiene leggero il boot del
+worker e blinda l'assenza di import pesanti a registration-time.
+"""
 
 from __future__ import annotations
 
@@ -17,15 +24,19 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
-def test_worker_task_registration_does_not_import_concrete_arcgis_services() -> None:
-    """Register Celery tasks without importing concrete provider/write services."""
+def test_actor_registration_does_not_import_concrete_arcgis_services() -> None:
+    """Registra gli actor Dramatiq senza importare provider/write concreti."""
     script = """
 import json
 import sys
 
-from workers.celery_app import celery_app
+import workers.dramatiq_app as dramatiq_app
 
-celery_app.loader.import_default_modules()
+registered = {
+    getattr(dramatiq_app, attr).actor_name
+    for attr in dir(dramatiq_app)
+    if hasattr(getattr(dramatiq_app, attr), "actor_name")
+}
 
 blocked = [
     "app.core.features.features_service",
@@ -42,7 +53,7 @@ tasks = [
 ]
 print(json.dumps({
     "blocked_imported": [name for name in blocked if name in sys.modules],
-    "missing_tasks": [name for name in tasks if name not in celery_app.tasks],
+    "missing_tasks": [name for name in tasks if name not in registered],
 }, sort_keys=True))
 """
     env = {

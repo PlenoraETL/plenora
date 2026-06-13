@@ -11,7 +11,6 @@ import os
 
 
 HARDENED_ENV_NAMES = frozenset({"production", "prod", "staging", "stage"})
-TRUTHY_ENV_VALUES = frozenset({"true", "1", "yes", "on"})
 
 
 def get_env(name: str, default: str | None = None) -> str | None:
@@ -31,10 +30,3 @@ def environment_name(default: str = "development") -> str:
 
 def is_hardened_environment() -> bool:
     return environment_name() in HARDENED_ENV_NAMES
-
-
-def env_flag(name: str, default: bool = False) -> bool:
-    value = get_env(name)
-    if value is None:
-        return default
-    return value.strip().lower() in TRUTHY_ENV_VALUES

@@ -61,6 +61,10 @@ def configure_redis_urls(env: MutableMapping[str, str]) -> None:
     env["CELERY_RESULT_BACKEND"] = (
         result_backend or _HOST_RUN_RESULT_BACKEND
     )
+    # Plenora 2.0 Fase 5: il worker dei test e' Dramatiq su RabbitMQ -> ha
+    # bisogno del broker amqp. Default host-run; in container l'env (es.
+    # DRAMATIQ_BROKER_URL=amqp://guest:guest@rabbitmq:5672) lo sovrascrive.
+    env.setdefault("DRAMATIQ_BROKER_URL", "amqp://guest:guest@127.0.0.1:5672")
 
 
 def isolate_redis_dbs(

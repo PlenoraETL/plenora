@@ -54,8 +54,7 @@ _SECRET_NEEDLES = (
 # NON vede host/port/credentials.
 _URL_REDACT_KEYS = (
     "DATABASE_URL",
-    "CELERY_BROKER_URL",
-    "CELERY_RESULT_BACKEND",
+    "DRAMATIQ_BROKER_URL",
 )
 
 _CONFIG_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -83,10 +82,9 @@ _CONFIG_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "Celery / Redis",
+        "Task queue (Dramatiq / RabbitMQ)",
         (
-            "CELERY_BROKER_URL",
-            "CELERY_RESULT_BACKEND",
+            "DRAMATIQ_BROKER_URL",
             "CELERY_QUEUE_DEFAULT",
             "CELERY_QUEUE_DATA_PLANE",
             "CELERY_QUEUE_CONTROL_PLANE",

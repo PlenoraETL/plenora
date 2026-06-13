@@ -1,13 +1,13 @@
 [Unit]
 Description=PLENORA-ETL Worker (Dramatiq)
-After=network.target rabbitmq-server.service postgresql.service redis.service
+After=network.target rabbitmq-server.service postgresql.service
 
 [Service]
 User=ubuntu
 WorkingDirectory=/home/ubuntu/plenora-etl/backend
-# Plenora 2.0 Fase 1 (cutover): il worker esegue gli actor Dramatiq da
-# RabbitMQ (non piu' celery worker da Redis). Redis resta per il KV
-# (blacklist/rate-limit) fino a Fase 4.
+# Plenora 2.0: il worker esegue gli actor Dramatiq da RabbitMQ (Redis
+# rimosso: stato/lock/blacklist/rate-limit sono su PostgreSQL). Il nome
+# dell'unit resta plenora-celery per compat dei runbook/migrazioni.
 ExecStart=/home/ubuntu/plenora-etl/backend/venv/bin/dramatiq workers.dramatiq_app --processes 2 --threads 4
 Restart=always
 RestartSec=5

@@ -38,15 +38,22 @@ class _StubStorage:
 
 @pytest.fixture
 def caplog_helper(caplog):
-    """Attach `caplog` al logger del modulo helper. Helper non setta
-    `propagate=False` (e' uno stdlib `logging.getLogger`), ma
-    rendiamo esplicito per stabilita'."""
+    """Attacca l'handler di `caplog` direttamente al logger del modulo
+    helper e DISABILITA la propagazione per la durata del test.
+
+    Senza ``propagate=False`` il record verrebbe catturato due volte —
+    una dall'handler esplicito sul logger helper, una via propagazione al
+    root dove pytest tiene lo stesso ``caplog.handler`` — facendo contare
+    due volte gli eventi (rompe gli assert ``len(...) == 1``)."""
     helper_logger = logging.getLogger("app.infrastructure.storage.compensation")
     prev_level = helper_logger.level
+    prev_propagate = helper_logger.propagate
     helper_logger.setLevel(logging.DEBUG)
+    helper_logger.propagate = False
     helper_logger.addHandler(caplog.handler)
     yield caplog
     helper_logger.removeHandler(caplog.handler)
+    helper_logger.propagate = prev_propagate
     helper_logger.setLevel(prev_level)
 
 

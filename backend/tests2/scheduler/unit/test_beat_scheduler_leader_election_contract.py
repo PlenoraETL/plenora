@@ -11,7 +11,6 @@ import time
 from unittest.mock import MagicMock, patch
 
 import pytest
-from celery.beat import Scheduler
 
 from workers.beat_scheduler import PlenoraBeatScheduler
 
@@ -103,8 +102,9 @@ class _FakeScheduler(PlenoraBeatScheduler):
 
 
 def _run_tick(scheduler):
-    with patch.object(Scheduler, "tick", return_value=1.0):
-        scheduler.tick()
+    # Plenora 2.0 Fase 5: il beat e' celery-free; tick() non chiama piu' un
+    # super().tick() di celery.beat.Scheduler. Si invoca direttamente.
+    scheduler.tick()
 
 
 # ACQUISIZIONE LEADERSHIP
@@ -130,13 +130,11 @@ def test_second_beat_sees_existing_leader_and_goes_standby():
     scheduler = _FakeScheduler(leader_id="pid-1@host-a", leader_store=store)
 
     with patch.object(scheduler, "_sync_from_db") as sync, \
-         patch.object(scheduler, "_write_heartbeat") as heartbeat, \
-         patch.object(Scheduler, "tick") as super_tick:
+         patch.object(scheduler, "_write_heartbeat") as heartbeat:
         scheduler.tick()
 
     sync.assert_not_called()
     heartbeat.assert_not_called()
-    super_tick.assert_not_called()
     assert scheduler._is_leader is False
 
 
@@ -170,7 +168,6 @@ def test_leader_loses_lock_to_another_process_and_logs_warning(caplog):
     scheduler._is_leader = True  # credeva di esserlo
 
     with patch.object(scheduler, "_sync_from_db") as sync, \
-         patch.object(Scheduler, "tick"), \
          caplog.at_level(logging.WARNING, logger="workers.beat_scheduler"):
         scheduler.tick()
 
@@ -207,12 +204,10 @@ def test_pg_unavailable_fail_closed_goes_standby(monkeypatch):
         leader_id="pid-1@host-a", leader_store=_RaisingLeaderStore()
     )
 
-    with patch.object(scheduler, "_sync_from_db") as sync, \
-         patch.object(Scheduler, "tick") as super_tick:
+    with patch.object(scheduler, "_sync_from_db") as sync:
         scheduler.tick()
 
     sync.assert_not_called()
-    super_tick.assert_not_called()
     assert scheduler._is_leader is False
 
 
@@ -225,8 +220,7 @@ def test_close_releases_leader_lock_when_still_owned():
     store.acquire_or_refresh_beat_leader(owner_token="pid-1@host-a", ttl_seconds=120)
     scheduler._is_leader = True
 
-    with patch.object(Scheduler, "close"):
-        scheduler.close()
+    scheduler.close()
 
     assert store.current_beat_leader() is None
 
@@ -238,7 +232,6 @@ def test_close_does_not_release_lock_owned_by_different_process():
     store.acquire_or_refresh_beat_leader(owner_token="pid-2@host-b", ttl_seconds=120)
     scheduler._is_leader = True  # stale flag
 
-    with patch.object(Scheduler, "close"):
-        scheduler.close()
+    scheduler.close()
 
     assert store.current_beat_leader() == "pid-2@host-b"

@@ -1,12 +1,12 @@
 # BE-GO-READY-INSTALL-011-FIRST-DOCKER-SCAFFOLD
 #
 # First executable Docker scaffold for Plenora-ETL. Brings up:
-#   - postgres   : Plenora catalog DB (schema autocreates on backend boot)
-#   - redis      : Celery broker + result backend + leader-lock + JWT
-#                  blacklist (one canonical URL)
+#   - postgres   : Plenora catalog DB (schema autocreates on backend boot;
+#                  also result/progress store, leader-lock, JWT blacklist)
+#   - rabbitmq   : task broker (Dramatiq)
 #   - backend    : FastAPI (uvicorn :5004) with /health and /ready
-#   - worker     : Celery worker (--pool=solo for determinism)
-#   - beat       : Celery beat with PlenoraBeatScheduler
+#   - worker     : Dramatiq worker (python -m dramatiq workers.dramatiq_app)
+#   - beat       : APScheduler beat (python -m workers.beat)
 #   - frontend   : Vite production build served by nginx (:3000 -> :80)
 #
 # MinIO and the systemd backup unit are intentionally OUT of this
@@ -36,23 +36,9 @@ services:
       start_period: 5s
     restart: unless-stopped
 
-  redis:
-    image: redis:7-alpine
-    # AOF on so the beat leader-lock survives Redis restarts.
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "PING"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 3s
-    restart: unless-stopped
-
-  # Plenora 2.0 (Fase 1): broker target della migrazione Dramatiq.
-  # Convive con redis finche' il cutover non e' completo (Fase 5 rimuove
-  # redis). Nessuna porta host: solo rete compose.
+  # Plenora 2.0 (Fase 5): RabbitMQ e' il broker dei task (Dramatiq); Redis
+  # e' stato rimosso (result/progress, lock e blacklist sono su PostgreSQL).
+  # Nessuna porta host: solo rete compose.
   rabbitmq:
     image: rabbitmq:4-alpine
     volumes:
@@ -74,8 +60,7 @@ services:
       - .env.docker
     environment:
       DATABASE_URL: postgresql://plenora:plenora@postgres:5432/plenora
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DRAMATIQ_BROKER_URL: amqp://guest:guest@rabbitmq:5672
       DATA_DIR: /data
     volumes:
       - data-dir:/data
@@ -84,13 +69,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     # CMD inherited from Dockerfile (uvicorn). HEALTHCHECK inherited.
-    # Plenora 2.0 Fase 1 (cutover): l'API dispatcha i task su RabbitMQ
-    # (Dramatiq); redis resta per il KV (blacklist/rate-limit) fino a Fase 4.
+    # Plenora 2.0: l'API dispatcha i task su RabbitMQ (Dramatiq); stato,
+    # lock, blacklist e rate-limit sono su PostgreSQL (Redis rimosso).
     restart: unless-stopped
 
   worker:
@@ -105,8 +88,7 @@ services:
       - .env.docker
     environment:
       DATABASE_URL: postgresql://plenora:plenora@postgres:5432/plenora
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DRAMATIQ_BROKER_URL: amqp://guest:guest@rabbitmq:5672
       DATA_DIR: /data
     volumes:
       - data-dir:/data
@@ -115,12 +97,10 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-      redis:
-        condition: service_healthy
       backend:
         condition: service_started
-    # Plenora 2.0 Fase 1 (cutover): il worker esegue gli actor Dramatiq da
-    # RabbitMQ (non piu' celery worker da Redis). 1 processo / 8 thread per
+    # Plenora 2.0: il worker esegue gli actor Dramatiq da RabbitMQ
+    # (Redis rimosso). 1 processo / 8 thread per
     # lo scaffold single-machine; il routing actor->coda e' in dramatiq_app.
     entrypoint: ["python", "-m", "dramatiq", "workers.dramatiq_app"]
     command: ["--processes", "1", "--threads", "8"]
@@ -137,8 +117,7 @@ services:
       - .env.docker
     environment:
       DATABASE_URL: postgresql://plenora:plenora@postgres:5432/plenora
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      DRAMATIQ_BROKER_URL: amqp://guest:guest@rabbitmq:5672
       DATA_DIR: /data
     volumes:
       - data-dir:/data
@@ -175,7 +154,6 @@ services:
 
 volumes:
   postgres-data:
-  redis-data:
   rabbitmq-data:
   data-dir:
 

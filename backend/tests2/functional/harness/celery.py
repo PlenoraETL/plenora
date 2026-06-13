@@ -16,23 +16,25 @@ def spawn_celery_worker(
     env: Optional[dict] = None,
     loglevel: str = "warning",
 ) -> ManagedProcess:
-    """Avvia un worker Celery locale con pool solo.
+    """Avvia un worker dei task locale (Plenora 2.0: Dramatiq su RabbitMQ).
 
-    Non fa readiness check attivo: i test funzionali async dovranno
-    definire un handshake piu' specifico (per esempio submit + poll).
+    Plenora 2.0 Fase 5: niente piu' ``celery worker``; il worker e'
+    ``python -m dramatiq workers.dramatiq_app`` (1 processo / 4 thread). Il
+    nome della funzione resta per compat dei chiamanti (fixture gated dietro
+    URBY_RUN_INTEGRATION). Non fa readiness check attivo: i test async
+    definiscono un handshake piu' specifico (submit + poll su PG).
     """
     return spawn_process(
-        name="celery-worker",
+        name="dramatiq-worker",
         command=[
             sys.executable,
             "-m",
-            "celery",
-            "-A",
-            "workers.celery_app",
-            "worker",
-            "--pool=solo",
-            "--loglevel",
-            loglevel,
+            "dramatiq",
+            "workers.dramatiq_app",
+            "--processes",
+            "1",
+            "--threads",
+            "4",
         ],
         workdir=workdir,
         env=env,
