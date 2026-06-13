@@ -28,6 +28,7 @@ from app.core.scheduler.job_dispatcher import (
 from app.core.scheduler import log_archive as scheduler_log_archive
 from app.core.scheduler import log_service as scheduler_log_service
 from app.core.scheduler import schedule_service as schedule_service_module
+from app.core.scheduler import beat_leader_store
 from app.core.resources import storage_reconciliation as storage_reconciliation_module
 from app.core.io.local_cleanup import rmtree_safe
 from app.infrastructure.storage import compensation as storage_compensation
@@ -37,14 +38,10 @@ logger = get_logger(__name__)
 DEFAULT_MAX_INTERVAL = 60.0
 
 # TTL=120s + refresh a ogni tick (~60s) → margine 2x per sopravvivere
-# a un tick lento o a un transient di rete senza perdere leadership
-_LEADER_LOCK_KEY = "scheduler:beat:leader"
+# a un tick lento o a un transient di rete senza perdere leadership.
+# Plenora 2.0 Fase 3: il lock leader vive su PostgreSQL (beat_leader_locks),
+# non piu' su Redis. Vedi app.core.scheduler.beat_leader_store.
 _LEADER_LOCK_TTL_SECONDS = 120
-
-# Beat is a separate process, so leader transition telemetry uses Redis.
-_LEADER_METRICS_HASH = "scheduler:beat:leader:transitions"
-_LEADER_METRICS_CURRENT_ID = "scheduler:beat:leader:current_leader_id"
-_LEADER_METRICS_LAST_TRANSITION_AT = "scheduler:beat:leader:last_transition_at"
 
 _PG_CONNECTION_MODULE = importlib.import_module("app.db.pg_connection")
 _ORIGINAL_PG_FETCHALL = getattr(_PG_CONNECTION_MODULE, "fetchall")
@@ -96,76 +93,28 @@ class PlenoraBeatScheduler(Scheduler):
         self._db_loaded = False
         self._leader_id = f"{os.getpid()}@{socket.gethostname()}"
         self._is_leader = False
-        self._redis_client = None
+        # Plenora 2.0 Fase 3: lock leader su PostgreSQL (iniettabile nei test).
+        self._leader_store = beat_leader_store
         super().__init__(*args, **kwargs)
         logger.info(
-            f"PlenoraBeatScheduler avviato (schedule da Postgres, "
-            f"broker Redis, leader_id={self._leader_id})"
+            f"PlenoraBeatScheduler avviato (schedule + leader lock da "
+            f"Postgres, leader_id={self._leader_id})"
         )
 
-    def _get_redis(self) -> Optional[object]:
-        """Lazy init del client Redis. Ritorna None se non raggiungibile
-        (trigger del degraded fallback single-instance)."""
-        if self._redis_client is not None:
-            return self._redis_client
-        try:
-            import redis
-
-            client = redis.Redis.from_url(app_config.settings.CELERY_BROKER_URL)
-            client.ping()
-            self._redis_client = client
-            return client
-        except Exception as e:
-            logger.error(f"[LEADER] Redis non raggiungibile: {e}", exc_info=True)
-            return None
-
-    def _record_leader_transition(self, transition_type: str) -> None:
-        """Telemetria best-effort delle transizioni leader.
-
-        Scrive su Redis:
-        - HINCRBY sulla hash counter per `transition_type`
-        - SET del current_leader_id (solo su acquired/degraded_open)
-        - SET dell'ISO timestamp dell'ultima transizione
-
-        Best-effort: se Redis e' giu' o la scrittura fallisce, la
-        transizione e' loggata (dal caller) ma la metrica e' persa.
-        Mai rompe il flow di leader election per un errore metric.
-        """
-        client = self._redis_client
-        if client is None:
-            return
-        try:
-            client.hincrby(_LEADER_METRICS_HASH, transition_type, 1)
-            client.set(
-                _LEADER_METRICS_LAST_TRANSITION_AT,
-                datetime.now(timezone.utc).isoformat(),
-            )
-            if transition_type in ("acquired", "degraded_open"):
-                client.set(_LEADER_METRICS_CURRENT_ID, self._leader_id)
-            elif transition_type in ("lost", "released"):
-                client.delete(_LEADER_METRICS_CURRENT_ID)
-        except Exception as e:
-            logger.warning(
-                f"[LEADER] Metric write failed for transition="
-                f"{transition_type}: {e}"
-            )
-
     def _try_become_leader(self) -> bool:
-        """Tenta di acquisire o refreshare il lock leader.
+        """Tenta di acquisire o refreshare il lock leader su PostgreSQL.
 
-        Logica:
-        1. SET ... NX EX: acquisizione atomica se la chiave non esiste.
-        2. Altrimenti, GET: se il valore e' il mio leader_id → sono
-           ancora leader, EXPIRE per refreshare il TTL.
-        3. Altrimenti → qualcun altro e' leader, standby.
+        Un singolo upsert atomico (beat_leader_store.acquire_or_refresh)
+        acquisisce se il lock e' libero/scaduto o lo rinnova se sono gia'
+        owner; altrimenti standby.
 
-        Degraded mode (Redis unavailable o errore durante acquire):
-        - Default **fail-closed**: standby, `return False`. Evita che
-          due beat diventino entrambi leader durante un flap Redis
-          riaprendo il doppio enqueue.
-        - Con `SCHEDULE_BEAT_LEADER_FAIL_OPEN=True`: comportamento
-          legacy (assumi di essere leader single-instance). Utile per
-          deployment mono-host dove nessun altro beat gira mai.
+        Degraded mode (PostgreSQL unavailable o errore durante acquire):
+        - Default **fail-closed**: standby, `return False`. Evita che due
+          beat diventino entrambi leader durante un flap DB riaprendo il
+          doppio enqueue.
+        - Con `SCHEDULE_BEAT_LEADER_FAIL_OPEN=True`: comportamento legacy
+          (assumi di essere leader single-instance). Utile per deployment
+          mono-host dove nessun altro beat gira mai.
 
         Il flag e' letto a ogni chiamata dai settings (non cache), cosi'
         puo' essere cambiato runtime via env var per incident response
@@ -174,88 +123,56 @@ class PlenoraBeatScheduler(Scheduler):
         Returns:
             True se questo processo e' (o e' diventato) leader.
         """
+        try:
+            acquired = self._leader_store.acquire_or_refresh_beat_leader(
+                owner_token=self._leader_id,
+                ttl_seconds=_LEADER_LOCK_TTL_SECONDS,
+            )
+        except Exception as e:
+            logger.error(
+                f"[LEADER] Errore PostgreSQL durante acquire leader: {e}",
+                exc_info=True,
+            )
+            return self._degraded_leader_result()
+
+        was_leader = self._is_leader
+        self._is_leader = acquired
+        if acquired and not was_leader:
+            logger.info(f"[LEADER] Acquisito: {self._leader_id}")
+        elif not acquired and was_leader:
+            logger.warning(
+                f"[LEADER] Perso (lock scaduto e ripreso da un altro beat, "
+                f"io={self._leader_id}). Passo in standby."
+            )
+        return acquired
+
+    def _degraded_leader_result(self) -> bool:
+        """Esito della leader election quando PostgreSQL non risponde."""
         fail_open = bool(
             getattr(app_config.settings, "SCHEDULE_BEAT_LEADER_FAIL_OPEN", False)
         )
-
-        def _degraded_result() -> bool:
-            if fail_open:
-                was_leader = self._is_leader
-                if not was_leader:
-                    logger.warning(
-                        "[LEADER] Redis unavailable — fallback single-instance "
-                        "leader (SCHEDULE_BEAT_LEADER_FAIL_OPEN=True)"
-                    )
-                self._is_leader = True
-                if not was_leader:
-                    self._record_leader_transition("degraded_open")
-                return True
-            else:
-                was_leader = self._is_leader
-                if was_leader:
-                    logger.warning(
-                        "[LEADER] Redis unavailable — perso, passo in standby "
-                        "(fail-closed default). Set SCHEDULE_BEAT_LEADER_FAIL_OPEN=True "
-                        "per il behavior legacy single-instance."
-                    )
-                else:
-                    logger.warning(
-                        "[LEADER] Redis unavailable — beat in standby "
-                        "(fail-closed default)"
-                    )
-                self._is_leader = False
-                if was_leader:
-                    self._record_leader_transition("standby")
-                return False
-
-        client = self._get_redis()
-        if client is None:
-            return _degraded_result()
-
-        try:
-            acquired = client.set(
-                _LEADER_LOCK_KEY,
-                self._leader_id,
-                nx=True,
-                ex=_LEADER_LOCK_TTL_SECONDS,
-            )
-            if acquired:
-                was_leader = self._is_leader
-                if not was_leader:
-                    logger.info(f"[LEADER] Acquisito: {self._leader_id}")
-                self._is_leader = True
-                if not was_leader:
-                    self._record_leader_transition("acquired")
-                return True
-
-            # Lock gia' preso — sono io o qualcun altro?
-            current_raw = client.get(_LEADER_LOCK_KEY)
-            current = current_raw.decode("utf-8") if current_raw else None
-
-            if current == self._leader_id:
-                # Sono ancora leader — refresh TTL
-                client.expire(_LEADER_LOCK_KEY, _LEADER_LOCK_TTL_SECONDS)
-                self._is_leader = True
-                return True
-
-            # Qualcun altro e' leader
-            was_leader = self._is_leader
-            if was_leader:
+        was_leader = self._is_leader
+        if fail_open:
+            if not was_leader:
                 logger.warning(
-                    f"[LEADER] Perso: ora '{current}' e' leader "
-                    f"(io={self._leader_id}). Passo in standby."
+                    "[LEADER] PostgreSQL unavailable — fallback single-instance "
+                    "leader (SCHEDULE_BEAT_LEADER_FAIL_OPEN=True)"
                 )
-            self._is_leader = False
-            if was_leader:
-                self._record_leader_transition("lost")
-            return False
-
-        except Exception as e:
-            logger.error(
-                f"[LEADER] Errore comunicazione Redis durante acquire: {e}",
-                exc_info=True,
+            self._is_leader = True
+            return True
+        if was_leader:
+            logger.warning(
+                "[LEADER] PostgreSQL unavailable — perso, passo in standby "
+                "(fail-closed default). Set SCHEDULE_BEAT_LEADER_FAIL_OPEN=True "
+                "per il behavior legacy single-instance."
             )
-            return _degraded_result()
+        else:
+            logger.warning(
+                "[LEADER] PostgreSQL unavailable — beat in standby "
+                "(fail-closed default)"
+            )
+        self._is_leader = False
+        return False
 
     # Override principale: called ogni tick da Celery Beat
 
@@ -267,6 +184,7 @@ class PlenoraBeatScheduler(Scheduler):
     _last_schedule_logs_retention: float = 0.0
     _last_temp_orphan_cleanup: float = 0.0
     _last_storage_reconcile: float = 0.0
+    _last_task_results_cleanup: float = 0.0
 
     def tick(self, event_t: Optional[object] = None, **kwargs: object) -> float:
         """Override tick:
@@ -293,6 +211,7 @@ class PlenoraBeatScheduler(Scheduler):
         self._archive_old_audit_actions()
         self._cleanup_orphan_temp_files()
         self._reconcile_storage()
+        self._cleanup_task_results()
         if event_t is not None:
             return super().tick(event_t=event_t, **kwargs)
         return super().tick(**kwargs)
@@ -1489,6 +1408,28 @@ class PlenoraBeatScheduler(Scheduler):
 
     # Persistenza — non usiamo file shelve, tutto su DB
 
+    def _cleanup_task_results(self) -> None:
+        """Sweep TTL della tabella task_results (Plenora 2.0, Fase 2/3).
+
+        Rimpiazza la scadenza automatica che Redis faceva via
+        CELERY_RESULT_EXPIRES: cancella le righe di stato/esito task con
+        expires_at scaduto. Throttle 1h: e' una semplice DELETE indicizzata
+        su expires_at, non serve a ogni tick."""
+        now = _t.time()
+        if now - self._last_task_results_cleanup < 3600:  # 1h
+            return
+        self._last_task_results_cleanup = now
+        try:
+            from app.core.orchestrator.task_result_store import (
+                default_task_result_store,
+            )
+
+            deleted = default_task_result_store().cleanup_expired()
+            if deleted:
+                logger.info(f"[CLEANUP] task_results scaduti rimossi: {deleted}")
+        except Exception as e:
+            logger.warning(f"[CLEANUP] sweep task_results fallito: {e}")
+
     def setup_schedule(self) -> None:
         """Inizializza schedule vuoto — verrà popolato dal DB al primo tick.
 
@@ -1579,27 +1520,23 @@ class PlenoraBeatScheduler(Scheduler):
     def close(self) -> None:
         """Cleanup alla chiusura.
 
-        Rilascia il lock leader su Redis se e' ancora posseduto da questo
-        processo: cosi' un altro beat puo' prenderlo subito invece di
-        aspettare il TTL di 120s. La release e' "safe": controlla che il
-        valore del lock sia ancora il nostro leader_id prima di cancellare
-        (evita race durante failover dove il nostro TTL e' scaduto e un
-        altro processo ha ripreso nel frattempo)."""
+        Rilascia il lock leader su PostgreSQL se e' ancora posseduto da
+        questo processo: cosi' un altro beat puo' prenderlo subito invece
+        di aspettare il TTL di 120s. La release e' "safe" (DELETE filtrato
+        per owner_token nello store): un beat che ha gia' perso la
+        leadership non cancella il lock di un altro durante un failover."""
         if self._is_leader:
             try:
-                client = self._get_redis()
-                if client is not None:
-                    current_raw = client.get(_LEADER_LOCK_KEY)
-                    current = current_raw.decode("utf-8") if current_raw else None
-                    if current == self._leader_id:
-                        client.delete(_LEADER_LOCK_KEY)
-                        logger.info(f"[LEADER] Rilasciato su close: {self._leader_id}")
-                        self._record_leader_transition("released")
-                    else:
-                        logger.info(
-                            f"[LEADER] Skip release su close: il lock e' ora "
-                            f"posseduto da '{current}' (io={self._leader_id})"
-                        )
+                released = self._leader_store.release_beat_leader(
+                    owner_token=self._leader_id
+                )
+                if released:
+                    logger.info(f"[LEADER] Rilasciato su close: {self._leader_id}")
+                else:
+                    logger.info(
+                        f"[LEADER] Skip release su close: il lock non e' piu' "
+                        f"mio (io={self._leader_id})"
+                    )
             except Exception as e:
                 logger.warning(f"[LEADER] Errore release su close: {e}")
         logger.info("PlenoraBeatScheduler chiuso")

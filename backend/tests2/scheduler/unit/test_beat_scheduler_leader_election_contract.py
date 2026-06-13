@@ -1,11 +1,13 @@
 """
-Leader election del beat scheduler via Redis SETNX (C3 punto 1).
+Leader election del beat scheduler via lock PostgreSQL (Plenora 2.0, Fase 3).
 
-Contratto atteso
+Prima usava Redis SETNX; ora un upsert atomico su beat_leader_locks
+(acquire-or-refresh con TTL). Il contratto e' invariato — un solo leader,
+refresh del TTL, standby per i non-leader, degraded fail-closed/open — qui
+verificato iniettando un fake store PG con scadenza real-time (lane no-DB).
 """
 
 import time
-from typing import Dict, Optional, Tuple
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,14 +21,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
 
 @pytest.fixture(autouse=True)
 def _neutralize_db_bound_maintenance():
-    """Il tick da leader esegue 10 step di manutenzione; questo file ne
-    blinda solo alcuni (sync/heartbeat/stuck/cleanup) e i restanti —
-    aggiunti dopo la scrittura di questi test — andavano sul DB/coda
-    reali: nella lane no-DB ogni tick costava 30s di PoolTimeout
-    (apparente hang della suite). Qui il contratto sotto test e' la
-    leader election, non la manutenzione: la si azzera in blocco a
-    livello di classe (i patch per-istanza dei singoli test vincono
-    comunque)."""
+    """Il tick da leader esegue gli step di manutenzione; questo file blinda
+    la leader election, non la manutenzione: la si azzera in blocco."""
     maintenance = (
         "_sync_from_db",
         "_emit_catchup_runs",
@@ -39,6 +35,7 @@ def _neutralize_db_bound_maintenance():
         "_archive_old_audit_actions",
         "_cleanup_orphan_temp_files",
         "_reconcile_storage",
+        "_cleanup_task_results",
     )
     with patch.multiple(
         PlenoraBeatScheduler,
@@ -47,48 +44,52 @@ def _neutralize_db_bound_maintenance():
         yield
 
 
-class _FakeRedis:
-    """Emula il subset di redis-py usato dalla leader election."""
+class _FakePgLeaderStore:
+    """Emula beat_leader_store su PostgreSQL con scadenza real-time.
+
+    Condiviso tra piu' _FakeScheduler = stessa riga beat_leader_locks
+    (due processi beat che contendono lo stesso lock)."""
 
     def __init__(self):
-        # key -> (value_bytes, expires_at_epoch_or_None)
-        self._data: Dict[str, Tuple[bytes, Optional[float]]] = {}
+        self._owner = None
+        self._expires_at = None  # epoch
 
-    def set(self, key: str, value, nx: bool = False, ex: Optional[int] = None):
-        self._sweep()
-        if nx and key in self._data:
-            return None
-        value_bytes = value.encode("utf-8") if isinstance(value, str) else value
-        expires_at = time.time() + ex if ex else None
-        self._data[key] = (value_bytes, expires_at)
-        return True
-
-    def get(self, key: str):
-        self._sweep()
-        entry = self._data.get(key)
-        return entry[0] if entry else None
-
-    def expire(self, key: str, ex: int) -> bool:
-        if key not in self._data:
-            return False
-        value, _ = self._data[key]
-        self._data[key] = (value, time.time() + ex)
-        return True
-
-    def delete(self, key: str) -> int:
-        return 1 if self._data.pop(key, None) is not None else 0
-
-    def _sweep(self):
+    def acquire_or_refresh_beat_leader(self, *, owner_token, ttl_seconds):
         now = time.time()
-        expired = [k for k, (_, exp) in self._data.items() if exp and now > exp]
-        for k in expired:
-            del self._data[k]
+        expired = self._expires_at is None or now > self._expires_at
+        if self._owner is None or expired or self._owner == owner_token:
+            self._owner = owner_token
+            self._expires_at = now + ttl_seconds
+            return True
+        return False
+
+    def release_beat_leader(self, *, owner_token):
+        if self._owner == owner_token:
+            self._owner = None
+            self._expires_at = None
+            return True
+        return False
+
+    def current_beat_leader(self):
+        if self._owner and self._expires_at and time.time() <= self._expires_at:
+            return self._owner
+        return None
+
+
+class _RaisingLeaderStore:
+    """Store che simula PostgreSQL irraggiungibile (degraded mode)."""
+
+    def acquire_or_refresh_beat_leader(self, *, owner_token, ttl_seconds):
+        raise RuntimeError("PostgreSQL unavailable")
+
+    def release_beat_leader(self, *, owner_token):
+        raise RuntimeError("PostgreSQL unavailable")
 
 
 class _FakeScheduler(PlenoraBeatScheduler):
-    """PlenoraBeatScheduler senza bootstrap Celery, con Redis fake iniettato."""
+    """PlenoraBeatScheduler senza bootstrap Celery, con store iniettato."""
 
-    def __init__(self, leader_id: str = "pid-1@host-a", redis_client=None):
+    def __init__(self, leader_id="pid-1@host-a", leader_store=None):
         self._db_loaded = False
         self.data = {}
         self.app = MagicMock()
@@ -96,110 +97,79 @@ class _FakeScheduler(PlenoraBeatScheduler):
         self._last_stuck_check = 0.0
         self._last_eseguibili_cleanup = 0.0
         self._last_logs_retention = 0.0
-        self._last_imdf_bundles_cleanup = 0.0
-        # Attributi per leader election (aggiunti dal fix)
         self._leader_id = leader_id
         self._is_leader = False
-        self._redis_client = redis_client
+        self._leader_store = leader_store or _FakePgLeaderStore()
+
+
+def _run_tick(scheduler):
+    with patch.object(Scheduler, "tick", return_value=1.0):
+        scheduler.tick()
 
 
 # ACQUISIZIONE LEADERSHIP
 
 
-def test_first_tick_acquires_leader_lock_when_key_absent():
-    """Primo beat che parte: il lock non esiste, il SETNX riesce,
-    il beat diventa leader e procede con sync+cleanup."""
-    redis = _FakeRedis()
-    scheduler = _FakeScheduler(leader_id="pid-1@host-a", redis_client=redis)
+def test_first_tick_acquires_leader_lock_when_free():
+    store = _FakePgLeaderStore()
+    scheduler = _FakeScheduler(leader_id="pid-1@host-a", leader_store=store)
 
-    with patch.object(scheduler, "_sync_from_db") as sync, \
-         patch.object(scheduler, "_write_heartbeat"), \
-         patch.object(scheduler, "_check_stuck_tasks"), \
-         patch.object(scheduler, "_cleanup_eseguibili_outputs"), \
-         patch.object(scheduler, "_cleanup_old_logs"), \
-         patch.object(Scheduler, "tick", return_value=1.0):
-        scheduler.tick()
+    with patch.object(scheduler, "_sync_from_db") as sync:
+        _run_tick(scheduler)
 
     sync.assert_called_once()
     assert scheduler._is_leader is True
-    assert redis.get("scheduler:beat:leader") == b"pid-1@host-a"
+    assert store.current_beat_leader() == "pid-1@host-a"
 
 
 def test_second_beat_sees_existing_leader_and_goes_standby():
-    """Un secondo beat avviato quando il lock gia' esiste NON deve
-    fare sync, cleanup, ne' super().tick(). Deve restare idle."""
-    redis = _FakeRedis()
-    # Primo beat ha gia' il lock
-    redis.set("scheduler:beat:leader", "pid-99@host-x", nx=True, ex=120)
+    store = _FakePgLeaderStore()
+    # Primo beat ha gia' il lock.
+    store.acquire_or_refresh_beat_leader(owner_token="pid-99@host-x", ttl_seconds=120)
 
-    scheduler = _FakeScheduler(leader_id="pid-1@host-a", redis_client=redis)
+    scheduler = _FakeScheduler(leader_id="pid-1@host-a", leader_store=store)
 
     with patch.object(scheduler, "_sync_from_db") as sync, \
          patch.object(scheduler, "_write_heartbeat") as heartbeat, \
-         patch.object(scheduler, "_check_stuck_tasks") as stuck, \
          patch.object(Scheduler, "tick") as super_tick:
         scheduler.tick()
 
     sync.assert_not_called()
     heartbeat.assert_not_called()
-    stuck.assert_not_called()
     super_tick.assert_not_called()
     assert scheduler._is_leader is False
 
 
 def test_leader_refreshes_ttl_on_subsequent_ticks():
-    """Un beat che e' gia' leader, al tick successivo deve refresh-are
-    il TTL (expire) per evitare che scada mentre sta lavorando."""
-    redis = _FakeRedis()
-    scheduler = _FakeScheduler(leader_id="pid-1@host-a", redis_client=redis)
+    store = _FakePgLeaderStore()
+    scheduler = _FakeScheduler(leader_id="pid-1@host-a", leader_store=store)
 
-    # Primo tick: acquisisce
-    with patch.object(scheduler, "_sync_from_db"), \
-         patch.object(scheduler, "_write_heartbeat"), \
-         patch.object(scheduler, "_check_stuck_tasks"), \
-         patch.object(scheduler, "_cleanup_eseguibili_outputs"), \
-         patch.object(scheduler, "_cleanup_old_logs"), \
-         patch.object(Scheduler, "tick", return_value=1.0):
-        scheduler.tick()
+    with patch.object(scheduler, "_sync_from_db"):
+        _run_tick(scheduler)
+    original_expire = store._expires_at
 
-    original_expire = redis._data["scheduler:beat:leader"][1]
-
-    # Forza avanzamento del tempo nel fake (simulazione passaggio secondi)
     time.sleep(0.01)
 
-    # Secondo tick: refresh
-    with patch.object(scheduler, "_sync_from_db"), \
-         patch.object(scheduler, "_write_heartbeat"), \
-         patch.object(scheduler, "_check_stuck_tasks"), \
-         patch.object(scheduler, "_cleanup_eseguibili_outputs"), \
-         patch.object(scheduler, "_cleanup_old_logs"), \
-         patch.object(Scheduler, "tick", return_value=1.0):
-        scheduler.tick()
-
-    new_expire = redis._data["scheduler:beat:leader"][1]
-    assert new_expire > original_expire
+    with patch.object(scheduler, "_sync_from_db"):
+        _run_tick(scheduler)
+    assert store._expires_at > original_expire
+    assert scheduler._is_leader is True
 
 
-# LEADERSHIP LOST / RIPRESA
+# LEADERSHIP LOST
 
 
 def test_leader_loses_lock_to_another_process_and_logs_warning(caplog):
-    """Il beat che era leader scopre che qualcun altro ha preso il lock
-    (scenario: il suo TTL e' scaduto mentre era bloccato, un altro
-    processo ha acquisito). Deve loggare WARNING e passare in standby."""
     import logging
 
-    redis = _FakeRedis()
-    scheduler = _FakeScheduler(leader_id="pid-1@host-a", redis_client=redis)
-    scheduler._is_leader = True
-    # Un altro processo ha il lock
-    redis.set("scheduler:beat:leader", "pid-2@host-b", ex=120)
+    store = _FakePgLeaderStore()
+    # Un altro processo detiene il lock (non scaduto).
+    store.acquire_or_refresh_beat_leader(owner_token="pid-2@host-b", ttl_seconds=120)
+
+    scheduler = _FakeScheduler(leader_id="pid-1@host-a", leader_store=store)
+    scheduler._is_leader = True  # credeva di esserlo
 
     with patch.object(scheduler, "_sync_from_db") as sync, \
-         patch.object(scheduler, "_write_heartbeat"), \
-         patch.object(scheduler, "_check_stuck_tasks"), \
-         patch.object(scheduler, "_cleanup_eseguibili_outputs"), \
-         patch.object(scheduler, "_cleanup_old_logs"), \
          patch.object(Scheduler, "tick"), \
          caplog.at_level(logging.WARNING, logger="workers.beat_scheduler"):
         scheduler.tick()
@@ -209,69 +179,66 @@ def test_leader_loses_lock_to_another_process_and_logs_warning(caplog):
     assert any("LEADER" in rec.getMessage() for rec in caplog.records)
 
 
-# DEGRADED MODE: Redis non raggiungibile
+# DEGRADED MODE: PostgreSQL non raggiungibile
 
 
-def test_redis_unavailable_falls_back_to_single_instance_leader(monkeypatch):
-    """Con SCHEDULE_BEAT_LEADER_FAIL_OPEN=True (flag esplicito), Redis
-    unavailable → beat diventa leader single-instance (behavior legacy).
-
-    Nota: il DEFAULT e' fail-closed. Questo test documenta il
-    comportamento opt-in per deployment mono-host."""
-    # `SCHEDULE_BEAT_LEADER_FAIL_OPEN` vive dentro DEFAULTS dict, non come
-    # property di Settings: il consumer (workers/beat_scheduler.py) fa
-    # `getattr(settings, key, False)`. Settiamo l'attributo con
-    # `raising=False` cosi' monkeypatch lo aggiunge in setup e lo rimuove
-    # al teardown senza esigere che esista a priori.
+def test_pg_unavailable_fail_open_stays_leader(monkeypatch):
     monkeypatch.setattr(
         "app.config.settings.SCHEDULE_BEAT_LEADER_FAIL_OPEN", True,
         raising=False,
     )
-    scheduler = _FakeScheduler(leader_id="pid-1@host-a", redis_client=None)
+    scheduler = _FakeScheduler(
+        leader_id="pid-1@host-a", leader_store=_RaisingLeaderStore()
+    )
 
-    with patch.object(scheduler, "_get_redis", return_value=None), \
-         patch.object(scheduler, "_sync_from_db") as sync, \
-         patch.object(scheduler, "_emit_catchup_runs"), \
-         patch.object(scheduler, "_write_heartbeat"), \
-         patch.object(scheduler, "_check_stuck_tasks"), \
-         patch.object(scheduler, "_cleanup_eseguibili_outputs"), \
-         patch.object(scheduler, "_cleanup_old_logs"), \
-         patch.object(Scheduler, "tick", return_value=1.0):
-        scheduler.tick()
+    with patch.object(scheduler, "_sync_from_db") as sync:
+        _run_tick(scheduler)
 
     sync.assert_called_once()
     assert scheduler._is_leader is True
+
+
+def test_pg_unavailable_fail_closed_goes_standby(monkeypatch):
+    monkeypatch.setattr(
+        "app.config.settings.SCHEDULE_BEAT_LEADER_FAIL_OPEN", False,
+        raising=False,
+    )
+    scheduler = _FakeScheduler(
+        leader_id="pid-1@host-a", leader_store=_RaisingLeaderStore()
+    )
+
+    with patch.object(scheduler, "_sync_from_db") as sync, \
+         patch.object(Scheduler, "tick") as super_tick:
+        scheduler.tick()
+
+    sync.assert_not_called()
+    super_tick.assert_not_called()
+    assert scheduler._is_leader is False
 
 
 # SHUTDOWN: release del lock
 
 
 def test_close_releases_leader_lock_when_still_owned():
-    """Su shutdown pulito (close), il leader rilascia il lock cosi' che
-    un altro beat possa prenderlo subito invece di aspettare il TTL."""
-    redis = _FakeRedis()
-    scheduler = _FakeScheduler(leader_id="pid-1@host-a", redis_client=redis)
-    redis.set("scheduler:beat:leader", "pid-1@host-a", ex=120)
+    store = _FakePgLeaderStore()
+    scheduler = _FakeScheduler(leader_id="pid-1@host-a", leader_store=store)
+    store.acquire_or_refresh_beat_leader(owner_token="pid-1@host-a", ttl_seconds=120)
     scheduler._is_leader = True
 
     with patch.object(Scheduler, "close"):
         scheduler.close()
 
-    assert redis.get("scheduler:beat:leader") is None
+    assert store.current_beat_leader() is None
 
 
 def test_close_does_not_release_lock_owned_by_different_process():
-    """Se il lock e' posseduto da un altro processo (es. TTL scaduto,
-    qualcun altro l'ha ripreso), close() del non-owner NON deve cancellarlo.
-    Protegge contro race durante failover."""
-    redis = _FakeRedis()
-    scheduler = _FakeScheduler(leader_id="pid-1@host-a", redis_client=redis)
-    # Un altro processo ha il lock
-    redis.set("scheduler:beat:leader", "pid-2@host-b", ex=120)
-    scheduler._is_leader = True  # stale flag — credeva di esserlo
+    store = _FakePgLeaderStore()
+    scheduler = _FakeScheduler(leader_id="pid-1@host-a", leader_store=store)
+    # Un altro processo ha il lock.
+    store.acquire_or_refresh_beat_leader(owner_token="pid-2@host-b", ttl_seconds=120)
+    scheduler._is_leader = True  # stale flag
 
     with patch.object(Scheduler, "close"):
         scheduler.close()
 
-    # Lock dell'altro processo deve rimanere
-    assert redis.get("scheduler:beat:leader") == b"pid-2@host-b"
+    assert store.current_beat_leader() == "pid-2@host-b"
