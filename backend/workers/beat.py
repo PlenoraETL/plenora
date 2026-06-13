@@ -54,7 +54,22 @@ def build_scheduler(engine: PlenoraBeatScheduler) -> BlockingScheduler:
     return scheduler
 
 
+def _bootstrap_beat_process() -> None:
+    """Esegue il bootstrap 4-step nel processo beat (rimpiazzo del signal
+    Celery ``beat_init``, perso col passaggio ad APScheduler in F3.3).
+
+    Fail-closed: un'eccezione da ``bootstrap`` propaga e impedisce l'avvio
+    del beat contro un DB / storage / broker mal configurato. Idempotente
+    via ``is_bootstrapped`` (processo singolo, niente fork)."""
+    from app import bootstrap as _bootstrap_mod
+
+    if _bootstrap_mod.is_bootstrapped():
+        return
+    _bootstrap_mod.bootstrap()
+
+
 def run() -> None:
+    _bootstrap_beat_process()
     engine = build_engine()
     scheduler = build_scheduler(engine)
 

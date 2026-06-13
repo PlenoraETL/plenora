@@ -236,36 +236,55 @@ def test_jwt_middleware_clears_user_id_between_authenticated_and_anonymous_reque
     assert second_body["user_id_ctx"] == ""
 
 
-def test_celery_signals_propagate_request_id_and_clear_after_task():
+def test_dramatiq_request_id_middleware_propagates_and_clears():
+    # Plenora 2.0 Fase 5: la propagazione del correlation id attraverso il
+    # broker e' su middleware Dramatiq (rimpiazzo dei signal Celery
+    # before_task_publish/task_prerun/task_postrun). Dramatiq non ha header
+    # nativi: il request_id viaggia nelle message.options.
     from app.utils.logger import get_request_id, set_request_id
-    from workers.celery_app import (
-        _clear_request_id_after_task,
-        _propagate_request_id_on_publish,
-        _set_request_id_from_task,
-    )
+    from workers.dramatiq_app import _REQUEST_ID_OPTION, _RequestIdMiddleware
 
+    mw = _RequestIdMiddleware()
+
+    # Lato dispatch (es. API): copia il request_id locale nelle options.
     set_request_id("rid-123")
-    headers = {}
-    _propagate_request_id_on_publish(headers=headers)
-    assert headers["X-Request-ID"] == "rid-123"
+    message = SimpleNamespace(options={}, message_id="msg-1")
+    mw.before_enqueue(None, message, None)
+    assert message.options[_REQUEST_ID_OPTION] == "rid-123"
 
+    # Lato worker: ripristina il request_id dal messaggio.
     set_request_id("")
-    fake_task = SimpleNamespace(request=SimpleNamespace(headers=headers))
-    _set_request_id_from_task(task_id="task-1", task=fake_task)
+    mw.before_process_message(None, message)
     assert get_request_id() == "rid-123"
 
-    _clear_request_id_after_task()
+    # Cleanup dopo il task: niente leak tra task consecutivi.
+    mw.after_process_message(None, message)
     assert get_request_id() == ""
 
 
-def test_celery_signal_falls_back_to_task_id_when_header_missing():
+def test_dramatiq_request_id_middleware_falls_back_to_message_id():
+    # Senza request_id nel messaggio (es. dispatch dal beat) il worker
+    # ricade sul message_id, come task_prerun ricadeva sul task_id.
     from app.utils.logger import get_request_id, set_request_id
-    from workers.celery_app import _clear_request_id_after_task, _set_request_id_from_task
+    from workers.dramatiq_app import _RequestIdMiddleware
 
+    mw = _RequestIdMiddleware()
     set_request_id("")
-    fake_task = SimpleNamespace(request=SimpleNamespace(headers={}))
-    _set_request_id_from_task(task_id="task-fallback-1", task=fake_task)
-    assert get_request_id() == "task-fallback-1"
+    message = SimpleNamespace(options={}, message_id="msg-fallback-1")
+    mw.before_process_message(None, message)
+    assert get_request_id() == "msg-fallback-1"
 
-    _clear_request_id_after_task()
+    mw.after_process_message(None, message)
     assert get_request_id() == ""
+
+
+def test_dramatiq_request_id_not_injected_when_absent():
+    # Nessun request_id locale: niente option iniettata sul messaggio.
+    from app.utils.logger import set_request_id
+    from workers.dramatiq_app import _REQUEST_ID_OPTION, _RequestIdMiddleware
+
+    mw = _RequestIdMiddleware()
+    set_request_id("")
+    message = SimpleNamespace(options={}, message_id="msg-2")
+    mw.before_enqueue(None, message, None)
+    assert _REQUEST_ID_OPTION not in message.options

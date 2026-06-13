@@ -1,132 +1,44 @@
 """
-Contract test BE-GO-READY-BOOTSTRAP-ENGINE-014-WORKER-BOOTSTRAP-PARITY.
+Contract: bootstrap del processo worker su middleware Dramatiq.
 
-Lock the worker-side bootstrap boundary. Closes residual R-013.4:
+Plenora 2.0 Fase 5 (fetta 7): il bootstrap 4-step del worker non e' piu' su
+signal Celery (worker_init / worker_process_init), ma sul middleware
+``_BootstrapMiddleware.before_worker_boot`` del broker Dramatiq. Questo
+contratto blinda la parita' del boundary:
+  - ``before_worker_boot`` scarta il pool psycopg ereditato e ri-bootstrappa
+    con ``force_reset=True`` (i worker Dramatiq nascono da fork del
+    supervisor, come i child prefork di Celery);
+  - ``_bootstrap_worker_process()`` di default e' idempotente;
+  - una qualsiasi eccezione da ``bootstrap`` propaga (fail-closed).
 """
 
 from __future__ import annotations
 
 import os
 
-# Ensure DATABASE_URL is set before any import that may load
-# `app.db.pg_connection` (raises RuntimeError at module-level if missing).
+# DATABASE_URL deve esistere prima di importare app.db.pg_connection
+# (RuntimeError a module-level se mancante).
 os.environ.setdefault(
     "DATABASE_URL", "postgresql://test:test@127.0.0.1:5432/test"
 )
 
-import re
-from pathlib import Path
 from typing import List
-
-from tests2.shared._ast_identifiers import imports_symbol_from, uses_attribute
 
 import pytest
 
+pytest.importorskip("dramatiq", reason="dramatiq non installato")
+
 import app.bootstrap as bootstrap_module
-import workers.celery_app as celery_app_module
+import app.db.pg_connection as pg_connection
+import workers.dramatiq_app as dramatiq_app
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-_BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
-_CELERY_APP_PY = _BACKEND_ROOT / "workers" / "celery_app.py"
-
-
-def _read(p: Path) -> str:
-    return p.read_text(encoding="utf-8")
-
-
-# Source-bound: signals imported and handlers connected
-
-
-def test_celery_app_imports_three_bootstrap_signals():
-    """Source check: `worker_init`, `worker_process_init` and
-    `beat_init` are imported from `celery.signals`. Drift = a
-    contributor removed one and broke the parity invariant."""
-    src = _read(_CELERY_APP_PY)
-    for signal_name in ("worker_init", "worker_process_init", "beat_init"):
-        assert imports_symbol_from(src, "celery.signals", signal_name), (
-            f"`celery.signals.{signal_name}` not imported in "
-            f"workers/celery_app.py. The bootstrap parity contract "
-            f"requires all three signals."
-        )
-
-
-def test_celery_app_connects_handler_to_each_bootstrap_signal():
-    """Source check: each of the three signals has a
-    `@<signal>.connect` decorated handler. Drift = a handler was
-    removed or its connect was disconnected."""
-    src = _read(_CELERY_APP_PY)
-    for signal_name in ("worker_init", "worker_process_init", "beat_init"):
-        assert uses_attribute(src, signal_name, "connect"), (
-            f"Expected `@{signal_name}.connect` decorator in "
-            f"workers/celery_app.py. Required for bootstrap parity."
-        )
-
-
-def test_handler_for_worker_process_init_uses_force_reset_true():
-    """Source check: the `worker_process_init` handler must call
-    `_bootstrap_worker_process(force_reset=True)`. Without
-    force_reset the post-fork child would skip re-init and reuse
-    the parent's broken psycopg2 pool."""
-    src = _read(_CELERY_APP_PY)
-    # Locate the function body following @worker_process_init.connect.
-    m = re.search(
-        r"@worker_process_init\.connect\s*\n"
-        r"def\s+\w+\([^)]*\)\s*->\s*None\s*:\s*\n"
-        r"(?:\s*\"\"\"(?:.*?)\"\"\"\s*\n)?"  # optional docstring
-        r"(.*?)(?=\n@|\ndef |\Z)",
-        src,
-        re.DOTALL,
-    )
-    assert m is not None, (
-        "Could not locate `worker_process_init` handler body in "
-        "workers/celery_app.py."
-    )
-    body = m.group(1)
-    # RAW: expression-pattern including literal boolean value True (not just the keyword name)
-    assert "force_reset=True" in body, (
-        "`worker_process_init` handler must invoke "
-        "`_bootstrap_worker_process(force_reset=True)`. "
-        "Post-fork children inherit a broken psycopg2 pool; "
-        "without force_reset the idempotent short-circuit would "
-        "skip the re-init."
-    )
-
-
-def test_handlers_for_worker_init_and_beat_init_do_not_force_reset():
-    """Source check: the `worker_init` and `beat_init` handlers
-    must NOT pass `force_reset=True`. They run in fresh processes
-    with no inherited state."""
-    src = _read(_CELERY_APP_PY)
-    for signal_name in ("worker_init", "beat_init"):
-        m = re.search(
-            rf"@{signal_name}\.connect\s*\n"
-            rf"def\s+\w+\([^)]*\)\s*->\s*None\s*:\s*\n"
-            rf"(?:\s*\"\"\"(?:.*?)\"\"\"\s*\n)?"
-            rf"(.*?)(?=\n@|\ndef |\Z)",
-            src,
-            re.DOTALL,
-        )
-        assert m is not None, (
-            f"Could not locate `{signal_name}` handler body."
-        )
-        body = m.group(1)
-        # RAW: expression-pattern including literal boolean value True (not just the keyword name)
-        assert "force_reset=True" not in body, (
-            f"`{signal_name}` handler must NOT pass "
-            f"force_reset=True. force_reset is the post-fork "
-            f"recovery primitive, not a default."
-        )
-
-
-# Behavioural: handlers actually call bootstrap
-
-
 @pytest.fixture
 def _reset_boot_flag():
-    """Snapshot + restore `_BOOT_COMPLETE` around the test."""
+    """Snapshot + restore di ``_BOOT_COMPLETE`` attorno al test."""
     original = bootstrap_module._BOOT_COMPLETE
     bootstrap_module._BOOT_COMPLETE = False
     try:
@@ -136,17 +48,12 @@ def _reset_boot_flag():
 
 
 def _stub_bootstrap(monkeypatch) -> List[bool]:
-    """Replace `app.bootstrap.bootstrap` with a recorder that flips
-    `_BOOT_COMPLETE` to True (mimicking the real implementation's
-    last statement). Returns a list whose length == # of calls and
-    values are the `_BOOT_COMPLETE` value SEEN at entry of each
-    invocation."""
+    """Sostituisce ``app.bootstrap.bootstrap`` con un recorder che, come la
+    vera implementazione, flippa ``_BOOT_COMPLETE`` a True. Ritorna la lista
+    dei valori del flag visti all'ENTRATA di ogni invocazione."""
     calls_seen_flag: List[bool] = []
 
     def _fake_bootstrap():
-        # Capture flag BEFORE we flip it: tests assert pre-call
-        # state (force_reset path = saw False; no-force path = also
-        # False because the handler short-circuits if True).
         calls_seen_flag.append(bootstrap_module._BOOT_COMPLETE)
         bootstrap_module._BOOT_COMPLETE = True
 
@@ -154,139 +61,81 @@ def _stub_bootstrap(monkeypatch) -> List[bool]:
     return calls_seen_flag
 
 
-def test_worker_init_handler_calls_bootstrap_when_not_bootstrapped(
+# _bootstrap_worker_process: API diretta
+
+
+def test_bootstrap_worker_process_default_is_idempotent(
     monkeypatch, _reset_boot_flag,
 ):
-    """`worker_init` → `_bootstrap_worker_process()` →
-    `bootstrap()` runs once, flag flips True."""
     calls = _stub_bootstrap(monkeypatch)
-    assert bootstrap_module.is_bootstrapped() is False
-    celery_app_module._bootstrap_on_worker_init()
+    dramatiq_app._bootstrap_worker_process()
+    dramatiq_app._bootstrap_worker_process()
     assert len(calls) == 1
     assert bootstrap_module.is_bootstrapped() is True
 
 
-def test_worker_init_handler_skips_when_already_bootstrapped(
+def test_bootstrap_worker_process_force_reset_always_runs(
     monkeypatch, _reset_boot_flag,
 ):
-    """Idempotency: a second `worker_init` (or any
-    non-force-reset path) does NOT re-run bootstrap()."""
     calls = _stub_bootstrap(monkeypatch)
-    # Pre-flip to simulate "already bootstrapped".
-    bootstrap_module._BOOT_COMPLETE = True
+    dramatiq_app._bootstrap_worker_process()
+    dramatiq_app._bootstrap_worker_process(force_reset=True)
+    dramatiq_app._bootstrap_worker_process(force_reset=True)
+    assert len(calls) == 3
+    # In force_reset il flag e' azzerato prima della chiamata.
+    assert calls == [False, False, False]
 
-    celery_app_module._bootstrap_on_worker_init()
-    assert calls == []  # short-circuit; bootstrap NOT re-invoked
+
+# _BootstrapMiddleware.before_worker_boot: post-fork + ordering
 
 
-def test_worker_process_init_handler_force_resets_and_re_runs(
+def test_before_worker_boot_discards_pool_then_bootstraps(
     monkeypatch, _reset_boot_flag,
 ):
-    """Post-fork: even if the inherited flag says True, the
-    handler must reset and re-run bootstrap (PG pool re-init)."""
-    calls = _stub_bootstrap(monkeypatch)
-    # Simulate post-fork: child inherits flag=True from parent.
-    bootstrap_module._BOOT_COMPLETE = True
+    sequence: List[str] = []
 
-    celery_app_module._bootstrap_on_worker_process_init()
-    # Must have run exactly once, and at entry the flag was False
-    # because the handler reset it before the bootstrap call.
-    assert len(calls) == 1
-    assert calls[0] is False
-    # Final state: True again after the re-run.
+    def _fake_discard():
+        sequence.append("discard")
+
+    def _fake_bootstrap():
+        sequence.append("bootstrap")
+        bootstrap_module._BOOT_COMPLETE = True
+
+    monkeypatch.setattr(pg_connection, "discard_pool_after_fork", _fake_discard)
+    monkeypatch.setattr(bootstrap_module, "bootstrap", _fake_bootstrap)
+
+    # Simula il post-fork: il child eredita il flag True dal supervisor.
+    bootstrap_module._BOOT_COMPLETE = True
+    dramatiq_app._BootstrapMiddleware().before_worker_boot(object(), object())
+
+    # Drop del pool PRIMA del bootstrap (altrimenti bootstrap riuserebbe il
+    # socket TLS ereditato), e il bootstrap RI-esegue nonostante il flag True.
+    assert sequence == ["discard", "bootstrap"]
     assert bootstrap_module.is_bootstrapped() is True
 
 
-def test_beat_init_handler_calls_bootstrap_once(
+def test_before_worker_boot_propagates_bootstrap_exception(
     monkeypatch, _reset_boot_flag,
 ):
-    """`beat_init` mirrors `worker_init` semantics."""
-    calls = _stub_bootstrap(monkeypatch)
-    assert bootstrap_module.is_bootstrapped() is False
-    celery_app_module._bootstrap_on_beat_init()
-    assert len(calls) == 1
-    assert bootstrap_module.is_bootstrapped() is True
+    monkeypatch.setattr(
+        pg_connection, "discard_pool_after_fork", lambda: None
+    )
 
-
-def test_beat_init_handler_skips_when_already_bootstrapped(
-    monkeypatch, _reset_boot_flag,
-):
-    calls = _stub_bootstrap(monkeypatch)
-    bootstrap_module._BOOT_COMPLETE = True
-    celery_app_module._bootstrap_on_beat_init()
-    assert calls == []
-
-
-# Fail-closed: bootstrap exception propagates from the handler
-
-
-def test_worker_process_init_propagates_bootstrap_exception(
-    monkeypatch, _reset_boot_flag,
-):
-    """If `bootstrap()` raises, the worker handler MUST re-raise.
-    Celery treats raised signal handler exceptions as fatal →
-    process exit → supervisor restart. Swallowing here would let
-    the worker accept tasks against a broken DB / Redis / storage
-    config."""
     def _failing_bootstrap():
         raise RuntimeError("simulated DB unreachable")
 
     monkeypatch.setattr(bootstrap_module, "bootstrap", _failing_bootstrap)
 
     with pytest.raises(RuntimeError, match="simulated DB unreachable"):
-        celery_app_module._bootstrap_on_worker_process_init()
-    # Flag stays False (or whatever it was before force_reset wrote
-    # False — never True).
+        dramatiq_app._BootstrapMiddleware().before_worker_boot(
+            object(), object()
+        )
     assert bootstrap_module.is_bootstrapped() is False
 
 
-def test_worker_init_propagates_bootstrap_exception(
-    monkeypatch, _reset_boot_flag,
-):
-    def _failing_bootstrap():
-        raise RuntimeError("simulated storage config error")
-
-    monkeypatch.setattr(bootstrap_module, "bootstrap", _failing_bootstrap)
-
-    with pytest.raises(RuntimeError, match="simulated storage config error"):
-        celery_app_module._bootstrap_on_worker_init()
-    assert bootstrap_module.is_bootstrapped() is False
-
-
-def test_beat_init_propagates_bootstrap_exception(
-    monkeypatch, _reset_boot_flag,
-):
-    def _failing_bootstrap():
-        raise RuntimeError("simulated validate_startup failure")
-
-    monkeypatch.setattr(bootstrap_module, "bootstrap", _failing_bootstrap)
-
-    with pytest.raises(RuntimeError, match="simulated validate_startup failure"):
-        celery_app_module._bootstrap_on_beat_init()
-    assert bootstrap_module.is_bootstrapped() is False
-
-
-# _bootstrap_worker_process direct API contract
-
-
-def test_bootstrap_worker_process_default_is_idempotent(
-    monkeypatch, _reset_boot_flag,
-):
-    """Direct API: calling `_bootstrap_worker_process()` twice in
-    a row runs `bootstrap()` once."""
-    calls = _stub_bootstrap(monkeypatch)
-    celery_app_module._bootstrap_worker_process()
-    celery_app_module._bootstrap_worker_process()
-    assert len(calls) == 1
-
-
-def test_bootstrap_worker_process_force_reset_always_runs(
-    monkeypatch, _reset_boot_flag,
-):
-    """Direct API: `force_reset=True` always re-runs bootstrap
-    (the post-fork primitive)."""
-    calls = _stub_bootstrap(monkeypatch)
-    celery_app_module._bootstrap_worker_process()  # 1st run
-    celery_app_module._bootstrap_worker_process(force_reset=True)  # 2nd run
-    celery_app_module._bootstrap_worker_process(force_reset=True)  # 3rd run
-    assert len(calls) == 3
+def test_bootstrap_middleware_registered_on_broker():
+    names = {type(m).__name__ for m in dramatiq_app.broker.middleware}
+    assert "_BootstrapMiddleware" in names, (
+        "il broker Dramatiq deve avere il middleware di bootstrap "
+        "(before_worker_boot) — rimpiazzo del signal Celery worker_init"
+    )

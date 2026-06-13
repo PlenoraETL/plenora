@@ -154,8 +154,7 @@ def test_startup_validation_owns_redis_and_filesystem_bootstrap_work():
 
     for marker in (
         "def validate_startup(",
-        "def ensure_redis(",
-        "def ensure_redis_wsl_fallback(",
+        "def ensure_broker(",
         "socket.create_connection",
         "shutil.rmtree",
         "DATA_DIR",

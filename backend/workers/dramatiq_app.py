@@ -20,6 +20,15 @@ from dramatiq.middleware import CurrentMessage, Middleware
 
 from app.config import settings
 from app.core.orchestrator.task_progress import TaskRevoked
+from app.utils.logger import get_logger, get_request_id, set_request_id
+
+logger = get_logger(__name__)
+
+# Chiave nelle ``message.options`` che trasporta il correlation id
+# attraverso il broker (Dramatiq non ha header nativi: le options sono
+# serializzate col messaggio). Rimpiazzo dell'header "X-Request-ID" che
+# Celery propagava via signal before_task_publish.
+_REQUEST_ID_OPTION = "request_id"
 
 # Nessun path nell'URL = vhost di default "/" (un trailing "//" verrebbe
 # interpretato da pika come vhost vuoto -> 530 NOT_ALLOWED).
@@ -60,11 +69,117 @@ class _TaskResultMiddleware(Middleware):
         )
 
 
+def _bootstrap_worker_process(*, force_reset: bool = False) -> None:
+    """Esegue il bootstrap 4-step nel processo worker via il boundary
+    canonico ``app.bootstrap`` (rimpiazzo del signal Celery
+    ``worker_process_init`` / ``worker_init``).
+
+    ``force_reset=True``: i processi worker Dramatiq nascono da fork del
+    supervisor; il pool psycopg ereditato non e' sicuro post-fork. Si
+    azzera il flag di completamento e si ri-esegue il bootstrap cosi'
+    ogni worker ha il proprio pool. Fail-closed: una qualsiasi eccezione
+    da ``bootstrap`` propaga -> il worker non accetta task contro un DB /
+    storage / broker mal configurato.
+
+    Import locale: tiene leggero l'import del modulo (il broker viene
+    importato anche dai processi che solo *dispatchano*, che non devono
+    pagare l'import del grafo bootstrap)."""
+    from app import bootstrap as _bootstrap_mod
+
+    if force_reset:
+        _bootstrap_mod._BOOT_COMPLETE = False
+
+    if _bootstrap_mod.is_bootstrapped():
+        return
+
+    _bootstrap_mod.bootstrap()
+
+
+class _BootstrapMiddleware(Middleware):
+    """Bootstrap del processo worker Dramatiq (Plenora 2.0, Fase 5).
+
+    ``before_worker_boot`` scatta una volta per processo worker, dopo il
+    fork del supervisor ``dramatiq``: e' il rimpiazzo del signal Celery
+    ``worker_process_init``. Scarta il pool psycopg ereditato PRIMA di
+    ri-bootstrappare (``bootstrap`` riapre la connessione DB), poi esegue
+    i 4 step con ``force_reset=True``."""
+
+    def before_worker_boot(self, broker: object, worker: object) -> None:
+        # Drop del pool psycopg ereditato dal supervisor SENZA closeall():
+        # il padre possiede ancora i socket sottostanti.
+        from app.db.pg_connection import discard_pool_after_fork
+
+        discard_pool_after_fork()
+        _bootstrap_worker_process(force_reset=True)
+
+
+class _RequestIdMiddleware(Middleware):
+    """Propaga il correlation id (X-Request-ID) attraverso il broker.
+
+    Rimpiazzo dei signal Celery before_task_publish / task_prerun /
+    task_postrun:
+      - ``before_enqueue``: copia il request_id dal ContextVar locale nelle
+        ``message.options`` (lato processo che dispatcha, es. API/beat);
+      - ``before_process_message``: ripristina il request_id nel worker dal
+        messaggio, con fallback al message_id come faceva il task_prerun;
+      - ``after_process_message``: azzera il ContextVar per evitare leak di
+        correlation tra task consecutivi sullo stesso thread worker.
+    Best-effort: la correlation non deve mai bloccare enqueue/esecuzione."""
+
+    def before_enqueue(self, broker: object, message: object, delay: object) -> None:
+        try:
+            req_id = get_request_id()
+            if req_id:
+                message.options[_REQUEST_ID_OPTION] = req_id
+        except Exception:
+            logger.warning(
+                "[REQID] propagazione request_id su enqueue fallita "
+                "(task perde correlation id)",
+                exc_info=True,
+            )
+
+    def before_process_message(self, broker: object, message: object) -> None:
+        try:
+            options = getattr(message, "options", None) or {}
+            req_id = options.get(_REQUEST_ID_OPTION) or getattr(
+                message, "message_id", ""
+            )
+            set_request_id(req_id or "")
+        except Exception:
+            logger.warning(
+                "[REQID] set request_id nel worker fallito", exc_info=True
+            )
+
+    def after_process_message(
+        self,
+        broker: object,
+        message: object,
+        *,
+        result: object = None,
+        exception: object = None,
+    ) -> None:
+        try:
+            set_request_id("")
+        except Exception:
+            logger.warning(
+                "[REQID] reset request_id dopo il task fallito", exc_info=True
+            )
+
+
 broker = RabbitmqBroker(url=broker_url())
+# Bootstrap del processo worker (4-step su boundary app.bootstrap): scatta
+# a worker_boot, rimpiazzo del signal Celery worker_process_init.
+broker.add_middleware(_BootstrapMiddleware())
 # CurrentMessage espone il messaggio in esecuzione all'actor: e' il
 # rimpiazzo Dramatiq di `self.request.id` (bind=True) di Celery, usato
 # dai task che mettono il task_id nel result payload.
 broker.add_middleware(CurrentMessage())
+# Propagazione del correlation id attraverso il broker (rimpiazzo dei
+# signal Celery before_task_publish/task_prerun/task_postrun). Registrato
+# PRIMA del finalize cosi' l'after_process_message del finalize (che gira
+# in ordine inverso) logga ancora con il request_id, e il reset avviene
+# per ultimo.
+broker.add_middleware(_RequestIdMiddleware())
 # Finalize dell'esito su PG (rimpiazzo del result backend Redis): vale per
 # tutti gli actor, come after_return per i task Celery.
 broker.add_middleware(_TaskResultMiddleware())

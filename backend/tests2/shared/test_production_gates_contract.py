@@ -1,4 +1,10 @@
-"""Contract tests for production/staging and cluster startup gates."""
+"""Contract tests for production/staging and cluster startup gates.
+
+Plenora 2.0 Fase 5: il broker e' RabbitMQ (Dramatiq). Il gate loopback
+controlla ``DRAMATIQ_BROKER_URL`` (era CELERY_BROKER_URL/RESULT_BACKEND/
+REDIS_URL). I flag ``*_REDIS_*`` mantengono il nome storico per compat dei
+deploy ma il backend e' PostgreSQL.
+"""
 
 from __future__ import annotations
 
@@ -20,9 +26,7 @@ def _clean_gate_env(monkeypatch):
         "PLENORA_CLUSTER_MODE",
         "MULTI_POD_MODE",
         "PLENORA_MULTI_POD",
-        "CELERY_BROKER_URL",
-        "CELERY_RESULT_BACKEND",
-        "REDIS_URL",
+        "DRAMATIQ_BROKER_URL",
         "OBJECT_STORAGE_ENABLED",
         "OBJECT_STORAGE_BUCKET",
         "SCHEDULE_BEAT_LEADER_FAIL_OPEN",
@@ -42,8 +46,9 @@ def _errors_for_current_env() -> list[str]:
 
 def _set_cluster_safe_env(monkeypatch, *, environment: str = "production") -> None:
     monkeypatch.setenv("ENVIRONMENT", environment)
-    monkeypatch.setenv("CELERY_BROKER_URL", "redis://redis.service:6379/0")
-    monkeypatch.setenv("CELERY_RESULT_BACKEND", "redis://redis.service:6379/1")
+    monkeypatch.setenv(
+        "DRAMATIQ_BROKER_URL", "amqp://guest:guest@rabbitmq.service:5672"
+    )
     monkeypatch.setenv("OBJECT_STORAGE_ENABLED", "true")
     monkeypatch.setenv("OBJECT_STORAGE_BUCKET", "runtime-artifacts")
     monkeypatch.setenv("SCHEDULE_BEAT_LEADER_FAIL_OPEN", "false")
@@ -66,8 +71,6 @@ def test_server_envs_enable_production_gates(monkeypatch, environment):
     errors = _errors_for_current_env()
     joined = "\n".join(errors)
 
-    assert "CELERY_BROKER_URL" in joined
-    assert "CELERY_RESULT_BACKEND" in joined
     assert "OBJECT_STORAGE_BUCKET" in joined
     assert "LOGIN_RL_REDIS_REQUIRED" in joined
     assert "ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED" in joined
@@ -85,40 +88,42 @@ def test_explicit_cluster_flags_enable_gates_in_development(monkeypatch, flag_na
     errors = _errors_for_current_env()
     joined = "\n".join(errors)
 
-    assert "CELERY_BROKER_URL" in joined
     assert "OBJECT_STORAGE_BUCKET" in joined
 
 
 @pytest.mark.parametrize(
-    "key,url",
+    "url",
     [
-        ("CELERY_BROKER_URL", "redis://localhost:6379/0"),
-        ("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0"),
-        ("CELERY_RESULT_BACKEND", "redis://[::1]:6379/1"),
-        ("REDIS_URL", "redis://0.0.0.0:6379/0"),
+        "amqp://guest:guest@localhost:5672",
+        "amqp://guest:guest@127.0.0.1:5672",
+        "amqp://guest:guest@[::1]:5672",
+        "amqp://guest:guest@0.0.0.0:5672",
     ],
 )
-def test_loopback_redis_urls_are_rejected(monkeypatch, key, url):
+def test_loopback_broker_urls_are_rejected(monkeypatch, url):
     _set_cluster_safe_env(monkeypatch)
-    monkeypatch.setenv(key, url)
+    monkeypatch.setenv("DRAMATIQ_BROKER_URL", url)
 
     errors = _errors_for_current_env()
 
-    assert any(key in error and "loopback/localhost" in error for error in errors)
+    assert any(
+        "DRAMATIQ_BROKER_URL" in error and "loopback/localhost" in error
+        for error in errors
+    )
 
 
-def test_loopback_redis_url_error_does_not_expose_credentials(monkeypatch):
+def test_loopback_broker_url_error_does_not_expose_credentials(monkeypatch):
     _set_cluster_safe_env(monkeypatch)
     monkeypatch.setenv(
-        "CELERY_BROKER_URL",
-        "redis://:super-secret-password@localhost:6379/0",
+        "DRAMATIQ_BROKER_URL",
+        "amqp://guest:super-secret-password@localhost:5672",
     )
 
     errors = _errors_for_current_env()
     joined = "\n".join(errors)
 
-    assert "CELERY_BROKER_URL" in joined
-    assert "localhost:6379" in joined
+    assert "DRAMATIQ_BROKER_URL" in joined
+    assert "localhost:5672" in joined
     assert "super-secret-password" not in joined
 
 
@@ -182,7 +187,7 @@ def test_validate_startup_runs_production_gates_before_boot_completes(
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setattr(startup_validation, "_validate_data_dir", lambda *_a: None)
     monkeypatch.setattr(startup_validation, "_cleanup_temp_dir", lambda *_a: None)
-    monkeypatch.setattr(startup_validation, "ensure_redis", lambda *_a: None)
+    monkeypatch.setattr(startup_validation, "ensure_broker", lambda *_a: None)
 
     with pytest.raises(SystemExit) as exc_info:
         startup_validation.validate_startup(Settings())
@@ -190,5 +195,4 @@ def test_validate_startup_runs_production_gates_before_boot_completes(
     assert exc_info.value.code == 1
     out = capsys.readouterr().out
     assert "Configurazione non valida" in out
-    assert "CELERY_BROKER_URL" in out
     assert "OBJECT_STORAGE_BUCKET" in out

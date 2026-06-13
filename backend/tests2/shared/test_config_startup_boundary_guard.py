@@ -47,8 +47,7 @@ def test_startup_validation_owns_operational_boot_checks():
     text = _STARTUP_VALIDATION.read_text(encoding="utf-8")
     for marker in (
         "def validate_startup(",
-        "def ensure_redis(",
-        "def ensure_redis_wsl_fallback(",
+        "def ensure_broker(",
         "shutil.rmtree",
         "socket.create_connection",
     ):

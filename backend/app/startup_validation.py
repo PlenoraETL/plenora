@@ -1,8 +1,13 @@
 """Operational startup validation boundary.
 
-`app.config.Settings` owns configuration values only. Filesystem cleanup,
-Redis probing, and dev-only WSL fallback live here so importing the settings
-singleton never implies operational behavior.
+`app.config.Settings` owns configuration values only. Filesystem cleanup
+and broker (RabbitMQ) reachability probing live here so importing the
+settings singleton never implies operational behavior.
+
+Plenora 2.0 Fase 5: il broker e' RabbitMQ (Dramatiq), non piu' Redis
+(Celery). La probe di reachability a startup pinga RabbitMQ via
+``DRAMATIQ_BROKER_URL``; il vecchio fallback WSL per auto-avviare Redis in
+dev Windows e' stato rimosso col cutover.
 """
 
 from __future__ import annotations
@@ -10,14 +15,11 @@ from __future__ import annotations
 from ipaddress import ip_address
 from urllib.parse import urlparse
 import socket
-import subprocess
-import sys
 
 import logging
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from app.config_env_loader import DOTENV_DISABLED_ENVS
 from app.environment import environment_name
 
 
@@ -31,11 +33,13 @@ _CLUSTER_FLAG_KEYS = (
     "MULTI_POD_MODE",
     "PLENORA_MULTI_POD",
 )
-_REDIS_URL_KEYS = (
-    "CELERY_BROKER_URL",
-    "CELERY_RESULT_BACKEND",
-    "REDIS_URL",
+_BROKER_URL_KEYS = (
+    "DRAMATIQ_BROKER_URL",
 )
+# Default broker RabbitMQ (allineato a settings.DRAMATIQ_BROKER_URL /
+# workers.dramatiq_app.broker_url()). amqp://...:5672, vhost di default "/".
+_DEFAULT_BROKER_URL = "amqp://guest:guest@rabbitmq:5672"
+_DEFAULT_BROKER_PORT = 5672
 
 
 def _env_name() -> str:
@@ -96,14 +100,14 @@ def validate_production_gates(settings: Any, errors: list[str]) -> None:
     if not production_gates_required(settings):
         return
 
-    for key in _REDIS_URL_KEYS:
+    for key in _BROKER_URL_KEYS:
         value = settings.get(key)
         if value and _url_uses_loopback_host(value):
             errors.append(
                 f"{key} ({_safe_url_host_label(value)}) usa un host "
                 "loopback/localhost. "
-                "In production/staging o cluster usa un Redis condiviso "
-                "raggiungibile da tutti i pod/processi."
+                "In production/staging o cluster usa un broker RabbitMQ "
+                "condiviso raggiungibile da tutti i pod/processi."
             )
 
     object_storage_enabled = _as_bool(settings.get("OBJECT_STORAGE_ENABLED", True))
@@ -162,63 +166,32 @@ def validate_production_gates(settings: Any, errors: list[str]) -> None:
         )
 
 
-def wsl_redis_fallback_allowed() -> bool:
-    """Return True only for local Windows development."""
+def ensure_broker(settings: Any, errors: list) -> None:
+    """Verify RabbitMQ broker reachability with a bounded TCP connect.
 
-    is_dev = _env_name() not in DOTENV_DISABLED_ENVS
-    is_windows = sys.platform.startswith("win")
-    return is_dev and is_windows
+    Plenora 2.0 Fase 5: rimpiazza ``ensure_redis``. Il broker dei task e'
+    RabbitMQ (Dramatiq); un connect TCP all'host:porta ricavati da
+    ``DRAMATIQ_BROKER_URL`` e' sufficiente a fail-fast su broker assente
+    senza dipendere da pika a startup. Niente piu' fallback WSL (era una
+    convenienza dev-Windows per auto-avviare Redis, non applicabile a
+    RabbitMQ)."""
 
-
-def ensure_redis(settings: Any, errors: list, warnings: list) -> None:
-    """Verify Redis reachability and optionally start WSL Redis in dev Windows."""
-
-    broker_url = settings.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+    broker_url = settings.get("DRAMATIQ_BROKER_URL", _DEFAULT_BROKER_URL)
     parsed = urlparse(broker_url)
-    host = parsed.hostname or "localhost"
-    port = parsed.port or 6379
+    host = parsed.hostname or "rabbitmq"
+    port = parsed.port or _DEFAULT_BROKER_PORT
 
-    def _redis_ping() -> bool:
-        try:
-            with socket.create_connection((host, port), timeout=2):
-                return True
-        except OSError:
-            return False
-
-    if _redis_ping():
-        logger.info("Redis gia' attivo su %s:%s", host, port)
-        return
-
-    if wsl_redis_fallback_allowed():
-        ensure_redis_wsl_fallback(_redis_ping, errors, warnings)
-        return
-
-    errors.append(
-        f"Redis non raggiungibile su {broker_url}. "
-        "Avvia il servizio Redis configurato in CELERY_BROKER_URL "
-        "prima di avviare l'app."
-    )
-
-
-def ensure_redis_wsl_fallback(
-    redis_ping: Callable[[], bool],
-    errors: list,
-    warnings: list,
-) -> None:
-    """Reject implicit process spawning; Redis must be started externally."""
-
-    if redis_ping():
-        return
     try:
-        subprocess.Popen(["wsl", "redis-server", "--daemonize", "yes"])
-    except FileNotFoundError:
+        with socket.create_connection((host, port), timeout=2):
+            logger.info("Broker RabbitMQ raggiungibile su %s:%s", host, port)
+            return
+    except OSError:
         pass
-    warnings.append(
-        "Fallback WSL Redis disabilitato: lo startup non avvia processi figli."
-    )
+
     errors.append(
-        "Redis non attivo. Avvia Redis esternamente prima del backend "
-        "(es. wsl redis-server --daemonize yes in sviluppo locale)."
+        f"Broker RabbitMQ non raggiungibile su {broker_url}. "
+        "Avvia il servizio RabbitMQ configurato in DRAMATIQ_BROKER_URL "
+        "prima di avviare worker/beat/API."
     )
 
 
@@ -262,7 +235,7 @@ def validate_startup(settings: Any) -> None:
     validate_production_gates(settings, errors)
     _validate_data_dir(settings, errors)
     _cleanup_temp_dir(settings)
-    ensure_redis(settings, errors, warnings)
+    ensure_broker(settings, errors)
 
     for warning in warnings:
         print(f"[WARN] PLENORA-ETL: {warning}")
@@ -275,10 +248,8 @@ def validate_startup(settings: Any) -> None:
 
 
 __all__ = [
-    "ensure_redis",
-    "ensure_redis_wsl_fallback",
+    "ensure_broker",
     "production_gates_required",
     "validate_production_gates",
     "validate_startup",
-    "wsl_redis_fallback_allowed",
 ]
