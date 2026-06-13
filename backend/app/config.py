@@ -97,15 +97,11 @@ class Settings:
         "LOGIN_MAX_ATTEMPTS": 10,
         "LOGIN_WINDOW_SECONDS": 60,
         "LOGIN_LOCKOUT_SECONDS": 300,
-        # Timeout Redis per i lookup di rate limit / blacklist. Default 1s
-        # single-host) — ops puo' alzarlo per Redis remoto/latente. Su
-        # timeout: fallback in-memory (login RL) o fail-open (blacklist
-        # read, ADR-0009).
-        "LOGIN_RL_REDIS_TIMEOUT_SEC": 1,
-        # Default retrocompatibile: se Redis non e' disponibile, il
-        # login rate limiter usa ancora il fallback in-memory single-node.
-        # In prod/cluster impostare True per fail-closed (nessun login
-        # se il bucket distribuito non e' consultabile).
+        # Default retrocompatibile: se il backend distribuito (PostgreSQL,
+        # Fase 4) non e' disponibile, il login rate limiter usa il fallback
+        # in-memory single-node. In prod/cluster impostare True per
+        # fail-closed (nessun login se il backend non e' consultabile).
+        # NB nome storico (era Redis): mantenuto per compat dei deploy.
         "LOGIN_RL_REDIS_REQUIRED": False,
         # Plenora 2.0 Fase 4: la blacklist JWT e' su PostgreSQL con cache
         # in-memory davanti (positiva+negativa). TTL della cache: bilancia

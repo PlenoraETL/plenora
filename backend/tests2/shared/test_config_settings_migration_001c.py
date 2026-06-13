@@ -27,7 +27,6 @@ _BACKEND_APP = Path(__file__).resolve().parent.parent.parent / "app"
         ("LOGIN_MAX_ATTEMPTS", int, 10),
         ("LOGIN_WINDOW_SECONDS", int, 60),
         ("LOGIN_LOCKOUT_SECONDS", int, 300),
-        ("LOGIN_RL_REDIS_TIMEOUT_SEC", int, 1),
         ("JWT_BLACKLIST_CACHE_TTL_SEC", int, 5),
         ("JWT_BLACKLIST_STALE_THRESHOLD_SEC", int, 1800),
     ],
@@ -51,7 +50,6 @@ def test_default_present_and_typed(key, expected_type, expected_default):
         ("LOGIN_MAX_ATTEMPTS", "5", 5),
         ("LOGIN_WINDOW_SECONDS", "120", 120),
         ("LOGIN_LOCKOUT_SECONDS", "600", 600),
-        ("LOGIN_RL_REDIS_TIMEOUT_SEC", "3", 3),
         ("JWT_BLACKLIST_CACHE_TTL_SEC", "2", 2),
         ("JWT_BLACKLIST_STALE_THRESHOLD_SEC", "900", 900),
     ],
@@ -80,10 +78,10 @@ def test_auth_reads_login_constants_via_settings():
     assert "os.getenv(\"LOGIN_LOCKOUT_SECONDS" not in src
 
 
-def test_login_rate_limiter_reads_timeout_via_settings():
+def test_login_rate_limiter_reads_required_flag_via_settings():
     src = _read(_BACKEND_APP / "core" / "security" / "login_rate_limiter.py")
-    assert "settings.get(\"LOGIN_RL_REDIS_TIMEOUT_SEC\")" in src
-    assert "os.getenv(\"LOGIN_RL_REDIS_TIMEOUT_SEC" not in src
+    assert "settings.get(\"LOGIN_RL_REDIS_REQUIRED\"" in src
+    assert "os.getenv(\"LOGIN_RL_REDIS_REQUIRED" not in src
 
 
 def test_token_blacklist_reads_cache_ttl_via_settings():

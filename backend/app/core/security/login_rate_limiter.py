@@ -1,31 +1,125 @@
 """
-Login rate limiter — Redis-backed sliding window con fallback in-memory.
+Login rate limiter — sliding window su PostgreSQL con fallback in-memory.
+
+Plenora 2.0 Fase 4: il backend distribuito e' PostgreSQL (tabella
+login_attempts) al posto della ZSET Redis. Port algoritmico proprio (non
+passa dal KeyValueStore): ogni tentativo fallito e' una riga (ip, attempt_at),
+il check conta le righe nella finestra. Su backend giu' -> fallback in-memory
+single-node (come oggi), o fail-closed se LOGIN_RL_REDIS_REQUIRED.
 """
 
 from __future__ import annotations
 
 import threading
 import time
-import uuid
-from typing import Any, Callable, Optional, Tuple
+from typing import Optional, Callable, Protocol, Tuple
 
 from fastapi import HTTPException, status
 
+from app.db.pg_connection import unit_of_work
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-_KEY_PREFIX = "plenora:login_rl:"
 _TTL_BUFFER_SECONDS = 60
 
-_client_lock = threading.Lock()
-_client: Optional[Any] = None
-_client_explicit: bool = False
-# NOTE: emit-once: evita rumore su ogni request quando Redis e' giu'
+_store_lock = threading.Lock()
+_store: Optional["_AttemptsStore"] = None
+_store_explicit: bool = False
+# emit-once: evita rumore su ogni request quando il backend e' giu'.
 _warned_fallback: bool = False
 
 
-def _redis_required() -> bool:
+class _AttemptsStore(Protocol):
+    """Backend della sliding window dei tentativi di login."""
+
+    def check(
+        self, ip: str, *, max_attempts: int, window_s: int, lockout_s: int
+    ) -> Tuple[bool, int]:
+        ...
+
+    def record(self, ip: str, *, window_s: int) -> None:
+        ...
+
+    def clear(self, ip: str) -> None:
+        ...
+
+
+class PgLoginAttemptsStore:
+    """Sliding window su PostgreSQL (tabella login_attempts)."""
+
+    def check(
+        self, ip: str, *, max_attempts: int, window_s: int, lockout_s: int
+    ) -> Tuple[bool, int]:
+        with unit_of_work() as session:
+            row = session.fetchone(
+                "SELECT count(*) AS n, "
+                "extract(epoch FROM min(attempt_at)) AS oldest "
+                "FROM login_attempts "
+                "WHERE ip = %s AND attempt_at > now() - (%s * interval '1 second')",
+                (ip, window_s),
+            )
+        count = int(row["n"]) if row else 0
+        if count >= max_attempts:
+            oldest = (
+                float(row["oldest"]) if row and row["oldest"] is not None else None
+            )
+            if oldest is not None:
+                retry_after = int(lockout_s - (time.time() - oldest))
+            else:
+                retry_after = lockout_s
+            return True, max(retry_after, 1)
+        return False, 0
+
+    def record(self, ip: str, *, window_s: int) -> None:
+        with unit_of_work() as session:
+            session.execute(
+                "INSERT INTO login_attempts (ip, attempt_at) VALUES (%s, now())",
+                (ip,),
+            )
+            # Cleanup opportunistico delle righe fuori finestra per questo ip.
+            session.execute(
+                "DELETE FROM login_attempts "
+                "WHERE ip = %s AND attempt_at <= now() - (%s * interval '1 second')",
+                (ip, window_s + _TTL_BUFFER_SECONDS),
+            )
+
+    def clear(self, ip: str) -> None:
+        with unit_of_work() as session:
+            session.execute("DELETE FROM login_attempts WHERE ip = %s", (ip,))
+
+
+class InMemoryLoginAttemptsStore:
+    """Sliding window in-process (test double + semantica di riferimento)."""
+
+    def __init__(self, clock: Optional[Callable[[], float]] = None) -> None:
+        self._clock = clock or time.time
+        self._lock = threading.Lock()
+        self._attempts: dict[str, list[float]] = {}
+
+    def check(
+        self, ip: str, *, max_attempts: int, window_s: int, lockout_s: int
+    ) -> Tuple[bool, int]:
+        with self._lock:
+            now = self._clock()
+            cutoff = now - window_s
+            attempts = [t for t in self._attempts.get(ip, []) if t > cutoff]
+            self._attempts[ip] = attempts
+            if len(attempts) >= max_attempts:
+                oldest = min(attempts)
+                return True, max(int(lockout_s - (now - oldest)), 1)
+            return False, 0
+
+    def record(self, ip: str, *, window_s: int) -> None:
+        with self._lock:
+            self._attempts.setdefault(ip, []).append(self._clock())
+
+    def clear(self, ip: str) -> None:
+        with self._lock:
+            self._attempts.pop(ip, None)
+
+
+def _required() -> bool:
     try:
         from app.config import settings
 
@@ -34,49 +128,17 @@ def _redis_required() -> bool:
         return False
 
 
-def _get_client() -> Optional[Any]:
-    """Lazy init + cache del client Redis. None se init fallisce.
-
-    Non solleva: il caller decide cosa fare (qui: fallback in-memory).
-    """
-    global _client
-    if _client_explicit:
-        return _client
-    if _client is not None:
-        return _client
-    with _client_lock:
-        if _client_explicit:
-            return _client
-        if _client is not None:
-            return _client
-        try:
-            import redis  # type: ignore
-        except ImportError:
-            return None
-        try:
-            # Import locale per evitare import circolare con app.shared
-            from app.config import settings
-            # Keep Redis failures from blocking auth handlers indefinitely.
-            try:
-                timeout = int(settings.get("LOGIN_RL_REDIS_TIMEOUT_SEC"))
-                if timeout <= 0:
-                    timeout = 1
-            except (TypeError, ValueError):
-                timeout = 1
-            _client = redis.from_url(
-                settings.CELERY_BROKER_URL,
-                socket_timeout=timeout,
-                socket_connect_timeout=timeout,
-                decode_responses=True,
-            )
-            return _client
-        except Exception as e:
-            logger.warning("login_rate_limiter Redis client init failed: %s", e)
-            return None
-
-
-def _key(ip: str) -> str:
-    return f"{_KEY_PREFIX}{ip}"
+def _get_store() -> Optional["_AttemptsStore"]:
+    global _store
+    if _store_explicit:
+        return _store
+    if _store is not None:
+        return _store
+    with _store_lock:
+        if _store_explicit or _store is not None:
+            return _store
+        _store = PgLoginAttemptsStore()
+        return _store
 
 
 def _warn_fallback_once(reason: str) -> None:
@@ -84,7 +146,7 @@ def _warn_fallback_once(reason: str) -> None:
     if not _warned_fallback:
         _warned_fallback = True
         logger.warning(
-            "login rate limiter: Redis non disponibile (%s) — "
+            "login rate limiter: backend non disponibile (%s) — "
             "attivo fallback in-memory (comportamento single-node preservato)",
             reason,
         )
@@ -92,7 +154,7 @@ def _warn_fallback_once(reason: str) -> None:
 
 def _fail_closed(operation: str, reason: str) -> None:
     logger.error(
-        "login rate limiter: Redis required, %s denied (%s)",
+        "login rate limiter: backend required, %s denied (%s)",
         operation,
         reason,
     )
@@ -100,62 +162,6 @@ def _fail_closed(operation: str, reason: str) -> None:
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail="Login rate limiter non disponibile.",
     )
-
-
-def _redis_check(
-    ip: str,
-    *,
-    max_attempts: int,
-    window_s: int,
-    lockout_s: int,
-) -> Tuple[bool, int]:
-    """Ritorna `(limited, retry_after_s)`.
-
-    Solleva se il client e' None o I/O Redis fallisce: il caller
-    cattura e fa fallback in-memory.
-    """
-    client = _get_client()
-    if client is None:
-        raise RuntimeError("redis client unavailable")
-    now = time.time()
-    key = _key(ip)
-    cutoff = now - window_s
-    pipe = client.pipeline(transaction=True)
-    pipe.zremrangebyscore(key, 0, cutoff)
-    pipe.zrange(key, 0, 0, withscores=True)
-    pipe.zcard(key)
-    pipe.expire(key, window_s + _TTL_BUFFER_SECONDS)
-    results = pipe.execute()
-    oldest = results[1]
-    count = int(results[2])
-    if count >= max_attempts:
-        if oldest:
-            _, oldest_score = oldest[0]
-            retry_after = int(lockout_s - (now - float(oldest_score)))
-        else:
-            retry_after = lockout_s
-        return True, max(retry_after, 1)
-    return False, 0
-
-
-def _redis_record(ip: str, *, window_s: int) -> None:
-    client = _get_client()
-    if client is None:
-        raise RuntimeError("redis client unavailable")
-    now = time.time()
-    key = _key(ip)
-    member = f"{now}:{uuid.uuid4().hex}"
-    pipe = client.pipeline(transaction=True)
-    pipe.zadd(key, {member: now})
-    pipe.expire(key, window_s + _TTL_BUFFER_SECONDS)
-    pipe.execute()
-
-
-def _redis_clear(ip: str) -> None:
-    client = _get_client()
-    if client is None:
-        raise RuntimeError("redis client unavailable")
-    client.delete(_key(ip))
 
 
 def check_rate_limit(
@@ -168,18 +174,21 @@ def check_rate_limit(
 ) -> None:
     """Solleva HTTPException(429) se `ip` ha superato il limite.
 
-    Tenta Redis; in caso di errore/unavailable delega a `fallback(ip)`,
-    che mantiene operativo il login anche se Redis non e' disponibile.
+    Tenta il backend PG; in caso di errore/unavailable delega a `fallback(ip)`
+    (in-memory single-node), o fail-closed se LOGIN_RL_REDIS_REQUIRED.
     """
     try:
-        limited, retry_after = _redis_check(
+        store = _get_store()
+        if store is None:
+            raise RuntimeError("attempts store unavailable")
+        limited, retry_after = store.check(
             ip,
             max_attempts=max_attempts,
             window_s=window_seconds,
             lockout_s=lockout_seconds,
         )
     except Exception as e:
-        if _redis_required():
+        if _required():
             _fail_closed("check", str(e))
         _warn_fallback_once(str(e))
         fallback(ip)
@@ -199,9 +208,12 @@ def record_failed_login(
     fallback: Callable[[str], None],
 ) -> None:
     try:
-        _redis_record(ip, window_s=window_seconds)
+        store = _get_store()
+        if store is None:
+            raise RuntimeError("attempts store unavailable")
+        store.record(ip, window_s=window_seconds)
     except Exception as e:
-        if _redis_required():
+        if _required():
             _fail_closed("record", str(e))
         _warn_fallback_once(str(e))
         fallback(ip)
@@ -213,31 +225,33 @@ def clear_failed_logins(
     fallback: Callable[[str], None],
 ) -> None:
     try:
-        _redis_clear(ip)
+        store = _get_store()
+        if store is None:
+            raise RuntimeError("attempts store unavailable")
+        store.clear(ip)
     except Exception as e:
-        if _redis_required():
+        if _required():
             _fail_closed("clear", str(e))
         _warn_fallback_once(str(e))
         fallback(ip)
 
 
-def _set_client_for_tests(client: Optional[Any]) -> None:
-    """Inietta un client custom (es. fakeredis) o `None` per simulare
-    Redis down. Setta il flag explicit cosi' il lazy-init non
-    sovrascrive l'iniezione.
-    """
-    global _client, _client_explicit
-    with _client_lock:
-        _client = client
-        _client_explicit = True
+def _set_store_for_tests(store: Optional["_AttemptsStore"]) -> None:
+    """Inietta un attempts store (es. InMemoryLoginAttemptsStore) o None per
+    simulare il backend giu'. Setta il flag explicit cosi' il lazy-init non
+    sovrascrive l'iniezione."""
+    global _store, _store_explicit
+    with _store_lock:
+        _store = store
+        _store_explicit = True
 
 
-def _reset_client_for_tests() -> None:
-    """Torna al lazy-init reale al prossimo `_get_client()`."""
-    global _client, _client_explicit
-    with _client_lock:
-        _client = None
-        _client_explicit = False
+def _reset_store_for_tests() -> None:
+    """Torna al lazy-init reale al prossimo `_get_store()`."""
+    global _store, _store_explicit
+    with _store_lock:
+        _store = None
+        _store_explicit = False
 
 
 def _reset_state_for_tests() -> None:

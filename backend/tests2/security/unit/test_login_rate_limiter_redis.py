@@ -9,7 +9,6 @@ from __future__ import annotations
 import time
 from unittest.mock import patch
 
-import fakeredis
 import pytest
 from fastapi import HTTPException
 
@@ -18,35 +17,39 @@ pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
 # Fixtures
+# Plenora 2.0 Fase 4: il backend distribuito e' PostgreSQL; nei test si inietta
+# InMemoryLoginAttemptsStore (stessa semantica sliding-window, zero rete).
 
 
 @pytest.fixture
 def fake_client():
-    """Un client fakeredis condiviso a livello di test."""
-    return fakeredis.FakeStrictRedis(decode_responses=True)
+    """Attempts store in-memory condiviso a livello di test."""
+    from app.core.security.login_rate_limiter import InMemoryLoginAttemptsStore
+
+    return InMemoryLoginAttemptsStore()
 
 
 @pytest.fixture
 def rl_with_redis(fake_client):
-    """Inietta `fake_client` nel limiter; cleanup dopo."""
+    """Inietta lo store in-memory nel limiter; cleanup dopo."""
     from app.core.security import login_rate_limiter as rl
 
-    rl._set_client_for_tests(fake_client)
+    rl._set_store_for_tests(fake_client)
     rl._reset_state_for_tests()
     yield rl
-    rl._reset_client_for_tests()
+    rl._reset_store_for_tests()
     rl._reset_state_for_tests()
 
 
 @pytest.fixture
 def rl_no_redis():
-    """Forza Redis a None: il limiter cade sul fallback."""
+    """Forza il backend a None: il limiter cade sul fallback."""
     from app.core.security import login_rate_limiter as rl
 
-    rl._set_client_for_tests(None)
+    rl._set_store_for_tests(None)
     rl._reset_state_for_tests()
     yield rl
-    rl._reset_client_for_tests()
+    rl._reset_store_for_tests()
     rl._reset_state_for_tests()
 
 
@@ -188,7 +191,7 @@ def test_cluster_safety_two_callers_share_bucket(fake_client):
     proprio cio' che il vecchio limiter in-memory non garantiva."""
     from app.core.security import login_rate_limiter as rl
 
-    rl._set_client_for_tests(fake_client)
+    rl._set_store_for_tests(fake_client)
     rl._reset_state_for_tests()
     try:
         MAX = 3
@@ -200,8 +203,8 @@ def test_cluster_safety_two_callers_share_bucket(fake_client):
         for _ in range(MAX):
             rl.record_failed_login(ip, window_seconds=WINDOW, fallback=_no_op_fallback)
 
-        # "Istanza 2" (stesso modulo, stessa connessione fakeredis):
-        # check sullo stesso IP deve vedere il bucket pieno → 429.
+        # "Istanza 2" (stesso modulo, stesso store distribuito): il check
+        # sullo stesso IP vede il bucket pieno → 429.
         with pytest.raises(HTTPException) as exc:
             rl.check_rate_limit(
                 ip, max_attempts=MAX, window_seconds=WINDOW,
@@ -209,7 +212,7 @@ def test_cluster_safety_two_callers_share_bucket(fake_client):
             )
         assert exc.value.status_code == 429
     finally:
-        rl._reset_client_for_tests()
+        rl._reset_store_for_tests()
         rl._reset_state_for_tests()
 
 
@@ -269,20 +272,23 @@ def test_redis_required_fails_closed_without_fallback(rl_no_redis, monkeypatch, 
     assert fallback_called == []
 
 
-def test_fallback_called_when_redis_pipeline_raises():
-    """Se Redis e' "online" ma l'I/O solleva (es. timeout, server error),
-    cadiamo sul fallback. Simulato con un client che esplode su `pipeline()`.
+def test_fallback_called_when_store_raises():
+    """Se il backend e' "online" ma l'I/O solleva (es. DB timeout/down),
+    cadiamo sul fallback. Simulato con uno store che esplode su ogni op.
     """
     from app.core.security import login_rate_limiter as rl
 
-    class ExplodingClient:
-        def pipeline(self, *_a, **_kw):
-            raise ConnectionError("simulated redis down")
+    class ExplodingStore:
+        def check(self, *_a, **_kw):
+            raise ConnectionError("simulated backend down")
 
-        def delete(self, *_a, **_kw):
-            raise ConnectionError("simulated redis down")
+        def record(self, *_a, **_kw):
+            raise ConnectionError("simulated backend down")
 
-    rl._set_client_for_tests(ExplodingClient())
+        def clear(self, *_a, **_kw):
+            raise ConnectionError("simulated backend down")
+
+    rl._set_store_for_tests(ExplodingStore())
     rl._reset_state_for_tests()
     try:
         called: list[str] = []
@@ -296,7 +302,7 @@ def test_fallback_called_when_redis_pipeline_raises():
         rl.clear_failed_logins("ip-y", fallback=fb)
         assert called == ["ip-y", "ip-y", "ip-y"]
     finally:
-        rl._reset_client_for_tests()
+        rl._reset_store_for_tests()
         rl._reset_state_for_tests()
 
 
