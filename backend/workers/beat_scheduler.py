@@ -212,9 +212,60 @@ class PlenoraBeatScheduler(Scheduler):
         self._cleanup_orphan_temp_files()
         self._reconcile_storage()
         self._cleanup_task_results()
-        if event_t is not None:
-            return super().tick(event_t=event_t, **kwargs)
-        return super().tick(**kwargs)
+        # Plenora 2.0 Fase 3 (F3.2): l'emit degli schedule dovuti passa dal
+        # layer dispatch (dispatch_task_by_name) invece che da super().tick()
+        # di Celery. Stessa valutazione di scadenza (ScheduleEntry.is_due),
+        # solo trasporto diverso: Celery ora, Dramatiq dopo il cutover (F1).
+        return self._emit_due_via_dispatch()
+
+    def _dispatch_schedule_task(self, name: str, kwargs: dict) -> None:
+        """Dispatcha un task schedule via il layer runtime-agnostico.
+
+        Import locale: evita un edge top-level workers->task_runtime nel
+        grafo e mantiene il dispatch lazy (serve solo a emit-time)."""
+        from app.core.task_runtime.dispatch import dispatch_task_by_name
+
+        dispatch_task_by_name(name, kwargs=kwargs)
+
+    def _emit_due_via_dispatch(self) -> float:
+        """Emette gli schedule dovuti, rimpiazzo Celery-agnostico di
+        super().tick().
+
+        Riusa ``ScheduleEntry.is_due()`` (stessa matematica cron di Celery
+        beat) per decidere cosa e' dovuto e avanza ``last_run_at`` in-memory
+        via ``next(entry)`` esattamente come Celery — comportamento
+        identico, niente doppi-fire. Cambia solo il trasporto: il task va
+        sul layer dispatch invece che su self.app.send_task.
+
+        Ritorna l'intervallo di sleep fino al prossimo schedule dovuto
+        (clampato a max_interval)."""
+        remaining: list[float] = []
+        for name, entry in list(getattr(self, "data", {}).items()):
+            try:
+                is_due, next_time = entry.is_due()
+            except Exception as e:
+                logger.error(
+                    f"[BEAT] is_due fallita per entry {name}: {e}", exc_info=True
+                )
+                continue
+            if is_due:
+                try:
+                    self._dispatch_schedule_task(
+                        entry.task, dict(entry.kwargs or {})
+                    )
+                    logger.info(f"[BEAT] emesso {entry.task} (entry={name})")
+                except Exception as e:
+                    logger.error(
+                        f"[CRASH] [BEAT] emit fallito per {name}: {e}",
+                        exc_info=True,
+                    )
+                # Avanza last_run_at in-memory come Celery (anche se il
+                # dispatch fallisce: il retry e' demandato a catchup/policy,
+                # non a un re-emit immediato che duplicherebbe).
+                self.data[name] = next(entry)
+            if next_time is not None:
+                remaining.append(next_time)
+        return min([self.max_interval, *remaining])
 
     # Cap anti-runaway: se uno schedule emette piu' di N catchup nei
     # `_CATCHUP_RUNAWAY_WINDOW_MIN` minuti precedenti, il beat skippa
@@ -405,9 +456,9 @@ class PlenoraBeatScheduler(Scheduler):
         # silenziosamente perso e non rilevabile. Ora: rollback della
         # row history su failure e log error per visibility.
         try:
-            self.app.send_task(
+            self._dispatch_schedule_task(
                 SCHEDULE_PIPELINE_TASK_NAME,
-                kwargs={
+                {
                     "schedule_id": schedule_id,
                     **scheduled_run_kwargs(
                         triggered_by="catchup",

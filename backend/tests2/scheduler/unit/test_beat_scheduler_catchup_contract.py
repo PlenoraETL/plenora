@@ -24,7 +24,9 @@ class _FakeScheduler(PlenoraBeatScheduler):
         self.data = {}
         self.app = MagicMock()
         self.app.now = MagicMock(return_value=MagicMock(name="now"))
-        self.app.send_task = MagicMock(return_value=MagicMock(id="task-xyz"))
+        # F3.2: l'emit passa da _dispatch_schedule_task (layer dispatch),
+        # non piu' da app.send_task di Celery.
+        self._dispatch_schedule_task = MagicMock(return_value=None)
         self._last_stuck_check = 0.0
         self._last_eseguibili_cleanup = 0.0
         self._last_logs_retention = 0.0
@@ -81,7 +83,7 @@ def test_skips_schedule_when_catchup_flag_disabled(scheduler):
         mock_dt.fromisoformat = datetime.fromisoformat
         scheduler._emit_catchup_runs()
 
-    scheduler.app.send_task.assert_not_called()
+    scheduler._dispatch_schedule_task.assert_not_called()
 
 
 def test_skips_schedule_when_disabled_globally(scheduler):
@@ -97,7 +99,7 @@ def test_skips_schedule_when_disabled_globally(scheduler):
         scheduler._emit_catchup_runs()
 
     # La query deve filtrare is_enabled=TRUE, quindi la riga non torna
-    scheduler.app.send_task.assert_not_called()
+    scheduler._dispatch_schedule_task.assert_not_called()
     # Check che la query filtri correttamente
     ff.assert_called_once()
     query = ff.call_args[0][0]
@@ -121,10 +123,10 @@ def test_emits_task_with_triggered_by_catchup_and_scheduled_for(scheduler):
         mock_dt.fromisoformat = datetime.fromisoformat
         scheduler._emit_catchup_runs()
 
-    scheduler.app.send_task.assert_called_once()
-    call_kwargs = scheduler.app.send_task.call_args
-    task_name = call_kwargs[0][0]
-    kwargs = call_kwargs.kwargs.get("kwargs", {})
+    scheduler._dispatch_schedule_task.assert_called_once()
+    call_args = scheduler._dispatch_schedule_task.call_args
+    task_name = call_args[0][0]
+    kwargs = call_args[0][1]
 
     assert task_name == "workers.tasks.schedule_task.schedule_pipeline_task"
     assert kwargs["schedule_id"] == "sched-1"
@@ -191,7 +193,7 @@ def test_cap_exceeded_skips_emit_and_logs_warning(scheduler, caplog):
         mock_dt.fromisoformat = datetime.fromisoformat
         scheduler._emit_catchup_runs()
 
-    scheduler.app.send_task.assert_not_called()
+    scheduler._dispatch_schedule_task.assert_not_called()
     assert any("CATCHUP" in rec.getMessage().upper() for rec in caplog.records)
 
 
@@ -211,7 +213,7 @@ def test_cap_not_exceeded_still_emits(scheduler):
         mock_dt.fromisoformat = datetime.fromisoformat
         scheduler._emit_catchup_runs()
 
-    scheduler.app.send_task.assert_called_once()
+    scheduler._dispatch_schedule_task.assert_called_once()
 
 
 # Robustezza a DB error
@@ -225,7 +227,7 @@ def test_db_error_on_main_query_is_swallowed(scheduler, caplog):
          caplog.at_level(logging.ERROR, logger="workers.beat_scheduler"):
         scheduler._emit_catchup_runs()  # non deve sollevare
 
-    scheduler.app.send_task.assert_not_called()
+    scheduler._dispatch_schedule_task.assert_not_called()
 
 
 def test_emits_nothing_when_no_missed_run_detected(scheduler):
@@ -240,4 +242,4 @@ def test_emits_nothing_when_no_missed_run_detected(scheduler):
         mock_dt.fromisoformat = datetime.fromisoformat
         scheduler._emit_catchup_runs()
 
-    scheduler.app.send_task.assert_not_called()
+    scheduler._dispatch_schedule_task.assert_not_called()

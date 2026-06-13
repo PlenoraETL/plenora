@@ -31,7 +31,7 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     # Celery tasks and signal callbacks are registered by decorators.
     re.compile(r"backend[\\/]+workers[\\/]+celery_app\.py:\d+: unused function "),
     re.compile(r"backend[\\/]+workers[\\/]+tasks[\\/]+.+\.py:\d+: unused function "),
-    re.compile(r"backend[\\/]+workers[\\/]+beat_scheduler\.py:\d+: unused method '(setup_schedule|sync)' "),
+    re.compile(r"backend[\\/]+workers[\\/]+beat_scheduler\.py:\d+: unused method '(setup_schedule|sync|tick)' "),
 
     # Transform functions are loaded from transforms_registry.json or plugin dispatch.
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+manipola[\\/]+transforms[\\/]+.+\.py:\d+: unused function "),

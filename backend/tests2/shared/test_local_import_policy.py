@@ -42,7 +42,11 @@ _SCAN_ROOTS = (
 # middleware finalize importa lazy finalize_from_celery (1). Lazy come tutti gli
 # actor: il bootstrap Dramatiq non deve pagare l'import di celery_app/orchestrator
 # finche' l'actor non viene eseguito.
-MAX_LOCAL_IMPORTS = 287
+# 287 -> 288 (Plenora 2.0, Fase 3 F3.2): beat_scheduler._dispatch_schedule_task
+# importa lazy dispatch_task_by_name (evita un edge top-level workers->task_runtime
+# nel grafo; il dispatch serve solo a emit-time). NB: in F3.1 l'import di redis in
+# _get_redis e' stato rimosso, quindi il saldo Fase 3 sui local import resta basso.
+MAX_LOCAL_IMPORTS = 288
 MAX_LATE_MODULE_IMPORTS = 8
 
 

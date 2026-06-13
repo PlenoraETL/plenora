@@ -123,22 +123,23 @@ def test_celery_app_autoretry_excludes_oserror():
 # Path 6: beat_scheduler catchup audit insert PRIMA di send_task
 
 def test_beat_scheduler_catchup_audit_before_send_task():
-    """In `_emit_single_catchup`, l'INSERT audit DEVE precedere il
-    `send_task`. Pre-fix: send_task PRIMA, INSERT fail-open DOPO →
-    duplicati al prossimo tick se INSERT fallisce."""
+    """In `_emit_single_catchup`, l'INSERT audit DEVE precedere l'emit del
+    task. Pre-fix: emit PRIMA, INSERT fail-open DOPO → duplicati al
+    prossimo tick se INSERT fallisce. F3.2: l'emit passa da
+    _dispatch_schedule_task (layer dispatch) invece di self.app.send_task."""
     from workers import beat_scheduler
 
     src = inspect.getsource(beat_scheduler.PlenoraBeatScheduler._emit_single_catchup)
 
     # RAW: "INSERT INTO schedule_catchup_history" e' un SQL literal, non un identificatore codice
     insert_idx = src.find("INSERT INTO schedule_catchup_history")
-    # RAW: il test verifica ORDINE (insert_idx < send_task_idx); gli helper AST restituiscono bool non posizione
-    send_task_idx = src.find("self.app.send_task(")
+    # RAW: il test verifica ORDINE (insert_idx < emit_idx); gli helper AST restituiscono bool non posizione
+    emit_idx = src.find("self._dispatch_schedule_task(")
 
-    assert insert_idx >= 0 and send_task_idx >= 0
-    assert insert_idx < send_task_idx, (
-        "L'INSERT audit DEVE precedere send_task per garantire dedupe "
-        "history-based. Pre-fix: send_task PRIMA → se INSERT falliva, "
+    assert insert_idx >= 0 and emit_idx >= 0
+    assert insert_idx < emit_idx, (
+        "L'INSERT audit DEVE precedere l'emit per garantire dedupe "
+        "history-based. Pre-fix: emit PRIMA → se INSERT falliva, "
         "prossimo tick re-emetteva → duplicato in volo."
     )
 

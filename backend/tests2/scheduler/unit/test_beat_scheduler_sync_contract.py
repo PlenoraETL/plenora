@@ -46,15 +46,16 @@ def scheduler():
 
 
 def test_tick_calls_sync_heartbeat_and_all_cleanups(scheduler):
-    """tick() del leader deve orchestrare: _sync_from_db,
-    _write_heartbeat, i cleanup jobs, poi delegare a super().tick()."""
+    """tick() del leader deve orchestrare: _sync_from_db, _write_heartbeat,
+    i cleanup jobs, poi emettere gli schedule dovuti via dispatch (F3.2:
+    rimpiazza super().tick() di Celery)."""
     with patch.object(scheduler, "_try_become_leader", return_value=True), \
          patch.object(scheduler, "_sync_from_db") as sync, \
          patch.object(scheduler, "_write_heartbeat") as heartbeat, \
          patch.object(scheduler, "_check_stuck_tasks") as stuck, \
          patch.object(scheduler, "_cleanup_eseguibili_outputs") as outputs, \
          patch.object(scheduler, "_cleanup_old_logs") as logs, \
-         patch.object(Scheduler, "tick", return_value=42.0) as super_tick:
+         patch.object(scheduler, "_emit_due_via_dispatch", return_value=42.0) as emit:
         result = scheduler.tick()
 
     sync.assert_called_once()
@@ -62,24 +63,72 @@ def test_tick_calls_sync_heartbeat_and_all_cleanups(scheduler):
     stuck.assert_called_once()
     outputs.assert_called_once()
     logs.assert_called_once()
-    super_tick.assert_called_once()
+    emit.assert_called_once()
     assert result == 42.0
 
 
-def test_tick_delegates_event_t_to_super_when_provided(scheduler):
-    """Se Celery passa event_t, tick() (da leader) lo propaga a super().tick()."""
+def test_tick_accepts_event_t_from_celery_loop(scheduler):
+    """Finche' il loop e' Celery beat (pre-cutover APScheduler), tick() puo'
+    ricevere event_t: deve accettarlo senza crash ed emettere comunque."""
     with patch.object(scheduler, "_try_become_leader", return_value=True), \
          patch.object(scheduler, "_sync_from_db"), \
          patch.object(scheduler, "_write_heartbeat"), \
          patch.object(scheduler, "_check_stuck_tasks"), \
          patch.object(scheduler, "_cleanup_eseguibili_outputs"), \
          patch.object(scheduler, "_cleanup_old_logs"), \
-         patch.object(Scheduler, "tick", return_value=1.0) as super_tick:
-        scheduler.tick(event_t=("tick", 100, object()))
+         patch.object(scheduler, "_emit_due_via_dispatch", return_value=1.0) as emit:
+        result = scheduler.tick(event_t=("tick", 100, object()))
 
-    super_tick.assert_called_once()
-    _args, kwargs = super_tick.call_args
-    assert kwargs.get("event_t") == ("tick", 100, super_tick.call_args.kwargs["event_t"][2])
+    emit.assert_called_once()
+    assert result == 1.0
+
+
+class _FakeEntry:
+    """Minimo ScheduleEntry: is_due() + __next__() che avanza."""
+
+    def __init__(self, due, task="workers.tasks.schedule_task.schedule_pipeline_task",
+                 kwargs=None, next_time=30.0):
+        self._due = due
+        self.task = task
+        self.kwargs = kwargs or {}
+        self._next = next_time
+        self.advanced = False
+
+    def is_due(self):
+        return (self._due, self._next)
+
+    def __next__(self):
+        self.advanced = True
+        return self
+
+
+def test_emit_due_via_dispatch_dispatches_only_due_entries(scheduler):
+    due = _FakeEntry(True, kwargs={"schedule_id": "s1", "triggered_by": "cron"})
+    not_due = _FakeEntry(False, kwargs={"schedule_id": "s2"})
+    scheduler.data = {"urby:schedule:s1": due, "urby:schedule:s2": not_due}
+
+    with patch.object(scheduler, "_dispatch_schedule_task") as dispatch:
+        result = scheduler._emit_due_via_dispatch()
+
+    dispatch.assert_called_once_with(
+        "workers.tasks.schedule_task.schedule_pipeline_task",
+        {"schedule_id": "s1", "triggered_by": "cron"},
+    )
+    # Solo l'entry dovuta avanza last_run_at; l'altra resta invariata.
+    assert due.advanced is True
+    assert not_due.advanced is False
+    # Sleep = min(max_interval, next_time delle entry).
+    assert result == 30.0
+
+
+def test_emit_due_via_dispatch_clamps_to_max_interval(scheduler):
+    far = _FakeEntry(False, next_time=99999.0)
+    scheduler.data = {"urby:schedule:s1": far}
+
+    with patch.object(scheduler, "_dispatch_schedule_task"):
+        result = scheduler._emit_due_via_dispatch()
+
+    assert result == scheduler.max_interval
 
 
 # _sync_from_db — carica schedule dal DB in self.data
