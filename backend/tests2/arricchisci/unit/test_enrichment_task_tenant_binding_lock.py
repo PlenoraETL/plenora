@@ -234,17 +234,20 @@ def test_execute_enrichment_task_propagates_result_id_in_file_branch(
 # 5. Behavior: update_task_progress signature + task_id propagation
 
 
-def test_update_task_progress_accepts_explicit_task_id():
+def test_update_task_progress_accepts_explicit_task_id(monkeypatch):
     """Regression guard: `update_task_progress` deve accettare un
-    `task_id` keyword esplicito che propaga a `task.update_state(task_id=...)`.
+    `task_id` keyword esplicito che propaga alla scrittura su PG
+    (`report_task_progress`), che lo usa come chiave della riga task_results.
 
     Senza, le chiamate da dentro `_run_single_node` quando eseguito in
     un thread del `ThreadPoolExecutor` vedono `self.request.id == None`
-    (Celery `request` e' thread-local), e
-    `backend.store_result(task_id=None, ...)` solleva
-    "task_id must not be empty. Got None instead." → tutto il task
-    fallisce mentre l'enrichment era gia' completato con successo."""
+    (Celery `request` e' thread-local): la riga di progress finirebbe con
+    task_id None e non sarebbe leggibile dall'orchestratore.
+
+    Plenora 2.0 Fase 2 (F2.5): la destinazione e' PG, non piu'
+    `task.update_state` (result backend Redis rimosso col flip della lettura)."""
     import inspect
+    import workers.tasks.enrichment_task as enrichment_task_mod
     from workers.tasks.enrichment_task import update_task_progress
 
     sig = inspect.signature(update_task_progress)
@@ -258,18 +261,18 @@ def test_update_task_progress_accepts_explicit_task_id():
         "`task_id` deve essere keyword-only per evitare ambiguita' di chiamata"
     )
 
-    # Stub Task: cattura task_id passato a update_state
-    class _StubTask:
-        def __init__(self):
-            self.captured = {}
-        def update_state(self, **kwargs):
-            self.captured = kwargs
+    # Cattura il task_id propagato alla scrittura PG.
+    captured = {}
 
-    stub = _StubTask()
-    update_task_progress(stub, 50, "test", task_id="task-xyz")
+    def _capture_report(task_id, progress, message, *, is_error=False, name=None):
+        captured["task_id"] = task_id
 
-    assert stub.captured.get("task_id") == "task-xyz", (
-        "update_task_progress deve propagare task_id a task.update_state"
+    monkeypatch.setattr(enrichment_task_mod, "report_task_progress", _capture_report)
+
+    update_task_progress(object(), 50, "test", task_id="task-xyz")
+
+    assert captured.get("task_id") == "task-xyz", (
+        "update_task_progress deve propagare task_id a report_task_progress"
     )
 
 

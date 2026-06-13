@@ -981,35 +981,22 @@ def update_task_progress(
     task_id: Optional[str] = None,
 ) -> None:
     """
-    Aggiorna il progresso del task in Redis.
+    Aggiorna il progresso del task su PostgreSQL.
 
-    Usa sempre lo stato 'PROGRESS' (mai 'FAILURE') per evitare che Celery
-    interpreti il task come terminato. Il frontend determina lo stato
-    reale dal flag is_error e dall'eventuale prefisso "Errore:" nel messaggio.
+    Stato sempre 'PROGRESS' (mai 'FAILURE') per non far interpretare il task
+    come terminato; il frontend determina lo stato reale dal flag is_error e
+    dall'eventuale prefisso "Errore:" nel messaggio.
 
-    `task_id` keyword obbligatorio quando la chiamata avviene da un
-    thread spawned (es. ThreadPoolExecutor del loop parallelo). Celery
-    `Task.request.id` e' thread-local: nei thread worker spawned dal
-    main thread del task, `self.request.id` ricade su `None` e
-    `backend.store_result(task_id=None, ...)` solleva
-    "task_id must not be empty. Got None instead.". Passare `task_id`
-    esplicito (catturato all'inizio del task da `self.request.id`)
-    bypassa il fallback thread-local.
+    `task_id` keyword obbligatorio quando la chiamata avviene da un thread
+    spawned (es. ThreadPoolExecutor del loop parallelo): `self.request.id`
+    di Celery e' thread-local e nei thread worker ricade su None. Va quindi
+    passato esplicito (catturato a inizio task da `self.request.id`) perche'
+    e' la chiave della riga task_results.
+
+    Plenora 2.0 Fase 2 (F2.5): scrittura solo su PG via report_task_progress.
+    Il vecchio self.update_state verso il result backend Redis di Celery e'
+    stato rimosso col flip della lettura su PG (F2.3).
     """
-    task.update_state(
-        task_id=task_id,
-        state="PROGRESS",
-        meta={
-            "progress": max(0, progress),
-            "message": message,
-            "is_error": is_error,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        },
-    )
-    # Plenora 2.0 Fase 2 (F2.4): progress anche su PG (rimpiazzo result
-    # backend Redis). task_id esplicito qui e' essenziale: nei thread
-    # spawned self.request.id e' None (vedi docstring). self.update_state
-    # resta transitorio finche' la lettura non flippa (F2.3, rimosso a F2.5).
     report_task_progress(
         task_id or getattr(getattr(task, "request", None), "id", None),
         progress,

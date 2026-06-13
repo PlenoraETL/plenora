@@ -8,7 +8,7 @@ import time as _time
 import traceback as _traceback
 import uuid as _uuid
 from collections.abc import Mapping as _Mapping
-from typing import Any, Optional, Protocol
+from typing import Any, Optional
 
 from app.shared.contracts.payloads import JsonObject
 from workers.celery_app import celery_app, BaseTaskWithRetry
@@ -25,31 +25,11 @@ from app.utils import debug_payload_builder as debug_payload_builder_module
 logger = get_logger("workers.pipeline_task")
 
 
-class _ProgressTask(Protocol):
-    def update_state(self, *, state: str, meta: JsonObject) -> None:
-        ...
-
-
-def _update_progress(task: _ProgressTask, percent: int, message: str) -> None:
-    # Pre-fix: pipeline_task emetteva `meta["percent"]`, mentre
-    # enrichment_task e imdf_publish_task emettevano `meta["progress"]`.
-    # Il consumer `task_service.py:517` aveva un fallback
-    # `meta.get("progress", meta.get("percent", 0))` ma il drift restava
-    # un trap per nuovi consumer FE che leggono solo uno dei due. Post-fix
-    # emettiamo entrambi: `progress` canonico (allineato agli altri task)
-    # + `percent` mirror legacy per evitare regressioni FE.
-    task.update_state(
-        state="PROGRESS",
-        meta={
-            "progress": percent,
-            "percent": percent,  # mirror legacy
-            "message": message,
-            "type": "pipeline",
-        },
-    )
-    # Plenora 2.0 Fase 2 (F2.4): progress anche su PG (rimpiazzo result
-    # backend Redis). self.update_state resta transitorio finche' la
-    # lettura non flippa (F2.3) e viene rimosso a F2.5.
+def _update_progress(task: object, percent: int, message: str) -> None:
+    # Plenora 2.0 Fase 2 (F2.5): progress scritto solo su PG via
+    # report_task_progress. Il vecchio self.update_state verso il result
+    # backend Redis di Celery e' stato rimosso col flip della lettura su PG
+    # (F2.3): quello stato non veniva piu' letto.
     report_task_progress(
         getattr(getattr(task, "request", None), "id", None),
         percent,
@@ -294,18 +274,10 @@ def execute_pipeline_task(
                     error_module=module,
                     error_message=f"Connessione al database persa: {message}",
                 )
-                self.update_state(
-                    state="FAILURE",
-                    meta={
-                        "exc_type": "ConnectionError",
-                        "exc_message": message,
-                        # Dual emission per evitare drift (vedi P2-MED I1):
-                        # progress canonico + percent legacy mirror.
-                        "progress": 0,
-                        "percent": 0,
-                        "message": f"Connessione al database persa. {message}",
-                    },
-                )
+                # F2.5: niente self.update_state(FAILURE) verso Redis. Il
+                # return success=False viene declassato a FAILURE da
+                # get_task_status leggendo da PG (after_return persiste l'esito).
+                _update_progress(self, 0, f"Connessione al database persa. {message}")
                 return {"success": False, "message": f"Connessione al database persa: {message}"}
 
             # Errore logico — costruisce debug_payload
