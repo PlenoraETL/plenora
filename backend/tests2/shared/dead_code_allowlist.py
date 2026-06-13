@@ -152,6 +152,13 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     # il protocol ha corpo `...` (falso positivo strutturale). Rimuovere
     # queste righe quando la Fase 4 li aggancia.
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+kv[\\/]+(store|memory_store|redis_store)\.py:\d+: unused method '(scan_keys|acquire_lock|release_lock|exists|delete|get|set)' "),
+
+    # Fondazione Plenora 2.0 Fase 2 (task_result_store): `cleanup_expired`
+    # e' lo sweep TTL che rimpiazza CELERY_RESULT_EXPIRES di Redis; il suo
+    # consumer di produzione (step di manutenzione/beat) viene agganciato
+    # in una fetta successiva della Fase 2. Protocol + 2 backend = 3 righe.
+    # Rimuovere questa riga quando lo sweep viene cablato.
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+orchestrator[\\/]+task_result_store\.py:\d+: unused method 'cleanup_expired' "),
 )
 
 

@@ -31,7 +31,10 @@ _SCAN_ROOTS = (
 # legacy. Stessa motivazione degli altri actor (cleanup_temp_files,
 # cleanroom): il bootstrap Dramatiq non deve pagare l'import di celery_app
 # finche' l'actor non viene eseguito.
-MAX_LOCAL_IMPORTS = 278
+# 278 -> 279 (Plenora 2.0, Fase 2 F2.1): default_task_result_store() importa
+# app.config.settings localmente, stesso pattern di default_task_metadata_store
+# (evita di aggiungere un edge top-level orchestrator->config al grafo).
+MAX_LOCAL_IMPORTS = 279
 MAX_LATE_MODULE_IMPORTS = 8
 
 
