@@ -309,8 +309,11 @@ docker run -d \
   -v plenora-data:/data \
   --entrypoint python \
   $REGISTRY/backend:$PLENORA_TAG \
-  -m celery -A workers.celery_app worker --loglevel=info
+  -m dramatiq workers.dramatiq_app --processes 2 --threads 4
 ```
+
+> Plenora 2.0 (Fase 1): il worker esegue gli actor Dramatiq da RabbitMQ
+> (`python -m dramatiq workers.dramatiq_app`), non piu' `celery worker`.
 
 Worker round-trip:
 

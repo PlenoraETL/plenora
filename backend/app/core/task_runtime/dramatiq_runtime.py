@@ -47,7 +47,7 @@ class DramatiqTaskRuntime:
         args = tuple(options.pop("args", ()) or ())
         kwargs = dict(options.pop("kwargs", {}) or {})
         countdown = options.pop("countdown", None)
-        queue_name = options.pop("queue", None) or "default"
+        queue_name = options.pop("queue", None)
         # opzioni Celery senza equivalente diretto vengono ignorate in
         # modo esplicito qui (es. task_id custom non supportato): meglio
         # fallire la review che perdere semantica in silenzio.
@@ -55,6 +55,14 @@ class DramatiqTaskRuntime:
             raise ValueError(
                 f"Opzioni send_task non mappate su Dramatiq: {sorted(options)}"
             )
+
+        broker = self._resolve_broker()
+        # Routing: senza queue esplicita, instrada sulla coda dell'actor
+        # registrato (data-plane/control-plane/scheduler) — preserva la
+        # topologia code di Celery. Fallback "default" se l'actor non e'
+        # risolvibile (es. broker fake nei test, actor non registrato).
+        if queue_name is None:
+            queue_name = self._actor_queue_name(broker, name)
 
         message = dramatiq.Message(
             queue_name=queue_name,
@@ -64,8 +72,16 @@ class DramatiqTaskRuntime:
             options={},
         )
         delay_ms = int(countdown * 1000) if countdown else None
-        self._resolve_broker().enqueue(message, delay=delay_ms)
+        broker.enqueue(message, delay=delay_ms)
         return DramatiqDispatchHandle(id=message.message_id)
+
+    @staticmethod
+    def _actor_queue_name(broker: Any, name: str) -> str:
+        """Coda dell'actor registrato col nome dato, o 'default'."""
+        try:
+            return broker.get_actor(name).queue_name
+        except Exception:
+            return "default"
 
 
 __all__ = ["DramatiqDispatchHandle", "DramatiqTaskRuntime"]

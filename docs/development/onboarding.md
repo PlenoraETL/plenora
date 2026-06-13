@@ -113,7 +113,7 @@ Worker and beat:
 
 ```bash
 cd backend
-celery -A workers.celery_app worker --loglevel=info
+dramatiq workers.dramatiq_app --processes 1 --threads 8
 python -m workers.beat
 ```
 

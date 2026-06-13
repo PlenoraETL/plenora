@@ -86,7 +86,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     # CMD inherited from Dockerfile (uvicorn). HEALTHCHECK inherited.
+    # Plenora 2.0 Fase 1 (cutover): l'API dispatcha i task su RabbitMQ
+    # (Dramatiq); redis resta per il KV (blacklist/rate-limit) fino a Fase 4.
     restart: unless-stopped
 
   worker:
@@ -109,15 +113,17 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
       redis:
         condition: service_healthy
       backend:
         condition: service_started
-    # --pool=solo for the scaffold: deterministic, no fork-time
-    # bootstrap re-run, matches the dry-run pack section 2.7 worker
-    # command. Production should use prefork (target shape).
-    entrypoint: ["python", "-m", "celery", "-A", "workers.celery_app", "worker"]
-    command: ["--pool=solo", "--loglevel=info"]
+    # Plenora 2.0 Fase 1 (cutover): il worker esegue gli actor Dramatiq da
+    # RabbitMQ (non piu' celery worker da Redis). 1 processo / 8 thread per
+    # lo scaffold single-machine; il routing actor->coda e' in dramatiq_app.
+    entrypoint: ["python", "-m", "dramatiq", "workers.dramatiq_app"]
+    command: ["--processes", "1", "--threads", "8"]
     healthcheck:
       disable: true
     restart: unless-stopped
@@ -139,7 +145,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
+      rabbitmq:
         condition: service_healthy
       backend:
         condition: service_started

@@ -14,6 +14,7 @@ from app.core.orchestrator.task_metadata_store import (
     default_task_metadata_store,
 )
 from app.core.task_runtime import TaskRuntimePort
+from app.core.task_runtime.dispatch import dispatch_task_by_name
 from app.core.orchestrator.pg_task_runtime import PgResultTaskRuntime
 from app.shared.execution import carica_dispatcher
 from app.utils.logger import get_logger
@@ -59,10 +60,13 @@ class CeleryLaunchResult:
 
 
 class CeleryLaunchTask(Protocol):
-    """Minimal Celery task contract for launching work."""
+    """Minimal task contract for launching work.
 
-    def delay(self, **kwargs: JsonValue) -> CeleryLaunchResult:
-        ...
+    `name` e' il nome registrato del task (es. "pipeline.execute"): dal
+    cutover di Fase 1 il dispatch va by-name via dispatch_task_by_name
+    (Dramatiq/RabbitMQ), non piu' via `.delay` dell'oggetto Celery."""
+
+    name: str
 
 
 @dataclass(frozen=True)
@@ -337,10 +341,17 @@ class TaskService:
         self.runtime.app = app
 
     def submit_task(self, request: TaskSubmitRequest) -> TaskInfo:
-        """Launch a Celery task and record the pending task metadata."""
+        """Launch a task by-name and record the pending task metadata.
 
-        result = request.celery_task.delay(
-            **task_payload_to_celery_kwargs(request.payload)
+        Plenora 2.0 Fase 1 (cutover): il dispatch passa dal layer
+        runtime-agnostico (dispatch_task_by_name → DramatiqTaskRuntime su
+        RabbitMQ dopo il flip di default_task_runtime), non piu' dal
+        `.delay` dell'oggetto Celery. Il nome registrato del task arriva
+        da `request.celery_task.name`."""
+
+        result = dispatch_task_by_name(
+            request.celery_task.name,
+            kwargs=dict(task_payload_to_celery_kwargs(request.payload)),
         )
 
         logger.info(

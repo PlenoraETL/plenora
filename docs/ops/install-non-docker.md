@@ -148,7 +148,7 @@ Terminal 2:
 
 ```bash
 source venv/bin/activate
-celery -A workers.celery_app worker --loglevel=info --pool=solo
+dramatiq workers.dramatiq_app --processes 1 --threads 8
 ```
 
 Terminal 3:

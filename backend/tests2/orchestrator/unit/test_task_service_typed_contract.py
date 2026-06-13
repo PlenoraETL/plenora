@@ -363,13 +363,24 @@ def test_forget_task_result_delegates_to_runtime_port():
     assert forgotten == ["task-1"]
 
 
-def test_submit_task_launches_celery_and_returns_pending_task_info():
+def test_submit_task_launches_celery_and_returns_pending_task_info(monkeypatch):
     captured_kwargs = {}
+    captured_name = {}
+
+    # Fase 1 cutover: submit_task dispatcha by-name via dispatch_task_by_name
+    # (non piu' celery_task.delay). Si patcha il dispatch nel modulo
+    # task_service e si verifica nome + kwargs propagati.
+    from app.core.orchestrator import task_service as ts_mod
+
+    def fake_dispatch(name, **options):
+        captured_name["name"] = name
+        captured_kwargs.update(options.get("kwargs", {}))
+        return CeleryLaunchResult(id="task-submit-1")
+
+    monkeypatch.setattr(ts_mod, "dispatch_task_by_name", fake_dispatch)
 
     class FakeCeleryTask:
-        def delay(self, **kwargs):
-            captured_kwargs.update(kwargs)
-            return CeleryLaunchResult(id="task-submit-1")
+        name = "pipeline.execute"
 
     metadata_store = InMemoryTaskMetadataStore()
     service = TaskService(metadata_store=metadata_store)
@@ -388,6 +399,7 @@ def test_submit_task_launches_celery_and_returns_pending_task_info():
         )
     )
 
+    assert captured_name["name"] == "pipeline.execute"
     assert task_info.task_id == "task-submit-1"
     assert task_info.task_type is TaskType.EXECUTE
     assert task_info.project_id == "project-1"

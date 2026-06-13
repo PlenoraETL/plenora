@@ -46,7 +46,10 @@ _SCAN_ROOTS = (
 # importa lazy dispatch_task_by_name (evita un edge top-level workers->task_runtime
 # nel grafo; il dispatch serve solo a emit-time). NB: in F3.1 l'import di redis in
 # _get_redis e' stato rimosso, quindi il saldo Fase 3 sui local import resta basso.
-MAX_LOCAL_IMPORTS = 288
+# 288 -> 289 (Plenora 2.0, Fase 1 cutover): default_task_runtime() ora importa lazy
+# workers.dramatiq_app (side-effect set_broker) + DramatiqTaskRuntime (era 1 solo
+# import locale di celery_app) -> +1. Locale per non aggiungere edge al grafo.
+MAX_LOCAL_IMPORTS = 289
 MAX_LATE_MODULE_IMPORTS = 8
 
 

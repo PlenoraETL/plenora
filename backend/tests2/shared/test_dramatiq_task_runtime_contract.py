@@ -76,3 +76,26 @@ def test_queue_option_routes_message():
     DramatiqTaskRuntime(broker=broker).send_task("x", queue="data_plane")
     [(message, _)] = broker.enqueued
     assert message.queue_name == "data_plane"
+
+
+def test_send_task_routes_to_registered_actor_queue():
+    # Senza queue esplicita, instrada sulla coda dell'actor registrato
+    # (preserva la topologia: carica.execute -> data-plane).
+    from types import SimpleNamespace
+
+    class _ActorBroker(_FakeBroker):
+        def get_actor(self, name):
+            return SimpleNamespace(queue_name="data-plane")
+
+    broker = _ActorBroker()
+    DramatiqTaskRuntime(broker=broker).send_task("carica.execute", kwargs={})
+    [(message, _)] = broker.enqueued
+    assert message.queue_name == "data-plane"
+
+
+def test_send_task_falls_back_to_default_when_actor_unknown():
+    # Broker senza get_actor (fake) o actor non registrato -> default.
+    broker = _FakeBroker()
+    DramatiqTaskRuntime(broker=broker).send_task("ignoto", kwargs={})
+    [(message, _)] = broker.enqueued
+    assert message.queue_name == "default"

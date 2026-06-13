@@ -31,7 +31,7 @@ export CELERY_BROKER_URL="redis://localhost:6379/0"
 export CELERY_RESULT_BACKEND="redis://localhost:6379/0"
 
 uvicorn app.main:app --reload --port 5004
-celery -A workers.celery_app worker --loglevel=info
+dramatiq workers.dramatiq_app --processes 1 --threads 8
 python -m workers.beat
 ```
 

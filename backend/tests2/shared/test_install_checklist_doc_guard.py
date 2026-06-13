@@ -276,8 +276,9 @@ def test_checklist_has_marco_command_sequence(checklist_section: str):
         ("uvicorn app.main:app", "Marco command sequence must show "
          "the foreground uvicorn smoke (no systemd first run) so "
          "the operator can see boot logs in real time."),
-        ("celery -A workers.celery_app worker", "Marco command "
-         "sequence must show the foreground celery worker."),
+        ("dramatiq workers.dramatiq_app", "Marco command sequence must "
+         "show the foreground Dramatiq worker (Plenora 2.0 Fase 1: il worker "
+         "esegue gli actor Dramatiq da RabbitMQ, non piu' celery worker)."),
         ("python -m workers.beat", "Marco command sequence must show "
          "the foreground beat (Plenora 2.0 Fase 3: APScheduler runner "
          "workers.beat, non piu' celery beat)."),

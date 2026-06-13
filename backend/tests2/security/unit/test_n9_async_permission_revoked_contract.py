@@ -235,26 +235,28 @@ def test_create_pipeline_task_accepts_user_id():
     ))
 
 
-def test_create_pipeline_task_forwards_user_id_to_delay(monkeypatch):
-    """`create_pipeline_task` deve invocare `execute_pipeline_task.delay`
-    propagando user_id come kwarg.
+def test_create_pipeline_task_forwards_user_id_to_dispatch(monkeypatch):
+    """`create_pipeline_task` deve dispatchare via dispatch_task_by_name
+    propagando user_id nei kwargs.
 
-    Replacement R-04 di `inspect.getsource(...) + "user_id" in src`:
-    spy su `.delay` -> osservazione diretta del kwarg arrivato.
+    Fase 1 cutover: il dispatch e' by-name (Dramatiq/RabbitMQ), non piu'
+    `execute_pipeline_task.delay`. Spy su dispatch_task_by_name -> nome +
+    kwargs propagati.
     """
-    from workers.tasks import pipeline_task as pt
+    from app.core.orchestrator import task_service as ts_mod
     from app.core.orchestrator.task_service import task_service
 
     captured = {}
 
-    class _FakeAsyncResult:
-        id = "celery-task-1"
+    class _FakeResult:
+        id = "task-1"
 
-    def fake_delay(**kwargs):
-        captured.update(kwargs)
-        return _FakeAsyncResult()
+    def fake_dispatch(name, **options):
+        captured["name"] = name
+        captured.update(options.get("kwargs", {}))
+        return _FakeResult()
 
-    monkeypatch.setattr(pt.execute_pipeline_task, "delay", fake_delay)
+    monkeypatch.setattr(ts_mod, "dispatch_task_by_name", fake_dispatch)
 
     info = task_service.create_pipeline_task(
         project_id="proj_1",
@@ -262,9 +264,10 @@ def test_create_pipeline_task_forwards_user_id_to_delay(monkeypatch):
         user_id="usr_x",
     )
 
-    assert info.task_id == "celery-task-1"
+    assert info.task_id == "task-1"
+    assert captured.get("name") == "pipeline.execute"
     assert captured.get("user_id") == "usr_x", (
-        f"create_pipeline_task non forward user_id a .delay. Captured: {captured}"
+        f"create_pipeline_task non forward user_id al dispatch. Captured: {captured}"
     )
     assert captured.get("project_id") == "proj_1"
 
@@ -540,11 +543,12 @@ def test_other_services_forward_user_id_to_delay(
     monkeypatch, service_method, task_attr, task_module, service_kwargs,
 ):
     """`create_{preview,carica,enrichment}_task` accettano e forward
-    user_id alla task Celery via `.delay()`.
+    user_id al dispatch del task.
 
-    Replacement R-04 di `inspect.getsource(method) + "user_id" in src`:
-    spy su `.delay` per ogni task. Verifica anche signature.
+    Fase 1 cutover: il dispatch e' by-name via dispatch_task_by_name
+    (Dramatiq/RabbitMQ), non piu' `task.delay`. Spy sul dispatch.
     """
+    from app.core.orchestrator import task_service as ts_mod
     from app.core.orchestrator.task_service import task_service
 
     method = _task_service_signature_target(service_method)
@@ -554,25 +558,21 @@ def test_other_services_forward_user_id_to_delay(
         f"non puo' propagare l'identita' al worker."
     )
 
-    # Spy su .delay del task corrispondente.
-    task_mod = importlib.import_module(task_module)
-    task = getattr(task_mod, task_attr)
-
     captured = {}
 
-    class _FakeAsyncResult:
-        id = "celery-1"
+    class _FakeResult:
+        id = "task-1"
 
-    def fake_delay(**kwargs):
-        captured.update(kwargs)
-        return _FakeAsyncResult()
+    def fake_dispatch(name, **options):
+        captured.update(options.get("kwargs", {}))
+        return _FakeResult()
 
-    monkeypatch.setattr(task, "delay", fake_delay)
+    monkeypatch.setattr(ts_mod, "dispatch_task_by_name", fake_dispatch)
 
     getattr(task_service, service_method)(user_id="usr_y", **service_kwargs)
 
     assert captured.get("user_id") == "usr_y", (
-        f"{service_method} non forward user_id a .delay. "
+        f"{service_method} non forward user_id al dispatch. "
         f"Captured: {captured}"
     )
 

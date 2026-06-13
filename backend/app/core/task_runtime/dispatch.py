@@ -21,10 +21,18 @@ class TaskRuntime(Protocol):
 
 
 def default_task_runtime() -> TaskRuntime:
-    """Return the process-wide concrete task runtime."""
-    from workers.celery_app import celery_app
+    """Return the process-wide concrete task runtime.
 
-    return celery_app
+    Plenora 2.0 Fase 1 (cutover): il runtime di dispatch di default e'
+    Dramatiq su RabbitMQ (non piu' Celery su Redis). L'import di
+    workers.dramatiq_app registra il broker globale (set_broker) usato da
+    DramatiqTaskRuntime. Vale per OGNI processo che dispatcha (API, beat,
+    worker): RabbitMQ deve essere raggiungibile."""
+    import workers.dramatiq_app  # noqa: F401 — side-effect: dramatiq.set_broker
+
+    from app.core.task_runtime.dramatiq_runtime import DramatiqTaskRuntime
+
+    return DramatiqTaskRuntime()
 
 
 def dispatch_task_by_name(

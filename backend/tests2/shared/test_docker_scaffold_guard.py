@@ -203,12 +203,11 @@ def test_compose_uses_service_healthy_dependency():
 
 def test_compose_worker_uses_pool_solo_and_beat_uses_plenora_scheduler():
     text = _COMPOSE.read_text(encoding="utf-8")
-    assert "--pool=solo" in text, (
-        "docker-compose.yml worker service must launch celery "
-        "with `--pool=solo` -- matches the single-machine "
-        "smoke (dry-run pack section 2.7) and the cleanroom CI lane. "
-        "Switching to prefork in the scaffold would diverge "
-        "from the validated path without justification."
+    assert "dramatiq" in text and "workers.dramatiq_app" in text, (
+        "docker-compose.yml worker service must launch the Dramatiq worker "
+        "`python -m dramatiq workers.dramatiq_app` -- Plenora 2.0 Fase 1 "
+        "(cutover): il worker esegue gli actor Dramatiq da RabbitMQ, non "
+        "piu' celery worker da Redis."
     )
     assert "workers.beat" in text, (
         "docker-compose.yml beat service must launch `python -m workers.beat` "

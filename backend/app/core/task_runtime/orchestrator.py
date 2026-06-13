@@ -11,8 +11,11 @@ class TaskLaunchResult(Protocol):
 
 
 class DelayTask(Protocol):
-    def delay(self, **kwargs: object) -> TaskLaunchResult:
-        ...
+    """Handle di un task registrato. Plenora 2.0 Fase 1 (cutover): il
+    dispatch e' by-name (dispatch_task_by_name), quindi serve solo il
+    `name` registrato, non piu' `.delay`."""
+
+    name: str
 
 
 class TaskRuntimeResult(Protocol):
