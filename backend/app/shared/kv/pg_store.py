@@ -95,32 +95,44 @@ class PgKeyValueStore:
         except Exception:
             return []
 
-    def acquire_lock(self, key: str, *, ttl_seconds: int) -> bool:
+    def acquire_lock(
+        self, key: str, *, ttl_seconds: int, owner: Optional[str] = None
+    ) -> bool:
         # Set-if-not-exists atomico: INSERT, o UPDATE solo se il lock e'
         # scaduto. Un lock vivo di un altro -> WHERE falso -> nessuna riga
-        # in RETURNING -> non acquisito.
+        # in RETURNING -> non acquisito. Il valore memorizza l'owner (o "1").
+        value = owner or "1"
         try:
             with unit_of_work() as session:
                 with session.cursor() as cur:
                     cur.execute(
                         "INSERT INTO kv_store (key, value, expires_at, updated_at) "
-                        "VALUES (%s, '1', now() + (%s * interval '1 second'), now()) "
+                        "VALUES (%s, %s, now() + (%s * interval '1 second'), now()) "
                         "ON CONFLICT (key) DO UPDATE "
-                        "SET value = '1', expires_at = EXCLUDED.expires_at, updated_at = now() "
+                        "SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at, "
+                        "updated_at = now() "
                         "WHERE kv_store.expires_at IS NOT NULL "
                         "AND kv_store.expires_at <= now() "
                         "RETURNING key",
-                        (key, ttl_seconds),
+                        (key, value, ttl_seconds),
                     )
                     row = cur.fetchone()
             return row is not None
         except Exception as exc:
             raise KeyValueStoreUnavailable(str(exc)) from exc
 
-    def release_lock(self, key: str) -> None:
+    def release_lock(self, key: str, *, owner: Optional[str] = None) -> None:
+        # Owner-safe: con owner cancella solo se il valore e' il nostro owner
+        # (no release del lock altrui dopo un takeover post-scadenza).
         try:
             with unit_of_work() as session:
-                session.execute("DELETE FROM kv_store WHERE key = %s", (key,))
+                if owner is None:
+                    session.execute("DELETE FROM kv_store WHERE key = %s", (key,))
+                else:
+                    session.execute(
+                        "DELETE FROM kv_store WHERE key = %s AND value = %s",
+                        (key, owner),
+                    )
         except Exception:
             pass
 

@@ -62,17 +62,25 @@ class InMemoryKeyValueStore:
             self._purge_expired_locked()
             return sorted(k for k in self._data if k.startswith(prefix))
 
-    def acquire_lock(self, key: str, *, ttl_seconds: int) -> bool:
+    def acquire_lock(
+        self, key: str, *, ttl_seconds: int, owner: Optional[str] = None
+    ) -> bool:
         with self._lock:
             self._purge_expired_locked()
             if key in self._data:
                 return False
-            self._data[key] = ("1", self._clock() + ttl_seconds)
+            self._data[key] = (owner or "1", self._clock() + ttl_seconds)
             return True
 
-    def release_lock(self, key: str) -> None:
+    def release_lock(self, key: str, *, owner: Optional[str] = None) -> None:
         with self._lock:
-            self._data.pop(key, None)
+            entry = self._data.get(key)
+            if entry is None:
+                return
+            # Owner-safe: con owner valorizzato cancella solo se sei tu il
+            # proprietario corrente (no release del lock altrui dopo takeover).
+            if owner is None or entry[0] == owner:
+                self._data.pop(key, None)
 
 
 __all__ = ["InMemoryKeyValueStore"]

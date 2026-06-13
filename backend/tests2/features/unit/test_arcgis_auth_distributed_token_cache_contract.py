@@ -36,26 +36,6 @@ class _Http:
         raise AssertionError("GET is not used by this test")
 
 
-class _FakeRedis:
-    def __init__(self) -> None:
-        self.store: dict[str, str] = {}
-
-    def get(self, key: str) -> str | None:
-        return self.store.get(key)
-
-    def setex(self, key: str, ttl: int, value: str) -> None:
-        self.store[key] = value
-
-    def set(self, key: str, value: str, *, nx: bool = False, ex: int | None = None) -> bool:
-        if nx and key in self.store:
-            return False
-        self.store[key] = value
-        return True
-
-    def delete(self, key: str) -> None:
-        self.store.pop(key, None)
-
-
 @pytest.fixture(autouse=True)
 def _reset_token_cache_state():
     oauth._reset_token_cache_state_for_tests()
@@ -64,7 +44,10 @@ def _reset_token_cache_state():
 
 
 def test_arcgis_oauth_token_is_reused_across_client_instances(monkeypatch):
-    oauth._set_token_cache_client_for_tests(_FakeRedis())
+    # Fase 4: il token cache distribuito e' un KeyValueStore (PG in prod).
+    from app.shared.kv import InMemoryKeyValueStore
+
+    oauth._set_token_cache_client_for_tests(InMemoryKeyValueStore())
     fetch_calls = []
 
     def _fetch_token(auth, *, extra_form_data=None):

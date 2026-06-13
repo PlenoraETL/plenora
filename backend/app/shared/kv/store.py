@@ -10,7 +10,11 @@ test `tests2/shared/test_key_value_store_contract.py`):
 - `delete` idempotente (True se la chiave esisteva);
 - `scan_keys(prefix)` ritorna le chiavi vive con quel prefisso;
 - `acquire_lock` e' atomico (set-if-not-exists con TTL): True solo per
-  il primo chiamante finche' il lock non scade o viene rilasciato.
+  il primo chiamante finche' il lock non scade o viene rilasciato. Con
+  `owner` valorizzato, il lock memorizza l'owner e `release_lock(owner=...)`
+  cancella SOLO se il caller e' ancora il proprietario (release owner-safe:
+  un caller il cui TTL e' scaduto e il cui lock e' stato ripreso da un altro
+  non cancella il lock altrui). Senza `owner`, release e' incondizionato.
 
 Errori di infrastruttura (backend irraggiungibile): le implementazioni
 sollevano `KeyValueStoreUnavailable` su `set`/`acquire_lock` (scritture
@@ -45,10 +49,12 @@ class KeyValueStore(Protocol):
     def scan_keys(self, prefix: str) -> list[str]:
         ...
 
-    def acquire_lock(self, key: str, *, ttl_seconds: int) -> bool:
+    def acquire_lock(
+        self, key: str, *, ttl_seconds: int, owner: Optional[str] = None
+    ) -> bool:
         ...
 
-    def release_lock(self, key: str) -> None:
+    def release_lock(self, key: str, *, owner: Optional[str] = None) -> None:
         ...
 
 

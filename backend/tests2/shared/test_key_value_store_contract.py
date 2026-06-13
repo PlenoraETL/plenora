@@ -103,6 +103,25 @@ def test_lock_expires_with_ttl(store, clock):
     assert store.acquire_lock("lock:x", ttl_seconds=10) is True
 
 
+def test_owner_safe_release_keeps_lock_held_by_another_owner(store, clock):
+    # A acquisisce con owner; dopo scadenza B lo riprende. La release tardiva
+    # di A (owner-safe) NON deve cancellare il lock di B.
+    assert store.acquire_lock("lock:x", ttl_seconds=10, owner="A") is True
+    clock.advance(11)  # il lock di A scade
+    assert store.acquire_lock("lock:x", ttl_seconds=10, owner="B") is True
+    store.release_lock("lock:x", owner="A")  # A tardivo: non e' piu' owner
+    # Il lock di B e' ancora attivo.
+    assert store.acquire_lock("lock:x", ttl_seconds=10, owner="C") is False
+    store.release_lock("lock:x", owner="B")
+    assert store.acquire_lock("lock:x", ttl_seconds=10, owner="C") is True
+
+
+def test_release_without_owner_is_unconditional(store):
+    assert store.acquire_lock("lock:y", ttl_seconds=30, owner="A") is True
+    store.release_lock("lock:y")  # nessun owner -> delete incondizionato
+    assert store.acquire_lock("lock:y", ttl_seconds=30, owner="B") is True
+
+
 # ---------------------------------------------------------------------------
 # Mapping operazioni del backend Redis (fake client, niente server)
 # ---------------------------------------------------------------------------
@@ -215,6 +234,16 @@ def test_pg_store_acquire_lock_is_atomic_set_if_not_exists():
     # Riacquisisce SOLO se scaduto (lock vivo di un altro -> non acquisito).
     assert "kv_store.expires_at <= now()" in src
     assert "RETURNING key" in src
+
+
+def test_pg_store_release_lock_is_owner_safe():
+    import inspect
+
+    from app.shared.kv.pg_store import PgKeyValueStore
+
+    src = inspect.getsource(PgKeyValueStore.release_lock)
+    # Con owner: compare-and-delete (DELETE ... AND value = owner).
+    assert "DELETE FROM kv_store WHERE key = %s AND value = %s" in src
 
 
 def test_pg_store_scan_escapes_like_metacharacters():

@@ -67,7 +67,10 @@ def _setting_float(name: str, default: float) -> float:
         return default
 
 
-def _get_token_cache_redis_client() -> Optional[Any]:
+def _get_token_cache_store() -> Optional[Any]:
+    """Backend del token cache distribuito (Plenora 2.0 Fase 4: KeyValueStore
+    su PostgreSQL al posto di Redis). None se non inizializzabile -> fallback
+    locale (cache in-process)."""
     global _TOKEN_CACHE_CLIENT
     if _TOKEN_CACHE_CLIENT_EXPLICIT:
         return _TOKEN_CACHE_CLIENT
@@ -79,20 +82,9 @@ def _get_token_cache_redis_client() -> Optional[Any]:
         if _TOKEN_CACHE_CLIENT is not None:
             return _TOKEN_CACHE_CLIENT
         try:
-            import redis  # type: ignore
-        except ImportError:
-            return None
-        try:
-            timeout = _setting_int(
-                "OAUTH_TOKEN_CACHE_REDIS_TIMEOUT_SEC",
-                _TOKEN_CACHE_DEFAULT_REDIS_TIMEOUT_SEC,
-            )
-            _TOKEN_CACHE_CLIENT = redis.from_url(
-                app_config.settings.CELERY_BROKER_URL,
-                socket_timeout=timeout,
-                socket_connect_timeout=timeout,
-                decode_responses=True,
-            )
+            from app.shared.kv import PgKeyValueStore
+
+            _TOKEN_CACHE_CLIENT = PgKeyValueStore()
             return _TOKEN_CACHE_CLIENT
         except Exception as exc:
             _warn_token_cache_fallback_once(type(exc).__name__)
@@ -143,16 +135,14 @@ def _normalize_token_record(record: JsonObject) -> JsonObject:
     }
 
 
-def _read_redis_token_record(
-    client: Any,
-    redis_key: str,
+def _read_token_record(
+    store: Any,
+    store_key: str,
     min_ttl_sec: int,
 ) -> Optional[JsonObject]:
-    raw_payload = client.get(redis_key)
+    raw_payload = store.get(store_key)  # KeyValueStore.get -> str | None
     if not raw_payload:
         return None
-    if isinstance(raw_payload, bytes):
-        raw_payload = raw_payload.decode("utf-8")
     try:
         payload = json.loads(str(raw_payload))
     except json.JSONDecodeError:
@@ -165,7 +155,7 @@ def _read_redis_token_record(
     return record
 
 
-def _write_redis_token_record(client: Any, redis_key: str, record: JsonObject) -> None:
+def _write_token_record(store: Any, store_key: str, record: JsonObject) -> None:
     ttl_seconds = max(1, int(_token_expires_at(record) - time.time()))
     payload = json.dumps(
         {
@@ -174,34 +164,33 @@ def _write_redis_token_record(client: Any, redis_key: str, record: JsonObject) -
         },
         separators=(",", ":"),
     )
-    client.setex(redis_key, ttl_seconds, payload)
+    store.set(store_key, payload, ttl_seconds=ttl_seconds)
 
 
-def _acquire_redis_token_lock(client: Any, lock_key: str, owner: str) -> bool:
+def _acquire_token_lock(store: Any, lock_key: str, owner: str) -> bool:
     lock_ttl = _setting_int(
         "OAUTH_TOKEN_CACHE_LOCK_TTL_SEC",
         _TOKEN_CACHE_DEFAULT_LOCK_TTL_SEC,
     )
-    return bool(client.set(lock_key, owner, nx=True, ex=lock_ttl))
+    # owner-safe: il KeyValueStore memorizza l'owner; il release lo verifica.
+    return bool(store.acquire_lock(lock_key, ttl_seconds=lock_ttl, owner=owner))
 
 
-def _release_redis_token_lock(client: Any, lock_key: str, owner: str) -> None:
+def _release_token_lock(store: Any, lock_key: str, owner: str) -> None:
     try:
-        current_owner = client.get(lock_key)
-        if isinstance(current_owner, bytes):
-            current_owner = current_owner.decode("utf-8")
-        if current_owner == owner:
-            client.delete(lock_key)
+        # release_lock(owner=...) cancella SOLO se siamo ancora owner
+        # (owner-safe, ora nel protocol KeyValueStore).
+        store.release_lock(lock_key, owner=owner)
     except Exception as exc:
         logger.debug(
-            "OAuth/API token Redis lock release failed: %s",
+            "OAuth/API token lock release failed: %s",
             type(exc).__name__,
         )
 
 
-def _wait_for_redis_token_record(
-    client: Any,
-    redis_key: str,
+def _wait_for_token_record(
+    store: Any,
+    store_key: str,
     min_ttl_sec: int,
 ) -> Optional[JsonObject]:
     wait_timeout = _setting_float(
@@ -210,7 +199,7 @@ def _wait_for_redis_token_record(
     )
     deadline = time.time() + wait_timeout
     while time.time() < deadline:
-        cached = _read_redis_token_record(client, redis_key, min_ttl_sec)
+        cached = _read_token_record(store, store_key, min_ttl_sec)
         if cached:
             return cached
         time.sleep(_TOKEN_CACHE_POLL_INTERVAL_SEC)
@@ -230,40 +219,40 @@ def _get_or_refresh_token_record(
     if _is_token_record_valid(cached, refresh_threshold_sec):
         return str(cached["token"])
 
-    redis_key = _distributed_token_cache_key(namespace, cache_key)
+    store_key = _distributed_token_cache_key(namespace, cache_key)
     lock_key = _distributed_token_lock_key(namespace, cache_key)
 
-    client = _get_token_cache_redis_client()
-    if client is not None:
+    store = _get_token_cache_store()
+    if store is not None:
         try:
-            cached = _read_redis_token_record(client, redis_key, refresh_threshold_sec)
+            cached = _read_token_record(store, store_key, refresh_threshold_sec)
             if cached:
                 with local_lock:
                     local_cache[cache_key] = cached
                 return str(cached["token"])
         except Exception as exc:
             _warn_token_cache_fallback_once(type(exc).__name__)
-            client = None
+            store = None
 
     with local_lock:
         cached = local_cache.get(cache_key)
         if _is_token_record_valid(cached, refresh_threshold_sec):
             return str(cached["token"])
 
-        if client is not None:
+        if store is not None:
             owner: Optional[str] = None
             try:
-                cached = _read_redis_token_record(client, redis_key, refresh_threshold_sec)
+                cached = _read_token_record(store, store_key, refresh_threshold_sec)
                 if cached:
                     local_cache[cache_key] = cached
                     return str(cached["token"])
 
                 owner = uuid.uuid4().hex
-                if not _acquire_redis_token_lock(client, lock_key, owner):
+                if not _acquire_token_lock(store, lock_key, owner):
                     owner = None
-                    cached = _wait_for_redis_token_record(
-                        client,
-                        redis_key,
+                    cached = _wait_for_token_record(
+                        store,
+                        store_key,
                         refresh_threshold_sec,
                     )
                     if cached:
@@ -277,9 +266,9 @@ def _get_or_refresh_token_record(
                 owner = None
 
             if owner is not None:
-                return _refresh_token_with_redis_lock(
-                    client=client,
-                    redis_key=redis_key,
+                return _refresh_token_with_lock(
+                    store=store,
+                    store_key=store_key,
                     lock_key=lock_key,
                     owner=owner,
                     local_cache=local_cache,
@@ -296,10 +285,10 @@ def _get_or_refresh_token_record(
         return str(record["token"])
 
 
-def _refresh_token_with_redis_lock(
+def _refresh_token_with_lock(
     *,
-    client: Any,
-    redis_key: str,
+    store: Any,
+    store_key: str,
     lock_key: str,
     owner: str,
     local_cache: MutableMapping[str, JsonObject],
@@ -308,7 +297,7 @@ def _refresh_token_with_redis_lock(
     fetch_token_record: Callable[[], Optional[JsonObject]],
 ) -> Optional[str]:
     try:
-        cached = _read_redis_token_record(client, redis_key, refresh_threshold_sec)
+        cached = _read_token_record(store, store_key, refresh_threshold_sec)
         if cached:
             local_cache[cache_key] = cached
             return str(cached["token"])
@@ -322,12 +311,12 @@ def _refresh_token_with_redis_lock(
         record = _normalize_token_record(fetched)
         local_cache[cache_key] = record
         try:
-            _write_redis_token_record(client, redis_key, record)
+            _write_token_record(store, store_key, record)
         except Exception as exc:
             _warn_token_cache_fallback_once(type(exc).__name__)
         return str(record["token"])
     finally:
-        _release_redis_token_lock(client, lock_key, owner)
+        _release_token_lock(store, lock_key, owner)
 
 
 def _invalidate_token_record(
@@ -343,10 +332,10 @@ def _invalidate_token_record(
         else:
             with local_lock:
                 local_cache.pop(cache_key, None)
-    client = _get_token_cache_redis_client()
-    if client is not None:
+    store = _get_token_cache_store()
+    if store is not None:
         try:
-            client.delete(_distributed_token_cache_key(namespace, cache_key))
+            store.delete(_distributed_token_cache_key(namespace, cache_key))
         except Exception as exc:
             _warn_token_cache_fallback_once(type(exc).__name__)
 

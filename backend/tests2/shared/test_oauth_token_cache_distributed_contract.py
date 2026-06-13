@@ -14,37 +14,27 @@ from app.shared.connections import oauth
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
-class _FakeRedis:
+from app.shared.kv import InMemoryKeyValueStore
+
+
+class _RecordingStore(InMemoryKeyValueStore):
+    """KeyValueStore in-memory (Fase 4: il backend e' PG) che registra le
+    scritture token e le acquisizioni lock per le asserzioni del contract."""
+
     def __init__(self) -> None:
-        self.store: dict[str, str] = {}
-        self.setex_calls: list[tuple[str, int, str]] = []
-        self.set_calls: list[tuple[str, str, bool, int | None]] = []
-        self.delete_calls: list[str] = []
+        super().__init__()
+        self.set_calls: list[tuple[str, int | None]] = []
+        self.lock_calls: list[tuple[str, str | None]] = []
 
-    def get(self, key: str) -> str | None:
-        return self.store.get(key)
+    def set(self, key: str, value: str, *, ttl_seconds: int | None = None) -> None:
+        self.set_calls.append((key, ttl_seconds))
+        super().set(key, value, ttl_seconds=ttl_seconds)
 
-    def setex(self, key: str, ttl: int, value: str) -> None:
-        self.setex_calls.append((key, ttl, value))
-        self.store[key] = value
-
-    def set(
-        self,
-        key: str,
-        value: str,
-        *,
-        nx: bool = False,
-        ex: int | None = None,
+    def acquire_lock(
+        self, key: str, *, ttl_seconds: int, owner: str | None = None
     ) -> bool:
-        self.set_calls.append((key, value, nx, ex))
-        if nx and key in self.store:
-            return False
-        self.store[key] = value
-        return True
-
-    def delete(self, key: str) -> None:
-        self.delete_calls.append(key)
-        self.store.pop(key, None)
+        self.lock_calls.append((key, owner))
+        return super().acquire_lock(key, ttl_seconds=ttl_seconds, owner=owner)
 
 
 @pytest.fixture(autouse=True)
@@ -65,30 +55,31 @@ def _oauth2_auth() -> dict[str, Any]:
 
 
 def test_oauth2_token_reads_distributed_cache_without_refresh(monkeypatch):
-    fake_redis = _FakeRedis()
-    oauth._set_token_cache_client_for_tests(fake_redis)
+    store = _RecordingStore()
+    oauth._set_token_cache_client_for_tests(store)
     auth = _oauth2_auth()
     raw_key = oauth._oauth2_cache_key(auth)
-    redis_key = oauth._distributed_token_cache_key("oauth2", raw_key)
-    fake_redis.setex(
-        redis_key,
-        3600,
+    store_key = oauth._distributed_token_cache_key("oauth2", raw_key)
+    store.set(
+        store_key,
         json.dumps({"token": "cached-token", "expires_at": time.time() + 3600}),
+        ttl_seconds=3600,
     )
 
     def _unexpected_fetch(_auth):
-        pytest.fail("token refresh should not run when Redis has a valid token")
+        pytest.fail("token refresh should not run when store has a valid token")
 
     monkeypatch.setattr(oauth, "_fetch_oauth2_client_credentials_token", _unexpected_fetch)
 
     assert oauth.get_cached_oauth2_token(auth) == "cached-token"
-    assert all("super-secret" not in key for key in fake_redis.store)
-    assert all("issuer.example.test" not in key for key in fake_redis.store)
+    # Le chiavi sono hash: nessun segreto/host in chiaro.
+    assert all("super-secret" not in key for key in store.scan_keys(""))
+    assert all("issuer.example.test" not in key for key in store.scan_keys(""))
 
 
-def test_oauth2_refresh_writes_redis_once_and_second_pod_reuses_it(monkeypatch):
-    fake_redis = _FakeRedis()
-    oauth._set_token_cache_client_for_tests(fake_redis)
+def test_oauth2_refresh_writes_store_once_and_second_pod_reuses_it(monkeypatch):
+    store = _RecordingStore()
+    oauth._set_token_cache_client_for_tests(store)
     calls: list[dict[str, Any]] = []
 
     def _fetch(_auth):
@@ -103,8 +94,13 @@ def test_oauth2_refresh_writes_redis_once_and_second_pod_reuses_it(monkeypatch):
     with oauth._OAUTH2_TOKEN_LOCK:
         oauth._OAUTH2_TOKEN_CACHE.clear()
 
+    # Secondo "pod": la cache locale e' vuota ma il token e' nello store
+    # distribuito -> riuso senza nuovo fetch.
     assert oauth.get_cached_oauth2_token(auth) == "fresh-token"
     assert len(calls) == 1
-    assert len(fake_redis.setex_calls) == 1
-    assert any(call[2] is True for call in fake_redis.set_calls)
+    # Un solo write del token sullo store (la chiave token, non il lock).
+    token_writes = [c for c in store.set_calls if c[0].startswith("plenora:connections:token:")]
+    assert len(token_writes) == 1
+    # Il refresh ha acquisito il lock distribuito (owner-safe).
+    assert any(owner is not None for _key, owner in store.lock_calls)
 

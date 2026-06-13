@@ -97,17 +97,30 @@ class RedisKeyValueStore:
         except Exception:
             return []
 
-    def acquire_lock(self, key: str, *, ttl_seconds: int) -> bool:
+    def acquire_lock(
+        self, key: str, *, ttl_seconds: int, owner: Optional[str] = None
+    ) -> bool:
         try:
             return bool(
-                self._redis_client().set(key, "1", nx=True, ex=ttl_seconds)
+                self._redis_client().set(
+                    key, owner or "1", nx=True, ex=ttl_seconds
+                )
             )
         except Exception as exc:
             raise KeyValueStoreUnavailable(str(exc)) from exc
 
-    def release_lock(self, key: str) -> None:
+    def release_lock(self, key: str, *, owner: Optional[str] = None) -> None:
         try:
-            self._redis_client().delete(key)
+            client = self._redis_client()
+            if owner is None:
+                client.delete(key)
+                return
+            # Owner-safe: cancella solo se il valore e' ancora il nostro owner.
+            current = client.get(key)
+            if isinstance(current, bytes):
+                current = current.decode("utf-8")
+            if current == owner:
+                client.delete(key)
         except Exception:
             pass
 
