@@ -38,6 +38,21 @@ pytestmark = [
 _BACKEND_ROOT = Path(__file__).resolve().parents[3]
 
 
+class _StaticRuntime:
+    """Runtime di test: ``get_result`` ritorna un risultato fisso.
+
+    Dopo il flip F2.3 la sorgente di stato/esito e' PostgreSQL
+    (task_result_store) e non piu' ``celery.result.AsyncResult``. Questi
+    contract verificano il MAPPING (invariato), quindi iniettano il
+    risultato direttamente nel runtime invece di patchare il backend."""
+
+    def __init__(self, result: object) -> None:
+        self._result = result
+
+    def get_result(self, task_id: str) -> object:
+        return self._result
+
+
 def _imports(rel_path: str) -> set[str]:
     tree = ast.parse((_BACKEND_ROOT / rel_path).read_text(encoding="utf-8"))
     imports: set[str] = set()
@@ -75,17 +90,15 @@ def test_get_task_status_uses_typed_result_payload_inside_core():
         "result_id": "result-1",
         "output_file": "out.csv",
     }
-    async_result = SimpleNamespace(
+    stored_result = SimpleNamespace(
         state="SUCCESS",
         info=celery_meta,
         name="pipeline.execute",
     )
 
-    with patch(
-        "celery.result.AsyncResult",
-        return_value=async_result,
-    ):
-        task_info = TaskService().get_task_status("task-1")
+    task_info = TaskService(runtime=_StaticRuntime(stored_result)).get_task_status(
+        "task-1"
+    )
 
     assert task_info.status is TaskStatus.SUCCESS
     assert isinstance(task_info.result, TaskResultPayload)
@@ -104,17 +117,15 @@ def test_get_task_status_preserves_managed_failure_result_payload():
         "project_id": "project-1",
         "message": "Il progetto sorgente e' stato modificato dopo l'ultima esecuzione.",
     }
-    async_result = SimpleNamespace(
+    stored_result = SimpleNamespace(
         state="SUCCESS",
         info=celery_meta,
         name="pipeline.execute",
     )
 
-    with patch(
-        "celery.result.AsyncResult",
-        return_value=async_result,
-    ):
-        task_info = TaskService().get_task_status("task-1")
+    task_info = TaskService(runtime=_StaticRuntime(stored_result)).get_task_status(
+        "task-1"
+    )
 
     assert task_info.status is TaskStatus.FAILURE
     assert isinstance(task_info.result, TaskResultPayload)
@@ -135,19 +146,15 @@ def test_get_task_status_uses_pending_metadata_store_before_celery_metadata():
             task_type="preview",
         )
     )
-    async_result = SimpleNamespace(
+    stored_result = SimpleNamespace(
         state="PENDING",
         info=None,
         name=None,
     )
 
-    with patch(
-        "celery.result.AsyncResult",
-        return_value=async_result,
-    ):
-        task_info = TaskService(metadata_store=metadata_store).get_task_status(
-            "task-pending-1"
-        )
+    task_info = TaskService(
+        runtime=_StaticRuntime(stored_result), metadata_store=metadata_store
+    ).get_task_status("task-pending-1")
 
     assert task_info.status is TaskStatus.PENDING
     assert task_info.project_id == "project-pending-1"
@@ -261,17 +268,15 @@ def test_task_service_does_not_call_task_result_to_dict_internally(monkeypatch):
         "project_id": "project-1",
         "result_id": "result-1",
     }
-    async_result = SimpleNamespace(
+    stored_result = SimpleNamespace(
         state="SUCCESS",
         info=celery_meta,
         name="pipeline.execute",
     )
 
-    with patch(
-        "celery.result.AsyncResult",
-        return_value=async_result,
-    ):
-        task_info = TaskService().get_task_status("task-1")
+    task_info = TaskService(runtime=_StaticRuntime(stored_result)).get_task_status(
+        "task-1"
+    )
 
     assert isinstance(task_info.result, TaskResultPayload)
     assert task_info.result.result_id == "result-1"
@@ -329,35 +334,33 @@ def test_get_task_result_returns_typed_payload():
         "project_id": "project-1",
         "result_id": "result-1",
     }
-    async_result = SimpleNamespace(
+    stored_result = SimpleNamespace(
         state="SUCCESS",
         result=celery_result,
     )
 
-    with patch(
-        "celery.result.AsyncResult",
-        return_value=async_result,
-    ):
-        result = TaskService().get_task_result("task-1")
+    result = TaskService(runtime=_StaticRuntime(stored_result)).get_task_result(
+        "task-1"
+    )
 
     assert isinstance(result, TaskResultPayload)
     assert result.project_id == "project-1"
     assert task_result_to_dict(result) == celery_result
 
 
-def test_forget_task_result_delegates_to_celery_boundary():
-    forget_calls = []
-    async_result = SimpleNamespace(forget=lambda: forget_calls.append("forgot"))
+def test_forget_task_result_delegates_to_runtime_port():
+    # Dopo il flip F2.3 il forget va allo store PG via runtime.forget_result
+    # (la cancellazione effettiva e' coperta in test_pg_task_runtime_contract).
+    # Qui si blinda solo che task_service deleghi al port.
+    forgotten: list[str] = []
 
-    with patch(
-        "celery.result.AsyncResult",
-        return_value=async_result,
-    ) as async_result_cls:
-        service = TaskService()
-        service.forget_task_result("task-1")
+    class _Runtime:
+        def forget_result(self, task_id: str) -> None:
+            forgotten.append(task_id)
 
-    async_result_cls.assert_called_once_with("task-1", app=service.app)
-    assert forget_calls == ["forgot"]
+    TaskService(runtime=_Runtime()).forget_task_result("task-1")
+
+    assert forgotten == ["task-1"]
 
 
 def test_submit_task_launches_celery_and_returns_pending_task_info():

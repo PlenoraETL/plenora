@@ -19,6 +19,7 @@ from app.core.intermediate import run_idempotency as run_idempotency_module
 from app.core.intermediate import run_lifecycle as run_lifecycle_module
 from app.core.projects import retention as project_retention
 from app.core.projects import runtime_context as project_runtime_context
+from app.core.orchestrator.task_progress import report_task_progress
 from app.utils import debug_payload_builder as debug_payload_builder_module
 
 logger = get_logger("workers.pipeline_task")
@@ -45,6 +46,15 @@ def _update_progress(task: _ProgressTask, percent: int, message: str) -> None:
             "message": message,
             "type": "pipeline",
         },
+    )
+    # Plenora 2.0 Fase 2 (F2.4): progress anche su PG (rimpiazzo result
+    # backend Redis). self.update_state resta transitorio finche' la
+    # lettura non flippa (F2.3) e viene rimosso a F2.5.
+    report_task_progress(
+        getattr(getattr(task, "request", None), "id", None),
+        percent,
+        message,
+        name=getattr(task, "name", None),
     )
 
 

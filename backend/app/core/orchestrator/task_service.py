@@ -13,7 +13,8 @@ from app.core.orchestrator.task_metadata_store import (
     TaskMetadataStore,
     default_task_metadata_store,
 )
-from app.core.task_runtime import CeleryTaskRuntime, TaskRuntimePort
+from app.core.task_runtime import TaskRuntimePort
+from app.core.orchestrator.pg_task_runtime import PgResultTaskRuntime
 from app.shared.execution import carica_dispatcher
 from app.utils.logger import get_logger
 
@@ -319,7 +320,10 @@ class TaskService:
         runtime: TaskRuntimePort | None = None,
         metadata_store: TaskMetadataStore | None = None,
     ):
-        self.runtime = runtime or CeleryTaskRuntime()
+        # Plenora 2.0 Fase 2 (F2.3): il runtime di default legge stato/esito
+        # da PostgreSQL (task_result_store), non piu' dal result backend
+        # Redis di Celery. Le operazioni broker restano Celery (delegate).
+        self.runtime = runtime or PgResultTaskRuntime()
         self.metadata_store = metadata_store or default_task_metadata_store()
 
     @property

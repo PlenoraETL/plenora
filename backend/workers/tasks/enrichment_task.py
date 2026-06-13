@@ -26,6 +26,7 @@ from app.core.files import service as files_service
 from app.core.intermediate import run_idempotency as run_idempotency_module
 from app.core.intermediate import snapshot as intermediate_snapshot
 from app.core.intermediate import writer as intermediate_writer
+from app.core.orchestrator.task_progress import report_task_progress
 from app.core.projects import service as project_service_module
 from app.core.results import blob_writer as result_blob_writer
 from app.core.results import store as result_store
@@ -1004,6 +1005,17 @@ def update_task_progress(
             "is_error": is_error,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         },
+    )
+    # Plenora 2.0 Fase 2 (F2.4): progress anche su PG (rimpiazzo result
+    # backend Redis). task_id esplicito qui e' essenziale: nei thread
+    # spawned self.request.id e' None (vedi docstring). self.update_state
+    # resta transitorio finche' la lettura non flippa (F2.3, rimosso a F2.5).
+    report_task_progress(
+        task_id or getattr(getattr(task, "request", None), "id", None),
+        progress,
+        message,
+        is_error=is_error,
+        name=getattr(task, "name", None),
     )
 
 
