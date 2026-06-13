@@ -9,8 +9,8 @@ import pytest
 
 from app.core.orchestrator.task_metadata_store import (
     InMemoryTaskMetadataStore,
+    KvTaskMetadataStore,
     PendingTaskMetadata,
-    RedisTaskMetadataStore,
     TaskMetadataStoreUnavailable,
     default_task_metadata_store,
 )
@@ -24,9 +24,9 @@ pytestmark = [
 ]
 
 
-# Plenora 2.0 (Fase 0): il store consuma il protocol condiviso
-# app.shared.kv.KeyValueStore — il contratto si sposta sul mapping
-# chiave/TTL/JSON verso il KV iniettato e sul default Redis-backed.
+# Plenora 2.0: il store consuma il protocol condiviso
+# app.shared.kv.KeyValueStore — il contratto e' sul mapping chiave/TTL/JSON
+# verso il KV iniettato e sul default PostgreSQL-backed (Fase 5, no Redis).
 
 
 class _FakeKeyValueStore:
@@ -44,12 +44,7 @@ class _FakeKeyValueStore:
 
 def test_store_maps_key_ttl_and_json_onto_kv_store():
     fake_kv = _FakeKeyValueStore()
-    store = RedisTaskMetadataStore(
-        "redis://broker:6379/9",
-        ttl_seconds=123,
-        timeout_seconds=4,
-        kv_store=fake_kv,
-    )
+    store = KvTaskMetadataStore(ttl_seconds=123, kv_store=fake_kv)
     metadata = PendingTaskMetadata(
         task_id="task-1",
         project_id="project-1",
@@ -68,18 +63,12 @@ def test_store_maps_key_ttl_and_json_onto_kv_store():
     assert store.get("task-1") == metadata
 
 
-def test_default_kv_backend_is_redis_with_broker_url_and_timeout():
-    from app.shared.kv.redis_store import RedisKeyValueStore
+def test_default_kv_backend_is_postgres():
+    from app.shared.kv import PgKeyValueStore
 
-    store = RedisTaskMetadataStore(
-        "redis://broker:6379/9",
-        ttl_seconds=123,
-        timeout_seconds=4,
-    )
+    store = KvTaskMetadataStore(ttl_seconds=123)
 
-    assert isinstance(store._kv, RedisKeyValueStore)
-    assert store._kv._url == "redis://broker:6379/9"
-    assert store._kv._timeout_seconds == 4
+    assert isinstance(store._kv, PgKeyValueStore)
 
 
 def test_task_metadata_store_default_runtime_has_no_local_fallback_wrapper():
@@ -91,33 +80,31 @@ def test_task_metadata_store_default_runtime_has_no_local_fallback_wrapper():
     assert "TaskMetadataStoreWithDevFallback" not in all_identifiers(source)
     assert "default_task_metadata_store" in all_identifiers(source)
     # RAW: statement pattern (multi-token return expression, not a plain identifier)
-    assert "return RedisTaskMetadataStore(" in source
+    assert "return KvTaskMetadataStore(" in source
 
 
-def test_default_task_metadata_store_is_redis_only(monkeypatch):
+def test_default_task_metadata_store_builds_pg_backed(monkeypatch):
     from app.core.orchestrator import task_metadata_store as module
 
     created = []
 
-    class FakeRedisStore:
-        def __init__(self, broker_url, *, ttl_seconds, timeout_seconds):
-            created.append((broker_url, ttl_seconds, timeout_seconds))
+    class FakeKvStore:
+        def __init__(self, *, ttl_seconds, kv_store):
+            created.append((ttl_seconds, type(kv_store).__name__))
 
-    monkeypatch.setattr(module, "RedisTaskMetadataStore", FakeRedisStore)
-    monkeypatch.setenv("CELERY_BROKER_URL", "redis://broker:6379/0")
+    monkeypatch.setattr(module, "KvTaskMetadataStore", FakeKvStore)
     monkeypatch.setenv("CELERY_RESULT_EXPIRES", "456")
-    monkeypatch.setenv("READINESS_REDIS_TIMEOUT_SECONDS", "7")
 
     store = default_task_metadata_store()
 
-    assert isinstance(store, FakeRedisStore)
-    assert created == [("redis://broker:6379/0", 456, 7)]
+    assert isinstance(store, FakeKvStore)
+    assert created == [(456, "PgKeyValueStore")]
 
 
-def test_redis_task_metadata_store_put_fails_loud_when_unavailable():
+def test_task_metadata_store_put_fails_loud_when_unavailable():
     class BrokenStore:
         def put(self, metadata):
-            raise TaskMetadataStoreUnavailable("redis down")
+            raise TaskMetadataStoreUnavailable("backend down")
 
     metadata = PendingTaskMetadata(
         task_id="task-1",

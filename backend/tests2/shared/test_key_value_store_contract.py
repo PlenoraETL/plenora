@@ -2,9 +2,9 @@
 Contratto KeyValueStore (Plenora 2.0, Fase 0 piano unificazione stack).
 
 Blinda la semantica del protocol per OGNI implementazione: la stessa
-batteria gira sull'in-memory (sempre) e, in Fase 4, sul backend
-PostgreSQL. Il backend Redis e' coperto a livello di mapping operazioni
-(fake client) — la lane non ha un server Redis.
+batteria gira sull'in-memory (sempre) e sul backend PostgreSQL (forma SQL,
+lane no-DB; comportamento reale verificato e2e). Plenora 2.0 Fase 5: il
+backend Redis non esiste piu'.
 """
 
 from __future__ import annotations
@@ -120,72 +120,6 @@ def test_release_without_owner_is_unconditional(store):
     assert store.acquire_lock("lock:y", ttl_seconds=30, owner="A") is True
     store.release_lock("lock:y")  # nessun owner -> delete incondizionato
     assert store.acquire_lock("lock:y", ttl_seconds=30, owner="B") is True
-
-
-# ---------------------------------------------------------------------------
-# Mapping operazioni del backend Redis (fake client, niente server)
-# ---------------------------------------------------------------------------
-
-
-class _FakeRedisClient:
-    def __init__(self) -> None:
-        self.calls: list[tuple] = []
-        self.values: dict[str, str] = {}
-
-    def setex(self, key, ttl, value):
-        self.calls.append(("setex", key, ttl, value))
-        self.values[key] = value
-
-    def set(self, key, value, nx=False, ex=None):
-        self.calls.append(("set", key, value, nx, ex))
-        if nx and key in self.values:
-            return None
-        self.values[key] = value
-        return True
-
-    def get(self, key):
-        return self.values.get(key)
-
-    def delete(self, key):
-        return 1 if self.values.pop(key, None) is not None else 0
-
-    def exists(self, key):
-        return 1 if key in self.values else 0
-
-    def scan_iter(self, match):
-        prefix = match.rstrip("*")
-        return [k for k in self.values if k.startswith(prefix)]
-
-
-@pytest.fixture()
-def redis_store(monkeypatch):
-    from app.shared.kv import redis_store as redis_store_module
-
-    fake = _FakeRedisClient()
-    store = redis_store_module.RedisKeyValueStore("redis://test:6379/0")
-    monkeypatch.setattr(store, "_redis_client", lambda: fake)
-    return store, fake
-
-
-def test_redis_store_set_with_ttl_maps_to_setex(redis_store):
-    store, fake = redis_store
-    store.set("k", "v", ttl_seconds=60)
-    assert fake.calls == [("setex", "k", 60, "v")]
-    assert store.get("k") == "v"
-
-
-def test_redis_store_lock_maps_to_set_nx_ex(redis_store):
-    store, fake = redis_store
-    assert store.acquire_lock("lock:x", ttl_seconds=30) is True
-    assert store.acquire_lock("lock:x", ttl_seconds=30) is False
-    assert ("set", "lock:x", "1", True, 30) in fake.calls
-
-
-def test_redis_store_scan_keys(redis_store):
-    store, fake = redis_store
-    store.set("app:a", "1")
-    store.set("zz:b", "2")
-    assert store.scan_keys("app:") == ["app:a"]
 
 
 # ---------------------------------------------------------------------------

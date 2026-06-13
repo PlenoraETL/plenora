@@ -52,10 +52,6 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # difensivo che ritorna {success:false, message} invece di 500:
 # preview-formula (#26), latest-by-project (#11), clone/rename/versions (#8/#12),
 # canvas_sync applied_migrations (#2). +11.
-# +6 (2026-06-12, Plenora 2.0 Fase 0): RedisKeyValueStore — catch broad
-# intenzionali al boundary infrastrutturale (letture fail-soft, scritture
-# fail-loud con wrap in KeyValueStoreUnavailable); redis-py e' dipendenza
-# opzionale quindi il narrowing a RedisError richiederebbe import eager.
 # +2 (2026-06-13, Plenora 2.0 Fase 2 F2.2): task_progress.report_task_progress
 # e finalize_task_result — safety-net best-effort sulla scrittura stato/esito
 # task su PG; un errore di persistenza (DB giu', serializzazione) non deve mai
@@ -66,9 +62,12 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # get_actor (fake nei test) o l'actor non e' registrato — best-effort di routing.
 # +7 (2026-06-13, Plenora 2.0 Fase 4 F4.1): PgKeyValueStore (app/shared/kv/pg_store.py)
 # — boundary KV su PG: letture fail-soft (None/[]/False), scritture fail-loud
-# (KeyValueStoreUnavailable). Stesso pattern di RedisKeyValueStore (+6 in Fase 0),
-# 7 metodi del protocol (get/set/delete/exists/scan_keys/acquire_lock/release_lock).
-_EXPECT_BROAD_BUDGET = 732
+# (KeyValueStoreUnavailable). 7 metodi del protocol
+# (get/set/delete/exists/scan_keys/acquire_lock/release_lock).
+# 732 -> 721 (2026-06-13, Plenora 2.0 Fase 5 F5.1): rimossi RedisKeyValueStore
+# (app/shared/kv/redis_store.py) e il ramo redis.exceptions di resilience/transient
+# — il backend KV e' interamente su PostgreSQL, niente piu' dipendenza redis-py.
+_EXPECT_BROAD_BUDGET = 721
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

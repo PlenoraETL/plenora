@@ -156,7 +156,7 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     # ai consumer di Fase 4 (blacklist JWT, lock oauth) non ancora migrati;
     # il protocol ha corpo `...` (falso positivo strutturale). Rimuovere
     # queste righe quando la Fase 4 li aggancia.
-    re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+kv[\\/]+(store|memory_store|redis_store|pg_store)\.py:\d+: unused method '(scan_keys|acquire_lock|release_lock|exists|delete|get|set)' "),
+    re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+kv[\\/]+(store|memory_store|pg_store)\.py:\d+: unused method '(scan_keys|acquire_lock|release_lock|exists|delete|get|set)' "),
 )
 
 

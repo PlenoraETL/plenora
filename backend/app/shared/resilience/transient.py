@@ -13,7 +13,7 @@ Proprieta':
   transitorio; tutto il resto (ValueError, auth-failure, vincolo violato,
   file-not-found, ...) NON va ritentato.
 - **Puro**: nessuno stato, nessun side-effect.
-- **Dipendenze opzionali best-effort**: psycopg/redis/requests sono importati a
+- **Dipendenze opzionali best-effort**: psycopg/requests sono importati a
   import-time con guardia; se assenti i relativi rami si disattivano senza
   rompere l'import del modulo.
 """
@@ -86,12 +86,6 @@ try:  # pragma: no cover - dipende dall'ambiente
 
     _optional.append(psycopg.OperationalError)
 except Exception:  # noqa: BLE001 - assenza SDK non deve rompere l'import
-    pass
-try:  # pragma: no cover
-    import redis
-
-    _optional.extend((redis.exceptions.ConnectionError, redis.exceptions.TimeoutError))
-except Exception:  # noqa: BLE001
     pass
 try:  # pragma: no cover
     import requests

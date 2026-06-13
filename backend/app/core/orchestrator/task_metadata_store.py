@@ -1,9 +1,9 @@
 """Distributed metadata store for pending orchestrator tasks.
 
-Plenora 2.0 (Fase 0): primo consumer pilota del protocol condiviso
-``app.shared.kv.KeyValueStore`` — questo modulo non possiede piu' un
-client Redis proprio; il backend (oggi Redis, in Fase 4 PostgreSQL) e'
-iniettabile e il mapping JSON/TTL resta qui.
+Consumer del protocol condiviso ``app.shared.kv.KeyValueStore``: il modulo
+non possiede un client proprio, il backend e' iniettabile e il mapping
+JSON/TTL resta qui. Plenora 2.0 Fase 5: il default e' PgKeyValueStore
+(PostgreSQL), nessuna dipendenza Redis.
 """
 
 from __future__ import annotations
@@ -13,15 +13,13 @@ import threading
 from dataclasses import dataclass
 from typing import Optional, Protocol
 
-from app.shared.kv import KeyValueStore
-from app.shared.kv.redis_store import RedisKeyValueStore
+from app.shared.kv import KeyValueStore, PgKeyValueStore
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 _KEY_PREFIX = "plenora:orchestrator:task_metadata:"
 _DEFAULT_TTL_SECONDS = 24 * 60 * 60
-_DEFAULT_TIMEOUT_SECONDS = 1
 
 
 class TaskMetadataStoreUnavailable(RuntimeError):
@@ -30,7 +28,7 @@ class TaskMetadataStoreUnavailable(RuntimeError):
 
 @dataclass(frozen=True)
 class PendingTaskMetadata:
-    """Minimal metadata needed before Celery result metadata exists."""
+    """Minimal metadata needed before the task result metadata exists."""
 
     task_id: str
     project_id: str
@@ -57,28 +55,21 @@ def _key(task_id: str) -> str:
     return f"{_KEY_PREFIX}{task_id}"
 
 
-class RedisTaskMetadataStore:
-    """Store su KeyValueStore (default: Redis via Celery broker URL).
+class KvTaskMetadataStore:
+    """Store sul protocol condiviso KeyValueStore (default: PostgreSQL).
 
-    Il nome resta per compatibilita' (test e default runtime); il
-    backend e' il protocol condiviso, iniettabile via ``kv_store``.
+    Il backend e' iniettabile via ``kv_store`` (test double in-memory);
+    il default runtime usa ``PgKeyValueStore``.
     """
 
     def __init__(
         self,
-        broker_url: str,
         *,
         ttl_seconds: int = _DEFAULT_TTL_SECONDS,
-        timeout_seconds: int = _DEFAULT_TIMEOUT_SECONDS,
         kv_store: Optional[KeyValueStore] = None,
     ) -> None:
         self._ttl_seconds = _normal_ttl(ttl_seconds)
-        resolved_timeout = (
-            timeout_seconds if timeout_seconds > 0 else _DEFAULT_TIMEOUT_SECONDS
-        )
-        self._kv: KeyValueStore = kv_store or RedisKeyValueStore(
-            broker_url, timeout_seconds=resolved_timeout
-        )
+        self._kv: KeyValueStore = kv_store or PgKeyValueStore()
 
     def put(self, metadata: PendingTaskMetadata) -> None:
         payload = json.dumps(
@@ -135,11 +126,10 @@ class InMemoryTaskMetadataStore:
 
 
 def default_task_metadata_store() -> TaskMetadataStore:
-    """Build the default pending task metadata store from application settings."""
+    """Build the default pending task metadata store (PostgreSQL-backed)."""
     from app.config import settings
 
-    return RedisTaskMetadataStore(
-        settings.CELERY_BROKER_URL,
+    return KvTaskMetadataStore(
         ttl_seconds=settings.CELERY_RESULT_EXPIRES,
-        timeout_seconds=int(settings.get("READINESS_REDIS_TIMEOUT_SECONDS", 2) or 2),
+        kv_store=PgKeyValueStore(),
     )
