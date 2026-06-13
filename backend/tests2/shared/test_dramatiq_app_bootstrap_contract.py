@@ -96,6 +96,135 @@ def test_current_message_id_none_outside_actor():
     assert current_message_id() is None
 
 
+def test_all_ten_task_names_have_a_dramatiq_actor():
+    # Chiusura Fase 1: 10/10 task Celery hanno un actor Dramatiq omonimo.
+    from workers import dramatiq_app
+
+    expected_actor_names = {
+        "cleanroom.ping",
+        "cleanroom.beat_ping",
+        "workers.tasks.cleanup_temp_files_task.run",
+        "workers.tasks.admin_backup_task.run_manual_backup_task",
+        "carica.execute",
+        "pipeline.execute",
+        "pipeline.preview",
+        "tasks.execute_enrichment",
+        "workers.tasks.schedule_task.schedule_pipeline_task",
+        "workers.tasks.schedule_task.beat_heartbeat",
+    }
+    registered = {
+        getattr(dramatiq_app, attr).actor_name
+        for attr in dir(dramatiq_app)
+        if hasattr(getattr(dramatiq_app, attr), "actor_name")
+    }
+    assert expected_actor_names <= registered, (
+        f"Actor mancanti: {expected_actor_names - registered}"
+    )
+
+
+import pytest as _pytest
+
+
+@_pytest.mark.parametrize(
+    "attr, actor_name, queue_attr",
+    [
+        ("carica_execute", "carica.execute", "CELERY_QUEUE_DATA_PLANE"),
+        ("pipeline_execute", "pipeline.execute", "CELERY_QUEUE_DATA_PLANE"),
+        ("pipeline_preview", "pipeline.preview", "CELERY_QUEUE_DATA_PLANE"),
+        ("execute_enrichment", "tasks.execute_enrichment", "CELERY_QUEUE_DATA_PLANE"),
+        (
+            "schedule_pipeline_task",
+            "workers.tasks.schedule_task.schedule_pipeline_task",
+            "CELERY_QUEUE_DATA_PLANE",
+        ),
+    ],
+)
+def test_shim_actors_keep_name_queue_and_share_body(attr, actor_name, queue_attr):
+    import inspect
+
+    from app.config import settings
+    from workers import dramatiq_app
+
+    actor = getattr(dramatiq_app, attr)
+    assert actor.actor_name == actor_name
+    assert actor.queue_name == getattr(settings, queue_attr)
+    # Corpo condiviso: l'actor delega al corpo del task Celery via shim.
+    assert "_invoke_celery_task_body" in inspect.getsource(actor.fn)
+
+
+def test_beat_heartbeat_actor_name_and_scheduler_queue():
+    from app.config import settings
+    from workers.dramatiq_app import beat_heartbeat
+
+    assert beat_heartbeat.actor_name == (
+        "workers.tasks.schedule_task.beat_heartbeat"
+    )
+    assert beat_heartbeat.queue_name == settings.CELERY_QUEUE_SCHEDULER
+
+
+def test_broker_has_task_result_finalize_middleware():
+    from workers.dramatiq_app import broker
+
+    names = {type(m).__name__ for m in broker.middleware}
+    assert "_TaskResultMiddleware" in names, (
+        "il broker Dramatiq deve avere il middleware di finalize esito su PG"
+    )
+    assert "CurrentMessage" in names
+
+
+def test_invoke_celery_task_body_injects_message_id_as_self_request_id(monkeypatch):
+    from types import SimpleNamespace
+
+    from workers import dramatiq_app
+
+    monkeypatch.setattr(dramatiq_app, "current_message_id", lambda: "msg-123")
+
+    captured = {}
+
+    def _raw(self, **kwargs):
+        captured["task_id"] = self.request.id
+        captured["name"] = self.name
+        captured["kwargs"] = kwargs
+        return {"ok": True}
+
+    fake_task = SimpleNamespace(__wrapped__=SimpleNamespace(__func__=_raw))
+
+    result = dramatiq_app._invoke_celery_task_body(
+        fake_task, name="carica.execute", kwargs={"project_id": "p1"}
+    )
+
+    assert result == {"ok": True}
+    assert captured == {
+        "task_id": "msg-123",
+        "name": "carica.execute",
+        "kwargs": {"project_id": "p1"},
+    }
+
+
+def test_real_celery_tasks_expose_wrapped_for_shim_invocation():
+    # Lo shim degli actor invoca task.__wrapped__ (.__func__): qui si blinda
+    # che i task Celery reali espongano davvero il seam, senza eseguirne il
+    # corpo (no DB). Se Celery cambiasse il wrapping, questo test lo rileva.
+    from workers.tasks.carica_task import execute_carica_task
+    from workers.tasks.pipeline_task import (
+        execute_pipeline_task,
+        preview_pipeline_task,
+    )
+    from workers.tasks.enrichment_task import execute_enrichment_task
+    from workers.tasks.schedule_task import schedule_pipeline_task
+
+    for task in (
+        execute_carica_task,
+        execute_pipeline_task,
+        preview_pipeline_task,
+        execute_enrichment_task,
+        schedule_pipeline_task,
+    ):
+        wrapped = task.__wrapped__
+        raw = getattr(wrapped, "__func__", wrapped)
+        assert callable(raw), f"{task.name}: __wrapped__ non risolvibile per lo shim"
+
+
 def test_broker_url_overridable_via_env(monkeypatch):
     from workers import dramatiq_app
 

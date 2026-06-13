@@ -15,10 +15,11 @@ Broker: ``DRAMATIQ_BROKER_URL`` (default RabbitMQ del compose).
 from __future__ import annotations
 
 import os
+from types import SimpleNamespace
 
 import dramatiq
 from dramatiq.brokers.rabbitmq import RabbitmqBroker
-from dramatiq.middleware import CurrentMessage
+from dramatiq.middleware import CurrentMessage, Middleware
 
 from app.config import settings
 
@@ -31,12 +32,42 @@ def broker_url() -> str:
     return os.environ.get("DRAMATIQ_BROKER_URL", _DEFAULT_BROKER_URL)
 
 
+class _TaskResultMiddleware(Middleware):
+    """Persiste l'esito dell'actor su PostgreSQL (Plenora 2.0, Fase 2).
+
+    Simmetrico a ``BaseTaskWithRetry.after_return`` lato Celery: dopo
+    l'esecuzione di un actor scrive stato+risultato su task_result_store
+    (keyed sul message_id), cosi' l'orchestratore — che dalla Fase 2 legge
+    da PG — vede l'esito anche quando il task gira sul worker Dramatiq.
+    Best-effort: finalize_from_celery non propaga."""
+
+    def after_process_message(
+        self,
+        broker: object,
+        message: object,
+        *,
+        result: object = None,
+        exception: object = None,
+    ) -> None:
+        from app.core.orchestrator.task_progress import finalize_from_celery
+
+        status = "FAILURE" if exception is not None else "SUCCESS"
+        einfo = (
+            SimpleNamespace(exception=exception) if exception is not None else None
+        )
+        finalize_from_celery(
+            message.message_id, status, result, einfo, name=message.actor_name
+        )
+
+
 broker = RabbitmqBroker(url=broker_url())
 # CurrentMessage espone il messaggio in esecuzione all'actor: e' il
 # rimpiazzo Dramatiq di `self.request.id` (bind=True) di Celery, usato
-# dai task che mettono il task_id nel result payload (admin_backup; in
-# Fase 2 anche carica/pipeline).
+# dai task che mettono il task_id nel result payload.
 broker.add_middleware(CurrentMessage())
+# Finalize dell'esito su PG (rimpiazzo del result backend Redis): vale per
+# tutti gli actor, come after_return per i task Celery.
+broker.add_middleware(_TaskResultMiddleware())
 dramatiq.set_broker(broker)
 
 
@@ -45,6 +76,23 @@ def current_message_id() -> str | None:
     actor. Equivalente di `self.request.id` lato Celery."""
     message = CurrentMessage.get_current_message()
     return message.message_id if message is not None else None
+
+
+def _invoke_celery_task_body(task: object, *, name: str, kwargs: dict) -> object:
+    """Esegue il corpo di un task Celery (bind=True) con un self-shim Dramatiq.
+
+    Dopo F2.5 i corpi dei task usano ``self`` solo per ``self.request.id``
+    (task_id) e ``self.name`` (routing del progress su PG). Lo shim li
+    fornisce dal messaggio Dramatiq corrente; nessun refactor dei corpi
+    (che restano l'unica fonte di verita', invocata anche dai test via
+    ``__wrapped__``). L'esito finale lo scrive ``_TaskResultMiddleware``.
+    """
+    shim = SimpleNamespace(
+        request=SimpleNamespace(id=current_message_id()), name=name
+    )
+    wrapped = task.__wrapped__  # type: ignore[attr-defined]
+    raw = getattr(wrapped, "__func__", wrapped)
+    return raw(shim, **kwargs)
 
 
 # Routing actor -> coda: stessa tabella di celery_app.task_routes (stessa
@@ -130,14 +178,103 @@ def run_manual_backup_task(*, owner_token: str) -> dict:
     )
 
 
+# ---------------------------------------------------------------------------
+# Task applicativi (chiusura Fase 1 → 10/10). Stessi nomi/code dei task
+# Celery; il corpo condiviso e' la funzione Celery stessa, invocata con un
+# self-shim (vedi _invoke_celery_task_body). Import lazy: il modulo legacy
+# importa celery_app, che il bootstrap Dramatiq non deve pagare a import-time.
+# ---------------------------------------------------------------------------
+
+
+@dramatiq.actor(actor_name="carica.execute", queue_name=queue_for("carica.execute"))
+def carica_execute(**kwargs: object) -> object:
+    """CARICA — stesso corpo del task Celery carica.execute."""
+    from workers.tasks.carica_task import execute_carica_task
+
+    return _invoke_celery_task_body(
+        execute_carica_task, name="carica.execute", kwargs=kwargs
+    )
+
+
+@dramatiq.actor(
+    actor_name="pipeline.execute", queue_name=queue_for("pipeline.execute")
+)
+def pipeline_execute(**kwargs: object) -> object:
+    """PIPELINE execute — stesso corpo del task Celery pipeline.execute."""
+    from workers.tasks.pipeline_task import execute_pipeline_task
+
+    return _invoke_celery_task_body(
+        execute_pipeline_task, name="pipeline.execute", kwargs=kwargs
+    )
+
+
+@dramatiq.actor(
+    actor_name="pipeline.preview", queue_name=queue_for("pipeline.preview")
+)
+def pipeline_preview(**kwargs: object) -> object:
+    """PIPELINE preview — stesso corpo del task Celery pipeline.preview."""
+    from workers.tasks.pipeline_task import preview_pipeline_task
+
+    return _invoke_celery_task_body(
+        preview_pipeline_task, name="pipeline.preview", kwargs=kwargs
+    )
+
+
+@dramatiq.actor(
+    actor_name="tasks.execute_enrichment",
+    queue_name=queue_for("tasks.execute_enrichment"),
+)
+def execute_enrichment(**kwargs: object) -> object:
+    """ARRICCHISCI — stesso corpo del task Celery tasks.execute_enrichment."""
+    from workers.tasks.enrichment_task import execute_enrichment_task
+
+    return _invoke_celery_task_body(
+        execute_enrichment_task, name="tasks.execute_enrichment", kwargs=kwargs
+    )
+
+
+@dramatiq.actor(
+    actor_name="workers.tasks.schedule_task.schedule_pipeline_task",
+    queue_name=queue_for("workers.tasks.schedule_task.schedule_pipeline_task"),
+)
+def schedule_pipeline_task(**kwargs: object) -> object:
+    """Schedule pipeline — stesso corpo del task Celery omonimo."""
+    from workers.tasks.schedule_task import schedule_pipeline_task as _task
+
+    return _invoke_celery_task_body(
+        _task,
+        name="workers.tasks.schedule_task.schedule_pipeline_task",
+        kwargs=kwargs,
+    )
+
+
+@dramatiq.actor(
+    actor_name="workers.tasks.schedule_task.beat_heartbeat",
+    queue_name=queue_for("workers.tasks.schedule_task.beat_heartbeat"),
+)
+def beat_heartbeat() -> object:
+    """Beat heartbeat — stesso corpo del task Celery (non bind, niente self)."""
+    from workers.tasks.schedule_task import beat_heartbeat as _task
+
+    wrapped = _task.__wrapped__
+    raw = getattr(wrapped, "__func__", wrapped)
+    return raw()
+
+
 __all__ = [
     "TASK_QUEUE_ROUTES",
+    "beat_heartbeat",
     "broker",
     "broker_url",
+    "carica_execute",
     "cleanroom_beat_ping",
     "cleanroom_ping",
     "cleanup_temp_files",
     "current_message_id",
+    "execute_enrichment",
+    "pipeline_execute",
+    "pipeline_preview",
     "queue_for",
     "run_manual_backup_task",
+    "schedule_pipeline_task",
 ]

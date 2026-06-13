@@ -37,7 +37,12 @@ _SCAN_ROOTS = (
 # 279 -> 280 (Plenora 2.0, Fase 2 F2.2): BaseTaskWithRetry.after_return importa
 # localmente finalize_from_celery dall'orchestrator (il bootstrap del modulo
 # celery non deve dipendere a import-time dall'orchestrator).
-MAX_LOCAL_IMPORTS = 280
+# 280 -> 287 (Plenora 2.0, chiusura Fase 1): i 6 actor Dramatiq applicativi in
+# workers/dramatiq_app.py importano lazy il task Celery corrispondente (6) e il
+# middleware finalize importa lazy finalize_from_celery (1). Lazy come tutti gli
+# actor: il bootstrap Dramatiq non deve pagare l'import di celery_app/orchestrator
+# finche' l'actor non viene eseguito.
+MAX_LOCAL_IMPORTS = 287
 MAX_LATE_MODULE_IMPORTS = 8
 
 
