@@ -74,7 +74,10 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # probes._pika_module (SDK opzionale), RabbitmqRuntimePort.ping close best-effort,
 # health.check_broker fail-closed. Boundary infrastrutturale (rimpiazzo della
 # PING Redis sul path readiness).
-_EXPECT_BROAD_BUDGET = 725
+# 725 -> 719 (2026-06-13, Plenora 2.0 Fase 5 F5.3b): osservabilita' admin
+# PG-derived. Rimossi i catch di get_redis_status, get_workers_status (celery
+# inspect) e delle funzioni Redis/Celery di probes.py; net -6.
+_EXPECT_BROAD_BUDGET = 719
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

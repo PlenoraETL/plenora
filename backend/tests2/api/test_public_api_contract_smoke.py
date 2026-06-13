@@ -94,7 +94,6 @@ def test_admin_system_status_public_shape_survives_typed_payload(
         "workers": {"status": "ok", "message": "ok"},
         "host_resources": {"status": "ok", "message": "ok"},
         "db_pool": {"status": "ok", "message": "ok"},
-        "redis": {"status": "ok", "message": "ok"},
         "db_schema": {"status": "ok", "message": "ok"},
         "jwt_blacklist": {"status": "ok", "message": "ok"},
         "tickets": {"status": "warn", "message": "open"},

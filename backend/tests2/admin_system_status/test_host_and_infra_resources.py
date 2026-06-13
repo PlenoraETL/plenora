@@ -78,26 +78,6 @@ def _db_pool_row(
     }
 
 
-def _fake_redis_info(
-    *,
-    used_mb,
-    max_mb,
-    clients=5,
-    uptime_seconds=3600,
-):
-    fake_client = MagicMock()
-    fake_client.info.return_value = {
-        "used_memory": used_mb * 1024 * 1024,
-        "used_memory_human": f"{used_mb}M",
-        "maxmemory": max_mb * 1024 * 1024,
-        "connected_clients": clients,
-        "uptime_in_seconds": uptime_seconds,
-    }
-    fake_redis_mod = MagicMock()
-    fake_redis_mod.Redis.from_url.return_value = fake_client
-    return fake_redis_mod
-
-
 def _ticket_counts(*, low=0, medium=0, high=0, critical=0):
     return {
         "low": low,
@@ -439,87 +419,6 @@ def test_db_pool_threshold_statuses(monkeypatch, row, expected_status, expected_
     assert out["scope"] == "cluster"
 
 
-# get_redis_status
-
-
-def test_redis_client_unavailable_returns_unknown():
-    """redis non importabile -> conserva il path degraded legacy."""
-    from app.core.admin_system_status import service
-
-    import builtins
-    real_import = builtins.__import__
-
-    def fake_import(name, *args, **kwargs):
-        if name == "redis":
-            raise ImportError("redis missing")
-        return real_import(name, *args, **kwargs)
-
-    with patch("builtins.__import__", side_effect=fake_import):
-        out = service.get_redis_status()
-
-    assert out["status"] == "unknown"
-    assert out["message"] == "redis client non importabile"
-    assert "redis missing" in out["error"]
-
-
-def test_redis_unreachable_returns_error(monkeypatch):
-    """redis.Redis.from_url raise → status=error con messaggio leggibile."""
-    from app.core.admin_system_status import service
-
-    fake_redis_mod = MagicMock()
-    fake_redis_mod.Redis.from_url.side_effect = ConnectionError("broker down")
-    monkeypatch.setitem(sys.modules, "redis", fake_redis_mod)
-
-    out = service.get_redis_status()
-    assert out["status"] == "error"
-    assert "Redis non raggiungibile" in out["message"]
-
-
-def test_redis_info_happy_path(monkeypatch):
-    from app.core.admin_system_status import service
-
-    fake_redis_mod = _fake_redis_info(
-        used_mb=50,
-        max_mb=200,
-        clients=12,
-        uptime_seconds=86400 * 3,
-    )
-    monkeypatch.setitem(sys.modules, "redis", fake_redis_mod)
-
-    out = service.get_redis_status()
-    assert out["status"] == "ok"
-    assert out["percent"] == 25.0  # 50/200
-    assert out["connected_clients"] == 12
-    assert "uptime 3d" in out["message"]
-
-
-def test_redis_over_warn_threshold(monkeypatch):
-    from app.core.admin_system_status import service
-
-    fake_redis_mod = _fake_redis_info(used_mb=80, max_mb=100)
-    monkeypatch.setitem(sys.modules, "redis", fake_redis_mod)
-
-    out = service.get_redis_status()
-    assert out["status"] == "warn"  # 80% >= 75%
-
-
-def test_redis_without_maxmemory_has_no_percent(monkeypatch):
-    """maxmemory=0 (unlimited): pct=None, status resta ok."""
-    from app.core.admin_system_status import service
-
-    fake_redis_mod = _fake_redis_info(
-        used_mb=500,
-        max_mb=0,
-        clients=3,
-        uptime_seconds=600,
-    )
-    monkeypatch.setitem(sys.modules, "redis", fake_redis_mod)
-
-    out = service.get_redis_status()
-    assert out["status"] == "ok"
-    assert out["percent"] is None
-
-
 # get_db_schema_size
 
 
@@ -586,18 +485,17 @@ def test_db_schema_size_env_override(monkeypatch):
 
 
 def test_aggregator_includes_new_blocks(monkeypatch):
-    """get_system_status() ora ritorna anche host_resources, db_pool,
-    redis, db_schema, jwt_blacklist."""
+    """get_system_status() ritorna host_resources, db_pool, db_schema,
+    jwt_blacklist (Plenora 2.0 Fase 5: niente piu' blocco redis)."""
     from app.core.admin_system_status import service
 
-    # Mock tutte le fonti esterne per non toccare DB/S3/redis reali
+    # Mock tutte le fonti esterne per non toccare DB/S3 reali
     monkeypatch.setattr(service, "get_backup_status", lambda: {"status": "ok", "message": "ok"})
     monkeypatch.setattr(service, "get_verify_restore_status", lambda: {"status": "ok", "message": "ok"})
     monkeypatch.setattr(service, "get_schedules_status", lambda: {"status": "ok", "message": "ok"})
     monkeypatch.setattr(service, "get_workers_status", lambda: {"status": "ok", "message": "ok"})
     monkeypatch.setattr(service, "get_host_resources", lambda: {"status": "ok", "message": "ok"})
     monkeypatch.setattr(service, "get_db_pool_status", lambda: {"status": "ok", "message": "ok"})
-    monkeypatch.setattr(service, "get_redis_status", lambda: {"status": "ok", "message": "ok"})
     monkeypatch.setattr(service, "get_db_schema_size", lambda: {"status": "ok", "message": "ok"})
     monkeypatch.setattr(service, "get_blacklist_status", lambda: {"status": "ok", "message": "ok"})
     monkeypatch.setattr(service, "get_tickets_status", lambda: {"status": "ok", "message": "ok"})
@@ -605,9 +503,10 @@ def test_aggregator_includes_new_blocks(monkeypatch):
     out = service.get_system_status()
     # Keys attese (contratto API)
     for k in ("backup", "verify_restore", "schedules", "workers",
-              "host_resources", "db_pool", "redis", "db_schema",
+              "host_resources", "db_pool", "db_schema",
               "jwt_blacklist", "tickets", "generated_at"):
         assert k in out, f"Mancante: {k}"
+    assert "redis" not in out
     api = out.to_api_dict()
     assert api["backup"]["scope"] == "cluster"
     assert api["host_resources"]["scope"] == "local_replica"
@@ -625,12 +524,11 @@ def test_router_serializes_typed_system_status(monkeypatch):
         backup=AdminStatusBlock(status="unknown", message="S3 non accessibile", error="boom"),
         verify_restore=AdminStatusBlock(status="unknown", message="Nessuna verifica registrata", last_run_at=None),
         schedules=AdminStatusBlock(status="ok", message="Nessuno schedule attivo", total_active=0, failing_count=0, failing=[]),
-        workers=AdminStatusBlock(status="error", message="Nessun worker online", nodes=0, workers_online=0),
+        workers=AdminStatusBlock(status="ok", message="Nessun task in esecuzione", active_tasks=0, running_tasks=0),
         host_resources=AdminStatusBlock(status="unknown", message="Metriche non disponibili", scope="local_replica", disk=None, memory=None, cpu=None),
         db_pool=AdminStatusBlock(status="unknown", message="pg_stat_activity vuoto"),
-        redis=AdminStatusBlock(status="error", message="Redis non raggiungibile: ConnectionError", error="down"),
         db_schema=AdminStatusBlock(status="unknown", message="DB non accessibile", error="down"),
-        jwt_blacklist=AdminStatusBlock(status="unknown", message="Client Redis non inizializzato", counters={}, last_ok_epoch=None, minutes_since_last_ok=None),
+        jwt_blacklist=AdminStatusBlock(status="unknown", message="Blacklist JWT non inizializzata", counters={}, last_ok_epoch=None, minutes_since_last_ok=None),
         tickets=AdminStatusBlock(status="unknown", message="Query ticket fallita", error="down"),
     )
     monkeypatch.setattr(service, "get_system_status", lambda: typed_payload)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.core.task_runtime.probes import ping_rabbitmq_broker, ping_redis_broker
+from app.core.task_runtime.probes import ping_rabbitmq_broker
 
 
 def bounded_readiness_timeout(settings: Any, key: str, default: int = 2) -> int:
@@ -21,5 +21,4 @@ def bounded_readiness_timeout(settings: Any, key: str, default: int = 2) -> int:
 __all__ = [
     "bounded_readiness_timeout",
     "ping_rabbitmq_broker",
-    "ping_redis_broker",
 ]

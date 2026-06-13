@@ -269,21 +269,6 @@ def test_health_module_has_no_unbounded_network_imports():
     )
 
 
-def test_redis_check_uses_socket_connect_timeout():
-    """Source-bound lock on the only direct Redis network call:
-    `socket_connect_timeout=` MUST be present. Removing it would
-    change /ready's worst-case latency from ~2s to the kernel's
-    default SYN-retransmit window (~75s on Linux)."""
-    text = _TASK_RUNTIME_PROBES_PY.read_text(encoding="utf-8")
-    code_only = _python_code_only(text)
-    assert "socket_connect_timeout" in code_only, (
-        "ping_redis_broker() must use `redis.from_url(..., "
-        "socket_connect_timeout=N)`. Without it, an unreachable "
-        "Redis (e.g. Redis pod restarting in k8s) would block "
-        "/ready for ~75s on the kernel SYN retransmit timeout."
-    )
-
-
 def test_rabbitmq_check_uses_bounded_connection_timeout():
     """Source-bound lock sul probe broker di /ready (Plenora 2.0 Fase 5):
     `ping_rabbitmq_broker` apre una connessione pika che DEVE limitare sia
@@ -373,23 +358,23 @@ def test_check_postgres_remains_fail_closed():
     assert "RuntimeError" in detail
 
 
-def test_check_redis_remains_fail_closed():
-    """`check_redis` is the second mandatory dependency. Fail-CLOSED
-    by design: Celery requires Redis."""
+def test_check_broker_remains_fail_closed():
+    """`check_broker` is a mandatory dependency on /ready. Fail-CLOSED
+    by design: i task richiedono il broker RabbitMQ."""
     from app.observability import health as h
 
-    class _BrokenRedis:
-        def ping(self):
-            raise RuntimeError("Redis unreachable")
-
-    with patch("redis.from_url", return_value=_BrokenRedis()):
-        ok, detail = h.check_redis()
+    with patch.object(
+        h.runtime_ports_module,
+        "ping_rabbitmq_broker",
+        side_effect=RuntimeError("broker unreachable"),
+    ):
+        ok, detail = h.check_broker()
 
     assert ok is False
     assert "RuntimeError" in detail
 
 
-# 6. OPS-001: process-only liveness + Redis PING-level timeout
+# 6. OPS-001: process-only liveness + broker probe-level timeout
 #
 # BE-GO-READY-OPS-001-READINESS-COST-BOUNDEDNESS adds three locks:
 #   (a) liveness must NEVER call dependency/readiness checks
@@ -435,7 +420,7 @@ def test_gather_liveness_does_not_call_dependency_or_readiness_checks():
         )
 
     with patch.object(h, "check_postgres", side_effect=_explode), \
-         patch.object(h, "check_redis", side_effect=_explode), \
+         patch.object(h, "check_broker", side_effect=_explode), \
          patch.object(h, "check_pool_headroom", side_effect=_explode), \
          patch.object(h, "check_migrations_aligned", side_effect=_explode), \
          patch.object(h, "check_object_storage", side_effect=_explode), \
@@ -449,78 +434,46 @@ def test_gather_liveness_does_not_call_dependency_or_readiness_checks():
     assert list(payload.body["checks"].keys()) == ["process"]
 
 
-def test_redis_check_uses_socket_operation_timeout():
-    """Source-bound: `check_redis` must pass BOTH
-    `socket_connect_timeout` (TCP handshake bound) AND
-    `socket_timeout` (PING-operation bound). Without the
-    operation timeout, a Redis that accepts the TCP handshake but
-    stalls before responding to PING would block /ready
-    until the kernel TCP keepalive fires (~minutes)."""
-    text = _TASK_RUNTIME_PROBES_PY.read_text(encoding="utf-8")
-    code_only = _python_code_only(text)
-    assert "socket_timeout" in code_only, (
-        "ping_redis_broker() must pass `socket_timeout=` in addition to "
-        "`socket_connect_timeout=`. Without it, a Redis that accepts "
-        "the connection but stalls before responding to PING would "
-        "block /ready beyond the connect timeout window."
-    )
-
-
-def test_redis_timeout_setting_default_is_two_seconds():
-    """`READINESS_REDIS_TIMEOUT_SECONDS` default = 2. Bounds both
-    the TCP handshake and the PING. Operators may tune per-deploy
-    (k8s tight SLO -> 1; noisy network -> 5). Cap <= 0 falls back
-    to the hardcoded 2 (intentionally NOT disable-able: /ready
-    without a bound would be a footgun)."""
+def test_broker_timeout_setting_default_is_two_seconds():
+    """`READINESS_BROKER_TIMEOUT_SECONDS` default = 2 (Plenora 2.0 Fase 5).
+    Bounds la connessione pika a RabbitMQ. Cap <= 0 ricade su 2
+    (intenzionalmente NON disabilitabile: /ready senza bound e' un footgun)."""
     from app.config import Settings
 
-    val = Settings.DEFAULTS["READINESS_REDIS_TIMEOUT_SECONDS"]
+    val = Settings.DEFAULTS["READINESS_BROKER_TIMEOUT_SECONDS"]
     assert val == 2, (
-        f"READINESS_REDIS_TIMEOUT_SECONDS default must be 2 seconds. "
-        f"Got {val!r}. Tightening below 2s risks false positives on "
-        "warm-restart Redis pods; raising above 5s starts to drift "
-        "outside the load-balancer-friendly latency budget for "
-        "/ready."
+        f"READINESS_BROKER_TIMEOUT_SECONDS default must be 2 seconds. "
+        f"Got {val!r}."
     )
 
 
-def test_check_redis_falls_back_to_two_seconds_on_invalid_setting():
-    """`check_redis` must NOT honour <=0 or non-int settings as
-    "no timeout" — that would break the cost-boundedness invariant
-    via a typo'd env. The fallback is a hardcoded 2."""
+def test_check_broker_falls_back_to_two_seconds_on_invalid_setting():
+    """`check_broker` must NOT honour <=0 or non-int settings as
+    "no timeout": the fallback bounded e' 2s (cost-boundedness invariant)."""
     from app.observability import health as h
 
     captured: dict = {}
 
-    class _StubRedis:
-        @classmethod
-        def from_url(cls, url, **kwargs):
-            captured.update(kwargs)
-            return cls()
-
-        def ping(self):
-            return True
+    def _capture_ping(url, *, timeout):
+        captured["timeout"] = timeout
+        return True
 
     class _SettingsStub:
-        CELERY_BROKER_URL = "redis://stub"
+        DRAMATIQ_BROKER_URL = "amqp://stub"
 
         def get(self, key, default=None):
-            if key == "READINESS_REDIS_TIMEOUT_SECONDS":
+            if key == "READINESS_BROKER_TIMEOUT_SECONDS":
                 return 0  # invalid: must fall back to 2
             return default
 
     with patch("app.config.settings", new=_SettingsStub()), \
-         patch("redis.from_url", _StubRedis.from_url):
-        ok, _ = h.check_redis()
+         patch.object(h.runtime_ports_module, "ping_rabbitmq_broker", _capture_ping):
+        ok, _ = h.check_broker()
 
     assert ok is True
-    assert captured.get("socket_connect_timeout") == 2, (
-        f"socket_connect_timeout fallback must be 2s on invalid "
-        f"setting; got {captured.get('socket_connect_timeout')!r}."
-    )
-    assert captured.get("socket_timeout") == 2, (
-        f"socket_timeout fallback must be 2s on invalid setting; "
-        f"got {captured.get('socket_timeout')!r}."
+    assert captured.get("timeout") == 2, (
+        f"broker probe timeout fallback must be 2s on invalid setting; "
+        f"got {captured.get('timeout')!r}."
     )
 
 

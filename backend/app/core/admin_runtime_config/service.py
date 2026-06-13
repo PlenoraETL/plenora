@@ -13,10 +13,10 @@ from app.config import API_VERSION, settings
 from app.environment import environment_name, get_env
 from app.observability.health import (
     check_bootstrap_complete,
+    check_broker,
     check_migrations_aligned,
     check_object_storage,
     check_postgres,
-    check_redis,
 )
 from app.utils.logger import get_logger
 
@@ -299,33 +299,27 @@ def _health_check(name: str, fn) -> HealthCheckPayload:
 
 
 def _worker_snapshot() -> WorkerSnapshotPayload:
-    try:
-        from app.core.task_runtime.probes import inspect_celery_workers
+    """Snapshot dei task in esecuzione, derivato da PostgreSQL.
 
-        active, stats, queues = inspect_celery_workers(timeout=1.5)
-        worker_names = sorted(set(stats.keys()) | set(active.keys()) | set(queues.keys()))
+    Plenora 2.0 Fase 5: il broker e' RabbitMQ (Dramatiq) e non c'e' inspect
+    dei worker; il segnale certo su PG e' il numero di task in stato
+    PROGRESS (in esecuzione adesso). La topologia dei nodi worker non e'
+    piu' enumerabile senza RabbitMQ Management API (fuori scope).
+    """
+    try:
+        from app.core.orchestrator.task_result_store import (
+            default_task_result_store,
+        )
+
+        running = default_task_result_store().count_in_state("PROGRESS")
         return {
             "available": True,
-            "workers_online": len(worker_names),
-            "workers": [
-                {
-                    "name": name,
-                    "active_tasks": len(active.get(name) or []),
-                    "queues": [
-                        q.get("name")
-                        for q in (queues.get(name) or [])
-                        if isinstance(q, dict) and q.get("name")
-                    ],
-                    "pool": (stats.get(name) or {}).get("pool", {}),
-                    "total": (stats.get(name) or {}).get("total", {}),
-                }
-                for name in worker_names
-            ],
+            "running_tasks": running,
         }
     except Exception as exc:
         return {
             "available": False,
-            "workers_online": 0,
+            "running_tasks": 0,
             "error": f"{type(exc).__name__}: {exc}",
         }
 
@@ -392,7 +386,7 @@ def get_runtime_config() -> RuntimeConfigPayload:
         "sections": sections,
         "health": [
             _health_check("postgres", check_postgres),
-            _health_check("redis", check_redis),
+            _health_check("broker", check_broker),
             _health_check("migrations", check_migrations_aligned),
             _health_check("object_storage", check_object_storage),
             _health_check("bootstrap", check_bootstrap_complete),

@@ -28,12 +28,11 @@ def get_system_status(
     - `backup`: stato ultimo dump S3 (soglie 26h/48h)
     - `verify_restore`: stato ultimo `plenora-backup-test.service`
     - `schedules`: count attivi + failing negli ultimi 7gg
-    - `workers`: Celery worker online + task attivi + queue depth
+    - `workers`: task in esecuzione (PROGRESS) derivati da PostgreSQL
     - `host_resources`: disco/RAM/CPU via psutil (warn 80%, error 92-95%)
     - `db_pool`: conn pool Postgres (attive/idle/waiting, warn 80%)
-    - `redis`: broker/cache memory + clients + uptime
     - `db_schema`: size schema `plenora` + row count tabelle critiche
-    - `jwt_blacklist`: stato blacklist JWT (Redis) + contatori ops + warning "inoperante da X min"
+    - `jwt_blacklist`: stato blacklist JWT (PostgreSQL) + contatori ops + warning "inoperante da X min"
 
     Ogni blocco ha `status` in {ok, warn, error, unknown} e `message`
     human-readable. Ogni blocco espone anche `scope`:

@@ -89,11 +89,11 @@ def test_module_does_not_import_fastapi_or_starlette():
 
 
 def test_module_exposes_public_api():
-    from app.observability.health import HealthPayload, check_postgres, check_redis, check_pool_headroom, check_migrations_aligned, gather_liveness, gather_readiness
+    from app.observability.health import HealthPayload, check_postgres, check_broker, check_pool_headroom, check_migrations_aligned, gather_liveness, gather_readiness
     # CheckOutcome e' un type alias (non testabile come instance);
     # la sua presenza nel namespace e' il lock.
     assert callable(check_postgres)
-    assert callable(check_redis)
+    assert callable(check_broker)
     assert callable(check_pool_headroom)
     assert callable(check_migrations_aligned)
     assert callable(gather_liveness)
@@ -205,48 +205,7 @@ def test_check_postgres_fail_closed_on_exception():
     assert detail == "RuntimeError: DB down"
 
 
-# 4. check_redis — fail-CLOSED on exception
-
-
-def test_check_redis_ok_on_ping_true():
-    import redis
-
-    fake_client = type("F", (), {"ping": lambda self: True})()
-    with patch.object(redis, "from_url", return_value=fake_client):
-        from app.observability.health import check_redis
-
-        ok, detail = check_redis()
-    assert ok is True
-    assert detail == "ok"
-
-
-def test_check_redis_failed_on_ping_false():
-    import redis
-
-    fake_client = type("F", (), {"ping": lambda self: False})()
-    with patch.object(redis, "from_url", return_value=fake_client):
-        from app.observability.health import check_redis
-
-        ok, detail = check_redis()
-    assert ok is False
-    assert "PING non ha risposto True" in detail
-
-
-def test_check_redis_fail_closed_on_exception():
-    import redis
-
-    def _raise(*a, **kw):
-        raise ConnectionError("boom")
-
-    with patch.object(redis, "from_url", _raise):
-        from app.observability.health import check_redis
-
-        ok, detail = check_redis()
-    assert ok is False
-    assert detail == "ConnectionError: boom"
-
-
-# 4b. check_broker (RabbitMQ) — fail-CLOSED on exception (Plenora 2.0 Fase 5)
+# 4. check_broker (RabbitMQ) — fail-CLOSED on exception (Plenora 2.0 Fase 5)
 
 
 def test_check_broker_ok_when_connection_open():

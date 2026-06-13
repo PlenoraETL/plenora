@@ -76,6 +76,9 @@ class TaskResultStore(Protocol):
     def cleanup_expired(self) -> int:
         ...
 
+    def count_in_state(self, state: str) -> int:
+        ...
+
 
 class PgTaskResultStore:
     """Backend PostgreSQL dello store (default runtime, Fase 2)."""
@@ -157,6 +160,20 @@ class PgTaskResultStore:
         )
         return int(getattr(cur, "rowcount", 0) or 0)
 
+    def count_in_state(self, state: str) -> int:
+        """Conta i task non scaduti in uno stato (es. PROGRESS = in corso).
+
+        Usato dall'osservabilita' admin PG-derived (Plenora 2.0 Fase 5):
+        rimpiazza l'inspect Celery dei worker."""
+        with unit_of_work() as session:
+            row = session.fetchone(
+                "SELECT count(*) AS n FROM task_results "
+                "WHERE state = %s "
+                "AND (expires_at IS NULL OR expires_at > now())",
+                (state,),
+            )
+        return int(row["n"]) if row else 0
+
 
 class InMemoryTaskResultStore:
     """Test double process-local (lane no-DB) e fallback.
@@ -203,6 +220,10 @@ class InMemoryTaskResultStore:
     def cleanup_expired(self) -> int:
         # Senza TTL temporale in-memory non c'e' nulla da scadere.
         return 0
+
+    def count_in_state(self, state: str) -> int:
+        with self._lock:
+            return sum(1 for r in self._by_task_id.values() if r.state == state)
 
 
 def default_task_result_store() -> TaskResultStore:

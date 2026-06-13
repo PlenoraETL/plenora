@@ -24,12 +24,8 @@ from app.core.admin_system_status.db_probe_store import (
 from app.core.admin_system_status.tickets_metrics import (
     get_active_ticket_metrics,
 )
-from app.core.task_runtime.probes import (
-    CeleryAppUnavailable,
-    RedisClientUnavailable,
-    get_celery_queue_depth,
-    get_redis_info,
-    inspect_celery_workers,
+from app.core.orchestrator.task_result_store import (
+    default_task_result_store,
 )
 from app.core.admin_system_status.models import (
     AdminStatusBlock,
@@ -40,7 +36,6 @@ from app.core.admin_system_status.models import (
     ScheduleFailure,
     StatusScope,
     SystemStatusPayload,
-    WorkerDetail,
 )
 from app.core.security.token_blacklist import get_blacklist_status as _probe
 from app.utils.logger import get_logger
@@ -297,138 +292,41 @@ def get_schedules_status() -> AdminStatusBlock:
     )
 
 
-# Celery workers (inspect.active via broker
+# Worker/task in esecuzione — derivato da PostgreSQL (Plenora 2.0 Fase 5)
 
 
 def get_workers_status() -> AdminStatusBlock:
-    """Worker Celery: nodi + slot concorrenza totali + task attivi + queue.
+    """Task in esecuzione, derivati da PostgreSQL (task_results).
 
-    Nota sulla semantica:
-      - `nodes`: numero di processi master Celery (tipico: 1 per istanza EC2).
-        Se hai N istanze/container, `nodes` diventa N.
-      - `concurrency_slots`: somma dei pool size dei nodi (es. un nodo con
-        `--concurrency=4` offre 4 slot). E' la capacita' pratica di task
-        in parallelo.
-      - `active_tasks`: task effettivamente in esecuzione adesso
-        (<=concurrency_slots).
+    Plenora 2.0 Fase 5: il broker e' RabbitMQ (Dramatiq) e lo stato dei task
+    vive su PG, non piu' nell'inspect Celery. Senza introspezione broker non
+    possiamo enumerare i nodi/slot worker; esponiamo il segnale che PG
+    conosce con certezza: il numero di task in stato PROGRESS (in esecuzione
+    adesso). I campi celery-specifici (nodes/concurrency_slots/queue_depth)
+    restano assenti dal payload.
     """
     try:
-        active, stats, queues_info = inspect_celery_workers(timeout=2.0)
-    except CeleryAppUnavailable as e:
-        logger.warning(f"celery_app import fallito: {e}")
-        return AdminStatusBlock(
-            status="unknown",
-            message="Celery app non importabile",
-            error=str(e)[:200],
-        )
+        running = default_task_result_store().count_in_state("PROGRESS")
     except Exception as e:
-        logger.warning(f"celery inspect fallito: {e}")
+        logger.warning(f"conteggio task in corso (PG) fallito: {e}")
         return AdminStatusBlock(
             status="unknown",
-            message="Broker Celery non raggiungibile",
+            message="Stato task non determinabile",
             error=str(e)[:200],
         )
 
-    nodes = 0
-    concurrency_slots = 0
-    active_tasks = 0
-    details: list[WorkerDetail] = []
-
-    try:
-        nodes = len(active)
-        active_tasks = sum(len(v or []) for v in active.values())
-
-        # Per-node detail: dove gira + capacita' + carico + contatore lifetime
-        # Union delle chiavi da active e stats (robusto a ritardi di
-        # risposta di un endpoint dei due
-        all_nodes = set(active.keys()) | set(stats.keys())
-        for worker_name in sorted(all_nodes):
-            s = stats.get(worker_name, {}) or {}
-            pool = s.get("pool", {}) or {}
-            max_conc = pool.get("max-concurrency") or 0
-            processes = pool.get("processes") or []
-            # `total` e' un dict {task_name: count}. Somma per ottenere il
-            # totale lifetime di task processati dal nodo
-            total_payload = s.get("total") or {}
-            if isinstance(total_payload, dict):
-                total_processed = sum(
-                    v for v in total_payload.values() if isinstance(v, int)
-                )
-            elif isinstance(total_payload, int):
-                total_processed = total_payload
-            else:
-                total_processed = None
-
-            # Hostname dal naming Celery: "celery@hostname" -> "hostname"
-            # Per pod Docker/K8s sara' es. "celery@plenora-worker-abc123"
-            hostname = (
-                worker_name.split("@", 1)[1]
-                if "@" in worker_name else worker_name
-            )
-
-            if isinstance(max_conc, int) and max_conc > 0:
-                concurrency_slots += max_conc
-
-            # Code consumate dal nodo (utile se un giorno avremo queue multiple
-            # es. "carica" dedicata o "priority"
-            queue_names = [
-                q.get("name") for q in (queues_info.get(worker_name) or [])
-                if q.get("name")
-            ]
-
-            details.append(WorkerDetail(
-                name=worker_name,
-                hostname=hostname,
-                pid=s.get("pid") if isinstance(s.get("pid"), int) else None,
-                pool_size=max_conc if isinstance(max_conc, int) else None,
-                child_processes=len(processes),
-                active_tasks=len(active.get(worker_name, []) or []),
-                total_tasks_processed=total_processed,
-                queues=queue_names,
-            ))
-    except Exception as e:
-        logger.warning(f"celery inspect fallito: {e}")
-        return AdminStatusBlock(
-            status="unknown",
-            message="Broker Celery non raggiungibile",
-            error=str(e)[:200],
-        )
-
-    # Queue depth via Redis diretto (best-effort
-    # Usiamo settings.CELERY_BROKER_URL come unica variabile canonica
-    # Redis dell'app (stesso broker che Celery stesso consuma
-    queue_depth: Optional[int] = None
-    try:
-        queue_depth = get_celery_queue_depth("celery")
-    except Exception as e:
-        logger.debug(f"Redis queue depth non disponibile: {e}")
-
-    status = "ok" if nodes > 0 else "error"
-    if nodes == 0:
-        message = "Nessun worker online"
+    if running == 0:
+        message = "Nessun task in esecuzione"
+    elif running == 1:
+        message = "1 task in esecuzione"
     else:
-        node_label = "1 nodo" if nodes == 1 else f"{nodes} nodi"
-        slot_label = (
-            f"{concurrency_slots} slot"
-            if concurrency_slots > 0 else "pool size sconosciuto"
-        )
-        if active_tasks == 0:
-            message = f"{node_label} · {slot_label} · idle"
-        else:
-            message = f"{node_label} · {slot_label} · {active_tasks} task attivi"
-    if queue_depth is not None and queue_depth > 0:
-        message += f" · {queue_depth} in coda"
+        message = f"{running} task in esecuzione"
 
     return AdminStatusBlock(
-        status=status,
+        status="ok",
         message=message,
-        nodes=nodes,
-        concurrency_slots=concurrency_slots,
-        active_tasks=active_tasks,
-        queue_depth=queue_depth,
-        details=details,
-        # Retrocompat per chiamanti legacy (la vecchia chiave era workers_online
-        workers_online=nodes,
+        active_tasks=running,
+        running_tasks=running,
     )
 
 
@@ -675,65 +573,6 @@ def get_db_pool_status() -> AdminStatusBlock:
     )
 
 
-# Redis info
-
-
-def get_redis_status() -> AdminStatusBlock:
-    """Stato Redis broker/cache: memory usage, clients connessi, uptime."""
-    try:
-        info = get_redis_info()
-    except RedisClientUnavailable as e:
-        return AdminStatusBlock(
-            status="unknown",
-            message="redis client non importabile",
-            error=str(e)[:200],
-        )
-    except Exception as e:
-        logger.warning(f"redis info failed: {e}")
-        return AdminStatusBlock(
-            status="error",
-            message=f"Redis non raggiungibile: {type(e).__name__}",
-            error=str(e)[:200],
-        )
-
-    used_bytes = int(info.get("used_memory", 0))
-    used_human = str(info.get("used_memory_human", "?"))
-    max_bytes = int(info.get("maxmemory", 0))
-    clients = int(info.get("connected_clients", 0))
-    uptime_sec = int(info.get("uptime_in_seconds", 0))
-
-    # Se maxmemory=0 (unlimited), non possiamo calcolare la %
-    pct: Optional[float] = None
-    if max_bytes > 0:
-        pct = round(100.0 * used_bytes / max_bytes, 1)
-
-    status = "ok"
-    if pct is not None:
-        if pct >= 90:
-            status = "error"
-        elif pct >= 75:
-            status = "warn"
-
-    msg_parts = [f"mem {used_human}"]
-    if pct is not None:
-        msg_parts.append(f"({pct:.0f}% di {max_bytes // (1024*1024)}MB)")
-    msg_parts.append(f"{clients} client")
-    uptime_days = uptime_sec // 86400
-    if uptime_days > 0:
-        msg_parts.append(f"uptime {uptime_days}d")
-
-    return AdminStatusBlock(
-        status=status,
-        message=" · ".join(msg_parts),
-        used_memory_bytes=used_bytes,
-        used_memory_human=used_human,
-        max_memory_bytes=max_bytes,
-        connected_clients=clients,
-        uptime_seconds=uptime_sec,
-        percent=pct,
-    )
-
-
 # JWT blacklist (Redis) — health dedicato
 
 
@@ -923,7 +762,6 @@ def get_system_status() -> SystemStatusPayload:
             default_scope="local_replica",
         ),
         db_pool=_as_status_block(get_db_pool_status()),
-        redis=_as_status_block(get_redis_status()),
         db_schema=_as_status_block(get_db_schema_size()),
         jwt_blacklist=_as_status_block(get_blacklist_status()),
         tickets=_as_status_block(get_tickets_status()),

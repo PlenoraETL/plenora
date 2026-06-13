@@ -90,35 +90,10 @@ def test_url_redact_keys_contains_known_targets():
     assert expected.issubset(set(_URL_REDACT_KEYS))
 
 
-# Path 2: WorkerDetail.hostname/pid exclude
-
-def test_worker_detail_hostname_pid_excluded_from_api_dump():
-    """WorkerDetail.hostname e .pid devono avere Field(exclude=True)
-    cosi' non finiscono nel payload `model_dump(exclude_unset=True)`."""
-    from app.core.admin_system_status.models import WorkerDetail
-
-    detail = WorkerDetail(
-        name="celery@host42",
-        hostname="ip-10-0-1-42.internal",
-        pid=12345,
-        pool_size=8,
-        child_processes=8,
-        active_tasks=2,
-        total_tasks_processed=1000,
-        queues=["default"],
-    )
-    dumped = detail.model_dump()
-
-    assert "hostname" not in dumped, (
-        "hostname NON deve essere serializzato — info leak topologia "
-        "interna (ip/hostname del nodo Celery)"
-    )
-    assert "pid" not in dumped, (
-        "pid NON deve essere serializzato — info forense interna"
-    )
-    # Sanity: gli altri campi restano
-    assert dumped["name"] == "celery@host42"
-    assert dumped["active_tasks"] == 2
+# Path 2 (storico): WorkerDetail.hostname/pid exclude — rimosso in Plenora 2.0
+# Fase 5. Senza Celery non c'e' piu' topologia worker (hostname/pid) da
+# esporre nel payload admin: il blocco workers e' ora derivato da PostgreSQL
+# (solo il conteggio task in esecuzione), quindi il vettore di leak non esiste.
 
 
 # Path 3: audit_action su system-status

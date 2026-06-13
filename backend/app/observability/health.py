@@ -23,7 +23,6 @@ __all__ = [
     "CheckOutcome",
     "HealthPayload",
     "check_postgres",
-    "check_redis",
     "check_broker",
     "check_pool_headroom",
     "check_migrations_aligned",
@@ -111,36 +110,6 @@ def check_postgres() -> CheckOutcome:
                 )
             return True, f"ok schema={current_schema}"
         return False, f"SELECT 1 ha restituito: {row!r}"
-    except Exception as e:
-        return False, f"{type(e).__name__}: {e}"
-
-
-def check_redis() -> CheckOutcome:
-    """PING su Redis broker Celery.
-
-     il timeout e'
-    applicato sia al TCP handshake (`socket_connect_timeout`) sia
-    all'operazione PING (`socket_timeout`). Senza socket_timeout
-    una Redis che accetta la connessione ma stalla bloccherebbe
-    /ready oltre il connect_timeout (worst-case TCP keepalive
-    finch* il kernel non droppa la socket).
-
-    Timeout letto da `READINESS_REDIS_TIMEOUT_SECONDS` (default 2);
-    un valore <= 0 ricade sul fallback hardcoded 2 (non
-    disabilitabile: /ready senza bound sarebbe un footgun ops).
-    """
-    try:
-        timeout = runtime_ports_module.bounded_readiness_timeout(
-            settings,
-            "READINESS_REDIS_TIMEOUT_SECONDS",
-            2,
-        )
-        if runtime_ports_module.ping_redis_broker(
-            settings.CELERY_BROKER_URL,
-            timeout=timeout,
-        ):
-            return True, "ok"
-        return False, "PING non ha risposto True"
     except Exception as e:
         return False, f"{type(e).__name__}: {e}"
 

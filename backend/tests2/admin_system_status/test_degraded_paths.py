@@ -333,10 +333,13 @@ def test_schedules_status_ignores_disabled():
     assert out["status"] == "ok"
 
 
-# get_workers_status — Celery app non importabile + broker timeout
+# get_workers_status — derivato da PostgreSQL (Plenora 2.0 Fase 5)
 
 
-def test_admin_status_service_uses_task_runtime_probe_boundary():
+def test_admin_status_service_does_not_import_celery_or_probes():
+    """Plenora 2.0 Fase 5: l'osservabilita' worker e' derivata da PG
+    (task_results), non dall'inspect Celery. Il service non deve importare
+    ne' Celery ne' i probe broker; usa il task_result_store."""
     import ast
     from pathlib import Path
 
@@ -356,66 +359,56 @@ def test_admin_status_service_uses_task_runtime_probe_boundary():
             imports.add(node.module)
 
     assert "workers.celery_app" not in imports
-    assert "app.core.admin_system_status.worker_runtime" not in imports
-    assert "app.core.task_runtime.probes" in imports
+    assert "app.core.task_runtime.probes" not in imports
+    assert "app.core.orchestrator.task_result_store" in imports
 
 
-def test_workers_status_when_celery_app_import_fails(monkeypatch):
+def _patch_running_count(monkeypatch, value=None, *, raises=None):
     from app.core.admin_system_status import service
 
-    class _Boom:
-        def __getattr__(self, _):
-            raise ImportError("workers.celery_app test-forced failure")
+    class _FakeStore:
+        def count_in_state(self, state):
+            if raises is not None:
+                raise raises
+            return value
 
-    monkeypatch.setitem(sys.modules, "workers.celery_app", _Boom())
+    monkeypatch.setattr(service, "default_task_result_store", lambda: _FakeStore())
+
+
+def test_workers_status_reports_running_tasks_from_pg(monkeypatch):
+    from app.core.admin_system_status import service
+
+    _patch_running_count(monkeypatch, value=3)
 
     out = service.get_workers_status()
 
+    assert out["status"] == "ok"
+    assert out["active_tasks"] == 3
+    assert out["running_tasks"] == 3
+    assert "3 task in esecuzione" in out["message"]
+
+
+def test_workers_status_idle_when_no_running_tasks(monkeypatch):
+    from app.core.admin_system_status import service
+
+    _patch_running_count(monkeypatch, value=0)
+
+    out = service.get_workers_status()
+
+    assert out["status"] == "ok"
+    assert out["active_tasks"] == 0
+    assert "Nessun task in esecuzione" in out["message"]
+
+
+def test_workers_status_unknown_when_pg_unavailable(monkeypatch):
+    """PG non raggiungibile: catch + shape coerente, non solleva."""
+    from app.core.admin_system_status import service
+    from app.core.admin_system_status.models import AdminStatusBlock
+
+    _patch_running_count(monkeypatch, raises=ConnectionError("PG down"))
+
+    out = service.get_workers_status()
+
+    assert isinstance(out, AdminStatusBlock)
     assert out["status"] == "unknown"
-    assert out["message"] == "Celery app non importabile"
-    assert "test-forced failure" in out["error"]
-
-
-def test_workers_status_when_inspect_returns_none(monkeypatch):
-    """Broker Redis down/vuoto: inspect() metodi ritornano None.
-    Contratto: non solleva, shape stabile.
-    """
-    from app.core.admin_system_status import service
-
-    fake_inspect = MagicMock()
-    fake_inspect.active.return_value = None
-    fake_inspect.stats.return_value = None
-    fake_inspect.active_queues.return_value = None
-
-    fake_celery_app = MagicMock()
-    fake_celery_app.control.inspect.return_value = fake_inspect
-
-    fake_module = MagicMock()
-    fake_module.celery_app = fake_celery_app
-    monkeypatch.setitem(sys.modules, "workers.celery_app", fake_module)
-
-    out = service.get_workers_status()
-
-    from app.core.admin_system_status.models import AdminStatusBlock
-    assert isinstance(out, AdminStatusBlock)
-    assert "status" in out
-
-
-def test_workers_status_when_inspect_raises(monkeypatch):
-    """Broker timeout solleva dentro inspect(): catch + dict coerente."""
-    from app.core.admin_system_status import service
-
-    fake_inspect = MagicMock()
-    fake_inspect.active.side_effect = ConnectionError("broker timeout")
-
-    fake_celery_app = MagicMock()
-    fake_celery_app.control.inspect.return_value = fake_inspect
-
-    fake_module = MagicMock()
-    fake_module.celery_app = fake_celery_app
-    monkeypatch.setitem(sys.modules, "workers.celery_app", fake_module)
-
-    out = service.get_workers_status()
-    from app.core.admin_system_status.models import AdminStatusBlock
-    assert isinstance(out, AdminStatusBlock)
-    assert "status" in out
+    assert "PG down" in out["error"]

@@ -24,30 +24,6 @@ class ScheduleFailure(BaseModel):
     name: str
 
 
-class WorkerDetail(BaseModel):
-    """Stato del singolo worker Celery esposto in `GET /admin/system-status`.
-
-    `hostname` e `pid` rivelano la topologia interna del cluster
-    (es. `celery@ip-10-0-1-42`, PID 12345) e sono utili a un admin
-    compromesso per lateral movement / forensic mapping.
-    Pre-fix (P1 admin-api): serializzati in chiaro nel payload API.
-    Post-fix: `Field(exclude=True)` come fatto per `DiskStatus.path`/
-    `usage_path` (stesso pattern). Restano disponibili internamente
-    al servizio per logging/troubleshooting ma NON finiscono nel
-    payload pubblico via `model_dump(exclude_unset=True)`.
-    """
-    model_config = ConfigDict(extra="forbid")
-
-    name: str
-    hostname: str = Field(exclude=True)
-    pid: int | None = Field(default=None, exclude=True)
-    pool_size: int | None = None
-    child_processes: int
-    active_tasks: int
-    total_tasks_processed: int | None = None
-    queues: list[str]
-
-
 class DiskStatus(BaseModel):
     """Stato del disco esposto in `GET /admin/system-status`.
 
@@ -132,8 +108,8 @@ class AdminStatusBlock(BaseModel):
     concurrency_slots: int | None = None
     active_tasks: int | None = None
     queue_depth: int | None = None
-    details: list[WorkerDetail] | None = None
     workers_online: int | None = None
+    running_tasks: int | None = None
 
     disk: DiskStatus | None = None
     memory: MemoryStatus | None = None
@@ -196,7 +172,6 @@ class SystemStatusPayload(BaseModel):
     workers: AdminStatusBlock
     host_resources: AdminStatusBlock
     db_pool: AdminStatusBlock
-    redis: AdminStatusBlock
     db_schema: AdminStatusBlock
     jwt_blacklist: AdminStatusBlock
     tickets: AdminStatusBlock
@@ -216,7 +191,6 @@ class SystemStatusPayload(BaseModel):
             "workers": self.workers.to_api_dict(),
             "host_resources": self.host_resources.to_api_dict(),
             "db_pool": self.db_pool.to_api_dict(),
-            "redis": self.redis.to_api_dict(),
             "db_schema": self.db_schema.to_api_dict(),
             "jwt_blacklist": self.jwt_blacklist.to_api_dict(),
             "tickets": self.tickets.to_api_dict(),

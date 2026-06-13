@@ -14,23 +14,17 @@ from app.core.task_runtime.orchestrator import (
     TaskRuntimeResult,
 )
 from app.core.task_runtime.probes import (
-    CeleryAppUnavailable,
-    RedisClientUnavailable,
-    RedisRuntimePort,
-    get_celery_queue_depth,
-    get_redis_info,
-    get_redis_runtime_port,
-    inspect_celery_workers,
-    ping_redis_broker,
-    redis_runtime_port,
+    RabbitmqClientUnavailable,
+    RabbitmqRuntimePort,
+    ping_rabbitmq_broker,
+    rabbitmq_runtime_port,
 )
 
 __all__ = [
-    "CeleryAppUnavailable",
     "CeleryTaskRuntime",
     "DelayTask",
-    "RedisClientUnavailable",
-    "RedisRuntimePort",
+    "RabbitmqClientUnavailable",
+    "RabbitmqRuntimePort",
     "TaskDispatchResult",
     "TaskLaunchResult",
     "TaskRuntime",
@@ -38,10 +32,6 @@ __all__ = [
     "TaskRuntimeResult",
     "default_task_runtime",
     "dispatch_task_by_name",
-    "get_celery_queue_depth",
-    "get_redis_info",
-    "get_redis_runtime_port",
-    "inspect_celery_workers",
-    "ping_redis_broker",
-    "redis_runtime_port",
+    "ping_rabbitmq_broker",
+    "rabbitmq_runtime_port",
 ]
