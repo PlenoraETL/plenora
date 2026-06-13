@@ -167,3 +167,66 @@ def test_redis_store_scan_keys(redis_store):
     store.set("app:a", "1")
     store.set("zz:b", "2")
     assert store.scan_keys("app:") == ["app:a"]
+
+
+# ---------------------------------------------------------------------------
+# Backend PostgreSQL (Plenora 2.0, Fase 4): semantica identica garantita dal
+# contract in-memory; qui si blinda la forma SQL (lane no-DB). Il comportamento
+# reale e' verificato e2e su Postgres.
+# ---------------------------------------------------------------------------
+
+
+def test_pg_store_satisfies_protocol():
+    from app.shared.kv import PgKeyValueStore
+
+    assert isinstance(PgKeyValueStore(), KeyValueStore)
+
+
+def test_pg_store_reads_filter_expired_rows():
+    import inspect
+
+    from app.shared.kv.pg_store import PgKeyValueStore
+
+    for method in (PgKeyValueStore.get, PgKeyValueStore.exists, PgKeyValueStore.scan_keys):
+        src = inspect.getsource(method)
+        assert "expires_at IS NULL OR expires_at > now()" in src, method.__name__
+
+
+def test_pg_store_set_is_ttl_upsert():
+    import inspect
+
+    from app.shared.kv.pg_store import PgKeyValueStore
+
+    src = inspect.getsource(PgKeyValueStore.set)
+    assert "INSERT INTO kv_store" in src
+    assert "ON CONFLICT (key) DO UPDATE" in src
+    assert "interval '1 second'" in src
+    # set senza ttl azzera la scadenza (expires_at NULL).
+    assert "expires_at = NULL" in src
+
+
+def test_pg_store_acquire_lock_is_atomic_set_if_not_exists():
+    import inspect
+
+    from app.shared.kv.pg_store import PgKeyValueStore
+
+    src = inspect.getsource(PgKeyValueStore.acquire_lock)
+    assert "ON CONFLICT (key) DO UPDATE" in src
+    # Riacquisisce SOLO se scaduto (lock vivo di un altro -> non acquisito).
+    assert "kv_store.expires_at <= now()" in src
+    assert "RETURNING key" in src
+
+
+def test_pg_store_scan_escapes_like_metacharacters():
+    from app.shared.kv.pg_store import _like_prefix
+
+    assert _like_prefix("a%b_c") == "a\\%b\\_c%"
+
+
+def test_pg_store_module_has_no_redis_dependency():
+    from pathlib import Path
+
+    from app.shared.kv import pg_store
+
+    src = Path(pg_store.__file__).read_text(encoding="utf-8").lower()
+    assert "import redis" not in src

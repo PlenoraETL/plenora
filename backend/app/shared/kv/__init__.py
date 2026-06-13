@@ -11,10 +11,12 @@ astrazione sbagliata (le primitive sorted-set/Lua non esistono su PG).
 """
 
 from app.shared.kv.memory_store import InMemoryKeyValueStore
+from app.shared.kv.pg_store import PgKeyValueStore
 from app.shared.kv.store import KeyValueStore, KeyValueStoreUnavailable
 
 __all__ = [
     "InMemoryKeyValueStore",
     "KeyValueStore",
     "KeyValueStoreUnavailable",
+    "PgKeyValueStore",
 ]
