@@ -134,12 +134,12 @@ class Settings:
         "API_DEFAULT_RATE_LIMIT": 5,
         # Rate limiter distribuito opzionale per arricchisci. Disabled di
         # default per preservare il throttling locale esistente; se enabled
-        # usa Redis via CELERY_BROKER_URL per quote globali per API/scope.
-        # REQUIRED=True rende il limiter fail-closed invece di degradare al
-        # fallback locale quando Redis non e' disponibile.
+        # usa il bucket GCRA su PostgreSQL (Fase 4) per quote globali per
+        # API/scope. REQUIRED=True rende il limiter fail-closed invece di
+        # degradare al fallback locale quando il backend non e' disponibile.
+        # NB nomi con "REDIS": storici, mantenuti per compat dei deploy.
         "ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED": False,
         "ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED": False,
-        "ARRICCHISCI_RATE_LIMIT_REDIS_TIMEOUT_SEC": 1,
         "ARRICCHISCI_RATE_LIMIT_REDIS_KEY_PREFIX": "plenora:arricchisci:rl",
         # Cache distribuita opzionale per token OAuth/API provider. Usa Redis
         # via CELERY_BROKER_URL quando disponibile; se Redis non c'e', i

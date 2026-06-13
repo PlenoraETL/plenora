@@ -8,9 +8,9 @@ import pytest
 
 from app.core.arricchisci._rate_limiter import (
     RateLimiter,
-    _reset_client_for_tests,
+    _reset_backend_for_tests,
     _reset_state_for_tests,
-    _set_client_for_tests,
+    _set_backend_for_tests,
     rate_limit_scope_for_api_config,
 )
 
@@ -20,61 +20,61 @@ pytestmark = [pytest.mark.unit, pytest.mark.arricchisci, pytest.mark.contract]
 
 @pytest.fixture(autouse=True)
 def _reset_limiter_state():
-    _reset_client_for_tests()
+    _reset_backend_for_tests()
     _reset_state_for_tests()
     yield
-    _reset_client_for_tests()
+    _reset_backend_for_tests()
     _reset_state_for_tests()
 
 
-class _FakeRedisLimiter:
+class _RecordingGcraBackend:
+    """Backend GCRA fake (Fase 4: il backend reale e' PG): registra le call."""
+
     def __init__(self, wait_ms: int = 0):
         self.wait_ms = wait_ms
-        self.calls = []
+        self.calls: list[tuple[str, int]] = []
 
-    def eval(self, script, num_keys, key, interval_ms, ttl_ms):
-        self.calls.append((script, num_keys, key, interval_ms, ttl_ms))
+    def acquire_wait_ms(self, key: str, *, interval_ms: int) -> int:
+        self.calls.append((key, interval_ms))
         return self.wait_ms
 
 
-def test_redis_enabled_uses_distributed_bucket_key():
-    client = _FakeRedisLimiter()
-    _set_client_for_tests(client)
+def test_distributed_enabled_uses_bucket_key():
+    backend = _RecordingGcraBackend()
+    _set_backend_for_tests(backend)
 
-    limiter = RateLimiter(1000, scope="api:test", redis_enabled=True)
+    limiter = RateLimiter(1000, scope="api:test", distributed_enabled=True)
     limiter.acquire()
 
-    assert len(client.calls) == 1
-    _, num_keys, key, interval_ms, ttl_ms = client.calls[0]
-    assert num_keys == 1
+    assert len(backend.calls) == 1
+    key, interval_ms = backend.calls[0]
     assert key == "plenora:arricchisci:rl:api:test"
     assert interval_ms == 1
-    assert ttl_ms > interval_ms
 
 
-def test_redis_enabled_falls_back_to_local_when_allowed():
-    _set_client_for_tests(None)
+def test_distributed_enabled_falls_back_to_local_when_allowed():
+    _set_backend_for_tests(None)
 
     limiter = RateLimiter(
         1000,
         scope="api:fallback",
-        redis_enabled=True,
-        redis_required=False,
+        distributed_enabled=True,
+        distributed_required=False,
     )
 
     limiter.acquire()
 
 
-def test_redis_required_fails_closed_when_unavailable():
-    _set_client_for_tests(None)
+def test_distributed_required_fails_closed_when_unavailable():
+    _set_backend_for_tests(None)
     limiter = RateLimiter(
         1000,
         scope="api:required",
-        redis_enabled=True,
-        redis_required=True,
+        distributed_enabled=True,
+        distributed_required=True,
     )
 
-    with pytest.raises(RuntimeError, match="Redis rate limiter unavailable"):
+    with pytest.raises(RuntimeError, match="distributed rate limiter unavailable"):
         limiter.acquire()
 
 
