@@ -48,7 +48,7 @@ Out of scope:
 - JWT authentication with explicit token signing secret.
 - Role-based authorization with tenant/group isolation.
 - MFA opt-in.
-- Redis-backed JWT blacklist and login rate-limiting paths.
+- PostgreSQL-backed JWT blacklist and login rate-limiting paths.
 - Encrypted storage for application credentials and MFA secrets.
 - Audit actions for sensitive operations.
 - Health/readiness checks.

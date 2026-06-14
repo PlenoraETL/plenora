@@ -5,10 +5,10 @@ Canonical path for one host running the full Plenora stack with Docker Compose.
 This procedure uses the root `docker-compose.yml` and starts:
 
 - PostgreSQL;
-- Redis;
+- RabbitMQ;
 - backend API;
-- Celery worker;
-- Celery beat;
+- Dramatiq worker;
+- APScheduler beat;
 - frontend static bundle served by nginx.
 
 ## Acceptance Gate
@@ -17,7 +17,7 @@ The install is green only when:
 
 - `docker compose config --quiet` succeeds;
 - backend and frontend images build;
-- Postgres and Redis become healthy;
+- Postgres and RabbitMQ become healthy;
 - backend `/health` and `/ready` return HTTP 200;
 - seeded API smoke succeeds: login, `/auth/me`, project create/list/delete,
   and logout;
@@ -86,12 +86,12 @@ Both installers:
 - create the external Docker bridge network `plenora` if missing;
 - set `OBJECT_STORAGE_ENABLED=false` when `STORAGE_POLICY=db` and the key is
   missing, so the local DB-only scaffold does not require cloud credentials;
-- prompt for the number of Celery worker containers, defaulting to one worker;
+- prompt for the number of Dramatiq worker containers, defaulting to one worker;
 - prompt for a bootstrap superadmin username/password on interactive installs,
   then create or update that user after the backend is healthy;
 - run `docker compose config --quiet`;
 - build backend and frontend images;
-- start Postgres, Redis, backend, worker, beat, and frontend;
+- start Postgres, RabbitMQ, backend, worker, beat, and frontend;
 - check Python DB providers: PostgreSQL, MySQL/MariaDB, Oracle, and SQL Server
   Python driver;
 - run health, readiness, frontend, and worker smoke checks unless smoke is
@@ -144,7 +144,7 @@ To skip user creation:
 bash scripts/install-docker.sh --skip-admin-bootstrap
 ```
 
-Interactive installs ask how many Celery worker containers to run. The default
+Interactive installs ask how many Dramatiq worker containers to run. The default
 is `1`. For non-interactive installs:
 
 ```bash
@@ -245,7 +245,7 @@ docker compose config --quiet
 
 ```bash
 docker compose build backend frontend
-docker compose up -d postgres redis
+docker compose up -d postgres rabbitmq
 docker compose up -d --wait backend
 docker compose up -d --scale worker=1 worker beat
 docker compose up -d --wait frontend
@@ -269,7 +269,7 @@ If `/ready` fails:
 curl -sS http://127.0.0.1:5004/ready
 docker compose ps
 docker compose logs --tail 200 backend
-docker compose logs --tail 200 postgres redis
+docker compose logs --tail 200 postgres rabbitmq
 docker compose logs --tail 200 worker
 docker compose logs --tail 200 beat
 docker compose exec -T backend python -c "from app.observability.health import gather_readiness; print(gather_readiness().body)"
@@ -280,10 +280,27 @@ Use the `/ready` response first: it names the failing readiness check.
 ## 8. Worker Round-Trip
 
 ```bash
-docker compose exec -T worker python -c "from workers.celery_app import celery_app; print(celery_app.send_task('cleanroom.ping').get(timeout=30))"
+docker compose exec -T worker python -c "
+import time
+from app.core.task_runtime.dispatch import dispatch_task_by_name
+from app.core.orchestrator.task_result_store import default_task_result_store
+handle = dispatch_task_by_name('cleanroom.ping')
+store = default_task_result_store()
+deadline = time.monotonic() + 30
+state = 'PENDING'
+while time.monotonic() < deadline:
+    record = store.get(handle.id)
+    if record is not None and record.state in ('SUCCESS', 'FAILURE'):
+        state = record.state
+        break
+    time.sleep(0.5)
+print(state)
+"
 ```
 
-Expected: `pong`.
+Expected: `cleanroom.ping` reaches `SUCCESS` in PostgreSQL (`task_results`). The
+Dramatiq worker consumes the task from RabbitMQ and the result-store records the
+terminal state; there is no Celery `AsyncResult`/`pong` round-trip anymore.
 
 ## 9. API Smoke
 
@@ -339,7 +356,7 @@ Stop and report output when:
 
 - `docker compose config` fails;
 - image build fails;
-- Postgres or Redis stays unhealthy;
+- Postgres or RabbitMQ stays unhealthy;
 - `/ready` returns 503;
 - worker ping times out;
 - frontend serves but calls the wrong API origin;

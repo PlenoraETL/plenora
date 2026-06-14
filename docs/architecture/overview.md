@@ -18,28 +18,29 @@ FastAPI backend
   |
   +-- routers and dependencies
   +-- horizontal services and execution engines
-  +-- Celery task dispatch
+  +-- Dramatiq task dispatch
   |
   +--> PostgreSQL
-  +--> Redis
+  +--> RabbitMQ (Dramatiq broker)
   +--> object storage, when configured
   +--> external systems: databases, APIs, ArcGIS-like providers
 
-Celery worker
+Dramatiq worker
   |
   +-- executes project graphs
   +-- reads and writes resources through resolvers/loaders
-  +-- records task, run, result, and reconciliation state
+  +-- records task, run, result, and reconciliation state in PostgreSQL
 
-Celery beat
+APScheduler beat
   |
   +-- scheduled runs
   +-- reconciliation and operational maintenance
 ```
 
-The frontend is React/Vite. The backend is FastAPI/Celery/PostgreSQL/Redis.
-Object storage is optional but required for large-artifact paths and some
-clean deployment profiles.
+The frontend is React/Vite. The backend is FastAPI/Dramatiq/PostgreSQL/RabbitMQ.
+Async task state, progress, and results are persisted in PostgreSQL
+(`task_results`), not in a separate result backend. Object storage is optional
+but required for large-artifact paths and some clean deployment profiles.
 
 ## Horizontal Direction
 
@@ -113,9 +114,9 @@ source of truth.
 
 Clean installation work has two tracks:
 
-- single-machine installation with PostgreSQL, Redis, backend, worker, beat,
+- single-machine installation with PostgreSQL, RabbitMQ, backend, worker, beat,
   and frontend;
-- Docker installation with backend, worker, beat, PostgreSQL, Redis, and
+- Docker installation with backend, worker, beat, PostgreSQL, RabbitMQ, and
   frontend image/static delivery documented in the compose path.
 
 The release target is not only "starts locally"; it must be reproducible on

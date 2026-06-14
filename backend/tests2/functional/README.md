@@ -3,8 +3,8 @@
 `tests2/functional/` ospita i test che esercitano il backend con processi veri:
 
 - server FastAPI
-- worker Celery
-- eventuale beat
+- worker Dramatiq (`python -m dramatiq workers.dramatiq_app`)
+- eventuale beat APScheduler
 - fake services esterni
 
 Questa cartella NON sostituisce `tests2/*/unit/`.
@@ -24,7 +24,7 @@ non bastano piu'.
 tests2/functional/
   conftest.py
   harness/
-    celery.py
+    celery.py        # bootstrap worker/beat (Plenora 2.0: spawn Dramatiq, non Celery)
     http.py
     processes.py
     ports.py
@@ -55,5 +55,6 @@ tests2/functional/
 ## Note
 
 - Questa cartella e' preparata adesso come harness base.
-- L'harness Celery e' stato predisposto ma non ancora usato nei test.
+- L'harness worker (Dramatiq su RabbitMQ) e' stato predisposto ma non ancora
+  usato nei test.
 - I primi test funzionali veri verranno aggiunti modulo per modulo.

@@ -7,7 +7,7 @@ Scopo: evitare diagnosi sbagliate ("il dashboard dice `unknown`, il codice e' ro
 > Per installare Plenora-ETL da zero su un host nuovo, vedi
 > [install-non-docker.md](install-non-docker.md). Quel runbook è la
 > source-of-truth per la procedura passo-passo (host prereq,
-> Postgres, Redis, object storage, secrets, systemd, frontend, smoke
+> Postgres, RabbitMQ, object storage, secrets, systemd, frontend, smoke
 > test). Questo documento elenca solo il **contratto runtime**, non la
 > procedura di install. Per Docker vedi [install-docker.md](install-docker.md).
 
@@ -18,9 +18,9 @@ Scopo: evitare diagnosi sbagliate ("il dashboard dice `unknown`, il codice e' ro
 | Package | Usato da | Scopo |
 |---|---|---|
 | `boto3` | `admin_backups.service.list_backups`, `admin_system_status.get_backup_status` (transitive) | Lista oggetti S3 del bucket backup |
-| `celery` | `admin_system_status.get_workers_status` | `inspect().active()/stats()/active_queues()` sui worker |
+| `dramatiq[rabbitmq]` | worker dei task (`workers.dramatiq_app`), dispatch by-name | Broker RabbitMQ + esecuzione actor |
 
-Entrambi sono in `requirements.txt` — se il modulo importa ma la lib manca (venv corrotto), il fallback e' `status="unknown"` + log a livello `error` o `warning`.
+`boto3` e' in `requirements.txt` — se il modulo importa ma la lib manca (venv corrotto), il fallback e' `status="unknown"` + log a livello `error` o `warning`. **Plenora 2.0 Fase 5: Celery e Redis sono stati rimossi.** Lo stato dei worker nel dashboard (`admin_system_status.get_workers_status`) e' ora **derivato da PostgreSQL** (conteggio dei `task_results` in stato PROGRESS), non piu' da `celery inspect`.
 
 **Nota esplicita: NON e' richiesta la AWS CLI (`aws` binary).** Tutte le operazioni cloud passano per `boto3` nativo. Se vedi chiamate `subprocess` nei due moduli, sono a `systemctl`/`journalctl`, mai ad `aws`.
 
@@ -38,8 +38,8 @@ Entrambi sono in `requirements.txt` — se il modulo importa ma la lib manca (ve
 - `/api/admin/backups/schedule` ritorna metadati statici dalla env var `BACKUP_SCHEDULE_CRON` (default `0 2 * * *`), non interroga il runtime schedulatore
 
 **Quello che resta host-local** (fuori scope observability, da governare nel deployment):
-- `POST /api/admin/backups/trigger` acquisisce il lock distribuito su Postgres (`admin_backup_manual_locks`) e accoda `workers.tasks.admin_backup_task.run_manual_backup_task` su Celery. L'API pod non lancia piu' `backup_db.py` via `subprocess.Popen` locale. In Kubernetes si puo' sostituire il worker Celery con un K8s Job mantenendo lo stesso lock/idempotency boundary.
-- La schedulazione reale dei job (systemd timer oggi, Celery beat / K8s CronJob in container) e' questione di deployment, non di codice
+- `POST /api/admin/backups/trigger` acquisisce il lock distribuito su Postgres (`admin_backup_manual_locks`) e accoda `workers.tasks.admin_backup_task.run_manual_backup_task` su Dramatiq (RabbitMQ). L'API pod non lancia piu' `backup_db.py` via `subprocess.Popen` locale. In Kubernetes si puo' sostituire il worker Dramatiq con un K8s Job mantenendo lo stesso lock/idempotency boundary.
+- La schedulazione reale dei job (systemd timer oggi, APScheduler beat / K8s CronJob in container) e' questione di deployment, non di codice
 
 ---
 
@@ -50,8 +50,8 @@ Attesi installati in `/etc/systemd/system/`:
 | Unit | Tipo | Scopo |
 |---|---|---|
 | `plenora-backend.service` | `simple` | FastAPI backend (uvicorn) |
-| `plenora-celery.service` | `simple` | Worker Celery |
-| `plenora-beat.service` | `simple` | Celery beat scheduler |
+| `plenora-celery.service` | `simple` | Worker Dramatiq (`python -m dramatiq workers.dramatiq_app`). Nome unit storico mantenuto per compat dei runbook |
+| `plenora-beat.service` | `simple` | Beat APScheduler (`python -m workers.beat`) |
 | `plenora-backup.service` | `oneshot` | Dump schema `plenora` + upload S3 |
 | `plenora-backup.timer` | `timer` | Trigger daily 02:00 UTC (+ RandomizedDelaySec=300) |
 | `plenora-backup-test.service` | `oneshot` | Restore di prova weekly (Sun 03:00 UTC) |
@@ -125,34 +125,36 @@ Lifecycle rule gestite via Terraform (`deploy/terraform/lifecycle.tf`), state su
 
 | Servizio | Endpoint | Usato da | Fallback |
 |---|---|---|---|
-| Postgres | `15.161.59.22:5432/plenora` (via `DATABASE_URL`) | tutto il backend + script backup | Senza DB: backend non parte. `admin_system_status.get_schedules_status` → `status="unknown"` con error |
-| Redis | env `CELERY_BROKER_URL` (variabile **canonica unica**) | `workers.celery_app` (broker), `workers.beat_scheduler` (leader lock), `admin_system_status` (queue depth / infra status), `app.core.security.token_blacklist` (JWT revocation) | Redis down: `inspect()` timeout 2s → `nodes=0`, card workers vuota; `/auth/logout` → 503 (fail-loud write); `is_jti_blacklisted` → False (fail-open read) |
+| Postgres | `15.161.59.22:5432/plenora` (via `DATABASE_URL`) | tutto il backend + script backup; **inoltre** stato/progress/result task (`task_results`), beat leader-lock (`beat_leader_locks`), JWT blacklist (`kv_store`), rate-limit e lock OAuth | Senza DB: backend non parte. `admin_system_status.get_schedules_status` → `status="unknown"` con error; blacklist fail-open in lettura, fail-loud in scrittura (`/auth/logout` → 503) |
+| RabbitMQ | env `DRAMATIQ_BROKER_URL` (amqp) | broker dei task asincroni (`workers.dramatiq_app` dispatch + worker) | Broker down: il dispatch fallisce / i task non vengono consumati; readiness `/ready` segnala `broker` non raggiungibile |
 
-### Redis — perché una sola variabile
+### Topologia broker + stato (Plenora 2.0 Fase 5)
 
-Tutta l'app parla con **una sola istanza Redis**. Non abbiamo (e non vogliamo) una `REDIS_URL` separata: `CELERY_BROKER_URL` fa da source-of-truth e copre TUTTI i consumer Redis. Motivazione:
+Il broker dei task e' **RabbitMQ** (Dramatiq), configurato da `DRAMATIQ_BROKER_URL` (amqp). **Redis e' stato rimosso**: tutto cio' che prima viveva su Redis e' ora su **PostgreSQL**:
 
-- Single-host deploy: lo stesso `redis-server` serve broker Celery, backend Celery (DB 1), beat leader lock e blacklist JWT.
-- Due variabili sinonime invitano a configurazioni incoerenti (es. `CELERY_BROKER_URL=redis://a` e `REDIS_URL=redis://b` per errore).
-- Convivenza di keyspace: Celery usa chiavi tipo `celery`, `_kombu.binding.*`, `unacked*`. Blacklist JWT usa prefix `plenora:jwt_blacklist:*`. Nessuna collisione.
+- stato/progress/result dei task → tabella `task_results` (rimpiazza il result-backend Redis / `AsyncResult`);
+- leader-lock del beat → tabella `beat_leader_locks` (rimpiazza il SETNX Redis);
+- JWT blacklist → `kv_store` con cache in-memory (rimpiazza la chiave Redis);
+- rate-limit (login + arricchisci) e lock/cache token OAuth → PostgreSQL.
 
-Se un giorno servisse separare la blacklist su un'altra istanza/DB (es. Redis dedicato high-availability per auth) → introdurre una nuova env var **esplicita** (`JWT_BLACKLIST_REDIS_URL`) e documentare il deliberato deviation. Finché non ce n'è bisogno, `CELERY_BROKER_URL` basta.
+I nomi env storici `*_REDIS_*` (es. `LOGIN_RL_REDIS_REQUIRED`, `ARRICCHISCI_RATE_LIMIT_REDIS_*`) sono **mantenuti per compat dei deploy** ma il backend e' PostgreSQL. Non esiste piu' una `REDIS_URL` ne' `CELERY_BROKER_URL`.
 
 ### JWT revocation (blacklist)
 
 | Aspetto | Valore |
 |---|---|
 | Trigger | `POST /auth/logout` con bearer token |
-| Chiave Redis | `plenora:jwt_blacklist:{jti}` (dove `jti` è claim `uuid4.hex` emessa al login) |
+| Backend | **PostgreSQL** (`kv_store` via `PgKeyValueStore`) con cache in-memory process-local davanti (Plenora 2.0 Fase 4). Niente piu' Redis |
+| Chiave | `plenora:jwt_blacklist:{jti}` (dove `jti` è claim `uuid4.hex` emessa al login) |
 | TTL | `exp - now` del token (auto-cleanup a scadenza naturale) |
-| Check | `get_current_user` consulta `EXISTS` prima della query DB |
-| Fail policy write (`/logout`) | 503 se Redis down — il client deve sapere se la revoca è effettiva |
-| Fail policy read (`get_current_user`) | Allow (JWT `exp`+signature restano enforced) — evita blast radius se Redis flappa |
+| Check | `get_current_user` consulta la cache poi PG prima della query utente |
+| Fail policy write (`/logout`) | 503 se il backend PostgreSQL/blacklist è down — il client deve sapere se la revoca è effettiva |
+| Fail policy read (`get_current_user`) | Allow (JWT `exp`+signature restano enforced) — evita blast radius se il backend flappa |
 | Token senza `jti` | `is_jti_blacklisted(None)` → False → passa normalmente |
-| Health check | `admin_system_status.get_blacklist_status()` → card "JWT Blacklist" dashboard (EXISTS sentinel + contatori + alert "inoperante da X min") |
-| Env `JWT_BLACKLIST_REDIS_TIMEOUT_SEC` | Timeout connessione/socket Redis del client blacklist (default `1` sec; alzare con Redis remoto) |
+| Health check | `admin_system_status.get_blacklist_status()` → card "JWT Blacklist" dashboard (sentinel + contatori + alert "inoperante da X min") |
+| Env `JWT_BLACKLIST_CACHE_TTL_SEC` | TTL della cache in-memory davanti a PostgreSQL (default `5` sec; bilancia latenza auth vs finestra di revoca cross-processo) |
 | Env `JWT_BLACKLIST_STALE_THRESHOLD_SEC` | Soglia alert "blacklist inoperante" se nessuna op reale riesce da X sec (default `1800` = 30 min) |
-| Incident runbook | [jwt-incident-response.md](jwt-incident-response.md) (token compromesso, Redis down, rotazione SECRET_KEY, fleet-wide revoke) |
+| Incident runbook | [jwt-incident-response.md](jwt-incident-response.md) (token compromesso, backend down, rotazione SECRET_KEY, fleet-wide revoke) |
 | Test | unit `tests2/security/unit/test_jwt_logout_blacklist.py`, integration `tests2/integration/test_jwt_logout_blacklist_integration.py` |
 
 ---
@@ -167,11 +169,11 @@ Se un giorno servisse separare la blacklist su un'altra istanza/DB (es. Redis de
 | Tabella `backup_runs`/`verify_runs` vuota (nessun run) | `status="unknown"`, message `"Nessun backup/verifica registrata"` |
 | S3 403 / bucket inesistente | `list_backups()` → `[]`, card backup `status="error"` |
 | `boto3` non installato | `list_backups()` → `[]` |
-| Redis irraggiungibile (read) | `inspect()` timeout → `nodes=0`, card workers zeri; `is_jti_blacklisted` → False (fail-open) |
-| Redis irraggiungibile (write `/auth/logout`) | 503 "Servizio di revoca token non disponibile, riprova" (fail-loud) |
+| Backend blacklist/PostgreSQL irraggiungibile (read) | card workers da `task_results` (nessun PROGRESS → zeri); `is_jti_blacklisted` → False (fail-open) |
+| Backend blacklist/PostgreSQL irraggiungibile (write `/auth/logout`) | 503 "Servizio di revoca token non disponibile, riprova" (fail-loud) |
 | Query tickets fallita | Card "Ticket" → `status="unknown"`, message "Query ticket fallita", dashboard continua a funzionare per le altre card |
 | DB query schedules fallita | `status="unknown"`, `error` campo troncato a 200 char |
-| Celery app non importabile | `status="unknown"`, message `"Celery app non importabile"` |
+| Broker RabbitMQ irraggiungibile | readiness `/ready` segnala `broker` down; il dispatch dei task fallisce, i task non vengono consumati |
 
 Questo permette al dashboard admin di funzionare parzialmente anche in ambienti parziali (sviluppatore locale senza DB popolato, container senza AWS creds, broker down, ecc.) — le card in `unknown` sono neutre, non rompono la pagina.
 
@@ -191,7 +193,7 @@ Categorie `tickets.category` sono enum **applicativo** (non DB CHECK) → estens
 
 Allegati: allowlist MIME (immagini + log/txt) + cap 10MB enforced dal router. Se il threshold S3 globale (`FILE_SOURCE_S3_THRESHOLD_BYTES`) scende sotto 10MB, gli allegati finiscono su S3 trasparentemente (stesso dispatch pattern di `file_sources`).
 
-Retention non presente. Se emerge necessità (GDPR, spazio), task Celery proposto:
+Retention non presente. Se emerge necessità (GDPR, spazio), task Dramatiq proposto:
 ```sql
 DELETE FROM tickets
 WHERE status = 'closed' AND updated_at < NOW() - INTERVAL '2 years';

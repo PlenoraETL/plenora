@@ -1941,7 +1941,7 @@ backend/scripts/test_restore.py
 
 Motivo:
 
-Non e' runtime HTTP/Celery ordinario. Si puo' trattare separatamente con streaming `pg_dump`/`pg_restore`.
+Non e' runtime HTTP/Dramatiq ordinario. Si puo' trattare separatamente con streaming `pg_dump`/`pg_restore`.
 
 ### Priorita' 8 - Datasource local
 
@@ -2420,7 +2420,7 @@ pyodbc
 msodbcsql18
 postgresql-client-17
 pandas/geopandas
-Celery worker/beat
+Dramatiq worker / APScheduler beat
 healthcheck
 build frontend/backend compose
 ```

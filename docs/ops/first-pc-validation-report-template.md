@@ -31,9 +31,20 @@ bash scripts/install.sh --non-interactive
 curl -fsS http://127.0.0.1:5004/health
 curl -fsS http://127.0.0.1:5004/ready
 python - <<'PY'
-from workers.celery_app import celery_app
-ar = celery_app.send_task("cleanroom.ping")
-print(ar.get(timeout=30))
+import time
+from app.core.task_runtime.dispatch import dispatch_task_by_name
+from app.core.orchestrator.task_result_store import default_task_result_store
+handle = dispatch_task_by_name("cleanroom.ping")
+store = default_task_result_store()
+deadline = time.monotonic() + 30
+state = "PENDING"
+while time.monotonic() < deadline:
+    record = store.get(handle.id)
+    if record is not None and record.state in ("SUCCESS", "FAILURE"):
+        state = record.state
+        break
+    time.sleep(0.5)
+print(state)
 PY
 ```
 

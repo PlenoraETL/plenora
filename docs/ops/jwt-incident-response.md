@@ -7,7 +7,7 @@ Procedure operative per eventi di sicurezza sui token JWT emessi da PLENORA-ETL.
 Esempio: un utente segnala credenziali rubate; un logout server-side è sufficiente.
 
 1. L'utente (o un admin per conto suo) esegue `POST /api/auth/logout` con il suo token corrente.
-   - Il `jti` viene aggiunto alla blacklist Redis con TTL pari alla scadenza naturale.
+   - Il `jti` viene aggiunto alla blacklist su PostgreSQL (`kv_store`) con TTL pari alla scadenza naturale del token.
    - Il token non funziona più da quel momento.
 2. L'utente cambia la password via `POST /api/auth/change-password` (o un admin via `POST /api/auth/users/{id}/reset-password`).
 3. L'utente si riautentica: il nuovo token ha un `jti` diverso — indipendente dalla blacklist.
@@ -20,7 +20,7 @@ curl -H "Authorization: Bearer <vecchio_token>" https://lab.plenora.it/api/auth/
 # → 401 "Token revocato"
 ```
 
-Se `/auth/logout` risponde 503 → Redis down (vedi "Blacklist inoperante" più sotto).
+Se `/auth/logout` risponde 503 → backend PostgreSQL/blacklist down (vedi "Blacklist inoperante" più sotto).
 
 ---
 
@@ -66,47 +66,50 @@ Accettabile come misura di emergenza; non usare per routine.
 
 ---
 
-## Scenario C — blacklist inoperante (Redis down/degradato)
+## Scenario C — blacklist inoperante (PostgreSQL/blacklist down/degradato)
+
+> Plenora 2.0 Fase 4: la blacklist JWT è su **PostgreSQL** (`kv_store` via
+> `PgKeyValueStore`) con una cache in-memory process-local davanti. Niente
+> più Redis.
 
 Il dashboard `/admin/system-status` espone la card "JWT Blacklist". Stati:
 
-- `ok`: Redis risponde, blacklist operativa.
-- `warn`: Redis risponde a `EXISTS` ma nessuna operazione reale (write/read) è riuscita negli ultimi 30 min — configurabile via `JWT_BLACKLIST_STALE_THRESHOLD_SEC`. Sintomatico di ACL blocking, disk-full Redis, instance stuck.
-- `error`: Redis raggiungibile ma `EXISTS` ha sollevato — autorizzazione o stato interno Redis.
-- `unknown`: client non inizializzato, o `redis-py` non installato.
+- `ok`: PostgreSQL risponde, blacklist operativa.
+- `warn`: il backend risponde alla sentinel ma nessuna operazione reale (write/read) è riuscita negli ultimi 30 min — configurabile via `JWT_BLACKLIST_STALE_THRESHOLD_SEC`. Sintomatico di lock/ACL DB, disco pieno, pool stuck.
+- `error`: PostgreSQL raggiungibile ma l'operazione ha sollevato — privilegi sullo schema o stato interno del DB.
+- `unknown`: store non inizializzato.
 
 ### Impatto pratico
 
-- **Read (controllo blacklist al momento del request)**: fail-open → token validi per `exp` e firma passano, anche se `jti` dovrebbe essere revocato. La finestra di esposizione massima di un token compromesso è il suo `exp` residuo (default 8h).
-- **Write (`/auth/logout`)**: fail-loud → 503 al client. L'utente non può revocare il suo token finché Redis non torna su. Workaround: rotazione `JWT_SECRET_KEY` (scenario B), molto invasiva.
+- **Read (controllo blacklist al momento del request)**: fail-open → token validi per `exp` e firma passano, anche se `jti` dovrebbe essere revocato. La finestra di esposizione massima di un token compromesso è il suo `exp` residuo (default 8h). NB: la cache in-memory può ancora servire revoche già viste (positive) per `JWT_BLACKLIST_CACHE_TTL_SEC`.
+- **Write (`/auth/logout`)**: fail-loud → 503 al client. L'utente non può revocare il suo token finché PostgreSQL non torna su. Workaround: rotazione `JWT_SECRET_KEY` (scenario B), molto invasiva.
 
 ### Diagnosi
 
 ```bash
-# 1. Il server Redis risponde?
-ssh ubuntu@lab.plenora.it 'redis-cli -u $(grep CELERY_BROKER_URL /home/ubuntu/plenora-etl/backend/.env | cut -d= -f2) ping'
-# → PONG
+# 1. Il backend PostgreSQL risponde?
+ssh ubuntu@lab.plenora.it 'psql "$(grep ^DATABASE_URL /home/ubuntu/plenora-etl/backend/.env | cut -d= -f2-)" -tAc "SELECT 1"'
+# → 1
 
-# 2. Lettura di una chiave sentinel
-ssh ubuntu@lab.plenora.it 'redis-cli exists plenora:jwt_blacklist:healthcheck'
+# 2. Lettura di una chiave sentinel nella blacklist (kv_store)
+ssh ubuntu@lab.plenora.it 'psql "$DATABASE_URL" -tAc "SELECT count(*) FROM plenora.kv_store WHERE key = '\''plenora:jwt_blacklist:healthcheck'\''"'
 # → 0 (normale, la chiave non esiste; non è un errore)
 
-# 3. Scrittura di test con TTL breve
-ssh ubuntu@lab.plenora.it 'redis-cli setex plenora:jwt_blacklist:_probe 10 "1"'
-# → OK
+# 3. Conteggio entry blacklist attive (non scadute)
+ssh ubuntu@lab.plenora.it 'psql "$DATABASE_URL" -tAc "SELECT count(*) FROM plenora.kv_store WHERE key LIKE '\''plenora:jwt_blacklist:%'\'' AND (expires_at IS NULL OR expires_at > now())"'
 
-# 4. Uptime e memoria (se Redis è stuck ma up)
-ssh ubuntu@lab.plenora.it 'redis-cli info memory | grep -E "used_memory_human|maxmemory_human"'
+# 4. Connessioni e lock sul DB (se PostgreSQL è stuck ma up)
+ssh ubuntu@lab.plenora.it 'psql "$DATABASE_URL" -c "SELECT state, count(*) FROM pg_stat_activity GROUP BY state"'
 ```
 
 ### Remediation
 
 | Sintomo | Azione |
 |---|---|
-| Redis server down | `sudo systemctl restart redis-server` (o container equivalente) |
-| Memory full (OOM) | Svuotare chiavi celery non più usate (`redis-cli flushdb` con cautela) |
-| ACL/auth rigettato | Verificare `CELERY_BROKER_URL` contenga username/password corretti |
-| Timeout di rete | Alzare `JWT_BLACKLIST_REDIS_TIMEOUT_SEC` (default 1s) nell'`.env` del backend |
+| PostgreSQL down | `sudo systemctl restart postgresql` (o servizio/container equivalente) |
+| Pool/connessioni esaurite | Investigare `pg_stat_activity` (query stuck, idle-in-transaction); riavviare il backend per riciclare il pool |
+| Privilegi schema rigettati | Verificare i grant del ruolo applicativo su `plenora.kv_store` |
+| Latenza/cache | `JWT_BLACKLIST_CACHE_TTL_SEC` (default 5s) regola la finestra di revoca cross-processo: abbassarlo riduce la finestra, alzarlo riduce il carico su PG |
 
 Dopo il restart, verifica che i contatori `write_ok` / `read_ok` della card blacklist ricomincino a crescere entro 1-2 min di normale traffico.
 
@@ -117,8 +120,8 @@ Dopo il restart, verifica che i contatori `write_ok` / `read_ok` della card blac
 Se il server è stato compromesso e dobbiamo presumere che **tutti** i token attivi siano a rischio:
 
 1. Rotazione `JWT_SECRET_KEY` (scenario B) — questa è l'azione primaria.
-2. In parallelo, ruotare anche altre credenziali che potrebbero essere state esposte: DB, AWS IAM, Redis, connection secrets applicativi (tabella `secrets_blob`).
-3. Svuotare completamente la blacklist (opzionale, cleanup): `redis-cli --scan --pattern 'plenora:jwt_blacklist:*' | xargs redis-cli del`. Dopo la rotazione della chiave, le entry diventano inutili comunque (i nuovi jti hanno chiave diversa).
+2. In parallelo, ruotare anche altre credenziali che potrebbero essere state esposte: DB, AWS IAM, RabbitMQ, connection secrets applicativi (tabella `secrets_blob`).
+3. Svuotare completamente la blacklist (opzionale, cleanup): `psql "$DATABASE_URL" -c "DELETE FROM plenora.kv_store WHERE key LIKE 'plenora:jwt_blacklist:%'"`. Dopo la rotazione della chiave, le entry diventano inutili comunque (i nuovi jti hanno chiave diversa).
 
 ---
 

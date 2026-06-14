@@ -48,14 +48,14 @@ Intervento/confini: intervenire su router/service per nuove operazioni admin. No
 
 Entry-point: `backend/app/core/admin_system_status/router.py`
 
-Responsabilita: aggrega stato sistema (DB pool, Redis, workers, host, blacklist, tickets) per la dashboard admin.
+Responsabilita: aggrega stato sistema (DB pool, workers, host, blacklist, tickets) per la dashboard admin. Stato workers/broker e blacklist sono derivati da PostgreSQL/RabbitMQ, non piu' da Redis.
 
 | file | funzioni/classi chiave | cosa guardare |
 |---|---|---|
 | `router.py` | `get_system_status` | unico endpoint aggregato |
-| `service.py` | `get_backup_status`, `get_verify_restore_status`, `get_schedules_status`, `get_workers_status`, `get_host_resources`, `get_db_pool_status`, `get_redis_status`, `get_blacklist_status`, `get_tickets_status`, `get_db_schema_size`, `get_system_status` | probe specifici per ogni area |
+| `service.py` | `get_backup_status`, `get_verify_restore_status`, `get_schedules_status`, `get_workers_status`, `get_host_resources`, `get_db_pool_status`, `get_blacklist_status`, `get_tickets_status`, `get_db_schema_size`, `get_system_status` | probe specifici per ogni area |
 
-Keywords: `get_system_status`, `get_workers_status`, `get_db_pool_status`, `get_redis_status`, `get_blacklist_status`
+Keywords: `get_system_status`, `get_workers_status`, `get_db_pool_status`, `get_blacklist_status`
 
 Intervento/confini: aggiungere nuovi probe in `service.py` come funzioni `get_*_status` e includerli nell'aggregato. Sola lettura: non scrivere stato applicativo da qui.
 

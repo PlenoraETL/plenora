@@ -1,6 +1,6 @@
 # Backend Development
 
-FastAPI, Celery, PostgreSQL, and Redis backend for Plenora-ETL.
+FastAPI, Dramatiq, PostgreSQL, and RabbitMQ backend for Plenora-ETL.
 
 Main runtime domains:
 
@@ -27,11 +27,10 @@ pip install -r requirements.txt -r requirements-dev.txt
 export PLENORA_ENCRYPTION_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
 export JWT_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
 export DATABASE_URL="postgresql://plenora:plenora@localhost:5432/plenora"
-export CELERY_BROKER_URL="redis://localhost:6379/0"
-export CELERY_RESULT_BACKEND="redis://localhost:6379/0"
+export DRAMATIQ_BROKER_URL="amqp://guest:guest@localhost:5672/"
 
 uvicorn app.main:app --reload --port 5004
-dramatiq workers.dramatiq_app --processes 1 --threads 8
+python -m dramatiq workers.dramatiq_app --processes 1 --threads 8
 python -m workers.beat
 ```
 
@@ -58,7 +57,7 @@ Run broader suites when touching:
 - auth/security;
 - runtime/bootstrap/install;
 - shared execution/resource/connection contracts;
-- scheduler/Celery;
+- scheduler/Dramatiq;
 - database migrations or persistence contracts.
 
 ---
@@ -83,7 +82,7 @@ Expected interpretation:
 - Ruff and Pyflakes findings are actionable unless a line is deliberately
   excluded with a narrow reason.
 - Vulture has many false positives in this backend: FastAPI route handlers,
-  Celery tasks, Pydantic model fields, middleware hooks, registry methods and
+  Dramatiq actors, Pydantic model fields, middleware hooks, registry methods and
   reflection-based call sites often look unused statically.
 - Keep imports at module top by default. Local imports are acceptable for
   circular-import breaks, optional/heavy providers, bootstrap boundaries, or

@@ -13,7 +13,7 @@ nodes for sources, transformations, enrichments, and outputs.
 | Arricchisci | REST/API enrichment, API generators, REST file processing, executable-based enrichment. |
 | Carica | Database writing and ArcGIS Feature Service publishing. |
 | IMDF | Apple Indoor Mapping Data Format bundle generation and ArcGIS publish flow. |
-| Scheduler | Celery worker/beat, scheduled runs, heartbeat, run history. |
+| Scheduler | Dramatiq worker / APScheduler beat, scheduled runs, heartbeat, run history. |
 | Auth | JWT, RBAC, MFA, tenant/group isolation. |
 | Storage | PostgreSQL, filesystem, object storage policy, resource/artifact loading. |
 | Observability | Health/readiness, logs, audit actions, backup/restore operational docs. |

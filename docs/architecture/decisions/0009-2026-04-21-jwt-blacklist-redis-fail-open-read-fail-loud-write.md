@@ -1,8 +1,16 @@
 # ADR-0009: JWT Blacklist In Redis
 
-**Status**: Accepted
+**Status**: Superseded by Plenora 2.0 (Fase 4, 2026-06-13)
 
 **Date**: 2026-04-21
+
+> **Nota (Plenora 2.0):** lo storage della blacklist è stato migrato da Redis a
+> **PostgreSQL** (`kv_store` via `PgKeyValueStore`) con una cache in-memory
+> process-local davanti; Redis è stato rimosso dall'intero stack. La semantica
+> della decisione resta invariata — `jti` con TTL = scadenza naturale,
+> **fail-open in lettura, fail-loud in scrittura** — solo il backend è cambiato.
+> Env: `JWT_BLACKLIST_CACHE_TTL_SEC` (era `JWT_BLACKLIST_REDIS_TIMEOUT_SEC`).
+> Il testo storico sotto è conservato come record della decisione originale.
 
 ## Context
 

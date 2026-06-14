@@ -49,7 +49,7 @@ versionato; secret operativi (PEM, AWS) restano per-operatore via env.
 - [ ] `/ready` 200 OK pre-deploy (baseline)
 - [ ] Disco libero sul server: `df -h` riporta >=20% libero su mount applicativo
 - [ ] PG raggiungibile via app: `/ready` include PG check
-- [ ] Redis raggiungibile via app: `/ready` include broker check
+- [ ] RabbitMQ raggiungibile via app: `/ready` include broker check
 
 ### 1.4 Stato infra
 
@@ -96,7 +96,7 @@ Se exit != 0: NON proseguire con post-deploy. Vedi sezione 4 (rollback) +
 
 - [ ] `/health` ritorna 200 OK (subito dopo restart)
 - [ ] `/ready` ritorna 200 OK (potrebbe richiedere 30-60s per PG pool warm)
-- [ ] `/ready` body include `db: ok`, `redis: ok`, schema migrations ok
+- [ ] `/ready` body include `db: ok`, `broker: ok` (RabbitMQ), schema migrations ok
 
 ### 3.2 Servizi systemd
 
@@ -123,8 +123,8 @@ Se exit != 0: NON proseguire con post-deploy. Vedi sezione 4 (rollback) +
 ### 3.5 Logs / observability
 
 - [ ] `journalctl -u plenora-backend -n 50` non mostra `[CRASH]` né exceptions ripetute
-- [ ] `journalctl -u plenora-celery -n 50` worker registrato + task consumed
-- [ ] `journalctl -u plenora-beat -n 50` schedule reload + leader election OK
+- [ ] `journalctl -u plenora-celery -n 50` worker Dramatiq registrato + task consumed (unit con filename invariato)
+- [ ] `journalctl -u plenora-beat -n 50` schedule reload + leader election OK (APScheduler, leader-lock su PostgreSQL)
 - [ ] `/api/admin/system-status` (se accesso admin) mostra metriche coerenti
 
 ### 3.6 Backup health

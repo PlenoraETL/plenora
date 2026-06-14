@@ -8,7 +8,7 @@ with the root [README](../../README.md) and the operations docs.
 - Python 3.12
 - Node.js 20+ and npm 10+
 - PostgreSQL 14+
-- Redis 7+
+- RabbitMQ 3.12+
 - Git 2.40+
 - Optional native libraries for geospatial formats, depending on the work:
   GDAL, Pyogrio, Shapely, libspatialindex, libpq
@@ -23,7 +23,7 @@ git clone https://github.com/PlenoraETL/plenora.git plenora
 cd plenora
 ```
 
-Use separate shells for backend API, Celery worker, Celery beat, and
+Use separate shells for backend API, Dramatiq worker, APScheduler beat, and
 frontend.
 
 ## PostgreSQL
@@ -50,22 +50,23 @@ docker run -d --name plenora-pg \
 Migrations are applied by the backend startup path. Do not edit production
 schemas manually.
 
-## Redis
+## RabbitMQ
 
 ```bash
-redis-server --port 6379
+rabbitmq-server
 ```
 
 or:
 
 ```bash
-docker run -d --name plenora-redis -p 6379:6379 redis:7-alpine
+docker run -d --name plenora-rabbitmq -p 5672:5672 -p 15672:15672 \
+  rabbitmq:3.12-management-alpine
 ```
 
 Verify:
 
 ```bash
-redis-cli ping
+rabbitmqctl status
 ```
 
 ## Backend Environment
@@ -78,9 +79,7 @@ Minimum development variables:
 PLENORA_ENCRYPTION_KEY=...
 JWT_SECRET_KEY=...
 DATABASE_URL=postgresql://plenora:plenora@localhost:5432/plenora
-REDIS_URL=redis://localhost:6379/0
-CELERY_BROKER_URL=redis://localhost:6379/0
-CELERY_RESULT_BACKEND=redis://localhost:6379/0
+DRAMATIQ_BROKER_URL=amqp://guest:guest@localhost:5672/
 ENVIRONMENT=development
 LOG_LEVEL=INFO
 INTERMEDIATE_PERSISTENCE_MODE=metadata_only
@@ -113,7 +112,7 @@ Worker and beat:
 
 ```bash
 cd backend
-dramatiq workers.dramatiq_app --processes 1 --threads 8
+python -m dramatiq workers.dramatiq_app --processes 1 --threads 8
 python -m workers.beat
 ```
 

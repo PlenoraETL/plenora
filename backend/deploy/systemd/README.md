@@ -7,7 +7,7 @@ disaster recovery: se si perde il server o si migra region, questi file
 riportano il servizio allo stato live senza riscriverli a memoria.
 
 > Per la procedura completa di clean install di un host nuovo
-> (host prereq, Postgres, Redis, secrets, frontend, smoke test), vedi
+> (host prereq, Postgres, RabbitMQ, secrets, frontend, smoke test), vedi
 > [`docs/ops/install-non-docker.md`](../../../docs/ops/install-non-docker.md).
 > La sezione "Install su nuovo server" qui sotto resta come
 > riferimento focalizzato sui soli unit file systemd.
@@ -67,8 +67,14 @@ one-shot in `backend/deploy/iam/`.
 
 - `plenora-backend.service` â€” long-running uvicorn (FastAPI), porta 5004
   locale. Restart=always.
-- `plenora-celery.service` â€” long-running Celery worker, concurrency=4.
-- `plenora-beat.service` â€” Celery beat scheduler (schedule dal DB).
+- `plenora-celery.service` â€” long-running worker Dramatiq
+  (`python -m dramatiq workers.dramatiq_app`, consuma da RabbitMQ). Il
+  filename della unit e' rimasto `plenora-celery.service` per non
+  rinominare l'unit installata; il processo eseguito e' Dramatiq, non
+  piu' `celery worker`.
+- `plenora-beat.service` â€” beat scheduler su APScheduler
+  (`python -m workers.beat`), schedule dal DB e leader-lock su PostgreSQL
+  (`beat_leader_locks`), non piu' `celery beat`.
 - `plenora-backup.service` â€” oneshot. Invoca `backup_db.py` via wrapper
   SSM. Timeout 2h.
 - `plenora-backup.timer` â€” schedula il service ogni giorno alle 02:00 UTC

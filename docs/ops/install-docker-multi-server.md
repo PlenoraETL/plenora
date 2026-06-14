@@ -11,12 +11,12 @@ network dependencies and per-role containers.
 
 | Role | Required | Scaling Rule |
 |---|---:|---|
-| PostgreSQL | Yes | One primary database endpoint. Use managed Postgres or an HA Postgres setup outside this procedure. |
-| Redis | Yes | One shared Redis endpoint for Celery broker/result, leader lock, JWT blacklist, and Redis-backed limits. |
+| PostgreSQL | Yes | One primary database endpoint. Use managed Postgres or an HA Postgres setup outside this procedure. Also holds the task result/state store, the beat leader-lock, the JWT blacklist, and the rate-limit backend. |
+| RabbitMQ | Yes | One shared AMQP broker endpoint for the Dramatiq task queue. |
 | Object storage | Yes | Required for multi-host runtime blobs/artifacts. Use S3 or S3-compatible MinIO. |
 | Backend API | Yes | One or more replicas behind a load balancer/reverse proxy. |
-| Celery worker | Yes | One or more replicas. Scale by workload. |
-| Celery beat | Yes | Run one active beat. Extra standby beat containers are only acceptable after validating Redis leader-lock behavior. |
+| Dramatiq worker | Yes | One or more replicas. Scale by workload. |
+| Beat (APScheduler) | Yes | Run one active beat. Extra standby beat containers are only acceptable after validating the PostgreSQL leader-lock behavior. |
 | Frontend nginx | Yes | One or more static frontend containers, or serve the built assets from the edge tier. |
 | Reverse proxy/TLS | Production | Terminates TLS and routes browser traffic to frontend and backend API. |
 
@@ -25,8 +25,8 @@ network dependencies and per-role containers.
 - All backend, worker, and beat containers must run the same image tag.
 - All backend, worker, and beat containers must share the same
   `PLENORA_ENCRYPTION_KEY` and `JWT_SECRET_KEY`.
-- `DATABASE_URL`, `CELERY_BROKER_URL`, and `CELERY_RESULT_BACKEND` must point to
-  shared network services, not compose-local names like `postgres` or `redis`.
+- `DATABASE_URL` and `DRAMATIQ_BROKER_URL` must point to shared network
+  services, not compose-local names like `postgres` or `rabbitmq`.
 - Do not rely on local `DATA_DIR` for cross-host data sharing.
 - Use `STORAGE_POLICY=object_storage` for multi-host installs unless a specific
   fallback design has been validated.
@@ -59,10 +59,10 @@ powershell -ExecutionPolicy Bypass -File scripts/install-docker.ps1 -InstallDeps
 ```
 
 Do not run the full single-server installer on every multi-server host: it
-starts the compose-local Postgres and Redis services. In a multi-server
-topology, shared PostgreSQL, Redis, and object storage are provisioned once and
-then referenced by backend, worker, beat, and frontend hosts through explicit
-network URLs.
+starts the compose-local Postgres and RabbitMQ services. In a multi-server
+topology, shared PostgreSQL, RabbitMQ, and object storage are provisioned once
+and then referenced by backend, worker, beat, and frontend hosts through
+explicit network URLs.
 
 On the operator workstation:
 
@@ -94,24 +94,27 @@ Probe from every app/worker host:
 psql "postgresql://plenora:<password>@<postgres-host>:5432/plenora" -c "SELECT 1"
 ```
 
-## 3. Shared Redis
+## 3. Shared RabbitMQ
 
-Redis must be reachable from backend, worker, and beat hosts.
+RabbitMQ must be reachable from backend, worker, and beat hosts.
 
-Minimum probe:
+Minimum probe (from a host with the RabbitMQ CLI tools, or via the broker
+container):
 
 ```bash
-redis-cli -u redis://<redis-host>:6379/0 PING
+rabbitmq-diagnostics -q ping
 ```
 
-Expected: `PONG`.
+Expected: `Ping succeeded`.
 
-Use one canonical Redis URL for:
+Use one canonical AMQP broker URL for the Dramatiq task queue:
 
 ```text
-CELERY_BROKER_URL=redis://<redis-host>:6379/0
-CELERY_RESULT_BACKEND=redis://<redis-host>:6379/0
+DRAMATIQ_BROKER_URL=amqp://guest:guest@<rabbitmq-host>:5672
 ```
+
+Task state and results are not stored on the broker: they live in PostgreSQL
+(`task_results`). There is no separate result-backend URL anymore.
 
 ## 4. Shared Object Storage
 
@@ -218,8 +221,7 @@ ENVIRONMENT=production
 LOG_LEVEL=INFO
 DB_SCHEMA=plenora
 DATABASE_URL=postgresql://plenora:<password>@<postgres-host>:5432/plenora
-CELERY_BROKER_URL=redis://<redis-host>:6379/0
-CELERY_RESULT_BACKEND=redis://<redis-host>:6379/0
+DRAMATIQ_BROKER_URL=amqp://guest:guest@<rabbitmq-host>:5672
 PLENORA_ENCRYPTION_KEY=<same-fernet-key-on-all-app-containers>
 JWT_SECRET_KEY=<same-jwt-key-on-all-app-containers>
 CORS_ORIGINS=https://app.example.com,https://api.example.com
@@ -318,10 +320,27 @@ docker run -d \
 Worker round-trip:
 
 ```bash
-docker exec -it plenora-worker python -c "from workers.celery_app import celery_app; print(celery_app.send_task('cleanroom.ping').get(timeout=30))"
+docker exec -it plenora-worker python -c "
+import time
+from app.core.task_runtime.dispatch import dispatch_task_by_name
+from app.core.orchestrator.task_result_store import default_task_result_store
+handle = dispatch_task_by_name('cleanroom.ping')
+store = default_task_result_store()
+deadline = time.monotonic() + 30
+state = 'PENDING'
+while time.monotonic() < deadline:
+    record = store.get(handle.id)
+    if record is not None and record.state in ('SUCCESS', 'FAILURE'):
+        state = record.state
+        break
+    time.sleep(0.5)
+print(state)
+"
 ```
 
-Expected: `pong`.
+Expected: `cleanroom.ping` reaches `SUCCESS` in PostgreSQL (`task_results`). The
+Dramatiq worker pulls the task from RabbitMQ and the result-store records the
+terminal state.
 
 ## 11. Start Beat
 
@@ -344,8 +363,8 @@ docker run -d \
 > Plenora 2.0 (Fase 3): il beat gira su APScheduler (`python -m workers.beat`),
 > non piu' su `celery beat`. Leader-lock e schedule su PostgreSQL.
 
-Do not scale beat until standby behavior has been validated in the target
-Redis environment.
+Do not scale beat until standby behavior has been validated against the
+PostgreSQL leader-lock (`beat_leader_locks`).
 
 ## 12. Start Frontend
 
@@ -398,7 +417,7 @@ From an app/worker host:
 
 ```bash
 psql "$DATABASE_URL" -c "SELECT 1"
-redis-cli -u "$CELERY_BROKER_URL" PING
+rabbitmq-diagnostics -q ping
 docker logs --tail 200 plenora-backend
 docker logs --tail 200 plenora-worker
 docker logs --tail 200 plenora-beat
@@ -429,7 +448,7 @@ Rollback is the same sequence using the previous image tag. Do not rotate
 
 Stop and report output when:
 
-- any host cannot reach Postgres or Redis;
+- any host cannot reach Postgres or RabbitMQ;
 - object storage readiness fails;
 - first backend `/ready` fails;
 - migration table is missing or empty after backend boot;

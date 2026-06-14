@@ -23,7 +23,7 @@ Plenora Backend
 
   C. Execution / Orchestration
      Canvas graph parsing, execution results, pipeline orchestration,
-     Celery worker/beat integration.
+     Dramatiq worker / APScheduler beat integration.
      Canonical: app/core/orchestrator, app/shared/execution, workers
 
   D. Transformation
@@ -52,8 +52,8 @@ Plenora Backend
 
 | External system | Backend classification | Notes |
 |---|---|---|
-| PostgreSQL | Persistence / DB | Catalog DB, runs, results, config, logs. |
-| Redis | Runtime infrastructure | Celery broker/result backend, locks, blacklist. |
+| PostgreSQL | Persistence / DB | Catalog DB, runs, results, config, logs, task results, locks, JWT blacklist, rate-limit. |
+| RabbitMQ | Runtime infrastructure | Dramatiq async task broker. |
 | S3 / MinIO | Resource / Storage | Object storage provider for artifacts and backups. |
 | ArcGIS REST | Connections / External Providers | Read/write provider consumed by Features, Estrai, Carica, and IMDF. |
 | User databases | Connections / External Providers | Queried through DB execution layer. |

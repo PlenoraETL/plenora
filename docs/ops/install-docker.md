@@ -9,8 +9,8 @@ Use one of these procedures:
 
 | Target | Procedure |
 |---|---|
-| One server, one Docker Engine, local compose-managed Postgres/Redis | [Single-server Docker install](install-docker-single-server.md) |
-| Multiple Docker hosts or separated Docker roles, shared Postgres/Redis/object storage | [Multi-server Docker install](install-docker-multi-server.md) |
+| One server, one Docker Engine, local compose-managed Postgres/RabbitMQ | [Single-server Docker install](install-docker-single-server.md) |
+| Multiple Docker hosts or separated Docker roles, shared Postgres/RabbitMQ/object storage | [Multi-server Docker install](install-docker-multi-server.md) |
 
 ## Decision Rule
 
@@ -18,13 +18,13 @@ Use the single-server procedure for first validation, demos, small internal
 deployments, and release acceptance on one clean host.
 
 Use the multi-server procedure only when the single-server procedure is already
-green and the deployment needs separate app workers, external Postgres/Redis,
+green and the deployment needs separate app workers, external Postgres/RabbitMQ,
 load balancing, or shared object storage.
 
 Do not mix the two procedures halfway. The root `docker-compose.yml` is the
 single-server scaffold. The multi-server procedure intentionally uses explicit
 per-role Docker commands and external dependencies because compose service DNS
-names such as `postgres` and `redis` are local to one compose network.
+names such as `postgres` and `rabbitmq` are local to one compose network.
 
 ## Automated Installers
 
@@ -55,7 +55,7 @@ bash scripts/install-docker.sh
 
 Use `--skip-admin-bootstrap` to leave the user table empty.
 
-The Linux installer also asks for the number of Celery worker containers.
+The Linux installer also asks for the number of Dramatiq worker containers.
 Default is one worker. For unattended installs:
 
 ```bash
@@ -89,7 +89,7 @@ BE-GO-READY-INSTALL-010-LINUX-EXECUTION-PACK.
 | install | `docker compose config --quiet` and `docker compose build backend frontend` | NO (scaffold) |
 | smoke | `bash scripts/docker-validate.sh` | NO (scaffold) |
 | health/ready | `curl -fsS http://127.0.0.1:5004/health` and `/ready` | NO (scaffold) |
-| Celery check | `cleanroom.ping` through the worker | NO (scaffold) |
+| Dramatiq check | `cleanroom.ping` through the worker | NO (scaffold) |
 | memory caps visibility | print backend memory cap settings | NO (scaffold) |
 | non-destructive rollback | `docker compose stop` | NO (scaffold) |
 
@@ -101,7 +101,7 @@ operator flow.
 ## Target shape (specification only)
 
 Single-server Docker runs all services on one Docker Engine. Multi-server
-Docker separates app roles from shared Postgres, Redis, and object storage.
+Docker separates app roles from shared Postgres, RabbitMQ, and object storage.
 
 ## Validation pack for the Linux PC test
 
@@ -134,7 +134,7 @@ Expected output checklist:
 2. **`docker compose build backend frontend`**
    Expected: backend and frontend images build successfully.
 3. **`docker compose up -d --wait backend`**
-   Expected: Postgres, Redis, and backend become healthy enough for API probes.
+   Expected: Postgres, RabbitMQ, and backend become healthy enough for API probes.
 4. **`curl -fsS http://127.0.0.1:5004/health`**
    Expected: HTTP 200 from the backend liveness surface, followed by HTTP 200
    from `/ready`.
@@ -145,7 +145,8 @@ Expected output checklist:
 7. **`curl -fsS http://127.0.0.1:3000/`**
    Expected: frontend SPA shell is served by nginx.
 8. **`cleanroom.ping`**
-   Expected: Celery worker returns `pong`.
+   Expected: the Dramatiq worker runs the task and it reaches SUCCESS in
+   PostgreSQL (`task_results`).
 9. **memory caps visibility**
    Expected: runtime memory caps print from backend settings.
 10. **`docker compose stop`**
@@ -174,7 +175,7 @@ replacement for the real-host runtime validation report.
 ## Known scaffold limitations
 
 - The root `docker-compose.yml` is single-server only.
-- Multi-server installs require external Postgres, Redis, and object storage.
+- Multi-server installs require external Postgres, RabbitMQ, and object storage.
 - The validation report is still required per target environment.
 - The frontend API URL is compiled at build time and must be rebuilt if the
   public API origin changes.
@@ -188,6 +189,6 @@ For either procedure, keep a validation report with:
 - generated `.env`/secret handling evidence without printing secrets;
 - `/health` and `/ready` outputs;
 - frontend URL checked from a browser;
-- Celery `cleanroom.ping` result;
+- Dramatiq `cleanroom.ping` result;
 - smoke project create/list/delete or full smoke pipeline result;
 - stop conditions or deviations.

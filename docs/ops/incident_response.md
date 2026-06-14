@@ -5,7 +5,7 @@ Pensato per l'operatore di turno: triage rapido, decisioni chiare, comms
 pre-formate per cliente istituzionale.
 
 Per scenari specifici vedi:
-- [`jwt-incident-response.md`](jwt-incident-response.md) — token compromessi, blacklist Redis
+- [`jwt-incident-response.md`](jwt-incident-response.md) — token compromessi, blacklist su PostgreSQL
 - [`backup-restore.md`](backup-restore.md) — DB perso, restore da S3, escalation AWS
 - [`runtime-prereqs.md`](runtime-prereqs.md) — prerequisiti runtime container/host
 - [`trusted-proxies.md`](trusted-proxies.md) — rate limit + IP forwarding
@@ -104,14 +104,15 @@ tabella DB destinazione contiene dati errati:
 4. **Comms al cliente** con template §4 dichiarando blast radius e RCA in
    progress.
 
-### §3.2 Backend 500 globale (uvicorn / Celery)
+### §3.2 Backend 500 globale (uvicorn / Dramatiq)
 
 1. `systemctl status plenora-backend plenora-celery plenora-beat` su
-   server prod.
+   server prod (la unit `plenora-celery` esegue ora il worker Dramatiq;
+   il filename e' rimasto invariato).
 2. Tail log `journalctl -u plenora-backend -n 200 --no-pager`. Cerca
    `[CRASH]` come marker di errore non gestito.
-3. Se OOM kill → `dmesg | tail`, riduci `celery --concurrency` o roll
-   back l'ultimo deploy.
+3. Se OOM kill → `dmesg | tail`, riduci il numero di processi/thread del
+   worker Dramatiq (`--processes`/`--threads`) o roll back l'ultimo deploy.
 4. Se `psycopg2 connection pool exhausted` → controlla `pg_stat_activity`
    su PG (potrebbe esserci una transazione zombie). `KILL` mirato della
    connessione zombie, non riavvio del DB.

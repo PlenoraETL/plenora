@@ -67,16 +67,27 @@ _REQUIRED_COMMAND_SHAPES: tuple[tuple[str, str], ...] = (
     (
         "cleanroom.ping",
         "The template must reference the canonical `cleanroom.ping` "
-        "Celery task name -- the same primitive locked by the "
+        "task name -- the same primitive locked by the "
         "smoke harness guard. A renamed task here would let "
-        "Marco run a different smoke than the cleanroom CI lane.",
+        "Marco run a different smoke than the cleanroom CI lane. "
+        "(Plenora 2.0 Fase 5: dispatched via Dramatiq on RabbitMQ, "
+        "result recorded in PostgreSQL.)",
     ),
     (
-        "ar.get(timeout=30)",
-        "The cleanroom.ping snippet must use the bounded "
-        "`AsyncResult.get(timeout=30)` primitive (NOT a sleep "
-        "loop, NOT an unbounded .get()). Same pattern as the "
-        "cleanroom CI workflow and the dry-run pack section 5.3.",
+        "dispatch_task_by_name(\"cleanroom.ping\")",
+        "The cleanroom.ping snippet must dispatch via the canonical "
+        "`dispatch_task_by_name(\"cleanroom.ping\")` runtime entrypoint "
+        "(Plenora 2.0 Fase 5: no more Celery `AsyncResult`). The task "
+        "is enqueued on RabbitMQ and its terminal state is read back "
+        "from the PostgreSQL result-store.",
+    ),
+    (
+        "store.get(handle.id)",
+        "The cleanroom.ping snippet must read the terminal state from "
+        "the PostgreSQL-backed task result-store via "
+        "`store.get(handle.id)` (TaskResultRecord.state) inside a bounded "
+        "30s poll loop (NOT a Celery `AsyncResult.get`, NOT an unbounded "
+        "wait). Same pattern as scripts/install.sh and docker-validate.sh.",
     ),
     (
         "bash scripts/docker-validate.sh --dry-run",

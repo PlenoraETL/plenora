@@ -19,17 +19,17 @@ FastAPI app
   +-- shared contracts
   |
   +--> PostgreSQL
-  +--> Redis
+  +--> RabbitMQ (Dramatiq broker)
   +--> object storage
   +--> external databases / REST APIs / ArcGIS-like providers
 
-Celery worker
+Dramatiq worker
   |
   +-- executes project graphs
   +-- resolves resources and artifacts
-  +-- writes run state and results
+  +-- writes run state and results to PostgreSQL
 
-Celery beat
+APScheduler beat
   |
   +-- scheduled execution
   +-- retention and operational maintenance

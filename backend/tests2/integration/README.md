@@ -4,7 +4,7 @@ Layer dedicato ai test che integrano:
 
 - backend reale
 - PostgreSQL reale
-- Redis reale
+- RabbitMQ reale (broker Dramatiq)
 - side effect persistiti su DB
 
 Questa cartella non usa `efm-backup`.
@@ -12,7 +12,7 @@ Questa cartella non usa `efm-backup`.
 Perimetro consentito:
 
 - `postgres` su `localhost:5432`
-- `redis` su `localhost:6379`
+- `rabbitmq` su `localhost:5672`
 - altri container solo quando servono davvero a un caso di test specifico
 
 Pattern:

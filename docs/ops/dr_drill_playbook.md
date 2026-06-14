@@ -27,7 +27,7 @@ record append-only in [`dr_drill_log.md`](dr_drill_log.md).
 - Failover automatico (non implementato — restore è manuale)
 - Cross-region (bucket è in `eu-south-1`, niente replica multi-region)
 - Restore dei file utente / blob (sono in DB, coperti dallo schema dump)
-- Cleanup post-incident dei task Celery in-flight (non DR-related)
+- Cleanup post-incident dei task Dramatiq in-flight (non DR-related)
 
 ---
 

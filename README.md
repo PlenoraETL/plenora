@@ -2,7 +2,7 @@
 
 ETL platform for geospatial and tabular data pipelines.
 
-Backend: FastAPI, Celery, PostgreSQL, Redis. Frontend: React, Vite,
+Backend: FastAPI, Dramatiq, PostgreSQL, RabbitMQ. Frontend: React, Vite,
 ReactFlow-based pipeline canvas.
 
 > `Plenora-ETL` is the canonical product and repository name. Runtime
@@ -23,12 +23,11 @@ pip install -r requirements.txt -r requirements-dev.txt
 export PLENORA_ENCRYPTION_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
 export JWT_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
 export DATABASE_URL="postgresql://plenora:plenora@localhost:5432/plenora"
-export CELERY_BROKER_URL="redis://localhost:6379/0"
-export CELERY_RESULT_BACKEND="redis://localhost:6379/0"
+export DRAMATIQ_BROKER_URL="amqp://guest:guest@localhost:5672/"
 
 uvicorn app.main:app --reload --port 5004
-celery -A workers.celery_app worker --loglevel=info
-celery -A workers.celery_app beat --loglevel=info
+python -m dramatiq workers.dramatiq_app --processes 1 --threads 8
+python -m workers.beat
 ```
 
 ### Frontend

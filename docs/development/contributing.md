@@ -139,7 +139,7 @@ python -m vulture backend/app backend/workers backend/scripts scripts --min-conf
 ```
 
 Do not delete files or public symbols solely because Vulture reports them.
-This repo has deliberate dynamic surfaces: FastAPI routes, Celery tasks,
+This repo has deliberate dynamic surfaces: FastAPI routes, Dramatiq actors,
 Pydantic models, middleware hooks, registries, and contract-test helpers.
 
 ## Documentation

@@ -158,7 +158,7 @@ aws ssm put-parameter \
   --type SecureString --overwrite --region eu-south-1
 
 # Restart dei service applicativi perche' rileggano DATABASE_URL
-# (uvicorn/celery leggono ancora da .env — aggiorna anche li' fino a
+# (uvicorn/worker Dramatiq leggono ancora da .env — aggiorna anche li' fino a
 # quando non chiudiamo il migration pending full-stack)
 ssh ubuntu@15.160.219.93 "
   sudo sed -i 's|DATABASE_URL=.*|DATABASE_URL=${DATABASE_URL%/*}/plenora_restored|' \
@@ -215,7 +215,7 @@ psql "$PROD_URL" -c "SELECT COUNT(*) FROM plenora.users"
 FK in uscita (altre tabelle la referenziano), truncate/insert cascade
 puo' cancellare dati validi. Se non sei sicuro:
 
-1. Stoppa i worker Celery (niente scritture concorrenti)
+1. Stoppa i worker Dramatiq (niente scritture concorrenti)
 2. Backup fresh di prod PRIMA di toccarla
 3. Lavora in transazione esplicita (`BEGIN; ... COMMIT/ROLLBACK`)
 4. Escalation a DBA se disponibile
@@ -423,8 +423,8 @@ Dopo ogni intervento DR:
 
 - [ ] Backend prod rispondente (HTTP 200 su `/health`)
 - [ ] Login funzionante (test con utente reale)
-- [ ] Celery worker attivo (`systemctl status plenora-celery`)
-- [ ] Beat scheduler attivo (`systemctl status plenora-beat`)
+- [ ] Worker Dramatiq attivo (`systemctl status plenora-celery` — la unit conserva il filename ma esegue il worker Dramatiq)
+- [ ] Beat scheduler (APScheduler) attivo (`systemctl status plenora-beat`)
 - [ ] Timer backup riattivo (`systemctl list-timers plenora-backup.timer`)
 - [ ] Un backup fresco su S3 (manuale via `sudo systemctl start plenora-backup.service`)
 - [ ] Stakeholder informati dello stato ripristinato

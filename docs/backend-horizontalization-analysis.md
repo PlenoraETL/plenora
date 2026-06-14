@@ -2,6 +2,18 @@
 
 Scope: `backend/` senza test (`tests`, `test*`, `__pycache__` esclusi). Data analisi: 2026-05-16.
 
+> **Nota (aggiornato Fase 5, Plenora 2.0):** questo documento e' uno snapshot
+> datato 2026-05-16, quando lo stack task era Celery + Redis. Dalla Fase 5 lo
+> stack e' cambiato: broker task = RabbitMQ (Dramatiq, var `DRAMATIQ_BROKER_URL`);
+> stato/progress/result task = PostgreSQL (`task_results`), non piu' AsyncResult/Redis;
+> JWT blacklist, rate-limit (login + arricchisci) e KV/lock OAuth = PostgreSQL;
+> beat = APScheduler + croniter con leader-lock su PostgreSQL (non piu' Redis).
+> Redis e Celery sono stati rimossi da codice e requirements e `workers/celery_app.py`
+> e' stato cancellato (bootstrap + request-id ora su middleware Dramatiq). I
+> riferimenti "Celery"/"Redis"/"CELERY_*" qui sotto vanno letti come stato
+> storico pre-Fase-5; i nomi env `*_REDIS_*` eventualmente sopravvissuti restano
+> solo per compatibilita' ma puntano a backend PostgreSQL.
+
 ## Executive summary
 
 Il backend e' gia' orientato al multi-replica su tre assi importanti:
@@ -22,11 +34,11 @@ I punti ancora da governare operativamente per una vera orizzontalizzazione sono
 ## Prerequisiti produzione multi-host
 
 - `DATABASE_URL` deve puntare a Postgres condiviso.
-- `CELERY_BROKER_URL` e `CELERY_RESULT_BACKEND` devono puntare a Redis condiviso, non localhost.
+- `DRAMATIQ_BROKER_URL` deve puntare a RabbitMQ condiviso, non localhost (post-Fase-5; pre-Fase-5 erano `CELERY_BROKER_URL`/`CELERY_RESULT_BACKEND` su Redis).
 - `OBJECT_STORAGE_ENABLED=true` e `OBJECT_STORAGE_BUCKET` devono essere configurati per runtime artifact.
 - `STORAGE_POLICY=hybrid` o `object_storage`; `db` e' orizzontalizzabile ma scarica tutto su Postgres.
-- `DB_POOL_MAX * (uvicorn_workers + celery_concurrency + beat_count)` deve stare sotto il limite reale di Postgres.
-- Un solo beat leader logico: Redis leader election attiva e `SCHEDULE_BEAT_LEADER_FAIL_OPEN=false` in cluster.
+- `DB_POOL_MAX * (uvicorn_workers + dramatiq_concurrency + beat_count)` deve stare sotto il limite reale di Postgres.
+- Un solo beat leader logico: leader election su PostgreSQL attiva e `SCHEDULE_BEAT_LEADER_FAIL_OPEN=false` in cluster (post-Fase-5; pre-Fase-5 la leader election era su Redis).
 
 ## Cartelle e file rilevanti
 

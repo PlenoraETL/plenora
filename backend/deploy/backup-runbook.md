@@ -265,7 +265,7 @@ Se il bucket S3 viene rinominato/sostituito:
   ultimo backup (test restore)" + ultima verifica status. Pattern
   equivalente a "Esegui backup ora" esistente. Stima ~2.5h (vedi nota
   in chat del 2026-04-17 opzioni A/B/C).
-- **Secret migration full-stack**: uvicorn/celery leggono ancora da
+- **Secret migration full-stack**: uvicorn/worker Dramatiq leggono ancora da
   `backend/.env`. Sostituire con lo stesso pattern C1 (wrapper
   `load_secrets.py` su SSM) per eliminare `.env` completamente dal
   server. Stima ~2-3h.

@@ -11,8 +11,7 @@ Status reviewed: 2026-05-07.
 | `DATABASE_URL` | PostgreSQL connection string. | Yes | Rotate on DB credential change or compromise. |
 | `PLENORA_ENCRYPTION_KEY` | Fernet key for encrypted application credentials and MFA secrets. | Yes | Not hot-rotatable; requires coordinated re-encryption and downtime. |
 | `JWT_SECRET_KEY` | HS256 JWT signing key. | Yes | Rotating invalidates all active JWTs. |
-| `CELERY_BROKER_URL` | Redis/Celery broker URL. | Yes | Rotate with Redis credentials/topology. |
-| `CELERY_RESULT_BACKEND` | Celery result backend URL. | Yes | Usually same Redis instance as broker. |
+| `DRAMATIQ_BROKER_URL` | RabbitMQ/Dramatiq broker URL for async tasks. | Yes | Rotate with RabbitMQ credentials/topology. |
 
 Legacy names must not be reintroduced as runtime fallbacks. Historical docs
 may mention old aliases; current runtime configuration uses `PLENORA_*`.

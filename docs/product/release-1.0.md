@@ -8,7 +8,7 @@ called a stable 1.0 product.
 Plenora 1.0 is ready only when the documented install, runtime, and recovery
 paths work from a clean checkout:
 
-- backend, worker, beat, PostgreSQL, Redis, and frontend start cleanly;
+- backend, worker, beat, PostgreSQL, RabbitMQ, and frontend start cleanly;
 - `/health` and `/ready` return success;
 - a smoke pipeline can be created, executed, previewed, and downloaded;
 - backup, restore, incident response, and deploy rollback docs are current;

@@ -102,16 +102,17 @@ Current contracts:
 - `ArtifactPayload` lives in `app/shared/execution/payloads.py`.
 - `ColumnSchema` is the shared schema contract for inferred canvas columns.
 - `app/core/scheduler/job_dispatcher.py` is the scheduled-run dispatch
-  boundary; scheduler application code should not call Celery tasks directly.
+  boundary; scheduler application code should not enqueue Dramatiq actors
+  directly.
 - `app/core/task_runtime/*` is the shared task-runtime adapter surface;
-  app services depend on its ports instead of importing Celery,
-  `workers.celery_app`, or concrete `workers.tasks.*` modules directly.
+  app services depend on its ports instead of importing Dramatiq,
+  `workers.dramatiq_app`, or concrete `workers.tasks.*` modules directly.
 - `app/core/orchestrator/task_runtime.py` is a legacy pre-shared-runtime
-  location and must not keep or regain concrete Celery/worker imports.
+  location and must not keep or regain concrete Dramatiq/worker imports.
 - `app/core/scheduler/run_log_store.py` is the scheduled-run DB log reader
   boundary; catalog/view code should not import scheduler DB directly.
 - `app/core/imdf/publish_dispatcher.py` is the IMDF publish dispatch boundary;
-  IMDF routers should not call Celery tasks directly.
+  IMDF routers should not enqueue Dramatiq actors directly.
 
 Rules:
 
@@ -119,9 +120,9 @@ Rules:
 - Do not put DataFrames, bytes, or streams in `ExecutionResult.payload`.
 - Do not create a generic `BaseGraphExecutor` until duplication proves it is
   needed.
-- Do not call `workers.tasks.schedule_task.schedule_pipeline_task.apply_async`
+- Do not enqueue `workers.tasks.schedule_task.schedule_pipeline_task`
   from scheduler application code; use the dispatch boundary.
-- Do not import Celery, `workers.celery_app`, or concrete `workers.tasks.*`
+- Do not import Dramatiq, `workers.dramatiq_app`, or concrete `workers.tasks.*`
   modules from application services; use `app.core.task_runtime`.
 - Do not import scheduler DB directly from scheduler catalog/view code; use
   `app.core.scheduler.run_log_store`.
@@ -325,7 +326,7 @@ Rules:
 - Multi-database query execution lives in `app/core/query_execution`;
   `app/db/query_*.py` files are compatibility shims, not DB foundations.
 - `app/core/task_runtime/*` is the only app-core surface allowed to import
-  Celery, `workers.celery_app`, or concrete `workers.tasks.*` modules.
+  Dramatiq, `workers.dramatiq_app`, or concrete `workers.tasks.*` modules.
 
 ---
 
@@ -344,7 +345,7 @@ Canonical surfaces:
 Current state:
 
 - Non-Docker single-machine installation is the most detailed runbook.
-- Docker scaffold exists for backend, worker, beat, Postgres, Redis, and the
+- Docker scaffold exists for backend, worker, beat, Postgres, RabbitMQ, and the
   frontend nginx image.
 - The Docker path still requires real-host acceptance before being treated as
   a release operations path.
@@ -354,7 +355,7 @@ Rules:
 
 - Prefer automated checks over long manual checklists.
 - Keep `/health` cheap and `/ready` bounded.
-- Admin status code should probe Celery through
+- Admin status code should probe worker/broker health through
   `app/core/task_runtime/probes.py`, not direct worker imports.
 - Do not claim Docker production readiness until a real Linux-PC validation
   report exists.
@@ -392,6 +393,8 @@ Rules:
 - Do not add direct pandas/geopandas imports in vertical domains; use
   `app.core.dataframes.*` ports/helpers for parser dispatch, constructors,
   probes, joins, serialization, hashing, and geospatial mechanics.
+- Do not dispatch file-source parsers from `app.core.files`; use
+  `app.core.dataframes.load_dispatch`.
 - Do not put pandas/geopandas type imports in dataframe contracts; use
   `app.core.dataframes.ports` for pandas-neutral engine protocols.
 - Do not add new concrete pandas/geopandas file-source loader behavior in
@@ -410,13 +413,13 @@ Rules:
   orchestration; use `app.core.dataframes.parallel_ops`.
 - Do not enqueue scheduled runs directly through
   `workers.tasks.schedule_task`; use `app.core.scheduler.job_dispatcher`.
-- Do not import Celery, `workers.celery_app`, or concrete `workers.tasks.*`
+- Do not import Dramatiq, `workers.dramatiq_app`, or concrete `workers.tasks.*`
   modules from application services; use `app.core.task_runtime`.
 - Do not import scheduler DB directly from scheduler catalog/view code; use
   `app.core.scheduler.run_log_store`.
 - Do not enqueue IMDF publish tasks directly through
   `workers.tasks.imdf_publish_task`; use `app.core.imdf.publish_dispatcher`.
-- Do not inspect Celery workers directly from admin service code; use
+- Do not inspect Dramatiq workers directly from admin service code; use
   `app.core.task_runtime.probes`.
 - Do not remove file-source group rows through the generic DB cleanup helper;
   use `app.core.files.cleanup`.

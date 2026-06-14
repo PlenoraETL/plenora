@@ -200,7 +200,7 @@ Sidebar: badge count sulla voce "Ticket", scope RBAC-aware (refresh 60s, fail-si
 
 ## Retention
 
-Nessun cleanup automatico dei soft-deleted. Se emerge il bisogno (es. normativa GDPR su ticket vecchi con dati personali), si aggiunge un cleanup task Celery analogo a `cleanup_intermediate_runs`:
+Nessun cleanup automatico dei soft-deleted. Se emerge il bisogno (es. normativa GDPR su ticket vecchi con dati personali), si aggiunge un cleanup task Dramatiq analogo a `cleanup_intermediate_runs`:
 
 ```python
 # scheduled task (proposta futura)
