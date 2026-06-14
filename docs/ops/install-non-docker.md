@@ -2,7 +2,7 @@
 
 This is the canonical single-machine install path for Plenora.
 
-Target: fresh Ubuntu 24.04 host, no containers, local PostgreSQL and Redis
+Target: fresh Ubuntu 24.04 host, no containers, local PostgreSQL and RabbitMQ
 unless stated otherwise.
 
 ## Status
@@ -20,8 +20,8 @@ The install is green only when all of these are true:
 - backend starts on `127.0.0.1:5004`;
 - `GET /health` returns HTTP 200;
 - `GET /ready` returns HTTP 200;
-- Celery worker receives and completes `cleanroom.ping`;
-- Celery beat starts and emits heartbeat/readiness signal;
+- Dramatiq worker receives and completes `cleanroom.ping`;
+- APScheduler beat starts and emits heartbeat/readiness signal;
 - frontend starts and can reach the backend;
 - one smoke pipeline can be created, executed, previewed, and downloaded;
 - the exact commit hash and command outputs are captured in the validation
@@ -35,7 +35,7 @@ sudo apt install -y \
   python3.11 python3.11-venv python3.11-dev \
   build-essential libpq-dev \
   postgresql postgresql-client \
-  redis-server \
+  rabbitmq-server \
   libgdal-dev libmagic1 \
   curl ca-certificates git \
   nodejs npm
@@ -46,7 +46,7 @@ Verify:
 ```bash
 python3.11 --version
 psql --version
-redis-server --version
+rabbitmqctl version
 gdalinfo --version
 node --version
 npm --version
@@ -88,14 +88,15 @@ The application pool also sets `search_path=<DB_SCHEMA>,public` on every
 connection. The `public` schema is kept read-only for the application role:
 do not grant `CREATE` on `public` to `plenora`.
 
-## 4. Redis
+## 4. RabbitMQ
 
 ```bash
-sudo systemctl enable --now redis-server
-redis-cli ping
+sudo systemctl enable --now rabbitmq-server
+sudo rabbitmq-diagnostics -q ping
 ```
 
-Expected: `PONG`.
+Expected: `Ping succeeded`. The default vhost `/` and the `guest` user
+(localhost-only) are sufficient for a single-machine install.
 
 ## 5. Backend Environment
 
@@ -115,8 +116,7 @@ LOG_LEVEL=INFO
 PLENORA_ENCRYPTION_KEY=<generate>
 JWT_SECRET_KEY=<generate>
 DATABASE_URL=postgresql://plenora:plenora@localhost:5432/plenora
-CELERY_BROKER_URL=redis://localhost:6379/0
-CELERY_RESULT_BACKEND=redis://localhost:6379/0
+DRAMATIQ_BROKER_URL=amqp://guest:guest@localhost:5672
 STORAGE_POLICY=db
 BACKUP_BUCKET=plenora-local-no-real-s3
 INTERMEDIATE_PERSISTENCE_MODE=metadata_only
@@ -168,15 +168,31 @@ curl -fsS http://127.0.0.1:5004/health
 curl -fsS http://127.0.0.1:5004/ready
 ```
 
-Celery round-trip:
+Task round-trip (Dramatiq dispatch + PostgreSQL result-store poll):
 
 ```bash
 cd ~/plenora/backend
 source venv/bin/activate
-python -c "from workers.celery_app import celery_app; print(celery_app.send_task('cleanroom.ping').get(timeout=30))"
+python - <<'PY'
+import time
+from app.core.task_runtime.dispatch import dispatch_task_by_name
+from app.core.orchestrator.task_result_store import default_task_result_store
+
+handle = dispatch_task_by_name("cleanroom.ping")
+store = default_task_result_store()
+deadline = time.monotonic() + 30
+state = "PENDING"
+while time.monotonic() < deadline:
+    record = store.get(handle.id)
+    if record is not None and record.state in ("SUCCESS", "FAILURE"):
+        state = record.state
+        break
+    time.sleep(0.5)
+print(state)
+PY
 ```
 
-Expected: `pong`.
+Expected: `SUCCESS` (the worker from Terminal 2 must be running).
 
 ## 8. Frontend
 
@@ -195,7 +211,7 @@ Stop foreground processes with `Ctrl-C`.
 For local services:
 
 ```bash
-sudo systemctl stop redis-server
+sudo systemctl stop rabbitmq-server
 ```
 
 Do not delete the database unless this is an intentional reset.
@@ -208,7 +224,7 @@ Paste:
 - package versions;
 - `/health` output;
 - `/ready` output;
-- Celery `cleanroom.ping` output;
+- `cleanroom.ping` round-trip state (`SUCCESS`);
 - frontend dev URL and any browser/backend errors;
 - whether the smoke pipeline completed.
 
@@ -218,7 +234,7 @@ Stop and report output instead of retrying blindly when:
 
 - host package install fails;
 - PostgreSQL probe fails;
-- Redis probe fails;
+- RabbitMQ probe fails;
 - backend startup fails before `/health`;
 - `/ready` returns 503;
 - `cleanroom.ping` times out;

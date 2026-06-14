@@ -216,7 +216,24 @@ function Invoke-SmokeChecks {
     Invoke-HttpSmoke "http://127.0.0.1:5004/health"
     Invoke-HttpSmoke "http://127.0.0.1:5004/ready"
     Invoke-HttpSmoke "http://127.0.0.1:3000/"
-    Invoke-External "docker" @("compose", "exec", "-T", "worker", "python", "-c", "from workers.celery_app import celery_app; print(celery_app.send_task('cleanroom.ping').get(timeout=30))")
+    $pingScript = @'
+import time, sys
+from app.core.task_runtime.dispatch import dispatch_task_by_name
+from app.core.orchestrator.task_result_store import default_task_result_store
+handle = dispatch_task_by_name('cleanroom.ping')
+store = default_task_result_store()
+deadline = time.monotonic() + 30
+state = 'PENDING'
+while time.monotonic() < deadline:
+    record = store.get(handle.id)
+    if record is not None and record.state in ('SUCCESS', 'FAILURE'):
+        state = record.state
+        break
+    time.sleep(0.5)
+print(state)
+sys.exit(0 if state == 'SUCCESS' else 1)
+'@
+    Invoke-External "docker" @("compose", "exec", "-T", "worker", "python", "-c", $pingScript)
 }
 
 Assert-RepoRoot
@@ -243,7 +260,7 @@ if (-not [string]::IsNullOrWhiteSpace($FrontendApiUrl)) {
 Write-Step "Build and start single-server stack"
 Invoke-External "docker" @("compose", "config")
 Invoke-External "docker" @("compose", "build", "backend", "frontend")
-Invoke-External "docker" @("compose", "up", "-d", "postgres", "redis")
+Invoke-External "docker" @("compose", "up", "-d", "postgres", "rabbitmq")
 Invoke-External "docker" @("compose", "up", "-d", "--wait", "backend")
 Invoke-External "docker" @("compose", "up", "-d", "worker", "beat")
 Invoke-External "docker" @("compose", "up", "-d", "--wait", "frontend")

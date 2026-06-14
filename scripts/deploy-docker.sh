@@ -5,7 +5,7 @@
 #   - pulls the selected Git branch with --ff-only;
 #   - rebuilds backend/frontend images;
 #   - recreates backend, worker, beat, and frontend containers;
-#   - keeps postgres/redis/data volumes intact;
+#   - keeps postgres/rabbitmq/data volumes intact;
 #   - runs lightweight smoke checks.
 #
 # First install remains:
@@ -57,7 +57,7 @@ Options:
       Sets FRONTEND_VITE_API_URL for the frontend build.
 
   --worker-replicas N
-      Number of Celery worker containers to run. Default: current running
+      Number of worker containers to run. Default: current running
       worker replica count if detectable, otherwise 1.
 
   --skip-smoke
@@ -279,7 +279,7 @@ compose_update() {
     fi
 
     log_step "Restart stack"
-    run_docker compose up -d postgres redis
+    run_docker compose up -d postgres rabbitmq
     run_docker compose up -d --wait --force-recreate backend
     run_docker compose up -d --force-recreate --scale worker="$PLENORA_WORKER_REPLICAS" worker beat
     run_docker compose up -d --wait --force-recreate frontend
@@ -298,7 +298,23 @@ smoke_checks() {
     log ""
     run curl -fsS http://127.0.0.1:3000/
     log ""
-    run_docker compose exec -T worker python -c "from workers.celery_app import celery_app; print(celery_app.send_task('cleanroom.ping').get(timeout=30))"
+    run_docker compose exec -T worker python -c "
+import time, sys
+from app.core.task_runtime.dispatch import dispatch_task_by_name
+from app.core.orchestrator.task_result_store import default_task_result_store
+handle = dispatch_task_by_name('cleanroom.ping')
+store = default_task_result_store()
+deadline = time.monotonic() + 30
+state = 'PENDING'
+while time.monotonic() < deadline:
+    record = store.get(handle.id)
+    if record is not None and record.state in ('SUCCESS', 'FAILURE'):
+        state = record.state
+        break
+    time.sleep(0.5)
+print(state)
+sys.exit(0 if state == 'SUCCESS' else 1)
+"
 }
 
 assert_repo_root

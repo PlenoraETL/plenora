@@ -54,7 +54,7 @@ def test_non_docker_installer_exposes_minimal_clean_install_config():
     required_inputs = (
         "PLENORA_INSTALL_DATABASE_URL",
         "PLENORA_INSTALL_DB_SCHEMA",
-        "PLENORA_INSTALL_REDIS_URL",
+        "PLENORA_INSTALL_BROKER_URL",
         "PLENORA_INSTALL_STORAGE_POLICY",
         "PLENORA_INSTALL_BACKUP_BUCKET",
         "PLENORA_INSTALL_ENVIRONMENT",
@@ -68,7 +68,7 @@ def test_non_docker_installer_exposes_minimal_clean_install_config():
 
     defaults = (
         ('prompt DB_SCHEMA', '"plenora"'),
-        ('prompt REDIS_URL', '"redis://localhost:6379/0"'),
+        ('prompt BROKER_URL', '"amqp://guest:guest@localhost:5672"'),
         ('prompt STORAGE_POLICY', '"db"'),
         ('prompt BACKUP_BUCKET', '"plenora-backup-placeholder"'),
         ('prompt BACKEND_PORT', '"5004"'),
@@ -85,8 +85,7 @@ def test_non_docker_installer_exposes_minimal_clean_install_config():
     managed_keys = (
         "DATABASE_URL",
         "DB_SCHEMA",
-        "CELERY_BROKER_URL",
-        "CELERY_RESULT_BACKEND",
+        "DRAMATIQ_BROKER_URL",
         "PLENORA_ENCRYPTION_KEY",
         "JWT_SECRET_KEY",
         "STORAGE_POLICY",
@@ -111,7 +110,7 @@ def test_docker_validate_models_empty_db_boot_readiness_and_smoke_order():
     _assert_ordered(
         text,
         (
-            'run_step 3a "up postgres + redis"',
+            'run_step 3a "up postgres + rabbitmq"',
             'run_step 3b "up backend (gates on HEALTHCHECK)"',
             'run_step 4a "GET /health"',
             'run_step 4b "GET /ready"',
@@ -154,7 +153,9 @@ def test_smoke_commands_are_bounded_and_include_full_api_acceptance():
         "curl -fsS --max-time 5",
         "curl -fsS --max-time 10",
         "PLENORA_SMOKE_RUN_PING",
-        "ar.get(timeout=30)",
+        # Plenora 2.0 Fase 5: la smoke cleanroom.ping polla task_results su PG
+        # con una deadline limitata (era ar.get(timeout=30) di Celery/Redis).
+        "time.monotonic() + 30",
     ):
         assert marker in install_text, (
             f"scripts/install.sh --smoke must keep bounded marker "

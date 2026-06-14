@@ -77,7 +77,7 @@ def test_validate_script_runs_eight_canonical_commands(validate_script_text: str
     expected_commands = (
         "docker compose config",
         "docker compose build backend frontend",
-        "docker compose up -d postgres redis",
+        "docker compose up -d postgres rabbitmq",
         "docker compose up -d --wait backend",
         "http://127.0.0.1:5004/health",
         "http://127.0.0.1:5004/ready",
@@ -218,7 +218,7 @@ def test_validate_script_has_read_only_schema_postcondition_after_ready(
     assert ready_pos < schema_call_pos < worker_pos, (
         "The schema postcondition must run after `/ready` and before "
         "worker/beat startup, so backend bootstrap/migrations are proven "
-        "before the Celery path is exercised."
+        "before the Dramatiq path is exercised."
     )
 
 

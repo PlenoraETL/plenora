@@ -25,13 +25,14 @@
 # Smoke env vars (read-only consumers, only honoured with --smoke):
 #   PLENORA_SMOKE_BACKEND_URL  e.g. http://127.0.0.1:5004
 #                              when set: curl /health and /ready
-#   PLENORA_SMOKE_RUN_PING     1 to send `cleanroom.ping` via Celery
-#                              (requires reachable broker and venv)
+#   PLENORA_SMOKE_RUN_PING     1 to dispatch `cleanroom.ping` via Dramatiq
+#                              (requires reachable RabbitMQ broker, a running
+#                              worker, and venv)
 #
 # Env vars (consumed when present, prompted otherwise):
 #   PLENORA_INSTALL_DATABASE_URL    Postgres DSN
 #   PLENORA_INSTALL_DB_SCHEMA       default: plenora
-#   PLENORA_INSTALL_REDIS_URL       Redis URL (broker = result backend)
+#   PLENORA_INSTALL_BROKER_URL      RabbitMQ broker URL (DRAMATIQ_BROKER_URL)
 #   PLENORA_INSTALL_STORAGE_POLICY  db | hybrid | object_storage
 #   PLENORA_INSTALL_BACKUP_BUCKET   non-empty even on STORAGE_POLICY=db
 #   PLENORA_INSTALL_OBJECT_STORAGE_BUCKET  required if STORAGE_POLICY != db
@@ -182,7 +183,6 @@ INSTALLER_REQUIRED_COMMANDS=(
     node
     npm
     psql
-    redis-cli
     curl
     git
 )
@@ -226,7 +226,8 @@ step_validate_prereqs() {
     require_cmd node "node LTS - see docs/ops/install-non-docker.md section1" || missing=1
     require_cmd npm "shipped with node" || missing=1
     require_cmd psql "postgresql-client-17 (apt PGDG repo on Ubuntu 24.04)" || missing=1
-    require_cmd redis-cli "apt install redis-server" || missing=1
+    # Il broker (RabbitMQ) non richiede un client host: la reachability si
+    # prova via TCP con python3.11 in step_probe_services (no redis-cli).
     require_cmd curl "apt install curl" || missing=1
     require_cmd git "apt install git" || missing=1
 
@@ -310,7 +311,7 @@ PYEOF
         if "$venv_python" - <<'PYEOF' 2>&1
 import importlib
 import sys
-modules = ("psycopg2", "redis", "celery", "fastapi", "uvicorn",
+modules = ("psycopg2", "dramatiq", "fastapi", "uvicorn",
            "pyarrow", "pandas", "pyogrio", "geopandas", "shapely")
 failed = []
 for m in modules:
@@ -402,8 +403,8 @@ step_smoke_app_import() {
     # Importing app.config is sufficient to exercise the Settings
     # singleton, .env load, and ADR-0021 boundary without booting
     # FastAPI or touching the DB.
-    if (cd "$BACKEND_DIR" && "$venv_python" -c "import app.config; import workers.celery_app"); then
-        log_ok "app.config and workers.celery_app import cleanly."
+    if (cd "$BACKEND_DIR" && "$venv_python" -c "import app.config; import workers.dramatiq_app"); then
+        log_ok "app.config and workers.dramatiq_app import cleanly."
         return 0
     fi
     log_err "Backend import failed - check venv installation and backend/.env."
@@ -438,7 +439,7 @@ step_smoke_health_ready() {
 }
 
 step_smoke_cleanroom_ping() {
-    log_step "Smoke 4 - Celery cleanroom.ping round-trip"
+    log_step "Smoke 4 - Dramatiq cleanroom.ping round-trip"
     if [[ "${PLENORA_SMOKE_RUN_PING:-0}" != "1" ]]; then
         log_info "PLENORA_SMOKE_RUN_PING not set to 1 - skipping cleanroom.ping (requires foreground worker)."
         return 2
@@ -448,23 +449,39 @@ step_smoke_cleanroom_ping() {
         log_warn "backend/venv not found - skipping cleanroom.ping."
         return 2
     fi
+    # Plenora 2.0: dispatch via Dramatiq su RabbitMQ; l'esito lo scrive il
+    # worker su PostgreSQL (task_result_store). Niente AsyncResult/Redis: si
+    # polla lo stato con una deadline LIMITATA (time.monotonic()+30), mai un
+    # loop illimitato.
     local out
     if ! out="$(cd "$BACKEND_DIR" && "$venv_python" - <<'PYEOF' 2>&1
-from workers.celery_app import celery_app
-ar = celery_app.send_task("cleanroom.ping")
-print(ar.get(timeout=30))
+import time
+from app.core.task_runtime.dispatch import dispatch_task_by_name
+from app.core.orchestrator.task_result_store import default_task_result_store
+
+handle = dispatch_task_by_name("cleanroom.ping")
+store = default_task_result_store()
+deadline = time.monotonic() + 30
+state = "PENDING"
+while time.monotonic() < deadline:
+    record = store.get(handle.id)
+    if record is not None and record.state in ("SUCCESS", "FAILURE"):
+        state = record.state
+        break
+    time.sleep(0.5)
+print(state)
 PYEOF
     )"; then
         log_err "cleanroom.ping round-trip failed: ${out}"
-        log_info "Hint: kombu.exceptions.OperationalError -> broker URL wrong or Redis down."
-        log_info "Hint: celery.exceptions.TimeoutError  -> worker not consuming tasks (check the foreground worker terminal)."
+        log_info "Hint: pika.exceptions.AMQPConnectionError -> broker URL wrong or RabbitMQ down."
+        log_info "Hint: state stuck PENDING -> worker not consuming tasks (check the foreground worker terminal)."
         return 1
     fi
-    if [[ "${out: -4}" == "pong" ]]; then
-        log_ok "cleanroom.ping returned 'pong' (worker dispatch + broker round-trip OK)."
+    if [[ "${out: -7}" == "SUCCESS" ]]; then
+        log_ok "cleanroom.ping reached SUCCESS on PostgreSQL (dispatch + broker + result-store OK)."
         return 0
     fi
-    log_err "cleanroom.ping returned unexpected output: ${out}"
+    log_err "cleanroom.ping did not reach SUCCESS within the deadline: ${out}"
     return 1
 }
 
@@ -534,7 +551,7 @@ step_gather_config() {
     # already-set inputs.
     DATABASE_URL="${PLENORA_INSTALL_DATABASE_URL:-}"
     DB_SCHEMA="${PLENORA_INSTALL_DB_SCHEMA:-}"
-    REDIS_URL="${PLENORA_INSTALL_REDIS_URL:-}"
+    BROKER_URL="${PLENORA_INSTALL_BROKER_URL:-}"
     STORAGE_POLICY="${PLENORA_INSTALL_STORAGE_POLICY:-}"
     BACKUP_BUCKET="${PLENORA_INSTALL_BACKUP_BUCKET:-}"
     OBJECT_STORAGE_BUCKET="${PLENORA_INSTALL_OBJECT_STORAGE_BUCKET:-}"
@@ -555,9 +572,9 @@ step_gather_config() {
         "DB_SCHEMA" \
         "plenora"
 
-    prompt REDIS_URL \
-        "Redis URL (CELERY_BROKER_URL = CELERY_RESULT_BACKEND)" \
-        "redis://localhost:6379/0"
+    prompt BROKER_URL \
+        "RabbitMQ broker URL (DRAMATIQ_BROKER_URL)" \
+        "amqp://guest:guest@localhost:5672"
 
     prompt STORAGE_POLICY \
         "STORAGE_POLICY (db | hybrid | object_storage)" \
@@ -598,10 +615,10 @@ step_gather_config() {
     log_ok "Configuration gathered."
 }
 
-# Step 3 - Connectivity probes (psql + redis-cli)
+# Step 3 - Connectivity probes (psql + RabbitMQ broker TCP)
 
 step_probe_services() {
-    log_step "Step 3 - Probe DB and Redis connectivity"
+    log_step "Step 3 - Probe DB and RabbitMQ broker connectivity"
 
     log_info "psql SELECT 1 against ${DATABASE_URL%%@*}@..."
     if (( DRY_RUN )); then
@@ -614,14 +631,31 @@ step_probe_services() {
         fi
     fi
 
-    log_info "redis-cli PING against ${REDIS_URL}"
+    log_info "AMQP TCP probe against ${BROKER_URL}"
     if (( DRY_RUN )); then
-        log_info "[dry-run] skipping redis-cli probe"
+        log_info "[dry-run] skipping broker probe"
     else
-        if [[ "$(redis-cli -u "$REDIS_URL" PING 2>&1 || true)" == "PONG" ]]; then
-            log_ok "Redis reachable, PING returned PONG."
+        # Il broker e' RabbitMQ (Dramatiq): niente redis-cli, niente client
+        # host dedicato. Un connect TCP bounded all'host:porta del broker URL
+        # via python3.11 (gia' richiesto) e' sufficiente a fail-fast.
+        if python3.11 - "$BROKER_URL" <<'PYEOF'
+import socket
+import sys
+from urllib.parse import urlparse
+
+parsed = urlparse(sys.argv[1])
+host = parsed.hostname or "localhost"
+port = parsed.port or 5672
+try:
+    with socket.create_connection((host, port), timeout=5):
+        sys.exit(0)
+except OSError:
+    sys.exit(1)
+PYEOF
+        then
+            log_ok "RabbitMQ broker reachable (TCP) at ${BROKER_URL}."
         else
-            die "redis-cli PING failed against ${REDIS_URL}. Check the URL and that the server is running."
+            die "Broker TCP probe failed against ${BROKER_URL}. Check the URL and that RabbitMQ is running."
         fi
     fi
 }
@@ -642,8 +676,7 @@ INSTALLER_MANAGED_KEYS=(
     ENVIRONMENT
     DATABASE_URL
     DB_SCHEMA
-    CELERY_BROKER_URL
-    CELERY_RESULT_BACKEND
+    DRAMATIQ_BROKER_URL
     PLENORA_ENCRYPTION_KEY
     JWT_SECRET_KEY
     STORAGE_POLICY
@@ -724,8 +757,7 @@ build_managed_values() {
     MANAGED_VALUES[ENVIRONMENT]="$ENVIRONMENT"
     MANAGED_VALUES[DATABASE_URL]="$DATABASE_URL"
     MANAGED_VALUES[DB_SCHEMA]="$DB_SCHEMA"
-    MANAGED_VALUES[CELERY_BROKER_URL]="$REDIS_URL"
-    MANAGED_VALUES[CELERY_RESULT_BACKEND]="$REDIS_URL"
+    MANAGED_VALUES[DRAMATIQ_BROKER_URL]="$BROKER_URL"
     MANAGED_VALUES[PLENORA_ENCRYPTION_KEY]="$PLENORA_ENCRYPTION_KEY"
     MANAGED_VALUES[JWT_SECRET_KEY]="$JWT_SECRET_KEY"
     MANAGED_VALUES[STORAGE_POLICY]="$STORAGE_POLICY"
@@ -762,9 +794,8 @@ ENVIRONMENT=${ENVIRONMENT}
 DATABASE_URL=${DATABASE_URL}
 DB_SCHEMA=${DB_SCHEMA}
 
-# Redis / Celery (single canonical URL)
-CELERY_BROKER_URL=${REDIS_URL}
-CELERY_RESULT_BACKEND=${REDIS_URL}
+# Task broker (RabbitMQ / Dramatiq)
+DRAMATIQ_BROKER_URL=${BROKER_URL}
 
 # Secrets (do NOT rotate post-encryption - see docs/ops/install-non-docker.md section6)
 PLENORA_ENCRYPTION_KEY=${PLENORA_ENCRYPTION_KEY}

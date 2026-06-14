@@ -70,7 +70,7 @@ for the expected output shapes.
 
 Non-destructive: this script never removes containers, volumes,
 or .env.docker. The teardown step is `docker compose stop`, which
-preserves all named volumes (postgres-data, redis-data, data-dir).
+preserves all named volumes (postgres-data, rabbitmq-data, data-dir).
 
 Pre-flight: run from the repo root with .env.docker already
 populated (see Step 2 of install-docker.md). The script exits 2
@@ -281,9 +281,9 @@ run_ready_step() {
     echo "Readiness is the dependency gate. Inspect the failed check details above, then paste:" >&2
     echo "  - docker compose ps" >&2
     echo "  - docker compose logs --tail 200 backend" >&2
-    echo "  - docker compose logs --tail 200 postgres redis" >&2
+    echo "  - docker compose logs --tail 200 postgres rabbitmq" >&2
     echo "  - docker compose exec -T backend python -c \"from app.observability.health import gather_readiness; print(gather_readiness().body)\"" >&2
-    echo "Common blockers: Postgres/Redis connectivity, pending or failed migrations, object storage policy/config, bootstrap not complete." >&2
+    echo "Common blockers: Postgres/RabbitMQ connectivity, pending or failed migrations, object storage policy/config, bootstrap not complete." >&2
     exit 1
 }
 
@@ -412,8 +412,8 @@ run_step 1 "config validation (no apply, no env dump)" -- \
 run_step 2 "build backend + frontend images" -- \
     docker compose build backend frontend
 
-run_step 3a "up postgres + redis" -- \
-    docker compose up -d postgres redis
+run_step 3a "up postgres + rabbitmq" -- \
+    docker compose up -d postgres rabbitmq
 
 run_step 3b "up backend (gates on HEALTHCHECK)" -- \
     docker compose up -d --wait backend
@@ -444,8 +444,23 @@ run_step 6b "GET frontend SPA shell" -- \
     curl -fsS http://127.0.0.1:3000/
 
 run_step 7 "cleanroom.ping round-trip" -- \
-    docker compose exec -T worker python -c \
-        "from workers.celery_app import celery_app; print(celery_app.send_task('cleanroom.ping').get(timeout=30))"
+    docker compose exec -T worker python -c "
+import time, sys
+from app.core.task_runtime.dispatch import dispatch_task_by_name
+from app.core.orchestrator.task_result_store import default_task_result_store
+handle = dispatch_task_by_name('cleanroom.ping')
+store = default_task_result_store()
+deadline = time.monotonic() + 30
+state = 'PENDING'
+while time.monotonic() < deadline:
+    record = store.get(handle.id)
+    if record is not None and record.state in ('SUCCESS', 'FAILURE'):
+        state = record.state
+        break
+    time.sleep(0.5)
+print(state)
+sys.exit(0 if state == 'SUCCESS' else 1)
+"
 
 run_step 8 "memory caps visibility" -- \
     docker compose exec -T backend python -c "

@@ -18,7 +18,7 @@
 #     target is Linux (Ubuntu 24.04 reference);
 #   - operators on Windows hosts use WSL2 and run the bash installer
 #     inside the WSL distribution. WSL exposes `/mnt/c/...` so the
-#     repo can stay on the Windows filesystem if needed (but PG/Redis
+#     repo can stay on the Windows filesystem if needed (but PG/RabbitMQ
 #     should run inside the WSL distro for performance).
 #
 # To proceed today on Windows:
@@ -56,7 +56,7 @@ Write-Host '  3. cd /path/to/plenora-etl' -ForegroundColor White
 Write-Host '  4. bash scripts/install.sh' -ForegroundColor White
 Write-Host ''
 Write-Host 'WSL2 prerequisites inside the Ubuntu distro:' -ForegroundColor Cyan
-Write-Host '  - Python 3.11, Node LTS, postgresql-client, redis-server, redis-cli, curl, git' -ForegroundColor White
+Write-Host '  - Python 3.11, Node LTS, postgresql-client, rabbitmq-server, curl, git' -ForegroundColor White
 Write-Host '  - See docs/ops/install-non-docker.md section1 for the apt one-liner.' -ForegroundColor White
 Write-Host ''
 Write-Host 'Native Windows is NOT supported as a deployment target:' -ForegroundColor Cyan

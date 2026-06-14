@@ -48,7 +48,6 @@ _EXPECTED_REQUIRED_COMMANDS = (
     "node",
     "npm",
     "psql",
-    "redis-cli",
     "curl",
     "git",
 )
@@ -444,22 +443,27 @@ def test_smoke_health_ready_curl_uses_max_time(install_sh_text: str):
         )
 
 
-# 13. cleanroom.ping uses bounded AsyncResult.get(timeout=)
+# 13. cleanroom.ping dispatch + bounded PostgreSQL poll (Dramatiq)
 
 
-def test_smoke_cleanroom_ping_uses_bounded_get(install_sh_text: str):
+def test_smoke_cleanroom_ping_uses_bounded_poll(install_sh_text: str):
     smoke_block = _slice_smoke_block(install_sh_text)
     assert "cleanroom.ping" in smoke_block, (
         "Smoke section must invoke `cleanroom.ping` (the canonical "
         "deterministic primitive shared with the cleanroom CI lane)."
     )
-    assert "ar.get(timeout=30)" in smoke_block \
-           or "AsyncResult.get(timeout=30)" in smoke_block, (
-        "cleanroom.ping smoke must use the bounded "
-        "`AsyncResult.get(timeout=30)` primitive (NOT a sleep loop, "
-        "NOT an unbounded .get()). Same pattern as the cleanroom CI "
-        "workflow; locked by section 5.3 of "
-        "docs/ops/install-marco-dry-run.md."
+    # Plenora 2.0 Fase 5: il broker e' RabbitMQ (Dramatiq) e l'esito e' su
+    # PostgreSQL (task_result_store), non piu' AsyncResult/Redis. Il dispatch
+    # va per nome e lo stato si polla con una DEADLINE limitata (mai un loop
+    # illimitato).
+    assert "dispatch_task_by_name" in smoke_block, (
+        "cleanroom.ping smoke must dispatch by-name via "
+        "`dispatch_task_by_name` (Dramatiq), non piu' celery_app.send_task."
+    )
+    assert "time.monotonic() + 30" in smoke_block, (
+        "cleanroom.ping smoke must poll the result-store with a BOUNDED "
+        "deadline (`time.monotonic() + 30`), non un loop illimitato. "
+        "Locked by section 5.3 of docs/ops/install-marco-dry-run.md."
     )
 
 
@@ -470,7 +474,7 @@ def test_smoke_branch_only_reads_smoke_env_vars(install_sh_text: str):
     smoke_block = _slice_smoke_block(install_sh_text)
     forbidden_install_vars = (
         "PLENORA_INSTALL_DATABASE_URL",
-        "PLENORA_INSTALL_REDIS_URL",
+        "PLENORA_INSTALL_BROKER_URL",
         "PLENORA_INSTALL_STORAGE_POLICY",
     )
     for var_name in forbidden_install_vars:

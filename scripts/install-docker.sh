@@ -84,7 +84,7 @@ Options:
       Do not prompt for or create a superadmin user.
 
   --worker-replicas N
-      Number of Celery worker containers to run. Default: 1.
+      Number of worker containers to run. Default: 1.
 
 Environment overrides:
   PLENORA_BOOTSTRAP_ADMIN_USERNAME / PLENORA_BOOTSTRAP_ADMIN_PASSWORD
@@ -94,7 +94,7 @@ Environment overrides:
       Group id used by the bootstrap superadmin. Default: root.
 
   PLENORA_WORKER_REPLICAS
-      Number of Celery worker containers to run. Default: 1.
+      Number of worker containers to run. Default: 1.
 
   PLENORA_DOCKER_NETWORK
       External Docker bridge network used by the compose stack.
@@ -436,20 +436,20 @@ collect_runtime_choices() {
     log_step "Runtime choices"
 
     if [ "$DRY_RUN" -eq 1 ]; then
-        log "+ choose Celery worker replicas (default: 1)"
+        log "+ choose worker replicas (default: 1)"
         [ -n "$PLENORA_WORKER_REPLICAS" ] || PLENORA_WORKER_REPLICAS=1
         validate_positive_int "PLENORA_WORKER_REPLICAS" "$PLENORA_WORKER_REPLICAS"
-        log "Celery worker replicas: ${PLENORA_WORKER_REPLICAS}"
+        log "worker replicas: ${PLENORA_WORKER_REPLICAS}"
         return 0
     fi
 
     if [ -z "$PLENORA_WORKER_REPLICAS" ] && [ -t 0 ]; then
-        printf "Celery worker replicas [1]: "
+        printf "worker replicas [1]: "
         read -r PLENORA_WORKER_REPLICAS
     fi
     PLENORA_WORKER_REPLICAS="${PLENORA_WORKER_REPLICAS:-1}"
     validate_positive_int "PLENORA_WORKER_REPLICAS" "$PLENORA_WORKER_REPLICAS"
-    log "Celery worker replicas: ${PLENORA_WORKER_REPLICAS}"
+    log "worker replicas: ${PLENORA_WORKER_REPLICAS}"
 }
 
 collect_admin_bootstrap_credentials() {
@@ -594,7 +594,23 @@ smoke_checks() {
     log ""
     run curl -fsS http://127.0.0.1:3000/
     log ""
-    run_docker compose exec -T worker python -c "from workers.celery_app import celery_app; print(celery_app.send_task('cleanroom.ping').get(timeout=30))"
+    run_docker compose exec -T worker python -c "
+import time, sys
+from app.core.task_runtime.dispatch import dispatch_task_by_name
+from app.core.orchestrator.task_result_store import default_task_result_store
+handle = dispatch_task_by_name('cleanroom.ping')
+store = default_task_result_store()
+deadline = time.monotonic() + 30
+state = 'PENDING'
+while time.monotonic() < deadline:
+    record = store.get(handle.id)
+    if record is not None and record.state in ('SUCCESS', 'FAILURE'):
+        state = record.state
+        break
+    time.sleep(0.5)
+print(state)
+sys.exit(0 if state == 'SUCCESS' else 1)
+"
 }
 
 assert_repo_root
@@ -625,7 +641,7 @@ fi
 log_step "Build and start single-server stack"
 run_docker compose config --quiet
 run_docker compose build backend frontend
-run_docker compose up -d postgres redis
+run_docker compose up -d postgres rabbitmq
 run_docker compose up -d --wait backend
 seed_bootstrap_superadmin
 run_docker compose up -d --scale worker="$PLENORA_WORKER_REPLICAS" worker beat
