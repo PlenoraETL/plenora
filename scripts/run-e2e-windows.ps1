@@ -69,9 +69,11 @@ Step "DB di test dedicato: $TestDb"
 $psql = 'C:\Program Files\PostgreSQL\17\bin\psql.exe'
 if (-not (Test-Path $psql)) { Fail "psql non trovato: $psql" }
 $env:PGPASSWORD = 'plenora'
-# [string] cast: quando il DB non esiste la query non produce righe e
-# l'output e' $null -> un .Trim() diretto esploderebbe (visto sul campo).
-$exists = ([string](& $psql -U plenora -h 127.0.0.1 -d plenora -tAc "SELECT 1 FROM pg_database WHERE datname='$TestDb'")).Trim()
+# Quando il DB non esiste la query non produce righe e l'output e'
+# $null. In PS 5.1 ANCHE ([string]$null).Trim() esplode (riprodotto):
+# l'unica forma sicura e' l'interpolazione "$(...)", che produce sempre
+# un'istanza stringa.
+$exists = "$(& $psql -U plenora -h 127.0.0.1 -d plenora -tAc "SELECT 1 FROM pg_database WHERE datname='$TestDb'")".Trim()
 if ($exists -ne '1') {
     & $psql -U plenora -h 127.0.0.1 -d plenora -c "CREATE DATABASE $TestDb;" | Out-Null
     Ok "$TestDb creato"
