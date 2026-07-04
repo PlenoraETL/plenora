@@ -265,7 +265,13 @@ Ordine: W1 → W5, una fetta per volta, VM come banco di collaudo.
   CORS_ORIGINS con entrambe le forme (l'installer ora lo scrive);
   navigare l'origin esatto della build. Dettaglio: `npm ci && npm run build`; caddy.exe come
   servizio: statici da dist/ + reverse proxy /api -> 127.0.0.1:5004.
-- **W5 — Production + collaudo da zero**: ENVIRONMENT=production coi
+- **W5 — Production + collaudo da zero** ✅ COLLAUDATA (2026-07-04):
+  ENVIRONMENT=production coi gates attivi su single-box dichiarato
+  (PLENORA_SINGLE_NODE), /ready 8/8 + smoke + login browser in
+  production, sopravvivenza al riavvio della VM. install.ps1 promosso
+  da stub a forwarder; runbook ufficiale docs/ops/install-windows.md.
+  **PIANO W1..W5 COMPLETO: Plenora si installa e gira nativo su
+  Windows come insieme di servizi.** Dettaglio originale: ENVIRONMENT=production coi
   gates; su snapshot VM pulita: install one-shot → login superadmin da
   browser → progetto → esecuzione → schedule → riavvio VM (tutto
   riparte) → stop beat (lock rilasciato). Runbook
