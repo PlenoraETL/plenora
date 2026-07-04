@@ -1,6 +1,5 @@
 """Data source configuration service and runtime file operations."""
 
-import os
 import uuid
 from io import BytesIO
 from pathlib import Path
@@ -282,15 +281,17 @@ class DataSourceService:
         far fallire il parser su file molto grandi — l'utente deve
         sapere che la preview ha un limite di scope.
         """
+        # BE-CONFIG-001F: default tipato in Settings.DEFAULTS, override
+        # env opzionale; valori non validi o <=0 ricadono sul default.
+        _default_max = 50 * 1024 * 1024
         try:
             max_bytes = int(
-                os.environ.get("PLENORA_DATASOURCE_SCHEMA_MAX_BYTES")
-                or 50 * 1024 * 1024
+                settings.get("PLENORA_DATASOURCE_SCHEMA_MAX_BYTES", _default_max)
             )
             if max_bytes <= 0:
-                max_bytes = 50 * 1024 * 1024
-        except ValueError:
-            max_bytes = 50 * 1024 * 1024
+                max_bytes = _default_max
+        except (TypeError, ValueError):
+            max_bytes = _default_max
 
         buf = bytearray()
         for chunk in self.iter_read_chunks(ds_id, path):

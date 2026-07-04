@@ -9,10 +9,10 @@ from urllib.parse import quote, urlparse
 import uuid
 
 import io
-import os
 from datetime import datetime
 from typing import Optional
 
+from app.config import settings
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -29,19 +29,18 @@ from app.core.datasources.interface import (
 
 
 def _env_float(name: str, default: float) -> float:
-    """Legge una env var float-tipizzata con fallback su `default`.
+    """Timeout float da Settings (BE-CONFIG-001F: default tipato in
+    DEFAULTS, override env opzionale); fallback su `default` per valori
+    non-float o <=0.
 
     P1 (2026-05-26): introdotta per esporre timeout SharePoint
     (connect/read separati) come knob env invece di hardcode `300`.
     """
-    raw = os.environ.get(name)
-    if raw is None or raw.strip() == "":
-        return default
     try:
-        v = float(raw)
-        return v if v > 0 else default
-    except ValueError:
+        v = float(settings.get(name, default))
+    except (TypeError, ValueError):
         return default
+    return v if v > 0 else default
 
 
 def _sanitize_sharepoint_error(e: Exception) -> str:

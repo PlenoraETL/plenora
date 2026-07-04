@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import os as _os
 from pathlib import Path
 from typing import Optional
 
+from app.config import settings
 from app.core.auth.visibility import is_resource_visible
 from app.core.datasources.service import datasource_service
 from app.core.dataframes.frame_io import (
@@ -17,16 +17,14 @@ from app.utils.logger import get_logger
 
 
 def _env_int_safe(name: str, *, default: int) -> int:
-    """Helper env-driven cap: legge env var, fallback su default su
-    valori non-int o <=0. F1-1 (2026-05-26): cap source datasource."""
-    val = _os.environ.get(name)
-    if not val:
-        return default
+    """Cap int da Settings (BE-CONFIG-001F: default tipato in DEFAULTS,
+    override env opzionale); fallback su default per valori non-int o <=0.
+    F1-1 (2026-05-26): cap source datasource."""
     try:
-        n = int(val)
-        return n if n > 0 else default
-    except ValueError:
+        n = int(settings.get(name, default))
+    except (TypeError, ValueError):
         return default
+    return n if n > 0 else default
 
 
 __all__ = ["load_datasource_nodes"]

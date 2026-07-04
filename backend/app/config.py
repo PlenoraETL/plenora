@@ -129,6 +129,23 @@ class Settings:
         # Default 10 MB. Sotto questa soglia il blob va in DB BYTEA
         # sopra dovrebbe andare object storage (separate path
         "TICKET_ATTACHMENT_MAX_BYTES": 10 * 1024 * 1024,
+        # Cap/timeout datasource & geo (BE-CONFIG-001F, 2026-07-04):
+        # migrati qui dai lettori os.environ.get sparsi nei moduli.
+        # Regola del config boundary: segreti SOLO in .env, tutto il
+        # resto ha default tipato qui con override env opzionale.
+        # Cap bytes sorgente datasource caricata come file source
+        # (peak RAM del loader manipola).
+        "PLENORA_DATASOURCE_SOURCE_MAX_BYTES": 2 * 1024 * 1024 * 1024,
+        # Cap bytes letti per lo schema/preview di un file datasource.
+        "PLENORA_DATASOURCE_SCHEMA_MAX_BYTES": 50 * 1024 * 1024,
+        # Cap pre-flight operazioni spatial pesanti (MANIPOLA-8).
+        "PLENORA_GEO_VORONOI_MAX_POINTS": 100_000,
+        "PLENORA_GEO_CLEAN_TOPOLOGY_MAX_GEOMS": 50_000,
+        # Timeout SharePoint separati connect/read (P1 2026-05-26).
+        "PLENORA_SHAREPOINT_CONNECT_TIMEOUT_SEC": 15.0,
+        "PLENORA_SHAREPOINT_STREAM_TIMEOUT_SEC": 300.0,
+        # TEST_ONLY: heartbeat cleanroom del beat (opt-in e2e).
+        "PLENORA_CLEANROOM_BEAT_PING": False,
         # Soglie display dashboard admin per la dimensione dello schema
         # PG. Float in GB. Puro display, non influenza retention
         "DB_SCHEMA_WARN_GB": 1.0,

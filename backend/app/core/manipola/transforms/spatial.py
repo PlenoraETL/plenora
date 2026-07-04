@@ -4,9 +4,9 @@ Operazioni di trasformazione geospaziali per MANIPOLA.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
-import os
 from typing import List, Optional
 
+from app.config import settings
 from app.utils.logger import get_logger
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
@@ -81,16 +81,13 @@ DataFrame = FrameLike
 
 
 def _env_int(name: str, default: int) -> int:
-    """Helper env-driven cap: legge env var, fallback su default su
-    valori non-int o <=0."""
-    val = os.environ.get(name)
-    if not val:
-        return default
+    """Cap int da Settings (BE-CONFIG-001F: default tipato in DEFAULTS,
+    override env opzionale); fallback su default per valori non-int o <=0."""
     try:
-        n = int(val)
-        return n if n > 0 else default
-    except ValueError:
+        n = int(settings.get(name, default))
+    except (TypeError, ValueError):
         return default
+    return n if n > 0 else default
 
 
 # MANIPOLA-8 (2026-05-26): cap pre-flight per operazioni spatial pesanti.

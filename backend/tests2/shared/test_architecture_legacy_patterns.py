@@ -167,15 +167,19 @@ ALLOWLIST_GETENV_COUNTS: Dict[str, int] = {
 }
 
 
-def _get_os_getenv_call_names(tree: ast.AST) -> Tuple[Set[str], Set[str]]:
-    """Return accepted module aliases and direct function aliases.
+def _get_os_getenv_call_names(
+    tree: ast.AST,
+) -> Tuple[Set[str], Set[str], Set[str]]:
+    """Return accepted module aliases and direct function/attr aliases.
 
-    This deliberately catches bypasses such as `import os as _os` and
-    `from os import getenv as env`. New raw env reads must still be
-    classified in `ALLOWLIST_GETENV_COUNTS`.
+    This deliberately catches bypasses such as `import os as _os`,
+    `from os import getenv as env` and `from os import environ`. New raw
+    env reads must still be classified in `ALLOWLIST_GETENV_COUNTS` /
+    `ALLOWLIST_ENVIRON_GET_COUNTS`.
     """
     os_module_names = {"os"}
     getenv_names: Set[str] = set()
+    environ_names: Set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
@@ -185,7 +189,9 @@ def _get_os_getenv_call_names(tree: ast.AST) -> Tuple[Set[str], Set[str]]:
             for alias in node.names:
                 if alias.name == "getenv":
                     getenv_names.add(alias.asname or alias.name)
-    return os_module_names, getenv_names
+                elif alias.name == "environ":
+                    environ_names.add(alias.asname or alias.name)
+    return os_module_names, getenv_names, environ_names
 
 
 def _is_os_getenv(
@@ -206,13 +212,34 @@ def _is_os_getenv(
     return isinstance(f.value, ast.Name) and f.value.id in os_module_names
 
 
+def _is_os_environ_get(
+    node: ast.AST,
+    *,
+    os_module_names: Set[str],
+    environ_names: Set[str],
+) -> bool:
+    """Match `os.environ.get(...)` (incluso `import os as _os`) e
+    `environ.get(...)` da `from os import environ`."""
+    if not isinstance(node, ast.Call):
+        return False
+    f = node.func
+    if not isinstance(f, ast.Attribute) or f.attr != "get":
+        return False
+    base = f.value
+    if isinstance(base, ast.Name):
+        return base.id in environ_names
+    if isinstance(base, ast.Attribute) and base.attr == "environ":
+        return isinstance(base.value, ast.Name) and base.value.id in os_module_names
+    return False
+
+
 def _scan_getenv() -> Dict[str, int]:
     counts: Dict[str, int] = {}
     for p in _iter_py(_APP_ROOT):
         tree = _parse(p)
         if tree is None:
             continue
-        os_module_names, getenv_names = _get_os_getenv_call_names(tree)
+        os_module_names, getenv_names, _ = _get_os_getenv_call_names(tree)
         n = sum(
             1
             for node in ast.walk(tree)
@@ -220,6 +247,27 @@ def _scan_getenv() -> Dict[str, int]:
                 node,
                 os_module_names=os_module_names,
                 getenv_names=getenv_names,
+            )
+        )
+        if n:
+            counts[_rel(p)] = n
+    return counts
+
+
+def _scan_environ_get() -> Dict[str, int]:
+    counts: Dict[str, int] = {}
+    for p in _iter_py(_APP_ROOT):
+        tree = _parse(p)
+        if tree is None:
+            continue
+        os_module_names, _, environ_names = _get_os_getenv_call_names(tree)
+        n = sum(
+            1
+            for node in ast.walk(tree)
+            if _is_os_environ_get(
+                node,
+                os_module_names=os_module_names,
+                environ_names=environ_names,
             )
         )
         if n:
@@ -245,6 +293,47 @@ def test_os_getenv_only_at_boundary_modules():
         "Action: se il sito e' boundary legittimo, aggiorna l'allowlist "
         "con razionale; altrimenti migra a `Settings.DEFAULTS` + "
         "`settings.get(...)` (ADR-0021)."
+    )
+
+
+# Rule 2b — os.environ.get allowed only at boundary modules
+#
+# BE-CONFIG-001F (2026-07-04): `os.environ.get` era la scappatoia con
+# cui 5 lettori config sparsi bypassavano il lock su `os.getenv`
+# (datasource caps, geo caps, timeout SharePoint, flag cleanroom del
+# beat) — migrati a Settings.DEFAULTS + settings.get. Regola del config
+# boundary: segreti SOLO in .env, tutto il resto ha default tipato in
+# DEFAULTS.
+#
+# Razionale allowlist:
+# - `app/shared/security/tls_policy.py`: gate di sicurezza; legge
+#   ENVIRONMENT/ENV + PLENORA_ALLOW_TLS_BYPASS raw per non dipendere
+#   da Settings nel path TLS (3 read).
+# - `app/core/security/outbound_url.py`: gate SSRF; stesse ragioni
+#   (ENVIRONMENT/ENV + PLENORA_ALLOW_LOOPBACK_OUTBOUND, 6 read).
+# NB: `preview_caps`/`resource_caps` usano `os.environ` come mapping
+# iniettabile (attribute reference, non `.get` call) — non contati qui,
+# governati dai rispettivi centralization contract.
+ALLOWLIST_ENVIRON_GET_COUNTS: Dict[str, int] = {
+    "app/shared/security/tls_policy.py": 3,
+    "app/core/security/outbound_url.py": 6,
+}
+
+
+def test_os_environ_get_only_at_boundary_modules():
+    """Lock: `os.environ.get` puo' essere usato SOLO nei moduli boundary
+    elencati in `ALLOWLIST_ENVIRON_GET_COUNTS`. Stessa disciplina di
+    `os.getenv` (Rule 2): drift in piu' -> classificazione esplicita,
+    drift in meno -> aggiorna il lock."""
+    found = _scan_environ_get()
+    assert found == ALLOWLIST_ENVIRON_GET_COUNTS, (
+        "Drift `os.environ.get` rilevato in `backend/app/`.\n"
+        f"Atteso: {ALLOWLIST_ENVIRON_GET_COUNTS}\n"
+        f"Trovato: {found}\n"
+        "Action: se il sito e' boundary legittimo, aggiorna l'allowlist "
+        "con razionale; altrimenti migra a `Settings.DEFAULTS` + "
+        "`settings.get(...)` (regola config boundary: segreti solo in "
+        ".env, il resto in DEFAULTS)."
     )
 
 

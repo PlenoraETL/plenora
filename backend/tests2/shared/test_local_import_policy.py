@@ -51,7 +51,9 @@ _SCAN_ROOTS = (
 # import locale di celery_app) -> +1. Locale per non aggiungere edge al grafo.
 # 289 -> 286 (2026-07-04, post-Fase-5): le rimozioni Celery/Redis di F5.4-F5.7
 # hanno liberato 3 unita' mai reclamate; tetto riallineato al conteggio reale.
-MAX_LOCAL_IMPORTS = 286
+# 286 -> 285 (2026-07-04, BE-CONFIG-001F): beat_schedule_config._env_flag
+# rimosso (leggeva os.environ con import os locale) -> settings.get.
+MAX_LOCAL_IMPORTS = 285
 MAX_LATE_MODULE_IMPORTS = 8
 
 

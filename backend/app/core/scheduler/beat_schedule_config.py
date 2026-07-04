@@ -12,12 +12,6 @@ from typing import Any, Mapping
 from app.core.scheduler.cron_schedule import IntervalSchedule
 
 
-def _env_flag(name: str) -> bool:
-    import os
-
-    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
-
-
 def beat_schedule_config() -> Mapping[str, Mapping[str, Any]]:
     """Entry config-based del beat (interval-based), celery-free.
 
@@ -38,7 +32,8 @@ def beat_schedule_config() -> Mapping[str, Mapping[str, Any]]:
     }
 
     # Heartbeat cleanroom (opt-in di test, sub-minuto -> interval).
-    if _env_flag("PLENORA_CLEANROOM_BEAT_PING"):
+    # BE-CONFIG-001F: flag TEST_ONLY con default False in DEFAULTS.
+    if bool(settings.get("PLENORA_CLEANROOM_BEAT_PING", False)):
         config["cleanroom-beat-ping"] = {
             "task": "cleanroom.beat_ping",
             "schedule": IntervalSchedule(5.0),
