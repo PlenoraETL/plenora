@@ -258,7 +258,12 @@ Ordine: W1 → W5, una fetta per volta, VM come banco di collaudo.
   release ufficiale come servizio `plenora-minio` (credenziali root
   random), bucket runtime+backup via boto3, MINIO_*/OBJECT_STORAGE_*
   nel .env, /ready object_storage verde.
-- **W4 — Frontend (Caddy)**: `npm ci && npm run build`; caddy.exe come
+- **W4 — Frontend (Caddy)** ✅ COLLAUDATA (2026-07-04): login dal
+  browser della VM col superadmin, catena FE→Caddy→API→stack completa.
+  2 lezioni dal campo: VITE_API_URL e' assoluto nel bundle → se si
+  naviga con hostname diverso (localhost vs 127.0.0.1) serve
+  CORS_ORIGINS con entrambe le forme (l'installer ora lo scrive);
+  navigare l'origin esatto della build. Dettaglio: `npm ci && npm run build`; caddy.exe come
   servizio: statici da dist/ + reverse proxy /api -> 127.0.0.1:5004.
 - **W5 — Production + collaudo da zero**: ENVIRONMENT=production coi
   gates; su snapshot VM pulita: install one-shot → login superadmin da
