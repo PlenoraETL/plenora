@@ -1,27 +1,28 @@
 ﻿# =============================================================================
-# Plenora-ETL — Installer nativo Windows (PROTOTIPO DI SCOPING)
+# Plenora-ETL — Installer nativo Windows (single-box)
 # =============================================================================
 #
-# Stato: PROTOTIPO (2026-07-04). Nato per la sessione di scoping su VM
-# Windows Server 2025 (vedi docs/ops/scoping-windows-native.md). Automatizza
-# il bring-up completo: PostgreSQL + Erlang/RabbitMQ + Miniforge/conda
-# (GDAL nativo) + pip deps + .env + smoke round-trip sul worker Dramatiq.
+# Collaudato end-to-end su Windows Server 2025 (2026-07-04): stack
+# completo PostgreSQL + Erlang/RabbitMQ + Miniforge/conda (GDAL nativo)
+# + worker Dramatiq + beat APScheduler + MinIO opzionale + frontend via
+# Caddy, tutto come SERVIZI Windows. Runbook: docs/ops/install-windows.md;
+# sessione di scoping e lezioni: docs/ops/scoping-windows-native.md.
+# `scripts/install.ps1` inoltra qui.
 #
-# NON e' ancora l'installer di produzione: niente servizi Windows (i
-# processi si avviano in finestre separate), niente hardening ACL,
-# password di default da scoping. `scripts/install.ps1` resta lo stub
-# finche' questo prototipo non si laurea con la validazione sulla VM.
+# Uso tipico (PowerShell da AMMINISTRATORE, dalla root del repo):
+#   1) powershell -ExecutionPolicy Bypass -File scripts\install-native.ps1
+#      (pacchetti piattaforma via winget; poi NUOVA shell admin)
+#   2) powershell -ExecutionPolicy Bypass -File scripts\install-native.ps1 `
+#          -SkipWinget -InstallServices -InstallMinio -InstallFrontend -Production
 #
-# Uso (PowerShell da AMMINISTRATORE, dalla root del repo):
-#   powershell -ExecutionPolicy Bypass -File scripts\install-native.ps1
+# Parametri principali: -WorkerProcesses/-WorkerThreads,
+# -AdminUsername/-AdminPassword (-SkipAdminBootstrap), -StoragePolicy,
+# -FrontendPort, -PgSuperPassword. Non-interattivo via env
+# PLENORA_BOOTSTRAP_ADMIN_* / PLENORA_INSTALL_WORKER_*.
 #
-# Parametri utili:
-#   -SkipWinget      salta le install winget (pacchetti gia' presenti)
-#   -PgSuperPassword password del superuser postgres (default: chiede)
-#   -StartProcesses  a fine setup apre 3 finestre: backend, worker, beat
-#
-# Ogni step stampa [STEP]/[OK]/[FAIL] e si ferma al primo errore: in
-# scoping un fallimento e' un DATO, non un incidente — riportare l'output.
+# Ogni step stampa [STEP]/[OK]/[FAIL] e si ferma al primo errore.
+# NB encoding: file UTF-8 CON BOM (PS 5.1 senza BOM legge ANSI e le
+# em-dash nelle stringhe diventano virgolette smart che le CHIUDONO).
 # =============================================================================
 
 [CmdletBinding()]
@@ -49,7 +50,10 @@ param(
     # proxy /api verso il backend).
     [switch]$InstallFrontend,
     [int]$FrontendPort = 80,
-    [string]$FrontendApiUrl = ''
+    [string]$FrontendApiUrl = '',
+    # W5 — switch a ENVIRONMENT=production coi gates attivi (richiede
+    # object storage configurato: -InstallMinio o AWS nel .env).
+    [switch]$Production
 )
 
 $ErrorActionPreference = 'Stop'
@@ -613,17 +617,16 @@ Ok 'smoke_native.py scritto'
 # -----------------------------------------------------------------------------
 Write-Host ''
 Write-Host '=============================================================' -ForegroundColor Green
-Write-Host ' Setup completato. Prossimi passi (3 finestre + smoke):' -ForegroundColor Green
+Write-Host ' Setup base completato.' -ForegroundColor Green
 Write-Host '=============================================================' -ForegroundColor Green
-Write-Host '  (comandi da eseguire in un "Miniforge Prompt", o via -StartProcesses)'
-Write-Host "  1) backend:  conda activate $CondaEnv && cd /d $BackendDir && python -m uvicorn app.main:app --host 127.0.0.1 --port 5004"
-Write-Host "  2) worker:   conda activate $CondaEnv && cd /d $BackendDir && python -m dramatiq workers.dramatiq_app --processes 1 --threads 4"
-Write-Host "  3) beat:     conda activate $CondaEnv && cd /d $BackendDir && python -m workers.beat"
-Write-Host "  4) smoke:    conda activate $CondaEnv && cd /d $BackendDir && python smoke_native.py   (atteso: SMOKE: SUCCESS)"
+Write-Host '  Servizi:    -InstallServices (backend/worker/beat come servizi Windows)'
+Write-Host '  MinIO:      -InstallMinio (object storage locale + bucket)'
+Write-Host '  Frontend:   -InstallFrontend (build Vite + Caddy su porta 80)'
+Write-Host '  Production: -Production (gates attivi, richiede object storage)'
 Write-Host ''
 Write-Host '  Checkpoint: curl.exe -s http://127.0.0.1:5004/ready' -ForegroundColor Cyan
-Write-Host '  RISCHIO n.1: la finestra 2 (worker CLI dramatiq su Windows).' -ForegroundColor Yellow
-Write-Host '  Se esplode: riportare il traceback TESTUALE — piano B nel runbook §8.' -ForegroundColor Yellow
+Write-Host "  Smoke:      conda run -n $CondaEnv --cwd $BackendDir python smoke_native.py" -ForegroundColor Cyan
+Write-Host '  Dev mode:   -StartProcesses apre backend/worker/beat in 3 finestre cmd' -ForegroundColor Cyan
 
 if ($StartProcesses) {
     Step 'Avvio processi in finestre separate (-StartProcesses)'
@@ -831,4 +834,54 @@ print(f"Superadmin ready: username={username} role=superadmin group_id={group_id
         Fail "login di verifica fallito: $($_.Exception.Message)"
     }
     $AdminPassword = ''
+}
+
+# =============================================================================
+# W5 — Production: gates attivi su deployment single-box dichiarato
+# =============================================================================
+if ($Production) {
+    Step 'W5: switch a ENVIRONMENT=production (single-node gates)'
+
+    # I production gates esigono object storage condiviso: senza MinIO
+    # (o AWS gia' configurato nel .env) il boot fallirebbe fail-fast.
+    $envC = Get-Content $envFile -Raw
+    if ($envC -notmatch 'OBJECT_STORAGE_ENABLED=true') {
+        Fail 'production richiede object storage: rilancia con -InstallMinio (o configura provider AWS nel .env) prima di -Production'
+    }
+
+    # NB dotenv in production: config_env_loader ignora il .env quando il
+    # PROCESS env dichiara production — i servizi WinSW non hanno
+    # ENVIRONMENT nel process env, quindi il .env viene letto e a quel
+    # punto ENVIRONMENT=production attiva i gates. Hardening futuro:
+    # secrets via env di sistema del servizio.
+    Set-EnvValue -File $envFile -Key 'ENVIRONMENT' -Value 'production'
+    # Single-box dichiarato: sopprime SOLO il gate anti-loopback sul
+    # broker (RabbitMQ e' su questa macchina per design).
+    Set-EnvValue -File $envFile -Key 'PLENORA_SINGLE_NODE' -Value 'true'
+    # Rate limiting distribuito (su PostgreSQL) fail-closed, come i
+    # gates richiedono.
+    Set-EnvValue -File $envFile -Key 'LOGIN_RL_DISTRIBUTED_REQUIRED' -Value 'true'
+    Set-EnvValue -File $envFile -Key 'ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_ENABLED' -Value 'true'
+    Set-EnvValue -File $envFile -Key 'ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_REQUIRED' -Value 'true'
+
+    # Restart di tutti i servizi app per il nuovo ambiente.
+    foreach ($id in 'plenora-backend', 'plenora-worker', 'plenora-beat') {
+        $s = Get-Service $id -ErrorAction SilentlyContinue
+        if ($s -and $s.Status -eq 'Running') { Restart-Service $id }
+    }
+
+    # Il boot in production e' fail-fast sui gates: se /ready non torna,
+    # un gate ha bloccato — vedere plenora-backend.err.log.
+    $ready = $false
+    foreach ($i in 1..30) {
+        try {
+            $resp = Invoke-RestMethod 'http://127.0.0.1:5004/ready' -TimeoutSec 3
+            if ($resp.status -eq 'ready') { $ready = $true; break }
+        } catch { }
+        Start-Sleep -Seconds 3
+    }
+    if (-not $ready) {
+        Fail 'backend non ready in production entro 90s: controllare C:\plenora-services\plenora-backend\plenora-backend.err.log (probabile gate fallito)'
+    }
+    Ok 'W5 completata: ENVIRONMENT=production, gates attivi, /ready verde'
 }

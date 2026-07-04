@@ -40,6 +40,7 @@ def _clean_gate_env(monkeypatch):
         "LOGIN_RL_REDIS_REQUIRED",
         "ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED",
         "ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED",
+        "PLENORA_SINGLE_NODE",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -135,6 +136,32 @@ def test_loopback_broker_urls_are_rejected(monkeypatch, url):
         "DRAMATIQ_BROKER_URL" in error and "loopback/localhost" in error
         for error in errors
     )
+
+
+def test_single_node_declared_allows_loopback_broker(monkeypatch):
+    """PLENORA_SINGLE_NODE=true (installer nativo Windows, single-box
+    dichiarato): il gate anti-loopback sul broker viene soppresso —
+    RabbitMQ sulla stessa macchina e' la topologia del prodotto."""
+    _set_cluster_safe_env(monkeypatch)
+    monkeypatch.setenv("DRAMATIQ_BROKER_URL", "amqp://plenora:pw@127.0.0.1:5672")
+    monkeypatch.setenv("PLENORA_SINGLE_NODE", "true")
+
+    assert _errors_for_current_env() == []
+
+
+def test_single_node_does_not_disable_other_gates(monkeypatch):
+    """Il flag single-node sopprime SOLO il check loopback: gli altri
+    gates (object storage, rate-limiter distribuiti) restano attivi."""
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("PLENORA_SINGLE_NODE", "true")
+    monkeypatch.setenv("DRAMATIQ_BROKER_URL", "amqp://plenora:pw@127.0.0.1:5672")
+
+    errors = _errors_for_current_env()
+    joined = "\n".join(errors)
+
+    assert "loopback" not in joined
+    assert "OBJECT_STORAGE_BUCKET" in joined
+    assert "LOGIN_RL_DISTRIBUTED_REQUIRED" in joined
 
 
 def test_loopback_broker_url_error_does_not_expose_credentials(monkeypatch):

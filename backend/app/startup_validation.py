@@ -100,15 +100,24 @@ def validate_production_gates(settings: Any, errors: list[str]) -> None:
     if not production_gates_required(settings):
         return
 
-    for key in _BROKER_URL_KEYS:
-        value = settings.get(key)
-        if value and _url_uses_loopback_host(value):
-            errors.append(
-                f"{key} ({_safe_url_host_label(value)}) usa un host "
-                "loopback/localhost. "
-                "In production/staging o cluster usa un broker RabbitMQ "
-                "condiviso raggiungibile da tutti i pod/processi."
-            )
+    # PLENORA_SINGLE_NODE=true (installer nativo Windows, deployment
+    # single-box dichiarato): il broker sulla stessa macchina e'
+    # legittimo -> si sopprime SOLO il gate anti-loopback. Gli altri
+    # gates restano: un single-node in production deve comunque avere
+    # object storage e rate-limiter distribuiti (su PG) attivi.
+    single_node = _as_bool(settings.get("PLENORA_SINGLE_NODE", False))
+    if not single_node:
+        for key in _BROKER_URL_KEYS:
+            value = settings.get(key)
+            if value and _url_uses_loopback_host(value):
+                errors.append(
+                    f"{key} ({_safe_url_host_label(value)}) usa un host "
+                    "loopback/localhost. "
+                    "In production/staging o cluster usa un broker RabbitMQ "
+                    "condiviso raggiungibile da tutti i pod/processi "
+                    "(oppure dichiara PLENORA_SINGLE_NODE=true per un "
+                    "deployment single-box)."
+                )
 
     object_storage_enabled = _as_bool(settings.get("OBJECT_STORAGE_ENABLED", True))
     if not object_storage_enabled:

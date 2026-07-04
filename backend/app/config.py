@@ -67,6 +67,12 @@ class Settings:
         "PLENORA_CLUSTER_MODE":         False,
         "MULTI_POD_MODE":               False,
         "PLENORA_MULTI_POD":            False,
+        # Deployment single-box DICHIARATO (installer nativo Windows):
+        # in production sopprime SOLO il gate anti-loopback sul broker
+        # (RabbitMQ e' legittimamente sulla stessa macchina). Tutti gli
+        # altri production gates (object storage, rate-limiter
+        # distribuiti, beat fail-closed) restano attivi.
+        "PLENORA_SINGLE_NODE":          False,
         # Timeout/hard-limit dei task worker. Rinominati da CELERY_*
         # (alias env legacy accettati).
         "TASK_TIMEOUT":          3600,
