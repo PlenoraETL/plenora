@@ -520,6 +520,15 @@ if ($InstallFrontend) {
     if (-not (Test-Path (Join-Path $distDir 'index.html'))) { Fail 'build FE senza dist\index.html' }
     Ok 'Frontend buildato (dist/)'
 
+    # CORS: il bundle chiama l'API su $FrontendApiUrl (assoluto). Se
+    # l'operatore naviga con un hostname diverso (localhost vs 127.0.0.1)
+    # il browser vede cross-origin e senza le origin nel backend il login
+    # muore con "Impossibile contattare il server" (visto sul campo).
+    $portSuffix = if ($FrontendPort -eq 80) { '' } else { ":$FrontendPort" }
+    Set-EnvValue -File $envFile -Key 'CORS_ORIGINS' -Value "http://127.0.0.1$portSuffix,http://localhost$portSuffix"
+    $backendSvc = Get-Service plenora-backend -ErrorAction SilentlyContinue
+    if ($backendSvc -and $backendSvc.Status -eq 'Running') { Restart-Service plenora-backend }
+
     # Caddy: singolo exe dal download service ufficiale.
     $caddySvcDir = Join-Path $ServicesRoot 'plenora-caddy'
     New-Item -ItemType Directory -Force $caddySvcDir | Out-Null
