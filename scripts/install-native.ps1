@@ -44,7 +44,12 @@ param(
     # crea i bucket runtime/backup e configura CLOUD_PROVIDER=minio.
     [switch]$InstallMinio,
     [ValidateSet('db', 'hybrid', 'object_storage')]
-    [string]$StoragePolicy = 'hybrid'
+    [string]$StoragePolicy = 'hybrid',
+    # W4 — frontend: build Vite + Caddy come servizio (statici + reverse
+    # proxy /api verso il backend).
+    [switch]$InstallFrontend,
+    [int]$FrontendPort = 80,
+    [string]$FrontendApiUrl = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -481,6 +486,95 @@ for bucket in ("plenora-runtime", "plenora-backups"):
                Where-Object Status -eq 'Running'
     foreach ($s in $running) { Restart-Service $s.Name }
     Ok "MinIO configurato: bucket plenora-runtime/plenora-backups, provider=minio, policy=$StoragePolicy"
+}
+
+# =============================================================================
+# W4 — Frontend: build Vite + Caddy come servizio Windows
+# =============================================================================
+if ($InstallFrontend) {
+    if (-not $FrontendApiUrl) {
+        $FrontendApiUrl = if ($FrontendPort -eq 80) { 'http://127.0.0.1' } else { "http://127.0.0.1:$FrontendPort" }
+    }
+    Step "W4: frontend (build Vite, API=$FrontendApiUrl) + Caddy su porta $FrontendPort"
+
+    $FrontendDir = Join-Path $RepoRoot 'frontend'
+    if (-not (Test-Path (Join-Path $FrontendDir 'package.json'))) { Fail "frontend non trovato in $FrontendDir" }
+
+    # Build: VITE_API_URL e' cablata nel bundle a build-time (config.js).
+    # Con Caddy davanti, l'API e' sullo STESSO origin del FE: il valore
+    # giusto e' l'origin di Caddy (le chiamate /api vengono proxate).
+    Push-Location $FrontendDir
+    try {
+        $env:VITE_API_URL = $FrontendApiUrl
+        Write-Host '  npm ci...'
+        & npm ci
+        if ($LASTEXITCODE -ne 0) { Fail "npm ci exit=$LASTEXITCODE" }
+        Write-Host '  npm run build...'
+        & npm run build
+        if ($LASTEXITCODE -ne 0) { Fail "npm run build exit=$LASTEXITCODE" }
+    } finally {
+        Pop-Location
+        Remove-Item Env:\VITE_API_URL -ErrorAction SilentlyContinue
+    }
+    $distDir = Join-Path $FrontendDir 'dist'
+    if (-not (Test-Path (Join-Path $distDir 'index.html'))) { Fail 'build FE senza dist\index.html' }
+    Ok 'Frontend buildato (dist/)'
+
+    # Caddy: singolo exe dal download service ufficiale.
+    $caddySvcDir = Join-Path $ServicesRoot 'plenora-caddy'
+    New-Item -ItemType Directory -Force $caddySvcDir | Out-Null
+    $caddyExe = Join-Path $caddySvcDir 'caddy.exe'
+    if (-not (Test-Path $caddyExe)) {
+        Write-Host '  Scarico caddy.exe (download service ufficiale)...'
+        Invoke-WebRequest 'https://caddyserver.com/api/download?os=windows&arch=amd64' -OutFile $caddyExe
+    }
+
+    # Caddyfile: statici SPA (fallback index.html) + reverse proxy delle
+    # rotte backend. /health e /ready proxati per comodita' operatore.
+    $caddyfile = Join-Path $caddySvcDir 'Caddyfile'
+    @"
+:$FrontendPort {
+    encode gzip
+    @backend path /api/* /health /ready
+    handle @backend {
+        reverse_proxy 127.0.0.1:5004
+    }
+    handle {
+        root * $distDir
+        try_files {path} /index.html
+        file_server
+    }
+}
+"@ | Set-Content -Encoding ascii $caddyfile
+
+    $caddyXml = @"
+<service>
+  <id>plenora-caddy</id>
+  <name>Plenora Frontend (Caddy)</name>
+  <description>Statici frontend Plenora + reverse proxy API (porta $FrontendPort)</description>
+  <executable>$caddyExe</executable>
+  <arguments>run --config $caddyfile --adapter caddyfile</arguments>
+  <workingdirectory>$caddySvcDir</workingdirectory>
+  <startmode>Automatic</startmode>
+  <onfailure action="restart" delay="5 sec"/>
+  <stoptimeout>15 sec</stoptimeout>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>4</keepFiles>
+  </log>
+</service>
+"@
+    Install-WinSWService -Id 'plenora-caddy' -Xml $caddyXml
+    Start-Service plenora-caddy
+
+    $up = $false
+    foreach ($i in 1..10) {
+        $tnc = Test-NetConnection 127.0.0.1 -Port $FrontendPort -WarningAction SilentlyContinue
+        if ($tnc.TcpTestSucceeded) { $up = $true; break }
+        Start-Sleep -Seconds 2
+    }
+    if (-not $up) { Fail "Caddy non in ascolto su $FrontendPort (vedi C:\plenora-services\plenora-caddy\*.log)" }
+    Ok "W4 completata: frontend su $FrontendApiUrl (login col superadmin dal browser della VM)"
 }
 
 # -----------------------------------------------------------------------------
