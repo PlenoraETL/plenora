@@ -544,6 +544,13 @@ if (-not $SkipAdminBootstrap) {
     # aggiorna password/ruolo/gruppo), eseguito nell'env conda locale.
     $seedScript = @'
 import os, uuid
+
+# Bare-metal: DATABASE_URL vive nel .env — l'installer docker esegue lo
+# stesso snippet DENTRO il container (env dal compose), qui va caricato
+# il dotenv prima di toccare il DB (stessa lezione del worker dramatiq).
+from app.config_env_loader import load_backend_dotenv
+load_backend_dotenv()
+
 from app.core.auth import db
 from app.core.security.password_hashing import hash_password
 
