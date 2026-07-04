@@ -33,7 +33,13 @@ param(
     # come servizi con avvio automatico al boot.
     [switch]$InstallServices,
     [int]$WorkerProcesses = 1,
-    [int]$WorkerThreads = 4
+    [int]$WorkerThreads = 4,
+    # W2 — bootstrap superadmin (parita' con install-docker.sh).
+    # Fallback env: PLENORA_BOOTSTRAP_ADMIN_USERNAME / _PASSWORD / _GROUP_ID.
+    [string]$AdminUsername = '',
+    [string]$AdminPassword = '',
+    [string]$AdminGroupId = '',
+    [switch]$SkipAdminBootstrap
 )
 
 $ErrorActionPreference = 'Stop'
@@ -41,6 +47,19 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 $BackendDir = Join-Path $RepoRoot 'backend'
 $DataDir = 'C:\plenora-data'
 $CondaEnv = 'plenora'
+
+# Fallback non-interattivi (stesse env dell'installer docker/linux).
+if (-not $AdminUsername) { $AdminUsername = $env:PLENORA_BOOTSTRAP_ADMIN_USERNAME }
+if (-not $AdminPassword) { $AdminPassword = $env:PLENORA_BOOTSTRAP_ADMIN_PASSWORD }
+if (-not $AdminGroupId) {
+    $AdminGroupId = if ($env:PLENORA_BOOTSTRAP_ADMIN_GROUP_ID) { $env:PLENORA_BOOTSTRAP_ADMIN_GROUP_ID } else { 'root' }
+}
+if (-not $PSBoundParameters.ContainsKey('WorkerProcesses') -and $env:PLENORA_INSTALL_WORKER_PROCESSES) {
+    $WorkerProcesses = [int]$env:PLENORA_INSTALL_WORKER_PROCESSES
+}
+if (-not $PSBoundParameters.ContainsKey('WorkerThreads') -and $env:PLENORA_INSTALL_WORKER_THREADS) {
+    $WorkerThreads = [int]$env:PLENORA_INSTALL_WORKER_THREADS
+}
 
 function Step($msg) { Write-Host "`n[STEP] $msg" -ForegroundColor Cyan }
 function Ok($msg)   { Write-Host "[OK]   $msg" -ForegroundColor Green }
@@ -50,6 +69,39 @@ function New-RandomSecret {
     # 48 char alfanumerici via RNG crittografico .NET
     $chars = ([char[]]([char]'a'..[char]'z') + [char[]]([char]'A'..[char]'Z') + [char[]]([char]'0'..[char]'9'))
     -join (1..48 | ForEach-Object { $chars | Get-Random })
+}
+
+function Set-EnvValue {
+    # Aggiorna (o appende) KEY=VALUE nel .env, preservando il resto.
+    param([string]$File, [string]$Key, [string]$Value)
+    $lines = @(Get-Content $File)
+    $found = $false
+    $lines = $lines | ForEach-Object {
+        if ($_ -match "^$([regex]::Escape($Key))=") { $found = $true; "$Key=$Value" } else { $_ }
+    }
+    if (-not $found) { $lines += "$Key=$Value" }
+    Set-Content -Encoding ascii $File $lines
+}
+
+function Invoke-RabbitCtl {
+    # rabbitmqctl con sync del cookie Erlang: il servizio gira come
+    # LocalSystem (cookie in systemprofile), la shell admin ha il suo —
+    # senza allineamento ogni comando fallisce con "incompatible cookie".
+    param([string[]]$CtlArgs)
+    $ctl = Get-ChildItem 'C:\Program Files\RabbitMQ Server\rabbitmq_server-*\sbin\rabbitmqctl.bat' |
+           Sort-Object FullName -Descending | Select-Object -First 1
+    if (-not $ctl) { Fail 'rabbitmqctl.bat non trovato' }
+    $sysCookie = 'C:\Windows\System32\config\systemprofile\.erlang.cookie'
+    $usrCookie = Join-Path $env:USERPROFILE '.erlang.cookie'
+    if ((Test-Path $sysCookie) -and (
+            -not (Test-Path $usrCookie) -or
+            ((Get-Content $sysCookie -Raw) -ne (Get-Content $usrCookie -Raw)))) {
+        Copy-Item $sysCookie $usrCookie -Force
+        # il cookie utente deve essere scrivibile solo dal proprietario? Su
+        # Windows rabbitmqctl non enforc-a i permessi: basta il contenuto.
+    }
+    & $ctl.FullName @CtlArgs
+    return $LASTEXITCODE
 }
 
 # -----------------------------------------------------------------------------
@@ -227,6 +279,43 @@ CLOUD_PROVIDER=none
 New-Item -ItemType Directory -Force $DataDir | Out-Null
 
 # -----------------------------------------------------------------------------
+Step 'W2: hardening broker — utente RabbitMQ dedicato (via guest)'
+# -----------------------------------------------------------------------------
+$envContent = Get-Content $envFile -Raw
+if ($envContent -match 'DRAMATIQ_BROKER_URL=amqp://plenora:') {
+    Ok 'Broker gia'' su utente dedicato plenora: skip'
+} else {
+    $rabbitPw = New-RandomSecret
+    # add_user fallisce se esiste: in quel caso change_password (idempotenza
+    # dopo un run interrotto in cui la password non era arrivata al .env).
+    $rc = Invoke-RabbitCtl @('add_user', 'plenora', $rabbitPw)
+    if ($rc -ne 0) {
+        $rc = Invoke-RabbitCtl @('change_password', 'plenora', $rabbitPw)
+        if ($rc -ne 0) { Fail "rabbitmqctl add_user/change_password exit=$rc" }
+    }
+    $rc = Invoke-RabbitCtl @('set_permissions', '-p', '/', 'plenora', '.*', '.*', '.*')
+    if ($rc -ne 0) { Fail "rabbitmqctl set_permissions exit=$rc" }
+    Set-EnvValue -File $envFile -Key 'DRAMATIQ_BROKER_URL' -Value "amqp://plenora:$rabbitPw@127.0.0.1:5672"
+    # Via l'utente guest (best effort: su nodo fresco esiste, dopo no).
+    Invoke-RabbitCtl @('delete_user', 'guest') | Out-Null
+    # I servizi gia' registrati leggono il .env al boot: restart per
+    # fargli vedere le credenziali nuove.
+    $running = Get-Service plenora-* -ErrorAction SilentlyContinue | Where-Object Status -eq 'Running'
+    foreach ($s in $running) { Restart-Service $s.Name }
+    Ok 'Utente broker plenora creato (password random nel .env), guest rimosso'
+}
+
+# -----------------------------------------------------------------------------
+Step 'W2: ACL sul .env (solo Administrators + SYSTEM)'
+# -----------------------------------------------------------------------------
+# SID e non nomi: su Windows localizzato "Administrators" si chiama
+# "Amministratori" — icacls coi nomi inglesi fallirebbe.
+# S-1-5-32-544 = builtin Administrators, S-1-5-18 = LocalSystem.
+icacls $envFile /inheritance:r /grant:r '*S-1-5-32-544:F' '*S-1-5-18:F' | Out-Null
+if ($LASTEXITCODE -ne 0) { Fail "icacls sul .env exit=$LASTEXITCODE" }
+Ok 'ACL ristretta sul .env (Administrators + SYSTEM)'
+
+# -----------------------------------------------------------------------------
 Step 'Smoke script (backend/smoke_native.py)'
 # -----------------------------------------------------------------------------
 @'
@@ -400,4 +489,107 @@ $dependXml
     Get-Service plenora-* | Format-Table Status, Name, DisplayName -AutoSize
     Write-Host '  Log dei servizi: C:\plenora-services\<id>\<id>.out.log / .err.log' -ForegroundColor Cyan
     Ok 'W1 completata: 3 servizi Windows attivi (avvio automatico al boot)'
+}
+
+# =============================================================================
+# W2 — Bootstrap superadmin (parita' con install-docker.sh)
+# =============================================================================
+if (-not $SkipAdminBootstrap) {
+    Step 'W2: bootstrap superadmin'
+
+    # Prompt interattivo se le credenziali non arrivano da parametri/env.
+    if (-not $AdminUsername) {
+        $AdminUsername = Read-Host 'Superadmin username [admin]'
+        if (-not $AdminUsername) { $AdminUsername = 'admin' }
+    }
+    while (-not $AdminPassword) {
+        $p1 = Read-Host 'Superadmin password (min 12 caratteri)' -AsSecureString
+        $p2 = Read-Host 'Conferma superadmin password' -AsSecureString
+        $s1 = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($p1))
+        $s2 = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($p2))
+        if ($s1 -ne $s2) { Write-Host '  Le password non coincidono: riprova.' -ForegroundColor Yellow; continue }
+        if ($s1.Length -lt 12) { Write-Host '  Minimo 12 caratteri: riprova.' -ForegroundColor Yellow; continue }
+        $AdminPassword = $s1
+    }
+    if ($AdminPassword.Length -lt 12) { Fail 'superadmin password: minimo 12 caratteri' }
+
+    # Il seed richiede il backend healthy (migrations applicate): poll
+    # /ready fino a 90s. Con -InstallServices il backend e' un servizio
+    # gia' avviato; senza, deve essere su per altra via.
+    $ready = $false
+    foreach ($i in 1..30) {
+        try {
+            $resp = Invoke-RestMethod 'http://127.0.0.1:5004/ready' -TimeoutSec 3
+            if ($resp.status -eq 'ready') { $ready = $true; break }
+        } catch { }
+        Start-Sleep -Seconds 3
+    }
+    if (-not $ready) {
+        Fail 'backend non ready entro 90s: avviare i servizi (-InstallServices) e rilanciare il bootstrap admin'
+    }
+
+    # Stesso script python dell'installer docker (idempotente: crea o
+    # aggiorna password/ruolo/gruppo), eseguito nell'env conda locale.
+    $seedScript = @'
+import os, uuid
+from app.core.auth import db
+from app.core.security.password_hashing import hash_password
+
+username = os.environ["PLENORA_BOOTSTRAP_ADMIN_USERNAME"]
+password = os.environ["PLENORA_BOOTSTRAP_ADMIN_PASSWORD"]
+group_id = os.environ.get("PLENORA_BOOTSTRAP_ADMIN_GROUP_ID") or "root"
+
+if not username.strip():
+    raise SystemExit("bootstrap superadmin username is empty")
+if len(password) < 12:
+    raise SystemExit("bootstrap superadmin password must be at least 12 characters")
+if not group_id.strip():
+    raise SystemExit("bootstrap superadmin group id is empty")
+
+if db.get_group(group_id) is None:
+    db.create_group(group_id, "Root", "Bootstrap superadmin group")
+
+existing = db.get_user_by_username(username)
+if existing is None:
+    db.create_user(
+        user_id=f"bootstrap-{uuid.uuid4()}",
+        username=username,
+        password_hash=hash_password(password),
+        group_id=group_id,
+        role="superadmin",
+        email="admin@example.local",
+    )
+else:
+    db.update_user(existing.id, is_active=True, role="superadmin", group_id=group_id)
+    db.update_user_password(existing.id, hash_password(password))
+
+print(f"Superadmin ready: username={username} role=superadmin group_id={group_id}")
+'@
+    $seedFile = Join-Path $BackendDir '_bootstrap_admin.py'
+    $seedScript | Set-Content -Encoding ascii $seedFile
+    $env:PLENORA_BOOTSTRAP_ADMIN_USERNAME = $AdminUsername
+    $env:PLENORA_BOOTSTRAP_ADMIN_PASSWORD = $AdminPassword
+    $env:PLENORA_BOOTSTRAP_ADMIN_GROUP_ID = $AdminGroupId
+    try {
+        & $condaBat run -n $CondaEnv --cwd $BackendDir python _bootstrap_admin.py
+        if ($LASTEXITCODE -ne 0) { Fail "seed superadmin exit=$LASTEXITCODE" }
+    } finally {
+        Remove-Item $seedFile -ErrorAction SilentlyContinue
+        Remove-Item Env:\PLENORA_BOOTSTRAP_ADMIN_PASSWORD -ErrorAction SilentlyContinue
+    }
+
+    # Verifica: login reale via API (fallisce loud se il seed non ha preso).
+    try {
+        $login = Invoke-RestMethod -Method Post 'http://127.0.0.1:5004/api/auth/login' `
+            -ContentType 'application/json' `
+            -Body (@{ username = $AdminUsername; password = $AdminPassword } | ConvertTo-Json)
+        if ($login.access_token) {
+            Ok "Superadmin '$AdminUsername' verificato: login API ok"
+        } else {
+            Write-Host '  Login ok ma senza access_token nella risposta: verificare a mano dal FE.' -ForegroundColor Yellow
+        }
+    } catch {
+        Fail "login di verifica fallito: $($_.Exception.Message)"
+    }
+    $AdminPassword = ''
 }
