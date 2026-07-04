@@ -1,95 +1,287 @@
-# Install Plenora — Windows nativo (single-box)
+# Manuale di installazione — Plenora su Windows nativo (single-box)
 
-Runbook ufficiale dell'installazione nativa su Windows (Server 2022/2025
-o Windows 11 Pro). Niente Docker, niente WSL: PostgreSQL, RabbitMQ,
-backend, worker Dramatiq, beat, MinIO opzionale e frontend girano come
-**servizi Windows** con avvio automatico al boot.
+Manuale completo dell'installazione nativa su Windows (Server 2022/2025
+o Windows 11 Pro): **niente Docker, niente WSL**. PostgreSQL, RabbitMQ,
+backend FastAPI, worker Dramatiq, beat APScheduler, MinIO opzionale e
+frontend (Caddy) girano come **servizi Windows** con avvio automatico.
 
-Collaudato end-to-end su Windows Server 2025 (2026-07-04): vedi la
-sessione di scoping in [scoping-windows-native.md](scoping-windows-native.md)
-con la tabella esiti e le lezioni incapsulate nello script.
+Collaudato end-to-end su Windows Server 2025 (2026-07-04). La sessione
+di scoping con tutte le lezioni raccolte sul campo e' in
+[scoping-windows-native.md](scoping-windows-native.md).
 
-## Prerequisiti
+## Indice
 
-- Windows con `winget` disponibile (Server 2025 e Windows 11 lo includono)
-- PowerShell **da Amministratore**
-- Rete verso: winget sources, GitHub releases (RabbitMQ/WinSW),
-  dl.min.io (se MinIO), caddyserver.com (se frontend), conda-forge, PyPI, npm
+1. [Architettura installata](#1-architettura-installata)
+2. [Prerequisiti](#2-prerequisiti)
+3. [Installazione passo-passo](#3-installazione-passo-passo)
+4. [Parametri dell'installer](#4-parametri-dellinstaller)
+5. [Collaudo dell'installazione](#5-collaudo-dellinstallazione)
+6. [Test e2e-v2 sull'ambiente installato](#6-test-e2e-v2-sullambiente-installato)
+7. [Operativita' quotidiana](#7-operativita-quotidiana)
+8. [Aggiornamento del software](#8-aggiornamento-del-software)
+9. [Troubleshooting](#9-troubleshooting)
+10. [Disinstallazione](#10-disinstallazione)
 
-## Installazione completa (one-shot)
+---
+
+## 1. Architettura installata
+
+| Componente | Come gira | Versione | Porta |
+|---|---|---|---|
+| PostgreSQL 17 | servizio EDB (`postgresql-x64-17`) | 17.x | 5432 |
+| Erlang/OTP | runtime di RabbitMQ | **28.x (pinnato)** | — |
+| RabbitMQ | servizio `RabbitMQ` | 4.3.x | 5672 |
+| Backend FastAPI | servizio `plenora-backend` (WinSW → uvicorn) | repo | 5004 (loopback) |
+| Worker Dramatiq | servizio `plenora-worker` | repo | — |
+| Beat APScheduler | servizio `plenora-beat` | repo | — |
+| MinIO (opzionale) | servizio `plenora-minio` | latest | 9000 (API), 9001 (console) |
+| Frontend (Caddy) | servizio `plenora-caddy` | latest | **80** (configurabile) |
+| Python + GDAL | env conda `plenora` (Miniforge) | 3.12 / GDAL 3.13 | — |
+
+Stato, lock, blacklist JWT, rate-limit e risultati dei task vivono su
+PostgreSQL; RabbitMQ e' solo il trasporto dei task (architettura
+Plenora 2.0). File di configurazione: `C:\plenora\backend\.env`
+(ACL ristretta ad Administrators+SYSTEM). Dati: `C:\plenora-data`.
+Servizi e log: `C:\plenora-services\<servizio>\`.
+
+## 2. Prerequisiti
+
+- Windows Server 2022/2025 o Windows 11 Pro, 64 bit
+- 8 GB RAM consigliati, ~15 GB disco (pacchetti + env conda)
+- `winget` disponibile (incluso in Server 2025 / Windows 11)
+- PowerShell **da Amministratore** per l'installazione
+- Accesso di rete verso: sorgenti winget, GitHub releases (RabbitMQ,
+  WinSW), `dl.min.io` (se MinIO), `caddyserver.com` (se frontend),
+  conda-forge, PyPI, registry npm
+
+## 3. Installazione passo-passo
+
+### 3.1 Clona il repository
 
 ```powershell
 git clone https://github.com/PlenoraETL/plenora.git C:\plenora
 cd C:\plenora
+```
+(se Git manca: `winget install Git.Git` e riapri la shell)
 
-# 1) Pacchetti di piattaforma (PostgreSQL 17, Erlang 28, Miniforge, Node, Git)
+### 3.2 Fase 1 — pacchetti di piattaforma
+
+```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
+```
 
-# 2) NUOVA shell admin (PATH aggiornati), poi tutto il resto:
+Installa via winget: Git, Node LTS, **PostgreSQL 17**, **Erlang/OTP 28**
+(pinnato — vedi §9), **Miniforge**; poi scarica e installa **RabbitMQ**
+dalla release ufficiale GitHub (non e' piu' su winget) impostando
+`ERLANG_HOME` a livello macchina.
+
+> Al termine del blocco winget: **chiudi la shell e riaprine una nuova
+> da Amministratore** (i PATH nuovi non sono visibili nella shell
+> corrente).
+
+### 3.3 Fase 2 — stack applicativo completo
+
+```powershell
+cd C:\plenora
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1 `
     -SkipWinget -InstallServices -InstallMinio -InstallFrontend -Production `
     -WorkerProcesses 1 -WorkerThreads 4
 ```
 
-Il flusso chiede: password del superuser `postgres` (con winget
-unattended di solito e' sconosciuta: lo script sa resettarla — vedi
-runbook scoping §2) e username/password del **superadmin** (minimo 12
-caratteri). A fine corsa: 5-6 servizi `plenora-*` attivi, login dal
-browser su `http://127.0.0.1/`.
+Ti verranno chiesti:
 
-## Parametri principali
+1. **Password del superuser `postgres`** — con l'install winget
+   unattended di solito NON e' nota: vedi §9 per il reset in locale.
+2. **Username e password del superadmin** (minimo 12 caratteri, doppia
+   conferma). E' l'utente con cui farai login nell'applicazione.
+
+Il flusso esegue nell'ordine: utente+DB PostgreSQL → verifica RabbitMQ
+→ env conda (python 3.12 + GDAL 3.13 da conda-forge) → dipendenze pip →
+`.env` con secrets random → **hardening broker** (utente RabbitMQ
+dedicato `plenora`, rimozione di `guest`) → ACL sul `.env` → **MinIO**
+(servizio + bucket `plenora-runtime`/`plenora-backups`) → **frontend**
+(build Vite + servizio Caddy) → **servizi applicativi** (backend con
+migrations al primo boot, worker, beat) → **seed superadmin** con
+verifica via login API reale → **switch a production** (gates attivi,
+attesa `/ready`).
+
+Output finale atteso:
+
+```
+[OK]   Superadmin '<nome>' verificato: login API ok
+[OK]   W5 completata: ENVIRONMENT=production, gates attivi, /ready verde
+```
+
+### 3.4 Primo accesso
+
+Browser (sulla macchina): **`http://127.0.0.1/`** → login con il
+superadmin. Usare esattamente quell'hostname (la build FE e' cablata
+su quell'origin; l'installer configura comunque CORS anche per
+`localhost`).
+
+## 4. Parametri dell'installer
 
 | Parametro | Default | Effetto |
 |---|---|---|
-| `-InstallServices` | off | Servizi WinSW: `plenora-backend`, `plenora-worker`, `plenora-beat` |
+| `-SkipWinget` | off | Salta la fase pacchetti (gia' installati) |
+| `-InstallServices` | off | Servizi `plenora-backend/worker/beat` |
 | `-WorkerProcesses` / `-WorkerThreads` | 1 / 4 | Parallelismo del worker Dramatiq |
-| `-AdminUsername` / `-AdminPassword` | prompt | Superadmin (o env `PLENORA_BOOTSTRAP_ADMIN_*`); `-SkipAdminBootstrap` per saltare |
-| `-InstallMinio` | off | MinIO come servizio + bucket `plenora-runtime`/`plenora-backups`, provider `minio` |
-| `-StoragePolicy` | `hybrid` | `db` \| `hybrid` \| `object_storage` (con `-InstallMinio`) |
-| `-InstallFrontend` | off | Build Vite + Caddy come servizio (statici + proxy `/api`) |
-| `-FrontendPort` | 80 | Porta di Caddy; la build FE viene cablata su quell'origin |
-| `-Production` | off | `ENVIRONMENT=production` coi gates attivi (richiede object storage) |
+| `-AdminUsername` / `-AdminPassword` / `-AdminGroupId` | prompt / `root` | Superadmin; `-SkipAdminBootstrap` per saltare |
+| `-InstallMinio` | off | MinIO come servizio + bucket + provider `minio` |
+| `-StoragePolicy` | `hybrid` | `db` \| `hybrid` \| `object_storage` |
+| `-InstallFrontend` | off | Build FE + servizio Caddy |
+| `-FrontendPort` | 80 | Porta di Caddy (la build FE viene cablata su quell'origin) |
+| `-Production` | off | `ENVIRONMENT=production` coi gates (richiede object storage) |
+| `-PgSuperPassword` | prompt | Password del superuser postgres |
+| `-StartProcesses` | off | Modalita' dev: 3 finestre cmd al posto dei servizi |
 
-Non-interattivo: `PLENORA_BOOTSTRAP_ADMIN_USERNAME/_PASSWORD/_GROUP_ID`,
-`PLENORA_INSTALL_WORKER_PROCESSES/_THREADS`, `-PgSuperPassword`.
+Non-interattivo (env): `PLENORA_BOOTSTRAP_ADMIN_USERNAME`,
+`PLENORA_BOOTSTRAP_ADMIN_PASSWORD`, `PLENORA_BOOTSTRAP_ADMIN_GROUP_ID`,
+`PLENORA_INSTALL_WORKER_PROCESSES`, `PLENORA_INSTALL_WORKER_THREADS`.
 
-## Il modello single-box (production)
+**Il modello single-box (`-Production`)**: scrive
+`PLENORA_SINGLE_NODE=true` — dichiarazione esplicita che broker e
+servizi convivono sulla macchina; sopprime SOLO il gate anti-loopback
+sul broker. Restano attivi: object storage obbligatorio, rate-limiter
+distribuiti (su PostgreSQL) fail-closed, beat leader fail-closed.
 
-`-Production` scrive `PLENORA_SINGLE_NODE=true`: e' la dichiarazione
-esplicita che broker e servizi convivono su una macchina — sopprime
-SOLO il gate anti-loopback sul broker. Tutti gli altri production
-gates restano attivi (object storage obbligatorio, rate-limiter
-distribuiti su PostgreSQL fail-closed, beat leader fail-closed).
+## 5. Collaudo dell'installazione
 
-NB secrets: in questo modello i secrets vivono in `backend/.env` con
-ACL ristretta (Administrators+SYSTEM). Il loader dotenv li accetta
-perche' `ENVIRONMENT` non e' nel process env dei servizi; hardening
-futuro: env di sistema per-servizio.
-
-## Operativita'
+Batteria minima (5 minuti) — e' la stessa usata nel collaudo ufficiale:
 
 ```powershell
-Get-Service plenora-*                 # stato
-Restart-Service plenora-backend       # riavvii mirati
-# log (rotazione automatica):
-#   C:\plenora-services\<servizio>\<servizio>.out.log / .err.log
-curl.exe -s http://127.0.0.1/ready    # readiness attraverso Caddy
+# 1. Tutti i servizi su
+Get-Service plenora-*        # attesi Running: backend, worker, beat (+minio, +caddy)
+
+# 2. Readiness completa (attraverso Caddy)
+curl.exe -s http://127.0.0.1/ready
+#    atteso: {"status":"ready", ...} con 8/8 check ok
+
+# 3. Smoke round-trip: dispatch -> RabbitMQ -> worker -> esito su PG
+& 'C:\ProgramData\miniforge3\condabin\conda.bat' run -n plenora --cwd C:\plenora\backend python smoke_native.py
+#    atteso: SMOKE: SUCCESS
+
+# 4. Login dal browser: http://127.0.0.1/ con il superadmin
 ```
 
-- **Stop pulito**: `Stop-Service plenora-beat` rilascia il leader lock
-  su PG (Ctrl+C di WinSW → SIGINT del runner). Collaudato.
-- **Riavvio macchina**: tutti i servizi ripartono da soli. Collaudato.
-- **Aggiornamento codice**: `git pull` + rilancio dello script con gli
-  stessi switch (idempotente: rigenera i servizi e riavvia).
+Batteria estesa (collaudo da accettazione):
 
-## Trappole note (gia' gestite dallo script)
+```powershell
+# 5. Sopravvivenza al riavvio: tutto riparte da solo
+Restart-Computer
+#    ...dopo il boot: ripetere 1-4 senza toccare nulla
 
-- RabbitMQ non e' piu' su winget → release GitHub, NSIS `/S`
-- `ERLANG_HOME` va impostata (Machine) PRIMA di installare RabbitMQ
-- Erlang/OTP va pinnato alla serie supportata da RabbitMQ (oggi 28.x)
-- `rabbitmqctl` richiede il cookie Erlang di LocalSystem (sync automatico)
-- password `postgres` di winget unattended non prevedibile → reset via
-  trust temporaneo su `pg_hba.conf`
-- il browser deve usare LO STESSO hostname della build FE
-  (`http://127.0.0.1`); l'installer scrive comunque CORS per
-  `127.0.0.1` e `localhost`
+# 6. Stop pulito del beat: il leader lock su PG viene rilasciato
+Stop-Service plenora-beat
+$env:PGPASSWORD='plenora'
+& 'C:\Program Files\PostgreSQL\17\bin\psql.exe' -U plenora -h 127.0.0.1 -d plenora -c "SELECT * FROM plenora.beat_leader_locks;"
+Remove-Item Env:\PGPASSWORD
+#    atteso: 0 righe
+Start-Service plenora-beat
+
+# 7. Solo l'utente broker dedicato esiste (guest rimosso)
+& 'C:\Program Files\RabbitMQ Server\rabbitmq_server-4.3.2\sbin\rabbitmqctl.bat' list_users
+#    atteso: solo `plenora`
+```
+
+## 6. Test e2e-v2 sull'ambiente installato
+
+Le suite e2e-v2 del repo (`tests2/functional`, `tests2/integration`)
+girano sull'installazione nativa **senza toccare i servizi di
+produzione**: usano un DB dedicato `plenora_test` e code RabbitMQ
+suffissate per-run (il worker di produzione non vede i task di test).
+
+```powershell
+cd C:\plenora
+# suite functional (veloce)
+powershell -ExecutionPolicy Bypass -File scripts\run-e2e-windows.ps1
+
+# functional + integration (i test dei provider esterni Oracle/MSSQL/
+# MySQL si auto-skippano se quei DB non ci sono)
+powershell -ExecutionPolicy Bypass -File scripts\run-e2e-windows.ps1 -Integration
+
+# iterazioni mirate
+powershell -ExecutionPolicy Bypass -File scripts\run-e2e-windows.ps1 -SkipDeps -PytestArgs '-k api_enrich'
+```
+
+Il runner: installa le dev-deps nell'env conda, crea+migra
+`plenora_test`, legge le credenziali broker dal `.env` (il fallback
+`guest` non esiste piu'), imposta `URBY_RUN_INTEGRATION=1` e lancia
+pytest. Exit code 0 = verdi.
+
+Nota: la suite canonica completa (~10.500 unit/contract) resta la lane
+containerizzata `tests2` su Linux/Docker — le e2e-v2 su Windows
+validano il COMPORTAMENTO dell'installazione reale.
+
+## 7. Operativita' quotidiana
+
+```powershell
+Get-Service plenora-*                    # stato
+Restart-Service plenora-backend          # riavvio mirato
+Stop-Service plenora-*                   # stop ordinato di tutto
+```
+
+- **Log** (rotazione automatica 10MB x4):
+  `C:\plenora-services\<servizio>\<servizio>.out.log` / `.err.log`
+- **Config**: `C:\plenora\backend\.env` — dopo una modifica,
+  riavviare i servizi interessati
+- **Console MinIO**: `http://127.0.0.1:9001` (credenziali
+  `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` dal `.env`)
+- **Backup DB**: `pg_dump` dello schema `plenora` (vedi
+  [backup-restore.md](backup-restore.md) per il modello completo)
+
+## 8. Aggiornamento del software
+
+```powershell
+cd C:\plenora
+git pull
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1 `
+    -SkipWinget -InstallServices -InstallFrontend -SkipAdminBootstrap `
+    <eventuali altri switch usati all'install>
+```
+
+Idempotente: rigenera i servizi (stop/refresh config/start), riesegue
+le migrations al boot del backend, ricostruisce il FE. I dati (PG,
+MinIO) non vengono toccati.
+
+## 9. Troubleshooting
+
+| Sintomo | Causa e rimedio |
+|---|---|
+| Un servizio `plenora-*` non parte | `C:\plenora-services\<id>\<id>.err.log` (wrapper) e `.out.log` (app). In production il backend e' fail-fast sui gates: il log dice quale gate ha bloccato |
+| Servizio RabbitMQ `Stopped`, zero log | `ERLANG_HOME` mancante a livello macchina (l'installer la imposta; verificare dopo update manuali di Erlang) |
+| RabbitMQ `BOOT FAILED ... incompatible_feature_flags {horus, unknown_instruction}` | Erlang/OTP troppo nuovo per la versione RabbitMQ: usare la serie OTP supportata (oggi 28.x — l'installer la pinna) |
+| `rabbitmqctl` → `incompatible cookie` | Cookie Erlang dell'utente ≠ LocalSystem: copiare `C:\Windows\System32\config\systemprofile\.erlang.cookie` in `%USERPROFILE%` (l'installer lo fa da solo) |
+| Password `postgres` sconosciuta (install winget) | Reset locale: backup di `pg_hba.conf`, `scram-sha-256`→`trust`, restart `postgresql-x64-17`, `ALTER USER postgres WITH PASSWORD '...'`, ripristino file, restart (dettagli in scoping-windows-native.md §2) |
+| Login dal browser: "Impossibile contattare il server" | Hostname diverso dall'origin della build FE (es. `localhost` vs `127.0.0.1`): usare `http://127.0.0.1/`; l'installer scrive CORS per entrambe |
+| Porta 80 occupata (IIS?) | Reinstallare il FE con `-FrontendPort 8080` (ribuilda anche il bundle sull'origin nuovo) |
+| `/ready` not_ready su `object_storage` | Provider cloud configurato senza credenziali: con MinIO usare `-InstallMinio`; senza object storage (solo dev) `OBJECT_STORAGE_ENABLED=false` |
+| Task in coda ma mai eseguiti | `plenora-worker` giu' o `.env` broker cambiato senza restart del servizio |
+| Un processo Erlang blocca update/cleanup | `epmd.exe` resta vivo dopo stop/uninstall: `Stop-Process -Name epmd -Force` |
+
+Trappola per chi modifica gli script: i `.ps1` del repo sono **UTF-8
+con BOM** — PowerShell 5.1 senza BOM li legge come ANSI e una em-dash
+dentro una stringa double-quoted diventa una virgoletta smart che
+CHIUDE la stringa (parse error fantasma piu' avanti nel file).
+
+## 10. Disinstallazione
+
+```powershell
+# Servizi applicativi (per ciascuno: plenora-backend, plenora-worker,
+# plenora-beat, plenora-minio, plenora-caddy)
+foreach ($id in 'plenora-caddy','plenora-beat','plenora-worker','plenora-minio','plenora-backend') {
+    if (Get-Service $id -ErrorAction SilentlyContinue) {
+        Stop-Service $id -Force
+        & "C:\plenora-services\$id\$id.exe" uninstall
+    }
+}
+Remove-Item -Recurse -Force C:\plenora-services
+
+# Dati e repo (IRREVERSIBILE: contiene DB MinIO e DATA_DIR)
+Remove-Item -Recurse -Force C:\plenora-data, C:\plenora
+
+# Piattaforma (se non serve ad altro)
+winget uninstall PostgreSQL.PostgreSQL.17     # i dati DB sono in Program Files\PostgreSQL\17\data
+winget uninstall Erlang.ErlangOTP             # prima: disinstallare il servizio RabbitMQ
+winget uninstall CondaForge.Miniforge3
+```
