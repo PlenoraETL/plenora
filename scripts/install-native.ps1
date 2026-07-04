@@ -100,7 +100,11 @@ function Invoke-RabbitCtl {
         # il cookie utente deve essere scrivibile solo dal proprietario? Su
         # Windows rabbitmqctl non enforc-a i permessi: basta il contenuto.
     }
-    & $ctl.FullName @CtlArgs
+    # CATTURARE lo stdout: senza, colerebbe nella pipeline e il valore di
+    # ritorno diventerebbe un array (output + exit code) — il chiamante
+    # confronterebbe mele con pere (visto sul campo alla prima run W2).
+    $out = & $ctl.FullName @CtlArgs
+    if ($out) { $out | ForEach-Object { Write-Host "    $_" } }
     return $LASTEXITCODE
 }
 
