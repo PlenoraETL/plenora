@@ -139,7 +139,7 @@ _CONFIG_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "LOGIN_WINDOW_SECONDS",
             "LOGIN_LOCKOUT_SECONDS",
             "LOGIN_RL_REDIS_REQUIRED",
-            "JWT_BLACKLIST_REDIS_TIMEOUT_SEC",
+            "JWT_BLACKLIST_CACHE_TTL_SEC",
             "JWT_BLACKLIST_STALE_THRESHOLD_SEC",
         ),
     ),

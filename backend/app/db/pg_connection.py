@@ -219,8 +219,8 @@ def _get_pool() -> ConnectionPool:
     """Lazy-init del pool. Thread-safe via lock.
 
     NB: il pool e' singleton **per-processo**. Multiple uvicorn worker
-    / celery children → pool separati. Vedi docstring modulo per il
-    sizing aggregato.
+    / processi worker Dramatiq → pool separati. Vedi docstring modulo
+    per il sizing aggregato.
     """
     global _pool
     if _pool is None or _pool.closed:
@@ -237,17 +237,16 @@ def _get_pool() -> ConnectionPool:
                     open=True,
                 )
                 # Log aggregato stimato per dare visibilita' all'operatore
-                # sulle connessioni PG consumate al picco. Usa la stessa
-                # formula del docstring modulo: N_processi = uvicorn_workers
-                # + celery_concurrency + 1 (beat). Il parent celery NON
-                # viene conteggiato perche' non emette query PG in prod
-                # e' solo coordinator; i query vanno attraverso le child
-                # prefork). Se UVICORN_WORKERS/CELERY_CONCURRENCY non sono
-                # in env, fallback conservativo a 1 uvicorn + 0 celery
+                # sulle connessioni PG consumate al picco. Formula:
+                # N_processi = uvicorn_workers + processi worker Dramatiq
+                # + 1 (beat). Ogni processo Dramatiq ha un pool proprio
+                # condiviso dai suoi thread (--threads). Se UVICORN_WORKERS
+                # / DRAMATIQ_PROCESSES non sono in env, fallback
+                # conservativo a 1 uvicorn + 0 worker
                 try:
                     uvi = _read_int_env("UVICORN_WORKERS", 1)
-                    cel = _read_int_env("CELERY_CONCURRENCY", 0)
-                    n_proc = uvi + cel + 1  # +1 per beat
+                    wrk = _read_int_env("DRAMATIQ_PROCESSES", 0)
+                    n_proc = uvi + wrk + 1  # +1 per beat
                     aggregate_max = n_proc * _POOL_MAX
                     logger.info(
                         f"PG pool inizializzato: {_POOL_MIN}-{_POOL_MAX} "
@@ -255,7 +254,7 @@ def _get_pool() -> ConnectionPool:
                         f"idle_in_trans_timeout={_IDLE_IN_TRANSACTION_MS}ms, "
                         f"aggregato stimato ~{aggregate_max} conn "
                         f"({n_proc} proc x {_POOL_MAX}) "
-                        f"[uvicorn={uvi} + celery={cel} + beat=1]"
+                        f"[uvicorn={uvi} + worker={wrk} + beat=1]"
                     )
                 except Exception:
                     logger.info(
@@ -294,16 +293,17 @@ def close_pool():
 def discard_pool_after_fork() -> None:
     """Scarta il riferimento al pool ereditato dal parent post-fork.
 
-    I worker prefork di Celery ereditano i socket TLS del pool aperto nel
-    master: questi non sono fork-safe (la state crittografica e' condivisa
-    col parent) e al primo uso producono ``SSL SYSCALL error: EOF
-    detected`` o ``decryption failed or bad record mac``. Chiamare
-    ``close()`` qui peggiorerebbe il problema (SSL teardown sui socket
-    condivisi col parent), quindi azzeriamo solo il riferimento: il
-    prossimo ``_get_pool()`` aprira' connessioni fresh nel PID del child.
+    I processi worker forkati (Dramatiq) ereditano i socket TLS del pool
+    aperto nel master: questi non sono fork-safe (la state crittografica
+    e' condivisa col parent) e al primo uso producono ``SSL SYSCALL
+    error: EOF detected`` o ``decryption failed or bad record mac``.
+    Chiamare ``close()`` qui peggiorerebbe il problema (SSL teardown sui
+    socket condivisi col parent), quindi azzeriamo solo il riferimento:
+    il prossimo ``_get_pool()`` aprira' connessioni fresh nel PID del
+    child.
 
-    Idempotente. Da invocare nel signal handler
-    ``celery.signals.worker_process_init``.
+    Idempotente. Invocata da ``_BootstrapMiddleware.before_worker_boot``
+    in ``workers/dramatiq_app.py``.
     """
     global _pool
     _pool = None

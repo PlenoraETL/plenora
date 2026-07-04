@@ -13,7 +13,8 @@ def main() -> int:
     backend_root = Path(__file__).resolve().parent.parent
     req_main = backend_root / "requirements.txt"
     req_dev = backend_root / "requirements-dev.txt"
-    sbom_out = backend_root / "docs" / "compliance" / "sbom.json"
+    # I docs sono centralizzati nella repo root (Wave 1.6), non in backend/.
+    sbom_out = backend_root.parent / "docs" / "compliance" / "sbom.json"
 
     for req in (req_main, req_dev):
         if not req.exists():

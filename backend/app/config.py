@@ -393,8 +393,7 @@ class Settings:
 
         # Timeout (secondi) per la PING del broker RabbitMQ in check_broker
         # (Plenora 2.0 Fase 5: il broker e' RabbitMQ/Dramatiq, non piu'
-        # Redis/Celery). Stessa logica di bound di READINESS_REDIS_TIMEOUT:
-        # cap <= 0 cade al fallback hardcoded di 2s.
+        # Redis/Celery). Bound: cap <= 0 cade al fallback hardcoded di 2s.
         "READINESS_BROKER_TIMEOUT_SECONDS": 2,
 
         # Timeout (secondi) per `SELECT 1` dentro check_postgres
@@ -406,7 +405,7 @@ class Settings:
         # Lo `SET LOCAL` non altera lo statement_timeout di altre query
         # del pool: il bound resta confinato al readiness probe
         # Cap <= 0 cade al fallback hardcoded di 2s (stesso footgun
-        # rationale del Redis timeout
+        # rationale del broker timeout
         "READINESS_PG_TIMEOUT_SECONDS": 2,
 
         # Timeout (secondi) per la probe `readiness_probe` dentro
