@@ -206,6 +206,12 @@ DRAMATIQ_BROKER_URL=amqp://guest:guest@127.0.0.1:5672
 JWT_SECRET_KEY=$jwt
 PLENORA_ENCRYPTION_KEY=$enc
 DATA_DIR=$DataDir
+# Storage: senza questi il bootstrap fallisce validate_storage_config
+# (default STORAGE_POLICY=hybrid esige un bucket object storage) e
+# SALTA anche le migrations -> errori 'relazione logs non esiste'.
+# Lezione scoping VM 2026-07-04.
+STORAGE_POLICY=db
+BACKUP_BUCKET=plenora-scoping-backup
 "@ | Set-Content -Encoding ascii $envFile
     Ok '.env generato (secrets random; ENVIRONMENT=development per lo scoping)'
 }

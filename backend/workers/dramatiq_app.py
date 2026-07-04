@@ -19,8 +19,19 @@ from dramatiq.brokers.rabbitmq import RabbitmqBroker
 from dramatiq.middleware import CurrentMessage, Middleware
 
 from app.config import settings
+from app.config_env_loader import load_backend_dotenv
 from app.core.orchestrator.task_progress import TaskRevoked
 from app.utils.logger import get_logger, get_request_id, set_request_id
+
+# Bare-metal (Windows/Linux senza compose): DRAMATIQ_BROKER_URL vive nel
+# .env, ma il broker viene costruito piu' sotto all'import del modulo —
+# prima che app.bootstrap.bootstrap() (before_worker_boot) carichi il
+# dotenv. Senza questo load anticipato il worker consumava dal default
+# compose `rabbitmq` (DNS inesistente fuori da Docker) mentre
+# ensure_broker, post-dotenv, validava l'URL giusto del .env: split-brain
+# scoperto sulla VM Windows Server (scoping 2026-07-04). Il loader e'
+# idempotente e ignora il .env in prod/staging.
+load_backend_dotenv()
 
 logger = get_logger(__name__)
 
