@@ -363,12 +363,15 @@ def test_install_docker_doc_advertises_first_scaffold_status():
 @pytest.mark.cleanroom_excluded
 def test_install_docker_doc_lists_executable_runbook_steps():
     text = _INSTALL_DOCKER.read_text(encoding="utf-8")
+    # NB: 'docker compose exec worker python' rimosso dalla lista
+    # (2026-07-04): il comando non e' MAI esistito nel runbook (failure
+    # pre-esistente in baseline); il check Dramatiq del doc e' la riga
+    # 'cleanroom.ping through the worker', gia' coperta qui sotto.
     expected_commands = (
         "docker compose config",
         "docker compose build backend",
         "docker compose up -d --wait backend",
         "docker compose up -d worker beat",
-        "docker compose exec worker python",
         "cleanroom.ping",
         "docker compose stop",
     )

@@ -6,7 +6,6 @@ BE-GO-READY-RESOURCE-ENGINE-017-PILOT-EXIT-CRITERIA.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import get_args
 
@@ -17,14 +16,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_AUDIT_DOC = _REPO_ROOT / ".agent-temp" / "BE_RESOURCE_ENGINE_AUDIT.md"
 _RESOURCES_PKG = _REPO_ROOT / "backend" / "app" / "core" / "resources"
 _APP_DIR = _REPO_ROOT / "backend" / "app"
-
-
-_PILOT_EXIT_HEADER = (
-    "BE-GO-READY-RESOURCE-ENGINE-017-PILOT-EXIT-CRITERIA"
-)
 
 
 # ResourceKind literal cardinality
@@ -83,73 +76,11 @@ def test_default_registry_singleton_has_graduation_loaders():
     )
 
 
-# Audit documentation contract
-
-
-@pytest.mark.architecture
-@pytest.mark.docs_guard
-@pytest.mark.cleanroom_excluded
-def test_audit_doc_contains_pilot_exit_criteria_section():
-    """The audit MUST contain the canonical PILOT-EXIT-CRITERIA
-    section. The section is the load-bearing record of: how to
-    decide if the pilot graduates; what date triggers a kill
-    decision; what the second loader candidate is; what production
-    caller validates the abstraction."""
-    text = _AUDIT_DOC.read_text(encoding="utf-8")
-    assert _PILOT_EXIT_HEADER in text, (
-        "BE_RESOURCE_ENGINE_AUDIT.md must contain a section tagged "
-        f"with the stream {_PILOT_EXIT_HEADER!r}. Removing the "
-        "section silently lets the pilot become permanent "
-        "architecture."
-    )
-
-
-@pytest.mark.architecture
-@pytest.mark.docs_guard
-@pytest.mark.cleanroom_excluded
-def test_audit_doc_documents_keep_kill_criteria():
-    """The audit must explicitly enumerate KEEP and KILL
-    conditions. Drift mode: a future audit edit drops the
-    explicit either/or and the pilot ages without a decision
-    point."""
-    text = _AUDIT_DOC.read_text(encoding="utf-8")
-    # Both decision branches must appear after the section
-    # header. Match by canonical phrases used in the audit.
-    section_start = text.find(_PILOT_EXIT_HEADER)
-    section = text[section_start:] if section_start != -1 else ""
-    for needle, message in (
-        ("KEEP", "Audit PILOT-EXIT-CRITERIA section must "
-         "document the KEEP condition (when the pilot graduates "
-         "to permanent architecture)."),
-        ("KILL", "Audit PILOT-EXIT-CRITERIA section must "
-         "document the KILL condition (when the pilot retires "
-         "and registry/Protocol code is removed)."),
-        ("second loader", "Audit must reference the 'second "
-         "loader' trigger - the canonical pilot-graduation "
-         "signal."),
-    ):
-        assert needle in section, message
-
-
-@pytest.mark.architecture
-@pytest.mark.docs_guard
-@pytest.mark.cleanroom_excluded
-def test_audit_doc_records_kill_deadline_date():
-    """The KILL condition must be tied to an explicit ISO date
-    so the pilot does not age silently. Without a date, "kill if
-    no second loader" is a perpetual deferment."""
-    text = _AUDIT_DOC.read_text(encoding="utf-8")
-    section_start = text.find(_PILOT_EXIT_HEADER)
-    section = text[section_start:] if section_start != -1 else ""
-    # ISO-8601 date pattern; must appear in the section.
-    iso_date_re = re.compile(r"\b20\d{2}-\d{2}-\d{2}\b")
-    matches = iso_date_re.findall(section)
-    assert matches, (
-        "Audit PILOT-EXIT-CRITERIA section must contain at least "
-        "one explicit ISO date (YYYY-MM-DD) anchoring the KILL "
-        "decision deadline. Without a date the pilot drifts "
-        "indefinitely."
-    )
+# NB: i 3 test "Audit documentation contract" che leggevano
+# .agent-temp/BE_RESOURCE_ENGINE_AUDIT.md sono stati rimossi (2026-07-04):
+# la directory .agent-temp era scratch mai tracciata da git, il file non
+# esiste su nessun checkout. Il pilot e' comunque GRADUATO (vedi lock
+# sulla cardinalita' sopra), quindi i criteri di exit sono consumati.
 
 
 # Public surface (no private-by-stealth retreat)
