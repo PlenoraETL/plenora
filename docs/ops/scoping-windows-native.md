@@ -232,7 +232,10 @@ Windows senza container ne' WSL.** Il worker usa il CLI dramatiq standard.
 Decisioni: **WinSW** per i servizi Windows, **Caddy** per il frontend.
 Ordine: W1 → W5, una fetta per volta, VM come banco di collaudo.
 
-- **W1 — Servizi Windows (WinSW)**: `plenora-backend`, `plenora-worker`,
+- **W1 — Servizi Windows (WinSW)** ✅ COLLAUDATA (2026-07-04): 3 servizi
+  Running al primo install; /ready+smoke sotto servizio; riavvio VM →
+  ripartenza autonoma; Stop-Service beat → leader lock rilasciato.
+  Dettaglio implementazione: `plenora-backend`, `plenora-worker`,
   `plenora-beat` come servizi (WinSW.exe da release GitHub + XML per
   servizio); dipendenze di avvio (PG, RabbitMQ), restart on-failure,
   log roll-by-size; PATH/GDAL_DATA/PROJ della env conda nel config del
