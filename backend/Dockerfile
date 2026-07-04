@@ -53,6 +53,10 @@ RUN curl -fsSL https://micro.mamba.pm/api/micromamba/linux-64/latest \
 RUN micromamba create -y -n plenora -c conda-forge \
         python=3.12 \
         gdal=3.13.0 \
+        # libjxl pinnato: il build conda-forge di gdal 3.13.0 linka
+        # libjxl.so.0.11; senza pin il resolver prende libjxl 0.12 e
+        # gdalinfo non parte (drift upstream, visto 2026-07-04).
+        "libjxl=0.11.*" \
         proj-data \
         pyogrio \
         geopandas-base \
