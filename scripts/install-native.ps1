@@ -39,7 +39,12 @@ param(
     [string]$AdminUsername = '',
     [string]$AdminPassword = '',
     [string]$AdminGroupId = '',
-    [switch]$SkipAdminBootstrap
+    [switch]$SkipAdminBootstrap,
+    # W3 — MinIO opzionale come object storage locale (servizio WinSW):
+    # crea i bucket runtime/backup e configura CLOUD_PROVIDER=minio.
+    [switch]$InstallMinio,
+    [ValidateSet('db', 'hybrid', 'object_storage')]
+    [string]$StoragePolicy = 'hybrid'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -106,6 +111,54 @@ function Invoke-RabbitCtl {
     $out = & $ctl.FullName @CtlArgs
     if ($out) { $out | ForEach-Object { Write-Host "    $_" } }
     return $LASTEXITCODE
+}
+
+$ServicesRoot = 'C:\plenora-services'
+
+function Get-WinSWExe {
+    # WinSW.exe condiviso (W1 servizi app + W3 servizio MinIO): scarica
+    # una volta dalla release GitHub, fallback pinnato v2.12.0.
+    New-Item -ItemType Directory -Force $ServicesRoot | Out-Null
+    $winswExe = Join-Path $ServicesRoot 'WinSW-x64.exe'
+    if (-not (Test-Path $winswExe)) {
+        Write-Host '  Scarico WinSW (ultima release GitHub)...'
+        try {
+            $rel = Invoke-RestMethod 'https://api.github.com/repos/winsw/winsw/releases/latest'
+            $asset = $rel.assets | Where-Object { $_.name -eq 'WinSW-x64.exe' } | Select-Object -First 1
+            if (-not $asset) { throw 'asset WinSW-x64.exe assente nella latest' }
+            Invoke-WebRequest $asset.browser_download_url -OutFile $winswExe
+        } catch {
+            Write-Host "  latest non utilizzabile ($($_.Exception.Message)): fallback WinSW v2.12.0"
+            Invoke-WebRequest 'https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe' -OutFile $winswExe
+        }
+    }
+    return $winswExe
+}
+
+function Install-WinSWService {
+    # Registra (o refresh-a) un servizio WinSW: cartella dedicata,
+    # copia del wrapper col retry (il wrapper molla il file in ritardo
+    # dopo lo stop — visto sul campo), XML config, install.
+    param([string]$Id, [string]$Xml)
+    $dir = Join-Path $ServicesRoot $Id
+    New-Item -ItemType Directory -Force $dir | Out-Null
+    $exe = Join-Path $dir "$Id.exe"
+    if (Get-Service -Name $Id -ErrorAction SilentlyContinue) {
+        Write-Host "  ${Id}: gia' registrato — stop + uninstall per refresh config"
+        Stop-Service $Id -Force -ErrorAction SilentlyContinue
+        & $exe uninstall 2>$null | Out-Null
+    }
+    $winswExe = Get-WinSWExe
+    $copied = $false
+    foreach ($try in 1..30) {
+        try { Copy-Item $winswExe $exe -Force; $copied = $true; break }
+        catch { Start-Sleep -Seconds 1 }
+    }
+    if (-not $copied) { Fail "${Id}: impossibile aggiornare $exe (wrapper ancora in esecuzione dopo 30s)" }
+    $Xml | Set-Content -Encoding ascii (Join-Path $dir "$Id.xml")
+    & $exe install
+    if ($LASTEXITCODE -ne 0) { Fail "${Id}: winsw install exit=$LASTEXITCODE" }
+    Ok "$Id registrato"
 }
 
 # -----------------------------------------------------------------------------
@@ -319,6 +372,117 @@ icacls $envFile /inheritance:r /grant:r '*S-1-5-32-544:F' '*S-1-5-18:F' | Out-Nu
 if ($LASTEXITCODE -ne 0) { Fail "icacls sul .env exit=$LASTEXITCODE" }
 Ok 'ACL ristretta sul .env (Administrators + SYSTEM)'
 
+# =============================================================================
+# W3 — MinIO opzionale (object storage locale come servizio Windows)
+# =============================================================================
+if ($InstallMinio) {
+    Step "W3: MinIO come servizio Windows (STORAGE_POLICY=$StoragePolicy)"
+
+    $minioSvcDir = Join-Path $ServicesRoot 'plenora-minio'
+    New-Item -ItemType Directory -Force $minioSvcDir | Out-Null
+    $minioExe = Join-Path $minioSvcDir 'minio.exe'
+    if (-not (Test-Path $minioExe)) {
+        Write-Host '  Scarico minio.exe (release ufficiale windows-amd64)...'
+        Invoke-WebRequest 'https://dl.min.io/server/minio/release/windows-amd64/minio.exe' -OutFile $minioExe
+    }
+    $minioData = Join-Path $DataDir 'minio'
+    New-Item -ItemType Directory -Force $minioData | Out-Null
+
+    # Credenziali: riusa quelle gia' nel .env (idempotenza), altrimenti
+    # genera. NB: il .env e' la sorgente di verita' — la password non e'
+    # recuperabile da MinIO stesso.
+    $minioUser = 'plenora-minio'
+    $minioPw = ''
+    foreach ($line in Get-Content $envFile) {
+        if ($line -match '^MINIO_ACCESS_KEY=(.+)$') { $minioUser = $Matches[1] }
+        if ($line -match '^MINIO_SECRET_KEY=(.+)$') { $minioPw = $Matches[1] }
+    }
+    if (-not $minioPw) { $minioPw = New-RandomSecret }
+
+    $minioXml = @"
+<service>
+  <id>plenora-minio</id>
+  <name>Plenora MinIO</name>
+  <description>Object storage locale S3-compatible per Plenora-ETL</description>
+  <executable>$minioExe</executable>
+  <arguments>server $minioData --address 127.0.0.1:9000 --console-address 127.0.0.1:9001</arguments>
+  <workingdirectory>$minioSvcDir</workingdirectory>
+  <env name="MINIO_ROOT_USER" value="$minioUser"/>
+  <env name="MINIO_ROOT_PASSWORD" value="$minioPw"/>
+  <startmode>Automatic</startmode>
+  <onfailure action="restart" delay="5 sec"/>
+  <stoptimeout>30 sec</stoptimeout>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>4</keepFiles>
+  </log>
+</service>
+"@
+    Install-WinSWService -Id 'plenora-minio' -Xml $minioXml
+    Start-Service plenora-minio
+
+    $up = $false
+    foreach ($i in 1..20) {
+        $tnc = Test-NetConnection 127.0.0.1 -Port 9000 -WarningAction SilentlyContinue
+        if ($tnc.TcpTestSucceeded) { $up = $true; break }
+        Start-Sleep -Seconds 2
+    }
+    if (-not $up) { Fail 'MinIO non in ascolto su 9000 entro 40s (vedi C:\plenora-services\plenora-minio\*.log)' }
+    Ok 'MinIO in ascolto su 127.0.0.1:9000 (console: 9001)'
+
+    # Bucket runtime + backup via boto3 (gia' nelle dipendenze), idempotente.
+    @'
+"""Crea i bucket MinIO per Plenora (runtime + backup). Idempotente."""
+import os
+import boto3
+from botocore.client import Config
+
+s3 = boto3.client(
+    "s3",
+    endpoint_url=os.environ["PLENORA_MINIO_URL"],
+    aws_access_key_id=os.environ["PLENORA_MINIO_USER"],
+    aws_secret_access_key=os.environ["PLENORA_MINIO_PASSWORD"],
+    config=Config(signature_version="s3v4"),
+    region_name="us-east-1",
+)
+for bucket in ("plenora-runtime", "plenora-backups"):
+    try:
+        s3.create_bucket(Bucket=bucket)
+        print("bucket creato:", bucket)
+    except Exception as e:
+        if "BucketAlreadyOwnedByYou" in str(e) or "BucketAlreadyExists" in str(e):
+            print("bucket ok:", bucket)
+        else:
+            raise
+'@ | Set-Content -Encoding ascii (Join-Path $BackendDir '_minio_buckets.py')
+    $env:PLENORA_MINIO_URL = 'http://127.0.0.1:9000'
+    $env:PLENORA_MINIO_USER = $minioUser
+    $env:PLENORA_MINIO_PASSWORD = $minioPw
+    try {
+        & $condaBat run -n $CondaEnv --cwd $BackendDir python _minio_buckets.py
+        if ($LASTEXITCODE -ne 0) { Fail "creazione bucket MinIO exit=$LASTEXITCODE" }
+    } finally {
+        Remove-Item (Join-Path $BackendDir '_minio_buckets.py') -ErrorAction SilentlyContinue
+        Remove-Item Env:\PLENORA_MINIO_PASSWORD -ErrorAction SilentlyContinue
+    }
+
+    # .env: attiva l'object storage sul provider minio.
+    Set-EnvValue -File $envFile -Key 'STORAGE_POLICY' -Value $StoragePolicy
+    Set-EnvValue -File $envFile -Key 'OBJECT_STORAGE_ENABLED' -Value 'true'
+    Set-EnvValue -File $envFile -Key 'CLOUD_PROVIDER' -Value 'minio'
+    Set-EnvValue -File $envFile -Key 'MINIO_ENDPOINT_URL' -Value 'http://127.0.0.1:9000'
+    Set-EnvValue -File $envFile -Key 'MINIO_ACCESS_KEY' -Value $minioUser
+    Set-EnvValue -File $envFile -Key 'MINIO_SECRET_KEY' -Value $minioPw
+    Set-EnvValue -File $envFile -Key 'OBJECT_STORAGE_BUCKET' -Value 'plenora-runtime'
+    Set-EnvValue -File $envFile -Key 'BACKUP_BUCKET' -Value 'plenora-backups'
+
+    # I servizi app leggono il .env al boot: restart per vedere MinIO.
+    $running = Get-Service plenora-backend, plenora-worker, plenora-beat -ErrorAction SilentlyContinue |
+               Where-Object Status -eq 'Running'
+    foreach ($s in $running) { Restart-Service $s.Name }
+    Ok "MinIO configurato: bucket plenora-runtime/plenora-backups, provider=minio, policy=$StoragePolicy"
+}
+
 # -----------------------------------------------------------------------------
 Step 'Smoke script (backend/smoke_native.py)'
 # -----------------------------------------------------------------------------
@@ -377,9 +541,6 @@ if ($StartProcesses) {
 if ($InstallServices) {
     Step 'W1: servizi Windows (WinSW) — plenora-backend / plenora-worker / plenora-beat'
 
-    $ServicesRoot = 'C:\plenora-services'
-    New-Item -ItemType Directory -Force $ServicesRoot | Out-Null
-
     # Env conda: un servizio non puo' fare `conda activate` — replichiamo
     # nel config del servizio il PATH (DLL GDAL in Library\bin) e le var
     # dei dati geospaziali che l'attivazione imposterebbe.
@@ -394,23 +555,6 @@ if ($InstallServices) {
     # Nome reale del servizio PostgreSQL (EDB: postgresql-x64-17).
     $pgSvc = (Get-Service postgresql* | Select-Object -First 1).Name
     if (-not $pgSvc) { Fail 'Servizio PostgreSQL non trovato' }
-
-    # WinSW: scarica una volta dalla release GitHub (asset WinSW-x64.exe).
-    $winswExe = Join-Path $ServicesRoot 'WinSW-x64.exe'
-    if (-not (Test-Path $winswExe)) {
-        Write-Host '  Scarico WinSW (ultima release GitHub)...'
-        try {
-            $rel = Invoke-RestMethod 'https://api.github.com/repos/winsw/winsw/releases/latest'
-            $asset = $rel.assets | Where-Object { $_.name -eq 'WinSW-x64.exe' } | Select-Object -First 1
-            if (-not $asset) { throw 'asset WinSW-x64.exe assente nella latest' }
-            Invoke-WebRequest $asset.browser_download_url -OutFile $winswExe
-        } catch {
-            # Fallback pinnato (v2.12.0, ultima v2 stabile) se la latest
-            # e' una v3 pre-release senza l'asset x64 classico.
-            Write-Host "  latest non utilizzabile ($($_.Exception.Message)): fallback WinSW v2.12.0"
-            Invoke-WebRequest 'https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe' -OutFile $winswExe
-        }
-    }
 
     $services = @(
         @{
@@ -437,32 +581,8 @@ if ($InstallServices) {
     )
 
     foreach ($svc in $services) {
-        $dir = Join-Path $ServicesRoot $svc.id
-        New-Item -ItemType Directory -Force $dir | Out-Null
-        $exe = Join-Path $dir "$($svc.id).exe"
-        $xml = Join-Path $dir "$($svc.id).xml"
-
-        # Idempotenza: se il servizio esiste gia', stop + uninstall prima
-        # di riscrivere il config (cosi' i parametri nuovi prendono).
-        if (Get-Service -Name $svc.id -ErrorAction SilentlyContinue) {
-            Write-Host "  $($svc.id): gia' registrato — stop + uninstall per refresh config"
-            # Stop-Service e' SINCRONO (attende lo stop); lo stop di
-            # winsw.exe invece ritorna subito e il wrapper teneva ancora
-            # il file alla Copy-Item (visto sul campo: beat in refresh).
-            Stop-Service $svc.id -Force -ErrorAction SilentlyContinue
-            & $exe uninstall 2>$null | Out-Null
-        }
-        # Il wrapper puo' mollare il file qualche secondo DOPO lo stop:
-        # retry bounded sulla copia.
-        $copied = $false
-        foreach ($try in 1..30) {
-            try { Copy-Item $winswExe $exe -Force; $copied = $true; break }
-            catch { Start-Sleep -Seconds 1 }
-        }
-        if (-not $copied) { Fail "$($svc.id): impossibile aggiornare $exe (wrapper ancora in esecuzione dopo 30s)" }
-
         $dependXml = ($svc.depends | ForEach-Object { "  <depend>$_</depend>" }) -join "`r`n"
-        @"
+        $xmlContent = @"
 <service>
   <id>$($svc.id)</id>
   <name>$($svc.name)</name>
@@ -485,11 +605,8 @@ $dependXml
     <keepFiles>4</keepFiles>
   </log>
 </service>
-"@ | Set-Content -Encoding ascii $xml
-
-        & $exe install
-        if ($LASTEXITCODE -ne 0) { Fail "$($svc.id): winsw install exit=$LASTEXITCODE" }
-        Ok "$($svc.id) registrato"
+"@
+        Install-WinSWService -Id $svc.id -Xml $xmlContent
     }
 
     # Avvio in ordine: backend (fa le migrations) -> worker -> beat.
