@@ -210,21 +210,33 @@ npm run build
 
 ---
 
-## Esiti da annotare (compilare durante la sessione)
+## Esiti (sessione 2026-07-04, VM VMware Windows Server 2025)
 
 | # | Step | Esito | Note |
 |---|---|---|---|
-| 2 | PostgreSQL 17 | | |
-| 3 | Erlang+RabbitMQ | | |
-| 4 | conda env + GDAL | | |
-| 5 | pip deps | | |
-| 7 | backend boot + /ready | | |
-| 8 | worker CLI dramatiq | | CLI o piano B? |
-| 9 | smoke ping | | |
-| 10 | beat + leader lock | | |
-| 11 | FE build | | |
+| 2 | PostgreSQL 17 | ✅ | winget ok; password superuser unattended NON prevedibile → reset via trust temporaneo in pg_hba (l'installer definitivo dovra' passare `--superpassword` o fare il reset) |
+| 3 | Erlang+RabbitMQ | ✅ (3 lezioni) | RabbitMQ NON e' piu' su winget → release GitHub NSIS /S; winget non setta ERLANG_HOME → servizio muto; OTP 29 incompatibile con RabbitMQ 4.3.2 (horus `unknown_instruction`) → pin OTP 28.5.0.3. Uninstall OTP lascia `epmd.exe` vivo che locka la dir |
+| 4 | conda env + GDAL | ✅ | GDAL 3.13.0 "Iowa City" nativo win-64, NESSUN pin libjxl necessario (a differenza di linux-64) |
+| 5 | pip deps | ✅ | tutte le wheel win-amd64 disponibili, zero compilazioni |
+| 7 | backend boot + /ready | ✅ | 33 migrations applicate al boot; `/ready` 8/8 ok (object storage disattivato via env, niente credenziali cloud sulla VM) |
+| 8 | worker CLI dramatiq | ✅ **CLI, niente piano B** | spawn multiprocessing ok, "Worker process is ready for action". BUG REALE trovato: broker URL letto all'import PRIMA del dotenv → default `rabbitmq` irrisolvibile su bare-metal (fix 943c6e04: load_backend_dotenv a modulo) |
+| 9 | smoke ping | ✅ `SMOKE: SUCCESS` | dispatch → RabbitMQ → worker → task_results su PG, tutto nativo |
+| 10 | beat + leader lock | ✅ | runner APScheduler su, leader lock su PG acquisito |
+| 11 | FE build | non eseguito | rimandato (gia' validato su host dev; da includere nell'installer definitivo) |
 
-Decisioni che discendono dagli esiti: forma del servizio (NSSM vs
-wrapper pywin32 vs Task Scheduler), CLI vs Worker API per il worker,
-packaging dell'env python (conda-pack? installer Miniforge scriptato?),
-bootstrap DB/broker nell'installer.
+**Verdetto: la tesi Plenora 2.0 e' dimostrata — lo stack gira nativo su
+Windows senza container ne' WSL.** Il worker usa il CLI dramatiq standard.
+
+## Cosa manca per l'installer di produzione (fuori scoping)
+
+- **Servizi Windows** per backend/worker/beat (candidati: NSSM, WinSW,
+  wrapper pywin32) + restart policy + log su file, al posto delle
+  finestre cmd.
+- **Password/secrets**: `--superpassword` PG esplicito, utente RabbitMQ
+  dedicato (non guest), ACL sul `.env`.
+- **Frontend**: build + serving (IIS? static file server? porta 80).
+- **Config di produzione**: ENVIRONMENT=production con i production
+  gates (oggi lo scoping usa development).
+- **Spegnimento pulito**: Ctrl+C/SIGINT gestiti; da validare lo stop dei
+  servizi Windows (SERVICE_STOP → il beat rilascia il leader lock?).
+- Cleanup del `Test-Path`/messaggi dello script (prototipo → prodotto).
