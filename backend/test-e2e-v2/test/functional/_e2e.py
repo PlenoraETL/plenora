@@ -55,6 +55,39 @@ DB_NAME = os.environ.get("PLENORA_E2E_DB_NAME", "plenora")
 TASK_TIMEOUT_SECONDS = int(os.environ.get("PLENORA_E2E_TASK_TIMEOUT_SECONDS", "90"))
 
 
+def _as_bool(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+# -----------------------------------------------------------------------------
+# Modalita' NATIVE (Windows nativo, no Docker)
+# -----------------------------------------------------------------------------
+# Il harness e2e-v2 nasce Docker-first: pilota l'app via HTTP ma per DUE cose
+# usa la Docker CLI — leggere/scrivere il DB applicativo (run_sql) e provare
+# che il codice interno respinge certi input (run_backend_python, test_073) —
+# piu' un attach di rete (ensure_plenora_test_network_access) che sul nativo
+# non ha senso. Con PLENORA_E2E_NATIVE=1 questi tre punti passano per gli
+# strumenti nativi (psql.exe, conda run) e l'attach diventa no-op. Il percorso
+# Docker resta identico quando il flag non e' settato.
+NATIVE_MODE = _as_bool(os.environ.get("PLENORA_E2E_NATIVE"))
+
+# DB applicativo (quello che usa il backend sotto test). Su nativo e' il
+# PostgreSQL locale della VM; su Docker resta il docker exec sul container.
+APP_DB_HOST = os.environ.get("PLENORA_E2E_APP_DB_HOST", "127.0.0.1")
+APP_DB_PORT = os.environ.get("PLENORA_E2E_APP_DB_PORT", "5432")
+APP_DB_USER = os.environ.get("PLENORA_E2E_APP_DB_USER", DB_USER)
+APP_DB_NAME = os.environ.get("PLENORA_E2E_APP_DB_NAME", DB_NAME)
+APP_DB_PASSWORD = os.environ.get("PLENORA_E2E_APP_DB_PASSWORD", "")
+PSQL_EXE = os.environ.get("PLENORA_E2E_PSQL", "psql")
+
+# Backend python nativo per le prove di dominio in-process (test_073): serve
+# l'interprete della env conda (PATH GDAL/PROJ) col cwd su backend/.
+CONDA_BAT = os.environ.get("PLENORA_E2E_CONDA", "conda")
+CONDA_ENV = os.environ.get("PLENORA_E2E_CONDA_ENV", "plenora")
+BACKEND_CWD = os.environ.get("PLENORA_E2E_BACKEND_CWD", "")
+BACKEND_CONTAINER = os.environ.get("PLENORA_E2E_BACKEND_CONTAINER", "plenora-backend-1")
+
+
 class E2EError(AssertionError):
     """Readable assertion failure for standalone E2E scripts."""
 
@@ -469,27 +502,33 @@ def new_context() -> E2EContext:
 
 
 def run_sql(sql: str) -> str:
-    command = [
-        "docker",
-        "exec",
-        "-i",
-        DB_CONTAINER,
-        "psql",
-        "-U",
-        DB_USER,
-        "-d",
-        DB_NAME,
-        "-v",
-        "ON_ERROR_STOP=1",
-        "-P",
-        "pager=off",
-    ]
+    psql_flags = ["-v", "ON_ERROR_STOP=1", "-P", "pager=off"]
+    sql_env = None
+    if NATIVE_MODE:
+        # psql.exe locale contro il DB applicativo della VM. La password va
+        # via PGPASSWORD (niente prompt interattivo, che appenderebbe l'hang).
+        command = [
+            PSQL_EXE,
+            "-h", APP_DB_HOST,
+            "-p", APP_DB_PORT,
+            "-U", APP_DB_USER,
+            "-d", APP_DB_NAME,
+            *psql_flags,
+        ]
+        sql_env = {**os.environ, "PGPASSWORD": APP_DB_PASSWORD}
+    else:
+        command = [
+            "docker", "exec", "-i", DB_CONTAINER,
+            "psql", "-U", DB_USER, "-d", DB_NAME,
+            *psql_flags,
+        ]
     result = subprocess.run(
         command,
         input=sql,
         text=True,
         capture_output=True,
         check=False,
+        env=sql_env,
     )
     if result.returncode != 0:
         fail(
@@ -500,8 +539,33 @@ def run_sql(sql: str) -> str:
     return result.stdout
 
 
+def run_backend_python(script: str) -> subprocess.CompletedProcess:
+    """Esegue uno snippet Python DENTRO il processo backend sotto test.
+
+    Serve alle prove che verificano il codice interno (es. il QueryGenerator
+    respinge un join cartesiano) senza passare dall'API. Su Docker e' un
+    `docker exec backend python -c`; su nativo l'interprete della env conda
+    col cwd su backend/ (PATH GDAL/PROJ dalla env). Ritorna il
+    CompletedProcess grezzo: il caller decide come interpretarne l'esito.
+    """
+    if NATIVE_MODE:
+        command = [CONDA_BAT, "run", "-n", CONDA_ENV]
+        if BACKEND_CWD:
+            command += ["--cwd", BACKEND_CWD]
+        command += ["python", "-c", script]
+    else:
+        command = ["docker", "exec", BACKEND_CONTAINER, "python", "-c", script]
+    return subprocess.run(command, text=True, capture_output=True, check=False)
+
+
 def ensure_plenora_test_network_access() -> None:
     """Attach running Plenora backend/worker containers to the E2E fixture network."""
+
+    if NATIVE_MODE:
+        # Nativo: backend/worker sono servizi Windows, non container; le
+        # fixture sono raggiunte via rete VMware con host/porte espliciti
+        # (PLENORA_E2E_*_HOST/PORT). Niente da agganciare.
+        return
 
     network = os.environ.get("PLENORA_TEST_NETWORK", "plenora-test")
     containers: list[str] = []
@@ -828,6 +892,7 @@ __all__ = [
     "project_source_node",
     "project_source_node_from_contract",
     "result_node",
+    "run_backend_python",
     "run_test",
     "set_output_contract",
     "source_column",

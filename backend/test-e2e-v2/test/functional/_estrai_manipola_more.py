@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import csv
-import os
-import subprocess
 from io import StringIO
 from typing import Any, Callable
 
@@ -21,6 +19,7 @@ from _e2e import (
     project_source_node,
     project_source_node_from_contract,
     result_node,
+    run_backend_python,
     run_test,
     set_output_contract,
     source_column,
@@ -110,7 +109,6 @@ def test_072(ctx: E2EContext) -> None:
 
 def test_073(ctx: E2EContext) -> None:
     del ctx
-    backend_container = os.environ.get("PLENORA_E2E_BACKEND_CONTAINER", "plenora-backend-1")
     script = (
         "from app.core.estrai.query_generator import QueryGenerator\n"
         "from app.core.projects.canvas_models import Node, Edge\n"
@@ -127,12 +125,7 @@ def test_073(ctx: E2EContext) -> None:
         "    raise SystemExit(0 if 'JOIN senza condizioni' in str(exc) else 2)\n"
         "raise SystemExit(1)\n"
     )
-    result = subprocess.run(
-        ["docker", "exec", backend_container, "python", "-c", script],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    result = run_backend_python(script)
     if result.returncode != 0:
         fail(
             "QueryGenerator must reject empty attribute joins\n"
