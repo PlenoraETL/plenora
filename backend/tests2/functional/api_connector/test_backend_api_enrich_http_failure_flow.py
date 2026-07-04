@@ -5,6 +5,7 @@ from __future__ import annotations
 from socket import timeout as SocketTimeout
 
 from tests2.functional.harness.http import http_json_response, poll_json_until
+from tests2.functional.harness.projects import validate_project_canvas
 
 
 def _http_generator_error_payload(fake_api_server) -> dict:
@@ -105,6 +106,11 @@ def test_arricchisci_http_api_generator_failure_surfaces_task_error(
     # POST /api/projects risponde 201 Created (router status_code=201)
     assert status == 201
     project_id = created_project["metadata"]["id"]
+
+    # Validate-first: senza, /execute e' 409 fail-fast (gate canvas).
+    # Il canvas e' strutturalmente valido; il fallimento atteso da questo
+    # test e' RUNTIME (upstream HTTP 422), non di validazione.
+    validate_project_canvas(backend_server["base_url"], project_id, auth_headers)
 
     try:
         status, task_created, _ = http_json_response(
