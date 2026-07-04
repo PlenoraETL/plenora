@@ -41,9 +41,14 @@ def _arricchisci_http_failure_canvas(api_id: str) -> dict:
                 "id": "ae-1",
                 "type": "api_enrich",
                 "position": {"x": 280, "y": 100},
-                "api_id": api_id,
-                "param_mapping": {},
-                "output_mapping": [],
+                # Config nel formato FE (dentro `data`): il node-validator
+                # legge SOLO data.api_id (top-level -> ARRICCHISCI_API_NOT_SELECTED);
+                # l'executor legge entrambe le shape (get_field fallback).
+                "data": {
+                    "api_id": api_id,
+                    "param_mapping": {},
+                    "output_mapping": [],
+                },
             },
             {
                 "id": "result-1",
