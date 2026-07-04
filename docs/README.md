@@ -2,10 +2,9 @@
 
 This is the documentation entry point for the current Plenora product.
 
-The rule is simple:
-
-- Canonical docs describe how the system works now.
-- ADRs explain durable architecture decisions.
+The rule is simple: canonical docs describe how the system works now. Historical
+notes, ADRs, and audit snapshots are not maintained as live Markdown; Git
+history preserves that context.
 
 ## Start Here
 
@@ -22,36 +21,30 @@ The rule is simple:
 | Clean install, single-server Docker | [Single-server Docker install](ops/install-docker-single-server.md) |
 | Clean install, multi-server Docker | [Multi-server Docker install](ops/install-docker-multi-server.md) |
 
-## Canonical Product Docs
+## Product
 
 - [Product overview](product/overview.md)
 - [Release 1.0 readiness](product/release-1.0.md)
 
-## Canonical Architecture Docs
+## Architecture
 
 - [Architecture overview](architecture/overview.md)
 - [Macro components](architecture/macro-components.md)
 - [Horizontal engines](architecture/horizontal-engines.md)
 - [Execution engine seam](architecture/execution-engine-seam.md)
 - [Invariants](architecture/invariants.md)
-- [ADR registry](architecture/decisions/README.md)
 
-Use the architecture overview and ADR registry for current architecture.
-
-## Canonical Development Docs
+## Development
 
 - [Onboarding](development/onboarding.md)
 - [Backend](development/backend.md)
 - [Frontend](development/frontend.md)
 - [Contributing](development/contributing.md)
 - [Code map](development/code-map.md)
-- [Strategic backlog](development/strategic-backlog.md)
-- [Changelog](development/changelog.md)
 - [Backend visual model](development/backend-visual-model.md)
-- [Backend horizontalization analysis](backend-horizontalization-analysis.md)
-- [Historical audits](audits/README.md)
+- [Bug marker ledger](development/bug-ledger.md)
 
-## Canonical Operations Docs
+## Operations
 
 - [Clean install, non-Docker](ops/install-non-docker.md)
 - [Docker install procedures](ops/install-docker.md)
@@ -68,7 +61,7 @@ Use the architecture overview and ADR registry for current architecture.
 - [Tickets](ops/tickets.md)
 - [Handoff](ops/handoff.md)
 
-## Compliance Docs
+## Compliance
 
 - [Secrets management](compliance/secrets-management.md)
 - [SBOM](compliance/sbom.md)
@@ -78,50 +71,15 @@ Use the architecture overview and ADR registry for current architecture.
 Compliance documents are working evidence. They need product-owner review
 before being used in an external audit.
 
-## Inventory Policy
+## Repository Markdown Policy
 
-The repository intentionally still contains many Markdown files, but they
-fall into distinct classes:
-
-- root convention files for GitHub entry points;
-- canonical product, architecture, development, operations, and compliance
-  docs under `docs/`;
-- ADRs, which are append-only;
-- local README files next to backend, deploy, script, and test packages;
-- the active backend E2E v2 harness under `backend/test-e2e-v2/`.
-
-Local package docs that are intentionally kept outside `docs/`:
-
-- [Backend deploy backup runbook](../backend/deploy/backup-runbook.md)
-- [Backend deploy IAM](../backend/deploy/iam/README.md)
-- [Backend deploy systemd](../backend/deploy/systemd/README.md)
-- [Backend deploy Terraform](../backend/deploy/terraform/README.md)
-- [Deploy profiles](../deploy/profiles/README.md)
-- [Backend tests2](../backend/tests2/README.md)
-- [Backend functional tests](../backend/tests2/functional/README.md)
-- [Backend integration tests](../backend/tests2/integration/README.md)
-- [Backend performance tests](../backend/tests2/performance/README.md)
-- [Frontend unit/contract tests](../frontend/tests/README.md)
-- [Frontend Playwright tests](../frontend/e2e/README.md)
-- [Backend E2E v2 harness](../backend/test-e2e-v2/README.md)
-- [Backend E2E v2 runner](../backend/test-e2e-v2/test/README.md)
-- [Backend E2E v2 SQL fixtures](../backend/test-e2e-v2/sql/README.md)
-- [Backend E2E v2 fake REST fixture](../backend/test-e2e-v2/fake-rest/README.md)
-- [Backend E2E v2 file fixtures](../backend/test-e2e-v2/files/README.md)
-- [Backend performance query notes](../backend/scripts/perf_queries/README.md)
-
-Historical or generated Markdown that should not be edited as live guidance:
-
-- The legacy `backend/test-e2e/` harness was removed after migration to
-  `backend/test-e2e-v2/`.
-
-Unlinked planning notes should be deleted or promoted into a canonical doc.
-
-## Documentation Rules
-
-- Do not add new root-level documentation unless it is a GitHub convention
-  file (`README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `CODE_MAP.md`).
-- Do not add broad "notes" files. Pick product, architecture, development,
-  ops, or compliance.
-- Do not rewrite ADRs. Add a new ADR or a superseding note.
-- Keep live docs short enough to read and current enough to trust.
+- Current product, architecture, development, operations, and compliance docs
+  live under `docs/`.
+- Root Markdown is limited to conventional entry points: `README.md` and
+  `CONTRIBUTING.md`.
+- Local `README.md` files are allowed only next to executable test, deploy, or
+  fixture packages where moving them would make the package harder to operate.
+- Historical notes, ADRs, superseded audits, and broad scratch files should be
+  deleted instead of archived in the repository.
+- When a durable rule changes, update the current canonical doc in the same
+  change.

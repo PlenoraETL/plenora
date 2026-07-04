@@ -63,8 +63,7 @@ These are the live engineering rules for Plenora.
 ## 7. Configuration
 
 - Runtime configuration should have one canonical name.
-- Retired aliases may be documented in ADRs but must not silently return as
-  runtime fallbacks.
+- Retired aliases must not silently return as runtime fallbacks.
 - Secrets are not normal config and must not be logged.
 - Memory/resource caps must be centralized or follow a documented split.
 
@@ -88,8 +87,8 @@ These are the live engineering rules for Plenora.
 ## 10. Documentation
 
 - Canonical docs describe current reality.
-- ADRs record accepted decisions. Supersede them explicitly when a decision
-  changes.
+- Durable rules belong in the current canonical docs. Git history preserves
+  past decision context.
 - If a change affects an engine boundary, installation behavior, security
   contract, or resource contract, update docs with the code change.
 

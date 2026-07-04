@@ -4,8 +4,8 @@ Plenora is a no-code/low-code ETL platform built around visual canvases,
 asynchronous execution, tenant isolation, and resource-aware artifact
 handling.
 
-This page describes the current architecture. Detailed decisions live in
-[`docs/architecture/decisions/`](decisions/).
+This page describes the current architecture. Durable rules live in the
+canonical architecture docs; Git history preserves past decision context.
 
 ## Runtime Shape
 
@@ -127,8 +127,8 @@ a clean machine.
 - No new business features during architecture cleanup.
 - No speculative mega-engine that replaces small focused capabilities.
 - No new compatibility facade without a removal plan.
-- No broad rewrite of accepted ADRs unless the recorded decision is wrong or
-  no longer operative.
+- No broad rewrite of current architecture rules without code evidence and
+  matching test updates.
 
 ## References
 

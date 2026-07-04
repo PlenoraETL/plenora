@@ -25,7 +25,6 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DOCS_OPS = _REPO_ROOT / "docs" / "ops"
 
 _INSTALL_DOCKER = _DOCS_OPS / "install-docker.md"
-_INSTALL_MARCO = _DOCS_OPS / "install-marco-dry-run.md"
 _INSTALL_NON_DOCKER = _DOCS_OPS / "install-non-docker.md"
 
 
@@ -60,9 +59,9 @@ _REQUIRED_TRUTH_MARKERS: tuple[str, ...] = (
 
 _IN_SCOPE_DOCS: tuple[Path, ...] = (
     _INSTALL_DOCKER,
-    _INSTALL_MARCO,
     _INSTALL_NON_DOCKER,
 )
+_DOCKER_STATUS_DOCS: tuple[Path, ...] = (_INSTALL_DOCKER,)
 
 
 @pytest.fixture(scope="module")
@@ -71,7 +70,7 @@ def doc_texts() -> dict[Path, str]:
     for path in _IN_SCOPE_DOCS:
         assert path.is_file(), (
             f"docs/ops/{path.name} must exist; INSTALL-014 "
-            "consistency guard depends on the three install runbooks "
+            "consistency guard depends on the live install runbooks "
             "being present together."
         )
         out[path] = path.read_text(encoding="utf-8")
@@ -106,21 +105,21 @@ def test_in_scope_docs_have_no_stale_phrases(doc_texts):
             "SCAFFOLD `backend/Dockerfile` + `docker-compose.yml` "
             "+ `scripts/docker-validate.sh`. Re-introducing any of "
             "the banned phrases would silently rebrand the scaffold "
-            "as missing, contradicting the install-docker.md "
-            "header AND the install-marco-dry-run.md disclaimer.\n"
+            "as missing, contradicting the install-docker.md header.\n"
             "If the scaffold is genuinely being torn down, this "
             "guard MUST be updated in the same change with a "
             "paired audit entry in BE_INSTALLATION_AUDIT.md."
         )
 
 
-def test_in_scope_docs_state_scaffold_exists(doc_texts):
-    """Positive lock. Every in-scope doc MUST mention both
+def test_docker_docs_state_scaffold_exists(doc_texts):
+    """Positive lock. Every Docker install doc MUST mention both
     `FIRST SCAFFOLD` and `NOT YET VALIDATED` so an operator who
-    skims any of the three pages cannot mistake the scaffold for
+    skims the Docker runbook cannot mistake the scaffold for
     a validated path nor for a missing one."""
     missing: list[tuple[str, str]] = []
-    for path, text in doc_texts.items():
+    for path in _DOCKER_STATUS_DOCS:
+        text = doc_texts[path]
         for marker in _REQUIRED_TRUTH_MARKERS:
             if marker not in text:
                 missing.append((path.name, marker))
@@ -133,7 +132,7 @@ def test_in_scope_docs_state_scaffold_exists(doc_texts):
         raise AssertionError(
             "Install doc consistency drift:\n"
             f"{details}\n\n"
-            "Each in-scope doc must carry both `FIRST SCAFFOLD` "
+            "Each Docker install doc must carry both `FIRST SCAFFOLD` "
             "AND `NOT YET VALIDATED`. The two markers together "
             "are the load-bearing honesty signal: the scaffold "
             "exists (cannot be dropped quietly) AND the Linux "
@@ -196,13 +195,13 @@ def test_install_non_docker_remains_go_ready_first_pc_path():
     This positive lock prevents a future doc edit from quietly
     flipping the operator's go-ready path to Docker."""
     text = _INSTALL_NON_DOCKER.read_text(encoding="utf-8")
-    # The section 13.1 callout phrases the funnel; the dry-run pack
-    # echoes it. We accept either of the canonical lower-cased
-    # phrasings because both currently appear in the runbook.
+    # The section 13.1 callout phrases the funnel. We accept the canonical
+    # lower-cased variants currently used in the runbook.
     canonical_phrases = (
         "go-ready first-pc",
         "go-ready first-pc test path",
         "go-ready install path",
+        "primary go-ready installation path",
     )
     lower = text.lower()
     if not any(p in lower for p in canonical_phrases):
@@ -214,31 +213,3 @@ def test_install_non_docker_remains_go_ready_first_pc_path():
             "installed has no signal that the scaffold is NOT "
             "the validated path."
         )
-
-
-def test_install_marco_dry_run_funnels_back_to_non_docker():
-    """The dry-run pack MUST funnel operators with pre-installed
-    Docker back to the single-machine path until the validation
-    report exists. The companion guard
-    `test_install_marco_dry_run_doc_guard.test_dry_run_doc_keeps_docker_honest`
-    asserts the disclaimer block exists; this lock simply asserts
-    the funnel sentence so the consistency layer is independent
-    of the disclaimer wording."""
-    text = _INSTALL_MARCO.read_text(encoding="utf-8")
-    # Either of the two canonical phrasings is acceptable; both
-    # currently appear (one as the disclaimer's closing sentence,
-    # the other as the section 13.1 callout cross-link).
-    lower = text.lower()
-    assert (
-        "the only go-ready path for the first pc test is this one"
-        in lower
-        or "go-ready first-pc test path remains" in lower
-        or "go-ready first-pc path" in lower
-    ), (
-        "install-marco-dry-run.md must explicitly funnel operators "
-        "back to the non-Docker path as the go-ready first-PC "
-        "path. The funnel sentence is the operator-facing "
-        "consistency signal between the two docs; without it, an "
-        "operator who reads only the dry-run pack misses that the "
-        "single-machine path is the validated route."
-    )

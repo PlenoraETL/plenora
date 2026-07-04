@@ -13,7 +13,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.shared]
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _REPO_ROOT = _BACKEND_ROOT.parent
-_BUGS_LEDGER = _REPO_ROOT / "BUGS.md"
+_BUGS_LEDGER = _REPO_ROOT / "docs" / "development" / "bug-ledger.md"
 _SCAN_ROOTS = (_BACKEND_ROOT / "app", _BACKEND_ROOT / "tests2")
 
 _BUG_MARKER_RE = re.compile(
@@ -53,7 +53,7 @@ def _numbered_bug_markers() -> dict[str, list[str]]:
     return markers
 
 
-def test_numbered_bug_markers_are_documented_in_root_ledger() -> None:
+def test_numbered_bug_markers_are_documented_in_development_ledger() -> None:
     tracked = _tracked_bug_ids()
     markers = _numbered_bug_markers()
     untracked = {
@@ -63,7 +63,8 @@ def test_numbered_bug_markers_are_documented_in_root_ledger() -> None:
     }
 
     assert not untracked, (
-        "Numbered backend bug/FIXME markers must be tracked in BUGS.md. "
+        "Numbered backend bug/FIXME markers must be tracked in "
+        "docs/development/bug-ledger.md. "
         "Add a `### #N - ...` entry before introducing a new marker.\n"
         "Untracked markers:\n  - "
         + "\n  - ".join(
@@ -82,6 +83,6 @@ def test_bug_ledger_has_no_duplicate_marker_headings() -> None:
     )
 
     assert not duplicates, (
-        "BUGS.md has duplicate marker headings: "
+        "docs/development/bug-ledger.md has duplicate marker headings: "
         + ", ".join(f"#{bug_id}" for bug_id in duplicates)
     )

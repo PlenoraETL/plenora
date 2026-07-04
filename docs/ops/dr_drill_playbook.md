@@ -1,8 +1,9 @@
 # DR drill playbook
 
 Procedura ripetibile per esercitare end-to-end il disaster recovery di
-PLENORA-ETL. Cadenza target: **trimestrale**. Ogni esecuzione produce un
-record append-only in [`dr_drill_log.md`](dr_drill_log.md).
+PLENORA-ETL. Cadenza target: **trimestrale**. Ogni esecuzione produce evidenza
+in un ticket operativo o registro esterno; non mantenere log append-only in
+Markdown nel repository.
 
 > Distinzione importante: il timer `plenora-backup-test.timer` weekly
 > verifica solo che il dump sia **restorable** (no errore in pg_restore).
@@ -55,11 +56,10 @@ Ogni step ha **comando + checkpoint + atteso**. Cronometra dall'inizio
 dello step 4 (download) alla fine dello step 8 (smoke verify): è il tuo
 **RTO measured**.
 
-### Step 1 — Apri il drill log
+### Step 1 — Apri il record di drill
 
-Nel log [`dr_drill_log.md`](dr_drill_log.md) crea l'entry header con
-data ISO, executor, ambiente target. Salva il file. Servirà a riempirsi
-durante l'esecuzione.
+Nel ticket operativo o registro esterno crea l'entry header con data ISO,
+executor e ambiente target. Il record si riempie durante l'esecuzione.
 
 ### Step 2 — Snapshot dei target dichiarati
 
@@ -83,7 +83,7 @@ aws s3 ls s3://plenora-backup-112011134642-eu-south-1-an/ \
 Se il dump più recente è > 48h fa: stop drill, apri P1 incidente —
 qualcosa nel ciclo backup è rotto, drill non rappresentativo.
 
-Registra nel log: nome dump scelto + timestamp.
+Registra nel record di drill: nome dump scelto + timestamp.
 
 ### Step 4 — Download del dump
 
@@ -97,7 +97,7 @@ aws s3 cp s3://plenora-backup-112011134642-eu-south-1-an/<dump-file> \
 **Checkpoint**: file `/tmp/dr_drill.dump` esiste, dimensione > 1 MB.
 **Atteso**: download in < 30s su connessione locale tipica.
 
-Registra nel log: dimensione file, secondi di download.
+Registra nel record di drill: dimensione file, secondi di download.
 
 ### Step 5 — Crea DB target vergine
 
@@ -135,7 +135,7 @@ pg_restore \
 `ERROR:`.
 **Atteso**: ~10-60s per schema da 12 MB.
 
-Registra nel log: secondi di restore, eventuali warning non-fatali.
+Registra nel record di drill: secondi di restore, eventuali warning non-fatali.
 
 ### Step 7 — Verifica restorability semantica
 
@@ -178,7 +178,7 @@ curl -X POST http://localhost:8000/auth/login \
 **Atteso**: < 5s totali.
 
 Se login fallisce con `JWT_SECRET_KEY` mancante: il drill ha rivelato
-che la SSM lookup non è coperta — registra come finding nel log e nel
+che la SSM lookup non è coperta — registra come finding nel record e nel
 post-drill.
 
 ### Step 9 — Cleanup
@@ -190,9 +190,9 @@ rm -f /tmp/dr_drill.dump
 
 **Checkpoint**: nessun residuo. Il drill non deve lasciare DB orfani.
 
-### Step 10 — Chiudi entry log
+### Step 10 — Chiudi record di drill
 
-Compila l'entry in `dr_drill_log.md` con:
+Completa il record di drill con:
 
 - RTO measured
 - RPO measured (timestamp del dump scelto vs ora drill)
@@ -246,7 +246,7 @@ PG locale carico, console AWS rallentata, ecc.).
 
 ## §5 Report template
 
-Da copiare in `dr_drill_log.md` come nuova entry.
+Da copiare nel ticket operativo o registro esterno.
 
 ```markdown
 ### Drill <YYYY-MM-DD> — <executor>
@@ -287,5 +287,4 @@ Da copiare in `dr_drill_log.md` come nuova entry.
 - [`incident_response.md`](incident_response.md) — se durante il drill
   scopri gap che richiedono intervento prod, apri incidente per il
   livello di severity appropriato
-- [`dr_drill_log.md`](dr_drill_log.md) — registro append-only delle
-  esecuzioni passate
+- Ticket operativo o registro esterno — evidenze delle esecuzioni passate

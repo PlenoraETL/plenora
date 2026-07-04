@@ -22,7 +22,8 @@ Rules:
 - Do not add new imports from the retired auth facade.
 - Runtime security helpers belong in `app/core/security`; `app/shared/*`
   security paths are compatibility aliases only.
-- Disclosure policy and auth error codes are governed by ADR-0022.
+- Disclosure policy and auth error codes are governed by the current security
+  and invariant rules.
 - Tenant/group binding must remain explicit at cross-tenant boundaries.
 
 ---
@@ -48,7 +49,7 @@ Current ArcGIS shape:
 - `ArcGISProviderProtocol` lives in `app/shared/connections/arcgis_provider.py`.
 - IMDF uses the neutral connection resolver instead of depending directly on
   `FeaturesService` or a Features-owned adapter.
-- The ADR-0023 IMDF residual allowlist is empty: IMDF ArcGIS policy wrappers
+- The IMDF residual allowlist is empty: IMDF ArcGIS policy wrappers
   route generic discovery and lifecycle helper calls through
   `app.core.connections`, not `app.core.features`.
 - Generic ArcGIS SQL and existing-service publish-mode helpers live under
@@ -66,7 +67,7 @@ Rules:
 - Shared connection contracts must not import concrete clients or DB code.
 - New provider semantics belong in `connections`, not in canvas node models.
 - Do not add new IMDF imports from `app.core.features`; the boundary guard has
-  no remaining ADR-0023 IMDF exceptions.
+  no remaining IMDF exceptions.
 - Do not add new ArcGIS connection CRUD persistence under
   `app.core.features`; use `app.core.connections.arcgis_connection_store`.
 
@@ -367,7 +368,6 @@ Rules:
 - [Macro components](macro-components.md)
 - [Architecture overview](overview.md)
 - [Invariants](invariants.md)
-- [ADR registry](decisions/README.md)
 - [Clean install, non-Docker](../ops/install-non-docker.md)
 - [Clean install, Docker](../ops/install-docker.md)
 

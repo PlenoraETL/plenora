@@ -4,9 +4,9 @@ Bibbia operativa del repo. Una sezione per modulo: dove entrare,
 responsabilita', file principali con funzioni/classi reali, keywords per
 `rg`, punti di intervento e confini da non rompere.
 
-Questo file descrive **lo stato corrente del codice** e i confini
-operativi dei moduli. Cronologia e decisioni temporali vivono in
-`docs/development/changelog.md` e negli ADR.
+Questo file descrive **lo stato corrente del codice** e i confini operativi
+dei moduli. Cronologia e decisioni superate restano nella storia Git; le regole
+durature vivono nei documenti canonici correnti.
 
 Formato per sezione:
 - `Entry-point`: dove entra il flusso runtime o API.

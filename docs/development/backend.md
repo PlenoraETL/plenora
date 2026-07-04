@@ -122,18 +122,11 @@ See:
 
 ---
 
-## Key ADRs
+## Architecture References
 
-- [ADR-0003](../architecture/decisions/0003-2026-04-21-fernet-crypto-at-rest.md)
-- [ADR-0004](../architecture/decisions/0004-2026-04-21-jwt-hs256-ttl-8h-no-refresh.md)
-- [ADR-0009](../architecture/decisions/0009-2026-04-21-jwt-blacklist-redis-fail-open-read-fail-loud-write.md)
-- [ADR-0015](../architecture/decisions/0015-2026-04-22-minio-object-storage-provider.md)
-- [ADR-0019](../architecture/decisions/0019-2026-05-01-intermediate-mode-per-call-override.md)
-- [ADR-0021](../architecture/decisions/0021-2026-05-03-env-config-boundary.md)
-- [ADR-0022](../architecture/decisions/0022-2026-05-04-auth-disclosure-policy.md)
-- [ADR-0023](../architecture/decisions/0023-2026-05-06-arcgis-external-provider-boundary.md)
-
-Full index: [decisions/README.md](../architecture/decisions/README.md).
+- [Architecture overview](../architecture/overview.md)
+- [Horizontal engines](../architecture/horizontal-engines.md)
+- [Invariants](../architecture/invariants.md)
 
 ---
 

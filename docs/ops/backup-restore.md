@@ -394,7 +394,8 @@ Un DR plan che non viene mai testato non e' un DR plan. Ogni 3 mesi
 eseguire il drill end-to-end seguendo il playbook dedicato:
 
 - Procedura ripetibile: [`dr_drill_playbook.md`](dr_drill_playbook.md)
-- Log esecuzioni: [`dr_drill_log.md`](dr_drill_log.md)
+- Evidenze esecuzioni: ticket operativo o registro esterno, non Markdown nel
+  repository.
 
 Il playbook copre: download dump da S3, restore su DB vergine, verifica
 estensioni (postgis/h3), smoke applicativo (login + healthcheck),
@@ -438,7 +439,7 @@ Dopo ogni intervento DR:
 
 - Operazioni normali: [backup-runbook.md](../../backend/deploy/backup-runbook.md)
 - DR drill ripetibile: [dr_drill_playbook.md](dr_drill_playbook.md)
-- DR drill log: [dr_drill_log.md](dr_drill_log.md)
+- Evidenze DR drill: ticket operativo o registro esterno
 - Incident response generale: [incident_response.md](incident_response.md)
 - Unit systemd + install: [deploy/systemd/README.md](../../backend/deploy/systemd/README.md)
 - IAM policies + SSM setup: [deploy/iam/README.md](../../backend/deploy/iam/README.md)

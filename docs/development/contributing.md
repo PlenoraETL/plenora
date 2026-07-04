@@ -150,9 +150,9 @@ public contracts change.
 Use:
 
 - `README.md` for product and quickstart entry points.
-- `docs/architecture/` for current system shape and ADRs.
+- `docs/architecture/` for current system shape and durable rules.
 - `docs/development/` for developer workflow.
 - `docs/ops/` for installation, runtime, backup, and cleanroom notes.
 
-ADRs record accepted decisions. Add a new ADR or superseding note when the
-decision changes.
+When a durable decision changes, update the current canonical architecture,
+development, or operations doc in the same change.

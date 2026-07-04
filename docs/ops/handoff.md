@@ -44,7 +44,8 @@ Backup = chi può subentrare in caso di assenza, dopo onboarding completato.
 
 ## 3. Onboarding 2nd operator — checklist
 
-Da eseguire in ordine. Dopo ogni step, segnare data + responsabile in `dr_drill_log.md` come tracking.
+Da eseguire in ordine. Dopo ogni step, segnare data + responsabile nel ticket
+operativo o registro esterno del drill.
 
 ### 3.1 Accessi base
 

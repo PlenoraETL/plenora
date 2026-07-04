@@ -29,7 +29,7 @@ Out of scope:
 | ISO area | Status | Evidence |
 |---|---|---|
 | A.5 Security policies | Org-owned | Corporate policy required outside the repo. |
-| A.6 Organization | Partial | RBAC, ADR process, documented review rules. |
+| A.6 Organization | Partial | RBAC, architecture docs, documented review rules. |
 | A.7 HR security | Org-owned | Outside application scope. |
 | A.8 Asset management | Partial | Architecture docs, resource/storage docs, GDPR register. |
 | A.9 Access control | Implemented/Partial | JWT, RBAC, MFA opt-in, tenant/group isolation, admin controls. |
@@ -37,7 +37,7 @@ Out of scope:
 | A.11 Physical security | Provider/Org-owned | Cloud/provider responsibility. |
 | A.12 Operations security | Partial | Runbooks, logs, backup/restore, incident docs. |
 | A.13 Communications security | Partial | TLS/reverse proxy and trusted proxy assumptions. |
-| A.14 Secure development | Partial | ADRs, tests, code review policy, dependency docs. |
+| A.14 Secure development | Partial | Architecture docs, tests, code review policy, dependency docs. |
 | A.15 Supplier relationships | Org-owned | Outside application scope. |
 | A.16 Incident management | Partial | Incident response and JWT playbook exist. |
 | A.17 Business continuity | Partial | Backup/restore and DR drill docs exist; drill evidence required. |
@@ -54,7 +54,7 @@ Out of scope:
 - Health/readiness checks.
 - Backup and restore documentation.
 - Dependency/SBOM process.
-- ADR registry for durable decisions.
+- Canonical architecture docs for durable rules.
 
 ## Known Gaps Before External Audit
 

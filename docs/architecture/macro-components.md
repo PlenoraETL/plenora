@@ -73,8 +73,7 @@ Current state:
 - The remaining adapter still lives in `app/core/features` because DB lookup
   for ArcGIS connections has not yet moved to a neutral repository boundary.
 
-Decision record:
-[ADR-0023](decisions/0023-2026-05-06-arcgis-external-provider-boundary.md).
+Boundary details: [Horizontal engines](horizontal-engines.md).
 
 ---
 

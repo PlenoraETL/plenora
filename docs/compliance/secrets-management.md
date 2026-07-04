@@ -13,8 +13,8 @@ Status reviewed: 2026-05-07.
 | `JWT_SECRET_KEY` | HS256 JWT signing key. | Yes | Rotating invalidates all active JWTs. |
 | `DRAMATIQ_BROKER_URL` | RabbitMQ/Dramatiq broker URL for async tasks. | Yes | Rotate with RabbitMQ credentials/topology. |
 
-Legacy names must not be reintroduced as runtime fallbacks. Historical docs
-may mention old aliases; current runtime configuration uses `PLENORA_*`.
+Legacy names must not be reintroduced as runtime fallbacks. Current runtime
+configuration uses `PLENORA_*`.
 
 ## Storage
 
@@ -96,5 +96,5 @@ Before 1.0:
 - [Non-Docker install](../ops/install-non-docker.md)
 - [Docker install](../ops/install-docker.md)
 - [JWT incident response](../ops/jwt-incident-response.md)
-- [ADR-0003 Fernet crypto at rest](../architecture/decisions/0003-2026-04-21-fernet-crypto-at-rest.md)
-- [ADR-0004 JWT HS256](../architecture/decisions/0004-2026-04-21-jwt-hs256-ttl-8h-no-refresh.md)
+- [Architecture invariants](../architecture/invariants.md)
+- [Runtime prerequisites](../ops/runtime-prereqs.md)

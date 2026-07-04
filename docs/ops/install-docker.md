@@ -93,10 +93,8 @@ BE-GO-READY-INSTALL-010-LINUX-EXECUTION-PACK.
 | memory caps visibility | print backend memory cap settings | NO (scaffold) |
 | non-destructive rollback | `docker compose stop` | NO (scaffold) |
 
-The executable single-machine smoke pack remains cross-linked from
-`install-marco-dry-run.md`. Use the dedicated
-[single-server Docker install](install-docker-single-server.md) for the current
-operator flow.
+Use the dedicated [single-server Docker install](install-docker-single-server.md)
+for the current operator flow.
 
 ## Target shape (specification only)
 
