@@ -212,6 +212,10 @@ DATA_DIR=$DataDir
 # Lezione scoping VM 2026-07-04.
 STORAGE_POLICY=db
 BACKUP_BUCKET=plenora-scoping-backup
+# Niente credenziali cloud sulla VM: senza questi due /ready resta
+# not_ready su object_storage (probe S3 -> NoCredentialsError).
+OBJECT_STORAGE_ENABLED=false
+CLOUD_PROVIDER=none
 "@ | Set-Content -Encoding ascii $envFile
     Ok '.env generato (secrets random; ENVIRONMENT=development per lo scoping)'
 }
