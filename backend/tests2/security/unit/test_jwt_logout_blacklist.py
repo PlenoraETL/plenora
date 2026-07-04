@@ -1,5 +1,5 @@
 """
-Unit tests — JWT jti claim + /auth/logout + blacklist Redis.
+Unit tests — JWT jti claim + /auth/logout + blacklist (KV su PostgreSQL).
 
 Reperto coperto: revoca token JWT lato server. Pre-feature, l'unica
 """
@@ -274,7 +274,7 @@ def test_logout_redis_down_returns_503(auth_client):
     assert "revoca" in detail["message"].lower()
 
 
-# 10. Blacklist check fail-open su Redis down
+# 10. Blacklist check fail-open su store down
 
 
 def test_blacklist_check_fail_open_on_redis_down(auth_client):

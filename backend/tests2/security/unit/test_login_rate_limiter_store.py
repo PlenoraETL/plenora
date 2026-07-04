@@ -59,7 +59,7 @@ def _no_op_fallback(_ip: str) -> None:
     pass
 
 
-# 1. Limit applicato per IP via Redis
+# 1. Limit applicato per IP via attempts store distribuito
 
 
 def test_redis_limit_triggers_after_max_attempts(rl_with_redis):

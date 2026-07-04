@@ -16,12 +16,12 @@ from tests2.integration.test_postgres_connection_and_estrai_preview import (
 
 
 def test_postgres_execute_pipeline_spawns_and_completes_carica_task(
-    integration_celery_worker,
+    integration_task_worker,
     integration_backend_server,
     integration_auth_headers,
     integration_user_seed,
 ):
-    _ = integration_celery_worker
+    _ = integration_task_worker
     connection = _create_postgres_connection(
         integration_backend_server["base_url"],
         integration_auth_headers,

@@ -15,11 +15,11 @@ from tests2.integration.harness.projects import managed_project
 
 
 def test_mysql_execute_returns_downloadable_project_result(
-    integration_celery_worker,
+    integration_task_worker,
     integration_backend_server,
     integration_auth_headers,
 ):
-    _ = integration_celery_worker
+    _ = integration_task_worker
     connection = _create_mysql_connection(
         integration_backend_server["base_url"],
         integration_auth_headers,

@@ -13,9 +13,8 @@ from tests2.functional.harness.auth import (
     login_functional_user,
     seed_functional_user,
 )
-from tests2.functional.harness.celery import spawn_celery_worker
-from tests2.functional.harness.celery import flush_redis_db
-from tests2.functional.harness.env import configure_redis_urls, isolate_redis_dbs
+from tests2.functional.harness.env import configure_broker_env, isolate_task_queues
+from tests2.functional.harness.workers import spawn_worker
 from tests2.functional.harness.ports import find_free_port
 from tests2.functional.harness.processes import (
     spawn_process,
@@ -38,8 +37,11 @@ def functional_env(tmp_path) -> dict:
     env["JWT_SECRET_KEY"] = "tests2-functional-jwt-secret"
     env["PLENORA_ENCRYPTION_KEY"] = "tests2-functional-encryption-key"
     env["DATA_DIR"] = str(data_dir)
-    configure_redis_urls(env)
-    isolate_redis_dbs(env, broker_db=13, result_db=14)
+    configure_broker_env(env)
+    # Code dedicate per-test (functional_env e' function-scoped): il worker
+    # spawnato consuma SOLO i task di questo test — rimpiazza sia il vecchio
+    # isolamento redis-DB sia il flush per-test.
+    isolate_task_queues(env)
     # Opt-in SSRF loopback: i test funzionali lanciano un fake HTTP
     # server su 127.0.0.1 e poi fanno chiamare il backend reale verso
     # quell'URL. Senza questa opt-in, `validate_external_url` blocca
@@ -111,15 +113,13 @@ def backend_server(functional_env):
 
 
 @pytest.fixture
-def celery_worker(functional_env):
-    """Avvia un worker Celery locale per i functional async-lite."""
-    broker_url = functional_env.get("CELERY_BROKER_URL") or functional_env.get("REDIS_URL")
-    result_backend = functional_env.get("CELERY_RESULT_BACKEND")
-    if broker_url:
-        flush_redis_db(broker_url)
-    if result_backend:
-        flush_redis_db(result_backend)
-    proc = spawn_celery_worker(
+def task_worker(functional_env):
+    """Avvia un worker Dramatiq locale per i functional async-lite.
+
+    Isolamento: le code sono suffissate per-test (isolate_task_queues in
+    functional_env), quindi niente flush del broker — i task orfani di
+    run precedenti vivono su code diverse senza consumer."""
+    proc = spawn_worker(
         workdir=FUNCTIONAL_ROOT.parent.parent,
         env=functional_env,
         loglevel="warning",
@@ -128,35 +128,6 @@ def celery_worker(functional_env):
         yield {"process": proc}
     finally:
         stop_process(proc)
-        if broker_url:
-            flush_redis_db(broker_url)
-        if result_backend:
-            flush_redis_db(result_backend)
-
-
-@pytest.fixture(autouse=True)
-def _functional_flush_redis_per_test(request):
-    """Isolamento per test anche con worker/backend module-scoped."""
-    redis_fixtures = {
-        "backend_server",
-        "celery_worker",
-        "auth_token",
-        "auth_headers",
-    }
-    if not (redis_fixtures & set(request.fixturenames)):
-        yield
-        return
-
-    functional_env = request.getfixturevalue("functional_env")
-    broker_url = functional_env.get("CELERY_BROKER_URL")
-    result_backend = functional_env.get("CELERY_RESULT_BACKEND")
-    try:
-        yield
-    finally:
-        if broker_url:
-            flush_redis_db(broker_url)
-        if result_backend:
-            flush_redis_db(result_backend)
 
 
 @pytest.fixture
@@ -202,10 +173,10 @@ _HTTP_FIXTURES = frozenset({
 })
 
 
-# Fixture che avviano servizi reali (backend HTTP, fake-API, worker Celery):
-# i test che li usano richiedono lo stack e2e-v2 e non possono girare nel run
-# unit di default.
-_LIVE_SERVICE_FIXTURES = _HTTP_FIXTURES | frozenset({"celery_worker"})
+# Fixture che avviano servizi reali (backend HTTP, fake-API, worker
+# Dramatiq): i test che li usano richiedono lo stack e2e-v2 e non possono
+# girare nel run unit di default.
+_LIVE_SERVICE_FIXTURES = _HTTP_FIXTURES | frozenset({"task_worker"})
 
 
 def pytest_collection_modifyitems(config, items):

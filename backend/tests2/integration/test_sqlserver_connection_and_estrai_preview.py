@@ -66,11 +66,11 @@ def _estrai_sqlserver_canvas(table_name: str) -> dict:
 
 
 def test_sqlserver_connection_tables_and_estrai_preview_roundtrip(
-    integration_celery_worker,
+    integration_task_worker,
     integration_backend_server,
     integration_auth_headers,
 ):
-    _ = integration_celery_worker
+    _ = integration_task_worker
     connection = _create_sqlserver_connection(
         integration_backend_server["base_url"],
         integration_auth_headers,

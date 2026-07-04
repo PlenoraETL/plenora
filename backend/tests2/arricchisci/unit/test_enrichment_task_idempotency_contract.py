@@ -17,9 +17,7 @@ pytestmark = [
     pytest.mark.unit,
     pytest.mark.arricchisci,
     pytest.mark.contract,
-    pytest.mark.usefixtures("celery_eager"),
 ]
-pytest_plugins = ("tests2._helpers.celery_eager",)
 
 
 def test_enrichment_task_accepts_run_id_kwarg():
@@ -37,7 +35,7 @@ def test_enrichment_task_invokes_idempotency_check_when_run_id_passed(
 ):
     """Behavior: con run_id passato, il task invoca
     `is_already_completed(run_id)` PRIMA di qualsiasi altra logica."""
-    from tests2._helpers.celery_eager import (
+    from tests2._helpers.enrichment_task_harness import (
         install_enrichment_task_mocks, invoke_enrichment_task,
         install_update_task_progress_spy,
     )
@@ -76,7 +74,7 @@ def test_enrichment_task_returns_skipped_idempotent_when_already_completed(
 
     Coerenza col carica_task: stesso shape `{status, success, message,
     run_id, task_id}`."""
-    from tests2._helpers.celery_eager import (
+    from tests2._helpers.enrichment_task_harness import (
         install_enrichment_task_mocks, invoke_enrichment_task,
     )
 

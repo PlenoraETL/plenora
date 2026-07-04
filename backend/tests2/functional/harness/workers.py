@@ -1,8 +1,12 @@
-"""Helper di bootstrap per worker/beat Celery nei test funzionali."""
+"""Helper di bootstrap per worker/beat nei test funzionali.
+
+Rinominato da ``celery.py`` (2026-07-04): il worker e' Dramatiq su
+RabbitMQ e ``flush_redis_db`` e' stato rimosso (Redis non esiste piu';
+l'isolamento fra run e' via code suffissate, vedi ``env.isolate_task_queues``).
+"""
 
 from __future__ import annotations
 
-from urllib.parse import urlparse
 import sys
 from pathlib import Path
 from typing import Optional
@@ -10,20 +14,19 @@ from typing import Optional
 from tests2.functional.harness.processes import ManagedProcess, spawn_process
 
 
-def spawn_celery_worker(
+def spawn_worker(
     *,
     workdir: Path,
     env: Optional[dict] = None,
     loglevel: str = "warning",
 ) -> ManagedProcess:
-    """Avvia un worker dei task locale (Plenora 2.0: Dramatiq su RabbitMQ).
+    """Avvia un worker dei task locale (Dramatiq su RabbitMQ).
 
-    Plenora 2.0 Fase 5: niente piu' ``celery worker``; il worker e'
-    ``python -m dramatiq workers.dramatiq_app`` (1 processo / 4 thread). Il
-    nome della funzione resta per compat dei chiamanti (fixture gated dietro
-    URBY_RUN_INTEGRATION). Non fa readiness check attivo: i test async
-    definiscono un handshake piu' specifico (submit + poll su PG).
+    ``python -m dramatiq workers.dramatiq_app`` (1 processo / 4 thread).
+    Non fa readiness check attivo: i test async definiscono un handshake
+    piu' specifico (submit + poll su PG).
     """
+    _ = loglevel  # firma storica; il CLI dramatiq non ha un flag loglevel
     return spawn_process(
         name="dramatiq-worker",
         command=[
@@ -41,17 +44,17 @@ def spawn_celery_worker(
     )
 
 
-def spawn_celery_beat(
+def spawn_beat(
     *,
     workdir: Path,
     env: Optional[dict] = None,
     loglevel: str = "warning",
 ) -> ManagedProcess:
-    """Avvia il beat del progetto.
+    """Avvia il beat del progetto (APScheduler, ``python -m workers.beat``).
 
-    Plenora 2.0 Fase 3: il beat gira su APScheduler (``python -m workers.beat``),
-    non piu' su ``celery beat -S``. La logica (leader su PG, sync, catchup,
-    emit via dispatch) e' invariata. Il nome resta per compat dei chiamanti."""
+    La logica (leader su PG, sync, catchup, emit via dispatch) e' quella
+    di produzione."""
+    _ = loglevel
     return spawn_process(
         name="plenora-beat",
         command=[
@@ -62,37 +65,3 @@ def spawn_celery_beat(
         workdir=workdir,
         env=env,
     )
-
-
-def flush_redis_db(redis_url: str) -> None:
-    """Svuota il DB Redis indicato dall'URL.
-
-    Usato dai test integration/functional per evitare task/result orfani
-    tra run successive. Se la dependency `redis` non è disponibile o il
-    server non è raggiungibile, solleva esplicitamente: è infrastruttura
-    di test che deve funzionare, non best-effort silenzioso.
-    """
-    parsed = urlparse(redis_url)
-    db = int((parsed.path or "/0").lstrip("/") or "0")
-    import redis
-    from redis.exceptions import RedisError
-
-    client = redis.Redis(
-        host=parsed.hostname or "127.0.0.1",
-        port=parsed.port or 6379,
-        db=db,
-        password=parsed.password,
-        socket_connect_timeout=5,
-        socket_timeout=5,
-        decode_responses=False,
-    )
-    try:
-        client.flushdb()
-    except RedisError as exc:
-        raise RuntimeError(
-            "Redis test dependency is not reachable at "
-            f"{redis_url!r}. For host-run tests, publish Redis and set "
-            "CELERY_BROKER_URL/REDIS_URL to redis://127.0.0.1:6379/0; "
-            "inside containers, set it to the service hostname, e.g. "
-            "redis://redis:6379/0."
-        ) from exc

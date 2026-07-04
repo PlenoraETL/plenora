@@ -22,13 +22,13 @@ def test_unknown_task_returns_404(integration_backend_server, integration_auth_h
 
 
 def test_task_status_progresses_with_real_worker(
-    integration_celery_worker,
+    integration_task_worker,
     integration_backend_server,
     integration_auth_headers,
     integration_user_seed,
     integration_db_probe,
 ):
-    _ = integration_celery_worker
+    _ = integration_task_worker
     with managed_project(
         base_url=integration_backend_server["base_url"],
         auth_headers=integration_auth_headers,
@@ -59,13 +59,13 @@ def test_task_status_progresses_with_real_worker(
 
 
 def test_execute_endpoint_creates_real_task_and_reaches_terminal_state(
-    integration_celery_worker,
+    integration_task_worker,
     integration_backend_server,
     integration_auth_headers,
     integration_user_seed,
     integration_db_probe,
 ):
-    _ = integration_celery_worker
+    _ = integration_task_worker
     with managed_project(
         base_url=integration_backend_server["base_url"],
         auth_headers=integration_auth_headers,

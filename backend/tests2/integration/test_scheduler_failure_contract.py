@@ -42,11 +42,11 @@ def _estrai_missing_mysql_canvas(table_name: str) -> dict:
 
 
 def test_scheduler_manual_run_failure_updates_runtime_and_logs(
-    integration_celery_worker,
+    integration_task_worker,
     integration_backend_server,
     integration_auth_headers,
 ):
-    _ = integration_celery_worker
+    _ = integration_task_worker
     connection = _create_mysql_connection(
         integration_backend_server["base_url"],
         integration_auth_headers,

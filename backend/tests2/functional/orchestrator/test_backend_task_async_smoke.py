@@ -7,10 +7,10 @@ from tests2.functional.harness.http import http_json_response, poll_json_until
 
 def test_preview_task_reaches_terminal_state_with_real_worker(
     backend_server,
-    celery_worker,
+    task_worker,
     auth_headers,
 ):
-    _ = celery_worker
+    _ = task_worker
     create_payload = {
         "name": "Functional Async Preview",
         "description": "tests2 functional",

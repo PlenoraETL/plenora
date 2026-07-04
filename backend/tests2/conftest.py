@@ -323,7 +323,7 @@ if os.getenv("URBY_TEST_REAL_DB_INIT") != "1":
         # `app.main` ora chiama `app.bootstrap.bootstrap()` al top-level
         # invece dei 4 step inline. Lo stub a livello del
         # boundary copre il caso in cui un test importi `app.main` senza
-        # PG/Redis raggiungibili. Gli stub piu' granulari sopra restano
+        # PG/broker raggiungibili. Gli stub piu' granulari sopra restano
         # in place per i test che importano direttamente i 4 helper
         # (idempotente con questa no-op aggiuntiva).
         _bootstrap.bootstrap = _noop_bootstrap
@@ -335,17 +335,16 @@ if os.getenv("URBY_TEST_REAL_DB_INIT") != "1":
 
 
 def _kill_stray_test_subprocesses() -> None:
-    """Kill stray celery/uvicorn spawnati da test runs precedenti.
+    """Kill stray worker/uvicorn spawnati da test runs precedenti.
 
     Quando pytest viene ucciso da --timeout o Ctrl+C a meta' test, i
-    subprocess figli (celery worker, uvicorn backend) spesso sopravvivono
-    perche' la teardown del fixture module-scoped non gira. Il celery stray
-    si riattacca al Redis condiviso e ruba i task del nuovo worker di test
-    — DuplicateNodenameWarning — causando flake indistinguibili dai bug
-    applicativi.
+    subprocess figli (worker Dramatiq, uvicorn backend) spesso sopravvivono
+    perche' la teardown del fixture module-scoped non gira. Il worker stray
+    si riattacca al broker condiviso e ruba i task del nuovo worker di test,
+    causando flake indistinguibili dai bug applicativi.
 
     Heuristica conservativa: killa solo processi il cui command-line
-    matcha ESATTAMENTE quello che spawniamo nei test (celery/uvicorn con
+    matcha ESATTAMENTE quello che spawniamo nei test (dramatiq/uvicorn con
     app specifica). Non tocca dev server su porte arbitrarie."""
     import sys as _sys
     if _sys.platform != "win32":

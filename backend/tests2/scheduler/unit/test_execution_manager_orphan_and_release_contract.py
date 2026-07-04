@@ -215,7 +215,7 @@ def test_finally_does_not_propagate_when_both_release_attempts_fail(
          pulitamente e ``execute()`` ritorna il result dal
          ``handle_failure`` (non un uncaught OperationalError).
 
-    Contract critico: ``execute()`` Ã¨ chiamato da un task Celery che
+    Contract critico: ``execute()`` Ã¨ chiamato da un task worker che
     si aspetta sempre un return value. Una OperationalError non catturata
     marcherebbe il task come failed-with-exception invece di
     failed-with-result â†’ retry automatico di Celery â†’ tick duplicato

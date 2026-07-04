@@ -12,9 +12,8 @@ from app.core.auth.auth import hash_password
 from app.core.auth.db import create_group, create_user
 from app.core.auth.group_cleanup import delete_group_cascade
 
-from tests2.functional.harness.celery import spawn_celery_worker
-from tests2.functional.harness.celery import flush_redis_db
-from tests2.functional.harness.env import configure_redis_urls, isolate_redis_dbs
+from tests2.functional.harness.env import configure_broker_env, isolate_task_queues
+from tests2.functional.harness.workers import spawn_worker
 from tests2.functional.harness.http import http_json_response
 from tests2.functional.harness.ports import find_free_port
 from tests2.functional.harness.processes import (
@@ -29,7 +28,7 @@ INTEGRATION_ROOT = Path(__file__).resolve().parent
 
 _BACKEND_STACK_FIXTURES = frozenset({
     "integration_backend_server",
-    "integration_celery_worker",
+    "integration_task_worker",
     "integration_fake_api_server",
     "integration_user_seed",
     "integration_auth_headers",
@@ -85,7 +84,7 @@ _MIXED_OPTIONAL_PROVIDER_MARKERS = {
 
 @pytest.fixture(scope="module")
 def integration_env(tmp_path_factory) -> dict:
-    """Env esplicito per backend reale contro container Postgres/Redis."""
+    """Env esplicito per backend reale contro container Postgres/RabbitMQ."""
     data_dir = tmp_path_factory.mktemp("tests2-integration-data") / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -108,8 +107,12 @@ def integration_env(tmp_path_factory) -> dict:
     # eseguire pytest.
     # DB_SCHEMA resta poppato per usare il default 'plenora'.
     env.pop("DB_SCHEMA", None)
-    configure_redis_urls(env)
-    isolate_redis_dbs(env, broker_db=11, result_db=12)
+    configure_broker_env(env)
+    # Code dedicate per-modulo (integration_env e' module-scoped): il worker
+    # spawnato consuma solo i task di questo modulo — rimpiazza il vecchio
+    # isolamento redis-DB (11/12) e i flush per-test. I task orfani di run
+    # morti restano su code suffissate senza consumer.
+    isolate_task_queues(env)
     env["DATA_DIR"] = str(data_dir)
     return env
 
@@ -183,15 +186,13 @@ def integration_fake_api_server(integration_env):
 
 
 @pytest.fixture(scope="module")
-def integration_celery_worker(integration_env):
-    """Worker Celery reale contro Redis dei container di test."""
-    broker_url = integration_env.get("CELERY_BROKER_URL")
-    result_backend = integration_env.get("CELERY_RESULT_BACKEND")
-    if broker_url:
-        flush_redis_db(broker_url)
-    if result_backend:
-        flush_redis_db(result_backend)
-    proc = spawn_celery_worker(
+def integration_task_worker(integration_env):
+    """Worker Dramatiq reale contro RabbitMQ dei container di test.
+
+    Isolamento: code suffissate per-modulo (isolate_task_queues in
+    integration_env) — niente flush del broker; lo stato/result dei task
+    e' su PostgreSQL, keyed per task_id."""
+    proc = spawn_worker(
         workdir=INTEGRATION_ROOT.parent.parent,
         env=integration_env,
         loglevel="warning",
@@ -200,29 +201,6 @@ def integration_celery_worker(integration_env):
         yield {"process": proc}
     finally:
         stop_process(proc)
-        if broker_url:
-            flush_redis_db(broker_url)
-        if result_backend:
-            flush_redis_db(result_backend)
-
-
-@pytest.fixture(autouse=True)
-def _integration_flush_redis_per_test(request):
-    """Isolamento Redis solo per test che usano il backend/worker live."""
-    if not (_BACKEND_STACK_FIXTURES & set(request.fixturenames)):
-        yield
-        return
-
-    integration_env = request.getfixturevalue("integration_env")
-    broker_url = integration_env.get("CELERY_BROKER_URL")
-    result_backend = integration_env.get("CELERY_RESULT_BACKEND")
-    try:
-        yield
-    finally:
-        if broker_url:
-            flush_redis_db(broker_url)
-        if result_backend:
-            flush_redis_db(result_backend)
 
 
 @pytest.fixture
@@ -309,7 +287,7 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(pytest.mark.requires_postgres)
             item.add_marker(pytest.mark.requires_redis)
 
-        if "integration_celery_worker" in fixturenames:
+        if "integration_task_worker" in fixturenames:
             item.add_marker(pytest.mark.requires_celery)
 
         if not is_integration_file:
@@ -328,7 +306,7 @@ def pytest_collection_modifyitems(config, items):
         item.add_marker(pytest.mark.integration)
 
         # Gate corsia integration: questi test richiedono servizi reali (DB
-        # esterni, worker Celery, backend HTTP live) forniti dallo stack
+        # esterni, worker Dramatiq, backend HTTP live) forniti dallo stack
         # `backend/test-e2e-v2`. Nel run unit di default i servizi non ci sono e
         # i fixture-setup ERRORavano; ora SKIPpano in modo pulito. Per eseguirli
         # davvero: `URBY_RUN_INTEGRATION=1` con lo stack e2e-v2 attivo.

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests2._helpers.celery_eager import (
+from tests2._helpers.enrichment_task_harness import (
     install_enrichment_task_mocks,
     invoke_enrichment_task,
 )

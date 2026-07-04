@@ -44,10 +44,10 @@ def _arricchisci_file_canvas(file_source_id: str) -> dict:
 
 def test_arricchisci_execute_from_uploaded_file_reaches_success(
     backend_server,
-    celery_worker,
+    task_worker,
     auth_headers,
 ):
-    _ = celery_worker
+    _ = task_worker
     status, uploaded, _ = http_multipart_response(
         f"{backend_server['base_url']}/api/files/upload",
         data={

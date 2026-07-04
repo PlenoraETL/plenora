@@ -143,8 +143,8 @@ def test_module_has_no_redis_dependency():
 
     source = Path(module.__file__).read_text(encoding="utf-8")
     # PostgreSQL-only (Fase 2): nessun import di client/store Redis. La
-    # parola "Redis" puo' comparire nei commenti (e' il backend Celery
-    # che stiamo rimpiazzando), ma non come dipendenza importata.
+    # parola "Redis" puo' comparire nei commenti (era il result backend
+    # Celery/Redis, rimpiazzato in Fase 2), ma non come dipendenza importata.
     lowered = source.lower()
     assert "import redis" not in lowered
     assert "rediskeyvaluestore" not in lowered

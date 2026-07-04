@@ -16,9 +16,7 @@ pytestmark = [
     pytest.mark.arricchisci,
     pytest.mark.security,
     pytest.mark.regression,
-    pytest.mark.usefixtures("celery_eager"),
 ]
-pytest_plugins = ("tests2._helpers.celery_eager",)
 
 
 # 1. Static guard: nessun singleton modulo-level
@@ -50,7 +48,7 @@ def test_execute_enrichment_task_instantiates_local_api_service(
     monkeypatch,
 ):
     """Il task DEVE creare un'istanza locale `ApiConnectionService()`."""
-    from tests2._helpers.celery_eager import (
+    from tests2._helpers.enrichment_task_harness import (
         install_enrichment_task_mocks, invoke_enrichment_task,
     )
     from tests2._helpers.enrichment_task_fixtures import (
@@ -91,7 +89,7 @@ def test_execute_enrichment_task_passes_ctx_with_group_id_to_loaders(
     `ctx.group_id` deve essere quello atteso (`"test-group"` dal
     fake project metadata).
     """
-    from tests2._helpers.celery_eager import (
+    from tests2._helpers.enrichment_task_harness import (
         install_enrichment_task_mocks, invoke_enrichment_task,
     )
     from tests2._helpers.enrichment_task_fixtures import (
@@ -288,7 +286,7 @@ def test_execute_enrichment_task_propagates_task_id_in_progress_calls(
     `update_task_progress` con uno spy che registra ogni call, e
     verifichiamo che TUTTE le call abbiano `task_id` non-None.
     """
-    from tests2._helpers.celery_eager import (
+    from tests2._helpers.enrichment_task_harness import (
         install_enrichment_task_mocks, install_update_task_progress_spy,
         invoke_enrichment_task,
     )
@@ -339,7 +337,7 @@ def test_execute_enrichment_task_eseguibile_branch_fetches_group_id(
       2. la prima call a un loader nel `_call_log` ha
          `ctx.group_id == "grp-eseg-test"`.
     """
-    from tests2._helpers.celery_eager import (
+    from tests2._helpers.enrichment_task_harness import (
         install_enrichment_task_mocks, invoke_enrichment_task,
     )
     from tests2._helpers.enrichment_task_fixtures import (

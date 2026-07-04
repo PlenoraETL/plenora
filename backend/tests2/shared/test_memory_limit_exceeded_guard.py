@@ -37,7 +37,7 @@ def test_memory_limit_exceeded_in_known_domain_codes():
 
 def test_exception_module_does_not_import_fastapi():
     """Exception module deve restare puro (no FastAPI/starlette).
-    Garantisce che worker Celery / CLI possano importare ed alzare
+    Garantisce che worker / CLI possano importare ed alzare
     `MemoryLimitExceededError` senza pull-in del web stack."""
     import app.core.resources.exceptions as exc_mod
 

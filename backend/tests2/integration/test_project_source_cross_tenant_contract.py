@@ -65,11 +65,11 @@ def _seed_secondary_admin() -> dict:
 
 
 def test_project_source_cross_tenant_execute_fails_closed(
-    integration_celery_worker,
+    integration_task_worker,
     integration_backend_server,
     integration_auth_headers,
 ):
-    _ = integration_celery_worker
+    _ = integration_task_worker
     secondary = _seed_secondary_admin()
     connection = _create_mysql_connection(
         integration_backend_server["base_url"],

@@ -75,11 +75,11 @@ def _reset_orchestrator_module_singleton():
 # Helpers â€” bytecode probe (refactor-resilient)
 
 def _underlying(callable_or_task):
-    """Estrae la funzione Python sottostante da un task Celery wrappato.
+    """Estrae la funzione Python sottostante da un eventuale wrapper.
 
-    Celery `@app.task` wrappa il callable in un Task subclass; il body
-    originale e' accessibile via `__wrapped__` quando bind=True/False.
-    Se non c'e' wrapping, ritorna l'oggetto stesso (es. fn pura).
+    Storico: `@celery_app.task` wrappava il callable in un Task subclass
+    col body accessibile via `__wrapped__`. Post-F5.5 i corpi sono
+    funzioni pure: senza wrapping ritorna l'oggetto stesso.
     """
     return getattr(callable_or_task, "__wrapped__", callable_or_task)
 

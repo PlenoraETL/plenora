@@ -1,7 +1,12 @@
 """
-Celery eager harness — test-only.
+Harness test-only per l'invocazione diretta di execute_enrichment_task.
 
-Test reliability helper contracts:
+I corpi dei task sono funzioni pure (Plenora 2.0 Fase 5): i test li
+invocano direttamente via ``invoke_enrichment_task`` (con un self-shim
+request.id/name) e osservano i side-effect sulle spie installate da
+``install_enrichment_task_mocks``. Rinominato da ``celery_eager.py``
+(2026-07-04): il fixture no-op ``celery_eager`` e' stato rimosso insieme
+allo stack Celery.
 """
 
 from __future__ import annotations
@@ -9,24 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-import pytest
 
-
-# 1. Eager mode fixture
-
-
-@pytest.fixture
-def celery_eager():
-    """No-op (Plenora 2.0 Fase 5).
-
-    I corpi dei task sono ora funzioni pure (niente piu' Celery/eager): i
-    test li invocano direttamente via ``invoke_enrichment_task`` (con un
-    self-shim). Il fixture resta per compatibilita' di firma dei test.
-    """
-    return None
-
-
-# 2. Fake ApiConnectionService — spy sui tenant binding
+# 1. Fake ApiConnectionService — spy sui tenant binding
 
 
 class FakeApiConnectionService:
@@ -416,11 +405,10 @@ def install_enrichment_task_mocks(
     )
 
     # 13. update_task_progress no-op default. La call site sottostante
-    # `task.update_state` parlerebbe col backend Celery (Redis), che in
-    # ambiente unit-test eager non e' disponibile. I test che vogliono
-    # osservare le call possono ridichiararla via
-    # `install_update_task_progress_spy` (chiamata DOPO questo helper),
-    # che sovrascrive questo no-op.
+    # scriverebbe il progress su PostgreSQL (task_results), non
+    # disponibile negli unit test. I test che vogliono osservare le call
+    # possono ridichiararla via `install_update_task_progress_spy`
+    # (chiamata DOPO questo helper), che sovrascrive questo no-op.
     monkeypatch.setattr(
         et_mod, "update_task_progress", lambda *a, **kw: None,
     )
@@ -474,8 +462,8 @@ def install_update_task_progress_spy(monkeypatch) -> List[Dict[str, Any]]:
             "is_error": is_error,
             "extra": kw,
         })
-        # NON chiamare l'original (richiede self.request.id reale e altre
-        # interazioni Celery). I test verificano solo i kwargs passati.
+        # NON chiamare l'original (scriverebbe il progress su PG via
+        # report_task_progress). I test verificano solo i kwargs passati.
 
     monkeypatch.setattr(et_mod, "update_task_progress", _spy)
     return calls

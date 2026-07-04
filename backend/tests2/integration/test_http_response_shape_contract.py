@@ -152,12 +152,12 @@ def test_get_project_response_has_expected_shape(
 
 
 def test_get_task_status_response_has_expected_shape(
-    integration_celery_worker,
+    integration_task_worker,
     integration_backend_server,
     integration_auth_headers,
     integration_user_seed,
 ):
-    _ = integration_celery_worker
+    _ = integration_task_worker
     file_source = seed_csv_file_source(
         group_id=integration_user_seed["group_id"],
         created_by=integration_user_seed["user_id"],
@@ -219,12 +219,12 @@ def test_get_task_status_response_has_expected_shape(
 
 
 def test_schedule_runs_response_has_expected_shape(
-    integration_celery_worker,
+    integration_task_worker,
     integration_backend_server,
     integration_auth_headers,
     integration_user_seed,
 ):
-    _ = integration_celery_worker
+    _ = integration_task_worker
     file_source = seed_csv_file_source(
         group_id=integration_user_seed["group_id"],
         created_by=integration_user_seed["user_id"],

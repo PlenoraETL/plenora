@@ -42,7 +42,7 @@ def spawn_process(
 
     IMPORTANTE: la stdout viene drenata continuamente da un thread
     background e accumulata in memoria su `proc.captured_output`.
-    Senza il drain, un worker Celery chiacchierone (tanti log) riempie
+    Senza il drain, un worker Dramatiq chiacchierone (tanti log) riempie
     il buffer del pipe del sistema operativo (4KB su Windows, ~64KB su
     Linux) e i suoi successivi write bloccano — causando falsi hang
     del worker indistinguibili da un deadlock applicativo.

@@ -75,7 +75,7 @@ def test_cleanup_temp_files_actor_routes_to_control_plane_and_shares_body():
     )
     assert cleanup_temp_files.queue_name == settings.TASK_QUEUE_CONTROL_PLANE
 
-    # Corpo condiviso: l'actor delega alla stessa funzione del task Celery
+    # Corpo condiviso: l'actor delega alla stessa funzione pura del task
     # (lazy import nel body — verifica per identita' del simbolo sorgente).
     import inspect
 
@@ -93,7 +93,7 @@ def test_admin_backup_actor_routes_to_control_plane_and_shares_body():
         settings.TASK_QUEUE_CONTROL_PLANE
     )
 
-    # Corpo condiviso: l'actor delega alla stessa funzione del task Celery
+    # Corpo condiviso: l'actor delega alla stessa funzione pura del task
     # e inietta il message_id come task_id (rimpiazzo di self.request.id).
     import inspect
 
@@ -111,7 +111,7 @@ def test_current_message_id_none_outside_actor():
 
 
 def test_all_ten_task_names_have_a_dramatiq_actor():
-    # Chiusura Fase 1: 10/10 task Celery hanno un actor Dramatiq omonimo.
+    # Chiusura Fase 1: 10/10 task hanno un actor Dramatiq omonimo.
     from workers import dramatiq_app
 
     expected_actor_names = {

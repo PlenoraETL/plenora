@@ -62,11 +62,11 @@ def _arricchisci_http_failure_canvas(api_id: str) -> dict:
 
 def test_arricchisci_http_api_generator_failure_surfaces_task_error(
     backend_server,
-    celery_worker,
+    task_worker,
     fake_api_server,
     auth_headers,
 ):
-    _ = celery_worker
+    _ = task_worker
 
     status, api_connection, _ = http_json_response(
         f"{backend_server['base_url']}/api/api-connections",

@@ -15,11 +15,11 @@ from tests2.integration.test_oracle_connection_and_estrai_preview import (
 
 
 def test_oracle_execute_returns_downloadable_project_result(
-    integration_celery_worker,
+    integration_task_worker,
     integration_backend_server,
     integration_auth_headers,
 ):
-    _ = integration_celery_worker
+    _ = integration_task_worker
     connection = _create_oracle_connection(
         integration_backend_server["base_url"],
         integration_auth_headers,

@@ -40,11 +40,11 @@ def _arricchisci_project_source_canvas(source_project_id: str) -> dict:
 
 
 def test_project_source_resolves_latest_blob_backed_artifact(
-    integration_celery_worker,
+    integration_task_worker,
     integration_backend_server,
     integration_auth_headers,
 ):
-    _ = integration_celery_worker
+    _ = integration_task_worker
     connection = _create_mysql_connection(
         integration_backend_server["base_url"],
         integration_auth_headers,

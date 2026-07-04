@@ -74,12 +74,12 @@ def _arricchisci_carica_sqlserver_canvas(file_source_id: str, connection_id: str
 
 
 def test_sqlserver_direct_carica_task_writes_destination_table(
-    integration_celery_worker,
+    integration_task_worker,
     integration_backend_server,
     integration_auth_headers,
     integration_user_seed,
 ):
-    _ = integration_celery_worker
+    _ = integration_task_worker
     connection = _create_sqlserver_connection(
         integration_backend_server["base_url"],
         integration_auth_headers,

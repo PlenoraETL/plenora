@@ -74,13 +74,13 @@ def _arricchisci_carica_mysql_canvas(file_source_id: str, connection_id: str, ta
 
 
 def test_mysql_direct_carica_task_writes_destination_table(
-    integration_celery_worker,
+    integration_task_worker,
     integration_backend_server,
     integration_auth_headers,
     integration_user_seed,
     integration_db_probe,
 ):
-    _ = integration_celery_worker
+    _ = integration_task_worker
     _ = integration_db_probe
     connection = _create_mysql_connection(
         integration_backend_server["base_url"],
