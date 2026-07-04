@@ -32,7 +32,7 @@ def is_bootstrapped() -> bool:
         the flag after a fake-stubbed run).
 
     The flag does NOT replace the underlying steps' own readiness
-    semantics: PG pool init / Redis ping / storage config validity
+    semantics: PG pool init / broker ping / storage config validity
     each have their own observability surface. `is_bootstrapped`
     is the single source of truth for "the four-step boundary has
     been crossed at least once in this process".
@@ -73,7 +73,7 @@ def bootstrap() -> None:
     validate_startup(settings)
 
     # 2. Coerenza STORAGE_POLICY + provider + bucket + soglie
-    # Fail-fast qui evita che un task Celery scopra al primo upload
+    # Fail-fast qui evita che un task worker scopra al primo upload
     # oltre soglia che il bucket non esiste o che il provider non e'
     # implementato
     validate_storage_config()

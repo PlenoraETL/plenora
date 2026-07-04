@@ -73,13 +73,13 @@ class Settings:
         # Scheduler locks use a short TTL plus worker heartbeat. If the worker
         # dies by SIGKILL, the lock expires in
         # SCHEDULE_LOCK_TTL_SECONDS invece di restare appeso fino al
-        # hard limit Celery. HEARTBEAT_INTERVAL << TTL/2 per margine
+        # hard limit del task. HEARTBEAT_INTERVAL << TTL/2 per margine
         "SCHEDULE_LOCK_TTL_SECONDS":                600,
         "SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS": 180,
-        # Leader election is fail-closed by default: if Redis is unavailable,
-        # beat goes standby instead of
+        # Leader election is fail-closed by default: if PostgreSQL is
+        # unavailable, beat goes standby instead of
         # diventare leader by default (evita doppio enqueue in caso
-        # di flap Redis con due beat attivi). Override a True per
+        # di flap PG con due beat attivi). Override a True per
         # deployment single-instance dove nessun altro beat gira mai
         "SCHEDULE_BEAT_LEADER_FAIL_OPEN":           False,
         "TASK_PROGRESS_POLL_INTERVAL":  1,
@@ -414,7 +414,7 @@ class Settings:
         # del client boto3 one-shot creato dal probe; il client usa
         # anche `retries.max_attempts=1` per evitare il retry
         # exponenziale (3 tentativi) che sommerebbe ~360s worst case
-        # su un endpoint hung. Default 3s = leggermente sopra il PG/Redis
+        # su un endpoint hung. Default 3s = leggermente sopra il PG/broker
         # 2s per assorbire la latenza S3 regionale
         # Cap <= 0 cade al fallback hardcoded di 3s
         "READINESS_OBJECT_STORAGE_TIMEOUT_SECONDS": 3,
@@ -502,7 +502,7 @@ class Settings:
         # Classificate APP_POLICY/OPERATIONAL_TUNING in ADR-0021 §"Config
         # boundary": stringhe consumate da `get_schedule_info` per
         # l'endpoint admin di metadata. La schedule reale e' gestita a
-        # livello deployment (systemd timer / Celery beat / K8s CronJob
+        # livello deployment (systemd timer / beat / K8s CronJob
         # questi default sono i valori esposti al FE quando l'env e'
         # unset, e devono essere overridabili via env per allineare il
         # display alla schedule effettivamente configurata sul deployment
@@ -513,7 +513,7 @@ class Settings:
         "BACKUP_SCHEDULE_CRON": "0 2 * * *",
         "BACKUP_SCHEDULE_DESCRIPTION": "Daily 02:00 UTC (+ jitter fino a 5 min)",
         # Trigger manuale backup via boundary asincrono. Il servizio API
-        # accoda un task Celery; non avvia processi figli locali.
+        # dispatcha un task al worker; non avvia processi figli locali.
         "ADMIN_BACKUP_MANUAL_TRIGGER_ENABLED": True,
 
         # Bucket dedicato runtime artifact intermedi (full_artifact

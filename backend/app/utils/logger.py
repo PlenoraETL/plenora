@@ -23,7 +23,7 @@ from app.config import settings
 # quindi run_id/request_id/group_id restano visibili nel codice async
 # threading.Thread NON copia Context — per scenari multi-thread
 # espliciti serve contextvars.copy_context esplicito, ma nei nostri
-# path (FastAPI handler + Celery worker + thread pool arricchimenti
+# path (FastAPI handler + worker Dramatiq + thread pool arricchimenti
 # funziona out-of-the-box
 _group_id_var: ContextVar[str] = ContextVar("log_group_id", default="")
 _run_id_var: ContextVar[str] = ContextVar("log_run_id", default="")
@@ -69,7 +69,7 @@ def get_steps() -> list[dict[str, object]]:
 
 
 def set_request_id(request_id: str) -> None:
-    """C8: correlation ID propagato da HTTP middleware e Celery signals."""
+    """C8: correlation ID propagato da HTTP middleware e middleware worker."""
     _request_id_var.set(request_id or "")
 
 

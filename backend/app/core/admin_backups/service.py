@@ -143,7 +143,7 @@ REGION = settings.get("AWS_REGION", "eu-south-1")
 # il worker Celery crashava (OOM, kill -9, disconnect broker) il lock
 # restava orfano per 2h prima di sbloccarsi via TTL → ogni superadmin
 # che provava a triggerare un backup nel frattempo riceveva "gia' in
-# corso". Post-fix: TTL breve (300s = 5min) + heartbeat dal task Celery
+# corso". Post-fix: TTL breve (300s = 5min) + heartbeat dal task worker
 # che estende `expires_at` ogni 120s. Se il worker muore, l'heartbeat
 # si ferma, TTL scade in ≤5min, il prossimo try_acquire riacquisisce.
 # Blast radius su worker morto: da 2h a 5min.
@@ -321,7 +321,7 @@ def get_schedule_info() -> BackupScheduleInfo:
     """Info sulla schedule del backup.
 
     La schedule e' gestita a livello di deployment (systemd timer
-    `plenora-backup.timer` oggi, Celery beat / K8s CronJob in container).
+    `plenora-backup.timer` oggi, beat / K8s CronJob in container).
     Qui ritorniamo metadati statici + next_run/last_run calcolati dal
     DB. `timer_active` e' sempre True: senza systemctl non possiamo
     distinguere "timer configurato e abilitato" da "timer assente" —
@@ -437,7 +437,7 @@ def is_manual_backup_running() -> bool:
 
 
 def trigger_manual_backup() -> ManualBackupTriggerResult:
-    """Accoda il backup manuale su Celery.
+    """Dispatcha il backup manuale al worker (Dramatiq via RabbitMQ).
 
     Returns:
         {"started": bool, "pid": None, "task_id": str | None, "message": str}
@@ -478,7 +478,7 @@ def trigger_manual_backup() -> ManualBackupTriggerResult:
         # `try_acquire_manual_backup_lock` come due query separate. La
         # finestra tra le due era una race TOCTOU: due admin che
         # cliccavano "Backup ora" nello stesso istante potevano entrambi
-        # superare il gate e accodare due task Celery duplicati.
+        # superare il gate e accodare due task duplicati.
         #
         # Fix in profondita': nessun retry "diagnostico". Se il primo
         # tentativo (atomico) ritorna None, il lock e' davvero detenuto
@@ -493,17 +493,20 @@ def trigger_manual_backup() -> ManualBackupTriggerResult:
     try:
         from app.core.task_runtime.dispatch import dispatch_task_by_name
 
-        async_result = dispatch_task_by_name(
+        dispatch_handle = dispatch_task_by_name(
             "workers.tasks.admin_backup_task.run_manual_backup_task",
             kwargs={"owner_token": owner_token},
         )
-        logger.info("Backup manuale Celery accodato: task_id=%s", async_result.id)
+        logger.info(
+            "Backup manuale dispatchato al worker: task_id=%s",
+            dispatch_handle.id,
+        )
         return {
             "started": True,
             "pid": None,
-            "task_id": async_result.id,
+            "task_id": dispatch_handle.id,
             "message": (
-                f"Backup accodato su Celery (task_id={async_result.id}). "
+                f"Backup accodato al worker (task_id={dispatch_handle.id}). "
                 "Controlla la lista S3 tra qualche secondo."
             ),
         }

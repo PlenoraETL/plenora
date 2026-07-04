@@ -190,7 +190,8 @@ class PlenoraBeatScheduler:
         self._is_leader = False
         return False
 
-    # Override principale: called ogni tick da Celery Beat
+    # Entry-point principale: chiamato a intervallo fisso dal runner
+    # APScheduler (workers/beat.py)
 
     _last_stuck_check: float = 0.0
     _last_eseguibili_cleanup: float = 0.0
@@ -203,14 +204,14 @@ class PlenoraBeatScheduler:
     _last_task_results_cleanup: float = 0.0
 
     def tick(self, event_t: Optional[object] = None, **kwargs: object) -> float:
-        """Override tick:
-        1. Leader election (SETNX Redis). Se non-leader → standby.
+        """Tick del beat:
+        1. Leader election (lock su PostgreSQL). Se non-leader → standby.
         2. Se leader: sync schedule dal DB + heartbeat + cleanup jobs
            + catchup dei missed runs (opt-in per schedule).
-        3. Delega a super.tick che emette i task scaduti.
+        3. Emette i task scaduti via dispatch layer.
 
         In standby il beat ritorna `max_interval` senza toccare il DB
-        ne' la coda Celery: zero enqueue duplicati con un secondo
+        ne' il broker: zero enqueue duplicati con un secondo
         processo beat in parallelo.
         """
         if not self._try_become_leader():
@@ -229,9 +230,8 @@ class PlenoraBeatScheduler:
         self._reconcile_storage()
         self._cleanup_task_results()
         # Plenora 2.0 Fase 3 (F3.2): l'emit degli schedule dovuti passa dal
-        # layer dispatch (dispatch_task_by_name) invece che da super().tick()
-        # di Celery. Stessa valutazione di scadenza (ScheduleEntry.is_due),
-        # solo trasporto diverso: Celery ora, Dramatiq dopo il cutover (F1).
+        # layer dispatch (dispatch_task_by_name — Dramatiq dal cutover F1).
+        # Stessa valutazione di scadenza (BeatEntry.is_due) del beat storico.
         return self._emit_due_via_dispatch()
 
     def _dispatch_schedule_task(self, name: str, kwargs: dict) -> None:
@@ -292,7 +292,7 @@ class PlenoraBeatScheduler:
 
     # Dedupe window: se lo stesso scheduled_for e' stato gia' emesso nelle
     # ultime N ore, NON ri-emettiamo (evita spam duplicati finche' il primo
-    # task e' in volo nella coda Celery). Dopo la finestra, un eventuale
+    # task e' in volo nella coda del broker). Dopo la finestra, un eventuale
     # task morto viene re-emesso al prossimo detect
     _CATCHUP_DEDUPE_WINDOW_HOURS = 2
 
@@ -612,7 +612,8 @@ class PlenoraBeatScheduler:
             logger.error(f"[CRASH] Errore sync schedule dal DB: {e}", exc_info=True)
 
     def _warn_if_timezone_divergent(self, schedule_id: str, config: Any) -> None:
-        """Loud warning se schedule.timezone diverge da Celery beat tz.
+        """Loud warning se schedule.timezone diverge dalla beat tz
+        (BEAT_TIMEZONE, default Europe/Rome).
 
         Pre-fix il mismatch era silente: lo schedule veniva emesso
         all'ora di Europe/Rome anche se l'utente configurava un'altra
@@ -1554,10 +1555,6 @@ class PlenoraBeatScheduler:
                     f"[CONFIG-BEAT] Errore caricamento entry {name!r}: {e}",
                     exc_info=True,
                 )
-
-    def sync(self) -> None:
-        """Sync periodico richiesto da Celery — già gestito in tick()."""
-        pass
 
     def close(self) -> None:
         """Cleanup alla chiusura.
