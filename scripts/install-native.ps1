@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # Plenora-ETL — Installer nativo Windows (PROTOTIPO DI SCOPING)
 # =============================================================================
 #
@@ -28,7 +28,12 @@
 param(
     [switch]$SkipWinget,
     [string]$PgSuperPassword = '',
-    [switch]$StartProcesses
+    [switch]$StartProcesses,
+    # W1 — servizi Windows (WinSW): registra plenora-backend/worker/beat
+    # come servizi con avvio automatico al boot.
+    [switch]$InstallServices,
+    [int]$WorkerProcesses = 1,
+    [int]$WorkerThreads = 4
 )
 
 $ErrorActionPreference = 'Stop'
@@ -268,7 +273,131 @@ if ($StartProcesses) {
     $prefix = "call `"$condaBat`" activate $CondaEnv && cd /d `"$BackendDir`" &&"
     Start-Process cmd -ArgumentList '/k', "$prefix python -m uvicorn app.main:app --host 127.0.0.1 --port 5004"
     Start-Sleep -Seconds 15
-    Start-Process cmd -ArgumentList '/k', "$prefix python -m dramatiq workers.dramatiq_app --processes 1 --threads 4"
+    Start-Process cmd -ArgumentList '/k', "$prefix python -m dramatiq workers.dramatiq_app --processes $WorkerProcesses --threads $WorkerThreads"
     Start-Process cmd -ArgumentList '/k', "$prefix python -m workers.beat"
     Ok 'Tre finestre avviate (backend, worker, beat). Eseguire poi smoke_native.py in una quarta.'
+}
+
+# =============================================================================
+# W1 — Servizi Windows via WinSW (piano installer produzione)
+# =============================================================================
+if ($InstallServices) {
+    Step 'W1: servizi Windows (WinSW) — plenora-backend / plenora-worker / plenora-beat'
+
+    $ServicesRoot = 'C:\plenora-services'
+    New-Item -ItemType Directory -Force $ServicesRoot | Out-Null
+
+    # Env conda: un servizio non puo' fare `conda activate` — replichiamo
+    # nel config del servizio il PATH (DLL GDAL in Library\bin) e le var
+    # dei dati geospaziali che l'attivazione imposterebbe.
+    $forgeRoot = Split-Path -Parent (Split-Path -Parent $condaBat)   # ...\miniforge3
+    $envRoot = Join-Path $forgeRoot "envs\$CondaEnv"
+    $pythonExe = Join-Path $envRoot 'python.exe'
+    if (-not (Test-Path $pythonExe)) { Fail "python.exe non trovato in $envRoot" }
+    $envPath = "$envRoot;$envRoot\Library\mingw-w64\bin;$envRoot\Library\usr\bin;$envRoot\Library\bin;$envRoot\Scripts;%PATH%"
+    $gdalData = Join-Path $envRoot 'Library\share\gdal'
+    $projData = Join-Path $envRoot 'Library\share\proj'
+
+    # Nome reale del servizio PostgreSQL (EDB: postgresql-x64-17).
+    $pgSvc = (Get-Service postgresql* | Select-Object -First 1).Name
+    if (-not $pgSvc) { Fail 'Servizio PostgreSQL non trovato' }
+
+    # WinSW: scarica una volta dalla release GitHub (asset WinSW-x64.exe).
+    $winswExe = Join-Path $ServicesRoot 'WinSW-x64.exe'
+    if (-not (Test-Path $winswExe)) {
+        Write-Host '  Scarico WinSW (ultima release GitHub)...'
+        try {
+            $rel = Invoke-RestMethod 'https://api.github.com/repos/winsw/winsw/releases/latest'
+            $asset = $rel.assets | Where-Object { $_.name -eq 'WinSW-x64.exe' } | Select-Object -First 1
+            if (-not $asset) { throw 'asset WinSW-x64.exe assente nella latest' }
+            Invoke-WebRequest $asset.browser_download_url -OutFile $winswExe
+        } catch {
+            # Fallback pinnato (v2.12.0, ultima v2 stabile) se la latest
+            # e' una v3 pre-release senza l'asset x64 classico.
+            Write-Host "  latest non utilizzabile ($($_.Exception.Message)): fallback WinSW v2.12.0"
+            Invoke-WebRequest 'https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe' -OutFile $winswExe
+        }
+    }
+
+    $services = @(
+        @{
+            id = 'plenora-backend'
+            name = 'Plenora Backend'
+            desc = 'Plenora-ETL API FastAPI (uvicorn)'
+            args = '-m uvicorn app.main:app --host 127.0.0.1 --port 5004'
+            depends = @($pgSvc)
+        },
+        @{
+            id = 'plenora-worker'
+            name = 'Plenora Worker'
+            desc = "Plenora-ETL worker Dramatiq ($WorkerProcesses processi x $WorkerThreads thread)"
+            args = "-m dramatiq workers.dramatiq_app --processes $WorkerProcesses --threads $WorkerThreads"
+            depends = @($pgSvc, 'RabbitMQ')
+        },
+        @{
+            id = 'plenora-beat'
+            name = 'Plenora Beat'
+            desc = 'Plenora-ETL beat scheduler (APScheduler, leader lock su PG)'
+            args = '-m workers.beat'
+            depends = @($pgSvc, 'RabbitMQ')
+        }
+    )
+
+    foreach ($svc in $services) {
+        $dir = Join-Path $ServicesRoot $svc.id
+        New-Item -ItemType Directory -Force $dir | Out-Null
+        $exe = Join-Path $dir "$($svc.id).exe"
+        $xml = Join-Path $dir "$($svc.id).xml"
+
+        # Idempotenza: se il servizio esiste gia', stop + uninstall prima
+        # di riscrivere il config (cosi' i parametri nuovi prendono).
+        if (Get-Service -Name $svc.id -ErrorAction SilentlyContinue) {
+            Write-Host "  $($svc.id): gia' registrato — stop + uninstall per refresh config"
+            & $exe stop 2>$null | Out-Null
+            Start-Sleep -Seconds 3
+            & $exe uninstall 2>$null | Out-Null
+            Start-Sleep -Seconds 2
+        }
+        Copy-Item $winswExe $exe -Force
+
+        $dependXml = ($svc.depends | ForEach-Object { "  <depend>$_</depend>" }) -join "`r`n"
+        @"
+<service>
+  <id>$($svc.id)</id>
+  <name>$($svc.name)</name>
+  <description>$($svc.desc)</description>
+  <executable>$pythonExe</executable>
+  <arguments>$($svc.args)</arguments>
+  <workingdirectory>$BackendDir</workingdirectory>
+  <env name="PATH" value="$envPath"/>
+  <env name="GDAL_DATA" value="$gdalData"/>
+  <env name="PROJ_DATA" value="$projData"/>
+  <env name="PROJ_LIB" value="$projData"/>
+$dependXml
+  <startmode>Automatic</startmode>
+  <onfailure action="restart" delay="5 sec"/>
+  <!-- Stop: WinSW manda Ctrl+C al console app: uvicorn shutdown pulito,
+       il beat rilascia il leader lock su PG (gestione SIGINT del runner). -->
+  <stoptimeout>30 sec</stoptimeout>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>4</keepFiles>
+  </log>
+</service>
+"@ | Set-Content -Encoding ascii $xml
+
+        & $exe install
+        if ($LASTEXITCODE -ne 0) { Fail "$($svc.id): winsw install exit=$LASTEXITCODE" }
+        Ok "$($svc.id) registrato"
+    }
+
+    # Avvio in ordine: backend (fa le migrations) -> worker -> beat.
+    foreach ($id in 'plenora-backend', 'plenora-worker', 'plenora-beat') {
+        Start-Service $id
+        Start-Sleep -Seconds 5
+    }
+    Start-Sleep -Seconds 10
+    Get-Service plenora-* | Format-Table Status, Name, DisplayName -AutoSize
+    Write-Host '  Log dei servizi: C:\plenora-services\<id>\<id>.out.log / .err.log' -ForegroundColor Cyan
+    Ok 'W1 completata: 3 servizi Windows attivi (avvio automatico al boot)'
 }

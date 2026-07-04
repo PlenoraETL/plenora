@@ -227,16 +227,31 @@ npm run build
 **Verdetto: la tesi Plenora 2.0 e' dimostrata — lo stack gira nativo su
 Windows senza container ne' WSL.** Il worker usa il CLI dramatiq standard.
 
-## Cosa manca per l'installer di produzione (fuori scoping)
+## Piano installer di produzione (approvato dal proprietario 2026-07-04)
 
-- **Servizi Windows** per backend/worker/beat (candidati: NSSM, WinSW,
-  wrapper pywin32) + restart policy + log su file, al posto delle
-  finestre cmd.
-- **Password/secrets**: `--superpassword` PG esplicito, utente RabbitMQ
-  dedicato (non guest), ACL sul `.env`.
-- **Frontend**: build + serving (IIS? static file server? porta 80).
-- **Config di produzione**: ENVIRONMENT=production con i production
-  gates (oggi lo scoping usa development).
-- **Spegnimento pulito**: Ctrl+C/SIGINT gestiti; da validare lo stop dei
-  servizi Windows (SERVICE_STOP → il beat rilascia il leader lock?).
-- Cleanup del `Test-Path`/messaggi dello script (prototipo → prodotto).
+Decisioni: **WinSW** per i servizi Windows, **Caddy** per il frontend.
+Ordine: W1 → W5, una fetta per volta, VM come banco di collaudo.
+
+- **W1 — Servizi Windows (WinSW)**: `plenora-backend`, `plenora-worker`,
+  `plenora-beat` come servizi (WinSW.exe da release GitHub + XML per
+  servizio); dipendenze di avvio (PG, RabbitMQ), restart on-failure,
+  log roll-by-size; PATH/GDAL_DATA/PROJ della env conda nel config del
+  servizio (niente `conda activate` disponibile per un servizio);
+  collaudo stop pulito (Ctrl+C di WinSW → il beat rilascia il leader
+  lock). Parametri `-WorkerProcesses/-WorkerThreads`.
+- **W2 — Parita' con install-docker.sh**: superadmin bootstrap
+  (prompt/env `PLENORA_BOOTSTRAP_ADMIN_*`, password >=12, snippet
+  python idempotente gruppo root + utente, DOPO /ready verde),
+  non-interattivo completo, secrets (PG `--superpassword` via winget
+  override, utente RabbitMQ dedicato + via guest, icacls sul .env).
+- **W3 — MinIO opzionale**: `CLOUD_PROVIDER=minio` → minio.exe da
+  release ufficiale come servizio `plenora-minio` (credenziali root
+  random), bucket runtime+backup via boto3, MINIO_*/OBJECT_STORAGE_*
+  nel .env, /ready object_storage verde.
+- **W4 — Frontend (Caddy)**: `npm ci && npm run build`; caddy.exe come
+  servizio: statici da dist/ + reverse proxy /api -> 127.0.0.1:5004.
+- **W5 — Production + collaudo da zero**: ENVIRONMENT=production coi
+  gates; su snapshot VM pulita: install one-shot → login superadmin da
+  browser → progetto → esecuzione → schedule → riavvio VM (tutto
+  riparte) → stop beat (lock rilasciato). Runbook
+  docs/ops/install-windows.md e promozione dello stub install.ps1.
