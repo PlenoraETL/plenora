@@ -33,7 +33,6 @@ from app.core.arricchisci.models import (
     BatchInputFormat,
     EnrichmentOptions,
     EnrichmentStats,
-    RowError,
     RowStatus,
 )
 from app.shared.resources.json_path import (

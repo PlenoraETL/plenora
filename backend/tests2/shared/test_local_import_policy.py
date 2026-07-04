@@ -49,7 +49,9 @@ _SCAN_ROOTS = (
 # 288 -> 289 (Plenora 2.0, Fase 1 cutover): default_task_runtime() ora importa lazy
 # workers.dramatiq_app (side-effect set_broker) + DramatiqTaskRuntime (era 1 solo
 # import locale di celery_app) -> +1. Locale per non aggiungere edge al grafo.
-MAX_LOCAL_IMPORTS = 289
+# 289 -> 286 (2026-07-04, post-Fase-5): le rimozioni Celery/Redis di F5.4-F5.7
+# hanno liberato 3 unita' mai reclamate; tetto riallineato al conteggio reale.
+MAX_LOCAL_IMPORTS = 286
 MAX_LATE_MODULE_IMPORTS = 8
 
 

@@ -9,9 +9,6 @@ pytest>=8.0
 pytest-cov>=5.0
 pytest-asyncio>=0.24
 
-# Property-based testing. Usato in tests2/shared/test_hypothesis_property_contract.py.
-hypothesis>=6.100
-
 # Static analysis / hygiene gates. Ruff copre import inutili, undefined
 # names e variabili locali inutilizzate; pyflakes resta un secondo controllo
 # leggero; vulture si usa solo per audit manuale del codice potenzialmente
@@ -19,12 +16,6 @@ hypothesis>=6.100
 ruff>=0.15,<1.0
 pyflakes>=3.2
 vulture>=2.14
-
-# Redis in-memory per integration test (fakeredis e' drop-in di
-# redis-py, supporta SET NX EX / EXPIRE / TTL / DELETE senza Docker).
-# Usato in tests2/scheduler/integration/test_leader_election_e2e.py
-# per simulare scenari di concorrenza, SIGKILL, Redis down.
-fakeredis>=2.20
 
 # Object storage contract matrix (A1-B3). moto v5 intercetta boto3 a
 # livello modulo: AwsS3ObjectStorage e MinioObjectStorage subclass

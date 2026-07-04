@@ -1,7 +1,8 @@
 """
-Contract test — login rate limiter Redis-backed (R-01).
+Contract test — login rate limiter con attempts store distribuito (R-01).
 
-Copre il modulo `app.core.security.login_rate_limiter`:
+Copre il modulo `app.core.security.login_rate_limiter` (sliding window
+su PostgreSQL in produzione; qui si inietta InMemoryLoginAttemptsStore).
 """
 
 from __future__ import annotations
@@ -54,7 +55,7 @@ def rl_no_redis():
 
 
 def _no_op_fallback(_ip: str) -> None:
-    """Fallback che non fa nulla: usato quando il test verifica il path Redis."""
+    """Fallback che non fa nulla: usato quando il test verifica il path store."""
     pass
 
 
@@ -186,9 +187,9 @@ def test_redis_sliding_window_drops_old_attempts(rl_with_redis):
 
 
 def test_cluster_safety_two_callers_share_bucket(fake_client):
-    """Due chiamanti che usano lo stesso fakeredis store condividono il
-    bucket: i tentativi del primo influenzano il check del secondo —
-    proprio cio' che il vecchio limiter in-memory non garantiva."""
+    """Due chiamanti che condividono lo stesso attempts store condividono
+    il bucket: i tentativi del primo influenzano il check del secondo —
+    proprio cio' che il vecchio limiter per-processo non garantiva."""
     from app.core.security import login_rate_limiter as rl
 
     rl._set_store_for_tests(fake_client)

@@ -6,7 +6,6 @@ contro una whitelist di trusted roots.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Iterable, Union
 

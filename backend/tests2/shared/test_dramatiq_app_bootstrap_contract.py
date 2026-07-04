@@ -187,7 +187,6 @@ def test_broker_has_task_result_finalize_middleware():
 
 
 def test_invoke_task_body_injects_message_id_as_self_request_id(monkeypatch):
-    from types import SimpleNamespace
 
     from workers import dramatiq_app
 

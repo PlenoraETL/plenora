@@ -5,7 +5,6 @@ from types import SimpleNamespace
 import ast
 from pathlib import Path
 from typing import get_type_hints
-from unittest.mock import patch
 
 import pytest
 

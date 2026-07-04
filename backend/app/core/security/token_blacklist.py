@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any, Optional
+from typing import Optional
 
 from app.shared.contracts.payloads import IntMap, JsonObject
 from app.shared.kv import InMemoryKeyValueStore, KeyValueStore

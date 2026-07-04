@@ -9,7 +9,6 @@ error contract. Inputs are minimal inline pandas DataFrames (no DB/HTTP).
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 import pytest
 

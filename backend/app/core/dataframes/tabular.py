@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from decimal import Decimal
 import io
-import json
 from pathlib import Path
 from collections.abc import Mapping
 from typing import Any, Iterable, Iterator, List, Optional

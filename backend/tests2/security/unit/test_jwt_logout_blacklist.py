@@ -429,7 +429,7 @@ def test_get_blacklist_status_warn_when_stale(patched_blacklist, monkeypatch):
     # Simulo last_ok molto nel passato (1h fa)
     import time
     tb._last_ok_epoch = time.time() - 3600
-    # Il client (fakeredis) risponde a EXISTS → non e' error
+    # Lo store in-memory risponde alle letture → non e' error
     status = tb.get_blacklist_status(stale_threshold_seconds=1800)
     assert status["status"] == "warn"
     assert "inoperante" in status["message"].lower() or "nessuna operazione" in status["message"].lower()

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Optional, List, Protocol, TypeAlias
-from typing_extensions import TypedDict
 from datetime import datetime, timezone
 from enum import Enum
 from dataclasses import dataclass
