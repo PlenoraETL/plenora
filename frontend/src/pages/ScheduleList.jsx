@@ -354,7 +354,7 @@ const enabledCount   = schedules.filter(s => s.schedule?.enabled).length;
           {/* Beat health banner */}
           {beatHealth && beatHealth.status !== 'ok' && (
             <div className={`sl__banner sl__banner--${beatHealth.status === 'down' ? 'error' : 'warning'}`}>
-              {beatHealth.status === 'down' ? '🔴' : '🟡'} {beatHealth.status === 'down' ? 'Celery Beat non attivo — gli schedule non verranno eseguiti automaticamente.' : beatHealth.message}
+              {beatHealth.status === 'down' ? '🔴' : '🟡'} {beatHealth.status === 'down' ? 'Beat scheduler non attivo — gli schedule non verranno eseguiti automaticamente.' : beatHealth.message}
             </div>
           )}
 

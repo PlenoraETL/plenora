@@ -10,7 +10,7 @@
  *   config.js         → costanti (URL, timeout, headers)
  *   projects.js       → CRUD progetti, canvas, esecuzione, preview, download
  *   connections.js    → CRUD connessioni DB, test, schema tabelle
- *   tasks.js          → polling task Celery, cancel, download
+ *   tasks.js          → polling task asincroni, cancel, download
  *   enrichment.js     → validate, estimate, execute arricchimento
  *   apiConnections.js → CRUD connettori esterni (API, eseguibili, datasource)
  *   files.js          → upload/gestione file caricati

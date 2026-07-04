@@ -2,7 +2,7 @@
  * useExecution.js — Hook per esecuzione asincrona pipeline
  *
  * Gestisce l'intero ciclo di vita di una esecuzione:
- * avvio task Celery → polling stato → completamento/errore → download output.
+ * avvio task asincrono → polling stato → completamento/errore → download output.
  *
  * Ritorna: { executing, taskId, progress, result, error, execute, cancel }
  *
@@ -68,7 +68,7 @@ const startCaricaPolling = useCallback((caricaTask) => {
 
         const isDone = ['success', 'failure', 'revoked'].includes(data.status);
 
-        // data.status = stato Celery (success/failure/revoked)
+        // data.status = stato task (success/failure/revoked)
         // data.result.status = stato business logic (validation_error, write_error, ecc.)
         const businessStatus = data.result?.status;
         const isBusinessError = businessStatus && businessStatus !== 'success' && businessStatus !== 'completed' && businessStatus !== 'partial_success';

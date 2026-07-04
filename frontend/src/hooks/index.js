@@ -4,8 +4,8 @@
  * Importa SEMPRE da qui, non direttamente dai singoli file.
  *
  * Hook disponibili:
- *   usePreview            → gestione anteprima dati (polling Celery)
- *   useExecution          → gestione esecuzione pipeline (polling Celery)
+ *   usePreview            → gestione anteprima dati (polling task)
+ *   useExecution          → gestione esecuzione pipeline (polling task)
  *   useCaricarica         → gestione scrittura su DB/ArcGIS
  *   useCanvasCore         → stato nodi/edges condiviso (wrapper Zustand)
  *   useCanvasSave         → salvataggio draft uniforme tra editor

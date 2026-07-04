@@ -163,7 +163,7 @@ describe('ScheduleList', () => {
 
     render(<ScheduleList />);
 
-    expect(await screen.findByText(/celery beat non attivo/i)).toBeInTheDocument();
+    expect(await screen.findByText(/beat scheduler non attivo/i)).toBeInTheDocument();
     expect(screen.getByText(/1 schedule in esecuzione/i)).toBeInTheDocument();
     expect(screen.getByText('Queued Job')).toBeInTheDocument();
     expect(screen.getByText('dest_table (replace)')).toBeInTheDocument();

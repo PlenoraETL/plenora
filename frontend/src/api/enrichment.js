@@ -2,7 +2,7 @@
  * enrichment.js — API per il modulo Arricchisci
  *
  * Gestisce validazione, stima e avvio dell'arricchimento dati tramite API esterne.
- * Tutte le operazioni intensive usano Celery (async) — per i risultati usare
+ * Tutte le operazioni intensive girano sul worker (async) — per i risultati usare
  * getTaskStatus da api/tasks.js.
  */
 
@@ -67,7 +67,7 @@ export const estimateEnrichment = async (projectId, apiId, paramMapping, fileSou
 };
 
 /**
- * Avvia l'arricchimento in modo asincrono (Celery).
+ * Avvia l'arricchimento in modo asincrono (task worker).
  * Ritorna immediatamente con un task_id da usare per il polling.
  *
  * @param {string}  projectId              - ID del progetto

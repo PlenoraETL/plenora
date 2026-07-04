@@ -1,5 +1,5 @@
 /**
- * useTaskPolling.js — Hook base per polling di task Celery
+ * useTaskPolling.js — Hook base per polling di task asincroni
  *
  * Fornisce il meccanismo comune di polling usato da useExecution e usePreview:
  * - Guard mountedRef contro setState post-unmount
@@ -35,7 +35,7 @@ export function useTaskPolling({ interval = 1000 } = {}) {
   }, []);
 
   /**
-   * Avvia il polling di un task Celery.
+   * Avvia il polling di un task asincrono.
    *
    * Garanzia: stopPolling() viene chiamato prima di pianificare il nuovo
    * interval, quindi una seconda startPolling() sullo stesso hook

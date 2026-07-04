@@ -2,8 +2,9 @@
  * AdminSystemStatusPage.jsx — Dashboard stato sistema (superadmin)
  * Route: /admin/system-status
  *
- * Single pane of glass: backup, verify-restore, scheduler, worker Celery,
- * risorse host (CPU/RAM/disco), DB pool, Redis, schema size.
+ * Single pane of glass: backup, verify-restore, scheduler, worker
+ * (task in esecuzione, derivati da PostgreSQL), risorse host
+ * (CPU/RAM/disco), DB pool, schema size.
  * Ogni card legge dall'endpoint aggregato `/api/admin/system-status`.
  * Auto-refresh ogni 30s (backend aggrega in ~100ms).
  */
@@ -45,14 +46,6 @@ function fmtDate(iso) {
   }
 }
 
-function fmtUptime(sec) {
-  if (sec == null) return '—';
-  const d = Math.floor(sec / 86400);
-  const h = Math.floor((sec % 86400) / 3600);
-  if (d > 0) return `${d}d ${h}h`;
-  const m = Math.floor((sec % 3600) / 60);
-  return `${h}h ${m}m`;
-}
 function ProgressBar({ percent, warnAt = 80, errorAt = 92 }) {
   if (percent == null) return null;
   const cls = percent >= errorAt ? 'error' : percent >= warnAt ? 'warn' : 'ok';
@@ -149,47 +142,18 @@ function SchedulesCard({ data, onLink }) {
 }
 
 function WorkersCard({ data }) {
+  // Plenora 2.0: il backend deriva lo stato worker da PostgreSQL
+  // (task_results in PROGRESS) — niente piu' inspect per-nodo
+  // (hostname/PID/pool/queue_depth erano celery-only).
   return (
-    <Card title="Worker Celery" icon="👷" data={data}>
+    <Card title="Worker" icon="👷" data={data}>
       {data && (
         <>
-          {data.queue_depth != null && data.queue_depth > 0 && (
-            <div className="sys__txt-warn-bold">
-              ⏳ {data.queue_depth} in coda
-            </div>
-          )}
-          {data.details && data.details.length > 0 ? (
-            <ul className="sys__list sys__mt-xs">
-              {data.details.map((n) => (
-                <li key={n.name} className="sys__list-item">
-                  <div><b>🖥️ {n.hostname}</b>
-                    {n.pid != null && (
-                      <span className="sys__txt-meta sys__ml-sm">
-                        PID {n.pid}
-                      </span>
-                    )}
-                  </div>
-                  <div className="sys__txt-meta sys__mt-2">
-                    Pool {n.pool_size ?? '?'} · attivi {n.active_tasks ?? 0}
-                    {n.total_tasks_processed != null && <> · lifetime {n.total_tasks_processed}</>}
-                  </div>
-                  {n.queues && n.queues.length > 0 && (
-                    <div className="sys__txt-meta">
-                      Code: {n.queues.join(', ')}
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <>
-              {data.nodes != null && <div>Nodi: <b>{data.nodes}</b></div>}
-              {data.concurrency_slots != null && <div>Slot: <b>{data.concurrency_slots}</b></div>}
-              {data.active_tasks != null && <div>Task attivi: <b>{data.active_tasks}</b></div>}
-            </>
+          {data.active_tasks != null && (
+            <div>Task in esecuzione: <b>{data.active_tasks}</b></div>
           )}
           <div className="sys__hint">
-            Nodi = processi master · Pool = slot paralleli per nodo
+            Conteggio derivato dallo stato task su PostgreSQL
           </div>
         </>
       )}
@@ -245,28 +209,6 @@ function DbPoolCard({ data }) {
             {data.waiting > 0 && (
               <span className="sys__txt-error"> · Waiting: {data.waiting}</span>
             )}
-          </div>
-        </>
-      )}
-    </Card>
-  );
-}
-
-function RedisCard({ data }) {
-  return (
-    <Card title="Redis" icon="🔴" data={data}>
-      {data && data.used_memory_human && (
-        <>
-          <div>
-            Memoria: <b>{data.used_memory_human}</b>
-            {data.percent != null && ` (${data.percent}%)`}
-          </div>
-          {data.percent != null && (
-            <ProgressBar percent={data.percent} warnAt={75} errorAt={90} />
-          )}
-          <div className="sys__mt-sm">
-            Client: <b>{data.connected_clients}</b>
-            {data.uptime_seconds != null && <> · Uptime: <b>{fmtUptime(data.uptime_seconds)}</b></>}
           </div>
         </>
       )}
@@ -375,7 +317,7 @@ const REFRESH_INTERVAL_MS = 30000;
 
 const STATUS_KEYS = [
   'backup', 'verify_restore', 'schedules', 'workers',
-  'host_resources', 'db_pool', 'redis', 'db_schema', 'jwt_blacklist',
+  'host_resources', 'db_pool', 'db_schema', 'jwt_blacklist',
   'tickets',
 ];
 
@@ -462,7 +404,6 @@ export default function AdminSystemStatusPage() {
           <WorkersCard data={status?.workers} />
           <HostResourcesCard data={status?.host_resources} />
           <DbPoolCard data={status?.db_pool} />
-          <RedisCard data={status?.redis} />
           <DbSchemaCard data={status?.db_schema} />
           <JwtBlacklistCard data={status?.jwt_blacklist} />
           <TicketsCard

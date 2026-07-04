@@ -3,7 +3,7 @@
  *
  * Gestisce la configurazione e l'avvio del caricamento su DB:
  * selezione connessione, schema, tabella, modalità (create/append/overwrite).
- * Include polling del task Celery e apertura del modale di progresso.
+ * Include polling del task asincrono e apertura del modale di progresso.
  *
  * Usato da: EstraiEditor, ManipolaEditor, ArricchisciEditor (via CaricanNode)
  */
@@ -243,7 +243,7 @@ export function useCaricarica(projectId, options = {}) {
           } else if (data.status === 'failure') {
             setIsExecuting(false);
             // PR-A UX Tier 1: il task puo' fallire con result.status =
-            // 'permission_revoked' propagato dai 4 task Celery — banner
+            // 'permission_revoked' propagato dai 4 task worker — banner
             // inline invece di errore generico.
             const innerStatus = data.result?.status;
             const isPermissionRevoked = innerStatus === 'permission_revoked';

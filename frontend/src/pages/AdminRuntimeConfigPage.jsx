@@ -196,17 +196,18 @@ export default function AdminRuntimeConfigPage() {
           <div className="arc__runtime-note">{data?.runtime?.note}</div>
         </section>
 
-        {data?.workers?.workers?.length > 0 && (
+        {/* Plenora 2.0: il BE deriva lo stato worker da PostgreSQL
+            ({available, running_tasks}) — niente piu' lista di nodi
+            (era l'inspect Celery). */}
+        {data?.workers?.available && (
           <section className="arc__section">
-            <h2 className="arc__section-title">Worker Celery</h2>
+            <h2 className="arc__section-title">Worker</h2>
             <div className="arc__workers">
-              {data.workers.workers.map((worker) => (
-                <div className="arc__worker" key={worker.name}>
-                  <div className="arc__worker-name">{worker.name}</div>
-                  <div className="arc__worker-meta">task attivi: {worker.active_tasks}</div>
-                  <div className="arc__worker-meta">code: {worker.queues?.join(', ') || '-'}</div>
+              <div className="arc__worker">
+                <div className="arc__worker-meta">
+                  task in esecuzione: {data.workers.running_tasks}
                 </div>
-              ))}
+              </div>
             </div>
           </section>
         )}

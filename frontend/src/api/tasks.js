@@ -1,8 +1,8 @@
 /**
- * tasks.js — API per la gestione dei task Celery
+ * tasks.js — API per la gestione dei task asincroni (worker Dramatiq)
  *
  * URBY-ETL esegue le operazioni pesanti (esecuzione, preview, arricchimento)
- * in modo asincrono tramite Celery. Questi endpoint permettono di monitorare
+ * in modo asincrono tramite il worker. Questi endpoint permettono di monitorare
  * e controllare i task in esecuzione.
  *
  * Pattern di polling consigliato:
@@ -19,7 +19,7 @@ import http from './http';
 import { downloadBlob } from '../utils/downloadBlob';
 
 /**
- * Restituisce lo stato corrente di un task Celery.
+ * Restituisce lo stato corrente di un task asincrono.
  *
  * @param {string} taskId
  * @returns {Promise<Object>} { task_id, status, progress, message, result?, error? }
@@ -41,7 +41,7 @@ export const cancelTask = async (taskId) => {
 };
 
 /**
- * Crea un nuovo task Celery con payload personalizzato.
+ * Crea un nuovo task asincrono con payload personalizzato.
  * Usato per task di tipo 'carica' con mappatura colonne esplicita.
  *
  * Pre-fix (P0 contracts-schemas): il JSDoc non documentava
@@ -121,7 +121,7 @@ export const downloadTaskOutput = async (taskId, filename = null) => {
 
 /**
  * Cleanup completo di un task: elimina result file/blob, log entries e
- * revoca il record Celery sul server. Pensato per il ruolo "esecutore"
+ * revoca il record del task sul server. Pensato per il ruolo "esecutore"
  * che richiede privacy GDPR-style: la UI kiosk chiama questo endpoint
  * subito dopo aver scaricato il risultato così non resta traccia.
  *

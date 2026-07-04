@@ -8,7 +8,7 @@
  * Privacy: dopo il download del risultato la wizard chiama
  * `cleanupTaskCompletely(taskId)` per rimuovere ogni traccia
  * dell'esecuzione dal server (results.db, log entries, file su disco,
- * record Celery).
+ * record del task).
  *
  * Route: /run
  * Accesso: solo utenti con role === 'esecutore'.

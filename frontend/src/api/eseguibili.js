@@ -76,7 +76,7 @@ export const analyzeUpload = async (eseguibileId, file) => {
 };
 
 /**
- * Esegue un eseguibile: applica mapping, sostituisce sorgente, lancia task Celery.
+ * Esegue un eseguibile: applica mapping, sostituisce sorgente, lancia il task asincrono.
  * @param {string} eseguibileId
  * @param {Object} payload
  * @param {string} payload.file_id

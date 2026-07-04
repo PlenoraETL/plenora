@@ -155,7 +155,7 @@ export const deleteProject = async (projectId) => {
 };
 
 /**
- * Esegue la query/pipeline di un progetto in modo asincrono (Celery).
+ * Esegue la query/pipeline di un progetto in modo asincrono (task worker).
  *
  * @param {string} projectId
  * @param {Object} [options]
@@ -193,7 +193,7 @@ export const executeProjectQuery = async (projectId, options = null) => {
 };
 
 /**
- * Ottiene una preview dei dati del progetto (asincrona con Celery).
+ * Ottiene una preview dei dati del progetto (asincrona, task worker).
  * @param {string} projectId
  * @param {number} limit      - Numero massimo di righe (default 100)
  * @returns {Promise<Object>} { task_id, ... }

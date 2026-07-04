@@ -15,7 +15,7 @@ const POLL_INTERVAL = 1000;
 
 /**
  * Hook per gestire la preview dei progetti.
- * La preview gira su Celery — polling fino al completamento.
+ * La preview gira sul worker — polling fino al completamento.
  */
 export function usePreview(projectId, onBeforePreview = null) {
   const [showModal, setShowModal] = useState(false);

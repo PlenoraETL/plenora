@@ -128,7 +128,7 @@ const ManipolaEditorContent = () => {
     onBeforeExecute: handleSaveQuiet,
   });
 
-  // CARICA asincrono via Celery
+  // CARICA asincrono via task worker
   // Deps `[]`: `nodesRef`/`edgesRef` sono ref Zustand stabili lifetime-bound
   // al componente (non subiscono re-render churn). `createTask` e' import
   // module-level, costante. Il polling generato dall'execute viene gestito

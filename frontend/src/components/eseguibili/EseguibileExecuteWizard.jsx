@@ -57,7 +57,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
   const [taskMessage, setTaskMessage] = useState('');
   const [taskResult, setTaskResult] = useState(null);
 
-  // Polling task Celery: il hook gestisce single-flight + cleanup unmount.
+  // Polling task: il hook gestisce single-flight + cleanup unmount.
   const { startPolling } = useTaskPolling({ interval: 1500 });
   useDialogFocus(true, onClose, dialogRef, { closeOnEsc: !executing });
 

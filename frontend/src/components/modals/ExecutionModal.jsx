@@ -1,7 +1,7 @@
 /**
  * ExecutionModal.jsx — Modal risultati esecuzione pipeline
  *
- * Mostra il task Celery in esecuzione con progress bar, log in tempo reale
+ * Mostra il task in esecuzione con progress bar, log in tempo reale
  * e, a completamento, le opzioni di download dell'output nei formati disponibili.
  * Usato da tutti e tre gli editor dopo il click su "Esegui".
  */
