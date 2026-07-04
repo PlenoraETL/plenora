@@ -63,19 +63,27 @@ if (-not $SkipWinget) {
     Step 'Install pacchetti di piattaforma (winget)'
     # NB: gli ID winget possono variare col tempo; su fallimento di un ID
     # usare `winget search <nome>` e annotare l'ID corretto nel runbook.
+    # NB scoping VM 2026-07-04: RabbitMQ server NON e' piu' su winget
+    # (ne' VMware.RabbitMQ ne' Broadcom.*): si installa dal blocco
+    # dedicato piu' sotto (release ufficiale GitHub, NSIS /S).
+    # LEZIONE scoping VM 2026-07-04: OTP 29 e' troppo nuovo per RabbitMQ
+    # 4.3.x — BOOT FAILED {incompatible_feature_flags,{horus,
+    # extraction_denied,{unknown_instruction,...}}}. Pin alla serie 28.
     $pkgs = @(
-        'Git.Git',
-        'OpenJS.NodeJS.LTS',
-        'PostgreSQL.PostgreSQL.17',
-        'Erlang.ErlangOTP',          # PRIMA di RabbitMQ
-        'VMware.RabbitMQ',
-        'CondaForge.Miniforge3'
+        @{ id = 'Git.Git' },
+        @{ id = 'OpenJS.NodeJS.LTS' },
+        @{ id = 'PostgreSQL.PostgreSQL.17' },
+        @{ id = 'Erlang.ErlangOTP'; version = '28.5.0.3' },   # PRIMA di RabbitMQ
+        @{ id = 'CondaForge.Miniforge3' }
     )
     foreach ($p in $pkgs) {
-        Write-Host "  winget install $p"
-        winget install --id $p --accept-package-agreements --accept-source-agreements --silent
+        Write-Host "  winget install $($p.id)"
+        $args = @('install', '--id', $p.id,
+                  '--accept-package-agreements', '--accept-source-agreements', '--silent')
+        if ($p.version) { $args += @('--version', $p.version) }
+        & winget @args
         if ($LASTEXITCODE -notin 0, -1978335189) {   # -1978335189 = gia' installato
-            Fail "winget install $p exit=$LASTEXITCODE (annotare e cercare l'ID con 'winget search')"
+            Fail "winget install $($p.id) exit=$LASTEXITCODE (annotare e cercare l'ID con 'winget search')"
         }
     }
     Ok 'Pacchetti piattaforma installati (o gia'' presenti)'
@@ -108,10 +116,34 @@ if ($one -ne '1') { Fail 'SELECT 1 come utente plenora fallita' }
 Ok 'PostgreSQL pronto (db plenora, utente plenora)'
 
 # -----------------------------------------------------------------------------
-Step 'RabbitMQ: servizio e porta 5672'
+Step 'RabbitMQ: install (release GitHub) + servizio e porta 5672'
 # -----------------------------------------------------------------------------
+# LEZIONE scoping VM 2026-07-04: winget installa Erlang SENZA settare
+# ERLANG_HOME; senza, il servizio RabbitMQ si registra ma non parte mai
+# (e rabbitmq-server.bat fallisce esplicito). Va impostata PRIMA
+# dell'install di RabbitMQ, a livello Machine per il servizio.
+if (-not $env:ERLANG_HOME) {
+    $erlHome = 'C:\Program Files\Erlang OTP'
+    if (-not (Test-Path $erlHome)) { Fail "Erlang non trovato in $erlHome (install OTP fallita o path diverso)" }
+    [Environment]::SetEnvironmentVariable('ERLANG_HOME', $erlHome, 'Machine')
+    $env:ERLANG_HOME = $erlHome
+    Ok "ERLANG_HOME impostata: $erlHome"
+}
+
 $svc = Get-Service -Name 'RabbitMQ' -ErrorAction SilentlyContinue
-if (-not $svc) { Fail 'Servizio RabbitMQ non trovato (install fallita?)' }
+if (-not $svc) {
+    Write-Host '  RabbitMQ non presente: scarico l''ultima release ufficiale...'
+    $rel = Invoke-RestMethod 'https://api.github.com/repos/rabbitmq/rabbitmq-server/releases/latest'
+    $asset = $rel.assets | Where-Object { $_.name -like 'rabbitmq-server-*.exe' } | Select-Object -First 1
+    if (-not $asset) { Fail 'Nessun installer .exe nella release RabbitMQ (annotare tag e asset)' }
+    Write-Host "  $($rel.tag_name) -> $($asset.name)"
+    $exe = Join-Path $env:TEMP $asset.name
+    Invoke-WebRequest $asset.browser_download_url -OutFile $exe
+    Start-Process $exe -ArgumentList '/S' -Wait     # NSIS silent; registra il servizio
+    Start-Sleep -Seconds 10
+    $svc = Get-Service -Name 'RabbitMQ' -ErrorAction SilentlyContinue
+}
+if (-not $svc) { Fail 'Servizio RabbitMQ non trovato dopo l''install (compat Erlang? vedi runbook)' }
 if ($svc.Status -ne 'Running') { Start-Service RabbitMQ; Start-Sleep -Seconds 5 }
 $tnc = Test-NetConnection 127.0.0.1 -Port 5672 -WarningAction SilentlyContinue
 if (-not $tnc.TcpTestSucceeded) { Fail 'Porta 5672 chiusa: RabbitMQ non in ascolto' }
