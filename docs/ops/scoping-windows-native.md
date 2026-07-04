@@ -242,7 +242,12 @@ Ordine: W1 → W5, una fetta per volta, VM come banco di collaudo.
   servizio (niente `conda activate` disponibile per un servizio);
   collaudo stop pulito (Ctrl+C di WinSW → il beat rilascia il leader
   lock). Parametri `-WorkerProcesses/-WorkerThreads`.
-- **W2 — Parita' con install-docker.sh**: superadmin bootstrap
+- **W2 — Parita' con install-docker.sh** ✅ COLLAUDATA (2026-07-04):
+  superadmin seedato e verificato con login API reale; broker su utente
+  dedicato `plenora` (guest ELIMINATO), smoke verde con le credenziali
+  nuove; ACL sul .env. 3 fix dal campo: dotenv nel seed (bare-metal),
+  return pulito di Invoke-RabbitCtl, stop sincrono nel refresh servizi.
+  Dettaglio: superadmin bootstrap
   (prompt/env `PLENORA_BOOTSTRAP_ADMIN_*`, password >=12, snippet
   python idempotente gruppo root + utente, DOPO /ready verde),
   non-interattivo completo, secrets (PG `--superpassword` via winget
