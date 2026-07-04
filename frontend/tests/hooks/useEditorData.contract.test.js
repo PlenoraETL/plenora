@@ -46,6 +46,17 @@ vi.mock('../../src/api/files', () => ({
   getFiles: getFilesMock,
 }));
 
+// Il hook oggi usa useToast (toast di errore nel bootstrap): fuori da
+// <ToastProvider> il context throwa — mock al modulo hook.
+vi.mock('../../src/hooks/useToast', () => ({
+  useToast: () => ({
+    success: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+  }),
+}));
+
 import { useEditorData } from '../../src/hooks/useEditorData';
 
 beforeEach(() => {

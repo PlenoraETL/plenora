@@ -98,9 +98,11 @@ describe('NL2Pipeline cleanup contract (C3.4)', () => {
     });
   });
 
-  describe('CODE_MAP.md does not list nl2pipelinePresets as active client', () => {
+  describe('code-map.md does not list nl2pipelinePresets as active client', () => {
+    // CODE_MAP.md root e' stato spostato in docs/development/code-map.md
+    // (pulizia doc 5d4f05a6).
     const codeMap = readFileSync(
-      resolve(__dirname, '../../../CODE_MAP.md'),
+      resolve(__dirname, '../../../docs/development/code-map.md'),
       'utf-8',
     );
     it('removes nl2pipelinePresets.js from the api/ client list', () => {

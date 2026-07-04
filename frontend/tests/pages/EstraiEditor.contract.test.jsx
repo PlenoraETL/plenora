@@ -159,15 +159,24 @@ vi.mock('../../src/hooks/useToast', () => ({
   useToast: () => toastMock,
 }));
 
-vi.mock('../../src/store/useCanvasStore', () => ({
-  default: {
-    getState: () => ({
-      markClean: vi.fn(),
-      setEditorActions: vi.fn(),
-      setConnections: vi.fn(),
-    }),
-  },
-}));
+vi.mock('../../src/store/useCanvasStore', () => {
+  // Lo store zustand e' un HOOK chiamabile con selector (EditorShell fa
+  // `useCanvasStore(s => s.takeSnapshot)` per l'undo/redo #24), non solo
+  // un oggetto con getState: il mock deve supportare entrambe le forme.
+  const storeState = {
+    markClean: vi.fn(),
+    setEditorActions: vi.fn(),
+    setConnections: vi.fn(),
+    takeSnapshot: vi.fn(),
+    validationHighlights: [],
+    lastValidationSummary: null,
+    past: [],
+    future: [],
+  };
+  const hook = (selector) => (selector ? selector(storeState) : storeState);
+  hook.getState = () => storeState;
+  return { default: hook };
+});
 
 vi.mock('../../src/utils/nodeFactories', () => ({
   deserializeNodes: deserializeNodesMock,

@@ -332,7 +332,8 @@ describe('TicketDetail', () => {
     await user.click(screen.getByText('log.log'));
 
     await waitFor(() => {
-      expect(toastMock.error).toHaveBeenCalledWith('Blob non disponibile');
+      // toastApiError prefissa il contesto: 'Errore apertura allegato: <detail>'.
+      expect(toastMock.error).toHaveBeenCalledWith('Errore apertura allegato: Blob non disponibile');
     });
   });
 
@@ -467,7 +468,8 @@ describe('TicketDetail', () => {
     await user.click(confirmBtn);
 
     await waitFor(() => {
-      expect(toastMock.error).toHaveBeenCalledWith('Permesso negato');
+      // toastApiError prefissa il contesto: 'Errore eliminazione ticket: <detail>'.
+      expect(toastMock.error).toHaveBeenCalledWith('Errore eliminazione ticket: Permesso negato');
     });
     expect(navigateMock).not.toHaveBeenCalled();
   });

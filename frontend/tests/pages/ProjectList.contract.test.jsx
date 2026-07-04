@@ -101,8 +101,10 @@ describe('ProjectList', () => {
 
     render(<ProjectList />);
 
-    await screen.findByRole('button', { name: /nuovo progetto/i });
-    await userEvent.click(screen.getByRole('button', { name: /nuovo progetto/i }));
+    // /nuovo progetto$/: il quick-start ha aggiunto il bottone
+    // "＋ Nuovo progetto Estrai" che matcherebbe /nuovo progetto/i.
+    await screen.findByRole('button', { name: /nuovo progetto$/i });
+    await userEvent.click(screen.getByRole('button', { name: /nuovo progetto$/i }));
 
     await userEvent.clear(screen.getByPlaceholderText(/catasto campania q2/i));
     await userEvent.type(screen.getByPlaceholderText(/catasto campania q2/i), 'Orders ETL');

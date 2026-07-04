@@ -90,6 +90,8 @@ describe('Sessione 8 P0 residui', () => {
       task_type: 'carica',
       project_id: 'p-1',
       canvas: { nodes: [], edges: [] },
+      // Required dal fail-fast P1 quando task_type === 'carica'.
+      carica_node_data: { schema_name: 'plenora', table_name: 'foo' },
     });
     expect(result).toEqual({ task_id: 'task-1' });
     expect(httpMock.post).toHaveBeenCalledWith('/tasks', expect.objectContaining({

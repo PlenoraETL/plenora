@@ -217,7 +217,12 @@ describe('ParameterInput — contract', () => {
 
     const addSelect = screen.getByRole('combobox');
     await user.selectOptions(addSelect, 'a');
-    expect(onChange).toHaveBeenLastCalledWith(['a']);
+    // ColumnSelector passa anche il secondo argomento `nextColumns`
+    // (oggetti colonna tipizzati) accanto ai nomi selezionati.
+    expect(onChange).toHaveBeenLastCalledWith(
+      ['a'],
+      [{ name: 'a', type: 'str' }],
+    );
 
     // Re-render con value=['a']: tag visibile + click × → onChange([]).
     onChange.mockClear();

@@ -46,9 +46,11 @@ describe('useCaricarica mountedRef guards architectural lint (sessione 2 P0)', (
   });
 
   it('handleExecute ha mountedRef guard dopo _waitTaskTerminal', () => {
-    const idx = source.indexOf('_waitTaskTerminal(executeResp.task_id)');
+    // H-5: la call oggi passa un options object ({isCancelled}) — il
+    // pattern matcha l'apertura della call, non la chiusura.
+    const idx = source.indexOf('_waitTaskTerminal(executeResp.task_id');
     expect(idx).toBeGreaterThan(-1);
-    const window = source.slice(idx, idx + 300);
+    const window = source.slice(idx, idx + 600);
     expect(window).toMatch(/if\s*\(\s*!\s*mountedRef\.current\s*\)\s*return/);
   });
 

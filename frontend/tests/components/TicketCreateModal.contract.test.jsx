@@ -214,7 +214,8 @@ describe('TicketCreateModal', () => {
     await user.click(screen.getByRole('button', { name: /apri ticket/i }));
 
     await waitFor(() => {
-      expect(toastMock.error).toHaveBeenCalledWith('Permesso negato');
+      // toastApiError prefissa il contesto: 'Errore creazione ticket: <detail>'.
+      expect(toastMock.error).toHaveBeenCalledWith('Errore creazione ticket: Permesso negato');
     });
     expect(onCreated).not.toHaveBeenCalled();
   });

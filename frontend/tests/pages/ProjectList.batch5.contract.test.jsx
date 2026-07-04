@@ -90,7 +90,7 @@ describe('ProjectList contract', () => {
     vi.clearAllMocks();
     authState.user = { role: 'admin', username: 'tester', group_id: 'grp-1' };
   });
-  it('deletes a project after confirm and reloads the dashboard data', async () => {
+  it('deletes a project after confirm with optimistic removal (no reload)', async () => {
     mockDashboardData({
       projects: [sampleProject],
       connections: [{ id: 'conn-1', name: 'Main DB', database: 'urby' }],
@@ -107,7 +107,13 @@ describe('ProjectList contract', () => {
     await waitFor(() =>
       expect(apiMock.deleteProject).toHaveBeenCalledWith('proj-1'),
     );
-    expect(apiMock.listProjects).toHaveBeenCalledTimes(2);
+    // Epic C (delete ottimistico): la card sparisce subito via
+    // removeProjectLocal, NESSUN reload su successo — solo il load
+    // iniziale del mount.
+    await waitFor(() =>
+      expect(screen.queryByText('Orders ETL')).not.toBeInTheDocument(),
+    );
+    expect(apiMock.listProjects).toHaveBeenCalledTimes(1);
     expect(toastMock.error).not.toHaveBeenCalled();
   });
   it('shows formatted cascade dependencies on 409 delete (eseguibili + downstream projects)', async () => {
@@ -147,8 +153,9 @@ describe('ProjectList contract', () => {
     expect(msg).toMatch(/eseguibile/i);
     expect(msg).toMatch(/progetto/i);
     expect(ttl).toBe(10000);
-    // No reload triggered (handleDeleteProject early return).
-    expect(apiMock.listProjects).toHaveBeenCalledTimes(1);
+    // Epic C: su errore la rimozione ottimistica viene RIPRISTINATA con
+    // loadData() → load iniziale + reload di restore = 2.
+    expect(apiMock.listProjects).toHaveBeenCalledTimes(2);
   });
   it('shows the cleanup_partial recovery message on 500 project_cleanup_partial', async () => {
     mockDashboardData({
@@ -182,8 +189,9 @@ describe('ProjectList contract', () => {
     expect(msg).toContain('cleanup step canvas_db failed');
     expect(msg).toMatch(/Ritenta o contatta admin/i);
     expect(ttl).toBe(10000);
-    // Reload non triggered: il branch fa early return dopo toast.
-    expect(apiMock.listProjects).toHaveBeenCalledTimes(1);
+    // Epic C: su errore la rimozione ottimistica viene RIPRISTINATA con
+    // loadData() → load iniziale + reload di restore = 2.
+    expect(apiMock.listProjects).toHaveBeenCalledTimes(2);
   });
   it('blocks createProject with an empty name and warns the user', async () => {
     mockDashboardData({
@@ -193,7 +201,9 @@ describe('ProjectList contract', () => {
     render(<ProjectList />);
 
     await userEvent.click(
-      await screen.findByRole('button', { name: /nuovo progetto/i }),
+      // /nuovo progetto$/: il quick-start ha aggiunto il bottone
+      // "＋ Nuovo progetto Estrai" che matcherebbe /nuovo progetto/i.
+      await screen.findByRole('button', { name: /nuovo progetto$/i }),
     );
     await userEvent.click(
       await screen.findByRole('button', { name: /crea progetto/i }),

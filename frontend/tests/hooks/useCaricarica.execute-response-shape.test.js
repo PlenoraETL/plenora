@@ -22,10 +22,16 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { startPollingMock, executeProjectQueryMock, createTaskMock } = vi.hoisted(() => ({
+const {
+  startPollingMock,
+  executeProjectQueryMock,
+  createTaskMock,
+  getTaskStatusMock,
+} = vi.hoisted(() => ({
   startPollingMock: vi.fn(),
   executeProjectQueryMock: vi.fn(),
   createTaskMock: vi.fn(),
+  getTaskStatusMock: vi.fn(),
 }));
 
 vi.mock('../../src/hooks/useTaskPolling', () => ({
@@ -40,6 +46,14 @@ vi.mock('../../src/api', () => ({
   executeProjectQuery: executeProjectQueryMock,
   cancelTask: vi.fn(),
   createTask: createTaskMock,
+}));
+
+// L'hook oggi attende lo stato TERMINALE della query (polling sincrono
+// _waitTaskTerminal via getTaskStatus, import diretto da api/tasks) prima
+// di lanciare il task CARICA: senza questo mock il test farebbe una
+// chiamata HTTP reale (Network Error).
+vi.mock('../../src/api/tasks', () => ({
+  getTaskStatus: getTaskStatusMock,
 }));
 
 import { useCaricarica } from '../../src/hooks/useCaricarica';
@@ -60,6 +74,8 @@ describe('useCaricarica — executeProjectQuery response shape contract', () => 
       status: 'pending',
       async: true,
     });
+    // Il polling _waitTaskTerminal esce al primo stato terminale.
+    getTaskStatusMock.mockResolvedValue({ status: 'success' });
     createTaskMock.mockResolvedValue({ task_id: 'carica-task-xyz' });
   });
 

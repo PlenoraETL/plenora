@@ -51,7 +51,9 @@ vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
     ...actual,
-    useParams: () => ({ id: currentProjectId }),
+    // La route reale e' /editor/manipola/:projectId (App.jsx): il param
+    // si chiama projectId, non id.
+    useParams: () => ({ projectId: currentProjectId }),
     useNavigate: () => navigateMock,
   };
 });
@@ -151,8 +153,11 @@ vi.mock('../../src/store/useCanvasStore', () => {
     markClean: vi.fn(),
     setEditorActions: vi.fn(),
     setConnections: vi.fn(),
+    takeSnapshot: vi.fn(),
     validationHighlights: [],
     lastValidationSummary: null,
+    past: [],
+    future: [],
   };
   const hook = (selector) => selector ? selector(storeState) : storeState;
   hook.getState = () => storeState;
