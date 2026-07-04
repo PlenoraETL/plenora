@@ -446,12 +446,20 @@ if ($InstallServices) {
         # di riscrivere il config (cosi' i parametri nuovi prendono).
         if (Get-Service -Name $svc.id -ErrorAction SilentlyContinue) {
             Write-Host "  $($svc.id): gia' registrato — stop + uninstall per refresh config"
-            & $exe stop 2>$null | Out-Null
-            Start-Sleep -Seconds 3
+            # Stop-Service e' SINCRONO (attende lo stop); lo stop di
+            # winsw.exe invece ritorna subito e il wrapper teneva ancora
+            # il file alla Copy-Item (visto sul campo: beat in refresh).
+            Stop-Service $svc.id -Force -ErrorAction SilentlyContinue
             & $exe uninstall 2>$null | Out-Null
-            Start-Sleep -Seconds 2
         }
-        Copy-Item $winswExe $exe -Force
+        # Il wrapper puo' mollare il file qualche secondo DOPO lo stop:
+        # retry bounded sulla copia.
+        $copied = $false
+        foreach ($try in 1..30) {
+            try { Copy-Item $winswExe $exe -Force; $copied = $true; break }
+            catch { Start-Sleep -Seconds 1 }
+        }
+        if (-not $copied) { Fail "$($svc.id): impossibile aggiornare $exe (wrapper ancora in esecuzione dopo 30s)" }
 
         $dependXml = ($svc.depends | ForEach-Object { "  <depend>$_</depend>" }) -join "`r`n"
         @"
