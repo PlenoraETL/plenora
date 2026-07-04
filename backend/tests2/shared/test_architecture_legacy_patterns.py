@@ -159,7 +159,10 @@ def test_db_foundation_does_not_import_core_modules():
 # - `app/core/auth/smoke_seed.py`: docker smoke seed boundary; deve
 #   distinguere variabili esplicitamente settate dal default runtime.
 ALLOWLIST_GETENV_COUNTS: Dict[str, int] = {
-    "app/config.py": 2,
+    # 2 -> 3 (2026-07-04): Settings.get risolve gli alias env legacy
+    # (Celery/Redis -> TASK_*/*_DISTRIBUTED_*) con un secondo os.getenv
+    # sul nome storico. config.py E' il boundary: legittimo.
+    "app/config.py": 3,
     "app/environment.py": 1,
 }
 

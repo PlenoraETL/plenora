@@ -345,7 +345,7 @@ def test_check_stuck_tasks_removes_expired_locks_and_checks_running_schedules():
 
     with patch(
         "app.config.settings",
-        new=SimpleNamespace(CELERY_SCHEDULE_HARD_LIMIT=3600),
+        new=SimpleNamespace(TASK_SCHEDULE_HARD_LIMIT=3600),
     ), patch(
         "app.db.pg_connection.fetchall",
         side_effect=fetchall_side_effect,

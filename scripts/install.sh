@@ -969,14 +969,14 @@ docs/ops/install-non-docker.md (sectionsection7-9):
 
   2. systemd units (requires sudo):
        cd ${BACKEND_DIR}/deploy/systemd
-       sudo cp plenora-backend.service plenora-celery.service \\
+       sudo cp plenora-backend.service plenora-worker.service \\
               plenora-beat.service /etc/systemd/system/
        sudo cp plenora-backup.service plenora-backup.timer \\
               plenora-backup-test.service plenora-backup-test.timer \\
               /etc/systemd/system/
        sudo systemctl daemon-reload
        sudo systemctl enable --now \\
-            plenora-backend.service plenora-celery.service \\
+            plenora-backend.service plenora-worker.service \\
             plenora-beat.service \\
             plenora-backup.timer plenora-backup-test.timer
 
@@ -997,7 +997,7 @@ docs/ops/install-non-docker.md (sectionsection7-9):
      Both should return HTTP 200 with all checks green.
 
   5. Acceptance criteria (docs/ops/install-non-docker.md section0):
-       systemctl is-active plenora-backend plenora-celery plenora-beat
+       systemctl is-active plenora-backend plenora-worker plenora-beat
      should print "active" three times.
 
 If /ready returns 503, inspect:

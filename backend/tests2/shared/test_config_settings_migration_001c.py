@@ -80,8 +80,8 @@ def test_auth_reads_login_constants_via_settings():
 
 def test_login_rate_limiter_reads_required_flag_via_settings():
     src = _read(_BACKEND_APP / "core" / "security" / "login_rate_limiter.py")
-    assert "settings.get(\"LOGIN_RL_REDIS_REQUIRED\"" in src
-    assert "os.getenv(\"LOGIN_RL_REDIS_REQUIRED" not in src
+    assert "settings.get(\"LOGIN_RL_DISTRIBUTED_REQUIRED\"" in src
+    assert "os.getenv(\"LOGIN_RL_DISTRIBUTED_REQUIRED" not in src
 
 
 def test_token_blacklist_reads_cache_ttl_via_settings():

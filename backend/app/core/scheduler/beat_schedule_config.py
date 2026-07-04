@@ -33,7 +33,7 @@ def beat_schedule_config() -> Mapping[str, Mapping[str, Any]]:
             "task": "workers.tasks.cleanup_temp_files_task.run",
             "schedule": IntervalSchedule(3600.0),
             "kwargs": {},
-            "options": {"queue": settings.CELERY_QUEUE_CONTROL_PLANE},
+            "options": {"queue": settings.TASK_QUEUE_CONTROL_PLANE},
         },
     }
 

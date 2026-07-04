@@ -107,7 +107,7 @@ def test_pg_put_is_upsert_on_task_id_with_ttl_expiry():
     assert "INSERT INTO task_results" in src
     assert "ON CONFLICT (task_id) DO UPDATE" in src
     # TTL espresso come intervallo a partire da now() (rimpiazzo di
-    # CELERY_RESULT_EXPIRES gestito prima da Redis).
+    # TASK_RESULT_EXPIRES gestito prima da Redis).
     assert "interval '1 second'" in src
     # name preservato sugli update parziali (progress senza nome).
     assert "COALESCE(EXCLUDED.name, task_results.name)" in src

@@ -13,7 +13,7 @@
 # ACLs.
 #
 # Until the Windows path is bounded:
-#   - the systemd surface (plenora-backend.service, plenora-celery.service,
+#   - the systemd surface (plenora-backend.service, plenora-worker.service,
 #     plenora-beat.service) does not exist on Windows. The deployment
 #     target is Linux (Ubuntu 24.04 reference);
 #   - operators on Windows hosts use WSL2 and run the bash installer
@@ -60,7 +60,7 @@ Write-Host '  - Python 3.11, Node LTS, postgresql-client, rabbitmq-server, curl,
 Write-Host '  - See docs/ops/install-non-docker.md section1 for the apt one-liner.' -ForegroundColor White
 Write-Host ''
 Write-Host 'Native Windows is NOT supported as a deployment target:' -ForegroundColor Cyan
-Write-Host '  - the systemd surface (plenora-backend.service, plenora-celery.service,' -ForegroundColor White
+Write-Host '  - the systemd surface (plenora-backend.service, plenora-worker.service,' -ForegroundColor White
 Write-Host '    plenora-beat.service) does not exist on Windows;' -ForegroundColor White
 Write-Host '  - the production target is Linux (Ubuntu 24.04 reference).' -ForegroundColor White
 Write-Host ''

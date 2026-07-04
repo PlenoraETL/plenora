@@ -163,7 +163,7 @@ aws ssm put-parameter \
 ssh ubuntu@15.160.219.93 "
   sudo sed -i 's|DATABASE_URL=.*|DATABASE_URL=${DATABASE_URL%/*}/plenora_restored|' \
     /home/ubuntu/plenora-etl/backend/.env
-  sudo systemctl restart plenora-backend plenora-celery
+  sudo systemctl restart plenora-backend plenora-worker
 "
 ```
 
@@ -424,7 +424,7 @@ Dopo ogni intervento DR:
 
 - [ ] Backend prod rispondente (HTTP 200 su `/health`)
 - [ ] Login funzionante (test con utente reale)
-- [ ] Worker Dramatiq attivo (`systemctl status plenora-celery` — la unit conserva il filename ma esegue il worker Dramatiq)
+- [ ] Worker Dramatiq attivo (`systemctl status plenora-worker`; sui server con la vecchia unit plenora-celery fare prima la migrazione in deploy/systemd/README.md)
 - [ ] Beat scheduler (APScheduler) attivo (`systemctl status plenora-beat`)
 - [ ] Timer backup riattivo (`systemctl list-timers plenora-backup.timer`)
 - [ ] Un backup fresco su S3 (manuale via `sudo systemctl start plenora-backup.service`)

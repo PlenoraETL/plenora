@@ -65,7 +65,7 @@ class TestSecretNeedlesIncludesEndpoint:
         # Sanity: il match deve essere sostantivo, non degradare a
         # "tutto secret" (verrebbe ridotto il valore informativo).
         assert service._is_secret_key("MAX_FILE_SIZE") is False
-        assert service._is_secret_key("CELERY_QUEUE_DEFAULT") is False
+        assert service._is_secret_key("TASK_QUEUE_DEFAULT") is False
 
 
 class TestRuntimeSnapshotHidesTopologyInProd:

@@ -36,7 +36,7 @@ def get_beat_healthcheck() -> BeatHealthcheck:
             schedules_count = scheduler_db.count_enabled_schedules()
 
             if age < 180:
-                hard_limit = settings.CELERY_SCHEDULE_HARD_LIMIT
+                hard_limit = settings.TASK_SCHEDULE_HARD_LIMIT
                 stuck_count = scheduler_db.count_stuck_schedules(hard_limit)
                 stuck_msg = f" - {stuck_count} task bloccate" if stuck_count > 0 else ""
                 beat_status = "warning" if stuck_count > 0 else "ok"

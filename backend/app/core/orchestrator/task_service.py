@@ -712,7 +712,7 @@ class TaskService:
         Hook di manutenzione manuale: pulisce risultati task più vecchi di max_age_hours.
 
         Non viene chiamato automaticamente — Redis gestisce la scadenza via
-        CELERY_RESULT_EXPIRES. Da invocare esplicitamente da uno script di
+        TASK_RESULT_EXPIRES. Da invocare esplicitamente da uno script di
         manutenzione se si vuole pulizia anticipata.
 
         Args:
@@ -722,7 +722,7 @@ class TaskService:
             Numero di risultati eliminati (sempre 0: Redis gestisce scadenza)
         """
         logger.info(f"Cleanup manuale risultati task più vecchi di {max_age_hours}h")
-        return 0  # Redis gestisce scadenza automatica via CELERY_RESULT_EXPIRES
+        return 0  # Redis gestisce scadenza automatica via TASK_RESULT_EXPIRES
 
 
 # Singleton

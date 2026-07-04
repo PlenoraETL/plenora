@@ -402,7 +402,7 @@ def _acquire_target_lock_or_return_busy(
     ttl_seconds = int(
         settings.get(
             "CARICA_TARGET_LOCK_TTL_SECONDS",
-            settings.CELERY_TASK_HARD_LIMIT + 300,
+            settings.TASK_HARD_LIMIT + 300,
         )
     )
     owner_token = f"task={task_id};run={run_id}"

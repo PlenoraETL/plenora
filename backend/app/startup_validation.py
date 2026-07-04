@@ -128,28 +128,32 @@ def validate_production_gates(settings: Any, errors: list[str]) -> None:
     if _as_bool(settings.get("SCHEDULE_BEAT_LEADER_FAIL_OPEN", False)):
         errors.append(
             "SCHEDULE_BEAT_LEADER_FAIL_OPEN deve essere false in "
-            "production/staging o cluster: se Redis/lock non e' disponibile "
-            "beat deve restare fail-closed per evitare doppio enqueue."
+            "production/staging o cluster: se il lock leader su PostgreSQL "
+            "non e' disponibile beat deve restare fail-closed per evitare "
+            "doppio enqueue."
         )
 
-    if not _as_bool(settings.get("LOGIN_RL_REDIS_REQUIRED", False)):
+    if not _as_bool(settings.get("LOGIN_RL_DISTRIBUTED_REQUIRED", False)):
         errors.append(
-            "LOGIN_RL_REDIS_REQUIRED deve essere true in production/staging "
-            "o cluster: il fallback in-memory non e' coerente con piu' pod."
+            "LOGIN_RL_DISTRIBUTED_REQUIRED deve essere true in production/staging "
+            "o cluster: il fallback in-memory non e' coerente con piu' pod. "
+            "(alias legacy accettato: LOGIN_RL_REDIS_REQUIRED)"
         )
 
-    if not _as_bool(settings.get("ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED", False)):
+    if not _as_bool(settings.get("ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_ENABLED", False)):
         errors.append(
-            "ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED deve essere true in "
+            "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_ENABLED deve essere true in "
             "production/staging o cluster: il rate limit verso provider "
-            "esterni deve essere globale tra pod/worker."
+            "esterni deve essere globale tra pod/worker. "
+            "(alias legacy accettato: ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED)"
         )
 
-    if not _as_bool(settings.get("ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED", False)):
+    if not _as_bool(settings.get("ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_REQUIRED", False)):
         errors.append(
-            "ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED deve essere true in "
+            "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_REQUIRED deve essere true in "
             "production/staging o cluster: il fallback locale moltiplica "
-            "le quote per numero di repliche."
+            "le quote per numero di repliche. "
+            "(alias legacy accettato: ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED)"
         )
 
     storage_policy = (

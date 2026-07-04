@@ -93,7 +93,7 @@ def test_default_task_metadata_store_builds_pg_backed(monkeypatch):
             created.append((ttl_seconds, type(kv_store).__name__))
 
     monkeypatch.setattr(module, "KvTaskMetadataStore", FakeKvStore)
-    monkeypatch.setenv("CELERY_RESULT_EXPIRES", "456")
+    monkeypatch.setenv("TASK_RESULT_EXPIRES", "456")
 
     store = default_task_metadata_store()
 

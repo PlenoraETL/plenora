@@ -23,21 +23,21 @@ def test_queue_routes_map_tasks_to_canonical_queues():
     from workers.dramatiq_app import TASK_QUEUE_ROUTES
 
     expected = {
-        "pipeline.execute": settings.CELERY_QUEUE_DATA_PLANE,
-        "pipeline.preview": settings.CELERY_QUEUE_DATA_PLANE,
-        "carica.execute": settings.CELERY_QUEUE_DATA_PLANE,
-        "tasks.execute_enrichment": settings.CELERY_QUEUE_DATA_PLANE,
+        "pipeline.execute": settings.TASK_QUEUE_DATA_PLANE,
+        "pipeline.preview": settings.TASK_QUEUE_DATA_PLANE,
+        "carica.execute": settings.TASK_QUEUE_DATA_PLANE,
+        "tasks.execute_enrichment": settings.TASK_QUEUE_DATA_PLANE,
         "workers.tasks.admin_backup_task.run_manual_backup_task": (
-            settings.CELERY_QUEUE_CONTROL_PLANE
+            settings.TASK_QUEUE_CONTROL_PLANE
         ),
         "workers.tasks.cleanup_temp_files_task.run": (
-            settings.CELERY_QUEUE_CONTROL_PLANE
+            settings.TASK_QUEUE_CONTROL_PLANE
         ),
         "workers.tasks.schedule_task.schedule_pipeline_task": (
-            settings.CELERY_QUEUE_DATA_PLANE
+            settings.TASK_QUEUE_DATA_PLANE
         ),
         "workers.tasks.schedule_task.beat_heartbeat": (
-            settings.CELERY_QUEUE_SCHEDULER
+            settings.TASK_QUEUE_SCHEDULER
         ),
     }
     assert TASK_QUEUE_ROUTES == expected
@@ -47,7 +47,7 @@ def test_default_queue_matches_celery_default():
     from app.config import settings
     from workers.dramatiq_app import queue_for
 
-    assert queue_for("nome-non-mappato") == settings.CELERY_QUEUE_DEFAULT
+    assert queue_for("nome-non-mappato") == settings.TASK_QUEUE_DEFAULT
 
 
 def test_cleanroom_ping_actor_keeps_celery_name_and_default_queue():
@@ -55,7 +55,7 @@ def test_cleanroom_ping_actor_keeps_celery_name_and_default_queue():
     from workers.dramatiq_app import cleanroom_ping
 
     assert cleanroom_ping.actor_name == "cleanroom.ping"
-    assert cleanroom_ping.queue_name == settings.CELERY_QUEUE_DEFAULT
+    assert cleanroom_ping.queue_name == settings.TASK_QUEUE_DEFAULT
     assert cleanroom_ping.fn() == "pong"
 
 
@@ -73,7 +73,7 @@ def test_cleanup_temp_files_actor_routes_to_control_plane_and_shares_body():
     assert cleanup_temp_files.actor_name == (
         "workers.tasks.cleanup_temp_files_task.run"
     )
-    assert cleanup_temp_files.queue_name == settings.CELERY_QUEUE_CONTROL_PLANE
+    assert cleanup_temp_files.queue_name == settings.TASK_QUEUE_CONTROL_PLANE
 
     # Corpo condiviso: l'actor delega alla stessa funzione del task Celery
     # (lazy import nel body — verifica per identita' del simbolo sorgente).
@@ -90,7 +90,7 @@ def test_admin_backup_actor_routes_to_control_plane_and_shares_body():
         "workers.tasks.admin_backup_task.run_manual_backup_task"
     )
     assert run_manual_backup_task.queue_name == (
-        settings.CELERY_QUEUE_CONTROL_PLANE
+        settings.TASK_QUEUE_CONTROL_PLANE
     )
 
     # Corpo condiviso: l'actor delega alla stessa funzione del task Celery
@@ -142,14 +142,14 @@ import pytest as _pytest
 @_pytest.mark.parametrize(
     "attr, actor_name, queue_attr",
     [
-        ("carica_execute", "carica.execute", "CELERY_QUEUE_DATA_PLANE"),
-        ("pipeline_execute", "pipeline.execute", "CELERY_QUEUE_DATA_PLANE"),
-        ("pipeline_preview", "pipeline.preview", "CELERY_QUEUE_DATA_PLANE"),
-        ("execute_enrichment", "tasks.execute_enrichment", "CELERY_QUEUE_DATA_PLANE"),
+        ("carica_execute", "carica.execute", "TASK_QUEUE_DATA_PLANE"),
+        ("pipeline_execute", "pipeline.execute", "TASK_QUEUE_DATA_PLANE"),
+        ("pipeline_preview", "pipeline.preview", "TASK_QUEUE_DATA_PLANE"),
+        ("execute_enrichment", "tasks.execute_enrichment", "TASK_QUEUE_DATA_PLANE"),
         (
             "schedule_pipeline_task",
             "workers.tasks.schedule_task.schedule_pipeline_task",
-            "CELERY_QUEUE_DATA_PLANE",
+            "TASK_QUEUE_DATA_PLANE",
         ),
     ],
 )
@@ -173,7 +173,7 @@ def test_beat_heartbeat_actor_name_and_scheduler_queue():
     assert beat_heartbeat.actor_name == (
         "workers.tasks.schedule_task.beat_heartbeat"
     )
-    assert beat_heartbeat.queue_name == settings.CELERY_QUEUE_SCHEDULER
+    assert beat_heartbeat.queue_name == settings.TASK_QUEUE_SCHEDULER
 
 
 def test_broker_has_task_result_finalize_middleware():

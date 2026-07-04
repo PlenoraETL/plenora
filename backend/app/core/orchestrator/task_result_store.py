@@ -10,7 +10,7 @@ Forma del record: una sola ``payload`` riproduce la semantica Celery
 dict di progresso ``{progress, message, is_error}``; sugli stati
 terminali (``SUCCESS``/``FAILURE``) e' il dict di ritorno del task.
 
-TTL: ``expires_at`` rimpiazza ``CELERY_RESULT_EXPIRES``; ``cleanup_expired``
+TTL: ``expires_at`` rimpiazza ``TASK_RESULT_EXPIRES``; ``cleanup_expired``
 e' il sweep di manutenzione che Redis faceva da solo.
 """
 
@@ -230,7 +230,7 @@ def default_task_result_store() -> TaskResultStore:
     """Costruisce lo store di default (PostgreSQL) dalle settings."""
     from app.config import settings
 
-    return PgTaskResultStore(ttl_seconds=settings.CELERY_RESULT_EXPIRES)
+    return PgTaskResultStore(ttl_seconds=settings.TASK_RESULT_EXPIRES)
 
 
 __all__ = [

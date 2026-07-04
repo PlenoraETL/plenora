@@ -22,7 +22,8 @@ _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _SCANNED_ROOTS = ("app", "workers")
 
 # Match solo statement di import del modulo celery/redis (non commenti,
-# stringhe, o nomi di setting come CELERY_QUEUE_*). Il modulo importato deve
+# stringhe, o gli alias env legacy CELERY_*/*_REDIS_* accettati da
+# Settings._DEPRECATED_ENV_ALIASES). Il modulo importato deve
 # essere esattamente ``celery`` o ``redis`` (eventuale sottomodulo via punto).
 _IMPORT_RE = re.compile(r"\s*(?:import|from)\s+(celery|redis)(?:\.|\s|$)")
 

@@ -110,7 +110,7 @@ Lo script fallisce esplicitamente se una di queste manca nel profilo:
 | `REMOTE_FRONTEND_PATH` | `/home/ubuntu/plenora-etl/frontend` | Path checkout frontend sul server |
 | `APP_HEALTH_URL` | `http://127.0.0.1:5004/health` | Endpoint liveness (PG + RabbitMQ) |
 | `APP_READY_URL` | `http://127.0.0.1:5004/ready` | Endpoint readiness rigoroso |
-| `SYSTEMD_UNITS` | `plenora-backend plenora-celery plenora-beat` | Space-separated, restart + is-active |
+| `SYSTEMD_UNITS` | `plenora-backend plenora-worker plenora-beat` | Space-separated, restart + is-active |
 | `ALLOWED_BRANCHES` | `main` | Allowlist branch deploy permessi |
 
 ## Variabili opzionali

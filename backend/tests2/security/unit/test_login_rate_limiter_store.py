@@ -239,13 +239,13 @@ def test_fallback_called_when_redis_client_is_none(rl_no_redis):
 
 @pytest.mark.parametrize("operation", ["check", "record", "clear"])
 def test_redis_required_fails_closed_without_fallback(rl_no_redis, monkeypatch, operation):
-    """Con LOGIN_RL_REDIS_REQUIRED=true Redis down blocca il login path.
+    """Con LOGIN_RL_DISTRIBUTED_REQUIRED=true Redis down blocca il login path.
 
     Il default resta retrocompatibile (test sopra), ma i deploy cluster
     possono impedire il fallback in-memory single-node.
     """
     rl = rl_no_redis
-    monkeypatch.setenv("LOGIN_RL_REDIS_REQUIRED", "true")
+    monkeypatch.setenv("LOGIN_RL_DISTRIBUTED_REQUIRED", "true")
     fallback_called = []
 
     def fb(ip):

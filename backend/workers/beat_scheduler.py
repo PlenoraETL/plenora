@@ -711,7 +711,7 @@ class PlenoraBeatScheduler:
 
             # Controlla schedule con last_status = 'running' da più del hard limit
             try:
-                hard_limit = int(app_config.settings.CELERY_SCHEDULE_HARD_LIMIT)
+                hard_limit = int(app_config.settings.TASK_SCHEDULE_HARD_LIMIT)
             except (TypeError, ValueError):
                 hard_limit = 3600
             if hard_limit <= 0:
@@ -1465,7 +1465,7 @@ class PlenoraBeatScheduler:
         """Sweep TTL della tabella task_results (Plenora 2.0, Fase 2/3).
 
         Rimpiazza la scadenza automatica che Redis faceva via
-        CELERY_RESULT_EXPIRES: cancella le righe di stato/esito task con
+        TASK_RESULT_EXPIRES: cancella le righe di stato/esito task con
         expires_at scaduto. Throttle 1h: e' una semplice DELETE indicizzata
         su expires_at, non serve a ogni tick."""
         now = _t.time()

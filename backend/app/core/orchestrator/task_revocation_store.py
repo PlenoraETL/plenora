@@ -124,7 +124,7 @@ def default_task_revocation_store() -> TaskRevocationStore:
     """Costruisce lo store di default (PostgreSQL) dalle settings."""
     from app.config import settings
 
-    return PgTaskRevocationStore(ttl_seconds=settings.CELERY_RESULT_EXPIRES)
+    return PgTaskRevocationStore(ttl_seconds=settings.TASK_RESULT_EXPIRES)
 
 
 __all__ = [

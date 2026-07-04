@@ -2,9 +2,9 @@
 Rate limiter thread-safe per arricchisci/enrichment.
 
 Usa il limiter locale storico di default. Se configurato
-(ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED), usa un bucket distribuito GCRA per
+(ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_ENABLED), usa un bucket distribuito GCRA per
 quote globali tra worker/processi, con fallback locale salvo
-ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED=True.
+ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_REQUIRED=True.
 
 Plenora 2.0 Fase 4: il bucket distribuito GCRA e' su PostgreSQL (tabella
 rate_limit_gcra) al posto della Lua Redis. Lo stato GCRA per-scope e' un
@@ -170,17 +170,17 @@ class RateLimiter:
         self.last_call = 0.0
         self.scope = scope or _DEFAULT_SCOPE
         self.distributed_enabled = (
-            _setting_bool("ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED", False)
+            _setting_bool("ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_ENABLED", False)
             if distributed_enabled is None
             else bool(distributed_enabled)
         )
         self.distributed_required = (
-            _setting_bool("ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED", False)
+            _setting_bool("ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_REQUIRED", False)
             if distributed_required is None
             else bool(distributed_required)
         )
         prefix = _setting_str(
-            "ARRICCHISCI_RATE_LIMIT_REDIS_KEY_PREFIX",
+            "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_KEY_PREFIX",
             "plenora:arricchisci:rl",
         ).rstrip(":")
         self.bucket_key = f"{prefix}:{self.scope}"

@@ -2,8 +2,9 @@
 
 Plenora 2.0 Fase 5: il broker e' RabbitMQ (Dramatiq). Il gate loopback
 controlla ``DRAMATIQ_BROKER_URL`` (era CELERY_BROKER_URL/RESULT_BACKEND/
-REDIS_URL). I flag ``*_REDIS_*`` mantengono il nome storico per compat dei
-deploy ma il backend e' PostgreSQL.
+REDIS_URL). I flag hanno i nomi nuovi ``*_DISTRIBUTED_*``; i nomi storici
+``*_REDIS_*`` restano accettati come alias env deprecati
+(``Settings._DEPRECATED_ENV_ALIASES``) — coperto dal test alias sotto.
 """
 
 from __future__ import annotations
@@ -30,10 +31,15 @@ def _clean_gate_env(monkeypatch):
         "OBJECT_STORAGE_ENABLED",
         "OBJECT_STORAGE_BUCKET",
         "SCHEDULE_BEAT_LEADER_FAIL_OPEN",
+        "LOGIN_RL_DISTRIBUTED_REQUIRED",
+        "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_ENABLED",
+        "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_REQUIRED",
+        "STORAGE_POLICY",
+        # Alias legacy: un valore residuo in env inquinerebbe i gate
+        # attraverso Settings._DEPRECATED_ENV_ALIASES.
         "LOGIN_RL_REDIS_REQUIRED",
         "ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED",
         "ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED",
-        "STORAGE_POLICY",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -52,9 +58,9 @@ def _set_cluster_safe_env(monkeypatch, *, environment: str = "production") -> No
     monkeypatch.setenv("OBJECT_STORAGE_ENABLED", "true")
     monkeypatch.setenv("OBJECT_STORAGE_BUCKET", "runtime-artifacts")
     monkeypatch.setenv("SCHEDULE_BEAT_LEADER_FAIL_OPEN", "false")
-    monkeypatch.setenv("LOGIN_RL_REDIS_REQUIRED", "true")
-    monkeypatch.setenv("ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED", "true")
-    monkeypatch.setenv("ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED", "true")
+    monkeypatch.setenv("LOGIN_RL_DISTRIBUTED_REQUIRED", "true")
+    monkeypatch.setenv("ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_ENABLED", "true")
+    monkeypatch.setenv("ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_REQUIRED", "true")
     monkeypatch.setenv("STORAGE_POLICY", "hybrid")
 
 
@@ -62,6 +68,25 @@ def test_dev_defaults_do_not_enable_production_gates():
     errors = _errors_for_current_env()
 
     assert errors == []
+
+
+def test_legacy_alias_env_still_satisfies_gates(monkeypatch):
+    """Un deploy con i nomi env storici *_REDIS_* nel .env deve passare
+    i gate: Settings risolve gli alias deprecati in modo trasparente."""
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv(
+        "DRAMATIQ_BROKER_URL", "amqp://guest:guest@rabbitmq.service:5672"
+    )
+    monkeypatch.setenv("OBJECT_STORAGE_ENABLED", "true")
+    monkeypatch.setenv("OBJECT_STORAGE_BUCKET", "runtime-artifacts")
+    monkeypatch.setenv("SCHEDULE_BEAT_LEADER_FAIL_OPEN", "false")
+    monkeypatch.setenv("STORAGE_POLICY", "hybrid")
+    # SOLO i nomi legacy: i nuovi restano unset.
+    monkeypatch.setenv("LOGIN_RL_REDIS_REQUIRED", "true")
+    monkeypatch.setenv("ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED", "true")
+    monkeypatch.setenv("ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED", "true")
+
+    assert _errors_for_current_env() == []
 
 
 @pytest.mark.parametrize("environment", ["production", "prod", "staging", "stage"])
@@ -72,9 +97,9 @@ def test_server_envs_enable_production_gates(monkeypatch, environment):
     joined = "\n".join(errors)
 
     assert "OBJECT_STORAGE_BUCKET" in joined
-    assert "LOGIN_RL_REDIS_REQUIRED" in joined
-    assert "ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED" in joined
-    assert "ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED" in joined
+    assert "LOGIN_RL_DISTRIBUTED_REQUIRED" in joined
+    assert "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_ENABLED" in joined
+    assert "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_REQUIRED" in joined
 
 
 @pytest.mark.parametrize(
@@ -153,23 +178,23 @@ def test_beat_leader_fail_open_is_rejected(monkeypatch):
 
 def test_login_rate_limiter_must_require_redis(monkeypatch):
     _set_cluster_safe_env(monkeypatch)
-    monkeypatch.setenv("LOGIN_RL_REDIS_REQUIRED", "false")
+    monkeypatch.setenv("LOGIN_RL_DISTRIBUTED_REQUIRED", "false")
 
     errors = _errors_for_current_env()
 
-    assert any("LOGIN_RL_REDIS_REQUIRED" in error for error in errors)
+    assert any("LOGIN_RL_DISTRIBUTED_REQUIRED" in error for error in errors)
 
 
 def test_arricchisci_rate_limiter_must_use_required_redis(monkeypatch):
     _set_cluster_safe_env(monkeypatch)
-    monkeypatch.setenv("ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED", "false")
-    monkeypatch.setenv("ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED", "false")
+    monkeypatch.setenv("ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_ENABLED", "false")
+    monkeypatch.setenv("ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_REQUIRED", "false")
 
     errors = _errors_for_current_env()
     joined = "\n".join(errors)
 
-    assert "ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED" in joined
-    assert "ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED" in joined
+    assert "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_ENABLED" in joined
+    assert "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_REQUIRED" in joined
 
 
 def test_storage_policy_db_is_rejected_for_cluster(monkeypatch):

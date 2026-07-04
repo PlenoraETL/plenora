@@ -7,7 +7,7 @@ Priorità:
 import logging
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +53,13 @@ class Settings:
         "DB_QUERY_TIMEOUT": 30,
         "SUPPORTED_DB_TYPES": ["postgres", "mssql", "mysql", "oracle", "sqlite"],
 
-        "CELERY_QUEUE_DEFAULT":         "default",
-        "CELERY_QUEUE_DATA_PLANE":      "data-plane",
-        "CELERY_QUEUE_CONTROL_PLANE":   "control-plane",
-        "CELERY_QUEUE_SCHEDULER":       "scheduler",
+        # Code del broker (routing actor Dramatiq). Rinominate da
+        # CELERY_QUEUE_* (alias env legacy accettati, vedi
+        # _DEPRECATED_ENV_ALIASES).
+        "TASK_QUEUE_DEFAULT":         "default",
+        "TASK_QUEUE_DATA_PLANE":      "data-plane",
+        "TASK_QUEUE_CONTROL_PLANE":   "control-plane",
+        "TASK_QUEUE_SCHEDULER":       "scheduler",
         # Production gates: dev/test restano single-node per default.
         # Imposta uno di questi flag a true per forzare le stesse regole
         # di production/staging anche in env non-prod (cluster/multi-pod).
@@ -64,12 +67,14 @@ class Settings:
         "PLENORA_CLUSTER_MODE":         False,
         "MULTI_POD_MODE":               False,
         "PLENORA_MULTI_POD":            False,
-        "CELERY_TASK_TIMEOUT":          3600,
-        "CELERY_TASK_HARD_LIMIT":       3900,
-        "CELERY_PREVIEW_TIMEOUT":       300,
-        "CELERY_PREVIEW_HARD_LIMIT":    360,
-        "CELERY_SCHEDULE_TIMEOUT":      3500,
-        "CELERY_SCHEDULE_HARD_LIMIT":   3600,
+        # Timeout/hard-limit dei task worker. Rinominati da CELERY_*
+        # (alias env legacy accettati).
+        "TASK_TIMEOUT":          3600,
+        "TASK_HARD_LIMIT":       3900,
+        "TASK_PREVIEW_TIMEOUT":       300,
+        "TASK_PREVIEW_HARD_LIMIT":    360,
+        "TASK_SCHEDULE_TIMEOUT":      3500,
+        "TASK_SCHEDULE_HARD_LIMIT":   3600,
         # Scheduler locks use a short TTL plus worker heartbeat. If the worker
         # dies by SIGKILL, the lock expires in
         # SCHEDULE_LOCK_TTL_SECONDS invece di restare appeso fino al
@@ -83,7 +88,9 @@ class Settings:
         # deployment single-instance dove nessun altro beat gira mai
         "SCHEDULE_BEAT_LEADER_FAIL_OPEN":           False,
         "TASK_PROGRESS_POLL_INTERVAL":  1,
-        "CELERY_RESULT_EXPIRES":        86400,
+        # TTL delle righe task_results su PG (era il result-expires del
+        # result backend; alias env legacy CELERY_RESULT_EXPIRES accettato).
+        "TASK_RESULT_EXPIRES":        86400,
 
         # Durata del token JWT in ore. Override env via type coercion `int`.
         "JWT_EXPIRE_HOURS": 8,
@@ -98,8 +105,8 @@ class Settings:
         # Fase 4) non e' disponibile, il login rate limiter usa il fallback
         # in-memory single-node. In prod/cluster impostare True per
         # fail-closed (nessun login se il backend non e' consultabile).
-        # NB nome storico (era Redis): mantenuto per compat dei deploy.
-        "LOGIN_RL_REDIS_REQUIRED": False,
+        # Rinominato da LOGIN_RL_REDIS_REQUIRED (alias env legacy accettato).
+        "LOGIN_RL_DISTRIBUTED_REQUIRED": False,
         # Plenora 2.0 Fase 4: la blacklist JWT e' su PostgreSQL con cache
         # in-memory davanti (positiva+negativa). TTL della cache: bilancia
         # latenza auth (cache hit) vs finestra di revoca cross-processo.
@@ -134,10 +141,11 @@ class Settings:
         # usa il bucket GCRA su PostgreSQL (Fase 4) per quote globali per
         # API/scope. REQUIRED=True rende il limiter fail-closed invece di
         # degradare al fallback locale quando il backend non e' disponibile.
-        # NB nomi con "REDIS": storici, mantenuti per compat dei deploy.
-        "ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED": False,
-        "ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED": False,
-        "ARRICCHISCI_RATE_LIMIT_REDIS_KEY_PREFIX": "plenora:arricchisci:rl",
+        # Rinominati da ARRICCHISCI_RATE_LIMIT_REDIS_* (alias env legacy
+        # accettati).
+        "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_ENABLED": False,
+        "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_REQUIRED": False,
+        "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_KEY_PREFIX": "plenora:arricchisci:rl",
         # Cache distribuita per token OAuth/API provider su PostgreSQL
         # (Plenora 2.0 Fase 4, KeyValueStore); i caller degradano alla cache
         # locale storica se il backend non e' disponibile.
@@ -557,6 +565,35 @@ class Settings:
         "OBJECT_STORAGE_BUCKET": None,
     }
 
+    # Alias env legacy (Plenora 2.0): i deploy esistenti possono avere
+    # ancora i nomi storici Celery/Redis nei loro .env. Se il nome NUOVO
+    # non e' in env ma il legacy si', il valore legacy viene usato con un
+    # warning una-tantum. La coercizione di tipo usa sempre il nome nuovo.
+    # Nuovo nome -> nome legacy accettato.
+    _DEPRECATED_ENV_ALIASES: Mapping[str, str] = {
+        "TASK_QUEUE_DEFAULT":       "CELERY_QUEUE_DEFAULT",
+        "TASK_QUEUE_DATA_PLANE":    "CELERY_QUEUE_DATA_PLANE",
+        "TASK_QUEUE_CONTROL_PLANE": "CELERY_QUEUE_CONTROL_PLANE",
+        "TASK_QUEUE_SCHEDULER":     "CELERY_QUEUE_SCHEDULER",
+        "TASK_TIMEOUT":             "CELERY_TASK_TIMEOUT",
+        "TASK_HARD_LIMIT":          "CELERY_TASK_HARD_LIMIT",
+        "TASK_PREVIEW_TIMEOUT":     "CELERY_PREVIEW_TIMEOUT",
+        "TASK_PREVIEW_HARD_LIMIT":  "CELERY_PREVIEW_HARD_LIMIT",
+        "TASK_SCHEDULE_TIMEOUT":    "CELERY_SCHEDULE_TIMEOUT",
+        "TASK_SCHEDULE_HARD_LIMIT": "CELERY_SCHEDULE_HARD_LIMIT",
+        "TASK_RESULT_EXPIRES":      "CELERY_RESULT_EXPIRES",
+        "LOGIN_RL_DISTRIBUTED_REQUIRED": "LOGIN_RL_REDIS_REQUIRED",
+        "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_ENABLED":
+            "ARRICCHISCI_RATE_LIMIT_REDIS_ENABLED",
+        "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_REQUIRED":
+            "ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED",
+        "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_KEY_PREFIX":
+            "ARRICCHISCI_RATE_LIMIT_REDIS_KEY_PREFIX",
+    }
+
+    # Chiavi legacy gia' segnalate nel log di questo processo (warn-once).
+    _alias_warned: set = set()
+
     def __init__(self):
         pass  # Niente da caricare — tutto da DEFAULTS + env
 
@@ -566,11 +603,23 @@ class Settings:
         Ottieni un valore di configurazione.
 
         Priorità:
-            1. Variabile d'ambiente
-            2. DEFAULTS della classe
-            3. default parametro
+            1. Variabile d'ambiente (nome nuovo)
+            2. Variabile d'ambiente (alias legacy, con warning una-tantum)
+            3. DEFAULTS della classe
+            4. default parametro
         """
         env_value = os.getenv(key)
+        if env_value is None:
+            legacy_key = self._DEPRECATED_ENV_ALIASES.get(key)
+            if legacy_key is not None:
+                env_value = os.getenv(legacy_key)
+                if env_value is not None and legacy_key not in self._alias_warned:
+                    self._alias_warned.add(legacy_key)
+                    logger.warning(
+                        "Env %s e' deprecata: rinominala %s nel .env "
+                        "(il valore legacy resta accettato).",
+                        legacy_key, key,
+                    )
         if env_value is not None:
             return self._converti_tipo_env(key, env_value)
         return self.DEFAULTS.get(key, default)
@@ -669,52 +718,52 @@ class Settings:
         )
 
     @property
-    def CELERY_QUEUE_DEFAULT(self) -> str:
-        return self._str_setting("CELERY_QUEUE_DEFAULT", "default")
+    def TASK_QUEUE_DEFAULT(self) -> str:
+        return self._str_setting("TASK_QUEUE_DEFAULT", "default")
 
     @property
-    def CELERY_QUEUE_DATA_PLANE(self) -> str:
-        return self._str_setting("CELERY_QUEUE_DATA_PLANE", "data-plane")
+    def TASK_QUEUE_DATA_PLANE(self) -> str:
+        return self._str_setting("TASK_QUEUE_DATA_PLANE", "data-plane")
 
     @property
-    def CELERY_QUEUE_CONTROL_PLANE(self) -> str:
-        return self._str_setting("CELERY_QUEUE_CONTROL_PLANE", "control-plane")
+    def TASK_QUEUE_CONTROL_PLANE(self) -> str:
+        return self._str_setting("TASK_QUEUE_CONTROL_PLANE", "control-plane")
 
     @property
-    def CELERY_QUEUE_SCHEDULER(self) -> str:
-        return self._str_setting("CELERY_QUEUE_SCHEDULER", "scheduler")
+    def TASK_QUEUE_SCHEDULER(self) -> str:
+        return self._str_setting("TASK_QUEUE_SCHEDULER", "scheduler")
 
     @property
-    def CELERY_TASK_TIMEOUT(self) -> int:
-        return self._int_setting("CELERY_TASK_TIMEOUT", 3600)
+    def TASK_TIMEOUT(self) -> int:
+        return self._int_setting("TASK_TIMEOUT", 3600)
 
     @property
-    def CELERY_TASK_HARD_LIMIT(self) -> int:
-        return self._int_setting("CELERY_TASK_HARD_LIMIT", 3900)
+    def TASK_HARD_LIMIT(self) -> int:
+        return self._int_setting("TASK_HARD_LIMIT", 3900)
 
     @property
-    def CELERY_PREVIEW_TIMEOUT(self) -> int:
-        return self._int_setting("CELERY_PREVIEW_TIMEOUT", 300)
+    def TASK_PREVIEW_TIMEOUT(self) -> int:
+        return self._int_setting("TASK_PREVIEW_TIMEOUT", 300)
 
     @property
-    def CELERY_PREVIEW_HARD_LIMIT(self) -> int:
-        return self._int_setting("CELERY_PREVIEW_HARD_LIMIT", 360)
+    def TASK_PREVIEW_HARD_LIMIT(self) -> int:
+        return self._int_setting("TASK_PREVIEW_HARD_LIMIT", 360)
 
     @property
-    def CELERY_SCHEDULE_TIMEOUT(self) -> int:
-        return self._int_setting("CELERY_SCHEDULE_TIMEOUT", 3500)
+    def TASK_SCHEDULE_TIMEOUT(self) -> int:
+        return self._int_setting("TASK_SCHEDULE_TIMEOUT", 3500)
 
     @property
-    def CELERY_RESULT_EXPIRES(self) -> int:
-        return self._int_setting("CELERY_RESULT_EXPIRES", 86400)
+    def TASK_RESULT_EXPIRES(self) -> int:
+        return self._int_setting("TASK_RESULT_EXPIRES", 86400)
 
     @property
     def MAX_PREVIEW_ROWS(self) -> int:
         return self._int_setting("MAX_PREVIEW_ROWS", 1000)
 
     @property
-    def CELERY_SCHEDULE_HARD_LIMIT(self) -> int:
-        return self._int_setting("CELERY_SCHEDULE_HARD_LIMIT", 3600)
+    def TASK_SCHEDULE_HARD_LIMIT(self) -> int:
+        return self._int_setting("TASK_SCHEDULE_HARD_LIMIT", 3600)
 
     @property
     def SCHEDULE_LOCK_TTL_SECONDS(self) -> int:

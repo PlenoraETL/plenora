@@ -130,6 +130,6 @@ def default_task_metadata_store() -> TaskMetadataStore:
     from app.config import settings
 
     return KvTaskMetadataStore(
-        ttl_seconds=settings.CELERY_RESULT_EXPIRES,
+        ttl_seconds=settings.TASK_RESULT_EXPIRES,
         kv_store=PgKeyValueStore(),
     )

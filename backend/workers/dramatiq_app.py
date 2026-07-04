@@ -212,27 +212,27 @@ def _invoke_task_body(task_fn: object, *, name: str, kwargs: dict) -> object:
 # fonte settings). Il contract test ne blinda la parita' finche' i due
 # stack convivono.
 TASK_QUEUE_ROUTES: dict[str, str] = {
-    "pipeline.execute": settings.CELERY_QUEUE_DATA_PLANE,
-    "pipeline.preview": settings.CELERY_QUEUE_DATA_PLANE,
-    "carica.execute": settings.CELERY_QUEUE_DATA_PLANE,
-    "tasks.execute_enrichment": settings.CELERY_QUEUE_DATA_PLANE,
+    "pipeline.execute": settings.TASK_QUEUE_DATA_PLANE,
+    "pipeline.preview": settings.TASK_QUEUE_DATA_PLANE,
+    "carica.execute": settings.TASK_QUEUE_DATA_PLANE,
+    "tasks.execute_enrichment": settings.TASK_QUEUE_DATA_PLANE,
     "workers.tasks.admin_backup_task.run_manual_backup_task": (
-        settings.CELERY_QUEUE_CONTROL_PLANE
+        settings.TASK_QUEUE_CONTROL_PLANE
     ),
     "workers.tasks.cleanup_temp_files_task.run": (
-        settings.CELERY_QUEUE_CONTROL_PLANE
+        settings.TASK_QUEUE_CONTROL_PLANE
     ),
     "workers.tasks.schedule_task.schedule_pipeline_task": (
-        settings.CELERY_QUEUE_DATA_PLANE
+        settings.TASK_QUEUE_DATA_PLANE
     ),
     "workers.tasks.schedule_task.beat_heartbeat": (
-        settings.CELERY_QUEUE_SCHEDULER
+        settings.TASK_QUEUE_SCHEDULER
     ),
 }
 
 
 def queue_for(task_name: str) -> str:
-    return TASK_QUEUE_ROUTES.get(task_name, settings.CELERY_QUEUE_DEFAULT)
+    return TASK_QUEUE_ROUTES.get(task_name, settings.TASK_QUEUE_DEFAULT)
 
 
 # ---------------------------------------------------------------------------

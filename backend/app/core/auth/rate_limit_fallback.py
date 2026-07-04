@@ -1,7 +1,7 @@
 """
 Auth in-memory rate-limit fallback — typed boundary.
 
-Used only when `LOGIN_RL_REDIS_REQUIRED` is false or Redis is not enabled in
+Used only when `LOGIN_RL_DISTRIBUTED_REQUIRED` is false or Redis is not enabled in
 the shared login limiter. Cluster deployments should enable Redis-required
 mode so this store remains a development/single-node compatibility path.
 

@@ -15,13 +15,13 @@ riportano il servizio allo stato live senza riscriverli a memoria.
 ## Stato operativo 1.0
 
 I servizi runtime installati usano solo naming `plenora-*`:
-`plenora-backend`, `plenora-celery`, `plenora-beat`,
+`plenora-backend`, `plenora-worker`, `plenora-beat`,
 `plenora-backup{,.timer}` e `plenora-backup-test{,.timer}`.
 
 Per verificare l'allineamento con il repo:
 
 ```bash
-systemctl cat plenora-backend plenora-celery plenora-beat
+systemctl cat plenora-backend plenora-worker plenora-beat
 systemctl cat plenora-backup plenora-backup-test
 ```
 
@@ -39,7 +39,7 @@ i consumer
 (`backup_db.py`, `test_restore.py`, `load_secrets.py`) parlano solo al
 Protocol `SecretsBackend` / `ObjectStorage`, mai direttamente a boto3.
 
-I service **long-running** (`plenora-backend`, `plenora-celery`,
+I service **long-running** (`plenora-backend`, `plenora-worker`,
 `plenora-beat`) INVECE usano `EnvironmentFile=/home/ubuntu/plenora-etl/backend/.env`
 per la configurazione runtime â€” inclusa `PLENORA_ENCRYPTION_KEY`.
 In produzione cloud lo stesso `.env` deve contenere anche
@@ -67,11 +67,11 @@ one-shot in `backend/deploy/iam/`.
 
 - `plenora-backend.service` â€” long-running uvicorn (FastAPI), porta 5004
   locale. Restart=always.
-- `plenora-celery.service` â€” long-running worker Dramatiq
-  (`python -m dramatiq workers.dramatiq_app`, consuma da RabbitMQ). Il
-  filename della unit e' rimasto `plenora-celery.service` per non
-  rinominare l'unit installata; il processo eseguito e' Dramatiq, non
-  piu' `celery worker`.
+- `plenora-worker.service` â€” long-running worker Dramatiq
+  (`python -m dramatiq workers.dramatiq_app`, consuma da RabbitMQ).
+  Rinominata da `plenora-celery.service` il 2026-07-04: sui server con
+  la unit vecchia installata vedi "Migrazione da plenora-celery.service"
+  qui sotto.
 - `plenora-beat.service` â€” beat scheduler su APScheduler
   (`python -m workers.beat`), schedule dal DB e leader-lock su PostgreSQL
   (`beat_leader_locks`), non piu' `celery beat`.
@@ -118,10 +118,10 @@ Install:
 
 ```bash
 # 1. Copia gli unit file (backup nightly + test restore weekly +
-#    backend/celery/beat long-running)
+#    backend/worker/beat long-running)
 sudo cp plenora-backup.service plenora-backup.timer \
         plenora-backup-test.service plenora-backup-test.timer \
-        plenora-backend.service plenora-celery.service plenora-beat.service \
+        plenora-backend.service plenora-worker.service plenora-beat.service \
         /etc/systemd/system/
 
 # 2. Reload systemd
@@ -129,11 +129,28 @@ sudo systemctl daemon-reload
 
 # 3. Abilita timer + long-running
 sudo systemctl enable --now plenora-backup.timer plenora-backup-test.timer
-sudo systemctl enable --now plenora-backend.service plenora-celery.service plenora-beat.service
+sudo systemctl enable --now plenora-backend.service plenora-worker.service plenora-beat.service
 
 # 4. Verifica
 systemctl list-timers plenora-backup.timer plenora-backup-test.timer
-systemctl status plenora-backend plenora-celery plenora-beat
+systemctl status plenora-backend plenora-worker plenora-beat
+```
+
+## Migrazione da plenora-celery.service (server esistenti)
+
+La unit del worker si chiamava `plenora-celery.service` (nome storico
+pre-Plenora-2.0; eseguiva gia' Dramatiq). Sui server dove e' installata
+col nome vecchio, PRIMA del prossimo deploy che usa i profili aggiornati
+(`SYSTEMD_UNITS` ora elenca `plenora-worker`):
+
+```bash
+# One-shot, downtime del worker ~secondi (i task in coda restano su RabbitMQ)
+sudo systemctl disable --now plenora-celery.service
+sudo cp plenora-worker.service /etc/systemd/system/
+sudo rm /etc/systemd/system/plenora-celery.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now plenora-worker.service
+systemctl status plenora-worker
 ```
 
 Prerequisito aggiuntivo per `plenora-backup-test`: l'utente Postgres in
@@ -180,7 +197,7 @@ ssh ubuntu@<host>
 cd /home/ubuntu/plenora-etl/backend/deploy/systemd
 sudo cp plenora-backup.service plenora-backup.timer \
         plenora-backup-test.service plenora-backup-test.timer \
-        plenora-backend.service plenora-celery.service plenora-beat.service \
+        plenora-backend.service plenora-worker.service plenora-beat.service \
         /etc/systemd/system/
 sudo systemctl daemon-reload
 # Se il timer era gia' attivo, daemon-reload basta.
