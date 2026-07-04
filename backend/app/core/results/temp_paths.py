@@ -15,7 +15,8 @@ RAM-only di pyogrio (0.12+: bytes nativi) e di pyarrow
 (ParquetWriter su BytesIO).
 
 Riferimenti:
-  - refactor_io_storage_ram_only.md §"Punto 3 — cleanup dead boundary"
+  - piano refactor_io_storage_ram_only §"Punto 3 — cleanup dead
+    boundary" (doc storico, ora solo nella storia git)
   - tests2/io_boundary/test_no_direct_filesystem_contract.py
     (snapshot ratchet: questo file non e' piu' in `_BOUNDARY_FROZEN_SNAPSHOT`)
 """

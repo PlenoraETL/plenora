@@ -1,6 +1,7 @@
 """Contract test — no NEW direct filesystem writes outside `app.core.io`.
 
-Strategia (Fase 0 di `refactor_io_storage_ram_only.md`):
+Strategia (Fase 0 del piano refactor_io_storage_ram_only — doc
+storico, ora solo nella storia git):
 
   1. Sweep dei pattern filesystem in `app/` + `workers/` + `scripts/`.
   2. Confronto con la allowlist baseline generata da
@@ -327,16 +328,16 @@ def _scan_excluded_findings() -> list[tuple[str, int, str, str]]:
     return findings
 
 
-# BOUNDARY FROZEN (2026-05-25, refactor_io_storage_ram_only.md
-# §"Boundary congelato"): snapshot per-file delle entries by-design
-# all'interno del boundary I/O. Il test ratchet sotto compara il
-# report corrente a questo snapshot; deviazioni in qualunque direzione
-# falliscono richiedendo aggiornamento contestuale del doc.
+# BOUNDARY FROZEN (2026-05-25, piano refactor_io_storage_ram_only
+# §"Boundary congelato" — doc storico, ora solo nella storia git):
+# snapshot per-file delle entries by-design all'interno del boundary
+# I/O. Il test ratchet sotto compara il report corrente a questo
+# snapshot; deviazioni in qualunque direzione falliscono. Questo dict
+# E' il record canonico del boundary congelato.
 #
 # Come aggiornare:
 #   1. Modifica deliberata che cambia uno di questi count?
-#   2. Aggiorna sia questo dict sia la sezione "Boundary congelato" nel
-#      doc con il NUOVO razionale.
+#   2. Aggiorna questo dict con il NUOVO razionale nel commit.
 #   3. Run `python scripts/_gen_io_allowlist.py` per rigenerare baseline.
 #
 # Path normalizzato con forward slash; le entries esatte (line/pattern)
@@ -406,9 +407,10 @@ def test_report_inside_boundary_frozen() -> None:
     questo test enforce che il count per-file matchi esattamente lo
     `_BOUNDARY_FROZEN_SNAPSHOT` dichiarato sopra.
 
-    Il razionale e' nel doc `refactor_io_storage_ram_only.md` sezione
-    "Boundary congelato". Modifiche deliberate del count richiedono
-    aggiornamento contestuale del doc + dello snapshot qui.
+    Il razionale storico e' nel piano refactor_io_storage_ram_only
+    sezione "Boundary congelato" (doc rimosso, vive nella storia git).
+    Modifiche deliberate del count richiedono aggiornamento dello
+    snapshot qui, con razionale nel commit.
     """
     findings = _scan_excluded_findings()
     by_file: dict[str, int] = {}

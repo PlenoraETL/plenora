@@ -11,7 +11,8 @@ richiedevano un path su disco sono stati migrati a:
   - object storage diretto (`save_bytes` su S3/MinIO) per persistence
 
 Riferimenti:
-  - refactor_io_storage_ram_only.md §"Punto 3 — cleanup dead boundary"
+  - piano refactor_io_storage_ram_only §"Punto 3 — cleanup dead
+    boundary" (doc storico, ora solo nella storia git)
   - tests2/io_boundary/test_no_direct_filesystem_contract.py
     (snapshot ratchet: questo file non e' piu' in `_BOUNDARY_FROZEN_SNAPSHOT`)
 

@@ -3,7 +3,7 @@
 Policy enum + lettori che mappano la variabile d'ambiente
 `PLENORA_IO_DISK_POLICY` a comportamenti consentiti.
 
-Valori supportati (vedi refactor_io_storage_ram_only.md):
+Valori supportati:
   - `memory_only`: vietato qualunque disk write (test/staging RAM-only)
   - `temp_only_explicit` (default): temp disk solo via `io.materialize`
     con `reason=` obbligatorio; vietato persistent disk

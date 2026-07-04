@@ -1,8 +1,8 @@
 """Plenora I/O boundary — RAM-first.
 
 Layer orizzontale per tutta la gestione di lettura/scrittura/archiviazione
-fuori dal filesystem locale. Vedi refactor_io_storage_ram_only.md per
-il piano completo.
+fuori dal filesystem locale. Il piano completo (refactor_io_storage_ram_only)
+e' un doc storico, ora solo nella storia git.
 
 Moduli (consolidamento orizzontale 2026-05-26):
   - `policy`: env-driven policy (memory_only / temp_only_explicit / ...)

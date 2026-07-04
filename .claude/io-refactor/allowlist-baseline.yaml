@@ -7,5 +7,5 @@ metadata:
     legge questa lista come allowlist: NUOVI usi fuori lista falliscono, ESISTENTI sono tollerati con motivo esplicito di
     fase di migrazione.'
   policy: 'Decrementale: ogni migrazione che chiude un callsite DEVE rimuoverlo dalla allowlist. A fine refactor la lista
-    deve essere vuota (criterio in refactor_io_storage_ram_only.md sezione ''Criterio di fine refactor'').'
+    deve essere vuota (criterio del piano storico refactor_io_storage_ram_only: RAGGIUNTO, baseline vuota dal 2026-05-25).'
 allowed_callsites: []

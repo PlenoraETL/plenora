@@ -1,8 +1,9 @@
 """One-shot generator for .claude/io-refactor/allowlist-baseline.yaml.
 
 Sweep dei pattern filesystem nel backend + workers + scripts,
-classifica per fase di migrazione (vedi refactor_io_storage_ram_only.md),
-emette YAML che il contract test consumera' come allowlist.
+classifica per fase di migrazione (piano refactor_io_storage_ram_only,
+doc storico ora solo nella storia git), emette YAML che il contract
+test consumera' come allowlist.
 
 Eseguire da `backend/` cwd:
     python3 scripts/_gen_io_allowlist.py
@@ -82,7 +83,7 @@ def _is_buffer_write(pattern_name: str, line: str) -> bool:
         return True
     return False
 
-# Mappa file -> fase di migrazione (refactor_io_storage_ram_only.md).
+# Mappa file -> fase di migrazione (piano refactor_io_storage_ram_only).
 PHASE_MAP: dict[str, str] = {
     "arricchisci/api_connection_rest_file.py": "Phase4-rest-file-enrichment",
     "arricchisci/api_connection_support.py": "Phase4-rest-file-enrichment",
@@ -197,12 +198,13 @@ def phase_for(filepath: str, pattern: str = "") -> str:
     return "unassigned"
 
 
-# BOUNDARY FROZEN (2026-05-25, refactor_io_storage_ram_only.md §"Boundary
-# congelato"): le directory/file qui sotto sono dichiarati by-design come
-# detentori della capability filesystem. Il report
+# BOUNDARY FROZEN (2026-05-25, piano refactor_io_storage_ram_only
+# §"Boundary congelato" — doc storico, ora solo nella storia git): le
+# directory/file qui sotto sono dichiarati by-design come detentori
+# della capability filesystem. Il report
 # `test_report_inside_boundary_frozen` enforce il count per-file: una
-# modifica deliberata richiede aggiornamento contestuale del doc + del
-# frozen-snapshot nel test.
+# modifica deliberata richiede aggiornamento contestuale del
+# frozen-snapshot nel test, con razionale nel commit.
 _BOUNDARY_DIRS = (
     # `app/core/io/`: layer materializer + helper geospaziali. Casa di
     # `temporary_path_from_bytes` (escape hatch tracciato) e dei wrapper
@@ -340,9 +342,9 @@ def main() -> None:
             "policy": (
                 "Decrementale: ogni migrazione che chiude un callsite "
                 "DEVE rimuoverlo dalla allowlist. A fine refactor la "
-                "lista deve essere vuota (criterio in "
-                "refactor_io_storage_ram_only.md sezione 'Criterio di "
-                "fine refactor')."
+                "lista deve essere vuota (criterio del piano storico "
+                "refactor_io_storage_ram_only: RAGGIUNTO, baseline "
+                "vuota dal 2026-05-25)."
             ),
         },
         "allowed_callsites": [
