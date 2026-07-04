@@ -252,7 +252,9 @@ Ordine: W1 → W5, una fetta per volta, VM come banco di collaudo.
   python idempotente gruppo root + utente, DOPO /ready verde),
   non-interattivo completo, secrets (PG `--superpassword` via winget
   override, utente RabbitMQ dedicato + via guest, icacls sul .env).
-- **W3 — MinIO opzionale**: `CLOUD_PROVIDER=minio` → minio.exe da
+- **W3 — MinIO opzionale** ✅ COLLAUDATA (2026-07-04): servizio
+  plenora-minio Running, bucket creati, /ready object_storage "ok" con
+  PROBE REALE (non piu' skipped), smoke verde. Dettaglio: `CLOUD_PROVIDER=minio` → minio.exe da
   release ufficiale come servizio `plenora-minio` (credenziali root
   random), bucket runtime+backup via boto3, MINIO_*/OBJECT_STORAGE_*
   nel .env, /ready object_storage verde.
