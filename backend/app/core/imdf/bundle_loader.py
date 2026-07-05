@@ -1,7 +1,7 @@
 """
 bundle_loader.py — consumer del contratto ``plenora.indoor.bundle``.
 
-Sostituisce, lato lettura, il round-trip GDAL del path legacy
+Sostituisce, lato lettura, il round-trip GDAL del reader path-based
 (``extract_imdf_zip_bytes`` -> ``_gdb.zip`` -> ``open_gdb_in_vsimem`` ->
 ``load_imdf_layers``). Il convertitore (controllato) emette un bundle
 **self-describing**: ``manifest.schema_descriptor`` dichiara per ogni layer la
@@ -15,8 +15,7 @@ Il loader e' quindi **100% generico**: nessun layer/campo/chiave/CRS hardcoded
 
 Questo modulo e' **puro** (nessun import pandas/geopandas, rispetta il
 dataframe import boundary): produce record piatti + geometria GeoJSON + identity
-per layer. L'assemblaggio in GeoDataFrame avviene al boundary ``core/dataframes``
-(step successivo del refactor, vedi design note 13).
+per layer. L'assemblaggio in GeoDataFrame avviene al boundary ``core/dataframes``.
 """
 
 from __future__ import annotations

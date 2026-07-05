@@ -113,15 +113,14 @@ def record_pending(
         cursor: psycopg2 cursor owned by the caller's transaction.
         domain: callsite tag ("file_source", "result_blob", ...).
             Not interpreted; persisted for filtering / dashboards.
-        storage_key: object-storage key targeted by the future
+        storage_key: object-storage key targeted by the deferred
             cleanup (e.g. "file-sources/<id>/<filename>").
-        operation: "delete" today; "upload_intent" reserved for
-            .
+        operation: "delete" today; "upload_intent" for pre-upload intent rows.
         reason: free-text reason persisted alongside the row
             ("row_delete_post_commit", ...). Not interpreted.
         extras: optional `Mapping[str, Any]` serialized to JSONB.
             Keep it small (debug metadata only); none of the fields
-            are interpreted by the boundary or the future reconciler.
+            are interpreted by the boundary or the reconciler.
 
     Returns:
         `ReconciliationEntryRef` with the freshly-generated UUID
@@ -195,7 +194,7 @@ def mark_done(reconciliation_id: str) -> None:
 def mark_orphan_deleted(reconciliation_id: str) -> None:
     """Autocommit terminal `pending -> orphan_deleted`.
 
-    Used by the future reconciler beat hook  after a
+    Used by the reconciler beat hook after a
     successful catch-up delete. Best-effort: never raises.
     """
     _autocommit_update(
@@ -299,9 +298,8 @@ def fetch_due_pending_deletes(
 
     Filters:
       - `state = 'pending'` (terminal states excluded);
-      - `operation = 'delete'` (this stream supports only delete —
-        upload-intent / W2 race coverage is out-of-scope per task
-        brief);
+      - `operation = 'delete'` (this stream supports only delete;
+        upload-intent reconciliation uses its own stream);
       - `next_retry_at IS NULL OR next_retry_at <= now`. NULL rows
         are picked up immediately (no backoff yet); rows with a
         future retry timestamp are skipped until the cadence ticks
@@ -420,8 +418,7 @@ def compute_next_retry_at(
 
 # Operational guardrails
 # Goal: prevent `storage_reconciliation_log` from becoming a
-# silent landfill. Two minimal, additive helpers — NO new transitions
-# on existing states, NO new operations, NO new migration
+# silent landfill without adding transitions or operations.
 # 1. `count_active_by_state_domain` — read-only aggregation of
 # `pending` and `lost` rows by `(state, domain)` for periodic
 # summary logs. Terminal `done`/`orphan_deleted` are intentionally
@@ -438,7 +435,7 @@ def compute_next_retry_at(
 class ReconciliationStateCount:
     """Tipato counter per row di `count_active_by_state_domain`.
 
-    Stable shape per logging strutturato e dashboard future:
+    Stable shape per logging strutturato e dashboard:
       - `state`: `"pending"` | `"lost"` (terminali esclusi
         intenzionalmente da questo helper);
       - `domain`: tag callsite (`"file_source"`, `"result_blob"`,
@@ -578,8 +575,8 @@ def prune_terminal_older_than(
 
 
 # Upload-intent lifecycle
-# Closes R-021.1: `app/services/file_storage_dispatch.py` had an
-# upload-then-DB-save W2 orphan race. Pattern is "self-clearing"
+# Pattern "self-clearing" per la finestra upload riuscito / DB save non
+# ancora committato.
 # 1. Caller (`dispatch_blob_storage`) records `operation='upload_intent'`
 # autocommit BEFORE the upload. No caller-side transaction
 # coupling: callers are not in scope for this stream and are not
@@ -651,9 +648,8 @@ def record_upload_intent(
         - `gather_readiness.checks.reconciliation_backlog.detail`
           (espone il breakdown per-operation).
     - L'engine alignment (STORAGE_ARTIFACT_ENGINE) e' "compensating
-      reconciliation log" — non "outbox/saga framework". L'audit
-      `BE_STORAGE_ENGINE_AUDIT.md` §23 documenta i failure modes
-      e le closure paths future.
+      reconciliation log" — non "outbox/saga framework". La documentazione
+      dello storage engine descrive failure modes e closure paths.
 
     Differenza chiave da `record_pending`:
     - `record_pending` richiede un cursor del caller e partecipa

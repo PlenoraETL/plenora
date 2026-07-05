@@ -84,7 +84,7 @@ class ExecutionResult:
     def to_dict(self) -> JsonObject:
         """Reconstruct a backward-compatible dict for downstream consumers.
 
-        ``PipelineArtifact.from_executor_result`` and legacy callers that
+        ``PipelineArtifact.from_executor_result`` and dict consumers that
         read ``result["success"]`` all receive the same shape they would
         from the raw executor dict.
         """
@@ -140,7 +140,7 @@ class CanvasExecutorProtocol(Protocol):
       unhandled crash) propagate as exceptions.
     - ``preview`` never persists output; always truncates to
       ``limit`` rows.
-    - Both methods are synchronous (Celery worker context).
+    - Both methods are synchronous in the worker context.
     - Return dict shape: ``success``, ``message`` / ``error`` keys
       for failures. Engines differ on ``message`` vs ``error`` key
       name; ``ExecutionResult.from_executor_dict`` normalises both.

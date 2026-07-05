@@ -93,7 +93,7 @@ class ResourceMetadata:
 
         Extracts ``geometry_column`` and ``crs_epsg`` from the first
         geometry column found; all other columns are preserved as-is.
-        Rows missing ``name`` are silently skipped (tolerant of legacy
+        Rows missing ``name`` are silently skipped (tolerant of incomplete
         canvas state).
         """
         cols: list[ColumnMeta] = []

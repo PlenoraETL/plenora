@@ -46,8 +46,8 @@ def get_current_user(
     # Blacklist check: se il jti e' stato revocato via /auth/logout
     # rifiuta anche se la signature+exp sarebbero valide. Precede la
     # query DB (piu' economico di un SELECT users
-    # Backward compat: token pre-rollout jti non hanno la claim -> None
-    # > `is_jti_blacklisted(None)` False -> passa, come prima
+    # Backward compat: token senza jti passano perche'
+    # `is_jti_blacklisted(None)` ritorna False.
     if is_jti_blacklisted(payload.get("jti")):
         _disclosure.raise_disclosure(_disclosure.token_revoked())
     user = _users_dal.get_user(payload["sub"])

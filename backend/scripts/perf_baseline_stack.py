@@ -1,7 +1,7 @@
-"""Baseline performance Plenora 2.0 — Fase 0 del piano unificazione stack.
+"""Baseline performance dello stack Plenora.
 
-Misura le 4 metriche del piano (§5) sullo stack ATTUALE (Celery+Redis),
-da rieseguire identico dopo ogni fase di migrazione per il confronto:
+Misura 4 metriche operative dello stack runtime, da rieseguire con gli
+stessi parametri quando cambia l'infrastruttura per confronti omogenei:
 
 1. latenza per-richiesta autenticata (check blacklist JWT per-request);
 2. latenza dispatch + lettura stato task (broker+result backend);
@@ -75,12 +75,12 @@ def bench_task_roundtrip(iterations: int) -> dict:
     """Dispatch cleanroom.ping + polling stato fino a SUCCESS.
 
     Misura separatamente la latenza del solo dispatch (broker write) e il
-    roundtrip completo (worker pickup + result backend + lettura stato).
+    roundtrip completo (worker pickup + stato task su PostgreSQL).
     """
     from app.core.task_runtime.dispatch import dispatch_task_by_name
-    from app.core.task_runtime.orchestrator import CeleryTaskRuntime
+    from app.core.orchestrator.pg_task_runtime import PgResultTaskRuntime
 
-    runtime = CeleryTaskRuntime()
+    runtime = PgResultTaskRuntime()
     dispatch_ms: list[float] = []
     roundtrip_ms: list[float] = []
     poll_reads_ms: list[float] = []
@@ -111,7 +111,7 @@ def bench_task_roundtrip(iterations: int) -> dict:
 
 def bench_login_rate_limit(iterations: int) -> dict:
     """POST /login con password errata: latenza per-tentativo del percorso
-    rate-limiter (sliding window Redis) e soglia di blocco osservata."""
+    rate-limiter e soglia di blocco osservata."""
     session = requests.Session()
     samples: list[float] = []
     first_429_at = None
@@ -151,7 +151,7 @@ def main() -> int:
     token = login.json()["access_token"]
 
     report = {
-        "stack": "celery+redis (baseline pre-migrazione)",
+        "stack": "current-runtime",
         "health_unauthenticated_control": bench_health_control(args.iterations),
         "authenticated_request_blacklist_path": bench_authenticated_requests(
             token, args.iterations

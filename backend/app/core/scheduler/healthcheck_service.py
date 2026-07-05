@@ -26,7 +26,7 @@ def _as_aware_datetime(value: object) -> datetime:
 
 
 def get_beat_healthcheck() -> BeatHealthcheck:
-    """Return the current Celery Beat health state."""
+    """Return the current scheduler beat health state."""
     try:
         row = scheduler_db.get_beat_heartbeat()
 

@@ -98,7 +98,7 @@ class CaricaArcGISMultiLayerRequest:
 
 @dataclass(frozen=True)
 class CaricaArcGISWriteOutcome:
-    """Domain outcome converted to a Celery result only at the worker edge."""
+    """Domain outcome converted to a task result at the worker edge."""
 
     status: str
     success: bool
@@ -118,7 +118,7 @@ class CaricaArcGISWriteOutcome:
     error_message: str = ""
 
     def to_task_result(self) -> CaricaArcGISTaskResult:
-        """Serialize the outcome for the existing Celery/API result shape."""
+        """Serialize the outcome for the task/API result shape."""
         if not self.success:
             return {
                 "status": self.status,

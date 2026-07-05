@@ -33,8 +33,7 @@ def build_error_envelope_body(
     Returns:
         Dict serializzabile in JSON, con:
         - top-level `error`, `message`, `details`;
-        - `detail` mirror con le stesse chiavi (compat FastAPI
-          legacy).
+        - `detail` mirror con le stesse chiavi (compat FastAPI).
 
     La copia mirror e' shallow: `details` e' lo stesso oggetto in
     entrambi i punti. Il body NON viene mutato dopo la costruzione
@@ -165,12 +164,12 @@ def raise_typed_http(
     sa normalizzare via `normalize_http_exception_detail` nello
     stesso envelope dual-shape dei call site dict-detail manuali.
 
-    Adoption strategy:
+    Adoption:
     - Helper opzionale: i call site esistenti restano invariati.
     - Nuovi `raise` POSSONO usare questo helper per beneficiare
       del catalog (`error_codes.<CONST>` o `app.core.<domain>.errors.<CONST>`) + del round-trip
       envelope.
-    - La migrazione dei call site esistenti e' debito separato
+    - L'adozione sui call site esistenti e' lavoro separato.
 
     Args:
         code: codice machine-readable. Convenzione snake_case.

@@ -645,8 +645,7 @@ class GeoSchemaHandlers:
         `representative_point` e lo scrive in `output_column`
         (default `"point_on_surface"`). Se `output_column` coincide
         con `geom_column` la sorgente viene sovrascritta a
-        `geometry:point`. Stesso pattern del `_schema_geo_centroid`
-        legacy.
+        `geometry:point`. Stesso schema delta di `_schema_geo_centroid`.
         """
         if not input_schemas:
             return []
@@ -777,7 +776,7 @@ class GeoSchemaHandlers:
         - Aggiunge le colonne non-geometriche di RIGHT (geopandas
           rimuove la geometria del RIGHT in sjoin/sjoin_nearest), con
           suffisso `_right` sulle collisioni con LEFT (allineato al
-          pattern del legacy `_schema_sjoin`).
+          pattern di `_schema_sjoin`).
         - Aggiunge `output_column` (default `"distance_m"`, real).
         - Il runtime droppa esplicitamente `index_right`, quindi NON
           viene aggiunto allo schema (differisce da `_schema_sjoin`).

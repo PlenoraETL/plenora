@@ -1,5 +1,5 @@
 """
-Password hashing helpers — Argon2id (default) + bcrypt (legacy verify
+Password hashing helpers — Argon2id (default) + bcrypt verification.
 
 Keeps this module's responsibility explicit and isolated from adjacent code.
 """
@@ -51,7 +51,7 @@ def verify_password(password: str, hashed: str) -> bool:
 def needs_rehash(hashed: str) -> bool:
     """True se l'hash va rigenerato in Argon2id al prossimo login riuscito.
 
-    - bcrypt ($2*) -> True (migrazione)
+    - bcrypt ($2*) -> True (rehash progressivo)
     - Argon2id valido -> delega a PasswordHasher.check_needs_rehash
     - altro / corrotto -> False (niente rehash alla cieca, il verify
                                  avra' gia' ritornato False a monte)
@@ -73,8 +73,7 @@ def needs_rehash(hashed: str) -> bool:
 # C10: hash dummy reale di una password casuale, generato una volta all'import
 # Usato nel login quando l'username non esiste, cosi' `verify_password` fa
 # comunque il lavoro di hashing e il tempo di risposta non rivela se un utente
-# esiste o no (timing attack / user enumeration). Dall'introduzione di
-# Argon2id il dummy e' in Argon2id: coerente con i nuovi utenti. Gli utenti
-# NOTE: legacy bcrypt hanno un costo di verify leggermente diverso finche' non
-# vengono migrati dal rehash progressivo
+# esiste o no (timing attack / user enumeration). Il dummy resta in Argon2id,
+# coerente con gli utenti nuovi; gli hash bcrypt esistenti hanno un costo di
+# verify leggermente diverso finche' non vengono migrati dal rehash progressivo.
 _DUMMY_PASSWORD_HASH = _ph.hash("c10_dummy_password_for_timing_parity")

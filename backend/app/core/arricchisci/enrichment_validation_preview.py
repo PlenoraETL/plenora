@@ -44,8 +44,8 @@ class EnrichmentValidationPreviewMixin:
         null_param_rows = []
         warnings = []
 
-        # Helper: True se il parametro deve essere considerato bloccante
-        # required oppure abbiamo fallback legacy senza definizioni
+        # Helper: True se il parametro deve essere considerato bloccante:
+        # required, oppure fallback conservativo senza definizioni.
         def _is_blocking(api_param: str) -> bool:
             if not self._has_param_definitions:
                 return True  # NOTE: tratta tutto come required

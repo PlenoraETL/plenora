@@ -17,7 +17,7 @@ class FolderEnsureResult:
     created: bool = False
 
     def to_compat_id(self) -> Optional[str]:
-        """Return the legacy ``ensure_folder`` folder-id shape."""
+        """Return the public ``ensure_folder`` folder-id shape."""
         return self.folder_id
 
 
@@ -28,7 +28,7 @@ class ItemListingResult:
     items: Tuple[Mapping[str, object], ...]
 
     def to_compat_list(self) -> JsonRows:
-        """Return the legacy list of raw portal item dictionaries."""
+        """Return the public list of raw portal item dictionaries."""
         return [dict(item) for item in self.items]
 
 
@@ -39,7 +39,7 @@ class ItemSearchResult:
     items: Tuple[Mapping[str, object], ...]
 
     def to_compat_list(self) -> JsonRows:
-        """Return the legacy list of raw search result dictionaries."""
+        """Return the public list of raw search result dictionaries."""
         return [dict(item) for item in self.items]
 
 
@@ -51,7 +51,7 @@ class RendererUpdateResult:
     message: str
 
     def to_compat_dict(self) -> ObjectMap:
-        """Return the legacy ``{success, message}`` provider shape."""
+        """Return the public ``{success, message}`` provider shape."""
         return {"success": self.success, "message": self.message}
 
 
@@ -65,7 +65,7 @@ class ItemDeleteResult:
     response: Optional[Mapping[str, object]] = None
 
     def to_compat_dict(self) -> ObjectMap:
-        """Return the legacy item delete dictionary shape."""
+        """Return the public item delete dictionary shape."""
         result = {
             "success": self.success,
             "message": self.message,
@@ -77,7 +77,7 @@ class ItemDeleteResult:
 
     @classmethod
     def from_compat_dict(cls, result: Mapping[str, object], item_id: str) -> "ItemDeleteResult":
-        """Coerce a legacy delete dict into the typed result contract."""
+        """Coerce a compatibility delete dict into the typed result contract."""
         response = result.get("response")
         return cls(
             success=bool(result.get("success")),
@@ -95,7 +95,7 @@ class DeleteFeatureServiceItemsResult:
     succeeded: int
 
     def to_compat_tuple(self) -> tuple[int, int]:
-        """Return the legacy ``(attempted, succeeded)`` tuple shape."""
+        """Return the public ``(attempted, succeeded)`` tuple shape."""
         return self.attempted, self.succeeded
 
 
@@ -107,7 +107,7 @@ class ServiceNameAvailabilityResult:
     error: Optional[str] = None
 
     def to_compat_tuple(self) -> tuple[bool, Optional[str]]:
-        """Return the legacy ``(available, error)`` tuple shape."""
+        """Return the public ``(available, error)`` tuple shape."""
         return self.available, self.error
 
 

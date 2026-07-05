@@ -2,7 +2,7 @@
 
 The canonical persistence boundary lives in
 ``app.core.connections.arcgis_connection_store``. Keep this module importable
-for legacy callers while preventing new Features-owned DB code from growing
+for compatibility callers while preventing new Features-owned DB code from growing
 here.
 """
 

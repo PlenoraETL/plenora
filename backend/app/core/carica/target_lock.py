@@ -45,7 +45,7 @@ def resolve_carica_target_lock(
     group_id: str,
     write_branch: str,
 ) -> CaricaTargetLock | None:
-    """Return a tenant-scoped lock target, or None for legacy unknown shapes."""
+    """Return a tenant-scoped lock target, or None for unknown compatibility shapes."""
     tenant_scope = _tenant_scope(project_id=project_id, group_id=group_id)
     target: Mapping[str, object] | None
 

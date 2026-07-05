@@ -228,7 +228,7 @@ class WriteConfig:
 class BatchProgress:
     """Progresso di un singolo batch durante la scrittura.
 
-    Usato per aggiornare il progresso in Redis durante l'esecuzione asincrona.
+    Usato per aggiornare il progresso durante l'esecuzione asincrona.
     """
     batch_number: int
     total_batches: int

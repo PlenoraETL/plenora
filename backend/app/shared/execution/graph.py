@@ -24,8 +24,7 @@ class GraphCycleError(ValueError):
     detects a cycle in the input graph.
 
     Subclass of ``ValueError`` so existing code paths that catch
-    ``ValueError`` (e.g. Manipola's pre-migration cycle handling)
-    continue to work without changes.
+    ``ValueError`` continue to work without changes.
 
     Attributes:
         cycle_nodes: list of node ids that could not be ordered.
@@ -58,15 +57,14 @@ def kahn_topological_order(
             making the output deterministic for any given input.
         edges: iterable of ``(source, target)`` tuples. Edges
             whose source or target is not in ``node_ids`` are
-            silently dropped (matches the legacy Arricchisci /
-            Manipola behavior of tolerating dangling references).
+            silently dropped to tolerate dangling references.
         on_cycle: how to handle a graph with a cycle.
 
-            - ``"truncate"`` (default, Arricchisci legacy shape):
+            - ``"truncate"`` (default):
               cycle nodes are silently omitted from the result.
               The caller can detect a cycle by comparing
               ``len(result)`` with ``len(node_ids)``.
-            - ``"raise"`` (Manipola legacy shape): raises
+            - ``"raise"``: raises
               :class:`GraphCycleError` listing the cycle node
               ids. The exception message matches the verbatim
               Italian operator string Manipola used to emit
@@ -91,10 +89,9 @@ def kahn_topological_order(
     # edges keep an empty list
     out_edges: MutableMapping[str, List[str]] = {nid: [] for nid in ids}
     for source, target in edges:
-        # Edge filter: both endpoints must exist in node_ids
-        # Drops "dangling" edges that point at deleted nodes
-        # the legacy Arricchisci / Manipola implementations
-        # both did this implicitly through their dict lookups
+        # Edge filter: both endpoints must exist in node_ids. Dangling
+        # edges are ignored because downstream execution assumes existing
+        # node ids only.
         if source in id_set and target in id_set:
             out_edges[source].append(target)
             in_degree[target] += 1
@@ -116,6 +113,5 @@ def kahn_topological_order(
             ordered_set = set(order)
             cycle_nodes = [nid for nid in ids if nid not in ordered_set]
             raise GraphCycleError(cycle_nodes)
-        # on_cycle == "truncate": cycle nodes are silently
-        # omitted (legacy Arricchisci shape
+        # on_cycle == "truncate": cycle nodes are silently omitted.
     return order

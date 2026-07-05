@@ -175,7 +175,7 @@ class EnrichmentOptions:
     respect_retry_after: bool = True      # Rispetta header Retry-After
     # Cap (secondi) sul valore Retry-After accettato. Un server malevolo o
     # malfunzionante puo' rispondere Retry-After: 86400 (24h) e bloccare
-    # un worker Celery per l'intera giornata. Default 300s = 5 minuti:
+    # un worker per l'intera giornata. Default 300s = 5 minuti:
     # tollerante per backoff legittimi (es. quote refresh oraria) ma
     # taglia gli abusi. Vedi enrichment_retry_http.py _call_api_with_retry.
     max_retry_after_seconds: int = 300

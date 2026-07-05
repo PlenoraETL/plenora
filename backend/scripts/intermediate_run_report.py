@@ -16,7 +16,7 @@ def _format_bool(v: Optional[bool]) -> str:
 
 def _format_mode(v: Optional[str]) -> str:
     if v is None or v == "":
-        return "full_pg(legacy)"
+        return "full_pg(default)"
     return v
 
 

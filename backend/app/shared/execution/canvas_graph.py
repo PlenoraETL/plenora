@@ -30,7 +30,7 @@ class CanvasGraph:
 
     Built once at the entry boundary of an execution loop. Exposes:
 
-    - ``raw(node_id)`` - raw dict for legacy callers (e.g.
+    - ``raw(node_id)`` - raw dict for compatibility callers (e.g.
       ``execute_parallel_enrichers``, ``_find_final_result``);
     - ``get(node_id)`` - typed ``CanvasNode`` for field access;
     - ``result_node`` - first node whose ``type == "result"``;
@@ -58,7 +58,7 @@ class CanvasGraph:
         """Build a CanvasGraph from a full canvas object or mapping.
 
         This is the preferred intake boundary for orchestrators. It accepts
-        the legacy plain-dict canvas shape and Pydantic-like canvas objects
+        plain-dict canvas shapes and Pydantic-like canvas objects
         with ``nodes`` / ``edges`` attributes. Node normalization still
         delegates to ``from_nodes_edges`` so accepted node shapes stay aligned.
         """
@@ -139,7 +139,7 @@ class CanvasGraph:
 
     @property
     def raw_map(self) -> JsonObjectById:
-        """Raw dict map ``{node_id: raw_dict}`` for legacy callers."""
+        """Raw dict map ``{node_id: raw_dict}`` for compatibility callers."""
         return self._raw_map
 
     @property

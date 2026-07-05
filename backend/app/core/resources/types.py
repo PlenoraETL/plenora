@@ -84,7 +84,7 @@ class ResourceRef:
         if not self.expected_group_id:
             raise ValueError(
                 "ResourceRef.expected_group_id required (fail-closed). "
-                "Pass an empty string ONLY in legacy back-compat shims "
+                "Pass an empty string ONLY in explicit compatibility shims "
                 "that explicitly opt out of the engine path."
             )
         active = sum(

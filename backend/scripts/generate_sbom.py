@@ -13,7 +13,7 @@ def main() -> int:
     backend_root = Path(__file__).resolve().parent.parent
     req_main = backend_root / "requirements.txt"
     req_dev = backend_root / "requirements-dev.txt"
-    # I docs sono centralizzati nella repo root (Wave 1.6), non in backend/.
+    # I docs sono centralizzati nella repo root, non in backend/.
     sbom_out = backend_root.parent / "docs" / "compliance" / "sbom.json"
 
     for req in (req_main, req_dev):
@@ -48,7 +48,7 @@ def main() -> int:
     #   0 = nessuna vulnerabilita' trovata
     #   1 = vulnerabilita' trovate (il file SBOM viene comunque scritto)
     # Trattiamo 1 come non-bloccante: lo SBOM e' generato, le CVE vanno
-    # triagiate manualmente seguendo `docs/compliance/sbom.md` §3.
+    # triagiate manualmente seguendo la sezione triage di `docs/compliance/sbom.md`.
     if result.returncode not in (0, 1):
         print(
             f"ERROR: pip-audit exit code {result.returncode}, "
@@ -70,8 +70,8 @@ def main() -> int:
 
     if result.returncode == 1:
         print(
-            "NOTE: pip-audit ha segnalato CVE. Triale seguendo "
-            "`docs/compliance/sbom.md` §3 prima di chiudere il refresh.",
+            "NOTE: pip-audit ha segnalato CVE. Triagiale seguendo "
+            "`docs/compliance/sbom.md` prima di chiudere il refresh.",
         )
 
     return 0

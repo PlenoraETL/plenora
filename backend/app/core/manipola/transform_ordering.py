@@ -8,7 +8,7 @@ from app.core.projects.canvas_models import Edge
 
 
 def get_target_handle(edge: Edge) -> Optional[str]:
-    """Return the React Flow target handle from the edge field or legacy id."""
+    """Return the React Flow target handle from the edge field or compat id."""
     handle = getattr(edge, "targetHandle", None)
     if handle:
         return handle

@@ -13,7 +13,7 @@ def delete_task_log_runs(task_id: str) -> int:
 
     The orchestrator owns the cleanup decision and failure handling; the DB
     write is intentionally kept at this orchestrator boundary instead of going
-    through a legacy `app.db.*_service` facade. Exceptions intentionally
+    through an `app.db.*_service` facade. Exceptions intentionally
     propagate so the router can preserve its existing best-effort
     partial-cleanup response contract.
     """

@@ -24,7 +24,7 @@ from app.core.query_execution import query_executor as query_executor_module
 if TYPE_CHECKING:
     # Lazy at runtime: importing FeaturesService eagerly pulls in the
     # concrete ArcGIS write stack (arcgis_feature_writer/client) into every
-    # Celery worker bootstrap. The boundary contract keeps task registration
+    # worker bootstrap. The boundary contract keeps task registration
     # provider-free; the real import lives inside build_orchestrator_stack.
     from app.core.features import features_service as features_service_module
 
@@ -42,7 +42,7 @@ def build_scheduled_carica_executor(
     *,
     connection_service: Any = None,
 ) -> carica_executor_module.CaricaExecutor:
-    """Factory composition-root per la scrittura CARICA schedulata (G4).
+    """Factory composition-root per la scrittura CARICA schedulata.
 
     Lo scheduler consuma questa factory invece di importare
     ``carica.executor`` direttamente: la costruzione del verticale resta
@@ -69,7 +69,7 @@ def _register_multilayer_artifact_adapters() -> None:
 
 
 def _register_canvas_node_validators() -> None:
-    """Registra i ``validate_node`` dei motori al composition-root (#D).
+    """Registra i ``validate_node`` dei motori al composition-root.
 
     L'orchestratore ``canvas_validation`` li scopre via ``validator_for(node.type)``
     senza importarli — la direzione resta motori -> shared. Idempotente.
@@ -231,9 +231,9 @@ def build_runtime_services() -> RuntimeServices:
         connection_service=connection_service,
     )
 
-    # Epic C: binding esplicito dei reader consumati da auth.resource_access.
-    # Stessi adapter del fallback lazy — qui il wiring diventa visibile e
-    # i contesti bootstrap-pieni non dipendono dal fallback.
+    # Binding esplicito dei reader consumati da auth.resource_access:
+    # il wiring resta visibile e i contesti bootstrap-pieni non dipendono
+    # dal fallback lazy.
     resource_access_module.bind_resource_readers(
         project_metadata_reader=ProjectMetadataAccess(),
         file_source_reader=FileSourceAccess(),

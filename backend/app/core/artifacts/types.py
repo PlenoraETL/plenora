@@ -75,12 +75,12 @@ class RunArtifactRef:
 class PipelineArtifact(dict):
     """Contratto strutturato dell'output di una pipeline run.
 
-    Subclass di `dict`: i consumer possono leggere come dict legacy
+    Subclass di `dict`: i consumer possono leggere come dict compatibile
     (`result["success"]`, `**result`, `result["carica"] = ...`) e
     contemporaneamente accedere alle proprieta' tipizzate
     (`artifact.project_id`, `artifact.artifact_kind`,
     `artifact.to_run_artifact_ref`). La forma dict resta necessaria
-    per la serializzazione cross-process via Celery.
+    per la serializzazione cross-process del task runtime.
 
     `artifact_kind` (proprieta' derivata):
     - "inline" → c'e' un DataFrame in process (path MANIPOLA inline)
@@ -196,7 +196,7 @@ class PipelineArtifact(dict):
         """Typed factory: constructs a PipelineArtifact from an ExecutionResult.
 
         Preserves the typed payload boundary between executor and artifact.
-        The legacy dict-compatible shape is reconstructed locally from typed
+        The dict-compatible shape is reconstructed locally from typed
         fields instead of calling ``exec_result.to_dict`` at this internal
         boundary; explicit dict conversion remains available for API/task
         edges that need a serializable mapping.

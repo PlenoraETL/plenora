@@ -129,7 +129,7 @@ def update_file_source(
     use_app_models: bool,
     logger: Any,
 ) -> Optional[Any]:
-    """Update FileSource metadata, including the legacy full-row fallback."""
+    """Update FileSource metadata, including the full-row compatibility fallback."""
     file_source = get_file_source_by_id(file_id)
     if not file_source:
         return None

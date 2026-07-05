@@ -35,7 +35,7 @@ logger = get_logger(__name__)
 class AddLayerResult:
     """Typed result for ``ArcGISClient.add_layer_to_service``.
 
-    The IMDF compatibility wrapper still converts this to the legacy dict
+    The IMDF compatibility wrapper still converts this to the compatibility dict
     shape ``{success, feature_count, errors}``.
     """
 
@@ -44,7 +44,7 @@ class AddLayerResult:
     errors: Tuple[str, ...] = ()
 
     def to_compat_dict(self) -> ArcGISJsonObject:
-        """Return the pre-BE-IMDF-006B legacy dict shape."""
+        """Return the compatibility dict shape expected by callers."""
         return {
             "success": self.success,
             "feature_count": self.feature_count,

@@ -38,7 +38,7 @@ class RestBatchSummary:
 
 @dataclass(frozen=True)
 class CaricaRestWriteOutcome:
-    """Domain outcome converted to the existing Celery result shape."""
+    """Domain outcome converted to the task/API result shape."""
 
     status: str
     success: bool

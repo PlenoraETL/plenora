@@ -202,7 +202,7 @@ class PluginExecutor:
         if not func:
             raise ValueError(f"Funzione per '{transform_id}' non caricata")
 
-        # Estrai configurazione dal nodo canvas (formato flat o legacy data wrapper
+        # Estrai configurazione dal nodo canvas (formato flat o data wrapper compatibile).
         node_config = node.config or (node.data.get('config', {}) if node.data else {})
         node_config = self._resolve_column_references(node_config, node, config)
         kwargs = self._prepara_kwargs(config, node_config)

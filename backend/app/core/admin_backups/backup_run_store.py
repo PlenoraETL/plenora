@@ -110,7 +110,7 @@ def refresh_manual_backup_lock(
 
     Heartbeat-based liveness: invece di tenere il lock con un TTL
     enorme (precedentemente 7200s = 2h) che lasciava lock orfani per
-    ore quando un worker Celery crashava, riduciamo TTL a un valore
+    ore quando un worker del backup crashava, riduciamo TTL a un valore
     breve e il task in esecuzione estende `expires_at` periodicamente.
     Se il worker muore, l'estensione si ferma, TTL scade in ≤TTL
     secondi, e il prossimo `try_acquire_manual_backup_lock` riacquisisce

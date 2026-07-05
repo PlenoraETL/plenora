@@ -1,7 +1,7 @@
 """Typed ArcGIS REST write endpoint contracts.
 
 These contracts own the provider-specific FeatureServer write payload shapes
-inside the features domain. Public callers may still receive legacy dict
+inside the features domain. Public callers may still receive compatibility dict
 results from ``ArcGISClient``; request construction and response parsing stay
 explicit here.
 """

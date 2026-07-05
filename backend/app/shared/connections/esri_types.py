@@ -22,7 +22,7 @@ class EsriTypeMapper:
         Coarse comparison buckets for schema compatibility checks:
         ``string``, ``int``, ``float``, ``date``, ``geometry``, ``other``.
         Both methods use the same bucket vocabulary so Esri fields and
-        pandas dtypes can be compared apple-to-apple (BE-IMDF-003).
+        pandas dtypes can be compared apple-to-apple.
     """
 
     ESRI_TO_PLENORA = {
@@ -68,7 +68,7 @@ class EsriTypeMapper:
         """Map an Esri field type to a coarse schema-comparison bucket.
 
         Bucket: ``string``/``int``/``float``/``date``/``geometry``/``other``.
-        Substring match, case-insensitive (preserves pre-IMDF-003 semantics
+        Substring match, case-insensitive (preserves the existing semantics
         of ``validator._coarse_type_from_esri``):
 
         - ``string``, ``guid``, ``xml`` -> "string"
@@ -78,7 +78,7 @@ class EsriTypeMapper:
         - ``geometry``, ``shape`` -> "geometry"
         - other / empty / None -> "other"
 
-        BE-IMDF-003: this bucket scheme is **distinct** from
+        This bucket scheme is **distinct** from
         ``map_field_type`` (Plenora-internal ``int``/``real``/``str``/...)
         and exists to compare Esri fields against pandas DataFrames via
         ``map_pandas_dtype_to_schema_bucket``.

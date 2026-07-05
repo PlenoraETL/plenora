@@ -84,8 +84,7 @@ def assert_path_within(
     return resolved
 
 
-# Regex whitelist per `bundle_task_id` IMDF. I task_id generati da Celery
-# sono UUID v4; qualche task legacy puo' avere formato leggermente diverso
-# quindi accettiamo alfanumerico + dash/underscore. Primo char alfanumerico
-# no `-`/`_` iniziale). Esclude `.`, `/`, `\`, spazi, null bytes e caratteri
-# di controllo — sufficiente per bloccare path traversal
+# Regex whitelist per `bundle_task_id` IMDF. I task_id generati dal runtime
+# sono UUID v4; per compatibilita' accettiamo anche alfanumerico +
+# dash/underscore. Primo char alfanumerico, no `-`/`_` iniziale. Esclude
+# `.`, `/`, `\`, spazi, null bytes e caratteri di controllo.

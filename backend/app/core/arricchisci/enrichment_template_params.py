@@ -161,8 +161,8 @@ class EnrichmentTemplateParamsMixin:
         """Verifica se ci sono parametri OBBLIGATORI nulli (esclusa API key).
 
         Se le definizioni dei parametri sono disponibili (api_config["parameters"]),
-        controlla solo quelli con required=True. Se non lo sono, fallback al
-        comportamento legacy che blocca su qualsiasi null.
+        controlla solo quelli con required=True. Se non lo sono, usa il
+        fallback conservativo che blocca su qualsiasi null.
         """
         api_key_name = self.auth.get("key_name", "apiKey") if self.auth.get("type") == "api_key" else None
 

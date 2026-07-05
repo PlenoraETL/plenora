@@ -1,4 +1,4 @@
-"""Result-owned persistence boundary used by legacy result-store callers."""
+"""Result-owned persistence boundary used by compatibility callers."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ ResultMetadataPayload: TypeAlias = dict[str, object]
 
 
 def _metadata_public_payload(row: ResultMetadataRow) -> ResultMetadataPayload:
-    """Serialize result metadata at the legacy result-store boundary."""
+    """Serialize result metadata at the compatibility result-store boundary."""
     values: dict[str, object] = {
         "id": row.id,
         "project_id": row.project_id,
@@ -124,13 +124,13 @@ def get_latest_result(
     project_id: str,
     group_id: Optional[str] = None,
 ) -> Optional[ResultMetadataPayload]:
-    """Return latest result metadata for a project as a legacy dict."""
+    """Return latest result metadata for a project as a public dict."""
     row = results_db.get_latest_result_row(project_id, group_id=group_id)
     return _metadata_public_payload(row) if row else None
 
 
 def list_results(project_id: str) -> list[ResultMetadataPayload]:
-    """Return result metadata rows for a project as legacy dicts."""
+    """Return result metadata rows for a project as public dicts."""
     return [_metadata_public_payload(row) for row in results_db.list_result_rows(project_id)]
 
 

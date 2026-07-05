@@ -769,7 +769,7 @@ class ArcGISClient(
         layer_url: str,
         drawing_info: dict,
     ) -> ArcGISJsonObject:
-        """Apply renderer/drawingInfo and return the legacy dict shape."""
+        """Apply renderer/drawingInfo and return the compatibility dict shape."""
         return self._renderer_update_result(conn, layer_url, drawing_info).to_compat_dict()
 
     def _layer_renderer_update_result(
@@ -825,7 +825,7 @@ class ArcGISClient(
         """
         Aggiorna il renderer di un layer tramite layer-level updateDefinition.
 
-        Public provider compatibility returns the legacy ``{success, message}``
+        Public provider compatibility returns the ``{success, message}``
         dict while the internal boundary uses ``RendererUpdateResult``.
         """
         return self._layer_renderer_update_result(
@@ -925,7 +925,7 @@ class ArcGISClient(
         conn: _ArcGISConnectionInfo,
         item_id: str,
     ) -> ArcGISJsonObject:
-        """Delete a portal item permanently and return the legacy dict shape."""
+        """Delete a portal item permanently and return the compatibility dict shape."""
         return self._delete_item_permanently_result(conn, item_id).to_compat_dict()
 
     def _delete_feature_service_items_result(

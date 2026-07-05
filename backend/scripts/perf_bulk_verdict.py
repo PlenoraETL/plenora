@@ -54,8 +54,8 @@ QUERY_STAGE_SWAP_MYSQL = """
       AND ts >= %s AND ts < %s
 """
 
-# Stratificazione per-tenant MySQL — eseguita SOLO se il rate aggregato
-# cade nella fascia 5% <= rate < 30% (§9.2 "zona di ambiguita'")
+# Stratificazione per-tenant MySQL: eseguita solo se il rate aggregato
+# cade nella fascia 5% <= rate < 30%.
 QUERY_MYSQL_BY_TENANT = """
     SELECT
       COALESCE(details->>'user_id', '<no_user_id>') AS user_id,
@@ -84,7 +84,7 @@ class Verdict:
 
 
 def compute_verdict_mysql(n_success: int, n_fallback_disabled: int) -> Verdict:
-    """Applica §9.2. Denominator: success + fallback(server_disable_local_infile).
+    """Applica la policy MySQL. Denominator: success + fallback(server_disable_local_infile).
     Esclusioni by-design: geometry, load_data_error, cursor_acquisition_failure
     (gia' non contate a monte dalla query QUERY_MYSQL_RATE)."""
     sample = n_success + n_fallback_disabled
@@ -93,7 +93,7 @@ def compute_verdict_mysql(n_success: int, n_fallback_disabled: int) -> Verdict:
             code="PERIODO INVALIDO",
             rate=None,
             rationale=(
-                f"sample {sample} < {MYSQL_MIN_SAMPLE} (§9.2). "
+                f"sample {sample} < {MYSQL_MIN_SAMPLE}. "
                 f"Estendere finestra a 4 settimane."
             ),
         )
@@ -103,8 +103,8 @@ def compute_verdict_mysql(n_success: int, n_fallback_disabled: int) -> Verdict:
             code="PROPOSTA DEPRECAZIONE",
             rate=rate,
             rationale=(
-                f"rate {rate:.2%} < {MYSQL_RATE_PROPOSAL_DEPRECATION:.0%} (§9.2). "
-                f"Candidato a rimozione in Fase 3."
+                f"rate {rate:.2%} < {MYSQL_RATE_PROPOSAL_DEPRECATION:.0%}. "
+                "Candidato a rimozione in una revisione pianificata."
             ),
         )
     if rate < MYSQL_RATE_STRATIFICATION:
@@ -114,7 +114,7 @@ def compute_verdict_mysql(n_success: int, n_fallback_disabled: int) -> Verdict:
             rationale=(
                 f"rate {rate:.2%} in zona "
                 f"{MYSQL_RATE_PROPOSAL_DEPRECATION:.0%}-"
-                f"{MYSQL_RATE_STRATIFICATION:.0%} (§9.2). "
+                f"{MYSQL_RATE_STRATIFICATION:.0%}. "
                 f"Valutare disable per-tenant via CARICA_BULK_INSERT=off."
             ),
         )
@@ -122,23 +122,23 @@ def compute_verdict_mysql(n_success: int, n_fallback_disabled: int) -> Verdict:
         code="KEEP",
         rate=rate,
         rationale=(
-            f"rate {rate:.2%} >= {MYSQL_RATE_STRATIFICATION:.0%} (§9.2). "
+            f"rate {rate:.2%} >= {MYSQL_RATE_STRATIFICATION:.0%}. "
             f"Path mantenuto."
         ),
     )
 
 
 def compute_verdict_pg(n_success: int, n_fallback_operational: int) -> Verdict:
-    """Applica §9.3. Denominator: success + fallback(copy_error).
+    """Applica la policy PostgreSQL. Denominator: success + fallback(copy_error).
     Esclusioni by-design: geometry, driver_unsupported, cursor_acquisition_failure.
-    Soglie invertite rispetto a §9.2 — PG rate alto = sano."""
+    PG rate alto = sano."""
     sample = n_success + n_fallback_operational
     if sample < PG_MIN_SAMPLE:
         return Verdict(
             code="PERIODO INVALIDO",
             rate=None,
             rationale=(
-                f"sample {sample} < {PG_MIN_SAMPLE} (§9.3). "
+                f"sample {sample} < {PG_MIN_SAMPLE}. "
                 f"Estendere finestra a 4 settimane o attendere traffico."
             ),
         )
@@ -148,7 +148,7 @@ def compute_verdict_pg(n_success: int, n_fallback_operational: int) -> Verdict:
             code="KEEP CONFERMATO",
             rate=rate,
             rationale=(
-                f"rate {rate:.2%} >= {PG_RATE_KEEP_CONFIRMED:.0%} (§9.3). "
+                f"rate {rate:.2%} >= {PG_RATE_KEEP_CONFIRMED:.0%}. "
                 f"Nessuna azione."
             ),
         )
@@ -159,7 +159,7 @@ def compute_verdict_pg(n_success: int, n_fallback_operational: int) -> Verdict:
             rationale=(
                 f"rate {rate:.2%} in zona "
                 f"{PG_RATE_OBSERVATION:.0%}-"
-                f"{PG_RATE_KEEP_CONFIRMED:.0%} (§9.3). "
+                f"{PG_RATE_KEEP_CONFIRMED:.0%}. "
                 f"Estendere +2 settimane, investigare cause puntuali."
             ),
         )
@@ -167,7 +167,7 @@ def compute_verdict_pg(n_success: int, n_fallback_operational: int) -> Verdict:
         code="ALERT REGRESSIONE",
         rate=rate,
         rationale=(
-            f"rate {rate:.2%} < {PG_RATE_OBSERVATION:.0%} (§9.3). "
+            f"rate {rate:.2%} < {PG_RATE_OBSERVATION:.0%}. "
             f"BUG signal — RCA su copy_error, baseline compare, "
             f"mitigazione temporanea CARICA_BULK_INSERT=off."
         ),
@@ -194,7 +194,7 @@ def format_mysql_section(
     sample = n_success + n_fallback_disabled
     rate_str = f"{verdict.rate:.2%}" if verdict.rate is not None else "n/d"
     return (
-        f"{_format_header('Verdetto §9.2 MySQL LOAD DATA')}\n"
+        f"{_format_header('Verdetto MySQL LOAD DATA')}\n"
         f"Periodo: {from_ts} -> {to_ts}\n"
         f"N_success_mysql:               {n_success}\n"
         f"N_fallback_disabled (1148):    {n_fallback_disabled}\n"
@@ -214,7 +214,7 @@ def format_pg_section(
     sample = n_success + n_fallback_operational
     rate_str = f"{verdict.rate:.2%}" if verdict.rate is not None else "n/d"
     return (
-        f"{_format_header('Verdetto §9.3 Postgres COPY')}\n"
+        f"{_format_header('Verdetto Postgres COPY')}\n"
         f"Periodo: {from_ts} -> {to_ts}\n"
         f"N_success_pg:                  {n_success}\n"
         f"N_fallback_operational:        {n_fallback_operational}\n"
@@ -240,7 +240,7 @@ def format_stage_swap_section(
             f"(fallback executemany su shadow puo' degradare TRUNCATE_INSERT > 500k)."
         )
     return (
-        f"{_format_header('Gap §6.R2 — stage_swap MySQL')}\n"
+        f"{_format_header('Gap stage_swap MySQL')}\n"
         f"Invocazioni (event=stage_swap.dispatched dialect=mysql): {n_dispatched}\n"
         f"-> {note}\n"
     )
@@ -249,11 +249,11 @@ def format_stage_swap_section(
 def format_stratification_section(rows: list) -> str:
     if not rows:
         return (
-            f"{_format_header('Stratificazione per-tenant MySQL (§9.2 zona 5-30%)')}\n"
+            f"{_format_header('Stratificazione per-tenant MySQL (zona 5-30%)')}\n"
             f"Nessun tenant con sample >= {STRATIFICATION_MIN_TENANT_SAMPLE} nel periodo.\n"
         )
     lines = [
-        f"{_format_header('Stratificazione per-tenant MySQL (§9.2 zona 5-30%)')}",
+        f"{_format_header('Stratificazione per-tenant MySQL (zona 5-30%)')}",
         f"{'user_id':<40} {'n_success':>10} {'n_fallback':>12} {'rate':>8}",
         "-" * 74,
     ]
@@ -266,7 +266,7 @@ def format_stratification_section(rows: list) -> str:
         lines.append(f"{uid:<40} {ns:>10} {nf:>12} {rate_str:>8}")
     lines.append(
         "\nTenant con rate molto basso sono candidati a disable per-tenant "
-        "via CARICA_BULK_INSERT=off (review §6.3 kill-switch preservato)."
+        "via CARICA_BULK_INSERT=off (kill-switch preservato)."
     )
     return "\n".join(lines) + "\n"
 
@@ -336,8 +336,8 @@ def _parse_iso_date(s: str) -> str:
 def main(argv: Optional[list] = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Calcola verdetto post-osservazione bulk (§9.2 MySQL / §9.3 PG / "
-            "stage_swap MySQL) applicando le soglie di kickoff.md."
+            "Calcola verdetto post-osservazione bulk (MySQL / PG / "
+            "stage_swap MySQL) applicando le soglie operative."
         ),
     )
     parser.add_argument(

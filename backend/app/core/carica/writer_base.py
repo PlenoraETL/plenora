@@ -26,7 +26,7 @@ class DestinationWriter(ABC):
     Attributes:
         config: configurazione completa del nodo CARICA
         progress_callback: funzione opzionale per aggiornare il progresso
-            (usata dal task Celery per aggiornare Redis)
+            del task runtime
     """
 
     def __init__(
