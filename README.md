@@ -43,6 +43,7 @@ Extended setup:
 - Development onboarding: [docs/development/onboarding.md](docs/development/onboarding.md)
 - Backend setup: [docs/development/backend.md](docs/development/backend.md)
 - Frontend setup: [docs/development/frontend.md](docs/development/frontend.md)
+- Windows native install: [docs/ops/install-windows.md](docs/ops/install-windows.md)
 - Clean install, non-Docker: [docs/ops/install-non-docker.md](docs/ops/install-non-docker.md)
 - Clean install, Docker: [docs/ops/install-docker.md](docs/ops/install-docker.md)
 
@@ -76,7 +77,7 @@ All canonical documentation lives under [docs/](docs/).
 - Product: [overview](docs/product/overview.md), [release 1.0 readiness](docs/product/release-1.0.md)
 - Architecture: [overview](docs/architecture/overview.md), [macro components](docs/architecture/macro-components.md), [horizontal engines](docs/architecture/horizontal-engines.md), [invariants](docs/architecture/invariants.md)
 - Development: [onboarding](docs/development/onboarding.md), [backend](docs/development/backend.md), [frontend](docs/development/frontend.md), [contributing](docs/development/contributing.md), [code map](docs/development/code-map.md), [bug ledger](docs/development/bug-ledger.md)
-- Ops: [install non-Docker](docs/ops/install-non-docker.md), [install Docker](docs/ops/install-docker.md), [runbook](docs/ops/runbook.md), [backup/restore](docs/ops/backup-restore.md), [incident response](docs/ops/incident_response.md)
+- Ops: [install Windows](docs/ops/install-windows.md), [install non-Docker](docs/ops/install-non-docker.md), [install Docker](docs/ops/install-docker.md), [runbook](docs/ops/runbook.md), [backup/restore](docs/ops/backup-restore.md), [incident response](docs/ops/incident_response.md)
 - Compliance: [secrets management](docs/compliance/secrets-management.md), [SBOM](docs/compliance/sbom.md), [ISO 27001 SoA](docs/compliance/soa-iso-27001.md), [GDPR register](docs/compliance/registro-trattamenti-gdpr.md)
 
 Start from [docs/README.md](docs/README.md) for the full index.

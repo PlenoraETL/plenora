@@ -12,7 +12,7 @@ paths work from a clean checkout:
 - `/health` and `/ready` return success;
 - a smoke pipeline can be created, executed, previewed, and downloaded;
 - backup, restore, incident response, and deploy rollback docs are current;
-- Docker and non-Docker installation paths are both documented.
+- Windows native, Docker, and non-Docker installation paths are documented.
 
 ## 1.0 Must-Haves
 
@@ -23,7 +23,7 @@ paths work from a clean checkout:
 | Resources | Large artifact access is bounded; no unbounded stream joins in hot paths. |
 | Execution | Canvas execution returns typed or clearly bounded contracts. |
 | Frontend | Uses backend error/resource contracts without `detail`-only assumptions. |
-| Installation | Non-Docker install validated on a fresh Linux PC from a clean clone. |
+| Installation | Windows native install validated end-to-end on Windows Server 2025; Linux non-Docker still needs a fresh-host report. |
 | Docker | Compose path validated end-to-end, including frontend delivery. |
 | Docs | Canonical docs describe current reality. |
 
@@ -31,7 +31,7 @@ paths work from a clean checkout:
 
 | Blocker | Why it matters | Close condition |
 |---|---|---|
-| First clean Linux install not yet proven | A product that cannot be installed cleanly is not 1.0. | Completed report from a fresh machine with health, ready, worker, beat, and frontend checks. |
+| First clean Linux install not yet proven | The Linux non-Docker path is documented but still needs fresh-host evidence. | Completed report from a fresh machine with health, ready, worker, beat, and frontend checks. |
 | Docker validation not yet evidenced | Compose is a release path only after it has been run end-to-end on Linux. | `install-docker.md` acceptance gate passes on a clean host. |
 | Documentation drift | Operators need one trusted path during incidents and installs. | `docs/README.md` links only current product and operations docs. |
 
@@ -53,7 +53,8 @@ and documented runtime dependencies.
 
 Plenora can be tagged 1.0 when:
 
-1. The latest `main` commit installs cleanly on a fresh Linux PC.
+1. The latest `main` commit installs cleanly on Windows Server and has a
+   fresh-host Linux validation report for the non-Docker path.
 2. Docker compose runs the full product path or clearly documents the only
    excluded piece with a tested replacement.
 3. A smoke pipeline can be created, executed, previewed, and downloaded.

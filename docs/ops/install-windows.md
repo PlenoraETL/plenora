@@ -9,9 +9,8 @@ Collaudato end-to-end su Windows Server 2025 (2026-07-04). Validazione
 post-install automatica con `scripts\validate-windows-install.ps1
 -RunE2E -RequireFrontend -RequireMinio` verde su VM Windows Server 2025
 (2026-07-05): servizi, `/ready`, frontend, smoke nativo, `tests2/functional`
-23 passed, e ripartenza post-reboot confermata. La sessione di scoping
-con tutte le lezioni raccolte sul campo e' in
-[scoping-windows-native.md](scoping-windows-native.md).
+23 passed, e ripartenza post-reboot confermata. Questo documento e' il
+sorgente canonico anche per il manuale PDF operativo.
 
 ## Indice
 
@@ -23,8 +22,9 @@ con tutte le lezioni raccolte sul campo e' in
 6. [Test e2e-v2 sull'ambiente installato](#6-test-e2e-v2-sullambiente-installato)
 7. [Operativita' quotidiana](#7-operativita-quotidiana)
 8. [Aggiornamento del software](#8-aggiornamento-del-software)
-9. [Troubleshooting](#9-troubleshooting)
-10. [Disinstallazione](#10-disinstallazione)
+9. [Checklist operative](#9-checklist-operative)
+10. [Troubleshooting](#10-troubleshooting)
+11. [Disinstallazione](#11-disinstallazione)
 
 ---
 
@@ -156,7 +156,8 @@ ufficiale, impacchettata in uno script non distruttivo:
 
 ```powershell
 cd C:\plenora
-powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1
+powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1 `
+    -RequireFrontend -RequireMinio
 ```
 
 Lo script verifica servizi Windows, `/ready` attraverso Caddy, frontend
@@ -190,13 +191,15 @@ curl.exe -s http://127.0.0.1/ready
 Con la suite functional isolata:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1 -RunE2E
+powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1 `
+    -RunE2E -RequireFrontend -RequireMinio
 ```
 
 Con functional + integration:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1 -RunE2E -Integration
+powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1 `
+    -RunE2E -Integration -RequireFrontend -RequireMinio
 ```
 
 Batteria estesa (collaudo da accettazione):
@@ -273,17 +276,62 @@ Stop-Service plenora-*                   # stop ordinato di tutto
 
 ```powershell
 cd C:\plenora
-git pull
+git fetch origin
+git pull --ff-only origin main
+git log -1 --oneline
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1 `
-    -SkipWinget -InstallServices -InstallFrontend -SkipAdminBootstrap `
-    <eventuali altri switch usati all'install>
+    -SkipWinget -InstallServices -InstallMinio -InstallFrontend `
+    -SkipAdminBootstrap -Production
 ```
 
 Idempotente: rigenera i servizi (stop/refresh config/start), riesegue
 le migrations al boot del backend, ricostruisce il FE. I dati (PG,
 MinIO) non vengono toccati.
 
-## 9. Troubleshooting
+Se l'installazione usa una porta frontend diversa da 80, ripassare la
+stessa porta usata in installazione:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1 `
+    -SkipWinget -InstallServices -InstallMinio -InstallFrontend `
+    -SkipAdminBootstrap -Production -FrontendPort 8080
+```
+
+Validare sempre dopo l'update:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1 `
+    -RequireFrontend -RequireMinio
+powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1 `
+    -RunE2E -RequireFrontend -RequireMinio
+```
+
+## 9. Checklist operative
+
+Installazione nuova:
+
+- [ ] PowerShell Amministratore aperta.
+- [ ] Repository clonato in `C:\plenora`.
+- [ ] `git log -1 --oneline` mostra il commit atteso.
+- [ ] Prima fase installer completata.
+- [ ] PowerShell riaperta dopo winget.
+- [ ] Seconda fase installer completata con `-Production`.
+- [ ] Login superadmin riuscito.
+- [ ] `validate-windows-install.ps1 -RequireFrontend -RequireMinio` verde.
+- [ ] `validate-windows-install.ps1 -RunE2E -RequireFrontend -RequireMinio` verde.
+
+Update:
+
+- [ ] PowerShell Amministratore aperta.
+- [ ] `git pull --ff-only origin main` completato.
+- [ ] Commit verificato con `git log -1 --oneline`.
+- [ ] Installer rilanciato con `-SkipAdminBootstrap`.
+- [ ] Servizi `plenora-*` Running.
+- [ ] `/ready` verde.
+- [ ] Validazione base verde.
+- [ ] Validazione e2e-v2 verde.
+
+## 10. Troubleshooting
 
 | Sintomo | Causa e rimedio |
 |---|---|
@@ -291,19 +339,34 @@ MinIO) non vengono toccati.
 | Servizio RabbitMQ `Stopped`, zero log | `ERLANG_HOME` mancante a livello macchina (l'installer la imposta; verificare dopo update manuali di Erlang) |
 | RabbitMQ `BOOT FAILED ... incompatible_feature_flags {horus, unknown_instruction}` | Erlang/OTP troppo nuovo per la versione RabbitMQ: usare la serie OTP supportata (oggi 28.x — l'installer la pinna) |
 | `rabbitmqctl` → `incompatible cookie` | Cookie Erlang dell'utente ≠ LocalSystem: copiare `C:\Windows\System32\config\systemprofile\.erlang.cookie` in `%USERPROFILE%` (l'installer lo fa da solo) |
-| Password `postgres` sconosciuta (install winget) | Reset locale: backup di `pg_hba.conf`, `scram-sha-256`→`trust`, restart `postgresql-x64-17`, `ALTER USER postgres WITH PASSWORD '...'`, ripristino file, restart (dettagli in scoping-windows-native.md §2) |
+| Password `postgres` sconosciuta (install winget) | Reset locale: procedura sotto. |
 | Login dal browser: "Impossibile contattare il server" | Hostname diverso dall'origin della build FE (es. `localhost` vs `127.0.0.1`): usare `http://127.0.0.1/`; l'installer scrive CORS per entrambe |
 | Porta 80 occupata (IIS?) | Reinstallare il FE con `-FrontendPort 8080` (ribuilda anche il bundle sull'origin nuovo) |
 | `/ready` not_ready su `object_storage` | Provider cloud configurato senza credenziali: con MinIO usare `-InstallMinio`; senza object storage (solo dev) `OBJECT_STORAGE_ENABLED=false` |
 | Task in coda ma mai eseguiti | `plenora-worker` giu' o `.env` broker cambiato senza restart del servizio |
 | Un processo Erlang blocca update/cleanup | `epmd.exe` resta vivo dopo stop/uninstall: `Stop-Process -Name epmd -Force` |
 
+Reset locale della password `postgres`:
+
+```powershell
+$pgData = 'C:\Program Files\PostgreSQL\17\data'
+$pgBin = 'C:\Program Files\PostgreSQL\17\bin'
+Copy-Item "$pgData\pg_hba.conf" "$pgData\pg_hba.conf.bak"
+(Get-Content "$pgData\pg_hba.conf") `
+    -replace 'scram-sha-256','trust' `
+    | Set-Content "$pgData\pg_hba.conf"
+Restart-Service postgresql-x64-17
+& "$pgBin\psql.exe" -U postgres -c "ALTER USER postgres WITH PASSWORD '<nuova-password-forte>';"
+Copy-Item "$pgData\pg_hba.conf.bak" "$pgData\pg_hba.conf" -Force
+Restart-Service postgresql-x64-17
+```
+
 Trappola per chi modifica gli script: i `.ps1` del repo sono **UTF-8
 con BOM** — PowerShell 5.1 senza BOM li legge come ANSI e una em-dash
 dentro una stringa double-quoted diventa una virgoletta smart che
 CHIUDE la stringa (parse error fantasma piu' avanti nel file).
 
-## 10. Disinstallazione
+## 11. Disinstallazione
 
 ```powershell
 # Servizi applicativi (per ciascuno: plenora-backend, plenora-worker,

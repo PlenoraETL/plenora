@@ -114,13 +114,27 @@ source of truth.
 
 Clean installation work has two tracks:
 
-- single-machine installation with PostgreSQL, RabbitMQ, backend, worker, beat,
-  and frontend;
+- Windows native single-box installation with PostgreSQL, RabbitMQ, backend,
+  worker, beat, optional MinIO, and frontend as Windows services;
+- Linux single-machine installation with PostgreSQL, RabbitMQ, backend,
+  worker, beat, and frontend;
 - Docker installation with backend, worker, beat, PostgreSQL, RabbitMQ, and
   frontend image/static delivery documented in the compose path.
 
 The release target is not only "starts locally"; it must be reproducible on
-a clean machine.
+a clean machine. The Windows native path was validated end-to-end on Windows
+Server 2025 on 2026-07-05.
+
+## Review Checklist
+
+Before changing backend architecture, check:
+
+- Does the change preserve tenant/group isolation?
+- Does it keep large payloads out of generic dictionaries and API responses?
+- Does it use an existing engine boundary instead of adding a broad facade?
+- Does it avoid direct infrastructure clients in business modules?
+- Does it keep frontend/backend contracts explicit?
+- Do architecture and operations docs still match runtime behavior?
 
 ## Non-Goals
 
@@ -136,4 +150,5 @@ a clean machine.
 - [Architecture Invariants](invariants.md)
 - [Backend Development](../development/backend.md)
 - [Frontend Development](../development/frontend.md)
+- [Windows Native Install](../ops/install-windows.md)
 - [Docker Install](../ops/install-docker.md)

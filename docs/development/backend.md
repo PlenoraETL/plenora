@@ -132,6 +132,7 @@ See:
 
 ## Operational References
 
+- [Windows native install](../ops/install-windows.md)
 - [Clean install, non-Docker](../ops/install-non-docker.md)
 - [Clean install, Docker](../ops/install-docker.md)
 - [Runbook](../ops/runbook.md)

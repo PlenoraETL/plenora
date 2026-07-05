@@ -16,6 +16,7 @@ history preserves that context.
 | Horizontal engine map | [Horizontal engines](architecture/horizontal-engines.md) |
 | Backend development | [Backend guide](development/backend.md) |
 | Frontend development | [Frontend guide](development/frontend.md) |
+| Clean install, Windows native | [Windows native install](ops/install-windows.md) |
 | Clean install, single machine | [Non-Docker install](ops/install-non-docker.md) |
 | Clean install, Docker | [Docker install procedures](ops/install-docker.md) |
 | Clean install, single-server Docker | [Single-server Docker install](ops/install-docker-single-server.md) |
@@ -41,11 +42,11 @@ history preserves that context.
 - [Frontend](development/frontend.md)
 - [Contributing](development/contributing.md)
 - [Code map](development/code-map.md)
-- [Backend visual model](development/backend-visual-model.md)
 - [Bug marker ledger](development/bug-ledger.md)
 
 ## Operations
 
+- [Windows native install](ops/install-windows.md) ([PDF](ops/install-windows.pdf))
 - [Clean install, non-Docker](ops/install-non-docker.md)
 - [Docker install procedures](ops/install-docker.md)
 - [Clean install, single-server Docker](ops/install-docker-single-server.md)
