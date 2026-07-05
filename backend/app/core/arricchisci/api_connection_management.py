@@ -19,10 +19,13 @@ from app.core.arricchisci._api_connection_helpers import (
     _decrypt_auth_in_config,
     _encrypt_auth_in_config,
 )
+from app.core.arricchisci.http_executor import (
+    RequestSpec,
+    execute_http_request,
+    timeout_from_options,
+)
 from app.core.arricchisci.types import JsonObject, JsonObjectById, JsonRows
 import app.core.arricchisci.db as db_svc
-from app.core.security.outbound_url import validate_external_url
-from app.infrastructure.http.session import get_shared_session
 from app.shared.connections.oauth import get_arcgis_token
 from app.utils.logger import get_logger
 from app.core.artifacts.static_parameters import process_static_fields
@@ -449,6 +452,7 @@ class ApiConnectionManagementMixin:
         method = config.get("endpoint", {}).get("method", "GET").upper()
         auth = config.get("auth", {})
         custom_headers = config.get("custom_headers", {})
+        options = config.get("options", {}) or {}
 
         if not url:
             return {"success": False, "error": "URL non configurato"}
@@ -462,26 +466,17 @@ class ApiConnectionManagementMixin:
         if auth_err is not None:
             return auth_err
 
-        # Anti-SSRF: valida URL prima di eseguire la richiesta. Il
-        # messaggio di `validate_external_url` include gia' il prefisso
-        # "URL bloccato:" / "URL non valido:", quindi NON wrappare
-        # ulteriormente o si ottiene il prefisso doppio
         try:
-            validate_external_url(url)
-        except ValueError as ssrf_err:
-            return {"success": False, "error": str(ssrf_err)}
-
-        try:
-            if method == 'GET':
-                response = get_shared_session().get(
-                    url, params=params, headers=headers, timeout=30,
-                    allow_redirects=False,
-                )
-            else:
-                response = get_shared_session().post(
-                    url, json=params, headers=headers, timeout=30,
-                    allow_redirects=False,
-                )
+            response = execute_http_request(RequestSpec(
+                url=url,
+                method=method,
+                params=params,
+                json_body=params,
+                headers=headers,
+                timeout=timeout_from_options(options, default_read_timeout=30),
+                allow_redirects=False,
+                context="test_api_connection",
+            ))
 
             result = {
                 "success": response.status_code == 200,
@@ -507,6 +502,8 @@ class ApiConnectionManagementMixin:
 
             return result
 
+        except ValueError as ssrf_err:
+            return {"success": False, "error": str(ssrf_err)}
         except requests.exceptions.Timeout:
             return {"success": False, "error": "Timeout: l'API non ha risposto entro 30 secondi"}
         except requests.exceptions.ConnectionError as e:

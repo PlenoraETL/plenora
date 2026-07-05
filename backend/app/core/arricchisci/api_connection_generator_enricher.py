@@ -16,9 +16,12 @@ from app.core.dataframes.tabular import (
     dataframe_from_records,
     dataframe_from_rows,
 )
+from app.core.arricchisci.http_executor import (
+    RequestSpec,
+    execute_http_request,
+    timeout_from_options,
+)
 from app.observability.log_sanitization import sanitize_for_log
-from app.core.security.outbound_url import validate_external_url
-from app.infrastructure.http.session import get_shared_session
 from app.shared.resources.json_path import extract_json_value as _shared_extract_json_value
 from app.utils.logger import get_logger
 from app.core.arricchisci.response_parser import ResponseParser, get_preset_config
@@ -201,6 +204,7 @@ class ApiConnectionGeneratorEnricherMixin:
         headers: JsonObject,
         call_params: JsonObject,
         call_url: Optional[str],
+        options: JsonObject,
         response_preset: str,
         response_config: JsonObject,
         output_mapping: JsonRows,
@@ -220,18 +224,17 @@ class ApiConnectionGeneratorEnricherMixin:
             target_url, call_params, safe=''
         )
 
-        validate_external_url(target_url)
-
         logger.info(f"Generator API call: {method} {target_url}")
-        session = get_shared_session()
-        if method == 'GET':
-            resp = session.get(
-                target_url, params=query_params, headers=headers, timeout=60
-            )
-        else:
-            resp = session.post(
-                target_url, json=call_params, headers=headers, timeout=60
-            )
+        resp = execute_http_request(RequestSpec(
+            url=target_url,
+            method=method,
+            params=query_params,
+            json_body=call_params,
+            headers=headers,
+            timeout=timeout_from_options(options, default_read_timeout=60),
+            allow_redirects=False,
+            context="API generator",
+        ))
 
         if resp.status_code != 200:
             err = resp.text[:500] if resp.text else 'nessuna risposta'
@@ -335,6 +338,7 @@ class ApiConnectionGeneratorEnricherMixin:
         response_config = api_config.get('response_config', {})
         response_preset = api_config.get('response_preset', '')
         pagination = api_config.get('pagination', {})
+        options = api_config.get('options', {}) or {}
 
         if not url:
             raise ValueError("URL API non configurato")
@@ -349,6 +353,7 @@ class ApiConnectionGeneratorEnricherMixin:
                 headers=headers,
                 call_params=call_params,
                 call_url=call_url,
+                options=options,
                 response_preset=response_preset,
                 response_config=response_config,
                 output_mapping=output_mapping,

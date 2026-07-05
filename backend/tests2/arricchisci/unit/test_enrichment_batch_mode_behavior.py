@@ -90,14 +90,16 @@ class _FakeSession:
             raise item
         return item
 
-    def get(self, url, params=None, headers=None, timeout=None):
+    def get(self, url, params=None, headers=None, timeout=None, **kwargs):
         self.get_calls.append({"url": url, "params": params,
-                               "headers": headers, "timeout": timeout})
+                               "headers": headers, "timeout": timeout,
+                               **kwargs})
         return self._next()
 
-    def post(self, url, json=None, headers=None, timeout=None):
+    def post(self, url, json=None, headers=None, timeout=None, **kwargs):
         self.post_calls.append({"url": url, "json": json,
-                                "headers": headers, "timeout": timeout})
+                                "headers": headers, "timeout": timeout,
+                                **kwargs})
         return self._next()
 
 
@@ -170,7 +172,14 @@ def _make_host(monkeypatch, *, responses, output_mapping=None,
         options = EnrichmentOptions(max_retries=0, rate_limit=1000.0)
 
     session = _FakeSession(responses)
-    monkeypatch.setattr(batch_mod, "get_shared_session", lambda: session)
+    monkeypatch.setattr(
+        "app.core.arricchisci.http_executor.get_shared_session",
+        lambda: session,
+    )
+    monkeypatch.setattr(
+        "app.core.arricchisci.http_executor.validate_external_url",
+        lambda _url: None,
+    )
     monkeypatch.setattr(batch_mod.time, "sleep", lambda *_a, **_k: None)
 
     host = _Host(output_mapping=output_mapping, batch_config=batch_config,

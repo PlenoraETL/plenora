@@ -59,15 +59,12 @@ def gen_env(api_service):
             svc=api_service,
             session=session,
             shared_session=_p(
-                "app.core.arricchisci.api_connection_generator_enricher."
+                "app.core.arricchisci.http_executor."
                 "get_shared_session",
                 return_value=session,
             ),
-            # `api_connection_generator_enricher` fa `from ... import
-            # validate_external_url`, quindi il binding e' locale al modulo
-            # consumer: patch dell'origine non basta.
             ssrf=_p(
-                "app.core.arricchisci.api_connection_generator_enricher."
+                "app.core.arricchisci.http_executor."
                 "validate_external_url",
                 return_value=None,
             ),
@@ -146,6 +143,28 @@ class TestGeneratorBasics:
         gen_env.svc._execute_api_generator(cfg)
         kwargs = gen_env.session.get.call_args.kwargs
         assert kwargs.get("params", {}).get("apikey") == "SECRET123"
+
+    def test_options_timeout_used_for_generator_call(self, gen_env):
+        gen_env.session.get.return_value = _resp(200, json_body=[])
+        cfg = {
+            "endpoint": {"url": "https://api.test/q", "method": "GET"},
+            "auth": {},
+            "options": {"timeout": 12},
+            "output_mapping": [],
+        }
+        gen_env.svc._execute_api_generator(cfg)
+        assert gen_env.session.get.call_args.kwargs["timeout"] == 12
+
+    def test_split_timeout_options_used_for_generator_call(self, gen_env):
+        gen_env.session.get.return_value = _resp(200, json_body=[])
+        cfg = {
+            "endpoint": {"url": "https://api.test/q", "method": "GET"},
+            "auth": {},
+            "options": {"connect_timeout": 2, "request_timeout": 9},
+            "output_mapping": [],
+        }
+        gen_env.svc._execute_api_generator(cfg)
+        assert gen_env.session.get.call_args.kwargs["timeout"] == (2, 9)
 
     def test_http_error_raises_value_error(self, gen_env):
         gen_env.session.get.return_value = _resp(500, text="server crashed")

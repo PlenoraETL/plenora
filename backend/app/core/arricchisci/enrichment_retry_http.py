@@ -14,9 +14,7 @@ from typing import Optional, Tuple
 
 import requests
 
-from app.infrastructure.http.session import (
-    get_shared_session,
-)
+from app.core.arricchisci.http_executor import RequestSpec, execute_http_request
 from app.core.arricchisci.types import JsonObject
 from app.observability.log_sanitization import (
     sanitize_for_log,
@@ -100,8 +98,6 @@ class EnrichmentRetryHttpMixin:
 
         for attempt in range(self.options.max_retries + 1):
             try:
-                start_time = time.time()
-
                 # disable_ssl_verify e' user-config (EnrichmentOptions); il
                 # gate `resolve_tls_verify` lo forza a True in prod/staging
                 # (signal MITM-prevention) e lo permette solo con opt-in env
@@ -135,27 +131,19 @@ class EnrichmentRetryHttpMixin:
                     f"params={sanitize_for_log(call_params, self.auth)}"
                 )
 
-                _session = get_shared_session()
-                if self.method == "GET":
-                    response = _session.get(
-                        call_url,
-                        params=call_params,
-                        headers=self._headers,
-                        timeout=(self.options.connect_timeout, self.options.request_timeout),
-                        verify=ssl_verify,
-                        allow_redirects=False,
-                    )
-                else:
-                    response = _session.post(
-                        call_url,
-                        json=call_params,
-                        headers=self._headers,
-                        timeout=(self.options.connect_timeout, self.options.request_timeout),
-                        verify=ssl_verify,
-                        allow_redirects=False,
-                    )
+                response = execute_http_request(RequestSpec(
+                    url=call_url,
+                    method=self.method,
+                    params=call_params,
+                    json_body=call_params,
+                    headers=self._headers,
+                    timeout=(self.options.connect_timeout, self.options.request_timeout),
+                    verify=ssl_verify,
+                    allow_redirects=False,
+                    context="API enricher per-row",
+                ))
 
-                elapsed_ms = (time.time() - start_time) * 1000
+                elapsed_ms = response.elapsed_ms
                 with self._stats_lock:
                     # deque con maxlen=1000: auto-trunca i piu' vecchi
                     self._response_times.append(elapsed_ms)
@@ -237,6 +225,15 @@ class EnrichmentRetryHttpMixin:
                     status=RowStatus.ERROR,
                     error_message=f"Timeout dopo {self.options.request_timeout}s",
                     error_type="timeout",
+                    retry_count=attempt
+                )
+
+            except ValueError as e:
+                last_error = RowError(
+                    row_index=row_index,
+                    status=RowStatus.ERROR,
+                    error_message=str(e),
+                    error_type="request_error",
                     retry_count=attempt
                 )
 

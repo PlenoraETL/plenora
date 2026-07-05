@@ -13,7 +13,8 @@ import requests
 
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.tabular import iter_dataframe_indexed_rows
-from app.infrastructure.http.session import get_shared_session
+from app.core.arricchisci.http_executor import RequestSpec, execute_http_request
+from app.shared.security.tls_policy import resolve_tls_verify
 from app.utils.logger import get_logger
 
 from app.core.arricchisci.models import (
@@ -208,27 +209,23 @@ class EnrichmentBatchModeMixin:
 
         for attempt in range(self.options.max_retries + 1):
             try:
-                start_time = time.time()
+                ssl_verify = resolve_tls_verify(
+                    not getattr(self.options, 'disable_ssl_verify', False),
+                    context="API enricher batch",
+                )
+                response = execute_http_request(RequestSpec(
+                    url=url,
+                    method=method,
+                    params=payload,
+                    json_body=payload,
+                    headers=self._headers,
+                    timeout=(self.options.connect_timeout, self.options.request_timeout),
+                    verify=ssl_verify,
+                    allow_redirects=False,
+                    context="API enricher batch",
+                ))
 
-                _session = get_shared_session()
-                if method == "GET":
-                    response = _session.get(
-                        url,
-                        params=payload,
-                        headers=self._headers,
-                        timeout=(self.options.connect_timeout, self.options.request_timeout),
-                        allow_redirects=False,
-                    )
-                else:
-                    response = _session.post(
-                        url,
-                        json=payload,
-                        headers=self._headers,
-                        timeout=(self.options.connect_timeout, self.options.request_timeout),
-                        allow_redirects=False,
-                    )
-
-                elapsed_ms = (time.time() - start_time) * 1000
+                elapsed_ms = response.elapsed_ms
                 with self._stats_lock:
                     # deque con maxlen=1000: auto-trunca i piu' vecchi
                     self._response_times.append(elapsed_ms)
@@ -288,6 +285,15 @@ class EnrichmentBatchModeMixin:
                     status=RowStatus.ERROR,
                     error_message=f"Timeout dopo {self.options.request_timeout}s",
                     error_type="timeout",
+                    retry_count=attempt
+                )
+
+            except ValueError as e:
+                last_error = RowError(
+                    row_index=batch_indices[0],
+                    status=RowStatus.ERROR,
+                    error_message=str(e),
+                    error_type="request_error",
                     retry_count=attempt
                 )
 

@@ -51,15 +51,12 @@ def tac_env(api_service):
             svc=api_service,
             session=session,
             shared_session=_p(
-                "app.core.arricchisci.api_connection_management."
+                "app.core.arricchisci.http_executor."
                 "get_shared_session",
                 return_value=session,
             ),
-            # `api_connection_management` fa `from ... import
-            # validate_external_url`, quindi il binding e' locale al modulo
-            # consumer: patch dell'origine non basta.
             ssrf=_p(
-                "app.core.arricchisci.api_connection_management."
+                "app.core.arricchisci.http_executor."
                 "validate_external_url",
                 return_value=None,
             ),
@@ -241,6 +238,24 @@ class TestTestApiConnectionHttp:
         tac_env.svc.test_api_connection(config=cfg, test_params={"x": 1})
         tac_env.session.post.assert_called_once()
         tac_env.session.get.assert_not_called()
+
+    def test_options_timeout_used_for_http_call(self, tac_env):
+        cfg = {
+            "endpoint": {"url": "https://api.test/q", "method": "GET"},
+            "auth": {},
+            "options": {"timeout": 11},
+        }
+        tac_env.svc.test_api_connection(config=cfg, test_params={})
+        assert tac_env.session.get.call_args.kwargs["timeout"] == 11
+
+    def test_split_timeout_options_used_for_http_call(self, tac_env):
+        cfg = {
+            "endpoint": {"url": "https://api.test/q", "method": "GET"},
+            "auth": {},
+            "options": {"connect_timeout": 3, "request_timeout": 14},
+        }
+        tac_env.svc.test_api_connection(config=cfg, test_params={})
+        assert tac_env.session.get.call_args.kwargs["timeout"] == (3, 14)
 
     def test_http_error_returned_in_result_dict(self, tac_env):
         tac_env.session.get.return_value = _resp(500, text="server crashed")
