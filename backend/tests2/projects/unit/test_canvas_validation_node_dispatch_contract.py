@@ -121,3 +121,26 @@ def test_no_validator_registered_is_structural_only():
     tr = _node("t", "transform", transform_op="join")
     report = _validate(_canvas([fs, tr], [_edge("f", "t")]))
     assert all(not i.code.startswith("test.") for i in report.issues)
+
+
+def test_arricchisci_stale_api_connection_reads_flat_top_level_api_id():
+    from app.core.projects.canvas_validation import validate_canvas
+
+    src = _node("s", "staticValues")
+    enr = _node("e", "api_enrich")
+    enr.api_id = "gone"
+    enr.label = "API piatta"
+    res = _node("r", "result")
+
+    report = validate_canvas(
+        _canvas([src, enr, res], [_edge("s", "e"), _edge("e", "r")]),
+        project_type="arricchisci",
+        available_api_connection_ids={"still-here"},
+    )
+
+    assert any(
+        i.code == "ARRICCHISCI_API_CONNECTION_STALE"
+        and i.node_id == "e"
+        and i.suggestion == {"api_id": "gone"}
+        for i in report.issues
+    )

@@ -731,6 +731,12 @@ def execute_enrichment_async(
             )
         if metadata.project_type != "arricchisci":
             raise HTTPException(400, f"Progetto '{project_id}' non è di tipo 'arricchisci'")
+        from app.core.orchestrator.service import canvas_validation_gate_blocks
+        if canvas_validation_gate_blocks(getattr(metadata, "canvas_validated", False)):
+            raise HTTPException(
+                status_code=409,
+                detail="Canvas non validato: apri il progetto e premi Valida prima di eseguire.",
+            )
 
         canvas = _project_service.get_project_canvas(project_id)
         if not canvas:

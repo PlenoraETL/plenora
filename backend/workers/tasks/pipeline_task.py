@@ -232,6 +232,7 @@ def execute_pipeline_task(
                 force_recalculate=force_recalculate,
                 skip_carica=False,
                 run_id=run_id,
+                user_id=user_id,
                 intermediate_mode_override=intermediate_mode_override,
             )
         else:
@@ -240,6 +241,7 @@ def execute_pipeline_task(
                 force_recalculate=force_recalculate,
                 skip_carica=False,
                 run_id=run_id,
+                user_id=user_id,
                 intermediate_mode_override=intermediate_mode_override,
             )
 

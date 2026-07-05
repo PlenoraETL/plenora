@@ -17,7 +17,7 @@ from typing_extensions import TypedDict
 import jwt
 
 from app.config import settings as _settings
-from app.environment import environment_name, get_env
+from app.environment import environment_name, get_env, is_hardened_environment
 
 ALGORITHM = "HS256"
 
@@ -44,7 +44,7 @@ if _jwt_env_value:
     SECRET_KEY = _jwt_env_value
 else:
     _env = environment_name()
-    if _env in ("production", "prod", "staging"):
+    if is_hardened_environment():
         # RuntimeError invece di SystemExit: catturabile dai test, gestibile
         # dal framework FastAPI/uvicorn invece di kill brutale del processo
         raise RuntimeError(

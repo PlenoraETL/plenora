@@ -142,7 +142,8 @@ class EnrichmentRetryHttpMixin:
                         params=call_params,
                         headers=self._headers,
                         timeout=(self.options.connect_timeout, self.options.request_timeout),
-                        verify=ssl_verify
+                        verify=ssl_verify,
+                        allow_redirects=False,
                     )
                 else:
                     response = _session.post(
@@ -150,7 +151,8 @@ class EnrichmentRetryHttpMixin:
                         json=call_params,
                         headers=self._headers,
                         timeout=(self.options.connect_timeout, self.options.request_timeout),
-                        verify=ssl_verify
+                        verify=ssl_verify,
+                        allow_redirects=False,
                     )
 
                 elapsed_ms = (time.time() - start_time) * 1000

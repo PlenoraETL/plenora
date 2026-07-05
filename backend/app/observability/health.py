@@ -173,9 +173,9 @@ def check_migrations_aligned() -> CheckOutcome:
             )
         return False, f"unknown migration state: {status.state}"
     except Exception as e:
-        # Non falliamo /ready per un problema di introspection stessa —
-        # un check PG/Redis a monte ha gia' validato la raggiungibilita'
-        return True, f"check skipped: {type(e).__name__}"
+        # Fail-closed: se non possiamo confermare lo stato migration,
+        # l'app non deve dichiararsi pronta.
+        return False, f"check failed: {type(e).__name__}"
 
 
 def check_pool_headroom() -> CheckOutcome:

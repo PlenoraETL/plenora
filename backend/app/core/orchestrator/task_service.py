@@ -405,6 +405,7 @@ class TaskService:
         output_contract_loader: Callable[[str], object],
         output_format: str = "geojson",
         triggered_by: str = "manual",
+        user_id: Optional[str] = None,
         message_suffix: str = "",
         resilient: bool = True,
         on_unconnected: Optional[Callable[[Any], None]] = None,
@@ -456,6 +457,7 @@ class TaskService:
                     carica_node_data=carica_node_data,
                     output_format=output_format,
                     triggered_by=triggered_by,
+                    user_id=user_id,
                 )
                 logger.info(
                     f"Task CARICA avviato: {task_info.task_id} (nodo: {node_id}, "

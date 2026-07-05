@@ -12,7 +12,7 @@ ref cross-tenant (``find_inaccessible_canvas_refs``) resta al boundary del route
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from app.core.projects.canvas_access import find_orphan_processing_nodes
 from app.core.projects.schema_inference import SchemaInferenceService
@@ -20,6 +20,23 @@ from app.shared.execution.graph import GraphCycleError, kahn_topological_order
 from app.shared.execution.schema_types import InferredSchema
 from app.shared.execution.validation_protocol import validator_for
 from app.shared.execution.validation_types import Issue, ValidationReport
+
+
+def _node_config(node: Any, keys: tuple[str, ...]) -> dict[str, Any]:
+    data = getattr(node, "data", None) or {}
+    config: dict[str, Any] = dict(data) if isinstance(data, Mapping) else {}
+    extra = getattr(node, "model_extra", None) or getattr(node, "__pydantic_extra__", None) or {}
+    if isinstance(extra, Mapping):
+        config.update({k: v for k, v in extra.items() if v is not None})
+    for key in keys:
+        attrs = getattr(node, "__dict__", {})
+        if isinstance(attrs, Mapping) and key in attrs:
+            value = attrs[key]
+        else:
+            continue
+        if value is not None:
+            config[key] = value
+    return config
 
 
 class _StaticCanvasService:
@@ -315,7 +332,7 @@ def _type_specific_issues(
             for n in nodes:
                 if getattr(n, "type", None) != "api_enrich":
                     continue
-                data = getattr(n, "data", None) or {}
+                data = _node_config(n, ("api_id", "label", "api_name"))
                 api_id = data.get("api_id")
                 if api_id and api_id not in available_api_connection_ids:
                     label = data.get("label") or data.get("api_name") or n.id

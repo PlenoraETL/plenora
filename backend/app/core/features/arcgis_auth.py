@@ -70,7 +70,8 @@ class DefaultHttpClient:
         headers: dict = None,
     ) -> requests.Response:
         return get_shared_session().get(
-            url, params=params, timeout=timeout, headers=headers
+            url, params=params, timeout=timeout, headers=headers,
+            allow_redirects=False,
         )
 
     def post(
@@ -81,7 +82,8 @@ class DefaultHttpClient:
         headers: dict = None,
     ) -> requests.Response:
         return get_shared_session().post(
-            url, data=data, timeout=timeout, headers=headers
+            url, data=data, timeout=timeout, headers=headers,
+            allow_redirects=False,
         )
 
 

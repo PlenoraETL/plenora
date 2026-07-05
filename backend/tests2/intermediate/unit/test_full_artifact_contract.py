@@ -249,6 +249,49 @@ def test_full_artifact_runtime_capability_collapse_marks_failed():
     assert "disabled" in (captured_db["artifact_error"] or "")
 
 
+def test_full_artifact_db_failure_compensates_uploaded_objects():
+    from app.core.intermediate import snapshot as _snap
+
+    df = pd.DataFrame({"a": [1, 2, 3]})
+    uploads: dict = {}
+    deleted: list[tuple[str, dict]] = []
+
+    def _delete_spy(key, **kwargs):
+        deleted.append((key, kwargs))
+
+    with _patch_settings(mode="full_artifact"), _mock_object_storage(uploads), \
+            _patch_run_meta(canvas_id="proj-C", group_id="grp-C"), patch(
+        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
+        side_effect=RuntimeError("db down"),
+    ), patch(
+        "app.infrastructure.storage.compensation.compensating_delete",
+        side_effect=_delete_spy,
+    ):
+        with pytest.raises(RuntimeError, match="db down"):
+            _snap.record_final_snapshot(
+                run_id="run-C",
+                module="manipola",
+                node_id="node-C",
+                node_type="result",
+                df=df,
+            )
+
+    expected_prefix = (
+        "intermediate/group=grp-C/project=proj-C/run=run-C/"
+        "module=manipola/node=node-C/kind=final/"
+    )
+    assert {k for k, _ in deleted} == {
+        expected_prefix + "data.parquet",
+        expected_prefix + "manifest.json",
+    }
+    assert all(
+        kwargs["domain"] == "intermediate_artifact"
+        and kwargs["reason"] == "db_snapshot_failed_after_artifact_upload"
+        and kwargs["extras"] == {"run_id": "run-C", "node_id": "node-C"}
+        for _, kwargs in deleted
+    )
+
+
 # D. Layout key deterministico
 
 

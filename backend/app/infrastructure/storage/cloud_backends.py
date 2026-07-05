@@ -675,6 +675,23 @@ def _read_object_storage_capability() -> dict:
     return {"enabled": enabled, "backend": backend}
 
 
+def _effective_object_storage_backend(config: StorageBackendConfig | None = None) -> str:
+    cfg = config or _storage_config()
+    backend = cfg.object_storage_backend
+    if backend is None:
+        provider = cfg.cloud_provider
+        if provider == "aws":
+            backend = "s3"
+        elif provider == "minio":
+            backend = "minio"
+        elif provider == "none":
+            backend = "none"
+        else:
+            backend = provider
+    backend = str(backend).strip().lower()
+    return "aws" if backend == "s3" else backend
+
+
 def object_storage_enabled() -> bool:
     """True se la capability runtime object storage e' attiva.
 
@@ -741,12 +758,12 @@ def _resolve_backup_bucket(config: "StorageBackendConfig | None" = None) -> "str
 def _build_object_storage(bucket: str, *, region_default: str) -> ObjectStorage:
     """Costruisce l'impl ObjectStorage per il backend configurato.
 
-    Riusa la classificazione `_get_provider` esistente per backward
-    compat: `aws -> AwsS3ObjectStorage`, `minio -> MinioObjectStorage`.
+    Usa il backend object-storage effettivo: `OBJECT_STORAGE_BACKEND`
+    se settato, altrimenti fallback legacy a `CLOUD_PROVIDER`.
     Caller assicura `object_storage_enabled=True` prima di chiamare.
     """
     cfg = _storage_config()
-    provider = cfg.cloud_provider
+    provider = _effective_object_storage_backend(cfg)
     if provider == "aws":
         return AwsS3ObjectStorage(
             bucket=bucket,
@@ -757,11 +774,11 @@ def _build_object_storage(bucket: str, *, region_default: str) -> ObjectStorage:
         access_key = cfg.minio_access_key
         secret_key = cfg.minio_secret_key
         if not endpoint_url:
-            raise ValueError("CLOUD_PROVIDER=minio richiede MINIO_ENDPOINT_URL.")
+            raise ValueError("OBJECT_STORAGE_BACKEND=minio richiede MINIO_ENDPOINT_URL.")
         if not access_key:
-            raise ValueError("CLOUD_PROVIDER=minio richiede MINIO_ACCESS_KEY.")
+            raise ValueError("OBJECT_STORAGE_BACKEND=minio richiede MINIO_ACCESS_KEY.")
         if not secret_key:
-            raise ValueError("CLOUD_PROVIDER=minio richiede MINIO_SECRET_KEY.")
+            raise ValueError("OBJECT_STORAGE_BACKEND=minio richiede MINIO_SECRET_KEY.")
         return MinioObjectStorage(
             bucket=bucket,
             endpoint_url=endpoint_url,
@@ -769,7 +786,7 @@ def _build_object_storage(bucket: str, *, region_default: str) -> ObjectStorage:
             secret_key=secret_key,
             region=cfg.aws_region or "us-east-1",
         )
-    raise ValueError(f"CLOUD_PROVIDER non supportato: {provider!r}")
+    raise ValueError(f"OBJECT_STORAGE_BACKEND non supportato: {provider!r}")
 
 
 def get_runtime_object_storage() -> ObjectStorage:
@@ -953,6 +970,7 @@ def validate_storage_config() -> None:
         )
 
     provider = cfg.cloud_provider
+    object_provider = _effective_object_storage_backend(cfg)
     if provider not in KNOWN_PROVIDERS:
         _fail(
             f"CLOUD_PROVIDER={provider!r} sconosciuto. "
@@ -979,11 +997,11 @@ def validate_storage_config() -> None:
             )
     else:
         # object_storage | hybrid: richiedono provider reale + bucket
-        if provider == "none":
+        if object_provider == "none":
             _fail(
                 f"STORAGE_POLICY={policy} richiede un object storage provider, "
-                "ma CLOUD_PROVIDER=none. Imposta CLOUD_PROVIDER=aws o cambia "
-                "policy a db."
+                "ma OBJECT_STORAGE_BACKEND=none. Imposta OBJECT_STORAGE_BACKEND=s3/minio "
+                "o cambia policy a db."
             )
         if not bucket:
             _fail(
@@ -1019,7 +1037,7 @@ def validate_storage_config() -> None:
                     "capability o cambia policy a db/hybrid."
                 )
         # A1-B2: MinIO richiede credenziali esplicite + endpoint (no IAM chain
-        if provider == "minio":
+        if object_provider == "minio":
             for name in (
                 "MINIO_ENDPOINT_URL",
                 "MINIO_ACCESS_KEY",
@@ -1027,7 +1045,7 @@ def validate_storage_config() -> None:
             ):
                 if not getattr(cfg, name.lower()):
                     _fail(
-                        f"CLOUD_PROVIDER=minio richiede {name} configurato."
+                        f"OBJECT_STORAGE_BACKEND=minio richiede {name} configurato."
                     )
 
     # Soglie dispatch: solo hybrid le consulta effettivamente
@@ -1049,10 +1067,10 @@ def validate_storage_config() -> None:
                 "LOG_ARCHIVE_ENABLED."
             )
         # 2. CLOUD_PROVIDER reale richiesto
-        if provider == "none":
+        if object_provider == "none":
             _fail(
                 "LOG_ARCHIVE_ENABLED=true richiede un object storage "
-                "provider, ma CLOUD_PROVIDER=none."
+                "provider, ma OBJECT_STORAGE_BACKEND=none."
             )
         # 3. LOG_ARCHIVE_BUCKET required (intenzionalmente fuori da
         # Settings.DEFAULTS, required-if-enabled per design A3

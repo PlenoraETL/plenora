@@ -140,22 +140,14 @@ def test_ensure_schema_runs_create_schema_if_not_exists(monkeypatch):
     put_mock.assert_called_once_with(conn)
 
 
-def test_ensure_schema_uses_db_schema_env(monkeypatch):
-    """Il nome schema viene da DB_SCHEMA, non hardcoded."""
-    from psycopg import sql as _sql  # P0 (2026-05-26): psycopg2 retirato
-
+def test_ensure_schema_rejects_custom_schema_until_sql_is_parametric(monkeypatch):
+    """DB_SCHEMA custom e' bloccato finche' le migration SQL restano plenora-qualified."""
     monkeypatch.setenv("DB_SCHEMA", "tenant_x")
 
-    conn, cur = _make_fake_conn()
-    with patch("app.db.pg_connection.get_connection", return_value=conn), \
-         patch("app.db.pg_connection.put_connection"):
-        out = mr.ensure_schema()
-
-    assert out == "tenant_x"
-    stmt = cur.execute.call_args.args[0]
-    idents = [p for p in stmt if isinstance(p, _sql.Identifier)]
-    # P0 (2026-05-26): psycopg3 Identifier non ha `.strings`, usa as_string.
-    assert idents and idents[0].as_string(None) == '"tenant_x"'
+    with patch("app.db.pg_connection.get_connection") as get_mock:
+        with pytest.raises(RuntimeError, match="DB_SCHEMA='tenant_x' non supportato"):
+            mr.ensure_schema()
+        get_mock.assert_not_called()
 
 
 def test_ensure_schema_rejects_invalid_identifier(monkeypatch):
@@ -225,14 +217,10 @@ def test_apply_pending_migrations_creates_schema_before_tracking_table(
     )
 
 
-def test_apply_pending_migrations_tracking_table_uses_schema_env(
+def test_apply_pending_migrations_rejects_custom_schema_until_sql_is_parametric(
     tmp_path, monkeypatch
 ):
-    """La tracking table deve usare lo schema risolto, non hardcoded
-    `plenora.schema_migrations` hardcoded. Questo chiude davvero il path clean-room
-    con `DB_SCHEMA` custom."""
-    from psycopg import sql as _sql  # P0 (2026-05-26): psycopg2 retirato
-
+    """DB_SCHEMA custom deve fallire loud: le migration SQL sono ancora plenora-qualified."""
     monkeypatch.setenv("DB_SCHEMA", "tenant_x")
     monkeypatch.setattr(mr, "MIGRATIONS_DIR", tmp_path / "empty")
 
@@ -241,14 +229,8 @@ def test_apply_pending_migrations_tracking_table_uses_schema_env(
     with patch.object(mr, "ensure_schema", return_value="tenant_x"), \
          patch("app.db.pg_connection.get_connection", return_value=conn), \
          patch("app.db.pg_connection.put_connection"), \
-         patch.object(mr, "list_applied_migrations", return_value=[]):
-        applied = mr._REAL_APPLY_PENDING_MIGRATIONS()
+         patch.object(mr, "list_applied_migrations", return_value=[]), \
+         pytest.raises(RuntimeError, match="DB_SCHEMA='tenant_x' non supportato"):
+        mr._REAL_APPLY_PENDING_MIGRATIONS()
 
-    assert applied == []
-    stmt = cur.execute.call_args.args[0]
-    assert isinstance(stmt, _sql.Composed)
-    identifiers = [p for p in stmt if isinstance(p, _sql.Identifier)]
-    assert identifiers
-    # P0 (2026-05-26): psycopg3 Identifier non ha `.strings`. Per
-    # multi-component identifier usa as_string (output `"a"."b"`).
-    assert identifiers[0].as_string(None) == '"tenant_x"."schema_migrations"'
+    cur.execute.assert_not_called()

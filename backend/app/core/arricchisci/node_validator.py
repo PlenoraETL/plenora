@@ -27,12 +27,38 @@ _TEMPLATE_REF_RE = re.compile(r"\{([^}]+)\}")
 _TRAILING_PAREN_RE = re.compile(r"\s*\(.*\)$")
 
 
+def _node_config(node: Any) -> dict[str, Any]:
+    """Return node config from top-level/model_extra plus legacy data."""
+    data = getattr(node, "data", None) or {}
+    config: dict[str, Any] = dict(data) if isinstance(data, Mapping) else {}
+    extra = getattr(node, "model_extra", None) or getattr(node, "__pydantic_extra__", None) or {}
+    if isinstance(extra, Mapping):
+        config.update({k: v for k, v in extra.items() if v is not None})
+    for key in (
+        "label",
+        "api_name",
+        "api_id",
+        "parameters",
+        "param_mapping",
+        "static_columns",
+        "static_parameters",
+    ):
+        attrs = getattr(node, "__dict__", {})
+        if isinstance(attrs, Mapping) and key in attrs:
+            value = attrs[key]
+        else:
+            continue
+        if value is not None:
+            config[key] = value
+    return config
+
+
 class ArricchisciNodeValidator:
     """``validate_node`` per i nodi api_enrich."""
 
     def validate_node(self, node: Any, *, upstream: InferredSchema) -> List[Issue]:
         node_id = getattr(node, "id", "")
-        data = getattr(node, "data", None) or {}
+        data = _node_config(node)
         label = data.get("label") or data.get("api_name") or node_id
 
         if not data.get("api_id"):

@@ -720,6 +720,7 @@ def execute_enrichment_task(
                         project_id=project_id,
                         canvas=canvas,
                         output_format=ext.lstrip(".") or "bin",
+                        user_id=user_id,
                     )
                     if carica_info:
                         result["carica"] = carica_info
@@ -835,6 +836,7 @@ def execute_enrichment_task(
                 project_id=project_id,
                 canvas=canvas,
                 output_format=final_format,
+                user_id=user_id,
             )
             if carica_info:
                 # Il frontend legge result.carica.tasks per fare polling sui task carica
@@ -1022,6 +1024,7 @@ def _trigger_carica_if_present(
     project_id: str,
     canvas: JsonObject,
     output_format: str = "csv",
+    user_id: Optional[str] = None,
 ) -> Optional[JsonObject]:
     """Cerca nodi CARICA collegati all'output e lancia i relativi task.
 
@@ -1047,6 +1050,7 @@ def _trigger_carica_if_present(
         ),
         output_format=output_format,
         triggered_by="manual",
+        user_id=user_id,
         resilient=True,
         message_suffix=" dopo arricchimento",
         on_unconnected=lambda node: logger.warning(

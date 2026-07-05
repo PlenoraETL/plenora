@@ -282,6 +282,15 @@ def _set_minio_env(monkeypatch):
     monkeypatch.setenv("MINIO_SECRET_KEY", "sk")
 
 
+def _set_object_backend_minio_env(monkeypatch):
+    monkeypatch.setenv("CLOUD_PROVIDER", "aws")
+    monkeypatch.setenv("OBJECT_STORAGE_BACKEND", "minio")
+    monkeypatch.setenv("BACKUP_BUCKET", "onprem-bucket")
+    monkeypatch.setenv("MINIO_ENDPOINT_URL", "http://minio.internal:9000")
+    monkeypatch.setenv("MINIO_ACCESS_KEY", "ak")
+    monkeypatch.setenv("MINIO_SECRET_KEY", "sk")
+
+
 def test_factory_minio_requires_endpoint_url(cb, monkeypatch):
     _set_minio_env(monkeypatch)
     monkeypatch.delenv("MINIO_ENDPOINT_URL", raising=False)
@@ -311,6 +320,16 @@ def test_factory_minio_returns_configured_storage(cb, monkeypatch):
     assert storage.endpoint_url == "http://minio.internal:9000"
     assert storage.access_key == "ak"
     assert storage.secret_key == "sk"
+
+
+def test_object_storage_backend_minio_overrides_cloud_provider_for_storage(cb, monkeypatch):
+    _set_object_backend_minio_env(monkeypatch)
+
+    storage = cb.get_backup_object_storage()
+
+    assert isinstance(storage, cb.MinioObjectStorage)
+    assert storage.bucket == "onprem-bucket"
+    assert isinstance(cb.get_secrets_backend(), cb.AwsSsmSecretsBackend)
 
 
 def test_minio_client_uses_endpoint_credentials_and_path_style(cb):

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from types import SimpleNamespace
-from typing import Any, List
+from typing import Any, List, Mapping
 
 import re
 
@@ -34,6 +34,39 @@ _HTTP_RE = re.compile(r"^https?://", re.IGNORECASE)
 
 def _err(node_id: str, code: str, message: str) -> Issue:
     return Issue(node_id=node_id, severity="error", code=code, message=message, suggestion=None)
+
+
+def _node_config(node: Any) -> dict[str, Any]:
+    data = getattr(node, "data", None) or {}
+    config: dict[str, Any] = dict(data) if isinstance(data, Mapping) else {}
+    extra = getattr(node, "model_extra", None) or getattr(node, "__pydantic_extra__", None) or {}
+    if isinstance(extra, Mapping):
+        config.update({k: v for k, v in extra.items() if v is not None})
+    for key in (
+        "dest_type",
+        "connection_id",
+        "schema_name",
+        "table_name",
+        "write_mode",
+        "column_mappings",
+        "match_columns",
+        "rest_url",
+        "rest_method",
+        "arcgis_connection_id",
+        "arcgis_layer_url",
+        "arcgis_operation",
+        "arcgis_new_service_name",
+        "arcgis_match_column",
+        "datasource_id",
+    ):
+        attrs = getattr(node, "__dict__", {})
+        if isinstance(attrs, Mapping) and key in attrs:
+            value = attrs[key]
+        else:
+            continue
+        if value is not None:
+            config[key] = value
+    return config
 
 
 def _carica_config_issues(node_type: str, data: dict, node_id: str) -> List[Issue]:
@@ -107,7 +140,7 @@ class CaricaNodeValidator:
     """``validate_node`` per i nodi CARICA."""
 
     def validate_node(self, node: Any, *, upstream: InferredSchema) -> List[Issue]:
-        data = getattr(node, "data", None) or {}
+        data = _node_config(node)
         node_id = getattr(node, "id", "")
         node_type = getattr(node, "type", "") or ""
 

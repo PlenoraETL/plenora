@@ -581,6 +581,7 @@ class ApiConnectionRestFileMixin:
                 timeout=timeout,
                 stream=True,
                 verify=verify_tls,
+                allow_redirects=False,
             )
 
             if response.status_code >= 400:

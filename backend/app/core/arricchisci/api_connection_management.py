@@ -474,9 +474,15 @@ class ApiConnectionManagementMixin:
 
         try:
             if method == 'GET':
-                response = get_shared_session().get(url, params=params, headers=headers, timeout=30)
+                response = get_shared_session().get(
+                    url, params=params, headers=headers, timeout=30,
+                    allow_redirects=False,
+                )
             else:
-                response = get_shared_session().post(url, json=params, headers=headers, timeout=30)
+                response = get_shared_session().post(
+                    url, json=params, headers=headers, timeout=30,
+                    allow_redirects=False,
+                )
 
             result = {
                 "success": response.status_code == 200,

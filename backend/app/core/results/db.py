@@ -124,16 +124,7 @@ def save_result_row(
             "INSERT INTO results (id, project_id, group_id, filename, format, data, "
             "size_bytes, rows_count, created_at, created_by, storage_key) "
             "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
-            "ON CONFLICT (id) DO " + "UPDATE SET "
-            "project_id = EXCLUDED.project_id, "
-            "group_id = EXCLUDED.group_id, "
-            "filename = EXCLUDED.filename, "
-            "format = EXCLUDED.format, "
-            "data = EXCLUDED.data, "
-            "size_bytes = EXCLUDED.size_bytes, "
-            "rows_count = EXCLUDED.rows_count, "
-            "created_by = EXCLUDED.created_by, "
-            "storage_key = EXCLUDED.storage_key",
+            "ON CONFLICT (id) DO NOTHING",
             (
                 result_id,
                 project_id,

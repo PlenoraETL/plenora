@@ -320,6 +320,14 @@ def create_task(
     """
     # Authz guard cross-tenant su project_id
     resource_access_module.assert_project_access(request.project_id, current_user)
+    _gate_meta = _project_service().get_project_metadata(request.project_id)
+    if _gate_meta is not None and canvas_validation_gate_blocks(
+        getattr(_gate_meta, "canvas_validated", False)
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Canvas non validato: apri il progetto e premi Valida prima di eseguire.",
+        )
     # Authz guard sui nodi del canvas: blocca canvas costruiti ad arte
     # che referenziano file_source/project_source di altri tenant
     # Validare qui significa che il task Celery riceve un canvas gia'

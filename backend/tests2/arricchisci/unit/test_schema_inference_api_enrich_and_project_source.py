@@ -6,6 +6,7 @@ Bug 2026-04-30 (cross-modulo result columns):
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -71,6 +72,26 @@ def test_infer_api_enrich_schema_reads_output_mapping_canonical_column_key():
     assert by_name["score"].type == "float"
     # Input columns preservano is_calculated originale
     assert by_name["id"].is_calculated is False
+
+
+def test_infer_api_enrich_schema_reads_flat_frontend_output_mapping():
+    from app.core.projects.schema_inference import ColumnSchema
+
+    svc = _svc()
+    base_input = [ColumnSchema(name="id", type="int", source_node="src")]
+    api_node = SimpleNamespace(
+        id="api1",
+        type="api_enrich",
+        data={},
+        output_mapping=[
+            {"column": "risk_level", "type": "str", "path": "$.risk"},
+        ],
+    )
+
+    schema = svc._infer_api_enrich_schema(api_node, [base_input])
+
+    names = [c.name for c in schema]
+    assert names == ["id", "risk_level"]
 
 
 # Test 2 — api_enrich shape variante: target_column / name / type assente

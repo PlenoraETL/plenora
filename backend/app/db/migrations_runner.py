@@ -30,6 +30,7 @@ MIGRATIONS_DIR = _BACKEND_ROOT / "migrations"
 # input utente, ma applichiamo comunque whitelist + psycopg identifier
 # quoting per non string-formattare mai identifier SQL
 _SCHEMA_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_SUPPORTED_SCHEMA = "plenora"
 _PG_UNDEFINED_TABLE = "42P01"
 _PG_INVALID_SCHEMA = "3F000"
 
@@ -55,6 +56,15 @@ def _resolved_schema() -> str:
     return get_env("DB_SCHEMA", "plenora") or "plenora"
 
 
+def _assert_supported_schema(name: str) -> None:
+    if name != _SUPPORTED_SCHEMA:
+        raise RuntimeError(
+            f"DB_SCHEMA={name!r} non supportato: le migration SQL attuali "
+            f"referenziano esplicitamente lo schema {_SUPPORTED_SCHEMA!r}. "
+            "Imposta DB_SCHEMA=plenora oppure rendi le migration schema-parametriche."
+        )
+
+
 def ensure_schema(schema: Optional[str] = None) -> str:
     """Crea lo schema applicativo se non esiste.
 
@@ -73,6 +83,7 @@ def ensure_schema(schema: Optional[str] = None) -> str:
             f"DB_SCHEMA={name!r} non valido: atteso "
             f"[A-Za-z_][A-Za-z0-9_]*"
         )
+    _assert_supported_schema(name)
 
     stmt = _sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
         _sql.Identifier(name)
@@ -102,6 +113,7 @@ def _schema_name(schema: Optional[str] = None) -> str:
             f"DB_SCHEMA={name!r} non valido: atteso "
             f"[A-Za-z_][A-Za-z0-9_]*"
         )
+    _assert_supported_schema(name)
     return name
 
 
@@ -124,7 +136,7 @@ def _create_tracking_table_statement(schema: Optional[str] = None):
 
 def _is_missing_tracking_table_error(exc: Exception) -> bool:
     """Return True for clean-install pre-tracking-table SQL errors."""
-    pgcode = getattr(exc, "pgcode", None)
+    pgcode = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
     return pgcode in {_PG_UNDEFINED_TABLE, _PG_INVALID_SCHEMA}
 
 

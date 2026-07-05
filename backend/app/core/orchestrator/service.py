@@ -158,6 +158,7 @@ class OrchestratorService:
         force_recalculate: bool = False,
         skip_carica: bool = False,
         run_id: str = None,
+        user_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
     ) -> PipelineArtifact:
         """Execute a data-plane contract supplied by the control plane.
@@ -180,10 +181,11 @@ class OrchestratorService:
             force_recalculate=force_recalculate,
             skip_carica=skip_carica,
             run_id=run_id,
+            user_id=user_id,
             intermediate_mode_override=intermediate_mode_override,
         )
 
-    def execute_pipeline(self, project_id: str, force_recalculate: bool = False, skip_carica: bool = False, run_id: str = None, intermediate_mode_override: Optional[str] = None) -> PipelineArtifact:
+    def execute_pipeline(self, project_id: str, force_recalculate: bool = False, skip_carica: bool = False, run_id: str = None, user_id: Optional[str] = None, intermediate_mode_override: Optional[str] = None) -> PipelineArtifact:
         """Punto di ingresso principale: decide se estrarre, manipolare o arricchire.
 
         Ritorna un `PipelineArtifact` (subclass di dict, dict-like
@@ -221,6 +223,7 @@ class OrchestratorService:
             force_recalculate=force_recalculate,
             skip_carica=skip_carica,
             run_id=run_id,
+            user_id=user_id,
             intermediate_mode_override=intermediate_mode_override,
         )
 
@@ -233,6 +236,7 @@ class OrchestratorService:
         force_recalculate: bool,
         skip_carica: bool,
         run_id: str = None,
+        user_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
     ) -> PipelineArtifact:
         if project_type not in self._executor_dispatch:
@@ -265,7 +269,7 @@ class OrchestratorService:
         # PipelineArtifact e' dict-like quindi `artifact["carica"] = ...`
         # funziona come prima del refactor
         if artifact.success and not skip_carica:
-            carica_info = self._execute_carica_if_present(project_id, canvas)
+            carica_info = self._execute_carica_if_present(project_id, canvas, user_id=user_id)
             if carica_info:
                 artifact["carica"] = carica_info
 
@@ -292,7 +296,13 @@ class OrchestratorService:
 
     # CARICA — Rilevamento e avvio task caricamento su database
 
-    def _execute_carica_if_present(self, project_id: str, canvas: CanvasState) -> Optional[JsonObject]:
+    def _execute_carica_if_present(
+        self,
+        project_id: str,
+        canvas: CanvasState,
+        *,
+        user_id: Optional[str] = None,
+    ) -> Optional[JsonObject]:
         """
         Controlla se nel canvas c'è un nodo CARICA collegato al nodo Output.
         Se presente, avvia il task Celery per il caricamento su database.
@@ -310,6 +320,7 @@ class OrchestratorService:
                 output_contract_loader=self.project_service.get_project_output_contract,
                 output_format="geojson",
                 triggered_by="pipeline",
+                user_id=user_id,
                 resilient=False,
                 on_unconnected=lambda node: logger.warning(
                     f"Nodo {carica_dispatcher.node_type(node)} "

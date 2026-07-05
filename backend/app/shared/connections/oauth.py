@@ -15,6 +15,7 @@ import requests
 from urllib3.exceptions import InsecureRequestWarning
 
 from app import config as app_config
+from app.core.security.outbound_url import validate_external_url
 from app.shared.security.tls_policy import resolve_tls_verify
 from app.infrastructure.http.session import get_shared_session
 from app.shared.contracts.payloads import HeadersMap, JsonObject, StringMap
@@ -366,6 +367,15 @@ def _api_timeout_seconds() -> int:
     return _setting_int("API_TIMEOUT", 30)
 
 
+def _validate_token_url(token_url: str) -> bool:
+    try:
+        validate_external_url(token_url)
+        return True
+    except ValueError as exc:
+        logger.warning("Token URL bloccato dalla policy outbound: %s", exc)
+        return False
+
+
 def get_cached_oauth2_token(auth: JsonObject) -> Optional[str]:
     """Ritorna un token OAuth2 valido, rinnovandolo solo se sta per scadere."""
     auth_type = auth.get("type", "")
@@ -427,6 +437,8 @@ def _fetch_oauth2_password_token(auth: JsonObject) -> Optional[JsonObject]:
     if not token_url or not username:
         logger.warning("OAuth2 password: token_url o username mancante")
         return None
+    if not _validate_token_url(token_url):
+        return None
 
     try:
         payload: StringMap = {
@@ -446,6 +458,7 @@ def _fetch_oauth2_password_token(auth: JsonObject) -> Optional[JsonObject]:
             data=payload,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             timeout=_api_timeout_seconds(),
+            allow_redirects=False,
         )
         if response.status_code == 200:
             data = response.json()
@@ -488,6 +501,8 @@ def _fetch_oauth2_client_credentials_token(
 
     if not token_url or not client_id:
         return None
+    if not _validate_token_url(token_url):
+        return None
 
     try:
         data = {
@@ -506,6 +521,7 @@ def _fetch_oauth2_client_credentials_token(
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             timeout=_api_timeout_seconds(),
             verify=True,
+            allow_redirects=False,
         )
 
         if response.status_code == 200:
@@ -537,6 +553,8 @@ def get_arcgis_token(auth: JsonObject) -> Optional[str]:
 
     if not token_url or not username:
         logger.warning("ArcGIS token: token_url o username mancante")
+        return None
+    if not _validate_token_url(token_url):
         return None
 
     secret_material = "|".join([
@@ -580,6 +598,7 @@ def get_arcgis_token(auth: JsonObject) -> Optional[str]:
                     headers={"Content-Type": "application/x-www-form-urlencoded"},
                     timeout=_api_timeout_seconds(),
                     verify=verify_ssl,
+                    allow_redirects=False,
                 )
             if response.status_code != 200:
                 logger.warning("ArcGIS token fallito: HTTP %s", response.status_code)

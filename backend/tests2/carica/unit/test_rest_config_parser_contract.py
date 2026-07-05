@@ -11,7 +11,7 @@ def test_carica_rest_config_parser_builds_typed_sink_config() -> None:
         {
             "dest_type": "rest",
             "rest_config": {
-                "url": "https://api.example.test/features",
+                "url": "https://api.example.com/features",
                 "method": "patch",
                 "headers": [
                     {"name": "Authorization", "value": "Bearer token-1", "secret": True},
@@ -34,7 +34,7 @@ def test_carica_rest_config_parser_builds_typed_sink_config() -> None:
     )
 
     config = parsed.sink_config
-    assert config.url == "https://api.example.test/features"
+    assert config.url == "https://api.example.com/features"
     assert config.method is RestSinkMethod.PATCH
     assert config.batch_mode is RestSinkBatchMode.PER_RECORD
     assert config.batch_size == 25
@@ -58,26 +58,34 @@ def test_carica_rest_config_parser_rejects_invalid_url_fail_closed() -> None:
 
     with pytest.raises(ValueError, match="url must not include credentials"):
         parse_carica_rest_config(
-            {"rest_config": {"url": "https://user:pass@api.example.test/features"}}
+            {"rest_config": {"url": "https://user:pass@api.example.com/features"}}
+        )
+
+
+def test_carica_rest_config_parser_blocks_loopback_url(monkeypatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    with pytest.raises(ValueError, match="IP privato/interno"):
+        parse_carica_rest_config(
+            {"rest_config": {"url": "http://127.0.0.1:9000/internal"}}
         )
 
 
 def test_carica_rest_config_parser_rejects_invalid_method_and_header_shape() -> None:
     with pytest.raises(ValueError, match="method must be one of"):
         parse_carica_rest_config(
-            {"rest_config": {"url": "https://api.example.test/features", "method": "GET"}}
+            {"rest_config": {"url": "https://api.example.com/features", "method": "GET"}}
         )
 
     with pytest.raises(ValueError, match="headers must be an object or list"):
         parse_carica_rest_config(
-            {"rest_config": {"url": "https://api.example.test/features", "headers": "bad"}}
+            {"rest_config": {"url": "https://api.example.com/features", "headers": "bad"}}
         )
 
     with pytest.raises(ValueError, match="header name is invalid"):
         parse_carica_rest_config(
             {
                 "rest_config": {
-                    "url": "https://api.example.test/features",
+                    "url": "https://api.example.com/features",
                     "headers": {"Bad Header": "value"},
                 }
             }
@@ -87,7 +95,7 @@ def test_carica_rest_config_parser_rejects_invalid_method_and_header_shape() -> 
 def test_carica_rest_config_parser_redacts_secret_header_metadata() -> None:
     parsed = parse_carica_rest_config(
         {
-            "rest_url": "https://api.example.test/features",
+            "rest_url": "https://api.example.com/features",
             "headers": {
                 "Authorization": "Bearer secret-token",
                 "X-Api-Key": "api-secret",
@@ -112,7 +120,7 @@ def test_carica_rest_config_parser_rejects_header_injection() -> None:
         parse_carica_rest_config(
             {
                 "rest_config": {
-                    "url": "https://api.example.test/features",
+                    "url": "https://api.example.com/features",
                     "headers": {"Authorization": "Bearer token\r\nX-Evil: yes"},
                 }
             }
@@ -124,7 +132,7 @@ def test_carica_rest_config_parser_rejects_invalid_body_mapping_shape() -> None:
         parse_carica_rest_config(
             {
                 "rest_config": {
-                    "url": "https://api.example.test/features",
+                    "url": "https://api.example.com/features",
                     "body_mapping": {"fields": {"source": "id", "target": "id"}},
                 }
             }
@@ -134,7 +142,7 @@ def test_carica_rest_config_parser_rejects_invalid_body_mapping_shape() -> None:
         parse_carica_rest_config(
             {
                 "rest_config": {
-                    "url": "https://api.example.test/features",
+                    "url": "https://api.example.com/features",
                     "body_mapping": {
                         "fields": [
                             {
@@ -154,7 +162,7 @@ def test_carica_rest_config_parser_rejects_invalid_success_statuses() -> None:
         parse_carica_rest_config(
             {
                 "rest_config": {
-                    "url": "https://api.example.test/features",
+                    "url": "https://api.example.com/features",
                     "success_statuses": [],
                 }
             }
@@ -164,7 +172,7 @@ def test_carica_rest_config_parser_rejects_invalid_success_statuses() -> None:
         parse_carica_rest_config(
             {
                 "rest_config": {
-                    "url": "https://api.example.test/features",
+                    "url": "https://api.example.com/features",
                     "success_statuses": [99],
                 }
             }

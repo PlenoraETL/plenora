@@ -137,6 +137,18 @@ def test_rest_url_and_method():
     assert "CARICA_REST_METHOD_INVALID" in codes
 
 
+def test_flat_frontend_rest_config_top_level_ok():
+    node = SimpleNamespace(
+        id="c1",
+        type="carica",
+        data={},
+        dest_type="rest",
+        rest_url="https://api.example.com/features",
+        rest_method="POST",
+    )
+    assert _v().validate_node(node, upstream=_upstream([])) == []
+
+
 def test_arcgis_update_requires_connection_layer_match():
     node = _raw(node_type="carica_arcgis", arcgis_operation="update")
     codes = _codes(_v().validate_node(node, upstream=_upstream([])))

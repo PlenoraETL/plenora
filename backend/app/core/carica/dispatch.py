@@ -38,6 +38,7 @@ from app.core.dataframes.export_writer import dataframe_to_export_chunks
 from app.core.datasources.service import DataSourceService
 from app.core.projects.runtime_context import get_project_runtime_context
 from app.core.projects.service import ProjectService
+from app.core.security.outbound_url import validate_external_url
 
 
 logger = get_logger("app.core.carica.dispatch")
@@ -121,12 +122,14 @@ class _RequestsRestHttpClient:
     ) -> Any:
         import requests
 
+        validate_external_url(url)
         response = requests.request(
             method=method,
             url=url,
             headers=headers,
             json=json,
             timeout=timeout,
+            allow_redirects=False,
         )
         response_body: Any
         try:

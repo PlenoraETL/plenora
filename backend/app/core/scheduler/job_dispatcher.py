@@ -102,14 +102,15 @@ def enqueue_schedule_run(
     runtime: ScheduledJobRuntime | None = None,
 ) -> ScheduledJobHandle:
     """Enqueue a scheduler run through the configured task runtime."""
-    apply_kwargs: dict[str, Any] = {
-        "args": [schedule_id],
-        "kwargs": scheduled_run_kwargs(
+    task_kwargs = dict(
+        scheduled_run_kwargs(
             triggered_by=triggered_by,
             retry_attempt=retry_attempt,
             scheduled_for=scheduled_for,
-        ),
-    }
+        )
+    )
+    task_kwargs["schedule_id"] = schedule_id
+    apply_kwargs: dict[str, Any] = {"args": [], "kwargs": task_kwargs}
     if countdown is not None:
         apply_kwargs["countdown"] = countdown
 

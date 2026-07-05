@@ -39,10 +39,14 @@ def _clean_storage_env(monkeypatch):
     for name in (
         "STORAGE_POLICY",
         "CLOUD_PROVIDER",
+        "OBJECT_STORAGE_BACKEND",
         "BACKUP_BUCKET",
         "OBJECT_STORAGE_BUCKET",
         "PLENORA_ARTIFACT_BUCKET",
         "OBJECT_STORAGE_ENABLED",
+        "MINIO_ENDPOINT_URL",
+        "MINIO_ACCESS_KEY",
+        "MINIO_SECRET_KEY",
         "RESULT_S3_THRESHOLD_BYTES",
         "FILE_SOURCE_S3_THRESHOLD_BYTES",
         "RESULT_DB_HARD_CAP_BYTES",
@@ -75,6 +79,18 @@ def test_policy_is_case_insensitive(monkeypatch):
     """DB / Db / db devono essere accettati."""
     monkeypatch.setenv("STORAGE_POLICY", "DB")
     validate_storage_config()  # no raise
+
+
+def test_hybrid_accepts_minio_object_backend_with_aws_cloud_provider(monkeypatch):
+    monkeypatch.setenv("STORAGE_POLICY", "hybrid")
+    monkeypatch.setenv("CLOUD_PROVIDER", "aws")
+    monkeypatch.setenv("OBJECT_STORAGE_BACKEND", "minio")
+    monkeypatch.setenv("BACKUP_BUCKET", "onprem-bucket")
+    monkeypatch.setenv("MINIO_ENDPOINT_URL", "http://minio.internal:9000")
+    monkeypatch.setenv("MINIO_ACCESS_KEY", "ak")
+    monkeypatch.setenv("MINIO_SECRET_KEY", "sk")
+
+    validate_storage_config()
 
 
 # 2. Policy = db
@@ -176,7 +192,7 @@ def test_object_storage_rejects_provider_none(monkeypatch):
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
     monkeypatch.setenv("CLOUD_PROVIDER", "none")
     monkeypatch.setenv("BACKUP_BUCKET", "b")
-    with pytest.raises(StorageConfigError, match="CLOUD_PROVIDER=none"):
+    with pytest.raises(StorageConfigError, match="OBJECT_STORAGE_BACKEND=none"):
         validate_storage_config()
 
 
@@ -312,7 +328,7 @@ def test_log_archive_enabled_rejects_policy_db(monkeypatch):
 
 
 def test_log_archive_enabled_rejects_provider_none(monkeypatch):
-    """ENABLED=true con CLOUD_PROVIDER=none: boot fallisce. Il check A1
+    """ENABLED=true con OBJECT_STORAGE_BACKEND=none: boot fallisce. Il check A1
     precedente copre gia' il caso policy=object_storage/hybrid+provider=none;
     la regola LOG_ARCHIVE (regola 2) e' difensiva — il test documenta
     l'invariante combinata senza pinnare il layer che raise."""
@@ -321,7 +337,7 @@ def test_log_archive_enabled_rejects_provider_none(monkeypatch):
     monkeypatch.setenv("BACKUP_BUCKET", "b")
     monkeypatch.setenv("LOG_ARCHIVE_ENABLED", "true")
     monkeypatch.setenv("LOG_ARCHIVE_BUCKET", "archive-b")
-    with pytest.raises(StorageConfigError, match="CLOUD_PROVIDER=none"):
+    with pytest.raises(StorageConfigError, match="OBJECT_STORAGE_BACKEND=none"):
         validate_storage_config()
 
 

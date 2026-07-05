@@ -1,6 +1,6 @@
 """Schema inference across project canvas graphs."""
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any, Tuple
+from typing import Dict, List, Optional, Any, Tuple, Mapping
 import uuid
 
 from app.core.projects.project_context_loader import (
@@ -19,6 +19,23 @@ from app.shared.execution.schema_types import ColumnSchema, InferredSchema
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _node_config(node: Any, keys: tuple[str, ...]) -> dict[str, Any]:
+    data = getattr(node, "data", None) or {}
+    config: dict[str, Any] = dict(data) if isinstance(data, Mapping) else {}
+    extra = getattr(node, "model_extra", None) or getattr(node, "__pydantic_extra__", None) or {}
+    if isinstance(extra, Mapping):
+        config.update({k: v for k, v in extra.items() if v is not None})
+    for key in keys:
+        attrs = getattr(node, "__dict__", {})
+        if isinstance(attrs, Mapping) and key in attrs:
+            value = attrs[key]
+        else:
+            continue
+        if value is not None:
+            config[key] = value
+    return config
 
 
 def _stable_column_id(*parts: str) -> str:
@@ -506,8 +523,10 @@ class SchemaInferenceService:
             is_calculated=col.is_calculated
         ) for col in base_schema]
 
-        # output_mapping is canonical; tolerate historical frontend aliases.
-        output_mapping = node.data.get("output_mapping", []) if node.data else []
+        # output_mapping is canonical; tolerate historical frontend aliases and
+        # frontend flat serialization.
+        data = _node_config(node, ("output_mapping",))
+        output_mapping = data.get("output_mapping", []) or []
         existing = {col.name for col in result}
         for mapping in output_mapping:
             if not isinstance(mapping, dict):

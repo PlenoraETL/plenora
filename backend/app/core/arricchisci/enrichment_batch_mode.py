@@ -216,14 +216,16 @@ class EnrichmentBatchModeMixin:
                         url,
                         params=payload,
                         headers=self._headers,
-                        timeout=(self.options.connect_timeout, self.options.request_timeout)
+                        timeout=(self.options.connect_timeout, self.options.request_timeout),
+                        allow_redirects=False,
                     )
                 else:
                     response = _session.post(
                         url,
                         json=payload,
                         headers=self._headers,
-                        timeout=(self.options.connect_timeout, self.options.request_timeout)
+                        timeout=(self.options.connect_timeout, self.options.request_timeout),
+                        allow_redirects=False,
                     )
 
                 elapsed_ms = (time.time() - start_time) * 1000

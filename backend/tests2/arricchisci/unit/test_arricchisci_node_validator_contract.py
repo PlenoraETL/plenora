@@ -35,6 +35,12 @@ def test_api_selected_ok():
     assert issues == []
 
 
+def test_api_selected_from_flat_frontend_top_level_ok():
+    node = SimpleNamespace(id="e1", type="api_enrich", data={}, api_id="api-123")
+    issues = _v().validate_node(node, upstream=InferredSchema(columns=[]))
+    assert issues == []
+
+
 def _certain(*names):
     return InferredSchema(columns=[{"name": n} for n in names], status="certain")
 

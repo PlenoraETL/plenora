@@ -54,10 +54,10 @@ def get_current_user(
     if not user or not user.is_active:
         _disclosure.raise_disclosure(_disclosure.user_not_found_or_disabled())
     return CurrentUser(
-        user_id=payload["sub"],
-        username=payload["username"],
-        group_id=payload["group_id"],
-        role=payload["role"],
+        user_id=user.id,
+        username=user.username,
+        group_id=user.group_id,
+        role=user.role,
     )
 
 

@@ -15,6 +15,7 @@ from app.core.connections.rest_sink import (
     RestSinkHeader,
     RestSinkMethod,
 )
+from app.core.security.outbound_url import validate_external_url
 
 
 _HEADER_NAME_PATTERN = re.compile(r"^[A-Za-z0-9!#$%&'*+.^_`|~-]+$")
@@ -85,6 +86,10 @@ def _parse_url(rest_data: Mapping[str, object]) -> str:
         raise ValueError("CARICA REST url must be absolute http/https")
     if parsed.username or parsed.password:
         raise ValueError("CARICA REST url must not include credentials")
+    try:
+        validate_external_url(value)
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
     return value
 
 

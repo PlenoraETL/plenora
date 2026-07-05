@@ -408,25 +408,51 @@ def _record_snapshot(
         artifact_ms = _ms(_t_art)
 
     _t_db = time.monotonic()
-    _node_snapshots_db.write_node_snapshot_atomic(
-        run_id=run_id,
-        node_id=node_id,
-        node_type=node_type,
-        rows_to_persist=rows_to_persist,
-        col_schema=col_schema,
-        exec_time=exec_time,
-        status=status,
-        error_msg=error_msg,
-        row_count=row_count,
-        node_hash=node_hash,
-        hash_algo=hash_algo,
-        persistence_mode=persistence_mode,
-        preview_truncated=preview_truncated,
-        artifact_uri=artifact_uri,
-        artifact_format=artifact_format,
-        artifact_status=artifact_status,
-        artifact_error=artifact_error,
-    )
+    try:
+        _node_snapshots_db.write_node_snapshot_atomic(
+            run_id=run_id,
+            node_id=node_id,
+            node_type=node_type,
+            rows_to_persist=rows_to_persist,
+            col_schema=col_schema,
+            exec_time=exec_time,
+            status=status,
+            error_msg=error_msg,
+            row_count=row_count,
+            node_hash=node_hash,
+            hash_algo=hash_algo,
+            persistence_mode=persistence_mode,
+            preview_truncated=preview_truncated,
+            artifact_uri=artifact_uri,
+            artifact_format=artifact_format,
+            artifact_status=artifact_status,
+            artifact_error=artifact_error,
+        )
+    except Exception:
+        if artifact_uri:
+            try:
+                from app.infrastructure.storage.compensation import compensating_delete
+
+                keys = [artifact_uri]
+                if artifact_uri.endswith("/data.parquet"):
+                    keys.append(artifact_uri[: -len("data.parquet")] + "manifest.json")
+                for key in keys:
+                    compensating_delete(
+                        key,
+                        domain="intermediate_artifact",
+                        reason="db_snapshot_failed_after_artifact_upload",
+                        extras={"run_id": run_id, "node_id": node_id},
+                        logger=logger,
+                    )
+            except Exception as cleanup_exc:
+                logger.warning(
+                    "[ARTIFACT] cleanup compensativo fallito per run=%s node=%s: %s",
+                    run_id,
+                    node_id,
+                    cleanup_exc,
+                    exc_info=True,
+                )
+        raise
     db_ms = _ms(_t_db)
 
     op = (

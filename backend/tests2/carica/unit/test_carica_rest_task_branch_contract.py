@@ -38,7 +38,7 @@ def test_rest_write_branch_delegates_to_carica_rest_boundary(monkeypatch) -> Non
     node_data = {
         "dest_type": "rest",
         "rest": {
-            "url": "https://api.example.test/items",
+            "url": "https://api.example.com/items",
             "method": "POST",
             "headers": {"X-Client": "plenora"},
             "batch_size": 2,
@@ -74,7 +74,7 @@ def test_rest_write_branch_delegates_to_carica_rest_boundary(monkeypatch) -> Non
     assert result["rows_failed"] == 0
     assert result["total_rows"] == 2
     fake_client.request.assert_called_once()
-    assert fake_client.request.call_args.kwargs["url"] == "https://api.example.test/items"
+    assert fake_client.request.call_args.kwargs["url"] == "https://api.example.com/items"
     assert fake_client.request.call_args.kwargs["method"] == "POST"
     assert progress_messages == [
         "Preparazione scrittura REST...",
