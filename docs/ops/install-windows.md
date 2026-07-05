@@ -147,7 +147,26 @@ distribuiti (su PostgreSQL) fail-closed, beat leader fail-closed.
 
 ## 5. Collaudo dell'installazione
 
-Batteria minima (5 minuti) — e' la stessa usata nel collaudo ufficiale:
+Batteria minima automatica (5 minuti) — e' la stessa usata nel collaudo
+ufficiale, impacchettata in uno script non distruttivo:
+
+```powershell
+cd C:\plenora
+powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1
+```
+
+Lo script verifica servizi Windows, `/ready` attraverso Caddy, frontend
+statico, e smoke round-trip `dispatch -> RabbitMQ -> worker -> PG`.
+Non riavvia servizi, non modifica `.env`, non cancella dati.
+
+Se l'installazione non include Caddy/frontend:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1 `
+    -ReadyUrl http://127.0.0.1:5004/ready -SkipFrontendPage
+```
+
+Controlli equivalenti manuali:
 
 ```powershell
 # 1. Tutti i servizi su
@@ -162,6 +181,18 @@ curl.exe -s http://127.0.0.1/ready
 #    atteso: SMOKE: SUCCESS
 
 # 4. Login dal browser: http://127.0.0.1/ con il superadmin
+```
+
+Con la suite functional isolata:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1 -RunE2E
+```
+
+Con functional + integration:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1 -RunE2E -Integration
 ```
 
 Batteria estesa (collaudo da accettazione):
@@ -208,6 +239,10 @@ Il runner: installa le dev-deps nell'env conda, crea+migra
 `plenora_test`, legge le credenziali broker dal `.env` (il fallback
 `guest` non esiste piu'), imposta `URBY_RUN_INTEGRATION=1` e lancia
 pytest. Exit code 0 = verdi.
+
+Lo stesso runner puo' essere invocato dal validatore post-install con
+`scripts\validate-windows-install.ps1 -RunE2E` (e `-Integration` se
+serve la suite estesa).
 
 Nota: la suite canonica completa (~10.500 unit/contract) resta la lane
 containerizzata `tests2` su Linux/Docker — le e2e-v2 su Windows
