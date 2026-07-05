@@ -181,6 +181,10 @@
   color: #22c55e;
 }
 
+.enrichment-confirm-stat--warning .enrichment-confirm-stat-value {
+  color: #f59e0b;
+}
+
 /* Time */
 .enrichment-confirm-time {
   text-align: center;

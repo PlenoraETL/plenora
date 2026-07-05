@@ -1,6 +1,7 @@
 /* KeyboardShortcutsHelp.css — contenuto della guida scorciatoie (#33). */
 
 .kbd-help { display: flex; flex-direction: column; gap: 16px; }
+.kbd-help__group { display: flex; flex-direction: column; gap: 2px; }
 .kbd-help__group-title {
   font-size: 10px;
   font-weight: 700;

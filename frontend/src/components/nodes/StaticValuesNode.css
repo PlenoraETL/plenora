@@ -140,6 +140,9 @@
   align-items: center;
   gap: 5px;
 }
+.svn__row--add {
+  padding: 0 7px 7px;
+}
 
 /* ── Inputs ─────────────────────────────────────────────────────── */
 .svn__input {
@@ -299,6 +302,11 @@
   top: 0;
 }
 [data-theme='light'] .svn__variables-header { background: #F4F7FD; }
+
+.svn__variables-list {
+  display: flex;
+  flex-direction: column;
+}
 
 .svn__var-btn {
   display: flex;

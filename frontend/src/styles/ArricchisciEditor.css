@@ -184,6 +184,15 @@
   border-color: #D97706;
 }
 
+.arricchisci-toolbar__btn--versions {
+  background: rgba(75,139,255,0.10);
+  border-color: rgba(75,139,255,0.25);
+  color: #4B8BFF;
+}
+.arricchisci-toolbar__btn--versions:hover:not(:disabled) {
+  background: rgba(75,139,255,0.18);
+}
+
 /* ── Dropdown enrichment ──────────────────────────────────────── */
 .arricchisci-toolbar__dropdown {
   position: relative;

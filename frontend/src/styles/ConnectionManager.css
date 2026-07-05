@@ -194,8 +194,10 @@
 .cm__status-dot::before { content: ''; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--cm-text-dim); }
 .cm__status-ok::before   { background: var(--cm-ok);   box-shadow: 0 0 5px var(--cm-ok); color: var(--cm-ok); }
 .cm__status-err::before  { background: var(--cm-err); }
+.cm__status-none::before { background: var(--cm-text-dim); }
 .cm__status-ok  { color: var(--cm-ok); }
 .cm__status-err { color: var(--cm-err); }
+.cm__status-none { color: var(--cm-text-dim); }
 
 .cm__td-actions { text-align: right; }
 .cm__row-actions, .cm__actions { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }

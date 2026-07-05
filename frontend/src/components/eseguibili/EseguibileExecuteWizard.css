@@ -109,6 +109,11 @@
   font-size: 13px;
 }
 
+.esw-step__label {
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
 .esw-step__num {
   display: inline-flex;
   align-items: center;

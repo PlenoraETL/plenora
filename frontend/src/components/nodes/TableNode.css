@@ -200,6 +200,12 @@
 }
 .table-node__search-clear:hover { color: var(--plen-text, #DDE4F2); }
 
+.table-node__toggle-all {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
 .table-node__toggle-all-label {
   display: flex;
   align-items: center;

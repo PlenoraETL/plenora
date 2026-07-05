@@ -270,5 +270,6 @@
 /* ── Inline-style migration (FE-PHASE2-INLINE-STYLES-002) ──────────── */
 .dsm__btn--mt-lg          { margin-top: 20px; }
 .dsm__field-help-icon     { font-size: 14px; opacity: 0.7; cursor: help; padding: 0 4px; }
+.dsm__lock-badge          { display: inline-flex; align-items: center; justify-content: center; color: var(--dsm-text-dim); }
 .dsm__inline-row          { display: flex; gap: 6px; }
 .dsm__type-info           { max-width: 540px; }

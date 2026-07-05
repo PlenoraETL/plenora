@@ -834,6 +834,10 @@
   border-radius: 10px;
   background: var(--pl-bg);
 }
+.pl__qs-step-body {
+  flex: 1;
+  min-width: 0;
+}
 .pl__qs-step--done { opacity: 0.7; }
 .pl__qs-step-badge {
   flex-shrink: 0;

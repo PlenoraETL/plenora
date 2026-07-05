@@ -40,6 +40,10 @@
   --color-text-disabled:  var(--plen-text-dim);
 
   /* ── Button SECONDARY (il piu' comune nei modal) ─────────── */
+  --btn-primary-bg:        var(--plen-blue);
+  --btn-primary-hover:     var(--plen-blue-mid);
+  --btn-primary-text:      #FFFFFF;
+
   --btn-secondary-bg:      var(--plen-surface);
   --btn-secondary-text:    var(--plen-text);
   --btn-secondary-border:  var(--plen-border);

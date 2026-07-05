@@ -205,6 +205,10 @@
 
   /* Bottone PRIMARY — azione principale (override per modulo sotto) */
   /* Bottone SECONDARY — azione secondaria */
+  --btn-primary-bg:        var(--color-primary);
+  --btn-primary-hover:     var(--color-primary-dark);
+  --btn-primary-text:      white;
+
   --btn-secondary-bg:      white;
   --btn-secondary-text:    var(--color-text-primary);
   --btn-secondary-border:  var(--color-border);

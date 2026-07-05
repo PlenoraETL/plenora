@@ -160,6 +160,11 @@
   position: relative;
 }
 
+.join-modal__columns-grid--with-func {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+}
+
 .join-modal__column-select { display: flex; flex-direction: column; gap: 5px; }
 
 .join-modal__column-select label {

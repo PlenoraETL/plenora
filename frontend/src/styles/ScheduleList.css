@@ -198,6 +198,8 @@
 .sl__statusbar-right { display:flex; align-items:center; gap:8px; flex-shrink:0; }
 .sl__statusbar-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; background:currentColor; }
 .sl__statusbar-dot--running   { animation:sl-blink 1s ease-in-out infinite; }
+.sl__statusbar-dot--queued,
+.sl__statusbar-dot--failed    { opacity:.9; }
 @keyframes sl-blink { 0%,100%{opacity:1} 50%{opacity:.3} }
 .sl__statusbar-elapsed { opacity:.6; font-size:10.5px; }
 .sl__statusbar-task    { opacity:.5; font-size:10.5px; flex-shrink:0; }

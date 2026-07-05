@@ -1,4 +1,10 @@
 /* Versioni canvas (#12) */
+.cv-versions {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .cv-versions__save {
   display: flex;
   gap: 8px;

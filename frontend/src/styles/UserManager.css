@@ -243,6 +243,7 @@
 
 /* Confirm-delete-group modal (cluster locale) */
 .um__cdg-message          { color: var(--plen-text-sub); font-size: 13px; line-height: 1.5; margin: 0; }
+.um__cdg-error            { color: var(--plen-err); font-size: 12.5px; line-height: 1.5; }
 .um__cdg-warn             { background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.25); border-radius: 8px; padding: 10px 14px; color: var(--plen-err); font-size: 12.5px; line-height: 1.5; }
 .um__cdg-loading          { text-align: center; color: var(--plen-text-dim); padding: 16px 0; font-size: 12px; }
 .um__cdg-section-label    { margin-top: 12px; font-size: 12px; color: var(--plen-text-sub); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; font-family: var(--plen-font-mono); }

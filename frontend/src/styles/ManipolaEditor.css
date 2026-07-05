@@ -201,6 +201,15 @@
   opacity: 0.88;
 }
 
+.manipola-toolbar__btn--versions {
+  background: rgba(75,139,255,0.10);
+  border-color: rgba(75,139,255,0.25);
+  color: var(--plen-blue, #4B8BFF);
+}
+.manipola-toolbar__btn--versions:hover:not(:disabled) {
+  background: rgba(75,139,255,0.18);
+}
+
 /* ── Main layout ──────────────────────────────────────────────── */
 .manipola-main {
   flex: 1;

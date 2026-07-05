@@ -107,7 +107,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         // Proxy /api → backend FastAPI in dev
         '/api': {
-          target: env.VITE_API_URL || 'http://localhost:8000',
+          target: env.VITE_API_URL || 'http://localhost:5004',
           changeOrigin: true,
         },
       },

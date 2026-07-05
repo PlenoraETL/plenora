@@ -244,12 +244,26 @@
 .estrai-toolbar__btn--carica:hover:not(:disabled) { background: rgba(251,191,36,0.18); }
 .estrai-toolbar__btn--carica:disabled { opacity: 0.35; cursor: not-allowed; }
 
+.estrai-toolbar__btn--carica-arcgis {
+  background: rgba(45,212,191,0.10);
+  border: 1px solid rgba(45,212,191,0.25);
+  color: #2DD4BF;
+}
+.estrai-toolbar__btn--carica-arcgis:hover:not(:disabled) { background: rgba(45,212,191,0.18); }
+
 .estrai-toolbar__btn--datasource {
   background: rgba(245,166,35,0.1);
   border: 1px solid rgba(245,166,35,0.25);
   color: var(--ee-warn);
 }
 .estrai-toolbar__btn--datasource:hover { background: rgba(245,166,35,0.18); }
+
+.estrai-toolbar__btn--versions {
+  background: rgba(75,139,255,0.10);
+  border: 1px solid rgba(75,139,255,0.25);
+  color: var(--ee-blue);
+}
+.estrai-toolbar__btn--versions:hover:not(:disabled) { background: rgba(75,139,255,0.18); }
 
 .estrai-toolbar__btn--save {
   background: var(--ee-blue);

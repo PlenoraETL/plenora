@@ -25,7 +25,7 @@ npm run preview
 npx vitest run <test-file>
 ```
 
-Vite runs on `http://localhost:5173` by default. The dev proxy forwards
+Vite runs on `http://localhost:3000` in this repo. The dev proxy forwards
 API calls to the backend port configured in `vite.config.js`.
 
 ## Main Areas

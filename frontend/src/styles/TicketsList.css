@@ -216,6 +216,10 @@
 }
 
 /* ── Table ── */
+.tk-list {
+  min-width: 0;
+}
+
 .tk-list__table {
   width: 100%;
   border-collapse: collapse;

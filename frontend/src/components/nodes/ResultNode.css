@@ -58,6 +58,10 @@
 .result-node--estrai    .result-node__handle { background: var(--rn-blue) !important; }
 .result-node--manipola  .result-node__handle { background: var(--rn-manipola) !important; }
 .result-node--arricchisci .result-node__handle { background: var(--rn-arricch) !important; }
+.result-node__handle--input,
+.result-node__handle--output {
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.12);
+}
 
 /* ── Header ─────────────────────────────────────────────────────── */
 .result-node__header {
@@ -568,6 +572,10 @@
 }
 
 /* ── Execution options (Manipola/Arricchisci) ───────────────────── */
+.result-node__execution-content {
+  min-width: 0;
+}
+
 .result-node__execution-options { margin-bottom: 10px; }
 
 .result-node__execution-option {

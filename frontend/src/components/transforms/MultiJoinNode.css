@@ -386,6 +386,9 @@
   transition: transform 0.1s;
 }
 .multi-join-node__handle:hover { transform: scale(1.25); }
+.multi-join-node__handle--input {
+  border-color: rgba(155,109,255,0.5) !important;
+}
 .multi-join-node__handle--output {
   background: #9B6DFF !important;
   border-color: rgba(155,109,255,0.5) !important;
