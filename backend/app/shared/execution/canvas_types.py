@@ -21,9 +21,8 @@ Convention di bump:
     - Rimuovere o rinominare un valore e' breaking: bumpare
       API_VERSION major + migration sui canvas legacy.
 
-Drift FE↔BE storici fixati nei commit a9800ee (conflict_policy
-canonico "force") e c6bcd9a (rest_method DELETE rimosso, BE↔UI
-allineato). Nessun drift attivo dopo Sprint 2.
+Nessun drift FE/BE attivo: i valori qui devono rimanere allineati al
+mirror frontend.
 
 Nota su `dest_type='arcgis'`: NON e' drift. Il FE `canvasSerializer.js`
 factory `caricaArcgis` produce un Node con `type='carica_arcgis'`
@@ -87,11 +86,9 @@ VALID_CONFLICT_POLICIES: tuple[str, ...] = get_args(ConflictPolicyLiteral)
 
 
 # REST destination HTTP method (per carica con dest_type='rest').
-# DELETE rimosso post fix-drift (commit successivo al lockin): CARICA
-# su DELETE non ha semantica (cosa cancelli?), il FE non l'ha mai
-# offerto. Nessuna migration: canvas legacy con rest_method="DELETE"
-# verrebbero rifiutati dal Pydantic; se mai dovessero comparire (solo
-# scripts che hanno bypassato il FE) il fail e' visibile e gestibile
+# DELETE non e' ammesso: CARICA su DELETE non ha semantica chiara e il FE
+# non lo offre. Canvas legacy con rest_method="DELETE" vengono rifiutati
+# da Pydantic in modo visibile.
 # caso per caso.
 RestMethodLiteral = Literal["POST", "PUT", "PATCH"]
 VALID_REST_METHODS: tuple[str, ...] = get_args(RestMethodLiteral)

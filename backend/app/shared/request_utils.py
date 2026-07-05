@@ -10,6 +10,8 @@ import ipaddress
 from functools import lru_cache
 from typing import Optional, TYPE_CHECKING
 
+from app.environment import get_env
+
 if TYPE_CHECKING:
     from fastapi import Request
 
@@ -19,8 +21,7 @@ if TYPE_CHECKING:
 # IP singoli: "127.0.0.1,::1,10.0.0.5"
 # CIDR ranges: "10.0.0.0/8,172.16.0.0/12"
 # Mix: "127.0.0.1,10.0.0.0/8,::1"
-# Default coerente con setup single-host nginx -> uvicorn sullo stesso box
-# lab.plenora.it today
+# Default coerente con proxy e backend sullo stesso host.
 _DEFAULT_TRUSTED_PROXIES = "127.0.0.1,::1"
 
 
@@ -155,4 +156,3 @@ def get_client_ip(request: "Request") -> str:
             return client_ip
 
     return peer
-from app.environment import get_env

@@ -22,7 +22,7 @@ class MimeMismatchError(ValueError):
 # xlsx e' un container OOXML zippato → filetype puo' tornare
 # 'application/zip' o il MIME OOXML specifico a seconda della
 # versione/struttura. Accettiamo entrambi
-# xls (vecchio Office) e' OLE2 compound → 'application/x-cfb'
+# xls e' formato OLE2 compound -> 'application/x-cfb'
 # gpkg e' un container SQLite → 'application/x-sqlite3'
 # shp/gdb arrivano sempre zippati → 'application/zip'
 
@@ -122,8 +122,7 @@ def detect_mime(content: bytes) -> Optional[str]:
     (formato testuale o sconosciuto).
 
     Se `filetype` manca dal venv, solleva `MimeMismatchError` esplicito
-    invece di fail-open silente (pre-fix il fallback aveva permesso
-    deploy senza la lib di rendere ininfluente la validazione MIME).
+    invece di rendere la validazione MIME ininfluente.
     """
     try:
         import filetype

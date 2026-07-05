@@ -41,18 +41,15 @@ def build_execution_context(
 
     Fail-closed su errori `psycopg.Error`: re-raise come
     `ExecutionContextError` con `original_error` + `__cause__`
-    impostati. Stesso contract del legacy
-    `canvas_orchestrator.init_execution_context`.
+    impostati. Stesso contract di `canvas_orchestrator.init_execution_context`.
 
     Su progetto inesistente (`project_ctx is None`):
     `group_id = None`, ramo dati legittimo. I mixin downstream
     fail-closed con messaggio "Contesto di sicurezza non
     determinabile (group_id mancante)".
 
-    Pure function: nessun side effect su `svc` o stato globale.
-    Post-OE012 il singleton non viene piu' mirror-ato (la
-    funzione `apply_to_legacy_state` e' stata cancellata): i
-    mixin consumano `ctx` direttamente.
+    Pure function: nessun side effect su `svc` o stato globale; i mixin
+    consumano `ctx` direttamente.
 
     Args:
         project_id: id del progetto in esecuzione.

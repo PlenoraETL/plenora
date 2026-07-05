@@ -100,21 +100,20 @@ class Settings:
 
         # Durata del token JWT in ore. Override env via type coercion `int`.
         "JWT_EXPIRE_HOURS": 8,
-        # Login rate limit (R-01 + ADR-0021): 10
-        # tentativi falliti in 60s -> lockout 300s. I test esistenti
+        # Login rate limit: 10 tentativi falliti in 60s -> lockout 300s.
+        # I test esistenti
         # `tests2/security/unit/test_login_rate_limit_per_ip.py`
         # monkeypatch-ano i moduli `LOGIN_*` symbol; preservato
         "LOGIN_MAX_ATTEMPTS": 10,
         "LOGIN_WINDOW_SECONDS": 60,
         "LOGIN_LOCKOUT_SECONDS": 300,
-        # Default retrocompatibile: se il backend distribuito (PostgreSQL,
-        # Fase 4) non e' disponibile, il login rate limiter usa il fallback
-        # in-memory single-node. In prod/cluster impostare True per
-        # fail-closed (nessun login se il backend non e' consultabile).
+        # Default retrocompatibile: se il backend distribuito non e'
+        # disponibile, il login rate limiter usa il fallback in-memory
+        # single-node. In prod/cluster impostare True per fail-closed.
         # Rinominato da LOGIN_RL_REDIS_REQUIRED (alias env legacy accettato).
         "LOGIN_RL_DISTRIBUTED_REQUIRED": False,
-        # Plenora 2.0 Fase 4: la blacklist JWT e' su PostgreSQL con cache
-        # in-memory davanti (positiva+negativa). TTL della cache: bilancia
+        # Blacklist JWT su PostgreSQL con cache in-memory davanti
+        # (positiva+negativa). TTL della cache: bilancia
         # latenza auth (cache hit) vs finestra di revoca cross-processo.
         "JWT_BLACKLIST_CACHE_TTL_SEC": 5,
         # Soglia "stale" per la blacklist JWT mostrata nella dashboard
@@ -135,19 +134,18 @@ class Settings:
         # Default 10 MB. Sotto questa soglia il blob va in DB BYTEA
         # sopra dovrebbe andare object storage (separate path
         "TICKET_ATTACHMENT_MAX_BYTES": 10 * 1024 * 1024,
-        # Cap/timeout datasource & geo (BE-CONFIG-001F, 2026-07-04):
-        # migrati qui dai lettori os.environ.get sparsi nei moduli.
-        # Regola del config boundary: segreti SOLO in .env, tutto il
+        # Cap/timeout datasource & geo. Regola del config boundary:
+        # segreti SOLO in .env, tutto il
         # resto ha default tipato qui con override env opzionale.
         # Cap bytes sorgente datasource caricata come file source
         # (peak RAM del loader manipola).
         "PLENORA_DATASOURCE_SOURCE_MAX_BYTES": 2 * 1024 * 1024 * 1024,
         # Cap bytes letti per lo schema/preview di un file datasource.
         "PLENORA_DATASOURCE_SCHEMA_MAX_BYTES": 50 * 1024 * 1024,
-        # Cap pre-flight operazioni spatial pesanti (MANIPOLA-8).
+        # Cap pre-flight operazioni spatial pesanti.
         "PLENORA_GEO_VORONOI_MAX_POINTS": 100_000,
         "PLENORA_GEO_CLEAN_TOPOLOGY_MAX_GEOMS": 50_000,
-        # Timeout SharePoint separati connect/read (P1 2026-05-26).
+        # Timeout SharePoint separati connect/read.
         "PLENORA_SHAREPOINT_CONNECT_TIMEOUT_SEC": 15.0,
         "PLENORA_SHAREPOINT_STREAM_TIMEOUT_SEC": 300.0,
         # TEST_ONLY: heartbeat cleanroom del beat (opt-in e2e).
@@ -161,17 +159,17 @@ class Settings:
         "API_DEFAULT_RATE_LIMIT": 5,
         # Rate limiter distribuito opzionale per arricchisci. Disabled di
         # default per preservare il throttling locale esistente; se enabled
-        # usa il bucket GCRA su PostgreSQL (Fase 4) per quote globali per
-        # API/scope. REQUIRED=True rende il limiter fail-closed invece di
-        # degradare al fallback locale quando il backend non e' disponibile.
+        # usa il bucket GCRA su PostgreSQL per quote globali per API/scope.
+        # REQUIRED=True rende il limiter fail-closed invece di degradare al
+        # fallback locale quando il backend non e' disponibile.
         # Rinominati da ARRICCHISCI_RATE_LIMIT_REDIS_* (alias env legacy
         # accettati).
         "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_ENABLED": False,
         "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_REQUIRED": False,
         "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_KEY_PREFIX": "plenora:arricchisci:rl",
         # Cache distribuita per token OAuth/API provider su PostgreSQL
-        # (Plenora 2.0 Fase 4, KeyValueStore); i caller degradano alla cache
-        # locale storica se il backend non e' disponibile.
+        # (KeyValueStore); i caller degradano alla cache locale se il backend
+        # non e' disponibile.
         "OAUTH_TOKEN_CACHE_LOCK_TTL_SEC": 30,
         "OAUTH_TOKEN_CACHE_WAIT_TIMEOUT_SEC": 5,
 
@@ -204,31 +202,31 @@ class Settings:
         # = break-even empirico DB BYTEA vs roundtrip object storage
         "RESULT_S3_THRESHOLD_BYTES": 50 * 1024 * 1024,
         "FILE_SOURCE_S3_THRESHOLD_BYTES": 50 * 1024 * 1024,
-        # MinIO provider (A1-B2, ADR-0015). Required-if CLOUD_PROVIDER=minio
-        # pattern analogo a LOG_ARCHIVE_BUCKET: validazione fail-fast a boot
+        # MinIO provider. Required-if CLOUD_PROVIDER=minio, con validazione
+        # fail-fast a boot
         # in app/shared/cloud_backends.validate_storage_config
         "MINIO_ENDPOINT_URL": None,
         "MINIO_ACCESS_KEY": None,
         "MINIO_SECRET_KEY": None,
 
-        # Canvas Validation (Epic §12): se True l'esecuzione è bloccata quando
+        # Canvas validation: se True l'esecuzione e' bloccata quando
         # la catena del progetto non valida (gate a esecuzione, re-valida live) e
         # i run schedulati di progetti con canvas_validated=False sono bloccati.
-        # Default True: il modello §12 è attivo (pulsante Valida + stato persistito
+        # Default True: gate attivo con pulsante Valida + stato persistito
         # + FE in place). Override a False in .env per disattivarlo.
         "CANVAS_VALIDATION_GATE_ENABLED": True,
 
         "LOG_ARCHIVE_ENABLED": False,
         # Prefisso deterministico delle object key archive. Default senza
         # auto-derivazione <env>: ops override esplicito in .env per separare
-        # prod/staging/dev (ADR-0014 §A2). Formato: "" oppure endswith "/"
+        # prod/staging/dev. Formato: "" oppure endswith "/"
         "LOG_ARCHIVE_KEY_PREFIX": "logs-archive/",
         # Righe per SELECT->upload->DELETE del writer. Cap pratico RAM per batch.
         "LOG_ARCHIVE_BATCH_ROWS": 10_000,
         "AUDIT_RETENTION_DAYS": 365,
         # NB: LOG_ARCHIVE_BUCKET e' intenzionalmente fuori da DEFAULTS —
-        # e' required-if-enabled con validazione fail-fast a boot
-        # ADR-0014 §A3: distinto da BACKUP_BUCKET
+        # e' required-if-enabled con validazione fail-fast a boot, distinto
+        # da BACKUP_BUCKET.
 
         "SUPPORTED_PROJECT_TYPES": ["estrai", "manipola", "arricchisci", "salva"],
         "DEFAULT_GROUP": "default",
@@ -331,8 +329,8 @@ class Settings:
         "ARTIFACT_PREVIEW_MAX_BYTES": 25 * 1024 * 1024,
 
         # Tunables del reconciler beat hook che processa le entry
-        # pending in `plenora.storage_reconciliation_log`. Tutti
-        # operational tuning (ADR-0021), override env consentito
+        # pending in `plenora.storage_reconciliation_log`. Override env
+        # consentito.
         # STORAGE_RECONCILE_INTERVAL_SECONDS: cadence gate del hook
         # nel `PlenoraBeatScheduler.tick`. Default 900s (15 min
         # tradeoff tra latenza orphan-recovery e load sul DB /
@@ -352,7 +350,7 @@ class Settings:
         "STORAGE_RECONCILE_BATCH_SIZE": 50,
         "STORAGE_RECONCILE_MAX_ATTEMPTS": 5,
         "STORAGE_RECONCILE_BACKOFF_BASE_SECONDS": 60,
-        # Operational tuning (ADR-0021 OPERATIONAL_TUNING) per evitare
+        # Operational tuning per evitare
         # che `plenora.storage_reconciliation_log` diventi una discarica
         # silenziosa di terminali. Tutto override env consentito
         # STORAGE_RECONCILE_TERMINAL_RETENTION_DAYS: giorni di retention
@@ -422,9 +420,8 @@ class Settings:
         # il branch (escape hatch ops
         "READINESS_BEAT_HEARTBEAT_MAX_AGE_SECONDS": 0,
 
-        # Timeout (secondi) per la PING del broker RabbitMQ in check_broker
-        # (Plenora 2.0 Fase 5: il broker e' RabbitMQ/Dramatiq, non piu'
-        # Redis/Celery). Bound: cap <= 0 cade al fallback hardcoded di 2s.
+        # Timeout (secondi) per la PING del broker RabbitMQ in check_broker.
+        # Bound: cap <= 0 cade al fallback hardcoded di 2s.
         "READINESS_BROKER_TIMEOUT_SECONDS": 2,
 
         # Timeout (secondi) per `SELECT 1` dentro check_postgres
@@ -492,8 +489,7 @@ class Settings:
         # `node_meta.artifact_uri/_status/_format` valorizzati
         # Validazione fail-fast in
         # `app/core/intermediate/policy.validate_intermediate_settings`
-        # Default produzione: metadata_only (storage
-        # intermedi, 2026-04-28). Postgres resta catalogo leggero
+        # Default produzione: metadata_only. Postgres resta catalogo leggero.
         # Per audit/debug: preview_only o full_artifact
         "INTERMEDIATE_PERSISTENCE_MODE": "metadata_only",
         # Numero righe persistite quando MODE=preview_only. Tagliato
@@ -529,10 +525,9 @@ class Settings:
         "ESTRAI_INTERMEDIATE_CHECKPOINTS": "final_only",
         "ARRICCHISCI_INTERMEDIATE_CHECKPOINTS": "final_only",
 
-        # Backup amministrativi: cron schedule + descrizione UI-readable
-        # Classificate APP_POLICY/OPERATIONAL_TUNING in ADR-0021 §"Config
-        # boundary": stringhe consumate da `get_schedule_info` per
-        # l'endpoint admin di metadata. La schedule reale e' gestita a
+        # Backup amministrativi: cron schedule + descrizione UI-readable,
+        # consumate da `get_schedule_info` per l'endpoint admin di metadata.
+        # La schedule reale e' gestita a
         # livello deployment (systemd timer / beat / K8s CronJob
         # questi default sono i valori esposti al FE quando l'env e'
         # unset, e devono essere overridabili via env per allineare il
@@ -896,7 +891,7 @@ class Settings:
         return bool(self.get("LOG_ARCHIVE_ENABLED", False))
 
     # Bucket object storage dedicato per archive log. Separato da
-    # BACKUP_BUCKET: IAM boundary distinto (ADR-0014 §A3). Unset di
+    # BACKUP_BUCKET per mantenere un boundary IAM distinto. Unset di
     # default; required-if-enabled con validazione fail-fast a boot in
     # app/shared/cloud_backends.validate_storage_config
     @property
@@ -904,7 +899,7 @@ class Settings:
         return self.get("LOG_ARCHIVE_BUCKET")
 
     # Prefisso deterministico delle object key archive. Ops override in
-    # env per separare prod/staging/dev (ADR-0014 §A2). Formato: vuoto
+    # env per separare prod/staging/dev. Formato: vuoto
     # oppure terminante con "/" (invariante consumato da
     # app/core/scheduler/log_archive._build_object_key
     @property

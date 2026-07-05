@@ -129,13 +129,9 @@ class FileSourceService:
         — stesso predicato usato da `assert_resource_visible` del layer
         auth (coerente col router).
 
-        N1 (defense-in-depth): pre-fix, `load_dataframe` e metodi sensibili
-        affidavano 100% della validazione al router. Un endpoint che
-        dimentica `assert_resource_visible(...)` diventa immediatamente
-        un cross-tenant data leak. Con questo helper, anche il service
-        rifiuta la request se il caller non ha visibilita' dichiarata,
-        rendendo la leak richiedere due bug (router + service) invece
-        che uno.
+        Defense-in-depth: anche il service rifiuta la request se il caller
+        non ha visibilita' dichiarata, riducendo il rischio di leak
+        cross-tenant causati da endpoint incompleti.
 
         Args:
             file_id: identifier del file source.
@@ -151,7 +147,7 @@ class FileSourceService:
         """
         if not expected_group_id:
             raise PermissionError(
-                f"[N1 FAIL-CLOSED] expected_group_id mancante per load del "
+                f"Fail-closed: expected_group_id mancante per load del "
                 f"file_source {file_id}. Il service richiede il group_id "
                 f"del caller per la verifica cross-tenant."
             )
@@ -162,7 +158,7 @@ class FileSourceService:
 
         if expected_group_id == self.SUPERADMIN_BYPASS:
             self._logger.info(
-                f"[N1] superadmin bypass visibility su file_source {file_id}"
+                f"Superadmin bypass visibility su file_source {file_id}"
             )
             return
 
@@ -184,11 +180,11 @@ class FileSourceService:
             # In caso di fallimento del check shared (es. tabella share
             # non esistente o DB glitch), FAIL-CLOSED: nega accesso
             self._logger.warning(
-                f"[N1] check sharing fallito per {file_id}, nego accesso: {e}"
+                f"Check sharing fallito per {file_id}, nego accesso: {e}"
             )
 
         self._logger.error(
-            f"[N1 SECURITY] Cross-tenant access blocked: group "
+            f"Cross-tenant access blocked: group "
             f"'{expected_group_id}' tenta load su file_source {file_id} "
             f"(owner: '{file_source.group_id}')"
         )
@@ -351,8 +347,8 @@ class FileSourceService:
     ) -> Tuple[Any, Optional[Any]]:
         """Delegate to `source_read.load_dataframe`.
 
-        N1 resta fail-closed: il modulo estratto riceve `_assert_visible`
-        come collaborator esplicito.
+        Il modulo estratto riceve `_assert_visible` come collaborator
+        esplicito, mantenendo il check fail-closed.
         """
         return _source_read.load_dataframe(
             file_id,
@@ -387,7 +383,7 @@ class FileSourceService:
     ) -> FileSourceLayersPayload:
         """Delegate to `source_read.get_layers_info`.
 
-        N1: `expected_group_id` obbligatorio per fail-closed check.
+        `expected_group_id` obbligatorio per fail-closed check.
         """
         return _source_read.get_layers_info(
             file_id,
@@ -403,7 +399,7 @@ class FileSourceService:
     ) -> FileSourcePreviewPayload:
         """Delegate to `source_read.get_preview`.
 
-        N1: `expected_group_id` obbligatorio per fail-closed check.
+        `expected_group_id` obbligatorio per fail-closed check.
         """
         return _source_read.get_preview(
             file_id,

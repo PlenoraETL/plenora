@@ -67,9 +67,8 @@ def _coerce_fill_value_for_numeric(value: Any, col_name: str, dtype: Any) -> Any
     if isinstance(value, (int, float)):
         return value
     if isinstance(value, str):
-        # Stringa vuota e whitespace-only NON sono coercibili: rifiutali
-        # Senza questo check pd.to_numeric("") solleverebbe (gia' coperto
-        # ma vogliamo un messaggio chiaro che cita anche il fix tipico
+        # Stringa vuota e whitespace-only NON sono coercibili: rifiutali con
+        # messaggio esplicito.
         if not value.strip():
             raise ValueError(
                 f"op_fill_na: colonna numerica '{col_name}' (dtype={dtype}) "
@@ -129,8 +128,7 @@ def op_fill_na(
 
     try:
         if method in ['ffill', 'bfill']:
-            # FIX: fillna(method=) è deprecato in pandas 2.0+
-            # Usare ffill/bfill direttamente
+            # fillna(method=) e' deprecato in pandas 2.0+: usa ffill/bfill.
             fill_func = 'ffill' if method == 'ffill' else 'bfill'
             if column and column in result.columns:
                 result[column] = getattr(result[column], fill_func)()

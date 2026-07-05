@@ -75,11 +75,10 @@ def scheduled_run_kwargs(
     """Return the runtime kwargs for a scheduled pipeline task.
 
     `scheduled_for` deve essere SEMPRE valorizzato a dispatch-time:
-    fissarlo qui (e non lazy nel task) garantisce che retry Celery
+    fissarlo qui, e non lazy nel task, garantisce che retry Celery
     dello stesso task vedano lo stesso timestamp, e quindi la chiave
     idempotency CARICA (`schedule-{id}-{scheduled_for}-carica`) resti
-    stabile. Pre-fix il task ricalcolava `datetime.now()` ad ogni
-    invocazione → chiave diversa ad ogni retry → scritture duplicate.
+    stabile fra retry dello stesso task.
     """
     if scheduled_for is None:
         scheduled_for = datetime.now(timezone.utc).isoformat()

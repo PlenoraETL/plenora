@@ -115,10 +115,9 @@ def check_postgres() -> CheckOutcome:
 
 
 def check_broker() -> CheckOutcome:
-    """Probe bounded del broker RabbitMQ (Plenora 2.0 Fase 5).
+    """Probe bounded del broker RabbitMQ usato dai task.
 
-    Rimpiazza la PING Redis sul path di readiness: il broker dei task e'
-    RabbitMQ (Dramatiq). Apre/chiude una connessione pika con timeout
+    Apre/chiude una connessione pika con timeout
     limitato. Timeout da ``READINESS_BROKER_TIMEOUT_SECONDS`` (default 2;
     <= 0 ricade su 2). Fail-closed su eccezione.
     """

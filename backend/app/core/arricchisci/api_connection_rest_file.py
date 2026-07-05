@@ -43,18 +43,9 @@ from app.shared.security.tls_policy import resolve_tls_verify
 from app.utils.logger import get_logger
 
 
-# Sessione E-3 (2026-05-26): TENTATIVO `_ChunksFileAdapter` file-like
-# sopra `dataframe_to_export_chunks` per multipart streaming via
-# `requests.post(files=...)`. RIVELATOSI INEFFICACE: `requests` non
-# fa streaming dei file parts — `urllib3.encode_multipart_formdata`
-# chiama `fp.read()` UNA VOLTA per ogni file, materializzando il
-# payload intero in RAM prima di costruire il body multipart (serve
-# Content-Length header). Risultato: API "streaming" ma RAM uguale
-# al pattern bytes diretto.
-#
-# F2(a) follow-up (2026-05-26): RIPRISTINATO `save_dataframe_to_bytes`
-# (path diretto bytes) come comportamento onesto. Vero multipart
-# streaming richiede:
+# `requests.post(files=...)` materializza ogni file part tramite urllib3 prima
+# di costruire il body multipart, quindi questo connector usa un path bytes
+# diretto invece di fingere streaming. Vero multipart streaming richiede:
 #   - `requests_toolbelt.MultipartEncoder` (lazy-read file-like durante
 #     l'invio): pacchetto separato (~50KB dep aggiuntiva)
 #   - oppure encoder multipart custom + `requests.post(data=generator,
@@ -115,7 +106,7 @@ class ApiConnectionRestFileMixin:
     # REST_FILE PIPELINE
     # Pipeline: parse_config → prepare_headers → resolve_input → build_multipart
     # → requests.post(stream=True) → download_binary (dual-timeout) → cleanup
-    # Error taxonomy via `_rest_file_error` (F5 primo batch, 2026-04-24
+    # Error taxonomy via `_rest_file_error`.
 
     @staticmethod
     def _parse_http_error_body(response) -> str:
@@ -367,15 +358,8 @@ class ApiConnectionRestFileMixin:
         output_ext = response_cfg.get('output_extension') or '.bin'
         if not output_ext.startswith('.'):
             output_ext = '.' + output_ext
-        # Pre-fix (P2 etl-sources HIGH): `output_extension` proveniva
-        # dal canvas user-configurabile e veniva concatenato in
-        # `output{output_ext}` senza sanificazione. Un valore tipo
-        # `.bin/../../escape` produceva un output_path fuori da
-        # tmp_exec_dir. Post-fix: sanifica l'extension a soli
-        # `.<alnum>` (es. `.csv`, `.parquet`, `.bin`). Defense-in-depth:
-        # tmp_exec_dir e' creata via mkdtemp con prefix random, MA la
-        # sanificazione blinda anche caller futuri che bypassano la
-        # tmp_exec_dir (es. test che inietta un output_path custom).
+        # output_extension arriva dal canvas: accetta solo `.<alnum>` per
+        # evitare path segment o nomi non portabili.
         if not re.match(r'^\.[A-Za-z0-9_]{1,16}$', output_ext):
             logger.warning(
                 "Output extension non valida '%s': fallback a '.bin' "
@@ -410,7 +394,7 @@ class ApiConnectionRestFileMixin:
         user_error: bool = True,
     ) -> JsonObject:
         """Return dict standard per errori _execute_rest_file con taxonomy
-        `error_kind` (F5 primo batch, 2026-04-24).
+        `error_kind`.
 
         error_kind validi:
           - 'file_source_not_found' — file_source_id referenziato non esiste in DB
@@ -461,8 +445,8 @@ class ApiConnectionRestFileMixin:
         Ritorna un dict con ``is_file_result=True``, ``result_id``,
         ``filename``, ``format``, ``size_bytes``, ``metadata`` cosi' il
         caller del canvas arricchisci lo tratta come un generico
-        risultato file. Post-Phase5: niente piu' ``output_path`` —
-        l'output e' persistito direttamente come result_blob e i
+        risultato file. Niente ``output_path``: l'output e' persistito
+        direttamente come result_blob e i
         consumer ricaricano i bytes via ``ArtifactResolver.fetch_run_blob``.
         """
         start_time = time.time()
@@ -477,8 +461,8 @@ class ApiConnectionRestFileMixin:
         timeout = parsed['timeout']
         output_ext = parsed['output_ext']
 
-        # Fix-D narrow #20: clausola ristretta alle classi domain-safe
-        # sollevate da `_prepare_headers`
+        # Clausola ristretta alle classi domain-safe sollevate da
+        # `_prepare_headers`.
         # KeyError: campo auth mancante (es. api_key, client_secret
         # ValueError: formato auth invalido / auth_type non riconosciuto
         # requests.RequestException: fallimento del fetch OAuth2 token
@@ -502,16 +486,16 @@ class ApiConnectionRestFileMixin:
             or _req_cfg.get('materialize_format')
             or 'xlsx'
         )
-        # Fix-D narrow #21: clausola ristretta alle classi domain-safe
-        # prodotte dalla catena di risoluzione input
+        # Clausola ristretta alle classi domain-safe prodotte dalla catena di
+        # risoluzione input.
         # ValueError: messaggi domain gia' safe ("Accesso negato:"
         # "Contesto di sicurezza...", "Errore progetto sorgente..."
         # SourceLoadingError: errore dal SourceLoader cross-tenant
         # tecnicamente gia' wrappato in ValueError da
         # _resolve_file_source_path, incluso come belt-and-suspenders
-        # FileSourceResolutionError: da Fix-A (lookup DB o scrittura
-        # cache fallita), messaggio safe-by-construction
-        # Eccezioni fuori tupla fluiscono al safety-net outer (#22c
+        # FileSourceResolutionError: fault DB/object storage con messaggio
+        # safe-by-construction. Eccezioni fuori tupla fluiscono al
+        # safety-net outer.
         try:
             input_path, _owns_materialized_input = self._resolve_input_path_for_file_processor(
                 nodes, edges, node_id,
@@ -547,7 +531,6 @@ class ApiConnectionRestFileMixin:
             if build_err is not None:
                 return build_err
 
-            # Post-Phase5 (REST output bytes-first): niente piu' tmp_exec_dir.
             # Lo stream del body va direttamente in memoria (con cap), poi
             # `save_result_blob_from_bytes` persiste come result_id. Caller
             # downstream legge il blob via `ArtifactResolver.fetch_run_blob`
@@ -561,13 +544,8 @@ class ApiConnectionRestFileMixin:
             )
 
             # ── HTTP call ────────────────────────────────────────────────
-            # Pre-fix (P1 etl-sources): `requests.post` SENZA `verify=`
-            # esplicito → ignorava silenziosamente l'eventuale flag
-            # `verify_ssl=False` sull'auth/api_config. Inconsistente con
-            # il pattern centralizzato `tls_policy.resolve_tls_verify`
-            # usato in `enrichment_retry_http` e `oauth`. Post-fix:
-            # delega allo stesso helper env-aware → bypass concesso solo
-            # in dev/test/opt-in, bloccato in prod.
+            # TLS policy centralizzata: bypass concesso solo in dev/test/opt-in,
+            # bloccato in prod.
             auth_cfg = api_config.get('auth', {}) or {}
             verify_tls = resolve_tls_verify(
                 auth_cfg.get('verify_ssl', True),
@@ -677,12 +655,9 @@ class ApiConnectionRestFileMixin:
                 f"Errore HTTP: {e}",
             )
         except ValueError as e:
-            # F5 primo batch (2026-04-24): un ValueError con prefisso
-            # "Accesso negato" arriva da `_assert_file_source_group_access`
-            # chiamato da `_resolve_file_source_id_bytes` in
-            # `_build_rest_file_multipart` per extra_input). Senza questo
-            # catch specifico cadrebbe nel safety-net sotto e risulterebbe
-            # "internal" opaco — ma e' un denial cross-tenant semantico
+            # Un ValueError "Accesso negato" arriva dal boundary file source
+            # per extra_input: e' un denial cross-tenant semantico, non un
+            # errore interno opaco.
             msg = str(e)
             if "Accesso negato" in msg or "non appartiene al tuo gruppo" in msg:
                 return self._rest_file_error("file_source_forbidden", msg)
@@ -694,18 +669,11 @@ class ApiConnectionRestFileMixin:
                 user_error=False,
             )
         except Exception as e:
-            # Fix-D safety-net #22c: copre eccezioni inattese dentro il
-            # main try (build multipart, download response HTTP path
-            # oltre Timeout/RequestException). Messaggio safe generico
-            # per il FE; il dettaglio tecnico resta nel log logger.error
-            # + exc_info=True. Post-Phase5 (REST output bytes-first):
-            # niente piu' `mkdtemp` da safety-net qui.
-            # NOTA: i catch narrow #20 (auth prep) e #21 (input resolve
-            # sono FUORI da questo try. Eccezioni inattese in quei due
-            # step propagano fuori dalla funzione e vengono raccolte
-            # dal boundary top-level di `execute_enrichment` (Fix-C
-            # l'arricchimento". Un'eventuale estensione della safety-net
-            # locale a #20/#21 e' debito separato (vedi checkpoint
+            # Safety-net per eccezioni inattese nel main try. Messaggio safe
+            # per il FE; dettaglio tecnico solo nel log con exc_info=True.
+            # I catch stretti per auth prep e input resolve sono fuori da
+            # questo try; eccezioni inattese in quegli step propagano al
+            # boundary top-level di `execute_enrichment`.
             logger.error(f"[CRASH] rest_file: {e}", exc_info=True)
             return self._rest_file_error(
                 "internal",
@@ -775,8 +743,8 @@ class ApiConnectionRestFileMixin:
     ) -> Optional[tuple[bytes, str]]:
         """Risolve un file_source_id in `(bytes, filename)` RAM-only.
 
-        Post-Phase5: il blob viene letto direttamente da DB / object
-        storage senza materializzare file locali. Il caller
+        Il blob viene letto direttamente da DB / object storage senza
+        materializzare file locali. Il caller
         (`_build_files_for_post`) lo consuma via `requests.post(files=...)`
         come tuple, niente file handle.
 
@@ -852,8 +820,8 @@ class ApiConnectionRestFileMixin:
                 )
 
             try:
-                # Post-Phase5: bytes-first. Il caller `_build_files_for_post`
-                # gia' accetta `tuple(bytes, filename)` come input_path
+                # Bytes-first: il caller `_build_files_for_post` gia' accetta
+                # `tuple(bytes, filename)` come input_path
                 # (vedi isinstance check a riga 272).
                 return SourceLoader().resolve_project_file_bytes(
                     LatestProjectArtifactRef(project_id=source_project_id),
@@ -892,20 +860,19 @@ class ApiConnectionRestFileMixin:
 
         1. Upstream è un altro file-processor (`is_file_result=True`):
            ricarica i bytes via `ArtifactResolver.fetch_run_blob` dal
-           `result_id` upstream (post-Phase5: niente piu' `output_path`
-           cross-process, lo scambio inter-node passa sempre per il
-           Resource Engine).
+           `result_id` upstream: niente `output_path` cross-process, lo
+           scambio inter-node passa sempre per il Resource Engine.
         2. Upstream è un api_enrich che ha prodotto un pandas.DataFrame:
            serializza in-memory (bytes-first), ritorna `(bytes, filename)`.
 
         Ritorna `(input_ref, owns_disk_file)`. `input_ref` puo' essere:
-          - `tuple(bytes, filename)`: caso comune post-Phase5 (rest_file
+          - `tuple(bytes, filename)`: caso comune (rest_file
             upstream, api_enrich DataFrame, file_source/project_source).
           - `str` (path): accettato solo come input difensivo; i branch
             correnti ritornano bytes.
           - `None`: nessun input risolvibile.
 
-        `owns_disk_file`: False sempre post-Phase5 (no tempfile creati qui).
+        `owns_disk_file`: False per i branch correnti (no tempfile creati qui).
         """
         if node_results is not None:
             input_edge = next((e for e in edges if e.get('target') == target_node_id), None)
@@ -915,9 +882,8 @@ class ApiConnectionRestFileMixin:
                 upstream_type = source_node.get('type') if source_node else None
                 upstream_result = node_results.get(source_id)
 
-                # Branch 1: upstream e' un altro file-processor.
-                # Post-Phase5: `result_id` e' il riferimento canonico
-                # (no piu' `output_path`). Ricarichiamo i bytes via
+                # Branch 1: upstream e' un altro file-processor. `result_id`
+                # e' il riferimento canonico. Ricarichiamo i bytes via
                 # ArtifactResolver con `expected_project_id` per la
                 # verifica cross-tenant fail-closed.
                 if isinstance(upstream_result, dict) and upstream_result.get('is_file_result'):
@@ -966,12 +932,9 @@ class ApiConnectionRestFileMixin:
                         )
                         fmt = 'xlsx'
                     try:
-                        # F2(a) revert (2026-05-26): bytes diretto onesto.
-                        # `requests.post(files=...)` materializza comunque
-                        # il payload via urllib3 `_encode_files` upfront —
-                        # un file-like "streaming" non riduce il peak.
-                        # Vero multipart streaming = scope futuro
-                        # (requests_toolbelt o encoder custom, vedi nota
+                        # `requests.post(files=...)` materializza il payload
+                        # via urllib3 `_encode_files` upfront; usare bytes
+                        # espliciti rende chiaro il peak RAM effettivo.
                         # in testa al modulo).
                         data_bytes = save_dataframe_to_bytes(upstream_result, fmt)
                     except Exception as e:

@@ -1,10 +1,7 @@
 """Retry helper per transient errors su integrazioni esterne.
 
-Pattern condiviso per FTP/SFTP/SharePoint/HTTP transient: pre-fix
-solo `arcgis_auth._request_with_token` aveva retry+backoff esponenziale
-implementato inline. FTP, SFTP, SharePoint propagavano immediatamente
-le eccezioni di rete senza retry, causando fallimenti spurious su
-glitch transienti.
+Pattern condiviso per FTP/SFTP/SharePoint/HTTP transient con retry e
+backoff esponenziale, per assorbire glitch di rete temporanei.
 
 Funzione pura (no stato globale, no decoratori magici): mappa
 direttamente a un Go-equivalente come

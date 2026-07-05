@@ -116,7 +116,6 @@ def _coerce_str(value: object) -> str | None:
     psycopg2 returns ``TIMESTAMPTZ`` as ``datetime`` objects by default; the
     eseguibile DTO declares those columns as ``str``. Without coercion the
     factory raises ``Malformed eseguibile DB row`` even on legitimate rows.
-    Same pattern as ``tickets.db._coerce_str`` (commit 4bdfc74a).
     """
     if value is None:
         return None

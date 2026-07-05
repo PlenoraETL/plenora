@@ -28,10 +28,9 @@ from app.db.sql_safety import safe_set_clause
 def _coerce_timestamp_to_str(value: Any) -> Any:
     """Accept psycopg2 datetime values for TIMESTAMPTZ columns.
 
-    The custom psycopg2 typecasters (TSTZ_AS_TEXT etc.) were removed by
-    the PostgreSQL boundary hardening (commit 8c51836), so the driver
-    now returns ``datetime`` objects directly. Hydration models keep
-    the row shape as strings (legacy contract), so we normalise here:
+    The driver can return ``datetime`` objects directly for TIMESTAMPTZ.
+    Hydration models keep the row shape as strings for compatibility, so
+    we normalise here:
     ``datetime`` -> ISO-8601 string, anything else passes through to
     StrictStr validation untouched.
     """

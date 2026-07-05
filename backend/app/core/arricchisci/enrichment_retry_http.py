@@ -163,11 +163,8 @@ class EnrichmentRetryHttpMixin:
 
                 # Successo
                 if response.status_code == 200:
-                    # Pre-fix: `response.json()` propagava `ValueError`
-                    # (es. body HTML di un captive portal/proxy che risponde
-                    # 200 OK ma non e' JSON) come crash non-tipizzato dentro
-                    # il worker, terminando il batch invece di marcare solo
-                    # la singola riga. Ora la riga finisce in RowError con
+                    # Body 200 non JSON (es. captive portal/proxy) finisce in
+                    # RowError sulla singola riga, non in crash del batch.
                     # `error_type="invalid_json_response"` e il batch
                     # prosegue sulle altre.
                     try:

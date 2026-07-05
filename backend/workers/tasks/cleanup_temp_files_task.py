@@ -1,21 +1,8 @@
 """Celery beat task: cleanup di file_sources temporanei scaduti.
 
-Bug originale (plenora-bug-orchestration I2 P2):
-  `app/core/eseguibili/service.py:360` crea un FileSource con
-  `name="__exec_temp_<id>_<uuid8>"` quando un eseguibile viene lanciato
-  con parametri custom (input dinamico). Pre-fix nessun cleanup
-  automatico: queste righe restavano nel DB indefinitamente, gonfiando
-  `file_sources` e (con `STORAGE_POLICY=object_storage`) anche lo
-  storage MinIO.
-
-Post-fix:
-  1. Migration `2026-05-22_add_file_source_temp_ttl.sql` aggiunge
-     `is_temp BOOLEAN` + `expires_at TIMESTAMPTZ` con index parziale.
-  2. `eseguibili/service.py` setta `is_temp=true, expires_at=now()+24h`
-     in `create_from_upload`.
-  3. Questo task gira ogni ora via PlenoraBeatScheduler e cancella le
-     righe `WHERE is_temp = true AND expires_at < now()` chiamando
-     `delete_file_source` per ogni id (cleanup blob MinIO incluso).
+Le righe create dagli eseguibili con input dinamico hanno `is_temp=true` e
+`expires_at`. Questo task gira ogni ora e cancella le righe scadute chiamando
+`delete_file_source` per ogni id, incluso cleanup blob MinIO.
 
 Pattern Go-friendly: task modulo, no classi, dependency injection
 esplicita via import locale. Mappa direttamente a un Go cron worker

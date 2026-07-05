@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from importlib import import_module
 from typing import Any, Protocol, runtime_checkable
 
 
@@ -23,12 +24,10 @@ class TaskRuntime(Protocol):
 def default_task_runtime() -> TaskRuntime:
     """Return the process-wide concrete task runtime.
 
-    Plenora 2.0 Fase 1 (cutover): il runtime di dispatch di default e'
-    Dramatiq su RabbitMQ (non piu' Celery su Redis). L'import di
-    workers.dramatiq_app registra il broker globale (set_broker) usato da
-    DramatiqTaskRuntime. Vale per OGNI processo che dispatcha (API, beat,
-    worker): RabbitMQ deve essere raggiungibile."""
-    import workers.dramatiq_app  # noqa: F401 — side-effect: dramatiq.set_broker
+    Importing ``workers.dramatiq_app`` registers the global Dramatiq broker
+    used by API and beat processes before they enqueue tasks.
+    """
+    import_module("workers.dramatiq_app")
 
     from app.core.task_runtime.dramatiq_runtime import DramatiqTaskRuntime
 

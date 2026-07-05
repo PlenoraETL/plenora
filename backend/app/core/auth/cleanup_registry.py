@@ -1,5 +1,4 @@
-"""Wrapper compatibile: il registry del group cleanup vive in
-`app.core.lifecycle.group_cleanup` (Epic E roadmap accoppiamento).
+"""Compatibility wrapper for group cleanup registration.
 
 `auth` non importa piu' i cleanup verticali: il meccanismo e' nel
 lifecycle neutro, la composizione dei default e' al composition root
@@ -11,9 +10,6 @@ superficie storica per chiamanti e test:
 - `run_group_cleanup_handlers(...)`: senza `handlers` espliciti consulta
   `GROUP_CLEANUP_HANDLERS` (quindi rispetta i monkeypatch);
 - re-export di tipi e helper (`GroupCleanupHandler`, report, ...).
-
-Percorso di rimozione: quando i chiamanti migrano a
-`app.core.lifecycle.group_cleanup` + wiring, questo wrapper si tombstona.
 """
 
 from __future__ import annotations
@@ -24,7 +20,7 @@ from app.core.lifecycle.group_cleanup import (  # noqa: F401  re-export compatib
     GROUP_CLEANUP_REPORT_KEYS,
     CleanupLogger,
     GroupCleanupHandler,
-    GroupCleanupReport,
+    GroupCleanupReport as GroupCleanupReport,
     build_empty_group_cleanup_report,
 )
 from app.core.lifecycle.group_cleanup import (
@@ -33,6 +29,8 @@ from app.core.lifecycle.group_cleanup import (
 from app.core.lifecycle.group_cleanup import (
     run_group_cleanup_handlers as _run_handlers,
 )
+
+GROUP_CLEANUP_HANDLERS: Sequence[GroupCleanupHandler]
 
 
 def _ensure_default_handlers() -> None:
@@ -96,6 +94,7 @@ __all__ = [
     "GROUP_CLEANUP_HANDLERS",
     "GROUP_CLEANUP_REPORT_KEYS",
     "GroupCleanupHandler",
+    "GroupCleanupReport",
     "build_empty_group_cleanup_report",
     "delete_intermediate_runs_for_group_project",
     "get_group_cleanup_handlers",

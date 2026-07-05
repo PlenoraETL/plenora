@@ -363,9 +363,8 @@ def list_schedule_logs(
 ) -> list[ScheduleLogRow]:
     """Lista entries di `schedule_logs` per uno schedule.
 
-    Usato da `ScheduleRunsCatalog.list_runs` per popolare lo storico
-    runs anche quando il filesystem non ha cartelle archiviate (post
-    refactor blob→DB i risultati vivono in `results`, non come file).
+    Usato da `ScheduleRunsCatalog.list_runs` per popolare il log runs anche
+    quando i risultati vivono in `results`, non come file.
 
     Args:
         schedule_id: filtro obbligatorio.

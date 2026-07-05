@@ -1,8 +1,7 @@
 """
 Pure no-op cleanroom beat tick smoke task.
 
-Plenora 2.0 Fase 5: funzione pura (niente piu' @celery_app.task). L'actor
-Dramatiq omonimo vive in workers/dramatiq_app.py.
+Funzione pura invocata dall'actor Dramatiq omonimo in workers/dramatiq_app.py.
 """
 
 

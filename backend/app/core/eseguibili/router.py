@@ -195,10 +195,7 @@ def delete_eseguibile(
     _check_group_access(record, current_user)
 
     eseguibili_db.delete_eseguibile(eseguibile_id)
-    # F2-B2 (2026-04-24): DELETE risponde 204 No Content, body vuoto
-    # NB: il ritorno `ok` boolean di delete_eseguibile era gia' ignorato
-    # dal FE pre-fix. Debito semantico `ok=False -> 404` esplicito e'
-    # scope separato, NON toccato qui
+    # DELETE risponde 204 No Content, body vuoto.
 
 
 # ANALYZE UPLOAD
@@ -489,7 +486,7 @@ def download_eseguibile_output(
     # puo' scaricare l'output di un'esecuzione altrui
     owner_meta = _load_task_owner(safe_task_id)
     if owner_meta is None:
-        # Metadata assente: task vecchio o cleanup gia' fatto
+        # Metadata assente: task precedente al tracking owner o cleanup gia' fatto.
         # Fail-closed: non consentire l'accesso se non siamo sicuri
         if current_user.role != "superadmin":
             raise HTTPException(

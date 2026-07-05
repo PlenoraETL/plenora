@@ -57,11 +57,8 @@ def _log_to_dict(row: LogPayload) -> LogPayload:
             d["details"] = json.loads(d["details"])
         except Exception:
             pass
-    # P1 (2026-05-26): filtra solo `None`, non `""` o `[]`.
-    # Pre-fix `v not in (None, "", [])` rimuoveva log con msg vuoto o
-    # details list vuota — utili per tracciare eventi "no payload"
-    # (es. tick di scheduling senza azione, init senza details).
-    # Allineato a `_run_to_dict` poco sopra.
+    # Filtra solo `None`: msg vuoto o details=[] sono payload validi per
+    # eventi "no payload" (es. tick di scheduling senza azione).
     return {k: v for k, v in d.items() if v is not None}
 
 

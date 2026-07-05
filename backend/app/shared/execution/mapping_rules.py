@@ -1,6 +1,6 @@
-"""Regola pura di validazione del column-mapping (Epic Canvas Validation 0.4).
+"""Regola pura di validazione del column-mapping.
 
-``check_mapping`` è la regola condivisa #B: pura, duck-typed sui mapping
+``check_mapping`` e' una regola condivisa pura, duck-typed sui mapping
 (``.source_column`` / ``.dest_column`` / ``.skip``) → vale sia per
 ``ColumnMapping`` (carica) sia per ``ArcGISColumnMapping`` (connections), senza
 introdurre un tipo nuovo né importare i domini.

@@ -44,14 +44,10 @@ _SECRET_NEEDLES = (
 
 
 # Chiavi `*_URL` necessitano di trattamento dedicato: contengono spesso
-# credenziali embedded (es. `postgresql://user:pwd@host:5432/db`) e
-# topologia di rete interna. Pre-fix (P1 admin-api):
-# `_is_secret_key("DATABASE_URL") → False` (nessuna needle nel nome) +
-# `_redact_url(value)` no-op su URL senza credentials embedded → host:port
-# interno esposto. Post-fix: redaction strutturata `_redact_url_strict`
-# che preserva solo lo `scheme` + il `path` (db name / Redis DB number)
-# e maschera netloc completo. L'admin distingue Postgres vs Redis ma
-# NON vede host/port/credentials.
+# credenziali embedded e topologia di rete interna. `_redact_url_strict`
+# preserva solo `scheme` e `path` (db name / Redis DB number) e maschera
+# il netloc completo, quindi l'admin distingue il tipo di servizio senza
+# vedere host, porta o credenziali.
 _URL_REDACT_KEYS = (
     "DATABASE_URL",
     "DRAMATIQ_BROKER_URL",
@@ -225,8 +221,7 @@ def _serialize_value(key: str, value: Any) -> object:
     if _is_secret_key(key):
         return "<redacted>"
     # Chiavi URL-sensitive: redaction strict che maschera netloc anche
-    # quando l'URL non ha credenziali embedded (es. `postgresql://
-    # internal-pg:5432/db` esponeva host:port interni pre-fix).
+    # quando l'URL non ha credenziali embedded.
     if key.upper() in _URL_REDACT_KEYS:
         if isinstance(value, str) and "://" in value:
             return _redact_url_strict(value)
@@ -299,8 +294,7 @@ def _health_check(name: str, fn) -> HealthCheckPayload:
 def _worker_snapshot() -> WorkerSnapshotPayload:
     """Snapshot dei task in esecuzione, derivato da PostgreSQL.
 
-    Plenora 2.0 Fase 5: il broker e' RabbitMQ (Dramatiq) e non c'e' inspect
-    dei worker; il segnale certo su PG e' il numero di task in stato
+    Il segnale certo su PG e' il numero di task in stato
     PROGRESS (in esecuzione adesso). La topologia dei nodi worker non e'
     piu' enumerabile senza RabbitMQ Management API (fuori scope).
     """
@@ -330,13 +324,9 @@ def _is_dev_env() -> bool:
     prod/staging anche se l'endpoint e' superadmin-only: un admin
     compromesso ottiene la mappa interna per lateral movement.
     """
-    # Pre-fix (P2 admin-api): fallback "development" rendeva il check
-    # fail-OPEN — un deployment privo della variabile `ENVIRONMENT`
-    # (config dimenticata, k8s manifest incompleto) veniva trattato
-    # come dev e la topologia veniva esposta. Post-fix: allowlist
-    # positivo. Espongo `_dev_topology` solo se l'env e' esplicitamente
-    # marcato dev/test/local. Tutto il resto (incluso None/empty/typo)
-    # viene trattato come produzione → no leak.
+    # Espone `_dev_topology` solo se l'env e' esplicitamente marcato
+    # dev/test/local. Tutto il resto (incluso None/empty/typo) viene
+    # trattato come produzione per evitare leak di topologia interna.
     env_name = environment_name(default="")
     return env_name in ("development", "dev", "test", "local")
 
@@ -348,8 +338,7 @@ def _runtime_snapshot() -> RuntimeSnapshot:
     (note + workers). I campi di topologia interna (hostname,
     docker_socket, compose_project, container_name) sono visibili
     SOLO in dev/test sotto chiave `_dev_topology` per non rompere il
-    debug locale. Pre-fix questi campi erano sempre presenti nella
-    risposta — info leak verso un admin compromesso.
+    debug locale e per evitare leak di topologia interna in prod/staging.
     """
     snapshot: dict[str, object] = {
         "note": (

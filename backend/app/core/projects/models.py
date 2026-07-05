@@ -12,10 +12,8 @@ from datetime import datetime
 def _coerce_datetime(value: object) -> Optional[datetime]:
     """Normalizza datetime|str|None alla forma canonica `Optional[datetime]`.
 
-    Boundary cleanup B1 (audit P2): pre-fix `ProjectRow` esponeva
-    `datetime | str | None` al DAL, ma `ProjectMetadata` Pydantic
-    dichiarava `Optional[datetime]`. Senza validator la stringa ISO
-    veniva passata as-is e Pydantic rifiutava su strict mode.
+    Il DAL puo' esporre `datetime | str | None`, mentre `ProjectMetadata`
+    dichiara `Optional[datetime]`.
 
     Centralizzazione: helper modulo (Go-friendly) usato dal validator
     Pydantic del `ProjectMetadata`. Il DAL `ProjectRow` resta `datetime
@@ -46,7 +44,7 @@ class ProjectMetadata(BaseModel):
     group_id: str = "default"
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    # Stato di validazione canvas persistito (Epic CanvasVal §12): True dopo una
+    # Stato di validazione canvas persistito: True dopo una
     # POST /validate senza errori; resettato a False a ogni salvataggio del canvas.
     canvas_validated: bool = False
     # Tag liberi per organizzare i progetti nella dashboard (#10).

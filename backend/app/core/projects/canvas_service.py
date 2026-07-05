@@ -1,14 +1,14 @@
-"""Sub-service canvas progetto (Epic F roadmap, fetta F3).
+"""Sub-service canvas progetto.
 
 Letture/scritture del canvas, versioning e stato di validazione come
 interfaccia stretta estratta dalla facade ``ProjectService``.
 
-Pattern owner-backref (come F2): gli hook storici monkeypatchati dai test
+Pattern owner-backref: gli hook monkeypatchati dai test
 sulla classe facade (``_assert_no_lineage_cycle``,
 ``_find_dependent_projects``, ``get_project_canvas``/``update_canvas``
 stessi) restano di proprieta' della facade; questo sub-service li risolve
 attraverso ``owner`` a call-time, cosi' i patch di classe e i cross-call
-interni mantengono la semantica storica esatta.
+interni mantengono la semantica della facade.
 """
 
 from __future__ import annotations
@@ -155,7 +155,7 @@ class ProjectCanvasService:
     def update_canvas(self, project_id: str, canvas: CanvasState) -> bool:
         """Salva canvas e aggiorna updated_at. False se il progetto non esiste.
 
-        Invalida lo stato di validazione (Epic CanvasVal §12): salvare il canvas
+        Invalida lo stato di validazione: salvare il canvas
         azzera ``canvas_validated`` del progetto E lo cascata a False su tutti i
         progetti a valle (manipola/arricchisci che lo usano come ``project_source``),
         perché un cambio a monte può invalidarne la catena certificata.
@@ -187,7 +187,7 @@ class ProjectCanvasService:
         return True
 
     def set_canvas_validated(self, project_id: str, value: bool) -> bool:
-        """Persisti lo stato di validazione canvas (Epic CanvasVal §12).
+        """Persisti lo stato di validazione canvas.
 
         Chiamato da POST /validate con ``not report.has_errors`` → lo stato
         memorizzato riflette sempre l'esito dell'ultima validazione. False se il

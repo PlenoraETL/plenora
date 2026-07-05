@@ -115,7 +115,7 @@ CREATE TABLE IF NOT EXISTS file_sources (
     created_at        TEXT NOT NULL,
     updated_at        TEXT NOT NULL,
     created_by        TEXT REFERENCES users(id),
-    -- Temp file lifecycle (P2 I2): le righe create da `eseguibili/
+    -- Temp file lifecycle: le righe create da `eseguibili/
     -- service.py` con `name="__exec_temp_..."` sono marcate is_temp=true
     -- + expires_at impostato a now()+24h. Il task
     -- `cleanup_temp_files_task` gira ogni ora via PlenoraBeatScheduler

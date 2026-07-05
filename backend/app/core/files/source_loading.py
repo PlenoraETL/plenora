@@ -1,7 +1,7 @@
 """File-source bytes resolution boundary (RAM-only).
 
-Post-refactor: il file_source si risolve in `(bytes, filename)` direttamente
-da DB / object storage. Niente piu' cache locale su filesystem.
+Il file_source si risolve in `(bytes, filename)` direttamente da DB / object
+storage, senza cache locale su filesystem.
 Il caller (REST connector) consuma i bytes via `requests.post(files=...)`.
 """
 
@@ -82,16 +82,10 @@ def assert_file_source_group_access(
 def _expected_filename(row_meta: dict[str, Any]) -> str:
     """Estrai il filename atteso dalla riga DB, normalizzato a SOLO basename.
 
-    Pre-fix (CVE-grade P0): ritornava `row_meta["original_filename"]` raw.
-    Un record DB con `original_filename = "../../../etc/passwd"` (creato da
-    upload malformato o DB corrotto) componeva un path che usciva dalla
-    source_dir, esponendo sia READ che WRITE arbitrari nella cache locale.
-
-    Post-fix: `Path(raw).name` taglia qualunque directory component,
+    `Path(raw).name` taglia qualunque directory component,
     indipendentemente da `..`, `/`, `\\`, separatori URL-encoded, ecc.
-    Post-Phase5 il path-cache e' stato eliminato (la funzione ritorna
-    bytes), quindi il rischio path-traversal non esiste piu' by-design;
-    il normalizer resta come defense-in-depth sul filename ritornato.
+    Anche se il path-cache non e' piu' usato, il normalizer resta come
+    defense-in-depth sul filename ritornato.
     """
     raw = (
         row_meta.get("original_filename")
@@ -133,9 +127,7 @@ def resolve_file_source_id_bytes(
         ValueError (via `assert_file_source_group_access`) su cross-tenant.
         `FileSourceResolutionError` su fault DB / object storage.
 
-    Sostituisce il vecchio resolver path-based che persisteva il blob
-    in una cache locale per file_source. Il caller (REST connector)
-    consuma i bytes direttamente in
+    Resolver RAM-only: il caller (REST connector) consuma i bytes direttamente in
     `requests.post(files=...)`, niente cache disco — trade-off: re-fetch
     da DB / object storage ad ogni invocazione (accettabile per il
     profilo Plenora: tipicamente una POST per file_source per task).

@@ -5,8 +5,8 @@ Consolida la logica ad-hoc sparsa in un unico predicato `is_transient(exc)`:
 - datasources (sftp/ftp/sharepoint): `socket.timeout`/`gaierror`, `OSError` di rete;
 - enrichment HTTP: status 429/5xx (`RetryConfig.retry_on_status`).
 
-E' la "whitelist" del punto roadmap #3. Fondazione riusabile dal retry-whitelist
-a livello pipeline e dai retry localizzati esistenti.
+Fondazione riusabile dal retry-whitelist a livello pipeline e dai retry
+localizzati esistenti.
 
 Proprieta':
 - **Conservativo**: default a `False`. Ritenta SOLO cio' che e' riconosciuto

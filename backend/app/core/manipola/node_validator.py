@@ -1,17 +1,17 @@
-"""Validatore PUT-time per i nodi transform (manipola) — Epic Canvas Validation 1.6.
+"""Validatore PUT-time per i nodi transform (manipola).
 
 Due check, entrambi zero-drift (riusano la logica del runtime):
 1. **ref-colonna del config risolvono** contro lo schema upstream — via
    ``config_column_refs`` (la STESSA risoluzione id→nome che usa
    ``schema_inference`` a runtime → PUT e runtime non divergono). È il deliverable
-   headline di #1 ("colonna referenziata che non esiste → 422") per filter/select/
+   ("colonna referenziata che non esiste -> 422") per filter/select/
    group_by/join-keys/aggregations.
 2. **safety della formula** — via ``_validate_formula_ast`` (la stessa gate usata
    prima di ``eval`` a runtime). I *ref dentro la formula* NON sono validati qui:
    i Name mescolano colonne e funzioni pandas-eval e flaggarli darebbe falsi
-   positivi (vedi FINDING 1.6c).
+   positivi.
 
-Onora lo status (#A): con upstream ``indeterminate`` un ref mancante è ``warning``
+Onora lo status: con upstream ``indeterminate`` un ref mancante è ``warning``
 (può esistere a runtime), non ``error``.
 """
 

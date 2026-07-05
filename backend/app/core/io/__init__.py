@@ -1,13 +1,12 @@
 """Plenora I/O boundary — RAM-first.
 
 Layer orizzontale per tutta la gestione di lettura/scrittura/archiviazione
-fuori dal filesystem locale. Il piano completo (refactor_io_storage_ram_only)
-e' un doc storico, ora solo nella storia git.
+fuori dal filesystem locale.
 
-Moduli (consolidamento orizzontale 2026-05-26):
+Moduli:
   - `policy`: env-driven policy (memory_only / temp_only_explicit / ...)
   - `payloads`: BinaryPayload + StoredObjectRef tipati
-  - `materialize`: TOMBSTONE (zero caller post refactor RAM-only)
+  - `materialize`: escape hatch esplicito per path temporanei locali
   - `geospatial`: pyogrio bytes wrapper (read/write GeoJSON/GPKG/FGB/SHP-zip)
   - `vsimem`: ctypes adapter su libgdal per `/vsimem` (ex-`imdf.gdal_vsi`)
   - `zip_guards`: bomb-cap pre-extract + `open_zip_bytes_safe` context

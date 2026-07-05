@@ -127,14 +127,10 @@ FE branching: redirect a list view, toast generico "non
 autorizzato"; NON usare per autenticazione mancante (401)."""
 
 
-# Domain-specific — Auth family
-# Promozione dei call site auth-domain (auth.py + ownership.py) da
-# literal HTTPException a raise_typed_http preservando status code
-# messaggio italiano user-facing e headers (`WWW-Authenticate`
-# `Retry-After`). Nessun cambiamento comportamentale, nessuna nuova
-# disclosure
-# Disclosure policy: vedi ADR-0022 (auth disclosure policy
-# uniform-401, admin reset/delete uniform-403, path-traversal
+# Domain-specific — Auth family.
+# Disclosure policy: uniform-401 per autenticazione, uniform-403 per
+# reset/delete admin fuori gruppo o path traversal, codici espliciti solo
+# dove l'UX richiede distinguibilita'.
 
 AUTH_TOKEN_MISSING = "auth_token_missing"
 """401 + WWW-Authenticate: Bearer. Token Bearer assente nella
@@ -174,8 +170,8 @@ LEAKY_BY_DESIGN."""
 
 AUTH_MFA_REQUIRED = "auth_mfa_required"
 """403. Login post-password-ok ma `mfa_code` mancante. Disclosure
-intenzionale (LEAKY_BY_DESIGN): ADR-0018 trade-off MFA-aware client
-UX. Message preservato come `mfa_required` literal italiano."""
+intenzionale (LEAKY_BY_DESIGN): client MFA-aware. Message preservato
+come `mfa_required` literal italiano."""
 
 AUTH_ROLE_INSUFFICIENT_FOR_WRITE = "auth_role_insufficient_for_write"
 """403. Viewer/esecutore tentano operazione di scrittura/modifica.
@@ -249,8 +245,8 @@ AUTH_RATE_LIMIT_EXCEEDED = "auth_rate_limit_exceeded"
 (LOGIN_LOCKOUT_SECONDS). UNIFORM."""
 
 AUTH_REVOCATION_UNAVAILABLE = "auth_revocation_unavailable"
-"""503. Redis blacklist non disponibile durante logout. Fail-loud
-(ADR-0009): il client deve sapere se la revoca e' effettiva."""
+"""503. Blacklist token non disponibile durante logout. Fail-loud:
+il client deve sapere se la revoca e' effettiva."""
 
 
 # Domain-specific — Admin backups family

@@ -230,8 +230,8 @@ class ApiConnectionSupportMixin:
         """Costruisce la response dict per un risultato file-based
         (tipicamente `_execute_rest_file` con `is_file_result=True`).
 
-        Post-Phase5: `_execute_rest_file` persiste il blob direttamente
-        via `save_result_blob_from_bytes` e ritorna `result_id`,
+        `_execute_rest_file` persiste il blob direttamente via
+        `save_result_blob_from_bytes` e ritorna `result_id`,
         `filename`, `size_bytes`. Niente piu' `output_path` da leggere
         dal disco; niente piu' `plenora_exec_*` dir da pulire.
 
@@ -249,7 +249,7 @@ class ApiConnectionSupportMixin:
                 "user_error": False,
                 "error": (
                     "Risultato file processor invalido: "
-                    "result_id mancante (atteso post-Phase5)."
+                    "result_id mancante nel file processor result."
                 ),
             }
         src_name = final_result.get('filename') or 'output.bin'

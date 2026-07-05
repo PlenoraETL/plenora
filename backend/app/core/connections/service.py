@@ -154,7 +154,7 @@ class ConnectionService:
 
     def list_connections(self, group_id: str | None = None) -> ConnectionList:
         # group_id=None → no filter (usato da superadmin e dalla path allowed_groups
-        # Fix N+1: fetch tutte le righe complete in una query, no loop di get_connection_config
+        # Fetch unico delle righe complete, no loop di get_connection_config.
         rows = connection_db.list_connection_configs(group_id)
         connections = []
         for full_row in rows:
@@ -389,12 +389,9 @@ class ConnectionService:
                     finally:
                         c.close()
                 except Exception as e:
-                    # Pre-fix: f"{e}" propagava il messaggio raw di pymssql,
-                    # che su auth failure include username/password nella
-                    # form "Login failed for user '...'". Allineato al fix
-                    # gia' applicato al path pyodbc (riga 342-353) e al
-                    # safety-net (sotto): logghiamo solo type + sanitized,
-                    # exc_info mantiene la traceback completa per debug.
+                    # pymssql puo' includere credenziali nel messaggio raw:
+                    # logghiamo solo type + messaggio sanitizzato, mantenendo
+                    # la traceback completa in `exc_info` per debug.
                     sanitized = _sanitize_mssql_error(e)
                     logger.warning(
                         "[GESTITO] MS SQL pymssql fallback fallito: %s: %s",
@@ -416,8 +413,7 @@ class ConnectionService:
             )
         except Exception as e:
             # Safety-net catch-all: stesso pattern del pymssql/pyodbc path.
-            # Pre-fix: f"{e}" raw poteva leakare credenziali su eccezioni
-            # non previste (es. socket error con host:port nel messaggio).
+            # Non loggare `str(e)` raw, per evitare leak di host o credenziali.
             sanitized = _sanitize_mssql_error(e)
             logger.error(
                 "[GESTITO] MS SQL _test_mssql safety-net: %s: %s",

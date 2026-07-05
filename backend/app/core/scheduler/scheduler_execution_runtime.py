@@ -156,14 +156,8 @@ def handle_failure(
             f"retry tra {decision['wait_seconds']}s"
         )
 
-        # Pre-fix (P1 orchestration): `set_runtime_status(RUNNING)` veniva
-        # chiamato PRIMA di `enqueue_schedule_run`. Se l'enqueue Celery
-        # falliva (broker down, queue full), lo status restava "running"
-        # mentre il lock era gia' rilasciato dal flow precedente — UI
-        # scheduler mostrava "in esecuzione" indefinito per uno schedule
-        # NON in coda. Post-fix: enqueue PRIMA, set_runtime_status DOPO
-        # con conferma dell'enqueue. Se enqueue fallisce, status va a
-        # FAILED nel branch except sotto (gia' presente), NON RUNNING.
+        # Enqueue prima di RUNNING: se il broker fallisce, lo status resta
+        # gestibile dal branch except e non segnala una run inesistente.
         try:
             from app.core.scheduler.job_dispatcher import enqueue_schedule_run
 
@@ -182,10 +176,6 @@ def handle_failure(
             )
         except Exception as e:
             logger.error(f"[CRASH] Errore scheduling retry: {e}", exc_info=True)
-            # Pre-fix: literal "failed" sia come arg che dentro la dict
-            # `last_execution`. `last_execution.status` e' un sotto-enum
-            # diverso (`Literal["completed","partial","failed"]`) ma il
-            # valore "failed" coincide, percio' usare l'enum runtime e' OK.
             schedule_service.update_runtime(
                 schedule_id,
                 status=RuntimeStatus.FAILED,
@@ -210,12 +200,9 @@ def handle_failure(
         f"dopo {retry_attempt} tentativi"
     )
 
-    # Pre-fix: literal "failed" sia come arg di update_runtime sia nella
-    # dict last_execution. Post-fix: enum runtime per il primo (typed),
-    # `.value` per la dict che e' un dump JSON-compatibile diretto al DB.
-    # Il `status` nel return payload resta literal perche' e' formato di
-    # risposta esterno (consumato dal worker Celery / dal test contract),
-    # non un runtime_status del DB.
+    # Enum runtime per update_runtime, `.value` per il dict JSON diretto al DB.
+    # Il `status` nel return payload resta literal: e' formato di risposta
+    # esterno, non runtime_status persistito.
     schedule_service.update_runtime(
         schedule_id,
         status=RuntimeStatus.FAILED,

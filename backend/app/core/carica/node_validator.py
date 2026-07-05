@@ -1,4 +1,4 @@
-"""Validatore PUT-time per i nodi CARICA (Epic Canvas Validation 1.6).
+"""Validatore PUT-time per i nodi CARICA.
 
 Riusa la regola pura condivisa ``check_mapping`` per il sottoinsieme comune
 (source-exists / dup-source / dup-dest) e copre le **regole extra di carica** che
@@ -7,7 +7,7 @@ max-1-geometria, match-column (UPDATE/UPSERT) — altrimenti il PUT sotto-valide
 carica (false-OK, viola #B). NB: nessun mapping attivo NON è un errore (carica fa
 auto_map a runtime) → si ritorna ``[]``.
 
-Onora lo status (#A): se l'upstream è ``indeterminate`` (schema a monte non
+Onora lo status: se l'upstream è ``indeterminate`` (schema a monte non
 risolvibile), una colonna sorgente mancante è un **warning**, non un error — la
 colonna potrebbe esistere a runtime.
 """

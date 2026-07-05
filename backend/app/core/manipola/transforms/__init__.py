@@ -15,11 +15,6 @@ from .geo import op_geo_from_coords
 from .joins import op_join, op_union
 from .reshape import op_pivot, op_table_diff
 from .security import op_mask_data, op_md5_hash
-from .strings import op_string_extract, op_text_normalize
-
-# Alias: op_concat e' sinonimo di op_union (unione verticale di DataFrame).
-op_concat = op_union
-
 # ── Trasformazioni spaziali ──────────────────────────────────────────────────
 from .spatial import (
     op_sjoin,
@@ -39,6 +34,10 @@ from .spatial import (
     op_geo_clean_topology,
     op_geo_overlay,
 )
+from .strings import op_string_extract, op_text_normalize
+
+# Alias: op_concat e' sinonimo di op_union (unione verticale di DataFrame).
+op_concat = op_union
 
 __all__ = [
     "op_aggregate",

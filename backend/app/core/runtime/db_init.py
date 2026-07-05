@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 def init_all_dbs() -> None:
-    """Initialize runtime database surfaces in the historical order."""
+    """Initialize runtime database surfaces in dependency order."""
     # Intentional bootstrap boundary imports: tests and startup guards patch
     # these module functions before calling init_all_dbs. Binding them at
     # module load would bypass the patch and can open a real DB connection.

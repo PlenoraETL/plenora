@@ -1,15 +1,7 @@
 """Local filesystem cleanup facade — boundary I/O orizzontale.
 
-Storia: originalmente `app/shared/resources/file_cleanup.py`. Spostato
-in `app/core/io/local_cleanup.py` nel consolidamento finale
-(audit follow-up 2026-05-26): non e' un'utility shared generica ma
-una primitive del boundary I/O (lifecycle ops su filesystem locale).
-
 **Scope:** centralizza tutte le rimozioni file/directory sul filesystem
 locale del backend (cleanup tmp, eviction cache, delete data plane).
-Prima di questo modulo ogni callsite faceva inline `shutil.rmtree`,
-`Path.unlink`, `os.unlink`, `os.remove` con pattern try/except
-ripetitivi.
 
 **API:**
   - `rmtree_safe(path, retries=3, logger=None)`: cleanup best-effort

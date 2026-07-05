@@ -18,10 +18,7 @@ router = APIRouter(prefix="/admin/runtime-config", tags=["admin-runtime-config"]
 @router.get("", summary="Configurazione runtime read-only")
 @audit_action(action="admin.runtime_config.read")
 def get_runtime_config(
-    # P1 (2026-05-26): nome `current_user` richiesto da @audit_action
-    # che usa kwargs.get("current_user") per popolare audit.user_id.
-    # Pre-fix il param era `_user` e ogni read produceva audit row con
-    # user_id=NULL, annullando l'attribuzione superadmin.
+    # `@audit_action` legge kwargs["current_user"] per popolare audit.user_id.
     current_user: CurrentUser = Depends(require_superadmin),
 ) -> Mapping[str, object]:
     """Return redacted runtime configuration and service probes.
@@ -29,11 +26,8 @@ def get_runtime_config(
     This endpoint is intentionally read-only. Configuration editing and
     service restarts need a separate, audited operational boundary.
 
-    Audit: ogni lettura emette un evento `admin.runtime_config.read`.
-    Pre-fix l'endpoint era senza traccia: un superadmin compromesso
-    poteva estrarre la configurazione completa (DATABASE_URL host,
-    broker Redis, endpoint MinIO redatto, secret needles) senza lasciare
-    audit trail per forensics.
+    Audit: ogni lettura emette un evento `admin.runtime_config.read` per
+    lasciare una traccia forense degli accessi alla configurazione runtime.
     """
 
     return service.get_runtime_config()

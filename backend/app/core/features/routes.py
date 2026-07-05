@@ -168,7 +168,7 @@ async def delete_connection(connection_id: str, current_user: CurrentUser = Depe
     deleted = get_service().delete_connection(connection_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Connessione non trovata")
-    # F2-B2 (2026-04-24): DELETE risponde 204 No Content, body vuoto
+    # DELETE risponde 204 No Content, body vuoto.
 
 
 @router.post("/connections/{connection_id}/test", response_model=ArcGISTestResult)
@@ -351,8 +351,8 @@ def _resolve_input_dataframe(
 ):
     """Risolve l'input ArcGIS direttamente in DataFrame (bytes-first).
 
-    Post-Phase5: il flow non passa piu' da path / tempfile. Si va da
-    `materialize_latest(..., mode="bytes")` -> `load_dataframe_from_artifact(
+    Il flow bytes-first va da `materialize_latest(..., mode="bytes")` a
+    `load_dataframe_from_artifact(
     data=..., format_hint=...)`. I 2 endpoint (`/write`, `/create-service`)
     usano poi `write_features_from_df` / `create_service_from_df`
     (entry-point dataframe-based gia' esistenti sul service).
@@ -417,12 +417,9 @@ def _resolve_input_dataframe(
 async def write_features(request: WriteRequest, current_user: CurrentUser = Depends(require_admin)):
     """Scrittura su Feature Service esistente (add/update/delete).
 
-    SECURITY: require_admin (non require_not_esecutore). Pre-fix qualunque
-    utente loggato di ruolo `user` o superiore poteva scrivere su un
-    Feature Service ArcGIS condiviso, anche se la mutation modifica dati
-    visibili ad altri tenant via FeatureServer pubblico. La feature di
-    write su servizi esterni e' un'operazione admin-only per coerenza
-    con `create_connection`/`update_connection`.
+    SECURITY: require_admin (non require_not_esecutore). La scrittura su
+    servizi esterni e' admin-only perche' puo' modificare dati condivisi via
+    FeatureServer pubblico.
     """
     _check_arcgis_access(request.connection_id, current_user)
     # Se il caller risolve l'input via `project_id` invece che

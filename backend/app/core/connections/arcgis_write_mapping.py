@@ -96,8 +96,8 @@ class ArcGISWriteMappingContract:
             if mapping.source_column and mapping.dest_column and not mapping.skip
         )
         # Validazione (dup-source / dup-dest / source-missing) via regola pura
-        # condivisa; rilancia il ValueError storico dal primo Issue (ordine
-        # preservato da check_mapping). Il check match-column resta post-mapping.
+        # condivisa; rilancia ValueError dal primo Issue (ordine preservato
+        # da check_mapping). Il check match-column resta post-mapping.
         issues = check_mapping(set(df.columns), active)
         if issues:
             first = issues[0]

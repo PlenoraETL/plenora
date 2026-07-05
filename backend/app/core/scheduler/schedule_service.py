@@ -65,12 +65,8 @@ def detect_missed_run(
     if last_run is None:
         return None
 
-    # Pre-fix `last_run` poteva arrivare dal DB come datetime naive
-    # (TIMESTAMP WITHOUT TIME ZONE in colonne legacy), mentre
-    # `expected_last` calcolato da croniter rispetto a `now` tz-aware
-    # e' aware. Il confronto `last_run >= expected_last` sollevava
-    # `TypeError: can't compare offset-naive and offset-aware datetimes`.
-    # Allinea entrambi a UTC-aware prima del confronto.
+    # Allinea entrambi a UTC-aware prima del confronto: il DB puo' fornire
+    # datetime naive da colonne TIMESTAMP WITHOUT TIME ZONE.
     if last_run.tzinfo is None:
         last_run = last_run.replace(tzinfo=timezone.utc)
 
@@ -254,9 +250,6 @@ class ScheduleService:
             pre_check=SchedulePreCheck(
                 verify_destination_connection=schedule_data.destination is not None
             ),
-            # Pre-fix: literal "idle" duplicato fra service/router/manager.
-            # Post-fix: enum centralizzato (StrEnum -> stringa "idle" nel DB,
-            # nessuna migrazione necessaria).
             runtime=ScheduleRuntime(status=RuntimeStatus.IDLE)
         )
 
@@ -355,10 +348,8 @@ class ScheduleService:
     def toggle_schedule(self, schedule_id: str, enabled: bool) -> Optional[ScheduleConfig]:
         """Abilita o disabilita uno schedule."""
         def _mutate(config: ScheduleConfig) -> bool:
-            # Pre-fix: comparison vs literal stringa, typo silente sarebbe
-            # diventato un schedule non-orfano "for ever" se qualcuno
-            # avesse scritto "orphane" altrove.
-            # Post-fix: comparison vs enum value (StrEnum -> "orphan").
+            # Confronto via enum canonical: evita typo silenti sullo stato
+            # runtime persistito.
             if enabled and config.runtime.status == RuntimeStatus.ORPHAN:
                 logger.warning(f"Impossibile abilitare schedule orfano {schedule_id}")
                 return False
@@ -417,7 +408,6 @@ class ScheduleService:
         """
         def _mutate(config: ScheduleConfig) -> bool:
             config.schedule.enabled = False
-            # Pre-fix: literal "orphan". Post-fix: enum canonico.
             config.runtime.status = RuntimeStatus.ORPHAN
             config.runtime.next_execution = None
             return True
@@ -457,12 +447,9 @@ class ScheduleService:
 
         Read-modify-write protetto da row lock DB.
 
-        Pre-fix: `status: str` -> ~9 callsite passavano literal "running",
-        "idle", "queued" senza vincolo di compile-time. Typo finiva nel DB.
-        Post-fix: accetta `str` (back-compat) o `RuntimeStatus` (preferito).
-        `coerce_runtime_status` normalizza a stringa canonical -> il
-        Pydantic `ScheduleStatus` Literal valida e la column DB resta una
-        plain string.
+        Accetta `str` per compatibilita' o `RuntimeStatus` (preferito).
+        `coerce_runtime_status` normalizza a stringa canonical; il Pydantic
+        `ScheduleStatus` Literal valida e la column DB resta una plain string.
         """
         status_str = coerce_runtime_status(status)
 
@@ -486,18 +473,13 @@ class ScheduleService:
         su counter (success_count, failure_count, consecutive_failures) e
         next_execution.
 
-        Pre-fix: come `set_runtime_status`, accettava solo `str` -> i
-        confronti `status == "completed"` erano stringly-typed.
-        Post-fix: accetta enum o str; comparison vs enum value canonico.
+        Accetta enum o stringa compatibile; i confronti interni usano il
+        valore canonical dell'enum.
         """
         status_str = coerce_runtime_status(status)
-        # Pre-fix (P2 orchestration): `coerce_runtime_status` non
-        # validava le stringhe → un typo come "Completed" (mixed case)
-        # passava attraverso e nessun branch sotto matchava → counter
-        # `success_count`/`consecutive_failures` non aggiornati,
-        # silent no-op. Validazione strict: rifiutiamo subito valori
-        # fuori enum cosi' il caller scopre il bug invece di vedere
-        # contatori che non si muovono. NB: `RuntimeStatus(...)` solleva
+        # Validazione strict: rifiutiamo subito valori fuori enum cosi' il
+        # caller scopre typo invece di vedere counter non aggiornati.
+        # NB: `RuntimeStatus(...)` solleva
         # `ValueError` su input non valido.
         try:
             RuntimeStatus(status_str)

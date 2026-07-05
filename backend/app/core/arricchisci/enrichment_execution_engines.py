@@ -148,7 +148,7 @@ class EnrichmentExecutionEnginesMixin:
 
         Se il caller ha richiesto semantiche serial-only, delega al motore
         sequenziale: questo mantiene il comportamento pubblico di `execute`
-        anche quando il dispatcher storico entra qui con parallel_workers > 1.
+        anche con parallel_workers > 1.
         """
         serial_reason = self._serial_engine_required_reason()
         if serial_reason is not None:

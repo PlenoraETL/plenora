@@ -119,11 +119,9 @@ class DefaultConnectionFactory:
         Per supportare server senza TLS valido (sviluppo, on-prem legacy)
         usiamo Encrypt=Optional + TrustServerCertificate gated.
 
-        H-2 (2026-05-26): TrustServerCertificate ora gated da
-        `tls_bypass_allowed()` (env-aware). Pre-fix: "yes" hardcoded
-        incondizionatamente, disabilitava verify certificato TLS in
-        prod = potenziale MitM su reti non-trusted. Stessa policy
-        applicata in `connections/service.py:_test_mssql`.
+        TrustServerCertificate e' gated da `tls_bypass_allowed()` (env-aware):
+        in prod resta disattivo per non bypassare la verifica TLS su reti
+        non-trusted. Stessa policy di `connections/service.py:_test_mssql`.
         """
         import pyodbc
 

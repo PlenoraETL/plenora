@@ -174,8 +174,7 @@ class DefaultEngineFactory:
         Returns:
             Engine SQLAlchemy funzionante.
         """
-        # BE-CONFIG-001D: default tipato in `Settings.DEFAULTS["MSSQL_FAST_EXECUTEMANY"]="on"`
-        # Override env continua a funzionare via Settings
+        # Override env continua a funzionare via Settings.
         from app.config import settings as _settings
         fast_em = (_settings.get("MSSQL_FAST_EXECUTEMANY") or "on").lower()
         engine_kwargs = {}
@@ -256,7 +255,7 @@ class DefaultEngineFactory:
         args_per_tipo = {
             # gssencmode=disable evita il tentativo GSSAPI/Kerberos su Windows
             # sslmode=prefer mantiene SSL se disponibile ma non fallisce senza
-            "postgres":   {"connect_timeout": 60, "gssencmode": "disable"},  # FIX-GSSAPI
+            "postgres":   {"connect_timeout": 60, "gssencmode": "disable"},
             "postgresql": {"connect_timeout": 60, "gssencmode": "disable"},
             "mysql":      {"connect_timeout": 60, "read_timeout": 60, "write_timeout": 60},
             "mssql":      {"timeout": 60},

@@ -1,4 +1,4 @@
-"""PgKeyValueStore — backend PostgreSQL del KeyValueStore (Plenora 2.0, Fase 4).
+"""PgKeyValueStore: backend PostgreSQL del KeyValueStore.
 
 Stessa semantica del protocol (blindata da test_key_value_store_contract +
 e2e): TTL via ``expires_at``, get/exists/scan filtrano le righe scadute,

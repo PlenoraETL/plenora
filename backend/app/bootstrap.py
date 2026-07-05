@@ -81,10 +81,8 @@ def bootstrap() -> None:
     # 3. Inizializza database PostgreSQL (pool + tabelle)
     init_all_dbs()
 
-    # 4. Rimuove eventuali variabili SSL globali lasciate dal vecchio
-    # path psycopg2 durante il primo connect. Con psycopg3 normalmente
-    # non accade, ma lo step resta idempotente e protegge ambienti
-    # misti/legacy.
+    # 4. Rimuove eventuali variabili SSL globali lasciate da init psycopg2.
+    # Lo step resta idempotente e protegge ambienti misti.
     _repair_psycopg2_ssl_env()
 
     # 5. Mark boundary crossed. Set LAST so any exception from
@@ -94,7 +92,7 @@ def bootstrap() -> None:
 
 
 def _repair_psycopg2_ssl_env() -> None:
-    """Remove SSL env vars that legacy psycopg2 initialization could leak."""
+    """Remove SSL env vars that psycopg2 initialization could leak."""
     for name in _PSYCOPG2_SSL_ENV_KEYS:
         os.environ.pop(name, None)
 

@@ -29,9 +29,8 @@ logger = get_logger(__name__)
 
 functions_router = APIRouter(prefix="/functions", tags=["functions"])
 
-# Servizi iniettati dal composition root via ESTRAI_BINDING (Epic D roadmap
-# accoppiamento). Il fallback per-chiamata preserva il comportamento storico
-# nei contesti senza wiring (unit test su app parziali).
+# Servizi iniettati dal composition root via ESTRAI_BINDING. Il fallback
+# per-chiamata supporta contesti senza wiring (unit test su app parziali).
 _project_service = None
 _connection_service = None
 _query_executor = None

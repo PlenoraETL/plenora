@@ -385,11 +385,11 @@ def delete_file(file_id: str, current_user: CurrentUser = Depends(require_file_o
                 "message": f"File source '{file_id}' non trovato",
             },
         )
-    # F2-B3 (2026-04-24): DELETE risponde 204 No Content, body vuoto
+    # DELETE risponde 204 No Content, body vuoto.
 
 
 def _svc_group(current_user: CurrentUser) -> str:
-    """N1: calcola il group_id da passare al service per fail-closed.
+    """Calcola il group_id da passare al service per fail-closed.
     Superadmin usa il bypass sentinel del FileSourceService."""
     if current_user.role == "superadmin":
         return FileSourceService.SUPERADMIN_BYPASS

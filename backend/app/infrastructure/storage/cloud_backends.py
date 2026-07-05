@@ -436,7 +436,6 @@ class MinioObjectStorage(AwsS3ObjectStorage):
       romperebbe l'upload su deploy minimi. Ops puo' abilitare SSE a
       livello bucket policy, indipendente dal client.
 
-    Ratifica: ADR-0015 (A1-B2, 2026-04-22).
     """
 
     def __init__(
@@ -846,7 +845,7 @@ def get_backup_object_storage() -> ObjectStorage:
 
 
 def get_log_archive_storage() -> ObjectStorage:
-    """Ritorna l'ObjectStorage dedicato all'archive log (O-ARC, ADR-0014 §A3).
+    """Ritorna l'ObjectStorage dedicato all'archive log.
 
     Gemella delle factory object-storage runtime/backup ma su bucket distinto: IAM boundary
     separato per archive log vs backup DB e' un invariante di design,
@@ -862,8 +861,8 @@ def get_log_archive_storage() -> ObjectStorage:
 
     Config via env:
       CLOUD_PROVIDER=aws (default)
-        LOG_ARCHIVE_BUCKET — required (nessun fallback legacy: per
-                              design il bucket archive e' nuovo)
+        LOG_ARCHIVE_BUCKET — required (nessun fallback: per design il bucket
+                              archive e' dedicato)
         AWS_REGION — default eu-south-1
     """
     cfg = _storage_config()
@@ -889,9 +888,9 @@ def get_log_archive_storage() -> ObjectStorage:
 VALID_STORAGE_POLICIES = ("db", "object_storage", "hybrid")
 # Provider effettivamente implementati in cloud_backends
 IMPLEMENTED_PROVIDERS = ("aws", "minio", "none")
-# Provider noti all'enum (inclusi quelli roadmap P1/P2): dichiararli e'
-# accettato in validate_storage_config solo se policy=db (= bucket non
-# consultato), altrimenti fail-fast perche' la factory non li costruisce
+# Provider noti all'enum: validate_storage_config li accetta solo se
+# policy=db (= bucket non consultato), altrimenti fail-fast perche' la
+# factory non li costruisce.
 KNOWN_PROVIDERS = ("aws", "minio", "azure", "gcp", "none")
 
 
@@ -931,16 +930,15 @@ def validate_storage_config() -> None:
         raise StorageConfigError(msg)
 
     def _check_positive_int(name: str) -> None:
-        # NOTA (BE-CONFIG-001E + ADR-0021 allowlist): `os.getenv` diretto
-        # per design — questo helper e' un boot-time fail-fast validator
+        # `os.getenv` diretto per design: questo helper e' un boot-time
+        # fail-fast validator
         # che deve distinguere "user ha settato l'env" da "user non l'ha
         # settato". Settings.get applicherebbe `_converti_tipo_env` che
         # silently swallowa valori malformati e ritorna il default
         # rompendo il fail-fast su typo (es. `LOG_ARCHIVE_BATCH_ROWS=abc`
         # passerebbe il boot, e in produzione l'archive userebbe 10000
         # invece di crashare loud al boot). Il runtime path consuma il
-        # valore via `settings.LOG_ARCHIVE_BATCH_ROWS` property come da
-        # ADR-0021
+        # valore via `settings.LOG_ARCHIVE_BATCH_ROWS` property.
         # raw = os.getenv(name)
         raw = raw_values.get(name)
         if raw is None:
@@ -1081,8 +1079,8 @@ def validate_storage_config() -> None:
                 "configurato (bucket dedicato archive, distinto da "
                 "BACKUP_BUCKET)."
             )
-        # 4. Bucket archive distinto da BACKUP_BUCKET
-        # IAM boundary (O-ARC §5.4, ADR-0014 §A3). A questo punto
+        # 4. Bucket archive distinto da BACKUP_BUCKET.
+        # IAM boundary dedicato. A questo punto
         # `bucket` e' guaranteed truthy: regola 1 ha escluso policy=db
         # e il ramo A1 else-branch (riga 395) fallisce gia' se bucket
         # e' unset con policy != db
@@ -1090,13 +1088,12 @@ def validate_storage_config() -> None:
             _fail(
                 f"LOG_ARCHIVE_BUCKET={log_archive_bucket!r} coincide con "
                 "BACKUP_BUCKET: IAM boundary richiesto "
-                "distinto per archive log vs backup DB (O-ARC §5.4)."
+                "distinto per archive log vs backup DB."
             )
         # 5. Formato key prefix (se settata): vuoto o endswith "/"
         # Coerente con log_archive._build_object_key:206-209
-        # NOTA (BE-CONFIG-001E + ADR-0021): `os.getenv` diretto per design
-        # boot-time fail-fast (vedi `_check_positive_int`). Runtime via
-        # `settings.LOG_ARCHIVE_KEY_PREFIX` property
+        # `os.getenv` diretto per boot-time fail-fast (vedi
+        # `_check_positive_int`). Runtime via `settings.LOG_ARCHIVE_KEY_PREFIX`.
         log_archive_prefix = cfg.log_archive_key_prefix
         if log_archive_prefix and not log_archive_prefix.endswith("/"):
             _fail(
@@ -1108,9 +1105,8 @@ def validate_storage_config() -> None:
         # 7. AUDIT_RETENTION_DAYS >= 0 (inline parse: _check_positive_int
         # rigetta 0, ma qui 0 = retention disabilitata e' legittimo
         # simmetrico a SCHEDULE_LOGS_RETENTION_DAYS
-        # NOTA (BE-CONFIG-001E + ADR-0021): `os.getenv` diretto per design
-        # boot-time fail-fast (vedi `_check_positive_int`). Runtime via
-        # `settings.AUDIT_RETENTION_DAYS` property
+        # `os.getenv` diretto per boot-time fail-fast (vedi
+        # `_check_positive_int`). Runtime via `settings.AUDIT_RETENTION_DAYS`.
         audit_retention_raw = cfg.raw_audit_retention_days
         if audit_retention_raw is not None:
             try:

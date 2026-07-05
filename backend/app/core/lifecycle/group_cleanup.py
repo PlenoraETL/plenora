@@ -1,9 +1,8 @@
 """Registry neutro dei cleanup handler per la cancellazione gruppo.
 
-Epic E roadmap accoppiamento: il meccanismo (handler tipizzati, report,
-esecuzione ordinata con failure isolation) vive qui, fuori da `auth`.
-I domini espongono le proprie funzioni di cleanup; la registrazione dei
-default avviene al composition root
+Il meccanismo (handler tipizzati, report, esecuzione ordinata con failure
+isolation) vive qui, fuori da `auth`. I domini espongono le proprie funzioni
+di cleanup; la registrazione dei default avviene al composition root
 (`app/runtime/group_cleanup_wiring.py`); `auth.cleanup_registry` resta
 come wrapper compatibile.
 

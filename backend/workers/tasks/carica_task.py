@@ -47,7 +47,7 @@ from app.utils.debug_payload_builder import DebugPayloadBuilder
 logger = get_logger("workers.carica_task")
 
 
-# Plenora 2.0 Fase 5: corpo task come funzione pura (niente @celery_app.task).
+# Corpo task come funzione pura.
 # `self` e' un self-shim fornito dall'actor Dramatiq (request.id/name); vedi
 # workers/dramatiq_app.py. Retry/timeouts non sono piu' decorator Celery: la
 # write fail-fast (no retry, niente doppie scritture append+per_batch) e'
@@ -76,8 +76,8 @@ def execute_carica_task(
     (scheduler, retry-handler UI) e in intermediate.runs esiste gia'
     un record con status='completed' per quel run_id, il task SKIPPA
     l'esecuzione e ritorna un risultato cached. Copre il caso di
-    retry manuale accidentale o replay da backup. Se run_id non
-    viene passato → genera fresh (behavior legacy, no idempotency).
+    retry manuale accidentale o replay da backup. Se run_id non viene passato,
+    genera fresh e non applica idempotency cross-run.
 
     Args:
         project_id: ID del progetto
@@ -259,13 +259,9 @@ def execute_carica_task(
         rows_written = result.get("rows_written", 0) or 0
         elapsed_ms = int((_time.time() - _run_start) * 1000)
 
-        # P1 (2026-05-26): emit `append_step` SOLO per i branch
-        # non-db. Il path `db` ha gia' un emit interno in
-        # `CaricaExecutor.execute()` che mappa correttamente lo
-        # status PARTIAL (qui invece si collassava a "failure").
-        # Pre-fix: doppia entry "carica" per ogni esecuzione db (run
-        # log e dashboard UI mostravano due righe per la stessa
-        # operazione).
+        # Emit `append_step` solo per branch non-db: il path `db` ha gia'
+        # emit interno in `CaricaExecutor.execute()` e mappa correttamente
+        # lo status PARTIAL.
         if write_branch != 'db':
             append_step({
                 "module":      "carica",
@@ -356,14 +352,9 @@ def execute_carica_task(
                 logger.warning(
                     f"release CARICA target lock fallito: {type(e).__name__}: {e}"
                 )
-        # FIX: chiudi le connessioni PostgreSQL thread-local del worker Celery
-        # Storia: la migrazione SQLite -> PostgreSQL ha mantenuto lo stesso
-        # pattern thread-local, quindi il cleanup resta necessario. Senza
-        # questa pulizia, ogni esecuzione lascia 2 connessioni aperte
-        # config DB + intermediate DB) nel thread.local, che vengono
-        # riusate dal worker pool finche' il file descriptor si esaurisce
-        # o il pool resta saturo. Pre-migrazione si manifestava come
-        # SQLITE_BUSY; post-migrazione come PG pool exhaustion
+        # Chiude le connessioni thread-local del worker: senza cleanup ogni
+        # esecuzione mantiene aperte le connessioni config/intermediate nel
+        # thread pool, fino a saturare i pool PostgreSQL.
         try:
             close_worker_connection()
         except Exception as e:
@@ -437,10 +428,8 @@ def _update_progress(task, percent: int, message: str):
     come terminato; il frontend determina lo stato reale da messaggio e
     percentuale (percent negativo = errore).
 
-    Plenora 2.0 Fase 2 (F2.5): la scrittura va solo su PG via
-    report_task_progress (keyed sul task_id). Il vecchio self.update_state
-    verso il result backend Redis di Celery e' stato rimosso col flip della
-    lettura su PG (F2.3): quello stato non veniva piu' letto da nessuno.
+    La scrittura va solo su PG via report_task_progress (keyed sul task_id),
+    che e' la fonte di verita' per il progress consumato dalla UI.
     """
     report_task_progress(
         getattr(getattr(task, "request", None), "id", None),
@@ -572,7 +561,7 @@ def _load_upstream_data(
         return None
 
 
-# Plenora 2.0 Fase 5: nome registrato del task (era @celery_app.task(name=...)).
+# Nome registrato del task.
 # Soddisfa il protocol DelayTask.name usato da submit_task per il dispatch
 # by-name e combacia con l'actor Dramatiq in workers/dramatiq_app.py.
 execute_carica_task.name = "carica.execute"

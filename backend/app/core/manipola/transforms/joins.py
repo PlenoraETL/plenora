@@ -218,22 +218,21 @@ def op_join(
             f"NaN==NaN, le righe key-NaN saranno {effetto}."
         )
 
-    # MANIPOLA-6 (2026-05-26): cardinality guard many-to-many.
-    # Pre-fix: un join `inner` con 50k righe x 50k righe su chiave a
+    # Cardinality guard many-to-many: un join `inner` con 50k righe x 50k
+    # righe su chiave a
     # cardinalita' alta (es. solo 10 valori distinti) produceva 50k * 50k
     # / 10 = 250M righe — OOM immediato. Mirror del guard di cross_join.
-    # Post-fix: stima cap pre-merge con bound peggiore basato sulle
-    # frequenze di chiave; se supera la soglia, fail-closed con messaggio
+    # Stima cap pre-merge con bound peggiore basato sulle frequenze di
+    # chiave; se supera la soglia, fail-closed con messaggio
     # operativo invece di OOM silente.
     #
-    # M-6 follow-up: ESCLUDI i null dal prodotto common-keys. La policy
-    # downstream sostituisce ogni null con una sentinel UNIVOCA per riga
+    # Escludi i null dal prodotto common-keys. La policy downstream
+    # sostituisce ogni null con una sentinel UNIVOCA per riga
     # (NaN NON matcha NaN cross-side, vedi commento sopra). Quindi nella
     # stima: left_nulls * right_nulls non e' una croce match-able — vanno
     # contati solo come righe preservate per how in (left/right/outer).
-    # Pre-fix-fix: `value_counts(dropna=False)` includeva i null nei
-    # common e poteva sovrastimare (e bloccare) un join legittimo con
-    # molti null bilaterali ma chiavi reali a bassa cardinalita'.
+    # I null non entrano nei common-key matchable: includerli sovrastima
+    # join legittimi con molti null bilaterali.
     _MAX_JOIN_OUTPUT_ROWS = 50_000_000  # 50M righe = ~5-10GB peak tipico
     try:
         left_keys = left_df[left_on]
@@ -269,15 +268,9 @@ def op_join(
     except ValueError:
         raise
     except Exception as exc:
-        # G-4 fix (2026-05-26): visibility-up del guard fallito.
-        # Pre-fix: `logger.debug` silenzioso → un join su chiave con
-        # extension dtype (nullable Int64, Arrow, geometry Shapely)
-        # bypassava il guard senza segnale operativo. Risultato: merge
-        # many-to-many potenziale OOM senza alert.
-        # Post-fix: `logger.warning` con context completo (tipi chiave,
-        # exception type) cosi' operations vedono il bypass in
-        # produzione. Il guard salta ancora (non blocchiamo join
-        # legittimi su dtype esotici), ma il bypass e' visibile.
+        # Warning con context completo (tipi chiave, exception type) cosi'
+        # il bypass del guard resta visibile. Il guard salta ancora per non
+        # bloccare join legittimi su dtype esotici.
         logger.warning(
             f"[GUARD-BYPASS] Join cardinality guard skipped: "
             f"left_dtype={left_keys.dtype}, right_dtype={right_keys.dtype}, "

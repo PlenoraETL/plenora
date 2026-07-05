@@ -178,12 +178,7 @@ def delete_comparison_keys(canvas_id: str, node_id: str | None = None) -> None:
 class ProjectRow:
     """Read model for the project list row shape.
 
-    Pre-fix (P1 entities): `description` mancava da ProjectRow + dalle
-    SELECT (era solo in `ProjectDetailRow`). Il caller
-    `ProjectService.project_row_to_metadata` hardcodava `description=""`
-    nella risposta `GET /projects` → tutti i progetti esposti senza
-    description anche se popolata in DB. Post-fix: campo aggiunto qui +
-    SELECT estese a `description` nei 4 callsite di `list_project_rows`.
+    Include `description` per mantenere coerenti list e detail metadata.
     """
 
     id: str
@@ -357,12 +352,8 @@ class ProjectRepository:
             row = _fetchone("SELECT * FROM projects WHERE id = %s", (project_id,))
         if not row:
             return None
-        # Costruisci un dict mutabile dalla mapping ritornata da psycopg2.
-        # `RealDictRow` in alcune versioni e' read-only: `row["canvas"] = ...`
-        # solleva TypeError silenziosamente catturato dal try/except qui
-        # sotto, con conseguente fallback a canvas vuoto su dati sani.
-        # Pre-fix questo bug era P1 in plenora-bug-entities (mutation
-        # in-place su Mapping non garantito mutabile).
+        # Costruisci un dict mutabile: `RealDictRow` puo' essere read-only
+        # a seconda della versione/configurazione psycopg.
         normalized = dict(row)
         canvas = normalized.get("canvas")
         if canvas:
@@ -422,12 +413,7 @@ class ProjectRepository:
         group_id: str | None = None,
         project_type: str | None = None,
     ) -> list[ProjectRow]:
-        # P1 (2026-05-26): `description` aggiunta a TUTTI i 4 SELECT.
-        # Pre-fix solo l'ultima query (group_id senza project_type) la
-        # selezionava: superadmin (group_id=None) e i path con
-        # project_type filter vedevano description NULL in UI per ogni
-        # progetto. Helper `_PROJECT_LIST_COLUMNS` centralizza la
-        # colonna list per evitare drift se aggiungiamo altri campi.
+        # Helper centralizzato per evitare drift fra i 4 SELECT del list.
         _COLS = (
             "id, group_id, name, project_type, connection_id, "
             "created_at, updated_at, created_by, description, canvas_validated, tags"
@@ -472,15 +458,8 @@ class ProjectRepository:
         connection_id: str | None = None,
         created_by: str | None = None,
     ) -> ProjectDetailRow:
-        # Pre-fix (P1 entities): `datetime.now(...).isoformat()` passava
-        # un ISO string a psycopg2 invece di un `datetime` nativo. Postgres
-        # accetta entrambi (cast string→timestamptz), ma il roundtrip
-        # ritorna `datetime` aware, mentre se l'INSERT fosse fallito su
-        # un trigger con NOW() server-side avremmo avuto mismatch fra
-        # ProjectDetailRow.created_at (string atteso) e il datetime
-        # caricato. Allineato al boundary B1 Pydantic (sessione precedente)
-        # che ora normalizza datetime|str. Mantiene compat callsite che
-        # legge ProjectRow.created_at via _optional_datetime_or_str.
+        # Passa datetime nativo a psycopg2: il roundtrip ritorna `datetime`
+        # aware e i boundary Pydantic normalizzano datetime|str.
         now = datetime.now(timezone.utc)
         canvas = json.dumps({"nodes": [], "edges": []})
         _execute(
@@ -519,8 +498,7 @@ class ProjectRepository:
         # tags è jsonb: serializza la lista (psycopg non adatta list→jsonb).
         if "tags" in fields and isinstance(fields["tags"], (list, dict)):
             fields["tags"] = json.dumps(fields["tags"])
-        # Pre-fix (P1 entities): isoformat string invece di datetime nativo.
-        # Vedi nota in create_project_row sopra.
+        # Datetime nativo per coerenza con create_project_row.
         fields["updated_at"] = datetime.now(timezone.utc)
         set_clause, vals = safe_set_clause("projects", fields)
         _execute(f"UPDATE projects SET {set_clause} WHERE id = %s", vals + (project_id,))
@@ -602,7 +580,7 @@ class ProjectRepository:
         key: str,
         value: object,
     ) -> bool:
-        # Pre-fix (P1 entities): isoformat string. Vedi note sopra.
+        # Datetime nativo per coerenza con create/update project row.
         now = datetime.now(timezone.utc)
         with unit_of_work() as conn:
             with conn.cursor() as cur:
@@ -613,11 +591,8 @@ class ProjectRepository:
                 row = cur.fetchone()
                 if not row:
                     return False
-                # Accesso uniforme via mapping: psycopg2 e' configurato
-                # con RealDictCursor di default (vedi pg_connection).
-                # Il fallback posizionale `row[0]` era fragile rispetto
-                # a cambio cursor factory o aggiunta di colonne alla
-                # SELECT. Pre-fix bug P1 in plenora-bug-entities.
+                # Accesso uniforme via mapping: psycopg2 e' configurato con
+                # RealDictCursor di default (vedi pg_connection).
                 canvas_raw = row["canvas"]
                 if isinstance(canvas_raw, str):
                     try:

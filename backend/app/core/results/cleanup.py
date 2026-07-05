@@ -51,11 +51,10 @@ def delete_result(result_id: str) -> bool:
            beat hook re-tentera' secondo backoff esponenziale, fino a
            `mark_lost`.
 
-    ADR-0011 contract preservato: storage failure NON propaga; la
-    row DB resta cancellata. La differenza vs pre-e' che
-    l'orphan e' ora tracked + retry-able.
+    Storage failure NON propaga; la row DB resta cancellata e l'orphan viene
+    tracciato per retry.
 
-    Backward-compat: row con `storage_key=None` (BYTEA legacy) salta
+    Backward-compat: row con `storage_key=None` (BYTEA) salta
     `record_pending` e il post-commit cleanup; comportamento invariato.
     """
     storage_key_to_clean = None
@@ -123,7 +122,7 @@ def delete_results_for_project(project_id: str) -> int:
     (rollback). Cosi' il reconciler beat hook puo' coprire la finestra
     "DB committed -> process death -> S3 orphan" anche sulla bulk path.
 
-    ADR-0011 preservato: storage failure NON propaga. Il caller riceve
+    Storage failure NON propaga. Il caller riceve
     sempre il `rowcount` finale.
     """
     deleted_count = 0

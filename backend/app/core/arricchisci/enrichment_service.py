@@ -276,10 +276,8 @@ def generate_error_report(
     messaggio, HTTP status, numero retry, parametri input, timestamp.
 
     `input_params` viene redatto via `sanitize_for_log` prima della
-    serializzazione. La path CSV pre-fix scriveva in chiaro
-    api_key/token/password presenti in `params` (es. api_key in query
-    string materializzata da `_build_params`), causando credential leak
-    nel file `<output>_errors.csv` distribuito ai consumer del task.
+    serializzazione, per evitare api_key/token/password nel CSV distribuito ai
+    consumer del task.
     Ora la stessa redaction usata sul logger debug (`sanitize_for_log`)
     e' applicata anche a questa path. Se il caller passa `auth`, anche
     `auth.key_name` viene oscurato (api_key con nome custom es. `apikey`,
@@ -296,10 +294,8 @@ def generate_error_report(
         `save_result_blob_from_bytes` -> result_id e li espone nel
         task result come blob scaricabile.
 
-    Post-refactor (QUERY-1 follow-up): RAM-only. Niente piu' write
-    su `RESULTS_DIR/{project_id}/enrichment_errors_{task_id}.csv`;
-    il worker decide come persistere (result_blob su DB BYTEA o
-    object storage via storage_policy).
+    RAM-only: il worker decide come persistere il result_blob (DB BYTEA o
+    object storage via storage_policy), senza scrivere su RESULTS_DIR.
     """
     if not errors:
         return None
@@ -341,8 +337,8 @@ def build_enrichment_executor(
 
     Logica condivisa tra `execute_enrichment_task` (standalone) e
     `canvas_orchestrator.run_single_enricher` (arricchisci come nodo / preview
-    / schedulato): garantisce che TUTTI i path usino lo stesso motore avanzato
-    (parallel/dedup/retry/cache), eliminando il vecchio engine semplificato.
+    / schedulato): garantisce che TUTTI i path usino lo stesso motore
+    (parallel/dedup/retry/cache).
 
     `node_data` deve essere il merge dei campi root del nodo + il suo `data{}`
     (i campi del nodo canvas hanno priorita' sui default della connection).

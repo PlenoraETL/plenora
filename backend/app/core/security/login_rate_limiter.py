@@ -1,8 +1,8 @@
 """
-Login rate limiter — sliding window su PostgreSQL con fallback in-memory.
+Login rate limiter: sliding window su PostgreSQL con fallback in-memory.
 
-Plenora 2.0 Fase 4: il backend distribuito e' PostgreSQL (tabella
-login_attempts) al posto della ZSET Redis. Port algoritmico proprio (non
+Il backend distribuito e' PostgreSQL (tabella login_attempts). Port
+algoritmico proprio (non
 passa dal KeyValueStore): ogni tentativo fallito e' una riga (ip, attempt_at),
 il check conta le righe nella finestra. Su backend giu' -> fallback in-memory
 single-node (come oggi), o fail-closed se LOGIN_RL_DISTRIBUTED_REQUIRED.

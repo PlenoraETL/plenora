@@ -132,8 +132,7 @@ class ApiConnectionManagementMixin:
     def list_api_connections_decrypted(self, group_id: str = None) -> JsonObjectById:
         """Lista API connections con credenziali decifrate (per uso interno).
 
-        Fix N+1: era un loop di get_api_connection(id, include_token=True).
-        Ora fa UNA sola query e decifra inline. Ritorna dict id -> config.
+        Fa una sola query e decifra inline. Ritorna dict id -> config.
         """
         rows = db_svc.list_api_connection_rows(group_id)
         result = {}
@@ -513,12 +512,9 @@ class ApiConnectionManagementMixin:
         except requests.exceptions.ConnectionError as e:
             return {"success": False, "error": f"Errore di connessione: {str(e)}"}
         except Exception as e:
-            # Fix-D safety-net #5 ramo Exception: endpoint UI sincrono
-            # di test delle API connection. Eccezioni inattese (bug
-            # interno di _prepare_headers, TypeError su parsing custom
-            # headers, ecc.) NON devono leakare str(e) nella response
-            # JSON esposta al form di setup. Messaggio safe generico
-            # dettaglio tecnico solo nel log
+            # Endpoint UI sincrono di test API connection: eccezioni inattese
+            # non devono leakare str(e) nella response JSON. Dettaglio tecnico
+            # solo nel log.
             logger.error(
                 f"[GESTITO] Errore test_api_connection: {e}",
                 exc_info=True,

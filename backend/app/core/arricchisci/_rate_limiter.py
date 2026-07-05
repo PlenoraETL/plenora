@@ -1,15 +1,14 @@
 """
 Rate limiter thread-safe per arricchisci/enrichment.
 
-Usa il limiter locale storico di default. Se configurato
+Usa il limiter locale di default. Se configurato
 (ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_ENABLED), usa un bucket distribuito GCRA per
 quote globali tra worker/processi, con fallback locale salvo
 ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_REQUIRED=True.
 
-Plenora 2.0 Fase 4: il bucket distribuito GCRA e' su PostgreSQL (tabella
-rate_limit_gcra) al posto della Lua Redis. Lo stato GCRA per-scope e' un
-singolo `tat_ms`; l'acquire e' un upsert atomico. Port algoritmico proprio
-(non passa dal KeyValueStore: serve il read-modify-write atomico).
+Il bucket distribuito GCRA e' su PostgreSQL (tabella rate_limit_gcra). Lo
+stato GCRA per-scope e' un singolo `tat_ms`; l'acquire e' un upsert atomico.
+Non passa dal KeyValueStore: serve read-modify-write atomico.
 I nomi config con "REDIS" restano per compat dei deploy.
 """
 

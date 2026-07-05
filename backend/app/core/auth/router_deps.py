@@ -1,8 +1,7 @@
 """Dipendenze FastAPI condivise tra i router auth (users, groups).
 
-Estratti da `users_router.py` e `groups_router.py` (pre-fix erano
-duplicati identici in entrambi i moduli, con due bug-fix da mantenere
-sincronizzati ogni volta). Mantengono il pattern lazy-import per
+Dipendenze unificate per evitare duplicazione tra i router e mantenere
+sincronizzata la validazione. Mantengono il pattern lazy-import per
 evitare cicli `users_router -> auth.py -> users_router`.
 
 Pattern Go-friendly: funzioni modulo leaf, no classi, import inline

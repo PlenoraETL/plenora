@@ -34,12 +34,8 @@ _DEFAULT_LOGGER = get_logger(__name__)
 def normalize_node_columns(node_columns: Sequence[Any] | None) -> JsonRows:
     """Normalizza una lista di node columns in dict omogenei.
 
-    Pre-fix: lo stesso for-loop `if isinstance(c, dict): append(c) else
-    append({name/alias/type/visible})` era duplicato in
-    `source_loading.py::load_file_sources` e
-    `datasource_node_loading.py::_load_datasource_node`. Estratto qui
-    come single source of truth: i caller passano la lista raw dal
-    canvas e ottengono dict normalizzati da consegnare a
+    Single source of truth: i caller passano la lista raw dal canvas e
+    ottengono dict normalizzati da consegnare a
     `filter_visible_columns` / `_metadata_columns_from_node_columns`.
     """
     out: JsonRows = []
@@ -83,14 +79,13 @@ def load_project_source_artifact(
 ) -> LoadedResource:
     """Load one materialized ``project_source`` artifact with metadata.
 
-    Post-Phase5: accetta `data` (bytes, preferito) o `path` (legacy/
-    path-only adapter). Almeno uno DEVE essere fornito. La precedenza
-    e' `data` -> `path`; il caller tipicamente passa il `MaterializedArtifact`
-    .data direttamente, niente piu' tempfile bounce.
+    Accetta `data` (bytes, preferito) o `path` (path-only adapter).
+    Almeno uno DEVE essere fornito. La precedenza e' `data` -> `path`;
+    il caller tipicamente passa `MaterializedArtifact.data` direttamente.
 
     The returned ``LoadedResource`` keeps the DataFrame paired with the
     ``ResourceMetadata`` derived at the loader boundary. This preserves the
-    legacy DataFrame/CRS behavior while avoiding a second metadata guess in
+    DataFrame/CRS behavior while avoiding a second metadata guess in
     ``_applica_crs_da_colonne``.
     """
     from app.core.manipola.executor import _applica_crs_da_colonne
@@ -102,13 +97,9 @@ def load_project_source_artifact(
     df = load_dataframe_from_artifact(
         data=data, path=path, format_hint=format_hint,
     )
-    # Pre-fix (P2 etl-sources): `ensure_dataframe_matches_contract` con
-    # `node_columns=[]` produce `visible_names=[]` → nessuna colonna
-    # mancante → check passa indipendentemente dal contenuto del DF.
-    # Subito dopo `filter_visible_columns(df, [])` ritorna un DF a 0
-    # colonne, propagato silenziosamente alla pipeline. Diagnostica
-    # zero. Post-fix: warning esplicito al boundary per attirare
-    # l'attenzione nei log durante il debug di run "vuote".
+    # `node_columns=[]` non puo' validare il contratto e produce un DF a 0
+    # colonne dopo `filter_visible_columns`: warning esplicito al boundary
+    # per rendere diagnosticabili run "vuote".
     if not node_columns:
         _DEFAULT_LOGGER.warning(
             "load_project_source_artifact: node_columns vuoto per "
@@ -169,8 +160,7 @@ def load_file_sources(
             the ``ResourceMetadata`` produced for each file node
             (keyed by ``node.id``). Populated when provided;
             ignored when ``None``. Lets callers capture schema/
-            CRS metadata at load time rather than reconstructing
-            it later from legacy dicts.
+            CRS metadata at load time rather than reconstructing it later.
 
     Returns:
         ``None`` on success (``dataframes`` populated in place).
@@ -215,18 +205,9 @@ def load_file_sources(
     for node in file_nodes:
         fid = _nf(node, 'file_source_id')
         if not fid:
-            # Pre-fix: silent skip su file_source senza file_source_id.
-            # Sintomo utente: canvas con node file_source non collegato
-            # produce "Nessun dato sorgente" generico, senza indicazione
-            # che il nodo era misconfigurato. Warn esplicito facilita
-            # il triage operativo.
+            # Warn esplicito su file_source senza file_source_id: altrimenti
+            # la run finisce con un generico "Nessun dato sorgente".
             node_id = _nf(node, 'id', '<sconosciuto>')
-            # Pre-fix (P1 etl-sources): `logger.warning` invece di
-            # `log.warning`. Il logger iniettato (`logger=` kwarg, alias
-            # `log` nella funzione) viene ignorato per questo warning,
-            # rompendo i test harness con logger catturante.
-            # Post-fix: `log.warning` allineato a `log.error` del catch
-            # sottostante.
             log.warning(
                 "Nodo file_source skippato (file_source_id mancante): "
                 "node_id=%s — il canvas referenzia un file non configurato",
@@ -267,12 +248,7 @@ def load_file_sources(
         # node metadata (geometry:subtype:SRID in the column
         # definitions) the DataFrame -> GeoDataFrame upgrade
         # still has to run here. Mirrors the project_source
-        # branch. Idempotent: no-op if ``data`` is already a
-        # GeoDataFrame
-        # G-5 fix (2026-05-26): rename incompleto pre-existing —
-        # la variabile era stata rinominata `node_columns_normalized`
-        # ma questa call usava ancora il nome originale → NameError
-        # crash garantito a runtime su ogni file_source con geometry+SRID.
+        # branch. Idempotent: no-op if ``data`` is already a GeoDataFrame.
         data = _applica_crs_da_colonne(data, node_columns_normalized, meta=meta)
         if metadata_map is not None:
             metadata_map[node.id] = meta

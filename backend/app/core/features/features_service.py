@@ -356,15 +356,13 @@ class FeaturesService:
         inizio = time.time()
         
         try:
-            # Tombstone (QUERY-1 step 2): orphan `project_dir.mkdir(...)`
-            # rimosso. `project_dir` non era mai usato (il salvataggio
-            # passa da `save_pipeline_result_outcome` che gestisce
-            # storage policy DB/S3 trasparentemente).
+            # Il salvataggio passa da `save_pipeline_result_outcome`, che
+            # gestisce storage policy DB/S3 senza preparare directory locali.
             #
-            # Fase 0: Recupera CRS dal layer (per salvataggio geo corretto
+            # Step 1: recupera CRS dal layer per salvataggio geo corretto.
             layer_crs = self._get_layer_crs(connection_id, layer_url, out_sr)
             
-            # Fase 1: Query
+            # Step 2: query.
             t_query = time.time()
             rows, columns = self.query_layer(
                 connection_id, layer_url,
@@ -377,12 +375,12 @@ class FeaturesService:
             timings["query_total"] = time.time() - t_query
             logger.info(f"Query ArcGIS: {len(rows)} righe in {timings['query_total']:.2f}s")
             
-            # Fase 2: DataFrame
+            # Step 3: DataFrame.
             t_df = time.time()
             df = dataframe_from_rows(rows, list(columns))
             timings["dataframe"] = time.time() - t_df
             
-            # Fase 3: Salvataggio su blob DB (single entry, dispatch interno
+            # Step 4: salvataggio risultato.
             t_save = time.time()
             filename_stem = Path(output_filename).stem or "result"
             saved = save_pipeline_result_outcome(

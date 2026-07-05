@@ -21,8 +21,7 @@ from typing import Dict, List, Optional, Tuple
 # e' **input-only legacy tolerance**: lo script accetta `.env` non ancora
 # normalizzati (es. backup pre-migration o dev env non aggiornati) e
 # scrive comunque su SSM sotto il nome canonico. Il RUNTIME applicativo
-# non legge piu' l'alias dal 2026-04-23 (D4 chiuso, `app/infrastructure/security/crypto.py`,
-# tombstoned in `tests2/crypto/test_crypto_key_sourcing_contract.py`).
+# non legge piu' l'alias.
 # Una volta che tutti i `.env` operativi sono normalizzati a
 # `PLENORA_ENCRYPTION_KEY`, l'alias puo' sparire anche da qui.
 SECRET_ENV_SPECS: List[Tuple[str, List[str]]] = [

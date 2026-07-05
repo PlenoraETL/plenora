@@ -56,9 +56,8 @@ def op_sample(
         return df
 
     try:
-        # Pre-fix `df.copy()` non serviva: tutto il path costruisce
-        # `result` ex-novo (sample_rows_reset_index / concat_dataframes
-        # ritornano nuove istanze) e l'input non viene mai mutato.
+        # Niente copy: tutto il path costruisce `result` ex-novo e l'input
+        # non viene mai mutato.
         if stratify_column and stratify_column in df.columns:
             # Campionamento stratificato: proporzioni uguali da ogni gruppo
             groups = []
@@ -248,19 +247,16 @@ def op_flatten_json(
         parsed_col = result[column].apply(parse_json)
         col_prefix = prefix if prefix else f"{column}_"
 
-        # MANIPOLA-2 (2026-05-26): fast-path quando output_columns e' valorizzato.
-        # Pre-fix: normalize_json_records globale -> 1 DataFrame con TUTTE le
-        # chiavi (anche centinaia se i JSON sono pesanti), poi filter su
-        # output_columns. Peak = full normalized DF + lista dict intermedia.
-        # Post-fix: per ogni path richiesto, estrai via `.apply(dig)` come
+        # Fast-path quando output_columns e' valorizzato: per ogni path
+        # richiesto, estrai via `.apply(dig)` come
         # singola Series, evitando json_normalize globale. RAM ~ len(paths)
         # x len(rows) invece di full schema discovery.
         #
-        # M-2 follow-up: il fast-path RISPETTA `max_level` come il legacy
-        # `json_normalize(..., max_level=max_level)`. Path piu' profondi
-        # del cap vengono scartati con log warning (UI contract: l'utente
+        # Il fast-path rispetta `max_level` come `json_normalize`.
+        # Path piu' profondi del cap vengono scartati con log warning
+        # (UI contract: l'utente
         # ha esplicitamente impostato max_level, le request di estrarre
-        # path piu' deep sono coerenti col legacy che li tagliava).
+        # path piu' deep sono coerenti con il cap richiesto).
         if output_columns:
             wanted = list(output_columns)
             # Strip del prefix per ottenere il path JSON originale.
@@ -271,8 +267,8 @@ def op_flatten_json(
                     continue
                 json_path = full_col_name[len(col_prefix):]
                 path_parts = json_path.split(".")
-                # max_level rispecchia il legacy json_normalize: 0 = solo
-                # top-level, 1 = un livello di nesting, ecc. Un path con
+                # max_level: 0 = solo top-level, 1 = un livello di nesting.
+                # Un path con
                 # `len(parts) > max_level + 1` e' piu' profondo del cap.
                 if max_level is not None and max_level >= 0 and len(path_parts) > max_level + 1:
                     skipped_too_deep.append(full_col_name)
@@ -293,7 +289,7 @@ def op_flatten_json(
             if skipped_too_deep:
                 logger.warning(
                     f"FlattenJSON fast-path: path piu' profondi di max_level={max_level} "
-                    f"saranno scartati per coerenza con legacy json_normalize: "
+                    f"saranno scartati per coerenza con max_level: "
                     f"{skipped_too_deep}"
                 )
 

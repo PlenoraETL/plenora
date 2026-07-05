@@ -110,16 +110,9 @@ def save_result_row(
     with unit_of_work() as session:
         conflict_policy_marker = "ON CONFLICT (id) DO NOTHING"
         _ = conflict_policy_marker
-        # Pre-fix (P2 data-layer): `ON CONFLICT (id) DO UPDATE` sovrascriveva
-        # silenziosamente un result gia' persistito + ri-imposta `created_at`
-        # al timestamp dell'UPDATE, spezzando l'ordinamento per ricerca
-        # "ultimo result" (ORDER BY created_at DESC). In un sistema
-        # append-only dove ogni run genera UUID nuovo via uuid.uuid4(),
-        # un conflict NON dovrebbe mai accadere. Se accade, e' un bug
-        # applicativo (generator UUID rotto, replay malformato): meglio
-        # detectarlo come anomalia che mascherarlo.
-        # Post-fix: `DO NOTHING` + log warning sulla rowcount per visibilita'.
-        # Niente exception (non blocca la run, ma marca l'anomalia).
+        # In un sistema append-only ogni run genera UUID nuovo: un conflict
+        # su id non dovrebbe accadere. `DO NOTHING` evita overwrite di result
+        # gia' persistiti e il warning su rowcount marca l'anomalia.
         cur = session.execute(
             "INSERT INTO results (id, project_id, group_id, filename, format, data, "
             "size_bytes, rows_count, created_at, created_by, storage_key) "
@@ -182,17 +175,11 @@ def get_latest_result_row(
 ) -> Optional[ResultMetadataRow]:
     """Return latest typed result metadata for a project."""
     def _read(active_session: PgSession) -> Optional[ResultMetadataRow]:
-        # Pre-fix (P0 data integrity): SELECT NON includeva `storage_key`.
-        # I result salvati con STORAGE_POLICY=object_storage hanno
-        # data=NULL nella tabella `results` e il blob su MinIO/S3
-        # referenziato da storage_key. Senza la colonna nella SELECT,
-        # `ResultMetadataRow.from_mapping` settava storage_key=None,
-        # i caller downstream pensavano fosse un result BYTEA e
-        # tentavano di leggere `data` → NULL → `get_result_as_bytes`
-        # ritornava None silenziosamente. Risultato: TUTTI i result
-        # sopra `RESULT_S3_THRESHOLD_BYTES` erano illeggibili via
-        # `get_latest_result_row`. Allineato a `list_result_rows`
-        # (riga 141) che gia' includeva storage_key.
+        # I result salvati con STORAGE_POLICY=object_storage hanno data=NULL
+        # nella tabella `results` e il blob su MinIO/S3 referenziato da
+        # storage_key. La SELECT deve includere `storage_key`, altrimenti i
+        # caller downstream pensano sia un result BYTEA. Allineato a
+        # `list_result_rows`, che include gia' storage_key.
         if group_id:
             row = active_session.fetchone(
                 "SELECT id, project_id, group_id, filename, format, size_bytes, "

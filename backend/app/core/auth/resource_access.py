@@ -24,10 +24,9 @@ if TYPE_CHECKING:
     from app.core.files.db import FileSourcePublicRow
 
 
-# Port bindings (Epic C roadmap): i reader sono iniettabili dal composition
-# root (`bind_resource_readers`); il fallback lazy costruisce gli adapter dei
-# domini proprietari, cosi' worker e contesti senza bootstrap esplicito
-# mantengono il comportamento storico.
+# I reader sono iniettabili dal composition root (`bind_resource_readers`);
+# il fallback lazy costruisce gli adapter dei domini proprietari per worker
+# e contesti senza bootstrap esplicito.
 _project_metadata_reader: Optional[ProjectMetadataReader] = None
 _file_source_reader: Optional[FileSourceReader] = None
 

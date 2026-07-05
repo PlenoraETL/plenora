@@ -309,12 +309,8 @@ class EstraiExecutor:
         logger.info(f"Esecuzione ESTRAI: {project_id}", op="execute", project_id=project_id)
         _step_start = _time.time()
 
-        # Pre-fix: 4 early-return (result_node missing, default_connection_id
-        # missing, CredentialUnavailableError, ValueError) uscivano da execute()
-        # PRIMA del blocco append_step finale. Tutte le failure pre-connessione
-        # erano invisibili nel run step log — impossibile triagiare via UI.
-        # Post-fix: helper `_failure_step` single-exit-point allinea il
-        # pattern a manipola/executor.py (gia' fixato in sessione precedente).
+        # Le failure pre-connessione devono produrre uno step visibile nel run
+        # log; `_failure_step` mantiene un single-exit-point per questi casi.
         def _failure_step(message: str, *, user_error: bool = False) -> JsonObject:
             duration_ms = int((_time.time() - _step_start) * 1000)
             append_step({
@@ -388,10 +384,8 @@ class EstraiExecutor:
                 db_schema=connection.db_schema
             )
         except Exception as e:
-            # Pre-fix nessun logger qui: errori non-SQL (KeyError nel
-            # generator, bug interni, ecc.) sparivano dal log aggregato.
-            # Allinea al pattern di `_execute_feature_service` e
-            # `_preview_database` che loggano sempre con exc_info.
+            # Anche gli errori non-SQL devono entrare nel log aggregato con
+            # exc_info, come `_execute_feature_service` e `_preview_database`.
             logger.error(
                 f"[CRASH] Errore generazione SQL: {e}",
                 op="execute", project_id=project_id, exc_info=True,
@@ -418,12 +412,9 @@ class EstraiExecutor:
         )
 
         if res.get("success"):
-            # Pre-fix: _salva_tipi_colonne_da_canvas chiama
-            # update_project_output_contract senza try/except. Su failure
-            # (DB deadlock/timeout) post-blob-save l'eccezione propaga,
-            # bypassa append_step downstream e lascia il run in stato
-            # ambiguo. Post-fix: stesso pattern di arricchisci/manipola
-            # — log ERROR + flag contract_update_failed nel res.
+            # L'aggiornamento del contratto output e' best-effort: una failure
+            # DB post-blob-save viene loggata e marcata nel risultato, senza
+            # trasformare la run in stato ambiguo.
             try:
                 self._salva_tipi_colonne_da_canvas(project_id, canvas, res)
             except Exception as contract_err:
@@ -495,13 +486,9 @@ class EstraiExecutor:
             )
 
             if res.get("success"):
-                # P1 (2026-05-26): contract update schermata. Pre-fix
-                # un'eccezione in `_salva_tipi_colonne_da_canvas`
-                # (DB transient, contract write race) sollevava e
-                # veniva inghiottita dal try/except esterno → la run
-                # ArcGIS chiudeva con `success=False` nonostante il
-                # blob fosse persistito. Pattern allineato a
-                # MANIPOLA/ESTRAI database (vedi executor.py:425-442).
+                # L'aggiornamento del contratto output e' best-effort anche
+                # per ArcGIS: errori transienti vengono loggati e marcati,
+                # senza ribaltare una persistenza blob gia' riuscita.
                 try:
                     self._salva_tipi_colonne_da_canvas(project_id, canvas, res)
                 except Exception as exc_contract:

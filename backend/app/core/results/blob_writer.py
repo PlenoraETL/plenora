@@ -112,10 +112,8 @@ def _runtime_storage_upload_error(exc: Exception, *, result_id: str, filename: s
     return ResultSaveError(f"Upload object storage fallito per result {result_id}: {exc}")
 
 
-# Tombstone (QUERY-1): `save_result_blob(path)` rimosso.
-# Era l'entry point streaming path-based per query streaming output
-# (`query_result_persistence.persist_streamed_file`). Sostituito da
-# `StreamingResultBlobWriter` (S3 multipart real-time o DB BYTEA buffer)
+# Query streaming output usa `StreamingResultBlobWriter` (S3 multipart
+# real-time o DB BYTEA buffer), evitando entry point path-based.
 # orchestrato da `persist_streaming_query_to_storage`: niente piu'
 # tempfile intermedio fra cursor query e storage canonical.
 # Per source in-memory continua a valere `save_result_blob_from_bytes`.

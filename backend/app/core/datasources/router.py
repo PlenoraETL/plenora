@@ -294,8 +294,7 @@ def download_file(
         )[:200]
         if not safe_filename:
             safe_filename = "download"
-        # RAM-3 (2026-05-26): StreamingResponse + iter_read_chunks
-        # invece di Response(content=full_bytes). Per LocalDataSource
+        # StreamingResponse + iter_read_chunks. Per LocalDataSource
         # il peak RAM scende da O(file_size) a O(64KB). Per gli altri
         # backend il default fallback non riduce il peak ma evita la
         # doppia copia request->response di FastAPI.
@@ -350,10 +349,8 @@ def upload_file(
     """
     assert_group_access(_svc().get_datasource(ds_id), current_user, "Data Source")
     try:
-        # RAM-B3 (2026-05-26): upload streaming chunked.
-        # Pre: `file.file.read()` materializzava il body INTERO in RAM.
-        # Post: validate_no_executable sui primi 4KB (header magic
-        # bytes sufficiente), poi chunked write via `write_chunks`.
+        # Upload streaming chunked: validate_no_executable sui primi 4KB
+        # (header magic bytes sufficiente), poi write via `write_chunks`.
         # Peak RAM: ~4KB header + chunk buffer (~64KB) + bounded
         # internal buffer di starlette per UploadFile.
         from app.utils.mime_validator import (

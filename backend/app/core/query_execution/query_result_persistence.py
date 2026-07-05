@@ -4,11 +4,10 @@ QueryExecutor owns query execution and orchestration. This module owns the
 result-store calls so executor code does not import low-level persistence
 functions directly.
 
-QUERY-1 (post-IMDF-6): il path streamable evita il tempfile intermedio.
+Il path streamable evita il tempfile intermedio.
 `persist_streaming_query_to_storage` orchestra
 `StreamingResultBlobWriter` (S3 multipart o DB BYTEA) +
-`execute_streaming_to_writer` (cursor -> file-like). Il vecchio
-`persist_streamed_file(path)` e' rimosso (zero caller post-refactor).
+`execute_streaming_to_writer` (cursor -> file-like).
 """
 
 from __future__ import annotations

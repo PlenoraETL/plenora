@@ -19,9 +19,9 @@ logger = get_logger(__name__)
 
 DataFrame = Any
 
-# MANIPOLA-3: dimensione del batch per md5 hash RAM-bounded.
+# Dimensione del batch per md5 hash RAM-bounded.
 # 50k righe x 8 colonne x ~100 byte avg = ~40MB di peak per batch
-# (vs unbounded per intero DataFrame pre-fix).
+# invece di operare sull'intero DataFrame.
 _HASH_BATCH_SIZE = 50_000
 
 
@@ -67,11 +67,7 @@ def op_md5_hash(
     separator = "\x1f"  # Unit Separator — non appare nei dati reali
 
     try:
-        # MANIPOLA-3 (2026-05-26): batch RAM-bounded.
-        # Pre-fix: materializzava `values + buf + np.array` per ognuna delle
-        # N colonne contemporaneamente (peak ~ N_cols * N_rows * avg_str_size).
-        # Su 5M righe x 8 colonne con stringhe ~50 byte: ~2GB di peak.
-        # Post-fix: processa batch da `_HASH_BATCH_SIZE` (50k righe) per
+        # Batch RAM-bounded: processa `_HASH_BATCH_SIZE` (50k righe) per
         # volta. Peak ~ N_cols * 50k * avg_str_size ~ poche centinaia di MB
         # max, indipendente da N_rows.
         #

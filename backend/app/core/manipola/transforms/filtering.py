@@ -53,10 +53,8 @@ def op_filter(
             f"Colonne disponibili: {available}"
         )
 
-    # Pre-fix: `df.copy()` allocava un'intera copia profonda solo per
-    # consumare `result[column]` in lettura e poi fare
-    # `result[mask].reset_index(drop=True)`. Path read-only puro:
-    # niente modifiche column-level, leggi direttamente da `df`.
+    # Path read-only puro: niente modifiche column-level, leggi direttamente
+    # da `df`.
     col = df[column]
 
     # Se la colonna è numerica e il valore è stringa, converti
@@ -76,8 +74,8 @@ def op_filter(
         elif operator == '!=':
             mask = col != value
         elif operator == '>':
-            # FIX B-BE-MANIPOLA-04: value è già convertito dall'auto-conversione sopra
-            # Se non convertibile, value rimane stringa → confronto fallisce → df invariato
+            # value e' gia' convertito dall'auto-conversione sopra; se non
+            # convertibile, resta stringa e il confronto fallisce.
             mask = col > value
         elif operator == '>=':
             mask = col >= value

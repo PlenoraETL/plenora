@@ -17,9 +17,10 @@ from app.utils.logger import get_logger
 
 
 def _env_int_safe(name: str, *, default: int) -> int:
-    """Cap int da Settings (BE-CONFIG-001F: default tipato in DEFAULTS,
-    override env opzionale); fallback su default per valori non-int o <=0.
-    F1-1 (2026-05-26): cap source datasource."""
+    """Cap int da Settings con override env opzionale.
+
+    Fallback su default per valori non-int o <=0.
+    """
     try:
         n = int(settings.get(name, default))
     except (TypeError, ValueError):
@@ -148,11 +149,10 @@ def load_datasource_nodes(
         # Read remote bytes via the canonical service. The backend
         # connect/disconnect lifecycle and credential decryption live
         # there — no FTP/SFTP/SharePoint logic leaks into this loader.
-        # Sessione E-1 (2026-05-26) + F1-1 follow-up: usa
-        # `iter_read_chunks` accumulando in bytearray con cap esplicito
+        # Usa `iter_read_chunks` accumulando in bytearray con cap esplicito
         # `PLENORA_DATASOURCE_SOURCE_MAX_BYTES` (default 2GB). Per
         # backend con override streaming (LocalDataSource, SFTP, FTP,
-        # SharePoint via REST — RAM-3/B2/E-2) il peak intermedio scende
+        # SharePoint via REST) il peak intermedio scende
         # a `chunk_size`. Il payload finale resta in bytearray finche'
         # il parser non ha consumato i bytes — il parser non ha
         # streaming API. Trade-off accettato: peak finale = file_size
@@ -167,11 +167,9 @@ def load_datasource_nodes(
             for chunk in datasource_service.iter_read_chunks(ds_id, file_path):
                 buf.extend(chunk)
                 if len(buf) > max_bytes:
-                    # G-3 fix (2026-05-26): segnala superamento cap via
-                    # flag, non via ValueError che leakka file_path +
-                    # size esatti nel `str(e)` ritornato al frontend
-                    # (info leak: path utente + bytes esatti). Log
-                    # dettagli completi server-side, ritorna messaggio
+                    # Segnala superamento cap via flag, non via ValueError:
+                    # str(e) potrebbe finire nel frontend con path/size
+                    # esatti. Log dettagli completi server-side, ritorna messaggio
                     # canonico user-facing.
                     log.warning(
                         f"[GESTITO] datasource_node cap exceeded: "
@@ -200,8 +198,8 @@ def load_datasource_nodes(
                 f"path={file_path!r} {type(e).__name__}: {e}",
                 exc_info=True,
             )
-            # G-3 (2026-05-26): non includere `{e}` nel messaggio
-            # utente — alcune eccezioni (es. paramiko / requests)
+            # Non includere `{e}` nel messaggio utente: alcune eccezioni
+            # (es. paramiko / requests)
             # contengono path/credenziali/host nel str(). Log full
             # exception server-side; messaggio user canonico.
             return {
@@ -213,8 +211,7 @@ def load_datasource_nodes(
             }
 
         # Bytes-first parse: `_load_dataframe_from_bytes` dispatcha per
-        # format_hint (post-Phase5, niente piu' tempfile bounce per
-        # questo flow).
+        # format_hint senza tempfile bounce.
         suffix = _suffix_for(node, file_path)
         fmt = suffix.lstrip(".").lower() or "bin"
         parse_options = _nf(node, "parse_options") or {}

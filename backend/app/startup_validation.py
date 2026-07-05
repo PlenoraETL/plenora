@@ -4,10 +4,8 @@
 and broker (RabbitMQ) reachability probing live here so importing the
 settings singleton never implies operational behavior.
 
-Plenora 2.0 Fase 5: il broker e' RabbitMQ (Dramatiq), non piu' Redis
-(Celery). La probe di reachability a startup pinga RabbitMQ via
-``DRAMATIQ_BROKER_URL``; il vecchio fallback WSL per auto-avviare Redis in
-dev Windows e' stato rimosso col cutover.
+La probe di reachability a startup pinga RabbitMQ via
+``DRAMATIQ_BROKER_URL`` senza side effect operativi.
 """
 
 from __future__ import annotations
@@ -182,10 +180,9 @@ def validate_production_gates(settings: Any, errors: list[str]) -> None:
 def ensure_broker(settings: Any, errors: list) -> None:
     """Verify RabbitMQ broker reachability with a bounded TCP connect.
 
-    Plenora 2.0 Fase 5: rimpiazza ``ensure_redis``. Il broker dei task e'
-    RabbitMQ (Dramatiq); un connect TCP all'host:porta ricavati da
+    Il broker dei task e' RabbitMQ; un connect TCP all'host:porta ricavati da
     ``DRAMATIQ_BROKER_URL`` e' sufficiente a fail-fast su broker assente
-    senza dipendere da pika a startup. Niente piu' fallback WSL (era una
+    senza dipendere da pika a startup. Niente fallback WSL (era una
     convenienza dev-Windows per auto-avviare Redis, non applicabile a
     RabbitMQ)."""
 

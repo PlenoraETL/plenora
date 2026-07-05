@@ -1,10 +1,10 @@
 """
 Portable read/preview orchestration for FileSourceService.
 
-Post-Phase4 refactor: bytes-first. Le funzioni `load_dataframe` /
-`get_layers_info` consumano il blob direttamente in RAM via
+Bytes-first: le funzioni `load_dataframe` / `get_layers_info` consumano il
+blob direttamente in RAM via
 `load_by_format_bytes` / `list_vector_layers` / `list_excel_sheets_from_bytes`,
-senza piu' materializzare temp file via `temp_file_for`.
+senza materializzare temp file.
 
 Il blob viene fornito dal caller come `get_blob` callable (firma
 `(file_id, expected_group_id) -> Optional[bytes]`), tipicamente

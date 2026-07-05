@@ -1,11 +1,11 @@
-"""Orchestratore orizzontale di validazione canvas (Epic Canvas Validation).
+"""Orchestratore orizzontale di validazione canvas.
 
-``validate_canvas`` produce un ``ValidationReport`` tipizzato. Fase 1.5: i check
-**strutturali canvas-intrinseci** — cicli (kahn ``on_cycle='raise'``), edge
+``validate_canvas`` produce un ``ValidationReport`` tipizzato. I check
+**strutturali canvas-intrinseci** coprono cicli (kahn ``on_cycle='raise'``), edge
 danglanti (verso nodi inesistenti), nodi orfani (processing senza input).
 
 Non importa i motori (estrai/manipola/...): la validazione per-nodo (schema,
-formula, mapping) arriva in 1.6 via ``validator_for`` (registry, #D). L'authz dei
+formula, mapping) arriva via ``validator_for``. L'authz dei
 ref cross-tenant (``find_inaccessible_canvas_refs``) resta al boundary del router
 (serve lookup DB-backed di visibilità): l'engine resta puro sul canvas.
 """
@@ -60,7 +60,7 @@ def validate_canvas(
     """Valida un canvas. Ritorna un ``ValidationReport``.
 
     Strutturale (sempre) + per-nodo via i ``validate_node`` registrati al
-    composition-root (#D), scoperti con ``validator_for(node.type)`` — nessun
+    composition-root, scoperti con ``validator_for(node.type)`` — nessun
     import diretto dei motori. Ogni validatore riceve l'``InferredSchema`` upstream
     (colonne + status) per decidere error-vs-warning (no falso-blocco).
 

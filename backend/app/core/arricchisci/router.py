@@ -493,10 +493,9 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
                     )
                     if node_api_id == api_id:
                         proj_name = proj_dict.get('name', proj_id)
-                        # F1-B1 (2026-04-24): aggiunto project_type alla shape
-                        # cascade per uniformare con connection/datasource 409
-                        # PR-δ: aggiunto group_id per consentire filtro
-                        # cross-tenant in fase di costruzione 409 detail
+                        # project_type uniforma la shape 409 con
+                        # connection/datasource; group_id abilita filtro
+                        # cross-tenant nel detail.
                         in_use_by.append({
                             'project_id': proj_id,
                             'project_name': proj_name,
@@ -519,9 +518,8 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
         )
 
     if in_use_by:
-        # PR-δ: filtrare dependencies per visibility lato chiamante per non
-        # leakare nomi di progetti cross-tenant nell'errore 409 (la api
-        # connection puo' essere shared con altri gruppi via allowed_groups
+        # Filtra dependencies per visibility lato chiamante: una API connection
+        # puo' essere condivisa con altri gruppi via allowed_groups.
         is_super = current_user.role == "superadmin"
         if is_super:
             visible = list(in_use_by)
@@ -530,12 +528,9 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
             visible = [p for p in in_use_by if p.get("group_id") == current_user.group_id]
             hidden_count = len(in_use_by) - len(visible)
 
-        # Shape 409 cascade canonica (6.1): error + dependencies
-        # con kind. Pre-fix questa shape non aveva la chiave "error" e
-        # usava "in_use_by" con {project_id, project_name}: il FE non
-        # poteva scrivere un handler unificato. Ora allineata a projects/
-        # connections/datasources: kind="project", id, name
-        # PR-δ: aggiunto `hidden_count` opzionale (FE backward-compatible
+        # Shape 409 cascade canonica: error + dependencies con kind,
+        # allineata a projects/connections/datasources. `hidden_count`
+        # resta opzionale e backward-compatible.
         raise HTTPException(
             status_code=409,
             detail={
@@ -549,8 +544,7 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
                         "kind": "project",
                         "id": p["project_id"],
                         "name": p["project_name"],
-                        # F1-B1: project_type ora presente per uniformare
-                        # shape con connection/datasource 409 cascade
+                        # project_type uniforma la shape 409 cascade.
                         "project_type": p.get("project_type", ""),
                     }
                     for p in visible
@@ -567,7 +561,7 @@ def delete_api_connection(api_id: str, current_user: CurrentUser = Depends(requi
                 "message": f"API connection '{api_id}' non trovata",
             },
         )
-    # F2-B1 (2026-04-24): DELETE risponde 204 No Content, body vuoto
+    # DELETE risponde 204 No Content, body vuoto.
 
 
 @api_connections_router.post("/api-connections/test")
@@ -771,7 +765,7 @@ def execute_enrichment_async(
             canvas=canvas.model_dump(),
             output_format=output_format,
             force_recalculate=request.force_recalculate,
-            user_id=current_user.user_id,  # N9
+            user_id=current_user.user_id,
             intermediate_mode_override=intermediate_mode,
         )
         

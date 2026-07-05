@@ -6,9 +6,11 @@ import re
 from typing import Any, Mapping
 
 from app.core.output_contract.service import node_columns_from_contract
-# B4 roadmap: Column dal contratto shared — niente dipendenza dal dominio
-# projects per un puro modello dati (spezza il 2-ciclo projects<->output_contract).
 from app.shared.execution.canvas_column import Column
+from app.shared.execution.config_column_refs import (
+    LIST_COLUMN_CONFIG_KEYS,
+    SCALAR_COLUMN_CONFIG_KEYS,
+)
 
 ColumnPayload = dict[str, Any]
 ColumnPayloadRows = list[ColumnPayload]
@@ -22,14 +24,7 @@ ProjectSourceSyncResult = tuple[bool, ColumnMigrationsByNode]
 ExpressionRefs = list[ColumnPayload]
 
 
-# Key-set condivise: sorgente unica in shared/execution/config_column_refs
-# (de-duplicate; erano copiate qui e in schema_inference). Re-export per i caller
-# che le importano da questo modulo.
-from app.shared.execution.config_column_refs import (  # noqa: E402
-    LIST_COLUMN_CONFIG_KEYS,
-    SCALAR_COLUMN_CONFIG_KEYS,
-)
-
+# Re-export compatibile per caller che importano le key-set da questo modulo.
 DICT_COLUMN_REFERENCE_LISTS = {
     "aggregations": ("column", "column_id"),
     "aggs": ("column", "column_id"),
@@ -91,9 +86,9 @@ def _sync_project_source_columns(
     column_migrations_by_node: dict[str, dict[str, dict[str, Any] | None]] = {}
     # Ponte 2-hop: i config-ref del canvas possono puntare a una colonna
     # tramite un suo nome *precedente* registrato nell'output_contract del
-    # progetto stesso (es. il vecchio physical_name "old_age" per la colonna
+    # progetto stesso (es. il physical_name precedente "old_age" per la colonna
     # id "col-age"). La migration del project_source riconcilia upstream
-    # prev→next per id; aggiungiamo le chiavi name: dei nomi storici propri
+    # prev→next per id; aggiungiamo le chiavi name: dei nomi precedenti propri
     # cosi' anche i ref espressi con quei nomi vengono riscritti.
     own_name_by_id = _own_contract_name_by_id(project_service, project_id)
     for node in getattr(canvas, "nodes", []) or []:
@@ -646,10 +641,11 @@ def _build_schema_context(
     project_service: Any,
     schema_inference_factory: Any = None,
 ) -> SchemaContext | None:
-    """B4 roadmap: la schema inference appartiene al dominio projects — il
-    chiamante la inietta (i 3 call-site di sync sono in projects). Senza
-    factory il contesto e' None, stato gia' supportato da tutti i consumer
-    (era l'esito del ramo except)."""
+    """Build schema-inference context when the projects domain injects it.
+
+    Without a factory the context stays ``None`` and consumers run without
+    schema-aware reconciliation.
+    """
     if schema_inference_factory is None:
         return None
     try:
@@ -718,7 +714,7 @@ def _own_contract_name_by_id(
     """Map ``column_id -> [physical names recorded in the project's own
     output_contract]``.
 
-    Serve da ponte 2-hop: i config-ref possono usare un nome storico della
+    Serve da ponte 2-hop: i config-ref possono usare un nome precedente della
     colonna (il physical_name esposto in precedenza dal progetto stesso)
     diverso dal nome corrente del project_source.
     """
@@ -752,7 +748,7 @@ def _augment_migration_with_own_names(
     migration: ColumnMigrationMap,
     own_name_by_id: dict[str, list[str]],
 ) -> None:
-    """Aggiunge chiavi ``name:<nome storico proprio>`` alla migration per ogni
+    """Aggiunge chiavi ``name:<nome precedente proprio>`` alla migration per ogni
     colonna che ha gia' una migration per id (riscritta o rimossa upstream)."""
 
     if not own_name_by_id:

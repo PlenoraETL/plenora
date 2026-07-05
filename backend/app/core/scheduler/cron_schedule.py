@@ -1,7 +1,6 @@
-"""Schedule celery-free per il beat (Plenora 2.0, Fase 5 F5.4).
+"""Schedule celery-free per il beat.
 
-Rimpiazza ``celery.schedules.crontab`` + ``celery.beat.ScheduleEntry`` con
-primitive proprie basate su ``croniter`` (gia' dipendenza del repo).
+Primitive proprie basate su ``croniter`` per valutare cron e tick del beat.
 
 Timezone: i cron vengono interpretati nella timezone del beat (default
 ``Europe/Rome``, come faceva Celery beat con ``timezone="Europe/Rome"`` +

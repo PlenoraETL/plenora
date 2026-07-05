@@ -11,13 +11,8 @@ from datetime import datetime
 from app.core.scheduler.runtime_status import RuntimeStatus
 
 
-# Pre-fix: `ScheduleStatus` era un `Literal[...]` con stringhe duplicate
-# rispetto ai ~40 callsite che assegnavano `config.runtime.status = "..."`.
-# Post-fix: l'enum canonico vive in `runtime_status.py`; qui esponiamo
-# `ScheduleStatus` come Literal backward-compat (Pydantic conserva la
-# stessa shape JSON di prima, niente migrazione DB) costruito direttamente
-# dai valori dell'enum cosi' una drift fra i due fonti diventa errore di
-# compile-time.
+# `ScheduleStatus` resta Literal per Pydantic/JSON compatibility, ma i valori
+# devono rimanere allineati a `RuntimeStatus`.
 ScheduleStatus = Literal[
     "idle",
     "running",

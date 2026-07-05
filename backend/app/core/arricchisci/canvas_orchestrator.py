@@ -311,7 +311,7 @@ def run_enrichment_canvas(
 
             elif node_type == "api_enrich":
                 # api_enrich emesso come step "single" quando
-                # cardinality-changing o isolato (RB.#15). rest_file ed
+                # cardinality-changing o isolato. rest_file ed
                 # execute_if sono gestiti qui (serve il contesto loop:
                 # nodes/edges/node_results), in modo uniforme al branch
                 # parallelo; `enrich_fn` resta puro enricher/generator.

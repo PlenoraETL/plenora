@@ -13,10 +13,8 @@ from app.shared.contracts.payloads import JsonObject
 def geojson_to_wkt(geom: JsonObject) -> str:
     """Convert a GeoJSON geometry dict to WKT using shapely when available."""
     try:
-        # Lazy via importlib: engine boundary guard
-        # (BE-GO-READY-ARCH-057-W1) forbids static `shapely` imports in
-        # `app.shared.resources.*`. shapely is optional here (graceful
-        # fallback to JSON), so we resolve it dynamically.
+        # Lazy via importlib: shapely is optional here (graceful fallback
+        # to JSON), so we resolve it dynamically.
 
         shape = importlib.import_module("shapely.geometry").shape
         return shape(geom).wkt

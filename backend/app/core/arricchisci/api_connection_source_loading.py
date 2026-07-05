@@ -58,13 +58,9 @@ def _group_id_from_ctx(
     Ritorna `ctx.group_id` se il caller passa un context tipato,
     altrimenti `None`.
 
-    Decisione di slice (audit -021):
-      `_load_static_values` non ha tenant binding semantico
-      (processing puro di template variables come `{{NOW}}`,
-      `{{TODAY}}`). La sua dipendenza pre-singleton era
-      un side effect del helper legacy, non del contract della
-      funzione. La lettura dal typed boundary elimina lo stale-state
-      coupling al singleton.
+    `_load_static_values` non ha tenant binding semantico: processa solo
+    template variables come `{{NOW}}` e `{{TODAY}}`. La lettura dal typed
+    boundary evita stale-state coupling al singleton.
     """
     if ctx is not None:
         return ctx.group_id
@@ -185,19 +181,14 @@ class ApiConnectionSourceLoadingMixin:
         delega ad ArtifactResolver). Il recompute upstream resta qui
         perche' e' specifico di api_connector.
 
-         `ctx` e' ora un
-        keyword-only **required** parameter (no default). Tutti i 3
-        production callsite (`canvas_orchestrator`, `executor.preview`,
-        `enrichment_task`) e tutti i test callsite passano `ctx=ctx`
-        esplicito post-TE-019/-020/-030A/-030B/-031. Il `group_id`
-        viene letto ESCLUSIVAMENTE da `ctx.group_id` via
+        `ctx` e' un keyword-only **required** parameter (no default). Il
+        `group_id` viene letto ESCLUSIVAMENTE da `ctx.group_id` via
         `_group_id_from_ctx(ctx)`; se `ctx.group_id is None`
         (project non trovato) il loader fail-closes con
         `ValueError("Contesto di sicurezza non determinabile...")`.
         """
-        # RB.#19 Step A: timing log totale del source project load
-        # Aggrega tutti i sub-step (DB lookup, S3/blob fetch, temp write
-        # parse) gia' loggati individualmente downstream
+        # Timing log totale del source project load: aggrega sub-step gia'
+        # loggati downstream.
         _t0 = _time_mod.monotonic()
 
         source_project_id = node_data.get('source_project_id')
@@ -214,11 +205,8 @@ class ApiConnectionSourceLoadingMixin:
         loader = SourceLoader()
 
         df = None
-        # FIX 6: se il canvas dell'upstream e' stato salvato dopo
-        # l'ultimo blob risultato, il blob e' stale (le colonne /
-        # formule downstream non riflettono il nuovo schema). In quel
-        # caso saltiamo il tentativo 1 e forziamo il recompute per non
-        # propagare dati obsoleti a MANIPOLA / risultato.
+        # Se il canvas upstream e' piu' recente dell'ultimo blob risultato,
+        # il blob e' stale: forza recompute per non propagare dati obsoleti.
         upstream_stale = self._upstream_blob_is_stale(
             source_project_id,
             expected_group_id=executing_group_id,
@@ -256,9 +244,8 @@ class ApiConnectionSourceLoadingMixin:
             self._assert_source_project_in_tenant(
                 source_project_id, executing_group_id
             )
-            # FIX 6: stale upstream → ricalcolo aggressivo. Senza
-            # questo, l'orchestratore poteva riusare la propria cache
-            # locale e produrre di nuovo lo stesso blob obsoleto.
+            # Stale upstream: ricalcolo aggressivo per evitare cache locale
+            # sul blob obsoleto.
             self._recompute_upstream_project(
                 source_project_id,
                 force_recalculate=force_recalculate or upstream_stale,
@@ -334,9 +321,8 @@ class ApiConnectionSourceLoadingMixin:
         `ctx.preview_limit is None`, il preview_limit e' considerato
         non-richiesto (no truncation).
         """
-        # RB.#19 Step A: timing log totale del file source load (analogo
-        # a _load_source_project). Sub-step (DB blob fetch, temp write
-        # parse) gia' loggati downstream individualmente
+        # Timing log totale del file source load; sub-step gia' loggati
+        # downstream individualmente.
         _t0 = _time_mod.monotonic()
 
         file_source_id = node_data.get('file_source_id')
@@ -357,10 +343,8 @@ class ApiConnectionSourceLoadingMixin:
             # messaggio originale del loader viene propagato come-is
             raise ValueError(str(e)) from e
 
-        # Tronca per preview (opzionale
-        # slice migration
-        # sia il `preview_limit` (TE-025) sia il `group_id` (TE-030B
-        # vengono letti SOLO dal `ctx` (typed boundary).
+        # Tronca per preview (opzionale): `preview_limit` e `group_id` vengono
+        # letti SOLO dal `ctx` typed boundary.
         _plimit = _preview_limit_from_ctx(ctx)
         if _plimit and isinstance(_plimit, int) and _plimit > 0:
             df = df.head(_plimit)
@@ -433,15 +417,14 @@ class ApiConnectionSourceLoadingMixin:
         """Shim REST_FILE strict-no-opt-in: SSRF guard per uscite
         outbound del flusso REST_FILE.
 
-        PR-#35 (P1-C SSRF single-source design): delega alla primitive
-        condivisa `app.core.security.outbound_url.check_outbound_address` con
+        Delega alla primitive condivisa
+        `app.core.security.outbound_url.check_outbound_address` con
         `allow_loopback_opt_in=False`. REST_FILE NON accetta loopback
         nemmeno con env `PLENORA_ALLOW_LOOPBACK_OUTBOUND` settata: la
         coerenza col threat model REST_FILE (file processor via HTTP
         invocato dal canvas) richiede che resti strict anche in dev/test.
 
-        Signature `(url: str) -> Optional[str]` invariata pre-/post-fix
-        per preservare:
+        Signature `(url: str) -> Optional[str]` stabile per preservare:
           - call site `api_connection_rest_file.py:512`
             (`ssrf_error = self._validate_outbound_url(url)`)
           - test che fanno `monkeypatch.setattr(svc, "_validate_outbound_url",

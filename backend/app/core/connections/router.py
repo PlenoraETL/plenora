@@ -193,9 +193,7 @@ def delete_connection(
         )
 
     _connection_service.delete_connection(connection_id)
-    # F2-B1 (2026-04-24): DELETE risponde 204 No Content, body vuoto
-    # FastAPI ignora il return quando status_code=204; return esplicito
-    # rimosso per coerenza col contract
+    # DELETE risponde 204 No Content, body vuoto.
 
 
 @router.post("/connections/{connection_id}/test", response_model=ConnectionTestResult)

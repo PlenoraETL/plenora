@@ -1,9 +1,9 @@
-"""Key-value store condiviso (Plenora 2.0, Fase 0 piano unificazione).
+"""Key-value store condiviso per dati transitori TTL.
 
-Interfaccia unica per lo storage transitorio TTL oggi su Redis
+Interfaccia unica per lo storage transitorio TTL
 (blacklist JWT, cache token, metadata task pending, lock leggeri).
-In Fase 4 il backend diventa PostgreSQL + cache in-memory davanti,
-senza toccare i consumer: dipendono da questo protocol, non da redis.
+Il backend di produzione e' PostgreSQL + cache in-memory davanti; i
+consumer dipendono da questo protocol, non dal backend specifico.
 
 I rate limiter (sliding window login, GCRA arricchisci) NON passano da
 qui: sono algoritmi con port propri — il KV generico ne sarebbe una

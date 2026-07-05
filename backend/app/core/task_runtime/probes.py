@@ -1,8 +1,8 @@
-"""Bounded runtime probe for the RabbitMQ broker (Plenora 2.0 Fase 5).
+"""Bounded runtime probe for the RabbitMQ broker.
 
-Niente piu' Celery/Redis: il broker dei task e' RabbitMQ (Dramatiq) e lo
-stato dei task vive su PostgreSQL (task_results). Qui resta solo la PING
-bounded del broker, usata dal readiness probe (/ready).
+Il broker dei task e' RabbitMQ (Dramatiq) e lo stato dei task vive su
+PostgreSQL (task_results). Qui resta solo la PING bounded del broker,
+usata dal readiness probe (/ready).
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ def _pika_module() -> Any:
 
 
 class RabbitmqRuntimePort:
-    """Bounded runtime port for the RabbitMQ broker (Plenora 2.0 Fase 5).
+    """Bounded runtime port for the RabbitMQ broker.
 
     Apre una BlockingConnection pika con timeout limitato e la chiude
     subito — verifica che il broker accetti connessioni."""

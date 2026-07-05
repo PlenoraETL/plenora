@@ -1,14 +1,13 @@
-"""Runtime di lettura stato/esito task su PostgreSQL (Plenora 2.0).
+"""Runtime di lettura stato/esito task su PostgreSQL.
 
 Implementa ``TaskRuntimePort`` leggendo stato/progress/esito da
 ``task_result_store`` (PG), dove li scrivono i worker Dramatiq. I metodi
 ``*_task()`` ritornano le funzioni-corpo dei task (con attributo ``name``)
 per il dispatch by-name di ``submit_task``.
 
-Plenora 2.0 Fase 5 (F5.6): niente piu' delega a Celery. Lo stato non e' piu'
-il result backend Redis (``AsyncResult``); il revoke e' cooperativo su PG
-(vedi task_service.cancel_task + revocation_store); l'inspect dei worker
-Celery e' stato rimosso (osservabilita' admin derivata da PG).
+Lo stato task vive su PostgreSQL; il revoke e' cooperativo via PG
+(vedi task_service.cancel_task + revocation_store) e l'osservabilita' admin
+deriva dal task_result_store.
 
 Vive nel dominio orchestrator (non in task_runtime) per non creare un
 ciclo: orchestrator dipende gia' da task_runtime, l'inverso no.

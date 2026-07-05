@@ -49,10 +49,7 @@ _ALLOWED_EXTENSIONS = {
 # throughput rete (upload sincrono nel request handler
 # dimensione del blob in DB se sotto soglia FILE_SOURCE_S3_THRESHOLD_BYTES
 # Calcolato a import-time: per cambiare serve riavvio del processo
-# BE-CONFIG-001D: default tipato in
-# `Settings.DEFAULTS["TICKET_ATTACHMENT_MAX_BYTES"]=10 * 1024 * 1024`
-# Calcolato a import-time: per cambiare serve riavvio del processo
-# comportamento invariato pre-001D
+# Calcolato a import-time: per cambiare serve riavvio del processo.
 _MAX_ATTACHMENT_SIZE_BYTES = int(_settings_cfg.get("TICKET_ATTACHMENT_MAX_BYTES"))
 
 
@@ -352,9 +349,8 @@ def delete_ticket_endpoint(
         f"by={current_user.username}",
         op="ticket_delete",
     )
-    # F2-B3 (2026-04-24): DELETE risponde 204 No Content. La semantica
-    # soft/hard resta visibile via `?hard=true` query param + logger op
-    # "ticket_delete" (PURGED vs soft-deleted); non e' piu' echoed nel body
+    # DELETE risponde 204 No Content; la semantica soft/hard resta visibile
+    # via `?hard=true` e nel log op "ticket_delete".
 
 
 @router.get("/{ticket_id}/attachments/{attachment_id}/download")
@@ -431,4 +427,4 @@ def delete_attachment_endpoint(
             f"{attachment.file_source_id} fallito (orfano): {e}"
         )
 
-    # F2-B3 (2026-04-24): DELETE risponde 204 No Content, body vuoto
+    # DELETE risponde 204 No Content, body vuoto.

@@ -35,12 +35,8 @@ def _row_to_dict(row: LogEntryPayload) -> LogEntryPayload:
                 type(e).__name__,
                 e,
             )
-    # Rimuovi solo None: preservare i falsy validi `[]`, `0`, `False`,
-    # `""` che il consumer puo' usare per distinguere "campo assente"
-    # da "valore presente ma zero/vuoto". Pre-fix `v not in (None, "",
-    # [])` rimuoveva silenziosamente una lista `steps=[]` dalla
-    # response → il client non poteva distinguere "steps non popolato
-    # dal DB" da "steps esiste ma e' vuoto", drift API silente.
+    # Rimuovi solo None: preserva i falsy validi `[]`, `0`, `False`, `""`
+    # che il consumer usa per distinguere campo assente da valore vuoto.
     return {k: v for k, v in d.items() if v is not None}
 
 
@@ -82,12 +78,9 @@ def get_logs(
         params.extend(o.strip().lower() for o in op.split(","))
 
     if project_id:
-        # N6 (2026-04-17): fail-closed ownership check prima di filtrare per
-        # project_id. Pre-fix il filtro `group_id = X OR group_id = ''` a
-        # riga ~82 bloccava il cross-tenant per log applicativi, ma i log
-        # di sistema con group_id='' erano leak-able da utenti cross-tenant
-        # che conoscevano un project_id di un altro gruppo. Ora rifiutiamo
-        # esplicitamente l'accesso a project altrui (superadmin bypassa
+        # Fail-closed ownership check prima di filtrare per project_id:
+        # utenti cross-tenant non possono leggere log di sistema conoscendo
+        # il project_id di un altro gruppo. Il superadmin bypassa
         # via assert_project_visible che accetta anche progetti condivisi
         if current_user.role != "superadmin":
             assert_project_visible(project_id, current_user)

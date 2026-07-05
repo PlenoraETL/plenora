@@ -1,8 +1,8 @@
 """
-JWT blacklist su PostgreSQL + cache in-memory — revocation list per jti.
+JWT blacklist su PostgreSQL + cache in-memory: revocation list per jti.
 
-Plenora 2.0 Fase 4: il backend e' il KeyValueStore (PostgreSQL, tabella
-kv_store) al posto di Redis. La lettura `is_jti_blacklisted` e' sul percorso
+Il backend e' il KeyValueStore (PostgreSQL, tabella kv_store). La lettura
+`is_jti_blacklisted` e' sul percorso
 auth per-richiesta: davanti a PG c'e' una cache in-memory (process-local) che
 memorizza sia i revocati ("1") sia i validi ("0") con TTL breve, cosi' il caso
 comune (token validi) e' servito dalla RAM e resta nel budget di latenza.

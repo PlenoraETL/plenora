@@ -267,17 +267,16 @@ def op_text_normalize(
 
         return s
 
-    # MANIPOLA-5 (2026-05-26): branch vettoriale per operazioni `.str.*`
-    # native pandas. ~10x piu' veloce + peak RAM ridotto vs `.apply(lambda)`
+    # Branch vettoriale per operazioni `.str.*` native pandas:
+    # ~10x piu' veloce + peak RAM ridotto vs `.apply(lambda)`
     # Python row-iter. Solo `strip_accents` (unicodedata combining) richiede
     # ancora `.apply()` perche' non c'e' equivalente pandas vettoriale.
     #
-    # M-5 follow-up: il branch vettoriale applica `.str.*` SOLO al
-    # sub-set di valori string del Series, preservando inalterati i
-    # non-string (int, float, bool, ecc.). Pre-fix-fix: `.str.lower()`
-    # su una Series object mista produceva NaN sui non-string,
-    # rompendo la semantica originale `normalize_text(text)` che
-    # ritornava `text` se non era str. Su Series numerica `.str.*`
+    # Il branch vettoriale applica `.str.*` SOLO al subset di valori string
+    # della Series, preservando inalterati i
+    # non-string (int, float, bool, ecc.). Su Series object mista,
+    # `.str.lower()` produce NaN sui non-string; la semantica deve restituire
+    # `text` invariato se non era str. Su Series numerica `.str.*`
     # solleva — qui invece resta no-op perche' la mask di string e'
     # vuota.
     needs_strip_accents = operations in ("strip_accents", "full")
@@ -293,8 +292,7 @@ def op_text_normalize(
                 )
             else:
                 # Vettoriale `.str.*` pandas su SOLO i valori string:
-                # ~10x piu' veloce + peak ridotto sulle ops vettoriali;
-                # preserva non-string come il legacy `normalize_text`.
+                # ~10x piu' veloce + peak ridotto; preserva non-string.
                 result[out_col] = apply_string_ops_to_string_subset(source, operations)
 
         logger.info(f"Text Normalize ({operations}): {len(valid_columns)} colonne")

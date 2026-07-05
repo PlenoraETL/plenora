@@ -207,7 +207,7 @@ async def delete_schedule(schedule_id: str, current_user: CurrentUser = Depends(
     try:
         service = ScheduleService()
         service.delete_schedule(schedule_id)
-        # F2-B1 (2026-04-24): DELETE risponde 204 No Content, body vuoto
+        # DELETE risponde 204 No Content, body vuoto.
     except HTTPException:
         raise
     except Exception as e:
@@ -298,10 +298,7 @@ async def run_schedule_now(schedule_id: str, current_user: CurrentUser = Depends
         )
     
     try:
-        # Pre-fix: literal "queued"/"idle" duplicato cross-modulo.
-        # Post-fix: enum centralizzato. NB: il payload JSON di risposta
-        # mantiene la stringa "queued" perche' il frontend la legge come
-        # plain text.
+        # Runtime status via enum; il payload JSON resta plain string per FE.
         service.set_runtime_status(schedule_id, status=RuntimeStatus.QUEUED)
 
         from app.core.scheduler.job_dispatcher import enqueue_schedule_run

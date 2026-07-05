@@ -89,9 +89,8 @@ class ProjectMetadataAccess:
 
     Vive nel dominio proprietario: ``auth.resource_access`` consuma il port
     senza costruire ``ProjectService``. La costruzione resta per-chiamata
-    via attributo di modulo (stessa semantica del chiamante storico: i patch
-    wholesale su ``app.core.projects.service.ProjectService`` continuano a
-    intercettare).
+    via attributo di modulo, cosi' i patch wholesale su
+    ``app.core.projects.service.ProjectService`` continuano a intercettare.
     """
 
     def get_project_metadata(self, project_id: str):

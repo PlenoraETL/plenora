@@ -16,17 +16,14 @@ locale che esistono per design:
 
 **Razionale del boundary unico:**
 
-Prima del 2026-05-26 ogni callsite faceva inline il makedirs + write
-binary mode oppure un touch diretto. Senza un punto centralizzato,
-era impossibile:
+Un punto centralizzato permette di:
   - audit-are le destinazioni filesystem locale in un colpo solo
   - applicare cross-cutting (logging, metrics, size cap, path policy)
   - distinguere "data plane esterno user-configured" da "leak interno"
 
-Adesso TUTTE le scritture filesystem fuori da `app/core/io/*`,
-`app/core/storage/*`, e dai tombstone svuotati DEVONO passare per
-questo modulo. Il gate (`tests2/io_boundary/`) escludera' i call site
-qui dentro come scope dichiarato.
+TUTTE le scritture filesystem fuori da `app/core/io/*` e
+`app/core/storage/*` DEVONO passare per questo modulo. Il gate
+(`tests2/io_boundary/`) esclude i call site qui dentro come scope dichiarato.
 
 **API:**
   - `write_local_bytes(path, content)`: scrive `content` su `path`,

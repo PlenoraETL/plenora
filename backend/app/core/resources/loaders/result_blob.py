@@ -287,10 +287,9 @@ def _dispatch_by_id(
 
 # ResultBlobLoader — Protocol-compliant fail-closed entry point.
 #
-# Post-Phase5: mode="path" rimossa (zero production caller). Il loader
-# materializza solo bytes in-memory; chi ha bisogno di un path filesystem
-# deve usare `app.core.io.materialize.temporary_path_from_bytes` come
-# context manager (escape hatch esplicito al boundary I/O).
+# Il loader materializza solo bytes in-memory; chi ha bisogno di un path
+# filesystem deve usare `app.core.io.materialize.temporary_path_from_bytes`
+# come context manager (escape hatch esplicito al boundary I/O).
 
 
 class ResultBlobLoader:
@@ -316,10 +315,8 @@ class ResultBlobLoader:
                 f"(got {ref.result_id!r})."
             )
         if mode != "bytes":
-            # Post-Phase5: solo `bytes` supportato. Path mode rimossa
-            # (zero production caller; chi ha bisogno di un path deve
-            # usare `app.core.io.materialize.temporary_path_from_bytes`
-            # come context manager).
+            # Solo `bytes` supportato; chi ha bisogno di un path deve usare
+            # `app.core.io.materialize.temporary_path_from_bytes`.
             raise ValueError(
                 f"ResultBlobLoader.load: mode={mode!r} not supported. "
                 "Only mode='bytes' is accepted (path mode removed)."

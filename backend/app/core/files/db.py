@@ -292,9 +292,9 @@ def update_file_source_metadata(file_id: str, metadata: dict) -> None:
 
 
 def delete_file_source(file_id: str) -> bool:
-    """Elimina file_source dal DB + cleanup S3 se blob era S3-backed (FS-B1-large).
+    """Elimina file_source dal DB + cleanup S3 se blob era S3-backed.
 
-    Flow (BE-HARDEN-001C E4 / BE-DELETE-002):
+    Flow:
 
       1. Apre `unit_of_work` (single conn, autocommit off).
       2. `SELECT storage_key WHERE id=? FOR UPDATE` - lock pessimistico
@@ -310,18 +310,18 @@ def delete_file_source(file_id: str) -> bool:
       5. Commit (uscita dal CM).
       6. Cleanup S3 SOLO se step 3 ha decretato "ultimo ref"
          (best-effort, fuori transazione, errore loggato senza
-         alterare la row gia' cancellata -> ADR-0011 contract preserved).
+         alterare la row gia' cancellata).
 
-    Properties post-E4:
-      - **Race A.2 (concurrent shared delete)**: serializzata. Le N delete
+    Properties:
+      - **concurrent shared delete**: serializzata. Le N delete
         sequenzialmente acquisiscono il lock; l'ultimo vede refcount=0
         e fa cleanup. **Zero orphan** sul caso 2-sibling.
-      - **Race D (DB fail dopo storage call)**: ELIMINATA. La storage call
+      - **DB fail dopo storage call**: impossibile, perche' la storage call
         avviene dopo il commit, quindi un fail DB non lascia mai una row
         che punta a un blob gia' eliminato.
-      - **Race C (storage fail post-commit)**: invariata vs ADR-0011
-        ("orphan resta sul bucket, row DB cancellata").
-      - **Race E (capability off mid-delete)**: invariata, debug log.
+      - **storage fail post-commit**: orphan resta sul bucket, row DB
+        cancellata.
+      - **capability off mid-delete**: niente cleanup storage, log debug.
 
     Backward-compat: BYTEA mode (`storage_key=None`) salta la sibling
     query per costruzione; comportamento singolo-row invariato.
@@ -385,10 +385,9 @@ def delete_file_source(file_id: str) -> bool:
             )
             deleted = cur.rowcount > 0
 
-    # Storage cleanup AFTER DB commit (ADR-0011 contract: orphan accepted
-    # on storage failure, DB row stays deleted
-    # delegato all'helper unificato
-    # outcome -> reconciliation transition
+    # Storage cleanup AFTER DB commit: orphan accettato su failure storage,
+    # row DB gia' cancellata. L'helper unificato ritorna un outcome che
+    # guida la transizione di reconciliation.
     if storage_key_to_clean:
         outcome = storage_compensation.compensating_delete(
             storage_key_to_clean,

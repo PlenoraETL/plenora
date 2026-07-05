@@ -398,7 +398,7 @@ class ReplaceStrategiesMixin:
         CREATE shadow con schema dai column_mappings, INSERT batch,
         RENAME atomico target→backup + shadow→target, DROP bak.
         Se INSERT fallisce, target resta nello stato precedente
-        (nuovi dati mai esposti, schema vecchio preservato).
+        (nuovi dati mai esposti, schema precedente preservato).
 
         Casi:
         - target esiste: full swap (2 rename + drop bak)

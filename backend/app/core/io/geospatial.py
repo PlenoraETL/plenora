@@ -112,8 +112,8 @@ def write_shapefile_zip_bytes(
 ) -> bytes:
     """Serialize a GeoDataFrame as a zipped ESRI Shapefile (bytes, fully RAM).
 
-    Shapefile e' multi-file (.shp/.shx/.dbf/.prj/.cpg). QUERY-1 step 4:
-    sidecar scritti in `/vsimem/{uuid}/{name}.*` via pyogrio (GDAL
+    Shapefile e' multi-file (.shp/.shx/.dbf/.prj/.cpg). I sidecar vengono
+    scritti in `/vsimem/{uuid}/{name}.*` via pyogrio (GDAL
     VSI handler), poi letti via `vsi_read_bytes` + assemblati come
     zip in memoria. Zero disk touch.
 
@@ -152,7 +152,7 @@ def list_vector_layers(data: bytes) -> list[str]:
     """List layer names available in a multi-layer vector dataset (bytes).
 
     Utile per GPKG e FileGDB che possono contenere multi layer.
-    Equivalent del vecchio layer listing path-based ma su bytes.
+    Equivalente bytes-based del listing layer.
     """
     import pyogrio
     infos = pyogrio.list_layers(data)

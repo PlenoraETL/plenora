@@ -1,8 +1,4 @@
-"""
-ArcGIS connection info - lightweight provider-neutral dataclass.
-
-ADR-0023 / moved from
-"""
+"""ArcGIS connection info: lightweight provider-neutral dataclass."""
 
 from __future__ import annotations
 

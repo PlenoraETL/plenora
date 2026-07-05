@@ -245,11 +245,9 @@ def _prefer_nullable_int(original: pd.Series, converted: pd.Series) -> pd.Series
 def _coerce_json_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Coerce string/object columns to numeric when 100% convertibili.
 
-    Contract: NON muta il DataFrame di input. Pre-fix `df[col] = converted`
-    scriveva sull'oggetto del caller (allineato al pattern P0
-    `stringify_columns_preserving_nulls` gia' fixato in sessione 2).
-    Solo i caller `_load_json_dataframe_from_text` + `load_dataframe_from_file`
-    si aspettano il DF coerced; copia conservativa qui evita di
+    Contract: NON muta il DataFrame di input. Solo i caller
+    `_load_json_dataframe_from_text` + `load_dataframe_from_file` si aspettano
+    il DF coerced; copia conservativa qui evita di
     sorprendere consumer futuri.
     """
     out = df
@@ -295,9 +293,7 @@ def _load_dataframe_from_bytes(
 ) -> pd.DataFrame:
     if format_hint == "csv":
         # Allinea il path blob al path filesystem (_read_csv_safe) che
-        # gia' faceva fallback multi-encoding. Pre-fix
-        # `pd.read_csv(BytesIO(data))` senza `encoding=` falliva su CSV
-        # italiani cp1252 nel path in-memory.
+        # usa fallback multi-encoding.
         return read_csv_safe_bytes(data, source_label="blob CSV")
     if format_hint == "json":
         try:
@@ -309,12 +305,8 @@ def _load_dataframe_from_bytes(
         stream = BytesIO(data)
         return pd.read_excel(stream, sheet_name=sheet) if sheet else pd.read_excel(stream)
     if format_hint == "parquet":
-        # Pre-fix: `pd.read_parquet(BytesIO(data))` senza dtype_backend
-        # forzava NumPy classico, e una colonna parquet `int64` con
-        # null veniva degradata a `float64` (con NaN al posto dei null)
-        # — round-trip non lossless per tipi integer + null.
-        # Post-fix: dtype_backend="numpy_nullable" instrada le colonne
-        # integer nullable su pandas Int64 e preserva i null come pd.NA.
+        # dtype_backend="numpy_nullable" preserva integer nullable su pandas
+        # Int64 e mantiene i null come pd.NA.
         # Sicuro per i consumer attuali: `sanitize_for_json` rileva
         # pd.NA via `pd.isna(value)` prima dei branch `isinstance
         # np.integer/np.floating/np.bool_`, e `to_dict("records")`
@@ -331,11 +323,8 @@ def _load_dataframe_from_bytes(
                 text = data.decode("utf-8-sig")
             return gpd.read_file(StringIO(text), engine="pyogrio")
     if format_hint in _PATH_BOUND_ARTIFACT_FORMATS:
-        # Pre-fix: scriveva i bytes su NamedTemporaryFile e poi
-        # delegava a `load_dataframe_from_file(tmp_path)`. Costoso
-        # (disk write + unlink) e fragile (cleanup race su crash).
-        # Post-fix: pyogrio 0.12+ accetta nativamente `bytes` /
-        # `BytesIO` come `path_or_buffer` e gestisce internamente
+        # pyogrio 0.12+ accetta nativamente `bytes` / `BytesIO` come
+        # `path_or_buffer` e gestisce internamente
         # /vsimem (per single-file) e /vsizip (per shapefile/gdb
         # ZIP). I formati gpkg/shp/zip/gdb sono ora RAM-only.
         return read_vector_bytes(data, layer=layer)
@@ -378,19 +367,14 @@ def load_dataframe_from_artifact(
             with open(artifact_path, "r", encoding="utf-8-sig") as f:
                 return _load_json_dataframe_from_text(f.read())
     if fmt == "parquet":
-        # Pre-fix / Post-fix: vedi nota in `_load_dataframe_from_bytes`.
         # Stessa policy applicata al path artifact-by-path per uniformare
         # il contratto integer-null-preserving su entrambi i call site.
         return pd.read_parquet(artifact_path, dtype_backend="numpy_nullable")
     if fmt == "geojson":
         return gpd.read_file(artifact_path, engine="pyogrio")
     if fmt in _PATH_BOUND_ARTIFACT_FORMATS:
-        # Pre-fix: se il file su disco aveva un suffisso "sbagliato"
-        # (es. `.bin` per un GPKG), copiava su NamedTemporaryFile con
-        # il suffisso corretto perche' `load_dataframe_from_file`
-        # dispatcha per estensione. Post-fix: leggi bytes una volta e
-        # delega a `_load_dataframe_from_bytes` con `format_hint`
-        # esplicito -- niente piu' dipendenza dal suffisso del path.
+        # Leggi bytes una volta e delega a `_load_dataframe_from_bytes` con
+        # `format_hint` esplicito: niente dipendenza dal suffisso del path.
         # Eccezione: `gdb` puo' essere una DIRECTORY (`.gdb/`), non
         # un file singolo: lascia il dispatch path-based al
         # `load_dataframe_from_file` quando il path e' una dir.
@@ -456,18 +440,13 @@ def load_dataframe_from_file(
             except UnicodeDecodeError:
                 with open(file_path, "r", encoding="utf-8-sig") as f:
                     data = json.load(f)
-            # Pre-fix: loop in-place che mutava direttamente `df[col] =
-            # converted` con logica duplicata vs `_coerce_json_dataframe_columns`
-            # (riga 244). Drift fra le 2 implementazioni era P3 ma diventava
-            # P1 al primo bugfix applicato solo a uno dei due rami. Post-fix:
-            # delega all'helper canonico che gia' usa il pattern lazy-copy.
+            # Delega all'helper canonico che usa lazy-copy e non muta input.
             df = _coerce_json_dataframe_columns(pd.DataFrame(data))
 
         elif estensione == ".parquet":
-            # Pre-fix / Post-fix: vedi nota in `_load_dataframe_from_bytes`.
-            # Terzo (e ultimo) call site di `pd.read_parquet` nel modulo:
-            # tenuti allineati per garantire round-trip integer+null
-            # lossless indipendentemente da come l'artifact entra
+            # Tenere allineati i call site `pd.read_parquet` garantisce
+            # round-trip integer+null lossless indipendentemente da come
+            # l'artifact entra.
             # (bytes blob, path artifact, path filesystem diretto).
             df = pd.read_parquet(file_path, dtype_backend="numpy_nullable")
 
@@ -509,7 +488,7 @@ def load_dataframe_from_file(
 
 def load_arcgis_feature_dataframe(file_path: Union[str, Path]) -> pd.DataFrame:
     """
-    Load an ArcGIS feature write input preserving the legacy fail-fast fallback.
+    Load an ArcGIS feature write input preserving fail-fast fallback behavior.
 
     Unknown extensions are attempted as GeoJSON/geospatial content first. They
     fall back to CSV only for CSV-like suffixes (.tsv, .txt), so corrupt binary
@@ -588,11 +567,8 @@ def _carica_da_zip(
 ) -> pd.DataFrame:
     """Load a DataFrame from a ZIP archive.
 
-    Pre-fix: estraeva il contenuto ZIP su una temp dir via
-    safe_extractall, quindi caricava il file estratto da disk.
-    3 callsite identici per shapefile / FileGDB / singolo file.
-    Post-fix: pyogrio 0.12+ accetta ZIP bytes nativi e gestisce
-    internamente /vsizip. Lettura ZIP-from-bytes -> GeoDataFrame
+    pyogrio 0.12+ accetta ZIP bytes nativi e gestisce internamente /vsizip.
+    Lettura ZIP-from-bytes -> GeoDataFrame
     senza extractall e senza temp dir. La ZipFile e' aperta UNA
     volta sola via BytesIO, e i cap zip-bomb sono validati prima
     di qualunque `inner.read()`.

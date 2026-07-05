@@ -1,13 +1,7 @@
-"""Bounded loader per preview file — no RAM amplification (2026-05-26).
+"""Bounded loader per preview file, senza RAM amplification.
 
-Pre-RAM-1: `preview_file_temp` chiamava `load_by_format_bytes` che caricava
-il DataFrame INTERO solo per ritornare `len(df)` e column info. Su un
-CSV da 500MB, pandas costruiva un DataFrame da 1-2GB in memoria per
-mostrare 100 righe di preview.
-
-Post-RAM-1: questo modulo fa dispatch format-specific con cap esplicito
-sul numero di righe/feature caricate. La preview legge solo quello che
-serve, niente di piu'.
+Dispatch format-specific con cap esplicito sul numero di righe/feature
+caricate: la preview legge solo quello che serve.
 
 API:
   - `preview_dataframe_from_bytes(data, format, *, max_rows, layer, sheet)`

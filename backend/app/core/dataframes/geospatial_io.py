@@ -1,7 +1,7 @@
 """Geospatial DataFrame export helpers owned by the dataframe boundary.
 
-Post-Phase5 refactor: solo l'entry-point bytes-first
-`geospatial_dataframe_to_bytes` sopravvive. Le funzioni path-based
+Solo l'entry-point bytes-first `geospatial_dataframe_to_bytes` resta attivo.
+Le funzioni path-based
 (save_geospatial_dataframe, _salva_formato_geo, _salva_shapefile_zippato,
 _salva_geo_vuoto, _switch_colonna_geometria) sono state rimosse —
 nessun caller live in app/. In produzione il flow e' bytes -> storage.
@@ -198,9 +198,7 @@ def _converti_geometrie_secondarie_in_wkt(gdf):
         if not col_data.empty:
             primo_valido = col_data.iloc[0]
             if isinstance(primo_valido, BaseGeometry):
-                # Pre-fix: `apply(lambda x: x.wkt if BaseGeometry
-                # else x)` per-riga. Post-fix: serializzazione
-                # vettoriale via `geometry_series_to_wkt` con
+                # Serializzazione vettoriale via `geometry_series_to_wkt` con
                 # `preserve_non_geometry=True` per mantenere il
                 # comportamento del lambda originale (caso edge:
                 # serie geometry-like che contiene mix Shapely +

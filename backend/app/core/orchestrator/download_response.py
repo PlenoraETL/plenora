@@ -42,8 +42,7 @@ def project_result_response(
       1. Se `requested_file` e' valorizzato, cerca tra TUTTE le result row
          del progetto la prima con `filename == requested_file`. Pensato
          per scaricare blob secondari come `enrichment_errors_{task_id}.csv`
-         (refactor QUERY-1 follow-up: error report e' un result_blob,
-         non un file su RESULTS_DIR).
+         (error report come result_blob, non file su RESULTS_DIR).
       2. Altrimenti -> latest result (comportamento default per "ultimo
          output del progetto").
     """
@@ -67,8 +66,8 @@ def project_result_response(
                         "Content-Length": str(len(blob)),
                     },
                 )
-        # Fallthrough: nessuna row con quel filename. Mantiene il 404
-        # legacy invece di restituire silently il latest.
+        # Fallthrough: nessuna row con quel filename. Restituisce 404 invece
+        # di scaricare silently il latest.
         raise HTTPException(
             404,
             f"File '{requested_file}' non trovato per progetto '{project_id}'",

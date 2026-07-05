@@ -1,12 +1,12 @@
 """
-Porte di lettura risorse per i check di autorizzazione (Epic C roadmap).
+Porte di lettura risorse per i check di autorizzazione.
 
 `auth.resource_access` non deve costruire servizi di altri domini ne'
 toccare i loro moduli db: legge project metadata e file source attraverso
 questi protocolli. Gli adapter concreti vivono nei domini proprietari
 (`projects.access_context`, `files.ownership`); il binding avviene al
 composition root (`app/runtime/services.py`) con fallback lazy identico
-al comportamento storico.
+al comportamento dei contesti senza bootstrap esplicito.
 """
 
 from __future__ import annotations

@@ -25,10 +25,8 @@ logger = get_logger("workers.pipeline_task")
 
 
 def _update_progress(task: object, percent: int, message: str) -> None:
-    # Plenora 2.0 Fase 2 (F2.5): progress scritto solo su PG via
-    # report_task_progress. Il vecchio self.update_state verso il result
-    # backend Redis di Celery e' stato rimosso col flip della lettura su PG
-    # (F2.3): quello stato non veniva piu' letto.
+    # Progress scritto solo su PG via report_task_progress; il result backend
+    # del task runtime non e' la fonte di verita' per la UI.
     report_task_progress(
         getattr(getattr(task, "request", None), "id", None),
         percent,
@@ -115,7 +113,7 @@ def _normalize_execution_contract(
     return contract
 
 
-# Plenora 2.0 Fase 5: corpo task come funzione pura (no @celery_app.task).
+# Corpo task come funzione pura.
 # `self` e' il self-shim dell'actor Dramatiq (request.id/name). Fail-fast
 # senza retry (no doppie scritture): garantito dall'actor con max_retries=0.
 def execute_pipeline_task(
@@ -147,8 +145,8 @@ def execute_pipeline_task(
         project_id: ID del progetto da eseguire.
         force_recalculate: Se True, ignora cache e ricalcola.
         triggered_by: "manual" / "cron" / "retry".
-        run_id: Chiave di idempotency opzionale. Se None → generato
-            fresh (behavior legacy, no idempotency).
+        run_id: Chiave di idempotency opzionale. Se None, viene generato
+            fresh e non si applica idempotency cross-run.
     """
     task_id = self.request.id
 
@@ -270,9 +268,8 @@ def execute_pipeline_task(
                     error_module=module,
                     error_message=f"Connessione al database persa: {message}",
                 )
-                # F2.5: niente self.update_state(FAILURE) verso Redis. Il
-                # return success=False viene declassato a FAILURE da
-                # get_task_status leggendo da PG (after_return persiste l'esito).
+                # Il return success=False viene declassato a FAILURE da
+                # get_task_status leggendo da PG.
                 _update_progress(self, 0, f"Connessione al database persa. {message}")
                 return {"success": False, "message": f"Connessione al database persa: {message}"}
 
@@ -422,7 +419,6 @@ def execute_pipeline_task(
         raise
 
 
-# Plenora 2.0 Fase 5: corpo task come funzione pura (no @celery_app.task).
 def preview_pipeline_task(
     self,
     project_id: str,
@@ -434,7 +430,7 @@ def preview_pipeline_task(
     logger.info(f"Task PREVIEW {task_id} avviato per progetto {project_id}")
     _update_progress(self, 0, "Inizializzazione preview...")
 
-    # N9: re-check permessi al pickup (helper condiviso
+    # Re-check permessi al pickup tramite helper condiviso.
 
     _revoked = async_user_recheck_module.recheck_user_authorized(
         user_id=user_id, project_id=project_id,
@@ -484,7 +480,7 @@ def preview_pipeline_task(
         raise
 
 
-# Plenora 2.0 Fase 5: nomi registrati dei task (erano @celery_app.task(name=...)).
+# Nomi registrati dei task.
 # Soddisfano il protocol DelayTask.name (dispatch by-name di submit_task) e
 # combaciano con gli actor Dramatiq in workers/dramatiq_app.py.
 execute_pipeline_task.name = "pipeline.execute"

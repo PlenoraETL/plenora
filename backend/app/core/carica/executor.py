@@ -151,11 +151,8 @@ class CaricaExecutor:
         """
         _step_start = _time.time()
 
-        # Pre-fix: carica/executor.py NON emetteva mai `append_step`. Tutte
-        # le run di scrittura DB (success o failure) erano invisibili nel
-        # run step log della UI scheduler / project run history. Post-fix:
-        # helper `_failure_step` per i 5 early-return + emit di success
-        # nella final return path. Allineato al pattern di estrai/manipola.
+        # Ogni failure anticipata deve produrre uno step visibile nel run log,
+        # allineando CARICA ai runtime ESTRAI/MANIPOLA.
         def _failure_step(status: WriteStatus, message: str) -> WriteResult:
             duration_ms = int((_time.time() - _step_start) * 1000)
             append_step({
@@ -306,9 +303,8 @@ class CaricaExecutor:
           2. Pydantic v1 `.dict()` (legacy, fallback per modelli non
              ancora migrati)
           3. plain object `__dict__` (dataclass-like)
-        Pre-fix `conn.dict()` veniva chiamato anche su modelli v2 dove
-        emette DeprecationWarning a ogni invocazione; in Pydantic v3
-        scomparira' del tutto. Ordering canonico evita la deprecation.
+        L'ordering canonico evita deprecation warning su Pydantic v2 e resta
+        compatibile con modelli v1/plain object.
         """
         if self.connection_service:
             conn = self.connection_service.get_connection(connection_id)
@@ -379,7 +375,7 @@ class CaricaExecutor:
         elif db_type == "mysql" or db_type == "mariadb":
             url = f"mysql+pymysql://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
         elif db_type == "mssql":
-            # H-2 (2026-05-26): TrustServerCertificate gated da tls_bypass_allowed()
+            # TrustServerCertificate e' consentito solo dalla policy TLS.
             trust_cert = "yes" if tls_policy_module.tls_bypass_allowed() else "no"
             url = (
                 f"mssql+pyodbc://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"

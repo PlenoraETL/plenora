@@ -1,12 +1,11 @@
-"""Sub-service di lettura metadata progetto (Epic F roadmap accoppiamento).
+"""Sub-service di lettura metadata progetto.
 
-Prima estrazione dalla facade ``ProjectService`` (F2): il lato lettura
-metadata vive qui come interfaccia stretta. I nuovi chiamanti dipendono da
-``ProjectMetadataService`` (o dal port ``auth.ports.ProjectMetadataReader``,
-che questa classe soddisfa strutturalmente); la facade delega qui e resta
-compatibile.
+Il lato lettura metadata vive qui come interfaccia stretta. I nuovi chiamanti
+dipendono da ``ProjectMetadataService`` (o dal port
+``auth.ports.ProjectMetadataReader``, che questa classe soddisfa
+strutturalmente); la facade delega qui e resta compatibile.
 
-Gli hook storici monkeypatchati dai test sulla classe facade
+Gli hook monkeypatchati dai test sulla classe facade
 (``_ensure_default_group``, i converter ``project_*row_to_metadata``)
 restano di proprieta' della facade: il sub-service li risolve attraverso
 ``owner`` a call-time, cosi' i patch di classe continuano a valere.

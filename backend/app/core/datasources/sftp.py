@@ -29,10 +29,10 @@ def _import_paramiko() -> Optional[Any]:
 
 
 def _sanitize_sftp_error(e: Exception) -> str:
-    """F5-B2 (2026-04-24): mappa eccezioni paramiko/socket a messaggi
-    canonici user-facing, SENZA esporre str(e) che puo' contenere host,
-    username, key fingerprint, auth method trace. Il dettaglio tecnico
-    resta nei log server-side (logger.warning/error con exc_info=True).
+    """Map low-level SFTP/socket errors to safe user-facing messages.
+
+    Raw exception strings can contain host, username, key fingerprint or auth
+    method traces, so technical detail stays in server-side logs.
     """
     paramiko = _import_paramiko()
     if paramiko is not None:
@@ -296,7 +296,7 @@ class SFTPDataSource(DataSourceInterface):
         return buf.getvalue()
 
     def iter_read_chunks(self, path: str, *, chunk_size: int = 64 * 1024):
-        """RAM-B2 (2026-05-26): override streaming via paramiko file-like.
+        """Streaming read via paramiko file-like.
 
         `paramiko.SFTPClient.open(path, 'rb')` ritorna un file-like che
         supporta `.read(chunk_size)` con prefetch automatico. Peak RAM
@@ -328,7 +328,7 @@ class SFTPDataSource(DataSourceInterface):
             raise DataSourcePermissionError(f"Scrittura negata: {path!r}") from e
 
     def write_chunks(self, path: str, chunks) -> None:
-        """RAM-B1 (2026-05-26): override streaming write via paramiko
+        """Streaming write via paramiko
         file-like. Scrive chunk-per-chunk con peak RAM ~chunk_size."""
         self._check()
         parent = "/".join(path.split("/")[:-1])

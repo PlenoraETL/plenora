@@ -127,8 +127,7 @@ def init_orchestrator(orchestrator: object) -> None:
 
 def _project_service() -> project_service_module.ProjectService:
     """ProjectService dell'orchestrator iniettato (composition root);
-    fallback alla costruzione diretta per contesti senza wiring
-    (Epic D roadmap accoppiamento: unica via residua, da rimuovere)."""
+    fallback alla costruzione diretta per contesti senza wiring."""
     service = getattr(_orchestrator, "project_service", None)
     if service is not None:
         return service
@@ -165,8 +164,8 @@ def execute_project_pipeline(
     try:
         force_recalculate = request.force_recalculate if request else False
         project_service = _project_service()
-        # Gate canvas-validation (Epic CanvasVal §12): un progetto non validato non
-        # parte. Fail-fast qui (nessun task spawnato); il gate scheduler è separato.
+        # Gate canvas-validation: un progetto non validato non parte.
+        # Fail-fast qui (nessun task spawnato); il gate scheduler e' separato.
         _gate_meta = project_service.get_project_metadata(project_id)
         if _gate_meta is not None and canvas_validation_gate_blocks(
             getattr(_gate_meta, "canvas_validated", False)
@@ -530,8 +529,7 @@ def cleanup_task_completely(
     # le righe logs / log_runs con run_id == task_id
     # il file output specifico (se registrato nel payload
     # NON tocchiamo `RESULTS_DIR/{project_id}` ne' altri risultati del
-    # progetto: un cleanup wide sarebbe data-loss grave (un click su
-    # "cleanup task" distruggerebbe lo storico dell'intero progetto
+    # progetto: un cleanup wide sarebbe data-loss grave.
 
     # Accumulatore step cleanup falliti. Ogni step e' best-effort (un fallimento
     # non blocca i successivi) ma l'esito aggregato finisce nel body 207 cosi'
@@ -703,9 +701,8 @@ def download_task_result(
 
         result_id = result.get("result_id")
         if not result_id:
-            # Senza result_id il task non e' downloadabile: il payload
-            # Celery e' incompleto (probabile TTL scaduto o task molto
-            # vecchio). 410 Gone esplicito invece di 404 ambiguo
+            # Senza result_id il task non e' downloadabile: payload incompleto
+            # o TTL scaduto. 410 Gone esplicito invece di 404 ambiguo.
             logger.warning(
                 f"download task {task_id}: result_id assente nel payload, "
                 f"restituisco 410 Gone"

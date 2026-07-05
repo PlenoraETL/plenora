@@ -1,11 +1,7 @@
 """Serializzazione vettoriale di GeoSeries → WKT.
 
 Contratto: tutti i valori "missing" (`None`, NaN, `pd.NA`) sono
-normalizzati a `None` nell'output. Pre-fix le serializzazioni
-per-riga (`series.apply(lambda g: g.wkt if g else None)`) avevano
-comportamento divergente sui missing — alcune ritornavano `NaN`,
-altre potevano sollevare AttributeError su `pd.NA.wkt` — e
-serializzavano una geometria alla volta. Centralizzando qui:
+normalizzati a `None` nell'output. Centralizzando qui:
 
 - un'unica API stabile per JSON/export downstream;
 - fast-path vettoriale via `shapely.to_wkt` (no GIL bound per

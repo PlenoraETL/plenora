@@ -69,9 +69,10 @@ def _setting_float(name: str, default: float) -> float:
 
 
 def _get_token_cache_store() -> Optional[Any]:
-    """Backend del token cache distribuito (Plenora 2.0 Fase 4: KeyValueStore
-    su PostgreSQL al posto di Redis). None se non inizializzabile -> fallback
-    locale (cache in-process)."""
+    """Backend del token cache distribuito.
+
+    None se non inizializzabile -> fallback locale (cache in-process).
+    """
     global _TOKEN_CACHE_CLIENT
     if _TOKEN_CACHE_CLIENT_EXPLICIT:
         return _TOKEN_CACHE_CLIENT
@@ -490,9 +491,8 @@ def _fetch_oauth2_client_credentials_token(
 
     `extra_form_data` consente ai caller provider-specific di aggiungere
     campi al body POST senza forkare la funzione (es. ArcGIS richiede
-    `f=json` per forzare la response JSON sul vecchio endpoint
-    `/sharing/rest/oauth2/token`). Pre-fix `arcgis_auth.py` aveva una
-    implementazione duplicata di questa funzione con poche differenze.
+    `f=json` per forzare la response JSON su
+    `/sharing/rest/oauth2/token`).
     """
     token_url = auth.get("token_url", "")
     client_id = auth.get("client_id", "")
@@ -633,12 +633,8 @@ def get_arcgis_token(auth: JsonObject) -> Optional[str]:
             }
 
         except Exception as e:
-            # Pre-fix: `%s, e` propagava lo str(e) raw, che su errori HTTP
-            # di urllib3/requests puo' contenere l'URL token con query
-            # params (token, client_secret) o credenziali nei response body
-            # inclusi nell'eccezione. Allineato a `_fetch_oauth2_password_token`
-            # e `_fetch_oauth2_client_credentials_token` nello stesso file
-            # (gia' fixati in sessione precedente).
+            # Gli errori HTTP possono includere URL token, query params o
+            # body con credenziali; loggare solo il tipo evita leak di secret.
             logger.error(
                 "[CRASH] Errore richiesta ArcGIS token: %s",
                 type(e).__name__,

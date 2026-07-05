@@ -1,7 +1,8 @@
 """Pydantic models for project canvas state."""
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Any, Dict, List, Optional, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.shared.execution.canvas_types import (
     ConflictPolicyLiteral,
@@ -13,8 +14,11 @@ from app.shared.execution.canvas_types import (
     TransactionModeLiteral,
     WriteModeLiteral,
 )
-from app.shared.execution.column_info import ColumnInfo  # noqa: F401  re-export compatibile
+from app.shared.execution.canvas_column import Column as Column  # re-export compatibile
+from app.shared.execution.column_info import ColumnInfo as _ColumnInfo
 from app.utils.logger import get_logger
+
+ColumnInfo = _ColumnInfo
 
 _canvas_logger = get_logger(__name__)
 
@@ -53,11 +57,6 @@ class Position(BaseModel):
     """Posizione (x, y) di un nodo nel canvas visuale."""
     x: float
     y: float
-
-
-# B4 roadmap: la sede canonica di Column e' app.shared.execution.canvas_column
-# (contratto strutturale puro); qui resta il re-export compatibile.
-from app.shared.execution.canvas_column import Column  # noqa: F401, E402
 
 
 class Filter(BaseModel):
@@ -110,20 +109,10 @@ class Node(BaseModel):
         - comment: annotazione/nota visuale nel canvas (non influenza il flusso dati)
     """
 
-    # `extra="allow"` invece del default `ignore`: preserva campi FE che
-    # non sono ancora dichiarati sul modello. Storia: la default policy
-    # `ignore` ha causato ~12 dei 32 bug di questa sessione di audit
-    # (campo serializzato dal FE droppato silenziosamente -> il
-    # path runtime trovava None e fallava senza segnale parlante,
-    # es. `rest_url`, `rest_method`, `dest_type=rest`, le coppie auth
-    # OpenAPI-style `in/name/value`, ecc.). Con `allow` il campo arriva
-    # comunque a destinazione (anche se un caller `getattr(node, "x")`
-    # non lo vedrebbe — serve `node.model_extra["x"]`); soprattutto il
-    # `model_validator` qui sotto logga un WARNING strutturato a ogni
-    # carico, cosi' un campo nuovo del FE che divergesse dal BE
-    # compare immediatamente nei log invece che diventare un bug
-    # silenzioso a runtime. `extra="forbid"` resta troppo rigido per campi
-    # FE nuovi non ancora tipizzati sul backend.
+    # Preserva campi FE non ancora dichiarati sul modello e li rende visibili
+    # al validator sotto, evitando drop silenziosi durante il runtime.
+    # `extra="forbid"` resta troppo rigido per campi FE nuovi non ancora
+    # tipizzati sul backend.
     model_config = ConfigDict(extra="allow")
 
     @model_validator(mode="after")
@@ -356,9 +345,8 @@ class Edge(BaseModel):
     sourceHandle/targetHandle sono metadata ReactFlow opzionali
     tollerati (il frontend li invia a volte con l'edge grezzo).
 
-    Manteniamo deliberatamente il default
-    Pydantic `extra="ignore"` invece di `extra="forbid"` raccomandato
-    dal finding. Motivo: il serializer frontend al
+    Manteniamo deliberatamente il default Pydantic `extra="ignore"`
+    invece di `extra="forbid"`. Motivo: il serializer frontend al
     `frontend/src/utils/canvasSerializer.js:227` ritorna il raw edge
     ReactFlow quando `data.join_type` manca (es. edge verso result /
     carica). Quel raw edge porta con se' campi ReactFlow variabili
@@ -366,7 +354,7 @@ class Edge(BaseModel):
     cambiano tra versioni di ReactFlow. Forbid spezzerebbe canvas
     legittimi ad ogni upgrade library. Trade-off: accettiamo il rischio
     minore di tollerare typo/field ignorati; la validazione strutturale
-    (id/source/target/join_type tipizzati) copre il 90% della superficie.
+    (id/source/target/join_type tipizzati) copre la superficie critica.
     """
     id: str = Field(..., min_length=1)
     source: str = Field(..., min_length=1)

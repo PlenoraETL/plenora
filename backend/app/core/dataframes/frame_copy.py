@@ -15,20 +15,16 @@ df resta intatto. Quindi `deep=False` e' safe anche per:
   - out.loc[mask, col] = value
   - out.iloc[i, j] = value
   - out.at[i, col] = value
-Il vincolo "deep=True per cell update" valeva per pandas < 2 senza
-CoW. Plenora oggi runa pandas 3.x; il vincolo storico non si applica.
+    Con pandas Copy-on-Write attivo, non serve `deep=True` per cell update.
 
 Quando NON usarlo:
 - Read-only path: subset/projection senza side-effect -> restituisci
   direttamente la slice (no copy, no helper). Pattern:
   return df[mask].reset_index(drop=True).
 
-Pre-fix: df.copy() con default deep=True copiava tutti i buffer
-numpy ad ogni transform -- overhead lineare in righe x colonne anche
-quando il transform aggiungeva una sola colonna nuova. Su DataFrame
-di milioni di righe il costo era dominante. Post-fix: deep=False
-ricalca la struttura (Series/Index/dtype) ma sharing dei buffer,
-~10x piu' veloce; CoW disambigua le mutazioni successive.
+`deep=False` ricalca la struttura (Series/Index/dtype) ma con sharing dei
+buffer; CoW disambigua le mutazioni successive evitando copie profonde
+inutili sui transform che aggiungono o riassegnano colonne.
 """
 
 from __future__ import annotations

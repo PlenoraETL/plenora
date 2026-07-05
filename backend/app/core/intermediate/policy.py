@@ -24,10 +24,9 @@ MODE_PREVIEW_ONLY = "preview_only"
 MODE_FULL_PG = "full_pg"
 MODE_FULL_ARTIFACT = "full_artifact"
 
-# Valori che la pipeline puo' effettivamente eseguire
-# `full_artifact` aggiunto nel storage intermedi
-# 2026-04-28): richiede OBJECT_STORAGE_ENABLED=true e bucket runtime
-# configurato (vedi validate_intermediate_settings
+# Valori che la pipeline puo' effettivamente eseguire.
+# `full_artifact` richiede OBJECT_STORAGE_ENABLED=true e bucket runtime
+# configurato (vedi validate_intermediate_settings).
 SUPPORTED_PERSISTENCE_MODES = frozenset({
     MODE_METADATA_ONLY,
     MODE_PREVIEW_ONLY,
@@ -256,10 +255,9 @@ def validate_intermediate_settings(values: Optional[dict] = None) -> None:
             f"Valori ammessi: {sorted(SUPPORTED_PERSISTENCE_MODES)}."
         )
 
-    # Object storage capability cross-check (storage
-    # intermedi, 2026-04-28). `full_artifact` richiede object storage
-    # runtime attivo + bucket configurato. Senza, l'unica via e'
-    # cambiare mode (es. metadata_only) o abilitare la capability
+    # Object storage capability cross-check. `full_artifact` richiede
+    # object storage runtime attivo + bucket configurato. Senza, l'unica
+    # via e' cambiare mode (es. metadata_only) o abilitare la capability.
     if mode == MODE_FULL_ARTIFACT:
         # Lazy import per evitare cicli (cloud_backends importa
         # eventualmente settings indirettamente
@@ -308,8 +306,8 @@ def validate_intermediate_settings(values: Optional[dict] = None) -> None:
 
     resolve_fingerprint_policy(cfg)
 
-    # PLENORA_ARTIFACT_BUCKET e INTERMEDIATE_ARTIFACT_PREFIX sono ora
-    # consumati dal path full_artifact
+    # PLENORA_ARTIFACT_BUCKET e INTERMEDIATE_ARTIFACT_PREFIX sono
+    # consumati dal path full_artifact.
     # bucket: fallback in `cloud_backends._resolve_runtime_bucket`
     # dietro a OBJECT_STORAGE_BUCKET (priorita' 2
     # prefix: usato da `artifact_writer.build_artifact_key_prefix`

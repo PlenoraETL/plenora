@@ -1,9 +1,9 @@
-"""Leader election del beat su PostgreSQL (Plenora 2.0, Fase 3).
+"""Leader election del beat su PostgreSQL.
 
-Rimpiazza il lock leader Redis (SETNX/EXPIRE). Pattern TTL + refresh come
-``admin_backup_manual_locks``: ``acquire_or_refresh`` e' un singolo upsert
-atomico che acquisisce il lock se libero/scaduto OPPURE rinnova ``expires_at``
-se il caller ne e' gia' owner. Pool-safe (niente advisory lock di sessione).
+Pattern TTL + refresh come ``admin_backup_manual_locks``:
+``acquire_or_refresh`` e' un singolo upsert atomico che acquisisce il lock se
+libero/scaduto OPPURE rinnova ``expires_at`` se il caller ne e' gia' owner.
+Pool-safe: niente advisory lock di sessione.
 """
 
 from __future__ import annotations

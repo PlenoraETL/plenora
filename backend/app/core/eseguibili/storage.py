@@ -17,11 +17,8 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# Prefix condiviso con la convenzione: separato dal backup bucket pattern
-# urby_*.dump) cosi' le lifecycle rule possono essere distinte. Alias
-# modulare verso `app.shared.resources.storage_layout.ESEGUIBILI_OUTPUTS_PREFIX`
-# BE-DATA-PLANE-001A): single source-of-truth per i prefix object
-# storage
+# Prefix object storage condiviso con il layout centrale; separato dal backup
+# bucket pattern cosi' le lifecycle rule possono essere distinte.
 PREFIX = ESEGUIBILI_OUTPUTS_PREFIX
 
 
@@ -63,7 +60,7 @@ _PART_SIZE = 8 * 1024 * 1024
 
 
 def save_chunks(task_id: str, filename: str, chunks) -> str:
-    """Sessione C-1 (2026-05-26): upload streaming via S3 multipart real-time.
+    """Upload streaming via S3 multipart real-time.
 
     Mirror di `StreamingResultBlobWriter._init_s3` ma per il bucket
     eseguibili (no DB row coordination, no upload_intent). Consuma
@@ -114,13 +111,9 @@ def save_chunks(task_id: str, filename: str, chunks) -> str:
     part_number = 0
     part_buf = bytearray()
 
-    # P1 (2026-05-26): cleanup abort_multipart centralizzato.
-    # Pre-fix ogni fallimento di `upload_part` chiamava
-    # `_abort_multipart_safe` E poi sollevava RuntimeError, che il
-    # try/except esterno catchava ri-chiamando `_abort_multipart_safe`.
-    # Doppia abort -> seconda chiamata otteneva NoSuchUpload (gia'
-    # abortita), swallowed da `_abort_multipart_safe` con log debug,
-    # oscurando il vero errore nei log + raddoppiando le call S3.
+    # Cleanup multipart centralizzato: ogni errore passa da un solo abort,
+    # evitando doppie call S3 e log secondari che coprirebbero il failure
+    # originale.
     # Ora le sub-call alzano direttamente: l'unico abort vive nel
     # `except` esterno.
     def _flush_one_part(payload: bytes) -> None:
@@ -192,9 +185,9 @@ def _abort_multipart_safe(client, bucket: str, key: str, upload_id: str) -> None
 def save(task_id: str, src_path: Path) -> str:
     """Upload del file su object storage, poi delete del local temp.
 
-    Post-Phase5: thin wrapper su `save_bytes`. Legge il contenuto del
-    file una volta in RAM e delega al path bytes-first. Trade-off:
-    streaming upload sostituito da buffered. Per gli eseguibili
+    Thin wrapper su `save_bytes`: legge il contenuto del file una volta in
+    RAM e delega al path bytes-first. Trade-off: streaming upload sostituito
+    da buffered. Per gli eseguibili
     Plenora il payload e' di solito small-to-medium (REST file
     workflow output, < RESULT_DB_HARD_CAP); il tradeoff RAM e' accettabile.
 

@@ -121,7 +121,6 @@ class QueryPersistenceProtocol(Protocol):
         ...
 
 
-# Tombstone (QUERY-1 step 2): `QueryStreamingWriterProtocol` rimosso.
 # Lo streaming canonico passa da `persist_streaming_query_to_storage`
 # (in `QueryResultPersistence`) -> `execute_streaming_to_writer` (in
 # `query_streaming`) -> `StreamingResultBlobWriter` (S3 multipart o
@@ -244,7 +243,6 @@ class QueryExecutor:
             logger: Logger per messaggi di info/error/debug.
             result_persistence: porta di persistenza Rows/DataFrame -> result blob.
 
-        Tombstone (QUERY-1 step 2): `streaming_writer` param rimosso.
         Lo streaming canonical e' `persist_streaming_query_to_storage`
         del `result_persistence`.
         """
@@ -336,7 +334,6 @@ class QueryExecutor:
 
             return rows, columns
 
-    # Tombstone (QUERY-1 step 2): `_execute_streaming_to_file` rimosso.
     # Lo streaming branch di `execute_query` invoca direttamente
     # `self._result_persistence.persist_streaming_query_to_storage(...)`
     # che orchestra `execute_streaming_to_writer` su un
@@ -398,8 +395,8 @@ class QueryExecutor:
             self._logger.info(f"Esecuzione query per progetto {project_id}")
 
             if _streamable:
-                # QUERY-1: streaming end-to-end cursor → result blob storage
-                # via `StreamingResultBlobWriter`. Niente tempfile intermedio,
+                # Streaming end-to-end cursor -> result blob storage via
+                # `StreamingResultBlobWriter`. Niente tempfile intermedio,
                 # save = parte del query_total perche' multipart upload
                 # avviene mentre il cursor produce.
                 t_query = time.time()

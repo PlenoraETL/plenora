@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 
 DataFrame = FrameLike
 
-# MANIPOLA-4: dimensione del batch per concat_columns RAM-bounded.
+# Dimensione del batch per concat_columns RAM-bounded.
 # Per N_cols=12 * batch=100k * avg_str=50B = ~60MB peak per batch.
 _CONCAT_BATCH_SIZE = 100_000
 
@@ -59,7 +59,7 @@ def op_drop_columns(
 
 
 # RINOMINA COLONNE
-# Rinomina colonne secondo mapping {vecchio_nome: nuovo_nome}
+# Rinomina colonne secondo mapping {old_name: new_name}
 
 def op_rename(
     df: DataFrame,
@@ -132,10 +132,8 @@ def op_reorder_columns(
         return df
 
     try:
-        # Pre-fix: `df.copy()` allocava una copia profonda solo per fare
-        # poi `result[new_order]` (subset di colonne). Le subset di
-        # colonne di pandas sono gia' nuove DataFrame view-friendly:
-        # niente modifiche column-level, niente bisogno della copy.
+        # Le subset di colonne pandas sono sufficienti qui: non facciamo
+        # modifiche column-level, quindi niente copia profonda.
         if columns:
             valid_cols = [c for c in columns if c in df.columns]
             remaining = [c for c in df.columns if c not in valid_cols]
@@ -197,11 +195,7 @@ def op_concat_columns(
         subset = result[valid_cols]
 
         if skip_null:
-            # MANIPOLA-4 (2026-05-26): batch RAM-bounded.
-            # Pre-fix: materializzava str_arrs + mask_arrs per TUTTE le
-            # colonne contemporaneamente (peak ~ N_cols * N_rows *
-            # avg_str_size). Su 10M righe x 12 colonne: ~4-6GB peak.
-            # Post-fix: processa batch da `_CONCAT_BATCH_SIZE` righe per
+            # Batch RAM-bounded: processa `_CONCAT_BATCH_SIZE` righe per
             # volta. Peak ~ N_cols * batch_size * avg_str_size.
             #
             # Vera vettorizzazione: estrazione numpy arrays per colonna
@@ -232,7 +226,7 @@ def op_concat_columns(
                 ]
 
                 # Per-row join: compress(values, mask) filtra in C le posizioni
-                # dove mask=True. Semantica legacy preservata: join "" -> None.
+                # dove mask=True. Join vuoto -> None.
                 for j, (row_vals, row_mask) in enumerate(
                     zip(zip(*str_arrs_batch), zip(*mask_arrs_batch))
                 ):

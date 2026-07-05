@@ -310,7 +310,7 @@ def execute(
 
     # 1. Carica DataFrame originale.
     # - `file_source_id`: bytes-first via `_load_dataframe_from_bytes`,
-    #   niente piu' tempfile bounce (post-Phase5).
+    #   senza tempfile bounce.
     # - `file_path`: path-based legitimate (file gia' presente sul
     #   filesystem dal flow analyze/eseguibili).
     if file_source_id:
@@ -358,17 +358,9 @@ def execute(
     # 4. Salva DataFrame rinominato come FileSource temporaneo nel DB
     # Riusiamo il sistema file_source esistente — marchiamo con un nome speciale.
     #
-    # Pre-fix (P2 orchestration HIGH): `temp_name` usava `uuid.uuid4().hex[:8]`
-    # → ogni retry dello stesso eseguibile creava un NEW FileSource temp,
-    # accumulando orfani fino al cleanup hourly (TTL 24h). Su retry
-    # consecutivi (job failure → re-run rapido) il leak era bounded ma
-    # rumoroso nel DB.
-    # Post-fix: identifier deterministico = hash(df bytes + eseguibile.id)
-    # primi 8 char. Stesso payload → stesso temp_name → retry idempotente
-    # (collision intenzionale, no duplicati). Diversi payload (input file
-    # diverso) → diverso temp_name. Hash sha256 troncato e' sufficiente
-    # per disambiguare retry rapidi (no collisione su 2^32 retry distinti).
-    # Il cleanup TTL 24h (sessione precedente) resta come safety net.
+    # Identifier deterministico = hash(df bytes + eseguibile.id) primi 8 char.
+    # Stesso payload -> stesso temp_name -> retry idempotente; payload diverso
+    # -> temp_name diverso. Il cleanup TTL 24h resta come safety net.
     _df_signature = hashlib.sha256(
         f"{eseguibile['id']}::{len(df)}::{','.join(df.columns)}".encode("utf-8")
     ).hexdigest()[:8]
@@ -391,13 +383,9 @@ def execute(
     # create_from_upload ritorna un oggetto FileSource (pydantic) — accediamo a .id
     temp_file_source_id = file_source.id if hasattr(file_source, "id") else file_source["id"]
 
-    # P2 I2: marca la riga come temporanea con TTL 24h. Il task beat
-    # `cleanup_temp_files_task` (orario) cancella automaticamente le
-    # righe is_temp=true con expires_at passata. Pre-fix questi file
-    # restavano nel DB indefinitamente accumulandosi. Update inline e
-    # best-effort: un errore qui (column non esistente in vecchi DB
-    # senza migration) NON blocca l'esecuzione dell'eseguibile —
-    # peggio caso il file resta orfano e va cancellato manualmente.
+    # Marca la riga come temporanea con TTL 24h. Il task beat
+    # `cleanup_temp_files_task` cancella le righe is_temp=true scadute.
+    # Update best-effort: un errore qui non blocca l'esecuzione.
     try:
         eseguibili_db.mark_temp_file_source_ttl(temp_file_source_id)
     except Exception as ttl_err:

@@ -58,8 +58,8 @@ class ProjectPublicPayload(TypedDict):
     id: str
 
 
-# ProjectDependencyPayload vive in lifecycle_service (Epic F, F5);
-# RawProjectCanvas in canvas_service (F3). Re-export sopra.
+# ProjectDependencyPayload vive in lifecycle_service; RawProjectCanvas in
+# canvas_service. Re-export sopra.
 
 
 class ProjectService:
@@ -79,8 +79,8 @@ class ProjectService:
         self._project_repository = (
             project_repository or DbProjectCanvasKeyRepository()
         )
-        # Epic F (F2/F3/F4/F5): sub-service a interfaccia stretta. I nuovi
-        # chiamanti dipendono da questi; la facade delega.
+        # Sub-service a interfaccia stretta: i nuovi chiamanti dipendono da
+        # questi, mentre la facade mantiene le API pubbliche esistenti.
         self.metadata = ProjectMetadataService(self)
         self.canvas = ProjectCanvasService(self)
         self.output_contract = ProjectOutputContractService()
@@ -91,7 +91,7 @@ class ProjectService:
         return build_project_id(name, datetime.now(timezone.utc), str(uuid.uuid4()))
 
     def _ensure_default_group(self):
-        """Crea il gruppo default se non esiste (migrazione da filesystem)."""
+        """Crea il gruppo default se non esiste."""
         if not _groups.get_group(self.DEFAULT_GROUP):
             _groups.create_group(
                 self.DEFAULT_GROUP, "Default", "Gruppo di default"
@@ -103,10 +103,8 @@ class ProjectService:
     ) -> ProjectMetadata:
         """Serialize a typed ProjectRow into the public metadata model.
 
-        Pre-fix (P1 entities): `description=""` hardcoded → tutti i
-        progetti esposti via GET /projects perdevano la description
-        anche quando popolata in DB. Post-fix: lettura da `row.description`
-        (nuovo campo in ProjectRow, sessione 7).
+        La description arriva da `row.description`; stringhe vuote o valori
+        null vengono normalizzati a `""` nel modello pubblico.
         """
         return ProjectMetadata(
             id=row.id,
@@ -172,7 +170,7 @@ class ProjectService:
         group_id: Optional[str] = None,
         created_by: Optional[str] = None,
     ) -> Optional[ProjectMetadata]:
-        """Delega al sub-service lifecycle (Epic F)."""
+        """Clone progetto delegando al sub-service lifecycle."""
         return self.lifecycle.clone_project(
             source_project_id,
             new_name,
@@ -222,19 +220,19 @@ class ProjectService:
         group_id: Optional[str] = None,
         created_by: Optional[str] = None,
     ) -> Optional[CanvasVersionRef]:
-        """Delega al sub-service canvas (Epic F)."""
+        """Crea una versione del canvas."""
         return self.canvas.create_canvas_version(
             project_id, label=label, group_id=group_id, created_by=created_by,
         )
 
     def list_canvas_versions(self, project_id: str) -> list[CanvasVersionRef]:
-        """Delega al sub-service canvas (Epic F)."""
+        """Lista le versioni del canvas."""
         return self.canvas.list_canvas_versions(project_id)
 
     def restore_canvas_version(
         self, project_id: str, version_id: str
     ) -> Optional[CanvasState]:
-        """Delega al sub-service canvas (Epic F)."""
+        """Ripristina una versione del canvas."""
         return self.canvas.restore_canvas_version(project_id, version_id)
 
     def rollback_created_project(
@@ -252,15 +250,15 @@ class ProjectService:
         return project_db.delete_project(project_id, group_id=group_id)
 
     def list_projects(self, group_id: Optional[str] = None) -> ProjectList:
-        """Lista progetti (delega al sub-service metadata, Epic F)."""
+        """Lista progetti delegando al sub-service metadata."""
         return self.metadata.list_projects(group_id)
 
     def get_project_metadata(self, project_id: str, group_id: Optional[str] = None) -> Optional[ProjectMetadata]:
-        """Carica metadati progetto (delega al sub-service metadata, Epic F)."""
+        """Carica metadati progetto delegando al sub-service metadata."""
         return self.metadata.get_project_metadata(project_id, group_id=group_id)
 
     def get_project_canvas(self, project_id: str) -> Optional[CanvasState]:
-        """Delega al sub-service canvas (Epic F)."""
+        """Carica il canvas del progetto."""
         return self.canvas.get_project_canvas(project_id)
 
     def get_project_raw_canvas(
@@ -268,7 +266,7 @@ class ProjectService:
         project_id: str,
         group_id: Optional[str] = None,
     ) -> Optional[RawProjectCanvas]:
-        """Delega al sub-service canvas (Epic F)."""
+        """Carica il canvas raw del progetto."""
         return self.canvas.get_project_raw_canvas(project_id, group_id=group_id)
 
     def get_project(
@@ -294,7 +292,7 @@ class ProjectService:
         }
 
     def update_canvas(self, project_id: str, canvas: CanvasState) -> bool:
-        """Delega al sub-service canvas (Epic F). Mantiene la semantica:
+        """Aggiorna il canvas mantenendo la semantica della facade:
         lineage guard, reset canvas_validated, cascade ai progetti a valle.
 
         Raises:
@@ -305,14 +303,14 @@ class ProjectService:
         return self.canvas.update_canvas(project_id, canvas)
 
     def set_canvas_validated(self, project_id: str, value: bool) -> bool:
-        """Delega al sub-service canvas (Epic F)."""
+        """Persisti lo stato di validazione canvas."""
         return self.canvas.set_canvas_validated(project_id, value)
 
     def get_project_output_contract(
         self,
         project_id: str,
     ) -> Mapping[str, object] | None:
-        """Delega al sub-service output_contract (Epic F)."""
+        """Carica l'output contract del progetto."""
         return self.output_contract.get_project_output_contract(project_id)
 
     def update_project_output_contract(
@@ -320,7 +318,7 @@ class ProjectService:
         project_id: str,
         output_contract: Mapping[str, object],
     ) -> bool:
-        """Delega al sub-service output_contract (Epic F)."""
+        """Aggiorna l'output contract del progetto."""
         return self.output_contract.update_project_output_contract(
             project_id,
             output_contract,
@@ -374,13 +372,18 @@ class ProjectService:
         project_id: str,
         group_id: Optional[str] = None,
     ) -> list[ProjectDependencyPayload]:
-        """Delega al sub-service lifecycle (Epic F). Resta sulla facade come
-        hook: i chiamanti interni (update_canvas cascade, delete_project)
-        passano da qui, quindi i patch di classe continuano a intercettare."""
+        """Trova progetti dipendenti tramite il sub-service lifecycle.
+
+        Resta sulla facade come hook: i chiamanti interni (update_canvas
+        cascade, delete_project) passano da qui, quindi i patch di classe
+        continuano a intercettare.
+        """
         return self.lifecycle.find_dependent_projects(project_id, group_id=group_id)
 
     def delete_project(self, project_id: str, group_id: Optional[str] = None) -> bool:
-        """Delega al sub-service lifecycle (Epic F). Semantica invariata:
+        """Cancella un progetto tramite il sub-service lifecycle.
+
+        Semantica invariata:
         blocco dipendenze (eseguibili + progetti downstream), cascade con
         critical/derived failures, fail-closed sulla row config.
 

@@ -153,8 +153,8 @@ def _validate_formula_ast(formula: str) -> None:
 def _extract_referenced_names(formula: str) -> set[str]:
     """Ritorna il set di tutti i `Name` referenziati nell'AST della formula.
 
-    MANIPOLA-1: usato per limitare `local_vars` alle sole colonne
-    citate, evitando la conversione numerica per-colonna su DataFrame
+    Usato per limitare `local_vars` alle sole colonne citate, evitando
+    la conversione numerica per-colonna su DataFrame
     wide. Fallback safe: se l'AST non parse-a, ritorna set vuoto e
     il caller cadra' sul comportamento tutto-colonne.
 
@@ -209,7 +209,7 @@ def op_formula(
     result = copy_frame_for_update(df)
     formula = formula.strip()
 
-    # N4 defense-in-depth: scarta colonne con nome _-prefix/dunder prima di
+    # Defense-in-depth: scarta colonne con nome _-prefix/dunder prima di
     # esporle al motore eval (sia pandas.eval sia eval manuale). L'AST
     # validator blocca gia' i builtin pericolosi come ast.Name, ma evitiamo
     # comunque di esporre nomi strani nel namespace: se un attacker riuscisse
@@ -247,12 +247,9 @@ def op_formula(
             )
 
         # Passa le colonne come variabili locali — nessuna sostituzione nel testo della formula
-        # Auto-conversione a numerico per colonne object (es. CSV importato come stringa
-        # MANIPOLA-1 (2026-05-26): estrai dall'AST i soli nomi usati dalla
-        # formula. Pre-fix: scandiva TUTTE le colonne (200+ su DF wide) anche
-        # se la formula usava 2 colonne, allocando convertite + cleaned per
-        # ognuna. Post-fix: itera solo i nomi referenziati, RAM proporzionale
-        # alla complessita' della formula, non alla larghezza del DF.
+        # Auto-conversione a numerico solo per colonne referenziate dalla
+        # formula: RAM proporzionale alla complessita' della formula, non alla
+        # larghezza del DataFrame.
         referenced_names = _extract_referenced_names(formula)
         cols_to_prepare = [
             c for c in eval_df.columns

@@ -163,8 +163,8 @@ class SourceLoader:
             file_source_service, FileSourceService,
         )
         try:
-            # N1: propaga expected_group_id al service per il fail-closed
-            # interno. Se is_superadmin, usa il sentinel di bypass — altrimenti
+            # Propaga expected_group_id al service per il fail-closed interno.
+            # Se is_superadmin, usa il sentinel di bypass; altrimenti
             # il group_id gia' validato sopra
             _svc_group = (
                 FileSourceService.SUPERADMIN_BYPASS
@@ -204,10 +204,8 @@ class SourceLoader:
         i bytes direttamente in `requests.post(files={name: (filename,
         bytes, mime)})`. Stesso cross-tenant fail-closed del `load`.
 
-        Post-Phase5: sostituisce la vecchia `resolve_project_path` che
-        materializzava un tempfile via mode="path". Adesso il resolver
-        opera in mode="bytes" e il caller consuma i bytes direttamente,
-        eliminando il tempfile bounce.
+        Il resolver opera in mode="bytes" e il caller consuma i bytes
+        direttamente, senza materializzare tempfile intermedi.
         """
         if not expected_group_id:
             raise ValueError(
@@ -248,8 +246,8 @@ class SourceLoader:
         is_superadmin: bool = False,
     ) -> Any:
         try:
-            # mode="bytes": Post-Phase5 il loader bytes-first va via
-            # `MaterializedArtifact.data` -> `load_dataframe_from_artifact(
+            # mode="bytes": il loader bytes-first passa da
+            # `MaterializedArtifact.data` a `load_dataframe_from_artifact(
             # data=..., format_hint=...)`. Niente tempfile bounce.
             materialized = self._resolver.materialize_latest(
                 project_ref,
@@ -276,9 +274,8 @@ class SourceLoader:
         with materialized as m:
             if m.df is not None:
                 return m.df
-            # Post-Phase5: resolver default mode="bytes". Path fallback
-            # solo per i ref legacy che ancora ritornano path (e.g.
-            # output_path branch di RunArtifactRef).
+            # Resolver default mode="bytes"; path fallback solo per i ref
+            # legacy che ancora ritornano path (e.g. output_path branch).
             if m.data is not None:
                 return load_dataframe_from_artifact(
                     data=m.data, format_hint=m.format,

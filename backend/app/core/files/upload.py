@@ -1,7 +1,6 @@
 """Single-file upload parsing and file-source creation.
 
-Post-Phase4 refactor: il payload upload e' processato interamente in
-RAM. Niente piu' NamedTemporaryFile / mkdtemp / safe_extractall:
+Il payload upload e' processato interamente in RAM:
 - ZIP navigato via `zipfile.ZipFile(BytesIO(raw_data))` + `zf.read`
   per estrarre il singolo inner file in bytes.
 - Schema inference via `load_by_format_bytes(raw_data, format_type,
@@ -93,11 +92,8 @@ def create_from_upload(
     inner_bytes = raw_data
 
     if format_type == 'zip':
-        # Pre-fix: estraeva il ZIP su mkdtemp + safe_extractall, poi
-        # navigava la dir per estensione, poi rileggeva i bytes del
-        # file estratto. Post-fix: zipfile.ZipFile(BytesIO) naviga
-        # in RAM, e per shapefile/gdb pyogrio gestisce direttamente
-        # lo ZIP via /vsizip (vedi `_load_dataframe_from_bytes`).
+        # Naviga lo ZIP in RAM; per shapefile/gdb pyogrio gestisce
+        # direttamente lo ZIP via /vsizip (vedi `_load_dataframe_from_bytes`).
         outer_filename = filename
         try:
             # `open_zip_bytes_safe` valida i cap zip-bomb PRIMA di yield:

@@ -1,13 +1,12 @@
-"""Runner del beat su APScheduler (Plenora 2.0, Fase 3 F3.3).
+"""Runner del beat su APScheduler.
 
-Rimpiazza ``celery beat -S workers.beat_scheduler.PlenoraBeatScheduler``:
-il loop e' APScheduler (nativo Windows/Linux/container, niente fork), la
-logica resta in ``PlenoraBeatScheduler`` (leader election su PostgreSQL,
-sync schedule dal DB, catchup, manutenzione, emit via layer dispatch).
+Il loop e' APScheduler (nativo Windows/Linux/container, niente fork), la
+logica resta in ``PlenoraBeatScheduler``: leader election su PostgreSQL,
+sync schedule dal DB, catchup, manutenzione, emit via layer dispatch.
 
-Plenora 2.0 Fase 5: l'engine e' celery-free (la date-math cron/interval e'
-su croniter, vedi app.core.scheduler.cron_schedule); l'emit dei task va via
-``dispatch_task_by_name`` (Dramatiq).
+La date-math cron/interval usa croniter (vedi
+app.core.scheduler.cron_schedule); l'emit dei task passa da
+``dispatch_task_by_name``.
 
 Avvio: ``python -m workers.beat``.
 """
@@ -55,8 +54,7 @@ def build_scheduler(engine: PlenoraBeatScheduler) -> BlockingScheduler:
 
 
 def _bootstrap_beat_process() -> None:
-    """Esegue il bootstrap 4-step nel processo beat (rimpiazzo del signal
-    Celery ``beat_init``, perso col passaggio ad APScheduler in F3.3).
+    """Esegue il bootstrap 4-step nel processo beat.
 
     Fail-closed: un'eccezione da ``bootstrap`` propaga e impedisce l'avvio
     del beat contro un DB / storage / broker mal configurato. Idempotente

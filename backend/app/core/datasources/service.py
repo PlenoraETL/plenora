@@ -175,12 +175,8 @@ class DataSourceService:
                 message=result.get("message", ""),
                 details=result.get("details"),
             )
-        # Provider exceptions can include URLs, tokens, credentials, or internal paths.
-        # Pre-fix (P1 connections): f"{e}" propagava raw l'eccezione che poteva
-        # includere credenziali (es. ftplib auth failure con username/password
-        # nel messaggio, paramiko SSHException con host+key snippet). Allineato
-        # al pattern di `connections/service.py:_test_*` (sessioni precedenti):
-        # logghiamo solo type(e).__name__, exc_info=True per traceback debug.
+        # Provider exceptions can include URLs, tokens, credentials, or
+        # internal paths. Logghiamo solo il tipo, con traceback server-side.
         except Exception as e:
             logger.error(
                 "[GESTITO] Errore test connessione %s: %s",
@@ -192,12 +188,8 @@ class DataSourceService:
                 message="Impossibile testare la connessione: riprova piu' tardi",
             )
         finally:
-            # Pre-fix (P1 connections): test_connection apriva una connessione
-            # via `create_backend(config)` ma NON la chiudeva esplicitamente.
-            # Su backend con stateful socket (FTP/SFTP/SharePoint), questo
-            # accumulava handle aperte verso il server esterno + risorse
-            # locali fino al GC. Cleanup best-effort: chiamiamo disconnect()
-            # se il backend lo espone (interfaccia DataSource).
+            # Cleanup best-effort per backend stateful socket
+            # (FTP/SFTP/SharePoint).
             if backend is not None and hasattr(backend, "disconnect"):
                 try:
                     backend.disconnect()
@@ -261,18 +253,10 @@ class DataSourceService:
         Il datasource resta la boundary di lettura remota; il parsing riusa
         il parser temporaneo del dominio Files, senza persistere FileSource.
 
-        Sessione D (2026-05-26): bounded read via `iter_read_chunks` con
-        cap `PLENORA_DATASOURCE_SCHEMA_MAX_BYTES` (default 50MB).
-        Pre-fix: `read_file()` caricava il file INTERO anche solo per
-        inferire schema/columns (preview_file_temp internamente usa gia'
-        `preview_dataframe_from_bytes(max_rows=200)` da RAM-1, ma il
-        wrapper get_file_schema buttava in RAM il payload completo del
-        file remoto).
-        Post-fix: itera chunks con cap. Per LocalDataSource/SFTP/FTP
-        (override streaming) il peak scende a max_bytes. Per SharePoint
-        (default fallback) `iter_read_chunks` carica comunque tutto in
-        RAM internamente — il cap dei bytes consumati limita solo lo
-        slice estratto. Trade-off accettato.
+        Bounded read via `iter_read_chunks` con cap
+        `PLENORA_DATASOURCE_SCHEMA_MAX_BYTES` (default 50MB). Per
+        LocalDataSource/SFTP/FTP il peak scende a max_bytes. Per backend con
+        fallback full-read, il cap limita solo i bytes consumati.
 
         Caveat per format ZIP/binari (XLSX/Parquet/GPKG/SHP-ZIP):
         questi formati richiedono il footer/index del file completo.
@@ -281,8 +265,7 @@ class DataSourceService:
         far fallire il parser su file molto grandi — l'utente deve
         sapere che la preview ha un limite di scope.
         """
-        # BE-CONFIG-001F: default tipato in Settings.DEFAULTS, override
-        # env opzionale; valori non validi o <=0 ricadono sul default.
+        # Override env opzionale; valori non validi o <=0 ricadono sul default.
         _default_max = 50 * 1024 * 1024
         try:
             max_bytes = int(
@@ -312,7 +295,7 @@ class DataSourceService:
         )
 
     def iter_read_chunks(self, ds_id: str, path: str, *, chunk_size: int = 64 * 1024):
-        """RAM-3 (2026-05-26): streaming read via il backend interface.
+        """Streaming read via backend interface.
 
         Per `LocalDataSource` apre il file e itera `chunk_size` byte
         per volta (peak ~chunk_size). Per gli altri backend usa il
@@ -333,7 +316,7 @@ class DataSourceService:
             ds.write_file(path, content)
 
     def write_chunks(self, ds_id: str, path: str, chunks) -> None:
-        """RAM-B1 (2026-05-26): streaming write via il backend interface.
+        """Streaming write via backend interface.
 
         I backend con override nativo (Local, SFTP, FTP) scrivono
         chunk-per-chunk con peak ~chunk_size. SharePoint usa il default

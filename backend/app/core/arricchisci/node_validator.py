@@ -1,4 +1,4 @@
-"""Validatore PUT-time per i nodi api_enrich (arricchisci) — Epic Canvas Validation 1.6.
+"""Validatore PUT-time per i nodi api_enrich (arricchisci).
 
 Regole pure (no DB), porting fedele del validatore FE:
 - ARRICCHISCI_API_NOT_SELECTED: nessuna API connessa (``api_id`` assente).
@@ -8,7 +8,7 @@ Regole pure (no DB), porting fedele del validatore FE:
   (errore a prescindere dai dati); la parte "mappato a colonna inesistente" è
   verificata solo se lo schema a monte è noto (#A: indeterminate → non flaggata).
 
-NON porta qui (richiede contesto DB, vedi probe 2026-06-01):
+NON porta qui (richiede contesto DB):
 - ARRICCHISCI_API_CONNECTION_STALE → richiede la lista delle connessioni API
   disponibili (lookup DB). È iniettata dall'endpoint /validate (DB-aware) in
   ``validate_canvas``; il node-validator resta puro.
@@ -28,7 +28,7 @@ _TRAILING_PAREN_RE = re.compile(r"\s*\(.*\)$")
 
 
 def _node_config(node: Any) -> dict[str, Any]:
-    """Return node config from top-level/model_extra plus legacy data."""
+    """Return node config from top-level/model_extra plus node.data."""
     data = getattr(node, "data", None) or {}
     config: dict[str, Any] = dict(data) if isinstance(data, Mapping) else {}
     extra = getattr(node, "model_extra", None) or getattr(node, "__pydantic_extra__", None) or {}

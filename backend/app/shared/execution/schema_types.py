@@ -14,7 +14,7 @@ from app.shared.contracts.payloads import JsonRows, ObjectMap
 
 @dataclass(frozen=True)
 class InferredSchema:
-    """Schema inferito per un nodo, con esito esplicito (Epic Canvas Validation).
+    """Schema inferito per un nodo, con esito esplicito.
 
     Disambigua i tre significati che collassavano su ``[]``: colonne note
     (``certain``), vuoto-ma-certo (sorgente dichiarata senza colonne), e

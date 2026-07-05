@@ -346,10 +346,7 @@ class ArcGISAuthMixin:
         """Fetch del token OAuth2 ArcGIS.
 
         Delega a `oauth._fetch_oauth2_client_credentials_token` (shared)
-        per evitare duplicazione del grant flow. Pre-fix
-        c'era un'implementazione parallela in questo file con cache
-        separata (`self._token_cache` vs `_OAUTH2_TOKEN_CACHE` globale)
-        che potevano restituire token diversi per la stessa connessione.
+        per usare un solo grant flow e una sola cache token.
         L'`extra_form_data={"f": "json"}` preserva il quirk ArcGIS
         (forza JSON response sull'endpoint legacy `/sharing/rest/...`).
         """
@@ -454,11 +451,9 @@ class ArcGISAuthMixin:
                     token = result["token"]
                     expires = result.get("expires", 0)
                     # ArcGIS API ritorna `expires` in millisecondi-since-epoch
-                    # (legacy) o secondi (alcune versioni nuove). Pre-fix
-                    # l'heuristic `> 1e10` ne distingueva l'unita': 1e10 sec
-                    # = anno 2286 → qualsiasi valore sopra e' "in ms". Bug
-                    # noto: in futuro lontano (post-2286) la heuristic si
-                    # rompe. Mitigazione: sanity cap su ttl (max ~1 anno)
+                    # (legacy) o secondi (alcune versioni nuove). L'heuristic
+                    # `> 1e10` distingue l'unita'; il sanity cap sul TTL limita
+                    # valori futuri o malformati.
                     # per non accettare token con scadenza assurda.
                     expires_sec = expires / 1000 if expires > 1e10 else expires
                     _MAX_REASONABLE_TTL = 366 * 24 * 3600  # 1 anno

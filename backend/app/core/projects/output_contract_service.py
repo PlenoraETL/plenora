@@ -1,7 +1,7 @@
-"""Sub-service output contract progetto (Epic F roadmap, fetta F4).
+"""Sub-service output contract progetto.
 
 Lettura/aggiornamento dell'output contract come interfaccia stretta,
-estratta dalla facade ``ProjectService``. Nessun hook storico coinvolto:
+estratta dalla facade ``ProjectService``. Nessun hook della facade coinvolto:
 il sub-service e' autonomo (solo leaf db). I chiamanti nuovi dipendono
 da questa classe; la facade delega e resta compatibile.
 """

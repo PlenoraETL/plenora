@@ -92,9 +92,9 @@ def publish_existing_layer_mode(
             target_srid,
             outcome,
             # Atomicità upsert (no-rollback server-side): le chiavi il cui delete è
-            # fallito NON vanno re-inserite, altrimenti la riga vecchia (non
+            # fallito NON vanno re-inserite, altrimenti la riga precedente (non
             # cancellata) + la nuova = DUPLICATO. Le escludiamo dall'add: tengono il
-            # valore vecchio (visibile via outcome.errors), corretto al prossimo upsert.
+            # valore precedente (visibile via outcome.errors), corretto al prossimo upsert.
             match_col=match_col if mode == "upsert" else None,
             exclude_keys=failed_delete_keys,
         )

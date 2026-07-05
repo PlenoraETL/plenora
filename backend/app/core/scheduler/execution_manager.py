@@ -92,19 +92,17 @@ class ExecutionManager:
         self.log_service = ScheduleLogService()
         self.concurrency = ConcurrencyManager()
         self.policy = PolicyEngine()
-        # ConnectionService iniettabile (G4); default lazy per il caller
-        # storico (schedule_task) — riusata in _get_orchestrator,
-        # _pre_check_connection, _execute_carica
+        # ConnectionService iniettabile; default lazy per schedule_task e
+        # riuso in _get_orchestrator, _pre_check_connection, _execute_carica.
         self._connection_service = connection_service
         # Factory composition-root per la scrittura CARICA schedulata:
         # i test iniettano qui un fake runner senza toccare carica.
         self._carica_executor_factory = (
             carica_executor_factory or build_scheduled_carica_executor
         )
-        # G3 roadmap: la pipeline schedulata consuma un orchestrator
-        # costruito da una factory iniettabile (default: composition
-        # root). I test scheduler usano un fake runner senza patchare
-        # build_orchestrator_stack.
+        # La pipeline schedulata consuma un orchestrator costruito da una
+        # factory iniettabile. I test scheduler usano un fake runner senza
+        # patchare build_orchestrator_stack.
         self._orchestrator_factory = (
             orchestrator_factory or self._build_default_orchestrator
         )
@@ -238,9 +236,9 @@ class ExecutionManager:
                 "schedule e progetto appartengono a gruppi diversi"
             )
 
-        # Gate canvas-validation per i run schedulati (Epic CanvasVal §12.5), dietro
-        # lo STESSO feature-flag del gate a esecuzione (default off → nessun cambio
-        # in prod). Se il progetto non è validato (stato persistito ``canvas_validated``)
+        # Gate canvas-validation per i run schedulati, dietro lo stesso
+        # feature-flag del gate a esecuzione. Se il progetto non e' validato
+        # (stato persistito ``canvas_validated``)
         # il run schedulato NON parte: si registra un evento PIPELINE_FAILED (il canale
         # notifiche dello scheduler, visibile in dashboard) e si ritorna failed.
         from app.core.orchestrator.service import canvas_validation_gate_blocks
@@ -269,12 +267,8 @@ class ExecutionManager:
 
         _group_id = getattr(project_meta, "group_id", "") or ""
 
-        # P0 fix (bug-hunter orchestration): `open_run` + `create_intermediate_run`
-        # vengono ora chiamati DOPO `try_acquire == "acquired"`. Pre-fix erano
-        # eseguiti incondizionatamente, e i path early-return "skipped"/"queued"
-        # lasciavano un record log_run permanente in stato 'running' senza
-        # `close_run` corrispondente. Conseguenza: l'healthcheck
-        # `count_stuck_schedules` accumulava falsi positivi nel tempo.
+        # Apri i record di run solo dopo lock acquisito: i path early-return
+        # "skipped"/"queued" non hanno una run da chiudere.
         lock_result = self.concurrency.try_acquire(
             schedule_id,
             max_queue_size=config.concurrency.max_queue_size,
@@ -302,9 +296,7 @@ class ExecutionManager:
             # Il task Celery con countdown gestirà il retry dalla coda
             return {"success": False, "status": "queued", "message": "In coda"}
 
-        # Lock acquisito: apri la run nel checkpoint store. Pre-fix
-        # questo blocco eseguiva PRIMA di `try_acquire` e i path "skipped"/
-        # "queued" non lo chiudevano mai.
+        # Lock acquisito: apri la run nel checkpoint store.
         open_run(
             run_id=run_id,
             project_id=project_id,
@@ -312,13 +304,8 @@ class ExecutionManager:
             module=config.pipeline.project_type if config else "scheduler",
             triggered_by=triggered_by,
         )
-        # Apri run anche su intermediate storage. `open_run` popola
-        # `log_runs` per la dashboard, ma il `node_meta` inserito dal
-        # `intermediate.snapshot.record_*_snapshot` ha una FK su `runs.id`.
-        # Senza questo create, ogni write produce
-        # `node_meta_run_id_fkey` violation (catturato come bug nel
-        # commit 6d600650). Mirror del pattern usato in
-        # `workers/tasks/pipeline_task.py:189` per i task non-schedule.
+        # Apri run anche su intermediate storage: `open_run` popola
+        # `log_runs` per la dashboard, mentre `node_meta` ha FK su `runs.id`.
         try:
             intermediate_run_lifecycle.create_run(
                 run_id=run_id,
@@ -333,14 +320,8 @@ class ExecutionManager:
             )
         set_run_context(run_id=run_id, project_id=project_id)
 
-        # Pre-fix: literal "running" duplicato fra execution_manager,
-        # scheduler_execution_runtime e router. Post-fix: enum.
-        # NB: questo callsite e' SICURO rispetto al pattern enqueue-then-status
-        # del retry path (vedi scheduler_execution_runtime.py:174 P1 fix).
-        # Qui siamo gia' DENTRO `execute()` — non c'e' un futuro enqueue
-        # che possa fallire, il run e' in corso e RUNNING e' la stato
-        # accurato. La transizione idle→running prima del heartbeat
-        # start e' intenzionale e atomic dal punto di vista del caller.
+        # Qui siamo gia' dentro `execute()`: non c'e' un enqueue futuro che
+        # possa fallire, quindi RUNNING rappresenta lo stato reale della run.
         self.schedule_service.set_runtime_status(schedule_id, RuntimeStatus.RUNNING)
         # Tracker per il rollback del runtime status nel finally. Settato
         # a True quando `update_runtime` viene chiamato (success path) o
@@ -360,17 +341,9 @@ class ExecutionManager:
                         "Pre-check connessione fallito: database destinazione non raggiungibile",
                         step="PRE_CHECK"
                     )
-                # Pre-fix (P2 orchestration): pre_check OK emetteva
-                # `LogStep(step="CARICA", status="success")` prima che il
-                # CARICA fosse effettivamente eseguito. L'operatore in
-                # dashboard vedeva "CARICA success" anche su run che
-                # poi fallivano nella pipeline a monte. `LogStep.step`
-                # accetta solo i 5 stadi pipeline (Literal), aggiungere
-                # "PRE_CHECK" sarebbe breaking-change per il FE.
-                # Soluzione: non emettere nessuno step sintetico per il
-                # pre_check OK (silent success). Il fail emette
-                # ExecutionError(step="PRE_CHECK") che il logger esterno
-                # registra come fallimento boundary, non come LogStep.
+                # Il pre-check positivo resta silenzioso: non e' uno step
+                # pipeline FE. Il fail usa ExecutionError(step="PRE_CHECK")
+                # e viene registrato come fallimento boundary.
             
             pipeline_start = time.time()
             
@@ -400,11 +373,8 @@ class ExecutionManager:
                 )
 
             # Aggiungi step pipeline al log
-            # `result.rows_count` legge direttamente la chiave che TUTTI
-            # gli executor scrivono (estrai/manipola/arricchisci/features
-            # il vecchio `result.get("row_count", result.get("rows", 0))`
-            # leggeva chiavi che nessun executor scriveva → telemetria
-            # sempre 0
+            # `result.rows_count` legge direttamente la chiave che tutti gli
+            # executor scrivono (estrai/manipola/arricchisci/features).
             rows = result.rows_count or 0
             steps.append(LogStep(
                 step=config.pipeline.project_type.upper(),
@@ -528,17 +498,9 @@ class ExecutionManager:
 
             lock_lost = bool(heartbeat_state.get("lock_lost", False))
             if lock_lost:
-                # Pre-fix: lock_lost loggava solo WARN ma ritornava
-                # success=True. Risultato: il caller (Celery task wrapper)
-                # marcava la run come riuscita anche quando un secondo
-                # worker poteva aver gia' acquisito il lock e iniziato a
-                # scrivere artifact concorrenti. L'orphan run scriveva
-                # output che poi veniva sovrascritto/corrotto dal worker
-                # legittimo, senza alcuna segnalazione operativa.
-                # Post-fix: status="partial" + success=False rende il
-                # fallimento visibile al boundary task (Celery) e ai
-                # consumer della task table (UI scheduler), garantendo
-                # che l'admin sappia che la run e' inaffidabile.
+                # La perdita del lock rende inaffidabile la run: ritorna
+                # success=False e status partial cosi' Celery/UI non la
+                # marcano come completata.
                 logger.warning(
                     f"[LOCK_LOST] Schedule {schedule_id}: heartbeat ha "
                     f"rilevato perdita del lock durante l'esecuzione. "
@@ -626,7 +588,6 @@ class ExecutionManager:
             # originale del fallimento.
             if not runtime_status_finalized:
                 try:
-                    # Pre-fix: literal "idle". Post-fix: enum.
                     self.schedule_service.set_runtime_status(
                         schedule_id, RuntimeStatus.IDLE,
                     )
@@ -739,8 +700,7 @@ class ExecutionManager:
                 }
 
             try:
-                # mode="bytes": Post-Phase5 il consumer carica
-                # `m.data` via load_dataframe_from_artifact (no tempfile).
+                # mode="bytes": il consumer carica `m.data` senza tempfile.
                 materialized = artifact_module.ArtifactResolver().materialize_run(
                     artifact.to_run_artifact_ref(),
                     mode="bytes",
@@ -783,18 +743,9 @@ class ExecutionManager:
                 connection_service=self._get_connection_service()
             )
 
-            # Registra la run intermediate PRIMA dell'execute.
-            # Pre-fix: lo scheduler passava un `carica_run_id`
-            # deterministico ma non creava mai la riga su
-            # `intermediate.runs` ne' la chiudeva → al replay dello
-            # stesso scheduled tick, `CaricaExecutor.
-            # is_already_completed(run_id)` trovava `get_run() is None`
-            # e ritornava False, quindi l'executor riscriveva le
-            # stesse righe (test e2e
-            # `scheduler-carica-runtime.spec.js::idempotency` falliva).
-            # Post-fix: open prima e close dopo, cosi' al secondo tick
-            # il guard scatta e l'executor torna SKIPPED_IDEMPOTENT
-            # (`rows_written=0`, status `completed`).
+            # Registra la run intermediate prima dell'execute: il run_id
+            # deterministico deve esistere per permettere al guard
+            # idempotente di riconoscere replay dello stesso tick.
             if carica_run_id:
                 try:
                     if intermediate_runs_db.get_run(carica_run_id) is None:
@@ -805,11 +756,9 @@ class ExecutionManager:
                             user_id=None,
                         )
                 except Exception as _ie:
-                    # Fail-open: se l'apertura della run intermediate
-                    # esplode, non blocco la scrittura. L'unico effetto
-                    # collaterale e' che il guard idempotency non
-                    # scattera' al replay (comportamento pre-fix), ma
-                    # la run principale procede.
+                    # Fail-open: se l'apertura della run intermediate esplode,
+                    # non blocco la scrittura. L'unico effetto collaterale e'
+                    # che il guard idempotency non scattera' al replay.
                     logger.warning(
                         f"Intermediate: apertura run CARICA fallita "
                         f"(non bloccante) per {carica_run_id}: {_ie}",

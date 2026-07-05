@@ -1,4 +1,4 @@
-"""Vocabolario condiviso della validazione canvas (Epic Canvas Validation).
+"""Vocabolario condiviso della validazione canvas.
 
 Vive in ``shared/execution`` (NON in ``projects/``): protocol+registry,
 l'orchestratore ``projects/canvas_validation`` e i 4 motori vi dipendono tutti —

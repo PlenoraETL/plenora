@@ -315,12 +315,9 @@ def update_ticket(
     if status == "resolved" and not current.get("resolved_at"):
         fields["resolved_at"] = now
 
-    # Pre-fix: SET clause costruito via f-string da `fields` dict, senza
-    # allowlist. I valori provenivano da API tipizzata, ma il pattern era
-    # fragile — l'aggiunta di un nuovo campo bypassava qualsiasi safety.
-    # Post-fix: delegato a `safe_set_clause("tickets", ...)` che valida
-    # contro `_ALLOWED_UPDATE_FIELDS["tickets"]` e solleva su chiave
-    # estranea (defense-in-depth).
+    # `safe_set_clause` valida ogni campo contro l'allowlist della tabella:
+    # l'aggiunta di nuovi input API non puo' entrare nella SET clause senza
+    # un aggiornamento esplicito della policy.
     set_clause, value_params = safe_set_clause("tickets", fields)
     execute(
         f"UPDATE tickets SET {set_clause} WHERE id = %s",

@@ -180,7 +180,7 @@ class DataSourceInterface(ABC):
         *,
         chunk_size: int = DEFAULT_CHUNK_SIZE,
     ) -> Iterator[bytes]:
-        """Legge il file a chunk per minimizzare il RAM peak (RAM-3).
+        """Legge il file a chunk per minimizzare il RAM peak.
 
         Default implementation: fallback a `read_file()` + suddivisione
         del bytes intero (NON riduce il peak, ma fornisce l'interface
@@ -218,7 +218,7 @@ class DataSourceInterface(ABC):
         """
 
     def write_chunks(self, path: str, chunks: Iterable[bytes]) -> None:
-        """Scrive un file consumando un iterable di bytes chunk (RAM-B1).
+        """Scrive un file consumando un iterable di bytes chunk.
 
         Default implementation: accumula tutti i chunk in `bytearray` e
         delega a `write_file()`. Backwards-compatible: i backend che

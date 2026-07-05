@@ -1,5 +1,5 @@
 """
-N9 — helper condiviso per re-check permessi user al pickup di un task Celery.
+Helper condiviso per re-check permessi user al pickup di un task Celery.
 
 Contesto: tra submit (endpoint HTTP) e pickup (worker Celery) puo' passare
 """
@@ -52,7 +52,7 @@ def recheck_user_authorized(
         user = get_user(user_id)
         if not user or not user.is_active:
             logger.warning(
-                f"[N9] {task_name} {task_id} rifiutato: user {user_id} "
+                f"{task_name} {task_id} rifiutato: user {user_id} "
                 f"non trovato o disabilitato",
                 run_id=run_id, project_id=project_id,
             )
@@ -76,7 +76,7 @@ def recheck_user_authorized(
             assert_project_access(project_id, live_user)
         except HTTPException as http_exc:
             logger.warning(
-                f"[N9] {task_name} {task_id} rifiutato: assert_project_access "
+                f"{task_name} {task_id} rifiutato: assert_project_access "
                 f"failed per user {user_id} / project {project_id}: "
                 f"{http_exc.status_code} {http_exc.detail}",
                 run_id=run_id, project_id=project_id,
@@ -90,7 +90,7 @@ def recheck_user_authorized(
 
     except Exception as e:
         logger.error(
-            f"[N9] {task_name} {task_id}: re-check user {user_id} fallito: {e}",
+            f"{task_name} {task_id}: re-check user {user_id} fallito: {e}",
             run_id=run_id, project_id=project_id, exc_info=True,
         )
         return {

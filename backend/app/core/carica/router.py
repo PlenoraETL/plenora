@@ -171,12 +171,9 @@ async def get_tables(connection_id: str, schema_name: str, current_user: Current
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
-# NOTE: l'endpoint `GET /columns/{connection_id}/{schema_name}/{table_name}`
-# e' stato rimosso il 2026-05-14. Il FE non lo chiamava piu` dal commit
-# f71d0a0 (dead fetch `loadDestColumns` rimossa); nessun test BE lo
-# referenziava. La funzionalita` "leggi colonne tabella DB
-# destinazione" si fa via `POST /carica/auto-mapping` che ritorna
-# `existing_columns` come parte del payload mapping.
+# La funzionalita' "leggi colonne tabella DB destinazione" passa da
+# `POST /carica/auto-mapping`, che ritorna `existing_columns` nel payload
+# mapping.
 
 
 # ENDPOINT: AUTO-MAPPING
@@ -348,7 +345,7 @@ def _create_engine(connection: JsonObject):
         elif db_type in ("mysql", "mariadb"):
             url = f"mysql+pymysql://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
         elif db_type == "mssql":
-            # H-2 (2026-05-26): TrustServerCertificate gated da tls_bypass_allowed()
+            # TrustServerCertificate e' consentito solo dalla policy TLS.
             trust_cert = "yes" if tls_policy_module.tls_bypass_allowed() else "no"
             url = (
                 f"mssql+pyodbc://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"

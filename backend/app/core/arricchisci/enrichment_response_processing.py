@@ -157,7 +157,7 @@ class EnrichmentResponseProcessingMixin:
                 row = {}
                 props = feature.get("properties") or {}
                 for k, v in props.items():
-                    # Fix: interi rimangono interi (pandas li upcastava a float con NaN
+                    # Mantieni interi quando pandas li ha upcastati a float.
                     row[k] = int(v) if isinstance(v, float) and v == int(v) else v
                 geom = feature.get("geometry")
                 if geom:
@@ -206,7 +206,7 @@ class EnrichmentResponseProcessingMixin:
 
     def _flatten_dict(self, data: JsonObject) -> JsonObject:
         """Appiattisce un dict: valori scalari diretti, dict/list -> JSON string.
-        Fix: interi floats (es 114367654.0) vengono convertiti a int.
+        I float interi (es 114367654.0) vengono convertiti a int.
         """
         return self._response_type_detector.flatten_dict(data)
 

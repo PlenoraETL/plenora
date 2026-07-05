@@ -125,7 +125,7 @@ class SchemaInferenceService:
     def infer_node_schema_typed(self, project_id: str, node_id: str) -> InferredSchema:
         """Come ``infer_node_schema`` ma con esito esplicito (``InferredSchema``).
 
-        Faccia tipizzata per l'engine di validazione (Epic Canvas Validation):
+        Faccia tipizzata per l'engine di validazione canvas:
         condivide la STESSA computazione del metodo pubblico (``.columns`` ==
         ``infer_node_schema(...)``) e vi aggiunge lo ``status``. Nessuna
         duplicazione di logica → niente drift.
@@ -179,7 +179,7 @@ class SchemaInferenceService:
            *parziale* quando un input è indeterminate (mancano le sue colonne);
            marcarlo ``certain`` causerebbe un FALSO BLOCCO sui ref a valle. Il
            check va PRIMA di guardare ``schema`` (regola centrale: copre tutti i
-           combinatori presenti e futuri, niente fix per-handler);
+           combinatori presenti e futuri, senza eccezioni per-handler);
         3. altrimenti ``certain`` (colonne presenti, o vuoto dichiarato/edge).
         """
         if node.id in self._status_cache:

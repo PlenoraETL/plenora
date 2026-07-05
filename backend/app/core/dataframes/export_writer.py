@@ -1,6 +1,6 @@
-"""DataFrame serialization with minimal RAM amplification (RAM-2 2026-05-26).
+"""DataFrame serialization with minimal RAM amplification.
 
-Pre-RAM-2 il pattern in `workers/tasks/carica_task.py` era:
+Evita pattern che creano piu' copie intermedie:
 
     buf = io.BytesIO()
     buf.write(df.to_csv(index=False).encode('utf-8'))  # 3 copie intermedie
@@ -13,9 +13,8 @@ Peak RAM ~4-5x del df serializzato:
   4. `buf.write(...)` BytesIO accumula i bytes (~1x)
   5. `buf.getvalue()` copia il contenuto di BytesIO (~1x finale)
 
-Post-RAM-2: scrittura diretta sul `BytesIO` via `io.TextIOWrapper` per i
-text-format (CSV/JSON), niente stringa Python intermedia. Riduce il
-picco a ~2x (df + bytes finali).
+Scrittura diretta sul `BytesIO` via `io.TextIOWrapper` per i text-format
+(CSV/JSON), senza stringa Python intermedia. Picco ~2x (df + bytes finali).
 
 Per Excel (binary writer nativo pandas), il pattern `df.to_excel(buf)`
 e' gia' ottimale.
@@ -215,13 +214,9 @@ def _csv_producer(
 
 
 def _json_producer(df: Any, qbuf: _QueueBuf, err_holder: list) -> None:
-    """E-5 (2026-05-26): JSON records streaming manual record-by-record.
+    """JSON records streaming manual record-by-record.
 
-    Pre-fix: `df.to_json(text_buffer, orient='records')` aveva picchi
-    interni O(df) durante la serializzazione pandas C-level (anche se
-    il buffer finale era streamato via TextIOWrapper).
-
-    Post-fix: serializza record-by-record via `json.dumps` su batch
+    Serializza record-by-record via `json.dumps` su batch
     da `_JSON_RECORDS_BATCH` righe. Peak teorico: 1 batch DataFrame
     + bytes serializzati di quel batch. Per file molto grandi
     significa centinaia di MB invece di GB.
@@ -273,7 +268,7 @@ def _json_producer(df: Any, qbuf: _QueueBuf, err_holder: list) -> None:
 
 
 def _parquet_producer(df: Any, qbuf: _QueueBuf, chunksize: int, err_holder: list) -> None:
-    """E-4 (2026-05-26): Parquet streaming row-group via pyarrow.ParquetWriter.
+    """Parquet streaming row-group via pyarrow.ParquetWriter.
 
     Pyarrow ParquetWriter scrive row groups forward + footer al close
     (formato append-only, no seek required sul sink). Iteriamo batches
@@ -293,13 +288,10 @@ def _parquet_producer(df: Any, qbuf: _QueueBuf, chunksize: int, err_holder: list
             writer.close()
             return
 
-        # P1 (2026-05-26): schema inferred su sample piu' largo per
-        # evitare ArrowInvalid quando il primo batch ha tutte None su
-        # colonne object (es. sparse extra). Pre-fix il primo
-        # `chunksize` righe inferiva schema=null per quelle colonne,
-        # poi il batch successivo con stringhe falliva con ArrowInvalid
-        # → Parquet corrotto (footer mancante). Minimo 1000 righe nel
-        # sample copre la maggior parte dei pattern; il caso patologico
+        # Schema inferito su sample piu' largo per evitare ArrowInvalid
+        # quando il primo batch ha tutte None su colonne object e i batch
+        # successivi contengono stringhe. Minimo 1000 righe copre la
+        # maggior parte dei pattern; il caso patologico
         # (10k+ righe iniziali tutte None) resta possibile ma viene
         # rilanciato pulito come exception nel producer.
         sample_size = min(n, max(chunksize, 1000))
@@ -385,9 +377,8 @@ def dataframe_to_export_chunks(
         target = _json_producer
         args = (df, qbuf, err_holder)
     elif fmt == "parquet":
-        # E-4 (2026-05-26): Parquet row-group streaming via pyarrow
-        # ParquetWriter. Append-only writer + footer al close — no
-        # seek required sul sink. Peak ~chunksize righe in flight.
+        # Parquet row-group streaming via pyarrow ParquetWriter. Append-only
+        # writer + footer al close, no seek required sul sink.
         target = _parquet_producer
         args = (df, qbuf, chunksize, err_holder)
     else:
@@ -404,12 +395,8 @@ def dataframe_to_export_chunks(
                 break
             yield item
     finally:
-        # P1 (2026-05-26): drena la queue per sbloccare il producer
-        # che potrebbe essere fermo su `q.put()` se il consumer ha
-        # abbandonato il generator (eccezione downstream). Pre-fix:
-        # `t.join(timeout=30.0)` scadeva senza terminare il thread
-        # quando la queue era piena; il thread restava vivo nel
-        # worker Celery, accumulando thread orfani sotto load.
+        # Drena la queue per sbloccare il producer se il consumer abbandona
+        # il generator mentre il thread e' fermo su `q.put()`.
         while t.is_alive():
             try:
                 q.get(timeout=0.1)

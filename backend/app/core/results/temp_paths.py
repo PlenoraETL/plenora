@@ -1,24 +1,15 @@
-"""Tombstone post Punto 3 cleanup (2026-05-25).
+"""Compatibility marker: nessuna API path-only per i result blob.
 
-Era il modulo per path-only adapter (file-based libraries che
-non supportano BytesIO / /vsimem). Symbol legacy:
+Questo modulo non esporta piu' symbol path-only:
   - `PATH_ONLY_ADAPTER_PREFIX`, `RESULT_STREAM_TEMP_PREFIX`
   - `make_path_only_adapter_dir`, `write_path_only_adapter_bytes`,
     `cleanup_path_only_adapter`
   - `get_temp_output_path`
 
-Zero caller runtime: tutto il result-writing del refactor passa
-da `StreamingResultBlobWriter` (S3 multipart via boto3 client
-diretto) + `save_result_blob_from_bytes` (DB BYTEA fallback).
-Le adapter path-only sono state rese inutili dalla migrazione
-RAM-only di pyogrio (0.12+: bytes nativi) e di pyarrow
-(ParquetWriter su BytesIO).
-
-Riferimenti:
-  - piano refactor_io_storage_ram_only §"Punto 3 — cleanup dead
-    boundary" (doc storico, ora solo nella storia git)
-  - tests2/io_boundary/test_no_direct_filesystem_contract.py
-    (snapshot ratchet: questo file non e' piu' in `_BOUNDARY_FROZEN_SNAPSHOT`)
+Il result-writing passa da `StreamingResultBlobWriter` (S3 multipart via
+boto3 client diretto) e `save_result_blob_from_bytes` (DB BYTEA fallback).
+Le adapter path-only restano non disponibili per evitare regressioni verso
+scritture temporanee su filesystem.
 """
 
 from __future__ import annotations

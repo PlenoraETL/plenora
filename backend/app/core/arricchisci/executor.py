@@ -165,12 +165,8 @@ class EnrichExecutor:
                             for col, physical_name in zip(result_names, physical_names)
                         ]
                 except Exception as exc:
-                    # Pre-fix (P1 etl-executors): logger.warning senza
-                    # exc_info=True. Per "dato mancante" il livello WARNING
-                    # e' corretto, ma un bug di codice (TypeError/AttributeError
-                    # da SchemaInferenceService) non produceva alcuna traceback
-                    # → triage impossibile. exc_info=True mantiene il livello
-                    # WARNING ma assicura la traceback completa nel log.
+                    # WARNING con exc_info: livello non bloccante, ma traceback
+                    # completo per bug SchemaInferenceService.
                     logger.warning(
                         f"output_contract arricchisci: schema id non disponibili: "
                         f"{type(exc).__name__}: {exc}",
@@ -183,13 +179,8 @@ class EnrichExecutor:
                     # qui, il blob resta persistito ma il progetto continua
                     # ad esporre l'output_contract precedente — situazione
                     # ambigua ma preferibile a far crashare l'intero `execute`
-                    # (e perdere l'append_step di success). Logghiamo come
-                    # ERROR (non WARNING: e' un drift di schema osservabile
-                    # da downstream) e mettiamo un segnale esplicito nel
-                    # `res` cosi' caller/UI sanno che il contract e' stale.
-                    # Pre-fix: nessun try/except → eccezione propagava al
-                    # task Celery, append_step di success non veniva mai
-                    # emesso, e il blob restava orfano dal contract.
+                    # (e perdere l'append_step di success). Log ERROR e segnale
+                    # esplicito in `res` indicano che il contract e' stale.
                     try:
                         persist_output_contract(
                             project_service=self.project_service,

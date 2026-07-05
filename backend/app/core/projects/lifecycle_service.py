@@ -1,11 +1,11 @@
-"""Sub-service lifecycle/dependency progetto (Epic F roadmap, fetta F5).
+"""Sub-service lifecycle/dependency progetto.
 
 Clone, cancellazione con cascade fail-closed e dependency scan vivono qui
 come interfaccia stretta estratta dalla facade ``ProjectService``.
 
-Pattern owner-backref (come F2/F3): i cross-call passano dalla facade
+Pattern owner-backref: i cross-call passano dalla facade
 (``get_project_metadata``, ``create_project``, ``update_canvas``,
-``_find_dependent_projects``...) cosi' i patch di classe storici sui
+``_find_dependent_projects``...) cosi' i patch di classe sui
 metodi della facade restano efficaci attraverso la delega.
 """
 
@@ -197,7 +197,7 @@ class ProjectLifecycleService:
         # intent: cascade step derived — mark_as_orphan e' idempotente, un
         # fallimento e' recuperabile via UI scheduler
         # outcome: fail-open con breadcrumb (exc_info per diagnosi
-        # Non cancelliamo gli schedule: lo storico (log esecuzioni) resta
+        # Non cancelliamo gli schedule: il log esecuzioni resta
         # visibile e l'utente decide se rimuoverli manualmente dalla UI
         try:
             from app.core.scheduler.schedule_service import ScheduleService
@@ -212,9 +212,7 @@ class ProjectLifecycleService:
             project_schedules = schedule_service.get_schedules_for_project(
                 project_id, group_id=row.group_id,
             )
-            # Pre-fix: comparison vs literal "orphan" — typo silente
-            # avrebbe ri-marcato anche schedule gia' orfani.
-            # Post-fix: enum value comparison (StrEnum -> string canonica).
+            # Confronto via enum canonical: evita typo sullo stato orphan.
             from app.core.scheduler.runtime_status import RuntimeStatus
             orphaned_count = 0
             for sched in project_schedules:

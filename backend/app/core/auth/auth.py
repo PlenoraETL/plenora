@@ -270,11 +270,8 @@ def change_password(
     Cambia la propria password. Richiede di conoscere la password attuale.
     Qualsiasi utente autenticato (incluso viewer) può cambiare la propria.
 
-    Rate limit (P1 security-auth): pre-fix endpoint senza throttle.
-    Un attaccante con JWT valido (token leak o sessione rubata) poteva
-    brute-forzare `old_password` senza freno: nessun limit per IP/utente,
-    nessun lockout. Post-fix: stesso rate limit del login (IP-based)
-    + record di failed attempts per scenari di tentativo brute-force.
+    Applica lo stesso rate limit del login (IP-based) e registra i failed
+    attempts per contenere tentativi brute-force su `old_password`.
     """
     client_ip = get_client_ip(request)
     _check_rate_limit(client_ip)

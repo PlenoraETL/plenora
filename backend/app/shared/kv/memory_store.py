@@ -2,8 +2,8 @@
 
 Doppio ruolo:
 - fake nei test (semantica identica al backend reale, zero rete);
-- livello di cache davanti a PostgreSQL in Fase 4 (strutture ad alta
-  frequenza come la blacklist JWT restano in RAM, PG e' la verita').
+- livello di cache davanti a PostgreSQL per strutture ad alta frequenza
+  come la blacklist JWT. PG resta la sorgente di verita'.
 
 Thread-safe; le scadenze usano `time.monotonic` (iniettabile nei test).
 """

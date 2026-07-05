@@ -1,5 +1,5 @@
 """
-PlenoraBeatScheduler — scheduler del beat celery-free (Plenora 2.0 Fase 5):
+PlenoraBeatScheduler: scheduler del beat celery-free.
 
 - schedule caricati dal DB Postgres (tabella `schedules`)
 - date-math cron/interval su croniter (app.core.scheduler.cron_schedule)
@@ -47,10 +47,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_INTERVAL = 60.0
 
-# TTL=120s + refresh a ogni tick (~60s) → margine 2x per sopravvivere
+# TTL=120s + refresh a ogni tick (~60s): margine 2x per sopravvivere
 # a un tick lento o a un transient di rete senza perdere leadership.
-# Plenora 2.0 Fase 3: il lock leader vive su PostgreSQL (beat_leader_locks),
-# non piu' su Redis. Vedi app.core.scheduler.beat_leader_store.
+# Il lock leader vive su PostgreSQL (beat_leader_locks).
 _LEADER_LOCK_TTL_SECONDS = 120
 
 _PG_CONNECTION_MODULE = importlib.import_module("app.db.pg_connection")
@@ -89,10 +88,10 @@ class PlenoraBeatScheduler:
     """
     Beat Scheduler custom che legge gli schedule da PostgreSQL.
 
-    Plenora 2.0 Fase 5: non eredita piu' da celery.beat.Scheduler. La
-    date-math degli schedule (cron/interval) e' su croniter (vedi
-    app.core.scheduler.cron_schedule), il trasporto dei task sul layer
-    dispatch (Dramatiq). Il loop e' guidato da APScheduler (workers/beat.py).
+    La date-math degli schedule (cron/interval) e' su croniter (vedi
+    app.core.scheduler.cron_schedule), il trasporto dei task passa dal
+    layer dispatch Dramatiq. Il loop e' guidato da APScheduler
+    (workers/beat.py).
 
     Ogni max_interval secondi:
     1. Carica tutti gli schedule attivi dal DB
@@ -110,7 +109,7 @@ class PlenoraBeatScheduler:
         self._is_leader = False
         self.data: dict[str, BeatEntry] = {}
         self.max_interval = DEFAULT_MAX_INTERVAL
-        # Plenora 2.0 Fase 3: lock leader su PostgreSQL (iniettabile nei test).
+        # Lock leader su PostgreSQL, iniettabile nei test.
         self._leader_store = beat_leader_store
         logger.info(
             f"PlenoraBeatScheduler avviato (schedule + leader lock da "
@@ -128,9 +127,9 @@ class PlenoraBeatScheduler:
         - Default **fail-closed**: standby, `return False`. Evita che due
           beat diventino entrambi leader durante un flap DB riaprendo il
           doppio enqueue.
-        - Con `SCHEDULE_BEAT_LEADER_FAIL_OPEN=True`: comportamento legacy
-          (assumi di essere leader single-instance). Utile per deployment
-          mono-host dove nessun altro beat gira mai.
+        - Con `SCHEDULE_BEAT_LEADER_FAIL_OPEN=True`: assume leadership
+          single-instance. Utile per deployment mono-host dove nessun altro
+          beat gira mai.
 
         Il flag e' letto a ogni chiamata dai settings (non cache), cosi'
         puo' essere cambiato runtime via env var per incident response
@@ -180,7 +179,7 @@ class PlenoraBeatScheduler:
             logger.warning(
                 "[LEADER] PostgreSQL unavailable — perso, passo in standby "
                 "(fail-closed default). Set SCHEDULE_BEAT_LEADER_FAIL_OPEN=True "
-                "per il behavior legacy single-instance."
+                "per assumere leadership single-instance."
             )
         else:
             logger.warning(
@@ -229,9 +228,8 @@ class PlenoraBeatScheduler:
         self._cleanup_orphan_temp_files()
         self._reconcile_storage()
         self._cleanup_task_results()
-        # Plenora 2.0 Fase 3 (F3.2): l'emit degli schedule dovuti passa dal
-        # layer dispatch (dispatch_task_by_name — Dramatiq dal cutover F1).
-        # Stessa valutazione di scadenza (BeatEntry.is_due) del beat storico.
+        # Gli schedule dovuti passano dal layer dispatch mantenendo la stessa
+        # valutazione di scadenza di BeatEntry.is_due.
         return self._emit_due_via_dispatch()
 
     def _dispatch_schedule_task(self, name: str, kwargs: dict) -> None:
@@ -428,15 +426,10 @@ class PlenoraBeatScheduler:
                              now: datetime) -> None:
         """Emette il task di catchup + audit insert + last_run update.
 
-        Order P1 (fix orchestration): INSERT audit history PRIMA di
-        `send_task`. Pre-fix l'INSERT era fail-open DOPO il send: se
-        l'INSERT falliva (DB transient down), al tick successivo
-        `_catchup_already_emitted_recently` non trovava la riga e
-        re-emetteva lo stesso catchup → due task in volo concorrenti
-        con stesso `scheduled_for`. Post-fix: INSERT first, send_task
-        SOLO se l'INSERT riesce. Se INSERT fallisce, log + return:
-        il prossimo tick rileva ancora il missed run e re-prova
-        l'emit + INSERT atomico — niente duplicati.
+        INSERT audit history PRIMA di `send_task`: se l'INSERT fallisce,
+        abortiamo l'emit e il tick successivo ritenta lo stesso missed run.
+        Se il task viene inviato solo dopo history persistita, il dedupe
+        history-based evita catchup duplicati per lo stesso `scheduled_for`.
         """
         scheduled_for_iso = expected_last.isoformat()
 
@@ -466,11 +459,9 @@ class PlenoraBeatScheduler:
 
         # SECOND: send_task (audit gia' registrato → dedupe history-based
         # opera correttamente al prossimo tick).
-        # P1 (2026-05-26): se `send_task` fallisce dopo l'INSERT della
-        # history, la riga history rendeva il dedupe "gia' emesso" al
-        # tick successivo ma il task NON era in coda → run di catchup
-        # silenziosamente perso e non rilevabile. Ora: rollback della
-        # row history su failure e log error per visibility.
+        # Se `send_task` fallisce dopo l'INSERT della history, rollbackiamo
+        # la row: altrimenti il dedupe vedrebbe "gia' emesso" anche se il
+        # task non e' mai entrato in coda.
         try:
             self._dispatch_schedule_task(
                 SCHEDULE_PIPELINE_TASK_NAME,
@@ -538,17 +529,9 @@ class PlenoraBeatScheduler:
                 if schedule is None:
                     continue
 
-                # Pre-fix (P2 orchestration): `crontab()` di Celery
-                # interpreta i cron nella timezone globale dell'app
-                # (Europe/Rome in celery_app.py). Uno schedule con
-                # `config.schedule.timezone` diversa veniva emesso
-                # all'ora di Europe/Rome, non della tz richiesta —
-                # silenziosamente. Modificare `_parse_cron` per essere
-                # tz-aware tramite `nowfun` e' rischioso (signature
-                # crontab non stabilizzata cross-versione Celery).
-                # Soluzione pragmatica: warning loud al sync-time
-                # quando rileviamo timezone divergente — il problema
-                # esce dai log piuttosto che restare invisibile.
+                # Celery crontab usa la timezone globale del beat. Se lo
+                # schedule dichiara una timezone divergente, logghiamo un
+                # warning al sync-time invece di lasciarlo invisibile.
                 self._warn_if_timezone_divergent(sid, row.get("config"))
 
                 last_run_at = self._parse_dt(row.get("last_run"))
@@ -561,26 +544,17 @@ class PlenoraBeatScheduler:
                         kwargs={
                             "schedule_id": sid,
                             "triggered_by": "cron",
-                            # Pre-fix: `**scheduled_run_kwargs(triggered_by="cron")`
-                            # pre-calcolava `scheduled_for=now()` al sync-time
-                            # (ogni 60s). Cosmi e' una stringa frozen dentro
-                            # entry.kwargs, riusata a ogni tick — la
-                            # idempotency key CARICA `schedule-{id}-{scheduled_for}-carica`
-                            # restava costante fra tick consecutivi, e il
-                            # secondo tick veniva marked SKIPPED_IDEMPOTENT.
-                            # Post-fix: scheduled_for NON viene cached qui.
-                            # schedule_pipeline_task lo determina al ricevimento
-                            # del task (a tick-time) usando datetime.now().
+                            # Non cache-are `scheduled_for` dentro BeatEntry:
+                            # il task lo determina al ricevimento, cosi'
+                            # l'idempotency key CARICA cambia per ogni tick.
                         },
                         last_run_at=last_run_at or beat_now(),
                     )
                     logger.info(f"Schedule aggiunto: '{row.get('name', sid)}' cron={row['cron_expression']}")
                 else:
-                    # Aggiorna schedule se cambiato: ricreiamo l'entry
-                    # preservando `last_run_at`. Senza questo fix il cambio
-                    # di cron a caldo veniva swallowed come crash silenzioso
-                    # loggato "[CRASH] Errore sync") e lo schedule continuava
-                    # con la vecchia cron finche' il beat non veniva riavviato
+                    # Aggiorna schedule se cambiato: ricrea l'entry preservando
+                    # `last_run_at`, cosi' i cambi cron a caldo diventano
+                    # effettivi senza riavviare il beat.
                     entry = self.data[entry_name]
                     if str(entry.schedule) != str(schedule):
                         logger.info(f"Schedule modificato: '{row.get('name', sid)}' cron={row['cron_expression']} (era {entry.schedule})")
@@ -615,14 +589,9 @@ class PlenoraBeatScheduler:
         """Loud warning se schedule.timezone diverge dalla beat tz
         (BEAT_TIMEZONE, default Europe/Rome).
 
-        Pre-fix il mismatch era silente: lo schedule veniva emesso
-        all'ora di Europe/Rome anche se l'utente configurava un'altra
-        timezone. Il fix profondo richiederebbe `crontab(nowfun=...)`,
-        ma cambiare l'engine cron a runtime e' fuori scope per un P2.
-        Questo helper trasforma il bug invisibile in un warning loud
-        cosi' chi vede log noti il problema e configuri il beat
-        scheduler con la tz corretta (oppure normalizzi i cron alla
-        tz globale).
+        Celery emette secondo la timezone globale del beat. Questo helper
+        rende esplicito il mismatch cosi' si puo' configurare il beat con la
+        timezone corretta o normalizzare i cron alla timezone globale.
         """
         try:
             cfg = config if isinstance(config, dict) else (
@@ -771,10 +740,7 @@ class PlenoraBeatScheduler:
                                                 in file_service, artifacts, ecc.)
           - eseguibili_uploads/* (cross-worker upload staging,
                                                 router.eseguibili)
-          (storia: il pattern `plenora_{pid}_{hash}/` veniva creato da
-           `results.temp_paths.get_temp_output_path`, tombstonato in Punto 3
-           del refactor RAM-only; non viene piu' generato ma il cleanup
-           resta tollerante a residui legacy via il prefix `tmp*`).
+          - temp generici: il cleanup resta tollerante via il prefix `tmp*`.
 
         La dir `eseguibili_uploads/` resta (container fisso della cache),
         i file dentro vengono puliti individualmente.
@@ -884,8 +850,7 @@ class PlenoraBeatScheduler:
             logger.warning(f"Errore retention schedule_logs: {e}")
 
     def _archive_old_logs(self) -> None:
-        """Ogni 24h archivia+purga plenora.logs via LogArchiveWriter
-        (O-ARC , ADR-0014).
+        """Ogni 24h archivia+purga plenora.logs via LogArchiveWriter.
 
         Gate sequenziali:
         1. 24h temporal gate (_last_logs_archive).
@@ -960,12 +925,11 @@ class PlenoraBeatScheduler:
                 f"in {len(result['object_keys'])} oggetti "
                 f"(cutoff={cutoff.isoformat()}, days={days})"
             )
-            # B4: observability circolare su plenora.logs. INFO non passa
+            # Observability circolare su plenora.logs. INFO non passa
             # dal PostgresLogHandler (LOG_LEVEL_DB=WARNING default), quindi
-            # INSERT diretta via pg_execute. Shape colonne identica al
-            # handler canonico (utils/logger.py:340-344). Ratificata in
-            # ADR-0014 §B. Best-effort: un fallimento observability non
-            # contamina lo stato "archive ok" (slot gia' aggiornato sopra
+            # usiamo una INSERT diretta con la stessa shape colonne
+            # dell'handler canonico. Best-effort: un fallimento
+            # observability non contamina lo stato "archive ok".
             try:
                 obs_ts = datetime.now(timezone.utc).strftime(
                     "%Y-%m-%dT%H:%M:%S.%f"
@@ -1040,14 +1004,12 @@ class PlenoraBeatScheduler:
             logger.warning(f"Errore retention logs: {e}")
 
     def _archive_old_audit_actions(self) -> None:
-        """Ogni 24h archivia+purga plenora.audit_actions via LogArchiveWriter
-        (O-ARC , ADR-0014).
+        """Ogni 24h archivia+purga plenora.audit_actions via LogArchiveWriter.
 
         Primo path di DELETE autorizzato su audit_actions: con
         LOG_ARCHIVE_ENABLED=False (default) la tabella continua a crescere
         come oggi; con ENABLED=True e AUDIT_RETENTION_DAYS>0 il writer
-        archivia+purga. Non esiste un `_cleanup_old_audit_actions` legacy
-        da gate-are.
+        archivia+purga.
 
         Gate sequenziali:
         1. 24h temporal gate (_last_audit_archive).
@@ -1095,7 +1057,7 @@ class PlenoraBeatScheduler:
             def select_rows(cutoff_ts: datetime, batch_size: int) -> object:
                 # Schema-agnostic: search_path del pool risolve
                 # `audit_actions` a plenora.audit_actions. Colonna
-                # temporale = `timestamp` (O-ARC assunzione #4
+                # temporale = `timestamp`.
                 return _pg_fetchall(
                     "SELECT * FROM audit_actions WHERE timestamp < %s "
                     "ORDER BY timestamp ASC, id ASC LIMIT %s",
@@ -1123,10 +1085,9 @@ class PlenoraBeatScheduler:
                 f"in {len(result['object_keys'])} oggetti "
                 f"(cutoff={cutoff.isoformat()}, days={days})"
             )
-            # B4: observability circolare su plenora.logs (tabella logs
+            # Observability circolare su plenora.logs (tabella logs
             # non audit_actions: la chiusura del cerchio log-del-log
-            # va sempre su plenora.logs). Shape identica al handler
-            # canonico (utils/logger.py:340-344). ADR-0014 §B
+            # va sempre su plenora.logs). Shape identica al handler canonico.
             try:
                 obs_ts = datetime.now(timezone.utc).strftime(
                     "%Y-%m-%dT%H:%M:%S.%f"
@@ -1163,10 +1124,8 @@ class PlenoraBeatScheduler:
         """Beat-driven reconciler per `plenora.storage_reconciliation_log`.
 
         Cadence-gated da `RECONCILIATION_BEAT_INTERVAL_MIN` (default 15
-        minuti). Supporta solo `operation="delete"` in questa fase
-        . Upload-intent (W2 race),
-        storage-side scan e intermediate artifact pair restano fuori
-        scope.
+        minuti). Supporta solo `operation="delete"`; upload-intent,
+        storage-side scan e intermediate artifact pair restano fuori scope.
 
         Per ciascuna riga `pending` due:
           - chiama `compensating_delete(storage_key, domain=domain,
@@ -1193,8 +1152,8 @@ class PlenoraBeatScheduler:
         except Exception:
             return  # config non disponibile: skip silente
 
-        # Tutti i tunables via Settings.get (ADR-0021); fallback a
-        # default difensivi se i test usano un SimpleNamespace stub
+        # Tutti i tunables via Settings.get; fallback a default difensivi se i
+        # test usano un SimpleNamespace stub.
         get_setting = getattr(settings, "get", None)
 
         def _read_int(key: str, default: int) -> int:
@@ -1459,10 +1418,10 @@ class PlenoraBeatScheduler:
                     f"Reconcile storage: prune fallito: {e}", exc_info=True,
                 )
 
-    # Persistenza — non usiamo file shelve, tutto su DB
+    # Persistenza su DB
 
     def _cleanup_task_results(self) -> None:
-        """Sweep TTL della tabella task_results (Plenora 2.0, Fase 2/3).
+        """Sweep TTL della tabella task_results.
 
         Rimpiazza la scadenza automatica che Redis faceva via
         TASK_RESULT_EXPIRES: cancella le righe di stato/esito task con
@@ -1486,9 +1445,8 @@ class PlenoraBeatScheduler:
     def setup_schedule(self) -> None:
         """Inizializza schedule vuoto — verrà popolato dal DB al primo tick.
 
-         dopo il sync DB, merge anche le
-        entry config-based `celery_app.conf.beat_schedule` (env-gated
-        cleanroom opt-in). DB-driven schedules vivono nel namespace
+        Dopo il sync DB, merge anche le entry config-based. DB-driven
+        schedules vivono nel namespace
         `urby:schedule:<id>`; le config entry usano nomi qualunque
         ALTRI da quel prefix per coesistere senza collisioni.
         """
@@ -1500,12 +1458,11 @@ class PlenoraBeatScheduler:
     def _merge_config_beat_schedule(self) -> None:
         """Merge le entry config-based (NON DB) in `self.data`.
 
-        Plenora 2.0 Fase 5: la sorgente e' `beat_schedule_config()`
-        (celery-free, app.core.scheduler.beat_schedule_config), non piu'
-        `celery_app.conf.beat_schedule`. Gli schedule DB-driven (namespace
-        `urby:schedule:<id>`) restano di `_sync_from_db`; le entry config
-        (qualunque altro nome) sopravvivono ai sync DB successivi (il
-        cleanup loop filtra solo per il prefix `urby:schedule:`).
+        La sorgente e' `beat_schedule_config()` (celery-free,
+        app.core.scheduler.beat_schedule_config). Gli schedule DB-driven
+        (namespace `urby:schedule:<id>`) restano di `_sync_from_db`; le
+        entry config (qualunque altro nome) sopravvivono ai sync DB
+        successivi perche' il cleanup loop filtra solo per quel prefix.
 
         Idempotente; best-effort per-entry.
         """

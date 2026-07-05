@@ -141,9 +141,8 @@ def _normalize_value(v) -> str:
     if isinstance(v, int):
         return str(v)
     if isinstance(v, float):
-        # N10 (2026-04-17): format stabile via helper condiviso. Prima
-        # era str(v) crudo che rompeva la dedup su floating-point noise
-        # 1.23 vs 1.2300000001 producevano hash diversi
+        # Format stabile: limita il rumore floating-point nella dedup
+        # (es. 1.23 vs 1.2300000001).
         return _format_float_stable(v)
     return str(v)
 
@@ -188,10 +187,8 @@ def write_node(run_id: str, node_id: str, node_type: str,
                 for row in rows
             ]
 
-            # A3 : scrittura node_rows + node_meta in singola
-            # transazione. Idempotent (DELETE-then-INSERT) e atomic (qualsiasi
-            # fallimento rollback-a entrambi). Pre-fix erano due tx separate
-            # con duplicati silenti su retry Celery
+            # Scrittura node_rows + node_meta in singola transazione:
+            # idempotente (DELETE-then-INSERT) e atomica.
             node_snapshots_db.write_node_atomic(
                 run_id=run_id,
                 node_id=node_id,
@@ -226,13 +223,10 @@ def write_node(run_id: str, node_id: str, node_type: str,
         )
         return node_hash
 
-    # intent: resource guard — fallback upsert_node_meta(status="error") +
-    # re-raise tipizzato via IntermediateWriteError (chain preservata via
-    # `from e`). Pre-fix ritornava silenziosamente `sha256(b"error")`: hash
-    # sintatticamente valido ma semanticamente fake, che contaminava
-    # input_hash/output_hash del run e violava l'invariante di determinismo
-    # di dedup/replay. I caller attuali wrappano in try/except e swallowano
-    # come "best-effort non bloccante" → effetto macroscopico invariato
+    # Resource guard: fallback upsert_node_meta(status="error") + re-raise
+    # tipizzato via IntermediateWriteError. Non generare hash sintetici:
+    # contaminerebbero input_hash/output_hash e l'invariante di determinismo
+    # di dedup/replay.
     # outcome: fail-closed tipizzato
     except Exception as e:
         logger.error(
@@ -299,11 +293,9 @@ def close_run(run_id: str, input_hash: str, output_hash: str,
             op="intermediate_write"
         )
 
-        # N8 (2026-04-17): applica retention FIFO subito dopo chiusura run
-        # Pre-fix: apply_runs_retention era definita ma mai chiamata da
-        # alcun callsite -> intermediate.runs + node_meta + node_rows
-        # crescevano indefinitamente causando disk fill nel tempo
-        # Ora retention FIFO (N run piu' recenti non pinnate, N da
+        # Applica retention FIFO subito dopo chiusura run per evitare crescita
+        # indefinita di intermediate.runs + node_meta + node_rows.
+        # Retention FIFO: N run piu' recenti non pinnate, N da
         # projects.retention_n passato dagli orchestration edge, o default 5)
         # viene applicata a ogni chiusura run. Best-effort: un errore qui non
         # rollbacka l'update
@@ -318,17 +310,14 @@ def close_run(run_id: str, input_hash: str, output_hash: str,
                 )
         except Exception as _re:
             logger.warning(
-                f"[N8] Retention intermediate fallita (non bloccante) "
+                f"Retention intermediate fallita (non bloccante) "
                 f"per run {run_id}: {_re}",
                 op="intermediate_write",
             )
 
-    # intent: resource guard — cleanup best-effort (fallback update_run a status=failed
-    # + re-raise dell'eccezione originale. Il caller decide il proprio flusso
-    # Celery task top-level gia' cattura via try/except attorno a idb_close_run
-    # outcome: fail-closed (chiude il pattern resource guard che pre-fix
-    # ingoiava l'errore lasciando la row intermediate.runs in stato ambiguo
-    # rispetto allo stato Celery task
+    # Resource guard: cleanup best-effort con fallback update_run(status="failed")
+    # e re-raise dell'eccezione originale. Il caller decide il proprio flusso;
+    # il task Celery top-level cattura gia' attorno a idb_close_run.
     except Exception as e:
         logger.error(
             f"[CRASH] Errore chiusura run {run_id}: {e}",

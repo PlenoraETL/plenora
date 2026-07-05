@@ -95,13 +95,7 @@ class ConcurrencyManager:
     def _set_nx(self, key: str, value: str, ttl_seconds: int = None) -> bool:
         """SET NX — imposta solo se non esiste o se scaduto. Returns True se acquisito.
 
-        Pre-fix: `self._get(key)` cancellava il lock scaduto come side-effect,
-        seguito da un INSERT separato. Tra DELETE e INSERT esisteva una
-        finestra di race in cui un altro processo poteva inserire il proprio
-        lock e farci ottenere UniqueViolation -> False, anche quando la
-        nostra DELETE era legittima e nessuno aveva un lock valido.
-
-        Post-fix: atomic test-and-steal-if-expired via PostgreSQL
+        Atomic test-and-steal-if-expired via PostgreSQL
         `INSERT ... ON CONFLICT (key) DO UPDATE` con clausola WHERE che
         permette l'update SOLO se `expires_at IS NULL` o gia' scaduto.
         Combinato con `RETURNING (xmax = 0) AS is_insert` distinguiamo:
@@ -120,14 +114,8 @@ class ConcurrencyManager:
         if ttl_seconds:
             expires_at = (datetime.now(timezone.utc) + timedelta(seconds=ttl_seconds)).isoformat()
         try:
-            # P1 (2026-05-26): WHERE clause include `expires_at IS NULL`
-            # cosi' lock pre-esistenti senza TTL non bloccano per
-            # sempre l'acquisizione. Pre-fix la condizione era solo
-            # `expires_at IS NOT NULL AND expires_at <= now()`:
-            # row con `expires_at = NULL` (pre-fix manuale, schedule
-            # senza TTL configurato) non potevano essere prese da
-            # nessuno fino a `force_release` manuale. NULL e' trattato
-            # come "lock orfano" (nessun heartbeat possibile).
+            # `expires_at IS NULL` viene trattato come lock orfano:
+            # nessun heartbeat puo' estenderlo, quindi e' acquisibile.
             row = db.fetchone(
                 "INSERT INTO scheduler_locks (key, value, expires_at) "
                 "VALUES (%s,%s,%s) "
@@ -206,11 +194,9 @@ class ConcurrencyManager:
 
         Pattern atomic-safe contro race condition:
           1. _set_nx (UNIQUE constraint → atomic)
-          2. Se lock occupato: _incr PRIMA di check (atomic ora con D-FIX-1)
+          2. Se lock occupato: _incr PRIMA di check
           3. Se il nuovo valore SUPERA max_queue_size: _decr e skip
-        Prima: read + check + incr non atomici → la coda poteva superare il
-        limite (es. 3 thread concorrenti che leggono current=2 e tutti
-        decidono "ok" → coda finisce a 5).
+        Evita race read+check+incr che possono superare il limite coda.
         """
         lock_key  = f"scheduler:lock:{schedule_id}"
         queue_key = f"scheduler:queue:{schedule_id}"
@@ -238,9 +224,7 @@ class ConcurrencyManager:
         finche' sta lavorando.
 
         Race safety:
-        Pre-fix: `_get(lock_key)` faceva un check con side-effect (DELETE
-        se scaduto), poi un UPDATE separato non-condizionale. Finestra
-        TOCTOU tra il check e l'UPDATE:
+        L'UPDATE e' condizionale per evitare TOCTOU fra heartbeat e steal:
           1. heartbeat A: `_get` vede lock ancora vivo (1ms before expiry)
           2. lock scade naturalmente
           3. worker B: `try_acquire` -> `_set_nx` con WHERE expires_at <= now()
@@ -248,9 +232,8 @@ class ConcurrencyManager:
           4. heartbeat A: UPDATE non-condizionale sovrascrive il lock di B
              con il proprio TTL → due worker pensano di possedere il lock,
              entrambi scrivono sul target CARICA.
-        Post-fix: UPDATE atomico con `WHERE expires_at > now()`. Se il
-        lock e' scaduto o e' stato preso da un altro worker (expires_at
-        diverso ma "vivo" per quel worker), rowcount = 0 e ritorna False.
+        Usiamo `WHERE expires_at > now()`: se il lock e' scaduto o e' stato
+        preso da un altro worker, rowcount = 0 e ritorna False.
         Il caller sa che non possiede piu' il lock e abortisce la run.
 
         Args:

@@ -1,11 +1,8 @@
 """
 GDAL `/vsimem` adapter via ctypes — boundary I/O orizzontale.
 
-Storia: originalmente `app/core/imdf/gdal_vsi.py` (IMDF-5 + QUERY-1
-step 4). Spostato in `app/core/io/vsimem.py` nel consolidamento
-orizzontale (2026-05-26) perche' non e' specifico di IMDF — e'
-una primitive boundary usabile da qualunque flusso multi-file
-RAM-only (Shapefile sidecar, GDB read, future formati path-only).
+Primitive boundary per flussi multi-file RAM-only come Shapefile sidecar,
+GDB read e formati path-only.
 
 Espone API minimali contro `libgdal.so` (bundled da pyogrio) senza
 passare per le Python bindings `osgeo` (non installabili nel container

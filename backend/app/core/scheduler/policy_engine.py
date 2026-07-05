@@ -6,15 +6,14 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 
 from typing import Literal, Optional, Tuple
 from typing_extensions import TypedDict
+from app.core.scheduler.models import (
+    ScheduleConfig,
+    ScheduleConflictPolicy,
+    ScheduleErrorPolicy,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-from app.core.scheduler.models import (
-    ScheduleConfig,
-    ScheduleErrorPolicy,
-    ScheduleConflictPolicy,
-)
 
 
 class FailurePolicyDecision(TypedDict):

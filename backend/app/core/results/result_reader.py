@@ -1,8 +1,6 @@
 """Result read helpers (RAM-only).
 
-Post-Phase5 refactor: `get_result_as_tempfile` /
-`get_result_as_tempfile_cm` rimosse — nessun caller live in app/. I
-consumer leggono i bytes direttamente via `get_result_as_bytes` e
+I consumer leggono i bytes direttamente via `get_result_as_bytes` e
 delegano ai parser bytes-first (load_by_format_bytes ecc.).
 """
 

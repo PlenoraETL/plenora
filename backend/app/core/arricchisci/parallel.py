@@ -107,8 +107,7 @@ def _extract_produced_columns(node_data: JsonObject) -> Set[str]:
 def _node_may_explode_cardinality(
     node: JsonObject, api_connections: Optional[JsonObjectById] = None
 ) -> bool:
-    """RB.#15 (2026-04-28): True se il nodo api_enrich puo' produrre piu'
-    righe in output rispetto all'input (cardinality-changing).
+    """True se il nodo api_enrich puo' produrre piu' righe dell'input.
 
     Marker statico unico (alta affidabilita`):
       - `output_mapping[].path` contiene `[]` o `[*]` -> path A di
@@ -124,9 +123,9 @@ def _node_may_explode_cardinality(
     Falso negativo accettato (path B `_auto_flatten` con response runtime
     `FeatureCollection`, `enrichment_response_processing.py:263`): nessun
     marker statico disponibile. Se accade, la rete di sicurezza e` il
-    fail-hard di RB.#14 (`_merge_batch_parallel_node_results` raise
-    `RuntimeError` su cardinality mismatch) -> task fallisce visibilmente
-    invece di silent data loss.
+    fail-hard di `_merge_batch_parallel_node_results` (`RuntimeError` su
+    cardinality mismatch) -> task fallisce visibilmente invece di silent data
+    loss.
 
     Falso positivo accettato (output_mapping con `[*]` ma response runtime
     sempre singleton, es. `XeYdellParticellaDaCoordinate`): perdita di
@@ -262,14 +261,10 @@ def compute_parallel_groups(
             groups.append(("single", [node_id]))
             continue
 
-        # RB.#15 (2026-04-28): nodi cardinality-changing (esplosione
-        # FeatureCollection / multi-row via `output_mapping` con `[]`/`[*]`
-        # non possono stare nello stesso di nodi
-        # cardinality-preserving: il merge column-by-column post-batch
-        # `enrichment_task._merge_batch_parallel_node_results`) violerebbe
-        # l'invariante cardinality e fallirebbe fail-hard (RB.#14
-        # Flush del + emissione come single -> il nodo
-        # esegue sequenzialmente DOPO i
+        # Nodi cardinality-changing non possono stare nello stesso batch di
+        # nodi cardinality-preserving: il merge column-by-column post-batch
+        # violerebbe l'invariante cardinality. Flush del batch corrente ed
+        # emissione come single -> il nodo esegue sequenzialmente dopo i
         # gia' emessi, e propaga la sua cardinality esplosa ai nodi
         # downstream nel DAG
         # Pattern simmetrico a `_is_file_processor` flush
@@ -388,9 +383,8 @@ def execute_parallel_enrichers(
     # Non bloccare su errori singoli se continue_on_error e attivo
     # il caller decide come gestire
 
-    # Merge: input_df + colonne nuove da ciascun nodo
-    # F-DATA-07 / P1-06: il merge usa positional alignment (`.values` bypassa
-    # l'index pandas). Sicuro oggi perche' tutti i path attuali di
+    # Merge: input_df + colonne nuove da ciascun nodo. Positional alignment
+    # (`.values` bypassa l'index pandas) e' sicuro perche' tutti i path attuali di
     # `EnrichmentExecutor` preservano cardinalita' E ordine dell'input_df
     # vedi branch `all_exec=True` e `all_exec=False` con `sort_index`
     # Se un futuro executor dedupplica internamente, riordina o cambia

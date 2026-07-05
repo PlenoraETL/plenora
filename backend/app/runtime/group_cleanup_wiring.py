@@ -1,11 +1,11 @@
-"""Wiring composition-root dei cleanup handler di gruppo (Epic E).
+"""Wiring composition-root dei cleanup handler di gruppo.
 
 Qui — e solo qui — i cleanup di dominio vengono importati e composti nel
 registry neutro `app.core.lifecycle.group_cleanup`. Aggiungere un nuovo
 dominio al cascade delete significa toccare QUESTO file, non `auth`.
 
-L'ordine degli handler e' un contratto (stesso ordine dello storico
-`auth.cleanup_registry`): schedules, api_connections, datasources,
+L'ordine degli handler e' un contratto di compatibilita': schedules,
+api_connections, datasources,
 file_sources, connections, projects (report multiplo), users, log_runs.
 """
 

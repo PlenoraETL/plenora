@@ -1,9 +1,8 @@
-"""DramatiqTaskRuntime — adapter Dramatiq del protocol TaskRuntime.
+"""DramatiqTaskRuntime: adapter Dramatiq del protocol TaskRuntime.
 
-Plenora 2.0, Fase 1: implementa ``send_task(name, **options)`` sopra
-Dramatiq/RabbitMQ con dispatch by-name (Message costruito senza importare
-l'actor: i moduli applicativi non dipendono dal package workers, come
-oggi con Celery send_task).
+Implementa ``send_task(name, **options)`` sopra Dramatiq/RabbitMQ con
+dispatch by-name. Il Message viene costruito senza importare l'actor, cosi'
+i moduli applicativi non dipendono dal package workers.
 
 Mappatura opzioni (superficie reale dei call-site censiti):
 - ``args`` / ``kwargs`` → payload del messaggio;
@@ -12,7 +11,7 @@ Mappatura opzioni (superficie reale dei call-site censiti):
 
 L'handle ritornato espone ``.id`` (message_id) come da
 ``TaskDispatchResult``. Import di dramatiq lazy: il modulo resta
-importabile dove la dipendenza non e' installata (transizione).
+importabile dove la dipendenza non e' installata.
 """
 
 from __future__ import annotations

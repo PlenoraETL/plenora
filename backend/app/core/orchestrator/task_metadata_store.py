@@ -2,8 +2,7 @@
 
 Consumer del protocol condiviso ``app.shared.kv.KeyValueStore``: il modulo
 non possiede un client proprio, il backend e' iniettabile e il mapping
-JSON/TTL resta qui. Plenora 2.0 Fase 5: il default e' PgKeyValueStore
-(PostgreSQL), nessuna dipendenza Redis.
+JSON/TTL resta qui. Il default e' PgKeyValueStore (PostgreSQL).
 """
 
 from __future__ import annotations

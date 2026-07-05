@@ -1,20 +1,11 @@
-"""Tombstone post Punto 3 cleanup (2026-05-25).
+"""Compatibility marker: nessuna API di materializzazione su disco.
 
-Era il boundary autorizzato a materializzare bytes su filesystem
-(`temporary_path_from_bytes`, `DiskWriteDeniedError`). Zero caller
-runtime sopravvissuti al refactor RAM-only: tutti i flussi che
-richiedevano un path su disco sono stati migrati a:
+I flussi che richiedono un path su disco devono usare:
 
   - `BytesIO` / `StringIO` per file-like API
   - `/vsimem` (libgdal ctypes adapter in `app.core.io.vsimem`)
     per binari OGR multi-file
   - object storage diretto (`save_bytes` su S3/MinIO) per persistence
-
-Riferimenti:
-  - piano refactor_io_storage_ram_only §"Punto 3 — cleanup dead
-    boundary" (doc storico, ora solo nella storia git)
-  - tests2/io_boundary/test_no_direct_filesystem_contract.py
-    (snapshot ratchet: questo file non e' piu' in `_BOUNDARY_FROZEN_SNAPSHOT`)
 
 Se torna a servire un disk-write boundary, NON resuscitare questo
 modulo: aggiungere una capability esplicita su `app.core.storage`

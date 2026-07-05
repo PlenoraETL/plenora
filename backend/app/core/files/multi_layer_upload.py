@@ -1,8 +1,7 @@
 """Multi-layer and multi-sheet upload parsing.
 
-Post-Phase4 refactor: RAM-only. Niente piu' NamedTemporaryFile /
-mkdtemp_writable / safe_extractall — il payload upload e' navigato
-in memoria via `zipfile.ZipFile(BytesIO(...))` e i parser bytes-first
+RAM-only: il payload upload e' navigato in memoria via
+`zipfile.ZipFile(BytesIO(...))` e i parser bytes-first
 di `app.core.dataframes.load_dispatch`.
 """
 
@@ -98,10 +97,8 @@ def create_multi_layer_from_upload(
     inner_bytes = raw_data
 
     if format_type == 'zip':
-        # Pre-fix: estraeva su mkdtemp + safe_extractall, navigava la dir
-        # per estensione, leggeva i bytes del path. Post-fix: navigazione
-        # del ZIP in RAM via zipfile.ZipFile(BytesIO). NB: SOLO .gpkg /
-        # .gdb (no .shp/.csv come create_from_upload).
+        # Navigazione del ZIP in RAM via zipfile.ZipFile(BytesIO).
+        # NB: SOLO .gpkg / .gdb (no .shp/.csv come create_from_upload).
         outer_filename = filename
         try:
             # `open_zip_bytes_safe` valida i cap zip-bomb PRIMA di yield.
@@ -128,11 +125,9 @@ def create_multi_layer_from_upload(
                     # punta allo stesso ZIP per parse.
                     inner_bytes = raw_data
                 else:
-                    # .gpkg single-file: estrai i bytes dal ZIP. Per il
-                    # blob di storage manteniamo lo ZIP originale (raw_data)
-                    # — nota: la versione pre-fix invece sostituiva il
-                    # blob con i bytes del file estratto. Mantengo il
-                    # comportamento pre-fix per non rompere downstream:
+                    # .gpkg single-file: estrae i bytes dal ZIP e usa il GPKG
+                    # interno come blob persistito, coerente con il formato
+                    # dichiarato.
                     raw_data = z.read(inner_name)
                     inner_bytes = raw_data
                     # SAFETY: ri-valida MIME sull'inner file (defense-in-depth

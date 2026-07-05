@@ -295,11 +295,8 @@ _SQL_INSERT_NODE_ROW = (
 def _bulk_insert_node_rows(cur, records: List[tuple]) -> None:
     """Bulk insert node_rows via psycopg3 executemany.
 
-    Pre-fix usavamo `psycopg2.extras.execute_values` con template +
-    VALUES %s, perche' execute_values univa N tuple in un singolo
-    INSERT per ridurre i round-trip. psycopg3 ha rimosso
-    execute_values: usiamo `cursor.executemany` su una INSERT
-    parametrizzata, e psycopg3 internamente cache la prepared
+    Usa `cursor.executemany` su INSERT parametrizzata. psycopg3 internamente
+    cache la prepared
     statement (default `prepare_threshold=5`), riducendo l'overhead
     di parsing dopo le prime esecuzioni. Per dataset molto grandi
     (>>10k righe) la migrazione successiva passera' a

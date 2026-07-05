@@ -30,7 +30,6 @@ class AccessTokenPayload(TypedDict, total=False):
     exp: int | datetime
     iat: int | datetime
     jti: str
-# BE-CONFIG-001B: TTL token migrato a `Settings.DEFAULTS` (default 8h
 # Override env `JWT_EXPIRE_HOURS` continua a funzionare via type coercion
 # `int` in `Settings._converti_tipo_env`. Lettura a import-time: la
 # costante e' parte del contratto modulo (consumata da `auth.auth` e

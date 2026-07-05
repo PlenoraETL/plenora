@@ -26,7 +26,7 @@ RestRecords = tuple[RestRecord, ...]
 
 _CSV_ENCODINGS = ("utf-8", "utf-8-sig", "cp1252", "latin-1")
 
-# MANIPOLA-A6: batch RAM-bounded per `join_columns_as_strings`.
+# Batch RAM-bounded per `join_columns_as_strings`.
 # 100k righe x ~12 colonne x avg 50B = ~60MB peak per batch.
 _JOIN_BATCH_SIZE = 100_000
 
@@ -40,9 +40,8 @@ def _read_csv_with_encodings(
 
     `source` puo' essere un `Path` (legge da filesystem) o un
     `io.BytesIO` (legge da blob in memoria). In entrambi i casi tenta
-    la chain `utf-8 / utf-8-sig / cp1252 / latin-1` — pre-fix il path
-    blob in `frame_io._load_dataframe_from_bytes` non aveva fallback
-    e produceva dati corrotti o exception su CSV italiani cp1252.
+    la chain `utf-8 / utf-8-sig / cp1252 / latin-1`, necessaria per CSV
+    italiani cp1252 e per input blob.
     """
     last_err: Optional[UnicodeDecodeError] = None
     for enc in _CSV_ENCODINGS:
@@ -73,10 +72,7 @@ def read_csv_safe_bytes(data: bytes, *, source_label: str = "in-memory CSV") -> 
     """Load a CSV from raw bytes with robust encoding detection.
 
     Esportata per il path blob (`frame_io._load_dataframe_from_bytes`):
-    pre-fix `pd.read_csv(BytesIO(data))` non specificava `encoding=` e
-    falliva silenziosamente su CSV italiani cp1252 (P1 plenora-bug-
-    etl-sources). Allinea il blob path al pattern del filesystem path
-    via lo stesso helper.
+    allinea il blob path al pattern multi-encoding del filesystem path.
     """
     return _read_csv_with_encodings(io.BytesIO(data), label=source_label)
 
@@ -243,11 +239,8 @@ def filter_visible_columns(
     raw_names = [c[0] for c in colonne_da_selezionare]
     alias_map = {c[0]: c[1] for c in colonne_da_selezionare if c[0] != c[1]}
 
-    # `copy_frame_for_update` esplicito per evitare view-vs-copy ambiguity.
-    # Pre-fix `df[raw_names]` con CoW disabilitato (default pandas < 2.0)
-    # ritornava una view, e qualunque modifica downstream propagava
-    # `SettingWithCopyWarning` o mutava silenziosamente il `df` originale.
-    # Post-fix: shallow copy esplicita (`deep=False`) → istanza distinta
+    # `copy_frame_for_update` esplicito per evitare view-vs-copy ambiguity:
+    # shallow copy (`deep=False`) -> istanza distinta
     # con buffer condivisi; le modifiche column-level downstream
     # sostituiscono l'intera Series, niente aliasing reale sul caller.
     result = copy_frame_for_update(df[raw_names])
@@ -261,10 +254,8 @@ def sanitize_for_json(rows: JsonRows) -> JsonRows:
 
     Contract (vedi `tests2/dataframes/unit/test_tabular_no_in_place_mutation_contract.py`):
     la funzione NON muta `rows` ne' i dict interni. Il caller puo'
-    riutilizzare l'oggetto originale dopo la chiamata. Pre-fix l'iterazione
-    `row[chiave] = _sanitizza_valore(row[chiave])` mutava in-place ogni
-    dict di input, corrompendo lo stato del caller (ad es. preview che
-    usava i rows due volte vedeva la seconda volta valori gia' "stringa").
+    riutilizzare l'oggetto originale dopo la chiamata senza corrompere
+    preview o dati successivi.
     """
     try:
         from shapely.geometry.base import BaseGeometry
@@ -372,10 +363,8 @@ def iter_dataframe_rest_records(df: pd.DataFrame) -> Iterator[RestRecord]:
     `dataframe_to_rest_records`: itera row-by-row via
     `itertuples(index=False, name=None)` e yielda un `RestRecord`
     normalizzato per riga senza mai materializzare la lista intera.
-    Memoria: O(1) per yield invece di O(N) upfront (pre-fix
-    `df.to_dict(orient="records")` allocava tutta la lista prima
-    ancora che il caller iterasse). Su DataFrame con 100k+ righe
-    questa era la voce di costo dominante della scrittura REST.
+    Memoria: O(1) per yield invece di O(N) upfront, evitando di allocare
+    tutta la lista records prima che il caller iteri.
     """
     columns = [str(col) for col in df.columns]
     for row in df.itertuples(index=False, name=None):
@@ -755,10 +744,7 @@ def stringify_columns_preserving_nulls(
 ) -> pd.DataFrame:
     """Convert selected columns to strings while preserving null sentinels.
 
-    Contract: il DataFrame di input NON viene mutato. Pre-fix il loop
-    scriveva `df[col] = df[col].astype(str)` direttamente sull'oggetto
-    ricevuto, corrompendo lo stato del caller (es. executor che ancora
-    aveva un riferimento al df pre-stringify per altre operazioni).
+    Contract: il DataFrame di input NON viene mutato.
     `copy_frame_for_update` (deep=False) safe qui: dopo
     `out[col] = out[col].astype(str)` la Series e' nuova e non piu'
     condivisa, quindi la `out.loc[..., col] = None` agisce solo su
@@ -787,9 +773,7 @@ def geometry_series_columns_to_wkt(df: pd.DataFrame) -> pd.DataFrame:
     `geometry_serialization.geometry_series_to_wkt` (vettoriale via
     `shapely.to_wkt`, ~2.4x sui punti / ~1.3-1.7x sui poligoni vs
     `apply(lambda g: g.wkt ...)` per-riga). Normalizza tutti i
-    missing (None/NaN/pd.NA) a None — pre-fix il lambda restituiva
-    None solo per i missing che passavano il check `is_null_scalar`,
-    lasciando potenziali NaN nell'output.
+    missing (None/NaN/pd.NA) a None, evitando NaN nell'output.
     """
     out = copy_frame_for_update(df)
     for col in out.columns:
@@ -1022,16 +1006,10 @@ def melt_dataframe(
 def join_columns_as_strings(df: pd.DataFrame, separator: str) -> Any:
     """Join column values as strings preserving legacy pandas coercion.
 
-    MANIPOLA-A6 (2026-05-26): batch RAM-bounded.
-    Pre-fix: `df.fillna('').astype(str)` materializzava una copia
-    string-typed dell'intero subset PRIMA del `.agg(separator.join, axis=1)`.
-    Peak ~ N_rows * N_cols * avg_str_size in stringhe + un'altra copy
-    nell'output Series. Su 10M righe x 12 colonne string: ~6-12GB.
-
-    Post-fix: itera batch da `_JOIN_BATCH_SIZE` righe. Per ogni batch
+    Batch RAM-bounded: itera batch da `_JOIN_BATCH_SIZE` righe. Per ogni batch
     materializza solo la fascia di righe, fa fillna+astype+agg, scrive
     nell'output array, libera. Peak ~ batch_size * N_cols * avg_str_size.
-    Semantica e dtype output (Series object) identici al legacy.
+    Semantica e dtype output (Series object) invariati.
     """
     n = len(df)
     if n == 0:

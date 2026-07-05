@@ -240,7 +240,6 @@ MODULE_MAP = {
 _configured_loggers: set[str] = set()
 _db_handler: Optional["PostgresLogHandler"] = None
 
-# — Aggregator pre-condizione §9.2/§9.3
 # Insieme chiuso di logger che emettono telemetria strutturata
 # stage_swap.dispatched. Solo i record INFO di questi logger bypassano
 # il filtro WARNING del PostgresLogHandler default
@@ -373,7 +372,7 @@ class PostgresLogHandler(logging.Handler):
     ) -> None:
         """Apre una nuova run — status 'running'.
 
-        N9: `user_id` viene persistito per audit (chi ha lanciato la run).
+        `user_id` viene persistito per audit (chi ha lanciato la run).
         None per task cron/scheduled senza user umano dietro.
         """
         from app.db.pg_connection import execute as pg_execute
@@ -552,10 +551,8 @@ class StructuredLogger:
         self._logger.log(level, msg, *args, exc_info=exc_info, extra=extra, **kwargs)
 
     def debug(self, msg: str, *args: object, **kwargs: object) -> None:
-        # Nota: se il metodo manca, qualunque logger.debug in giro solleva
-        # AttributeError. Era successo con il fix del log volume di aprile 2026
-        # enrichment_service.py passato da logger.info a logger.debug →
-        # AttributeError → catturato dal catch-all async → fallimento silente
+        # Metodo esplicito per mantenere compatibilita' con i callsite che
+        # usano logger.debug e farli passare dallo stesso wrapper strutturato.
         self._log(logging.DEBUG, msg, *args, **kwargs)
 
     def info(self, msg: str, *args: object, **kwargs: object) -> None:
@@ -683,7 +680,7 @@ def open_run(
 ) -> None:
     """Apre una run su log_runs (Postgres). Chiamare all'avvio del task.
 
-    N9: user_id viene persistito per audit (nullable, default None per
+    user_id viene persistito per audit (nullable, default None per
     cron/scheduled).
     """
     _get_db_handler().open_run(

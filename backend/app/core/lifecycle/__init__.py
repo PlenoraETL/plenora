@@ -1,4 +1,4 @@
-"""Lifecycle cross-domain neutro (Epic E roadmap accoppiamento).
+"""Lifecycle cross-domain neutro.
 
 Meccanismi di ciclo di vita che coordinano piu' domini senza appartenere
 a nessuno: il registry del group cleanup vive qui, i domini espongono

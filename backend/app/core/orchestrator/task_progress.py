@@ -1,15 +1,11 @@
-"""Reporter unificato di stato/progress/esito task (Plenora 2.0, Fase 2).
+"""Reporter unificato di stato/progress/esito task.
 
 Scrive su ``task_result_store`` (PostgreSQL) keyed-by-``task_id``, senza
-dipendere dal contesto Celery ``self``: il wrapper Celery passa
-``self.request.id``, l'actor Dramatiq (chiusura Fase 1) passa il
-``current_message_id()``. E' il rimpiazzo del result backend Redis sul
-lato scrittura.
+dipendere dal contesto del worker: l'actor Dramatiq passa il
+``current_message_id()``.
 
-Best-effort by design: durante la transizione (finche' la LETTURA non
-migra a PG in F2.3) un fallimento di scrittura su PG non deve alterare
-l'esito del task — Celery conserva ancora il proprio backend. Gli errori
-vengono loggati, non propagati.
+Best-effort by design: un fallimento di scrittura su PG non deve alterare
+l'esito del task. Gli errori vengono loggati, non propagati.
 """
 
 from __future__ import annotations
@@ -42,7 +38,7 @@ _revocation_store: Optional[TaskRevocationStore] = None
 
 
 class TaskRevoked(BaseException):
-    """Annullamento cooperativo di un task (Plenora 2.0, Fase 5 F5.2).
+    """Annullamento cooperativo di un task.
 
     Sottoclasse di ``BaseException`` (non ``Exception``) di proposito: deve
     attraversare i ``except Exception`` dei corpi task (eseguendone i
@@ -110,9 +106,8 @@ def report_task_progress(
     if not task_id:
         return
     # Checkpoint di annullamento cooperativo: se il task e' stato revocato,
-    # solleva TaskRevoked PRIMA di scrivere il progress (vedi F5.2). Fuori
-    # dal try best-effort sotto: la TaskRevoked deve propagare, non essere
-    # inghiottita.
+    # solleva TaskRevoked PRIMA di scrivere il progress. Fuori dal try
+    # best-effort sotto: la TaskRevoked deve propagare, non essere inghiottita.
     raise_if_task_revoked(task_id)
     payload = {
         "progress": max(0, int(percent)),
@@ -125,8 +120,7 @@ def report_task_progress(
         )
     except Exception:
         # Best-effort safety-net: un errore di scrittura PG (DB giu',
-        # serializzazione) NON deve far fallire il task; il polling Celery
-        # resta valido finche' la lettura non migra a PG (F2.3).
+        # serializzazione) NON deve far fallire il task.
         logger.warning(
             "report_task_progress fallita task_id=%s", task_id, exc_info=True
         )

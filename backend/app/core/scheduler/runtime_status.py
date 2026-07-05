@@ -2,14 +2,7 @@
 
 Keeps this module's responsibility explicit and isolated from adjacent code.
 
-Pre-fix: i valori di `ScheduleRuntime.status` erano string literal sparpagliati
-in ~40 callsite (`set_runtime_status(schedule_id, "running")`,
-`config.runtime.status = "idle"`, `if status == "completed":`, ecc.). Typo
-silenti (es. "runing", "queue") passavano i type-check e atterravano nel DB
-come stati invalidi che il frontend non sapeva interpretare.
-
-Post-fix: enum centralizzato a single source-of-truth. `StrEnum` (Python 3.11+)
-mantiene `.value` come `str` "puro" -> il DB row encoding (Pydantic
+`StrEnum` mantiene `.value` come `str` "puro" -> il DB row encoding (Pydantic
 `ScheduleStatus = Literal[...]` -> JSON string) resta identico, nessuna
 migrazione DB. Backward-compat: i caller possono passare `"running"` (str) o
 `RuntimeStatus.RUNNING` (enum) — `set_runtime_status` normalizza.
@@ -35,7 +28,7 @@ from enum import StrEnum
 class RuntimeStatus(StrEnum):
     """Stati canonici di `ScheduleRuntime.status`.
 
-    Allineato 1:1 al `ScheduleStatus = Literal[...]` storico in
+    Allineato 1:1 al `ScheduleStatus = Literal[...]` in
     `app/core/scheduler/models.py`. NON aggiungere valori senza aggiornare
     anche il Literal alias e il frontend status renderer.
     """
@@ -53,14 +46,8 @@ class RuntimeStatus(StrEnum):
 def coerce_runtime_status(value: "str | RuntimeStatus") -> str:
     """Accetta str o enum, ritorna sempre lo string canonico per il DB.
 
-    Pre-fix: `set_runtime_status` accettava solo `str`. Migrando i caller a
-    enum, una signature `status: str` riceveva `RuntimeStatus.RUNNING` e
-    funzionava per coincidenza (StrEnum subclasse str), ma `==` su un
-    Literal `Literal["running"]` poteva dare risultati inattesi in tooling
-    statico. Questo helper rende esplicita la normalizzazione.
-
-    Post-fix: caller passa enum -> ritorna `.value`; caller passa str ->
-    ritorna invariato (back-compat con callsite ancora migrati a literal).
+    Enum -> `.value`; stringa -> invariata per compatibilita' con caller
+    ancora basati su literal.
     """
     if isinstance(value, RuntimeStatus):
         return value.value

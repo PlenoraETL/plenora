@@ -292,15 +292,14 @@ def get_schedules_status() -> AdminStatusBlock:
     )
 
 
-# Worker/task in esecuzione — derivato da PostgreSQL (Plenora 2.0 Fase 5)
+# Worker/task in esecuzione — derivato da PostgreSQL.
 
 
 def get_workers_status() -> AdminStatusBlock:
     """Task in esecuzione, derivati da PostgreSQL (task_results).
 
-    Plenora 2.0 Fase 5: il broker e' RabbitMQ (Dramatiq) e lo stato dei task
-    vive su PG, non piu' nell'inspect Celery. Senza introspezione broker non
-    possiamo enumerare i nodi/slot worker; esponiamo il segnale che PG
+    Lo stato dei task vive su PG. Senza introspezione broker non possiamo
+    enumerare i nodi/slot worker; esponiamo il segnale che PG
     conosce con certezza: il numero di task in stato PROGRESS (in esecuzione
     adesso). I campi celery-specifici (nodes/concurrency_slots/queue_depth)
     restano assenti dal payload.
@@ -397,10 +396,8 @@ def get_host_resources() -> AdminStatusBlock:
         data_dir_path = Path(app_config.settings.DATA_DIR)
         data_dir = str(data_dir_path)
         usage_path = _disk_usage_probe_path(data_dir_path)
-        # R-2 (2026-04-27): psutil.disk_usage emette
-        # `SystemError("argument 1 (impossible<bad format char>)")` su Windows
-        # locale (telemetria locale post-diagnostic patch). Causa probabile:
-        # edge case in psutil._psplatform (Windows) sulla `struct` C.
+        # psutil.disk_usage puo' emettere SystemError su edge case Windows;
+        # fallback a shutil.disk_usage sotto.
         # Fallback: `shutil.disk_usage` (stdlib) usa GetDiskFreeSpaceExW
         # diretto e non passa per psutil. Se anche shutil fallisce -> graceful
         # con log enriched
@@ -587,9 +584,8 @@ def get_blacklist_status() -> AdminStatusBlock:
     Fa parte del contratto di graceful degradation della dashboard:
     mai solleva, sempre ritorna dict con `status` e `message`.
     """
-    # BE-CONFIG-001C: default tipato in `Settings.DEFAULTS`
-    # `JWT_BLACKLIST_STALE_THRESHOLD_SEC=1800`). Guard `ValueError` resta
-    # safety per env malformata propagata dal type coercion
+    # Guard `ValueError`: safety per env malformata propagata dal type
+    # coercion dei settings.
     try:
         threshold = int(
             app_config.settings.get("JWT_BLACKLIST_STALE_THRESHOLD_SEC")
@@ -691,8 +687,8 @@ _CRITICAL_TABLES = [
 def get_db_schema_size() -> AdminStatusBlock:
     """Dimensione schema `plenora` + row count tabelle critiche.
 
-    Utile per early-detection di growth anomali (es. file_sources.data
-    pre-FS-B1-large fix gonfiato con blob >50MB).
+    Utile per early-detection di growth anomali (es. blob grandi rimasti in
+    file_sources.data).
     """
     try:
         size_row = fetch_schema_size_row()
@@ -717,11 +713,8 @@ def get_db_schema_size() -> AdminStatusBlock:
         for r in (table_rows or [])
     ]
 
-    # Soglie: dumping cresciute molto potrebbe indicare bytea bloat
-    # Error a 5 GB, warn a 1 GB. Tweakable via env
-    # BE-CONFIG-001D: default tipati `float` in `Settings.DEFAULTS`
-    # `DB_SCHEMA_WARN_GB=1.0`, `DB_SCHEMA_ERROR_GB=5.0`). Override env
-    # via `Settings._converti_tipo_env` (coercion `float`
+    # Soglie: dumping cresciute molto potrebbe indicare bytea bloat.
+    # Error a 5 GB, warn a 1 GB. Tweakable via env.
     warn_gb = float(app_config.settings.get("DB_SCHEMA_WARN_GB"))
     error_gb = float(app_config.settings.get("DB_SCHEMA_ERROR_GB"))
     size_gb = size_bytes / (1024 ** 3)

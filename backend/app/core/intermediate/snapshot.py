@@ -358,10 +358,10 @@ def _record_snapshot(
         and persisted_rows_count < row_count
     )
 
-    # storage intermedi (2026-04-28): in mode full_artifact
-    # serializziamo data.parquet + manifest.json su runtime object
-    # storage. Il caller persistera' artifact_uri / _status / _format
-    # in `node_meta`. Best-effort: errori tornano `failed` e proseguono
+    # In mode full_artifact serializziamo data.parquet + manifest.json
+    # su runtime object storage. Il caller persistera' artifact_uri /
+    # _status / _format in `node_meta`. Best-effort: errori tornano
+    # `failed` e proseguono.
     artifact_uri: Optional[str] = None
     artifact_format: Optional[str] = None
     artifact_status: str = _policy.ARTIFACT_STATUS_NONE

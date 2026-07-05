@@ -195,7 +195,7 @@ def _carica_dispatch_init(*args: Any, **kwargs: Any) -> None:
 
     Il dispatch CARICA (sink db/datasource/rest/arcgis) consuma
     project/connection/datasource service dal composition root invece di
-    costruirli inline (Epic D roadmap accoppiamento).
+    costruirli inline.
     """
     from app.core.carica.dispatch import init_carica_dispatch
 
@@ -217,7 +217,7 @@ def _estrai_init(*args: Any, **kwargs: Any) -> None:
     """Lazy thunk: import + invoke ``init_estrai``.
 
     Il preview formula di EstrAi consuma project/connection/query executor
-    iniettati (Epic D roadmap accoppiamento) invece di costruirli inline.
+    iniettati invece di costruirli inline.
     """
     from app.core.estrai.router import init_estrai
 

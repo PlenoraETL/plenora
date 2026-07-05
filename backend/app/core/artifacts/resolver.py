@@ -48,8 +48,7 @@ class ArtifactResolver:
         None: o materializza, o fallisce hard.
 
         Args:
-            mode: SOLO `"bytes"` supportato. Post-Phase5 il path mode
-                e' stato rimosso (zero production caller); il
+            mode: SOLO `"bytes"` supportato. Il path mode non e' disponibile;
                 ResultBlobLoader rifiuta esplicitamente mode != "bytes".
                 Il parametro resta per stabilita' API.
         """
@@ -329,11 +328,9 @@ class ArtifactResolver:
     ) -> MaterializedArtifact:
         """Resolve a `result_id` via the Resource Engine.
 
-        Post-Phase5: solo `mode="bytes"` supportato. Il loader
-        `ResultBlobLoader` rifiuta `mode="path"` (zero production
-        caller; il boundary `temporary_path_from_bytes` e' stato
-        tombstonato in Punto 3 — chi necessita davvero di un path
-        deve usare `/vsimem` via `app.core.io.vsimem`).
+        Solo `mode="bytes"` e' supportato. Il loader `ResultBlobLoader`
+        rifiuta `mode="path"`; chi necessita davvero di un path deve usare
+        `/vsimem` via `app.core.io.vsimem`.
         Il resolver continua a fornire row metadata lookup (format,
         group_id) + cross-tenant project_id check; la
         materializzazione del blob e' delegata al loader bytes-first.

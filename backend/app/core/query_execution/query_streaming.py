@@ -34,11 +34,8 @@ class StreamingEngineFactory(Protocol):
     def create_engine(self, conn: StreamingConnection) -> Engine: ...
 
 
-# Tombstone (QUERY-1 step 2): `QueryStreamingWriter` rimossa.
-# Era un thin adapter su `execute_streaming_to_file(path)`; con
-# QUERY-1 il path canonical e' `execute_streaming_to_writer(file-like)`
-# orchestrato da `persist_streaming_query_to_storage`. Zero caller
-# in produzione.
+# Streaming canonico: `execute_streaming_to_writer(file-like)` orchestrato da
+# `persist_streaming_query_to_storage`.
 
 
 def _max_streaming_rows() -> int:
@@ -59,14 +56,9 @@ def _configure_session(conn: Any, connection: StreamingConnection) -> None:
     try:
         timeout_s = settings.DB_QUERY_TIMEOUT
         timeout_ms = int(timeout_s) * 1000
-        # P0 (2026-05-26): literal-embedded (no bind param) per le
-        # SET utility command. Stesso bug di `query_session.py`:
-        # psycopg3 usa extended query protocol con server-side Bind
-        # e PostgreSQL non accetta bound parameter sulle SET. Pre-fix
-        # il path streaming (CARICA da DB query, ESTRAI con
-        # persistence_mode=streaming) girava senza statement_timeout —
-        # silent fail nel broad except. `timeout_ms` e' un int da
-        # settings, no rischio injection.
+        # Literal embedded (no bind param) per i SET utility command:
+        # PostgreSQL non accetta bound parameter qui. `timeout_ms` e' un int
+        # da settings, quindi non introduce injection.
         if connection.type in ("postgres", "postgresql"):
             conn.execute(text(f"SET statement_timeout = {timeout_ms}"))
         elif connection.type == "mysql":
@@ -230,8 +222,7 @@ def execute_streaming_to_writer(
     return total_rows, columns
 
 
-# Tombstone (QUERY-1 step 2): `execute_streaming_to_file(path)` rimossa.
-# Sostituita da `execute_streaming_to_writer(file-like)` (sopra) che
-# accetta qualunque binary writer. Per persistere su storage canonical
+# `execute_streaming_to_writer(file-like)` accetta qualunque binary writer.
+# Per persistere su storage canonical
 # il caller usa `StreamingResultBlobWriter` (S3 multipart o DB BYTEA);
 # per test bytes-only basta `io.BytesIO()`.

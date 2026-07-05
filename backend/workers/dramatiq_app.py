@@ -1,8 +1,7 @@
-"""Bootstrap Dramatiq (Plenora 2.0).
+"""Bootstrap Dramatiq.
 
-Registra gli actor con i nomi storici dei task (il dispatch by-name non
-cambia i chiamanti) e la topologia di code da settings. Plenora 2.0 Fase 5:
-i corpi dei task sono funzioni pure (niente piu' celery); l'esito finisce su
+Registra gli actor con nomi stabili per il dispatch by-name e la topologia di
+code da settings. I corpi dei task sono funzioni pure; l'esito finisce su
 PostgreSQL via ``_TaskResultMiddleware``.
 
 Worker: ``dramatiq workers.dramatiq_app`` (processi/thread via CLI).
@@ -28,8 +27,7 @@ from app.utils.logger import get_logger, get_request_id, set_request_id
 # prima che app.bootstrap.bootstrap() (before_worker_boot) carichi il
 # dotenv. Senza questo load anticipato il worker consumava dal default
 # compose `rabbitmq` (DNS inesistente fuori da Docker) mentre
-# ensure_broker, post-dotenv, validava l'URL giusto del .env: split-brain
-# scoperto sulla VM Windows Server (scoping 2026-07-04). Il loader e'
+# ensure_broker, post-dotenv, validava l'URL giusto del .env. Il loader e'
 # idempotente e ignora il .env in prod/staging.
 load_backend_dotenv()
 
@@ -51,12 +49,10 @@ def broker_url() -> str:
 
 
 class _TaskResultMiddleware(Middleware):
-    """Persiste l'esito dell'actor su PostgreSQL (Plenora 2.0, Fase 2).
+    """Persiste l'esito dell'actor su PostgreSQL.
 
-    Simmetrico a ``BaseTaskWithRetry.after_return`` lato Celery: dopo
-    l'esecuzione di un actor scrive stato+risultato su task_result_store
-    (keyed sul message_id), cosi' l'orchestratore — che dalla Fase 2 legge
-    da PG — vede l'esito anche quando il task gira sul worker Dramatiq.
+    Dopo l'esecuzione di un actor scrive stato+risultato su task_result_store
+    (keyed sul message_id), cosi' l'orchestratore vede l'esito dal worker.
     Best-effort: finalize_from_celery non propaga."""
 
     def after_process_message(
@@ -67,7 +63,7 @@ class _TaskResultMiddleware(Middleware):
         result: object = None,
         exception: object = None,
     ) -> None:
-        # finalize_from_celery mappa TaskRevoked -> REVOKED (F5.2),
+        # finalize_from_celery mappa TaskRevoked -> REVOKED,
         # SUCCESS/FAILURE altrimenti.
         from app.core.orchestrator.task_progress import finalize_from_celery
 
@@ -107,7 +103,7 @@ def _bootstrap_worker_process(*, force_reset: bool = False) -> None:
 
 
 class _BootstrapMiddleware(Middleware):
-    """Bootstrap del processo worker Dramatiq (Plenora 2.0, Fase 5).
+    """Bootstrap del processo worker Dramatiq.
 
     ``before_worker_boot`` scatta una volta per processo worker, dopo il
     fork del supervisor ``dramatiq``: e' il rimpiazzo del signal Celery
@@ -207,9 +203,9 @@ def current_message_id() -> str | None:
 def _invoke_task_body(task_fn: object, *, name: str, kwargs: dict) -> object:
     """Esegue il corpo di un task (funzione pura) con un self-shim Dramatiq.
 
-    Plenora 2.0 Fase 5: i corpi dei task sono funzioni pure (niente piu'
-    ``@celery_app.task``). Usano ``self`` solo per ``self.request.id``
-    (task_id) e ``self.name`` (routing del progress su PG): lo shim li
+    I corpi dei task sono funzioni pure. Usano ``self`` solo per
+    ``self.request.id`` (task_id) e ``self.name`` (routing del progress su PG):
+    lo shim li
     fornisce dal messaggio Dramatiq corrente. L'esito finale lo scrive
     ``_TaskResultMiddleware``.
     """

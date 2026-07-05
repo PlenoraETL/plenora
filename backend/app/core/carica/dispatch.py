@@ -43,9 +43,9 @@ from app.core.security.outbound_url import validate_external_url
 
 logger = get_logger("app.core.carica.dispatch")
 
-# Servizi iniettati dal composition root via CARICA_DISPATCH_BINDING
-# (Epic D roadmap accoppiamento). Fallback per-chiamata per i contesti
-# senza wiring (worker standalone, unit test su moduli parziali).
+# Servizi iniettati dal composition root via CARICA_DISPATCH_BINDING.
+# Fallback per-chiamata per contesti senza wiring (worker standalone,
+# unit test su moduli parziali).
 _project_service: Optional[ProjectService] = None
 _connection_service: Optional[ConnectionService] = None
 _datasource_service: Optional[DataSourceService] = None

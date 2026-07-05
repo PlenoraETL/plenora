@@ -1,4 +1,4 @@
-"""Modello Column del canvas — contratto strutturale condiviso (B4 roadmap).
+"""Modello Column del canvas — contratto strutturale condiviso.
 
 Sede canonica del modello colonna usato dai nodi canvas: estratto da
 ``app.core.projects.canvas_models`` (che mantiene il re-export compatibile)
@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict
 class Column(BaseModel):
     """Colonna di una tabella/dataset nel canvas.
 
-    ``extra="allow"`` — simmetrico al fix di ``Node`` (commit fc86a999).
+    ``extra="allow"`` preserva i metadata extra del frontend.
     Il frontend serializza per ogni colonna metadata extra (``selected``,
     ``fromApi``, ``path`` per output_mapping, ecc.) che il backend NON
     modella esplicitamente ma deve preservare nel round-trip

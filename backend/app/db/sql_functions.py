@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from typing import Any, List, Optional
 from enum import Enum
 from dataclasses import dataclass
+import re as _re_n2
 
 from app.db.sql_date_functions import SqlDateFunctionMixin
 from app.db.sql_numeric_functions import SqlNumericFunctionMixin
@@ -20,7 +21,7 @@ from app.shared.contracts.payloads import JsonObject
 def _sql_escape(value: str) -> str:
     """Escape apici singoli per string literal SQL (limitato).
 
-    NB (N2): questo raddoppio e' sicuro SOLO quando il valore finisce
+    NB: questo raddoppio e' sicuro SOLO quando il valore finisce
     tra apici singoli in SQL (es. `'{_sql_escape(v)}'`). NON protegge
     da injection in numeri, identificatori o espressioni. Per quei
     contesti usa `_safe_number` o `_safe_identifier`.
@@ -30,7 +31,7 @@ def _sql_escape(value: str) -> str:
     return str(value).replace("'", "''")
 
 
-# N2 — VALIDATORI INPUT CONTRO SQL INJECTION
+# Validator input contro SQL injection.
 # I traduttori in questo modulo costruiscono SQL via f-string. Per i valori
 # che non finiscono tra apici (numeri, nomi colonna, espressioni) _sql_escape
 # non basta: serve un cast/whitelist esplicito che rifiuti input malformati
@@ -40,9 +41,6 @@ def _sql_escape(value: str) -> str:
 # _safe_identifier(v): whitelist regex per singoli identificatori
 # es. "geom" → OK, "geom); DROP TABLE x;--" → ValueError
 # _safe_qualified_identifier(v): come sopra ma ammette "table.column"
-
-
-import re as _re_n2
 
 
 # Singolo identificatore SQL: lettera/underscore iniziale, poi alfanumerico
@@ -756,8 +754,8 @@ class SqlFunctionTranslator(
               applichiamo whitelist — la fiducia ricade sui traduttori
               sottostanti.
 
-        N2: per il path "nome semplice" e "gia' qualificato" applichiamo
-        un whitelist regex (`_safe_qualified_identifier`) che rifiuta
+        Per il path "nome semplice" e "gia' qualificato" applichiamo un
+        whitelist regex (`_safe_qualified_identifier`) che rifiuta
         payload come `geom); DROP TABLE x;--`. Il path espressione resta
         trust-based ma l'unica fonte di espressioni in input sono gli
         altri `_translate_*` di questo modulo (che ora validano i loro
@@ -774,8 +772,8 @@ class SqlFunctionTranslator(
         # traduttore che ha prodotto l'espressione. Questi input NON
         # arrivano direttamente dall'utente in condizioni normali: sono
         # frammenti SQL emessi da altre _translate_*
-        # N2 defense-in-depth: rifiuta comunque marker strutturali di
-        # injection. Non compaiono mai negli output legittimi dei
+        # Defense-in-depth: rifiuta marker strutturali di injection.
+        # Non compaiono mai negli output legittimi dei
         # _translate_*, quindi niente falsi positivi
         if "(" in column or ")" in column:
             for marker in (";", "--", "/*", "*/", "\x00"):
@@ -827,7 +825,7 @@ class SqlFunctionTranslator(
     def _translate_case_when(self, params: SqlParamMap, table_alias: str = None) -> str:
         """Espressione condizionale CASE WHEN — identica su tutti i database."""
         col = self._qualify_column(params["column"], table_alias)
-        # N2: whitelist su operator (finiva raw in f-string
+        # Whitelist sull'operator usato nella f-string SQL.
         operatore = _safe_compare_operator(params.get("operator", "="))
         confronto = _sql_escape(params["compare_value"])
         valore_vero = _sql_escape(params["then_value"])
@@ -837,7 +835,7 @@ class SqlFunctionTranslator(
     def _translate_iif(self, params: SqlParamMap, table_alias: str = None) -> str:
         """If inline — MSSQL/SQLite hanno IIF, altri usano CASE WHEN."""
         col = self._qualify_column(params["column"], table_alias)
-        # N2: whitelist su operator (finiva raw in f-string
+        # Whitelist sull'operator usato nella f-string SQL.
         operatore = _safe_compare_operator(params.get("operator", "="))
         confronto = _sql_escape(params["compare_value"])
         valore_vero = _sql_escape(params["true_value"])
@@ -939,7 +937,7 @@ class SqlFunctionTranslator(
 
 # FUNZIONI HELPER PUBBLICHE
 
-# Esempi d'uso per funzione (#20 roadmap: cheatsheet inline nel modal formula).
+# Esempi d'uso per funzione esposti nel catalogo formula.
 # Una riga per funzione: sintassi di chiamata + (dove utile) il risultato. I nomi
 # dei parametri keyword (separator=, unit=, value=, format=, col2=) rispecchiano
 # quelli reali del catalogo. Tenuto come dict separato per non gonfiare i 49

@@ -1,5 +1,5 @@
 """
-Intermediate full artifact reader — preview da artifact (2026-04-28).
+Intermediate full artifact reader.
 
 Legge preview da `data.parquet` su runtime object storage per il modo
 """

@@ -1,7 +1,7 @@
 """Blob read for file sources (RAM-only).
 
-Post-Phase4 refactor: il modulo non materializza piu' blob su disco.
-`temp_file_for` e `temp_file_for_cm` sono stati rimossi — i consumatori
+Il modulo non materializza blob su disco.
+`temp_file_for` e `temp_file_for_cm` non sono disponibili: i consumatori
 RAM-first usano `get_blob_from_db` direttamente e poi delegano a
 `load_by_format_bytes` / `list_vector_layers` / `list_excel_sheets_from_bytes`.
 

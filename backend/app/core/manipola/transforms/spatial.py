@@ -81,8 +81,10 @@ DataFrame = FrameLike
 
 
 def _env_int(name: str, default: int) -> int:
-    """Cap int da Settings (BE-CONFIG-001F: default tipato in DEFAULTS,
-    override env opzionale); fallback su default per valori non-int o <=0."""
+    """Cap int da Settings con override env opzionale.
+
+    Fallback su default per valori non-int o <=0.
+    """
     try:
         n = int(settings.get(name, default))
     except (TypeError, ValueError):
@@ -90,7 +92,7 @@ def _env_int(name: str, default: int) -> int:
     return n if n > 0 else default
 
 
-# MANIPOLA-8 (2026-05-26): cap pre-flight per operazioni spatial pesanti.
+# Cap pre-flight per operazioni spatial pesanti.
 # Voronoi: O(n log n) ma con costanti alte; >100k punti finisce OOM su
 # worker tipici. Clean topology: make_valid + buffer + overlay O(N^2) sui
 # vertici; cap su N_geometrie evita esplosioni topologiche. Override env
@@ -107,9 +109,8 @@ def _clean_topology_max_geoms() -> int:
 def _clean_topology_max_vertices() -> int:
     """Cap su somma vertici totali del GDF input per `clean_topology`.
 
-    M-8 follow-up: il commento prometteva "geometrie + vertici totali",
-    ora consegnato. Anche con 50k geometrie sotto cap, una singola
-    geometria con 10M vertici (es. boundary nazionale multipoligonale)
+    Anche con 50k geometrie sotto cap, una singola geometria con 10M vertici
+    (es. boundary nazionale multipoligonale)
     farebbe OOM su make_valid/buffer. Cap default 5M (= 50k * 100
     vertici/poligono medio); override env per casi legittimi
     (geometrie cartografiche dense)."""
@@ -1000,8 +1001,8 @@ def op_geo_voronoi(
             logger.error("shapely.ops.voronoi_diagram non disponibile. Aggiornare shapely >= 1.8")
             return df
 
-        # MANIPOLA-8 (2026-05-26): cap pre-flight su numero di punti.
-        # Voronoi e' O(n log n) ma con costanti alte e poligoni complessi;
+        # Cap pre-flight su numero di punti: Voronoi e' O(n log n) ma con
+        # costanti alte e poligoni complessi;
         # >100k punti finisce in OOM su worker tipici. Fail-closed con
         # messaggio operativo invece di OOM silente. Override env per
         # casi legittimi (cluster dense usano cap = unset).
@@ -1025,9 +1026,8 @@ def op_geo_voronoi(
         voronoi_polygons = list(voronoi_geom.geoms)
 
         # Associa ogni punto alla cella Voronoi che lo contiene via STRtree
-        # O(log n) per query vs O(n) lineare). Il legacy usava first-match
-        # per contains|touches nell'ordine della lista; qui usiamo
-        # `predicate="intersects"` (superset di contains+touches) e
+        # (O(log n) per query vs O(n) lineare), con `predicate="intersects"`
+        # come superset di contains+touches.
         # prendiamo l'indice minimo fra i candidati per preservare l'ordine
         from shapely.strtree import STRtree
         tree = STRtree(voronoi_polygons)
@@ -1090,9 +1090,8 @@ def op_geo_to_wkt(
         result = copy_frame_for_update(gdf)
 
         if mode in ("wkt", "both"):
-            # Pre-fix per-row apply su GeoSeries (fino a 100k geometrie
-            # in pipeline reali). Post-fix vettoriale via
-            # `geometry_series_to_wkt`: ~2.4x sui punti, ~1.3-1.7x sui
+            # Serializzazione vettoriale via `geometry_series_to_wkt`:
+            # ~2.4x sui punti, ~1.3-1.7x sui
             # poligoni; contratto uniforme su missing (None/NaN/pd.NA)
             # → None.
             from app.core.dataframes.geometry_serialization import (
@@ -1146,8 +1145,8 @@ def op_geo_clean_topology(
     try:
         gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
 
-        # MANIPOLA-8 (2026-05-26 + follow-up): cap pre-flight su numero
-        # geometrie + somma vertici totali. Clean topology fa make_valid
+        # Cap pre-flight su numero geometrie + somma vertici totali.
+        # Clean topology fa make_valid
         # + buffer iterativi + overlay per N poligoni: peggior caso
         # O(N^2) sui vertici. Cap pragmatico evita worker OOM. Override
         # env per casi legittimi. Il vertex check usa
@@ -1239,9 +1238,8 @@ def op_geo_clean_topology(
                     if preceding_list:
                         accumulated = unary_union(preceding_list)
                     else:
-                        # Nessun preceding non-empty: legacy avrebbe fatto
-                        # diff = g.difference(empty_collection) = g
-                        # non-empty → fixed_count++ e geometries[i] = g
+                        # Nessun preceding non-empty: lascia la geometria
+                        # invariata e conta la correzione.
                         geometries[i] = g
                         fixed_count += 1
                         accumulated = g

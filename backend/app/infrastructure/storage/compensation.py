@@ -77,8 +77,8 @@ def compensating_delete(
       event=storage_compensating_delete_failed \\
         domain=<d> storage_key=<k> reason=<r> \\
         cleanup_error=<ExcType> cleanup_error_msg=<repr> [extras...]
-        (level=warning — orphan accepted, ADR-0011 contract; non-fatal
-        ai sensi del caller. Allerta osservabilita' tramite filtro su
+        (level=warning — orphan accepted; non-fatal ai sensi del caller.
+        Allerta osservabilita' tramite filtro su
         `event=storage_compensating_delete_failed` o domain.)
 
       event=storage_compensating_delete_skipped \\

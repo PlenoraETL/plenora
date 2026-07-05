@@ -78,7 +78,7 @@ class TransformSchemaHandlers:
 
         Aliases preservati (presenti nel dispatcher ma non nel
         `transforms_registry.json` — lock parity test):
-        - `drop` -> `_schema_drop` (alias storico per `drop_columns`)
+        - `drop` -> `_schema_drop` (alias compatibile per `drop_columns`)
         - `geo_to_crs` -> `_schema_passthrough` (alias legacy per
           `geo_reproject`)
 

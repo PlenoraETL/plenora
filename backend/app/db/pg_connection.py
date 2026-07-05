@@ -139,9 +139,7 @@ def _configure_connection(conn: psycopg.Connection) -> None:
 
     # opts = [f"-c search_path={_DB_SCHEMA},public"]
     psycopg3 espone `configure` callback come API pulita per applicare
-    SET sessione (search_path, timeout). Pre-psycopg3 il pattern era
-    `options="-c search_path=... -c idle_in_transaction_session_timeout=..."`
-    nella conninfo string. Il callback e' equivalente ma type-safe e
+    SET sessione (search_path, timeout). Il callback e' type-safe e
     debuggabile (errori di SET emergono come `psycopg.errors`).
 
     `dict_row` settato qui invece di kwargs sulla `ConnectionPool` per
@@ -170,9 +168,7 @@ def _configure_connection(conn: psycopg.Connection) -> None:
 def _reset_connection(conn: psycopg.Connection) -> None:
     """Reset state della connection prima di restituirla al pool.
 
-    P0 (2026-05-26): aggiunto per evitare leak di state fra caller.
-    Pre-fix psycopg_pool senza `reset` callback teneva intatto lo
-    state della connection su putconn: se un caller settava
+    Evita leak di state fra caller. Se un caller setta
     `autocommit=True` (es. `migrations_runner.py`) e poi la
     restituiva, il caller successivo riceveva una conn con
     autocommit=True dove `commit()` e' no-op e `rollback()` non
@@ -348,7 +344,7 @@ def get_pool_headroom() -> PoolHeadroom:
     """Public typed accessor sul pool headroom diagnostic.
 
     Lazy-init del pool al primo uso (delegato a `_get_pool`).
-    Best-effort sul fallback che legge attributi privati del pool legacy.
+    Best-effort sul fallback che legge attributi privati del pool.
     psycopg_pool.ConnectionPool.get_stats() ritorna un dict con
     `pool_size` (totale aperto) e `pool_available` (idle): in_use =
     pool_size - pool_available.

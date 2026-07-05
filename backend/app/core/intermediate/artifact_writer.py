@@ -1,5 +1,5 @@
 """
-Intermediate full artifact writer — storage intermedi (2026-04-28).
+Intermediate full artifact writer.
 
 Persiste lo snapshot completo di un nodo come `data.parquet` +
 """
@@ -231,14 +231,10 @@ def persist_full_artifact(
         )
 
     # Layout key. `INTERMEDIATE_ARTIFACT_PREFIX` env override resta per
-    # ops flexibility; il default e' la constant centralizzata. BE-CONFIG-001E
-    # DEDUP): la chiave era letta sia via `Settings.DEFAULTS` (default
-    # `"intermediate"`) sia direttamente da `os.getenv` qui. Migrato a
-    # `settings.get(...)` per single source-of-default. La lettura tramite
-    # Settings include eventuali override env via `_converti_tipo_env`
-    # str pass-through). `or INTERMEDIATE_PREFIX` resta come safety net
-    # se Settings ritornasse None per qualche motivo (e.g. test che
-    # rimuove la default key); il default reale ora vive in Settings.DEFAULTS
+    # ops flexibility; il default e' la constant centralizzata. La lettura
+    # tramite Settings include eventuali override env. `or
+    # INTERMEDIATE_PREFIX` resta come safety net se Settings ritornasse
+    # None per qualche motivo (es. test che rimuove la default key).
     from app.config import settings as _settings
     prefix_env = _settings.get("INTERMEDIATE_ARTIFACT_PREFIX") or INTERMEDIATE_PREFIX
     try:

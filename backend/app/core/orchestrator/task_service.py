@@ -1,4 +1,4 @@
-"""Canonical orchestrator boundary for asynchronous Celery task management."""
+"""Canonical orchestrator boundary for asynchronous task management."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ class TaskType(str, Enum):
 
 @dataclass(frozen=True)
 class CeleryLaunchResult:
-    """Minimal Celery async result contract used by the submit boundary."""
+    """Minimal async result contract used by the submit boundary."""
 
     id: str
 
@@ -58,9 +58,9 @@ class CeleryLaunchResult:
 class CeleryLaunchTask(Protocol):
     """Minimal task contract for launching work.
 
-    `name` e' il nome registrato del task (es. "pipeline.execute"): dal
-    cutover di Fase 1 il dispatch va by-name via dispatch_task_by_name
-    (Dramatiq/RabbitMQ), non piu' via `.delay` dell'oggetto Celery."""
+    `name` e' il nome registrato del task (es. "pipeline.execute"); il
+    dispatch va by-name via dispatch_task_by_name (Dramatiq/RabbitMQ).
+    """
 
     name: str
 
@@ -112,7 +112,7 @@ TaskLaunchPayload: TypeAlias = (
 
 @dataclass(frozen=True)
 class TaskSubmitRequest:
-    """Typed request for launching a Celery task from the orchestrator."""
+    """Typed request for launching a task from the orchestrator."""
 
     celery_task: CeleryLaunchTask
     task_type: TaskType
@@ -125,7 +125,7 @@ class TaskSubmitRequest:
 def task_payload_to_celery_kwargs(
     payload: TaskLaunchPayload,
 ) -> Mapping[str, JsonValue]:
-    """Adapt typed task payloads to Celery's keyword-argument launch API."""
+    """Adapt typed task payloads to the task keyword-argument API."""
 
     if isinstance(payload, EnrichmentTaskPayload):
         return MappingProxyType(
@@ -177,7 +177,7 @@ def task_payload_to_celery_kwargs(
 
 @dataclass(frozen=True)
 class TaskResultField:
-    """Single public Celery result field retained for API compatibility."""
+    """Single public task result field retained for API compatibility."""
 
     name: str
     value: JsonValue
@@ -185,7 +185,7 @@ class TaskResultField:
 
 @dataclass(frozen=True)
 class TaskResultPayload:
-    """Typed core contract for Celery task result metadata."""
+    """Typed core contract for task result metadata."""
 
     success: Optional[bool] = None
     project_id: str = ""
@@ -240,7 +240,7 @@ def _to_json_value(value: object) -> JsonValue:
 
 
 def task_result_payload_from_celery_meta(meta: Mapping[str, object]) -> TaskResultPayload:
-    """Normalize Celery result metadata at the Celery boundary."""
+    """Normalize task result metadata at the orchestrator boundary."""
 
     return TaskResultPayload(
         success=_optional_bool(meta.get("success")),
@@ -289,23 +289,20 @@ class TaskService:
         metadata_store: TaskMetadataStore | None = None,
         revocation_store: TaskRevocationStore | None = None,
     ):
-        # Plenora 2.0 Fase 2 (F2.3): il runtime di default legge stato/esito
-        # da PostgreSQL (task_result_store), non piu' dal result backend
-        # Redis di Celery.
+        # Il runtime di default legge stato/esito da PostgreSQL
+        # (task_result_store).
         self.runtime = runtime or PgResultTaskRuntime()
         self.metadata_store = metadata_store or default_task_metadata_store()
-        # Fase 5 (F5.2): annullamento cooperativo su PG (rimpiazzo di
-        # celery app.control.revoke).
+        # Annullamento cooperativo su PG.
         self.revocation_store = revocation_store or default_task_revocation_store()
 
     def submit_task(self, request: TaskSubmitRequest) -> TaskInfo:
         """Launch a task by-name and record the pending task metadata.
 
-        Plenora 2.0 Fase 1 (cutover): il dispatch passa dal layer
-        runtime-agnostico (dispatch_task_by_name → DramatiqTaskRuntime su
-        RabbitMQ dopo il flip di default_task_runtime), non piu' dal
-        `.delay` dell'oggetto Celery. Il nome registrato del task arriva
-        da `request.celery_task.name`."""
+        Il dispatch passa dal layer runtime-agnostico
+        (dispatch_task_by_name). Il nome registrato del task arriva da
+        `request.celery_task.name`.
+        """
 
         result = dispatch_task_by_name(
             request.celery_task.name,
@@ -491,9 +488,9 @@ class TaskService:
     ) -> TaskInfo:
         """Crea e avvia un task di esecuzione pipeline (ESTRAI/MANIPOLA/ARRICCHISCI).
 
-        N9: `user_id` viene propagato alla task Celery per re-check
-        permessi al pickup del worker. Se None (tipico delle cron
-        schedulate), il task skippa il re-check.
+        `user_id` viene propagato alla task Celery per re-check permessi al
+        pickup del worker. Se None (tipico delle cron schedulate), il task
+        skippa il re-check.
 
         R-25 PR-B3: `intermediate_mode_override` viene propagato al task
         Celery per audit run-specific. None = bit-compat. Auth gate
@@ -590,12 +587,9 @@ class TaskService:
             else:
                 task_result = None
 
-            # Se fallito, meta potrebbe contenere l'errore.
-            # Pre-fix (P2 orchestration HIGH): il fallback `str(meta)`
-            # serializzava l'INTERO dict meta (project_id, canvas, kwargs
-            # Celery, traceback completo) nella response API → leak di
-            # contesto interno a chiunque polla /tasks/{id}. Post-fix:
-            # fallback a un messaggio generico tipato (no payload leak).
+            # Se fallito, meta potrebbe contenere payload interni (canvas,
+            # kwargs Celery, traceback). Non serializzare `str(meta)` nella
+            # response API: usare fallback generico tipato.
             error = None
             if status == TaskStatus.FAILURE:
                 if isinstance(meta, Exception):
@@ -666,10 +660,9 @@ class TaskService:
         """
         Annulla un task in esecuzione (annullamento cooperativo su PG).
 
-        Plenora 2.0 Fase 5 (F5.2): scrive un flag di revoca su PostgreSQL al
-        posto di `celery app.control.revoke` (Dramatiq non revoca per id). Il
-        task lo controlla ai checkpoint di progress e aborta sollevando
-        TaskRevoked → stato terminale REVOKED.
+        Scrive un flag di revoca su PostgreSQL. Il task lo controlla ai
+        checkpoint di progress e aborta sollevando TaskRevoked, producendo
+        stato terminale REVOKED.
 
         Args:
             task_id: ID del task

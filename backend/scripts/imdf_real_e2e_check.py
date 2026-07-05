@@ -2,9 +2,8 @@
 """
 End-to-end check IMDF publish: imdf.plenora.it -> Plenora bundle -> AGOL.
 
-E' uno **script**, non un pytest. Post-IMDF (commit IMDF-6 + tombstone
-step 3) il bundle vive su object storage canonical (no piu' bundle dir
-locale). Lo script usa le nuove API bytes-first:
+E' uno **script**, non un pytest. Il bundle vive su object storage canonical
+(no bundle dir locale). Lo script usa le API bytes-first:
 
     `extract_imdf_zip_bytes(bytes)`  -> ImdfBundle in RAM
     `persist_imdf_bundle(bundle, ...)` -> upload diretto su storage
@@ -279,8 +278,8 @@ def main() -> int:
     project_id = os.environ.get("PLENORA_E2E_PROJECT_ID")
     if not project_id:
         _skip(
-            "PLENORA_E2E_PROJECT_ID non settata: post-IMDF-4 tombstone "
-            "il bundle richiede un project_id valido per l'ACL check."
+            "PLENORA_E2E_PROJECT_ID non settata: il bundle richiede "
+            "un project_id valido per l'ACL check."
         )
 
     imdf_token = login_imdf()

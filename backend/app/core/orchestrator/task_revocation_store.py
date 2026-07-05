@@ -1,9 +1,8 @@
-"""Annullamento task cooperativo su PostgreSQL (Plenora 2.0, Fase 5 F5.2).
+"""Annullamento task cooperativo su PostgreSQL.
 
-Rimpiazza ``celery app.control.revoke``: Dramatiq non revoca per id un task
-gia' in coda/esecuzione. L'annullamento e' un flag su PG; il task lo
-controlla ai checkpoint di progress (vedi ``task_progress.raise_if_task_revoked``)
-e aborta sollevando ``TaskRevoked``.
+L'annullamento e' un flag su PG; il task lo controlla ai checkpoint di progress
+(vedi ``task_progress.raise_if_task_revoked``) e aborta sollevando
+``TaskRevoked``.
 
 Scritture via ``pg_connection.execute`` (stesso path runtime dei task,
 no-oppato dall'autouse della lane → unit DB-free); letture via

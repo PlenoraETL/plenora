@@ -158,8 +158,8 @@ def update_user(user_id: str, data: UserUpdateRequest,
     la whitelist per-ruolo, il check di esistenza del group_id e i
     self-modify guard.
 
-    Pre-fix il body era `dict` raw: shape/type non documentati in
-    OpenAPI, validation duplicata in 4 punti con check manuali.
+    Il body resta tipizzato in OpenAPI e la validazione non viene duplicata
+    manualmente nel router.
     """
     target = _users_dal.get_user(user_id)
     if not target:

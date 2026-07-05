@@ -13,29 +13,22 @@ from datetime import datetime
 from typing import Optional
 
 from app.config import settings
+from app.core.datasources.interface import (
+    BackendConfig,
+    DataSourceConnectionError,
+    DataSourceConnectionTestResult,
+    DataSourceFileNotFoundError,
+    DataSourceInterface,
+    DataSourcePermissionError,
+    FileInfo,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-from app.core.datasources.interface import (
-    BackendConfig,
-    DataSourceInterface,
-    DataSourceConnectionError,
-    DataSourceConnectionTestResult,
-    DataSourceFileNotFoundError,
-    DataSourcePermissionError,
-    FileInfo,
-)
-
 
 def _env_float(name: str, default: float) -> float:
-    """Timeout float da Settings (BE-CONFIG-001F: default tipato in
-    DEFAULTS, override env opzionale); fallback su `default` per valori
-    non-float o <=0.
-
-    P1 (2026-05-26): introdotta per esporre timeout SharePoint
-    (connect/read separati) come knob env invece di hardcode `300`.
-    """
+    """Read a positive float setting, falling back on invalid values."""
     try:
         v = float(settings.get(name, default))
     except (TypeError, ValueError):
@@ -44,14 +37,13 @@ def _env_float(name: str, default: float) -> float:
 
 
 def _sanitize_sharepoint_error(e: Exception) -> str:
-    """F5-B4 (2026-04-24): mappa eccezioni Office365 / msal / requests /
-    socket a messaggi canonici user-facing, SENZA esporre str(e) che puo'
-    contenere site_url autenticati, tenant_id, client_id, Bearer token,
-    AADSTS error codes, HTTP response body con cookie/trace. Il dettaglio
-    tecnico resta nei log server-side (logger.warning con exc_info=True).
+    """Map SharePoint/client errors to safe user-facing messages.
+
+    Raw exceptions can contain authenticated URLs, tenant IDs, client IDs,
+    bearer tokens, AADSTS codes or response bodies with cookies/traces. The
+    technical detail stays in server-side logs.
 
     Priorita': AADSTS/OAuth codes -> HTTP status -> network/TLS -> fallback.
-    Messaggi canonici italiani coerenti con FTP/SFTP/MSSQL (F5-B2/B3).
     """
     msg = str(e)
     msg_l = msg.lower()
@@ -161,15 +153,8 @@ class SharePointDataSource(DataSourceInterface):
             self._ctx = ctx
 
         except Exception as e:
-            # Pre-fix (P1 connections): se l'auth riusciva PARZIALMENTE
-            # (es. ctx creato + ctx.load() + execute_query() che fallisce
-            # MA dopo aver aperto la sessione HTTP interna), il ctx
-            # restava orfano con session http aperta. Post-fix: cleanup
-            # best-effort di qualsiasi ctx parziale prima di raise.
-            # Il `_ctx` non e' stato ancora assegnato (raise interrompe),
-            # ma `_do_auth` puo' aver lasciato session aperte —
-            # mitighiamo lo scenario via context manager (Office365 client
-            # gia' inizia la session al primo execute_query).
+            # Auth parziale puo' avere gia' aperto la sessione HTTP interna.
+            # Lasciamo `_ctx` a None e rilanciamo con messaggio sanitizzato.
             logger.warning(
                 f"[GESTITO] SharePoint auth fallita: {type(e).__name__}: {e}",
                 exc_info=True,
@@ -182,18 +167,9 @@ class SharePointDataSource(DataSourceInterface):
         """Chiude la sessione HTTP interna di Office365 prima di
         dereferenziare il `ClientContext`.
 
-        Pre-fix il `self._ctx = None` lasciava la `requests.Session`
-        interna di `Office365-REST-Python-Client` aperta finche' il GC
-        non collezionava l'oggetto (non deterministico). In ambienti
-        con molti datasource SharePoint si accumulavano connessioni
-        TCP verso SharePoint proporzionali al numero di handle aperti.
-
         Cleanup best-effort multi-probe: la libreria non espone un'API
-        stabile per chiudere la session; usiamo introspection con
-        fallback. Pre-fix (P1 connections): solo 2 probe `_session`/
-        `session`. Se il client object refactora il nome, leak silente.
-        Post-fix: 4 probe sequenziali + tentativo di `ctx.close()` se
-        disponibile in API pubblica futura. Log warning unico cumulativo.
+        stabile per chiudere la session; usiamo introspection con fallback
+        e tentiamo anche `ctx.close()` se disponibile.
 
         Probe order:
           1. `ctx.close()` — API pubblica (se introdotta in future versioni)
@@ -287,9 +263,8 @@ class SharePointDataSource(DataSourceInterface):
                 },
             }
         except DataSourceConnectionError as e:
-            # F5-B4: `e` e' il nostro wrapper con messaggio gia' canonico
-            # vedi connect + _sanitize_sharepoint_error), quindi str(e
-            # e' safe
+            # `e` e' il wrapper DataSourceConnectionError con messaggio
+            # gia' canonico da `_sanitize_sharepoint_error`.
             logger.warning(
                 f"[GESTITO] SharePoint test_connection fallita: {type(e).__name__}: {e} "
                 f"(cause: {type(e.__cause__).__name__ if e.__cause__ else 'none'})",
@@ -297,8 +272,8 @@ class SharePointDataSource(DataSourceInterface):
             )
             return {"ok": False, "message": str(e), "details": {}}
         except Exception as e:
-            # F5-B4: eccezione inattesa fuori dal wrap di connect —
-            # sanitize via helper invece di f"Errore inatteso: {e}"
+            # Eccezione inattesa fuori dal wrap di connect: sanitizza prima
+            # di ritornare un messaggio user-facing.
             logger.warning(
                 f"[GESTITO] SharePoint test_connection eccezione inattesa: "
                 f"{type(e).__name__}: {e}",
@@ -380,11 +355,8 @@ class SharePointDataSource(DataSourceInterface):
                     # Aggiungi solo i file (non le sottocartelle ricorsive per evitare duplicati
                     results.extend([r for r in sub_results if r.type != "folder"])
                 except Exception as e:
-                    # Pre-fix (P2 connections HIGH): `{e}` raw poteva
-                    # includere URL SharePoint autenticati nel messaggio
-                    # di ClientRequestException (token Bearer nella query
-                    # string o nei response body inclusi nell'eccezione).
-                    # Post-fix: solo type(e).__name__ via _sanitize_sharepoint_error.
+                    # Non loggare eccezioni raw: possono contenere URL o
+                    # response body autenticati.
                     logger.warning(
                         "Errore ricorsione cartella %s: %s",
                         folder_path, _sanitize_sharepoint_error(e),
@@ -523,11 +495,9 @@ class SharePointDataSource(DataSourceInterface):
             ) from e
 
     def write_chunks(self, path: str, chunks) -> None:
-        """RAM-C4 (2026-05-26): streaming write via SharePoint resumable
-        upload API. Pre-RAM-C4: il default fallback accumulava in
-        bytearray e poi chiamava `write_file(bytes)` (peak O(file_size)).
+        """Streaming write via SharePoint resumable upload API.
 
-        Post: usa un buffer di accumulo di `_CHUNK_SIZE` (10MB, soglia
+        Usa un buffer di accumulo di `_CHUNK_SIZE` (10MB, soglia
         SharePoint per `start_upload`/`continue_upload`/`finish_upload`)
         e flusha ogni volta che il buffer pieno. Peak ~10MB invece di
         file_size.
@@ -615,9 +585,9 @@ class SharePointDataSource(DataSourceInterface):
             msg = str(e).lower()
             if "unauthorized" in msg or "403" in msg or "401" in msg:
                 raise DataSourcePermissionError(f"Scrittura negata: {path!r}") from e
-            # H-1 (2026-05-26): sanitize `{e}` per evitare leak Bearer
-            # AAD token nei log. office365 ClientRequestException
-            # include response headers/body nel str() che possono
+            # Sanitizza `{e}` per evitare leak di Bearer/AAD token nei log.
+            # office365 ClientRequestException include response headers/body
+            # nel str() che possono
             # contenere il token Authorization. `_sanitize_sharepoint_error`
             # ripulisce token + URL sensitive.
             logger.warning(
@@ -672,7 +642,7 @@ class SharePointDataSource(DataSourceInterface):
                 chunk_index += 1
 
         except Exception as e:
-            # H-1 (2026-05-26): sanitize `{e}` per evitare token AAD leak.
+            # Sanitizza `{e}` per evitare leak di token AAD.
             logger.warning(
                 f"[GESTITO] SharePoint upload chunked fallita: name={name!r} "
                 f"{type(e).__name__}: {_sanitize_sharepoint_error(e)}",
@@ -848,11 +818,10 @@ class SharePointDataSource(DataSourceInterface):
         return buf.getvalue()
 
     def iter_read_chunks(self, path: str, *, chunk_size: int = 64 * 1024):
-        """E-2 (2026-05-26): streaming download via REST API + Range header.
+        """Streaming download via REST API + Range header.
 
         Bypassa office365 `File.download(buffer)` che e' full-buffer
-        (e' la limitazione documentata in sessione C+D nota). Usa la
-        ClientContext authentication via la sua requests.Session
+        e usa la ClientContext authentication via la sua requests.Session
         interna per fare GET diretto a
         `/_api/Web/GetFileByServerRelativeUrl(...)/$value` con
         `stream=True` + `iter_content(chunk_size)`. Per backend
@@ -907,12 +876,8 @@ class SharePointDataSource(DataSourceInterface):
             yield from self._fallback_download_then_slice(path, chunk_size)
             return
 
-        # P1 (2026-05-26): timeout configurabile via env (connect/read
-        # separati). Pre-fix `timeout=300` era hardcoded — non
-        # tunabile per ambienti con SharePoint lento/veloce e mischiava
-        # connect timeout (deve essere breve, 15s tipico) con read
-        # timeout (puo' essere lungo per file grandi). requests accetta
-        # un tuple (connect, read).
+        # Timeout separati: connect breve, read piu' lungo per file grandi.
+        # requests accetta tuple (connect, read).
         connect_timeout = _env_float(
             "PLENORA_SHAREPOINT_CONNECT_TIMEOUT_SEC", 15.0
         )
@@ -938,9 +903,7 @@ class SharePointDataSource(DataSourceInterface):
             raise
         except Exception as exc:
             # Errore network / HTTP generico: fallback office365 full
-            # (preserva compatibility, log warning per visibility).
-            # P1 (2026-05-26): sanitize `{exc}` per evitare leak Bearer
-            # AAD token nel warning (stesso vettore di sharepoint:604).
+            # preservando compatibilita' e loggando solo dettaglio safe.
             logger.warning(
                 f"[GESTITO] SharePoint REST streaming fallito per "
                 f"{path!r}, fallback _download_file full: "
@@ -954,8 +917,8 @@ class SharePointDataSource(DataSourceInterface):
         usa il client office365 (auth/folder context). Usato quando
         il path REST diretto non e' disponibile.
 
-        F1-2 (2026-05-26): questo fallback e' **best-effort**, NON
-        garantisce streaming RAM. Il `_download_file` interno carica
+        Questo fallback e' **best-effort**, NON garantisce streaming RAM.
+        Il `_download_file` interno carica
         il file INTERO in BytesIO via office365 client `.download(buf)`.
         Lo slice in chunks ha un'API uniforme con altri backend ma il
         peak RAM resta O(file_size). Usato quando:

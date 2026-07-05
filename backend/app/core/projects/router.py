@@ -112,10 +112,8 @@ def create_project(
         try:
             _project_service.update_canvas(metadata.id, parsed_canvas or CanvasState())
         except (TypeError, ValueError) as e:
-            # FIX 2: prima il warning era silenzioso → il client riceveva
-            # success ma canvas vuoto, con response['warning'] non sempre
-            # letto. Ora promuoviamo a 400 con dettaglio Pydantic in modo
-            # che il chiamante (curl/script) veda l'errore vero.
+            # Canvas invalido e' 400: il chiamante deve vedere il dettaglio
+            # Pydantic invece di ricevere success con canvas vuoto.
             canvas_warning = f"Canvas non salvato: schema non valido ({e})"
             logger.warning(
                 f"create_project canvas save fallito per {metadata.id}: {e}",
@@ -316,11 +314,8 @@ def list_projects(
     gid = group_filter(current_user)
     project_list = _project_service.list_projects(group_id=gid)
 
-    # P1 (2026-05-26): batch-fetch dei canvas manipola in 1 query
-    # invece di N+1 chiamate a `get_project_canvas`. Pre-fix con 20+
-    # progetti manipola la latenza era lineare (visibile a UI; piu'
-    # critico con piu' progetti). Si usa il boundary projects.usage,
-    # filtrando client-side ai soli manipola.
+    # Batch-fetch dei canvas manipola in 1 query invece di N+1 chiamate
+    # a `get_project_canvas`.
     # NB: salta `sync_canvas_with_output_contracts` (side-effect del
     # `get_project_canvas` full) — il list endpoint non ne ha bisogno
     # e il sync e' gia' fatto in fase di save/load del canvas detail.
@@ -861,13 +856,13 @@ def validate_project_canvas(
     project_id: str,
     current_user: CurrentUser = Depends(require_not_esecutore),
 ) -> JsonObject:
-    """Valida l'intero canvas del progetto (Epic Canvas Validation).
+    """Valida l'intero canvas del progetto.
 
     Orizzontale: strutturale + per-nodo (i ``validate_node`` registrati al
     composition-root). Ritorna il ``ValidationReport`` tipizzato. Non blocca nulla
     (il gate a esecuzione e' separato); e' la valida-on-demand del pulsante.
     Persiste lo stato (``canvas_validated``) con l'esito: True se la catena valida
-    senza errori, altrimenti False (Epic CanvasVal §12).
+    senza errori, altrimenti False.
     """
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")

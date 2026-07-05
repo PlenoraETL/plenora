@@ -33,14 +33,13 @@ class CredentialUnavailableError(Exception):
     """
 
 
-# Prefisso che marca un valore come cifrato. Sceglie ``enc:`` (no versione
-# per coerenza con il formato già presente in connection_service.py legacy
+# Prefisso che marca un valore come cifrato. Sceglie ``enc:`` (no versione)
+# per coerenza con il formato gia' presente in connection_service.py.
 ENC_PREFIX = "enc:"
 
-# Stringa storica del default-key che era committata nel repo fino al
-# 2026-05-21. Mantenuta SOLO come signature per il fail-fast: se qualcuno
-# trova il valore in un .env legacy e lo copia in produzione, vogliamo
-# crashare il boot. NON viene piu' usata come chiave attiva (vedi
+# Signature del default-key compromesso. Mantenuta SOLO per fail-fast: se
+# qualcuno trova il valore in un .env e lo copia in produzione, vogliamo
+# crashare il boot. NON viene usata come chiave attiva (vedi
 # `_ephemeral_dev_key`). Threat coperto: chiunque clonando il repo
 # poteva decifrare tutti i dati at-rest di installazioni dev/staging
 # che lasciavano la default-key.
@@ -94,11 +93,10 @@ def _get_raw_key() -> str:
     tenerli separati rompe l'accoppiamento rotazione-JWT ↔ decifratura-at-rest.
 
     SECURITY hardening:
-      - In prod/staging, missing key o legacy committed-key signature →
+      - In prod/staging, missing key o committed-key signature →
         ``RuntimeError`` fail-fast.
       - In dev, missing key → chiave effimera generata in-process
-        (`_ephemeral_dev_key`). Pre-fix usavamo una stringa committata
-        nel sorgente, decifrabile da chiunque clonasse il repo.
+        (`_ephemeral_dev_key`).
       - Opt-in `PLENORA_DISABLE_DEFAULT_KEY=1` per dev che vogliono
         replicare il fail-fast di prod localmente.
       - `_MIN_KEY_LENGTH` enforce in qualsiasi ambiente.
@@ -108,16 +106,16 @@ def _get_raw_key() -> str:
 
     env = environment_name()
     # Simmetrico a _DOTENV_DISABLED_ENVS di config.py:26: gli ambienti
-    # hardened (prod + staging) fail-fast su missing key / legacy default.
+    # hardened (prod + staging) fail-fast su missing key / compromised default.
     is_prod = env in ("production", "prod", "staging", "stage")
 
     if val:
-        # Detection della stringa legacy che era committata nel repo:
-        # se qualcuno l'ha copiata in un .env di prod, crash fast.
+        # Detection della stringa compromessa: se qualcuno l'ha copiata in un
+        # .env di prod, crash fast.
         if val == _LEGACY_COMMITTED_KEY_SIGNATURE:
             msg = (
-                f"[PLENORA-ETL] {env_name} contiene il vecchio default-key "
-                f"committato nel repo (rimosso 2026-05-21). E' considerato "
+                f"[PLENORA-ETL] {env_name} contiene un default-key "
+                f"compromesso. E' considerato "
                 f"compromesso: ruota la chiave usando `secrets.token_urlsafe(32)`."
             )
             if is_prod:

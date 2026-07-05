@@ -1,22 +1,10 @@
 """
 zip_guards — Guard contro zip bomb (cap pre-extract).
 
-Storia: originalmente `app/utils/zip_safe.py`. Spostato in
-`app/core/io/zip_guards.py` nel consolidamento orizzontale
-(2026-05-26): non e' un'utility generica ma una primitive del
-boundary I/O (chiamata prima di ogni `z.read()` RAM-only).
+Boundary I/O RAM-only: i caller validano l'archivio prima di ogni
+`z.read(name)` per evitare decompress bombs senza estrarre su filesystem.
 
-Post Punto 3 cleanup (2026-05-25):
-  - `safe_extractall` / `safe_extract_zip_path` rimossi (zero caller
-    runtime: tutto il flow di estrazione passa per `zipfile.ZipFile(
-    BytesIO(...))` + `validate_zip_bomb_limits` + `z.read(name)` su
-    bytes, oppure per `/vsizip//vsimem` per i binari OGR).
-  - `ZipSlipError` + `_validate_member` rimossi: la zip-slip vulnerability
-    e' un disk-write attack. Senza estrazione su filesystem (RAM-only)
-    il rischio scompare. I caller che leggono singoli member via
-    `z.read(name)` ottengono bytes, niente path traversal possibile.
-
-Public surface attivo:
+Public surface:
   - `validate_zip_bomb_limits(zf)`: cap size / count / ratio, da chiamare
     PRIMA di `z.read(name)` per evitare decompress bombs.
   - `pick_zip_member_by_extension(...)`: scelta del member ZIP per

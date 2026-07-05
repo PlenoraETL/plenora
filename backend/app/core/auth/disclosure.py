@@ -21,9 +21,9 @@ class DisclosureDecision:
             `app.shared.error_codes`. Visible to the client as
             `response.body.error` (and `response.body.detail.error`
             mirror).
-        status_code: HTTP status preserved by ADR-0022.
-        message: italian user-facing text exactly as historically
-            ADR-0018 / disclosure decisions.
+        status_code: HTTP status coerente con la disclosure policy.
+        message: italian user-facing text for the selected disclosure
+            decision.
         headers: optional response headers. Used for
             `WWW-Authenticate: Bearer` (token-related 401s) and
             `Retry-After` (429 rate-limit). `None` means no custom
@@ -36,7 +36,7 @@ class DisclosureDecision:
     headers: Optional[Mapping[str, str]] = None
 
 
-# Pre-auth — token presence/validity disclosure (401, WWW-Authenticate: Bearer
+# Pre-auth — token presence/validity disclosure (401, WWW-Authenticate: Bearer)
 
 
 _BEARER_HEADER: Mapping[str, str] = {"WWW-Authenticate": "Bearer"}
@@ -76,7 +76,7 @@ def token_revoked() -> DisclosureDecision:
     )
 
 
-# Post-token user state — anti-enumeration #2 (UNIFORM 401
+# Post-token user state — anti-enumeration (UNIFORM 401)
 
 
 def user_not_found_or_disabled() -> DisclosureDecision:
@@ -92,7 +92,7 @@ def user_not_found_or_disabled() -> DisclosureDecision:
     )
 
 
-# Login — anti-enumeration #1 + #4 + ADR-0018 MFA trade-offs
+# Login — anti-enumeration + MFA disclosure trade-offs
 
 
 def invalid_credentials() -> DisclosureDecision:
@@ -119,9 +119,9 @@ def account_disabled() -> DisclosureDecision:
 
 def mfa_required() -> DisclosureDecision:
     """403. Post-password-ok branch: user has MFA enabled and
-    `mfa_code` is missing. LEAKY_BY_DESIGN, ADR-0018 trade-off.
-    Italian message preserved as the literal `mfa_required` for the
-    SPA frontend that branches on this string."""
+    `mfa_code` is missing. LEAKY_BY_DESIGN for MFA-aware clients.
+    Italian message preserved as the literal `mfa_required` for the SPA
+    frontend that branches on this string."""
     return DisclosureDecision(
         code=error_codes.AUTH_MFA_REQUIRED,
         status_code=403,
@@ -161,8 +161,7 @@ def rate_limit_exceeded(retry_after_seconds: int) -> DisclosureDecision:
 
 
 def revocation_unavailable() -> DisclosureDecision:
-    """503. Redis blacklist unavailable during logout. Fail-loud
-    (ADR-0009)."""
+    """503. Token blacklist unavailable during logout. Fail-loud."""
     return DisclosureDecision(
         code=error_codes.AUTH_REVOCATION_UNAVAILABLE,
         status_code=503,
@@ -170,7 +169,7 @@ def revocation_unavailable() -> DisclosureDecision:
     )
 
 
-# Post-authz — role-based disclosure (403, LEAKY_BY_DESIGN UI-friendly
+# Post-authz — role-based disclosure (403, LEAKY_BY_DESIGN UI-friendly)
 
 
 def role_insufficient_for_write() -> DisclosureDecision:

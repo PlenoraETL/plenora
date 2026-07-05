@@ -30,7 +30,7 @@ ExecutorDispatch = Mapping[str, CanvasExecutorProtocol]
 
 
 def canvas_validation_gate_blocks(canvas_validated: bool) -> bool:
-    """True se il gate canvas-validation (§12) deve bloccare l'esecuzione.
+    """True se il gate canvas-validation deve bloccare l'esecuzione.
 
     Gate ON (``CANVAS_VALIDATION_GATE_ENABLED``, default True) + progetto NON
     validato (stato persistito ``canvas_validated``, tenuto fresco dal cascade
@@ -212,7 +212,7 @@ class OrchestratorService:
                 message=f"Progetto {project_id} non trovato",
             )
 
-        # NB: il gate canvas-validation (§12) NON vive qui: execute_pipeline è
+        # NB: il gate canvas-validation NON vive qui: execute_pipeline e'
         # chiamato anche da sub-esecuzioni interne (carica, arricchisci-upstream)
         # che gatererebbe erroneamente. Il gate sta agli entry-point top-level:
         # l'handler API POST /{id}/execute (fail-fast) e ExecutionManager (scheduler).
@@ -266,8 +266,7 @@ class OrchestratorService:
 
         # Se la pipeline ha avuto successo, controlla se c'è un nodo CARICA
         # skip se chiamato dal task CARICA stesso per evitare loop
-        # PipelineArtifact e' dict-like quindi `artifact["carica"] = ...`
-        # funziona come prima del refactor
+        # PipelineArtifact e' dict-like quindi supporta `artifact["carica"] = ...`.
         if artifact.success and not skip_carica:
             carica_info = self._execute_carica_if_present(project_id, canvas, user_id=user_id)
             if carica_info:

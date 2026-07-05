@@ -8,16 +8,25 @@ import threading
 from datetime import datetime, timezone
 from typing import Optional
 
+from app.core.datasources.interface import (
+    BackendConfig,
+    DataSourceConnectionError,
+    DataSourceConnectionTestResult,
+    DataSourceFileNotFoundError,
+    DataSourceInterface,
+    DataSourcePermissionError,
+    FileInfo,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 
 def _sanitize_ftp_error(e: Exception) -> str:
-    """F5-B2 (2026-04-24): mappa eccezioni ftplib/socket a messaggi canonici
-    user-facing, SENZA esporre str(e) che puo' contenere banner, response
-    code dettagli, hostname nel raw string. Il dettaglio tecnico resta
-    nei log server-side (logger.warning/error con exc_info=True).
+    """Map low-level FTP/socket errors to safe user-facing messages.
+
+    Raw exception strings can contain banners, response details or hostnames,
+    so the technical detail stays in server-side logs.
     """
     if isinstance(e, ftplib.error_perm):
         return "Accesso FTP negato o risorsa non disponibile"
@@ -32,16 +41,6 @@ def _sanitize_ftp_error(e: Exception) -> str:
     if isinstance(e, OSError):
         return "Connessione FTP rifiutata"
     return "Connessione FTP fallita"
-
-from app.core.datasources.interface import (
-    BackendConfig,
-    DataSourceInterface,
-    DataSourceConnectionError,
-    DataSourceConnectionTestResult,
-    DataSourceFileNotFoundError,
-    DataSourcePermissionError,
-    FileInfo,
-)
 
 
 class FTPDataSource(DataSourceInterface):
@@ -326,17 +325,14 @@ class FTPDataSource(DataSourceInterface):
         return buf.getvalue()
 
     def iter_read_chunks(self, path: str, *, chunk_size: int = 64 * 1024):
-        """RAM-B2 (2026-05-26): override streaming via ftplib retrbinary
-        + queue. `retrbinary` chiama il callback per ogni chunk; usiamo
+        """Streaming read via ftplib retrbinary + queue.
+
+        `retrbinary` chiama il callback per ogni chunk; usiamo
         una queue thread-safe per yieldare i chunk al consumer del
         generator senza accumulare tutto in memoria.
 
-        P1 (2026-05-26): cancellation cooperativa via threading.Event.
-        Pre-fix se il consumer abbandonava il generator (eccezione
-        downstream, slice via itertools, ecc.) il thread producer
-        restava bloccato su `q.put()` per sempre (queue piena, nessun
-        consumer). `t.join(timeout=5.0)` scadeva ma il thread era ancora
-        vivo nel worker Celery, occupando la control connection FTP.
+        La cancellation cooperativa via threading.Event evita producer
+        bloccati su `q.put()` quando il consumer abbandona il generator.
         Sotto load i thread orfani si accumulavano e prosciugavano sia
         il pool thread che le sessioni FTP.
 
@@ -430,8 +426,9 @@ class FTPDataSource(DataSourceInterface):
             raise DataSourceConnectionError(f"Errore write_file FTP: {_sanitize_ftp_error(e)}") from e
 
     def write_chunks(self, path: str, chunks) -> None:
-        """RAM-B1 (2026-05-26): override streaming via ftplib storbinary
-        + adapter file-like. `storbinary` legge da un file-like in
+        """Streaming write via ftplib storbinary + adapter file-like.
+
+        `storbinary` legge da un file-like in
         blocks; wrappiamo l'iterable con un adapter che concatena i
         chunk al volo (peak ~chunk_size)."""
         self._check()

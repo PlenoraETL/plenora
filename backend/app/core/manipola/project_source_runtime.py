@@ -241,9 +241,8 @@ def load_project_sources(
 
         if not force_recalculate:
             try:
-                # mode="bytes": Post-Phase5 il consumer
-                # `_load_materialized_project_source` accetta data
-                # direttamente, niente tempfile bounce.
+                # mode="bytes": `_load_materialized_project_source` accetta
+                # data direttamente, niente tempfile bounce.
                 materialized = _materialize_latest_project_source(
                     source_project_id,
                     executing_group_id,
@@ -306,10 +305,8 @@ def load_project_sources(
             log,
         )
 
-        # try/finally garantisce che _close_upstream_run venga chiamata
-        # anche se pipeline_dispatcher solleva eccezione. Pre-fix la
-        # mancata chiusura lasciava la run upstream in stato 'running'
-        # permanente nel checkpoint store (lifecycle leak).
+        # try/finally garantisce che _close_upstream_run venga chiamata anche
+        # se pipeline_dispatcher solleva eccezione.
         upstream: Any = None
         try:
             upstream = pipeline_dispatcher(

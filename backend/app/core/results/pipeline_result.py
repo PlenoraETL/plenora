@@ -1,7 +1,6 @@
 """Persist dataframe pipeline outputs as result artifacts.
 
-Post-Phase5 + RAM-A1 (2026-05-26): streaming end-to-end via
-`save_dataframe_to_result_blob_streaming` (combina
+Streaming end-to-end via `save_dataframe_to_result_blob_streaming` (combina
 `dataframe_to_export_chunks` + `StreamingResultBlobWriter`).
 
 Per formato:
@@ -11,9 +10,8 @@ Per formato:
     (writer footer-based o multi-file zippato; lo SHP multi-file e'
     zippato dentro il boundary `io.geospatial.write_shapefile_zip_bytes`).
 
-Picco RAM per CSV/JSON ridotto da `df + bytes_full` a `df +
-chunk_buffer (~8MB)`. Formati single-chunk mantengono il vecchio
-peak (limitazione del writer, non del path).
+Picco RAM per CSV/JSON: `df + chunk_buffer (~8MB)`. I formati
+single-chunk mantengono un peak piu' alto per limite del writer, non del path.
 """
 
 from __future__ import annotations
@@ -43,8 +41,7 @@ def save_pipeline_result_outcome(
 ) -> PipelineResultSave:
     """Save a DataFrame as a result artifact through a single entry point.
 
-    RAM-A1 (2026-05-26): usa il path streaming
-    `save_dataframe_to_result_blob_streaming` che combina
+    Usa il path streaming `save_dataframe_to_result_blob_streaming` che combina
     `dataframe_to_export_chunks` (CSV/JSON via queue+thread bridge) con
     `StreamingResultBlobWriter` (S3 multipart o DB BYTEA buffer). Per
     CSV/JSON peak ridotto da `df + bytes_intere` a `df + chunk_buffer`.

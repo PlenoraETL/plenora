@@ -1,8 +1,8 @@
 """
 Grafo degli import cross-domain tra i package di backend/app/core.
 
-Strumento di misura per la roadmap accoppiamento (Epic A): estrae via AST
-gli import tra domini, calcola le componenti fortemente connesse (SCC,
+Strumento di misura degli import tra domini: estrae via AST gli import tra
+domini, calcola le componenti fortemente connesse (SCC,
 Tarjan) e in/out-degree, e produce un report leggibile o una baseline JSON
 versionabile.
 

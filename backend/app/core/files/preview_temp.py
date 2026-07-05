@@ -1,7 +1,7 @@
 """
 Temporary preview for uploaded files without DB persistence.
 
-Post-Phase4 refactor: RAM-only. Preview e' interamente in memoria —
+Preview RAM-only: interamente in memoria,
 nessun NamedTemporaryFile, niente extract_zip su disco. Il ZIP e'
 navigato via `zipfile.ZipFile(BytesIO(...))` e il parsing usa
 `load_by_format_bytes`.
@@ -38,10 +38,8 @@ class FilePreviewTempColumnPayload(TypedDict):
 class FilePreviewTempPayload(TypedDict):
     columns: list[FilePreviewTempColumnPayload]
     row_count: int
-    # H-4 (2026-05-26): True quando row_count e' un lower-bound del totale
-    # (bounded preview cap, no metadata cheap dal formato). Il FE deve
-    # mostrare disclaimer "stima" all'utente. Casi True: csv/jsonlines/xlsx
-    # (require full scan); False: parquet/geospatial (totale da metadata).
+    # True quando row_count e' un lower-bound del totale: il formato non espone
+    # metadata cheap e la bounded preview carica solo `max_rows`.
     row_count_is_estimate: bool
     format: str
     layers: list[str]
@@ -79,7 +77,7 @@ def preview_file_temp(
         sheet: foglio XLSX da caricare (opzionale).
     Returns:
         dict con `columns`, `row_count`, `format`, `layers`, `sheets`.
-        Post-RAM-1: `row_count` puo' essere `None` quando il formato
+        `row_count` puo' essere `None` quando il formato
         non espone metadata cheap (csv, jsonlines, xlsx); il frontend
         deve interpretare `None` come "row count non disponibile in
         preview, riprovare dopo upload definitivo".
@@ -173,10 +171,9 @@ def preview_file_temp(
             sheet = available_sheets[0]
 
     is_sheet = format_type in ['xlsx', 'xls']
-    # RAM-1 (2026-05-26): bounded preview — carica al massimo `max_rows`
-    # righe/feature invece del DataFrame intero. Per CSV/XLSX/JSON-lines
-    # il row_count totale non e' disponibile cheap (None); per parquet
-    # e geospatial viene da metadata.
+    # Bounded preview: carica al massimo `max_rows` righe/feature invece
+    # del DataFrame intero. Per CSV/XLSX/JSON-lines il row_count totale non
+    # e' disponibile cheap (None); per parquet e geospatial viene da metadata.
     df_preview, total_row_count = preview_loader_module.preview_dataframe_from_bytes(
         inner_bytes,
         format_type,
@@ -188,8 +185,8 @@ def preview_file_temp(
     # con tabular access). Per formati non-geo, gdf=None.
     gdf_for_columns = df_preview if format_type in ('geojson', 'gpkg', 'shp', 'gdb', 'zip') else None
     columns = column_builder.from_dataframe(df_preview, gdf_for_columns)
-    # H-4 (2026-05-26): row_count semantics esplicita via
-    # `row_count_is_estimate`. Quando `total_row_count is None`, il
+    # Semantica row_count esplicita via `row_count_is_estimate`: quando
+    # `total_row_count is None`, il
     # bounded preview non puo' calcolare il totale cheap (CSV/XLSX/
     # JSON-lines): `row_count` diventa `len(df_preview)` (lower-bound
     # = max_rows del bounded loader) e `is_estimate=True`. Quando il

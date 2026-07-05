@@ -1,4 +1,4 @@
-"""Backup amministrativo del database (corpo task, Plenora 2.0 Fase 5).
+"""Backup amministrativo del database (corpo task).
 
 Funzione pura ``run_manual_backup``: l'actor Dramatiq omonimo (vedi
 workers/dramatiq_app.py) la invoca passando il message_id come task_id.
@@ -74,7 +74,7 @@ def _start_lock_heartbeat(owner_token: str) -> tuple[threading.Event, threading.
 def run_manual_backup(
     *, owner_token: str, task_id: str | None
 ) -> dict[str, object]:
-    """Corpo condiviso (Plenora 2.0, Fase 1) del backup manuale.
+    """Corpo condiviso del backup manuale.
 
     Esegue il job di backup dentro un worker (non nel processo API),
     tenendo vivo il lock con un thread heartbeat e rilasciandolo nel

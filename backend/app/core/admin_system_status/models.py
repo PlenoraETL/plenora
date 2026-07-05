@@ -30,9 +30,8 @@ class DiskStatus(BaseModel):
     `path` e `usage_path` rivelano la struttura del filesystem server
     (es. `/var/plenora/data`, `/var`) e sono escludibili dalla risposta
     API via `Field(exclude=True)`. Restano disponibili internamente
-    per logging/troubleshooting ma non finiscono nel payload pubblico.
-    Pre-fix venivano serializzati in chiaro: info leak per admin
-    compromesso che ne ricava la mappa del filesystem per persistenza.
+    per logging/troubleshooting ma non finiscono nel payload pubblico,
+    evitando leak della mappa filesystem.
     """
 
     model_config = ConfigDict(extra="forbid")

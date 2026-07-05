@@ -76,10 +76,10 @@ class AdminBackupDependencyError(RuntimeError):
 class AdminBackupCredentialsError(RuntimeError):
     """Raised quando le credenziali AWS sono scadute o non disponibili.
 
-    Runtime-bugs RB.2 (2026-04-27): distingue il caso "AWS SSO scaduto"
-    (operatore deve eseguire `aws sso login`) dagli altri errori transitori
-    su S3. Il router lo cattura -> 503 con detail strutturato e messaggio
-    operativo, evitando il fallback silenzioso a lista vuota che faceva
+    Distingue il caso "AWS SSO scaduto" (operatore deve eseguire
+    `aws sso login`) dagli altri errori transitori su S3. Il router lo
+    cattura -> 503 con detail strutturato e messaggio operativo, evitando il
+    fallback silenzioso a lista vuota.
     apparire l'endpoint come "success" senza backup elencati.
 
     Cause riconosciute (vedi `app.infrastructure.storage.cloud_backends.aws_credentials_error_message`):
@@ -124,29 +124,19 @@ def _to_datetime(value: Any) -> datetime:
 # `BUCKET` -> delega a `cloud_backends._resolve_backup_bucket`
 # DEPLOY_INFRA, env-only) che gia' centralizza la chain
 # `BACKUP_BUCKET` -> canonical backup bucket env-only.
-# `REGION` -> single env read `AWS_REGION` (DEPLOY_INFRA). Il
-# NOTE: legacy alias `BACKUP_S3_REGION` era un dead alias (zero altri
-# consumer in repo) e viene retirato qui
-# schedule cron / description -> `Settings.DEFAULTS` (APP_POLICY
+# `REGION` -> single env read `AWS_REGION`.
+# schedule cron / description -> `Settings.DEFAULTS`.
 
-# P1 (2026-05-26): rimosso fallback hardcoded con AWS account ID reale
-# (`plenora-backup-112011134642-eu-south-1-an`). L'account ID era
-# rintracciabile via grep su backend/ ed esponeva infrastruttura prod.
-# In assenza di BACKUP_BUCKET la lista/restore restituiranno errore
-# strutturato invece di puntare in modo silenzioso a una risorsa
-# specifica.
+# Bucket backup risolto solo da env/config: niente fallback hardcoded verso
+# risorse specifiche. In assenza di `BACKUP_BUCKET`, lista/restore
+# restituiscono un errore strutturato.
 BUCKET = _resolve_backup_bucket_env() or ""
 REGION = settings.get("AWS_REGION", "eu-south-1")
 
 # Lock distribuito Postgres per evitare trigger concorrenti via API.
-# Pre-fix: TTL = 7200s (2h). Sufficiente a coprire un backup lungo ma se
-# il worker Celery crashava (OOM, kill -9, disconnect broker) il lock
-# restava orfano per 2h prima di sbloccarsi via TTL → ogni superadmin
-# che provava a triggerare un backup nel frattempo riceveva "gia' in
-# corso". Post-fix: TTL breve (300s = 5min) + heartbeat dal task worker
-# che estende `expires_at` ogni 120s. Se il worker muore, l'heartbeat
-# si ferma, TTL scade in ≤5min, il prossimo try_acquire riacquisisce.
-# Blast radius su worker morto: da 2h a 5min.
+# TTL breve + heartbeat dal task worker: se il worker muore, l'heartbeat
+# si ferma, il lock scade in pochi minuti e il prossimo try_acquire lo
+# riacquisisce.
 MANUAL_LOCK_TTL_SEC = 300
 MANUAL_LOCK_HEARTBEAT_SEC = 120
 
@@ -216,13 +206,12 @@ def list_backups() -> list[BackupObjectPayload]:
                 "list_backups: botocore non importabile durante la "
                 f"classificazione errore backup: {import_error}"
             )
-        # RB.2 (2026-04-27): credenziali AWS scadute / SSO refresh required
-        # > 503 con detail strutturato. Niente lista vuota fuorviante
+        # Credenziali AWS scadute / SSO refresh required -> 503 con detail
+        # strutturato. Niente lista vuota fuorviante.
         hint = aws_credentials_error_message(e)
         if hint is not None:
-            # R-1 (2026-04-27): log conciso. La causa e' classificata
-            # credenziali AWS scadute = condizione operativa nota, non bug
-            # applicativo) e gestita esplicitamente dal router con 503
+            # Log conciso: credenziali AWS scadute sono una condizione
+            # operativa nota e gestita esplicitamente dal router con 503.
             # strutturato. Un traceback botocore completo per ogni client
             # call durante il refresh expiry rumoreggia il journal senza
             # aggiungere informazione: il tipo di eccezione e' gia' loggato
@@ -474,15 +463,11 @@ def trigger_manual_backup() -> ManualBackupTriggerResult:
         # quindi il lock viene rinegoziato in una singola operazione SQL
         # che vede solo lock vivi.
         #
-        # Pre-fix questo branch faceva `is_manual_backup_running()` +
-        # `try_acquire_manual_backup_lock` come due query separate. La
-        # finestra tra le due era una race TOCTOU: due admin che
-        # cliccavano "Backup ora" nello stesso istante potevano entrambi
-        # superare il gate e accodare due task duplicati.
+        # Evita race TOCTOU tra check e acquire: due admin che cliccano
+        # "Backup ora" nello stesso istante non possono accodare task doppi.
         #
-        # Fix in profondita': nessun retry "diagnostico". Se il primo
-        # tentativo (atomico) ritorna None, il lock e' davvero detenuto
-        # → rispondi "gia' in corso" senza ulteriori query.
+        # Nessun retry "diagnostico": se il primo tentativo atomico ritorna
+        # None, il lock e' davvero detenuto -> rispondi "gia' in corso".
         return {
             "started": False,
             "pid": None,

@@ -72,7 +72,7 @@ def op_sjoin(
         if 'index_right' in result.columns:
             result = result.drop(columns=['index_right'])
 
-        # FIX: Assicura che ci sia una geometria attiva valida
+        # Assicura che ci sia una geometria attiva valida.
         result = _ensure_active_geometry(result)
 
         logger.info(f"Spatial Join completato: {len(result)} righe, predicate={predicate}")
@@ -112,7 +112,7 @@ def op_geo_clip(
 
         result = geodataframe_clip(input_gdf, mask_gdf)
 
-        # FIX: Assicura geometria attiva valida
+        # Assicura geometria attiva valida.
         result = _ensure_active_geometry(result)
 
         logger.info(f"Clip completato: {len(result)} righe")
@@ -150,7 +150,7 @@ def op_geo_intersection(
 
         result = geodataframe_overlay(left_gdf, right_gdf, how='intersection', keep_geom_type=False)
 
-        # FIX: Assicura geometria attiva valida
+        # Assicura geometria attiva valida.
         result = _ensure_active_geometry(result)
 
         logger.info(f"Intersection completato: {len(result)} righe")
@@ -188,7 +188,7 @@ def op_geo_union(
 
         result = geodataframe_overlay(left_gdf, right_gdf, how='union', keep_geom_type=False)
 
-        # FIX: Assicura geometria attiva valida
+        # Assicura geometria attiva valida.
         result = _ensure_active_geometry(result)
 
         logger.info(f"Union geometrica completata: {len(result)} righe")
@@ -226,7 +226,7 @@ def op_geo_difference(
 
         result = geodataframe_overlay(left_gdf, right_gdf, how='difference', keep_geom_type=False)
 
-        # FIX: Assicura geometria attiva valida
+        # Assicura geometria attiva valida.
         result = _ensure_active_geometry(result)
 
         logger.info(f"Difference completato: {len(result)} righe")

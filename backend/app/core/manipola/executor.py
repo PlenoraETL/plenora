@@ -91,9 +91,8 @@ def _failure_step(message: str, step_start: float) -> JsonObject:
     `return`-are dal chiamante.
 
     Single-source dello shape "step di failure" usato da tutti i branch
-    di errore di `execute()`. Pre-fix esistevano 3 inline duplicates +
-    2 early-return che lo SKIPPAVANO (bug 5 cluster silent-except).
-    Concentrare lo shape qui evita futuri "branch dimenticati".
+    di errore di `execute()`. Concentrare lo shape qui evita branch
+    dimenticati e step log incoerenti.
     """
     append_step({
         "module":      "manipola",
@@ -189,8 +188,7 @@ class ManipolaExecutor:
 
         I caller (execute / preview) propagano il valore ritornato come
         kwarg esplicito ai source loader. Tutti e tre i loader sono
-        ctx-strict (TE-007/008): il group_id deve venire da qui, non da
-        stato di istanza.
+        ctx-strict: il group_id deve venire da qui, non da stato di istanza.
 
         - `strict=True` (execute): ValueError fail-closed se il group_id
           non e' determinabile (l'esecuzione persiste output e va legata
@@ -240,9 +238,8 @@ class ManipolaExecutor:
         dataframes = {}
 
         try:
-            # TE-007/008/009: tutti e 3 i loader sono ctx-strict
-            # `executing_group_id` (da `_init_security_context`) e' l'unico
-            # canale tenant — nessuno stato di istanza coinvolto
+            # Tutti e 3 i loader sono ctx-strict: `executing_group_id` e'
+            # l'unico canale tenant, nessuno stato di istanza coinvolto.
             for loader in [
                 lambda: self._carica_sorgenti_progetto(canvas, dataframes, force_recalculate, run_id=run_id, group_id=executing_group_id),
                 lambda: self._carica_sorgenti_file(canvas, dataframes, group_id=executing_group_id),
@@ -260,8 +257,8 @@ class ManipolaExecutor:
                     })
                     return err
         except ProjectLineageCycleError as cycle_err:
-            # Ciclo cross-project rilevato a runtime (defense-in-depth
-            # per canvas legacy che sfuggono al check di update_canvas
+            # Ciclo cross-project rilevato a runtime (defense-in-depth per
+            # canvas che sfuggono al check di update_canvas).
             logger.error(
                 f"[SECURITY] Ciclo project_source rilevato a runtime: {cycle_err}",
                 op="execute", project_id=project_id,
@@ -287,10 +284,8 @@ class ManipolaExecutor:
             )
         except MemoryLimitExceededError as mem_err:
             # `MemoryLimitExceededError` NON e' una sottoclasse di
-            # `ValueError`: senza handler esplicito (pre-fix) sfuggiva al
-            # catch sottostante e propagava al worker Celery senza
-            # `append_step`, rendendo impossibile il triage. Stage info
-            # nel messaggio per distinguere da OOM generici nei log.
+            # `ValueError`: serve handler esplicito per emettere `append_step`
+            # e distinguere stage OOM dai generici errori worker.
             stage = getattr(mem_err, "stage", "unknown")
             return _failure_step(
                 f"Memoria insufficiente durante manipolazione "
@@ -300,15 +295,9 @@ class ManipolaExecutor:
         except ValueError as e:
             return _failure_step(str(e), _step_start)
         except Exception as e:
-            # Catch-all per eccezioni non previste dai plugin transform
-            # (KeyError su colonna mancante, AttributeError su dtype
-            # incompatibile, TypeError su mismatch firma plugin, ecc.).
-            # Pre-fix (P1 etl-executors): solo ValueError/MemoryLimit
-            # catturati, qualunque altra eccezione propagava al Celery
-            # task SENZA append_step → run risultava "failed" per il
-            # worker ma il modulo manipola era invisibile nello step log.
-            # Post-fix: stesso pattern di _failure_step + logger.error
-            # con exc_info per il triage operativo.
+            # Catch-all per eccezioni non previste dai plugin transform:
+            # log con exc_info e step di failure, cosi' il modulo resta
+            # visibile nello step log della run.
             logger.error(
                 f"[CRASH] Errore imprevisto trasformazione manipola: "
                 f"{type(e).__name__}: {e}",
@@ -319,9 +308,7 @@ class ManipolaExecutor:
                 _step_start,
             )
         if current_df is None:
-            # Failure path "trasformazioni hanno prodotto None" — pre-fix
-            # questo early-return saltava `append_step`, lasciando la run
-            # log inconsistente con gli altri rami di failure.
+            # Failure path "trasformazioni hanno prodotto None".
             return _failure_step(
                 "Nessun dato prodotto dalla manipolazione", _step_start,
             )
@@ -340,9 +327,8 @@ class ManipolaExecutor:
                 _step_start,
             )
         except ValueError as e:
-            # `_applica_group_by` ora solleva ValueError su config invalide
-            # (colonne inesistenti, aggregations vuote). Pre-fix swallowava
-            # ed esponeva i dati raw come output, corruzione silente.
+            # `_applica_group_by` solleva ValueError su config invalide
+            # (colonne inesistenti, aggregations vuote).
             return _failure_step(str(e), _step_start)
 
         if run_id and current_df is not None:
@@ -413,14 +399,9 @@ class ManipolaExecutor:
                 logger.warning(
                     f"output_contract: schema id non disponibili, uso colonne DataFrame: {exc}"
                 )
-            # Pre-fix: build/update output_contract eseguiti SENZA try/except
-            # DOPO che il blob e' gia' stato scritto. Se DB deadlock/timeout
-            # propagava sull'update_project_output_contract, l'eccezione
-            # bypassava append_step (sotto), lasciando il run in stato
-            # ambiguo: blob persistito + contract stale + zero step log
-            # nella run. Post-fix: stesso pattern di arricchisci/executor.py
-            # — log ERROR + flag contract_update_failed nel save_result
-            # cosi' caller/UI sanno che il contract e' drift.
+            # Output contract: errore DB dopo blob persistito non deve
+            # oscurare il save. Log ERROR + flag contract_update_failed nel
+            # save_result rendono visibile eventuale drift del contract.
             try:
                 persist_output_contract(
                     project_service=self.project_service,
@@ -461,14 +442,8 @@ class ManipolaExecutor:
             canvas_graph = CanvasGraph.from_canvas(canvas)
 
             dataframes = {}
-            # Pre-fix: i 4 loader venivano invocati ignorando il valore
-            # di ritorno; un errore-soft (es. project_source con artifact
-            # mancante, file_source con fid non risolvibile) era
-            # silenziosamente perso e la preview tornava "Nessun dato
-            # sorgente disponibile" generico invece dell'errore tipizzato
-            # del loader. Post-fix: stesso pattern di execute (linee
-            # 246-261) — ogni loader puo' tornare un dict d'errore che
-            # propaghiamo subito al caller con la causa esplicita.
+            # Ogni loader puo' tornare un dict d'errore: propaghiamolo subito
+            # al caller invece di mascherarlo con "Nessun dato sorgente".
             for loader in [
                 lambda: self._carica_sorgenti_progetto(
                     canvas, dataframes, force_recalculate=False,
@@ -528,8 +503,6 @@ class ManipolaExecutor:
         except Exception as e:
             # Eccezione non prevista (KeyError, TypeError, bug di codice):
             # log a ERROR con exc_info=True per consentire il triage.
-            # Pre-fix: `logger.warning` senza `exc_info` mascherava i bug
-            # di codice come "warnings ignorabili" nel log aggregato.
             logger.error(
                 f"[CRASH] Preview MANIPOLA: {e}",
                 op="preview", project_id=project_id, exc_info=True,
@@ -663,10 +636,8 @@ class ManipolaExecutor:
                     ref, expected_group_id=current_group_id
                 )
             except Exception as e:
-                # Pre-fix (P1 etl-executors): solo `return {"success": False,
-                # "message": ...}` senza logger.error. Un crash del SourceLoader
-                # su un nodo staticValues NON era triageable in produzione —
-                # impossibile sapere quale nodo aveva causato l'errore.
+                # Logga il node_id per rendere triageable crash del SourceLoader
+                # su nodi staticValues.
                 node_id = getattr(node, "id", "<sconosciuto>")
                 logger.error(
                     f"[CRASH] Errore StaticValues nodo {node_id}: "
@@ -734,8 +705,8 @@ class ManipolaExecutor:
             inputs = [dataframes[e.source] for e in incoming if e.source in dataframes]
 
             if not inputs:
-                # P1 (2026-05-26): se il nodo ha incoming edges ma
-                # nessuna source e' presente in `dataframes`, e' un
+                # Se il nodo ha incoming edges ma nessuna source e' presente
+                # in `dataframes`, e' un
                 # mismatch di stato (upstream fallito, edge orfano,
                 # ordering bug) — fail-loud invece di continuare e
                 # rischiare che i downstream leggano stale dal grafo
@@ -769,13 +740,9 @@ class ManipolaExecutor:
                             project_id=project_id,
                         )
                         input_columns.extend(col.to_dict() for col in source_schema)
-                    # Pre-fix: mutation in-place su node.data ("node.data['inputColumns'] = ...")
-                    # mutava l'istanza Pydantic ricevuta dal caller, contro la semantica
-                    # "node = input read-only del run" del canvas executor.
-                    # Post-fix: model_copy (Opzione B) produce un clone con data arricchito;
-                    # rebindiamo la variabile locale `node` cosi' i metodi downstream
-                    # (_esegui_multi_join, _esegui_trasformazione, record_checkpoint_snapshot)
-                    # continuano a vedere `inputColumns`, ma l'istanza esterna resta intatta.
+                    # Non mutare l'istanza Pydantic ricevuta dal caller:
+                    # `model_copy` produce un clone arricchito per i metodi
+                    # downstream, lasciando intatta l'istanza esterna.
                     base_data = node.data if isinstance(node.data, dict) else {}
                     node = node.model_copy(update={"data": {**base_data, "inputColumns": input_columns}})
                 except Exception as exc:
@@ -1010,8 +977,8 @@ class ManipolaExecutor:
         - Errore runtime (pandas raise, casting fallito, ...) →
           eccezione propaga, `execute()` la registra come failure.
 
-        Pre-fix: un `except Exception: return df` swallowed l'errore e
-        persisteva i dati raw come "output ufficiale" della run.
+        Gli errori propagano: non persistere dati raw come output ufficiale
+        quando il group_by e' configurato ma fallisce.
         """
         if not _nf(result_node, 'group_by_enabled', False):
             return df
@@ -1055,8 +1022,7 @@ class ManipolaExecutor:
 
         if not agg_dict and not count_aliases:
             # User-config: tutte le aggregazioni sono invalide. Failure
-            # visibile — pre-fix silent return-of-df produceva output non
-            # aggregato.
+            # visibile invece di produrre output non aggregato.
             raise ValueError(
                 "GROUP BY: nessuna aggregazione valida — verifica colonne "
                 f"e funzioni nel nodo Output. Invalide: {invalid_aggs!r}"
@@ -1100,11 +1066,7 @@ class ManipolaExecutor:
 
         try:
             # Leggi group_id del progetto per isolamento corretto dei risultati.
-            # Pre-fix il broad `except Exception: pass` silenziava errori DB
-            # (es. PG irraggiungibile al lookup metadati), facendo proseguire
-            # `save_pipeline_result_outcome` con `group_id=None` —
-            # potenziale violazione di isolamento tenant. Loggiamo come
-            # WARNING per visibilita' operativa; il save procede comunque
+            # Errori DB sul lookup sono WARNING visibili; il save procede
             # con group_id=None preservando l'invariante "salvataggio
             # best-effort" del path attuale.
             group_id = None
@@ -1144,10 +1106,7 @@ class ManipolaExecutor:
                 "message": f"Salvato {len(df)} righe in {saved.output_filename}"
             }
         except Exception as e:
-            # Pre-fix nessun logger qui: errori I/O (MinIO down, disco
-            # pieno, S3 5xx) sparivano dal log aggregato e il triage in
-            # produzione era impossibile. Allinea al pattern di
-            # `carica/executor.py` che logga sempre su save failure.
+            # Log esplicito per errori I/O (MinIO down, disco pieno, S3 5xx).
             logger.error(
                 f"[CRASH] Errore salvataggio MANIPOLA: {e}",
                 op="execute", project_id=project_id, exc_info=True,

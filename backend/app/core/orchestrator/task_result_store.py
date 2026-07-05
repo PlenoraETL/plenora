@@ -1,8 +1,7 @@
-"""Persistenza stato/esito task su PostgreSQL (Plenora 2.0, Fase 2).
+"""Persistenza stato/esito task su PostgreSQL.
 
-Rimpiazza il result backend Redis di Celery: lo stato corrente, il
-progress e il risultato finale di ogni task vengono scritti dai worker
-(Celery e Dramatiq, keyed-by-task_id) e letti dall'orchestratore via
+Lo stato corrente, il progress e il risultato finale di ogni task vengono
+scritti dai worker keyed-by-task_id e letti dall'orchestratore via
 ``TaskRuntimePort.get_result()``.
 
 Forma del record: una sola ``payload`` riproduce la semantica Celery
@@ -10,8 +9,8 @@ Forma del record: una sola ``payload`` riproduce la semantica Celery
 dict di progresso ``{progress, message, is_error}``; sugli stati
 terminali (``SUCCESS``/``FAILURE``) e' il dict di ritorno del task.
 
-TTL: ``expires_at`` rimpiazza ``TASK_RESULT_EXPIRES``; ``cleanup_expired``
-e' il sweep di manutenzione che Redis faceva da solo.
+TTL: ``expires_at`` definisce la scadenza dei record; ``cleanup_expired``
+e' il sweep di manutenzione.
 """
 
 from __future__ import annotations
@@ -29,8 +28,7 @@ logger = get_logger(__name__)
 
 _DEFAULT_TTL_SECONDS = 24 * 60 * 60
 
-# Stato di un task non presente nello store: combacia con il default di
-# Celery ``AsyncResult`` per un task_id sconosciuto (PENDING, niente info).
+# Stato di un task non presente nello store: PENDING, niente info.
 PENDING_STATE = "PENDING"
 
 
@@ -81,7 +79,7 @@ class TaskResultStore(Protocol):
 
 
 class PgTaskResultStore:
-    """Backend PostgreSQL dello store (default runtime, Fase 2)."""
+    """Backend PostgreSQL dello store."""
 
     def __init__(self, *, ttl_seconds: int = _DEFAULT_TTL_SECONDS) -> None:
         self._ttl_seconds = _normal_ttl(ttl_seconds)
@@ -163,8 +161,7 @@ class PgTaskResultStore:
     def count_in_state(self, state: str) -> int:
         """Conta i task non scaduti in uno stato (es. PROGRESS = in corso).
 
-        Usato dall'osservabilita' admin PG-derived (Plenora 2.0 Fase 5):
-        rimpiazza l'inspect Celery dei worker."""
+        Usato dall'osservabilita' admin derivata da PostgreSQL."""
         with unit_of_work() as session:
             row = session.fetchone(
                 "SELECT count(*) AS n FROM task_results "

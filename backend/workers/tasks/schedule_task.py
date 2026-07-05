@@ -11,7 +11,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-# Plenora 2.0 Fase 5: corpo task come funzione pura (no @celery_app.task).
+# Corpo task come funzione pura.
 # `self` e' il self-shim dell'actor Dramatiq. Retry gestito dal PolicyEngine,
 # non dal broker.
 def schedule_pipeline_task(
@@ -45,21 +45,11 @@ def schedule_pipeline_task(
         Dict con risultato esecuzione
     """
     # `scheduled_for` viene SEMPRE valorizzato a dispatch-time da
-    # `job_dispatcher.scheduled_run_kwargs` (commit 2026-05-21). Ricevere
-    # None qui significa che il task e' stato dispatched bypassando il
-    # dispatcher canonico (path legacy o test diretti): fallback a now()
-    # come last-resort + warning per visibilita' al monitoring.
-    #
-    # Pre-fix questo blocco veniva eseguito ad ogni invocazione del task
-    # (anche su retry-celery dello stesso schedule_id) generando un
-    # nuovo timestamp → la chiave idempotency CARICA
-    # `schedule-{id}-{scheduled_for}-carica` cambiava → guard
-    # idempotency non scattava → scrittura duplicata sul DB di
-    # destinazione.
+    # scheduled_for dovrebbe arrivare dal dispatcher canonico. None indica un
+    # path diretto/test: fallback a now() come last-resort + warning.
     if scheduled_for is None:
-        # Post-fix beat_scheduler: per i tick `cron` scheduled_for NON
-        # viene cached al sync-time (vedi nota in beat_scheduler.py:515).
-        # Lo determiniamo qui usando il tick time effettivo. Per
+        # Per i tick `cron`, scheduled_for non viene cached al sync-time:
+        # lo determiniamo qui usando il tick time effettivo. Per
         # `catchup`/`manual` invece il dispatcher canonico DEVE passare
         # scheduled_for esplicito (lineage logico): un None su quei
         # path indica un bug nel dispatcher, manteniamo il warning.
@@ -122,7 +112,6 @@ def schedule_pipeline_task(
         }
 
 
-# Plenora 2.0 Fase 5: funzione pura (no @celery_app.task).
 def beat_heartbeat():
     """
     Heartbeat periodico scritto da Beat ogni 60 secondi.
@@ -148,6 +137,6 @@ def beat_heartbeat():
         )
 
 
-# Plenora 2.0 Fase 5: nomi registrati (erano @celery_app.task(name=...)).
+# Nomi registrati degli actor/task.
 schedule_pipeline_task.name = "workers.tasks.schedule_task.schedule_pipeline_task"
 beat_heartbeat.name = "workers.tasks.schedule_task.beat_heartbeat"

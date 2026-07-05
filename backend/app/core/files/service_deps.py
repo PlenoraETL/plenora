@@ -1,17 +1,4 @@
-"""Protocols + default implementations for ``FileSourceService`` DI.
-
-Post tombstone DefaultFileSystem (2026-05-26): l'unico DI rimasto e'
-sui Logger / TimeProvider / DataLoader. `FileSystemProtocol` +
-`DefaultFileSystem` rimossi — erano istanziati come default da
-`FileSourceService` e `DatasourceService` e passati a
-`preview_file_temp(fs=...)` che li ignorava esplicitamente (RAM-only
-path non li usava). Storia dei tombstone:
-  - 2026-05-25 (Punto 3): `write_text`, `extract_zip` rimossi.
-  - 2026-05-26 (Punto 3 follow-up): `write_binary` rimosso.
-  - 2026-05-26 (audit follow-up): `FileSystemProtocol` + intera classe
-    `DefaultFileSystem` rimossi (zero caller runtime dei metodi
-    `mkdir`/`exists`/`read_text`/`stat_size`/`rmtree`/`unlink`/`rglob`).
-"""
+"""Protocols + default implementations for ``FileSourceService`` DI."""
 
 from __future__ import annotations
 
@@ -70,7 +57,5 @@ class DefaultTimeProvider:
         return datetime.now(timezone.utc)
 
     def generate_uuid(self) -> str:
-        # N1: full 32-hex UUID (pre-fix solo i primi 8 char = ~10^9
-        # combinazioni -> brute-force fattibile se il nome + timestamp
-        # sono noti). 32-hex = 2^128 = infeasible
+        # Full 32-hex UUID: 2^128 spazio di ricerca, non enumerabile.
         return uuid.uuid4().hex

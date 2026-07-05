@@ -277,18 +277,11 @@ class StreamingResultBlobWriter:
                     exc, result_id=self.result_id, filename=self.filename,
                 ) from exc
 
-        # G-2 fix (2026-05-26): integrity check post-complete.
-        # Pre-fix: il path `upload_bytes` di `cloud_backends` chiama
-        # `_assert_upload_integrity` (head_object + ContentLength) per
-        # rilevare object S3 troncati / parziali. Il path streaming
-        # multipart bypassava questa verifica: una troncatura di rete
-        # mid-stream + S3/MinIO che non valida checksum poteva produrre
-        # object parziale ma DB row marcata "complete" con size
-        # arbitrario. Post-fix: head_object dopo complete; su size
-        # mismatch -> delete object + raise (fail-closed). Skip per
-        # zero-parts path (caso `put_object(Body=b"")` gia' validato
-        # da S3 stesso). head_object failure (network/404 race) e'
-        # best-effort: log warning ma non blocca (complete e' gia'
+        # Integrity check post-complete: `head_object` verifica ContentLength
+        # anche nel path streaming multipart. Su size mismatch elimina object
+        # e fallisce chiuso. Skip per zero-parts path (`put_object(Body=b"")`
+        # gia' validato da S3 stesso). head_object failure (network/404 race)
+        # e' best-effort: log warning ma non blocca (complete e' gia'
         # andato OK, il dato dovrebbe esistere).
         if self._parts:
             self._verify_integrity_or_fail()
@@ -346,9 +339,10 @@ class StreamingResultBlobWriter:
             )
 
     def _verify_integrity_or_fail(self) -> None:
-        """G-2 (2026-05-26): head_object post-complete per verificare che
-        S3 abbia ricevuto esattamente `self._total_bytes`. Su mismatch:
-        cleanup object + intent + raise ResultSaveError."""
+        """Verifica post-complete che S3 abbia ricevuto `self._total_bytes`.
+
+        Su mismatch: cleanup object + intent + raise ResultSaveError.
+        """
         try:
             head = self._client.head_object(
                 Bucket=self._bucket, Key=self._key,
@@ -507,7 +501,7 @@ def save_dataframe_to_result_blob_streaming(
     geom_column: Optional[str] = None,
     crs: str = "EPSG:4326",
 ) -> str:
-    """RAM-A1 (2026-05-26): persist DataFrame -> result blob streaming.
+    """Persist DataFrame -> result blob streaming.
 
     Sostituisce il pattern doppio-picco
     `bytes = save_dataframe_to_bytes(df, fmt)` -> `save_result_blob_from_bytes(bytes)`
@@ -516,7 +510,7 @@ def save_dataframe_to_result_blob_streaming(
     o DB BYTEA buffer. Peak ridotto da `DataFrame + bytes_serializzati`
     a `DataFrame + chunk_buffer (~few MB)`.
 
-    Formati supportati come streaming reale (E-4 follow-up):
+    Formati supportati come streaming reale:
       - csv, json: chunks via `dataframe_to_export_chunks`
         (TextIOWrapper + queue-thread bridge; CSV pandas to_csv
         chunksize, JSON record-by-record batch).
@@ -546,9 +540,8 @@ def save_dataframe_to_result_blob_streaming(
     """
     fmt_lower = (output_format or "").lower()
 
-    # Formati che vanno via streaming nativo (CSV/JSON tabular + Parquet
-    # row-group via pyarrow). E-4 (2026-05-26): aggiunto parquet allo
-    # streaming set.
+    # Formati che vanno via streaming nativo: CSV/JSON tabular + Parquet
+    # row-group via pyarrow.
     _STREAMING_FORMATS = {"csv", "json", "parquet"}
 
     # Formati che cadono su single-chunk (geo binari, xlsx).

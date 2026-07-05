@@ -260,8 +260,9 @@ class LocalDataSource(DataSourceInterface):
             raise DataSourcePermissionError(f"Accesso negato: {full_path}") from e
 
     def iter_read_chunks(self, path: str, *, chunk_size: int = 64 * 1024):
-        """RAM-3 (2026-05-26): override streaming nativo per filesystem
-        locale. Apre il file in binary mode e itera `chunk_size` byte
+        """Streaming nativo per filesystem locale.
+
+        Apre il file in binary mode e itera `chunk_size` byte
         per volta — peak RAM ~`chunk_size` invece di file size.
         """
         full_path = self._abs(path)
@@ -278,7 +279,7 @@ class LocalDataSource(DataSourceInterface):
             raise DataSourcePermissionError(f"Accesso negato: {full_path}") from e
 
     def write_chunks(self, path: str, chunks) -> None:
-        """RAM-B1 (2026-05-26): streaming write delegato al boundary
+        """Streaming write delegato al boundary
         `io.local_filesystem.write_local_chunks` (single audit point
         per scritture filesystem locale). Peak RAM ~chunk_size.
         """
@@ -386,13 +387,8 @@ class LocalDataSource(DataSourceInterface):
     def _raw_read(self, full_path: str) -> bytes:
         size = os.path.getsize(full_path)
         if size > self._MAX_READ_SIZE:
-            # P1 (2026-05-26): messaggio canonico senza la size esatta.
-            # Pre-fix il `ValueError` propagava `{size // (1024*1024)}MB`
-            # fino al boundary `datasource_node_loading.py` che incolla
-            # `str(e)` nel response JSON utente → leak minore della
-            # dimensione del file (e dell'esistenza di un file specifico
-            # sul filesystem server). Log dettagliato resta nel logger
-            # server-side per diagnostica.
+            # Messaggio canonico senza size esatta: evita leak minori sulla
+            # dimensione/esistenza del file nel response JSON utente.
             logger.warning(
                 f"[GESTITO] LocalDataSource._raw_read: file troppo "
                 f"grande ({size} bytes, limit "

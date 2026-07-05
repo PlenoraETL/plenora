@@ -1,8 +1,4 @@
-"""
-log_archive.py — writer isolato PG-agnostic per archive+purge di
-
-`plenora.logs` e `plenora.audit_actions` (O-ARC , ADR-0014).
-"""
+"""Writer PG-agnostic per archive+purge di logs e audit_actions."""
 
 from __future__ import annotations
 
@@ -15,10 +11,10 @@ from typing_extensions import TypedDict
 from app.core.io.object_storage import ObjectStorage
 
 
-# Canonical NDJSON shapes (O-ARC §5.1
+# Canonical NDJSON shapes.
 # Ordine vincolante: garantisce output deterministico byte-level in
-# combinazione con gzip(mtime=0). Un'eventuale aggiunta di colonna al
-# DB (migration futura) richiede aggiornamento coordinato qui + ADR
+# combinazione con gzip(mtime=0). Un'eventuale aggiunta di colonna al DB
+# richiede aggiornamento coordinato qui.
 
 _LOGS_FIELDS: tuple[str, ...] = (
     "id", "ts", "level", "module", "op", "msg",
@@ -50,7 +46,7 @@ LogArchiveRow = Mapping[str, object]
 def _table_ts_column(table: str) -> str:
     """Ritorna il nome della colonna temporale per `table`.
 
-    `logs -> "ts"`, `audit_actions -> "timestamp"` (O-ARC assunzione #4).
+    `logs -> "ts"`, `audit_actions -> "timestamp"`.
     Solleva `ValueError` per tabelle sconosciute: il `Literal[...]` sulla
     firma pubblica limita il typing-time, questo check chiude il runtime.
     """
@@ -66,7 +62,7 @@ def _table_ts_column(table: str) -> str:
 def _normalize_datetime(value: datetime) -> str:
     """Normalizza un datetime tz-aware in ISO 8601 UTC con suffisso `Z`.
 
-    - Input naive (`tzinfo is None`) -> `ValueError` (ADR-0014 §5).
+    - Input naive (`tzinfo is None`) -> `ValueError`.
     - Input non-UTC -> convertito in UTC.
     - Microsecondi preservati se presenti.
     """
@@ -79,8 +75,8 @@ def _normalize_datetime(value: datetime) -> str:
             f"naive datetime is not allowed in log archive rows: {value!r}"
         )
     utc_value = value.astimezone(timezone.utc)
-    # isoformat su un datetime UTC produce "...+00:00"; il contratto
-    # O-ARC §5.1 prescrive il suffisso `Z`
+    # isoformat su un datetime UTC produce "...+00:00"; il payload archive
+    # usa il suffisso `Z`.
     return utc_value.isoformat().replace("+00:00", "Z")
 
 
@@ -103,14 +99,13 @@ def _json_default(obj: object) -> str:
 def _serialize_rows(rows: list[LogArchiveRow], table: str) -> bytes:
     """Serializza un batch di righe in NDJSON UTF-8 compresso gzip.
 
-    Shape (O-ARC §5.1): una riga NDJSON per riga DB, keyset canonico per
-    `table`, campi extra dell'input vengono droppati, campi canonici
+    Shape: una riga NDJSON per riga DB, keyset canonico per `table`,
+    campi extra dell'input vengono droppati, campi canonici
     assenti vengono emessi come `null`. JSON compatto senza spazi.
 
     Invarianti:
-    - `gzip.compresslevel=6` (O-ARC §5.1 "livello default (6)").
-    - `gzip.mtime=0` (byte-level determinism per re-run idempotency,
-      O-ARC §4.4 "stessi byte").
+    - `gzip.compresslevel=6`.
+    - `gzip.mtime=0` (byte-level determinism per re-run idempotency).
     - `separators=(",", ":")` (no whitespace).
     - Trailing newline dopo l'ultima riga NDJSON.
 
@@ -137,7 +132,7 @@ def _serialize_rows(rows: list[LogArchiveRow], table: str) -> bytes:
     return gzip.compress(payload, compresslevel=6, mtime=0)
 
 
-# Helpers (private) — object key naming (O-ARC §5.2
+# Helpers (private) — object key naming.
 # Pattern deterministico
 # <prefix><table>/<YYYY-MM>/<table>-<YYYY-MM-DD>-<NNN>.ndjson.gz
 # Il partitioning YYYY-MM / YYYY-MM-DD e' derivato dal `run_date`
@@ -158,7 +153,7 @@ def _build_object_key(
     run_date: datetime,
     seq: int,
 ) -> str:
-    """Compone la chiave object storage per un batch (O-ARC §5.2).
+    """Compone la chiave object storage per un batch.
 
     Pattern:
         ``<prefix><table>/<YYYY-MM>/<table>-<YYYY-MM-DD>-<NNN>.ndjson.gz``
@@ -225,9 +220,8 @@ class LogArchiveWriter:
     `plenora.audit_actions`.
 
     L'istanza e' riutilizzabile tra run: non tiene stato mutabile oltre
-    ai parametri ricevuti dal costruttore. In il writer non ha
-    chiamanti di produzione; il costruttore e' modellato per essere
-    invocato dal beat in tramite closure che incapsula le
+    ai parametri ricevuti dal costruttore. Il costruttore e' modellato
+    per essere invocato dal beat tramite closure che incapsula le
     transazioni PG autorizzate.
     """
 
@@ -241,14 +235,13 @@ class LogArchiveWriter:
         Parametri
         ---------
         storage
-            Implementazione di `ObjectStorage` (es. `AwsS3ObjectStorage`;
-            futura `MinioObjectStorage` per on-prem tramite track A-A1b).
+            Implementazione di `ObjectStorage` (es. `AwsS3ObjectStorage` o
+            backend compatibile S3).
         key_prefix
             Prefisso deterministico delle chiavi object storage, es.
             `"logs-archive/prod/"`. Attesa terminazione con `"/"` per
             comporre il path finale `<prefix><table>/<YYYY-MM>/...`
-            (O-ARC §5.2). La validazione del formato e' responsabilita'
-            del chiamante.
+            La validazione del formato e' responsabilita' del chiamante.
         batch_size
             Numero massimo di righe per iterazione SELECT → serialize →
             upload → DELETE. E' anche il cap pratico di RAM per batch.
@@ -268,9 +261,9 @@ class LogArchiveWriter:
         """
         Archivia su object storage e purga dal DB le righe con
         `<ts_column> < cutoff_ts`, dove `ts_column` e' `ts` per `logs` e
-        `timestamp` per `audit_actions` (O-ARC assunzione #4).
+        `timestamp` per `audit_actions`.
 
-        Contratto per iterazione batch (ADR-0014 §7):
+        Contratto per iterazione batch:
           SELECT callable -> serialize NDJSON gzip ->
           `storage.upload_bytes(data, key)` -> verifica via
           `storage.list_objects(prefix=key)` -> DELETE scoped
@@ -298,8 +291,8 @@ class LogArchiveWriter:
             `plenora.block_log_modifications`.
         run_date
             Data di partitioning dell'object key (pattern
-            `<table>/<YYYY-MM>/<table>-<YYYY-MM-DD>-<NNN>.ndjson.gz`,
-            O-ARC §5.2). Default: `datetime.now(tz=UTC)`.
+            `<table>/<YYYY-MM>/<table>-<YYYY-MM-DD>-<NNN>.ndjson.gz`).
+            Default: `datetime.now(tz=UTC)`.
 
         Ritorna
         -------

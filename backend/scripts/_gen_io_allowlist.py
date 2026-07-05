@@ -26,8 +26,7 @@ PATTERNS: tuple[tuple[str, re.Pattern], ...] = (
     ("safe_extractall", re.compile(r"safe_extractall\(|safe_extract_zip_path\(")),
     ("path_write_bytes", re.compile(r"\.write_bytes\(")),
     ("path_write_text", re.compile(r"\.write_text\(")),
-    # Match anche `open(var, "w")` (oltre al gia' coperto
-    # `open("file", "w")`). Punto 3 follow-up (2026-05-26).
+    # Match anche `open(var, "w")` oltre a `open("file", "w")`.
     ("open_write_mode", re.compile(r"""open\(\s*[^,)]+,\s*['"][wax]""")),
     ("fileresponse", re.compile(r"FileResponse\(")),
     ("shutil_copy", re.compile(r"shutil\.(copy|copyfile|copy2|copytree)\(")),
@@ -154,13 +153,11 @@ _LEGITIMATE_CACHE_FILES: tuple[str, ...] = (
     # on-disk e' la representation canonica per i bundle IMDF (consumati da
     # endpoint di download/render), non una materializzazione transitoria.
     "app/core/imdf/",
-    # Punto 3 cleanup (2026-05-25): rimossi `app/core/results/temp_paths.py`
-    # e `app/core/files/service_deps.py` — tombstonati i symbol path-only
-    # (`get_temp_output_path`, `DefaultFileSystem.{write_text,extract_zip,write_binary}`).
+    # I symbol path-only rimossi non fanno piu' parte del boundary ammesso.
 )
 
-# Data plane endpoints (Punto 3 follow-up 2026-05-26): datasource
-# user-configured destinations (filesystem locale / SMB share / SFTP
+# Data plane endpoints: datasource user-configured destinations
+# (filesystem locale / SMB share / SFTP
 # server). NON sono temp/cache interni — sono il punto in cui la
 # pipeline scrive l'output di un task `CARICA` verso lo storage che
 # l'utente ha configurato. Contratto RAM-first NON si applica.
@@ -223,24 +220,11 @@ _BOUNDARY_DIRS = (
 # `app/core/io/`. Sono primitive che esistono PER fornire la capability
 # filesystem al resto del codice in modo controllato.
 _BOUNDARY_FILES = (
-    # ResultBlobLoader: post-Phase5 supporta solo mode="bytes"
-    # (path-mode rimosso). Resta nel boundary per coerenza storica
-    # (era il punto di materializzazione tempfile pre-Phase5) e come
+    # ResultBlobLoader supporta solo mode="bytes"; resta nel boundary come
     # ancora per la classification legitimate-cache.
     "app/core/resources/loaders/result_blob.py",
-    # Punto 3 cleanup (2026-05-25): rimossi
-    #   - `app/utils/zip_safe.py` (safe_extractall + safe_extract_zip_path
-    #     tombstonati; restano validate_zip_bomb_limits +
-    #     pick_zip_member_by_extension, entrambi RAM-only)
-    #   - `app/core/results/temp_paths.py` (tutti i symbol path-only
-    #     tombstonati: get_temp_output_path, make_path_only_adapter_dir,
-    #     ecc. Modulo svuotato)
-    #   - `app/core/files/service_deps.py` (DefaultFileSystem.extract_zip
-    #     e write_text tombstonati; write_binary resta ma il regex non
-    #     matcha `open(path, 'wb')` con path variable)
-    # Post-QUERY-1: `blob_writer.py` rimosso dal boundary set.
-    # `save_result_blob(path)` tombstoned; tutti i writer canonical
-    # vanno via `save_result_blob_from_bytes` (RAM-first) o
+    # Boundary RAM-first: niente safe_extractall/path-only temp helpers.
+    # I writer canonical passano da `save_result_blob_from_bytes` o
     # `StreamingResultBlobWriter` (S3 multipart real-time, no
     # filesystem callsite — boto3 client diretto).
 )

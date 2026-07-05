@@ -42,8 +42,8 @@ from app.core.arricchisci.enrichment_service import (
 logger = get_logger(__name__)
 
 
-# Plenora 2.0 Fase 5: corpo task come funzione pura (no @celery_app.task).
-# `self` e' il self-shim dell'actor Dramatiq (request.id/name).
+# Corpo task come funzione pura: `self` e' il self-shim dell'actor
+# Dramatiq (request.id/name).
 def execute_enrichment_task(
     self,
     project_id: str,
@@ -63,8 +63,8 @@ def execute_enrichment_task(
     (scheduler, retry-handler UI) e in intermediate.runs esiste gia'
     un record con status='completed' per quel run_id, il task SKIPPA
     l'esecuzione e ritorna un risultato cached. Stesso pattern del
-    carica_task. Se run_id non viene passato → genera fresh (behavior
-    legacy, no idempotency).
+    carica_task. Se run_id non viene passato, genera fresh e non applica
+    idempotency cross-run.
 
     Args:
         project_id: ID del progetto
@@ -128,8 +128,8 @@ def execute_enrichment_task(
 
     # Variabili per statistiche enrichment
     enrichment_stats = None
-    # Post-refactor (QUERY-1 follow-up): l'error report e' un result_blob
-    # secondario persistito via save_result_blob_from_bytes; il task
+    # L'error report e' un result_blob secondario persistito via
+    # save_result_blob_from_bytes; il task
     # result espone il filename canonico (display) + il result_id per il
     # download. Niente piu' path filesystem.
     error_report_file = None  # filename display, e.g. enrichment_errors_{task_id}.csv
@@ -178,14 +178,9 @@ def execute_enrichment_task(
         # `ArricchisciExecutionContext` tipato esplicito; il context
         # viene threadato esplicitamente ai 4 mixin callsite
         # `_load_source_project`, `_load_file_source`
-        # `_load_static_values`, `_execute_rest_file`) tramite `ctx=ctx`
-        # + OE012: il worker NON
-        # muta `svc._current_group_id` / `svc._preview_limit`. I 4
-        # mixin reader site sono ctx-aware da TE-019/-020/-024/-026: il
-        # ctx tipato e' l'unica via di tenant binding nel path del
-        # worker. Post-OE012 la funzione legacy `apply_to_legacy_state`
-        # `tests2/arricchisci/unit/test_external_consumers_ctx_migration_contract.py`
-        # protegge contro re-introduzione
+        # `_load_static_values`, `_execute_rest_file`) tramite `ctx=ctx`.
+        # Il worker NON muta `svc._current_group_id` / `svc._preview_limit`:
+        # il ctx tipato e' l'unica via di tenant binding nel path worker.
         ctx = execution_context_module.ArricchisciExecutionContext(
             project_id=project_id,
             group_id=(
@@ -232,17 +227,17 @@ def execute_enrichment_task(
             """Usata dentro la closure per early termination con payload.
 
             Il loop esterno cattura questa eccezione e propaga il payload
-            come return del task. E' l'equivalente async-safe del `return`
-            diretto che il vecchio loop faceva in linea.
+            come return del task; e' l'equivalente async-safe di un
+            `return` interno alla closure.
             """
             def __init__(self, payload: JsonObject) -> None:
                 self.payload = payload
 
-        # ── Esecuzione canvas via runner condiviso (B step 3) ──
-        # Il task NON reimplementa piu' il loop: delega a
+        # Esecuzione canvas via runner condiviso.
+        # Il task delega a
         # `run_enrichment_canvas`, fornendo l'enricher avanzato (`enrich_fn`)
         # e gli hook progress/snapshot. Il parallelo e' gestito dal runner
-        # (`execute_parallel_enrichers`), non piu' da un ThreadPool locale.
+        # (`execute_parallel_enrichers`).
         graph = CanvasGraph.from_canvas(canvas)
 
         _PROGRESS_MSG = {
@@ -460,8 +455,7 @@ def execute_enrichment_task(
         
         if isinstance(final_result, dict) and final_result.get("is_file_result"):
 
-            # Post-Phase5 (REST output bytes-first): il connector ha gia'
-            # persistito l'output come result_blob e restituisce
+            # Il connector ha gia' persistito l'output come result_blob e restituisce
             # `result_id` + `filename` + `format` + `size_bytes`. Carichiamo
             # i bytes via il resolver per row counting / IMDF extraction
             # / eseguibili upload. Niente piu' `output_path` cross-process.
@@ -470,15 +464,10 @@ def execute_enrichment_task(
             upstream_fmt = final_result.get("format") or "bin"
             if not upstream_result_id:
                 raise ValueError(
-                    "rest_file: result_id mancante nel risultato "
-                    "(atteso post-Phase5 REST output)"
+                    "rest_file: result_id mancante nel risultato"
                 )
 
-            # RAM-B4 (2026-05-26): result_id propagation con metadata
-            # short-circuit. Pre-fix: fetch_run_blob caricava SEMPRE i
-            # bytes interi anche quando servivano solo per `rows_count`
-            # (che e' gia' nei metadata del result blob, scritto dal
-            # connector REST). Post-fix:
+            # Result_id propagation con metadata short-circuit:
             #   - Se NON e' IMDF (needs bundle bytes) E NON e' eseguibile
             #     (needs upload bytes), tenta lookup metadata via
             #     `store.get_result_row(result_id).rows_count`. Skip
@@ -525,12 +514,8 @@ def execute_enrichment_task(
                         f"fallback fetch_run_blob: {_md_e}"
                     )
 
-            # G-1 fix (2026-05-26): il REST connector salva sempre
-            # `rows_count=0` come placeholder iniziale (vedi
-            # api_connection_rest_file). Il vecchio check `<= 0: raise`
-            # rompeva TUTTI i task REST-file. Fix: trattare `rows_count=0`
-            # come "unknown/placeholder" (cade su path classico fetch
-            # per contarli davvero); short-circuit attivo SOLO se
+            # Il REST connector salva `rows_count=0` come placeholder iniziale.
+            # Trattalo come "unknown/placeholder" e fai short-circuit SOLO se
             # `metadata_rows_count > 0`.
             if metadata_rows_count is not None and metadata_rows_count > 0:
                 # Short-circuit: rows_count gia' nei metadata (e > 0),
@@ -607,7 +592,6 @@ def execute_enrichment_task(
                 # locale persistente: backend+worker multi-host safe. Il
                 # frontend scarica via GET /api/eseguibili/{id}/download/{task_id}
                 # che streamma da S3 e cancella l'oggetto dopo l'invio.
-                # Post-Phase5: bytes-first via `save_bytes` (skippa FS).
                 eseg_storage.save_bytes(task_id, final_name, output_bytes)
                 logger.info(
                     f"[Task {task_id}] Output eseguibile su storage: "
@@ -620,24 +604,14 @@ def execute_enrichment_task(
                 #     short-circuit attivo): ri-fetch + ri-salva.
                 #   - rename necessario E bytes disponibili: ri-salva.
                 #   - no rename: propaga upstream_result_id (no re-save).
-                # RAM-B4 (2026-05-26): il caso "no rename + rows_count >0"
-                # NON ri-salva piu' (era ridondante: il connector aveva gia'
-                # registrato rows_count nei metadata, lo stesso che leggiamo
-                # via short-circuit). Solo `final_name != upstream_filename`
+                # Solo `final_name != upstream_filename`
                 # giustifica un re-save per via dell'API contract task
                 # result dict.
                 needs_resave_for_rename = final_name != upstream_filename
                 if needs_resave_for_rename:
-                    # H-3 (2026-05-26): re-fetch + re-save sotto try/except
-                    # esplicito con fallback su propagazione upstream_result_id
-                    # + warning, invece di crashare la run. Pre-fix: se il
-                    # re-fetch o il save_result_blob_from_bytes sollevavano,
-                    # il run veniva chiuso come failure mentre il blob
-                    # originale upstream restava persistito = orfano logico
-                    # (esistente in storage ma run-status=failure).
-                    # Post-fix: se il rename fallisce, propaga il
-                    # upstream_result_id con il filename originale e
-                    # registra un warning nel result envelope.
+                    # Re-fetch + re-save sotto try/except: se il rename
+                    # fallisce, propaga upstream_result_id con filename
+                    # originale e registra un warning nel result envelope.
                     try:
                         if not output_bytes:
                             logger.info(
@@ -995,9 +969,8 @@ def update_task_progress(
     passato esplicito (catturato a inizio task da `self.request.id`) perche'
     e' la chiave della riga task_results.
 
-    Plenora 2.0 Fase 2 (F2.5): scrittura solo su PG via report_task_progress.
-    Il vecchio self.update_state verso il result backend Redis di Celery e'
-    stato rimosso col flip della lettura su PG (F2.3).
+    Scrittura solo su PG via report_task_progress: e' la fonte di verita'
+    per il progress consumato dalla UI.
     """
     report_task_progress(
         task_id or getattr(getattr(task, "request", None), "id", None),
@@ -1016,8 +989,7 @@ def update_task_progress(
 # `_load_static_values` su di essa. Questo garantisce isolamento del
 # tenant binding (`_current_group_id`) fra task concorrenti sullo stesso
 # worker process Celery (prefork riusa i fork
-# I fallback filesystem legacy per project_source sono rimossi: i progetti
-# downstream consumano solo latest artifact + output_contract.
+# I project_source downstream consumano solo latest artifact + output_contract.
 
 
 def _trigger_carica_if_present(
@@ -1031,9 +1003,7 @@ def _trigger_carica_if_present(
     Delega al launcher canonico condiviso
     (``task_service.launch_carica_tasks_for_canvas``), lo STESSO usato dal path
     orchestrator (``OrchestratorService._execute_carica_if_present``): identica
-    meccanica find/build/lancio via il wrapper ``create_carica_task``. Pre-fix
-    questa funzione riscriveva a mano ``submit_task`` + importava direttamente
-    ``execute_carica_task`` (bypassando l'indirection ``runtime.carica_task()``).
+    meccanica find/build/lancio via il wrapper ``create_carica_task``.
     Policy d'errore per-nodo resiliente (``resilient=True``): un nodo che non
     parte viene loggato e saltato, gli altri partono comunque.
 
@@ -1060,6 +1030,6 @@ def _trigger_carica_if_present(
     )
 
 
-# Plenora 2.0 Fase 5: nome registrato del task (era @celery_app.task(name=...)).
-# Soddisfa DelayTask.name (dispatch by-name) e combacia con l'actor Dramatiq.
+# Nome registrato del task: soddisfa DelayTask.name (dispatch by-name)
+# e combacia con l'actor Dramatiq.
 execute_enrichment_task.name = "tasks.execute_enrichment"
