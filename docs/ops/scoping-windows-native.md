@@ -276,3 +276,24 @@ Ordine: W1 → W5, una fetta per volta, VM come banco di collaudo.
   browser → progetto → esecuzione → schedule → riavvio VM (tutto
   riparte) → stop beat (lock rilasciato). Runbook
   docs/ops/install-windows.md e promozione dello stub install.ps1.
+
+## Collaudo automatico post-install (2026-07-05)
+
+Su VM Windows Server 2025 gia' installata, dopo `git pull` del validatore:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1 `
+    -RunE2E -RequireFrontend -RequireMinio
+```
+
+Esito verde:
+
+- servizi `postgresql-x64-17`, `RabbitMQ`, `plenora-backend`,
+  `plenora-worker`, `plenora-beat`, `plenora-minio`, `plenora-caddy`
+  tutti Running;
+- `/ready` via Caddy verde con check `postgres`, `broker`, `migrations`,
+  `object_storage`, `reconciliation_backlog`, `bootstrap_complete` ok;
+- frontend statico raggiungibile su `http://127.0.0.1/`;
+- `smoke_native.py`: `SMOKE: SUCCESS`;
+- suite isolata `tests2/functional`: 23 passed;
+- ripartenza post-reboot confermata ripetendo il validatore.

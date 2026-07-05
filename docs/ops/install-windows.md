@@ -5,8 +5,12 @@ o Windows 11 Pro): **niente Docker, niente WSL**. PostgreSQL, RabbitMQ,
 backend FastAPI, worker Dramatiq, beat APScheduler, MinIO opzionale e
 frontend (Caddy) girano come **servizi Windows** con avvio automatico.
 
-Collaudato end-to-end su Windows Server 2025 (2026-07-04). La sessione
-di scoping con tutte le lezioni raccolte sul campo e' in
+Collaudato end-to-end su Windows Server 2025 (2026-07-04). Validazione
+post-install automatica con `scripts\validate-windows-install.ps1
+-RunE2E -RequireFrontend -RequireMinio` verde su VM Windows Server 2025
+(2026-07-05): servizi, `/ready`, frontend, smoke nativo, `tests2/functional`
+23 passed, e ripartenza post-reboot confermata. La sessione di scoping
+con tutte le lezioni raccolte sul campo e' in
 [scoping-windows-native.md](scoping-windows-native.md).
 
 ## Indice
