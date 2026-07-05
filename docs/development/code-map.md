@@ -1,4 +1,4 @@
-﻿# Code Map
+# Code Map
 
 Bibbia operativa del repo. Una sezione per modulo: dove entrare,
 responsabilita', file principali con funzioni/classi reali, keywords per
@@ -512,10 +512,10 @@ Punti di intervento tipici:
 - nuova trasformazione tabellare -> selezionare il cluster `transforms/<cluster>.py` per dominio (joins/strings/columns/cleansing/aggregation/filtering/analysis/reshape/security/geo/utility/formula) + entry in `transforms_registry.json` con prefisso `"base.<func>"` (il facade in `base.py` re-exporta tutti i public ops dei figli, quindi il dispatcher `getattr(base, func)` continua a risolvere)
 - nuova trasformazione spaziale -> `transforms/spatial.py` (nuovo `op_geo_*`) + entry in `transforms_registry.json`
 - estensione formula language -> `transforms/formula.py`: `op_formula` + `_validate_formula_ast` (mai allargare l'AST whitelist senza test)
-- nuovo tipo di mascheramento PII -> `transforms/security.py`: estendere `MASK_FUNCTIONS` (NON sostituire il dict object â€” il test contract `test_op_mask_data_fail_closed.py` patcha via `patch.dict` con identita' preservata)
+- nuovo tipo di mascheramento PII -> `transforms/security.py`: estendere `MASK_FUNCTIONS` (NON sostituire il dict object — il test contract `test_op_mask_data_fail_closed.py` patcha via `patch.dict` con identita' preservata)
 - ciclo lineage tra progetti -> `executor.py` (`_assert_no_lineage_cycle_on_chain`)
 
-Intervento/confini: I/O via `intermediate`. Nuove trasformazioni: aggiungere `op_*` nel cluster `transforms/<cluster>.py` appropriato (oppure `spatial.py`) e registrare in `transforms_registry.json` come `"base.<func>"`, mai hardcoded nel router. Il facade `base.py` re-exporta tutti i public op dei figli â€” preservare i `from .<cluster> import op_*` non rimuoverli. Preservare AST validation in `op_formula` (`_validate_formula_ast`). Logger naming: tutti i moduli figli usano esplicitamente `get_logger("app.core.manipola.transforms.base")` (NOT `__name__`) per non spostare il name dei record.
+Intervento/confini: I/O via `intermediate`. Nuove trasformazioni: aggiungere `op_*` nel cluster `transforms/<cluster>.py` appropriato (oppure `spatial.py`) e registrare in `transforms_registry.json` come `"base.<func>"`, mai hardcoded nel router. Il facade `base.py` re-exporta tutti i public op dei figli — preservare i `from .<cluster> import op_*` non rimuoverli. Preservare AST validation in `op_formula` (`_validate_formula_ast`). Logger naming: tutti i moduli figli usano esplicitamente `get_logger("app.core.manipola.transforms.base")` (NOT `__name__`) per non spostare il name dei record.
 
 ---
 

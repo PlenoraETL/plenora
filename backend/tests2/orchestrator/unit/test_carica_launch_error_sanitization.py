@@ -1,5 +1,5 @@
 """
-C1 â€” sanitize str(e) in _execute_carica_if_present.
+C1 — sanitize str(e) in _execute_carica_if_present.
 
 Fix S3 / F1 dell'Audit finding: il boundary `OrchestratorService._execute_carica_if_present`
 deve restituire un errore sanitizzato (token canonico, niente str(e)) quando il
@@ -80,7 +80,7 @@ def _patch_find(fake_carica_node):
 
 
 def test_carica_launch_failure_returns_sanitized_error_string():
-    """Quando il lancio del task solleva â†’ artifact["carica"]["error"] e'
+    """Quando il lancio del task solleva → artifact["carica"]["error"] e'
     il token canonico 'carica_launch_failed', NON str(e)."""
     svc, fake_node = _make_orchestrator_with_carica_node()
 
@@ -160,7 +160,7 @@ def test_carica_launch_failure_logs_exception_with_exc_info():
 
 def test_carica_launch_success_unchanged_contract():
     """Sanity: se il lancio ha successo, il dict CARICA continua ad avere la
-    shape legacy `{tasks: [...], message: ...}` â€” il fix non tocca il path
+    shape legacy `{tasks: [...], message: ...}` — il fix non tocca il path
     success."""
     svc, fake_node = _make_orchestrator_with_carica_node()
 

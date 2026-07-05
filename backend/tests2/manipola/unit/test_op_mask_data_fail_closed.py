@@ -53,7 +53,7 @@ def test_op_mask_data_fails_closed_on_mask_fn_error():
 
 
 def test_op_mask_data_no_partial_output_on_fail():
-    """Test privacy-critical anti-regressione: su fail a metÃ  del loop,
+    """Test privacy-critical anti-regressione: su fail a metà del loop,
     `op_mask_data` NON deve ritornare un DataFrame parzialmente mascherato.
     Il raise avviene prima di `return result`, quindi il caller non riceve
     nessun output (no leak PII parziale).
@@ -78,7 +78,7 @@ def test_op_mask_data_no_partial_output_on_fail():
         {"cf": broken_cf_mask},
         clear=False,
     ):
-        # Il caller NON deve ricevere un DataFrame parziale â€” la funzione
+        # Il caller NON deve ricevere un DataFrame parziale — la funzione
         # solleva prima del return. Quindi pytest.raises e' sufficiente:
         # non si arriva mai al punto in cui avremmo un result da ispezionare.
         with pytest.raises(RuntimeError, match="leak PII parziale"):
@@ -93,11 +93,11 @@ def test_op_mask_data_no_partial_output_on_fail():
     assert df["email"].tolist() == ["a@b.com", "c@d.com"]
 
 
-# HAPPY PATH â€” nessun raise, tutte colonne mascherate correttamente
+# HAPPY PATH — nessun raise, tutte colonne mascherate correttamente
 
 
 def test_op_mask_data_happy_path_preserved():
-    """Anti-regressione: tutte le maschere applicabili senza errori â†’
+    """Anti-regressione: tutte le maschere applicabili senza errori →
     `op_mask_data` ritorna DataFrame con colonne mascherate come da pattern
     pre-esistente (MASK_FUNCTIONS standard). Nessun raise."""
     df = pd.DataFrame({

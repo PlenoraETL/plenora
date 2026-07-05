@@ -1,5 +1,5 @@
 """
-Contract test â€” download endpoint + cleanup + task result payload shape.
+Contract test — download endpoint + cleanup + task result payload shape.
 
 Post-refactor multi-host (R1 + in-memory): verifica che i path di
 """
@@ -19,7 +19,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
 def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
-    """Fast-path: find_keys ritorna 1 key â†’ StreamingResponse + background
+    """Fast-path: find_keys ritorna 1 key → StreamingResponse + background
     cleanup registrato."""
     from fastapi import BackgroundTasks
     from app.core.orchestrator.router import download_task_result
@@ -137,7 +137,7 @@ def test_tasks_download_falls_back_to_db_blob_if_no_s3_key():
                 current_user=fake_user,
             )
             # Se arriva qui il fallback DB blob ha trovato il result
-            # Non serve check specifico â€” il non-404 e' gia' conferma
+            # Non serve check specifico — il non-404 e' gia' conferma
             assert response is not None
         except Exception as e:
             # Se il fallback richiede altro mocking, verifichiamo almeno
@@ -276,7 +276,7 @@ def test_save_pipeline_result_outcome_shape(monkeypatch):
 
 
 def test_save_pipeline_result_rejects_unknown_format():
-    """Formato non supportato â†’ ValueError dalla serializzazione."""
+    """Formato non supportato → ValueError dalla serializzazione."""
     from app.core.results.pipeline_result import save_pipeline_result_outcome
 
     df = pd.DataFrame({"a": [1]})

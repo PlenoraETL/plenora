@@ -128,7 +128,7 @@ def _applica_crs_da_colonne(
 
     ``meta`` (optional): pre-built ``ResourceMetadata`` produced by the
     source-loading path. When provided the internal construction from
-    ``node_columns`` is skipped â€” metadata travels from the loader rather
+    ``node_columns`` is skipped — metadata travels from the loader rather
     than being reconstructed here. ``node_columns`` is still required for
     callers that do not supply ``meta``.
     """
@@ -136,7 +136,7 @@ def _applica_crs_da_colonne(
         return df  # Gia' risorsa geospaziale: non toccare.
 
     if meta is None:
-        # Normalise alias â†’ name before building ResourceMetadata: after
+        # Normalise alias → name before building ResourceMetadata: after
         # filter_visible_columns the DataFrame uses the alias as the actual
         # column name, so the lookup must use the same key
         _meta_input = [
@@ -197,7 +197,7 @@ class ManipolaExecutor:
           a un tenant).
         - `strict=False` (preview): ritorna None in caso di lookup fallito;
           i loader fail-closed e il preview torna "Nessun dato sorgente
-          disponibile" â€” comportamento corretto per canvas con sorgenti
+          disponibile" — comportamento corretto per canvas con sorgenti
           inaccessibili.
         """
         resolved: Optional[str]
@@ -242,7 +242,7 @@ class ManipolaExecutor:
         try:
             # TE-007/008/009: tutti e 3 i loader sono ctx-strict
             # `executing_group_id` (da `_init_security_context`) e' l'unico
-            # canale tenant â€” nessuno stato di istanza coinvolto
+            # canale tenant — nessuno stato di istanza coinvolto
             for loader in [
                 lambda: self._carica_sorgenti_progetto(canvas, dataframes, force_recalculate, run_id=run_id, group_id=executing_group_id),
                 lambda: self._carica_sorgenti_file(canvas, dataframes, group_id=executing_group_id),
@@ -577,7 +577,7 @@ class ManipolaExecutor:
         """Carica DataFrame dai nodi file_source via SourceLoader.
 
         thin delegator. Il body vive in
-        ``app.core.manipola.source_loading.load_file_sources`` â€”
+        ``app.core.manipola.source_loading.load_file_sources`` —
         funzione pura con parametri espliciti, zero stato di
         classe. Il nome del metodo e' preservato cosi' i test
         esistenti e i caller esterni (oggi nessuno fuori dal
@@ -693,7 +693,7 @@ class ManipolaExecutor:
         """
         Applica le trasformazioni del canvas in ordine topologico.
         Supporta sia nodi 'transform' che 'multi_join'.
-        Se run_id Ã¨ presente, scrive uno snapshot intermediate per ogni nodo.
+        Se run_id è presente, scrive uno snapshot intermediate per ogni nodo.
         """
         # Prendi sia transform che multi_join
         process_nodes = [n for n in canvas.nodes if n.type in ("transform", "multi_join")]
@@ -898,7 +898,7 @@ class ManipolaExecutor:
         if _multi_cap > 0 and len(result) > _multi_cap:
             logger.warning(
                 f"Multi-join base input ({len(result)} righe) supera il cap "
-                f"configurato di {_multi_cap} righe â€” guard attivato pre-loop."
+                f"configurato di {_multi_cap} righe — guard attivato pre-loop."
             )
             raise MemoryLimitExceededError(
                 observed_bytes=len(result),
@@ -932,7 +932,7 @@ class ManipolaExecutor:
                     logger.warning(
                         f"Multi-join step #{idx}: output stimato "
                         f"{_estimated_rows} righe sopra il cap {_multi_cap} "
-                        f"prima del merge â€” guard attivato."
+                        f"prima del merge — guard attivato."
                     )
                     raise MemoryLimitExceededError(
                         observed_bytes=_estimated_rows,
@@ -958,7 +958,7 @@ class ManipolaExecutor:
             if _multi_cap > 0 and len(result) > _multi_cap:
                 logger.warning(
                     f"Multi-join post-step #{idx}: output cumulato "
-                    f"{len(result)} righe supera il cap {_multi_cap} â€” "
+                    f"{len(result)} righe supera il cap {_multi_cap} — "
                     f"guard attivato. Step rimanenti: {len(inputs) - idx}."
                 )
                 raise MemoryLimitExceededError(

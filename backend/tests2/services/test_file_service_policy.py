@@ -1,7 +1,7 @@
 """
-Contract test A1 â€” dispatch policy-aware in FileSourceService.
+Contract test A1 — dispatch policy-aware in FileSourceService.
 
-Copre Â§6.3 del design A1: `_dispatch_blob_storage` deve ramificare sulla
+Copre §6.3 del design A1: `_dispatch_blob_storage` deve ramificare sulla
 """
 
 from __future__ import annotations

@@ -63,7 +63,7 @@ def test_download_task_result_streams_body_with_content_length(client):
     `Content-Length` esplicito (per mostrare progress bar al client)
     e ritornare il body completo. Prima del fix usava
     `Response(content=blob.data)` che caricava tutto in memoria PRIMA
-    di iniziare il send â†’ alta latenza percepita su blob grandi."""
+    di iniziare il send → alta latenza percepita su blob grandi."""
     payload = b"id,value\n" + b"1,ok\n" * 1000  # ~6 KB
     task_info = SimpleNamespace(
         status=SimpleNamespace(value="success"),
@@ -89,7 +89,7 @@ def test_download_task_result_streams_body_with_content_length(client):
 
     assert response.status_code == 200
     # Content-Length deve essere settato esplicito (StreamingResponse con
-    # generator di solito non lo fa â€” noi glielo passiamo via headers)
+    # generator di solito non lo fa — noi glielo passiamo via headers)
     assert response.headers.get("content-length") == str(len(payload))
     # Il body completo deve arrivare
     assert response.content == payload

@@ -1,4 +1,4 @@
-﻿# systemd unit files
+# systemd unit files
 
 Unit file systemd per il backup automatico del DB su S3 + verifica
 restore settimanale. Specchio di quelli installati su
@@ -30,7 +30,7 @@ systemctl cat plenora-backup plenora-backup-test
 I service **oneshot di backup** (`plenora-backup`, `plenora-backup-test`)
 NON dipendono da `backend/.env`. I secret (`DATABASE_URL`) vivono in un
 SecretsBackend configurabile:
-  - AWS SSM Parameter Store su `/plenora/prod/*` (SecureString) â€” default
+  - AWS SSM Parameter Store su `/plenora/prod/*` (SecureString) — default
   - Azure Key Vault (future, `CLOUD_PROVIDER=azure`)
   - GCP Secret Manager (future, `CLOUD_PROVIDER=gcp`)
 
@@ -41,7 +41,7 @@ Protocol `SecretsBackend` / `ObjectStorage`, mai direttamente a boto3.
 
 I service **long-running** (`plenora-backend`, `plenora-worker`,
 `plenora-beat`) INVECE usano `EnvironmentFile=/home/ubuntu/plenora-etl/backend/.env`
-per la configurazione runtime â€” inclusa `PLENORA_ENCRYPTION_KEY`.
+per la configurazione runtime — inclusa `PLENORA_ENCRYPTION_KEY`.
 In produzione cloud lo stesso `.env` deve contenere anche
 `STORAGE_POLICY=object_storage`, `OBJECT_STORAGE_ENABLED=true`,
 `OBJECT_STORAGE_BUCKET` e `PLENORA_ARTIFACT_BUCKET`; il bucket runtime
@@ -65,28 +65,28 @@ one-shot in `backend/deploy/iam/`.
 
 ## File
 
-- `plenora-backend.service` â€” long-running uvicorn (FastAPI), porta 5004
+- `plenora-backend.service` — long-running uvicorn (FastAPI), porta 5004
   locale. Restart=always.
-- `plenora-worker.service` â€” long-running worker Dramatiq
+- `plenora-worker.service` — long-running worker Dramatiq
   (`python -m dramatiq workers.dramatiq_app`, consuma da RabbitMQ).
   Rinominata da `plenora-celery.service` il 2026-07-04: sui server con
   la unit vecchia installata vedi "Migrazione da plenora-celery.service"
   qui sotto.
-- `plenora-beat.service` â€” beat scheduler su APScheduler
+- `plenora-beat.service` — beat scheduler su APScheduler
   (`python -m workers.beat`), schedule dal DB e leader-lock su PostgreSQL
   (`beat_leader_locks`), non piu' `celery beat`.
-- `plenora-backup.service` â€” oneshot. Invoca `backup_db.py` via wrapper
+- `plenora-backup.service` — oneshot. Invoca `backup_db.py` via wrapper
   SSM. Timeout 2h.
-- `plenora-backup.timer` â€” schedula il service ogni giorno alle 02:00 UTC
+- `plenora-backup.timer` — schedula il service ogni giorno alle 02:00 UTC
   con `RandomizedDelaySec=300` (jitter 5 min). `Persistent=true`
   recupera il run al boot se il server era spento.
-- `plenora-backup-test.service` â€” oneshot. Invoca `test_restore.py` via
+- `plenora-backup-test.service` — oneshot. Invoca `test_restore.py` via
   wrapper SSM (stesso modello credenziali): download ultimo dump,
   `CREATE DATABASE` usa-e-getta, `pg_restore` completo, sanity count
   su tabelle core, `DROP DATABASE`. Timeout 2h. Senza questo, il
   backup nightly verifica solo il TOC del dump e non prova un restore
   reale (#25-R1 / "un backup mai ripristinato non e' un backup").
-- `plenora-backup-test.timer` â€” weekly domenica 03:00 UTC, dopo che il
+- `plenora-backup-test.timer` — weekly domenica 03:00 UTC, dopo che il
   dump delle 02:00 UTC e' su S3. `Persistent=true`,
   `RandomizedDelaySec=600`.
 
@@ -167,7 +167,7 @@ psql "$DATABASE_URL" -c "SELECT rolcreatedb FROM pg_roles WHERE rolname = curren
 # Output atteso: rolcreatedb = t
 ```
 
-Se manca, `GRANT CREATE` su DB non basta â€” serve attributo ruolo:
+Se manca, `GRANT CREATE` su DB non basta — serve attributo ruolo:
 ```sql
 ALTER ROLE <username> CREATEDB;
 ```
@@ -184,9 +184,9 @@ sudo systemctl start plenora-backup-test.service
 sudo journalctl -u plenora-backup-test.service --since '5 minutes ago' --no-pager
 ```
 
-Output atteso (backup): SSM fetch â†’ pg_dump â†’ integrity ok â†’ upload ok â†’ exit 0.
-Output atteso (test-restore): SSM fetch â†’ download â†’ createdb â†’ pg_restore ok â†’
-sanity ok â†’ dropdb â†’ exit 0.
+Output atteso (backup): SSM fetch → pg_dump → integrity ok → upload ok → exit 0.
+Output atteso (test-restore): SSM fetch → download → createdb → pg_restore ok →
+sanity ok → dropdb → exit 0.
 
 ## Modifiche future
 

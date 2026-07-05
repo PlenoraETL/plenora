@@ -1,5 +1,5 @@
 """
-Contract test per ExecutionManager â€” orphan handling + release retry.
+Contract test per ExecutionManager — orphan handling + release retry.
 
 Gap reale vs i 5 file test esistenti su ``execution_manager``
 """
@@ -43,9 +43,9 @@ def _make_manager_for_cleanup_test(schedule_config) -> ExecutionManager:
     - ``start_lock_heartbeat`` stubbato per ritornare uno state che
       ``stop_lock_heartbeat`` capisce (no thread reale), altrimenti
       partirebbe un daemon che chiama ``refresh_lock`` sul mock.
-    - ``_get_orchestrator`` solleva subito â†’ salta il body di try e va
+    - ``_get_orchestrator`` solleva subito → salta il body di try e va
       nel ``except Exception``.
-    - ``handle_failure`` mockato per ritornare un result benign â€” i
+    - ``handle_failure`` mockato per ritornare un result benign — i
       test qui NON testano il contenuto del result ma SOLO il
       comportamento del finally block.
     """
@@ -71,15 +71,15 @@ def test_execute_marks_schedule_as_orphan_when_project_does_not_exist(
       2. Scrivere un log entry ``PIPELINE_FAILED`` a livello ERROR con
          error_message che cita "orphan" / "eliminato".
       3. Ritornare ``{"success": False, "status": "orphan", ...}``.
-      4. **NON** acquisire il lock nÃ© aprire il run (short-circuit PRIMA
+      4. **NON** acquisire il lock né aprire il run (short-circuit PRIMA
          di ``open_run`` e ``try_acquire``).
 
     Regressione: se ``mark_as_orphan`` viene rimosso o spostato sotto
-    un altro ramo, lo schedule resta attivo â†’ ogni tick successivo
+    un altro ramo, lo schedule resta attivo → ogni tick successivo
     riapre il run, fallisce, chiude il run. Polling infinito con log
     spam.
 
-    Contract negativo fondamentale: **NO lock acquired** â€” se qualcuno
+    Contract negativo fondamentale: **NO lock acquired** — se qualcuno
     spostasse il check project_meta dopo ``try_acquire``, un crash
     lascerebbe lock orfani su schedule destinati a essere disabilitati.
     """
@@ -94,7 +94,7 @@ def test_execute_marks_schedule_as_orphan_when_project_does_not_exist(
     ), patch(
         "app.core.projects.service.ProjectService"
     ) as project_service_cls:
-        # Progetto cancellato â†’ metadata None
+        # Progetto cancellato → metadata None
         project_service_cls.return_value.get_project_metadata.return_value = None
 
         result = manager.execute("s-orphan")
@@ -113,7 +113,7 @@ def test_execute_marks_schedule_as_orphan_when_project_does_not_exist(
         or "eliminat" in err_msg.lower()
         or "non trovato" in err_msg.lower()
     ), (
-        f"error_message DEVE indicare che il progetto Ã¨ stato "
+        f"error_message DEVE indicare che il progetto è stato "
         f"eliminato/orphan, ottenuto {err_msg!r}"
     )
     manager.log_service.write_log.assert_called_once()
@@ -131,7 +131,7 @@ def test_finally_release_lock_retries_once_after_transient_db_failure(
 ):
     """Blinda il fail-closed sul release nel finally di ``execute()``:
     se il primo ``concurrency.release`` solleva una classe transient PG
-    (psycopg.OperationalError â€” pool exhausted, connection reset),
+    (psycopg.OperationalError — pool exhausted, connection reset),
     il codice DEVE:
 
       1. Loggare warning [GESTITO] per il tentativo transient.
@@ -139,10 +139,10 @@ def test_finally_release_lock_retries_once_after_transient_db_failure(
       3. Ritentare ``concurrency.release`` (budget N=3, T=10s post current contract.b).
 
     Questo test copre lo scenario ``side_effect=[OperationalError, None]``
-    â†’ 1Â° fail transient, 2Â° success â†’ retry classified funziona, count=2.
+    → 1° fail transient, 2° success → retry classified funziona, count=2.
 
     Regressione: rimuovere il retry significherebbe che ogni blip DB
-    transient lascia un lock orfano (scadrÃ  per TTL ma intanto blocca
+    transient lascia un lock orfano (scadrà per TTL ma intanto blocca
     il prossimo tick per 10 minuti).
 
     Post current contract.b: classe transient narrow a psycopg2 (Previous behavior era
@@ -206,19 +206,19 @@ def test_finally_does_not_propagate_when_both_release_attempts_fail(
     schedule_config, monkeypatch
 ):
     """Blinda l'outer ``try/except`` del finally block: se TUTTI i tentativi
-    di release sollevano transient PG (DB giÃ¹ per piÃ¹ della budget window
+    di release sollevano transient PG (DB giù per più della budget window
     del retry wrapper), ``execute()`` DEVE:
 
       1. Chiamare release esattamente N=3 volte (post current contract.b).
-      2. Loggare CRITICO (il source cita "scadrÃ  per TTL").
-      3. **NON propagare l'eccezione** â€” il finally completa
+      2. Loggare CRITICO (il source cita "scadrà per TTL").
+      3. **NON propagare l'eccezione** — il finally completa
          pulitamente e ``execute()`` ritorna il result dal
          ``handle_failure`` (non un uncaught OperationalError).
 
-    Contract critico: ``execute()`` Ã¨ chiamato da un task worker che
+    Contract critico: ``execute()`` è chiamato da un task worker che
     si aspetta sempre un return value. Una OperationalError non catturata
     marcherebbe il task come failed-with-exception invece di
-    failed-with-result â†’ retry automatico di Celery â†’ tick duplicato
+    failed-with-result → retry automatico di Celery → tick duplicato
     sullo stesso schedule.
 
     Regressione: rimuovere l'outer guard del finally romperebbe il contract

@@ -76,7 +76,7 @@ def test_runtime_services_has_nine_canonical_fields():
 
 
 def test_runtime_services_is_frozen():
-    """Reassignment must surface as an error â€” the container is the
+    """Reassignment must surface as an error — the container is the
     source of truth, not a mutable scratch space."""
     from app.runtime import RuntimeServices
 
@@ -86,7 +86,7 @@ def test_runtime_services_is_frozen():
             setattr(instance, name, object())
 
 
-# 2. Factory dependency order â€” locked behavioural test
+# 2. Factory dependency order — locked behavioural test
 
 
 def test_build_runtime_services_constructs_in_canonical_order():
@@ -234,10 +234,10 @@ def test_build_runtime_services_constructs_in_canonical_order():
     assert result.features_service is features_instance
     assert result.orchestrator is orchestrator_instance
     # IDENTITY INVARIANT (016): the container does NOT construct a
-    # second ApiConnectionService â€” it must consume the canonical
+    # second ApiConnectionService — it must consume the canonical
     # `api_connector.api_connection_service` singleton.
     assert result.api_connection_service is api_conn_sentinel
-    # IDENTITY INVARIANT (017): same for DataSourceService â€” the
+    # IDENTITY INVARIANT (017): same for DataSourceService — the
     # container must consume the canonical singleton, not construct
     # a duplicate.
     assert result.datasource_service is datasource_sentinel
@@ -283,7 +283,7 @@ def test_app_factory_consumes_runtime_services_factory():
     assert "resolved_deps.build_runtime_services(" in src
 
     # Module-globals are still defined (monkeypatch surface), but
-    # they MUST be derived from the container â€” not constructed
+    # they MUST be derived from the container — not constructed
     # inline. Reject the previous inline form.
     forbidden_inline = (
         "project_service = ProjectService()",
@@ -315,7 +315,7 @@ def test_main_py_keeps_only_asgi_app_surface():
         )
 
 
-# 4. Bootstrap completion semantics â€” locked
+# 4. Bootstrap completion semantics — locked
 
 
 def test_bootstrap_completion_flag_exists_and_is_initially_false():
@@ -412,12 +412,12 @@ def test_runtime_services_module_does_not_import_fastapi_or_starlette():
             )
 
 
-# 6. BE-GO-READY-BOOTSTRAP-ENGINE-016 â€” api_connection_service slice
+# 6. BE-GO-READY-BOOTSTRAP-ENGINE-016 — api_connection_service slice
 
 
 def test_runtime_container_owns_api_connection_service_field():
     """The 8th field exists, is typed, and references the canonical
-    arricchisci singleton â€” NOT a fresh construction."""
+    arricchisci singleton — NOT a fresh construction."""
     import app.core.arricchisci.api_connector as api_connector_mod
     from app.runtime import RuntimeServices
 
@@ -432,7 +432,7 @@ def test_runtime_container_owns_api_connection_service_field():
 
 def test_main_py_no_longer_imports_api_connection_service_directly():
     """Source-bound: `app/main.py` must NOT import
-    `api_connection_service` directly from `api_connector` â€” the
+    `api_connection_service` directly from `api_connector` — the
     canonical path is the runtime container.
 
     The arricchisci singleton stays in `api_connector.py` for its own
@@ -469,7 +469,7 @@ def test_api_connector_module_still_exposes_singleton_for_patch_surface():
 
 def test_factory_does_not_reconstruct_api_connection_service():
     """The factory MUST NOT call `ApiConnectionService()` on its own
-    â€” it must consume the canonical singleton via import. A second
+    — it must consume the canonical singleton via import. A second
     construction would produce a divergent instance, breaking every
     `patch("...api_connection_service.<method>", ...)` test.
     """
@@ -497,12 +497,12 @@ def test_factory_does_not_reconstruct_api_connection_service():
     )
 
 
-# 7. BE-GO-READY-BOOTSTRAP-ENGINE-017 â€” datasource_service slice
+# 7. BE-GO-READY-BOOTSTRAP-ENGINE-017 — datasource_service slice
 
 
 def test_runtime_container_owns_datasource_service_field():
     """The 9th field exists, is typed, and references the canonical
-    datasources singleton â€” NOT a fresh construction."""
+    datasources singleton — NOT a fresh construction."""
     import app.core.datasources.service as ds_service_mod
     from app.runtime import RuntimeServices
 
@@ -517,7 +517,7 @@ def test_runtime_container_owns_datasource_service_field():
 
 def test_main_py_no_longer_imports_datasource_service_directly():
     """Source-bound: `app/main.py` must NOT import `datasource_service`
-    directly from `app.core.datasources.service` â€” the canonical path
+    directly from `app.core.datasources.service` — the canonical path
     is the runtime container.
 
     The singleton stays in `service.py:440` (canonical attribute
@@ -552,7 +552,7 @@ def test_datasources_service_module_still_exposes_singleton_for_patch_surface():
 
 
 def test_factory_does_not_reconstruct_datasource_service():
-    """The factory MUST NOT call `DataSourceService()` on its own â€”
+    """The factory MUST NOT call `DataSourceService()` on its own —
     it must consume the canonical singleton via import. A second
     construction would produce a divergent instance, breaking the
     identity invariant.

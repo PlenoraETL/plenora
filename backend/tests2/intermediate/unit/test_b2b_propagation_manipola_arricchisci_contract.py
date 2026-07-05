@@ -1,5 +1,5 @@
 """
-Contract test R-25 propagation contract â€” propagation manipola + arricchisci.
+Contract test R-25 propagation contract — propagation manipola + arricchisci.
 
 Estende il contract di propagation contract (estrai-final) ai 3 call-site rimasti:
 """

@@ -1,5 +1,5 @@
 """
-Contract test â€” FileSourceService usa SOLO DB come storage (FS-B1).
+Contract test — FileSourceService usa SOLO DB come storage (FS-B1).
 
 Blinda il contratto post-migration "nessun FS persistente per file_sources":
 """
@@ -25,7 +25,7 @@ def _install_fake_db(monkeypatch):
     """Patcha le funzioni di `app.core.files.db` con fake in-memory.
 
     Preferisce `monkeypatch.setattr` sul modulo reale (gia' importato)
-    invece di sostituire il modulo in `sys.modules` â€” il service importa
+    invece di sostituire il modulo in `sys.modules` — il service importa
     il leaf file-source DAL, quindi patchare quel modulo segue il boundary
     di produzione.
 
@@ -276,7 +276,7 @@ def test_read_blob_from_s3_downloads_and_cleans_temp(monkeypatch, tmp_path):
     file creato.
 
     BE-GO-READY-RESOURCE-ENGINE-006 (R-005.1 closure): il branch S3
-    e' bytes-first puro Current contract â€” niente piu' tempfile roundtrip
+    e' bytes-first puro Current contract — niente piu' tempfile roundtrip
     (`download(key, tmp_path)` + `read_bytes()` + `unlink`). Il test
     verifica anche che NESSUN tempfile venga creato durante la
     chiamata.
@@ -367,7 +367,7 @@ def test_read_blob_from_s3_downloads_and_cleans_temp(monkeypatch, tmp_path):
     # Post-RESOURCE-ENGINE-006: zero tempfile creati nel branch S3.
     assert not created_temps, (
         f"Regressione R-005.1: il branch storage_key ha creato "
-        f"tempfile ({created_temps}) â€” il path e' bytes-first via "
+        f"tempfile ({created_temps}) — il path e' bytes-first via "
         f"get_object_stream."
     )
 
@@ -378,7 +378,7 @@ def test_read_blob_from_s3_cleanup_temp_on_download_exception(monkeypatch):
     try/except esterno del metodo) e ZERO tempfile e' stato creato.
 
     BE-GO-READY-RESOURCE-ENGINE-006 (R-005.1): il path e' bytes-first
-    puro â€” niente tempfile da pulire neanche su exception path. Il
+    puro — niente tempfile da pulire neanche su exception path. Il
     test e' rinforzato come regression guard contro re-introduzione
     del download-then-read tempfile pattern.
     """
@@ -451,5 +451,5 @@ def test_read_blob_from_s3_cleanup_temp_on_download_exception(monkeypatch):
     # temp creato fosse poi unlink-ato; Current contract zero tempfile esiste.
     assert not created_temps, (
         f"Regressione R-005.1: tempfile creato sull'exception path "
-        f"({created_temps}) â€” il branch storage_key e' bytes-first."
+        f"({created_temps}) — il branch storage_key e' bytes-first."
     )

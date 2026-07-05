@@ -46,7 +46,7 @@ def test_temp_file_for_tombstone_post_phase4():
 
 def test_rest_file_cleans_up_tmp_dir_on_http_error_path():
     """Previous behavior: errore HTTP / response vuota / download_timed_out
-    ritornavano dict di errore senza cleanup tmp_exec_dir â†’ leak.
+    ritornavano dict di errore senza cleanup tmp_exec_dir → leak.
     Ora cleanup garantito da finally + _cleanup_tmp flag.
 
     Il test verifica end-to-end che NON resti una plenora_exec_* in TEMP

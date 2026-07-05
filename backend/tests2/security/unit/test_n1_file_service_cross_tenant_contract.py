@@ -1,5 +1,5 @@
 """
-Contract test N1 â€” FileSourceService fail-closed cross-tenant guard.
+Contract test N1 — FileSourceService fail-closed cross-tenant guard.
 
 Scenario di sicurezza:
 """
@@ -60,7 +60,7 @@ def test_assert_visible_raises_on_group_mismatch_without_share(svc):
 
 
 def test_assert_visible_allows_explicit_share(svc):
-    """File condiviso con tenant B (via *_shares) â†’ accesso OK."""
+    """File condiviso con tenant B (via *_shares) → accesso OK."""
     with patch.object(svc, "get_file_source", return_value=_file_source(group_id="A")):
         with patch(
             "app.core.files.service.is_resource_visible", return_value=True
@@ -72,14 +72,14 @@ def test_assert_visible_allows_explicit_share(svc):
 
 
 def test_assert_visible_fails_closed_on_empty_group_id(svc):
-    """expected_group_id mancante/vuoto â†’ PermissionError (fail-closed).
+    """expected_group_id mancante/vuoto → PermissionError (fail-closed).
     Evita che un caller sbadato bypassi la validazione passando None."""
     with pytest.raises(PermissionError, match="expected_group_id mancante"):
         svc._assert_visible("f1", "")
 
 
 def test_assert_visible_superadmin_bypass_with_sentinel(svc):
-    """SUPERADMIN_BYPASS sentinel '*' â†’ accesso OK + log info."""
+    """SUPERADMIN_BYPASS sentinel '*' → accesso OK + log info."""
     from app.core.files.service import FileSourceService
     with patch.object(svc, "get_file_source", return_value=_file_source(group_id="A")):
         svc._assert_visible("f1", FileSourceService.SUPERADMIN_BYPASS)
@@ -90,7 +90,7 @@ def test_assert_visible_superadmin_bypass_with_sentinel(svc):
 
 
 def test_assert_visible_raises_valueerror_on_missing_file(svc):
-    """file_id inesistente â†’ ValueError (distinto da PermissionError
+    """file_id inesistente → ValueError (distinto da PermissionError
     per distinguere 404 da 403 nel router)."""
     with patch.object(svc, "get_file_source", return_value=None):
         with pytest.raises(ValueError, match="non trovato"):
@@ -99,7 +99,7 @@ def test_assert_visible_raises_valueerror_on_missing_file(svc):
 
 def test_assert_visible_fails_closed_on_sharing_exception(svc):
     """Se is_resource_visible solleva (DB glitch, schema share
-    corrotto), NON passiamo â€” FAIL-CLOSED per default."""
+    corrotto), NON passiamo — FAIL-CLOSED per default."""
     with patch.object(svc, "get_file_source", return_value=_file_source(group_id="A")):
         with patch(
             "app.core.files.service.is_resource_visible",
@@ -144,8 +144,8 @@ def test_load_dataframe_passes_when_group_matches_owner(svc):
 
 def test_file_id_generator_produces_32_hex_uuid():
     """N1: file_id oggi contiene uuid_part = uuid.uuid4().hex (32 char).
-    Previous behavior: [:8] = ~10^9 combinazioni â†’ brute-force fattibile.
-    Current contract: 2^128 â†’ infeasible.
+    Previous behavior: [:8] = ~10^9 combinazioni → brute-force fattibile.
+    Current contract: 2^128 → infeasible.
     """
     from app.core.files.service import DefaultTimeProvider
     tp = DefaultTimeProvider()
@@ -175,12 +175,12 @@ def test_file_id_format_is_opaque_no_name_no_timestamp():
     # Non deve contenere il nome
     assert sensitive_name not in file_id, (
         f"REGRESSIONE N1-B: filename '{sensitive_name}' ancora "
-        f"presente nell'ID ({file_id}) â†’ metadata leakage."
+        f"presente nell'ID ({file_id}) → metadata leakage."
     )
     # Non deve contenere il timestamp
     assert sensitive_ts not in file_id, (
         f"REGRESSIONE N1-B: timestamp '{sensitive_ts}' ancora "
-        f"presente nell'ID ({file_id}) â†’ metadata leakage."
+        f"presente nell'ID ({file_id}) → metadata leakage."
     )
     # Formato atteso: file_<32-hex>
     assert file_id.startswith("file_"), f"Prefix mancante: {file_id}"

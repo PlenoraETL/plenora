@@ -1,5 +1,5 @@
 """
-Contract test N9 â€” re-check permessi user in pipeline_task.
+Contract test N9 — re-check permessi user in pipeline_task.
 
 Previous behavior scenario:
 """
@@ -72,7 +72,7 @@ def _reset_orchestrator_module_singleton():
     router_mod._orchestrator = original
 
 
-# Helpers â€” bytecode probe (refactor-resilient)
+# Helpers — bytecode probe (refactor-resilient)
 
 def _underlying(callable_or_task):
     """Estrae la funzione Python sottostante da un eventuale wrapper.
@@ -91,7 +91,7 @@ def _references_name(callable_or_task, name: str) -> bool:
     objects in `co_consts` (closures, comprehensions). Pattern preso da
     PR #37 (`test_enrichment_task_tenant_binding_lock.py`): refactor-
     resilient ai rename di variabili locali, alle riformattazioni e
-    all'aggiunta di commenti, ma sensibile al rename del callee â€” che
+    all'aggiunta di commenti, ma sensibile al rename del callee — che
     e' esattamente l'invariant da blindare.
     """
     code = _underlying(callable_or_task).__code__
@@ -453,7 +453,7 @@ def test_open_run_writes_user_id_in_insert_sql(monkeypatch):
     _assert_single_insert_user_id(captured_calls, "log_runs", "usr_target", "open_run")
 
 
-# 4. Scope completo N9 â€” preview, carica, enrichment (+ helper condiviso)
+# 4. Scope completo N9 — preview, carica, enrichment (+ helper condiviso)
 
 
 def test_shared_recheck_helper_exists_and_has_correct_contract():
@@ -493,8 +493,8 @@ def test_shared_recheck_returns_permission_revoked_on_disabled_user(monkeypatch)
     # `app.db.config.users` AT MODULE LOAD: il symbol `get_user` e' bound nel namespace
     # del modulo helper, non riferito ogni volta all'origine. Patchare
     # l'origine lascia invariato il
-    # symbol bound qui â†’ la chiamata reale a `pg_connection.fetchone` parte
-    # â†’ access violation se DB non raggiungibile (vedi review #8 Batch B).
+    # symbol bound qui → la chiamata reale a `pg_connection.fetchone` parte
+    # → access violation se DB non raggiungibile (vedi review #8 Batch B).
     # Pattern simmetrico a `test_n11_canvas_types_propagation_contract.py`
     # (review #7).
     monkeypatch.setattr("app.core.auth.async_user_recheck.get_user", fake_get_user)
@@ -512,7 +512,7 @@ def test_other_tasks_accept_user_id_kwarg(task_attr, task_module):
     task = getattr(mod, task_attr)
     sig = inspect.signature(task)
     assert "user_id" in sig.parameters, (
-        f"{task_attr} non accetta user_id kwarg â€” N9 scope incompleto."
+        f"{task_attr} non accetta user_id kwarg — N9 scope incompleto."
     )
     assert sig.parameters["user_id"].default is None
 
@@ -528,7 +528,7 @@ def test_other_tasks_reference_shared_recheck_helper(task_attr, task_module):
     mod = importlib.import_module(task_module)
     task = getattr(mod, task_attr)
     assert _references_name(task, "recheck_user_authorized"), (
-        f"{task_attr} non referenzia recheck_user_authorized â€” rischio drift "
+        f"{task_attr} non referenzia recheck_user_authorized — rischio drift "
         f"di logica re-check tra i worker."
     )
 
@@ -552,7 +552,7 @@ def test_other_services_forward_user_id_to_delay(
     method = _task_service_signature_target(service_method)
     sig = inspect.signature(method)
     assert "user_id" in sig.parameters, (
-        f"TaskService.{service_method} non accetta user_id â€” il router "
+        f"TaskService.{service_method} non accetta user_id — il router "
         f"non puo' propagare l'identita' al worker."
     )
 

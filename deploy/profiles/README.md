@@ -1,4 +1,4 @@
-﻿# Deploy profiles
+# Deploy profiles
 
 Profili **public** per ambiente di deploy. Selezionati da `deploy.sh` via env
 `PLENORA_DEPLOY_PROFILE` o flag `--profile=<name>`. Default: `prod`.
@@ -34,21 +34,21 @@ Prima di qualunque deploy reale o dry-run su un mode che pubblica codice
 o build, lo script applica un set di guardie locali. Tutte read-only,
 exit 1 al primo fail.
 
-1. **Working tree pulito** â€” niente file modificati o untracked in
+1. **Working tree pulito** — niente file modificati o untracked in
    `backend/`. Mai auto-commit.
-2. **Branch allowlist** â€” il branch corrente deve essere in
+2. **Branch allowlist** — il branch corrente deve essere in
    `ALLOWED_BRANCHES` del profilo (es. `main` per `prod`).
-3. **Upstream-sync** â€” il branch corrente deve essere allineato col
+3. **Upstream-sync** — il branch corrente deve essere allineato col
    suo upstream, e l'upstream deve essere esattamente
    `origin/<branch>`:
-   - manca upstream â†’ `git push -u origin <branch>` esplicito;
-   - upstream â‰  `origin/<branch>` (es. fork personale, mirror, altro
-     remote) â†’ exit 1, riconfigura con
+   - manca upstream → `git push -u origin <branch>` esplicito;
+   - upstream ≠ `origin/<branch>` (es. fork personale, mirror, altro
+     remote) → exit 1, riconfigura con
      `git branch --set-upstream-to=origin/<branch> <branch>`;
-   - branch ahead di `origin/<branch>` â†’ `git push origin <branch>`
+   - branch ahead di `origin/<branch>` → `git push origin <branch>`
      esplicito;
-   - branch behind â†’ `git pull --rebase origin <branch>`;
-   - branch divergente â†’ risolvi con rebase + push esplicito.
+   - branch behind → `git pull --rebase origin <branch>`;
+   - branch divergente → risolvi con rebase + push esplicito.
 
    Il vincolo `upstream == origin/<branch>` evita drift fra il ref
    verificato dalla guard e il ref usato runtime: `deploy_backend` fa
@@ -58,8 +58,8 @@ exit 1 al primo fail.
    La guard esegue un `git fetch --quiet origin
    +refs/heads/<branch>:refs/remotes/origin/<branch>` (refspec esplicito
    per aggiornare `origin/<branch>`, non solo `FETCH_HEAD`). Il fetch
-   Ã¨ read-only: niente merge, niente rebase, niente modifiche al
-   working tree. **Nessun `git push` automatico** â€” la pubblicazione
+   è read-only: niente merge, niente rebase, niente modifiche al
+   working tree. **Nessun `git push` automatico** — la pubblicazione
    resta a carico dell'operatore. Questo evita che
    `bash deploy.sh frontend` pubblichi un `dist/` costruito da codice
    locale non ancora su GitHub.
@@ -117,8 +117,8 @@ Lo script fallisce esplicitamente se una di queste manca nel profilo:
 
 | Variabile | Default | Note |
 | --- | --- | --- |
-| `APP_BASE_URL` | â€” | URL pubblico per smoke esterni e verifiche manuali |
-| `BACKEND_PORT` | â€” | Solo informativo |
+| `APP_BASE_URL` | — | URL pubblico per smoke esterni e verifiche manuali |
+| `BACKEND_PORT` | — | Solo informativo |
 | `READY_TIMEOUT_SEC` | `60` | Timeout polling `/ready` post-restart |
 | `READY_POLL_INTERVAL_SEC` | `2` | Intervallo polling |
 | `RETAIN_FRONTEND_VERSIONS` | `3` | Retain N versioni `dist-{sha}/` (usato dal deploy frontend) |
@@ -127,11 +127,11 @@ Lo script fallisce esplicitamente se una di queste manca nel profilo:
 
 I file `<profile>.conf` sono **versionati** e **public**. Non devono mai contenere:
 
-- **PEM path** â†’ resta env `PLENORA_DEPLOY_PEM` per-operatore (vedi sotto)
-- **AWS access keys / credentials** â†’ mai. Il server usa IAM role attached, gli script backup usano SSM Parameter Store
-- **Contenuto `.env`** (`DATABASE_URL`, `JWT_SECRET_KEY`, `PLENORA_ENCRYPTION_KEY`, ecc.) â†’ resta sul server target in `${REMOTE_BACKEND_PATH}/.env`
-- **Valori SSM Parameter Store** â†’ mai
-- **Token o secret di terze parti** â†’ mai
+- **PEM path** → resta env `PLENORA_DEPLOY_PEM` per-operatore (vedi sotto)
+- **AWS access keys / credentials** → mai. Il server usa IAM role attached, gli script backup usano SSM Parameter Store
+- **Contenuto `.env`** (`DATABASE_URL`, `JWT_SECRET_KEY`, `PLENORA_ENCRYPTION_KEY`, ecc.) → resta sul server target in `${REMOTE_BACKEND_PATH}/.env`
+- **Valori SSM Parameter Store** → mai
+- **Token o secret di terze parti** → mai
 
 Review della PR di un profilo deve verificare l'assenza di queste classi.
 

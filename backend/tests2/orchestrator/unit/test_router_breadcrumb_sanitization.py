@@ -1,5 +1,5 @@
 """
-C2 â€” breadcrumb + detail fisso in orchestrator/router.
+C2 — breadcrumb + detail fisso in orchestrator/router.
 
 Audit finding:
 """
@@ -15,7 +15,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.orchestrator, pytest.mark.contract]
 
 
-# F6.2 â€” get_task_status endpoint detail fisso (no task_id leak in response)
+# F6.2 — get_task_status endpoint detail fisso (no task_id leak in response)
 
 
 def test_get_task_status_detail_fixed_on_broad_exception(client):
@@ -29,7 +29,7 @@ def test_get_task_status_detail_fixed_on_broad_exception(client):
         "app.core.orchestrator.router._assert_task_group"
     ), patch(
         "app.core.orchestrator.task_service.task_service.get_task_status",
-        side_effect=RuntimeError("DB pool exhausted â€” internal details")
+        side_effect=RuntimeError("DB pool exhausted — internal details")
     ):
         response = client.get(f"/api/tasks/{canary_task_id}")
 
@@ -45,7 +45,7 @@ def test_get_task_status_detail_fixed_on_broad_exception(client):
     assert canary_task_id not in str(detail)
 
 
-# F6.1 â€” _assert_task_group breadcrumb su lookup fail
+# F6.1 — _assert_task_group breadcrumb su lookup fail
 
 
 def test_assert_task_group_logs_breadcrumb_on_lookup_fail(client):
@@ -81,7 +81,7 @@ def test_assert_task_group_logs_breadcrumb_on_lookup_fail(client):
     assert response.status_code == 404
 
 
-# F6.3 â€” full-cleanup tenant check breadcrumb su ProjectService lookup
+# F6.3 — full-cleanup tenant check breadcrumb su ProjectService lookup
 
 
 def test_full_cleanup_tenant_check_breadcrumb_on_project_lookup_fail(client, tmp_path):

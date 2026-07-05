@@ -50,7 +50,7 @@ def test_err_msg_inatteso_no_str_e_interpolation():
 
 def test_err_msg_execution_error_branch_preserved():
     """Il ramo `isinstance(e, ExecutionError): err_msg = str(e)` deve restare
-    invariato â€” ExecutionError e' domain exception costruita dal codice
+    invariato — ExecutionError e' domain exception costruita dal codice
     applicativo (message controllato), NON leak di internals."""
     src = _read_manager_src()
     # Pattern ExecutionError branch preservato

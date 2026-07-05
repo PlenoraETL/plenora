@@ -44,7 +44,7 @@ def test_op_filter_incompatible_operator_value_raises_value_error(monkeypatch):
 
 
 def test_op_filter_happy_path_preserved():
-    """Anti-regressione: filtro numerico valido â†’ df filtrato correttamente,
+    """Anti-regressione: filtro numerico valido → df filtrato correttamente,
     NO raise. Il fix non deve toccare il happy path."""
     df = pd.DataFrame({"a": [1, 2, 3, 4], "b": [10, 20, 30, 40]})
     result = op_filter(df, column="a", operator=">", value=2)
@@ -53,18 +53,18 @@ def test_op_filter_happy_path_preserved():
     assert list(result["a"]) == [3, 4]
 
 
-# SITO W3 â€” op_formula fail-closed su formula invalida / AST-blocked
+# SITO W3 — op_formula fail-closed su formula invalida / AST-blocked
 
 
 def test_op_formula_invalid_formula_raises_value_error():
-    """Formula che riferisce colonna inesistente â†’ runtime error eval
-    namespace â†’ catturato W3 â†’ `raise ValueError` con messaggio safe.
+    """Formula che riferisce colonna inesistente → runtime error eval
+    namespace → catturato W3 → `raise ValueError` con messaggio safe.
     No leak di traceback pandas/eval internals."""
     df = pd.DataFrame({"a": [1, 2, 3], "b": [10, 20, 30]})
 
     with pytest.raises(ValueError) as exc_info:
-        # Formula con colonna inesistente â†’ NameError dentro eval â†’
-        # catturato da W3 broad except â†’ raise ValueError
+        # Formula con colonna inesistente → NameError dentro eval →
+        # catturato da W3 broad except → raise ValueError
         op_formula(df, new_column="calc", formula="colonna_inesistente + 1")
 
     msg = str(exc_info.value)
@@ -78,7 +78,7 @@ def test_op_formula_invalid_formula_raises_value_error():
 
 
 def test_op_formula_happy_path_preserved():
-    """Anti-regressione: formula valida `a + b` â†’ df con new_col calcolata,
+    """Anti-regressione: formula valida `a + b` → df con new_col calcolata,
     NO raise. Il fix non deve toccare il happy path."""
     df = pd.DataFrame({"a": [1, 2, 3], "b": [10, 20, 30]})
     result = op_formula(df, new_column="somma", formula="a + b")

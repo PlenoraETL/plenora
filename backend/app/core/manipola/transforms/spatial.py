@@ -255,7 +255,7 @@ def op_geo_centroid(
 
 
 # AREA
-# Calcola area in mÂ². Riproietta automaticamente in CRS metrico se necessario
+# Calcola area in m². Riproietta automaticamente in CRS metrico se necessario
 
 def op_geo_area(
     df: DataFrame,
@@ -353,7 +353,7 @@ def op_geo_dissolve(
 
 
 # SEMPLIFICAZIONE
-# Riduce complessitÃ  geometrie mantenendo la forma (algoritmo Douglas-Peucker
+# Riduce complessità geometrie mantenendo la forma (algoritmo Douglas-Peucker
 
 def op_geo_simplify(
     df: DataFrame,
@@ -367,7 +367,7 @@ def op_geo_simplify(
     Args:
         df: DataFrame input
         geom_column: Colonna geometria
-        tolerance: Tolleranza semplificazione (unitÃ  del CRS)
+        tolerance: Tolleranza semplificazione (unità del CRS)
         preserve_topology: Se True, evita auto-intersezioni
         
     Returns:
@@ -426,7 +426,7 @@ def op_geo_convex_hull(
 
 
 # RIPROIEZIONE CRS
-# Cambia sistema di coordinate (es: WGS84 â†’ UTM 32N, EPSG:4326 â†’ EPSG:32632
+# Cambia sistema di coordinate (es: WGS84 → UTM 32N, EPSG:4326 → EPSG:32632
 
 def op_geo_reproject(
     df: DataFrame,
@@ -459,7 +459,7 @@ def op_geo_reproject(
         crs_hint = source_crs  # puo' essere None: nessun default
         gdf = to_geodataframe(df, geom_column, crs=crs_hint)
 
-        # Se source_crs Ã¨ fornito esplicitamente, forzalo (override auto-detect
+        # Se source_crs è fornito esplicitamente, forzalo (override auto-detect
         if source_crs and gdf.crs and str(gdf.crs) != source_crs:
             logger.info(f"Override CRS sorgente: {gdf.crs} -> {source_crs}")
             gdf = gdf.set_crs(source_crs, allow_override=True)
@@ -586,7 +586,7 @@ def op_geo_distance(
 
 
 # NEAREST NEIGHBOR JOIN
-# Join per vicinanza: associa ad ogni geometria il vicino piÃ¹ prossimo
+# Join per vicinanza: associa ad ogni geometria il vicino più prossimo
 
 def op_geo_nearest(
     dfs: List[DataFrame],
@@ -600,20 +600,20 @@ def op_geo_nearest(
     """
     Nearest neighbor join tra due layer.
 
-    Per ogni geometria del layer sinistro, trova il vicino piÃ¹ prossimo
+    Per ogni geometria del layer sinistro, trova il vicino più prossimo
     nel layer destro e ne riporta gli attributi con la distanza.
 
     Args:
         dfs: Lista [layer_sinistro, layer_destro]
         left_geom_column: Colonna geometria del layer sinistro
         right_geom_column: Colonna geometria del layer destro
-        max_distance: Distanza massima in unitÃ  del CRS metrico scelto.
+        max_distance: Distanza massima in unità del CRS metrico scelto.
         output_column: Nome colonna distanza output
         metric_crs: CRS per calcolo distanza. None -> auto-UTM se geografico.
         output_crs: "same" | "metric" | "EPSG:xxxx"
 
     Returns:
-        GeoDataFrame con attributi del vicino piÃ¹ prossimo e distanza
+        GeoDataFrame con attributi del vicino più prossimo e distanza
     """
     if len(dfs) < 2:
         logger.warning("Nearest richiede 2 input")
@@ -811,7 +811,7 @@ def op_geo_make_valid(
         invalid_count = (~result.geometry.is_valid).sum()
 
         if invalid_count == 0:
-            logger.info("Make Valid: tutte le geometrie sono giÃ  valide")
+            logger.info("Make Valid: tutte le geometrie sono già valide")
             return result
 
         if HAS_MAKE_VALID:
@@ -885,7 +885,7 @@ def op_geo_within(
         keep_cols = [c for c in left_columns if c in joined.columns]
         result = copy_frame_for_update(joined[keep_cols])
 
-        # Rimuovi duplicati (una geometria puÃ² essere within piÃ¹ poligoni sovrapposti
+        # Rimuovi duplicati (una geometria può essere within più poligoni sovrapposti
         result = geodataframe_drop_duplicates_reset_index(result)
 
         # Assicura geometria attiva valida
@@ -910,7 +910,7 @@ def op_geo_point_on_surface(
     """
     Calcola un punto garantito all'interno di ogni poligono.
 
-    A differenza del centroide, il punto rappresentativo Ã¨ sempre
+    A differenza del centroide, il punto rappresentativo è sempre
     all'interno della geometria, anche per forme concave o con buchi.
 
     Args:
@@ -982,7 +982,7 @@ def op_geo_voronoi(
     Genera diagramma di Voronoi da geometrie puntuali.
 
     Ogni punto in input produce un poligono di Voronoi che rappresenta
-    l'area piÃ¹ vicina a quel punto rispetto a tutti gli altri.
+    l'area più vicina a quel punto rispetto a tutti gli altri.
     Richiede shapely.ops.voronoi_diagram (shapely >= 1.8).
 
     Args:
@@ -1069,7 +1069,7 @@ def op_geo_to_wkt(
     """
     Esporta geometria come WKT e/o coordinate lat/lon.
 
-    ModalitÃ  disponibili:
+    Modalità disponibili:
     - "wkt": aggiunge colonna con rappresentazione WKT
     - "latlon": aggiunge colonne latitudine e longitudine (dal centroide)
     - "both": aggiunge sia WKT che lat/lon
@@ -1077,7 +1077,7 @@ def op_geo_to_wkt(
     Args:
         df: DataFrame input
         geom_column: Colonna geometria sorgente
-        mode: ModalitÃ  export ("wkt", "latlon", "both")
+        mode: Modalità export ("wkt", "latlon", "both")
         wkt_column: Nome colonna WKT output
         lat_column: Nome colonna latitudine output
         lon_column: Nome colonna longitudine output
@@ -1112,7 +1112,7 @@ def op_geo_to_wkt(
         logger.error(f"[CRASH] Errore To WKT: {e}", exc_info=True)
         raise
 
-# CLEAN TOPOLOGY â€” AreaGapAndOverlapCleaner
+# CLEAN TOPOLOGY — AreaGapAndOverlapCleaner
 # Corregge gap e sovrapposizioni tra aree adiacenti
 
 def op_geo_clean_topology(
@@ -1136,7 +1136,7 @@ def op_geo_clean_topology(
     Args:
         df: DataFrame/GeoDataFrame con geometrie poligonali
         geom_column: Colonna geometria
-        snap_tolerance: Tolleranza di snapping in unitÃ  CRS
+        snap_tolerance: Tolleranza di snapping in unità CRS
         remove_overlaps: Se True, rimuove sovrapposizioni
         fill_gaps: Se True, chiude micro-gap tra poligoni
 
@@ -1214,12 +1214,12 @@ def op_geo_clean_topology(
 
         # Step 3: rimuovi sovrapposizioni
         # NOTE: per ogni i, ricostruisce `unary_union(geometries[:i])`
-        # da zero â€” O(n^2). Qui teniamo un accumulator incrementale
+        # da zero — O(n^2). Qui teniamo un accumulator incrementale
         # al passo i, `accumulated` e' gia' l'unione dei geometries[0..i-1
         # processati. Complessita' effettiva ~O(n) union pairwise
         # Nota FP: pair-union vs cascading-union possono differire a
         # livello di coordinate; i test perf_correctness usano tolerance
-        # topologica (equals â†’ equals_exact â†’ area-relative 1e-6
+        # topologica (equals → equals_exact → area-relative 1e-6
         if remove_overlaps and len(result) > 1:
             from shapely.ops import unary_union
             geom_col_name = result.geometry.name
@@ -1241,7 +1241,7 @@ def op_geo_clean_topology(
                     else:
                         # Nessun preceding non-empty: legacy avrebbe fatto
                         # diff = g.difference(empty_collection) = g
-                        # non-empty â†’ fixed_count++ e geometries[i] = g
+                        # non-empty → fixed_count++ e geometries[i] = g
                         geometries[i] = g
                         fixed_count += 1
                         accumulated = g
@@ -1267,7 +1267,7 @@ def op_geo_clean_topology(
         raise
 
 
-# GEO BOUNDS EXTRACTOR â€” Estrai bounding box come attributi
+# GEO BOUNDS EXTRACTOR — Estrai bounding box come attributi
 # Calcola le coordinate min/max del rettangolo contenitore di ogni geometria
 
 def op_geo_bounds_extractor(
@@ -1313,8 +1313,8 @@ def op_geo_bounds_extractor(
         raise
 
 
-# GEO VERTEX COUNT â€” Conta i vertici di ogni geometria
-# Utile per analisi della complessitÃ  geometrica
+# GEO VERTEX COUNT — Conta i vertici di ogni geometria
+# Utile per analisi della complessità geometrica
 
 def op_geo_vertex_count(
     df: DataFrame,

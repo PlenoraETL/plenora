@@ -1,5 +1,5 @@
 """
-Contract test R-25 dual-auth endpoint contract â€” endpoint dual-auth intermediate_mode.
+Contract test R-25 dual-auth endpoint contract — endpoint dual-auth intermediate_mode.
 
 Endpoint coperti:
 """
