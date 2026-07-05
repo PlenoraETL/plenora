@@ -180,6 +180,7 @@ def _make_host(monkeypatch, *, responses, output_mapping=None,
         "app.core.arricchisci.http_executor.validate_external_url",
         lambda _url: None,
     )
+    monkeypatch.setattr(batch_mod, "validate_external_url", lambda _url: None)
     monkeypatch.setattr(batch_mod.time, "sleep", lambda *_a, **_k: None)
 
     host = _Host(output_mapping=output_mapping, batch_config=batch_config,
@@ -376,6 +377,47 @@ class TestCallBatchApi:
         assert results == [{"out": "ok"}]
         assert len(session.post_calls) == 2
 
+    def test_ssrf_validation_runs_once_before_retry_loop(self, monkeypatch):
+        host, session = _make_host(
+            monkeypatch,
+            responses=[_FakeResponse(500), _resp([{"value": "ok"}])],
+            options=EnrichmentOptions(max_retries=1),
+        )
+        validated_urls = []
+        monkeypatch.setattr(
+            batch_mod,
+            "validate_external_url",
+            lambda url: validated_urls.append(url),
+        )
+
+        results, err = host._call_batch_api([{"q": "a"}], [0])
+
+        assert err is None
+        assert results == [{"out": "ok"}]
+        assert validated_urls == ["https://api.example.com/batch"]
+        assert len(session.post_calls) == 2
+
+    def test_ssrf_validation_error_short_circuits_before_http(self, monkeypatch):
+        host, session = _make_host(
+            monkeypatch,
+            responses=[_resp([{"value": "unused"}])],
+            options=EnrichmentOptions(max_retries=3),
+        )
+
+        def reject_url(_url):
+            raise ValueError("blocked outbound URL")
+
+        monkeypatch.setattr(batch_mod, "validate_external_url", reject_url)
+
+        results, err = host._call_batch_api([{"q": "a"}], [0])
+
+        assert results is None
+        assert err is not None
+        assert err.error_type == "request_error"
+        assert err.retry_count == 0
+        assert session.get_calls == []
+        assert session.post_calls == []
+
     def test_retry_exhausted_sets_status(self, monkeypatch):
         host, session = _make_host(
             monkeypatch,
@@ -393,6 +435,18 @@ class TestCallBatchApi:
         host, session = _make_host(
             monkeypatch,
             responses=[_FakeResponse(429, headers={"Retry-After": "1"}),
+                       _resp([{"value": "ok"}])],
+            options=EnrichmentOptions(max_retries=3, respect_retry_after=True),
+        )
+        results, err = host._call_batch_api([{"q": "a"}], [0])
+        assert err is None
+        assert results == [{"out": "ok"}]
+        assert len(session.post_calls) == 2
+
+    def test_429_retry_after_header_is_case_insensitive(self, monkeypatch):
+        host, session = _make_host(
+            monkeypatch,
+            responses=[_FakeResponse(429, headers={"retry-after": "1"}),
                        _resp([{"value": "ok"}])],
             options=EnrichmentOptions(max_retries=3, respect_retry_after=True),
         )

@@ -291,3 +291,23 @@ class TestGeneratorPagination:
         assert gen_env.session.get.call_count == 2
         second_url = gen_env.session.get.call_args_list[1][0][0]
         assert "p2" in second_url
+
+    def test_link_pagination_reads_lowercase_link_header(self, gen_env):
+        gen_env.session.get.side_effect = [
+            _resp(
+                200,
+                json_body={"items": [{"x": 1}], "next": None},
+                headers={"link": '<https://api.test/p2>; rel="next"'},
+            ),
+            _resp(200, json_body={"items": [{"x": 2}], "next": None}),
+        ]
+        cfg = {
+            "endpoint": {"url": "https://api.test/q", "method": "GET"},
+            "auth": {},
+            "output_mapping": [{"path": "items[*].x", "column": "x"}],
+            "pagination": {"type": "link", "link_path": "next"},
+        }
+        gen_env.svc._execute_api_generator(cfg)
+        assert gen_env.session.get.call_count == 2
+        second_url = gen_env.session.get.call_args_list[1][0][0]
+        assert "p2" in second_url

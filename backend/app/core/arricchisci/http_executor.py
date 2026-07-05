@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional
 
 import requests
+from requests.structures import CaseInsensitiveDict
 
 from app.core.security.outbound_url import validate_external_url
 from app.infrastructure.http.session import get_shared_session
@@ -33,7 +34,7 @@ class NormalizedResponse:
     """Thin response wrapper with timing metadata."""
 
     status_code: int
-    headers: Mapping[str, str]
+    headers: CaseInsensitiveDict
     text: str
     elapsed_ms: float
     raw_response: requests.Response
@@ -75,7 +76,7 @@ class HttpExecutor:
 
         return NormalizedResponse(
             status_code=response.status_code,
-            headers=dict(response.headers),
+            headers=CaseInsensitiveDict(response.headers),
             text=response.text or "",
             elapsed_ms=(time.time() - started) * 1000,
             raw_response=response,

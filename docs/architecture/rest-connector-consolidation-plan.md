@@ -86,7 +86,11 @@ Deliverable: same behavior, one execution core, all paths route through it.
 Current implementation note: Phase 0 has started with `RequestSpec`,
 `NormalizedResponse`, and `HttpExecutor`; per-row enricher, batch, generator,
 and connection test now route through the shared executor. `rest_file` remains
-out of scope for Phase 0.
+out of scope for Phase 0. Per-row enricher and batch validate the final URL once
+before entering their retry loop, then delegate execution to the shared executor
+with URL validation disabled for the already-checked URL. Batch now also uses the
+same TLS `verify` policy as per-row calls; this is an intentional minor behavior
+alignment from the centralization.
 
 ## Phase 1 — Cross-cutting extension (Tier A), each change in one place
 

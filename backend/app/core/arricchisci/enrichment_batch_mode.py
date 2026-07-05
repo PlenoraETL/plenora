@@ -14,6 +14,8 @@ import requests
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.tabular import iter_dataframe_indexed_rows
 from app.core.arricchisci.http_executor import RequestSpec, execute_http_request
+from app.core.arricchisci.enrichment_retry_http import _clamp_retry_after
+from app.core.security.outbound_url import validate_external_url
 from app.shared.security.tls_policy import resolve_tls_verify
 from app.utils.logger import get_logger
 
@@ -201,18 +203,30 @@ class EnrichmentBatchModeMixin:
         # Costruisci payload batch
         payload = self._build_batch_payload(batch_params)
 
-        # URL e metodo (con possibile override
+        # URL e metodo, con eventuale override batch.
         url = self.batch_config.endpoint_override or self.url
         method = (self.batch_config.method_override or self.method).upper()
 
         last_error = None
 
+        try:
+            validate_external_url(url)
+        except ValueError as e:
+            return None, RowError(
+                row_index=batch_indices[0],
+                status=RowStatus.ERROR,
+                error_message=str(e),
+                error_type="request_error",
+                retry_count=0,
+            )
+
+        ssl_verify = resolve_tls_verify(
+            not getattr(self.options, 'disable_ssl_verify', False),
+            context="API enricher batch",
+        )
+
         for attempt in range(self.options.max_retries + 1):
             try:
-                ssl_verify = resolve_tls_verify(
-                    not getattr(self.options, 'disable_ssl_verify', False),
-                    context="API enricher batch",
-                )
                 response = execute_http_request(RequestSpec(
                     url=url,
                     method=method,
@@ -222,6 +236,7 @@ class EnrichmentBatchModeMixin:
                     timeout=(self.options.connect_timeout, self.options.request_timeout),
                     verify=ssl_verify,
                     allow_redirects=False,
+                    validate_url=False,
                     context="API enricher batch",
                 ))
 
@@ -240,7 +255,10 @@ class EnrichmentBatchModeMixin:
                 # Rate limited
                 if response.status_code == 429:
                     if self.options.respect_retry_after:
-                        retry_after = int(response.headers.get("Retry-After", 60))
+                        retry_after = _clamp_retry_after(
+                            response.headers.get("Retry-After"),
+                            max_seconds=self.options.max_retry_after_seconds,
+                        )
                         time.sleep(retry_after)
 
                     last_error = RowError(
@@ -285,15 +303,6 @@ class EnrichmentBatchModeMixin:
                     status=RowStatus.ERROR,
                     error_message=f"Timeout dopo {self.options.request_timeout}s",
                     error_type="timeout",
-                    retry_count=attempt
-                )
-
-            except ValueError as e:
-                last_error = RowError(
-                    row_index=batch_indices[0],
-                    status=RowStatus.ERROR,
-                    error_message=str(e),
-                    error_type="request_error",
                     retry_count=attempt
                 )
 

@@ -15,6 +15,7 @@ from typing import Optional, Tuple
 import requests
 
 from app.core.arricchisci.http_executor import RequestSpec, execute_http_request
+from app.core.security.outbound_url import validate_external_url
 from app.core.arricchisci.types import JsonObject
 from app.observability.log_sanitization import (
     sanitize_for_log,
@@ -96,24 +97,32 @@ class EnrichmentRetryHttpMixin:
         """
         last_error = None
 
+        call_url = self.url
+        call_params_base = dict(params)
+        for pname in re.findall(r'\{(\w+)\}', call_url):
+            if pname in call_params_base:
+                encoded = _quote(str(call_params_base.pop(pname)), safe='-._~:@!$&\'()*+,=;/')
+                call_url = call_url.replace(f'{{{pname}}}', encoded)
+
+        try:
+            validate_external_url(call_url)
+        except ValueError as e:
+            return None, RowError(
+                row_index=row_index,
+                status=RowStatus.ERROR,
+                error_message=str(e),
+                error_type="request_error",
+                retry_count=0,
+            )
+
+        ssl_verify = resolve_tls_verify(
+            not getattr(self.options, 'disable_ssl_verify', False),
+            context="API enricher per-row",
+        )
+
         for attempt in range(self.options.max_retries + 1):
             try:
-                # disable_ssl_verify e' user-config (EnrichmentOptions); il
-                # gate `resolve_tls_verify` lo forza a True in prod/staging
-                # (signal MITM-prevention) e lo permette solo con opt-in env
-                # esplicito (`PLENORA_ALLOW_TLS_BYPASS=1`) o ENVIRONMENT=dev.
-                ssl_verify = resolve_tls_verify(
-                    not getattr(self.options, 'disable_ssl_verify', False),
-                    context="API enricher per-row",
-                )
-
-                # Sostituisci path params nell'URL ({ip}, {coordinates}, ecc
-                call_url = self.url
-                call_params = dict(params)
-                for pname in re.findall(r'\{(\w+)\}', call_url):
-                    if pname in call_params:
-                        encoded = _quote(str(call_params.pop(pname)), safe='-._~:@!$&\'()*+,=;/')
-                        call_url = call_url.replace(f'{{{pname}}}', encoded)
+                call_params = dict(call_params_base)
 
                 # Iniezione token ArcGIS in query string (auth_type=arcgis_token
                 # Il token va come ?token=xxx, NON come Authorization header
@@ -140,6 +149,7 @@ class EnrichmentRetryHttpMixin:
                     timeout=(self.options.connect_timeout, self.options.request_timeout),
                     verify=ssl_verify,
                     allow_redirects=False,
+                    validate_url=False,
                     context="API enricher per-row",
                 ))
 
@@ -225,15 +235,6 @@ class EnrichmentRetryHttpMixin:
                     status=RowStatus.ERROR,
                     error_message=f"Timeout dopo {self.options.request_timeout}s",
                     error_type="timeout",
-                    retry_count=attempt
-                )
-
-            except ValueError as e:
-                last_error = RowError(
-                    row_index=row_index,
-                    status=RowStatus.ERROR,
-                    error_message=str(e),
-                    error_type="request_error",
                     retry_count=attempt
                 )
 

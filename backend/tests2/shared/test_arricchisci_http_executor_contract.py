@@ -71,6 +71,8 @@ def test_get_uses_query_params_and_disables_redirects_by_default(monkeypatch):
     assert kwargs["headers"] == {"X-Test": "1"}
     assert kwargs["timeout"] == (2, 5)
     assert kwargs["allow_redirects"] is False
+    assert response.headers.get("content-type") == "application/json"
+    assert response.headers.get("Content-Type") == "application/json"
 
 
 def test_non_get_methods_preserve_phase0_post_json_compat(monkeypatch):
