@@ -13,6 +13,10 @@ from app.core.security.outbound_url import validate_external_url
 from app.infrastructure.http.session import get_shared_session
 
 
+SUPPORTED_HTTP_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})
+SUPPORTED_BODY_TYPES = frozenset({"json", "form-urlencoded", "raw", "none"})
+
+
 @dataclass(frozen=True)
 class RequestSpec:
     """Normalized HTTP request used by REST connector call sites."""
@@ -52,15 +56,14 @@ class HttpExecutor:
     the configured body encoder.
     """
 
-    _SUPPORTED_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
-
     def execute(self, spec: RequestSpec) -> NormalizedResponse:
         if spec.validate_url:
             validate_external_url(spec.url)
 
-        method = (spec.method or "GET").upper()
-        if method not in self._SUPPORTED_METHODS:
-            raise ValueError(f"Metodo HTTP non supportato: {method}")
+        method, _body_type = validate_request_spec_config(
+            spec.method,
+            spec.body_type,
+        )
 
         session = get_shared_session()
         started = time.time()
@@ -134,6 +137,26 @@ def normalize_body_type(body_type: str | None) -> str:
         "none": "none",
     }
     return aliases.get(normalized, normalized)
+
+
+def validate_request_spec_config(
+    method: str | None,
+    body_type: str | None = "json",
+) -> tuple[str, str]:
+    """Validate and normalize method/body config for a REST RequestSpec."""
+
+    normalized_method = (method or "GET").upper()
+    if normalized_method not in SUPPORTED_HTTP_METHODS:
+        raise ValueError(f"Metodo HTTP non supportato: {normalized_method}")
+
+    normalized_body_type = normalize_body_type(body_type)
+    if (
+        normalized_method != "GET"
+        and normalized_body_type not in SUPPORTED_BODY_TYPES
+    ):
+        raise ValueError(f"body_type non supportato: {body_type}")
+
+    return normalized_method, normalized_body_type
 
 
 def body_type_from_config(

@@ -177,11 +177,16 @@ def test_api_connection_service_create_uses_typed_save_row(
             "group_id": "grp-1",
             "created_by": "user-1",
             "auth": {"type": "bearer", "token": "secret"},
+            "async": {"enabled": True, "status_url": "{base}/jobs/{job_id}"},
         }
     )
 
     assert captured["group_id"] == "grp-1"
     assert captured["created_by"] == "user-1"
+    assert captured["config"]["async"] == {
+        "enabled": True,
+        "status_url": "{base}/jobs/{job_id}",
+    }
     assert result["id"] == captured["api_id"]
     assert result["auth"]["token"] == "***"
 
@@ -209,12 +214,17 @@ def test_api_connection_service_update_uses_typed_update_row(
 
     result = api_service.update_api_connection(
         "api-1",
-        {"name": "Updated API", "auth": {"token": "***"}},
+        {
+            "name": "Updated API",
+            "auth": {"token": "***"},
+            "async": {"enabled": False},
+        },
     )
 
     updated_config = captured["config"]
     assert captured["api_id"] == "api-1"
     assert updated_config["name"] == "Updated API"
+    assert updated_config["async"] == {"enabled": False}
     assert updated_config["auth"]["token"] == "old-secret"
     assert result["auth"]["token"] == "***"
 

@@ -45,7 +45,15 @@ vi.mock('../../src/components/arricchisci/TemplateLibraryModal', () => ({
           api_type: 'generator',
           endpoint: { url: 'https://example.test/poi', method: 'GET' },
           auth: { type: 'none' },
+          custom_headers: { 'X-Client': 'plenora' },
           static_parameters: { dataset: 'poi' },
+          request: { body_type: 'json' },
+          async: {
+            enabled: true,
+            job_id_path: 'id',
+            status_url: '{base}/jobs/{job_id}',
+            result_path: 'result',
+          },
           options: { rate_limit: 7, timeout: 45, retry_on_error: false, retry_max: 1 },
         },
         parameters: [
@@ -228,6 +236,14 @@ describe('ApiConnectionManager', () => {
         connection_type: 'template',
         url: 'https://example.test/poi',
         method: 'GET',
+        custom_headers: { 'X-Client': 'plenora' },
+        request: { body_type: 'json' },
+        async: {
+          enabled: true,
+          job_id_path: 'id',
+          status_url: '{base}/jobs/{job_id}',
+          result_path: 'result',
+        },
         static_parameters: {
           dataset: 'poi',
           city: 'Rome',

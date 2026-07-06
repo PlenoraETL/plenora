@@ -115,6 +115,156 @@ def test_per_row_request_config_reaches_request_spec(monkeypatch):
     assert specs[0].allow_redirects is True
 
 
+def test_per_row_async_polls_and_extracts_final_result(monkeypatch):
+    host = _Host(options=EnrichmentOptions(max_retries=0))
+    host.method = "POST"
+    host.api_config = {
+        "async": {
+            "enabled": True,
+            "job_id_path": "id",
+            "status_url": "{base}/jobs/{job_id}",
+            "result_path": "result",
+            "poll_interval_s": 0,
+            "max_wait_s": 1,
+        },
+    }
+    specs = []
+    responses = [
+        _Response(202, {"id": "job-1"}),
+        _Response(200, {"status": "completed", "result": {"ok": True}}),
+    ]
+
+    monkeypatch.setattr(retry_mod, "validate_external_url", lambda _url: None)
+    monkeypatch.setattr(
+        retry_mod,
+        "resolve_tls_verify",
+        lambda enabled, *, context: enabled,
+    )
+    monkeypatch.setattr(retry_mod.time, "sleep", lambda *_args, **_kwargs: None)
+
+    def execute(spec):
+        specs.append(spec)
+        return responses.pop(0)
+
+    monkeypatch.setattr(retry_mod, "execute_http_request", execute)
+
+    result, err = host._call_api_with_retry({"q": "abc"}, row_index=4)
+
+    assert err is None
+    assert result == {"ok": True}
+    assert [spec.context for spec in specs] == [
+        "API enricher per-row",
+        "API async status",
+    ]
+    assert specs[1].url == "https://api.example.com/jobs/job-1"
+
+
+def test_per_row_async_submit_429_uses_existing_retry(monkeypatch):
+    host = _Host(
+        options=EnrichmentOptions(
+            max_retries=1,
+            respect_retry_after=False,
+            retry_on_status=[429],
+        )
+    )
+    host.method = "POST"
+    host.api_config = {
+        "async": {
+            "enabled": True,
+            "job_id_path": "id",
+            "status_url": "{base}/jobs/{job_id}",
+            "result_path": "result",
+            "poll_interval_s": 0,
+            "max_wait_s": 1,
+        },
+    }
+    responses = [
+        _Response(429),
+        _Response(202, {"id": "job-1"}),
+        _Response(200, {"status": "completed", "result": {"ok": True}}),
+    ]
+
+    monkeypatch.setattr(retry_mod, "validate_external_url", lambda _url: None)
+    monkeypatch.setattr(
+        retry_mod,
+        "resolve_tls_verify",
+        lambda enabled, *, context: enabled,
+    )
+    monkeypatch.setattr(retry_mod.time, "sleep", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        retry_mod,
+        "execute_http_request",
+        lambda _spec: responses.pop(0),
+    )
+
+    result, err = host._call_api_with_retry({"q": "abc"}, row_index=4)
+
+    assert err is None
+    assert result == {"ok": True}
+    assert host._rate_limit_hits_observed == 1
+
+
+def test_per_row_unsupported_method_returns_config_row_error(monkeypatch):
+    host = _Host(options=EnrichmentOptions(max_retries=3))
+    host.method = "HEAD"
+
+    monkeypatch.setattr(retry_mod, "validate_external_url", lambda _url: None)
+    monkeypatch.setattr(
+        retry_mod,
+        "execute_http_request",
+        lambda _spec: pytest.fail("HTTP must not run after config rejection"),
+    )
+
+    result, err = host._call_api_with_retry({"q": "abc"}, row_index=4)
+
+    assert result is None
+    assert err is not None
+    assert err.error_type == "request_config_error"
+    assert err.retry_count == 0
+    assert "Metodo HTTP non supportato" in err.error_message
+
+
+def test_per_row_unsupported_body_type_returns_config_row_error(monkeypatch):
+    host = _Host(options=EnrichmentOptions(max_retries=3))
+    host.method = "POST"
+    host.api_config = {"request": {"body_type": "multipart"}}
+
+    monkeypatch.setattr(retry_mod, "validate_external_url", lambda _url: None)
+    monkeypatch.setattr(
+        retry_mod,
+        "execute_http_request",
+        lambda _spec: pytest.fail("HTTP must not run after config rejection"),
+    )
+
+    result, err = host._call_api_with_retry({"q": "abc"}, row_index=4)
+
+    assert result is None
+    assert err is not None
+    assert err.error_type == "request_config_error"
+    assert err.retry_count == 0
+    assert "body_type non supportato" in err.error_message
+
+
+def test_per_row_invalid_async_config_returns_config_row_error(monkeypatch):
+    host = _Host(options=EnrichmentOptions(max_retries=3))
+    host.api_config = {"async": {"enabled": True}}
+
+    monkeypatch.setattr(retry_mod, "validate_external_url", lambda _url: None)
+    monkeypatch.setattr(
+        retry_mod,
+        "execute_http_request",
+        lambda _spec: pytest.fail("HTTP must not run after config rejection"),
+    )
+
+    result, err = host._call_api_with_retry({"q": "abc"}, row_index=4)
+
+    assert result is None
+    assert err is not None
+    assert err.error_type == "request_config_error"
+    assert err.retry_count == 0
+    assert "async.status_url" in err.error_message
+
+
 def test_per_row_application_error_path_returns_row_error(monkeypatch):
     host = _Host(options=EnrichmentOptions(max_retries=0))
     host.api_config = {"error_path": "error"}

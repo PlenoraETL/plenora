@@ -215,6 +215,42 @@ class TestGeneratorBasics:
         gen_env.svc._execute_api_generator(cfg)
         assert gen_env.session.get.call_args.kwargs["allow_redirects"] is True
 
+    def test_async_generator_polls_and_parses_final_result(self, gen_env):
+        gen_env.session.post.return_value = _resp(202, json_body={"id": "job-1"})
+        gen_env.session.get.return_value = _resp(
+            200,
+            json_body={
+                "status": "completed",
+                "result": {"items": [{"x": 1}, {"x": 2}]},
+            },
+        )
+        cfg = {
+            "endpoint": {"url": "https://api.test/run", "method": "POST"},
+            "auth": {},
+            "output_mapping": [{"path": "items[*].x", "column": "x"}],
+            "async": {
+                "enabled": True,
+                "job_id_from": "body",
+                "job_id_path": "id",
+                "accepted_status": [202],
+                "status_url": "{base}/jobs/{job_id}",
+                "status_path": "status",
+                "done_values": ["completed"],
+                "failed_values": ["failed"],
+                "result_from": "status_response",
+                "result_path": "result",
+                "poll_interval_s": 0,
+                "max_wait_s": 1,
+            },
+        }
+
+        result = gen_env.svc._execute_api_generator(cfg)
+
+        assert result["x"].tolist() == [1, 2]
+        gen_env.session.post.assert_called_once()
+        gen_env.session.get.assert_called_once()
+        assert gen_env.session.get.call_args[0][0] == "https://api.test/jobs/job-1"
+
 
 # _execute_api_generator — URL path param substitution
 

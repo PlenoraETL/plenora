@@ -11,6 +11,7 @@ from typing import Any, Optional
 
 import requests
 
+from app.core.arricchisci.async_poller import AsyncPoller
 from app.core.dataframes.tabular import (
     dataframe_first_row_dict,
     dataframe_from_records,
@@ -244,6 +245,7 @@ class ApiConnectionGeneratorEnricherMixin:
         response_preset: str,
         response_config: JsonObject,
         request_config: JsonObject,
+        async_config: JsonObject,
         success_config: JsonObject,
         output_mapping: JsonRows,
     ) -> tuple:
@@ -263,7 +265,7 @@ class ApiConnectionGeneratorEnricherMixin:
         )
 
         logger.info(f"Generator API call: {method} {target_url}")
-        resp = execute_http_request(RequestSpec(
+        request_spec = RequestSpec(
             url=target_url,
             method=method,
             params=query_params,
@@ -274,13 +276,22 @@ class ApiConnectionGeneratorEnricherMixin:
             timeout=timeout_from_options(options, default_read_timeout=60),
             allow_redirects=allow_redirects_from_config(options, request_config),
             context="API generator",
-        ))
+        )
 
-        if resp.status_code != 200:
-            err = resp.text[:500] if resp.text else 'nessuna risposta'
-            raise ValueError(f"API error: HTTP {resp.status_code} — {err}")
-
-        data = resp.json()
+        if async_config.get("enabled"):
+            poll_result = AsyncPoller(execute=execute_http_request).run(
+                request_spec,
+                async_config,
+                base_url=target_url,
+            )
+            resp = poll_result.response
+            data = poll_result.data
+        else:
+            resp = execute_http_request(request_spec)
+            if resp.status_code != 200:
+                err = resp.text[:500] if resp.text else 'nessuna risposta'
+                raise ValueError(f"API error: HTTP {resp.status_code} — {err}")
+            data = resp.json()
         evaluation = evaluate_success(data, success_config)
         if not evaluation.ok:
             raise ValueError(
@@ -389,6 +400,7 @@ class ApiConnectionGeneratorEnricherMixin:
         pagination = api_config.get('pagination', {})
         options = api_config.get('options', {}) or {}
         request_config = api_config.get('request', {}) or {}
+        async_config = api_config.get('async', {}) or {}
         success_config = success_config_from_api_config(api_config)
 
         if not url:
@@ -408,6 +420,7 @@ class ApiConnectionGeneratorEnricherMixin:
                 response_preset=response_preset,
                 response_config=response_config,
                 request_config=request_config,
+                async_config=async_config,
                 success_config=success_config,
                 output_mapping=output_mapping,
             )

@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "updated_at": "2026-01-26",
+  "updated_at": "2026-07-06",
   "templates": [
     {
       "_meta": {
@@ -648,6 +648,98 @@
           "path": "data[].prod[0].val[0].ref",
           "column": "timestamp",
           "description": "Data/ora rilevazione"
+        }
+      ]
+    },
+    {
+      "_meta": {
+        "id": "sister-async-generator",
+        "category": "custom",
+        "tags": [
+          "sister",
+          "async",
+          "generator",
+          "rest",
+          "polling"
+        ]
+      },
+      "display": {
+        "name": "SISTER - Async Generator",
+        "short_description": "Template REST asincrono submit/poll/result per servizi SISTER",
+        "icon": "S",
+        "docs_url": "",
+        "pricing": "Dipende dall'ambiente SISTER configurato",
+        "limitations": [
+          "Sostituire l'URL placeholder con l'endpoint SISTER reale",
+          "Verificare status_url/result_path secondo il deployment SISTER"
+        ]
+      },
+      "config": {
+        "api_type": "generator",
+        "endpoint": {
+          "url": "https://sister.example/api/submit",
+          "method": "POST"
+        },
+        "auth": {
+          "type": "none"
+        },
+        "request": {
+          "body_type": "json"
+        },
+        "async": {
+          "enabled": true,
+          "job_id_from": "body",
+          "job_id_path": "id",
+          "accepted_status": [
+            200,
+            202
+          ],
+          "status_url": "{base}/jobs/{job_id}",
+          "status_method": "GET",
+          "status_path": "status",
+          "done_values": [
+            "completed",
+            "done",
+            "success"
+          ],
+          "failed_values": [
+            "failed",
+            "error",
+            "cancelled"
+          ],
+          "result_from": "status_response",
+          "result_path": "result",
+          "poll_interval_s": 3,
+          "poll_backoff": 1.0,
+          "poll_max_interval_s": 30,
+          "max_wait_s": 600
+        },
+        "static_parameters": {},
+        "options": {
+          "rate_limit": 1,
+          "timeout": 120,
+          "retry_count": 2
+        }
+      },
+      "parameters": [
+        {
+          "name": "payload",
+          "type": "string",
+          "required": false,
+          "description": "Payload JSON o identificativo richiesta da adattare al servizio SISTER",
+          "default": "{}"
+        }
+      ],
+      "output_mapping": [
+        {
+          "path": "items[*].id",
+          "column": "id",
+          "description": "Identificativo elemento restituito"
+        },
+        {
+          "path": "items[*].status",
+          "column": "status",
+          "description": "Stato elemento restituito"
         }
       ]
     }

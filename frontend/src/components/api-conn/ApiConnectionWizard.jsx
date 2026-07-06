@@ -37,6 +37,7 @@ export const EMPTY_FORM = {
   pagination:{ type:'', page_size:100, max_rows:10000, offset_param:'offset', limit_param:'limit', cursor_param:'cursor', cursor_path:'next_cursor', link_path:'next', page_param:'page', page_size_param:'page_size', start_page:0 },
   options:{ rate_limit:5, timeout:30, retry_on_error:true, retry_max:3 },
   batch:{ enabled:false, max_size:100, input_key:'items', input_format:'array', endpoint_override:'', method_override:'' },
+  async:{ enabled:false },
   // REST file processor fields use connection_type='rest_file'.
   // file_fields: campi multipart che ricevono un file. Per ora solo source='node_input'
   //   (file in input al nodo del canvas).
@@ -73,7 +74,10 @@ function buildFormFromApi(api) {
     pagination: { ...EMPTY_FORM.pagination, ...(api.pagination || {}) },
     options: { ...EMPTY_FORM.options, ...(api.options || {}) },
     batch: { ...EMPTY_FORM.batch, ...(api.batch || {}) },
-    request: { ...EMPTY_FORM.request, ...(api.request || {}) },
+    async: { ...EMPTY_FORM.async, ...(api.async || {}) },
+    request: api.connection_type === 'rest_file'
+      ? { ...EMPTY_FORM.request, ...(api.request || {}) }
+      : (api.request || EMPTY_FORM.request),
     response: { ...EMPTY_FORM.response, ...(api.response || {}) },
   };
 }
@@ -88,7 +92,7 @@ function buildFormFromTemplate(tpl) {
     url: tpl.config?.endpoint?.url || '',
     method: tpl.config?.endpoint?.method || 'GET',
     auth: tpl.config?.auth || { type: 'none' },
-    custom_headers: {},
+    custom_headers: tpl.config?.custom_headers || {},
     parameters: (tpl.parameters || []).map(p => ({
       name: p.name,
       type: p.type || 'string',
@@ -107,18 +111,19 @@ function buildFormFromTemplate(tpl) {
       path: o.path, column: o.column, type: o.type,
     })),
     schema_fields: [],
-    response_preset: '',
-    response_config: null,
-    pagination: EMPTY_FORM.pagination,
+    response_preset: tpl.config?.response_preset || '',
+    response_config: tpl.config?.response_config || null,
+    pagination: { ...EMPTY_FORM.pagination, ...(tpl.config?.pagination || {}) },
     options: {
       rate_limit: tpl.config?.options?.rate_limit || 5,
       timeout: tpl.config?.options?.timeout || 30,
       retry_on_error: tpl.config?.options?.retry_on_error ?? true,
       retry_max: tpl.config?.options?.retry_max || 3,
     },
-    batch: EMPTY_FORM.batch,
-    request: EMPTY_FORM.request,
-    response: EMPTY_FORM.response,
+    batch: { ...EMPTY_FORM.batch, ...(tpl.config?.batch || {}) },
+    async: { ...EMPTY_FORM.async, ...(tpl.config?.async || {}) },
+    request: tpl.config?.request || EMPTY_FORM.request,
+    response: { ...EMPTY_FORM.response, ...(tpl.config?.response || {}) },
   };
 }
 
@@ -172,7 +177,9 @@ const [editingApi, setEditingApi] = useState(null);
     if (seed.kind === 'template') {
       setEditingApi(null);
       setFormData(buildFormFromTemplate(seed.template));
-      setCustomHeadersList([]);
+      setCustomHeadersList(Object.entries(
+        seed.template.config?.custom_headers || {}
+      ).map(([key, value]) => ({ key, value })));
       setWizardStep(1);
       setTestResult(null);
       setTestParams({});
@@ -224,6 +231,12 @@ const getCustomHeadersObject = () => {
         options: { ...formData.options, parallel_workers: formData.options?.parallel_workers || 1 },
         batch: formData.batch || { enabled: false },
       };
+      if (formData.async?.enabled) {
+        data.async = formData.async;
+      }
+      if (formData.request?.body_type && formData.request.body_type !== 'multipart') {
+        data.request = formData.request;
+      }
       if (formData.connection_type === 'rest_file') {
         data.method = 'POST';
         data.request = formData.request || { body_type:'multipart', file_fields:[], static_fields:[] };
@@ -273,6 +286,9 @@ const getCustomHeadersObject = () => {
           method: batch.method_override || 'POST',
           auth: formData.auth,
           custom_headers: getCustomHeadersObject(),
+          options: formData.options,
+          request: formData.request?.body_type !== 'multipart' ? formData.request : undefined,
+          async: formData.async?.enabled ? formData.async : undefined,
           test_params: { [inputKey]: batchItems },
           force_body: true,
           include_raw: true,
@@ -284,6 +300,9 @@ const getCustomHeadersObject = () => {
           method: formData.method,
           auth: formData.auth,
           custom_headers: getCustomHeadersObject(),
+          options: formData.options,
+          request: formData.request?.body_type !== 'multipart' ? formData.request : undefined,
+          async: formData.async?.enabled ? formData.async : undefined,
           test_params: { ...formData.static_parameters, ...testParams },
           include_raw: true,
         };

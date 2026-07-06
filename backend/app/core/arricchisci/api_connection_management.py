@@ -19,6 +19,7 @@ from app.core.arricchisci._api_connection_helpers import (
     _decrypt_auth_in_config,
     _encrypt_auth_in_config,
 )
+from app.core.arricchisci.async_poller import AsyncPoller
 from app.core.arricchisci.http_executor import (
     RequestSpec,
     allow_redirects_from_config,
@@ -220,6 +221,8 @@ class ApiConnectionManagementMixin:
             config["pagination"] = data["pagination"]
         if data.get("batch"):
             config["batch"] = data["batch"]
+        if data.get("async") is not None:
+            config["async"] = data["async"]
         # rest_file (Processore File): config multipart in/binary out
         if data.get("request") is not None:
             config["request"] = data["request"]
@@ -260,7 +263,7 @@ class ApiConnectionManagementMixin:
         updatable_fields = ['name', 'description', 'api_type', 'category', 'connection_type',
                             'parameters', 'static_parameters', 'output_mapping',
                             'schema_fields', 'custom_headers', 'response_preset', 'response_config',
-                            'pagination', 'options', 'batch',
+                            'pagination', 'options', 'batch', 'async',
                             # rest_file (Processore File): config multipart in/binary out
                             'request', 'response']
         for field in updatable_fields:
@@ -461,6 +464,7 @@ class ApiConnectionManagementMixin:
         custom_headers = config.get("custom_headers", {})
         options = config.get("options", {}) or {}
         request_config = config.get("request", {}) or {}
+        async_config = config.get("async", {}) or {}
         success_config = success_config_from_api_config(config)
 
         if not url:
@@ -476,7 +480,7 @@ class ApiConnectionManagementMixin:
             return auth_err
 
         try:
-            response = execute_http_request(RequestSpec(
+            request_spec = RequestSpec(
                 url=url,
                 method=method,
                 params=params,
@@ -490,7 +494,49 @@ class ApiConnectionManagementMixin:
                     request_config,
                 ),
                 context="test_api_connection",
-            ))
+            )
+
+            if async_config.get("enabled"):
+                poll_result = AsyncPoller(execute=execute_http_request).run(
+                    request_spec,
+                    async_config,
+                    base_url=url,
+                    max_polls=1,
+                    allow_incomplete=True,
+                )
+                response = poll_result.response
+                json_data = poll_result.data
+                result = {
+                    "success": True,
+                    "async": True,
+                    "completed": poll_result.completed,
+                    "job_id": poll_result.job_id,
+                    "async_status": poll_result.status,
+                    "status_code": response.status_code,
+                    "response_preview": (
+                        response.text[:500] if response.text else ""
+                    ),
+                    "headers": dict(response.headers),
+                    "response_data": json_data,
+                    "raw_response": json_data,
+                }
+                if isinstance(json_data, (dict, list)):
+                    result["available_fields"] = self._extract_available_fields(
+                        json_data
+                    )
+                if not poll_result.completed:
+                    return result
+
+                evaluation = evaluate_success(json_data, success_config)
+                if not evaluation.ok:
+                    result["success"] = False
+                    result["error"] = (
+                        evaluation.error_message
+                        or "Errore applicativo nella risposta API"
+                    )
+                return result
+
+            response = execute_http_request(request_spec)
 
             result = {
                 "success": response.status_code == 200,
@@ -526,8 +572,10 @@ class ApiConnectionManagementMixin:
 
             return result
 
-        except ValueError as ssrf_err:
-            return {"success": False, "error": str(ssrf_err)}
+        except ValueError as request_err:
+            return {"success": False, "error": str(request_err)}
+        except TimeoutError as timeout_err:
+            return {"success": False, "error": str(timeout_err)}
         except requests.exceptions.Timeout:
             return {"success": False, "error": "Timeout: l'API non ha risposto entro 30 secondi"}
         except requests.exceptions.ConnectionError as e:

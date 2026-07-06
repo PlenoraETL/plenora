@@ -14,12 +14,18 @@ from typing import Optional, Tuple
 
 import requests
 
+from app.core.arricchisci.async_poller import (
+    AsyncPollError,
+    AsyncPoller,
+    validate_async_config,
+)
 from app.core.arricchisci.http_executor import (
     RequestSpec,
     allow_redirects_from_config,
     body_type_from_config,
     execute_http_request,
     raw_body_from_config,
+    validate_request_spec_config,
 )
 from app.core.arricchisci.retry_policy import clamp_retry_after
 from app.core.arricchisci.success_evaluator import (
@@ -89,7 +95,21 @@ class EnrichmentRetryHttpMixin:
         connector_config = getattr(self, "api_config", {}) or {}
         request_cfg = connector_config.get("request", {}) or {}
         options_cfg = connector_config.get("options", {}) or {}
+        async_config = connector_config.get("async", {}) or {}
         success_config = success_config_from_api_config(connector_config)
+        body_type = body_type_from_config(request_cfg)
+
+        try:
+            validate_request_spec_config(self.method, body_type)
+            validate_async_config(async_config)
+        except ValueError as e:
+            return None, RowError(
+                row_index=row_index,
+                status=RowStatus.ERROR,
+                error_message=str(e),
+                error_type="request_config_error",
+                retry_count=0,
+            )
 
         for attempt in range(self.options.max_retries + 1):
             try:
@@ -111,13 +131,13 @@ class EnrichmentRetryHttpMixin:
                     f"params={sanitize_for_log(call_params, self.auth)}"
                 )
 
-                response = execute_http_request(RequestSpec(
+                request_spec = RequestSpec(
                     url=call_url,
                     method=self.method,
                     params=call_params,
                     json_body=call_params,
                     raw_body=raw_body_from_config(request_cfg),
-                    body_type=body_type_from_config(request_cfg),
+                    body_type=body_type,
                     headers=self._headers,
                     timeout=(self.options.connect_timeout, self.options.request_timeout),
                     verify=ssl_verify,
@@ -127,7 +147,44 @@ class EnrichmentRetryHttpMixin:
                     ),
                     validate_url=False,
                     context="API enricher per-row",
-                ))
+                )
+
+                data = None
+                async_error_message = None
+                if async_config.get("enabled"):
+                    try:
+                        poll_result = AsyncPoller(
+                            execute=execute_http_request,
+                        ).run(
+                            request_spec,
+                            async_config,
+                            base_url=call_url,
+                        )
+                        response = poll_result.response
+                        data = poll_result.data
+                    except AsyncPollError as e:
+                        if e.response is None:
+                            raise
+                        response = e.response
+                        async_error_message = str(e)
+                    except TimeoutError as e:
+                        return None, RowError(
+                            row_index=row_index,
+                            status=RowStatus.ERROR,
+                            error_message=str(e),
+                            error_type="timeout",
+                            retry_count=attempt,
+                        )
+                    except ValueError as e:
+                        return None, RowError(
+                            row_index=row_index,
+                            status=RowStatus.ERROR,
+                            error_message=str(e),
+                            error_type="async_error",
+                            retry_count=attempt,
+                        )
+                else:
+                    response = execute_http_request(request_spec)
 
                 elapsed_ms = response.elapsed_ms
                 with self._stats_lock:
@@ -141,20 +198,21 @@ class EnrichmentRetryHttpMixin:
                     # RowError sulla singola riga, non in crash del batch.
                     # `error_type="invalid_json_response"` e il batch
                     # prosegue sulle altre.
-                    try:
-                        data = response.json()
-                    except (ValueError, requests.exceptions.JSONDecodeError) as e:
-                        return None, RowError(
-                            row_index=row_index,
-                            status=RowStatus.ERROR,
-                            error_message=(
-                                f"Risposta HTTP 200 non e' JSON valido: "
-                                f"{type(e).__name__}"
-                            ),
-                            error_type="invalid_json_response",
-                            http_status=200,
-                            retry_count=attempt,
-                        )
+                    if data is None:
+                        try:
+                            data = response.json()
+                        except (ValueError, requests.exceptions.JSONDecodeError) as e:
+                            return None, RowError(
+                                row_index=row_index,
+                                status=RowStatus.ERROR,
+                                error_message=(
+                                    f"Risposta HTTP 200 non e' JSON valido: "
+                                    f"{type(e).__name__}"
+                                ),
+                                error_type="invalid_json_response",
+                                http_status=200,
+                                retry_count=attempt,
+                            )
                     evaluation = evaluate_success(data, success_config)
                     if not evaluation.ok:
                         return None, RowError(
@@ -212,7 +270,10 @@ class EnrichmentRetryHttpMixin:
                 return None, RowError(
                     row_index=row_index,
                     status=RowStatus.ERROR,
-                    error_message=f"HTTP {response.status_code}: {response.text[:200]}",
+                    error_message=(
+                        async_error_message
+                        or f"HTTP {response.status_code}: {response.text[:200]}"
+                    ),
                     error_type=f"http_{response.status_code}",
                     http_status=response.status_code,
                     retry_count=attempt

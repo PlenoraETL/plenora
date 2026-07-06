@@ -1,6 +1,6 @@
 # REST Connector — Consolidation & Extension Plan
 
-Status: Phase 1 complete. Created: 2026-07-05.
+Status: Phase 2 complete. Created: 2026-07-05.
 
 Implementation plan for the `app.core.arricchisci` REST/API connector. Goal in
 two moves: **(1) centralize** the duplicated HTTP execution logic into a single
@@ -110,14 +110,17 @@ from `request.allow_redirects` or `options.allow_redirects`; application-level
 errors are evaluated with `success_when` / `error_path`; generator pagination
 supports `page-number` with `page_param`, `page_size_param`, and `start_page`.
 Retry-After clamping lives in `retry_policy.py`, shared by per-row and batch.
+Per-row and batch validate method/body configuration once before entering their
+retry loop, returning a typed `request_config_error` instead of retrying a static
+misconfiguration.
 
 ## Phase 2 — Async overlay (submit → poll → result)
 
 Generic capability for the whole class of async REST services (SISTER is one
 instance expressed in config, not dedicated code).
 
-- `AsyncPoller` wraps `execute`, reused automatically by enricher **and**
-  generator (one branch, not two — the direct payoff of Phase 0).
+- `AsyncPoller` wraps `execute` and is used by generator, connection test,
+  per-row enricher, and native batch enricher.
 - Reuses Phase 1 `success_when` / `error_path` for `done_values` /
   `failed_values`.
 - **SISTER preset** — config only, zero SISTER-specific code.
@@ -151,8 +154,8 @@ PostgreSQL). Absent → current synchronous behavior, unchanged.
 
 Config plumbing:
 
-- `api_connection_management.py::create_api_connection` (~lines 207-217): add
-  `if data.get("async"): config["async"] = data["async"]`.
+- `api_connection_management.py::create_api_connection`: persist `async` when
+  provided, including explicit disabled configs (`{"enabled": false}`).
 - `api_connection_management.py::update_api_connection` (`updatable_fields`,
   ~line 250): add `'async'`.
 - `test_api_connection`: when `async.enabled`, run submit + a single poll cycle
@@ -162,6 +165,17 @@ Recommended usage: prefer the **generator** api_type for async batch APIs (one
 submit → one poll → row explosion), avoiding the per-row thread-blocking of the
 enricher. Async-enricher allowed but capped (`async_max_concurrency`, default 4)
 and flagged "advanced / fast per-record APIs only".
+
+Implementation note: Phase 2 is complete. `AsyncPoller` implements submit,
+status polling, failed/done checks, `status_response` results, and `result_url`
+resolution. Generator, per-row enricher, and native batch enricher now route
+`async.enabled` configs through the poller before normal response parsing;
+`test_api_connection` performs submit + one poll with `allow_incomplete=True`;
+CRUD create/update preserves the `async` config block; draft testing forwards
+`async` and `request` config too. Static async config validation catches
+unsupported/missing values before submit. The `sister-async-generator` template
+is config-only in `backend/app/data/api_templates.json`, so SISTER requires no
+service-specific backend branch.
 
 ## Configuration UX
 

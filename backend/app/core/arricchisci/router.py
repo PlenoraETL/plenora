@@ -584,8 +584,17 @@ def test_api_config(
         config = {
             "endpoint": {"url": url, "method": data.get("method", "GET")},
             "auth": data.get("auth", {"type": "none"}),
-            "custom_headers": data.get("custom_headers", {})
+            "custom_headers": data.get("custom_headers", {}),
+            "static_parameters": data.get("static_parameters", {}),
+            "options": data.get("options", {}),
+            "request": data.get("request", {}),
         }
+        if data.get("async") is not None:
+            config["async"] = data["async"]
+        if data.get("success_when") is not None:
+            config["success_when"] = data["success_when"]
+        if data.get("error_path") is not None:
+            config["error_path"] = data["error_path"]
         test_params = data.get("test_params", {})
         return _api_connection_service.test_api_connection(config=config, test_params=test_params)
     except HTTPException:

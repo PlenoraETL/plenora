@@ -372,6 +372,90 @@ class TestCallBatchApi:
         host._call_batch_api([{"q": "a"}], [0])
         assert session.post_calls[0]["allow_redirects"] is True
 
+    def test_async_batch_polls_and_extracts_final_results(self, monkeypatch):
+        host, session = _make_host(
+            monkeypatch,
+            responses=[
+                _FakeResponse(202, json_data={"id": "job-1"}),
+                _FakeResponse(
+                    200,
+                    json_data={
+                        "status": "completed",
+                        "result": {"results": [{"value": "ok"}]},
+                    },
+                ),
+            ],
+        )
+        host.api_config = {
+            "async": {
+                "enabled": True,
+                "job_id_path": "id",
+                "status_url": "{base}/jobs/{job_id}",
+                "result_path": "result",
+                "poll_interval_s": 0,
+                "max_wait_s": 1,
+            },
+        }
+
+        results, err = host._call_batch_api([{"q": "a"}], [0])
+
+        assert err is None
+        assert results == [{"out": "ok"}]
+        assert len(session.post_calls) == 1
+        assert len(session.get_calls) == 1
+        assert session.get_calls[0]["url"] == "https://api.example.com/jobs/job-1"
+
+    def test_invalid_async_config_returns_config_row_error(self, monkeypatch):
+        host, session = _make_host(
+            monkeypatch,
+            responses=[_resp([{"value": "unused"}])],
+        )
+        host.api_config = {"async": {"enabled": True}}
+
+        results, err = host._call_batch_api([{"q": "a"}], [0])
+
+        assert results is None
+        assert err is not None
+        assert err.error_type == "request_config_error"
+        assert err.retry_count == 0
+        assert "async.status_url" in err.error_message
+        assert session.get_calls == []
+        assert session.post_calls == []
+
+    def test_unsupported_method_override_returns_config_row_error(self, monkeypatch):
+        host, session = _make_host(
+            monkeypatch,
+            responses=[_resp([{"value": "unused"}])],
+            batch_config=BatchConfig(
+                enabled=True,
+                output_path="results",
+                method_override="HEAD",
+            ),
+        )
+        results, err = host._call_batch_api([{"q": "a"}], [0])
+        assert results is None
+        assert err is not None
+        assert err.error_type == "request_config_error"
+        assert err.retry_count == 0
+        assert "Metodo HTTP non supportato" in err.error_message
+        assert session.get_calls == []
+        assert session.post_calls == []
+
+    def test_unsupported_body_type_returns_config_row_error(self, monkeypatch):
+        host, session = _make_host(
+            monkeypatch,
+            responses=[_resp([{"value": "unused"}])],
+        )
+        host.api_config = {"request": {"body_type": "multipart"}}
+        results, err = host._call_batch_api([{"q": "a"}], [0])
+        assert results is None
+        assert err is not None
+        assert err.error_type == "request_config_error"
+        assert err.retry_count == 0
+        assert "body_type non supportato" in err.error_message
+        assert session.get_calls == []
+        assert session.post_calls == []
+
     def test_application_error_path_returns_row_error(self, monkeypatch):
         host, session = _make_host(
             monkeypatch,

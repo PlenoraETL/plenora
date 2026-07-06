@@ -298,6 +298,38 @@ class TestTestApiConnectionHttp:
         assert result["success"] is False
         assert "HTTP 500" in result["error"]
 
+    def test_async_connection_test_returns_single_poll_state(self, tac_env):
+        tac_env.session.post.return_value = _resp(202, json_body={"id": "job-1"})
+        tac_env.session.get.return_value = _resp(200, json_body={"status": "running"})
+        cfg = {
+            "endpoint": {"url": "https://api.test/run", "method": "POST"},
+            "auth": {},
+            "async": {
+                "enabled": True,
+                "job_id_from": "body",
+                "job_id_path": "id",
+                "accepted_status": [202],
+                "status_url": "{base}/jobs/{job_id}",
+                "status_path": "status",
+                "done_values": ["completed"],
+                "failed_values": ["failed"],
+                "poll_interval_s": 0,
+                "max_wait_s": 1,
+            },
+        }
+
+        result = tac_env.svc.test_api_connection(config=cfg, test_params={})
+
+        assert result["success"] is True
+        assert result["async"] is True
+        assert result["completed"] is False
+        assert result["job_id"] == "job-1"
+        assert result["async_status"] == "running"
+        assert result["raw_response"] == {"status": "running"}
+        tac_env.session.post.assert_called_once()
+        tac_env.session.get.assert_called_once()
+        assert tac_env.session.get.call_args[0][0] == "https://api.test/jobs/job-1"
+
 
 # Section 6: response JSON parsing + fallback
 

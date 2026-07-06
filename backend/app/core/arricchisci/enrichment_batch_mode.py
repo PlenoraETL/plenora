@@ -11,6 +11,11 @@ from typing import Any, List, Optional, Tuple
 
 import requests
 
+from app.core.arricchisci.async_poller import (
+    AsyncPollError,
+    AsyncPoller,
+    validate_async_config,
+)
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.tabular import iter_dataframe_indexed_rows
 from app.core.arricchisci.http_executor import (
@@ -19,6 +24,7 @@ from app.core.arricchisci.http_executor import (
     body_type_from_config,
     execute_http_request,
     raw_body_from_config,
+    validate_request_spec_config,
 )
 from app.core.arricchisci.retry_policy import clamp_retry_after
 from app.core.arricchisci.success_evaluator import (
@@ -45,9 +51,10 @@ logger = get_logger("app.core.arricchisci.enrichment_service")
 
 
 class EnrichmentBatchModeMixin:
-    """Mixin per `EnrichmentExecutor`: batch native API path. Sync.
-    Zero cache, zero async. Retry chain HTTP completo + 429 +
-    fallback row-by-row su
+    """Mixin per `EnrichmentExecutor`: batch native API path.
+
+    Retry HTTP completo + 429 + fallback row-by-row. Se configurato, il submit
+    batch passa attraverso l'overlay async condiviso.
     """
 
     def _execute_batch_native(
@@ -219,7 +226,9 @@ class EnrichmentBatchModeMixin:
         connector_config = getattr(self, "api_config", {}) or {}
         request_cfg = connector_config.get("request", {}) or {}
         options_cfg = connector_config.get("options", {}) or {}
+        async_config = connector_config.get("async", {}) or {}
         success_config = success_config_from_api_config(connector_config)
+        body_type = body_type_from_config(request_cfg)
 
         last_error = None
 
@@ -234,6 +243,18 @@ class EnrichmentBatchModeMixin:
                 retry_count=0,
             )
 
+        try:
+            validate_request_spec_config(method, body_type)
+            validate_async_config(async_config)
+        except ValueError as e:
+            return None, RowError(
+                row_index=batch_indices[0],
+                status=RowStatus.ERROR,
+                error_message=str(e),
+                error_type="request_config_error",
+                retry_count=0,
+            )
+
         ssl_verify = resolve_tls_verify(
             not getattr(self.options, 'disable_ssl_verify', False),
             context="API enricher batch",
@@ -241,13 +262,13 @@ class EnrichmentBatchModeMixin:
 
         for attempt in range(self.options.max_retries + 1):
             try:
-                response = execute_http_request(RequestSpec(
+                request_spec = RequestSpec(
                     url=url,
                     method=method,
                     params=payload,
                     json_body=payload,
                     raw_body=raw_body_from_config(request_cfg),
-                    body_type=body_type_from_config(request_cfg),
+                    body_type=body_type,
                     headers=self._headers,
                     timeout=(self.options.connect_timeout, self.options.request_timeout),
                     verify=ssl_verify,
@@ -257,7 +278,44 @@ class EnrichmentBatchModeMixin:
                     ),
                     validate_url=False,
                     context="API enricher batch",
-                ))
+                )
+
+                data = None
+                async_error_message = None
+                if async_config.get("enabled"):
+                    try:
+                        poll_result = AsyncPoller(
+                            execute=execute_http_request,
+                        ).run(
+                            request_spec,
+                            async_config,
+                            base_url=url,
+                        )
+                        response = poll_result.response
+                        data = poll_result.data
+                    except AsyncPollError as e:
+                        if e.response is None:
+                            raise
+                        response = e.response
+                        async_error_message = str(e)
+                    except TimeoutError as e:
+                        return None, RowError(
+                            row_index=batch_indices[0],
+                            status=RowStatus.ERROR,
+                            error_message=str(e),
+                            error_type="timeout",
+                            retry_count=attempt,
+                        )
+                    except ValueError as e:
+                        return None, RowError(
+                            row_index=batch_indices[0],
+                            status=RowStatus.ERROR,
+                            error_message=str(e),
+                            error_type="async_error",
+                            retry_count=attempt,
+                        )
+                else:
+                    response = execute_http_request(request_spec)
 
                 elapsed_ms = response.elapsed_ms
                 with self._stats_lock:
@@ -267,7 +325,8 @@ class EnrichmentBatchModeMixin:
 
                 # Successo
                 if response.status_code == 200:
-                    data = response.json()
+                    if data is None:
+                        data = response.json()
                     evaluation = evaluate_success(data, success_config)
                     if not evaluation.ok:
                         return None, RowError(
@@ -323,7 +382,10 @@ class EnrichmentBatchModeMixin:
                 return None, RowError(
                     row_index=batch_indices[0],
                     status=RowStatus.ERROR,
-                    error_message=f"HTTP {response.status_code}: {response.text[:200]}",
+                    error_message=(
+                        async_error_message
+                        or f"HTTP {response.status_code}: {response.text[:200]}"
+                    ),
                     error_type=f"http_{response.status_code}",
                     http_status=response.status_code,
                     retry_count=attempt

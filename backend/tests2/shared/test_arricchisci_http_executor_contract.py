@@ -12,6 +12,7 @@ from app.core.arricchisci.http_executor import (
     execute_http_request,
     raw_body_from_config,
     timeout_from_options,
+    validate_request_spec_config,
 )
 
 
@@ -174,6 +175,25 @@ def test_unsupported_method_raises_value_error(monkeypatch):
             url="https://api.example.com/items",
             method="HEAD",
         ))
+
+
+def test_unsupported_body_type_raises_value_error(monkeypatch):
+    _session, _validated = _install(monkeypatch)
+
+    with pytest.raises(ValueError, match="body_type non supportato"):
+        execute_http_request(RequestSpec(
+            url="https://api.example.com/items",
+            method="POST",
+            body_type="multipart",
+        ))
+
+
+def test_validate_request_spec_config_returns_normalized_values():
+    assert validate_request_spec_config("post", "raw_text") == ("POST", "raw")
+
+
+def test_validate_request_spec_config_allows_unused_get_body_type():
+    assert validate_request_spec_config("GET", "multipart") == ("GET", "multipart")
 
 
 def test_validate_url_can_be_disabled_for_prevalidated_callers(monkeypatch):
