@@ -46,6 +46,7 @@ class DatabaseConnection:
     database: str   # nome database o path file per SQLite
     username: str
     password: str
+    db_schema: Optional[str] = None
 
 
 # PROTOCOLLI PER DEPENDENCY INJECTION
@@ -53,7 +54,7 @@ class DatabaseConnection:
 
 class DatabaseCursor(Protocol):
     """Protocollo per cursor database — permette mock nei test."""
-    def execute(self, query: str) -> None: ...
+    def execute(self, query: str, params: Optional[Tuple[Any, ...]] = None) -> None: ...
     def fetchall(self) -> List[Tuple]: ...
     def fetchone(self) -> Optional[Tuple]: ...
     def close(self) -> None: ...
@@ -229,7 +230,7 @@ class SQLQueries:
                 NULL
             ) as geometry_srid
         FROM information_schema.columns c
-        WHERE c.table_schema = 'public'
+        WHERE c.table_schema = %s
         ORDER BY c.table_name, c.ordinal_position;
     """
 
@@ -261,7 +262,7 @@ class SQLQueries:
         INNER JOIN information_schema.views v
             ON c.table_schema = v.table_schema
             AND c.table_name = v.table_name
-        WHERE c.table_schema = 'public'
+        WHERE c.table_schema = %s
         ORDER BY c.table_name, c.ordinal_position;
     """
 
@@ -733,6 +734,12 @@ class DatabaseInspector:
         self._mapper = type_mapper or TypeMapper
         self._processor = result_processor or ResultProcessor
 
+    @staticmethod
+    def _postgres_schema(conn: DatabaseConnection) -> str:
+        schema = getattr(conn, "db_schema", None)
+        schema = str(schema).strip() if schema else ""
+        return schema or "public"
+
     def get_tables_and_columns(self, connection: DatabaseConnection) -> DatabaseSchema:
         """
         Metodo principale: ottiene lo schema completo del database.
@@ -786,6 +793,7 @@ class DatabaseInspector:
         query: str,
         processor: Callable,
         driver_name: str,
+        params: Optional[Tuple[Any, ...]] = None,
         **processor_kwargs
     ) -> DatabaseSchema:
         """
@@ -809,7 +817,10 @@ class DatabaseInspector:
             try:
                 cursor = connection.cursor()
                 try:
-                    cursor.execute(query)
+                    if params is None:
+                        cursor.execute(query)
+                    else:
+                        cursor.execute(query, params)
                     rows = cursor.fetchall()
                     return processor(rows, **processor_kwargs)
                 finally:
@@ -824,7 +835,8 @@ class DatabaseInspector:
         """Ispeziona PostgreSQL — include tipo geometria e SRID da PostGIS."""
         return self._esegui_ispezione(
             conn, SQLQueries.POSTGRES_COLUMNS,
-            self._processor.process_postgres_rows, "PostgreSQL (psycopg)"
+            self._processor.process_postgres_rows, "PostgreSQL (psycopg)",
+            params=(self._postgres_schema(conn),),
         )
 
     def _inspect_mssql(self, conn: DatabaseConnection) -> DatabaseSchema:
@@ -912,7 +924,8 @@ class DatabaseInspector:
         """Ispeziona viste PostgreSQL — include tipo geometria e SRID da PostGIS."""
         return self._esegui_ispezione(
             conn, SQLQueries.POSTGRES_VIEW_COLUMNS,
-            self._processor.process_postgres_rows, "PostgreSQL (psycopg)"
+            self._processor.process_postgres_rows, "PostgreSQL (psycopg)",
+            params=(self._postgres_schema(conn),),
         )
 
     def _inspect_mssql_views(self, conn: DatabaseConnection) -> DatabaseSchema:
