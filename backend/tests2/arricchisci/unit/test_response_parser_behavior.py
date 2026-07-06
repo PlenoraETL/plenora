@@ -14,6 +14,7 @@ from app.core.arricchisci.response_parser import (
     ResponseParser,
     get_preset_config,
     parse_csv_response_text,
+    parse_xml_response_text,
     response_format_from_config,
 )
 
@@ -71,6 +72,38 @@ def test_parse_csv_response_text_supports_custom_delimiter():
 
 def test_response_format_from_config_reads_response_block():
     assert response_format_from_config({"response": {"format": "text/csv"}}) == "csv"
+
+
+def test_parse_xml_response_text_converts_repeated_tags_to_lists():
+    data = parse_xml_response_text(
+        """
+        <items>
+          <item id="1"><name>Roma</name><pop>2873000</pop></item>
+          <item id="2"><name>Milano</name><pop>1352000</pop></item>
+        </items>
+        """
+    )
+
+    assert data == {
+        "items": {
+            "item": [
+                {"@id": "1", "name": "Roma", "pop": "2873000"},
+                {"@id": "2", "name": "Milano", "pop": "1352000"},
+            ]
+        }
+    }
+
+
+def test_parse_xml_response_text_strips_namespaces():
+    data = parse_xml_response_text(
+        '<ns:root xmlns:ns="urn:test"><ns:value unit="m">12</ns:value></ns:root>'
+    )
+
+    assert data == {"root": {"value": {"@unit": "m", "#text": "12"}}}
+
+
+def test_response_format_from_config_reads_xml_response_block():
+    assert response_format_from_config({"response": {"format": "application/xml"}}) == "xml"
 
 
 # ---------------------------------------------------------------------------

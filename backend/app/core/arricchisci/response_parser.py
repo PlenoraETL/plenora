@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import re
+import xml.etree.ElementTree as ET
 from typing import Any, List, Mapping
 
 from app.core.arricchisci.types import JsonObject, JsonRows
@@ -13,6 +14,7 @@ logger = get_logger(__name__)
 
 
 CSV_RESPONSE_FORMATS = {"csv", "text/csv"}
+XML_RESPONSE_FORMATS = {"xml", "text/xml", "application/xml"}
 
 
 def normalize_response_format(value: Any) -> str:
@@ -22,6 +24,8 @@ def normalize_response_format(value: Any) -> str:
         return "json"
     if normalized in CSV_RESPONSE_FORMATS:
         return "csv"
+    if normalized in XML_RESPONSE_FORMATS:
+        return "xml"
     return normalized
 
 
@@ -71,6 +75,58 @@ def parse_csv_response_text(
     return rows
 
 
+def parse_xml_response_text(text: str) -> JsonObject:
+    """Parse an XML response body into a nested dict with the root tag."""
+    body = (text or "").lstrip("\ufeff").strip()
+    if not body:
+        return {}
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError as exc:
+        raise ValueError(f"Risposta XML non valida: {exc}") from exc
+    return {_strip_xml_namespace(root.tag): _xml_element_to_value(root)}
+
+
+def _xml_element_to_value(element: ET.Element) -> Any:
+    children = list(element)
+    attributes = {
+        f"@{_strip_xml_namespace(key)}": value
+        for key, value in element.attrib.items()
+    }
+    text = (element.text or "").strip()
+
+    if not children:
+        if attributes:
+            if text:
+                attributes["#text"] = text
+            return attributes
+        return text
+
+    result: JsonObject = dict(attributes)
+    for child in children:
+        key = _strip_xml_namespace(child.tag)
+        value = _xml_element_to_value(child)
+        if key in result:
+            existing = result[key]
+            if isinstance(existing, list):
+                existing.append(value)
+            else:
+                result[key] = [existing, value]
+        else:
+            result[key] = value
+    if text:
+        result["#text"] = text
+    return result
+
+
+def _strip_xml_namespace(tag: str) -> str:
+    if "}" in tag:
+        return tag.rsplit("}", 1)[1]
+    if ":" in tag:
+        return tag.rsplit(":", 1)[1]
+    return tag
+
+
 def parse_response_body(response: Any, api_config: Mapping[str, Any] | None) -> Any:
     """Parse a REST response body according to connector response config."""
     response_format = response_format_from_config(api_config)
@@ -79,6 +135,8 @@ def parse_response_body(response: Any, api_config: Mapping[str, Any] | None) -> 
             response.text or "",
             **csv_dialect_from_config(api_config),
         )
+    if response_format == "xml":
+        return parse_xml_response_text(response.text or "")
     if response_format != "json":
         raise ValueError(f"response.format non supportato: {response_format}")
 

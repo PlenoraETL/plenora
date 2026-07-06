@@ -406,9 +406,9 @@ class ApiConnectionManagementMixin:
     ) -> tuple[Any | None, str | None]:
         """Parsa il body di una `test_api_connection` response.
 
-        Supporta JSON e CSV (`response.format=csv` o
-        `response_config.format=csv`). Per JSON mantiene il fallback
-        text/plain usato da alcuni endpoint ArcGIS.
+        Supporta JSON, CSV e XML via `response.format` o
+        `response_config.format`. Per JSON mantiene il fallback text/plain
+        usato da alcuni endpoint ArcGIS.
         """
         content_type = response.headers.get('Content-Type', '')
         try:

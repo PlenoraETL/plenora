@@ -416,6 +416,37 @@ class TestTestApiConnectionResponseParsing:
         paths = {field["path"] for field in result["available_fields"]}
         assert {"city", "pop"}.issubset(paths)
 
+    def test_xml_response_format_extracts_available_fields(self, tac_env):
+        tac_env.session.get.return_value = _resp(
+            200,
+            text=(
+                "<items>"
+                "<item><city>Roma</city><pop>2873000</pop></item>"
+                "<item><city>Milano</city><pop>1352000</pop></item>"
+                "</items>"
+            ),
+            headers={"Content-Type": "application/xml"},
+        )
+        cfg = {
+            "endpoint": {"url": "https://api.test/items.xml", "method": "GET"},
+            "auth": {},
+            "response": {"format": "xml"},
+        }
+
+        result = tac_env.svc.test_api_connection(config=cfg, test_params={})
+
+        assert result["success"] is True
+        assert result["raw_response"] == {
+            "items": {
+                "item": [
+                    {"city": "Roma", "pop": "2873000"},
+                    {"city": "Milano", "pop": "1352000"},
+                ]
+            }
+        }
+        paths = {field["path"] for field in result["available_fields"]}
+        assert {"items.item[0].city", "items.item[0].pop"}.issubset(paths)
+
     def test_unparseable_response_returns_error(self, tac_env):
         r = MagicMock()
         r.status_code = 200

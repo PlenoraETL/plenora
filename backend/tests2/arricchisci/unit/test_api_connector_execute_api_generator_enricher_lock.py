@@ -121,6 +121,32 @@ class TestGeneratorBasics:
         assert result["city"].tolist() == ["Roma", "Milano"]
         assert result["population"].tolist() == ["2873000", "1352000"]
 
+    def test_xml_response_format_returns_dataframe(self, gen_env):
+        gen_env.session.get.return_value = _resp(
+            200,
+            text=(
+                "<items>"
+                "<item><city>Roma</city><pop>2873000</pop></item>"
+                "<item><city>Milano</city><pop>1352000</pop></item>"
+                "</items>"
+            ),
+            headers={"Content-Type": "application/xml"},
+        )
+        cfg = {
+            "endpoint": {"url": "https://api.test/items.xml", "method": "GET"},
+            "auth": {},
+            "response": {"format": "xml"},
+            "output_mapping": [
+                {"path": "items.item[*].city", "column": "city"},
+                {"path": "items.item[*].pop", "column": "population"},
+            ],
+        }
+
+        result = gen_env.svc._execute_api_generator(cfg)
+
+        assert result["city"].tolist() == ["Roma", "Milano"]
+        assert result["population"].tolist() == ["2873000", "1352000"]
+
     def test_input_df_first_row_used_as_base_params(self, gen_env):
         gen_env.session.get.return_value = _resp(200, json_body=[])
         cfg = {

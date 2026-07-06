@@ -268,6 +268,13 @@ CSV body parser for connector configs with `response.format="csv"` or
 `response_config.format="csv"`. Generator APIs and `test_api_connection` can
 parse `text/csv` responses into row dictionaries and expose fields for mapping.
 
+Implementation note: Phase 3C base XML parsing is implemented. `ResponseParser`
+now includes a base XML body parser for connector configs with
+`response.format="xml"` or
+`response_config.format="xml"`. The parser strips XML namespaces, preserves
+attributes as `@name`, turns repeated sibling tags into lists, and exposes the
+parsed structure to generator mappings and `test_api_connection` field sampling.
+
 ## Cross-cutting
 
 - Tests: characterization (Phase 0) → parity/regression; unit per strategy
