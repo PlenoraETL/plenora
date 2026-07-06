@@ -365,7 +365,37 @@ class TestTestApiConnectionResponseParsing:
         result = tac_env.svc.test_api_connection(config=cfg, test_params={})
         assert result["success"] is True
         assert "available_fields" in result
+        assert result["suggested_output_mapping"] == [
+            {"path": "name", "column": "name", "type": "string", "selected": True},
+            {"path": "age", "column": "age", "type": "integer", "selected": True},
+        ]
         assert "raw_response" in result
+
+    def test_suggested_output_mapping_excludes_containers_and_dedupes_columns(self, tac_env):
+        tac_env.session.get.return_value = _resp(
+            200,
+            json_body={
+                "id": 1,
+                "profile": {"name": "Mario", "meta": {"score": 10}},
+                "flags": [True, False],
+                "items": [{"name": "duplicate"}],
+            },
+        )
+        cfg = {
+            "endpoint": {"url": "https://api.test/q", "method": "GET"},
+            "auth": {},
+        }
+
+        result = tac_env.svc.test_api_connection(config=cfg, test_params={})
+
+        assert result["success"] is True
+        suggested = result["suggested_output_mapping"]
+        assert {"path": "profile", "column": "profile", "type": "object", "selected": True} not in suggested
+        assert {"path": "flags", "column": "flags", "type": "array", "selected": True} not in suggested
+        assert {"path": "profile.name", "column": "name", "type": "string", "selected": True} in suggested
+        assert {"path": "items[0].name", "column": "name_2", "type": "string", "selected": True} in suggested
+        columns = [mapping["column"] for mapping in suggested]
+        assert len(columns) == len(set(columns))
 
     def test_application_error_path_returns_failure(self, tac_env):
         tac_env.session.get.return_value = _resp(

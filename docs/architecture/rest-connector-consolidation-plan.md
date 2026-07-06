@@ -1,6 +1,6 @@
 # REST Connector — Consolidation & Extension Plan
 
-Status: Phase 2 complete. Created: 2026-07-05.
+Status: Phase 4 configuration UX complete. Created: 2026-07-05.
 
 Implementation plan for the `app.core.arricchisci` REST/API connector. Goal in
 two moves: **(1) centralize** the duplicated HTTP execution logic into a single
@@ -247,6 +247,17 @@ This spans backend **and** frontend/UX, unlike the pure-connector phases. Decide
 per cycle how far to push the UI side. Recommended order: self-describing
 strategies (with Phase 0/1) → cURL import + response sampling (Phase 1.5) →
 preset library + reusable credentials (later).
+
+Implementation note: Phase 4 configuration UX is complete for the planned
+accelerators. The wizard can import a working cURL command into URL, method,
+custom headers, Bearer/Basic/API-key auth, fixed parameters, and request body
+config (`json`, `form-urlencoded`, or `raw`). The `test_api_connection`
+response now returns both the full `available_fields` sample and a selectable
+`suggested_output_mapping` built from scalar/GeoJSON fields with deduplicated
+output columns. The wizard persists sampled fields into `schema_fields`,
+auto-applies suggested mappings only when no manual `output_mapping` exists, and
+exposes explicit actions to re-apply suggested mappings or clear the current
+selection.
 
 ## Phase 3 — Completed extension pass
 

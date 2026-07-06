@@ -290,6 +290,10 @@
 .acm__info-box { padding: 10px 14px; background: var(--acm-blue-dim); border: 1px solid rgba(75,139,255,.15); border-radius: 8px; font-size: 12px; color: var(--acm-text-sub); line-height: 1.5; }
 .acm__info-box--ok  { background: var(--acm-ok-dim); border-color: rgba(52,211,153,.2); color: var(--acm-ok); }
 .acm__info-box--err { background: var(--acm-err-dim); border-color: rgba(248,113,113,.2); color: var(--acm-err); }
+.acm__curl-import-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.acm__curl-import-status { font-size: 11px; font-family: var(--acm-font-b); }
+.acm__curl-import-status--ok { color: var(--acm-ok); }
+.acm__curl-import-status--err { color: var(--acm-err); }
 
 /* Test step */
 .acm__test-param       { display: flex; flex-direction: column; gap: 5px; }
@@ -308,6 +312,7 @@
 .acm__test-err-msg      { font-size: 12px; color: var(--acm-err); font-family: var(--acm-font-m); }
 
 /* Fields grid */
+.acm__mapping-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .acm__fields-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(200px,1fr)); gap: 6px; }
 .acm__field-item  { display: flex; align-items: flex-start; gap: 8px; padding: 9px; background: var(--acm-surface-3); border: 1px solid var(--acm-border); border-radius: 7px; cursor: pointer; transition: all .12s; }
 .acm__field-item:hover { border-color: var(--acm-blue); background: var(--acm-blue-dim); }

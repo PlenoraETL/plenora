@@ -431,6 +431,7 @@ class ApiConnectionManagementMixin:
         Esegue una singola chiamata HTTP e restituisce:
         - success: se la chiamata ha avuto successo (HTTP 200 + JSON valido)
         - available_fields: campi estratti dalla risposta (per configurare output mapping)
+        - suggested_output_mapping: mapping iniziale selezionabile dal wizard
         - raw_response: risposta JSON completa (per ResponseConfigBuilder nel frontend)
 
         I parametri test vengono processati per risolvere variabili template
@@ -508,8 +509,10 @@ class ApiConnectionManagementMixin:
                     "raw_response": json_data,
                 }
                 if isinstance(json_data, (dict, list)):
-                    result["available_fields"] = self._extract_available_fields(
-                        json_data
+                    available_fields = self._extract_available_fields(json_data)
+                    result["available_fields"] = available_fields
+                    result["suggested_output_mapping"] = (
+                        self._build_suggested_output_mapping(available_fields)
                     )
                 if not poll_result.completed:
                     return result
@@ -550,7 +553,11 @@ class ApiConnectionManagementMixin:
                     result["response_data"] = json_data
                     result["raw_response"] = json_data
                     return result
-                result["available_fields"] = self._extract_available_fields(json_data)
+                available_fields = self._extract_available_fields(json_data)
+                result["available_fields"] = available_fields
+                result["suggested_output_mapping"] = (
+                    self._build_suggested_output_mapping(available_fields)
+                )
                 result["response_data"] = json_data  # Per debug
                 result["raw_response"] = json_data  # Per ResponseConfigBuilder
             else:

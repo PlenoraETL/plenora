@@ -6,6 +6,7 @@ Mixin SUPPORT — FIELD_INTROSPECTION + RESULT_BUILDING per
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any, List, Optional
 
@@ -189,6 +190,46 @@ class ApiConnectionSupportMixin:
         if len(sample) > max_len:
             return sample[:max_len] + "..."
         return sample
+
+    def _build_suggested_output_mapping(self, fields: JsonRows) -> JsonRows:
+        """Costruisce un output_mapping iniziale dai campi campionati."""
+        suggested: JsonRows = []
+        seen_columns: set[str] = set()
+        selectable_types = {"string", "integer", "number", "boolean", "geojson"}
+
+        for field in fields or []:
+            field_type = field.get("type")
+            path = field.get("path")
+            if field_type not in selectable_types or not path:
+                continue
+
+            column = self._suggest_output_column_name(field)
+            base_column = column
+            suffix = 2
+            while column in seen_columns:
+                column = f"{base_column}_{suffix}"
+                suffix += 1
+
+            seen_columns.add(column)
+            suggested.append({
+                "path": path,
+                "column": column,
+                "type": field_type,
+                "selected": True,
+            })
+
+        return suggested
+
+    def _suggest_output_column_name(self, field: JsonObject) -> str:
+        raw_name = str(field.get("name") or field.get("path") or "value")
+        raw_name = raw_name.replace("[]", "").replace("[*]", "").replace("[0]", "")
+        raw_name = raw_name.split(".")[-1]
+        column = re.sub(r"[^0-9A-Za-z_]+", "_", raw_name).strip("_")
+        if not column:
+            column = "value"
+        if column[0].isdigit():
+            column = f"field_{column}"
+        return column
 
     # RESULT_BUILDING — orchestration helpers per `execute_enrichment`
     # Pipeline: carica sorgenti → esegui nodi in ordine topologico →

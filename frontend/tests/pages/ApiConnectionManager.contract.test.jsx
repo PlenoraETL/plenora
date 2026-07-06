@@ -1,5 +1,5 @@
 ﻿import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 
@@ -267,6 +267,108 @@ describe('ApiConnectionManager', () => {
         mode: 'fixed',
         required: false,
       }),
+    ]);
+  });
+
+  it('persists sampled schema fields and suggested mapping after a successful wizard test', async () => {
+    const availableFields = [
+      { path: 'items[0].id', name: 'id', type: 'integer', sample_value: '1' },
+      { path: 'items[0].name', name: 'name', type: 'string', sample_value: 'Roma' },
+      { path: 'items', name: 'items', type: 'array', sample_value: '[1 items]' },
+    ];
+    const suggestedMapping = [
+      { path: 'items[0].id', column: 'id', type: 'integer', selected: true },
+      { path: 'items[0].name', column: 'name', type: 'string', selected: true },
+    ];
+
+    httpMock.get.mockResolvedValueOnce({ data: { api_connections: [] } });
+    httpMock.post
+      .mockResolvedValueOnce({
+        data: {
+          success: true,
+          available_fields: availableFields,
+          suggested_output_mapping: suggestedMapping,
+          raw_response: { items: [{ id: 1, name: 'Roma' }] },
+        },
+      })
+      .mockResolvedValueOnce({ data: { id: 'api-sampled' } });
+
+    render(<ApiConnectionManager />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /manuale/i }));
+    await userEvent.click(screen.getByText('Generatore'));
+    await userEvent.click(screen.getByRole('button', { name: /avanti/i }));
+
+    await userEvent.type(await screen.findByPlaceholderText(/Nominatim Geocoding/i), 'Sampled API');
+    await userEvent.type(screen.getByPlaceholderText(/api\.example\.com/i), 'https://api.example.test/items');
+
+    for (let i = 0; i < 4; i += 1) {
+      await userEvent.click(screen.getByRole('button', { name: /avanti/i }));
+    }
+
+    await userEvent.click(screen.getByRole('button', { name: /esegui test/i }));
+    expect(await screen.findByText(/Campi selezionati \(2\)/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /salva api/i }));
+
+    await waitFor(() => {
+      expect(httpMock.post).toHaveBeenCalledTimes(2);
+    });
+
+    expect(httpMock.post.mock.calls[0][0]).toBe('/api-connections/test');
+    const [, payload] = httpMock.post.mock.calls[1];
+    expect(payload.schema_fields).toEqual(availableFields);
+    expect(payload.output_mapping).toEqual(suggestedMapping);
+  });
+
+  it('imports a cURL command into the wizard connection payload', async () => {
+    httpMock.get.mockResolvedValueOnce({ data: { api_connections: [] } });
+    httpMock.post.mockResolvedValueOnce({ data: { id: 'api-curl' } });
+
+    render(<ApiConnectionManager />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /manuale/i }));
+    await userEvent.click(screen.getByText('Generatore'));
+    await userEvent.click(screen.getByRole('button', { name: /avanti/i }));
+
+    await userEvent.click(await screen.findByText('Importa da cURL'));
+    fireEvent.change(screen.getByPlaceholderText(/curl -X POST/i), {
+      target: {
+        value: "curl -X POST 'https://api.example.test/items?tenant=it' " +
+          "-H 'Authorization: Bearer SECRET' " +
+          "-H 'Content-Type: application/json' " +
+          "--data-raw '{\"city\":\"Roma\",\"limit\":2}'",
+      },
+    });
+    await userEvent.click(screen.getByRole('button', { name: /importa curl/i }));
+
+    expect(await screen.findByDisplayValue('api.example.test items')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('https://api.example.test/items?tenant=it')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('POST')).toBeInTheDocument();
+
+    for (let i = 0; i < 4; i += 1) {
+      await userEvent.click(screen.getByRole('button', { name: /avanti/i }));
+    }
+    await userEvent.click(screen.getByRole('button', { name: /salva api/i }));
+
+    await waitFor(() => {
+      expect(httpMock.post).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = httpMock.post.mock.calls[0];
+    expect(payload).toEqual(expect.objectContaining({
+      name: 'api.example.test items',
+      api_type: 'generator',
+      url: 'https://api.example.test/items?tenant=it',
+      method: 'POST',
+      auth: { type: 'bearer', token: 'SECRET' },
+      custom_headers: { 'Content-Type': 'application/json' },
+      static_parameters: { city: 'Roma', limit: 2 },
+      request: { body_type: 'json' },
+    }));
+    expect(payload.parameters).toEqual([
+      { name: 'city', type: 'string', required: false, mode: 'fixed' },
+      { name: 'limit', type: 'number', required: false, mode: 'fixed' },
     ]);
   });
 

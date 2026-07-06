@@ -28,6 +28,7 @@ import Step2Params from './wizard-steps/Step2Params';
 import Step3Auth from './wizard-steps/Step3Auth';
 import Step4Batch from './wizard-steps/Step4Batch';
 import Step5TestSave from './wizard-steps/Step5TestSave';
+import { parseCurlCommand } from '../../utils/curlImport';
 
 export const EMPTY_FORM = {
   name:'', description:'', api_type:'enricher', category:'custom', connection_type:'manual',
@@ -127,6 +128,56 @@ function buildFormFromTemplate(tpl) {
   };
 }
 
+const SELECTABLE_OUTPUT_TYPES = new Set(['string', 'integer', 'number', 'boolean', 'geojson']);
+
+function outputColumnFromField(field) {
+  const raw = String(field?.name || field?.path || 'value')
+    .replace(/\[\]|\[\*\]|\[0\]/g, '')
+    .split('.')
+    .pop() || 'value';
+  const column = raw.replace(/[^0-9A-Za-z_]+/g, '_').replace(/^_+|_+$/g, '') || 'value';
+  return /^\d/.test(column) ? `field_${column}` : column;
+}
+
+function normalizeOutputMapping(items) {
+  return (Array.isArray(items) ? items : [])
+    .filter(item => item?.path)
+    .map(item => ({
+      path: item.path,
+      column: item.column || outputColumnFromField(item),
+      type: item.type || 'string',
+      selected: item.selected ?? true,
+    }));
+}
+
+function buildSuggestedMappingFromFields(fields) {
+  const seen = new Set();
+  return (Array.isArray(fields) ? fields : [])
+    .filter(field => field?.path && SELECTABLE_OUTPUT_TYPES.has(field.type))
+    .map(field => {
+      const base = outputColumnFromField(field);
+      let column = base;
+      let suffix = 2;
+      while (seen.has(column)) {
+        column = `${base}_${suffix}`;
+        suffix += 1;
+      }
+      seen.add(column);
+      return {
+        path: field.path,
+        column,
+        type: field.type,
+        selected: true,
+      };
+    });
+}
+
+function suggestedMappingFromTestResult(result) {
+  const suggested = normalizeOutputMapping(result?.suggested_output_mapping);
+  if (suggested.length > 0) return suggested;
+  return buildSuggestedMappingFromFields(result?.available_fields);
+}
+
 export default function ApiConnectionWizard({ isOpen, seed, onClose, onSaved }) {
   const toast = useToast();
 const [editingApi, setEditingApi] = useState(null);
@@ -160,7 +211,10 @@ const [editingApi, setEditingApi] = useState(null);
         setTestResult({
           success: true,
           available_fields: api.schema_fields.map(f => ({
-            path: f.path, name: f.name, type: f.type,
+            path: f.path,
+            name: f.name || f.column || f.path,
+            type: f.type,
+            sample_value: f.sample_value,
           })),
         });
       } else {
@@ -254,6 +308,22 @@ const getCustomHeadersObject = () => {
   const handleTest = async () => {
     setTesting(true); setTestResult(null); setTestRawResponse(null);
     try {
+      const applyTestSampling = result => {
+        if (!result?.success) return;
+        const hasFields = Array.isArray(result.available_fields);
+        const fields = hasFields ? result.available_fields : [];
+        const suggested = suggestedMappingFromTestResult(result);
+        setFormData(prev => ({
+          ...prev,
+          ...(hasFields ? { schema_fields: fields } : {}),
+          ...(
+            prev.output_mapping?.length > 0 || suggested.length === 0
+              ? {}
+              : { output_mapping: suggested }
+          ),
+        }));
+      };
+
       // In edit mode: se l'auth ha credenziali sensibili mascherate
       // ("***") o vuote, il payload del form non puo' fare /test
       // (il backend useremmo l'auth del payload, e fallirebbe 401).
@@ -270,6 +340,7 @@ const getCustomHeadersObject = () => {
         });
         setTestResult(result);
         if (result.raw_response) setTestRawResponse(result.raw_response);
+        applyTestSampling(result);
         return;
       }
       const batch = formData.batch;
@@ -310,17 +381,7 @@ const getCustomHeadersObject = () => {
       const result = await testApiConfig(testPayload);
       setTestResult(result);
       if (result.raw_response) setTestRawResponse(result.raw_response);
-      if (result.success && result.available_fields) {
-        setFormData(prev => {
-          if (prev.output_mapping?.length > 0) return prev;
-          return {
-            ...prev,
-            output_mapping: result.available_fields
-              .filter(f => f.type === 'geojson' || f.name === 'id')
-              .map(f => ({ path: f.path, column: f.name, type: f.type, selected: true })),
-          };
-        });
-      }
+      applyTestSampling(result);
     } catch (e) {
       setTestResult({ success: false, error: e.message });
     } finally {
@@ -334,12 +395,38 @@ const getCustomHeadersObject = () => {
   const addCustomHeader    = () => setCustomHeadersList(prev => [...prev, { key:'', value:'' }]);
   const updateCustomHeader = (i, f, v) => setCustomHeadersList(prev => prev.map((h, j) => j === i ? { ...h, [f]: v } : h));
   const removeCustomHeader = (i) => setCustomHeadersList(prev => prev.filter((_, j) => j !== i));
+  const handleImportCurl = (curlCommand) => {
+    const parsed = parseCurlCommand(curlCommand);
+    setFormData(prev => ({
+      ...prev,
+      name: prev.name || parsed.name || '',
+      url: parsed.url,
+      method: parsed.method,
+      auth: parsed.auth || { type: 'none' },
+      parameters: parsed.parameters,
+      static_parameters: parsed.static_parameters,
+      request: Object.keys(parsed.request || {}).length > 0 ? parsed.request : {},
+    }));
+    setCustomHeadersList(
+      Object.entries(parsed.custom_headers || {})
+        .map(([key, value]) => ({ key, value })),
+    );
+    setTestResult(null);
+    setTestRawResponse(null);
+    return parsed;
+  };
   const toggleOutputField  = (field) => setFormData(prev => {
     const ex = prev.output_mapping.find(m => m.path === field.path);
     return ex
       ? { ...prev, output_mapping: prev.output_mapping.filter(m => m.path !== field.path) }
-      : { ...prev, output_mapping: [...prev.output_mapping, { path: field.path, column: field.name, type: field.type, selected: true }] };
+      : { ...prev, output_mapping: [...prev.output_mapping, { path: field.path, column: outputColumnFromField(field), type: field.type, selected: true }] };
   });
+  const applySuggestedOutputMapping = () => {
+    const suggested = suggestedMappingFromTestResult(testResult);
+    if (suggested.length === 0) return;
+    setFormData(prev => ({ ...prev, output_mapping: suggested }));
+  };
+  const clearOutputMapping = () => setFormData(prev => ({ ...prev, output_mapping: [] }));
   const updateOutputColumn = (path, col) => setFormData(prev => ({
     ...prev,
     output_mapping: prev.output_mapping.map(m => m.path === path ? { ...m, column: col } : m),
@@ -376,7 +463,13 @@ const getCustomHeadersObject = () => {
     {
       label: 'Info',
       canAdvance: !!formData.name && !!formData.url,
-      content: <Step1BasicInfo formData={formData} setFormData={setFormData} />,
+      content: (
+        <Step1BasicInfo
+          formData={formData}
+          setFormData={setFormData}
+          onImportCurl={handleImportCurl}
+        />
+      ),
     },
     {
       label: 'Parametri',
@@ -420,6 +513,8 @@ const getCustomHeadersObject = () => {
           setShowAdvancedConfig={setShowAdvancedConfig}
           handleTest={handleTest}
           toggleOutputField={toggleOutputField}
+          applySuggestedOutputMapping={applySuggestedOutputMapping}
+          clearOutputMapping={clearOutputMapping}
           updateOutputColumn={updateOutputColumn}
           handleResponseConfigChange={handleResponseConfigChange}
         />

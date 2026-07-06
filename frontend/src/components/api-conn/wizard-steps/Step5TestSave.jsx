@@ -25,9 +25,13 @@ export default function Step5TestSave({
   setShowAdvancedConfig,
   handleTest,
   toggleOutputField,
+  applySuggestedOutputMapping,
+  clearOutputMapping,
   updateOutputColumn,
   handleResponseConfigChange,
 }) {
+  const suggestedCount = testResult?.suggested_output_mapping?.length || 0;
+
   return (
     <div className="acm__wstep-content">
       <div className="acm__wlabel">📝 Dati di test</div>
@@ -62,6 +66,18 @@ export default function Step5TestSave({
             )}
             {!showAdvancedConfig && testResult.available_fields?.length > 0 && (<>
               <div className="acm__qt-help acm__qt-help--sm">Seleziona i campi da importare:</div>
+              <div className="acm__mapping-actions">
+                {suggestedCount > 0 && (
+                  <button type="button" className="acm__btn acm__btn--ok acm__btn--sm" onClick={applySuggestedOutputMapping}>
+                    Applica suggeriti ({suggestedCount})
+                  </button>
+                )}
+                {formData.output_mapping.length > 0 && (
+                  <button type="button" className="acm__btn acm__btn--ghost acm__btn--sm" onClick={clearOutputMapping}>
+                    Pulisci selezione
+                  </button>
+                )}
+              </div>
               <div className="acm__fields-grid">
                 {testResult.available_fields.map((f,i)=>{
                   const sel = formData.output_mapping.find(m=>m.path===f.path);

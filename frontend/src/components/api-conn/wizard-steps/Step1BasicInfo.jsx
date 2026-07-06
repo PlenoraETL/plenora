@@ -6,11 +6,50 @@
  *
  * Presentational.
  */
-import React from 'react';
+import React, { useState } from 'react';
 
-export default function Step1BasicInfo({ formData, setFormData }) {
+export default function Step1BasicInfo({ formData, setFormData, onImportCurl }) {
+  const [curlText, setCurlText] = useState('');
+  const [curlStatus, setCurlStatus] = useState(null);
+
+  const importCurl = () => {
+    try {
+      const result = onImportCurl(curlText);
+      const suffix = result?.warnings?.length
+        ? ` (${result.warnings.join(' · ')})`
+        : '';
+      setCurlStatus({ type: 'ok', message: `cURL importato${suffix}` });
+    } catch (err) {
+      setCurlStatus({ type: 'err', message: err.message || 'cURL non valido' });
+    }
+  };
+
   return (
     <div className="acm__wstep-content">
+      {formData.connection_type !== 'rest_file' && (
+        <details className="acm__details">
+          <summary>Importa da cURL</summary>
+          <div className="acm__field-group">
+            <textarea
+              className="acm__textarea acm__input--mono"
+              rows={4}
+              value={curlText}
+              onChange={e=>setCurlText(e.target.value)}
+              placeholder={"curl -X POST 'https://service.test/items' -H 'Authorization: Bearer ...' --data-raw '{\"city\":\"Roma\"}'"}
+            />
+            <div className="acm__curl-import-actions">
+              <button type="button" className="acm__btn acm__btn--ok acm__btn--sm" onClick={importCurl}>
+                Importa cURL
+              </button>
+              {curlStatus && (
+                <span className={`acm__curl-import-status acm__curl-import-status--${curlStatus.type}`}>
+                  {curlStatus.message}
+                </span>
+              )}
+            </div>
+          </div>
+        </details>
+      )}
       <div className="acm__field-group">
         <div className="acm__label">Nome API *</div>
         <input className="acm__input" autoComplete="off" value={formData.name} onChange={e=>setFormData({...formData,name:e.target.value})} placeholder="Es: Nominatim Geocoding" />
@@ -31,6 +70,9 @@ export default function Step1BasicInfo({ formData, setFormData }) {
             title="GET = parametri in query string · POST = parametri nel body JSON (o multipart se Processore File)">
             <option value="GET">GET</option>
             <option value="POST">POST</option>
+            <option value="PUT">PUT</option>
+            <option value="PATCH">PATCH</option>
+            <option value="DELETE">DELETE</option>
           </select>
           <div className="acm__field-hint">GET = query · POST = body JSON</div>
         </div>
