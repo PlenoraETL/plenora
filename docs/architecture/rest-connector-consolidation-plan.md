@@ -50,14 +50,14 @@ HttpExecutor.execute(RequestSpec) -> NormalizedResponse
   │                timeout, logging/masking
   ├─ AuthStrategy      (bearer | basic | api_key | oauth2_* | arcgis
   │                     | «mTLS | sigv4 | hmac | oauth2 authorization_code»)
-  ├─ BodyEncoder       (json | form-urlencoded | multipart | raw/text | «xml»)
-  ├─ ResponseParser    (json | «xml | csv | binary»)
-  ├─ Paginator         (offset | cursor | link | «page-number»)
+  ├─ BodyEncoder       (json | form-urlencoded | multipart | raw/text)
+  ├─ ResponseParser    (json | xml | csv | binary | «SOAP»)
+  ├─ Paginator         (offset | cursor | link | page-number)
   ├─ SuccessEvaluator  (status + success_when / error_path)
   └─ AsyncPoller       (overlay: submit → poll → result, wraps execute())
 ```
 
-`«...»` = future strategies (Phase 3 backlog); added without touching the core.
+`«...»` = deferred advanced strategies; added without touching the core.
 
 Consumers (per-row enricher, batch, generator, connection test) become thin:
 build a `RequestSpec`, call `execute`, map the result. Existing response
@@ -76,8 +76,8 @@ its own PR so the refactor risk is isolated from feature work.
 3. Extract `HttpExecutor.execute` reproducing today's behavior exactly: GET/POST,
    `json=` body, retry/429/backoff, rate-limit, auth via `prepare_headers`,
    SSRF gate, TLS policy.
-4. Migrate the four call sites to `execute`. `rest_file` stays out for now
-   (folding evaluated in Phase 3).
+4. Migrate the four call sites to `execute`. `rest_file` stays out in Phase 0
+   and is folded into the core in Phase 3.
 5. Close the drifts during migration (low-risk, made safe by the characterization
    tests): consistent `allow_redirects`, timeouts read from options.
 
@@ -86,7 +86,8 @@ Deliverable: same behavior, one execution core, all paths route through it.
 Implementation note: Phase 0 is complete. `RequestSpec`, `NormalizedResponse`,
 and `HttpExecutor` are in place; per-row enricher, batch, generator, and
 connection test route through the shared executor. `rest_file` remains out of
-scope for Phase 0. Per-row enricher and batch validate the final URL once before
+scope for Phase 0 and is folded in during Phase 3. Per-row enricher and batch
+validate the final URL once before
 entering their retry loop, then delegate execution to the shared executor with
 URL validation disabled for the already-checked URL. Batch now also uses the same
 TLS `verify` policy as per-row calls; this is an intentional minor behavior
@@ -247,38 +248,46 @@ per cycle how far to push the UI side. Recommended order: self-describing
 strategies (with Phase 0/1) → cURL import + response sampling (Phase 1.5) →
 preset library + reusable credentials (later).
 
-## Phase 3 — Declared backlog (extension points ready, implement on demand)
+## Phase 3 — Completed extension pass
 
-Enabled by the architecture; not in the current pass. Each is "add a strategy",
-not "touch the core".
+Phase 3 is complete for the current consolidation scope. The shared executor
+and parser extension points were exercised without re-opening the Phase 0-2
+core design.
+
+- **3A — `rest_file` folded into the HTTP core:** `HttpExecutor` supports
+  `multipart/form-data` through `RequestSpec.files`, `form_data`, and `stream`.
+  The `rest_file` HTTP call now uses the shared executor while keeping its
+  specialized multipart build, binary streaming download, output cap, watchdog,
+  and blob persistence pipeline.
+- **3B — CSV response parsing:** `ResponseParser` supports connector configs
+  with `response.format="csv"` or `response_config.format="csv"`. Generator APIs
+  and `test_api_connection` parse `text/csv` responses into row dictionaries and
+  expose fields for mapping.
+- **3C — XML response parsing:** `ResponseParser` supports connector configs
+  with `response.format="xml"` or `response_config.format="xml"`. The parser uses
+  `defusedxml`, strips XML namespaces, preserves attributes as `@name`, turns
+  repeated sibling tags into lists, and exposes the parsed structure to generator
+  mappings and `test_api_connection` field sampling.
+- **3D — REST hardening:** fixed stream-safe response handling for `rest_file`,
+  bounded error previews, XML entity-expansion protection, stricter CSV header
+  validation, relative `Link` pagination, cursor `0`, selective per-page retries,
+  `Retry-After` HTTP-date parsing, structured row errors, and
+  `test_api_connection` auth-prep error handling.
+
+### Deferred advanced strategies
+
+These remain intentionally on-demand. Each should be implemented as an added
+strategy, not by changing the shared executor contract again:
 
 - **AuthStrategy:** mTLS / client-cert, AWS SigV4, HMAC/request signing,
-  OAuth2 authorization_code (3-legged). Most-requested in practice: mTLS.
-- **ResponseParser:** XML/SOAP, CSV.
-- **Fold `rest_file`** into the core if worthwhile.
-
-Implementation note: Phase 3A is in progress. `HttpExecutor` now supports
-`multipart/form-data` requests through `RequestSpec.files`, `form_data`, and
-`stream`; the `rest_file` HTTP call uses the shared executor while keeping its
-specialized multipart build, binary streaming download, output cap, and blob
-persistence pipeline.
-
-Implementation note: Phase 3B is in progress. `ResponseParser` now includes a
-CSV body parser for connector configs with `response.format="csv"` or
-`response_config.format="csv"`. Generator APIs and `test_api_connection` can
-parse `text/csv` responses into row dictionaries and expose fields for mapping.
-
-Implementation note: Phase 3C base XML parsing is implemented. `ResponseParser`
-now includes a base XML body parser for connector configs with
-`response.format="xml"` or
-`response_config.format="xml"`. The parser strips XML namespaces, preserves
-attributes as `@name`, turns repeated sibling tags into lists, and exposes the
-parsed structure to generator mappings and `test_api_connection` field sampling.
+  OAuth2 authorization_code (3-legged). Existing OAuth2 password and
+  client_credentials flows are already supported.
+- **ResponseParser:** SOAP envelope/fault handling beyond the base XML parser.
 
 ## Cross-cutting
 
 - Tests: characterization (Phase 0) → parity/regression; unit per strategy
-  (Phases 1-2). Regression check: connections without `async` behave
+  (Phases 1-3). Regression check: connections without `async` behave
   byte-identically.
 - Docs: strategy matrix + how to register a new strategy, so the next case does
   not require re-reading the whole module.
@@ -287,8 +296,9 @@ parsed structure to generator mappings and `test_api_connection` field sampling.
 
 1. **Refactor risk (Phase 0):** mitigated by characterization tests + an isolated
    behavior-preserving PR.
-2. **`rest_file` diverging from the core:** left out in v1 to limit blast radius;
-   explicit folding decision in Phase 3.
+2. **`rest_file` diverging from the core:** resolved in Phase 3 by routing the
+   HTTP call through the shared executor while preserving the binary download
+   cap, watchdog, and blob persistence path.
 3. **God-object:** avoided by construction via strategies — the reason the target
    is a single entry point *plus* strategy registries, not one function.
 4. **`max_wait_s` vs task runtime / worker timeout:** `max_wait_s` must stay below
@@ -303,4 +313,4 @@ parsed structure to generator mappings and `test_api_connection` field sampling.
 | 1 | Tier A extensions | ~1-1.5 d |
 | 1.5 | Configuration UX: cURL import + response sampling (self-describing strategies folded into Phase 0/1) | ~2-3 d (BE+FE) |
 | 2 | Async overlay + SISTER preset | ~1.5 d |
-| **Total** | centralized + extended connector | **~5-6 d** core + **~2-3 d** config UX (Phase 3 + preset library / reusable credentials as clean backlog) |
+| **Total** | centralized + extended connector | **~5-6 d** core + **~2-3 d** config UX; advanced auth/SOAP, preset library and reusable credentials remain clean backlog |
