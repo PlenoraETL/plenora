@@ -416,6 +416,49 @@ class TestGeneratorPagination:
         third_params = gen_env.session.get.call_args_list[2].kwargs["params"]
         assert second_params["offset"] == third_params["offset"]
 
+    def test_offset_pagination_does_not_retry_404(self, gen_env):
+        gen_env.session.get.side_effect = [
+            _resp(404, text="missing"),
+            _resp(200, json_body=[{"x": 2}]),
+        ]
+        cfg = {
+            "endpoint": {"url": "https://api.test/items", "method": "GET"},
+            "auth": {},
+            "output_mapping": [],
+            "pagination": {
+                "type": "offset",
+                "page_size": 1,
+                "retry_max": 2,
+            },
+        }
+
+        with pytest.raises(ValueError, match="HTTP 404"):
+            gen_env.svc._execute_api_generator(cfg)
+
+        assert gen_env.session.get.call_count == 1
+
+    def test_offset_pagination_does_not_retry_application_error(self, gen_env):
+        gen_env.session.get.side_effect = [
+            _resp(200, json_body={"error": {"message": "quota exceeded"}}),
+            _resp(200, json_body=[{"x": 2}]),
+        ]
+        cfg = {
+            "endpoint": {"url": "https://api.test/items", "method": "GET"},
+            "auth": {},
+            "error_path": "error",
+            "output_mapping": [],
+            "pagination": {
+                "type": "offset",
+                "page_size": 1,
+                "retry_max": 2,
+            },
+        }
+
+        with pytest.raises(ValueError, match="quota exceeded"):
+            gen_env.svc._execute_api_generator(cfg)
+
+        assert gen_env.session.get.call_count == 1
+
     def test_cursor_pagination_follows_cursor_path(self, gen_env):
         gen_env.session.get.side_effect = [
             _resp(200, json_body={"items": [{"x": 1}], "next_cursor": "c1"}),

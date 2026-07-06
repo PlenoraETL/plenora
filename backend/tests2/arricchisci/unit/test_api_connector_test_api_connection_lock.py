@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 
 pytestmark = [
@@ -101,6 +102,15 @@ class TestTestApiConnectionValidation:
 
         assert result["success"] is False
         assert result["error"] == "auth malformata"
+
+    def test_prepare_headers_request_exception_returns_structured_error(self, tac_env):
+        tac_env.prep_headers.side_effect = requests.HTTPError("oauth failed")
+        cfg = {"endpoint": {"url": "https://api.test/q", "method": "GET"}, "auth": {}}
+
+        result = tac_env.svc.test_api_connection(config=cfg)
+
+        assert result["success"] is False
+        assert result["error"] == "Errore HTTP: oauth failed"
 
 
 # Section 2: params merge + template processing

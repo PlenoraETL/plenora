@@ -567,6 +567,8 @@ class ApiConnectionManagementMixin:
             return {"success": False, "error": "Timeout: l'API non ha risposto entro 30 secondi"}
         except requests.exceptions.ConnectionError as e:
             return {"success": False, "error": f"Errore di connessione: {str(e)}"}
+        except requests.exceptions.RequestException as e:
+            return {"success": False, "error": f"Errore HTTP: {str(e)}"}
         except Exception as e:
             # Endpoint UI sincrono di test API connection: eccezioni inattese
             # non devono leakare str(e) nella response JSON. Dettaglio tecnico

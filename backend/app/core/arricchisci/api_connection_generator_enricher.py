@@ -104,12 +104,37 @@ class ApiConnectionGeneratorEnricherMixin:
             int(raw_page_max_retries),
         )
         page_retry_backoff = float(retry_cfg.get("retry_backoff_factor", 0) or 0)
+        retry_on_status = {
+            int(status)
+            for status in retry_cfg.get(
+                "retry_on_status",
+                [429, 500, 502, 503, 504],
+            )
+        }
+
+        def _http_status_from_error(exc: ValueError) -> int | None:
+            match = re.search(r"HTTP\s+(\d{3})", str(exc))
+            return int(match.group(1)) if match else None
 
         def _call_page(call_params, call_url=None):
             for attempt in range(page_max_retries + 1):
                 try:
                     return call_fn(call_params, call_url=call_url)
-                except (ValueError, TimeoutError, requests.RequestException) as exc:
+                except ValueError as exc:
+                    status_code = _http_status_from_error(exc)
+                    if (
+                        status_code not in retry_on_status
+                        or attempt >= page_max_retries
+                    ):
+                        raise
+                    logger.warning(
+                        "Generator pagination retry "
+                        f"{attempt + 1}/{page_max_retries} dopo "
+                        f"HTTP {status_code}"
+                    )
+                    if page_retry_backoff > 0:
+                        time.sleep(page_retry_backoff ** attempt)
+                except (TimeoutError, requests.RequestException) as exc:
                     if attempt >= page_max_retries:
                         raise
                     logger.warning(
