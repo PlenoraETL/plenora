@@ -372,6 +372,71 @@ describe('ApiConnectionManager', () => {
     ]);
   });
 
+  it('clears sampled output state when importing cURL over an existing connection', async () => {
+    httpMock.get.mockResolvedValueOnce({
+      data: {
+        api_connections: [
+          {
+            id: 'api-stale',
+            name: 'Existing Sampled API',
+            description: 'has old sampled fields',
+            api_type: 'generator',
+            category: 'custom',
+            endpoint: { url: 'https://old.example.test/items', method: 'GET' },
+            auth: { type: 'none' },
+            custom_headers: {},
+            parameters: [],
+            static_parameters: {},
+            output_mapping: [
+              { path: 'old.items[0].name', column: 'old_name', type: 'string', selected: true },
+            ],
+            schema_fields: [
+              { path: 'old.items[0].name', name: 'name', type: 'string', sample_value: 'old' },
+            ],
+            response_preset: 'old-preset',
+            response_config: {
+              root_path: 'old.items',
+              mappings: [{ path: 'old.items[0].name', column: 'old_name', type: 'string' }],
+            },
+            usage: { calls_total: 0, calls_error: 0 },
+            can_edit: true,
+          },
+        ],
+      },
+    });
+    httpMock.put.mockResolvedValueOnce({ data: { id: 'api-stale' } });
+
+    render(<ApiConnectionManager />);
+
+    await screen.findByText('Existing Sampled API');
+    await userEvent.click(screen.getByTitle('Modifica'));
+
+    await userEvent.click(await screen.findByText('Importa da cURL'));
+    fireEvent.change(screen.getByPlaceholderText(/curl -X POST/i), {
+      target: {
+        value: "curl 'https://new.example.test/search?q=Roma' -H 'Accept: application/json'",
+      },
+    });
+    await userEvent.click(screen.getByRole('button', { name: /importa curl/i }));
+
+    expect(await screen.findByDisplayValue('https://new.example.test/search')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('Test'));
+    await userEvent.click(screen.getByRole('button', { name: /salva api/i }));
+
+    await waitFor(() => {
+      expect(httpMock.put).toHaveBeenCalledTimes(1);
+    });
+
+    const [, payload] = httpMock.put.mock.calls[0];
+    expect(payload.url).toBe('https://new.example.test/search');
+    expect(payload.static_parameters).toEqual({ q: 'Roma' });
+    expect(payload.output_mapping).toEqual([]);
+    expect(payload.schema_fields).toEqual([]);
+    expect(payload.response_preset).toBeUndefined();
+    expect(payload.response_config).toBeUndefined();
+  });
+
   it('maps datasource modal output to the backend datasource payload shape', async () => {
     httpMock.get.mockResolvedValueOnce({
       data: {

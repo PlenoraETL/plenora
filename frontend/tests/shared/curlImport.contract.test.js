@@ -78,6 +78,20 @@ describe('curlImport parser', () => {
     });
   });
 
+  it('does not treat unknown option values as the URL', () => {
+    const parsed = parseCurlCommand(
+      "curl --retry-delay 5 'https://api.example.test/search?q=Roma'",
+    );
+
+    expect(parsed.url).toBe('https://api.example.test/search');
+    expect(parsed.static_parameters).toEqual({ q: 'Roma' });
+  });
+
+  it('rejects commands without an http(s) URL candidate', () => {
+    expect(() => parseCurlCommand('curl --retry-delay 5'))
+      .toThrow(/senza URL http\(s\)/);
+  });
+
   it('rejects methods unsupported by the connector', () => {
     expect(() => parseCurlCommand("curl -X HEAD 'https://api.example.test/x'"))
       .toThrow(/Metodo HTTP non supportato/);

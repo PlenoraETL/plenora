@@ -254,9 +254,10 @@ const getCustomHeadersObject = () => {
       const sanitizeAuth = auth => {
         if (!auth) return auth;
         const s = { ...auth };
-        if (isMasked(s.password)) delete s.password;
-        if (isMasked(s.key_value)) delete s.key_value;
-        if (isMasked(s.client_secret)) delete s.client_secret;
+        ['password', 'key_value', 'client_secret', 'token', 'access_token', 'refresh_token']
+          .forEach(key => {
+            if (isMasked(s[key])) delete s[key];
+          });
         return s;
       };
       const data = {
@@ -405,6 +406,10 @@ const getCustomHeadersObject = () => {
       auth: parsed.auth || { type: 'none' },
       parameters: parsed.parameters,
       static_parameters: parsed.static_parameters,
+      output_mapping: [],
+      schema_fields: [],
+      response_preset: '',
+      response_config: null,
       request: Object.keys(parsed.request || {}).length > 0 ? parsed.request : {},
     }));
     setCustomHeadersList(
@@ -413,6 +418,7 @@ const getCustomHeadersObject = () => {
     );
     setTestResult(null);
     setTestRawResponse(null);
+    setShowAdvancedConfig(false);
     return parsed;
   };
   const toggleOutputField  = (field) => setFormData(prev => {

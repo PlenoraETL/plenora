@@ -13,6 +13,8 @@
 import React from 'react';
 import ResponseConfigBuilder from '../../panels/ResponseConfigBuilder';
 
+const SELECTABLE_OUTPUT_TYPES = new Set(['string', 'integer', 'number', 'boolean', 'geojson']);
+
 export default function Step5TestSave({
   formData,
   setFormData,
@@ -30,7 +32,10 @@ export default function Step5TestSave({
   updateOutputColumn,
   handleResponseConfigChange,
 }) {
-  const suggestedCount = testResult?.suggested_output_mapping?.length || 0;
+  const suggestedCount = testResult?.suggested_output_mapping?.length
+    || (testResult?.available_fields || [])
+      .filter(field => SELECTABLE_OUTPUT_TYPES.has(field.type))
+      .length;
 
   return (
     <div className="acm__wstep-content">

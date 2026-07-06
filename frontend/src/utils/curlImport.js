@@ -21,6 +21,10 @@ const SKIP_VALUE_OPTIONS = new Set([
 
 const SUPPORTED_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 
+function looksLikeHttpUrl(value) {
+  return /^https?:\/\//i.test(String(value || '').trim());
+}
+
 export function tokenizeCurlCommand(command) {
   const normalized = String(command || '')
     .replace(/\\\r?\n/g, ' ')
@@ -161,10 +165,13 @@ export function parseCurlCommand(command) {
       if (SKIP_VALUE_OPTIONS.has(name)) continue;
     }
     if (token.startsWith('-')) continue;
-    if (!rawUrl) rawUrl = token;
+    if (!rawUrl && looksLikeHttpUrl(token)) rawUrl = token;
   }
 
-  if (!rawUrl) throw new Error('Comando cURL senza URL');
+  if (!rawUrl) throw new Error('Comando cURL senza URL http(s)');
+  if (!looksLikeHttpUrl(rawUrl)) {
+    throw new Error('URL cURL non supportato: usa http:// o https://');
+  }
 
   const bodyText = dataParts.join('&');
   const hasBody = dataParts.length > 0 && !useGetWithData;
