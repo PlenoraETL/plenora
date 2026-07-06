@@ -129,6 +129,65 @@ function buildFormFromTemplate(tpl) {
 }
 
 const SELECTABLE_OUTPUT_TYPES = new Set(['string', 'integer', 'number', 'boolean', 'geojson']);
+const SENSITIVE_AUTH_FIELDS = [
+  'password',
+  'key_value',
+  'value',
+  'client_secret',
+  'token',
+  'access_token',
+  'refresh_token',
+];
+
+const isMaskedSecret = v => typeof v === 'string' && v.includes('***');
+const isBlank = v => v == null || String(v).trim() === '';
+
+function sanitizeAuth(auth) {
+  if (!auth) return auth;
+  const s = { ...auth };
+  SENSITIVE_AUTH_FIELDS.forEach(key => {
+    if (isMaskedSecret(s[key])) delete s[key];
+  });
+  return s;
+}
+
+function validateAuthConfig(auth) {
+  const cfg = auth || { type: 'none' };
+  const type = cfg.type || 'none';
+  const requireField = (key, label) => (
+    isBlank(cfg[key]) ? `${label} richiesto per ${type}` : null
+  );
+
+  if (type === 'none') return null;
+  if (type === 'bearer') return requireField('token', 'Token');
+  if (type === 'api_key') {
+    return requireField('key_name', 'Nome chiave')
+      || (isBlank(cfg.key_value ?? cfg.value) ? 'Valore API key richiesto per api_key' : null);
+  }
+  if (type === 'basic_auth') {
+    return requireField('username', 'Username')
+      || requireField('password', 'Password');
+  }
+  if (type === 'oauth2_password') {
+    return requireField('token_url', 'Token URL')
+      || requireField('username', 'Username')
+      || requireField('password', 'Password');
+  }
+  if (type === 'oauth2_client_credentials') {
+    return requireField('token_url', 'Token URL')
+      || requireField('client_id', 'Client ID')
+      || requireField('client_secret', 'Client Secret');
+  }
+  if (type === 'arcgis_token') {
+    const baseError = requireField('token_url', 'Token URL')
+      || requireField('username', 'Username')
+      || requireField('password', 'Password');
+    if (baseError) return baseError;
+    if (cfg.client === 'referer') return requireField('referer', 'Referer URL');
+    if (cfg.client === 'ip') return requireField('ip', 'IP');
+  }
+  return null;
+}
 
 function outputColumnFromField(field) {
   const raw = String(field?.name || field?.path || 'value')
@@ -248,55 +307,55 @@ const getCustomHeadersObject = () => {
     return h;
   };
 
+  const buildConnectionPayload = () => {
+    const data = {
+      name: formData.name,
+      description: formData.description,
+      api_type: formData.api_type,
+      category: formData.category,
+      connection_type: formData.connection_type || 'manual',
+      url: formData.url,
+      method: formData.method,
+      auth: sanitizeAuth(formData.auth),
+      custom_headers: getCustomHeadersObject(),
+      parameters: formData.parameters.map(p =>
+        formData.api_type === 'generator'
+          ? { ...p, mode: 'fixed', required: false }
+          : p
+      ),
+      static_parameters: formData.static_parameters,
+      output_mapping: formData.output_mapping,
+      schema_fields: formData.schema_fields || [],
+      response_preset: formData.response_preset || undefined,
+      response_config: formData.response_config || undefined,
+      pagination: (formData.api_type === 'generator' && formData.pagination?.type)
+        ? formData.pagination
+        : undefined,
+      options: { ...formData.options, parallel_workers: formData.options?.parallel_workers || 1 },
+      batch: formData.batch || { enabled: false },
+    };
+    if (formData.async?.enabled) {
+      data.async = formData.async;
+    }
+    if (formData.request?.body_type && formData.request.body_type !== 'multipart') {
+      data.request = formData.request;
+    }
+    if (formData.connection_type === 'rest_file') {
+      data.method = 'POST';
+      data.request = formData.request || { body_type:'multipart', file_fields:[], static_fields:[] };
+      data.response = formData.response || { format:'binary_file', output_extension:'.zip' };
+    }
+    return data;
+  };
+
   const handleSave = async () => {
     try {
-      const isMasked = v => typeof v === 'string' && v.includes('***');
-      const sanitizeAuth = auth => {
-        if (!auth) return auth;
-        const s = { ...auth };
-        ['password', 'key_value', 'client_secret', 'token', 'access_token', 'refresh_token']
-          .forEach(key => {
-            if (isMasked(s[key])) delete s[key];
-          });
-        return s;
-      };
-      const data = {
-        name: formData.name,
-        description: formData.description,
-        api_type: formData.api_type,
-        category: formData.category,
-        connection_type: formData.connection_type || 'manual',
-        url: formData.url,
-        method: formData.method,
-        auth: sanitizeAuth(formData.auth),
-        custom_headers: getCustomHeadersObject(),
-        parameters: formData.parameters.map(p =>
-          formData.api_type === 'generator'
-            ? { ...p, mode: 'fixed', required: false }
-            : p
-        ),
-        static_parameters: formData.static_parameters,
-        output_mapping: formData.output_mapping,
-        schema_fields: formData.schema_fields || [],
-        response_preset: formData.response_preset || undefined,
-        response_config: formData.response_config || undefined,
-        pagination: (formData.api_type === 'generator' && formData.pagination?.type)
-          ? formData.pagination
-          : undefined,
-        options: { ...formData.options, parallel_workers: formData.options?.parallel_workers || 1 },
-        batch: formData.batch || { enabled: false },
-      };
-      if (formData.async?.enabled) {
-        data.async = formData.async;
+      const authError = validateAuthConfig(formData.auth);
+      if (authError) {
+        toast.error(authError);
+        return;
       }
-      if (formData.request?.body_type && formData.request.body_type !== 'multipart') {
-        data.request = formData.request;
-      }
-      if (formData.connection_type === 'rest_file') {
-        data.method = 'POST';
-        data.request = formData.request || { body_type:'multipart', file_fields:[], static_fields:[] };
-        data.response = formData.response || { format:'binary_file', output_extension:'.zip' };
-      }
+      const data = buildConnectionPayload();
       if (editingApi) await updateApiConnection(editingApi.id, data);
       else await createApiConnection(data);
       onSaved?.();
@@ -309,6 +368,11 @@ const getCustomHeadersObject = () => {
   const handleTest = async () => {
     setTesting(true); setTestResult(null); setTestRawResponse(null);
     try {
+      const authError = validateAuthConfig(formData.auth);
+      if (authError) {
+        setTestResult({ success: false, error: authError });
+        return;
+      }
       const applyTestSampling = result => {
         if (!result?.success) return;
         const hasFields = Array.isArray(result.available_fields);
@@ -338,6 +402,7 @@ const getCustomHeadersObject = () => {
         const result = await testApiConnection(editingApi.id, {
           test_params: { ...formData.static_parameters, ...testParams },
           include_raw: true,
+          config_overrides: buildConnectionPayload(),
         });
         setTestResult(result);
         if (result.raw_response) setTestRawResponse(result.raw_response);

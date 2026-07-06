@@ -46,6 +46,16 @@ from app.core.artifacts.static_parameters import process_static_fields
 # handler stdlib agganciato a `"app.core.arricchisci.api_connector"`
 logger = get_logger("app.core.arricchisci.api_connector")
 
+_SENSITIVE_AUTH_FIELDS = {
+    "key_value",
+    "value",
+    "password",
+    "client_secret",
+    "token",
+    "access_token",
+    "refresh_token",
+}
+
 
 class ApiConnectionManagementMixin:
     """Mixin per `ApiConnectionService`: CRUD lifecycle + test
@@ -89,6 +99,24 @@ class ApiConnectionManagementMixin:
         if "key_value" in auth and "value" not in auth:
             auth["value"] = auth["key_value"]
         return config
+
+    def _merge_auth_preserving_secrets(
+        self,
+        existing_auth: JsonObject,
+        incoming_auth: Optional[JsonObject],
+    ) -> JsonObject:
+        if not isinstance(incoming_auth, dict):
+            return dict(existing_auth or {})
+        incoming = {
+            k: v for k, v in incoming_auth.items()
+            if v != "***"
+            and not (k in _SENSITIVE_AUTH_FIELDS and v == "")
+        }
+        if "value" in incoming and "key_value" not in incoming:
+            incoming["key_value"] = incoming["value"]
+        if "key_value" in incoming and "value" not in incoming:
+            incoming["value"] = incoming["key_value"]
+        return {**(existing_auth or {}), **incoming}
 
     def _public_config_from_api_connection_row(
         self,
@@ -288,20 +316,10 @@ class ApiConnectionManagementMixin:
             # (`key_value`, `password`, `client_secret`, `token`):
             # per gli altri (es. `key_name`, `location`) "" puo'
             # essere un reset legittimo.
-            _SENSITIVE_AUTH = {
-                "key_value", "value", "password", "client_secret", "token",
-            }
-            existing_auth = config.get("auth", {})
-            incoming_auth = {
-                k: v for k, v in (data["auth"] or {}).items()
-                if v != "***"
-                and not (k in _SENSITIVE_AUTH and v == "")
-            }
-            if "value" in incoming_auth and "key_value" not in incoming_auth:
-                incoming_auth["key_value"] = incoming_auth["value"]
-            if "key_value" in incoming_auth and "value" not in incoming_auth:
-                incoming_auth["value"] = incoming_auth["key_value"]
-            config["auth"] = {**existing_auth, **incoming_auth}
+            config["auth"] = self._merge_auth_preserving_secrets(
+                config.get("auth", {}),
+                data["auth"],
+            )
             self._normalize_auth_schema(config)
         config["updated_at"] = datetime.now(timezone.utc).isoformat()
 
@@ -326,6 +344,55 @@ class ApiConnectionManagementMixin:
     # Test singola chiamata con parsing risposta JSON per validazione
     # Estrae automaticamente i campi disponibili dalla risposta per
     # permettere la configurazione dell'output mapping nel frontend
+
+    def _build_test_config_with_overrides(
+        self,
+        api_id: str,
+        overrides: Optional[JsonObject],
+    ) -> Optional[JsonObject]:
+        config = self.get_api_connection(api_id, include_token=True, strict=True)
+        if not config:
+            return None
+
+        data = overrides or {}
+        for field in (
+            "custom_headers",
+            "static_parameters",
+            "options",
+            "request",
+            "async",
+            "success_when",
+            "error_path",
+        ):
+            if field in data:
+                config[field] = data[field]
+        if "url" in data:
+            config.setdefault("endpoint", {})["url"] = data["url"]
+        if "method" in data:
+            config.setdefault("endpoint", {})["method"] = data["method"]
+        if "endpoint" in data and isinstance(data["endpoint"], dict):
+            endpoint = data["endpoint"]
+            if "url" in endpoint:
+                config.setdefault("endpoint", {})["url"] = endpoint["url"]
+            if "method" in endpoint:
+                config.setdefault("endpoint", {})["method"] = endpoint["method"]
+        if "auth" in data:
+            config["auth"] = self._merge_auth_preserving_secrets(
+                config.get("auth", {}),
+                data["auth"],
+            )
+        return self._normalize_auth_schema(config)
+
+    def test_api_connection_with_overrides(
+        self,
+        api_id: str,
+        config_overrides: Optional[JsonObject] = None,
+        test_params: Optional[JsonObject] = None,
+    ) -> JsonObject:
+        config = self._build_test_config_with_overrides(api_id, config_overrides)
+        if not config:
+            return {"success": False, "error": "API connection non trovata"}
+        return self.test_api_connection(config=config, test_params=test_params)
 
     @staticmethod
     def _build_test_call_params(

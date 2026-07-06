@@ -437,6 +437,89 @@ describe('ApiConnectionManager', () => {
     expect(payload.response_config).toBeUndefined();
   });
 
+  it('sends draft auth metadata overrides when testing an edited connection with masked secret', async () => {
+    httpMock.get.mockResolvedValueOnce({
+      data: {
+        api_connections: [
+          {
+            id: 'api-auth',
+            name: 'Auth API',
+            description: 'masked key',
+            api_type: 'generator',
+            category: 'custom',
+            endpoint: { url: 'https://api.example.test/search', method: 'GET' },
+            auth: {
+              type: 'api_key',
+              location: 'header',
+              key_name: 'X-API-Key',
+              key_value: '***',
+            },
+            custom_headers: {},
+            parameters: [],
+            static_parameters: {},
+            output_mapping: [],
+            schema_fields: [],
+            usage: { calls_total: 0, calls_error: 0 },
+            can_edit: true,
+          },
+        ],
+      },
+    });
+    httpMock.post.mockResolvedValueOnce({ data: { success: true, available_fields: [] } });
+
+    render(<ApiConnectionManager />);
+
+    await screen.findByText('Auth API');
+    await userEvent.click(screen.getByTitle('Modifica'));
+    await userEvent.click(screen.getByText('Auth'));
+    await userEvent.click(screen.getByLabelText('Query param'));
+    await userEvent.click(screen.getByText('Test'));
+    await userEvent.click(screen.getByRole('button', { name: /esegui test/i }));
+
+    await waitFor(() => {
+      expect(httpMock.post).toHaveBeenCalledTimes(1);
+    });
+
+    const [url, payload] = httpMock.post.mock.calls[0];
+    expect(url).toBe('/api-connections/api-auth/test');
+    expect(payload).toEqual(expect.objectContaining({
+      test_params: {},
+      include_raw: true,
+      config_overrides: expect.objectContaining({
+        url: 'https://api.example.test/search',
+        method: 'GET',
+        auth: {
+          type: 'api_key',
+          location: 'query',
+          key_name: 'X-API-Key',
+        },
+      }),
+    }));
+    expect(payload.config_overrides.auth).not.toHaveProperty('key_value');
+  });
+
+  it('blocks save when required auth fields are missing', async () => {
+    httpMock.get.mockResolvedValueOnce({ data: { api_connections: [] } });
+
+    render(<ApiConnectionManager />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /manuale/i }));
+    await userEvent.click(screen.getByText('Generatore'));
+    await userEvent.click(screen.getByRole('button', { name: /avanti/i }));
+    await userEvent.type(await screen.findByPlaceholderText(/Nominatim Geocoding/i), 'Bearer API');
+    await userEvent.type(screen.getByPlaceholderText(/api\.example\.com/i), 'https://api.example.test/items');
+
+    await userEvent.click(screen.getByText('Auth'));
+    await userEvent.click(screen.getByLabelText('Bearer'));
+    await userEvent.click(screen.getByText('Test'));
+    await userEvent.click(screen.getByRole('button', { name: /salva api/i }));
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith('Token richiesto per bearer');
+    });
+    expect(httpMock.post).not.toHaveBeenCalled();
+  });
+
   it('maps datasource modal output to the backend datasource payload shape', async () => {
     httpMock.get.mockResolvedValueOnce({
       data: {

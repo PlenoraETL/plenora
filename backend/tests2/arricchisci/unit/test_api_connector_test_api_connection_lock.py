@@ -112,6 +112,50 @@ class TestTestApiConnectionValidation:
         assert result["success"] is False
         assert result["error"] == "Errore HTTP: oauth failed"
 
+    def test_by_id_overrides_preserve_saved_secret_and_update_auth_metadata(self, tac_env):
+        saved = {
+            "endpoint": {"url": "https://old.test/search", "method": "GET"},
+            "auth": {
+                "type": "api_key",
+                "location": "header",
+                "key_name": "X-API-Key",
+                "key_value": "SECRET",
+                "value": "SECRET",
+            },
+            "static_parameters": {},
+        }
+        overrides = {
+            "url": "https://new.test/search",
+            "method": "GET",
+            "auth": {
+                "type": "api_key",
+                "location": "query",
+                "key_name": "apiKey",
+                "key_value": "***",
+            },
+        }
+        with patch.object(
+            tac_env.svc,
+            "get_api_connection",
+            return_value=saved,
+        ) as get_api_connection:
+            result = tac_env.svc.test_api_connection_with_overrides(
+                "api-1",
+                config_overrides=overrides,
+                test_params={"q": "Roma"},
+            )
+
+        assert result["success"] is True
+        get_api_connection.assert_called_once_with(
+            "api-1",
+            include_token=True,
+            strict=True,
+        )
+        assert tac_env.session.get.call_args[0][0] == "https://new.test/search"
+        params = tac_env.session.get.call_args.kwargs.get("params", {})
+        assert params["q"] == "Roma"
+        assert params["apiKey"] == "SECRET"
+
 
 # Section 2: params merge + template processing
 

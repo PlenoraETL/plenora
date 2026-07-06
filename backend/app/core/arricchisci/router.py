@@ -621,7 +621,21 @@ def test_api_connection(
     """
     try:
         _check_api_connection_visible(api_id, current_user)
-        test_params = (body or {}).get("test_params", {})
+        payload = body or {}
+        test_params = payload.get("test_params", {})
+        config_overrides = payload.get("config_overrides")
+        if isinstance(config_overrides, dict):
+            override_url = config_overrides.get("url")
+            endpoint = config_overrides.get("endpoint")
+            if not override_url and isinstance(endpoint, dict):
+                override_url = endpoint.get("url")
+            if override_url:
+                _validate_external_url(override_url)
+            return _api_connection_service.test_api_connection_with_overrides(
+                api_id=api_id,
+                config_overrides=config_overrides,
+                test_params=test_params,
+            )
         return _api_connection_service.test_api_connection(api_id=api_id, test_params=test_params)
     except HTTPException:
         raise

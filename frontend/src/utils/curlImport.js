@@ -117,6 +117,9 @@ export function parseCurlCommand(command) {
 
     const dataValue = readOptionValue(tokens, i, token, ['-d', ...DATA_OPTION_NAMES]);
     if (dataValue) {
+      if (String(dataValue.value || '').trim().startsWith('@')) {
+        warnings.push('@file non letto dal browser: il body importato resta letterale');
+      }
       dataParts.push(dataValue.value);
       i = dataValue.index;
       continue;

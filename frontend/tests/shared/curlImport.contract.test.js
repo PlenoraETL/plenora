@@ -92,6 +92,20 @@ describe('curlImport parser', () => {
       .toThrow(/senza URL http\(s\)/);
   });
 
+  it('warns when a body references a local @file', () => {
+    const parsed = parseCurlCommand(
+      "curl -X POST 'https://api.example.test/upload' --data-binary @payload.json",
+    );
+
+    expect(parsed.request).toEqual({
+      body_type: 'raw',
+      raw_body: '@payload.json',
+    });
+    expect(parsed.warnings).toContain(
+      '@file non letto dal browser: il body importato resta letterale',
+    );
+  });
+
   it('rejects methods unsupported by the connector', () => {
     expect(() => parseCurlCommand("curl -X HEAD 'https://api.example.test/x'"))
       .toThrow(/Metodo HTTP non supportato/);
