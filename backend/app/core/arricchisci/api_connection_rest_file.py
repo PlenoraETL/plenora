@@ -33,6 +33,10 @@ from app.core.arricchisci._api_connection_helpers import _nd
 from app.core.arricchisci.execution_context import (
     ArricchisciExecutionContext,
 )
+from app.core.arricchisci.http_executor import (
+    RequestSpec,
+    execute_http_request,
+)
 from app.core.arricchisci.types import JsonObject, JsonRows
 from app.core.files.exceptions import FileSourceResolutionError
 from app.core.io.local_cleanup import rmtree_safe
@@ -551,21 +555,29 @@ class ApiConnectionRestFileMixin:
                 auth_cfg.get('verify_ssl', True),
                 context=f"rest_file POST {url}",
             )
-            response = requests.post(
-                url,
-                headers=headers,
-                files=files,
-                data=data,
-                timeout=timeout,
-                stream=True,
-                verify=verify_tls,
-                allow_redirects=False,
+            http_response = execute_http_request(
+                RequestSpec(
+                    url=url,
+                    method=method,
+                    headers=headers,
+                    form_data=data,
+                    files=files,
+                    body_type="multipart",
+                    timeout=timeout,
+                    stream=True,
+                    verify=verify_tls,
+                    allow_redirects=False,
+                    validate_url=False,
+                    context="rest_file POST",
+                )
             )
+            response = http_response.raw_response
 
-            if response.status_code >= 400:
+            if http_response.status_code >= 400:
                 return self._rest_file_error(
                     "remote_processor_error",
-                    f"HTTP {response.status_code}: {self._parse_http_error_body(response)}",
+                    f"HTTP {http_response.status_code}: "
+                    f"{self._parse_http_error_body(http_response)}",
                 )
 
             # Cap: RESOURCE_MAX_BYTES (override via env). Lo stesso cap
@@ -639,7 +651,7 @@ class ApiConnectionRestFileMixin:
                 "metadata": {
                     "method": method,
                     "url": url,
-                    "status_code": response.status_code,
+                    "status_code": http_response.status_code,
                     "content_length": total_bytes,
                 },
             }

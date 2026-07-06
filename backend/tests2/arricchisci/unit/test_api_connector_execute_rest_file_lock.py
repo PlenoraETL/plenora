@@ -51,7 +51,7 @@ def _api_config(
 
 
 def _mock_http_response(status_code=200, body_chunks=None, json_body=None, text=""):
-    """Finto response di requests.post (stream=True)."""
+    """Finto response del shared HTTP executor (stream=True)."""
     resp = MagicMock()
     resp.status_code = status_code
     resp.text = text
@@ -93,6 +93,8 @@ def rf_env(api_service, tmp_path):
         return stack.enter_context(patch.object(api_service, attr, **kwargs))
 
     with stack:
+        session = MagicMock()
+        session.post = MagicMock()
         mocks = SimpleNamespace(
             svc=api_service,
             input_file=input_file,
@@ -107,7 +109,11 @@ def rf_env(api_service, tmp_path):
                 "app.core.results.blob_writer.save_result_blob_from_bytes",
                 return_value="fake-result-id",
             ),
-            requests_post=_p("requests.post"),
+            shared_session=_p(
+                "app.core.arricchisci.http_executor.get_shared_session",
+                return_value=session,
+            ),
+            requests_post=session.post,
         )
         # Default response: 200, bytes validi
         mocks.requests_post.return_value = _mock_http_response(
@@ -341,7 +347,7 @@ class TestExecuteRestFileFileFields:
         result = rf_env.svc._execute_rest_file(
             {}, cfg, [], [], "n1", "p1"
         )
-        # Non fa short-circuit, prosegue e chiama requests.post
+        # Non fa short-circuit, prosegue e chiama la POST condivisa.
         rf_env.requests_post.assert_called_once()
         assert result["success"] is True
 

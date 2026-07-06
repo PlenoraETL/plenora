@@ -3,7 +3,7 @@
 Bug coperti:
 1. manipola/source_loading.py:175 — `log.warning` (era `logger.warning`)
    → logger iniettato ora rispettato
-2. arricchisci/api_connection_rest_file.py:579-586 — `requests.post`
+2. arricchisci/api_connection_rest_file.py — il RequestSpec del rest_file
    ora delega a `tls_policy.resolve_tls_verify` invece di ignorare
    verify=
 3. projects/db.py:341,376,468 — datetime nativo invece di isoformat
@@ -51,7 +51,7 @@ def test_manipola_source_loading_uses_injected_logger():
 # Path 2: api_connection_rest_file usa resolve_tls_verify
 
 def test_api_connection_rest_file_uses_tls_policy():
-    """Il `requests.post` in `_execute_rest_file` deve passare `verify=`
+    """Il `RequestSpec` in `_execute_rest_file` deve passare `verify=`
     risolto via `tls_policy.resolve_tls_verify`. Anti-regression
     contro pattern hardcoded verify=False o omissione."""
     from app.core.arricchisci import api_connection_rest_file
@@ -68,7 +68,7 @@ def test_api_connection_rest_file_uses_tls_policy():
         "con il pattern tls_policy centralizzato"
     )
     assert "verify=verify_tls" in window or "verify=" in window, (
-        "requests.post deve passare verify= esplicito"
+        "RequestSpec del rest_file deve passare verify= esplicito"
     )
 
 

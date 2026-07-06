@@ -289,7 +289,7 @@ def test_per_row_unsupported_method_returns_config_row_error(monkeypatch):
 def test_per_row_unsupported_body_type_returns_config_row_error(monkeypatch):
     host = _Host(options=EnrichmentOptions(max_retries=3))
     host.method = "POST"
-    host.api_config = {"request": {"body_type": "multipart"}}
+    host.api_config = {"request": {"body_type": "xml"}}
 
     monkeypatch.setattr(retry_mod, "validate_external_url", lambda _url: None)
     monkeypatch.setattr(

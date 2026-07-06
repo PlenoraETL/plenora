@@ -257,6 +257,12 @@ not "touch the core".
 - **ResponseParser:** XML/SOAP, CSV.
 - **Fold `rest_file`** into the core if worthwhile.
 
+Implementation note: Phase 3A is in progress. `HttpExecutor` now supports
+`multipart/form-data` requests through `RequestSpec.files`, `form_data`, and
+`stream`; the `rest_file` HTTP call uses the shared executor while keeping its
+specialized multipart build, binary streaming download, output cap, and blob
+persistence pipeline.
+
 ## Cross-cutting
 
 - Tests: characterization (Phase 0) → parity/regression; unit per strategy

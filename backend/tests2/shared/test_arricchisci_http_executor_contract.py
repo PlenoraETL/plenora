@@ -152,6 +152,27 @@ def test_form_urlencoded_body_uses_data(monkeypatch):
     assert "json" not in kwargs
 
 
+def test_multipart_body_uses_files_data_and_stream(monkeypatch):
+    session, _validated = _install(monkeypatch)
+    files = {"file": ("input.txt", b"hello", "text/plain")}
+    data = {"mode": "fast"}
+
+    execute_http_request(RequestSpec(
+        url="https://api.example.com/process",
+        method="POST",
+        body_type="multipart/form-data",
+        files=files,
+        form_data=data,
+        stream=True,
+    ))
+
+    _url, kwargs = session.post_calls[0]
+    assert kwargs["files"] == files
+    assert kwargs["data"] == data
+    assert kwargs["stream"] is True
+    assert "json" not in kwargs
+
+
 def test_raw_body_uses_data(monkeypatch):
     session, _validated = _install(monkeypatch)
 
@@ -184,7 +205,7 @@ def test_unsupported_body_type_raises_value_error(monkeypatch):
         execute_http_request(RequestSpec(
             url="https://api.example.com/items",
             method="POST",
-            body_type="multipart",
+            body_type="xml",
         ))
 
 

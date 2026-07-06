@@ -14,7 +14,13 @@ from app.infrastructure.http.session import get_shared_session
 
 
 SUPPORTED_HTTP_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})
-SUPPORTED_BODY_TYPES = frozenset({"json", "form-urlencoded", "raw", "none"})
+SUPPORTED_BODY_TYPES = frozenset({
+    "json",
+    "form-urlencoded",
+    "multipart",
+    "raw",
+    "none",
+})
 
 
 @dataclass(frozen=True)
@@ -26,11 +32,14 @@ class RequestSpec:
     headers: Mapping[str, str] = field(default_factory=dict)
     params: Optional[Mapping[str, Any]] = None
     json_body: Any = None
+    form_data: Optional[Mapping[str, Any]] = None
+    files: Optional[Mapping[str, Any]] = None
     raw_body: Any = None
     body_type: str = "json"
     timeout: Any = None
     verify: Any = None
     allow_redirects: bool = False
+    stream: bool = False
     validate_url: bool = True
     context: str = "REST connector request"
 
@@ -72,6 +81,7 @@ class HttpExecutor:
             "headers": dict(spec.headers or {}),
             "timeout": spec.timeout,
             "allow_redirects": spec.allow_redirects,
+            "stream": spec.stream,
         }
         if spec.verify is not None:
             kwargs["verify"] = spec.verify
@@ -111,6 +121,11 @@ class HttpExecutor:
             return {"json": payload}
         if body_type == "form-urlencoded":
             return {"data": payload}
+        if body_type == "multipart":
+            return {
+                "files": dict(spec.files or {}),
+                "data": dict(spec.form_data or spec.params or {}),
+            }
         if body_type == "raw":
             body = spec.raw_body if spec.raw_body is not None else payload
             if not isinstance(body, (str, bytes)):
@@ -129,6 +144,7 @@ def normalize_body_type(body_type: str | None) -> str:
         "form": "form-urlencoded",
         "x-www-form-urlencoded": "form-urlencoded",
         "application/x-www-form-urlencoded": "form-urlencoded",
+        "multipart/form-data": "multipart",
         "text": "raw",
         "raw/text": "raw",
         "raw-text": "raw",

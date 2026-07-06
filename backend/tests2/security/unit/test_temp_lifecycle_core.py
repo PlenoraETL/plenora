@@ -72,20 +72,20 @@ def test_rest_file_cleans_up_tmp_dir_on_http_error_path():
     temp_root = Path(_tf.gettempdir())
     before = {d.name for d in temp_root.iterdir() if d.name.startswith("plenora_exec_")}
 
-    # Mock requests.post per simulare un 500 dal server remoto
+    # Mock shared session post per simulare un 500 dal server remoto.
     fake_response = MagicMock()
     fake_response.status_code = 500
     fake_response.text = "internal error"
     fake_response.json.side_effect = Exception("not json")
     fake_response.iter_content.return_value = iter([])
+    session = MagicMock()
+    session.post.return_value = fake_response
 
-    # B3-B.5a current contract: `requests.post` patchato sul source canonico
-    # invece dell'alias `app.core.arricchisci.api_connector.requests.post`.
-    # `_shared_prepare_headers` resta source-bound al modulo api_connector
-    # perche' `_prepare_headers` (3-line shim) resta in core (vedi B3-B.3
-    # mini-scan: AUTH/UTILITY non estratto).
     with patch("app.core.arricchisci.api_connector._shared_prepare_headers", return_value={}), \
-         patch("requests.post", return_value=fake_response):
+         patch(
+             "app.core.arricchisci.http_executor.get_shared_session",
+             return_value=session,
+         ):
         result = svc._execute_rest_file(node_data, api_config, nodes, edges, node_id, "proj-1")
 
     assert result["success"] is False

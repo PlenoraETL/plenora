@@ -480,7 +480,7 @@ class TestCallBatchApi:
             monkeypatch,
             responses=[_resp([{"value": "unused"}])],
         )
-        host.api_config = {"request": {"body_type": "multipart"}}
+        host.api_config = {"request": {"body_type": "xml"}}
         results, err = host._call_batch_api([{"q": "a"}], [0])
         assert results is None
         assert err is not None
