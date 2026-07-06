@@ -229,6 +229,48 @@ def test_async_poller_supports_header_job_id_and_result_url() -> None:
     assert calls[2].url == "https://api.test/out/job%2F1"
 
 
+def test_async_poller_retries_transient_result_url_without_new_submit() -> None:
+    calls: list[RequestSpec] = []
+    responses = [
+        _response(202, {"id": "job-1"}),
+        _response(200, {"status": "completed", "result_url": "{base}/out/{job_id}"}),
+        _response(503, {"error": "busy"}),
+        _response(200, {"items": [{"x": 3}]}),
+    ]
+
+    def execute(spec: RequestSpec) -> NormalizedResponse:
+        calls.append(spec)
+        return responses.pop(0)
+
+    result = AsyncPoller(execute=execute, sleep=lambda _: None).run(
+        RequestSpec(url="https://api.test/run", method="POST"),
+        {
+            "job_id_path": "id",
+            "status_url": "{base}/jobs/{job_id}",
+            "result_from": "result_url",
+            "result_path": "result_url",
+            "poll_interval_s": 0,
+            "max_wait_s": 1,
+        },
+        base_url="https://api.test/run",
+    )
+
+    assert result.completed is True
+    assert result.data == {"items": [{"x": 3}]}
+    assert [call.context for call in calls] == [
+        "REST connector request",
+        "API async status",
+        "API async result",
+        "API async result",
+    ]
+    assert [call.url for call in calls] == [
+        "https://api.test/run",
+        "https://api.test/jobs/job-1",
+        "https://api.test/out/job-1",
+        "https://api.test/out/job-1",
+    ]
+
+
 def test_validate_async_config_rejects_missing_status_url() -> None:
     with pytest.raises(ValueError, match="status_url"):
         validate_async_config({"enabled": True, "job_id_path": "id"})

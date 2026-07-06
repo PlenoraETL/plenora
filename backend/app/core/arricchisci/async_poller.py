@@ -165,6 +165,12 @@ class AsyncPoller:
                     cfg,
                     base_url=base_url,
                     job_id=job_id,
+                    retry_status=retry_status,
+                    poll_interval=poll_interval,
+                    poll_backoff=poll_backoff,
+                    poll_max_interval=poll_max_interval,
+                    max_wait=max_wait,
+                    started=started,
                 )
                 return AsyncPollResult(
                     completed=True,
@@ -189,11 +195,9 @@ class AsyncPoller:
                     )
                 raise TimeoutError("API async job non completato entro i poll consentiti")
 
-            if self._clock() - started >= max_wait:
-                raise TimeoutError("API async job non completato entro max_wait_s")
-
-            if poll_interval > 0:
-                self._sleep(poll_interval)
+            remaining = max(0.0, max_wait - (self._clock() - started))
+            if poll_interval > 0 and remaining > 0:
+                self._sleep(min(poll_interval, remaining))
             poll_interval = min(poll_interval * poll_backoff, poll_max_interval)
 
     @staticmethod
@@ -222,6 +226,12 @@ class AsyncPoller:
         *,
         base_url: str,
         job_id: str,
+        retry_status: set[int],
+        poll_interval: float,
+        poll_backoff: float,
+        poll_max_interval: float,
+        max_wait: float,
+        started: float,
     ) -> tuple[Any, NormalizedResponse]:
         result_from = str(cfg.get("result_from", "status_response"))
         result_path = cfg.get("result_path", "result")
@@ -245,8 +255,7 @@ class AsyncPoller:
                 base_url=base_url,
                 job_id=job_id,
             )
-            self._run_before_poll_request()
-            result_response = self._execute(RequestSpec(
+            result_spec = RequestSpec(
                 url=result_url,
                 method=str(cfg.get("result_method", "GET")),
                 headers=submit_spec.headers,
@@ -255,7 +264,17 @@ class AsyncPoller:
                 allow_redirects=submit_spec.allow_redirects,
                 body_type="none",
                 context="API async result",
-            ))
+            )
+            result_response = self._execute_idempotent_async_request(
+                result_spec,
+                cfg,
+                retry_status=retry_status,
+                poll_interval=poll_interval,
+                poll_backoff=poll_backoff,
+                poll_max_interval=poll_max_interval,
+                max_wait=max_wait,
+                started=started,
+            )
             if result_response.status_code != 200:
                 raise AsyncPollError(
                     "API async result error: "
@@ -266,6 +285,39 @@ class AsyncPoller:
             return _safe_response_json(result_response), result_response
 
         raise ValueError(f"async.result_from non supportato: {result_from}")
+
+    def _execute_idempotent_async_request(
+        self,
+        spec: RequestSpec,
+        cfg: Mapping[str, Any],
+        *,
+        retry_status: set[int],
+        poll_interval: float,
+        poll_backoff: float,
+        poll_max_interval: float,
+        max_wait: float,
+        started: float,
+    ) -> NormalizedResponse:
+        attempts = 0
+        retry_interval = poll_interval
+        while True:
+            if attempts > 0 and self._clock() - started >= max_wait:
+                raise TimeoutError("API async job non completato entro max_wait_s")
+
+            attempts += 1
+            self._run_before_poll_request()
+            response = self._execute(spec)
+            if response.status_code == 200 or response.status_code not in retry_status:
+                return response
+
+            remaining = max(0.0, max_wait - (self._clock() - started))
+            if remaining <= 0:
+                raise TimeoutError("API async job non completato entro max_wait_s")
+
+            retry_delay = _poll_retry_delay(response, retry_interval, cfg)
+            if retry_delay > 0:
+                self._sleep(min(retry_delay, remaining))
+            retry_interval = min(retry_interval * poll_backoff, poll_max_interval)
 
     def _run_before_poll_request(self) -> None:
         if self._before_poll_request is not None:
