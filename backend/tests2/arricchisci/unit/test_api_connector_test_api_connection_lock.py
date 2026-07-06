@@ -394,6 +394,28 @@ class TestTestApiConnectionResponseParsing:
         assert result["success"] is True
         assert result["raw_response"] == {"items": [1, 2, 3]}
 
+    def test_csv_response_format_extracts_available_fields(self, tac_env):
+        tac_env.session.get.return_value = _resp(
+            200,
+            text="city,pop\nRoma,2873000\nMilano,1352000\n",
+            headers={"Content-Type": "text/csv"},
+        )
+        cfg = {
+            "endpoint": {"url": "https://api.test/items.csv", "method": "GET"},
+            "auth": {},
+            "response": {"format": "csv"},
+        }
+
+        result = tac_env.svc.test_api_connection(config=cfg, test_params={})
+
+        assert result["success"] is True
+        assert result["raw_response"] == [
+            {"city": "Roma", "pop": "2873000"},
+            {"city": "Milano", "pop": "1352000"},
+        ]
+        paths = {field["path"] for field in result["available_fields"]}
+        assert {"city", "pop"}.issubset(paths)
+
     def test_unparseable_response_returns_error(self, tac_env):
         r = MagicMock()
         r.status_code = 200

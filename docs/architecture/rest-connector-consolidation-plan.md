@@ -263,6 +263,11 @@ Implementation note: Phase 3A is in progress. `HttpExecutor` now supports
 specialized multipart build, binary streaming download, output cap, and blob
 persistence pipeline.
 
+Implementation note: Phase 3B is in progress. `ResponseParser` now includes a
+CSV body parser for connector configs with `response.format="csv"` or
+`response_config.format="csv"`. Generator APIs and `test_api_connection` can
+parse `text/csv` responses into row dictionaries and expose fields for mapping.
+
 ## Cross-cutting
 
 - Tests: characterization (Phase 0) → parity/regression; unit per strategy

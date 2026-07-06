@@ -13,6 +13,8 @@ from app.core.arricchisci.response_parser import (
     PRESET_CONFIGS,
     ResponseParser,
     get_preset_config,
+    parse_csv_response_text,
+    response_format_from_config,
 )
 
 
@@ -50,6 +52,25 @@ def test_init_reads_config_keys():
     assert parser.iterate_on == config["iterate_on"]
     assert parser.mappings == config["mappings"]
     assert parser.transforms == config["transforms"]
+
+
+def test_parse_csv_response_text_uses_header_columns():
+    rows = parse_csv_response_text("city,pop\nRoma,2873000\nMilano,1352000\n")
+
+    assert rows == [
+        {"city": "Roma", "pop": "2873000"},
+        {"city": "Milano", "pop": "1352000"},
+    ]
+
+
+def test_parse_csv_response_text_supports_custom_delimiter():
+    rows = parse_csv_response_text("city;pop\nRoma;2873000\n", delimiter=";")
+
+    assert rows == [{"city": "Roma", "pop": "2873000"}]
+
+
+def test_response_format_from_config_reads_response_block():
+    assert response_format_from_config({"response": {"format": "text/csv"}}) == "csv"
 
 
 # ---------------------------------------------------------------------------

@@ -28,7 +28,11 @@ from app.core.arricchisci.http_executor import (
 from app.observability.log_sanitization import sanitize_for_log
 from app.shared.resources.json_path import extract_json_value as _shared_extract_json_value
 from app.utils.logger import get_logger
-from app.core.arricchisci.response_parser import ResponseParser, get_preset_config
+from app.core.arricchisci.response_parser import (
+    ResponseParser,
+    get_preset_config,
+    parse_response_body,
+)
 from app.core.arricchisci.success_evaluator import (
     evaluate_success,
     success_config_from_api_config,
@@ -246,6 +250,7 @@ class ApiConnectionGeneratorEnricherMixin:
         response_config: JsonObject,
         request_config: JsonObject,
         async_config: JsonObject,
+        response_body_config: JsonObject,
         success_config: JsonObject,
         output_mapping: JsonRows,
     ) -> tuple:
@@ -291,7 +296,7 @@ class ApiConnectionGeneratorEnricherMixin:
             if resp.status_code != 200:
                 err = resp.text[:500] if resp.text else 'nessuna risposta'
                 raise ValueError(f"API error: HTTP {resp.status_code} — {err}")
-            data = resp.json()
+            data = parse_response_body(resp, response_body_config)
         evaluation = evaluate_success(data, success_config)
         if not evaluation.ok:
             raise ValueError(
@@ -425,6 +430,7 @@ class ApiConnectionGeneratorEnricherMixin:
                 response_config=response_config,
                 request_config=request_config,
                 async_config=async_config,
+                response_body_config=api_config,
                 success_config=success_config,
                 output_mapping=output_mapping,
             )

@@ -1,15 +1,94 @@
-"""
-Parser configurabile per risposte API con strutture JSON annidate.
+"""Parser configurabile per risposte API con strutture JSON annidate."""
 
-Progettato per gestire risposte API complesse (es. ItaliaMeteo, GeoJSON)
-"""
-
+import csv
+import io
+import json
 import re
-from typing import Any, List
+from typing import Any, List, Mapping
+
 from app.core.arricchisci.types import JsonObject, JsonRows
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+CSV_RESPONSE_FORMATS = {"csv", "text/csv"}
+
+
+def normalize_response_format(value: Any) -> str:
+    """Normalize response body format names used by connector configs."""
+    normalized = str(value or "json").strip().lower().replace("_", "-")
+    if normalized in {"", "auto"}:
+        return "json"
+    if normalized in CSV_RESPONSE_FORMATS:
+        return "csv"
+    return normalized
+
+
+def response_format_from_config(api_config: Mapping[str, Any] | None) -> str:
+    """Read response body format from response_config, response or top-level."""
+    cfg = dict(api_config or {})
+    for key in ("response_config", "response"):
+        value = cfg.get(key)
+        if isinstance(value, Mapping) and value.get("format"):
+            return normalize_response_format(value.get("format"))
+    return normalize_response_format(cfg.get("response_format"))
+
+
+def csv_dialect_from_config(api_config: Mapping[str, Any] | None) -> dict[str, str]:
+    """Read minimal CSV dialect options from connector response config."""
+    cfg = dict(api_config or {})
+    delimiter = ","
+    for key in ("response_config", "response"):
+        value = cfg.get(key)
+        if isinstance(value, Mapping) and value.get("delimiter"):
+            delimiter = str(value.get("delimiter") or ",")
+            break
+    if len(delimiter) != 1:
+        raise ValueError("response delimiter CSV deve essere un singolo carattere")
+    return {"delimiter": delimiter}
+
+
+def parse_csv_response_text(
+    text: str,
+    *,
+    delimiter: str = ",",
+) -> JsonRows:
+    """Parse a CSV response body into rows using the first line as header."""
+    body = (text or "").lstrip("\ufeff")
+    if not body.strip():
+        return []
+
+    reader = csv.DictReader(io.StringIO(body), delimiter=delimiter)
+    if not reader.fieldnames:
+        return []
+    if any(field in (None, "") for field in reader.fieldnames):
+        raise ValueError("Risposta CSV senza header valido")
+
+    rows: JsonRows = []
+    for row in reader:
+        rows.append({key: value for key, value in row.items() if key is not None})
+    return rows
+
+
+def parse_response_body(response: Any, api_config: Mapping[str, Any] | None) -> Any:
+    """Parse a REST response body according to connector response config."""
+    response_format = response_format_from_config(api_config)
+    if response_format == "csv":
+        return parse_csv_response_text(
+            response.text or "",
+            **csv_dialect_from_config(api_config),
+        )
+    if response_format != "json":
+        raise ValueError(f"response.format non supportato: {response_format}")
+
+    try:
+        return response.json()
+    except (json.JSONDecodeError, ValueError):
+        body_text = (response.text or "").strip()
+        if body_text and body_text[0] in "{[":
+            return json.loads(body_text)
+        raise
 
 
 class ResponseParser:

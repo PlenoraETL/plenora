@@ -100,6 +100,27 @@ class TestGeneratorBasics:
         assert isinstance(result, pd.DataFrame)
         gen_env.session.get.assert_called_once()
 
+    def test_csv_response_format_returns_dataframe(self, gen_env):
+        gen_env.session.get.return_value = _resp(
+            200,
+            text="city,pop\nRoma,2873000\nMilano,1352000\n",
+            headers={"Content-Type": "text/csv"},
+        )
+        cfg = {
+            "endpoint": {"url": "https://api.test/items.csv", "method": "GET"},
+            "auth": {},
+            "response": {"format": "csv"},
+            "output_mapping": [
+                {"path": "city", "column": "city"},
+                {"path": "pop", "column": "population"},
+            ],
+        }
+
+        result = gen_env.svc._execute_api_generator(cfg)
+
+        assert result["city"].tolist() == ["Roma", "Milano"]
+        assert result["population"].tolist() == ["2873000", "1352000"]
+
     def test_input_df_first_row_used_as_base_params(self, gen_env):
         gen_env.session.get.return_value = _resp(200, json_body=[])
         cfg = {

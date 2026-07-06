@@ -33,6 +33,7 @@ from app.core.arricchisci.success_evaluator import (
     evaluate_success,
     success_config_from_api_config,
 )
+from app.core.arricchisci.response_parser import parse_response_body
 import app.core.arricchisci.db as db_svc
 from app.shared.connections.oauth import get_arcgis_token
 from app.utils.logger import get_logger
@@ -399,37 +400,23 @@ class ApiConnectionManagementMixin:
         return None
 
     @staticmethod
-    def _parse_test_response_json(
+    def _parse_test_response_body(
         response: requests.Response,
+        api_config: Optional[JsonObject] = None,
     ) -> tuple[Any | None, str | None]:
-        """Parsa il body JSON di una `test_api_connection` response.
+        """Parsa il body di una `test_api_connection` response.
 
-        Alcuni server (ArcGIS REST con `f=json/pjson`) ritornano JSON
-        valido con `Content-Type=text/plain`. Tentiamo prima
-        `response.json` standard; se fallisce, fallback al parsing
-        manuale del testo grezzo (preserva il caso text/plain).
-
-        Ritorna `(json_data, parse_error)`:
-        - `(dict_or_list, None)` su success
-        - `(None, "Risposta non è JSON valido ...")` su failure
+        Supporta JSON e CSV (`response.format=csv` o
+        `response_config.format=csv`). Per JSON mantiene il fallback
+        text/plain usato da alcuni endpoint ArcGIS.
         """
         content_type = response.headers.get('Content-Type', '')
         try:
-            return response.json(), None
+            return parse_response_body(response, api_config), None
         except (json.JSONDecodeError, ValueError):
-            pass
-
-        try:
-            body_text = (response.text or "").strip()
-            if body_text and body_text[0] in "{[":
-                return json.loads(body_text), None
             return None, (
-                f"Risposta non è JSON valido (Content-Type: {content_type}). "
+                f"Risposta non parseabile (Content-Type: {content_type}). "
                 "Verifica l'URL e i parametri."
-            )
-        except (json.JSONDecodeError, ValueError) as e:
-            return None, (
-                f"Risposta non è JSON valido (Content-Type: {content_type}): {e}"
             )
 
     def test_api_connection(
@@ -551,7 +538,7 @@ class ApiConnectionManagementMixin:
                 )
                 return result
 
-            json_data, parse_error = self._parse_test_response_json(response)
+            json_data, parse_error = self._parse_test_response_body(response, config)
             if json_data is not None:
                 evaluation = evaluate_success(json_data, success_config)
                 if not evaluation.ok:
