@@ -405,6 +405,10 @@ class ApiConnectionGeneratorEnricherMixin:
 
         if not url:
             raise ValueError("URL API non configurato")
+        if async_config.get("enabled") and pagination.get("type"):
+            raise ValueError(
+                "API generator: async e pagination non sono supportati insieme"
+            )
 
         headers = self._prepare_headers(auth, custom_headers)
         base_params = self._build_generator_base_params(api_config, input_df)

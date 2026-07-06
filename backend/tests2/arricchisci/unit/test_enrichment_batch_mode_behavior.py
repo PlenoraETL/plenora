@@ -404,6 +404,40 @@ class TestCallBatchApi:
         assert len(session.post_calls) == 1
         assert len(session.get_calls) == 1
         assert session.get_calls[0]["url"] == "https://api.example.com/jobs/job-1"
+        assert host._rate_limiter.acquired == 1
+
+    def test_async_batch_status_error_does_not_resubmit(self, monkeypatch):
+        host, session = _make_host(
+            monkeypatch,
+            responses=[
+                _FakeResponse(202, json_data={"id": "job-1"}),
+                _FakeResponse(503, text="busy"),
+            ],
+            options=EnrichmentOptions(max_retries=1, retry_on_status=[503]),
+        )
+        host.api_config = {
+            "async": {
+                "enabled": True,
+                "job_id_path": "id",
+                "status_url": "{base}/jobs/{job_id}",
+                "result_path": "result",
+                "poll_interval_s": 0,
+                "max_wait_s": 1,
+                "retry_status": [],
+            },
+        }
+
+        results, err = host._call_batch_api([{"q": "a"}], [0])
+
+        assert results is None
+        assert err is not None
+        assert err.error_type == "async_status_error"
+        assert err.http_status == 503
+        assert err.retry_count == 0
+        assert len(session.post_calls) == 1
+        assert len(session.get_calls) == 1
+        assert session.get_calls[0]["url"] == "https://api.example.com/jobs/job-1"
+        assert host._rate_limiter.acquired == 1
 
     def test_invalid_async_config_returns_config_row_error(self, monkeypatch):
         host, session = _make_host(

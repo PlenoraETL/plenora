@@ -34,6 +34,14 @@ class _Response:
         return self._json_data
 
 
+class _NoopRateLimiter:
+    def __init__(self) -> None:
+        self.acquired = 0
+
+    def acquire(self) -> None:
+        self.acquired += 1
+
+
 class _Host(EnrichmentRetryHttpMixin):
     def __init__(self, *, options: EnrichmentOptions) -> None:
         self.api_config = {"request": {}, "options": {}}
@@ -45,6 +53,7 @@ class _Host(EnrichmentRetryHttpMixin):
         self._stats_lock = threading.Lock()
         self._response_times = deque(maxlen=1000)
         self._rate_limit_hits_observed = 0
+        self._rate_limiter = _NoopRateLimiter()
 
     def _extract_output(self, data: Any) -> Any:
         return data
@@ -157,6 +166,7 @@ def test_per_row_async_polls_and_extracts_final_result(monkeypatch):
         "API async status",
     ]
     assert specs[1].url == "https://api.example.com/jobs/job-1"
+    assert host._rate_limiter.acquired == 1
 
 
 def test_per_row_async_submit_429_uses_existing_retry(monkeypatch):
@@ -202,6 +212,58 @@ def test_per_row_async_submit_429_uses_existing_retry(monkeypatch):
     assert err is None
     assert result == {"ok": True}
     assert host._rate_limit_hits_observed == 1
+
+
+def test_per_row_async_status_error_does_not_resubmit(monkeypatch):
+    host = _Host(
+        options=EnrichmentOptions(max_retries=1, retry_on_status=[503])
+    )
+    host.method = "POST"
+    host.api_config = {
+        "async": {
+            "enabled": True,
+            "job_id_path": "id",
+            "status_url": "{base}/jobs/{job_id}",
+            "result_path": "result",
+            "poll_interval_s": 0,
+            "max_wait_s": 1,
+            "retry_status": [],
+        },
+    }
+    specs = []
+    responses = [
+        _Response(202, {"id": "job-1"}),
+        _Response(503, {"error": "busy"}),
+    ]
+
+    monkeypatch.setattr(retry_mod, "validate_external_url", lambda _url: None)
+    monkeypatch.setattr(
+        retry_mod,
+        "resolve_tls_verify",
+        lambda enabled, *, context: enabled,
+    )
+    monkeypatch.setattr(retry_mod.time, "sleep", lambda *_args, **_kwargs: None)
+
+    def execute(spec):
+        specs.append(spec)
+        if not responses:
+            pytest.fail("status-stage async error must not re-submit")
+        return responses.pop(0)
+
+    monkeypatch.setattr(retry_mod, "execute_http_request", execute)
+
+    result, err = host._call_api_with_retry({"q": "abc"}, row_index=4)
+
+    assert result is None
+    assert err is not None
+    assert err.error_type == "async_status_error"
+    assert err.http_status == 503
+    assert err.retry_count == 0
+    assert [spec.context for spec in specs] == [
+        "API enricher per-row",
+        "API async status",
+    ]
+    assert host._rate_limiter.acquired == 1
 
 
 def test_per_row_unsupported_method_returns_config_row_error(monkeypatch):

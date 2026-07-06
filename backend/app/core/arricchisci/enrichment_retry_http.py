@@ -155,6 +155,11 @@ class EnrichmentRetryHttpMixin:
                     try:
                         poll_result = AsyncPoller(
                             execute=execute_http_request,
+                            before_poll_request=getattr(
+                                getattr(self, "_rate_limiter", None),
+                                "acquire",
+                                None,
+                            ),
                         ).run(
                             request_spec,
                             async_config,
@@ -165,6 +170,19 @@ class EnrichmentRetryHttpMixin:
                     except AsyncPollError as e:
                         if e.response is None:
                             raise
+                        if e.stage != "submit":
+                            return None, RowError(
+                                row_index=row_index,
+                                status=RowStatus.ERROR,
+                                error_message=str(e),
+                                error_type=(
+                                    f"async_{e.stage}_error"
+                                    if e.stage
+                                    else "async_error"
+                                ),
+                                http_status=e.response.status_code,
+                                retry_count=attempt,
+                            )
                         response = e.response
                         async_error_message = str(e)
                     except TimeoutError as e:

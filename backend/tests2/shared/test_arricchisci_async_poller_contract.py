@@ -93,6 +93,71 @@ def test_async_poller_can_return_incomplete_single_poll() -> None:
     assert result.data == {"status": "running"}
 
 
+def test_async_poller_retries_transient_status_without_new_submit() -> None:
+    calls: list[RequestSpec] = []
+    responses = [
+        _response(202, {"id": "job-1"}),
+        _response(503, {"error": "busy"}),
+        _response(200, {"status": "completed", "result": {"ok": True}}),
+    ]
+
+    def execute(spec: RequestSpec) -> NormalizedResponse:
+        calls.append(spec)
+        return responses.pop(0)
+
+    result = AsyncPoller(execute=execute, sleep=lambda _: None).run(
+        RequestSpec(url="https://api.test/run", method="POST"),
+        {
+            "job_id_path": "id",
+            "status_url": "{base}/jobs/{job_id}",
+            "result_path": "result",
+            "poll_interval_s": 0,
+            "max_wait_s": 1,
+        },
+        base_url="https://api.test/run",
+    )
+
+    assert result.completed is True
+    assert result.data == {"ok": True}
+    assert [call.url for call in calls] == [
+        "https://api.test/run",
+        "https://api.test/jobs/job-1",
+        "https://api.test/jobs/job-1",
+    ]
+    assert [call.context for call in calls] == [
+        "REST connector request",
+        "API async status",
+        "API async status",
+    ]
+
+
+def test_async_poller_status_retry_respects_max_polls() -> None:
+    responses = [
+        _response(202, {"id": "job-1"}),
+        _response(503, {"error": "busy"}),
+    ]
+
+    def execute(_: RequestSpec) -> NormalizedResponse:
+        return responses.pop(0)
+
+    with pytest.raises(AsyncPollError) as exc_info:
+        AsyncPoller(execute=execute, sleep=lambda _: None).run(
+            RequestSpec(url="https://api.test/run", method="POST"),
+            {
+                "job_id_path": "id",
+                "status_url": "{base}/jobs/{job_id}",
+                "poll_interval_s": 0,
+                "max_wait_s": 1,
+            },
+            base_url="https://api.test/run",
+            max_polls=1,
+        )
+
+    assert exc_info.value.stage == "status"
+    assert exc_info.value.response is not None
+    assert exc_info.value.response.status_code == 503
+
+
 def test_async_poller_rejects_failed_status() -> None:
     responses = [
         _response(202, {"id": "job-1"}),
@@ -169,6 +234,32 @@ def test_validate_async_config_rejects_missing_status_url() -> None:
         validate_async_config({"enabled": True, "job_id_path": "id"})
 
 
+def test_async_poller_rejects_relative_status_url_before_submit() -> None:
+    def execute(_: RequestSpec) -> NormalizedResponse:
+        pytest.fail("submit must not run with invalid async.status_url")
+
+    with pytest.raises(ValueError, match="status_url.*assoluto"):
+        AsyncPoller(execute=execute, sleep=lambda _: None).run(
+            RequestSpec(url="https://api.test/run", method="POST"),
+            {
+                "enabled": True,
+                "job_id_path": "id",
+                "status_url": "/jobs/{job_id}",
+            },
+            base_url="https://api.test/run",
+        )
+
+
 def test_validate_async_config_requires_object() -> None:
     with pytest.raises(ValueError, match="oggetto"):
         validate_async_config(True)
+
+
+def test_validate_async_config_rejects_invalid_retry_status() -> None:
+    with pytest.raises(ValueError, match="retry_status"):
+        validate_async_config({
+            "enabled": True,
+            "job_id_path": "id",
+            "status_url": "{base}/jobs/{job_id}",
+            "retry_status": "503",
+        })

@@ -251,6 +251,26 @@ class TestGeneratorBasics:
         gen_env.session.get.assert_called_once()
         assert gen_env.session.get.call_args[0][0] == "https://api.test/jobs/job-1"
 
+    def test_async_generator_rejects_pagination(self, gen_env):
+        cfg = {
+            "endpoint": {"url": "https://api.test/run", "method": "POST"},
+            "auth": {},
+            "output_mapping": [],
+            "async": {
+                "enabled": True,
+                "job_id_from": "body",
+                "job_id_path": "id",
+                "status_url": "{base}/jobs/{job_id}",
+            },
+            "pagination": {"type": "offset", "page_size": 100},
+        }
+
+        with pytest.raises(ValueError, match="async.*pagination"):
+            gen_env.svc._execute_api_generator(cfg)
+
+        gen_env.session.post.assert_not_called()
+        gen_env.session.get.assert_not_called()
+
 
 # _execute_api_generator — URL path param substitution
 

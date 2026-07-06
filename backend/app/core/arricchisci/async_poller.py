@@ -12,7 +12,12 @@ from app.core.arricchisci.http_executor import (
     RequestSpec,
     execute_http_request,
 )
+from app.core.arricchisci.retry_policy import clamp_retry_after
 from app.shared.resources.json_path import extract_json_value
+
+
+_DEFAULT_STATUS_RETRY_CODES = frozenset({429, 500, 502, 503, 504})
+_DEFAULT_MAX_RETRY_AFTER_SECONDS = 300
 
 
 @dataclass(frozen=True)
@@ -48,10 +53,12 @@ class AsyncPoller:
         self,
         *,
         execute: Callable[[RequestSpec], NormalizedResponse] = execute_http_request,
+        before_poll_request: Callable[[], None] | None = None,
         sleep: Callable[[float], None] = time.sleep,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._execute = execute
+        self._before_poll_request = before_poll_request
         self._sleep = sleep
         self._clock = clock
 
@@ -95,17 +102,44 @@ class AsyncPoller:
         poll_backoff = float(cfg.get("poll_backoff", 1.0))
         poll_max_interval = float(cfg.get("poll_max_interval_s", 30))
         max_wait = float(cfg.get("max_wait_s", 600))
+        retry_status = _status_codes_from_config(
+            cfg,
+            "retry_status",
+            _DEFAULT_STATUS_RETRY_CODES,
+        )
         started = self._clock()
         polls = 0
 
         while True:
+            if polls > 0 and self._clock() - started >= max_wait:
+                raise TimeoutError("API async job non completato entro max_wait_s")
+
             polls += 1
+            self._run_before_poll_request()
             status_response = self._execute(self._status_spec(
                 submit_spec,
                 status_url,
                 cfg,
             ))
             if status_response.status_code != 200:
+                if (
+                    status_response.status_code in retry_status
+                    and (max_polls is None or polls < max_polls)
+                    and self._clock() - started < max_wait
+                ):
+                    retry_delay = _poll_retry_delay(
+                        status_response,
+                        poll_interval,
+                        cfg,
+                    )
+                    remaining = max(0.0, max_wait - (self._clock() - started))
+                    if retry_delay > 0 and remaining > 0:
+                        self._sleep(min(retry_delay, remaining))
+                    poll_interval = min(
+                        poll_interval * poll_backoff,
+                        poll_max_interval,
+                    )
+                    continue
                 raise AsyncPollError(
                     "API async status error: "
                     f"HTTP {status_response.status_code} - {status_response.text[:200]}",
@@ -211,6 +245,7 @@ class AsyncPoller:
                 base_url=base_url,
                 job_id=job_id,
             )
+            self._run_before_poll_request()
             result_response = self._execute(RequestSpec(
                 url=result_url,
                 method=str(cfg.get("result_method", "GET")),
@@ -231,6 +266,10 @@ class AsyncPoller:
             return _safe_response_json(result_response), result_response
 
         raise ValueError(f"async.result_from non supportato: {result_from}")
+
+    def _run_before_poll_request(self) -> None:
+        if self._before_poll_request is not None:
+            self._before_poll_request()
 
 
 def validate_async_config(async_config: Mapping[str, Any]) -> None:
@@ -253,21 +292,28 @@ def validate_async_config(async_config: Mapping[str, Any]) -> None:
 
     if not cfg.get("status_url"):
         raise ValueError("async.status_url non configurato")
+    if not _is_absolute_or_base_url_template(cfg.get("status_url")):
+        raise ValueError("async.status_url deve essere assoluto o contenere {base}")
 
     result_from = str(cfg.get("result_from", "status_response"))
     if result_from not in {"status_response", "result_url"}:
         raise ValueError(f"async.result_from non supportato: {result_from}")
+    if cfg.get("result_url") and not _is_absolute_or_base_url_template(
+        cfg.get("result_url")
+    ):
+        raise ValueError("async.result_url deve essere assoluto o contenere {base}")
 
-    accepted_status = cfg.get("accepted_status")
-    if accepted_status is not None:
-        if not isinstance(accepted_status, list):
-            raise ValueError("async.accepted_status deve essere una lista")
-        try:
-            [int(status) for status in accepted_status]
-        except (TypeError, ValueError) as exc:
-            raise ValueError(
-                "async.accepted_status deve contenere codici HTTP numerici"
-            ) from exc
+    for key in ("accepted_status", "retry_status"):
+        status_codes = cfg.get(key)
+        if status_codes is not None:
+            if not isinstance(status_codes, list):
+                raise ValueError(f"async.{key} deve essere una lista")
+            try:
+                [int(status) for status in status_codes]
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"async.{key} deve contenere codici HTTP numerici"
+                ) from exc
 
     for key in ("done_values", "failed_values"):
         value = cfg.get(key)
@@ -279,6 +325,7 @@ def validate_async_config(async_config: Mapping[str, Any]) -> None:
         "poll_backoff",
         "poll_max_interval_s",
         "max_wait_s",
+        "max_retry_after_s",
     ):
         if key in cfg:
             try:
@@ -305,14 +352,55 @@ def _extract_job_id(
     return str(job_id)
 
 
+def _status_codes_from_config(
+    cfg: Mapping[str, Any],
+    key: str,
+    default: frozenset[int],
+) -> set[int]:
+    return {int(status) for status in cfg.get(key, default)}
+
+
+def _is_absolute_or_base_url_template(value: Any) -> bool:
+    text = str(value or "").strip()
+    if "{base}" in text:
+        return True
+    return _is_absolute_http_url(text)
+
+
+def _is_absolute_http_url(value: str) -> bool:
+    parsed = urlsplit(value)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _poll_retry_delay(
+    response: NormalizedResponse,
+    poll_interval: float,
+    cfg: Mapping[str, Any],
+) -> float:
+    if response.status_code == 429:
+        raw_max_retry_after = cfg.get(
+            "max_retry_after_s",
+            _DEFAULT_MAX_RETRY_AFTER_SECONDS,
+        )
+        max_retry_after = int(float(raw_max_retry_after))
+        return float(clamp_retry_after(
+            response.headers.get("Retry-After"),
+            max_seconds=max_retry_after,
+        ))
+    return poll_interval
+
+
 def _format_url_template(value: Any, *, base_url: str, job_id: str) -> str:
     if not value:
         raise ValueError("API async: URL status/result non configurato")
     url = str(value)
-    return (
+    formatted = (
         url.replace("{base}", _origin_from_url(base_url))
         .replace("{job_id}", quote(str(job_id), safe=""))
     )
+    if not _is_absolute_http_url(formatted):
+        raise ValueError("API async: URL status/result deve essere assoluto")
+    return formatted
 
 
 def _origin_from_url(url: str) -> str:
