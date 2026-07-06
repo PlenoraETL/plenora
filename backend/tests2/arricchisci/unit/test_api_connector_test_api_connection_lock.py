@@ -239,6 +239,37 @@ class TestTestApiConnectionHttp:
         tac_env.session.post.assert_called_once()
         tac_env.session.get.assert_not_called()
 
+    def test_patch_method_uses_patch(self, tac_env):
+        tac_env.session.patch = MagicMock(return_value=_resp(200, json_body={"ok": True}))
+        cfg = {
+            "endpoint": {"url": "https://api.test/q", "method": "PATCH"},
+            "auth": {},
+        }
+        tac_env.svc.test_api_connection(config=cfg, test_params={"x": 1})
+        tac_env.session.patch.assert_called_once()
+        tac_env.session.get.assert_not_called()
+        tac_env.session.post.assert_not_called()
+
+    def test_form_urlencoded_request_uses_data_body(self, tac_env):
+        cfg = {
+            "endpoint": {"url": "https://api.test/q", "method": "POST"},
+            "auth": {},
+            "request": {"body_type": "form-urlencoded"},
+        }
+        tac_env.svc.test_api_connection(config=cfg, test_params={"x": 1})
+        kwargs = tac_env.session.post.call_args.kwargs
+        assert kwargs["data"] == {"x": 1}
+        assert "json" not in kwargs
+
+    def test_allow_redirects_config_is_passed_to_http_call(self, tac_env):
+        cfg = {
+            "endpoint": {"url": "https://api.test/q", "method": "GET"},
+            "auth": {},
+            "request": {"allow_redirects": True},
+        }
+        tac_env.svc.test_api_connection(config=cfg, test_params={})
+        assert tac_env.session.get.call_args.kwargs["allow_redirects"] is True
+
     def test_options_timeout_used_for_http_call(self, tac_env):
         cfg = {
             "endpoint": {"url": "https://api.test/q", "method": "GET"},
@@ -284,6 +315,33 @@ class TestTestApiConnectionResponseParsing:
         assert result["success"] is True
         assert "available_fields" in result
         assert "raw_response" in result
+
+    def test_application_error_path_returns_failure(self, tac_env):
+        tac_env.session.get.return_value = _resp(
+            200, json_body={"error": {"message": "quota exceeded"}}
+        )
+        cfg = {
+            "endpoint": {"url": "https://api.test/q", "method": "GET"},
+            "auth": {},
+            "error_path": "error",
+        }
+        result = tac_env.svc.test_api_connection(config=cfg, test_params={})
+        assert result["success"] is False
+        assert result["error"] == "quota exceeded"
+        assert result["raw_response"] == {"error": {"message": "quota exceeded"}}
+
+    def test_success_when_failure_returns_failure(self, tac_env):
+        tac_env.session.get.return_value = _resp(
+            200, json_body={"status": "failed"}
+        )
+        cfg = {
+            "endpoint": {"url": "https://api.test/q", "method": "GET"},
+            "auth": {},
+            "success_when": {"path": "status", "equals": "ok"},
+        }
+        result = tac_env.svc.test_api_connection(config=cfg, test_params={})
+        assert result["success"] is False
+        assert "success_when" in result["error"]
 
     def test_text_plain_with_valid_json_fallback_parsed(self, tac_env):
         """Caso ArcGIS REST: ritorna JSON valido ma con

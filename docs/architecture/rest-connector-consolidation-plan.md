@@ -1,6 +1,6 @@
 # REST Connector — Consolidation & Extension Plan
 
-Status: Phase 0 in progress. Created: 2026-07-05.
+Status: Phase 1 complete. Created: 2026-07-05.
 
 Implementation plan for the `app.core.arricchisci` REST/API connector. Goal in
 two moves: **(1) centralize** the duplicated HTTP execution logic into a single
@@ -83,13 +83,13 @@ its own PR so the refactor risk is isolated from feature work.
 
 Deliverable: same behavior, one execution core, all paths route through it.
 
-Current implementation note: Phase 0 has started with `RequestSpec`,
-`NormalizedResponse`, and `HttpExecutor`; per-row enricher, batch, generator,
-and connection test now route through the shared executor. `rest_file` remains
-out of scope for Phase 0. Per-row enricher and batch validate the final URL once
-before entering their retry loop, then delegate execution to the shared executor
-with URL validation disabled for the already-checked URL. Batch now also uses the
-same TLS `verify` policy as per-row calls; this is an intentional minor behavior
+Implementation note: Phase 0 is complete. `RequestSpec`, `NormalizedResponse`,
+and `HttpExecutor` are in place; per-row enricher, batch, generator, and
+connection test route through the shared executor. `rest_file` remains out of
+scope for Phase 0. Per-row enricher and batch validate the final URL once before
+entering their retry loop, then delegate execution to the shared executor with
+URL validation disabled for the already-checked URL. Batch now also uses the same
+TLS `verify` policy as per-row calls; this is an intentional minor behavior
 alignment from the centralization.
 
 ## Phase 1 — Cross-cutting extension (Tier A), each change in one place
@@ -102,6 +102,14 @@ With the core unified, each is localized:
 - **SuccessEvaluator** — `success_when` / `error_path` (application-level errors
   returned with HTTP 200).
 - **Paginator page-number** — fourth strategy in the existing switch.
+
+Implementation note: Phase 1 is complete. The shared executor now dispatches
+`GET`, `POST`, `PUT`, `PATCH`, and `DELETE`; `RequestSpec.body_type` supports
+`json`, `form-urlencoded`, `raw`/`text`, and `none`; `allow_redirects` is read
+from `request.allow_redirects` or `options.allow_redirects`; application-level
+errors are evaluated with `success_when` / `error_path`; generator pagination
+supports `page-number` with `page_param`, `page_size_param`, and `start_page`.
+Retry-After clamping lives in `retry_policy.py`, shared by per-row and batch.
 
 ## Phase 2 — Async overlay (submit → poll → result)
 

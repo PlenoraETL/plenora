@@ -34,7 +34,7 @@ export const EMPTY_FORM = {
   url:'', method:'GET', auth:{ type:'none' }, custom_headers:{},
   parameters:[], static_parameters:{}, output_mapping:[], schema_fields:[],
   response_preset:'', response_config:null,
-  pagination:{ type:'', page_size:100, max_rows:10000, offset_param:'offset', limit_param:'limit', cursor_param:'cursor', cursor_path:'next_cursor', link_path:'next', start_page:0 },
+  pagination:{ type:'', page_size:100, max_rows:10000, offset_param:'offset', limit_param:'limit', cursor_param:'cursor', cursor_path:'next_cursor', link_path:'next', page_param:'page', page_size_param:'page_size', start_page:0 },
   options:{ rate_limit:5, timeout:30, retry_on_error:true, retry_max:3 },
   batch:{ enabled:false, max_size:100, input_key:'items', input_format:'array', endpoint_override:'', method_override:'' },
   // REST file processor fields use connection_type='rest_file'.

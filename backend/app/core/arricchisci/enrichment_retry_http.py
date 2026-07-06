@@ -14,7 +14,18 @@ from typing import Optional, Tuple
 
 import requests
 
-from app.core.arricchisci.http_executor import RequestSpec, execute_http_request
+from app.core.arricchisci.http_executor import (
+    RequestSpec,
+    allow_redirects_from_config,
+    body_type_from_config,
+    execute_http_request,
+    raw_body_from_config,
+)
+from app.core.arricchisci.retry_policy import clamp_retry_after
+from app.core.arricchisci.success_evaluator import (
+    evaluate_success,
+    success_config_from_api_config,
+)
 from app.core.security.outbound_url import validate_external_url
 from app.core.arricchisci.types import JsonObject
 from app.observability.log_sanitization import (
@@ -32,50 +43,6 @@ from app.core.arricchisci.models import RowError, RowStatus
 # nome → record indistinguibili dai consumer che attaccano handler /
 # filtrano per nome canonico
 logger = get_logger("app.core.arricchisci.enrichment_service")
-
-
-_RETRY_AFTER_FALLBACK_SECONDS = 60
-"""Default usato quando il server non manda Retry-After con 429."""
-
-
-def _clamp_retry_after(raw_header: Optional[str], *, max_seconds: int) -> int:
-    """Parsa il valore dell'header Retry-After (HTTP 429) e lo clampa.
-
-    Funzione pura (no I/O, no stato) — testabile in isolamento e mappabile
-    direttamente in Go come `func clampRetryAfter(raw string, max int) int`.
-
-    Threat: un server malevolo o malfunzionante puo' rispondere
-    `Retry-After: 86400` (24 ore) e parcheggiare un worker Celery per
-    l'intera giornata, esaurendo la capacita' del pool. Il clamp limita
-    il blast radius a `max_seconds`.
-
-    Args:
-        raw_header: valore raw dell'header. Se None/vuoto/non-int, ritorna
-            il fallback `_RETRY_AFTER_FALLBACK_SECONDS` clampato.
-            NOTA: RFC 7231 ammette anche date-string HTTP-date come valore;
-            qui supportiamo solo il formato delta-seconds (interi), che e'
-            quello usato dal 99% dei servizi REST moderni.
-        max_seconds: cap superiore (tipicamente
-            `EnrichmentOptions.max_retry_after_seconds`).
-
-    Returns:
-        Numero intero di secondi nell'intervallo [0, max_seconds].
-    """
-    if max_seconds < 0:
-        max_seconds = 0
-    if raw_header is None:
-        candidate = _RETRY_AFTER_FALLBACK_SECONDS
-    else:
-        try:
-            candidate = int(str(raw_header).strip())
-        except (TypeError, ValueError):
-            # Formato HTTP-date o malformato: degrada al fallback. Non
-            # spendiamo cicli a parsare le date (raro nei servizi REST,
-            # e il caller di fallback e' comunque ragionevole).
-            candidate = _RETRY_AFTER_FALLBACK_SECONDS
-    if candidate < 0:
-        candidate = 0
-    return min(candidate, max_seconds)
 
 
 class EnrichmentRetryHttpMixin:
@@ -119,6 +86,10 @@ class EnrichmentRetryHttpMixin:
             not getattr(self.options, 'disable_ssl_verify', False),
             context="API enricher per-row",
         )
+        connector_config = getattr(self, "api_config", {}) or {}
+        request_cfg = connector_config.get("request", {}) or {}
+        options_cfg = connector_config.get("options", {}) or {}
+        success_config = success_config_from_api_config(connector_config)
 
         for attempt in range(self.options.max_retries + 1):
             try:
@@ -145,10 +116,15 @@ class EnrichmentRetryHttpMixin:
                     method=self.method,
                     params=call_params,
                     json_body=call_params,
+                    raw_body=raw_body_from_config(request_cfg),
+                    body_type=body_type_from_config(request_cfg),
                     headers=self._headers,
                     timeout=(self.options.connect_timeout, self.options.request_timeout),
                     verify=ssl_verify,
-                    allow_redirects=False,
+                    allow_redirects=allow_redirects_from_config(
+                        options_cfg,
+                        request_cfg,
+                    ),
                     validate_url=False,
                     context="API enricher per-row",
                 ))
@@ -179,6 +155,19 @@ class EnrichmentRetryHttpMixin:
                             http_status=200,
                             retry_count=attempt,
                         )
+                    evaluation = evaluate_success(data, success_config)
+                    if not evaluation.ok:
+                        return None, RowError(
+                            row_index=row_index,
+                            status=RowStatus.ERROR,
+                            error_message=(
+                                evaluation.error_message
+                                or "Errore applicativo nella risposta API"
+                            ),
+                            error_type="application_error",
+                            http_status=200,
+                            retry_count=attempt,
+                        )
                     return self._extract_output(data), None
 
                 # Rate limited - rispetta Retry-After
@@ -186,7 +175,7 @@ class EnrichmentRetryHttpMixin:
                     with self._stats_lock:
                         self._rate_limit_hits_observed += 1
                     if self.options.respect_retry_after:
-                        retry_after = _clamp_retry_after(
+                        retry_after = clamp_retry_after(
                             response.headers.get("Retry-After"),
                             max_seconds=self.options.max_retry_after_seconds,
                         )

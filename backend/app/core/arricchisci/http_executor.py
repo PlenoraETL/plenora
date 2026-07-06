@@ -22,6 +22,8 @@ class RequestSpec:
     headers: Mapping[str, str] = field(default_factory=dict)
     params: Optional[Mapping[str, Any]] = None
     json_body: Any = None
+    raw_body: Any = None
+    body_type: str = "json"
     timeout: Any = None
     verify: Any = None
     allow_redirects: bool = False
@@ -46,17 +48,20 @@ class NormalizedResponse:
 class HttpExecutor:
     """Execute Arricchisci REST requests through one shared dispatch path.
 
-    Phase 0 intentionally preserves the existing method semantics:
-    ``GET`` uses query params; every other method still uses POST with a JSON
-    body. Phase 1 can replace that compatibility rule with explicit verb
-    dispatch once the call sites are unified.
+    ``GET`` uses query params. ``POST`` / ``PUT`` / ``PATCH`` / ``DELETE`` use
+    the configured body encoder.
     """
+
+    _SUPPORTED_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE"}
 
     def execute(self, spec: RequestSpec) -> NormalizedResponse:
         if spec.validate_url:
             validate_external_url(spec.url)
 
         method = (spec.method or "GET").upper()
+        if method not in self._SUPPORTED_METHODS:
+            raise ValueError(f"Metodo HTTP non supportato: {method}")
+
         session = get_shared_session()
         started = time.time()
 
@@ -71,8 +76,12 @@ class HttpExecutor:
         if method == "GET":
             response = session.get(spec.url, params=dict(spec.params or {}), **kwargs)
         else:
-            payload = spec.json_body if spec.json_body is not None else dict(spec.params or {})
-            response = session.post(spec.url, json=payload, **kwargs)
+            request_fn = getattr(session, method.lower())
+            response = request_fn(
+                spec.url,
+                **self._encoded_body_kwargs(spec),
+                **kwargs,
+            )
 
         return NormalizedResponse(
             status_code=response.status_code,
@@ -81,6 +90,93 @@ class HttpExecutor:
             elapsed_ms=(time.time() - started) * 1000,
             raw_response=response,
         )
+
+    @staticmethod
+    def _payload_from_spec(spec: RequestSpec) -> Any:
+        if spec.json_body is not None:
+            return spec.json_body
+        return dict(spec.params or {})
+
+    @classmethod
+    def _encoded_body_kwargs(cls, spec: RequestSpec) -> dict[str, Any]:
+        body_type = normalize_body_type(spec.body_type)
+        if body_type == "none":
+            return {"params": dict(spec.params or {})}
+
+        payload = cls._payload_from_spec(spec)
+        if body_type == "json":
+            return {"json": payload}
+        if body_type == "form-urlencoded":
+            return {"data": payload}
+        if body_type == "raw":
+            body = spec.raw_body if spec.raw_body is not None else payload
+            if not isinstance(body, (str, bytes)):
+                body = str(body)
+            return {"data": body}
+
+        raise ValueError(f"body_type non supportato: {spec.body_type}")
+
+
+def normalize_body_type(body_type: str | None) -> str:
+    """Normalize REST connector body type aliases."""
+
+    normalized = (body_type or "json").strip().lower().replace("_", "-")
+    aliases = {
+        "": "json",
+        "form": "form-urlencoded",
+        "x-www-form-urlencoded": "form-urlencoded",
+        "application/x-www-form-urlencoded": "form-urlencoded",
+        "text": "raw",
+        "raw/text": "raw",
+        "raw-text": "raw",
+        "text/plain": "raw",
+        "no-body": "none",
+        "none": "none",
+    }
+    return aliases.get(normalized, normalized)
+
+
+def body_type_from_config(
+    request_config: Mapping[str, Any] | None,
+    *,
+    default: str = "json",
+) -> str:
+    """Read the REST body encoder from a connection request config."""
+
+    request_cfg = dict(request_config or {})
+    return normalize_body_type(request_cfg.get("body_type", default))
+
+
+def raw_body_from_config(request_config: Mapping[str, Any] | None) -> Any:
+    """Read raw/text body content from a connection request config."""
+
+    request_cfg = dict(request_config or {})
+    if "raw_body" in request_cfg:
+        return request_cfg["raw_body"]
+    return request_cfg.get("body")
+
+
+def allow_redirects_from_config(
+    options: Mapping[str, Any] | None = None,
+    request_config: Mapping[str, Any] | None = None,
+    *,
+    default: bool = False,
+) -> bool:
+    """Resolve allow_redirects from request config, then options, then default."""
+
+    request_cfg = dict(request_config or {})
+    if "allow_redirects" in request_cfg:
+        return _config_bool(request_cfg["allow_redirects"])
+    opts = dict(options or {})
+    if "allow_redirects" in opts:
+        return _config_bool(opts["allow_redirects"])
+    return default
+
+
+def _config_bool(value: Any) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
 
 
 _DEFAULT_EXECUTOR = HttpExecutor()

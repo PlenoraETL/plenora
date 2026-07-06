@@ -36,6 +36,7 @@ class _Response:
 
 class _Host(EnrichmentRetryHttpMixin):
     def __init__(self, *, options: EnrichmentOptions) -> None:
+        self.api_config = {"request": {}, "options": {}}
         self.url = "https://api.example.com/q"
         self.method = "GET"
         self.options = options
@@ -81,6 +82,64 @@ def test_per_row_validates_url_once_before_retry_loop(monkeypatch):
     assert validated_urls == ["https://api.example.com/q"]
     assert len(specs) == 2
     assert all(spec.validate_url is False for spec in specs)
+
+
+def test_per_row_request_config_reaches_request_spec(monkeypatch):
+    host = _Host(options=EnrichmentOptions(max_retries=0))
+    host.api_config = {
+        "request": {
+            "body_type": "form-urlencoded",
+            "allow_redirects": True,
+        },
+    }
+    specs = []
+
+    monkeypatch.setattr(retry_mod, "validate_external_url", lambda _url: None)
+    monkeypatch.setattr(
+        retry_mod,
+        "resolve_tls_verify",
+        lambda enabled, *, context: enabled,
+    )
+
+    def execute(spec):
+        specs.append(spec)
+        return _Response(200, {"ok": True})
+
+    monkeypatch.setattr(retry_mod, "execute_http_request", execute)
+
+    result, err = host._call_api_with_retry({"q": "abc"}, row_index=4)
+
+    assert err is None
+    assert result == {"ok": True}
+    assert specs[0].body_type == "form-urlencoded"
+    assert specs[0].allow_redirects is True
+
+
+def test_per_row_application_error_path_returns_row_error(monkeypatch):
+    host = _Host(options=EnrichmentOptions(max_retries=0))
+    host.api_config = {"error_path": "error"}
+
+    monkeypatch.setattr(retry_mod, "validate_external_url", lambda _url: None)
+    monkeypatch.setattr(
+        retry_mod,
+        "resolve_tls_verify",
+        lambda enabled, *, context: enabled,
+    )
+    monkeypatch.setattr(
+        retry_mod,
+        "execute_http_request",
+        lambda _spec: _Response(
+            200,
+            {"error": {"message": "quota exceeded"}},
+        ),
+    )
+
+    result, err = host._call_api_with_retry({"q": "abc"}, row_index=4)
+
+    assert result is None
+    assert err is not None
+    assert err.error_type == "application_error"
+    assert err.error_message == "quota exceeded"
 
 
 def test_per_row_validation_error_short_circuits_before_http(monkeypatch):

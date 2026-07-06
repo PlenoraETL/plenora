@@ -21,10 +21,17 @@ from app.core.arricchisci._api_connection_helpers import (
 )
 from app.core.arricchisci.http_executor import (
     RequestSpec,
+    allow_redirects_from_config,
+    body_type_from_config,
     execute_http_request,
+    raw_body_from_config,
     timeout_from_options,
 )
 from app.core.arricchisci.types import JsonObject, JsonObjectById, JsonRows
+from app.core.arricchisci.success_evaluator import (
+    evaluate_success,
+    success_config_from_api_config,
+)
 import app.core.arricchisci.db as db_svc
 from app.shared.connections.oauth import get_arcgis_token
 from app.utils.logger import get_logger
@@ -453,6 +460,8 @@ class ApiConnectionManagementMixin:
         auth = config.get("auth", {})
         custom_headers = config.get("custom_headers", {})
         options = config.get("options", {}) or {}
+        request_config = config.get("request", {}) or {}
+        success_config = success_config_from_api_config(config)
 
         if not url:
             return {"success": False, "error": "URL non configurato"}
@@ -472,9 +481,14 @@ class ApiConnectionManagementMixin:
                 method=method,
                 params=params,
                 json_body=params,
+                raw_body=raw_body_from_config(request_config),
+                body_type=body_type_from_config(request_config),
                 headers=headers,
                 timeout=timeout_from_options(options, default_read_timeout=30),
-                allow_redirects=False,
+                allow_redirects=allow_redirects_from_config(
+                    options,
+                    request_config,
+                ),
                 context="test_api_connection",
             ))
 
@@ -493,6 +507,16 @@ class ApiConnectionManagementMixin:
 
             json_data, parse_error = self._parse_test_response_json(response)
             if json_data is not None:
+                evaluation = evaluate_success(json_data, success_config)
+                if not evaluation.ok:
+                    result["success"] = False
+                    result["error"] = (
+                        evaluation.error_message
+                        or "Errore applicativo nella risposta API"
+                    )
+                    result["response_data"] = json_data
+                    result["raw_response"] = json_data
+                    return result
                 result["available_fields"] = self._extract_available_fields(json_data)
                 result["response_data"] = json_data  # Per debug
                 result["raw_response"] = json_data  # Per ResponseConfigBuilder

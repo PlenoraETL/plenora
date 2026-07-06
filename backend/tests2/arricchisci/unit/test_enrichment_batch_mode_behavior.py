@@ -350,6 +350,46 @@ class TestCallBatchApi:
         host._call_batch_api([{"q": "a"}], [0])
         assert session.get_calls[0]["url"] == "https://override/x"
 
+    def test_form_urlencoded_request_uses_data_body(self, monkeypatch):
+        host, session = _make_host(
+            monkeypatch,
+            responses=[_resp([{"value": "ok"}])],
+        )
+        host.api_config = {"request": {"body_type": "form-urlencoded"}}
+        results, err = host._call_batch_api([{"q": "a"}], [0])
+        assert err is None
+        assert results == [{"out": "ok"}]
+        call = session.post_calls[0]
+        assert call["data"] == {"items": [{"q": "a"}]}
+        assert call["json"] is None
+
+    def test_allow_redirects_config_is_passed_to_http_call(self, monkeypatch):
+        host, session = _make_host(
+            monkeypatch,
+            responses=[_resp([{"value": "ok"}])],
+        )
+        host.api_config = {"request": {"allow_redirects": True}}
+        host._call_batch_api([{"q": "a"}], [0])
+        assert session.post_calls[0]["allow_redirects"] is True
+
+    def test_application_error_path_returns_row_error(self, monkeypatch):
+        host, session = _make_host(
+            monkeypatch,
+            responses=[
+                _FakeResponse(
+                    200,
+                    json_data={"error": {"message": "quota exceeded"}},
+                )
+            ],
+        )
+        host.api_config = {"error_path": "error"}
+        results, err = host._call_batch_api([{"q": "a"}], [0])
+        assert results is None
+        assert err is not None
+        assert err.error_type == "application_error"
+        assert err.error_message == "quota exceeded"
+        assert len(session.post_calls) == 1
+
     def test_non_retriable_4xx_returns_error_no_retry(self, monkeypatch):
         host, session = _make_host(
             monkeypatch,

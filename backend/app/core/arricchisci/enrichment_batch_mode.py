@@ -13,8 +13,18 @@ import requests
 
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.tabular import iter_dataframe_indexed_rows
-from app.core.arricchisci.http_executor import RequestSpec, execute_http_request
-from app.core.arricchisci.enrichment_retry_http import _clamp_retry_after
+from app.core.arricchisci.http_executor import (
+    RequestSpec,
+    allow_redirects_from_config,
+    body_type_from_config,
+    execute_http_request,
+    raw_body_from_config,
+)
+from app.core.arricchisci.retry_policy import clamp_retry_after
+from app.core.arricchisci.success_evaluator import (
+    evaluate_success,
+    success_config_from_api_config,
+)
 from app.core.security.outbound_url import validate_external_url
 from app.shared.security.tls_policy import resolve_tls_verify
 from app.utils.logger import get_logger
@@ -206,6 +216,10 @@ class EnrichmentBatchModeMixin:
         # URL e metodo, con eventuale override batch.
         url = self.batch_config.endpoint_override or self.url
         method = (self.batch_config.method_override or self.method).upper()
+        connector_config = getattr(self, "api_config", {}) or {}
+        request_cfg = connector_config.get("request", {}) or {}
+        options_cfg = connector_config.get("options", {}) or {}
+        success_config = success_config_from_api_config(connector_config)
 
         last_error = None
 
@@ -232,10 +246,15 @@ class EnrichmentBatchModeMixin:
                     method=method,
                     params=payload,
                     json_body=payload,
+                    raw_body=raw_body_from_config(request_cfg),
+                    body_type=body_type_from_config(request_cfg),
                     headers=self._headers,
                     timeout=(self.options.connect_timeout, self.options.request_timeout),
                     verify=ssl_verify,
-                    allow_redirects=False,
+                    allow_redirects=allow_redirects_from_config(
+                        options_cfg,
+                        request_cfg,
+                    ),
                     validate_url=False,
                     context="API enricher batch",
                 ))
@@ -249,13 +268,26 @@ class EnrichmentBatchModeMixin:
                 # Successo
                 if response.status_code == 200:
                     data = response.json()
+                    evaluation = evaluate_success(data, success_config)
+                    if not evaluation.ok:
+                        return None, RowError(
+                            row_index=batch_indices[0],
+                            status=RowStatus.ERROR,
+                            error_message=(
+                                evaluation.error_message
+                                or "Errore applicativo nella risposta API"
+                            ),
+                            error_type="application_error",
+                            http_status=200,
+                            retry_count=attempt,
+                        )
                     results = self._extract_batch_output(data)
                     return results, None
 
                 # Rate limited
                 if response.status_code == 429:
                     if self.options.respect_retry_after:
-                        retry_after = _clamp_retry_after(
+                        retry_after = clamp_retry_after(
                             response.headers.get("Retry-After"),
                             max_seconds=self.options.max_retry_after_seconds,
                         )

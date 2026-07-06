@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.core.arricchisci.enrichment_retry_http import (
-    _RETRY_AFTER_FALLBACK_SECONDS,
-    _clamp_retry_after,
+from app.core.arricchisci.retry_policy import (
+    RETRY_AFTER_FALLBACK_SECONDS,
+    clamp_retry_after,
 )
 from app.core.arricchisci.models import EnrichmentOptions
 
@@ -46,7 +46,7 @@ class TestClampRetryAfter:
         # Valore al limite del cap → passa
         ("300", 300, 300),
         # Header mancante → fallback (clampato anche lui se < max)
-        (None, 300, _RETRY_AFTER_FALLBACK_SECONDS),
+        (None, 300, RETRY_AFTER_FALLBACK_SECONDS),
         (None, 30, 30),  # fallback 60 ma cap 30 → 30
         # Whitespace tollerato
         (" 42 ", 300, 42),
@@ -54,7 +54,7 @@ class TestClampRetryAfter:
         ("-10", 300, 0),
     ])
     def test_clamp_returns_expected(self, raw_header, max_seconds, expected):
-        assert _clamp_retry_after(raw_header, max_seconds=max_seconds) == expected
+        assert clamp_retry_after(raw_header, max_seconds=max_seconds) == expected
 
     @pytest.mark.parametrize("malformed_header", [
         "",                # vuoto
@@ -65,18 +65,18 @@ class TestClampRetryAfter:
     ])
     def test_malformed_header_falls_back_to_default(self, malformed_header):
         # Fallback `_RETRY_AFTER_FALLBACK_SECONDS` clampato al max
-        result = _clamp_retry_after(malformed_header, max_seconds=300)
-        assert result == _RETRY_AFTER_FALLBACK_SECONDS
+        result = clamp_retry_after(malformed_header, max_seconds=300)
+        assert result == RETRY_AFTER_FALLBACK_SECONDS
 
     def test_negative_max_seconds_treated_as_zero(self):
         """Difesa contro misconfig: max_retry_after_seconds=-1 → 0 sleep,
         non bypass del cap.
         """
-        assert _clamp_retry_after("42", max_seconds=-5) == 0
+        assert clamp_retry_after("42", max_seconds=-5) == 0
 
     def test_returns_int(self):
         """time.sleep richiede numero, ritornare int e' contratto."""
-        result = _clamp_retry_after("42", max_seconds=300)
+        result = clamp_retry_after("42", max_seconds=300)
         assert isinstance(result, int)
 
 

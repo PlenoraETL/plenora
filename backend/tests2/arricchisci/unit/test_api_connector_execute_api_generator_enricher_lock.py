@@ -176,6 +176,45 @@ class TestGeneratorBasics:
         with pytest.raises(ValueError, match="HTTP 500"):
             gen_env.svc._execute_api_generator(cfg)
 
+    def test_application_error_path_raises_value_error(self, gen_env):
+        gen_env.session.get.return_value = _resp(
+            200, json_body={"error": {"message": "quota exceeded"}}
+        )
+        cfg = {
+            "endpoint": {"url": "https://api.test/q", "method": "GET"},
+            "auth": {},
+            "error_path": "error",
+            "output_mapping": [],
+        }
+        with pytest.raises(ValueError, match="quota exceeded"):
+            gen_env.svc._execute_api_generator(cfg)
+
+    def test_form_urlencoded_request_uses_data_body(self, gen_env):
+        gen_env.session.post.return_value = _resp(200, json_body=[])
+        cfg = {
+            "endpoint": {"url": "https://api.test/q", "method": "POST"},
+            "auth": {},
+            "static_parameters": {"x": "1"},
+            "request": {"body_type": "form-urlencoded"},
+            "output_mapping": [],
+        }
+        gen_env.svc._execute_api_generator(cfg)
+
+        kwargs = gen_env.session.post.call_args.kwargs
+        assert kwargs["data"] == {"x": "1"}
+        assert "json" not in kwargs
+
+    def test_allow_redirects_config_is_passed_to_http_call(self, gen_env):
+        gen_env.session.get.return_value = _resp(200, json_body=[])
+        cfg = {
+            "endpoint": {"url": "https://api.test/q", "method": "GET"},
+            "auth": {},
+            "request": {"allow_redirects": True},
+            "output_mapping": [],
+        }
+        gen_env.svc._execute_api_generator(cfg)
+        assert gen_env.session.get.call_args.kwargs["allow_redirects"] is True
+
 
 # _execute_api_generator — URL path param substitution
 
@@ -311,3 +350,30 @@ class TestGeneratorPagination:
         assert gen_env.session.get.call_count == 2
         second_url = gen_env.session.get.call_args_list[1][0][0]
         assert "p2" in second_url
+
+    def test_page_number_pagination_increments_page_param(self, gen_env):
+        gen_env.session.get.side_effect = [
+            _resp(200, json_body={"items": [{"x": 1}, {"x": 2}]}),
+            _resp(200, json_body={"items": [{"x": 3}]}),
+        ]
+        cfg = {
+            "endpoint": {"url": "https://api.test/q", "method": "GET"},
+            "auth": {},
+            "output_mapping": [{"path": "items[*].x", "column": "x"}],
+            "pagination": {
+                "type": "page-number",
+                "page_param": "page",
+                "page_size_param": "per_page",
+                "page_size": 2,
+                "start_page": 1,
+                "max_rows": 10,
+            },
+        }
+        gen_env.svc._execute_api_generator(cfg)
+
+        assert gen_env.session.get.call_count == 2
+        first_params = gen_env.session.get.call_args_list[0].kwargs["params"]
+        second_params = gen_env.session.get.call_args_list[1].kwargs["params"]
+        assert first_params["page"] == 1
+        assert first_params["per_page"] == 2
+        assert second_params["page"] == 2

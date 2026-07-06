@@ -18,13 +18,20 @@ from app.core.dataframes.tabular import (
 )
 from app.core.arricchisci.http_executor import (
     RequestSpec,
+    allow_redirects_from_config,
+    body_type_from_config,
     execute_http_request,
+    raw_body_from_config,
     timeout_from_options,
 )
 from app.observability.log_sanitization import sanitize_for_log
 from app.shared.resources.json_path import extract_json_value as _shared_extract_json_value
 from app.utils.logger import get_logger
 from app.core.arricchisci.response_parser import ResponseParser, get_preset_config
+from app.core.arricchisci.success_evaluator import (
+    evaluate_success,
+    success_config_from_api_config,
+)
 from app.core.arricchisci.types import JsonObject, JsonRows
 from app.core.artifacts.static_parameters import process_static_fields
 
@@ -44,8 +51,8 @@ class ApiConnectionGeneratorEnricherMixin:
 
     # API GENERATOR
     # Pipeline: build_base_params → paginate → call_endpoint(path subst →
-    # SSRF guard → GET/POST → parse_response). Pagination 4 strategies
-    # '' (no-pag), 'offset', 'cursor', 'link'
+    # SSRF guard → execute → parse_response). Pagination strategies:
+    # '' (no-pag), 'offset', 'cursor', 'link', 'page-number'.
 
     def _paginate_generator_results(
         self, *, call_fn, pagination: JsonObject, base_params: JsonObject
@@ -60,6 +67,7 @@ class ApiConnectionGeneratorEnricherMixin:
         - `'link'`: segue URL `next` dal body (`link_path`) o
           dall'header `Link` RFC 5988. Dopo la prima pagina svuota
           `base_params` (l'URL e' gia' completo).
+        - `'page-number'`: incrementa un parametro pagina numerico.
         - tipo sconosciuto: warn + singola chiamata fallback.
 
         `MAX_PAGES = max_rows // page_size + 1` come safety cap globale.
@@ -153,6 +161,34 @@ class ApiConnectionGeneratorEnricherMixin:
                 # Dopo prima pagina, non rimandare base_params (URL gia' completo
                 link_base_params = {}
 
+        elif pagination_type in ('page', 'page_number', 'page-number'):
+            page_param = pagination.get('page_param', 'page')
+            page_size_param = pagination.get(
+                'page_size_param',
+                pagination.get('limit_param', 'page_size'),
+            )
+            start = int(pagination.get('start_page', 1))
+
+            for page_num in range(MAX_PAGES):
+                call_params = {
+                    **base_params,
+                    page_param: start + page_num,
+                    page_size_param: page_size,
+                }
+                rows, _, _ = call_fn(call_params)
+                if not rows:
+                    break
+                all_rows.extend(rows)
+                logger.info(
+                    f"Generator page-number pag {start + page_num}: "
+                    f"+{len(rows)} righe (tot {len(all_rows)})"
+                )
+                if len(all_rows) >= max_rows:
+                    all_rows = all_rows[:max_rows]
+                    break
+                if len(rows) < page_size:
+                    break
+
         else:
             logger.warning(
                 f"Tipo paginazione sconosciuto: '{pagination_type}', "
@@ -207,6 +243,8 @@ class ApiConnectionGeneratorEnricherMixin:
         options: JsonObject,
         response_preset: str,
         response_config: JsonObject,
+        request_config: JsonObject,
+        success_config: JsonObject,
         output_mapping: JsonRows,
     ) -> tuple:
         """Esegue una singola chiamata del generator e parsa la response.
@@ -230,9 +268,11 @@ class ApiConnectionGeneratorEnricherMixin:
             method=method,
             params=query_params,
             json_body=call_params,
+            raw_body=raw_body_from_config(request_config),
+            body_type=body_type_from_config(request_config),
             headers=headers,
             timeout=timeout_from_options(options, default_read_timeout=60),
-            allow_redirects=False,
+            allow_redirects=allow_redirects_from_config(options, request_config),
             context="API generator",
         ))
 
@@ -241,6 +281,12 @@ class ApiConnectionGeneratorEnricherMixin:
             raise ValueError(f"API error: HTTP {resp.status_code} — {err}")
 
         data = resp.json()
+        evaluation = evaluate_success(data, success_config)
+        if not evaluation.ok:
+            raise ValueError(
+                "API application error: "
+                f"{evaluation.error_message or 'success_when non soddisfatto'}"
+            )
 
         if response_preset:
             preset_cfg = get_preset_config(response_preset)
@@ -308,13 +354,14 @@ class ApiConnectionGeneratorEnricherMixin:
         """
         Esegue API di tipo 'generator' — genera un DataFrame dalla risposta.
 
-        Supporta paginazione automatica con tre strategie:
+        Supporta paginazione automatica con quattro strategie:
             - offset: aggiunge offset/limit ad ogni chiamata fino a risultati vuoti o max_rows
             - cursor: usa un token/cursor dalla risposta per la chiamata successiva
             - link: segue un URL 'next' nel body o nell'header Link della risposta
+            - page-number: incrementa un parametro numerico di pagina
 
         Configurazione paginazione (in api_config['pagination']):
-            type: 'offset' | 'cursor' | 'link' (default: nessuna)
+            type: 'offset' | 'cursor' | 'link' | 'page-number' (default: nessuna)
             page_size: righe per pagina (default: 100)
             max_rows: limite totale righe (default: 10000)
             offset_param: nome parametro offset (default: 'offset')
@@ -322,7 +369,9 @@ class ApiConnectionGeneratorEnricherMixin:
             cursor_param: nome parametro cursor (default: 'cursor')
             cursor_path: path JSON del cursor nella risposta (default: 'next_cursor')
             link_path: path JSON URL prossima pagina (default: 'next')
-            start_page: indice prima pagina (offset) (default: 0)
+            page_param: nome parametro pagina per page-number (default: 'page')
+            page_size_param: nome parametro page size per page-number (default: 'page_size')
+            start_page: indice prima pagina (offset default 0, page-number default 1)
 
         Strategie di parsing risposta (in ordine di priorità):
             1. response_preset: preset predefinito (italiameteo_observations, geojson_features)
@@ -339,6 +388,8 @@ class ApiConnectionGeneratorEnricherMixin:
         response_preset = api_config.get('response_preset', '')
         pagination = api_config.get('pagination', {})
         options = api_config.get('options', {}) or {}
+        request_config = api_config.get('request', {}) or {}
+        success_config = success_config_from_api_config(api_config)
 
         if not url:
             raise ValueError("URL API non configurato")
@@ -356,6 +407,8 @@ class ApiConnectionGeneratorEnricherMixin:
                 options=options,
                 response_preset=response_preset,
                 response_config=response_config,
+                request_config=request_config,
+                success_config=success_config,
                 output_mapping=output_mapping,
             )
 

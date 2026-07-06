@@ -149,10 +149,10 @@ export default function Step2Params({
           <div className="acm__param-row">
             <span className="acm__param-label">Tipo</span>
             <select className="acm__select" value={formData.pagination?.type||''} onChange={e=>setFormData({...formData,pagination:{...formData.pagination,type:e.target.value}})}>
-              <option value="">Nessuna</option><option value="offset">Offset/Limit</option><option value="cursor">Cursor/Token</option><option value="link">Link (next URL)</option>
+              <option value="">Nessuna</option><option value="offset">Offset/Limit</option><option value="cursor">Cursor/Token</option><option value="link">Link (next URL)</option><option value="page-number">Numero pagina</option>
             </select>
           </div>
-          <div className="acm__field-hint acm__field-hint--mb-sm"><strong>Offset</strong>: incrementa offset+limit a ogni pagina. <strong>Cursor</strong>: usa un token preso dalla risposta. <strong>Link</strong>: segue l'URL "next" nel body. Si ferma a Max righe o quando la risposta è vuota.</div>
+          <div className="acm__field-hint acm__field-hint--mb-sm"><strong>Offset</strong>: incrementa offset+limit a ogni pagina. <strong>Cursor</strong>: usa un token preso dalla risposta. <strong>Link</strong>: segue l'URL "next" nel body. <strong>Numero pagina</strong>: incrementa un parametro pagina. Si ferma a Max righe o quando la risposta è vuota.</div>
           {formData.pagination?.type && (
             <div className="acm__pagination-fields">
               <div className="acm__param-row">
@@ -181,6 +181,16 @@ export default function Step2Params({
                 <div className="acm__param-row">
                   <span className="acm__param-label">Path URL next</span>
                   <input className="acm__input" value={formData.pagination?.link_path??'next'} onChange={e=>setFormData({...formData,pagination:{...formData.pagination,link_path:e.target.value}})} placeholder="next"/>
+                </div>
+              )}
+              {formData.pagination?.type==='page-number' && (
+                <div className="acm__param-row">
+                  <span className="acm__param-label">Param pagina</span>
+                  <input className="acm__input" value={formData.pagination?.page_param??'page'} onChange={e=>setFormData({...formData,pagination:{...formData.pagination,page_param:e.target.value}})} placeholder="page"/>
+                  <span className="acm__param-label">Param size</span>
+                  <input className="acm__input" value={formData.pagination?.page_size_param??'page_size'} onChange={e=>setFormData({...formData,pagination:{...formData.pagination,page_size_param:e.target.value}})} placeholder="page_size"/>
+                  <span className="acm__param-label">Start</span>
+                  <input className="acm__input acm__input--sm" type="number" min="0" value={formData.pagination?.start_page??1} onChange={e=>setFormData({...formData,pagination:{...formData.pagination,start_page:parseInt(e.target.value)||1}})}/>
                 </div>
               )}
             </div>
