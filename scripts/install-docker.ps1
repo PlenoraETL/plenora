@@ -13,11 +13,25 @@ param(
     [switch]$DryRun,
     [switch]$InstallDeps,
     [switch]$SkipSmoke,
+    [switch]$SkipAdminBootstrap,
     [switch]$RequireSqlServerOdbc,
-    [string]$FrontendApiUrl = $env:FRONTEND_VITE_API_URL
+    [string]$FrontendApiUrl = $env:FRONTEND_VITE_API_URL,
+    [string]$AdminUsername = $env:PLENORA_BOOTSTRAP_ADMIN_USERNAME,
+    [string]$AdminPassword = $env:PLENORA_BOOTSTRAP_ADMIN_PASSWORD,
+    [string]$AdminGroupId = $env:PLENORA_BOOTSTRAP_ADMIN_GROUP_ID
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ([string]::IsNullOrWhiteSpace($AdminUsername)) {
+    $AdminUsername = $env:PLENORA_ADMIN_USERNAME
+}
+if ([string]::IsNullOrWhiteSpace($AdminPassword)) {
+    $AdminPassword = $env:PLENORA_ADMIN_PASSWORD
+}
+if ([string]::IsNullOrWhiteSpace($AdminGroupId)) {
+    $AdminGroupId = 'root'
+}
 
 function Write-Step {
     param([string]$Message)
@@ -202,6 +216,151 @@ function Ensure-DockerEnv {
     }
 }
 
+function Test-InteractiveInput {
+    try {
+        return (-not [Console]::IsInputRedirected)
+    } catch {
+        return $false
+    }
+}
+
+function ConvertFrom-SecureStringPlainText {
+    param([System.Security.SecureString]$Value)
+
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Value)
+    try {
+        return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    } finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    }
+}
+
+function Collect-AdminBootstrapCredentials {
+    Write-Step "Bootstrap superadmin"
+
+    if ($SkipAdminBootstrap) {
+        Write-Host "Superadmin bootstrap skipped."
+        return
+    }
+
+    if ($DryRun) {
+        Write-Host "+ prompt for superadmin username/password if not provided"
+        Write-Host "+ seed or update superadmin after backend is healthy"
+        return
+    }
+
+    $interactive = Test-InteractiveInput
+
+    if ([string]::IsNullOrWhiteSpace($script:AdminUsername) -and $interactive) {
+        $script:AdminUsername = Read-Host "Superadmin username [admin]"
+        if ([string]::IsNullOrWhiteSpace($script:AdminUsername)) {
+            $script:AdminUsername = "admin"
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($script:AdminPassword) -and $interactive) {
+        while ($true) {
+            $p1 = Read-Host "Superadmin password (min 12 chars)" -AsSecureString
+            $p2 = Read-Host "Confirm superadmin password" -AsSecureString
+            $plain1 = ConvertFrom-SecureStringPlainText $p1
+            $plain2 = ConvertFrom-SecureStringPlainText $p2
+
+            if ($plain1 -ne $plain2) {
+                Write-Host "Passwords do not match; try again." -ForegroundColor Yellow
+                $plain1 = ""
+                $plain2 = ""
+                continue
+            }
+            if ($plain1.Length -lt 12) {
+                Write-Host "Password must be at least 12 characters; try again." -ForegroundColor Yellow
+                $plain1 = ""
+                $plain2 = ""
+                continue
+            }
+
+            $script:AdminPassword = $plain1
+            $plain2 = ""
+            break
+        }
+    }
+
+    if ([string]::IsNullOrWhiteSpace($script:AdminUsername) -or [string]::IsNullOrWhiteSpace($script:AdminPassword)) {
+        $script:SkipAdminBootstrap = $true
+        Write-Host "Superadmin bootstrap skipped: credentials were not provided and stdin is not interactive." -ForegroundColor Yellow
+        Write-Host "Set PLENORA_BOOTSTRAP_ADMIN_USERNAME and PLENORA_BOOTSTRAP_ADMIN_PASSWORD for non-interactive installs."
+        return
+    }
+
+    if ($script:AdminPassword.Length -lt 12) {
+        throw "superadmin password must be at least 12 characters."
+    }
+}
+
+function Invoke-AdminBootstrap {
+    if ($SkipAdminBootstrap) {
+        return
+    }
+
+    Write-Step "Seed superadmin"
+    Write-Host "+ docker compose exec -T -e PLENORA_BOOTSTRAP_ADMIN_USERNAME -e PLENORA_BOOTSTRAP_ADMIN_PASSWORD -e PLENORA_BOOTSTRAP_ADMIN_GROUP_ID backend python -c <bootstrap-script>"
+    if ($DryRun) {
+        return
+    }
+
+    $env:PLENORA_BOOTSTRAP_ADMIN_USERNAME = $AdminUsername
+    $env:PLENORA_BOOTSTRAP_ADMIN_PASSWORD = $AdminPassword
+    $env:PLENORA_BOOTSTRAP_ADMIN_GROUP_ID = $AdminGroupId
+
+    $script = @'
+import os, uuid
+from app.core.auth import db
+from app.core.security.password_hashing import hash_password
+
+username = os.environ["PLENORA_BOOTSTRAP_ADMIN_USERNAME"]
+password = os.environ["PLENORA_BOOTSTRAP_ADMIN_PASSWORD"]
+group_id = os.environ.get("PLENORA_BOOTSTRAP_ADMIN_GROUP_ID") or "root"
+
+if not username.strip():
+    raise SystemExit("bootstrap superadmin username is empty")
+if len(password) < 12:
+    raise SystemExit("bootstrap superadmin password must be at least 12 characters")
+if not group_id.strip():
+    raise SystemExit("bootstrap superadmin group id is empty")
+
+if db.get_group(group_id) is None:
+    db.create_group(group_id, "Root", "Bootstrap superadmin group")
+
+existing = db.get_user_by_username(username)
+if existing is None:
+    db.create_user(
+        user_id=f"bootstrap-{uuid.uuid4()}",
+        username=username,
+        password_hash=hash_password(password),
+        group_id=group_id,
+        role="superadmin",
+        email="admin@example.local",
+    )
+else:
+    db.update_user(existing.id, is_active=True, role="superadmin", group_id=group_id)
+    db.update_user_password(existing.id, hash_password(password))
+
+print(f"Superadmin ready: username={username} role=superadmin group_id={group_id}")
+'@
+
+    try {
+        Invoke-External "docker" @(
+            "compose", "exec", "-T",
+            "-e", "PLENORA_BOOTSTRAP_ADMIN_USERNAME",
+            "-e", "PLENORA_BOOTSTRAP_ADMIN_PASSWORD",
+            "-e", "PLENORA_BOOTSTRAP_ADMIN_GROUP_ID",
+            "backend", "python", "-c", $script
+        )
+    } finally {
+        Remove-Item Env:\PLENORA_BOOTSTRAP_ADMIN_PASSWORD -ErrorAction SilentlyContinue
+        $script:AdminPassword = ""
+    }
+}
+
 function Invoke-ProviderCheck {
     Write-Step "Database provider check"
 
@@ -251,6 +410,7 @@ if ($Check) {
 }
 
 Ensure-DockerEnv
+Collect-AdminBootstrapCredentials
 
 if (-not [string]::IsNullOrWhiteSpace($FrontendApiUrl)) {
     $env:FRONTEND_VITE_API_URL = $FrontendApiUrl
@@ -265,6 +425,7 @@ Invoke-External "docker" @("compose", "up", "-d", "--wait", "backend")
 Invoke-External "docker" @("compose", "up", "-d", "worker", "beat")
 Invoke-External "docker" @("compose", "up", "-d", "--wait", "frontend")
 
+Invoke-AdminBootstrap
 Invoke-ProviderCheck
 
 if (-not $SkipSmoke) {

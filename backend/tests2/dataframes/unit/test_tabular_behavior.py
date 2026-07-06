@@ -218,6 +218,10 @@ class TestSanitizeForJson:
         out = T.sanitize_for_json([{"t": pd.Timestamp("2020-01-01")}])
         assert out[0]["t"].startswith("2020-01-01")
 
+    def test_decimal_to_compact_string(self):
+        out = T.sanitize_for_json([{"amount": Decimal("42.5000")}])
+        assert out == [{"amount": "42.5"}]
+
     def test_bytes_utf8_decoded(self):
         out = T.sanitize_for_json([{"b": b"hi"}])
         assert out == [{"b": "hi"}]

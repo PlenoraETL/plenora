@@ -16,8 +16,11 @@ e' il sweep di manutenzione.
 from __future__ import annotations
 
 import json
+import math
 import threading
+from collections.abc import Mapping
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Optional, Protocol
 
 from app.db import pg_connection
@@ -36,6 +39,54 @@ def _normal_ttl(ttl_seconds: int | None) -> int:
     if ttl_seconds is None or ttl_seconds <= 0:
         return _DEFAULT_TTL_SECONDS
     return ttl_seconds
+
+
+def _compact_decimal(value: Decimal) -> str:
+    if not value.is_finite():
+        return str(value)
+    text = format(value.normalize(), "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def _json_safe_payload(value: object) -> object:
+    """Normalize task payload values before JSONB persistence."""
+    if value is None or isinstance(value, (str, int, bool)):
+        return value
+    if isinstance(value, float):
+        return None if math.isnan(value) or math.isinf(value) else value
+    if isinstance(value, Decimal):
+        return _compact_decimal(value)
+    if isinstance(value, Mapping):
+        return {
+            str(key): _json_safe_payload(nested_value)
+            for key, nested_value in value.items()
+        }
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe_payload(nested_value) for nested_value in value]
+
+    type_name = type(value).__name__
+    if type_name in {"NaT", "NaTType"}:
+        return None
+
+    item = getattr(value, "item", None)
+    if callable(item):
+        try:
+            item_value = item()
+        except (TypeError, ValueError):
+            item_value = value
+        if item_value is not value:
+            return _json_safe_payload(item_value)
+
+    isoformat = getattr(value, "isoformat", None)
+    if callable(isoformat):
+        try:
+            return str(isoformat())
+        except (TypeError, ValueError):
+            pass
+
+    return str(value)
 
 
 @dataclass(frozen=True)
@@ -94,7 +145,15 @@ class PgTaskResultStore:
         ttl_seconds: Optional[int] = None,
     ) -> None:
         ttl = _normal_ttl(ttl_seconds) if ttl_seconds is not None else self._ttl_seconds
-        payload_json = json.dumps(payload, separators=(",", ":")) if payload is not None else None
+        payload_json = (
+            json.dumps(
+                _json_safe_payload(payload),
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+            if payload is not None
+            else None
+        )
         # Scrittura via pg_connection.execute (non unit_of_work diretto): e'
         # il path che i task usano a runtime, e l'autouse della lane
         # (_stub_pg_connection_execute) lo no-oppa nei unit test → niente
@@ -203,7 +262,9 @@ class InMemoryTaskResultStore:
                 task_id=task_id,
                 state=state,
                 name=resolved_name,
-                payload=dict(payload) if payload is not None else None,
+                payload=(
+                    _json_safe_payload(payload) if payload is not None else None
+                ),
             )
 
     def get(self, task_id: str) -> Optional[TaskResultRecord]:

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import inspect
 import json
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -99,6 +100,20 @@ def test_in_memory_payload_is_copied_not_aliased():
     assert record.payload == {"progress": 1}
 
 
+def test_in_memory_payload_is_json_safe_for_decimal_values():
+    store = InMemoryTaskResultStore()
+    store.put(
+        "t",
+        state="SUCCESS",
+        payload={"rows": [{"amount": Decimal("42.5000")}]},
+    )
+
+    record = store.get("t")
+
+    assert record is not None
+    assert record.payload == {"rows": [{"amount": "42.5"}]}
+
+
 # Forma SQL del backend PostgreSQL (source-bound)
 
 
@@ -111,6 +126,27 @@ def test_pg_put_is_upsert_on_task_id_with_ttl_expiry():
     assert "interval '1 second'" in src
     # name preservato sugli update parziali (progress senza nome).
     assert "COALESCE(EXCLUDED.name, task_results.name)" in src
+
+
+def test_pg_put_serializes_decimal_payload_before_jsonb_write(monkeypatch):
+    import app.core.orchestrator.task_result_store as module
+
+    captured = {}
+
+    def fake_execute(_sql, params):
+        captured["payload_json"] = params[3]
+
+    monkeypatch.setattr(module.pg_connection, "execute", fake_execute)
+
+    PgTaskResultStore().put(
+        "task-preview",
+        state="SUCCESS",
+        payload={"rows": [{"amount": Decimal("42.5000")}]},
+    )
+
+    assert json.loads(captured["payload_json"]) == {
+        "rows": [{"amount": "42.5"}],
+    }
 
 
 def test_pg_get_filters_out_expired_rows():

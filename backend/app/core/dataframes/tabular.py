@@ -296,6 +296,9 @@ def sanitize_for_json(rows: JsonRows) -> JsonRows:
         if isinstance(value, (pd.Timestamp, np.datetime64)):
             return str(value)
 
+        if isinstance(value, Decimal):
+            return _compact_decimal(value)
+
         if isinstance(value, bytes):
             try:
                 return value.decode("utf-8")
