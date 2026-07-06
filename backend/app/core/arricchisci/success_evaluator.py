@@ -40,7 +40,7 @@ def evaluate_success(data: Any, config: Mapping[str, Any] | None) -> SuccessEval
     error_path = cfg.get("error_path")
     if error_path:
         error_value = extract_json_value(data, str(error_path))
-        if error_value:
+        if error_value is not None and error_value != "":
             return SuccessEvaluation(False, _format_error_value(error_value))
 
     success_when = cfg.get("success_when")
@@ -81,6 +81,6 @@ def _format_error_value(error_value: Any) -> str:
     if isinstance(error_value, Mapping):
         for key in ("detail", "error", "message"):
             value = error_value.get(key)
-            if value:
+            if value is not None and value != "":
                 return str(value)
     return str(error_value)

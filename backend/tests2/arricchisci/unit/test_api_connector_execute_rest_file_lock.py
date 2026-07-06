@@ -4,6 +4,7 @@ Lock tests per ApiConnectionService._execute_rest_file.
 Scopo: congelare il contratto osservabile di `_execute_rest_file` prima
 """
 
+import json
 from contextlib import ExitStack
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -61,7 +62,14 @@ def _mock_http_response(status_code=200, body_chunks=None, json_body=None, text=
     else:
         resp.json.side_effect = ValueError("not json")
 
-    chunks = body_chunks if body_chunks is not None else [b""]
+    if body_chunks is not None:
+        chunks = body_chunks
+    elif json_body is not None:
+        chunks = [json.dumps(json_body).encode("utf-8")]
+    elif text:
+        chunks = [text.encode("utf-8")]
+    else:
+        chunks = [b""]
     resp.iter_content.return_value = iter(chunks)
     resp.close = MagicMock()
     return resp

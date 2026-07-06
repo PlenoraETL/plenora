@@ -344,7 +344,20 @@ class EnrichmentBatchModeMixin:
                 # Successo
                 if response.status_code == 200:
                     if data is None:
-                        data = response.json()
+                        try:
+                            data = response.json()
+                        except (ValueError, requests.exceptions.JSONDecodeError) as e:
+                            return None, RowError(
+                                row_index=batch_indices[0],
+                                status=RowStatus.ERROR,
+                                error_message=(
+                                    f"Risposta HTTP 200 non e' JSON valido: "
+                                    f"{type(e).__name__}"
+                                ),
+                                error_type="invalid_json_response",
+                                http_status=200,
+                                retry_count=attempt,
+                            )
                     evaluation = evaluate_success(data, success_config)
                     if not evaluation.ok:
                         return None, RowError(
@@ -425,6 +438,14 @@ class EnrichmentBatchModeMixin:
                     error_message=str(e),
                     error_type="request_error",
                     retry_count=attempt
+                )
+            except (ValueError, KeyError, TypeError) as e:
+                return None, RowError(
+                    row_index=batch_indices[0],
+                    status=RowStatus.ERROR,
+                    error_message=str(e),
+                    error_type="response_processing_error",
+                    retry_count=attempt,
                 )
 
             # Exponential backoff

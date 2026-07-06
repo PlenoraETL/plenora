@@ -14,6 +14,9 @@ configurato via `EnrichmentOptions.max_retry_after_seconds` (default 300s).
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
+
 import pytest
 
 from app.core.arricchisci.retry_policy import (
@@ -50,6 +53,7 @@ class TestClampRetryAfter:
         (None, 30, 30),  # fallback 60 ma cap 30 → 30
         # Whitespace tollerato
         (" 42 ", 300, 42),
+        ("Wed, 21 Oct 2015 07:28:00 GMT", 300, 0),
         # Negativo (server bug) → 0
         ("-10", 300, 0),
     ])
@@ -59,7 +63,6 @@ class TestClampRetryAfter:
     @pytest.mark.parametrize("malformed_header", [
         "",                # vuoto
         "abc",             # non-numerico
-        "Wed, 21 Oct 2015 07:28:00 GMT",  # HTTP-date (non supportato, degrada a fallback)
         "1.5",             # float (non int)
         "not-a-number",
     ])
@@ -78,6 +81,14 @@ class TestClampRetryAfter:
         """time.sleep richiede numero, ritornare int e' contratto."""
         result = clamp_retry_after("42", max_seconds=300)
         assert isinstance(result, int)
+
+    def test_http_date_future_is_clamped(self):
+        retry_at = datetime.now(timezone.utc) + timedelta(seconds=120)
+        raw_header = format_datetime(retry_at, usegmt=True)
+
+        result = clamp_retry_after(raw_header, max_seconds=60)
+
+        assert result == 60
 
 
 class TestEnrichmentOptionsDefault:

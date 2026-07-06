@@ -457,16 +457,16 @@ class ApiConnectionManagementMixin:
         if not url:
             return {"success": False, "error": "URL non configurato"}
 
-        headers = self._prepare_headers(auth, custom_headers)
-
-        params = self._build_test_call_params(config, test_params)
-        url, params = self._substitute_url_path_params(url, params)
-
-        auth_err = self._inject_auth_query_params(auth, params)
-        if auth_err is not None:
-            return auth_err
-
         try:
+            headers = self._prepare_headers(auth, custom_headers)
+
+            params = self._build_test_call_params(config, test_params)
+            url, params = self._substitute_url_path_params(url, params)
+
+            auth_err = self._inject_auth_query_params(auth, params)
+            if auth_err is not None:
+                return auth_err
+
             request_spec = RequestSpec(
                 url=url,
                 method=method,

@@ -93,6 +93,15 @@ class TestTestApiConnectionValidation:
         assert result["success"] is False
         assert "URL non configurato" in result["error"]
 
+    def test_prepare_headers_value_error_returns_structured_error(self, tac_env):
+        tac_env.prep_headers.side_effect = ValueError("auth malformata")
+        cfg = {"endpoint": {"url": "https://api.test/q", "method": "GET"}, "auth": {}}
+
+        result = tac_env.svc.test_api_connection(config=cfg)
+
+        assert result["success"] is False
+        assert result["error"] == "auth malformata"
+
 
 # Section 2: params merge + template processing
 

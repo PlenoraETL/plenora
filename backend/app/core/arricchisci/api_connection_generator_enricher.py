@@ -7,7 +7,9 @@ Mixin API GENERATOR + API ENRICHER + JSON PATH UTIL per
 from __future__ import annotations
 
 import re
+import time
 from typing import Any, Optional
+from urllib.parse import urljoin
 
 import requests
 
@@ -60,7 +62,13 @@ class ApiConnectionGeneratorEnricherMixin:
     # '' (no-pag), 'offset', 'cursor', 'link', 'page-number'.
 
     def _paginate_generator_results(
-        self, *, call_fn, pagination: JsonObject, base_params: JsonObject
+        self,
+        *,
+        call_fn,
+        pagination: JsonObject,
+        base_params: JsonObject,
+        base_url: str | None = None,
+        options: JsonObject | None = None,
     ) -> JsonRows:
         """Esegue la paginazione del generator dispatchando su `pagination['type']`.
 
@@ -84,6 +92,34 @@ class ApiConnectionGeneratorEnricherMixin:
             logger.info(f"Generator completato: {len(rows)} righe (no paginazione)")
             return rows or []
 
+        retry_cfg = {**dict(options or {}), **dict(pagination or {})}
+        raw_page_max_retries = retry_cfg.get(
+            "retry_max",
+            retry_cfg.get("max_retries", 3),
+        )
+        if raw_page_max_retries in (None, ""):
+            raw_page_max_retries = 3
+        page_max_retries = max(
+            0,
+            int(raw_page_max_retries),
+        )
+        page_retry_backoff = float(retry_cfg.get("retry_backoff_factor", 0) or 0)
+
+        def _call_page(call_params, call_url=None):
+            for attempt in range(page_max_retries + 1):
+                try:
+                    return call_fn(call_params, call_url=call_url)
+                except (ValueError, TimeoutError, requests.RequestException) as exc:
+                    if attempt >= page_max_retries:
+                        raise
+                    logger.warning(
+                        "Generator pagination retry "
+                        f"{attempt + 1}/{page_max_retries} dopo "
+                        f"{type(exc).__name__}"
+                    )
+                    if page_retry_backoff > 0:
+                        time.sleep(page_retry_backoff ** attempt)
+
         page_size = int(pagination.get('page_size', 100))
         max_rows = int(pagination.get('max_rows', 10000))
         all_rows: JsonRows = []
@@ -101,7 +137,7 @@ class ApiConnectionGeneratorEnricherMixin:
                     offset_param: start + page_num * page_size,
                     limit_param: page_size,
                 }
-                rows, _, _ = call_fn(call_params)
+                rows, _, _ = _call_page(call_params)
                 if not rows:
                     break
                 all_rows.extend(rows)
@@ -122,9 +158,9 @@ class ApiConnectionGeneratorEnricherMixin:
 
             for page_num in range(MAX_PAGES):
                 call_params = {**base_params}
-                if cursor_value:
+                if cursor_value is not None and cursor_value != "":
                     call_params[cursor_param] = cursor_value
-                rows, data, _ = call_fn(call_params)
+                rows, data, _ = _call_page(call_params)
                 if not rows:
                     break
                 all_rows.extend(rows)
@@ -133,7 +169,7 @@ class ApiConnectionGeneratorEnricherMixin:
                     f"(tot {len(all_rows)})"
                 )
                 cursor_value = self._extract_json_value(data, cursor_path)
-                if not cursor_value:
+                if cursor_value is None or cursor_value == "":
                     break
                 if len(all_rows) >= max_rows:
                     all_rows = all_rows[:max_rows]
@@ -145,7 +181,8 @@ class ApiConnectionGeneratorEnricherMixin:
             link_base_params = base_params  # mutiamo la copy locale
 
             for page_num in range(MAX_PAGES):
-                rows, data, resp = call_fn(link_base_params, call_url=next_url)
+                current_request_url = next_url or base_url
+                rows, data, resp = _call_page(link_base_params, call_url=next_url)
                 if not rows:
                     break
                 all_rows.extend(rows)
@@ -160,6 +197,20 @@ class ApiConnectionGeneratorEnricherMixin:
                     next_url = match.group(1) if match else None
                 if not next_url:
                     break
+                raw_response_url = getattr(
+                    getattr(resp, "raw_response", None),
+                    "url",
+                    None,
+                )
+                if not isinstance(raw_response_url, str):
+                    raw_response_url = None
+                current_page_url = (
+                    raw_response_url
+                    or current_request_url
+                    or base_url
+                    or ""
+                )
+                next_url = urljoin(current_page_url, str(next_url))
                 if len(all_rows) >= max_rows:
                     all_rows = all_rows[:max_rows]
                     break
@@ -180,7 +231,7 @@ class ApiConnectionGeneratorEnricherMixin:
                     page_param: start + page_num,
                     page_size_param: page_size,
                 }
-                rows, _, _ = call_fn(call_params)
+                rows, _, _ = _call_page(call_params)
                 if not rows:
                     break
                 all_rows.extend(rows)
@@ -199,7 +250,7 @@ class ApiConnectionGeneratorEnricherMixin:
                 f"Tipo paginazione sconosciuto: '{pagination_type}', "
                 f"eseguo singola chiamata"
             )
-            rows, _, _ = call_fn(base_params)
+            rows, _, _ = _call_page(base_params)
             all_rows = rows or []
 
         logger.info(
@@ -439,6 +490,8 @@ class ApiConnectionGeneratorEnricherMixin:
             call_fn=_call_and_parse,
             pagination=pagination,
             base_params=base_params,
+            base_url=url,
+            options=options,
         )
         if not all_rows and output_mapping:
             columns = []

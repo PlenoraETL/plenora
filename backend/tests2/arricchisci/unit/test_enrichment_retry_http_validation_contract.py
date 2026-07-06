@@ -354,6 +354,33 @@ def test_per_row_application_error_path_returns_row_error(monkeypatch):
     assert err.error_message == "quota exceeded"
 
 
+def test_per_row_output_extraction_error_returns_row_error(monkeypatch):
+    class _BadOutputHost(_Host):
+        def _extract_output(self, data: Any) -> Any:
+            raise KeyError("missing")
+
+    host = _BadOutputHost(options=EnrichmentOptions(max_retries=0))
+
+    monkeypatch.setattr(retry_mod, "validate_external_url", lambda _url: None)
+    monkeypatch.setattr(
+        retry_mod,
+        "resolve_tls_verify",
+        lambda enabled, *, context: enabled,
+    )
+    monkeypatch.setattr(
+        retry_mod,
+        "execute_http_request",
+        lambda _spec: _Response(200, {"ok": True}),
+    )
+
+    result, err = host._call_api_with_retry({"q": "abc"}, row_index=4)
+
+    assert result is None
+    assert err is not None
+    assert err.error_type == "response_processing_error"
+    assert err.retry_count == 0
+
+
 def test_per_row_validation_error_short_circuits_before_http(monkeypatch):
     host = _Host(options=EnrichmentOptions(max_retries=3))
 

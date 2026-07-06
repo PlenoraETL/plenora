@@ -99,7 +99,7 @@ class HttpExecutor:
         return NormalizedResponse(
             status_code=response.status_code,
             headers=CaseInsensitiveDict(response.headers),
-            text=response.text or "",
+            text="" if spec.stream else (response.text or ""),
             elapsed_ms=(time.time() - started) * 1000,
             raw_response=response,
         )

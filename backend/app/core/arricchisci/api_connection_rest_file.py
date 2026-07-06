@@ -6,11 +6,12 @@ Keeps API enrichment behavior isolated from orchestration callers.
 
 from __future__ import annotations
 
+import io
+import json
 import re
 import time
 import time as _time
 
-import io
 from pathlib import Path
 from typing import Optional
 
@@ -118,20 +119,60 @@ class ApiConnectionRestFileMixin:
 
         Prova prima JSON (preferendo `detail` → `error` → `message` →
         l'intero dict se nessuno di questi e' presente). Se il body non
-        e' JSON, fallback a `text[:500]`.
+        e' JSON, fallback a un'anteprima limitata del body.
         """
+        text = getattr(response, "text", "") or ""
+        if text:
+            try:
+                err_body = response.json()
+                return ApiConnectionRestFileMixin._format_http_error_body(err_body)
+            except Exception:
+                return text[:500]
+
+        preview = ApiConnectionRestFileMixin._read_http_error_preview(response)
+        if not preview:
+            return ''
         try:
-            err_body = response.json()
-            if isinstance(err_body, dict):
-                return (
-                    err_body.get('detail')
-                    or err_body.get('error')
-                    or err_body.get('message')
-                    or err_body
-                )
-            return err_body
+            return ApiConnectionRestFileMixin._format_http_error_body(
+                json.loads(preview)
+            )
         except Exception:
-            return response.text[:500] if response.text else ''
+            return preview
+
+    @staticmethod
+    def _format_http_error_body(err_body):
+        if isinstance(err_body, dict):
+            return (
+                err_body.get('detail')
+                or err_body.get('error')
+                or err_body.get('message')
+                or err_body
+            )
+        return err_body
+
+    @staticmethod
+    def _read_http_error_preview(response, limit: int = 500) -> str:
+        raw_response = getattr(response, "raw_response", response)
+        chunks = bytearray()
+        try:
+            for chunk in raw_response.iter_content(chunk_size=min(65536, limit)):
+                if not chunk:
+                    continue
+                remaining = limit - len(chunks)
+                chunks.extend(chunk[:remaining])
+                if len(chunks) >= limit:
+                    break
+        except Exception:
+            return ''
+        finally:
+            try:
+                raw_response.close()
+            except Exception:
+                pass
+        encoding = getattr(raw_response, "encoding", None)
+        if not isinstance(encoding, str):
+            encoding = "utf-8"
+        return bytes(chunks).decode(encoding, errors="replace")
 
     @staticmethod
     def _download_binary_response_to_bytes(

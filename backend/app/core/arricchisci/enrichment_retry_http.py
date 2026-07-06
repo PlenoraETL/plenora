@@ -314,6 +314,14 @@ class EnrichmentRetryHttpMixin:
                     error_type="request_error",
                     retry_count=attempt
                 )
+            except (ValueError, KeyError, TypeError) as e:
+                return None, RowError(
+                    row_index=row_index,
+                    status=RowStatus.ERROR,
+                    error_message=str(e),
+                    error_type="response_processing_error",
+                    retry_count=attempt,
+                )
 
             # Exponential backoff tra retry
             if attempt < self.options.max_retries:

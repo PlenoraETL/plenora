@@ -70,6 +70,16 @@ def test_parse_csv_response_text_supports_custom_delimiter():
     assert rows == [{"city": "Roma", "pop": "2873000"}]
 
 
+def test_parse_csv_response_text_rejects_duplicate_headers():
+    with pytest.raises(ValueError, match="header duplicati"):
+        parse_csv_response_text("city,city\nRoma,Lazio\n")
+
+
+def test_parse_csv_response_text_rejects_extra_columns():
+    with pytest.raises(ValueError, match="colonne extra"):
+        parse_csv_response_text("city\nRoma,extra\n")
+
+
 def test_response_format_from_config_reads_response_block():
     assert response_format_from_config({"response": {"format": "text/csv"}}) == "csv"
 
@@ -100,6 +110,17 @@ def test_parse_xml_response_text_strips_namespaces():
     )
 
     assert data == {"root": {"value": {"@unit": "m", "#text": "12"}}}
+
+
+def test_parse_xml_response_text_rejects_entities():
+    with pytest.raises(ValueError, match="XML non sicura"):
+        parse_xml_response_text(
+            """<!DOCTYPE lolz [
+            <!ENTITY lol "lol">
+            ]>
+            <root>&lol;</root>
+            """
+        )
 
 
 def test_response_format_from_config_reads_xml_response_block():

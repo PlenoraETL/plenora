@@ -648,6 +648,26 @@ class TestCallBatchApi:
         assert err.error_type == "request_error"
         assert "no route" in err.error_message
 
+    def test_http_200_invalid_json_is_not_retried(self, monkeypatch):
+        import requests
+
+        class _BadJsonResponse(_FakeResponse):
+            def json(self):
+                raise requests.exceptions.JSONDecodeError("bad", "not-json", 0)
+
+        host, session = _make_host(
+            monkeypatch,
+            responses=[_BadJsonResponse(200)],
+            options=EnrichmentOptions(max_retries=2),
+        )
+
+        results, err = host._call_batch_api([{"q": "a"}], [0])
+
+        assert results is None
+        assert err.error_type == "invalid_json_response"
+        assert err.retry_count == 0
+        assert len(session.post_calls) == 1
+
     def test_response_time_recorded_on_http_call(self, monkeypatch):
         host, _ = _make_host(
             monkeypatch,

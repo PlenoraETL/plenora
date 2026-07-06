@@ -4,8 +4,11 @@ import csv
 import io
 import json
 import re
-import xml.etree.ElementTree as ET
 from typing import Any, List, Mapping
+from xml.etree.ElementTree import Element, ParseError
+
+from defusedxml import ElementTree as DefusedElementTree
+from defusedxml.common import DefusedXmlException
 
 from app.core.arricchisci.types import JsonObject, JsonRows
 from app.utils.logger import get_logger
@@ -68,9 +71,13 @@ def parse_csv_response_text(
         return []
     if any(field in (None, "") for field in reader.fieldnames):
         raise ValueError("Risposta CSV senza header valido")
+    if len(set(reader.fieldnames)) != len(reader.fieldnames):
+        raise ValueError("Risposta CSV con header duplicati")
 
     rows: JsonRows = []
     for row in reader:
+        if None in row:
+            raise ValueError("Risposta CSV con colonne extra rispetto all'header")
         rows.append({key: value for key, value in row.items() if key is not None})
     return rows
 
@@ -81,13 +88,15 @@ def parse_xml_response_text(text: str) -> JsonObject:
     if not body:
         return {}
     try:
-        root = ET.fromstring(body)
-    except ET.ParseError as exc:
+        root = DefusedElementTree.fromstring(body)
+    except DefusedXmlException as exc:
+        raise ValueError(f"Risposta XML non sicura: {exc}") from exc
+    except ParseError as exc:
         raise ValueError(f"Risposta XML non valida: {exc}") from exc
     return {_strip_xml_namespace(root.tag): _xml_element_to_value(root)}
 
 
-def _xml_element_to_value(element: ET.Element) -> Any:
+def _xml_element_to_value(element: Element) -> Any:
     children = list(element)
     attributes = {
         f"@{_strip_xml_namespace(key)}": value

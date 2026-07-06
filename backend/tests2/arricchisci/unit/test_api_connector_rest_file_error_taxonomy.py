@@ -36,6 +36,34 @@ def service(monkeypatch):
     return svc
 
 
+def test_parse_http_error_body_reads_bounded_stream_preview(service):
+    class _RawResponse:
+        text = ""
+        encoding = "utf-8"
+
+        def __init__(self):
+            self.closed = False
+
+        def iter_content(self, chunk_size=1):
+            yield b"x" * 600
+
+        def close(self):
+            self.closed = True
+
+    class _NormalizedStreamResponse:
+        text = ""
+
+        def __init__(self):
+            self.raw_response = _RawResponse()
+
+    response = _NormalizedStreamResponse()
+
+    message = service._parse_http_error_body(response)
+
+    assert message == "x" * 500
+    assert response.raw_response.closed is True
+
+
 @pytest.fixture
 def ctx_default() -> ArricchisciExecutionContext:
     """BE-GO-READY-TRANSFORMATION-ENGINE-022: typed execution
