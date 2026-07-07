@@ -163,3 +163,8 @@ def test_worker_rss_max_bytes_in_settings_defaults():
     assert Settings.DEFAULTS["WORKER_RSS_MAX_BYTES"] > 0
     assert Settings.DEFAULTS["WORKER_MEMORY_CLEANUP_ENABLED"] is True
     assert Settings.DEFAULTS["WORKER_MEMORY_MALLOC_TRIM_ENABLED"] is True
+    assert Settings.DEFAULTS["WORKER_MEMORY_RECYCLE_ENABLED"] is True
+    assert (
+        Settings.DEFAULTS["WORKER_MEMORY_RECYCLE_RSS_BYTES"]
+        == Settings.DEFAULTS["WORKER_RSS_MAX_BYTES"]
+    )

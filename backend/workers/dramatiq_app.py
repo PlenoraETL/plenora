@@ -10,7 +10,9 @@ Broker: ``DRAMATIQ_BROKER_URL`` (default RabbitMQ del compose).
 
 from __future__ import annotations
 
+import logging
 import os
+import threading
 from types import SimpleNamespace
 
 import dramatiq
@@ -42,6 +44,9 @@ _REQUEST_ID_OPTION = "request_id"
 # Nessun path nell'URL = vhost di default "/" (un trailing "//" verrebbe
 # interpretato da pika come vhost vuoto -> 530 NOT_ALLOWED).
 _DEFAULT_BROKER_URL = "amqp://guest:guest@rabbitmq:5672"
+_RECYCLE_LOCK = threading.Lock()
+_ACTIVE_MESSAGES = 0
+_RECYCLE_REQUESTED = False
 
 
 def broker_url() -> str:
@@ -74,6 +79,109 @@ class _TaskResultMiddleware(Middleware):
         finalize_from_celery(
             message.message_id, status, result, einfo, name=message.actor_name
         )
+
+
+def _worker_memory_recycle_cap_bytes() -> int:
+    """RSS cap above which a worker process should recycle post-task."""
+    raw_cap = settings.get(
+        "WORKER_MEMORY_RECYCLE_RSS_BYTES",
+        settings.get("WORKER_RSS_MAX_BYTES", 0),
+    )
+    try:
+        return int(raw_cap or 0)
+    except (TypeError, ValueError):
+        logger.warning(
+            "[MEMORY] invalid WORKER_MEMORY_RECYCLE_RSS_BYTES=%r; "
+            "worker recycle disabled",
+            raw_cap,
+        )
+        return 0
+
+
+class _WorkerMemoryRecycleMiddleware(Middleware):
+    """Recycle worker process if post-task cleanup leaves RSS above cap.
+
+    Cleanup can release Python objects yet leave the long-lived process RSS
+    above `WORKER_RSS_MAX_BYTES` because native libraries/allocators retain
+    memory. In that state the next pipeline is rejected by the RSS guard
+    before doing useful work, so the only reliable recovery is process recycle.
+    """
+
+    def before_process_message(self, broker: object, message: object) -> None:
+        global _ACTIVE_MESSAGES
+        with _RECYCLE_LOCK:
+            _ACTIVE_MESSAGES += 1
+
+    def after_ack(self, broker: object, message: object) -> None:
+        self._complete_message_and_recycle_if_needed(message)
+
+    def after_nack(self, broker: object, message: object) -> None:
+        self._complete_message_and_recycle_if_needed(message)
+
+    def _complete_message_and_recycle_if_needed(self, message: object) -> None:
+        global _ACTIVE_MESSAGES
+        with _RECYCLE_LOCK:
+            if _ACTIVE_MESSAGES > 0:
+                _ACTIVE_MESSAGES -= 1
+        self._recycle_if_over_cap(message)
+
+    def _recycle_if_over_cap(
+        self,
+        message: object,
+    ) -> None:
+        global _RECYCLE_REQUESTED
+        if not settings.get("WORKER_MEMORY_RECYCLE_ENABLED", True):
+            return
+
+        cap_bytes = _worker_memory_recycle_cap_bytes()
+        if cap_bytes <= 0:
+            return
+
+        try:
+            from app.core.resources import memory_guard
+
+            rss = memory_guard.get_current_rss_bytes()
+        except Exception:
+            logger.warning("[MEMORY] worker recycle RSS sample failed", exc_info=True)
+            return
+
+        over_cap = rss is not None and rss > cap_bytes
+        if over_cap:
+            with _RECYCLE_LOCK:
+                _RECYCLE_REQUESTED = True
+        else:
+            with _RECYCLE_LOCK:
+                recycle_requested = _RECYCLE_REQUESTED
+            if not recycle_requested:
+                return
+
+        with _RECYCLE_LOCK:
+            active_messages = _ACTIVE_MESSAGES
+            recycle_requested = _RECYCLE_REQUESTED
+
+        if not recycle_requested:
+            return
+
+        if active_messages > 0:
+            logger.warning(
+                "[MEMORY] worker recycle requested after %s; waiting for "
+                "%s active message(s) before exit",
+                getattr(message, "actor_name", "unknown"),
+                active_messages,
+            )
+            return
+
+        reason = "rss-over-cap" if over_cap else "pending-recycle"
+        logger.warning(
+            "[MEMORY] worker recycle %s after %s; rss=%s cap=%s; "
+            "exiting process for supervisor restart",
+            reason,
+            getattr(message, "actor_name", "unknown"),
+            rss,
+            cap_bytes,
+        )
+        logging.shutdown()
+        os._exit(0)
 
 
 def _bootstrap_worker_process(*, force_reset: bool = False) -> None:
@@ -187,6 +295,9 @@ broker.add_middleware(CurrentMessage())
 # in ordine inverso) logga ancora con il request_id, e il reset avviene
 # per ultimo.
 broker.add_middleware(_RequestIdMiddleware())
+# Riciclo memoria post-task: usa after_ack/after_nack, quindi il messaggio e'
+# gia' stato confermato/rifiutato al broker prima dell'eventuale os._exit.
+broker.add_middleware(_WorkerMemoryRecycleMiddleware())
 # Finalize dell'esito su PG (rimpiazzo del result backend Redis): vale per
 # tutti gli actor, come after_return per i task Celery.
 broker.add_middleware(_TaskResultMiddleware())

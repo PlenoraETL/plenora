@@ -8,6 +8,9 @@ pilota cleanroom.ping e' registrato con il nome Celery storico.
 
 from __future__ import annotations
 
+import inspect
+from types import SimpleNamespace
+
 import pytest
 
 pytest.importorskip("dramatiq", reason="dramatiq non installato (Fase 1)")
@@ -289,6 +292,105 @@ def test_worker_memory_cleanup_helper_delegates_to_memory_guard(monkeypatch):
     dramatiq_app._cleanup_worker_memory_after_task("pipeline.execute")
 
     assert captured == {"run_gc": True, "run_malloc_trim": True}
+
+
+def test_worker_memory_recycle_exits_when_rss_remains_above_cap(monkeypatch):
+    from app.core.resources import memory_guard
+    from workers import dramatiq_app
+
+    def _settings_get(key, default=None):
+        values = {
+            "WORKER_MEMORY_RECYCLE_ENABLED": True,
+            "WORKER_MEMORY_RECYCLE_RSS_BYTES": 1_500,
+            "WORKER_RSS_MAX_BYTES": 1_500,
+        }
+        return values.get(key, default)
+
+    monkeypatch.setattr(dramatiq_app.settings, "get", _settings_get)
+    monkeypatch.setattr(memory_guard, "get_current_rss_bytes", lambda: 2_000)
+    monkeypatch.setattr(dramatiq_app.logging, "shutdown", lambda: None)
+    monkeypatch.setattr(dramatiq_app, "_ACTIVE_MESSAGES", 1)
+    monkeypatch.setattr(dramatiq_app, "_RECYCLE_REQUESTED", False)
+
+    def _exit(code):
+        raise SystemExit(code)
+
+    monkeypatch.setattr(dramatiq_app.os, "_exit", _exit)
+
+    middleware = dramatiq_app._WorkerMemoryRecycleMiddleware()
+    with pytest.raises(SystemExit) as exc_info:
+        middleware.after_ack(None, SimpleNamespace(actor_name="pipeline.preview"))
+
+    assert exc_info.value.code == 0
+
+
+def test_worker_memory_recycle_skips_when_rss_is_below_cap(monkeypatch):
+    from app.core.resources import memory_guard
+    from workers import dramatiq_app
+
+    monkeypatch.setattr(
+        dramatiq_app.settings,
+        "get",
+        lambda key, default=None: {
+            "WORKER_MEMORY_RECYCLE_ENABLED": True,
+            "WORKER_MEMORY_RECYCLE_RSS_BYTES": 1_500,
+        }.get(key, default),
+    )
+    monkeypatch.setattr(memory_guard, "get_current_rss_bytes", lambda: 1_000)
+    monkeypatch.setattr(dramatiq_app, "_ACTIVE_MESSAGES", 1)
+    monkeypatch.setattr(dramatiq_app, "_RECYCLE_REQUESTED", False)
+
+    exit_calls = []
+    monkeypatch.setattr(dramatiq_app.os, "_exit", exit_calls.append)
+
+    middleware = dramatiq_app._WorkerMemoryRecycleMiddleware()
+    middleware.after_ack(None, SimpleNamespace(actor_name="pipeline.preview"))
+
+    assert exit_calls == []
+
+
+def test_worker_memory_recycle_waits_for_other_active_messages(monkeypatch):
+    from app.core.resources import memory_guard
+    from workers import dramatiq_app
+
+    monkeypatch.setattr(
+        dramatiq_app.settings,
+        "get",
+        lambda key, default=None: {
+            "WORKER_MEMORY_RECYCLE_ENABLED": True,
+            "WORKER_MEMORY_RECYCLE_RSS_BYTES": 1_500,
+        }.get(key, default),
+    )
+    monkeypatch.setattr(memory_guard, "get_current_rss_bytes", lambda: 2_000)
+    monkeypatch.setattr(dramatiq_app.logging, "shutdown", lambda: None)
+    monkeypatch.setattr(dramatiq_app, "_ACTIVE_MESSAGES", 2)
+    monkeypatch.setattr(dramatiq_app, "_RECYCLE_REQUESTED", False)
+
+    exit_calls = []
+    monkeypatch.setattr(dramatiq_app.os, "_exit", exit_calls.append)
+
+    middleware = dramatiq_app._WorkerMemoryRecycleMiddleware()
+    middleware.after_ack(None, SimpleNamespace(actor_name="pipeline.preview"))
+
+    assert exit_calls == []
+    assert dramatiq_app._ACTIVE_MESSAGES == 1
+    assert dramatiq_app._RECYCLE_REQUESTED is True
+
+    def _exit(code):
+        raise SystemExit(code)
+
+    monkeypatch.setattr(dramatiq_app.os, "_exit", _exit)
+    with pytest.raises(SystemExit):
+        middleware.after_ack(None, SimpleNamespace(actor_name="pipeline.execute"))
+
+
+def test_memory_recycle_middleware_runs_only_after_broker_disposition():
+    from workers import dramatiq_app
+
+    src = inspect.getsource(dramatiq_app._WorkerMemoryRecycleMiddleware)
+    assert "def after_ack" in src
+    assert "def after_nack" in src
+    assert "def after_process_message" not in src
 
 
 def test_real_task_bodies_are_plain_callables_for_shim_invocation():

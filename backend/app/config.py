@@ -256,6 +256,13 @@ class Settings:
         # successivo sul guard RSS pre-stage. Override via env.
         "WORKER_MEMORY_CLEANUP_ENABLED": True,
         "WORKER_MEMORY_MALLOC_TRIM_ENABLED": True,
+        # Se dopo cleanup il worker resta sopra soglia, ricicla il processo
+        # Dramatiq. Questo evita worker vivi ma inutilizzabili perche' il
+        # prossimo task fallirebbe subito su WORKER_RSS_MAX_BYTES. Default:
+        # stessa soglia del guard RSS; override via
+        # WORKER_MEMORY_RECYCLE_RSS_BYTES. Cap <= 0 disabilita il recycle.
+        "WORKER_MEMORY_RECYCLE_ENABLED": True,
+        "WORKER_MEMORY_RECYCLE_RSS_BYTES": 1_500_000_000,
         # massimo per il numero di righe di output di un cross-join
         # `op_cross_join` in `app.core.manipola.transforms.joins`
         # Il preflight stima `len(left) * len(right)` PRIMA di
