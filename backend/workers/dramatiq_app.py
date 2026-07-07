@@ -200,6 +200,46 @@ def current_message_id() -> str | None:
     return message.message_id if message is not None else None
 
 
+def _cleanup_worker_memory_after_task(name: str) -> None:
+    """Best-effort RSS cleanup after data-plane task bodies.
+
+    Pandas/pyarrow task bodies can release Python objects while the process
+    RSS remains high because allocator arenas are retained. This cleanup keeps
+    long-lived Dramatiq worker processes reusable between heavy tasks.
+    """
+    if not settings.get("WORKER_MEMORY_CLEANUP_ENABLED", True):
+        return
+
+    try:
+        from app.core.resources import memory_guard
+
+        stats = memory_guard.cleanup_worker_memory(
+            run_gc=True,
+            run_malloc_trim=bool(
+                settings.get("WORKER_MEMORY_MALLOC_TRIM_ENABLED", True)
+            ),
+        )
+        before = stats.get("before_rss")
+        after = stats.get("after_rss")
+        if isinstance(before, int) and isinstance(after, int):
+            freed = before - after
+            if freed > 0:
+                logger.info(
+                    "[MEMORY] worker cleanup after %s: rss %s -> %s bytes "
+                    "(freed=%s, gc=%s, malloc_trim=%s)",
+                    name,
+                    before,
+                    after,
+                    freed,
+                    stats.get("collected"),
+                    stats.get("malloc_trim"),
+                )
+    except Exception:
+        logger.warning(
+            "[MEMORY] worker cleanup after %s failed", name, exc_info=True
+        )
+
+
 def _invoke_task_body(task_fn: object, *, name: str, kwargs: dict) -> object:
     """Esegue il corpo di un task (funzione pura) con un self-shim Dramatiq.
 
@@ -212,7 +252,10 @@ def _invoke_task_body(task_fn: object, *, name: str, kwargs: dict) -> object:
     shim = SimpleNamespace(
         request=SimpleNamespace(id=current_message_id()), name=name
     )
-    return task_fn(shim, **kwargs)  # type: ignore[operator]
+    try:
+        return task_fn(shim, **kwargs)  # type: ignore[operator]
+    finally:
+        _cleanup_worker_memory_after_task(name)
 
 
 # Routing actor -> coda: stessa tabella di celery_app.task_routes (stessa

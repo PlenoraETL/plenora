@@ -191,6 +191,9 @@ def test_invoke_task_body_injects_message_id_as_self_request_id(monkeypatch):
     from workers import dramatiq_app
 
     monkeypatch.setattr(dramatiq_app, "current_message_id", lambda: "msg-123")
+    monkeypatch.setattr(
+        dramatiq_app, "_cleanup_worker_memory_after_task", lambda name: None
+    )
 
     captured = {}
 
@@ -211,6 +214,81 @@ def test_invoke_task_body_injects_message_id_as_self_request_id(monkeypatch):
         "name": "carica.execute",
         "kwargs": {"project_id": "p1"},
     }
+
+
+def test_invoke_task_body_runs_memory_cleanup_after_success(monkeypatch):
+    from workers import dramatiq_app
+
+    cleanup_calls = []
+    monkeypatch.setattr(dramatiq_app, "current_message_id", lambda: "msg-123")
+    monkeypatch.setattr(
+        dramatiq_app,
+        "_cleanup_worker_memory_after_task",
+        lambda name: cleanup_calls.append(name),
+    )
+
+    def _body(self, **kwargs):
+        return {"ok": True}
+
+    result = dramatiq_app._invoke_task_body(
+        _body, name="pipeline.execute", kwargs={"project_id": "p1"}
+    )
+
+    assert result == {"ok": True}
+    assert cleanup_calls == ["pipeline.execute"]
+
+
+def test_invoke_task_body_runs_memory_cleanup_after_exception(monkeypatch):
+    from workers import dramatiq_app
+
+    cleanup_calls = []
+    monkeypatch.setattr(dramatiq_app, "current_message_id", lambda: "msg-123")
+    monkeypatch.setattr(
+        dramatiq_app,
+        "_cleanup_worker_memory_after_task",
+        lambda name: cleanup_calls.append(name),
+    )
+
+    def _body(self, **kwargs):
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        dramatiq_app._invoke_task_body(
+            _body, name="pipeline.execute", kwargs={"project_id": "p1"}
+        )
+
+    assert cleanup_calls == ["pipeline.execute"]
+
+
+def test_worker_memory_cleanup_helper_delegates_to_memory_guard(monkeypatch):
+    from app.core.resources import memory_guard
+    from workers import dramatiq_app
+
+    captured = {}
+
+    monkeypatch.setattr(
+        dramatiq_app.settings,
+        "get",
+        lambda key, default=None: True,
+    )
+
+    def _cleanup_worker_memory(*, run_gc, run_malloc_trim):
+        captured["run_gc"] = run_gc
+        captured["run_malloc_trim"] = run_malloc_trim
+        return {
+            "before_rss": 2_000,
+            "after_rss": 1_000,
+            "collected": 3,
+            "malloc_trim": True,
+        }
+
+    monkeypatch.setattr(
+        memory_guard, "cleanup_worker_memory", _cleanup_worker_memory
+    )
+
+    dramatiq_app._cleanup_worker_memory_after_task("pipeline.execute")
+
+    assert captured == {"run_gc": True, "run_malloc_trim": True}
 
 
 def test_real_task_bodies_are_plain_callables_for_shim_invocation():

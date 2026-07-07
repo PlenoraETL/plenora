@@ -70,6 +70,56 @@ def test_check_worker_rss_skips_when_psutil_unavailable():
         check_worker_rss(cap_bytes=1, stage="pipeline_execute")
 
 
+def test_cleanup_worker_memory_runs_gc_and_malloc_trim_on_linux(monkeypatch):
+    """Post-task cleanup should collect Python cycles and trim glibc arenas."""
+    from app.core.resources import memory_guard
+
+    class _FakeLibc:
+        @staticmethod
+        def malloc_trim(value):
+            assert value == 0
+            return 1
+
+    monkeypatch.setattr(memory_guard.sys, "platform", "linux")
+    monkeypatch.setattr(memory_guard.gc, "collect", lambda: 7)
+    monkeypatch.setattr(memory_guard.ctypes, "CDLL", lambda name: _FakeLibc())
+
+    with patch(
+        "app.core.resources.memory_guard.get_current_rss_bytes",
+        side_effect=[2_000_000_000, 1_100_000_000],
+    ):
+        stats = memory_guard.cleanup_worker_memory()
+
+    assert stats == {
+        "before_rss": 2_000_000_000,
+        "after_rss": 1_100_000_000,
+        "collected": 7,
+        "malloc_trim": True,
+    }
+
+
+def test_cleanup_worker_memory_is_best_effort_when_malloc_trim_unavailable(monkeypatch):
+    """malloc_trim failures must not change task outcome."""
+    from app.core.resources import memory_guard
+
+    monkeypatch.setattr(memory_guard.sys, "platform", "linux")
+    monkeypatch.setattr(memory_guard.gc, "collect", lambda: 2)
+    monkeypatch.setattr(
+        memory_guard.ctypes,
+        "CDLL",
+        lambda name: (_ for _ in ()).throw(OSError("missing libc")),
+    )
+
+    with patch(
+        "app.core.resources.memory_guard.get_current_rss_bytes",
+        side_effect=[100, 90],
+    ):
+        stats = memory_guard.cleanup_worker_memory()
+
+    assert stats["collected"] == 2
+    assert stats["malloc_trim"] is False
+
+
 # 3. Envelope shape: 503 for RSS stages
 
 def test_rss_stage_maps_to_503_in_handler_source_bound():
@@ -111,3 +161,5 @@ def test_worker_rss_max_bytes_in_settings_defaults():
     assert "WORKER_RSS_MAX_BYTES" in Settings.DEFAULTS
     assert isinstance(Settings.DEFAULTS["WORKER_RSS_MAX_BYTES"], int)
     assert Settings.DEFAULTS["WORKER_RSS_MAX_BYTES"] > 0
+    assert Settings.DEFAULTS["WORKER_MEMORY_CLEANUP_ENABLED"] is True
+    assert Settings.DEFAULTS["WORKER_MEMORY_MALLOC_TRIM_ENABLED"] is True

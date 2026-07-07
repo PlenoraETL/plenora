@@ -249,6 +249,13 @@ class Settings:
         # Cap <= 0 disabilita il guard (escape hatch
         # Override via env `WORKER_RSS_MAX_BYTES`
         "WORKER_RSS_MAX_BYTES": 1_500_000_000,
+        # Cleanup best-effort dopo ogni task worker data-plane: libera cicli
+        # Python e, su Linux/glibc, prova a restituire arena libc all'OS con
+        # malloc_trim(0). Serve a evitare che task pandas/pyarrow pesanti
+        # lascino il processo worker gonfio e facciano fallire il task
+        # successivo sul guard RSS pre-stage. Override via env.
+        "WORKER_MEMORY_CLEANUP_ENABLED": True,
+        "WORKER_MEMORY_MALLOC_TRIM_ENABLED": True,
         # massimo per il numero di righe di output di un cross-join
         # `op_cross_join` in `app.core.manipola.transforms.joins`
         # Il preflight stima `len(left) * len(right)` PRIMA di
