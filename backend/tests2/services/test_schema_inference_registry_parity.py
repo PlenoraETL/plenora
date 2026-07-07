@@ -206,6 +206,7 @@ def test_registry_aliases_bind_to_expected_handlers():
 @pytest.mark.parametrize(
     ("op", "config", "expected"),
     [
+        ("concat_columns", {"columns": ["b"], "output_column": "full_name"}, [("a", "int", False), ("b", "str", False), ("full_name", "str", True)]),
         ("add_row_number", {}, [("a", "int", False), ("b", "str", False), ("row_number", "int", True)]),
         ("uuid_generator", {"output_column": "rec_id"}, [("a", "int", False), ("b", "str", False), ("rec_id", "str", True)]),
         ("string_length", {"column": "b"}, [("a", "int", False), ("b", "str", False), ("b_length", "int", True)]),

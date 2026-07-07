@@ -124,7 +124,7 @@ class TransformSchemaHandlers:
             "conditional": lambda i, c, n: self._formula_handlers._schema_conditional(i, c, n),
             "text_normalize": lambda i, c, n: self._schema_text_normalize(i, c, n),
             # passthrough espliciti
-            "concat_columns": pt,
+            "concat_columns": lambda i, c, n: self._schema_concat_columns(i, c, n),
             "pivot": lambda i, c, n: self._reshape_handlers._schema_pivot(i, c, n),
             "geo_envelope": pt,
             # spatial
@@ -410,6 +410,32 @@ class TransformSchemaHandlers:
                         is_calculated=True
                     ))
 
+        return result
+
+    def _schema_concat_columns(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """concat_columns: input + colonna stringa `output_column`.
+
+        Runtime: `op_concat_columns` preserva tutte le colonne input e scrive
+        la concatenazione in `output_column` (default `concatenated`). La
+        schema inference deve quindi esporre la nuova colonna ai nodi a valle.
+        """
+        if not input_schemas:
+            return []
+
+        result = self._copy_schema(input_schemas[0], node_id)
+        output_col = config.get("output_column") or "concatenated"
+        if output_col and output_col not in {c.name for c in result}:
+            result.append(self._column_schema_cls(
+                name=output_col,
+                type="str",
+                source_node=node_id,
+                is_calculated=True,
+            ))
         return result
 
 
