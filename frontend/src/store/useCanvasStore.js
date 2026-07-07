@@ -89,7 +89,8 @@ const useCanvasStore = create(
        * - Settato a true da: azioni utente (updateNodeData, deleteNode,
        *   toggleColumn, addCalculatedColumn, removeCalculatedColumn,
        *   updateColumnAlias) e da onNodesChange/onEdgesChange ma SOLO per
-       *   changes "rilevanti" (position/dimensions/add/remove, NON select).
+       *   changes "rilevanti" (position/add/remove/resize esplicito, NON
+       *   select ne' dimensioni misurate automaticamente).
        * - Settato a false da: markClean() (chiamato dopo load) e
        *   handleSaveQuiet dopo un save riuscito.
        *
@@ -250,7 +251,13 @@ const useCanvasStore = create(
         // Marca dirty solo per changes "rilevanti" (escludi select, che è
         // solo highlight UI e non modifica i dati salvabili).
         const relevant = changes.some(c =>
-          c.type === 'position' || c.type === 'dimensions' || c.type === 'add' || c.type === 'remove'
+          c.type === 'position'
+          || c.type === 'add'
+          || c.type === 'remove'
+          // React Flow emette `dimensions` anche per misure automatiche del DOM
+          // (es. preview inline post-run). Solo NodeResizer imposta updateStyle,
+          // cioe' una dimensione scelta dall'utente e quindi salvabile.
+          || (c.type === 'dimensions' && c.updateStyle === true)
         );
         set(
           state => ({

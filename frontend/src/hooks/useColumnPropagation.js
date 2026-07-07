@@ -133,8 +133,16 @@ export const useColumnPropagation = (setNodes) => {
         
         const leftCols = sortedEdges.length > 0 ? (outputColumnsMap.get(sortedEdges[0].source) || []) : [];
         const rightCols = sortedEdges.length > 1 ? (outputColumnsMap.get(sortedEdges[1].source) || []) : [];
-        const leftOn = resolveColumnName(leftCols, config.left_on_column_id, config.left_on);
-        const rightOn = resolveColumnName(rightCols, config.right_on_column_id, config.right_on);
+        const leftKeys = resolveColumnNameList(
+          leftCols,
+          config.left_keys_column_ids,
+          config.left_keys || (config.left_on ? [config.left_on] : [])
+        );
+        const rightKeys = resolveColumnNameList(
+          rightCols,
+          config.right_keys_column_ids,
+          config.right_keys || (config.right_on ? [config.right_on] : [])
+        );
         
         // inputColumns separati per mostrare nel nodo (con marker left/right)
         inputColumns = [
@@ -143,7 +151,7 @@ export const useColumnPropagation = (setNodes) => {
         ];
         
         // outputColumns con suffissi _L e _R
-        outputColumns = computeJoinOutput(leftCols, rightCols, leftOn, rightOn);
+        outputColumns = computeJoinOutput(leftCols, rightCols, leftKeys, rightKeys);
       } else {
         // Nodo normale - unisci tutte le colonne input
         incomingEdges.forEach(edge => {
@@ -556,11 +564,23 @@ function computeMultiJoinOutput(node, sourcesColumns) {
   }
   
   const config = node.data?.config || {};
-  const joinKeys = resolveColumnNameList(
-    sourcesColumns.flat(),
-    config.join_key_ids,
-    config.join_keys || []
-  );
+  const joinPairs = Array.isArray(config.join_pairs)
+    ? config.join_pairs.filter(pair => pair && pair.left && pair.right)
+    : [];
+  const pairMode = sourcesColumns.length === 2 && joinPairs.length > 0;
+  const leftKeys = pairMode
+    ? joinPairs.map(pair => pair.left)
+    : resolveColumnNameList(
+        sourcesColumns.flat(),
+        config.join_key_ids,
+        config.join_keys || []
+      );
+  const rightKeys = pairMode
+    ? joinPairs.map(pair => pair.right)
+    : leftKeys;
+  const joinKeys = leftKeys;
+  const leftKeySet = new Set(leftKeys);
+  const rightKeySet = new Set(rightKeys);
   
   // Risultato finale
   const result = [];
@@ -585,7 +605,8 @@ function computeMultiJoinOutput(node, sourcesColumns) {
     
     cols.forEach(col => {
       // Skip chiavi di join (già aggiunte)
-      if (joinKeys.includes(col.name)) {
+      const keySet = pairMode && sourceIdx === 1 ? rightKeySet : leftKeySet;
+      if (keySet.has(col.name)) {
         return;
       }
       
@@ -623,16 +644,20 @@ function computeMultiJoinOutput(node, sourcesColumns) {
  * 
  * @param {Array} leftCols - Colonne della tabella sinistra
  * @param {Array} rightCols - Colonne della tabella destra
- * @param {string} leftOn - Colonna chiave sinistra
- * @param {string} rightOn - Colonna chiave destra
+ * @param {string|string[]} leftOn - Colonne chiave sinistre
+ * @param {string|string[]} rightOn - Colonne chiave destre
  * @returns {Array} Colonne output dopo il join
  */
 function computeJoinOutput(leftCols, rightCols, leftOn, rightOn) {
+  const leftKeys = Array.isArray(leftOn) ? leftOn.filter(Boolean) : (leftOn ? [leftOn] : []);
+  const rightKeys = Array.isArray(rightOn) ? rightOn.filter(Boolean) : (rightOn ? [rightOn] : []);
+  const leftKeySet = new Set(leftKeys);
+  const rightKeySet = new Set(rightKeys);
   const result = [];
   
   // Aggiungi colonne LEFT con suffisso _L (tranne la chiave)
   leftCols.forEach(col => {
-    if (col.name === leftOn) {
+    if (leftKeySet.has(col.name)) {
       // La chiave di join mantiene il nome originale
       result.push({ ...col, name: col.name, type: col.type || 'str', source: 'left' });
     } else {
@@ -643,7 +668,7 @@ function computeJoinOutput(leftCols, rightCols, leftOn, rightOn) {
   
   // Aggiungi colonne RIGHT con suffisso _R (tranne la chiave)
   rightCols.forEach(col => {
-    if (col.name === rightOn) {
+    if (rightKeySet.has(col.name)) {
       // La chiave di join destra viene ignorata se diversa da leftOn (backend la droppa)
       // Se uguale a leftOn, è già stata aggiunta
       return;

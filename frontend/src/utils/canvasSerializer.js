@@ -86,21 +86,18 @@ const serializers = {
 
   multi_join: (node) => {
     const cfg = node.data?.config || {};
-    // Per 2 sorgenti la UI usa `join_pairs` (mapping
-    // `{left, right}` con possibili nomi diversi). Per >2 usa
-    // `join_keys` (colonne comuni toggled). Il backend MANIPOLA
-    // (`_esegui_multi_join`) legge SOLO `join_keys` — quando i
-    // pair hanno `left == right` ricaviamo la chiave da li',
-    // cosi' il join e' deterministico invece di cadere sul
-    // fallback "trova colonne comuni" (silent e fragile).
-    //
-    // Per i pair `left != right` (es. cust.city_id ↔ city.id)
-    // serve un refactor backend per usare pandas `left_on/
-    // right_on`; per ora ignoriamo il pair e l'utente vedra'
-    // join_keys=[] (fallback) — TODO doc esplicito nel modal.
-    const pairs = Array.isArray(cfg.join_pairs) ? cfg.join_pairs : [];
+    // Per 2 sorgenti la UI usa `join_pairs` (`{left, right}`),
+    // anche con nomi diversi. Per >2 usa `join_keys` comuni.
+    // Manteniamo `join_keys` per compatibilita' e inviamo anche
+    // `left_keys/right_keys` al runtime quando sono presenti coppie.
+    const rawPairs = Array.isArray(cfg.join_pairs) ? cfg.join_pairs : [];
+    const pairs = rawPairs
+      .filter(p => p && p.left && p.right)
+      .map(p => ({ left: p.left, right: p.right }));
+    const leftKeys = pairs.map(p => p.left);
+    const rightKeys = pairs.map(p => p.right);
     const derivedKeys = pairs
-      .filter(p => p && p.left && p.right && p.left === p.right)
+      .filter(p => p.left === p.right)
       .map(p => p.left);
     const explicitKeys = cfg.join_keys ?? node.data?.join_keys ?? [];
     const explicitKeyIds = cfg.join_key_ids ?? node.data?.join_key_ids ?? [];
@@ -111,6 +108,9 @@ const serializers = {
       id: node.id, type: 'multi_join', position: node.position,
       join_keys:       mergedKeys,
       join_key_ids:    explicitKeyIds,
+      join_pairs:      pairs,
+      left_keys:       leftKeys,
+      right_keys:      rightKeys,
       multi_join_type: cfg.join_type ?? node.data?.multi_join_type ?? 'inner',
     };
   },

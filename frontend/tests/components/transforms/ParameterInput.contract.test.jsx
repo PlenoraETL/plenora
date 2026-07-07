@@ -238,7 +238,7 @@ describe('ParameterInput — contract', () => {
     expect(screen.getByText('a')).toBeInTheDocument();
     // Bottone × accessibile come role button con name '×'.
     await user.click(screen.getByRole('button', { name: '×' }));
-    expect(onChange).toHaveBeenLastCalledWith([]);
+    expect(onChange).toHaveBeenLastCalledWith([], []);
   });
 
 

@@ -309,6 +309,9 @@ class Node(BaseModel):
 
     join_keys: Optional[List[str]] = []
     join_key_ids: Optional[List[str]] = []
+    join_pairs: Optional[List[Dict[str, str]]] = []
+    left_keys: Optional[List[str]] = []
+    right_keys: Optional[List[str]] = []
     multi_join_type: Optional[MultiJoinTypeLiteral] = "inner"
 
     mode: Optional[Literal["source", "carica"]] = None

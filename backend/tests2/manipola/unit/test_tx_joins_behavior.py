@@ -100,6 +100,64 @@ def test_op_join_different_key_names_drops_right_key_column():
     assert "rv_R" in result.columns
 
 
+def test_op_join_multiple_same_name_keys():
+    left = pd.DataFrame({
+        "country": ["IT", "IT", "FR"],
+        "id": [1, 1, 1],
+        "lv": ["a", "b", "c"],
+    })
+    right = pd.DataFrame({
+        "country": ["IT", "FR"],
+        "id": [1, 1],
+        "rv": ["x", "y"],
+    })
+
+    result = op_join(
+        [left, right],
+        left_keys=["country", "id"],
+        right_keys=["country", "id"],
+        how="inner",
+    )
+
+    assert len(result) == 3
+    assert {"country", "id", "lv_L", "rv_R"}.issubset(result.columns)
+    assert sorted(result["rv_R"].tolist()) == ["x", "x", "y"]
+
+
+def test_op_join_multiple_different_key_names_drops_right_keys():
+    left = pd.DataFrame({
+        "country": ["IT", "IT", "FR"],
+        "customer_id": [1, 2, 1],
+        "lv": ["a", "b", "c"],
+    })
+    right = pd.DataFrame({
+        "country_code": ["IT", "FR"],
+        "cust_id": [1, 1],
+        "rv": ["x", "y"],
+    })
+
+    result = op_join(
+        [left, right],
+        left_keys=["country", "customer_id"],
+        right_keys=["country_code", "cust_id"],
+        how="inner",
+    )
+
+    assert len(result) == 2
+    assert {"country", "customer_id", "lv_L", "rv_R"}.issubset(result.columns)
+    assert "country_code" not in result.columns
+    assert "cust_id" not in result.columns
+    assert sorted(result["rv_R"].tolist()) == ["x", "y"]
+
+
+def test_op_join_multiple_key_count_mismatch_raises():
+    left = pd.DataFrame({"a": [1], "b": [2]})
+    right = pd.DataFrame({"x": [1]})
+
+    with pytest.raises(ValueError, match="numero di chiavi"):
+        op_join([left, right], left_keys=["a", "b"], right_keys=["x"])
+
+
 # ---------------------------------------------------------------------------
 # op_join — input degeneri
 # ---------------------------------------------------------------------------

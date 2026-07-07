@@ -9,23 +9,23 @@
       "name": "Join",
       "category": "base",
       "icon": "🔗",
-      "description": "Unisce due tabelle su una chiave comune",
+      "description": "Unisce due tabelle su una o più chiavi comuni",
       "function": "joins.op_join",
       "inputs": "multi",
       "parameters": [
         {
-          "id": "left_on",
-          "type": "column",
-          "label": "Colonna sinistra",
-          "description": "Colonna chiave della tabella sinistra (primo input)",
+          "id": "left_keys",
+          "type": "columns",
+          "label": "Chiavi sinistre",
+          "description": "Colonne chiave della tabella sinistra, nello stesso ordine delle chiavi destre",
           "required": true,
           "source": "left"
         },
         {
-          "id": "right_on",
-          "type": "column",
-          "label": "Colonna destra",
-          "description": "Colonna chiave della tabella destra (secondo input)",
+          "id": "right_keys",
+          "type": "columns",
+          "label": "Chiavi destre",
+          "description": "Colonne chiave della tabella destra, nello stesso ordine delle chiavi sinistre",
           "required": true,
           "source": "right"
         },

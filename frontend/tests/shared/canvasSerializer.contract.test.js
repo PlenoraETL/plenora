@@ -130,6 +130,44 @@ describe('canvasSerializer contract', () => {
     expect(serializeEdge(passthroughEdge)).toBe(passthroughEdge);
   });
 
+  it('serializes and rehydrates multi_join pairs with different key names', () => {
+    const pairs = [
+      { left: 'country', right: 'country_code' },
+      { left: 'customer_id', right: 'cust_id' },
+    ];
+    const nodes = [
+      {
+        id: 'mj-1',
+        type: 'multi_join',
+        position: { x: 10, y: 20 },
+        data: {
+          config: {
+            join_pairs: pairs,
+            join_type: 'left',
+          },
+        },
+      },
+    ];
+
+    const payload = serializeCanvas(nodes, []);
+    expect(payload.nodes[0]).toEqual(expect.objectContaining({
+      type: 'multi_join',
+      join_pairs: pairs,
+      left_keys: ['country', 'customer_id'],
+      right_keys: ['country_code', 'cust_id'],
+      join_keys: [],
+      multi_join_type: 'left',
+    }));
+
+    const rehydrated = deserializeNodes(payload.nodes, { flags: { isManipulate: true } });
+    expect(rehydrated[0].data.config).toEqual(expect.objectContaining({
+      join_pairs: pairs,
+      left_keys: ['country', 'customer_id'],
+      right_keys: ['country_code', 'cust_id'],
+      join_type: 'left',
+    }));
+  });
+
   it('roundtrips CARICA REST destination fields without coercing them back to DB', () => {
     const backendCanvas = {
       nodes: [

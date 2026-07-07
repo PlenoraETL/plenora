@@ -35,6 +35,17 @@ const DynamicConfig = ({
   }
   
   const { parameters = [], description } = transformConfig;
+
+  const getParamValue = (param) => {
+    if (config[param.id] !== undefined) return config[param.id];
+    if (transformId === 'join' && param.id === 'left_keys' && config.left_on) {
+      return [config.left_on];
+    }
+    if (transformId === 'join' && param.id === 'right_keys' && config.right_on) {
+      return [config.right_on];
+    }
+    return undefined;
+  };
   
   // Filtra parametri visibili (gestisce depends_on)
   const visibleParams = useMemo(() => {
@@ -308,7 +319,7 @@ const DynamicConfig = ({
               <ParameterInput
                 key={param.id}
                 param={enrichedParam}
-                value={config[param.id]}
+                value={getParamValue(param)}
                 onChange={(value, meta) => handleParamChange(param, value, meta)}
                 columns={getColumnsForParam(param)}
               />

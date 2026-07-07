@@ -20,11 +20,14 @@ from app.core.resources.exceptions import MemoryLimitExceededError
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
-def _make_node(join_keys, join_type="inner"):
+def _make_node(join_keys, join_type="inner", **config):
     return SimpleNamespace(
         join_keys=join_keys,
+        join_pairs=config.get("join_pairs", []),
+        left_keys=config.get("left_keys", []),
+        right_keys=config.get("right_keys", []),
         multi_join_type=join_type,
-        data={"config": {}},
+        data={"config": config},
     )
 
 
@@ -117,6 +120,68 @@ def test_multi_join_below_cap_passes(monkeypatch):
 
     assert len(result) == 3
     assert {"k", "x", "y", "z"}.issubset(set(result.columns))
+
+
+def test_multi_join_pairs_support_multiple_different_key_names(monkeypatch):
+    from app.config import settings as _settings
+
+    monkeypatch.setitem(_settings.DEFAULTS, "MULTI_JOIN_MAX_OUTPUT_ROWS", 1_000_000)
+
+    left = pd.DataFrame({
+        "country": ["IT", "IT", "FR"],
+        "customer_id": [1, 2, 1],
+        "x": ["a", "b", "c"],
+    })
+    right = pd.DataFrame({
+        "country_code": ["IT", "FR"],
+        "cust_id": [1, 1],
+        "y": [10, 20],
+    })
+
+    result = _make_executor()._esegui_multi_join(
+        _make_node(
+            [],
+            join_pairs=[
+                {"left": "country", "right": "country_code"},
+                {"left": "customer_id", "right": "cust_id"},
+            ],
+        ),
+        [left, right],
+    )
+
+    assert len(result) == 2
+    assert {"country", "customer_id", "x", "y"}.issubset(set(result.columns))
+    assert "country_code" not in result.columns
+    assert "cust_id" not in result.columns
+
+
+def test_multi_join_pairs_cardinality_guard_uses_all_keys(monkeypatch):
+    from app.config import settings as _settings
+
+    monkeypatch.setitem(_settings.DEFAULTS, "MULTI_JOIN_MAX_OUTPUT_ROWS", 5)
+
+    left = pd.DataFrame({
+        "country": ["IT", "IT", "IT"],
+        "customer_id": [1, 1, 1],
+    })
+    right = pd.DataFrame({
+        "country_code": ["IT", "IT", "IT"],
+        "cust_id": [1, 1, 1],
+    })
+
+    with pytest.raises(MemoryLimitExceededError) as exc_info:
+        _make_executor()._esegui_multi_join(
+            _make_node(
+                [],
+                join_pairs=[
+                    {"left": "country", "right": "country_code"},
+                    {"left": "customer_id", "right": "cust_id"},
+                ],
+            ),
+            [left, right],
+        )
+
+    assert exc_info.value.observed_bytes == 9
 
 
 def test_multi_join_cap_zero_disables_guard(monkeypatch):

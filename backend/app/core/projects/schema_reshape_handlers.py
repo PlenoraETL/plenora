@@ -13,6 +13,58 @@ if TYPE_CHECKING:
 class ReshapeSchemaHandlers:
     """Mixin for reshape and config-explicit structure schema handlers."""
 
+    def _schema_pivot(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """pivot: long -> wide when output columns are declared by mapping."""
+        if not input_schemas:
+            return []
+        input_schema = input_schemas[0]
+        by_name = {c.name: c for c in input_schema}
+
+        index_cols = [
+            name for name in self._normalize_str_list(config.get("index_col"))
+            if name in by_name
+        ]
+        value_col = config.get("value_col") or ""
+        value_type = getattr(by_name.get(value_col), "type", None) or "str"
+        aggr_func = str(config.get("aggr_func") or "").strip().lower()
+        if aggr_func == "count":
+            output_type = "int"
+        elif aggr_func == "concat":
+            output_type = "str"
+        else:
+            output_type = value_type
+
+        result: List[ColumnSchema] = []
+        seen: set[str] = set()
+        for name in index_cols:
+            result.append(self._copy_column(by_name[name], node_id, is_calculated=False))
+            seen.add(name)
+
+        mapping = config.get("mapping")
+        if isinstance(mapping, dict):
+            output_names = mapping.values()
+        else:
+            output_names = []
+
+        for raw_name in output_names:
+            name = str(raw_name or "").strip()
+            if not name or name in seen:
+                continue
+            result.append(self._column_schema_cls(
+                name=name,
+                type=output_type,
+                source_node=node_id,
+                is_calculated=True,
+            ))
+            seen.add(name)
+
+        return result if result else self._copy_schema(input_schema, node_id)
+
     def _schema_melt(
         self,
         input_schemas: List[List[ColumnSchema]],

@@ -125,7 +125,7 @@ class TransformSchemaHandlers:
             "text_normalize": lambda i, c, n: self._schema_text_normalize(i, c, n),
             # passthrough espliciti
             "concat_columns": pt,
-            "pivot": pt,
+            "pivot": lambda i, c, n: self._reshape_handlers._schema_pivot(i, c, n),
             "geo_envelope": pt,
             # spatial
             "geo_from_coords": lambda i, c, n: self._geo_handlers._schema_geo_from_coords(i, c, n),

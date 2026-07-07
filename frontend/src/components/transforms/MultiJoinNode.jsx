@@ -18,6 +18,7 @@ const MultiJoinNode = memo(({ data, id }) => {
   const config = data.config || {};
   const joinKeys = config.join_keys || [];
   const joinKeyIds = config.join_key_ids || [];
+  const joinPairs = Array.isArray(config.join_pairs) ? config.join_pairs : [];
   const joinType = config.join_type || 'inner';
   const [isRunHistoryOpen, setIsRunHistoryOpen] = useState(false);
   const projectId = useCanvasStore(s => s.projectId);
@@ -112,13 +113,17 @@ const MultiJoinNode = memo(({ data, id }) => {
 
   // Mostra preview delle colonne che usciranno (per info utente)
   const outputPreview = useMemo(() => {
-    if (sources.length === 0 || joinKeys.length === 0) return [];
+    const validPairs = joinPairs.filter(p => p && p.left && p.right);
+    const pairMode = sources.length === 2 && validPairs.length > 0;
+    const leftKeys = pairMode ? validPairs.map(p => p.left) : joinKeys;
+    const rightKeys = pairMode ? validPairs.map(p => p.right) : joinKeys;
+    if (sources.length === 0 || leftKeys.length === 0) return [];
     
     const seen = new Set();
     const result = [];
     
     // Prima le chiavi di join
-    joinKeys.forEach(key => {
+    leftKeys.forEach(key => {
       if (!seen.has(key)) {
         seen.add(key);
         result.push(key);
@@ -126,8 +131,12 @@ const MultiJoinNode = memo(({ data, id }) => {
     });
     
     // Poi le altre colonne da ogni sorgente
-    sources.forEach(src => {
+    sources.forEach((src, sourceIdx) => {
+      const keysForSource = pairMode && sourceIdx === 1 ? rightKeys : leftKeys;
       src.columns.forEach(col => {
+        if (keysForSource.includes(col.name)) {
+          return;
+        }
         if (!seen.has(col.name)) {
           seen.add(col.name);
           result.push(col.name);
@@ -136,7 +145,7 @@ const MultiJoinNode = memo(({ data, id }) => {
     });
     
     return result;
-  }, [sources, joinKeys]);
+  }, [sources, joinKeys, joinPairs]);
 
   // Handle multipli (10 fissi)
   const MAX_HANDLES = 10;
@@ -285,35 +294,17 @@ const MultiJoinNode = memo(({ data, id }) => {
 
                 {/* Warning quando l'utente non ha configurato pairs:
                     senza, il backend MANIPOLA cade sul fallback
-                    "trova colonne comuni" che e' silente e fragile.
-                    Mostra il warning anche per coppie left!=right
-                    perche' il serializer ad oggi le ignora (backend
-                    non supporta ancora left_on/right_on diverso). */}
+                    "trova colonne comuni" che e' silente e fragile. */}
                 {(() => {
-                  const pairs = config.join_pairs || [];
-                  const usable = pairs.filter(p =>
-                    p && p.left && p.right && p.left === p.right,
-                  );
-                  const mismatch = pairs.filter(p =>
-                    p && p.left && p.right && p.left !== p.right,
-                  );
-                  if (pairs.length === 0) {
+                  const pairs = joinPairs;
+                  const complete = pairs.filter(p => p && p.left && p.right);
+                  if (pairs.length === 0 || complete.length === 0) {
                     return (
                       <div className="multi-join-node__warning">
                         ⚠️ Nessuna chiave di join configurata. Il
                         backend usera' le colonne comuni in
                         automatico (rischio risultati inattesi se
                         gli alias cambiano).
-                      </div>
-                    );
-                  }
-                  if (mismatch.length > 0 && usable.length === 0) {
-                    return (
-                      <div className="multi-join-node__warning">
-                        ⚠️ Le coppie con colonne di nome diverso
-                        non sono ancora supportate dal runtime
-                        MANIPOLA. Rinomina via alias upstream o usa
-                        nomi uguali (es. entrambe `city_id`).
                       </div>
                     );
                   }

@@ -66,6 +66,12 @@ def test_join_keys_list_checked():
     assert issues[0].suggestion == {"column": "missing"}
 
 
+def test_join_legacy_left_on_right_on_satisfy_new_required_keys():
+    node = _node(config={"left_on": "a", "right_on": "b"}, transform_op="join")
+    issues = _v().validate_node(node, upstream=_upstream(["a", "b"]))
+    assert "TRANSFORM_PARAM_REQUIRED" not in _codes(issues)
+
+
 def test_list_key_group_by_checked():
     node = _node(config={"group_by": ["a", "ghost"]})
     issues = _v().validate_node(node, upstream=_upstream(["a"]))

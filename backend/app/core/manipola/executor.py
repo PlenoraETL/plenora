@@ -86,6 +86,56 @@ def _estimate_merge_output_rows(
     return estimate_merge_output_rows(left, right, join_keys, how)
 
 
+def _normalize_key_list(value: Any) -> List[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    if isinstance(value, (list, tuple)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value).strip()
+    return [text] if text else []
+
+
+def _normalize_join_pairs(value: Any) -> tuple[List[str], List[str]]:
+    if not isinstance(value, list):
+        return [], []
+    left_keys: List[str] = []
+    right_keys: List[str] = []
+    for pair in value:
+        if not isinstance(pair, dict):
+            continue
+        left_key = str(pair.get("left") or "").strip()
+        right_key = str(pair.get("right") or "").strip()
+        if left_key and right_key:
+            left_keys.append(left_key)
+            right_keys.append(right_key)
+    return left_keys, right_keys
+
+
+def _estimate_merge_output_rows_by_keys(
+    left: FrameLike,
+    right: FrameLike,
+    left_keys: List[str],
+    right_keys: List[str],
+    how: str,
+) -> Optional[int]:
+    """Estimate equality-merge rows when left/right key names differ."""
+    if left_keys == right_keys:
+        return _estimate_merge_output_rows(left, right, left_keys, how)
+
+    join_how = str(how or "inner").lower()
+    if join_how not in {"inner", "left", "right", "outer"}:
+        return None
+    if not left_keys or len(left_keys) != len(right_keys):
+        return None
+
+    left_tmp = copy_frame_for_update(left[left_keys])
+    right_tmp = copy_frame_for_update(right[right_keys])
+    right_tmp.columns = list(left_keys)
+    return estimate_merge_output_rows(left_tmp, right_tmp, left_keys, join_how)
+
+
 def _failure_step(message: str, step_start: float) -> JsonObject:
     """Emette `append_step` di failure manipola + ritorna il dict da
     `return`-are dal chiamante.
@@ -797,8 +847,9 @@ class ManipolaExecutor:
             logger.warning("Multi-join richiede almeno 2 input")
             return inputs[0] if inputs else empty_dataframe()
 
-        join_keys = _nf(node, 'join_keys') or (node.data or {}).get('config', {}).get('join_keys', [])
-        join_key_ids = _nf(node, 'join_key_ids') or (node.data or {}).get('config', {}).get('join_key_ids', [])
+        data_config = (node.data or {}).get('config', {}) if isinstance(node.data, dict) else {}
+        join_keys = _nf(node, 'join_keys') or data_config.get('join_keys', [])
+        join_key_ids = _nf(node, 'join_key_ids') or data_config.get('join_key_ids', [])
         if join_key_ids and isinstance(node.data, dict):
             id_to_name = {
                 str(col.get("id") or col.get("column_id")): str(col.get("name"))
@@ -810,9 +861,27 @@ class ManipolaExecutor:
                 for idx, column_id in enumerate(join_key_ids)
             ]
             join_keys = [key for key in resolved_keys if key]
-        join_type = _nf(node, 'multi_join_type') or (node.data or {}).get('config', {}).get('join_type', 'inner')
+        join_keys = _normalize_key_list(join_keys)
+        join_type = _nf(node, 'multi_join_type') or data_config.get('join_type', 'inner')
 
-        if not join_keys:
+        left_keys = _normalize_key_list(_nf(node, 'left_keys') or data_config.get('left_keys'))
+        right_keys = _normalize_key_list(_nf(node, 'right_keys') or data_config.get('right_keys'))
+        pair_left_keys, pair_right_keys = _normalize_join_pairs(
+            _nf(node, 'join_pairs') or data_config.get('join_pairs')
+        )
+        if (not left_keys or not right_keys) and pair_left_keys and pair_right_keys:
+            left_keys = pair_left_keys
+            right_keys = pair_right_keys
+
+        use_pair_keys = len(inputs) == 2 and bool(left_keys or right_keys)
+        if use_pair_keys:
+            if not left_keys or not right_keys or len(left_keys) != len(right_keys):
+                raise ValueError(
+                    "Multi-join con coppie di chiavi non valido: il numero di "
+                    "chiavi sinistre deve coincidere con quello delle chiavi destre."
+                )
+
+        if not join_keys and not use_pair_keys:
             logger.warning("Multi-join senza chiavi specificate, cerco colonne comuni")
             # Trova colonne comuni a tutti i DataFrame
             common_cols = set(inputs[0].columns)
@@ -824,12 +893,21 @@ class ManipolaExecutor:
                 logger.warning("Nessuna colonna comune trovata per il join")
                 return inputs[0]
 
-        # Verifica che le chiavi esistano in tutti i DataFrame
-        for idx, df in enumerate(inputs):
-            missing = [k for k in join_keys if k not in df.columns]
-            if missing:
-                logger.warning(f"Input {idx}: chiavi mancanti {missing}")
+        if use_pair_keys:
+            missing_left = [k for k in left_keys if k not in inputs[0].columns]
+            missing_right = [k for k in right_keys if k not in inputs[1].columns]
+            if missing_left or missing_right:
+                logger.warning(
+                    f"Multi-join: chiavi mancanti left={missing_left}, right={missing_right}"
+                )
                 return inputs[0]
+        else:
+            # Verifica che le chiavi esistano in tutti i DataFrame
+            for idx, df in enumerate(inputs):
+                missing = [k for k in join_keys if k not in df.columns]
+                if missing:
+                    logger.warning(f"Input {idx}: chiavi mancanti {missing}")
+                    return inputs[0]
 
 
         # Inizia con il primo DataFrame
@@ -873,6 +951,68 @@ class ManipolaExecutor:
                 path_basename="multi_join_output",
                 stage=MULTI_JOIN_STAGE,
             )
+
+        if use_pair_keys:
+            df_copy = copy_frame_for_update(inputs[1])
+            result_cols = set(result.columns)
+            df_cols = set(df_copy.columns) - set(right_keys)
+            duplicates = result_cols & df_cols
+
+            if duplicates:
+                rename_map = {col: f"{col}_2" for col in duplicates}
+                df_copy = df_copy.rename(columns=rename_map)
+                logger.info(f"Rinominate colonne: {list(rename_map.keys())}")
+
+            if _multi_cap > 0:
+                _estimated_rows = _estimate_merge_output_rows_by_keys(
+                    result, df_copy, left_keys, right_keys, join_type
+                )
+                if _estimated_rows is not None and _estimated_rows > _multi_cap:
+                    logger.warning(
+                        f"Multi-join con coppie chiavi: output stimato "
+                        f"{_estimated_rows} righe sopra il cap {_multi_cap} "
+                        f"prima del merge â€” guard attivato."
+                    )
+                    raise MemoryLimitExceededError(
+                        observed_bytes=_estimated_rows,
+                        limit_bytes=_multi_cap,
+                        path_basename="multi_join_output",
+                        stage=MULTI_JOIN_STAGE,
+                    )
+
+            result = merge_dataframes(
+                result,
+                df_copy,
+                left_on=left_keys,
+                right_on=right_keys,
+                how=join_type,
+            )
+
+            right_keys_to_drop = [
+                right_key
+                for left_key, right_key in zip(left_keys, right_keys)
+                if left_key != right_key and right_key not in left_keys and right_key in result.columns
+            ]
+            if right_keys_to_drop:
+                result = result.drop(columns=[*dict.fromkeys(right_keys_to_drop)])
+
+            logger.info(
+                f"Dopo multi-join a coppie: {len(result)} righe, {len(result.columns)} col"
+            )
+
+            if _multi_cap > 0 and len(result) > _multi_cap:
+                logger.warning(
+                    f"Multi-join a coppie: output {len(result)} righe supera "
+                    f"il cap {_multi_cap} â€” guard attivato."
+                )
+                raise MemoryLimitExceededError(
+                    observed_bytes=len(result),
+                    limit_bytes=_multi_cap,
+                    path_basename="multi_join_output",
+                    stage=MULTI_JOIN_STAGE,
+                )
+
+            return result
 
         # Merge sequenziale con gli altri
         for idx, df in enumerate(inputs[1:], start=2):

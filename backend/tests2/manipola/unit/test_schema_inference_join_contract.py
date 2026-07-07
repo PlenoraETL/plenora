@@ -32,6 +32,13 @@ def _join(left, right, *, left_on, right_on):
     )
 
 
+def _join_config(left, right, config):
+    from unittest.mock import MagicMock
+    svc = SchemaInferenceService(project_service=MagicMock())
+    handler = svc._build_transform_handlers(edges_by_target={})["join"]
+    return handler([left, right], config, "join_node")
+
+
 # Different keys: right_on resta col nome originale (BUG #40)
 
 
@@ -79,6 +86,45 @@ def test_same_keys_skips_right_join_key():
     # NESSUN duplicato 'id' o 'id_R'
     assert names.count("id") == 1
     assert "id_R" not in names
+
+
+def test_multiple_keys_schema_keeps_all_left_keys_and_drops_same_name_right_keys():
+    left = [_col("country"), _col("id"), _col("name_l")]
+    right = [_col("country"), _col("id"), _col("name_r")]
+    result = _join_config(
+        left,
+        right,
+        {"left_keys": ["country", "id"], "right_keys": ["country", "id"]},
+    )
+
+    names = [c.name for c in result]
+    assert names.count("country") == 1
+    assert names.count("id") == 1
+    assert "country_R" not in names
+    assert "id_R" not in names
+    assert "name_l_L" in names
+    assert "name_r_R" in names
+
+
+def test_multiple_different_keys_schema_keeps_right_key_names():
+    left = [_col("country"), _col("customer_id"), _col("name_l")]
+    right = [_col("country_code"), _col("cust_id"), _col("name_r")]
+    result = _join_config(
+        left,
+        right,
+        {
+            "left_keys": ["country", "customer_id"],
+            "right_keys": ["country_code", "cust_id"],
+        },
+    )
+
+    names = [c.name for c in result]
+    assert "country" in names
+    assert "customer_id" in names
+    assert "country_code" in names
+    assert "cust_id" in names
+    assert "name_l_L" in names
+    assert "name_r_R" in names
 
 
 # Tipi e is_calculated preservati

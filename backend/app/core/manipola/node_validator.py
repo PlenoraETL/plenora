@@ -59,6 +59,16 @@ def _is_empty_param_value(val: Any) -> bool:
     return val is None or val == "" or (isinstance(val, (list, dict)) and len(val) == 0)
 
 
+def _param_value_for_required_check(transform_op: str, param_id: str, config: Mapping[str, Any]) -> Any:
+    val = config.get(param_id)
+    if transform_op == "join" and _is_empty_param_value(val):
+        if param_id == "left_keys":
+            return config.get("left_on")
+        if param_id == "right_keys":
+            return config.get("right_on")
+    return val
+
+
 class ManipolaNodeValidator:
     """``validate_node`` per i nodi transform."""
 
@@ -131,7 +141,7 @@ class ManipolaNodeValidator:
                 pid = param.get("id")
                 if not pid:
                     continue
-                val = config.get(pid)
+                val = _param_value_for_required_check(transform_op, pid, config)
                 # T2: parametro obbligatorio non configurato → errore deterministico
                 # (completezza di config, non dipende dai dati a monte).
                 if param.get("required") and _is_empty_param_value(val):

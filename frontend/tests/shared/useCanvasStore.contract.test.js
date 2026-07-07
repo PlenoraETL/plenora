@@ -124,4 +124,81 @@ describe('useCanvasStore save-path contract', () => {
       }),
     );
   });
+
+  it('does not mark automatic React Flow dimension measurements as unsaved changes', async () => {
+    const store = useCanvasStore.getState();
+    store.init('proj-dim-auto', 'estrai');
+    store.setNodes([
+      {
+        id: 'result-1',
+        type: 'result',
+        position: { x: 0, y: 0 },
+        data: { fileName: 'output', format: 'csv' },
+      },
+    ]);
+    store.markClean();
+
+    useCanvasStore.getState().onNodesChange([
+      {
+        id: 'result-1',
+        type: 'dimensions',
+        dimensions: { width: 290, height: 420 },
+      },
+    ]);
+
+    expect(useCanvasStore.getState().nodes[0].width).toBe(290);
+    expect(useCanvasStore.getState().nodes[0].height).toBe(420);
+    expect(useCanvasStore.getState().isDirty).toBe(false);
+
+    await useCanvasStore.getState().handleSaveQuiet();
+
+    expect(updateCanvasMock).not.toHaveBeenCalled();
+  });
+
+  it('marks explicit node resizes dirty and persists annotation size', async () => {
+    const store = useCanvasStore.getState();
+    store.init('proj-resize-1', 'estrai');
+    store.setNodes([
+      {
+        id: 'comment-1',
+        type: 'comment',
+        position: { x: 15, y: 25 },
+        style: { width: 250, height: 150 },
+        data: { label: '', title: '', color: '#FBBF24' },
+      },
+    ]);
+    store.markClean();
+
+    useCanvasStore.getState().onNodesChange([
+      {
+        id: 'comment-1',
+        type: 'dimensions',
+        updateStyle: true,
+        resizing: true,
+        dimensions: { width: 360, height: 220 },
+      },
+    ]);
+
+    expect(useCanvasStore.getState().isDirty).toBe(true);
+    expect(useCanvasStore.getState().nodes[0].style).toEqual(
+      expect.objectContaining({ width: 360, height: 220 }),
+    );
+
+    await useCanvasStore.getState().handleSaveQuiet();
+
+    expect(updateCanvasMock).toHaveBeenCalledWith(
+      'proj-resize-1',
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'comment-1',
+            type: 'comment',
+            width: 360,
+            height: 220,
+          }),
+        ]),
+      }),
+    );
+    expect(useCanvasStore.getState().isDirty).toBe(false);
+  });
 });

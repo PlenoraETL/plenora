@@ -386,6 +386,35 @@ function createTransformNode(node) {
 }
 
 /**
+ * Crea un nodo Multi-Join da dati backend flat.
+ *
+ * @param {Object} node - Dati nodo dal backend
+ * @returns {Object} Nodo ReactFlow type='multi_join'
+ */
+function createMultiJoinNode(node) {
+  const top = nodeTopLevelData(node);
+  const existingConfig = node.data?.config || {};
+  return {
+    ...node,
+    data: {
+      ...top,
+      ...node.data,
+      config: {
+        join_keys: top.join_keys || [],
+        join_key_ids: top.join_key_ids || [],
+        join_pairs: top.join_pairs || [],
+        left_keys: top.left_keys || [],
+        right_keys: top.right_keys || [],
+        join_type: top.multi_join_type || 'inner',
+        ...existingConfig,
+      },
+      columns: nd(node, 'columns', []),
+      inputColumns: node.data?.inputColumns || [],
+    },
+  };
+}
+
+/**
  * Crea un nodo API Enrichment (chiamata a connettore esterno) da dati backend.
  *
  * @param {Object} node - Dati nodo dal backend
@@ -497,6 +526,8 @@ export function deserializeNodes(rawNodes, options = {}) {
         return createFileSourceNode(node);
       case 'transform':
         return createTransformNode(node);
+      case 'multi_join':
+        return createMultiJoinNode(node);
       case 'api_enrich':
         return createApiEnrichNode(node);
 

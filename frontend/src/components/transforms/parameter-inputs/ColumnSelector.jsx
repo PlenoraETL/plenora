@@ -41,7 +41,13 @@ const ColumnSelector = ({
               {v}
               <button
                 type="button"
-                onClick={() => onChange(selectedValues.filter(x => x !== v))}
+                onClick={() => {
+                  const nextValues = selectedValues.filter(x => x !== v);
+                  const nextColumns = nextValues
+                    .map(name => filteredColumns.find(col => col.name === name))
+                    .filter(Boolean);
+                  onChange(nextValues, nextColumns);
+                }}
                 className="column-selector__tag-remove"
               >
                 ×

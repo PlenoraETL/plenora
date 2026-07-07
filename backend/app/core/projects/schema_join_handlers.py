@@ -27,19 +27,28 @@ class JoinSchemaHandlers:
         left_schema = input_schemas[0]
         right_schema = input_schemas[1]
 
-        left_on = config.get("left_on", "")
-        right_on = config.get("right_on", "")
+        left_keys = self._normalize_str_list(config.get("left_keys") or config.get("left_on"))
+        right_keys = self._normalize_str_list(config.get("right_keys") or config.get("right_on"))
+        left_on = left_keys[0] if left_keys else ""
+        right_on = right_keys[0] if right_keys else ""
+        left_key_set = set(left_keys)
+        right_key_set = set(right_keys)
+        same_name_right_keys = {
+            right_key
+            for left_key, right_key in zip(left_keys, right_keys)
+            if left_key == right_key
+        }
 
         result = []
 
         for col in left_schema:
-            new_name = f"{col.name}_L" if col.name != left_on else col.name
+            new_name = col.name if col.name in left_key_set else f"{col.name}_L"
             result.append(self._copy_column(col, node_id, name=new_name))
 
         for col in right_schema:
-            if col.name == right_on and left_on == right_on:
+            if col.name in same_name_right_keys:
                 continue
-            new_name = col.name if col.name == right_on else f"{col.name}_R"
+            new_name = col.name if col.name in right_key_set else f"{col.name}_R"
             result.append(self._copy_column(col, node_id, name=new_name))
 
         return result

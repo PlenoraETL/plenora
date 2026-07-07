@@ -376,6 +376,37 @@ def test_melt_heterogeneous_value_types_falls_back_to_str():
     assert _name_type(out) == [("id", "int"), ("variable", "str"), ("value", "str")]
 
 
+def test_pivot_mapping_outputs_index_and_declared_columns():
+    schema = [
+        _col("cd_id", "int"),
+        _col("valuation_type", "str"),
+        _col("amount_valuation", "real"),
+    ]
+    out = _infer(
+        "pivot",
+        {
+            "index_col": "cd_id",
+            "pivot_col": "valuation_type",
+            "value_col": "amount_valuation",
+            "aggr_func": "max",
+            "mapping": {
+                "A": "rendita",
+                "I": "omi",
+                "M": "perizia",
+                "S": "acquisto",
+            },
+        },
+        [schema],
+    )
+    assert _name_type(out) == [
+        ("cd_id", "int"),
+        ("rendita", "real"),
+        ("omi", "real"),
+        ("perizia", "real"),
+        ("acquisto", "real"),
+    ]
+
+
 def test_reorder_columns_explicit_order_ignores_unknown_names():
     out = _infer("reorder_columns", {"columns": ["b", "missing", "a"]})
     assert _name_type(out) == [("b", "str"), ("a", "int")]
