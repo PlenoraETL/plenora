@@ -136,7 +136,7 @@ Step 'Servizi Windows'
 Test-RequiredServicePattern 'postgresql-x64-*' 'PostgreSQL'
 Test-RequiredServicePattern 'RabbitMQ' 'RabbitMQ'
 Test-RequiredServicePattern 'plenora-backend' 'Plenora backend'
-Test-RequiredServicePattern 'plenora-worker' 'Plenora worker'
+Test-RequiredServicePattern 'plenora-worker*' 'Plenora worker'
 Test-RequiredServicePattern 'plenora-beat' 'Plenora beat'
 $minioPresent = Test-OptionalService 'plenora-minio' 'Plenora MinIO' -Required:$RequireMinio
 $caddyPresent = Test-OptionalService 'plenora-caddy' 'Plenora Caddy' -Required:$RequireFrontend

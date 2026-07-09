@@ -131,13 +131,15 @@ if ($SkipServiceRestart) {
     Warn 'restart servizi saltato (-SkipServiceRestart): assicurati che il backend abbia gia'' l''opt-in in env'
 } elseif (-not $already) {
     Step 'Restart servizi backend/worker (ricaricano il .env)'
-    foreach ($svc in @('plenora-backend', 'plenora-worker')) {
-        $s = Get-Service -Name $svc -ErrorAction SilentlyContinue
+    $services = @(Get-Service -Name 'plenora-backend', 'plenora-worker*' -ErrorAction SilentlyContinue)
+    if ($services.Count -eq 0) {
+        Warn "plenora-backend/plenora-worker* non trovati (dev senza -InstallServices?): riavvia a mano backend e worker per l'opt-in"
+    }
+    foreach ($s in $services) {
+        $svc = $s.Name
         if ($s) {
             Restart-Service -Name $svc -Force
             Ok "$svc riavviato"
-        } else {
-            Warn "$svc non trovato (dev senza -InstallServices?): riavvia a mano il backend per l''opt-in"
         }
     }
 }

@@ -16,6 +16,7 @@
 #          -SkipWinget -InstallServices -InstallMinio -InstallFrontend -Production
 #
 # Parametri principali: -WorkerProcesses/-WorkerThreads,
+# -SplitWorkerServices/-DataWorkerServices/-DataWorkerThreads,
 # -AdminUsername/-AdminPassword (-SkipAdminBootstrap), -StoragePolicy,
 # -FrontendPort, -PgSuperPassword. Non-interattivo via env
 # PLENORA_BOOTSTRAP_ADMIN_* / PLENORA_INSTALL_WORKER_*.
@@ -35,6 +36,12 @@ param(
     [switch]$InstallServices,
     [int]$WorkerProcesses = 1,
     [int]$WorkerThreads = 4,
+    [switch]$SplitWorkerServices,
+    [int]$DataWorkerServices = 1,
+    [int]$DataWorkerThreads = 1,
+    [int]$ControlWorkerThreads = 2,
+    [int]$WorkerQueuePrefetch = 1,
+    [int]$WorkerDelayQueuePrefetch = 1,
     # W2 — bootstrap superadmin (parita' con install-docker.sh).
     # Fallback env: PLENORA_BOOTSTRAP_ADMIN_USERNAME / _PASSWORD / _GROUP_ID.
     [string]$AdminUsername = '',
@@ -73,6 +80,24 @@ if (-not $PSBoundParameters.ContainsKey('WorkerProcesses') -and $env:PLENORA_INS
 }
 if (-not $PSBoundParameters.ContainsKey('WorkerThreads') -and $env:PLENORA_INSTALL_WORKER_THREADS) {
     $WorkerThreads = [int]$env:PLENORA_INSTALL_WORKER_THREADS
+}
+if (-not $PSBoundParameters.ContainsKey('SplitWorkerServices') -and $env:PLENORA_INSTALL_SPLIT_WORKERS) {
+    $SplitWorkerServices = $env:PLENORA_INSTALL_SPLIT_WORKERS -match '^(1|true|yes)$'
+}
+if (-not $PSBoundParameters.ContainsKey('DataWorkerServices') -and $env:PLENORA_INSTALL_DATA_WORKER_SERVICES) {
+    $DataWorkerServices = [int]$env:PLENORA_INSTALL_DATA_WORKER_SERVICES
+}
+if (-not $PSBoundParameters.ContainsKey('DataWorkerThreads') -and $env:PLENORA_INSTALL_DATA_WORKER_THREADS) {
+    $DataWorkerThreads = [int]$env:PLENORA_INSTALL_DATA_WORKER_THREADS
+}
+if (-not $PSBoundParameters.ContainsKey('ControlWorkerThreads') -and $env:PLENORA_INSTALL_CONTROL_WORKER_THREADS) {
+    $ControlWorkerThreads = [int]$env:PLENORA_INSTALL_CONTROL_WORKER_THREADS
+}
+if (-not $PSBoundParameters.ContainsKey('WorkerQueuePrefetch') -and $env:PLENORA_INSTALL_WORKER_QUEUE_PREFETCH) {
+    $WorkerQueuePrefetch = [int]$env:PLENORA_INSTALL_WORKER_QUEUE_PREFETCH
+}
+if (-not $PSBoundParameters.ContainsKey('WorkerDelayQueuePrefetch') -and $env:PLENORA_INSTALL_WORKER_DELAY_QUEUE_PREFETCH) {
+    $WorkerDelayQueuePrefetch = [int]$env:PLENORA_INSTALL_WORKER_DELAY_QUEUE_PREFETCH
 }
 
 function Step($msg) { Write-Host "`n[STEP] $msg" -ForegroundColor Cyan }
@@ -169,6 +194,38 @@ function Install-WinSWService {
     if ($LASTEXITCODE -ne 0) { Fail "${Id}: winsw install exit=$LASTEXITCODE" }
     Ok "$Id registrato"
 }
+
+function Remove-WinSWService {
+    param([string]$Id)
+    $service = Get-Service -Name $Id -ErrorAction SilentlyContinue
+    if (-not $service) { return }
+    Write-Host "  ${Id}: servizio worker non piu' desiderato - stop + uninstall"
+    Stop-Service $Id -Force -ErrorAction SilentlyContinue
+    $exe = Join-Path (Join-Path $ServicesRoot $Id) "$Id.exe"
+    if (Test-Path $exe) {
+        & $exe uninstall 2>$null | Out-Null
+    } else {
+        & sc.exe delete $Id | Out-Null
+    }
+}
+
+function ConvertTo-ServiceEnvXml {
+    param([hashtable]$Env)
+    if (-not $Env) { return '' }
+    return (($Env.GetEnumerator() | Sort-Object Name | ForEach-Object {
+        $name = [System.Security.SecurityElement]::Escape([string]$_.Name)
+        $value = [System.Security.SecurityElement]::Escape([string]$_.Value)
+        "  <env name=""$name"" value=""$value""/>"
+    }) -join "`r`n")
+}
+
+if ($WorkerProcesses -lt 1) { Fail '-WorkerProcesses deve essere >= 1' }
+if ($WorkerThreads -lt 1) { Fail '-WorkerThreads deve essere >= 1' }
+if ($DataWorkerServices -lt 1) { Fail '-DataWorkerServices deve essere >= 1' }
+if ($DataWorkerThreads -lt 1) { Fail '-DataWorkerThreads deve essere >= 1' }
+if ($ControlWorkerThreads -lt 1) { Fail '-ControlWorkerThreads deve essere >= 1' }
+if ($WorkerQueuePrefetch -lt 1) { Fail '-WorkerQueuePrefetch deve essere >= 1' }
+if ($WorkerDelayQueuePrefetch -lt 1) { Fail '-WorkerDelayQueuePrefetch deve essere >= 1' }
 
 # -----------------------------------------------------------------------------
 Step 'Verifica prerequisiti di base'
@@ -486,7 +543,7 @@ for bucket in ("plenora-runtime", "plenora-backups"):
     Set-EnvValue -File $envFile -Key 'BACKUP_BUCKET' -Value 'plenora-backups'
 
     # I servizi app leggono il .env al boot: restart per vedere MinIO.
-    $running = Get-Service plenora-backend, plenora-worker, plenora-beat -ErrorAction SilentlyContinue |
+    $running = Get-Service plenora-backend, plenora-worker*, plenora-beat -ErrorAction SilentlyContinue |
                Where-Object Status -eq 'Running'
     foreach ($s in $running) { Restart-Service $s.Name }
     Ok "MinIO configurato: bucket plenora-runtime/plenora-backups, provider=minio, policy=$StoragePolicy"
@@ -662,6 +719,62 @@ if ($InstallServices) {
     $pgSvc = (Get-Service postgresql* | Select-Object -First 1).Name
     if (-not $pgSvc) { Fail 'Servizio PostgreSQL non trovato' }
 
+    $workerServices = @()
+    if ($SplitWorkerServices) {
+        $workerProcessEstimate = $DataWorkerServices + 1
+        for ($i = 1; $i -le $DataWorkerServices; $i++) {
+            $workerId = if ($i -eq 1) { 'plenora-worker' } else { "plenora-worker-data-$i" }
+            $workerServices += @{
+                id = $workerId
+                name = "Plenora Worker Data $i"
+                desc = "Plenora-ETL data-plane worker Dramatiq (1 processo x $DataWorkerThreads thread)"
+                args = "-m dramatiq workers.dramatiq_app --queues data-plane --processes 1 --threads $DataWorkerThreads"
+                depends = @($pgSvc, 'RabbitMQ')
+                extraEnv = @{
+                    DRAMATIQ_PROCESSES = $workerProcessEstimate
+                    DRAMATIQ_THREADS = $DataWorkerThreads
+                    dramatiq_queue_prefetch = $WorkerQueuePrefetch
+                    dramatiq_delay_queue_prefetch = $WorkerDelayQueuePrefetch
+                }
+            }
+        }
+        $workerServices += @{
+            id = 'plenora-worker-control'
+            name = 'Plenora Worker Control'
+            desc = "Plenora-ETL control/scheduler/default worker Dramatiq (1 processo x $ControlWorkerThreads thread)"
+            args = "-m dramatiq workers.dramatiq_app --queues control-plane scheduler default --processes 1 --threads $ControlWorkerThreads"
+            depends = @($pgSvc, 'RabbitMQ')
+            extraEnv = @{
+                DRAMATIQ_PROCESSES = $workerProcessEstimate
+                DRAMATIQ_THREADS = $ControlWorkerThreads
+                dramatiq_queue_prefetch = $WorkerQueuePrefetch
+                dramatiq_delay_queue_prefetch = $WorkerDelayQueuePrefetch
+            }
+        }
+    } else {
+        $workerServices += @{
+            id = 'plenora-worker'
+            name = 'Plenora Worker'
+            desc = "Plenora-ETL worker Dramatiq ($WorkerProcesses processi x $WorkerThreads thread)"
+            args = "-m dramatiq workers.dramatiq_app --processes $WorkerProcesses --threads $WorkerThreads"
+            depends = @($pgSvc, 'RabbitMQ')
+            extraEnv = @{
+                DRAMATIQ_PROCESSES = $WorkerProcesses
+                DRAMATIQ_THREADS = $WorkerThreads
+                dramatiq_queue_prefetch = $WorkerQueuePrefetch
+                dramatiq_delay_queue_prefetch = $WorkerDelayQueuePrefetch
+            }
+        }
+    }
+
+    $workerServiceIds = @($workerServices | ForEach-Object { $_.id })
+    $existingWorkerServices = @(Get-Service -Name 'plenora-worker*' -ErrorAction SilentlyContinue)
+    foreach ($existing in $existingWorkerServices) {
+        if ($workerServiceIds -notcontains $existing.Name) {
+            Remove-WinSWService -Id $existing.Name
+        }
+    }
+
     $services = @(
         @{
             id = 'plenora-backend'
@@ -669,14 +782,8 @@ if ($InstallServices) {
             desc = 'Plenora-ETL API FastAPI (uvicorn)'
             args = '-m uvicorn app.main:app --host 127.0.0.1 --port 5004'
             depends = @($pgSvc)
-        },
-        @{
-            id = 'plenora-worker'
-            name = 'Plenora Worker'
-            desc = "Plenora-ETL worker Dramatiq ($WorkerProcesses processi x $WorkerThreads thread)"
-            args = "-m dramatiq workers.dramatiq_app --processes $WorkerProcesses --threads $WorkerThreads"
-            depends = @($pgSvc, 'RabbitMQ')
-        },
+        }
+    ) + $workerServices + @(
         @{
             id = 'plenora-beat'
             name = 'Plenora Beat'
@@ -688,6 +795,8 @@ if ($InstallServices) {
 
     foreach ($svc in $services) {
         $dependXml = ($svc.depends | ForEach-Object { "  <depend>$_</depend>" }) -join "`r`n"
+        $extraEnvXml = ConvertTo-ServiceEnvXml -Env $svc.extraEnv
+        if ($extraEnvXml) { $extraEnvXml = "$extraEnvXml`r`n" }
         $xmlContent = @"
 <service>
   <id>$($svc.id)</id>
@@ -700,7 +809,7 @@ if ($InstallServices) {
   <env name="GDAL_DATA" value="$gdalData"/>
   <env name="PROJ_DATA" value="$projData"/>
   <env name="PROJ_LIB" value="$projData"/>
-$dependXml
+$extraEnvXml$dependXml
   <startmode>Automatic</startmode>
   <onfailure action="restart" delay="5 sec"/>
   <!-- Stop: WinSW manda Ctrl+C al console app: uvicorn shutdown pulito,
@@ -716,14 +825,18 @@ $dependXml
     }
 
     # Avvio in ordine: backend (fa le migrations) -> worker -> beat.
-    foreach ($id in 'plenora-backend', 'plenora-worker', 'plenora-beat') {
+    foreach ($id in @('plenora-backend') + $workerServiceIds + @('plenora-beat')) {
         Start-Service $id
         Start-Sleep -Seconds 5
     }
     Start-Sleep -Seconds 10
     Get-Service plenora-* | Format-Table Status, Name, DisplayName -AutoSize
     Write-Host '  Log dei servizi: C:\plenora-services\<id>\<id>.out.log / .err.log' -ForegroundColor Cyan
-    Ok 'W1 completata: 3 servizi Windows attivi (avvio automatico al boot)'
+    if ($SplitWorkerServices) {
+        Ok "W1 completata: servizi Windows attivi (backend, $($workerServiceIds.Count) worker, beat; avvio automatico al boot)"
+    } else {
+        Ok 'W1 completata: 3 servizi Windows attivi (avvio automatico al boot)'
+    }
 }
 
 # =============================================================================
@@ -865,9 +978,9 @@ if ($Production) {
     Set-EnvValue -File $envFile -Key 'ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_REQUIRED' -Value 'true'
 
     # Restart di tutti i servizi app per il nuovo ambiente.
-    foreach ($id in 'plenora-backend', 'plenora-worker', 'plenora-beat') {
-        $s = Get-Service $id -ErrorAction SilentlyContinue
-        if ($s -and $s.Status -eq 'Running') { Restart-Service $id }
+    $appServices = Get-Service plenora-backend, plenora-worker*, plenora-beat -ErrorAction SilentlyContinue
+    foreach ($s in $appServices) {
+        if ($s.Status -eq 'Running') { Restart-Service $s.Name }
     }
 
     # Il boot in production e' fail-fast sui gates: se /ready non torna,

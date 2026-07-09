@@ -36,7 +36,7 @@ sorgente canonico anche per il manuale PDF operativo.
 | Erlang/OTP | runtime di RabbitMQ | **28.x (pinnato)** | — |
 | RabbitMQ | servizio `RabbitMQ` | 4.3.x | 5672 |
 | Backend FastAPI | servizio `plenora-backend` (WinSW → uvicorn) | repo | 5004 (loopback) |
-| Worker Dramatiq | servizio `plenora-worker` | repo | — |
+| Worker Dramatiq | servizio `plenora-worker` (e, in modalita' split, `plenora-worker-control` + eventuali `plenora-worker-data-N`) | repo | — |
 | Beat APScheduler | servizio `plenora-beat` | repo | — |
 | MinIO (opzionale) | servizio `plenora-minio` | latest | 9000 (API), 9001 (console) |
 | Frontend (Caddy) | servizio `plenora-caddy` | latest | **80** (configurabile) |
@@ -89,7 +89,8 @@ dalla release ufficiale GitHub (non e' piu' su winget) impostando
 cd C:\plenora
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1 `
     -SkipWinget -InstallServices -InstallMinio -InstallFrontend -Production `
-    -WorkerProcesses 1 -WorkerThreads 4
+    -SplitWorkerServices -DataWorkerServices 1 `
+    -DataWorkerThreads 1 -ControlWorkerThreads 2
 ```
 
 Ti verranno chiesti:
@@ -129,7 +130,11 @@ su quell'origin; l'installer configura comunque CORS anche per
 |---|---|---|
 | `-SkipWinget` | off | Salta la fase pacchetti (gia' installati) |
 | `-InstallServices` | off | Servizi `plenora-backend/worker/beat` |
-| `-WorkerProcesses` / `-WorkerThreads` | 1 / 4 | Parallelismo del worker Dramatiq |
+| `-WorkerProcesses` / `-WorkerThreads` | 1 / 4 | Parallelismo del worker Dramatiq legacy, usato quando `-SplitWorkerServices` non e' attivo |
+| `-SplitWorkerServices` | off | Crea worker separati per code: data-plane e control/scheduler/default |
+| `-DataWorkerServices` / `-DataWorkerThreads` | 1 / 1 | Numero di servizi data-plane e thread per ciascun servizio split |
+| `-ControlWorkerThreads` | 2 | Thread del worker control/scheduler/default in modalita' split |
+| `-WorkerQueuePrefetch` / `-WorkerDelayQueuePrefetch` | 1 / 1 | Prefetch Dramatiq dei worker Windows; default basso per contenere RSS |
 | `-AdminUsername` / `-AdminPassword` / `-AdminGroupId` | prompt / `root` | Superadmin; `-SkipAdminBootstrap` per saltare |
 | `-InstallMinio` | off | MinIO come servizio + bucket + provider `minio` |
 | `-StoragePolicy` | `hybrid` | `db` \| `hybrid` \| `object_storage` |
@@ -141,7 +146,17 @@ su quell'origin; l'installer configura comunque CORS anche per
 
 Non-interattivo (env): `PLENORA_BOOTSTRAP_ADMIN_USERNAME`,
 `PLENORA_BOOTSTRAP_ADMIN_PASSWORD`, `PLENORA_BOOTSTRAP_ADMIN_GROUP_ID`,
-`PLENORA_INSTALL_WORKER_PROCESSES`, `PLENORA_INSTALL_WORKER_THREADS`.
+`PLENORA_INSTALL_WORKER_PROCESSES`, `PLENORA_INSTALL_WORKER_THREADS`,
+`PLENORA_INSTALL_SPLIT_WORKERS`, `PLENORA_INSTALL_DATA_WORKER_SERVICES`,
+`PLENORA_INSTALL_DATA_WORKER_THREADS`,
+`PLENORA_INSTALL_CONTROL_WORKER_THREADS`,
+`PLENORA_INSTALL_WORKER_QUEUE_PREFETCH`,
+`PLENORA_INSTALL_WORKER_DELAY_QUEUE_PREFETCH`.
+
+Per host con RAM limitata, preferire la modalita' split con data-plane a
+thread singolo. RabbitMQ bilancia automaticamente i task tra piu' servizi
+che ascoltano la stessa coda; per aumentare throughput data-plane usare
+`-DataWorkerServices 2` prima di aumentare i thread.
 
 **Il modello single-box (`-Production`)**: scrive
 `PLENORA_SINGLE_NODE=true` — dichiarazione esplicita che broker e
@@ -175,7 +190,7 @@ Controlli equivalenti manuali:
 
 ```powershell
 # 1. Tutti i servizi su
-Get-Service plenora-*        # attesi Running: backend, worker, beat (+minio, +caddy)
+Get-Service plenora-*        # attesi Running: backend, worker*, beat (+minio, +caddy)
 
 # 2. Readiness completa (attraverso Caddy)
 curl.exe -s http://127.0.0.1/ready
@@ -343,7 +358,7 @@ Update:
 | Login dal browser: "Impossibile contattare il server" | Hostname diverso dall'origin della build FE (es. `localhost` vs `127.0.0.1`): usare `http://127.0.0.1/`; l'installer scrive CORS per entrambe |
 | Porta 80 occupata (IIS?) | Reinstallare il FE con `-FrontendPort 8080` (ribuilda anche il bundle sull'origin nuovo) |
 | `/ready` not_ready su `object_storage` | Provider cloud configurato senza credenziali: con MinIO usare `-InstallMinio`; senza object storage (solo dev) `OBJECT_STORAGE_ENABLED=false` |
-| Task in coda ma mai eseguiti | `plenora-worker` giu' o `.env` broker cambiato senza restart del servizio |
+| Task in coda ma mai eseguiti | `plenora-worker*` giu' o `.env` broker cambiato senza restart dei servizi worker |
 | Un processo Erlang blocca update/cleanup | `epmd.exe` resta vivo dopo stop/uninstall: `Stop-Process -Name epmd -Force` |
 
 Reset locale della password `postgres`:
@@ -369,11 +384,11 @@ CHIUDE la stringa (parse error fantasma piu' avanti nel file).
 ## 11. Disinstallazione
 
 ```powershell
-# Servizi applicativi (per ciascuno: plenora-backend, plenora-worker,
-# plenora-beat, plenora-minio, plenora-caddy)
-foreach ($id in 'plenora-caddy','plenora-beat','plenora-worker','plenora-minio','plenora-backend') {
-    if (Get-Service $id -ErrorAction SilentlyContinue) {
-        Stop-Service $id -Force
+# Servizi applicativi (worker split inclusi)
+foreach ($svc in Get-Service plenora-caddy,plenora-beat,plenora-worker*,plenora-minio,plenora-backend -ErrorAction SilentlyContinue) {
+    $id = $svc.Name
+    Stop-Service $id -Force
+    if (Test-Path "C:\plenora-services\$id\$id.exe") {
         & "C:\plenora-services\$id\$id.exe" uninstall
     }
 }
