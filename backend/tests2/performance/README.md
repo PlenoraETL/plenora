@@ -17,6 +17,15 @@ Benchmark manuali:
 python -m pytest tests2/performance -c tests2/pytest.ini -m perf_bench -s
 ```
 
+Benchmark RSS mirato al preflight dei join MANIPOLA:
+
+```powershell
+python -m pytest tests2/performance/test_bench_manipola_join_memory.py -c tests2/pytest.ini -m perf_bench -s
+```
+
+Il benchmark esegue legacy e implementazione corrente in processi separati e
+confronta il picco RSS su due DataFrame sintetici larghi.
+
 ## Marker
 
 - `perf_correctness`: invarianti di output, eseguibili in CI.
