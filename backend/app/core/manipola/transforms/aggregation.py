@@ -261,7 +261,8 @@ def op_dedup_advanced(
         return df
 
     try:
-        result = copy_frame_for_update(df)
+        # sort/drop_duplicates restituiscono sempre un nuovo DataFrame.
+        result = df
         original_len = len(result)
 
         # Ordina prima della deduplicazione se richiesto

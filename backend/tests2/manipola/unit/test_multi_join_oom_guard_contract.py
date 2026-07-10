@@ -88,6 +88,21 @@ def test_multi_join_unique_keys_not_blocked_by_cartesian_worst_case(monkeypatch)
     assert len(result) == 1_000
 
 
+def test_multi_join_does_not_mutate_inputs(monkeypatch):
+    from app.config import settings as _settings
+
+    monkeypatch.setitem(_settings.DEFAULTS, "MULTI_JOIN_MAX_OUTPUT_ROWS", 100)
+    left = pd.DataFrame({"k": [1, 2], "value": ["a", "b"]})
+    right = pd.DataFrame({"k": [1, 2], "value": ["x", "y"]})
+    left_original = left.copy(deep=True)
+    right_original = right.copy(deep=True)
+
+    _make_executor()._esegui_multi_join(_make_node(["k"]), [left, right])
+
+    pd.testing.assert_frame_equal(left, left_original)
+    pd.testing.assert_frame_equal(right, right_original)
+
+
 def test_multi_join_left_join_estimate_counts_unmatched_left_rows(monkeypatch):
     from app.config import settings as _settings
 

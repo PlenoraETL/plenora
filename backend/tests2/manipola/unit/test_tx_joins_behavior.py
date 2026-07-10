@@ -53,6 +53,18 @@ def test_op_join_inner_happy_path_applies_suffixes_and_keeps_key():
     assert sorted(result["id"].tolist()) == [2, 3]
 
 
+def test_op_join_does_not_mutate_inputs():
+    left = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
+    right = pd.DataFrame({"id": [1, 2], "value": ["x", "y"]})
+    left_original = left.copy(deep=True)
+    right_original = right.copy(deep=True)
+
+    op_join([left, right], left_on="id", right_on="id", how="inner")
+
+    pd.testing.assert_frame_equal(left, left_original)
+    pd.testing.assert_frame_equal(right, right_original)
+
+
 def test_op_join_left_preserves_all_left_rows():
     left = pd.DataFrame({"id": [1, 2, 3], "lv": ["a", "b", "c"]})
     right = pd.DataFrame({"id": [2], "rv": ["x"]})
@@ -475,6 +487,40 @@ def test_op_cross_join_single_input_returns_first():
     result = op_cross_join([only])
     assert result is only
     assert len(result) == 3
+
+
+def test_join_cardinality_estimator_materializes_only_key_columns(monkeypatch):
+    from app.core.manipola.transforms import joins as joins_module
+
+    left = pd.DataFrame(
+        {"k": [1.0, 2.0, None], "wide_payload": ["a", "b", "c"]}
+    )
+    right = pd.DataFrame(
+        {"rk": [2.0, 3.0, None], "other_payload": [10, 20, 30]}
+    )
+    observed_columns = []
+    real_key_counts = joins_module._key_counts_by_tuple
+
+    def _capture_key_counts(df, keys):
+        observed_columns.append(list(df.columns))
+        return real_key_counts(df, keys)
+
+    monkeypatch.setattr(
+        joins_module,
+        "_key_counts_by_tuple",
+        _capture_key_counts,
+    )
+
+    estimated = joins_module._estimate_join_output_rows_by_keys(
+        left,
+        right,
+        ["k"],
+        ["rk"],
+        "inner",
+    )
+
+    assert estimated == 1
+    assert observed_columns == [["k"], ["rk"]]
 
 
 def test_op_cross_join_guard_blocks_above_cap(monkeypatch):

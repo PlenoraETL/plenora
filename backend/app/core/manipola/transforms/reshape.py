@@ -107,7 +107,9 @@ def op_pivot(
         return df
 
     needed_cols = list(dict.fromkeys(all_needed))
-    result = copy_frame_for_update(df[needed_cols])
+    # La proiezione crea gia' un frame distinto; Copy-on-Write isola la
+    # normalizzazione della colonna pivot senza un secondo shallow copy.
+    result = df[needed_cols]
     result[pivot_col] = result[pivot_col].fillna('').astype(str).str.strip()
     try:
         if mapping:

@@ -31,6 +31,15 @@ def _transform_node(node_id: str) -> Node:
     )
 
 
+def _result_node(node_id: str = "result") -> Node:
+    return Node(
+        id=node_id,
+        type="result",
+        position=Position(x=200, y=0),
+        data={},
+    )
+
+
 def _edge(edge_id: str, source: str, target: str) -> Edge:
     return Edge(id=edge_id, source=source, target=target)
 
@@ -109,3 +118,98 @@ def test_applica_trasformazioni_keeps_branch_source_until_last_consumer():
     assert "src" not in dataframes
     assert dataframes["left"] is left_df
     assert dataframes["right"] is right_df
+
+
+def test_execute_clears_frame_map_before_group_by_and_save():
+    executor = ManipolaExecutor(project_service=MagicMock())
+    canvas = CanvasState(
+        nodes=[_source_node("src"), _result_node()],
+        edges=[_edge("e1", "src", "result")],
+    )
+    final_df = pd.DataFrame({"id": [1, 2, 3]})
+    captured = {}
+
+    def _load(_canvas, dataframes, *_args, **_kwargs):
+        captured["dataframes"] = dataframes
+        dataframes["src"] = final_df
+        return None
+
+    def _transform(_canvas, dataframes, **_kwargs):
+        dataframes["dead_terminal"] = pd.DataFrame({"unused": [1]})
+        return final_df
+
+    def _group_by(df, _result):
+        assert df is final_df
+        assert captured["dataframes"] == {}
+        return df
+
+    with patch.object(
+        executor, "_init_security_context", return_value="group-1"
+    ), patch.object(
+        executor, "_carica_sorgenti_progetto", side_effect=_load
+    ), patch.object(
+        executor, "_carica_sorgenti_file", return_value=None
+    ), patch.object(
+        executor, "_carica_sorgenti_datasource", return_value=None
+    ), patch.object(
+        executor, "_carica_sorgenti_statiche", return_value=None
+    ), patch.object(
+        executor, "_applica_trasformazioni", side_effect=_transform
+    ), patch.object(
+        executor, "_applica_group_by", side_effect=_group_by
+    ), patch.object(
+        executor,
+        "_salva_risultato",
+        return_value={"success": False, "message": "test stop"},
+    ):
+        executor.execute("project-1", canvas)
+
+    assert captured["dataframes"] == {}
+
+
+def test_preview_clears_frame_map_before_group_by():
+    executor = ManipolaExecutor(project_service=MagicMock())
+    canvas = CanvasState(
+        nodes=[_source_node("src"), _result_node()],
+        edges=[_edge("e1", "src", "result")],
+    )
+    final_df = pd.DataFrame({"id": [1, 2, 3]})
+    captured = {}
+
+    def _load(_canvas, dataframes, *_args, **_kwargs):
+        captured["dataframes"] = dataframes
+        dataframes["src"] = final_df
+        return None
+
+    def _transform(_canvas, dataframes, **_kwargs):
+        dataframes["dead_terminal"] = pd.DataFrame({"unused": [1]})
+        return final_df
+
+    def _group_by(df, _result):
+        assert df is final_df
+        assert captured["dataframes"] == {}
+        return df
+
+    with patch.object(
+        executor, "_init_security_context", return_value="group-1"
+    ), patch.object(
+        executor, "_carica_sorgenti_progetto", side_effect=_load
+    ), patch.object(
+        executor, "_carica_sorgenti_file", return_value=None
+    ), patch.object(
+        executor, "_carica_sorgenti_datasource", return_value=None
+    ), patch.object(
+        executor, "_carica_sorgenti_statiche", return_value=None
+    ), patch.object(
+        executor, "_applica_trasformazioni", side_effect=_transform
+    ), patch.object(
+        executor, "_applica_group_by", side_effect=_group_by
+    ), patch.object(
+        executor, "_costruisci_mappa_tipi_canvas", return_value={}
+    ), patch.object(
+        executor, "_costruisci_colonne_con_tipi", return_value=[]
+    ):
+        result = executor.preview("project-1", canvas, limit=10)
+
+    assert result["success"] is True
+    assert captured["dataframes"] == {}

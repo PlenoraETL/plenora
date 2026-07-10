@@ -7,7 +7,6 @@ Keeps transformation behavior isolated from orchestration callers.
 import time as _time
 from typing import Any, List, Optional
 
-from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     dataframe_preview_records,
@@ -130,8 +129,10 @@ def _estimate_merge_output_rows_by_keys(
     if not left_keys or len(left_keys) != len(right_keys):
         return None
 
-    left_tmp = copy_frame_for_update(left[left_keys])
-    right_tmp = copy_frame_for_update(right[right_keys])
+    # Le proiezioni sono gia' DataFrame distinti. Un ulteriore shallow copy
+    # duplicherebbe solo manager/metadati senza isolare altri buffer.
+    left_tmp = left[left_keys]
+    right_tmp = right[right_keys]
     right_tmp.columns = list(left_keys)
     return estimate_merge_output_rows(left_tmp, right_tmp, left_keys, join_how)
 
@@ -363,6 +364,11 @@ class ManipolaExecutor:
                 "Nessun dato prodotto dalla manipolazione", _step_start,
             )
 
+        # `current_df` mantiene il risultato necessario. Il frame-map del
+        # grafo non serve piu' e potrebbe trattenere terminali di rami
+        # secondari o il frame pre-GROUP-BY per tutta la serializzazione.
+        dataframes.clear()
+
         result_node = next((n for n in canvas.nodes if n.type == "result"), None)
         if not result_node:
             return _failure_step("Nodo risultato non trovato", _step_start)
@@ -521,6 +527,10 @@ class ManipolaExecutor:
             )
             if current_df is None:
                 return {"success": False, "message": "Nessun dato prodotto dalla pipeline"}
+
+            # Evita che preview/group-by mantengano vivi frame terminali non
+            # piu' raggiungibili dal risultato corrente.
+            dataframes.clear()
 
             result_node = next((n for n in canvas.nodes if n.type == "result"), None)
             if result_node:
@@ -730,7 +740,7 @@ class ManipolaExecutor:
         )
         sorted_nodes = [node_map[node_id] for node_id in sorted_node_ids]
         process_node_ids = set(node_map)
-        remaining_consumers: dict[str, int] = {}
+        remaining_consumers = {}
         for edge in canvas.edges:
             if edge.target in process_node_ids:
                 remaining_consumers[edge.source] = (
@@ -938,7 +948,9 @@ class ManipolaExecutor:
 
 
         # Inizia con il primo DataFrame
-        result = copy_frame_for_update(inputs[0])
+        # `merge_dataframes` non muta gli input e materializza un nuovo frame.
+        # Manteniamo quindi il primo input read-only fino al primo merge.
+        result = inputs[0]
 
         # Multi-join sequenziale: ogni step `merge_dataframes` puo' inflate
         # l'output rispetto agli input se le chiavi non sono unique
@@ -980,7 +992,7 @@ class ManipolaExecutor:
             )
 
         if use_pair_keys:
-            df_copy = copy_frame_for_update(inputs[1])
+            df_copy = inputs[1]
             result_cols = set(result.columns)
             df_cols = set(df_copy.columns) - set(right_keys)
             duplicates = result_cols & df_cols
@@ -1043,7 +1055,7 @@ class ManipolaExecutor:
 
         # Merge sequenziale con gli altri
         for idx, df in enumerate(inputs[1:], start=2):
-            df_copy = copy_frame_for_update(df)
+            df_copy = df
 
             # Trova colonne duplicate (non-chiave
             result_cols = set(result.columns) - set(join_keys)

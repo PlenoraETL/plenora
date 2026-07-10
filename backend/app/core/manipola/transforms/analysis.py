@@ -230,7 +230,9 @@ def op_flatten_json(
         return df
 
     try:
-        result = copy_frame_for_update(df)
+        # Il risultato finale nasce da concat_dataframes; fino a quel punto
+        # l'input viene usato esclusivamente in lettura.
+        result = df
 
         # Parse stringhe JSON in dict
         def parse_json(val):
@@ -382,8 +384,6 @@ def op_statistics(
     prefix = output_prefix if output_prefix else f"{column}_"
 
     try:
-        result = copy_frame_for_update(df)
-
         if group_by and group_by in df.columns:
             # Statistiche per gruppo
             agg_dict = {}
@@ -393,7 +393,7 @@ def op_statistics(
 
             # Calcola con NamedAgg
             result = group_named_aggregate_merge(
-                result,
+                df,
                 group_by,
                 agg_dict,
                 how="left",
@@ -401,6 +401,7 @@ def op_statistics(
             )
 
         else:
+            result = copy_frame_for_update(df)
             # Statistiche globali — aggiungi come colonna costante
             series = df[column]
             for stat_name in stats:

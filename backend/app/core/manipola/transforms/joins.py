@@ -5,9 +5,10 @@ Keeps transformation behavior isolated from orchestration callers.
 """
 
 import uuid
+from collections.abc import Mapping
+from typing import Any, List
 
 import numpy as np
-from typing import Any, List
 
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
@@ -40,9 +41,12 @@ def _normalize_join_keys(value: Any) -> List[str]:
     return [text] if text else []
 
 
-def _key_counts_by_tuple(df: DataFrame, keys: List[str]) -> dict[tuple[Any, ...], int]:
+def _key_counts_by_tuple(
+    df: DataFrame,
+    keys: List[str],
+) -> Mapping[tuple[Any, ...], int]:
     grouped = df.groupby(keys[0] if len(keys) == 1 else keys, dropna=False).size()
-    counts: dict[tuple[Any, ...], int] = {}
+    counts = {}
     for key, count in grouped.items():
         tuple_key = key if isinstance(key, tuple) else (key,)
         counts[tuple_key] = int(count)
@@ -62,8 +66,12 @@ def _estimate_join_output_rows_by_keys(
     if not left_keys or len(left_keys) != len(right_keys):
         return None
 
-    left_non_null = left[left[left_keys].notna().all(axis=1)]
-    right_non_null = right[right[right_keys].notna().all(axis=1)]
+    # La stima usa esclusivamente le chiavi: filtrare `left`/`right`
+    # materializzerebbe inutilmente tutte le colonne dei frame larghi.
+    left_key_frame = left[left_keys]
+    right_key_frame = right[right_keys]
+    left_non_null = left_key_frame[left_key_frame.notna().all(axis=1)]
+    right_non_null = right_key_frame[right_key_frame.notna().all(axis=1)]
     left_counts = _key_counts_by_tuple(left_non_null, left_keys) if len(left_non_null) else {}
     right_counts = _key_counts_by_tuple(right_non_null, right_keys) if len(right_non_null) else {}
     matched_keys = set(left_counts).intersection(right_counts)
@@ -232,7 +240,6 @@ def op_join(
                     new_cols.append(f"{col}_{suffix}_dup{key_done[col]}")
             else:
                 new_cols.append(f"{col}_{suffix}")
-        df = copy_frame_for_update(df)
         df.columns = new_cols
         return df
 
