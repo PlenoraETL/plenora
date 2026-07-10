@@ -644,7 +644,7 @@ run_docker compose build backend frontend
 run_docker compose up -d postgres rabbitmq
 run_docker compose up -d --wait backend
 seed_bootstrap_superadmin
-run_docker compose up -d --scale worker="$PLENORA_WORKER_REPLICAS" worker beat
+run_docker compose up -d --scale worker="$PLENORA_WORKER_REPLICAS" worker worker-control beat
 run_docker compose up -d --wait frontend
 
 provider_check
@@ -662,6 +662,6 @@ else
     log_step "Install complete"
     log "Stack is running. Use:"
     log "  ${DOCKER_CMD[*]} compose ps"
-    log "  ${DOCKER_CMD[*]} compose logs --tail 200 backend worker beat frontend"
+    log "  ${DOCKER_CMD[*]} compose logs --tail 200 backend worker worker-control beat frontend"
     log "  ${DOCKER_CMD[*]} compose stop"
 fi

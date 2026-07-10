@@ -35,8 +35,8 @@ param(
     # come servizi con avvio automatico al boot.
     [switch]$InstallServices,
     [int]$WorkerProcesses = 1,
-    [int]$WorkerThreads = 4,
-    [switch]$SplitWorkerServices,
+    [int]$WorkerThreads = 1,
+    [switch]$SplitWorkerServices = $true,
     [int]$DataWorkerServices = 1,
     [int]$DataWorkerThreads = 1,
     [int]$ControlWorkerThreads = 2,

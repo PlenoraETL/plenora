@@ -112,7 +112,7 @@ Worker and beat:
 
 ```bash
 cd backend
-python -m dramatiq workers.dramatiq_app --processes 1 --threads 8
+python -m dramatiq workers.dramatiq_app --processes 1 --threads 1
 python -m workers.beat
 ```
 

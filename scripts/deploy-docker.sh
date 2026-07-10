@@ -281,7 +281,7 @@ compose_update() {
     log_step "Restart stack"
     run_docker compose up -d postgres rabbitmq
     run_docker compose up -d --wait --force-recreate backend
-    run_docker compose up -d --force-recreate --scale worker="$PLENORA_WORKER_REPLICAS" worker beat
+    run_docker compose up -d --force-recreate --scale worker="$PLENORA_WORKER_REPLICAS" worker worker-control beat
     run_docker compose up -d --wait --force-recreate frontend
 }
 
@@ -343,5 +343,5 @@ else
     log_step "Deploy complete"
     log "Stack updated. Use:"
     log "  ${DOCKER_CMD[*]} compose ps"
-    log "  ${DOCKER_CMD[*]} compose logs --tail 200 backend worker beat frontend"
+    log "  ${DOCKER_CMD[*]} compose logs --tail 200 backend worker worker-control beat frontend"
 fi

@@ -137,7 +137,7 @@ def test_compose_exists():
     )
 
 
-def test_compose_declares_five_canonical_services():
+def test_compose_declares_split_worker_services():
     text = _COMPOSE.read_text(encoding="utf-8")
     # Each service's top-level key appears as `<name>:` at the
     # start of an indented line.
@@ -146,6 +146,7 @@ def test_compose_declares_five_canonical_services():
         "  rabbitmq:",
         "  backend:",
         "  worker:",
+        "  worker-control:",
         "  beat:",
     )
     for service in expected_services:
@@ -202,7 +203,7 @@ def test_compose_uses_service_healthy_dependency():
     )
 
 
-def test_compose_worker_uses_pool_solo_and_beat_uses_plenora_scheduler():
+def test_compose_workers_use_memory_safe_queue_split():
     text = _COMPOSE.read_text(encoding="utf-8")
     assert "dramatiq" in text and "workers.dramatiq_app" in text, (
         "docker-compose.yml worker service must launch the Dramatiq worker "
@@ -215,6 +216,11 @@ def test_compose_worker_uses_pool_solo_and_beat_uses_plenora_scheduler():
         "-- Plenora 2.0 Fase 3: il beat gira su APScheduler (runner "
         "workers.beat), non piu' su celery beat. Leader-lock su PostgreSQL."
     )
+    assert '["--queues", "data-plane", "--processes", "1", "--threads", "1"]' in text
+    assert (
+        '["--queues", "control-plane", "scheduler", "default", '
+        '"--processes", "1", "--threads", "2"]'
+    ) in text
 
 
 def test_compose_publishes_backend_5004():
@@ -371,7 +377,7 @@ def test_install_docker_doc_lists_executable_runbook_steps():
         "docker compose config",
         "docker compose build backend",
         "docker compose up -d --wait backend",
-        "docker compose up -d worker beat",
+        "docker compose up -d worker worker-control beat",
         "cleanroom.ping",
         "docker compose stop",
     )

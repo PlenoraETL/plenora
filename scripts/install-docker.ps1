@@ -422,7 +422,7 @@ Invoke-External "docker" @("compose", "config")
 Invoke-External "docker" @("compose", "build", "backend", "frontend")
 Invoke-External "docker" @("compose", "up", "-d", "postgres", "rabbitmq")
 Invoke-External "docker" @("compose", "up", "-d", "--wait", "backend")
-Invoke-External "docker" @("compose", "up", "-d", "worker", "beat")
+Invoke-External "docker" @("compose", "up", "-d", "worker", "worker-control", "beat")
 Invoke-External "docker" @("compose", "up", "-d", "--wait", "frontend")
 
 Invoke-AdminBootstrap
@@ -441,6 +441,6 @@ if ($DryRun) {
     Write-Step "Install complete"
     Write-Host "Stack is running. Use:"
     Write-Host "  docker compose ps"
-    Write-Host "  docker compose logs --tail 200 backend worker beat frontend"
+    Write-Host "  docker compose logs --tail 200 backend worker worker-control beat frontend"
     Write-Host "  docker compose stop"
 }

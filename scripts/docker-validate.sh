@@ -232,7 +232,7 @@ run_step() {
         echo "STEP $n FAILED with exit code $rc." >&2
         echo "Paste this transcript back along with:" >&2
         echo "  - docker compose ps" >&2
-        echo "  - docker compose logs --tail 200 backend worker beat" >&2
+        echo "  - docker compose logs --tail 200 backend worker worker-control beat" >&2
         echo "See docs/ops/install-docker.md \"Validation pack\" for" >&2
         echo "the per-step Failure paste guidance." >&2
         exit $rc
@@ -435,7 +435,7 @@ run_ready_step
 run_schema_postcondition
 
 run_step 5 "up worker + beat" -- \
-    docker compose up -d worker beat
+    docker compose up -d worker worker-control beat
 
 run_step 6a "up frontend (static nginx)" -- \
     docker compose up -d --wait frontend

@@ -130,8 +130,8 @@ su quell'origin; l'installer configura comunque CORS anche per
 |---|---|---|
 | `-SkipWinget` | off | Salta la fase pacchetti (gia' installati) |
 | `-InstallServices` | off | Servizi `plenora-backend/worker/beat` |
-| `-WorkerProcesses` / `-WorkerThreads` | 1 / 4 | Parallelismo del worker Dramatiq legacy, usato quando `-SplitWorkerServices` non e' attivo |
-| `-SplitWorkerServices` | off | Crea worker separati per code: data-plane e control/scheduler/default |
+| `-WorkerProcesses` / `-WorkerThreads` | 1 / 1 | Parallelismo del worker Dramatiq legacy, usato quando `-SplitWorkerServices:$false` |
+| `-SplitWorkerServices` | on | Crea worker separati per code: data-plane e control/scheduler/default; disabilitare esplicitamente con `-SplitWorkerServices:$false` |
 | `-DataWorkerServices` / `-DataWorkerThreads` | 1 / 1 | Numero di servizi data-plane e thread per ciascun servizio split |
 | `-ControlWorkerThreads` | 2 | Thread del worker control/scheduler/default in modalita' split |
 | `-WorkerQueuePrefetch` / `-WorkerDelayQueuePrefetch` | 1 / 1 | Prefetch Dramatiq dei worker Windows; default basso per contenere RSS |
@@ -153,8 +153,9 @@ Non-interattivo (env): `PLENORA_BOOTSTRAP_ADMIN_USERNAME`,
 `PLENORA_INSTALL_WORKER_QUEUE_PREFETCH`,
 `PLENORA_INSTALL_WORKER_DELAY_QUEUE_PREFETCH`.
 
-Per host con RAM limitata, preferire la modalita' split con data-plane a
-thread singolo. RabbitMQ bilancia automaticamente i task tra piu' servizi
+La modalita' split con data-plane a thread singolo e' il default per evitare
+pipeline pandas concorrenti nello stesso processo. RabbitMQ bilancia
+automaticamente i task tra piu' servizi
 che ascoltano la stessa coda; per aumentare throughput data-plane usare
 `-DataWorkerServices 2` prima di aumentare i thread.
 

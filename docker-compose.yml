@@ -5,7 +5,8 @@
 #                  also result/progress store, leader-lock, JWT blacklist)
 #   - rabbitmq   : task broker (Dramatiq)
 #   - backend    : FastAPI (uvicorn :5004) with /health and /ready
-#   - worker     : Dramatiq worker (python -m dramatiq workers.dramatiq_app)
+#   - worker     : Dramatiq data-plane worker (1 thread, pipeline pesanti)
+#   - worker-control: Dramatiq control/scheduler/default worker
 #   - beat       : APScheduler beat (python -m workers.beat)
 #   - frontend   : Vite production build served by nginx (:3000 -> :80)
 #
@@ -90,6 +91,10 @@ services:
       DATABASE_URL: postgresql://plenora:plenora@postgres:5432/plenora
       DRAMATIQ_BROKER_URL: amqp://guest:guest@rabbitmq:5672
       DATA_DIR: /data
+      DRAMATIQ_PROCESSES: 2
+      DRAMATIQ_THREADS: 1
+      dramatiq_queue_prefetch: 1
+      dramatiq_delay_queue_prefetch: 1
     volumes:
       - data-dir:/data
     depends_on:
@@ -99,11 +104,43 @@ services:
         condition: service_healthy
       backend:
         condition: service_started
-    # Plenora 2.0: il worker esegue gli actor Dramatiq da RabbitMQ
-    # (Redis rimosso). 1 processo / 8 thread per
-    # lo scaffold single-machine; il routing actor->coda e' in dramatiq_app.
+    # Data-plane isolato: un solo thread per processo evita merge pandas
+    # concorrenti nello stesso budget RSS. Scalare questo servizio aumenta i
+    # processi isolati, non i thread che condividono memoria.
     entrypoint: ["python", "-m", "dramatiq", "workers.dramatiq_app"]
-    command: ["--processes", "1", "--threads", "8"]
+    command: ["--queues", "data-plane", "--processes", "1", "--threads", "1"]
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+
+  worker-control:
+    image: plenora-backend:scaffold
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - .env.docker
+    environment:
+      DATABASE_URL: postgresql://plenora:plenora@postgres:5432/plenora
+      DRAMATIQ_BROKER_URL: amqp://guest:guest@rabbitmq:5672
+      DATA_DIR: /data
+      DRAMATIQ_PROCESSES: 2
+      DRAMATIQ_THREADS: 2
+      dramatiq_queue_prefetch: 1
+      dramatiq_delay_queue_prefetch: 1
+    volumes:
+      - data-dir:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    # Task leggeri e di coordinamento non competono con i DataFrame del
+    # data-plane: cleanup, backup, scheduler e coda default.
+    entrypoint: ["python", "-m", "dramatiq", "workers.dramatiq_app"]
+    command: ["--queues", "control-plane", "scheduler", "default", "--processes", "1", "--threads", "2"]
     healthcheck:
       disable: true
     restart: unless-stopped

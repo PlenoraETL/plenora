@@ -247,7 +247,7 @@ docker compose config --quiet
 docker compose build backend frontend
 docker compose up -d postgres rabbitmq
 docker compose up -d --wait backend
-docker compose up -d --scale worker=1 worker beat
+docker compose up -d --scale worker=1 worker worker-control beat
 docker compose up -d --wait frontend
 ```
 
@@ -270,7 +270,7 @@ curl -sS http://127.0.0.1:5004/ready
 docker compose ps
 docker compose logs --tail 200 backend
 docker compose logs --tail 200 postgres rabbitmq
-docker compose logs --tail 200 worker
+docker compose logs --tail 200 worker worker-control
 docker compose logs --tail 200 beat
 docker compose exec -T backend python -c "from app.observability.health import gather_readiness; print(gather_readiness().body)"
 ```

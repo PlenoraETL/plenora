@@ -26,7 +26,7 @@ export DATABASE_URL="postgresql://plenora:plenora@localhost:5432/plenora"
 export DRAMATIQ_BROKER_URL="amqp://guest:guest@localhost:5672/"
 
 uvicorn app.main:app --reload --port 5004
-python -m dramatiq workers.dramatiq_app --processes 1 --threads 8
+python -m dramatiq workers.dramatiq_app --processes 1 --threads 1
 python -m workers.beat
 ```
 

@@ -136,8 +136,8 @@ Expected output checklist:
 4. **`curl -fsS http://127.0.0.1:5004/health`**
    Expected: HTTP 200 from the backend liveness surface, followed by HTTP 200
    from `/ready`.
-5. **`docker compose up -d worker beat`**
-   Expected: worker and beat containers stay running.
+5. **`docker compose up -d worker worker-control beat`**
+   Expected: data-plane worker, control worker and beat containers stay running.
 6. **`docker compose up -d --wait frontend`**
    Expected: frontend container becomes healthy.
 7. **`curl -fsS http://127.0.0.1:3000/`**

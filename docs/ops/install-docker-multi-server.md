@@ -311,7 +311,7 @@ docker run -d \
   -v plenora-data:/data \
   --entrypoint python \
   $REGISTRY/backend:$PLENORA_TAG \
-  -m dramatiq workers.dramatiq_app --processes 2 --threads 4
+  -m dramatiq workers.dramatiq_app --processes 2 --threads 1
 ```
 
 > Plenora 2.0 (Fase 1): il worker esegue gli actor Dramatiq da RabbitMQ

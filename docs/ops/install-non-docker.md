@@ -148,7 +148,7 @@ Terminal 2:
 
 ```bash
 source venv/bin/activate
-dramatiq workers.dramatiq_app --processes 1 --threads 8
+dramatiq workers.dramatiq_app --processes 1 --threads 1
 ```
 
 Terminal 3:
