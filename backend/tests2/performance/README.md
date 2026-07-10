@@ -26,6 +26,15 @@ python -m pytest tests2/performance/test_bench_manipola_join_memory.py -c tests2
 Il benchmark esegue legacy e implementazione corrente in processi separati e
 confronta il picco RSS su due DataFrame sintetici larghi.
 
+Benchmark end-to-end simulato nel wrapper del worker Dramatiq:
+
+```powershell
+python -m pytest tests2/performance/test_bench_manipola_dramatiq_memory.py -c tests2/pytest.ini -m perf_bench -s
+```
+
+Oltre al picco complessivo, stampa i massimi RSS osservati durante caricamento
+sorgenti, preflight del join, merge e cleanup post-task.
+
 ## Marker
 
 - `perf_correctness`: invarianti di output, eseguibili in CI.

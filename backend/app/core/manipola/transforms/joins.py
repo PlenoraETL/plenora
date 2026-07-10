@@ -5,7 +5,6 @@ Keeps transformation behavior isolated from orchestration callers.
 """
 
 import uuid
-from collections.abc import Mapping
 from typing import Any, List
 
 import numpy as np
@@ -41,18 +40,6 @@ def _normalize_join_keys(value: Any) -> List[str]:
     return [text] if text else []
 
 
-def _key_counts_by_tuple(
-    df: DataFrame,
-    keys: List[str],
-) -> Mapping[tuple[Any, ...], int]:
-    grouped = df.groupby(keys[0] if len(keys) == 1 else keys, dropna=False).size()
-    counts = {}
-    for key, count in grouped.items():
-        tuple_key = key if isinstance(key, tuple) else (key,)
-        counts[tuple_key] = int(count)
-    return counts
-
-
 def _estimate_join_output_rows_by_keys(
     left: DataFrame,
     right: DataFrame,
@@ -66,18 +53,42 @@ def _estimate_join_output_rows_by_keys(
     if not left_keys or len(left_keys) != len(right_keys):
         return None
 
-    # La stima usa esclusivamente le chiavi: filtrare `left`/`right`
-    # materializzerebbe inutilmente tutte le colonne dei frame larghi.
-    left_key_frame = left[left_keys]
-    right_key_frame = right[right_keys]
-    left_non_null = left_key_frame[left_key_frame.notna().all(axis=1)]
-    right_non_null = right_key_frame[right_key_frame.notna().all(axis=1)]
-    left_counts = _key_counts_by_tuple(left_non_null, left_keys) if len(left_non_null) else {}
-    right_counts = _key_counts_by_tuple(right_non_null, right_keys) if len(right_non_null) else {}
-    matched_keys = set(left_counts).intersection(right_counts)
-    matched_rows = sum(left_counts[key] * right_counts[key] for key in matched_keys)
-    left_matched_input_rows = sum(left_counts[key] for key in matched_keys)
-    right_matched_input_rows = sum(right_counts[key] for key in matched_keys)
+    # `dropna=True` esclude direttamente i gruppi con almeno una join key
+    # nulla, evitando sia il filtro booleano dei frame sia la conversione dei
+    # conteggi in dict/tuple Python (costosa su chiavi ad alta cardinalita').
+    left_group_key = left_keys[0] if len(left_keys) == 1 else left_keys
+    right_group_key = right_keys[0] if len(right_keys) == 1 else right_keys
+    left_counts = left.groupby(left_group_key, dropna=True).size()
+    right_counts = right.groupby(right_group_key, dropna=True).size()
+
+    # I nomi delle chiavi possono differire fra i due lati. Normalizzare i
+    # nomi dell'indice permette intersection/reindex per valore senza creare
+    # copie dei DataFrame sorgente.
+    if len(left_keys) == 1:
+        left_counts.index = left_counts.index.rename(None)
+        right_counts.index = right_counts.index.rename(None)
+    else:
+        unnamed_levels = [None] * len(left_keys)
+        left_counts.index = left_counts.index.set_names(unnamed_levels)
+        right_counts.index = right_counts.index.set_names(unnamed_levels)
+
+    matched_keys = left_counts.index.intersection(right_counts.index)
+    if len(matched_keys):
+        left_matched = left_counts.reindex(matched_keys).to_numpy(
+            dtype=np.int64,
+            copy=False,
+        )
+        right_matched = right_counts.reindex(matched_keys).to_numpy(
+            dtype=np.int64,
+            copy=False,
+        )
+        matched_rows = int(np.dot(left_matched, right_matched))
+        left_matched_input_rows = int(left_matched.sum())
+        right_matched_input_rows = int(right_matched.sum())
+    else:
+        matched_rows = 0
+        left_matched_input_rows = 0
+        right_matched_input_rows = 0
 
     left_unmatched_rows = len(left) - left_matched_input_rows
     right_unmatched_rows = len(right) - right_matched_input_rows

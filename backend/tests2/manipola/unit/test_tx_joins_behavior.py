@@ -489,7 +489,7 @@ def test_op_cross_join_single_input_returns_first():
     assert len(result) == 3
 
 
-def test_join_cardinality_estimator_materializes_only_key_columns(monkeypatch):
+def test_join_cardinality_estimator_avoids_boolean_row_materialization(monkeypatch):
     from app.core.manipola.transforms import joins as joins_module
 
     left = pd.DataFrame(
@@ -498,17 +498,17 @@ def test_join_cardinality_estimator_materializes_only_key_columns(monkeypatch):
     right = pd.DataFrame(
         {"rk": [2.0, 3.0, None], "other_payload": [10, 20, 30]}
     )
-    observed_columns = []
-    real_key_counts = joins_module._key_counts_by_tuple
+    real_getitem = pd.DataFrame.__getitem__
 
-    def _capture_key_counts(df, keys):
-        observed_columns.append(list(df.columns))
-        return real_key_counts(df, keys)
+    def _reject_boolean_row_materialization(self, key):
+        if isinstance(key, pd.Series) and key.dtype == bool:
+            raise AssertionError("La stima join non deve filtrare righe del DataFrame")
+        return real_getitem(self, key)
 
     monkeypatch.setattr(
-        joins_module,
-        "_key_counts_by_tuple",
-        _capture_key_counts,
+        pd.DataFrame,
+        "__getitem__",
+        _reject_boolean_row_materialization,
     )
 
     estimated = joins_module._estimate_join_output_rows_by_keys(
@@ -520,7 +520,6 @@ def test_join_cardinality_estimator_materializes_only_key_columns(monkeypatch):
     )
 
     assert estimated == 1
-    assert observed_columns == [["k"], ["rk"]]
 
 
 def test_op_cross_join_guard_blocks_above_cap(monkeypatch):

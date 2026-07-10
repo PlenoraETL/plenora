@@ -75,14 +75,17 @@ def _legacy_estimate(
     right: pd.DataFrame,
 ) -> int:
     """Implementazione precedente al commit 7193a58e."""
-    from app.core.manipola.transforms.joins import _key_counts_by_tuple
-
     left_keys = ["k"]
     right_keys = ["rk"]
     left_non_null = left[left[left_keys].notna().all(axis=1)]
     right_non_null = right[right[right_keys].notna().all(axis=1)]
-    left_counts = _key_counts_by_tuple(left_non_null, left_keys)
-    right_counts = _key_counts_by_tuple(right_non_null, right_keys)
+
+    def _key_counts(df, keys):
+        grouped = df.groupby(keys[0], dropna=False).size()
+        return {key: int(count) for key, count in grouped.items()}
+
+    left_counts = _key_counts(left_non_null, left_keys)
+    right_counts = _key_counts(right_non_null, right_keys)
     matched_keys = set(left_counts).intersection(right_counts)
     return sum(left_counts[key] * right_counts[key] for key in matched_keys)
 
