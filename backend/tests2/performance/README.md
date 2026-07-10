@@ -35,6 +35,15 @@ python -m pytest tests2/performance/test_bench_manipola_dramatiq_memory.py -c te
 Oltre al picco complessivo, stampa i massimi RSS osservati durante caricamento
 sorgenti, preflight del join, merge e cleanup post-task.
 
+Soak test del riciclo processo data-plane:
+
+```powershell
+python -m pytest tests2/performance/test_bench_dramatiq_process_recycle.py -c tests2/pytest.ini -m perf_bench -s
+```
+
+Confronta pipeline consecutive nello stesso processo con un processo nuovo per
+ogni pipeline, mostrando RSS idle dopo ogni task e costo di startup.
+
 ## Marker
 
 - `perf_correctness`: invarianti di output, eseguibili in CI.
