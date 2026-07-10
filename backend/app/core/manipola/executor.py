@@ -729,6 +729,13 @@ class ManipolaExecutor:
             on_cycle="raise",
         )
         sorted_nodes = [node_map[node_id] for node_id in sorted_node_ids]
+        process_node_ids = set(node_map)
+        remaining_consumers: dict[str, int] = {}
+        for edge in canvas.edges:
+            if edge.target in process_node_ids:
+                remaining_consumers[edge.source] = (
+                    remaining_consumers.get(edge.source, 0) + 1
+                )
         
         current_df = None
         graph = canvas_graph or CanvasGraph.from_canvas(canvas)
@@ -747,6 +754,24 @@ class ManipolaExecutor:
                 logger.warning(
                     f"Schema runtime non disponibile per risoluzione column_id: {exc}"
                 )
+
+        def _release_consumed_inputs(
+            incoming_edges: List[Any],
+            current_node_id: str,
+        ) -> None:
+            for edge in incoming_edges:
+                source_id = edge.source
+                if source_id not in dataframes:
+                    continue
+
+                remaining = remaining_consumers.get(source_id)
+                if remaining is None:
+                    continue
+
+                remaining -= 1
+                remaining_consumers[source_id] = remaining
+                if remaining <= 0 and source_id != current_node_id:
+                    dataframes.pop(source_id, None)
 
         for node in sorted_nodes:
             # Trova input per questo nodo - ORDINA per targetHandle o posizione Y
@@ -810,6 +835,8 @@ class ManipolaExecutor:
             
             # Salva risultato per nodi successivi
             dataframes[node.id] = current_df
+            _release_consumed_inputs(incoming, node.id)
+            inputs = []
 
             if run_id and current_df is not None:
                 try:

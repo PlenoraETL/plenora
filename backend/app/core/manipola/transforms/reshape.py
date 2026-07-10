@@ -106,7 +106,8 @@ def op_pivot(
         logger.warning(f"[GESTITO] Pivot: colonne mancanti: {missing}")
         return df
 
-    result = copy_frame_for_update(df)
+    needed_cols = list(dict.fromkeys(all_needed))
+    result = copy_frame_for_update(df[needed_cols])
     result[pivot_col] = result[pivot_col].fillna('').astype(str).str.strip()
     try:
         if mapping:

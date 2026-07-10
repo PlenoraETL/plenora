@@ -208,6 +208,33 @@ def test_pivot_does_not_mutate_input():
     pd.testing.assert_frame_equal(df, original)
 
 
+def test_pivot_passes_only_required_columns_to_pivot_table(monkeypatch):
+    from app.core.dataframes.tabular import pivot_table_dataframe as real_pivot_table
+
+    df = _pivot_df()
+    df["unused_payload"] = ["x" * 1000, "y" * 1000, "z" * 1000]
+    captured = {}
+
+    def _capture_pivot_table(data, **kwargs):
+        captured["columns"] = list(data.columns)
+        return real_pivot_table(data, **kwargs)
+
+    monkeypatch.setattr(
+        "app.core.manipola.transforms.reshape.pivot_table_dataframe",
+        _capture_pivot_table,
+    )
+
+    result = op_pivot(
+        df,
+        index_col="immobile",
+        pivot_col="tipo",
+        value_col="importo",
+    )
+
+    assert captured["columns"] == ["immobile", "tipo", "importo"]
+    assert "unused_payload" not in result.columns
+
+
 # ---------------------------------------------------------------------------
 # op_table_diff
 # ---------------------------------------------------------------------------
