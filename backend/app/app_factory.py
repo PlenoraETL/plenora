@@ -214,6 +214,11 @@ def create_app(
 
     _RSS_STAGES = frozenset({"pipeline_execute", "worker_rss"})
     _ROW_COUNT_STAGES = frozenset({"manipola_cross_join", "manipola_multi_join"})
+    _JOIN_MEMORY_STAGES = frozenset({
+        "manipola_join_memory",
+        "manipola_cross_join_memory",
+        "manipola_multi_join_memory",
+    })
 
     @app.exception_handler(MemoryLimitExceededError)
     async def memory_limit_exceeded_handler(
@@ -227,8 +232,11 @@ def create_app(
             else "split_file_or_contact_admin"
         )
         is_row_count = exc.stage in _ROW_COUNT_STAGES
+        is_join_memory = exc.stage in _JOIN_MEMORY_STAGES
         if is_row_count:
             suggested_action = "reduce_inputs_or_raise_cap"
+        elif is_join_memory:
+            suggested_action = "reduce_join_inputs_or_worker_concurrency"
         logger.warning(
             "Memory limit exceeded in stage=%s resource=%s observed=%d limit=%d status=%d",
             exc.stage,
@@ -262,6 +270,12 @@ def create_app(
                 f"Lo stage '{exc.stage}' {_verb} {exc.observed_bytes} righe, "
                 f"oltre il limite configurato di {exc.limit_bytes} righe. "
                 f"{_hint}"
+            )
+        elif is_join_memory:
+            message = (
+                f"Lo stage '{exc.stage}' richiederebbe circa {observed_mb} MB "
+                f"di picco, oltre il budget worker di {limit_mb} MB. Riduci "
+                "righe/colonne prima del join o limita la concorrenza data-plane."
             )
         else:
             message = (

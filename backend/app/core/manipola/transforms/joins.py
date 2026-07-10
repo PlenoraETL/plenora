@@ -11,6 +11,11 @@ import numpy as np
 
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
+from app.core.manipola.join_memory import (
+    CROSS_JOIN_MEMORY_STAGE,
+    JOIN_MEMORY_STAGE,
+    guard_estimated_merge_memory,
+)
 from app.core.dataframes.tabular import (
     coerce_numeric_series,
     concat_dataframes,
@@ -326,13 +331,12 @@ def op_join(
     # I null non entrano nei common-key matchable: includerli sovrastima
     # join legittimi con molti null bilaterali.
     _MAX_JOIN_OUTPUT_ROWS = 50_000_000  # 50M righe = ~5-10GB peak tipico
+    estimated_rows = None
     try:
         estimated_rows = _estimate_join_output_rows_by_keys(
             left_df, right_df, left_key_cols, right_key_cols, how
         )
-        if estimated_rows is None:
-            estimated_rows = 0
-        if estimated_rows > _MAX_JOIN_OUTPUT_ROWS:
+        if estimated_rows is not None and estimated_rows > _MAX_JOIN_OUTPUT_ROWS:
             raise ValueError(
                 f"Join {how} su chiavi ({left_key_cols} x {right_key_cols}) "
                 f"produrrebbe ~{estimated_rows:,} righe (cap "
@@ -350,6 +354,15 @@ def op_join(
             f"[GUARD-BYPASS] Join cardinality guard skipped: "
             f"left_keys={left_key_cols}, right_keys={right_key_cols}, "
             f"how={how}, exc_type={type(exc).__name__}: {exc}"
+        )
+
+    if estimated_rows is not None:
+        guard_estimated_merge_memory(
+            left_df,
+            right_df,
+            estimated_rows,
+            stage=JOIN_MEMORY_STAGE,
+            path_basename="join_output",
         )
 
     _join_nan_token = uuid.uuid4().hex[:12]
@@ -501,8 +514,8 @@ def op_cross_join(
         # Contesto pure-test senza Settings inizializzato: guard off
         _cap_rows = 0
 
+    _output_rows = len(left_df) * len(right_df)
     if _cap_rows > 0:
-        _output_rows = len(left_df) * len(right_df)
         if _output_rows > _cap_rows:
             logger.warning(
                 f"CrossJoin preflight: output stimato {_output_rows} righe "
@@ -515,6 +528,14 @@ def op_cross_join(
                 path_basename="cross_join_output",
                 stage=CROSS_JOIN_STAGE,
             )
+
+    guard_estimated_merge_memory(
+        left_df,
+        right_df,
+        _output_rows,
+        stage=CROSS_JOIN_MEMORY_STAGE,
+        path_basename="cross_join_output",
+    )
 
     try:
         result = merge_dataframes(left_df, right_df, how="cross")

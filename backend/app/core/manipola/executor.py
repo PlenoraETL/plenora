@@ -18,6 +18,10 @@ from app.core.dataframes.tabular import (
     merge_dataframes,
 )
 from app.core.projects.canvas_models import CanvasState, Node
+from app.core.manipola.join_memory import (
+    MULTI_JOIN_MEMORY_STAGE,
+    guard_estimated_merge_memory,
+)
 from app.config import settings
 from app.core.projects.execution_context import get_project_group_id
 from app.shared.execution.canvas_graph import CanvasGraph
@@ -1002,10 +1006,10 @@ class ManipolaExecutor:
                 df_copy = df_copy.rename(columns=rename_map)
                 logger.info(f"Rinominate colonne: {list(rename_map.keys())}")
 
+            _estimated_rows = _estimate_merge_output_rows_by_keys(
+                result, df_copy, left_keys, right_keys, join_type
+            )
             if _multi_cap > 0:
-                _estimated_rows = _estimate_merge_output_rows_by_keys(
-                    result, df_copy, left_keys, right_keys, join_type
-                )
                 if _estimated_rows is not None and _estimated_rows > _multi_cap:
                     logger.warning(
                         f"Multi-join con coppie chiavi: output stimato "
@@ -1018,6 +1022,15 @@ class ManipolaExecutor:
                         path_basename="multi_join_output",
                         stage=MULTI_JOIN_STAGE,
                     )
+
+            if _estimated_rows is not None:
+                guard_estimated_merge_memory(
+                    result,
+                    df_copy,
+                    _estimated_rows,
+                    stage=MULTI_JOIN_MEMORY_STAGE,
+                    path_basename="multi_join_output",
+                )
 
             result = merge_dataframes(
                 result,
@@ -1070,10 +1083,10 @@ class ManipolaExecutor:
 
             # Pre-merge exact cardinality estimate. Runs before
             # merge_dataframes materializes the merge output.
+            _estimated_rows = _estimate_merge_output_rows(
+                result, df_copy, join_keys, join_type
+            )
             if _multi_cap > 0:
-                _estimated_rows = _estimate_merge_output_rows(
-                    result, df_copy, join_keys, join_type
-                )
                 if _estimated_rows is not None and _estimated_rows > _multi_cap:
                     logger.warning(
                         f"Multi-join step #{idx}: output stimato "
@@ -1086,6 +1099,15 @@ class ManipolaExecutor:
                         path_basename="multi_join_output",
                         stage=MULTI_JOIN_STAGE,
                     )
+
+            if _estimated_rows is not None:
+                guard_estimated_merge_memory(
+                    result,
+                    df_copy,
+                    _estimated_rows,
+                    stage=MULTI_JOIN_MEMORY_STAGE,
+                    path_basename="multi_join_output",
+                )
 
             # Merge
             result = merge_dataframes(
