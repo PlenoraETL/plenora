@@ -1,0 +1,17 @@
+[Unit]
+Description=PLENORA-ETL Control-plane Worker (Dramatiq)
+After=network.target rabbitmq-server.service postgresql.service
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/plenora-etl/backend
+EnvironmentFile=/home/ubuntu/plenora-etl/backend/.env
+# Task leggeri e coordinamento restano separati dai picchi RAM del data-plane.
+Environment=DRAMATIQ_PROCESSES=1
+Environment=DRAMATIQ_THREADS=2
+ExecStart=/home/ubuntu/plenora-etl/backend/venv/bin/dramatiq workers.dramatiq_app --queues control-plane scheduler default --processes 1 --threads 2
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

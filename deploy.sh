@@ -103,6 +103,7 @@ load_profile() {
         APP_HEALTH_URL
         APP_READY_URL
         SYSTEMD_UNITS
+        SYSTEMD_UNIT_FILES
         ALLOWED_BRANCHES
     )
     local missing=()
@@ -121,6 +122,7 @@ load_profile() {
     READY_TIMEOUT_SEC="${READY_TIMEOUT_SEC:-60}"
     READY_POLL_INTERVAL_SEC="${READY_POLL_INTERVAL_SEC:-2}"
     RETAIN_FRONTEND_VERSIONS="${RETAIN_FRONTEND_VERSIONS:-3}"
+    SYSTEMD_LEGACY_UNITS="${SYSTEMD_LEGACY_UNITS:-}"
 }
 
 load_profile
@@ -375,14 +377,14 @@ deploy_backend() {
     # 1. Pre-deploy check (read-only sul server)
     pre_deploy_check
 
-    # 2. Pull sul server + sync dipendenze venv + restart
+    # 2. Pull sul server + sync dipendenze/unit systemd + restart
     # NB: pip install e' idempotente — quando requirements.txt non cambia,
     # finisce in ~1s con "Requirement already satisfied" per ogni pacchetto.
     # Fail-fast: se pip fallisce (dipendenza rotta) i servizi NON vengono
     # riavviati — preferiamo lasciare il vecchio vivo piuttosto che un
     # restart con import che esplode.
     run_or_dry ssh -i "$PEM" "$SERVER" \
-        "cd '${REMOTE_BACKEND_PATH}' && git pull origin '${CURRENT_BRANCH}' && venv/bin/pip install -q -r requirements.txt && sudo systemctl restart ${SYSTEMD_UNITS}"
+        "cd '${REMOTE_BACKEND_PATH}' && git pull origin '${CURRENT_BRANCH}' && venv/bin/pip install -q -r requirements.txt && for unit in ${SYSTEMD_UNIT_FILES}; do sudo cp \"deploy/systemd/\$unit\" \"/etc/systemd/system/\$unit\"; done && { sudo systemctl disable --now ${SYSTEMD_LEGACY_UNITS} >/dev/null 2>&1 || true; } && sudo systemctl daemon-reload && sudo systemctl enable ${SYSTEMD_UNITS} && sudo systemctl restart ${SYSTEMD_UNITS}"
     if [ "$DRY_RUN" -ne 1 ]; then
         echo ">>> Server aggiornato (venv sincronizzato) e riavviato"
     fi

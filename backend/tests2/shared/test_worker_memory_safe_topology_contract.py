@@ -56,6 +56,48 @@ def test_windows_installer_defaults_to_split_single_thread_data_plane():
     )
 
 
+def test_linux_systemd_uses_split_queue_scoped_workers():
+    data_unit = _read("backend/deploy/systemd/plenora-worker-data.service")
+    control_unit = _read(
+        "backend/deploy/systemd/plenora-worker-control.service"
+    )
+
+    assert "--queues data-plane --processes 1 --threads 1" in data_unit
+    assert "Environment=DRAMATIQ_PROCESSES=1" in data_unit
+    assert "Environment=DRAMATIQ_THREADS=1" in data_unit
+    assert (
+        "--queues control-plane scheduler default --processes 1 --threads 2"
+        in control_unit
+    )
+    assert "Environment=DRAMATIQ_PROCESSES=1" in control_unit
+    assert "Environment=DRAMATIQ_THREADS=2" in control_unit
+    assert not (_ROOT / "backend/deploy/systemd/plenora-worker.service").exists()
+
+
+def test_linux_installer_publishes_both_split_worker_units():
+    installer = _read("scripts/install.sh")
+
+    assert "plenora-worker-data.service" in installer
+    assert "plenora-worker-control.service" in installer
+    assert "plenora-worker.service" not in installer
+
+
+def test_production_deploy_profile_restarts_both_split_workers():
+    profile = _read("deploy/profiles/prod.conf")
+    deploy_script = _read("deploy.sh")
+
+    assert (
+        'SYSTEMD_UNITS="plenora-backend plenora-worker-data '
+        'plenora-worker-control plenora-beat"'
+    ) in profile
+    assert "plenora-worker-data.service" in profile
+    assert "plenora-worker-control.service" in profile
+    assert "SYSTEMD_LEGACY_UNITS" in profile
+    assert 'sudo cp \\"deploy/systemd/\\$unit\\"' in deploy_script
+    assert "systemctl disable --now ${SYSTEMD_LEGACY_UNITS}" in deploy_script
+    assert "systemctl daemon-reload" in deploy_script
+
+
 def test_documented_local_worker_defaults_are_single_thread():
     paths = (
         "README.md",

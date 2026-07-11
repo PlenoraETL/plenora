@@ -1,0 +1,18 @@
+[Unit]
+Description=PLENORA-ETL Data-plane Worker (Dramatiq)
+After=network.target rabbitmq-server.service postgresql.service
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/plenora-etl/backend
+EnvironmentFile=/home/ubuntu/plenora-etl/backend/.env
+# Un solo task pandas per processo parent. pipeline.execute crea poi il
+# subprocess spawn usa-e-getta configurato da DATA_PLANE_EXECUTION_MODE.
+Environment=DRAMATIQ_PROCESSES=1
+Environment=DRAMATIQ_THREADS=1
+ExecStart=/home/ubuntu/plenora-etl/backend/venv/bin/dramatiq workers.dramatiq_app --queues data-plane --processes 1 --threads 1
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

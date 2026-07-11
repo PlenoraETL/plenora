@@ -969,15 +969,16 @@ docs/ops/install-non-docker.md (sectionsection7-9):
 
   2. systemd units (requires sudo):
        cd ${BACKEND_DIR}/deploy/systemd
-       sudo cp plenora-backend.service plenora-worker.service \\
-              plenora-beat.service /etc/systemd/system/
+       sudo cp plenora-backend.service plenora-worker-data.service \\
+              plenora-worker-control.service plenora-beat.service \\
+              /etc/systemd/system/
        sudo cp plenora-backup.service plenora-backup.timer \\
               plenora-backup-test.service plenora-backup-test.timer \\
               /etc/systemd/system/
        sudo systemctl daemon-reload
        sudo systemctl enable --now \\
-            plenora-backend.service plenora-worker.service \\
-            plenora-beat.service \\
+            plenora-backend.service plenora-worker-data.service \\
+            plenora-worker-control.service plenora-beat.service \\
             plenora-backup.timer plenora-backup-test.timer
 
      IF host layout != /home/ubuntu/plenora-etl/backend, EDIT the unit
@@ -997,8 +998,9 @@ docs/ops/install-non-docker.md (sectionsection7-9):
      Both should return HTTP 200 with all checks green.
 
   5. Acceptance criteria (docs/ops/install-non-docker.md section0):
-       systemctl is-active plenora-backend plenora-worker plenora-beat
-     should print "active" three times.
+       systemctl is-active plenora-backend plenora-worker-data \\
+            plenora-worker-control plenora-beat
+     should print "active" four times.
 
 If /ready returns 503, inspect:
   journalctl -u plenora-backend -n 100 --no-pager

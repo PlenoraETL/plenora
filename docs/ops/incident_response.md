@@ -106,9 +106,9 @@ tabella DB destinazione contiene dati errati:
 
 ### §3.2 Backend 500 globale (uvicorn / Dramatiq)
 
-1. `systemctl status plenora-backend plenora-worker plenora-beat` su
-   server prod (la unit `plenora-worker` esegue ora il worker Dramatiq;
-   il filename e' rimasto invariato).
+1. `systemctl status plenora-backend plenora-worker-data plenora-worker-control plenora-beat`
+   sul server prod. Il data worker e il control worker devono essere entrambi
+   attivi e limitati alle rispettive code.
 2. Tail log `journalctl -u plenora-backend -n 200 --no-pager`. Cerca
    `[CRASH]` come marker di errore non gestito.
 3. Se OOM kill → `dmesg | tail`, riduci il numero di processi/thread del
@@ -116,8 +116,8 @@ tabella DB destinazione contiene dati errati:
 4. Se `psycopg2 connection pool exhausted` → controlla `pg_stat_activity`
    su PG (potrebbe esserci una transazione zombie). `KILL` mirato della
    connessione zombie, non riavvio del DB.
-5. Restart in ordine: `plenora-backend` → verifica `/health` → `plenora-worker`
-   → `plenora-beat`.
+5. Restart in ordine: `plenora-backend` → verifica `/health` →
+   `plenora-worker-data` → `plenora-worker-control` → `plenora-beat`.
 
 ### §3.3 Fallback — incidente non identificato
 

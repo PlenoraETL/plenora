@@ -31,6 +31,10 @@ La stessa implementazione usa il metodo Python `spawn` in tutti i casi:
 | Linux con Docker | variabili del servizio worker in Compose | Il figlio vive nello stesso container e ne rispetta il limite RAM. |
 | Windows con Docker Desktop | variabili del servizio worker in Compose | Il worker gira nel container Linux; il comportamento coincide con Linux Docker. |
 
+Su Linux nativo le unit canoniche sono `plenora-worker-data.service` (sola
+coda `data-plane`, 1x1) e `plenora-worker-control.service` (code leggere,
+1x2). La vecchia `plenora-worker.service` unica non deve restare attiva.
+
 Non servono immagini, code RabbitMQ o comandi di avvio differenti. Il processo
 Dramatiq deve restare attivo: e' l'agent che consuma la coda e avvia i processi
 isolati quando arrivano i task. Worker su macchine diverse possono condividere

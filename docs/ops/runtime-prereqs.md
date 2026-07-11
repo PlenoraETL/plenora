@@ -50,7 +50,8 @@ Attesi installati in `/etc/systemd/system/`:
 | Unit | Tipo | Scopo |
 |---|---|---|
 | `plenora-backend.service` | `simple` | FastAPI backend (uvicorn) |
-| `plenora-worker.service` | `simple` | Worker Dramatiq (`python -m dramatiq workers.dramatiq_app`). Rinominata da `plenora-celery.service` (2026-07-04, vedi migrazione in `deploy/systemd/README.md`) |
+| `plenora-worker-data.service` | `simple` | Worker Dramatiq per `data-plane`, 1 processo x 1 thread; pipeline pesanti in subprocess usa-e-getta. |
+| `plenora-worker-control.service` | `simple` | Worker Dramatiq per `control-plane`, `scheduler`, `default`, 1 processo x 2 thread. |
 | `plenora-beat.service` | `simple` | Beat APScheduler (`python -m workers.beat`) |
 | `plenora-backup.service` | `oneshot` | Dump schema `plenora` + upload S3 |
 | `plenora-backup.timer` | `timer` | Trigger daily 02:00 UTC (+ RandomizedDelaySec=300) |

@@ -110,7 +110,8 @@ Lo script fallisce esplicitamente se una di queste manca nel profilo:
 | `REMOTE_FRONTEND_PATH` | `/home/ubuntu/plenora-etl/frontend` | Path checkout frontend sul server |
 | `APP_HEALTH_URL` | `http://127.0.0.1:5004/health` | Endpoint liveness (PG + RabbitMQ) |
 | `APP_READY_URL` | `http://127.0.0.1:5004/ready` | Endpoint readiness rigoroso |
-| `SYSTEMD_UNITS` | `plenora-backend plenora-worker plenora-beat` | Space-separated, restart + is-active |
+| `SYSTEMD_UNITS` | `plenora-backend plenora-worker-data plenora-worker-control plenora-beat` | Space-separated, restart + is-active |
+| `SYSTEMD_UNIT_FILES` | `plenora-backend.service plenora-worker-data.service plenora-worker-control.service plenora-beat.service` | File copiati dal checkout remoto in `/etc/systemd/system` prima del restart. |
 | `ALLOWED_BRANCHES` | `main` | Allowlist branch deploy permessi |
 
 ## Variabili opzionali
@@ -122,6 +123,7 @@ Lo script fallisce esplicitamente se una di queste manca nel profilo:
 | `READY_TIMEOUT_SEC` | `60` | Timeout polling `/ready` post-restart |
 | `READY_POLL_INTERVAL_SEC` | `2` | Intervallo polling |
 | `RETAIN_FRONTEND_VERSIONS` | `3` | Retain N versioni `dist-{sha}/` (usato dal deploy frontend) |
+| `SYSTEMD_LEGACY_UNITS` | vuoto | Unit precedenti fermate/disabilitate per evitare consumer duplicati; prod usa `plenora-worker.service plenora-celery.service`. |
 
 ## Cosa NON va dentro un profilo
 
@@ -189,5 +191,3 @@ Non sostituiscono mai un profilo pubblico per deploy reali.
 I profili sono **shell-source-able** (`source <file>`). Niente nuove dipendenze
 tool (no yq, jq, python wrapper). Sintassi: `KEY="value"` per riga, commenti
 con `#`. Validazione in `deploy.sh:load_profile`.
-
-

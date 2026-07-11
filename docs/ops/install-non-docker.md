@@ -133,9 +133,9 @@ Generate secrets:
 
 Replace `<generate>` values before starting the backend.
 
-## 6. Start Backend, Worker, Beat
+## 6. Start Backend, Data Worker, Control Worker, Beat
 
-Use three terminals from `~/plenora/backend`.
+Use four terminals from `~/plenora/backend`.
 
 Terminal 1:
 
@@ -148,10 +148,17 @@ Terminal 2:
 
 ```bash
 source venv/bin/activate
-dramatiq workers.dramatiq_app --processes 1 --threads 1
+dramatiq workers.dramatiq_app --queues data-plane --processes 1 --threads 1
 ```
 
 Terminal 3:
+
+```bash
+source venv/bin/activate
+dramatiq workers.dramatiq_app --queues control-plane scheduler default --processes 1 --threads 2
+```
+
+Terminal 4:
 
 ```bash
 source venv/bin/activate
@@ -192,7 +199,7 @@ print(state)
 PY
 ```
 
-Expected: `SUCCESS` (the worker from Terminal 2 must be running).
+Expected: `SUCCESS` (the control worker from Terminal 3 must be running).
 
 ## 8. Frontend
 

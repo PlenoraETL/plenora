@@ -101,7 +101,8 @@ Se exit != 0: NON proseguire con post-deploy. Vedi sezione 4 (rollback) +
 ### 3.2 Servizi systemd
 
 - [ ] `systemctl status plenora-backend` = active (running)
-- [ ] `systemctl status plenora-worker` = active (running)
+- [ ] `systemctl status plenora-worker-data` = active (running)
+- [ ] `systemctl status plenora-worker-control` = active (running)
 - [ ] `systemctl status plenora-beat` = active (running)
 - [ ] Niente "failed" o "activating" residuo
 - [ ] Uptime servizi consistente con timestamp deploy
@@ -123,7 +124,8 @@ Se exit != 0: NON proseguire con post-deploy. Vedi sezione 4 (rollback) +
 ### 3.5 Logs / observability
 
 - [ ] `journalctl -u plenora-backend -n 50` non mostra `[CRASH]` né exceptions ripetute
-- [ ] `journalctl -u plenora-worker -n 50` worker Dramatiq registrato + task consumed (unit rinominata da plenora-celery il 2026-07-04: sui server vecchi fare prima la migrazione in deploy/systemd/README.md)
+- [ ] `journalctl -u plenora-worker-data -n 50` worker data-plane registrato sulla sola coda `data-plane`
+- [ ] `journalctl -u plenora-worker-control -n 50` worker control registrato sulle code `control-plane`, `scheduler`, `default`
 - [ ] `journalctl -u plenora-beat -n 50` schedule reload + leader election OK (APScheduler, leader-lock su PostgreSQL)
 - [ ] `/api/admin/system-status` (se accesso admin) mostra metriche coerenti
 
@@ -152,7 +154,7 @@ ssh -i $PLENORA_DEPLOY_PEM <user>@<server> \
 ssh ... 'cd <path> && pip install -r requirements.txt --quiet'
 
 # 3. Restart servizi
-ssh ... 'sudo systemctl restart plenora-backend plenora-worker plenora-beat'
+ssh ... 'sudo systemctl restart plenora-backend plenora-worker-data plenora-worker-control plenora-beat'
 
 # 4. Verifica health
 curl -fsS https://<app-url>/health
