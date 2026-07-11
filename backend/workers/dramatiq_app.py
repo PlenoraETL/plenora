@@ -482,7 +482,7 @@ def carica_execute(**kwargs: object) -> object:
 def pipeline_execute(**kwargs: object) -> object:
     """PIPELINE execute — stesso corpo del task Celery pipeline.execute."""
     execution_mode = str(
-        settings.get("DATA_PLANE_EXECUTION_MODE", "inline") or "inline"
+        settings.get("DATA_PLANE_EXECUTION_MODE", "subprocess") or "subprocess"
     ).strip().lower()
     if execution_mode == "subprocess":
         from workers.data_plane_subprocess import execute_task_in_subprocess

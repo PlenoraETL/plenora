@@ -307,10 +307,10 @@ def test_parent_terminates_child_on_timeout(monkeypatch):
     assert receive.closed is True
 
 
-def test_settings_default_to_reversible_inline_mode():
+def test_settings_default_to_memory_safe_subprocess_mode():
     from app.config import Settings
 
-    assert Settings.DEFAULTS["DATA_PLANE_EXECUTION_MODE"] == "inline"
+    assert Settings.DEFAULTS["DATA_PLANE_EXECUTION_MODE"] == "subprocess"
     assert Settings.DEFAULTS["DATA_PLANE_CHILD_TIMEOUT_SECONDS"] == 3900
 
 
@@ -351,6 +351,6 @@ def test_actor_contains_subprocess_feature_flag_contract():
     source = (
         Path(__file__).resolve().parents[2] / "workers" / "dramatiq_app.py"
     ).read_text(encoding="utf-8")
-    assert 'settings.get("DATA_PLANE_EXECUTION_MODE", "inline")' in source
+    assert 'settings.get("DATA_PLANE_EXECUTION_MODE", "subprocess")' in source
     assert "execute_task_in_subprocess" in source
     assert 'task_name="pipeline.execute"' in source

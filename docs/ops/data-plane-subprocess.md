@@ -6,15 +6,19 @@ errori, ma pandas, PyArrow, GDAL e i relativi allocator vengono caricati nel
 processo figlio. Alla fine del task il processo termina e il sistema operativo
 recupera tutta la sua memoria.
 
-La funzione e' inizialmente opt-in:
+La funzione e' il comportamento predefinito:
 
 ```env
 DATA_PLANE_EXECUTION_MODE=subprocess
 DATA_PLANE_CHILD_TIMEOUT_SECONDS=3900
 ```
 
-Il default `inline` mantiene il comportamento precedente. Dopo una modifica
-della configurazione occorre riavviare il worker.
+`inline` resta disponibile come rollback esplicito. Dopo una modifica della
+configurazione occorre riavviare il worker:
+
+```env
+DATA_PLANE_EXECUTION_MODE=inline
+```
 
 ## Piattaforme
 
@@ -46,8 +50,8 @@ PostgreSQL e l'object storage condiviso.
 
 ## Rollout consigliato
 
-1. Abilitare `subprocess` su un solo worker data-plane con un processo e un
-   thread.
+1. Avviare un solo worker data-plane con un processo e un thread, lasciando il
+   default `subprocess`.
 2. Eseguire una pipeline rappresentativa e verificare risultato, revoca,
    timeout, RSS del container/host e log.
 3. Aumentare le repliche dei worker per la concorrenza, mantenendo un task

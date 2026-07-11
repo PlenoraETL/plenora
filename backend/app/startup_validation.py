@@ -182,7 +182,7 @@ def validate_data_plane_config(settings: Any, errors: list[str]) -> None:
     """Validate the portable data-plane process boundary before consuming jobs."""
 
     mode = str(
-        settings.get("DATA_PLANE_EXECUTION_MODE", "inline") or "inline"
+        settings.get("DATA_PLANE_EXECUTION_MODE", "subprocess") or "subprocess"
     ).strip().lower()
     if mode not in _DATA_PLANE_EXECUTION_MODES:
         errors.append(
