@@ -14,7 +14,7 @@ from typing import List, Optional
 from psycopg import sql as _sql
 
 from app.db import pg_connection as pg_connection_module
-from app.environment import get_env
+from app.config import settings
 from app.utils.logger import get_logger
 
 
@@ -53,7 +53,7 @@ class MigrationStatus:
 
 def _resolved_schema() -> str:
     """Schema applicativo come da env (default `plenora`)."""
-    return get_env("DB_SCHEMA", "plenora") or "plenora"
+    return str(settings.get("DB_SCHEMA") or settings.DEFAULTS["DB_SCHEMA"])
 
 
 def _assert_supported_schema(name: str) -> None:

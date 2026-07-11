@@ -181,6 +181,8 @@ services:
       dockerfile: frontend/Dockerfile
       args:
         VITE_API_URL: ${FRONTEND_VITE_API_URL:-http://localhost:5004}
+        VITE_SENTRY_DSN: ${FRONTEND_VITE_SENTRY_DSN:-}
+        VITE_SENTRY_TRACES_SAMPLE_RATE: ${FRONTEND_VITE_SENTRY_TRACES_SAMPLE_RATE:-0.1}
     image: plenora-frontend:scaffold
     ports:
       - "3000:80"

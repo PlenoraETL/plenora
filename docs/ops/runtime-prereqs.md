@@ -137,7 +137,7 @@ Il broker dei task e' **RabbitMQ** (Dramatiq), configurato da `DRAMATIQ_BROKER_U
 - JWT blacklist → `kv_store` con cache in-memory (rimpiazza la chiave Redis);
 - rate-limit (login + arricchisci) e lock/cache token OAuth → PostgreSQL.
 
-Le chiavi config hanno i nomi nuovi `TASK_*` (code/timeout task, es. `TASK_QUEUE_DEFAULT`, `TASK_TIMEOUT`, `TASK_RESULT_EXPIRES`) e `*_DISTRIBUTED_*` (es. `LOGIN_RL_DISTRIBUTED_REQUIRED`, `ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_*`). I nomi env storici (`CELERY_*`, `*_REDIS_*`) restano **accettati come alias deprecati**: se il nome nuovo non e' impostato e quello storico si', il valore storico viene usato e il boot logga un warning una-tantum che invita a rinominare. Non esiste piu' una `REDIS_URL` ne' `CELERY_BROKER_URL`.
+Le chiavi config hanno i nomi nuovi `TASK_*` (code/limiti task, es. `TASK_QUEUE_DEFAULT`, `TASK_HARD_LIMIT`, `TASK_RESULT_EXPIRES`) e `*_DISTRIBUTED_*` (es. `LOGIN_RL_DISTRIBUTED_REQUIRED`, `ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_*`). I nomi env storici ancora effettivamente consumati (`CELERY_*`, `*_REDIS_*`) restano **accettati come alias deprecati**: se il nome nuovo non e' impostato e quello storico si', il valore storico viene usato e il boot logga un warning una-tantum che invita a rinominare. Non esiste piu' una `REDIS_URL` ne' `CELERY_BROKER_URL`.
 
 ### JWT revocation (blacklist)
 

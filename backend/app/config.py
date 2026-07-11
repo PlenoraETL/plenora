@@ -20,8 +20,9 @@ logger = logging.getLogger(__name__)
 # stato costruito.
 API_VERSION = "1.0"
 
-# Carica backend/.env il prima possibile, prima di qualunque os.getenv del
-# resto dell'app. Tutti i moduli che leggono variabili d'ambiente (incluso
+# Il caricamento di backend/.env appartiene a `app.config_env_loader` ed e'
+# invocato dagli entry point. Settings legge l'ambiente live senza produrre
+# side effect all'import. Tutti i moduli che leggono variabili d'ambiente (incluso
 # app.infrastructure.security.crypto) vedranno così le variabili definite nel .env. Senza
 # questo, l'app userebbe la chiave di cifratura di default e fallirebbe a
 # decifrare qualsiasi record salvato con la chiave reale
@@ -39,19 +40,22 @@ class Settings:
 
     DEFAULTS = {
         "DATA_DIR": "./data",
+        "DB_SCHEMA": "plenora",
 
         "LOG_DB_FILE":              "log.db",
         "LOG_DB_MAX_ROWS":          100_000,
-        "LOG_DB_CONNECT_TIMEOUT":   5,
-        "LOG_DB_BUSY_TIMEOUT":      3000,
         "RUNS_PAGE_SIZE":           50,
         "RUNS_LOG_LIMIT":           200,
 
         "CORS_ORIGINS": "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173",
 
-        "DB_CONNECT_TIMEOUT": 10,
         "DB_QUERY_TIMEOUT": 30,
-        "SUPPORTED_DB_TYPES": ["postgres", "mssql", "mysql", "oracle", "sqlite"],
+        # PostgreSQL pool: unico set canonico dei default. pg_connection
+        # mantiene la validazione fail-fast dei valori env malformati.
+        "DB_POOL_MIN": 2,
+        "DB_POOL_MAX": 12,
+        "DB_POOL_TIMEOUT_SECONDS": 30,
+        "DB_IDLE_IN_TRANSACTION_TIMEOUT_MS": 300_000,
 
         # Code del broker (routing actor Dramatiq). Rinominate da
         # CELERY_QUEUE_* (alias env legacy accettati, vedi
@@ -60,6 +64,7 @@ class Settings:
         "TASK_QUEUE_DATA_PLANE":      "data-plane",
         "TASK_QUEUE_CONTROL_PLANE":   "control-plane",
         "TASK_QUEUE_SCHEDULER":       "scheduler",
+        "DRAMATIQ_BROKER_URL": "amqp://guest:guest@rabbitmq:5672",
         # Production gates: dev/test restano single-node per default.
         # Imposta uno di questi flag a true per forzare le stesse regole
         # di production/staging anche in env non-prod (cluster/multi-pod).
@@ -75,11 +80,7 @@ class Settings:
         "PLENORA_SINGLE_NODE":          False,
         # Timeout/hard-limit dei task worker. Rinominati da CELERY_*
         # (alias env legacy accettati).
-        "TASK_TIMEOUT":          3600,
         "TASK_HARD_LIMIT":       3900,
-        "TASK_PREVIEW_TIMEOUT":       300,
-        "TASK_PREVIEW_HARD_LIMIT":    360,
-        "TASK_SCHEDULE_TIMEOUT":      3500,
         "TASK_SCHEDULE_HARD_LIMIT":   3600,
         # Scheduler locks use a short TTL plus worker heartbeat. If the worker
         # dies by SIGKILL, the lock expires in
@@ -93,7 +94,6 @@ class Settings:
         # di flap PG con due beat attivi). Override a True per
         # deployment single-instance dove nessun altro beat gira mai
         "SCHEDULE_BEAT_LEADER_FAIL_OPEN":           False,
-        "TASK_PROGRESS_POLL_INTERVAL":  1,
         # TTL delle righe task_results su PG (era il result-expires del
         # result backend; alias env legacy CELERY_RESULT_EXPIRES accettato).
         "TASK_RESULT_EXPIRES":        86400,
@@ -173,16 +173,6 @@ class Settings:
         "OAUTH_TOKEN_CACHE_LOCK_TTL_SEC": 30,
         "OAUTH_TOKEN_CACHE_WAIT_TIMEOUT_SEC": 5,
 
-        "SUPPORTED_OUTPUT_FORMATS": [
-            "csv", "json", "xlsx", "parquet",
-            "geojson", "gpkg", "shp", "gdb"
-        ],
-        "DEFAULT_OUTPUT_FORMAT": "csv",
-
-        "SUPPORTED_FILE_FORMATS": [
-            "csv", "xlsx", "json",
-            "geojson", "gpkg", "shp", "gdb"
-        ],
         "MAX_FILE_SIZE": 100 * 1024 * 1024,  # 100 MB
 
         # TTL in ore per i file temp orfani sotto `DATA_DIR/temp/`
@@ -191,6 +181,7 @@ class Settings:
         "TEMP_ORPHAN_CLEANUP_HOURS": 24,
 
         "STORAGE_POLICY": "hybrid",
+        "CLOUD_PROVIDER": "aws",
         # Hard cap per payload persistiti come BYTEA (mode "db" + ramo DB di "hybrid"
         # Default 500 MB: limite pratico di un BYTEA PG senza toast tuning
         # Sopra cap: ResultSaveError al save (caller deve failare
@@ -228,11 +219,7 @@ class Settings:
         # e' required-if-enabled con validazione fail-fast a boot, distinto
         # da BACKUP_BUCKET.
 
-        "SUPPORTED_PROJECT_TYPES": ["estrai", "manipola", "arricchisci", "salva"],
         "DEFAULT_GROUP": "default",
-
-        "MAX_PROJECT_NAME_LENGTH": 100,
-        "MAX_CONNECTION_NAME_LENGTH": 100,
         "MAX_PREVIEW_ROWS": 1000,
         # in byte per il file caricato sincrono via
         # `load_dataframe_from_file`. Sopra il cap il guard solleva
@@ -466,10 +453,6 @@ class Settings:
         # Cap <= 0 cade al fallback hardcoded di 3s
         "READINESS_OBJECT_STORAGE_TIMEOUT_SECONDS": 3,
 
-        "ENRICHMENT_BATCH_SIZE": 100,
-        "ENRICHMENT_MAX_WORKERS": 5,
-        "ENRICHMENT_CACHE_TTL": 3600,
-
         # Soglia righe oltre la quale TRUNCATE_INSERT + ALL_OR_NOTHING usa
         # stage+swap invece di DELETE+INSERT atomico. Sotto soglia: atomic
         # zero overhead, no privilegi DDL). Sopra soglia: stage+swap
@@ -612,11 +595,7 @@ class Settings:
         "TASK_QUEUE_DATA_PLANE":    "CELERY_QUEUE_DATA_PLANE",
         "TASK_QUEUE_CONTROL_PLANE": "CELERY_QUEUE_CONTROL_PLANE",
         "TASK_QUEUE_SCHEDULER":     "CELERY_QUEUE_SCHEDULER",
-        "TASK_TIMEOUT":             "CELERY_TASK_TIMEOUT",
         "TASK_HARD_LIMIT":          "CELERY_TASK_HARD_LIMIT",
-        "TASK_PREVIEW_TIMEOUT":     "CELERY_PREVIEW_TIMEOUT",
-        "TASK_PREVIEW_HARD_LIMIT":  "CELERY_PREVIEW_HARD_LIMIT",
-        "TASK_SCHEDULE_TIMEOUT":    "CELERY_SCHEDULE_TIMEOUT",
         "TASK_SCHEDULE_HARD_LIMIT": "CELERY_SCHEDULE_HARD_LIMIT",
         "TASK_RESULT_EXPIRES":      "CELERY_RESULT_EXPIRES",
         "LOGIN_RL_DISTRIBUTED_REQUIRED": "LOGIN_RL_REDIS_REQUIRED",
@@ -751,7 +730,8 @@ class Settings:
         # Broker RabbitMQ del worker Dramatiq (Plenora 2.0). Nessun path =
         # vhost di default "/". Allineato a workers.dramatiq_app.broker_url().
         return self._str_setting(
-            "DRAMATIQ_BROKER_URL", "amqp://guest:guest@rabbitmq:5672"
+            "DRAMATIQ_BROKER_URL",
+            str(self.DEFAULTS["DRAMATIQ_BROKER_URL"]),
         )
 
     @property
@@ -771,24 +751,8 @@ class Settings:
         return self._str_setting("TASK_QUEUE_SCHEDULER", "scheduler")
 
     @property
-    def TASK_TIMEOUT(self) -> int:
-        return self._int_setting("TASK_TIMEOUT", 3600)
-
-    @property
     def TASK_HARD_LIMIT(self) -> int:
         return self._int_setting("TASK_HARD_LIMIT", 3900)
-
-    @property
-    def TASK_PREVIEW_TIMEOUT(self) -> int:
-        return self._int_setting("TASK_PREVIEW_TIMEOUT", 300)
-
-    @property
-    def TASK_PREVIEW_HARD_LIMIT(self) -> int:
-        return self._int_setting("TASK_PREVIEW_HARD_LIMIT", 360)
-
-    @property
-    def TASK_SCHEDULE_TIMEOUT(self) -> int:
-        return self._int_setting("TASK_SCHEDULE_TIMEOUT", 3500)
 
     @property
     def TASK_RESULT_EXPIRES(self) -> int:

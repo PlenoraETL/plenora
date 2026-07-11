@@ -29,6 +29,33 @@ WorkerSnapshotPayload = dict[str, object]
 RuntimeConfigPayload = dict[str, object]
 
 
+# Il backend possiede la classificazione: il frontend non deve duplicare
+# stringhe di configurazione che possono cambiare tra release.
+_ESSENTIAL_CONFIG_KEYS = frozenset(
+    {
+        "ENVIRONMENT",
+        "DB_SCHEMA",
+        "DATABASE_URL",
+        "DRAMATIQ_BROKER_URL",
+        "STORAGE_POLICY",
+        "OBJECT_STORAGE_ENABLED",
+        "OBJECT_STORAGE_BACKEND",
+        "CLOUD_PROVIDER",
+        "OBJECT_STORAGE_BUCKET",
+        "BACKUP_BUCKET",
+        "MAX_FILE_SIZE",
+        "LOAD_FILE_MAX_BYTES",
+        "WORKER_RSS_MAX_BYTES",
+        "RESOURCE_MAX_BYTES",
+        "ARTIFACT_PREVIEW_MAX_BYTES",
+        "JWT_EXPIRE_HOURS",
+        "LOGIN_MAX_ATTEMPTS",
+        "DATA_PLANE_EXECUTION_MODE",
+        "DATA_PLANE_CHILD_TIMEOUT_SECONDS",
+    }
+)
+
+
 _SECRET_NEEDLES = (
     "SECRET",
     "PASSWORD",
@@ -71,7 +98,10 @@ _CONFIG_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "Database",
         (
             "DATABASE_URL",
-            "DB_CONNECT_TIMEOUT",
+            "DB_POOL_MIN",
+            "DB_POOL_MAX",
+            "DB_POOL_TIMEOUT_SECONDS",
+            "DB_IDLE_IN_TRANSACTION_TIMEOUT_MS",
             "DB_QUERY_TIMEOUT",
             "DB_SCHEMA_WARN_GB",
             "DB_SCHEMA_ERROR_GB",
@@ -85,11 +115,7 @@ _CONFIG_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "TASK_QUEUE_DATA_PLANE",
             "TASK_QUEUE_CONTROL_PLANE",
             "TASK_QUEUE_SCHEDULER",
-            "TASK_TIMEOUT",
             "TASK_HARD_LIMIT",
-            "TASK_PREVIEW_TIMEOUT",
-            "TASK_PREVIEW_HARD_LIMIT",
-            "TASK_SCHEDULE_TIMEOUT",
             "TASK_SCHEDULE_HARD_LIMIT",
             "DATA_PLANE_EXECUTION_MODE",
             "DATA_PLANE_CHILD_TIMEOUT_SECONDS",
@@ -261,15 +287,27 @@ def _setting_entry(key: str) -> RuntimeConfigEntry:
         "value": _serialize_value(key, value),
         "source": "env" if raw_value is not None else ("default" if has_default else "unset"),
         "secret": _is_secret_key(key),
+        "essential": key in _ESSENTIAL_CONFIG_KEYS,
         "editable_later": key in _FUTURE_EDIT_ALLOWLIST,
         "requires_restart": _requires_restart(key),
     }
 
 
 def _requires_restart(key: str) -> list[str]:
-    if key.startswith("CELERY_") or key in {"WORKER_RSS_MAX_BYTES"}:
+    if key.startswith("CELERY_") or key in {
+        "WORKER_RSS_MAX_BYTES",
+        "DATA_PLANE_EXECUTION_MODE",
+        "DATA_PLANE_CHILD_TIMEOUT_SECONDS",
+    }:
         return ["backend", "worker", "beat"]
-    if key in {"DATABASE_URL", "DB_SCHEMA"}:
+    if key in {
+        "DATABASE_URL",
+        "DB_SCHEMA",
+        "DB_POOL_MIN",
+        "DB_POOL_MAX",
+        "DB_POOL_TIMEOUT_SECONDS",
+        "DB_IDLE_IN_TRANSACTION_TIMEOUT_MS",
+    }:
         return ["backend", "worker", "beat"]
     if key.startswith("OBJECT_STORAGE") or key in {
         "STORAGE_POLICY",

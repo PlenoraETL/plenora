@@ -21,7 +21,6 @@ def print_config(settings: Any) -> None:
     print("\nTIMEOUT")
     print(f"  DB_QUERY_TIMEOUT:    {settings.DB_QUERY_TIMEOUT}s")
     print(f"  API_TIMEOUT:         {settings.API_TIMEOUT}s")
-    print(f"  TASK_TIMEOUT: {settings.TASK_TIMEOUT}s")
     print("\nTASK QUEUE (Dramatiq / RabbitMQ)")
     print(f"  BROKER_URL:          {settings.DRAMATIQ_BROKER_URL}")
     print("=" * 60)

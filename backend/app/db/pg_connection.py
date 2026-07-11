@@ -10,6 +10,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
+from app.config import settings
 from app.environment import get_env
 from app.utils.logger import get_logger
 from app.shared.contracts.payloads import JsonObject, JsonRows
@@ -27,13 +28,16 @@ _DATABASE_URL: Optional[str] = None
 _DB_SCHEMA = "plenora"
 
 
-def _read_int_env(name: str, default: int) -> int:
+def _read_int_env(name: str, default: int | None = None) -> int:
     """Legge una env var come intero. Se la conversione fallisce
     (stringa non numerica, vuota), solleva RuntimeError con messaggio
     esplicito invece di propagare ValueError oscuro."""
-    raw = get_env(name)
+    raw = settings.get_raw(name)
     if raw is None or raw == "":
-        return default
+        configured_default = settings.DEFAULTS.get(name, default)
+        if configured_default is None:
+            raise RuntimeError(f"Default mancante per {name}")
+        return int(configured_default)
     try:
         return int(raw)
     except ValueError:
@@ -112,12 +116,10 @@ def _load_pool_config() -> None:
     if not database_url:
         raise RuntimeError("DATABASE_URL non configurato. Imposta la variabile d'ambiente.")
 
-    pool_min = _read_int_env("DB_POOL_MIN", 2)
-    pool_max = _read_int_env("DB_POOL_MAX", 12)
-    idle_in_transaction_ms = _read_int_env(
-        "DB_IDLE_IN_TRANSACTION_TIMEOUT_MS", 300000
-    )
-    pool_timeout_seconds = _read_int_env("DB_POOL_TIMEOUT_SECONDS", 30)
+    pool_min = _read_int_env("DB_POOL_MIN")
+    pool_max = _read_int_env("DB_POOL_MAX")
+    idle_in_transaction_ms = _read_int_env("DB_IDLE_IN_TRANSACTION_TIMEOUT_MS")
+    pool_timeout_seconds = _read_int_env("DB_POOL_TIMEOUT_SECONDS")
     _validate_pool_params(
         pool_min=pool_min,
         pool_max=pool_max,
@@ -126,7 +128,7 @@ def _load_pool_config() -> None:
     )
 
     _DATABASE_URL = database_url
-    _DB_SCHEMA = get_env("DB_SCHEMA", "plenora") or "plenora"
+    _DB_SCHEMA = str(settings.get("DB_SCHEMA") or settings.DEFAULTS["DB_SCHEMA"])
     _POOL_MIN = pool_min
     _POOL_MAX = pool_max
     _IDLE_IN_TRANSACTION_MS = idle_in_transaction_ms

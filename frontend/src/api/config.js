@@ -5,8 +5,10 @@
  * per garantire consistenza in tutto il progetto.
  */
 
-// Base URL dell'API - usa variabile ambiente se disponibile
-export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5004';
+import { FRONTEND_ENV } from '../config/runtimeEnv';
+
+// Base URL dell'API - compilata dal boundary Vite centralizzato.
+export const API_BASE_URL = FRONTEND_ENV.apiBaseUrl;
 
 // URL completo per le API (con prefisso /api)
 export const API_ENDPOINT = `${API_BASE_URL}/api`;

@@ -8,8 +8,6 @@ legacy in env (warning una-tantum) → DEFAULTS.
 
 from __future__ import annotations
 
-import logging
-
 import pytest
 
 from app.config import Settings
@@ -40,20 +38,20 @@ def test_alias_map_targets_exist_in_defaults():
 
 
 def test_legacy_env_is_honored_when_new_name_unset(monkeypatch):
-    monkeypatch.setenv("CELERY_TASK_TIMEOUT", "1234")
+    monkeypatch.setenv("CELERY_TASK_HARD_LIMIT", "1234")
 
-    assert Settings().get("TASK_TIMEOUT") == 1234
+    assert Settings().get("TASK_HARD_LIMIT") == 1234
 
 
 def test_new_name_wins_over_legacy(monkeypatch):
-    monkeypatch.setenv("CELERY_TASK_TIMEOUT", "1234")
-    monkeypatch.setenv("TASK_TIMEOUT", "42")
+    monkeypatch.setenv("CELERY_TASK_HARD_LIMIT", "1234")
+    monkeypatch.setenv("TASK_HARD_LIMIT", "42")
 
-    assert Settings().get("TASK_TIMEOUT") == 42
+    assert Settings().get("TASK_HARD_LIMIT") == 42
 
 
 def test_defaults_apply_when_neither_is_set():
-    assert Settings().get("TASK_TIMEOUT") == 3600
+    assert Settings().get("TASK_HARD_LIMIT") == 3900
 
 
 def test_legacy_bool_coercion_uses_new_key_type(monkeypatch):
@@ -64,18 +62,21 @@ def test_legacy_bool_coercion_uses_new_key_type(monkeypatch):
     assert Settings().get("LOGIN_RL_DISTRIBUTED_REQUIRED") is True
 
 
-def test_legacy_env_logs_deprecation_warning_once(monkeypatch, caplog):
+def test_legacy_env_logs_deprecation_warning_once(monkeypatch):
     monkeypatch.setenv("CELERY_QUEUE_DEFAULT", "coda-legacy")
     # Reset dello stato warn-once condiviso a livello di classe.
     monkeypatch.setattr(Settings, "_alias_warned", set())
+    warnings: list[str] = []
+
+    def _capture_warning(message, *args):
+        warnings.append(message % args)
+
+    monkeypatch.setattr("app.config.logger.warning", _capture_warning)
 
     settings = Settings()
-    with caplog.at_level(logging.WARNING, logger="app.config"):
-        assert settings.get("TASK_QUEUE_DEFAULT") == "coda-legacy"
-        assert settings.get("TASK_QUEUE_DEFAULT") == "coda-legacy"
+    assert settings.get("TASK_QUEUE_DEFAULT") == "coda-legacy"
+    assert settings.get("TASK_QUEUE_DEFAULT") == "coda-legacy"
 
-    warnings = [
-        r for r in caplog.records if "CELERY_QUEUE_DEFAULT" in r.getMessage()
-    ]
     assert len(warnings) == 1, "il warning di deprecazione deve essere una-tantum"
-    assert "TASK_QUEUE_DEFAULT" in warnings[0].getMessage()
+    assert "CELERY_QUEUE_DEFAULT" in warnings[0]
+    assert "TASK_QUEUE_DEFAULT" in warnings[0]

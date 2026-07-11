@@ -41,16 +41,14 @@ logger = get_logger(__name__)
 # Celery propagava via signal before_task_publish.
 _REQUEST_ID_OPTION = "request_id"
 
-# Nessun path nell'URL = vhost di default "/" (un trailing "//" verrebbe
-# interpretato da pika come vhost vuoto -> 530 NOT_ALLOWED).
-_DEFAULT_BROKER_URL = "amqp://guest:guest@rabbitmq:5672"
 _RECYCLE_LOCK = threading.Lock()
 _ACTIVE_MESSAGES = 0
 _RECYCLE_REQUESTED = False
 
 
 def broker_url() -> str:
-    return os.environ.get("DRAMATIQ_BROKER_URL", _DEFAULT_BROKER_URL)
+    # Settings legge l'env live; il dotenv e' gia' stato caricato sopra.
+    return settings.DRAMATIQ_BROKER_URL
 
 
 class _TaskResultMiddleware(Middleware):

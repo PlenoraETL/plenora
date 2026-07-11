@@ -9,26 +9,6 @@ import { useToast } from '../hooks/useToast';
 import { toastApiError } from '../utils/toastApiError';
 import '../styles/AdminRuntimeConfigPage.css';
 
-const ESSENTIAL_KEYS = new Set([
-  'ENVIRONMENT',
-  'DB_SCHEMA',
-  'DATABASE_URL',
-  'DRAMATIQ_BROKER_URL',
-  'STORAGE_POLICY',
-  'OBJECT_STORAGE_ENABLED',
-  'OBJECT_STORAGE_BACKEND',
-  'CLOUD_PROVIDER',
-  'OBJECT_STORAGE_BUCKET',
-  'BACKUP_BUCKET',
-  'MAX_FILE_SIZE',
-  'LOAD_FILE_MAX_BYTES',
-  'WORKER_RSS_MAX_BYTES',
-  'RESOURCE_MAX_BYTES',
-  'ARTIFACT_PREVIEW_MAX_BYTES',
-  'JWT_EXPIRE_HOURS',
-  'LOGIN_MAX_ATTEMPTS',
-]);
-
 function fmtDate(iso) {
   if (!iso) return '-';
   try {
@@ -83,7 +63,7 @@ function Section({ section, query, showAdvanced }) {
   const items = useMemo(() => {
     const baseItems = showAdvanced
       ? (section.items || [])
-      : (section.items || []).filter((item) => ESSENTIAL_KEYS.has(item.key));
+      : (section.items || []).filter((item) => item.essential === true);
     if (!query.trim()) return baseItems;
     const q = query.trim().toLowerCase();
     return baseItems.filter((item) => {
@@ -124,6 +104,7 @@ export default function AdminRuntimeConfigPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const topology = data?.runtime?._dev_topology;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -167,12 +148,12 @@ export default function AdminRuntimeConfigPage() {
           </div>
           <div className="arc__card">
             <div className="arc__card-label">Backend</div>
-            <div className="arc__card-value">{data?.runtime?.hostname || '-'}</div>
+            <div className="arc__card-value">{topology?.hostname || 'protetto'}</div>
           </div>
           <div className="arc__card">
-            <div className="arc__card-label">Worker online</div>
+            <div className="arc__card-label">Task attivi</div>
             <div className="arc__card-value">
-              {data?.workers?.available ? data.workers.workers_online : 'N/D'}
+              {data?.workers?.available ? data.workers.running_tasks : 'N/D'}
             </div>
           </div>
         </section>
@@ -184,15 +165,17 @@ export default function AdminRuntimeConfigPage() {
         )}
 
         <section className="arc__runtime">
-          <div>
-            <b>Docker CLI:</b> {data?.runtime?.docker_cli_available ? 'disponibile' : 'non disponibile'}
-          </div>
-          <div>
-            <b>Docker socket:</b> {data?.runtime?.docker_socket_mounted ? 'montato' : 'non montato'}
-          </div>
-          <div>
-            <b>Container:</b> {data?.runtime?.container_name || '-'}
-          </div>
+          {topology && <>
+            <div>
+              <b>Docker CLI:</b> {topology.docker_cli_available ? 'disponibile' : 'non disponibile'}
+            </div>
+            <div>
+              <b>Docker socket:</b> {topology.docker_socket_mounted ? 'montato' : 'non montato'}
+            </div>
+            <div>
+              <b>Container:</b> {topology.container_name || '-'}
+            </div>
+          </>}
           <div className="arc__runtime-note">{data?.runtime?.note}</div>
         </section>
 

@@ -20,6 +20,7 @@ history preserves that context.
 | Clean install, single machine | [Non-Docker install](ops/install-non-docker.md) |
 | Clean install, Docker | [Docker install procedures](ops/install-docker.md) |
 | Data-plane memory isolation | [Data-plane subprocess](ops/data-plane-subprocess.md) |
+| Configuration inventory | [Configuration inventory](ops/configuration-inventory.md) |
 | Clean install, single-server Docker | [Single-server Docker install](ops/install-docker-single-server.md) |
 | Clean install, multi-server Docker | [Multi-server Docker install](ops/install-docker-multi-server.md) |
 
