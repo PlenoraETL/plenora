@@ -91,6 +91,8 @@ _CONFIG_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "TASK_PREVIEW_HARD_LIMIT",
             "TASK_SCHEDULE_TIMEOUT",
             "TASK_SCHEDULE_HARD_LIMIT",
+            "DATA_PLANE_EXECUTION_MODE",
+            "DATA_PLANE_CHILD_TIMEOUT_SECONDS",
         ),
     ),
     (

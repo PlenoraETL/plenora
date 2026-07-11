@@ -483,6 +483,30 @@ def carica_execute(**kwargs: object) -> object:
 )
 def pipeline_execute(**kwargs: object) -> object:
     """PIPELINE execute — stesso corpo del task Celery pipeline.execute."""
+    execution_mode = str(
+        settings.get("DATA_PLANE_EXECUTION_MODE", "inline") or "inline"
+    ).strip().lower()
+    if execution_mode == "subprocess":
+        from workers.data_plane_subprocess import execute_task_in_subprocess
+
+        return execute_task_in_subprocess(
+            task_name="pipeline.execute",
+            task_id=current_message_id() or "",
+            kwargs=dict(kwargs),
+            timeout_seconds=int(
+                settings.get(
+                    "DATA_PLANE_CHILD_TIMEOUT_SECONDS",
+                    settings.get("TASK_HARD_LIMIT", 3900),
+                )
+            ),
+            request_id=get_request_id(),
+        )
+    if execution_mode != "inline":
+        raise RuntimeError(
+            "DATA_PLANE_EXECUTION_MODE deve essere inline o subprocess, "
+            f"ricevuto {execution_mode!r}"
+        )
+
     from workers.tasks.pipeline_task import execute_pipeline_task
 
     return _invoke_task_body(

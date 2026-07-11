@@ -38,6 +38,7 @@ _BROKER_URL_KEYS = (
 # workers.dramatiq_app.broker_url()). amqp://...:5672, vhost di default "/".
 _DEFAULT_BROKER_URL = "amqp://guest:guest@rabbitmq:5672"
 _DEFAULT_BROKER_PORT = 5672
+_DATA_PLANE_EXECUTION_MODES = frozenset({"inline", "subprocess"})
 
 
 def _env_name() -> str:
@@ -177,6 +178,30 @@ def validate_production_gates(settings: Any, errors: list[str]) -> None:
         )
 
 
+def validate_data_plane_config(settings: Any, errors: list[str]) -> None:
+    """Validate the portable data-plane process boundary before consuming jobs."""
+
+    mode = str(
+        settings.get("DATA_PLANE_EXECUTION_MODE", "inline") or "inline"
+    ).strip().lower()
+    if mode not in _DATA_PLANE_EXECUTION_MODES:
+        errors.append(
+            "DATA_PLANE_EXECUTION_MODE deve essere 'inline' o 'subprocess' "
+            f"(ricevuto {mode!r})."
+        )
+
+    raw_timeout = settings.get("DATA_PLANE_CHILD_TIMEOUT_SECONDS", 3900)
+    try:
+        timeout = int(raw_timeout)
+    except (TypeError, ValueError):
+        timeout = 0
+    if timeout <= 0:
+        errors.append(
+            "DATA_PLANE_CHILD_TIMEOUT_SECONDS deve essere un intero positivo "
+            f"(ricevuto {raw_timeout!r})."
+        )
+
+
 def ensure_broker(settings: Any, errors: list) -> None:
     """Verify RabbitMQ broker reachability with a bounded TCP connect.
 
@@ -243,6 +268,7 @@ def validate_startup(settings: Any) -> None:
     warnings: list[str] = []
 
     validate_production_gates(settings, errors)
+    validate_data_plane_config(settings, errors)
     _validate_data_dir(settings, errors)
     _cleanup_temp_dir(settings)
     ensure_broker(settings, errors)
@@ -260,6 +286,7 @@ def validate_startup(settings: Any) -> None:
 __all__ = [
     "ensure_broker",
     "production_gates_required",
+    "validate_data_plane_config",
     "validate_production_gates",
     "validate_startup",
 ]

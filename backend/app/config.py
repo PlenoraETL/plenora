@@ -263,6 +263,11 @@ class Settings:
         # WORKER_MEMORY_RECYCLE_RSS_BYTES. Cap <= 0 disabilita il recycle.
         "WORKER_MEMORY_RECYCLE_ENABLED": True,
         "WORKER_MEMORY_RECYCLE_RSS_BYTES": 1_500_000_000,
+        # Boundary portabile per isolare pandas/GDAL/PyArrow dal processo
+        # Dramatiq. `inline` preserva il comportamento storico; `subprocess`
+        # usa un interprete spawn usa-e-getta (Windows/Linux/Docker).
+        "DATA_PLANE_EXECUTION_MODE": "inline",
+        "DATA_PLANE_CHILD_TIMEOUT_SECONDS": 3900,
         # massimo per il numero di righe di output di un cross-join
         # `op_cross_join` in `app.core.manipola.transforms.joins`
         # Il preflight stima `len(left) * len(right)` PRIMA di
