@@ -120,6 +120,27 @@ def test_cleanup_worker_memory_is_best_effort_when_malloc_trim_unavailable(monke
     assert stats["malloc_trim"] is False
 
 
+def test_cleanup_worker_memory_releases_loaded_pyarrow_pool(monkeypatch):
+    """Il pool Arrow va svuotato prima di chiedere il trim a libc."""
+    from app.core.resources import memory_guard
+
+    released = []
+
+    class _Pool:
+        def release_unused(self):
+            released.append(True)
+
+    fake_arrow = type("FakeArrow", (), {"default_memory_pool": lambda: _Pool()})
+    monkeypatch.setitem(memory_guard.sys.modules, "pyarrow", fake_arrow)
+    monkeypatch.setattr(memory_guard.sys, "platform", "win32")
+    monkeypatch.setattr(memory_guard.gc, "collect", lambda: 0)
+    monkeypatch.setattr(memory_guard, "get_current_rss_bytes", lambda: 100)
+
+    memory_guard.cleanup_worker_memory()
+
+    assert released == [True]
+
+
 # 3. Envelope shape: 503 for RSS stages
 
 def test_rss_stage_maps_to_503_in_handler_source_bound():

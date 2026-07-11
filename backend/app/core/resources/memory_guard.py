@@ -78,6 +78,19 @@ def cleanup_worker_memory(
         except Exception:
             logger.warning("Worker memory cleanup: gc.collect fallito", exc_info=True)
 
+    # PyArrow mantiene un proprio memory pool sopra l'allocatore di sistema.
+    # Se il modulo e' gia' caricato, restituisci prima i buffer inutilizzati;
+    # solo dopo malloc_trim puo' rendere le relative pagine all'OS.
+    if "pyarrow" in sys.modules:
+        try:
+            pyarrow = sys.modules["pyarrow"]
+            pyarrow.default_memory_pool().release_unused()
+        except Exception:
+            logger.debug(
+                "Worker memory cleanup: release PyArrow pool fallito",
+                exc_info=True,
+            )
+
     if run_malloc_trim and sys.platform.startswith("linux"):
         try:
             libc = ctypes.CDLL("libc.so.6")

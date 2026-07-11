@@ -4,6 +4,7 @@ Cluster JOINS — operazioni di join tra DataFrame.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
+import math
 import uuid
 from typing import Any, List
 
@@ -15,6 +16,7 @@ from app.core.manipola.join_memory import (
     CROSS_JOIN_MEMORY_STAGE,
     JOIN_MEMORY_STAGE,
     guard_estimated_merge_memory,
+    plan_merge_partitions,
 )
 from app.core.dataframes.tabular import (
     coerce_numeric_series,
@@ -32,6 +34,9 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 DataFrame = FrameLike
+
+_NULL_PARTITION_MIN_ROWS = 10_000
+_HASH_PARTITION_MIN_ROWS = 100_000
 
 
 def _normalize_join_keys(value: Any) -> List[str]:
@@ -356,11 +361,66 @@ def op_join(
             f"how={how}, exc_type={type(exc).__name__}: {exc}"
         )
 
-    if estimated_rows is not None:
+    left_any_null = (
+        np.logical_or.reduce(list(left_null_masks.values()))
+        if left_null_masks else np.zeros(len(left_df), dtype=bool)
+    )
+    right_any_null = (
+        np.logical_or.reduce(list(right_null_masks.values()))
+        if right_null_masks else np.zeros(len(right_df), dtype=bool)
+    )
+    use_null_partition = (
+        left_null_keys + right_null_keys >= _NULL_PARTITION_MIN_ROWS
+        and str(how).lower() in {"inner", "left", "right", "outer"}
+    )
+
+    merge_left = left_df
+    merge_right = right_df
+    merge_estimated_rows = estimated_rows
+    if use_null_partition:
+        merge_left = left_df.loc[~left_any_null]
+        merge_right = right_df.loc[~right_any_null]
+        merge_estimated_rows = _estimate_join_output_rows_by_keys(
+            merge_left,
+            merge_right,
+            left_key_cols,
+            right_key_cols,
+            how,
+        )
+        logger.info(
+            "[JOIN-NULL-PARTITION] how=%s mergeable_left=%s/%s "
+            "mergeable_right=%s/%s estimated_merge_rows=%s",
+            how,
+            len(merge_left),
+            len(left_df),
+            len(merge_right),
+            len(right_df),
+            merge_estimated_rows,
+        )
+
+    hash_partition_count = 1
+    if (
+        merge_estimated_rows is not None
+        and str(how).lower() == "left"
+        and len(merge_left) >= _HASH_PARTITION_MIN_ROWS
+    ):
+        hash_partition_count = plan_merge_partitions(
+            merge_left,
+            merge_right,
+            merge_estimated_rows,
+        )
+        if hash_partition_count > 1:
+            logger.info(
+                "[JOIN-HASH-PARTITION] left_rows=%s partitions=%s",
+                len(merge_left),
+                hash_partition_count,
+            )
+
+    if merge_estimated_rows is not None and hash_partition_count == 1:
         guard_estimated_merge_memory(
-            left_df,
-            right_df,
-            estimated_rows,
+            merge_left,
+            merge_right,
+            merge_estimated_rows,
             stage=JOIN_MEMORY_STAGE,
             path_basename="join_output",
         )
@@ -369,7 +429,7 @@ def op_join(
     _left_sentinel_prefix = f"__JOIN_NULL_L_{_join_nan_token}_"
     _right_sentinel_prefix = f"__JOIN_NULL_R_{_join_nan_token}_"
 
-    if left_null_keys or right_null_keys:
+    if (left_null_keys or right_null_keys) and not use_null_partition:
         # Forza object dtype su ENTRAMBE le key (anche quella senza null
         # se ne casta una sola, pandas merge solleva "trying to merge object
         # and float64 columns". L'object dtype ospita le sentinel string
@@ -396,16 +456,79 @@ def op_join(
                 )
 
     # Esegui merge
-    result = merge_dataframes(
-        left_df, right_df,
-        left_on=left_key_cols,
-        right_on=right_key_cols,
-        how=how,
-        suffixes=('', '_dup')
-    )
+    if hash_partition_count > 1:
+        merged_partitions = []
+        partition_size = math.ceil(len(merge_left) / hash_partition_count)
+        for start in range(0, len(merge_left), partition_size):
+            left_partition = merge_left.iloc[start:start + partition_size]
+            partition_rows = _estimate_join_output_rows_by_keys(
+                left_partition,
+                merge_right,
+                left_key_cols,
+                right_key_cols,
+                how,
+            )
+            if partition_rows is not None:
+                guard_estimated_merge_memory(
+                    left_partition,
+                    merge_right,
+                    partition_rows,
+                    stage=JOIN_MEMORY_STAGE,
+                    path_basename="join_output_partition",
+                )
+            merged_partitions.append(
+                merge_dataframes(
+                    left_partition,
+                    merge_right,
+                    left_on=left_key_cols,
+                    right_on=right_key_cols,
+                    how=how,
+                    suffixes=("", "_dup"),
+                )
+            )
+        result = concat_dataframes(merged_partitions, ignore_index=True)
+    else:
+        result = merge_dataframes(
+            merge_left, merge_right,
+            left_on=left_key_cols,
+            right_on=right_key_cols,
+            how=how,
+            suffixes=('', '_dup')
+        )
+
+    if use_null_partition:
+        null_partitions = []
+        join_how = str(how).lower()
+        if left_null_keys and join_how in {"left", "outer"}:
+            null_partitions.append(
+                merge_dataframes(
+                    left_df.loc[left_any_null],
+                    right_df.head(0),
+                    left_on=left_key_cols,
+                    right_on=right_key_cols,
+                    how="left",
+                    suffixes=("", "_dup"),
+                )
+            )
+        if right_null_keys and join_how in {"right", "outer"}:
+            null_partitions.append(
+                merge_dataframes(
+                    left_df.head(0),
+                    right_df.loc[right_any_null],
+                    left_on=left_key_cols,
+                    right_on=right_key_cols,
+                    how="right",
+                    suffixes=("", "_dup"),
+                )
+            )
+        if null_partitions:
+            result = concat_dataframes(
+                [result, *null_partitions],
+                ignore_index=True,
+            )
 
     # Ripristina NaN nelle posizioni dei sentinel sulle key di output
-    if left_null_keys or right_null_keys:
+    if (left_null_keys or right_null_keys) and not use_null_partition:
         def _restore_join_nans(series):
             if series.dtype != object:
                 return series

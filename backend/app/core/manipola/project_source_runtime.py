@@ -15,6 +15,7 @@ from app.core.intermediate.run_lifecycle import (
 from app.core.projects.execution_context import get_upstream_run_context
 from app.core.projects.lineage import ProjectLineageCycleError
 from app.core.projects.source_freshness import get_project_source_freshness
+from app.core.resources.memory_guard import cleanup_worker_memory
 from app.shared.execution.executor_protocol import PipelineDispatcherProtocol
 from app.core.artifacts import (
     ArtifactResolver,
@@ -328,6 +329,20 @@ def load_project_sources(
             _close_upstream_run(
                 upstream_run_id, upstream, upstream_retention_n, log,
             )
+
+        # L'upstream puo' aver eseguito query/streaming pesanti nello stesso
+        # processo. Il risultato e' ormai persistito: libera le sue arena
+        # prima di materializzarlo nel DataFrame del progetto MANIPOLA.
+        cleanup_stats = cleanup_worker_memory()
+        log.info(
+            "[UPSTREAM-PRE-LOAD-TRIM] project=%s rss=%s -> %s bytes "
+            "gc=%s trim=%s",
+            source_project_id,
+            cleanup_stats.get("before_rss"),
+            cleanup_stats.get("after_rss"),
+            cleanup_stats.get("collected"),
+            cleanup_stats.get("malloc_trim"),
+        )
 
         if not upstream.success:
             return {

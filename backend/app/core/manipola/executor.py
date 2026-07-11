@@ -787,6 +787,18 @@ class ManipolaExecutor:
                 if remaining <= 0 and source_id != current_node_id:
                     dataframes.pop(source_id, None)
 
+        def _take_last_consumer_inputs(incoming_edges: List[Any]) -> bool:
+            """Trasferisce ownership degli input al nodo quando e' l'ultimo consumer."""
+            if not incoming_edges or not all(
+                remaining_consumers.get(edge.source) == 1
+                for edge in incoming_edges
+            ):
+                return False
+            for edge in incoming_edges:
+                dataframes.pop(edge.source, None)
+                remaining_consumers[edge.source] = 0
+            return True
+
         for node in sorted_nodes:
             # Trova input per questo nodo - ORDINA per targetHandle o posizione Y
             incoming = sorted_incoming_edges(canvas.edges, node.id, graph)
@@ -814,6 +826,11 @@ class ManipolaExecutor:
                     raise ValueError(msg)
                 logger.warning(f"Nodo {node.id} senza input, skip")
                 continue
+
+            owns_inputs = _take_last_consumer_inputs(incoming)
+            # Non mantenere vivo un risultato di un ramo precedente durante
+            # una trasformazione pesante su un altro ramo.
+            current_df = None
 
             if schema_service and schema_nodes_by_id is not None and schema_edges_by_target is not None:
                 try:
@@ -845,6 +862,40 @@ class ManipolaExecutor:
                 logger.info(f"Multi-join: {len(inputs)} input -> {len(current_df)} righe", op="transform")
             else:
                 # Trasformazione normale
+                if _nf(node, "transform_op") == "join":
+                    from app.core.manipola.join_optimization import (
+                        compact_owned_join_string_columns,
+                        project_columns_dropped_immediately_after_join,
+                    )
+                    from app.core.resources.memory_guard import cleanup_worker_memory
+
+                    inputs = project_columns_dropped_immediately_after_join(
+                        canvas, node, inputs
+                    )
+                    if owns_inputs:
+                        inputs = compact_owned_join_string_columns(inputs, node)
+                    # Pivot/merge precedenti possono avere gia' liberato i
+                    # buffer, lasciandoli pero' residenti nelle arena libc.
+                    # Il guard del join usa l'RSS: trim prima della stima per
+                    # contare dati vivi, non pagine riutilizzabili.
+                    cleanup_stats = cleanup_worker_memory(
+                        run_gc=bool(
+                            settings.get("WORKER_MEMORY_CLEANUP_ENABLED", True)
+                        ),
+                        run_malloc_trim=bool(
+                            settings.get(
+                                "WORKER_MEMORY_MALLOC_TRIM_ENABLED", True
+                            )
+                        ),
+                    )
+                    logger.info(
+                        "[JOIN-PRE-TRIM] node=%s rss=%s -> %s bytes gc=%s trim=%s",
+                        node.id,
+                        cleanup_stats.get("before_rss"),
+                        cleanup_stats.get("after_rss"),
+                        cleanup_stats.get("collected"),
+                        cleanup_stats.get("malloc_trim"),
+                    )
                 current_df = self._esegui_trasformazione(node, inputs)
             
             # Salva risultato per nodi successivi

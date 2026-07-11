@@ -314,6 +314,12 @@ def test_settings_default_to_memory_safe_subprocess_mode():
     assert Settings.DEFAULTS["DATA_PLANE_CHILD_TIMEOUT_SECONDS"] == 3900
 
 
+def test_execute_and_preview_are_allowlisted_in_disposable_process():
+    from workers import data_plane_subprocess as executor
+
+    assert executor.SUPPORTED_TASKS == {"pipeline.execute", "pipeline.preview"}
+
+
 @pytest.mark.parametrize("mode", ["inline", "subprocess", " SUBPROCESS "])
 def test_startup_validation_accepts_supported_modes(mode):
     from app.startup_validation import validate_data_plane_config
@@ -354,3 +360,4 @@ def test_actor_contains_subprocess_feature_flag_contract():
     assert 'settings.get("DATA_PLANE_EXECUTION_MODE", "subprocess")' in source
     assert "execute_task_in_subprocess" in source
     assert 'task_name="pipeline.execute"' in source
+    assert 'task_name="pipeline.preview"' in source

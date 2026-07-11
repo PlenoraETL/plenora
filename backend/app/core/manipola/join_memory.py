@@ -9,6 +9,7 @@ from app.config import settings
 from app.core.dataframes.ports import FrameLike
 from app.core.resources.exceptions import MemoryLimitExceededError
 from app.core.resources.memory_guard import get_current_rss_bytes
+from app.utils.logger import get_logger
 
 
 JOIN_MEMORY_STAGE = "manipola_join_memory"
@@ -19,13 +20,20 @@ _ROW_WIDTH_SAMPLE_ROWS = 2_048
 _MERGE_ALLOCATION_OVERHEAD_FACTOR = 2.0
 _MIN_COLUMN_WIDTH_BYTES = 8
 
+logger = get_logger(__name__)
+
 
 @dataclass(frozen=True)
 class MergeMemoryEstimate:
+    left_rows: int
+    right_rows: int
+    left_row_width_bytes: int
+    right_row_width_bytes: int
     output_rows: int
     output_row_width_bytes: int
     output_payload_bytes: int
     additional_allocation_bytes: int
+    current_rss_bytes: int
     projected_peak_bytes: int
     worker_limit_bytes: int
 
@@ -87,10 +95,15 @@ def estimate_merge_memory(
         current_or_inputs = max(0, int(current_rss_bytes))
 
     return MergeMemoryEstimate(
+        left_rows=int(len(left)),
+        right_rows=int(len(right)),
+        left_row_width_bytes=left_width,
+        right_row_width_bytes=right_width,
         output_rows=safe_output_rows,
         output_row_width_bytes=output_row_width,
         output_payload_bytes=output_payload,
         additional_allocation_bytes=additional,
+        current_rss_bytes=current_or_inputs,
         projected_peak_bytes=current_or_inputs + additional,
         worker_limit_bytes=max(0, int(worker_limit_bytes)),
     )
@@ -119,6 +132,23 @@ def guard_estimated_merge_memory(
         worker_limit_bytes=worker_limit,
         current_rss_bytes=get_current_rss_bytes(),
     )
+    logger.info(
+        "[JOIN-MEMORY] stage=%s left=%s rows x %s B right=%s rows x %s B "
+        "output=%s rows x %s B payload=%s B additional=%s B rss=%s B "
+        "projected=%s B limit=%s B",
+        stage,
+        estimate.left_rows,
+        estimate.left_row_width_bytes,
+        estimate.right_rows,
+        estimate.right_row_width_bytes,
+        estimate.output_rows,
+        estimate.output_row_width_bytes,
+        estimate.output_payload_bytes,
+        estimate.additional_allocation_bytes,
+        estimate.current_rss_bytes,
+        estimate.projected_peak_bytes,
+        estimate.worker_limit_bytes,
+    )
     if estimate.projected_peak_bytes > worker_limit:
         raise MemoryLimitExceededError(
             observed_bytes=estimate.projected_peak_bytes,
@@ -129,6 +159,43 @@ def guard_estimated_merge_memory(
     return estimate
 
 
+def plan_merge_partitions(
+    left: FrameLike,
+    right: FrameLike,
+    output_rows: int,
+    *,
+    safety_factor: float = 0.8,
+    max_partitions: int = 32,
+) -> int:
+    """Numero di partizioni necessarie per far entrare un merge nel cap RSS."""
+    try:
+        worker_limit = int(settings.get("WORKER_RSS_MAX_BYTES", 0) or 0)
+    except (TypeError, ValueError):
+        return 1
+    if worker_limit <= 0:
+        return 1
+    estimate = estimate_merge_memory(
+        left,
+        right,
+        output_rows,
+        worker_limit_bytes=worker_limit,
+        current_rss_bytes=get_current_rss_bytes(),
+    )
+    if estimate.projected_peak_bytes <= worker_limit:
+        return 1
+    available = worker_limit - estimate.current_rss_bytes
+    safe_available = int(max(0, available) * max(0.1, min(1.0, safety_factor)))
+    if safe_available <= 0:
+        return 1
+    return max(
+        2,
+        min(
+            max(2, int(max_partitions)),
+            math.ceil(estimate.additional_allocation_bytes / safe_available),
+        ),
+    )
+
+
 __all__ = [
     "CROSS_JOIN_MEMORY_STAGE",
     "JOIN_MEMORY_STAGE",
@@ -136,4 +203,5 @@ __all__ = [
     "MergeMemoryEstimate",
     "estimate_merge_memory",
     "guard_estimated_merge_memory",
+    "plan_merge_partitions",
 ]

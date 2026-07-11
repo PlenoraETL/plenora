@@ -28,9 +28,14 @@ def test_estimate_merge_memory_uses_width_rows_and_overhead():
         current_rss_bytes=1_000,
     )
 
+    assert estimate.left_rows == 2
+    assert estimate.right_rows == 2
+    assert estimate.left_row_width_bytes == 16
+    assert estimate.right_row_width_bytes == 16
     assert estimate.output_row_width_bytes == 32
     assert estimate.output_payload_bytes == 96
     assert estimate.additional_allocation_bytes == 192
+    assert estimate.current_rss_bytes == 1_000
     assert estimate.projected_peak_bytes == 1_192
     assert estimate.worker_limit_bytes == 10_000
 

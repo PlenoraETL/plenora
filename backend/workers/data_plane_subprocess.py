@@ -17,7 +17,8 @@ from typing import Any, Callable
 
 
 PIPELINE_EXECUTE_TASK = "pipeline.execute"
-SUPPORTED_TASKS = frozenset({PIPELINE_EXECUTE_TASK})
+PIPELINE_PREVIEW_TASK = "pipeline.preview"
+SUPPORTED_TASKS = frozenset({PIPELINE_EXECUTE_TASK, PIPELINE_PREVIEW_TASK})
 _POLL_INTERVAL_SECONDS = 0.2
 _EXIT_GRACE_SECONDS = 5.0
 
@@ -36,6 +37,10 @@ def _resolve_task_body(task_name: str) -> Callable[..., object]:
         from workers.tasks.pipeline_task import execute_pipeline_task
 
         return execute_pipeline_task
+    if task_name == PIPELINE_PREVIEW_TASK:
+        from workers.tasks.pipeline_task import preview_pipeline_task
+
+        return preview_pipeline_task
     raise ValueError(f"Task data-plane subprocess non supportato: {task_name}")
 
 
