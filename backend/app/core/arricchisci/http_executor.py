@@ -8,6 +8,7 @@ from typing import Any, Mapping, Optional
 
 import requests
 from requests.structures import CaseInsensitiveDict
+from urllib.parse import urljoin
 
 from app.core.security.outbound_url import validate_external_url
 from app.infrastructure.http.session import get_shared_session
@@ -83,6 +84,15 @@ class HttpExecutor:
             "allow_redirects": spec.allow_redirects,
             "stream": spec.stream,
         }
+        if spec.allow_redirects:
+            # requests valida soltanto l'URL iniziale. Il response hook gira
+            # prima che Session.resolve_redirects segua ogni Location e resta
+            # associato anche alle richieste successive: in questo modo un
+            # endpoint pubblico non puo' redirigere verso localhost, reti
+            # private o metadata service cloud.
+            kwargs["hooks"] = {
+                "response": self._validate_redirect_target,
+            }
         if spec.verify is not None:
             kwargs["verify"] = spec.verify
 
@@ -103,6 +113,13 @@ class HttpExecutor:
             elapsed_ms=(time.time() - started) * 1000,
             raw_response=response,
         )
+
+    @staticmethod
+    def _validate_redirect_target(response: Any, *args: Any, **kwargs: Any) -> Any:
+        location = response.headers.get("location")
+        if response.is_redirect and location:
+            validate_external_url(urljoin(response.url, location))
+        return response
 
     @staticmethod
     def _payload_from_spec(spec: RequestSpec) -> Any:

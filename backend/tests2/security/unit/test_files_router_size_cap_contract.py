@@ -10,7 +10,7 @@ import io
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 
 
 pytestmark = [
@@ -123,3 +123,23 @@ def test_size_cap_uses_default_when_setting_missing(monkeypatch):
     assert size == 64
     assert captured["key"] == "MAX_FILE_SIZE"
     assert captured["default"] == 100 * 1024 * 1024
+
+
+def test_upload_endpoint_preserves_size_limit_http_status(monkeypatch):
+    """The endpoint must not turn the helper's 413 into a generic 500."""
+    from app.core.files import router as files_router
+
+    def _reject(_file):
+        raise HTTPException(status_code=413, detail="File troppo grande")
+
+    monkeypatch.setattr(files_router, "_enforce_upload_size_limit", _reject)
+    upload = UploadFile(filename="large.csv", file=io.BytesIO(b"x"))
+
+    with pytest.raises(HTTPException) as exc_info:
+        files_router.upload_file.__wrapped__(
+            file=upload,
+            name="large",
+            current_user=SimpleNamespace(group_id="g1", username="user"),
+        )
+
+    assert exc_info.value.status_code == 413

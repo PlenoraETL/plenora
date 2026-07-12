@@ -15,6 +15,7 @@ from app.core.dataframes.ports import FrameLike
 from app.core.manipola.join_memory import (
     CROSS_JOIN_MEMORY_STAGE,
     JOIN_MEMORY_STAGE,
+    guard_estimated_concat_memory,
     guard_estimated_merge_memory,
     plan_merge_partitions,
 )
@@ -273,6 +274,16 @@ def op_join(
     left_df = drop_duplicate_columns(left_df, keep='first')
     right_df = drop_duplicate_columns(right_df, keep='first')
 
+    # Stable source-order marker for partitioned left/right joins. Null-key
+    # partitions are concatenated after the mergeable rows; without this
+    # marker a left join silently moves all null-key rows to the end.
+    join_how = str(how).lower()
+    order_marker = None
+    if join_how in {"left", "right"}:
+        order_marker = f"__plenora_join_order_{uuid.uuid4().hex}"
+        ordered_side = left_df if join_how == "left" else right_df
+        ordered_side[order_marker] = np.arange(len(ordered_side), dtype=np.int64)
+
     # Guard post-rename [internal]: dopo la pre-validation in testa a
     # op_join, la chiave DEVE esistere qui. Se raggiungiamo questo raise
     # significa che safe_rename ha un bug (ha rinominato/perso la chiave
@@ -486,6 +497,11 @@ def op_join(
                     suffixes=("", "_dup"),
                 )
             )
+        guard_estimated_concat_memory(
+            merged_partitions,
+            stage=JOIN_MEMORY_STAGE,
+            path_basename="join_output_partition_concat",
+        )
         result = concat_dataframes(merged_partitions, ignore_index=True)
     else:
         result = merge_dataframes(
@@ -522,10 +538,31 @@ def op_join(
                 )
             )
         if null_partitions:
+            concat_parts = [result, *null_partitions]
+            guard_estimated_concat_memory(
+                concat_parts,
+                stage=JOIN_MEMORY_STAGE,
+                path_basename="join_output_null_concat",
+            )
             result = concat_dataframes(
-                [result, *null_partitions],
+                concat_parts,
                 ignore_index=True,
             )
+
+    if order_marker is not None and order_marker in result.columns:
+        if not result[order_marker].is_monotonic_increasing:
+            guard_estimated_concat_memory(
+                [result],
+                stage=JOIN_MEMORY_STAGE,
+                path_basename="join_output_order_restore",
+            )
+            result = result.sort_values(
+                order_marker,
+                kind="stable",
+                na_position="last",
+                ignore_index=True,
+            )
+        result = result.drop(columns=[order_marker])
 
     # Ripristina NaN nelle posizioni dei sentinel sulle key di output
     if (left_null_keys or right_null_keys) and not use_null_partition:

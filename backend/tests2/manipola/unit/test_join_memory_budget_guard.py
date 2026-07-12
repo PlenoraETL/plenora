@@ -160,6 +160,25 @@ def test_join_memory_guard_disabled_when_worker_cap_non_positive(monkeypatch):
     ) is None
 
 
+def test_concat_guard_accounts_for_final_materialization(monkeypatch):
+    from app.config import settings
+    from app.core.manipola import join_memory
+
+    monkeypatch.setitem(settings.DEFAULTS, "WORKER_RSS_MAX_BYTES", 1_030)
+    monkeypatch.setattr(join_memory, "get_current_rss_bytes", lambda: 1_000)
+    frames = [pd.DataFrame({"k": [1, 2], "x": [3, 4]})]
+
+    with pytest.raises(MemoryLimitExceededError) as exc_info:
+        join_memory.guard_estimated_concat_memory(
+            frames,
+            stage=join_memory.JOIN_MEMORY_STAGE,
+            path_basename="join_output_null_concat",
+        )
+
+    assert exc_info.value.path_basename == "join_output_null_concat"
+    assert exc_info.value.observed_bytes > exc_info.value.limit_bytes == 1_030
+
+
 def test_app_factory_has_join_memory_specific_error_message():
     app_factory = (
         Path(__file__).resolve().parent.parent.parent.parent

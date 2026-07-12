@@ -18,6 +18,7 @@ MULTI_JOIN_MEMORY_STAGE = "manipola_multi_join_memory"
 
 _ROW_WIDTH_SAMPLE_ROWS = 2_048
 _MERGE_ALLOCATION_OVERHEAD_FACTOR = 2.0
+_CONCAT_ALLOCATION_OVERHEAD_FACTOR = 1.25
 _MIN_COLUMN_WIDTH_BYTES = 8
 
 logger = get_logger(__name__)
@@ -159,6 +160,56 @@ def guard_estimated_merge_memory(
     return estimate
 
 
+def guard_estimated_concat_memory(
+    frames: list[FrameLike],
+    *,
+    stage: str,
+    path_basename: str,
+) -> int | None:
+    """Block concat/sort copies whose projected RSS exceeds the worker cap.
+
+    At this point every input frame is already resident. Concatenation creates
+    another frame with approximately their total payload plus index/block
+    management overhead, so the allocation must be checked independently from
+    the per-partition merge guards.
+    """
+    try:
+        worker_limit = int(settings.get("WORKER_RSS_MAX_BYTES", 0) or 0)
+    except (TypeError, ValueError):
+        worker_limit = 0
+    if worker_limit <= 0 or not frames:
+        return None
+
+    payload_bytes = sum(
+        _estimate_frame_row_width_bytes(frame) * int(len(frame))
+        for frame in frames
+    )
+    additional_bytes = math.ceil(
+        payload_bytes * _CONCAT_ALLOCATION_OVERHEAD_FACTOR
+    )
+    current_rss = max(0, int(get_current_rss_bytes()))
+    projected_peak = current_rss + additional_bytes
+    logger.info(
+        "[JOIN-CONCAT-MEMORY] stage=%s frames=%s payload=%s B "
+        "additional=%s B rss=%s B projected=%s B limit=%s B",
+        stage,
+        len(frames),
+        payload_bytes,
+        additional_bytes,
+        current_rss,
+        projected_peak,
+        worker_limit,
+    )
+    if projected_peak > worker_limit:
+        raise MemoryLimitExceededError(
+            observed_bytes=projected_peak,
+            limit_bytes=worker_limit,
+            path_basename=path_basename,
+            stage=stage,
+        )
+    return projected_peak
+
+
 def plan_merge_partitions(
     left: FrameLike,
     right: FrameLike,
@@ -203,5 +254,6 @@ __all__ = [
     "MergeMemoryEstimate",
     "estimate_merge_memory",
     "guard_estimated_merge_memory",
+    "guard_estimated_concat_memory",
     "plan_merge_partitions",
 ]

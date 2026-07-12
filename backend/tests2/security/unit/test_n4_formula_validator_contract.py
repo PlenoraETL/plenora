@@ -61,6 +61,20 @@ def test_ast_validator_blocks_dangerous_payloads(payload):
 
 
 @pytest.mark.parametrize("payload", [
+    "pd.io.common.os.getcwd()",
+    "pd.io.common.os.system('whoami')",
+    "col.to_csv('worker-owned.csv')",
+    "col.to_pickle('worker-owned.pkl')",
+])
+def test_ast_validator_blocks_public_attribute_escape(payload):
+    """Public attributes must be allowlisted too, not just dunders."""
+    from app.core.manipola.transforms.formula import _validate_formula_ast
+
+    with pytest.raises(ValueError):
+        _validate_formula_ast(payload)
+
+
+@pytest.mark.parametrize("payload", [
     # Costrutti Python che oggi passano il blocklist, ma non servono a
     # formule pandas e sono vettori di attacco potenziali (comprehension
     # come entry point per gadget chain, walrus come side-effect,

@@ -367,8 +367,10 @@ class ReplaceStrategiesMixin:
                         else:  # OBJECT (constraint
                             qualified_old = f"{schema}.{suffixed}"
                         conn.execute(text(
-                            f"EXEC sp_rename '{qualified_old}', "
-                            f"'{original}', '{kind}'"
+                            f"EXEC sp_rename "
+                            f"{self.ddl.quote_string_literal(qualified_old)}, "
+                            f"{self.ddl.quote_string_literal(original)}, "
+                            f"{self.ddl.quote_string_literal(kind)}"
                         ))
                     conn.commit()
             except Exception as e:
@@ -587,17 +589,20 @@ class ReplaceStrategiesMixin:
         old_full = self.ddl.qualified_table_name(schema, old_name)
 
         if self.db_type == "postgres":
-            return [f'ALTER TABLE {old_full} RENAME TO "{new_name}"']
+            return [f"ALTER TABLE {old_full} RENAME TO {self.ddl.quote_column(new_name)}"]
         if self.db_type == "oracle":
             return [
-                f'ALTER TABLE {old_full} RENAME TO "{new_name.upper()}"'
+                f"ALTER TABLE {old_full} RENAME TO {self.ddl.quote_column(new_name)}"
             ]
         if self.db_type in ("mysql", "mariadb"):
             new_full = self.ddl.qualified_table_name(schema, new_name)
             return [f"RENAME TABLE {old_full} TO {new_full}"]
         if self.db_type == "mssql":
             qualified_old = f"{schema}.{old_name}" if schema else old_name
-            return [f"EXEC sp_rename '{qualified_old}', '{new_name}'"]
+            return [
+                f"EXEC sp_rename {self.ddl.quote_string_literal(qualified_old)}, "
+                f"{self.ddl.quote_string_literal(new_name)}"
+            ]
         raise ValueError(
             f"_generate_single_rename non supportato per db_type="
             f"{self.db_type}"

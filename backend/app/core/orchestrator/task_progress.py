@@ -194,8 +194,13 @@ def finalize_from_celery(
         return
     if status == SUCCESS_STATE:
         payload = retval if isinstance(retval, dict) else {"result": retval}
+        resolved_state = (
+            FAILURE_STATE
+            if isinstance(payload, dict) and payload.get("success") is False
+            else SUCCESS_STATE
+        )
         finalize_task_result(
-            task_id, state=SUCCESS_STATE, payload=payload, name=name, store=store
+            task_id, state=resolved_state, payload=payload, name=name, store=store
         )
         return
     payload = {

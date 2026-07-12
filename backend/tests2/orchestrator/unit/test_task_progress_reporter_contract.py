@@ -143,6 +143,21 @@ def test_finalize_from_celery_success_stores_return_dict_as_payload():
     assert record.payload == {"success": True, "rows_written": 3}
 
 
+def test_finalize_from_celery_maps_application_failure_to_failure_state():
+    store = InMemoryTaskResultStore()
+    payload = {"success": False, "message": "pipeline non valida"}
+
+    finalize_from_celery(
+        "t1", "SUCCESS", payload, None,
+        name="pipeline.execute", store=store,
+    )
+
+    record = store.get("t1")
+    assert record is not None
+    assert record.state == FAILURE_STATE
+    assert record.payload == payload
+
+
 def test_finalize_from_celery_wraps_non_dict_return():
     store = InMemoryTaskResultStore()
     finalize_from_celery("t1", "SUCCESS", "pong", None, store=store)

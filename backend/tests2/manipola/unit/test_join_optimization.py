@@ -78,8 +78,8 @@ def test_large_null_partition_preserves_left_join_semantics(monkeypatch):
     monkeypatch.setitem(settings.DEFAULTS, "WORKER_RSS_MAX_BYTES", 0)
     null_rows = joins._NULL_PARTITION_MIN_ROWS
     left = pd.DataFrame({
-        "key": pd.Series([None] * null_rows + ["match"], dtype=object),
-        "left_value": range(null_rows + 1),
+        "key": pd.Series([None, "match"] * null_rows, dtype=object),
+        "left_value": range(null_rows * 2),
     })
     right = pd.DataFrame({"other_key": ["match"], "right_value": [42]})
 
@@ -88,9 +88,31 @@ def test_large_null_partition_preserves_left_join_semantics(monkeypatch):
     )
 
     assert len(result) == len(left)
-    assert int(result["right_value_R"].notna().sum()) == 1
-    assert result.loc[result["right_value_R"].notna(), "key"].iloc[0] == "match"
+    assert int(result["right_value_R"].notna().sum()) == null_rows
+    assert (
+        result.loc[result["right_value_R"].notna(), "key"] == "match"
+    ).all()
     assert "other_key" not in result.columns
+    assert result["left_value_L"].tolist() == list(range(null_rows * 2))
+
+
+def test_large_null_partition_preserves_right_join_order(monkeypatch):
+    from app.config import settings
+    from app.core.manipola.transforms import joins
+
+    monkeypatch.setitem(settings.DEFAULTS, "WORKER_RSS_MAX_BYTES", 0)
+    null_rows = joins._NULL_PARTITION_MIN_ROWS
+    left = pd.DataFrame({"key": ["match"], "left_value": [42]})
+    right = pd.DataFrame({
+        "other_key": pd.Series([None, "match"] * null_rows, dtype=object),
+        "right_order": range(null_rows * 2),
+    })
+
+    result = joins.op_join(
+        [left, right], left_on="key", right_on="other_key", how="right"
+    )
+
+    assert result["right_order_R"].tolist() == list(range(null_rows * 2))
 
 
 def test_hash_partitioned_left_join_preserves_order_and_values(monkeypatch):

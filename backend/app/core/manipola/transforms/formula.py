@@ -142,6 +142,15 @@ def _validate_formula_ast(formula: str) -> None:
                 raise ValueError(
                     f"Formula non consentita: attributo privato '{attr_name}' non ammesso"
                 )
+            # La whitelist deve essere applicata anche agli attributi
+            # pubblici. Limitarsi a bloccare dunder/private lascia raggiungibile
+            # qualunque oggetto esportato da pandas (per esempio
+            # ``pd.io.common.os.system``), trasformando il fallback eval in
+            # esecuzione di codice arbitrario sul worker.
+            if attr_name not in _SAFE_PANDAS_ATTRS:
+                raise ValueError(
+                    f"Formula non consentita: attributo '{attr_name}' non ammesso"
+                )
 
         if isinstance(node, _ast.Name) and node.id in _FORBIDDEN_NAMES:
             raise ValueError(

@@ -13,6 +13,24 @@ from app.core.carica.models import ColumnMapping
 from app.shared.contracts.payloads import IntMap, StringMap
 
 
+_ALLOWED_NATIVE_SQL_TYPES = frozenset({
+    "BIGINT", "BINARY", "BLOB", "BOOL", "BOOLEAN", "BYTEA", "CHAR",
+    "CLOB", "DATE", "DATETIME", "DATETIME2", "DECIMAL", "DOUBLE", "FLOAT",
+    "GEOGRAPHY", "GEOMETRY", "INT", "INTEGER", "JSON", "JSONB", "LONGTEXT",
+    "MEDIUMINT", "MEDIUMTEXT", "NCHAR", "NCLOB", "NUMBER", "NUMERIC",
+    "NVARCHAR", "NVARCHAR2", "REAL", "SDO_GEOMETRY", "SMALLINT", "TEXT",
+    "TIME", "TIMESTAMP", "TINYINT", "UUID", "VARBINARY", "VARCHAR",
+    "VARCHAR2", "XML",
+})
+_FORBIDDEN_SQL_TYPE_TOKENS = frozenset({
+    "ALTER", "CALL", "CHECK", "COLLATE", "COMMENT", "COPY", "CREATE", "DEFAULT",
+    "DELETE", "DROP", "EXEC", "EXECUTE", "GRANT", "INSERT", "MERGE",
+    "GENERATED", "IDENTITY", "NOT", "PRIMARY", "REFERENCES", "REVOKE",
+    "SELECT", "TRUNCATE", "UNIQUE", "UPDATE",
+})
+_SQL_TYPE_GRAMMAR = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(?:[ ()0-9,A-Za-z_]+)?$")
+
+
 PANDAS_TO_SQL = {
     "postgres": {
         "int64": "BIGINT",
@@ -150,27 +168,56 @@ class DDLGenerator:
         schema = schema.strip() if schema else schema
         if self.db_type in ("mysql", "mariadb"):
             if schema:
-                return f"`{schema}`.`{table}`"
-            return f"`{table}`"
+                return f"`{self._escape_identifier(schema, '`')}`.`{self._escape_identifier(table, '`')}`"
+            return f"`{self._escape_identifier(table, '`')}`"
         elif self.db_type == "oracle":
             schema_upper = schema.upper() if schema else ""
             table_upper = table.upper()
             if schema_upper:
-                return f'"{schema_upper}"."{table_upper}"'
-            return f'"{table_upper}"'
+                return f'"{self._escape_identifier(schema_upper, chr(34))}"."{self._escape_identifier(table_upper, chr(34))}"'
+            return f'"{self._escape_identifier(table_upper, chr(34))}"'
         else:
             if schema:
-                return f'"{schema}"."{table}"'
-            return f'"{table}"'
+                return f'"{self._escape_identifier(schema, chr(34))}"."{self._escape_identifier(table, chr(34))}"'
+            return f'"{self._escape_identifier(table, chr(34))}"'
 
     def quote_column(self, name: str) -> str:
         """Quota un nome di colonna."""
         if self.db_type in ("mysql", "mariadb"):
-            return f"`{name}`"
+            return f"`{self._escape_identifier(name, '`')}`"
         elif self.db_type == "oracle":
-            return f'"{name.upper()}"'
+            return f'"{self._escape_identifier(name.upper(), chr(34))}"'
         else:
-            return f'"{name}"'
+            return f'"{self._escape_identifier(name, chr(34))}"'
+
+    @staticmethod
+    def _escape_identifier(name: str, delimiter: str) -> str:
+        if not isinstance(name, str) or not name or "\x00" in name:
+            raise ValueError("Identificatore SQL non valido")
+        return name.replace(delimiter, delimiter * 2)
+
+    @staticmethod
+    def quote_string_literal(value: str) -> str:
+        if not isinstance(value, str) or "\x00" in value:
+            raise ValueError("Valore SQL non valido")
+        return "'" + value.replace("'", "''") + "'"
+
+    @staticmethod
+    def _validate_native_sql_type(value: str) -> str:
+        """Allow only a data-type declaration, never SQL/constraints."""
+        normalized = " ".join(value.strip().split())
+        if not normalized or not _SQL_TYPE_GRAMMAR.fullmatch(normalized):
+            raise ValueError(f"Tipo SQL nativo non valido: {value!r}")
+        tokens = set(re.findall(r"[A-Za-z_]+", normalized.upper()))
+        first_token = normalized.split("(", 1)[0].split()[0].upper()
+        if first_token not in _ALLOWED_NATIVE_SQL_TYPES:
+            raise ValueError(f"Tipo SQL nativo non supportato: {first_token}")
+        forbidden = tokens & _FORBIDDEN_SQL_TYPE_TOKENS
+        if forbidden:
+            raise ValueError(
+                f"Tipo SQL nativo contiene token non consentiti: {sorted(forbidden)[0]}"
+            )
+        return normalized
 
     def resolve_column_type(self, mapping: ColumnMapping, pandas_dtype: str = "") -> str:
         """Risolve il tipo SQL per una colonna.
@@ -202,7 +249,7 @@ class DDLGenerator:
         if mapping.dest_type and mapping.dest_type.upper() not in (
             "INT", "REAL", "STR", "BOOL", "DATE", "GEOMETRY", ""
         ):
-            return mapping.dest_type
+            return self._validate_native_sql_type(mapping.dest_type)
 
         base_type = mapping.dest_type.split(":")[0].lower() if mapping.dest_type else ""
         if base_type in URBY_TO_SQL.get(self.db_type, {}):
@@ -309,10 +356,11 @@ class DDLGenerator:
         full_name = self.qualified_table_name(schema, table)
         geom_col = self.quote_column(geometry_column)
         index_name = f"idx_{table}_{geometry_column}_spatial"
+        quoted_index_name = self.quote_column(index_name)
 
         if self.db_type == "postgres":
             return [
-                f"CREATE INDEX {index_name} ON {full_name} USING GIST ({geom_col})"
+                f"CREATE INDEX {quoted_index_name} ON {full_name} USING GIST ({geom_col})"
             ]
 
         elif self.db_type == "oracle":
@@ -333,13 +381,13 @@ VALUES (
     ),
     {srid}
 )""",
-                f"""CREATE INDEX {index_name} ON {full_name}({geom_col})
+                f"""CREATE INDEX {quoted_index_name} ON {full_name}({geom_col})
 INDEXTYPE IS MDSYS.SPATIAL_INDEX""",
             ]
 
         elif self.db_type == "mssql":
             return [
-                f"""CREATE SPATIAL INDEX {index_name}
+                f"""CREATE SPATIAL INDEX {quoted_index_name}
 ON {full_name}({geom_col})
 WITH (
     BOUNDING_BOX = (xmin=-180, ymin=-90, xmax=180, ymax=90)
@@ -348,7 +396,7 @@ WITH (
 
         elif self.db_type in ("mysql", "mariadb"):
             return [
-                f"CREATE SPATIAL INDEX {index_name} ON {full_name}({geom_col})"
+                f"CREATE SPATIAL INDEX {quoted_index_name} ON {full_name}({geom_col})"
             ]
 
         return []
@@ -437,8 +485,8 @@ END;"""
         backup_name = f"{src_table}__bak"
 
         if self.db_type == "postgres":
-            backup_id = f'"{backup_name}"'
-            src_id = f'"{src_table}"'
+            backup_id = self.quote_column(backup_name)
+            src_id = self.quote_column(src_table)
             return [
                 f'ALTER TABLE {src_full} RENAME TO {backup_id}',
                 f'ALTER TABLE {stg_full} RENAME TO {src_id}',
@@ -452,8 +500,8 @@ END;"""
             ]
 
         if self.db_type == "oracle":
-            backup_id = f'"{backup_name.upper()}"'
-            src_id = f'"{src_table.upper()}"'
+            backup_id = self.quote_column(backup_name)
+            src_id = self.quote_column(src_table)
             return [
                 f"ALTER TABLE {src_full} RENAME TO {backup_id}",
                 f"ALTER TABLE {stg_full} RENAME TO {src_id}",
@@ -464,8 +512,10 @@ END;"""
             src_qualified_str = f"{schema}.{src_table}" if schema else src_table
             stg_qualified_str = f"{schema}.{stg_table}" if schema else stg_table
             return [
-                f"EXEC sp_rename '{src_qualified_str}', '{backup_name}'",
-                f"EXEC sp_rename '{stg_qualified_str}', '{src_table}'",
+                f"EXEC sp_rename {self.quote_string_literal(src_qualified_str)}, "
+                f"{self.quote_string_literal(backup_name)}",
+                f"EXEC sp_rename {self.quote_string_literal(stg_qualified_str)}, "
+                f"{self.quote_string_literal(src_table)}",
             ]
 
         raise ValueError(
