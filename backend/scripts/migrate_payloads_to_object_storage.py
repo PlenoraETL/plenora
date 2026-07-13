@@ -107,7 +107,8 @@ def _migrate_file_sources(*, apply: bool) -> int:
 def _migrate_previews(*, apply: bool) -> int:
     candidates = _rows(
         "SELECT task_id, payload FROM task_results "
-        "WHERE name='pipeline.preview' AND payload ? 'rows' ORDER BY created_at"
+        "WHERE name='pipeline.preview' AND jsonb_exists(payload, 'rows') "
+        "ORDER BY created_at"
     )
     if not apply:
         print(f"task preview: {len(candidates)} payload JSONB")
@@ -119,16 +120,22 @@ def _migrate_previews(*, apply: bool) -> int:
             payload = json.loads(payload)
         project_id = str(payload.get("project_id") or "")
         task_id = str(row["task_id"])
-        if not project_id:
-            print(f"preview {task_id}: skip, project_id assente")
-            continue
+        # Preview prodotte dalle immagini precedenti al task envelope non
+        # avevano project_id. Il prefisso legacy rende comunque la key S3
+        # valida; rimuoviamo poi project_id dall'envelope per conservare la
+        # precedente semantica ACL (visibile solo ad admin/superadmin quando
+        # il task non e' associabile a un progetto).
+        had_project_id = bool(project_id)
+        storage_project_id = project_id or "legacy"
         envelope = persist_preview_payload(
-            payload, project_id=project_id, task_id=task_id
+            payload, project_id=storage_project_id, task_id=task_id
         )
+        if not had_project_id:
+            envelope.pop("project_id", None)
         with unit_of_work() as session:
             cur = session.execute(
                 "UPDATE task_results SET payload=%s::jsonb, updated_at=now() "
-                "WHERE task_id=%s AND payload ? 'rows'",
+                "WHERE task_id=%s AND jsonb_exists(payload, 'rows')",
                 (json.dumps(envelope, separators=(",", ":")), task_id),
             )
         if getattr(cur, "rowcount", 0) > 0:
@@ -213,7 +220,7 @@ def _validate_guard_constraints() -> None:
         (
             "task_results",
             "task_results_no_tabular_payload",
-            "payload ? 'rows'",
+            "jsonb_exists(payload, 'rows')",
         ),
     )
     for table, constraint, where in checks:
