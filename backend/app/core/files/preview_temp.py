@@ -1,10 +1,7 @@
-"""
-Temporary preview for uploaded files without DB persistence.
+"""Preview temporanea bounded da stream, senza persistenza applicativa.
 
-Preview RAM-only: interamente in memoria,
-nessun NamedTemporaryFile, niente extract_zip su disco. Il ZIP e'
-navigato via `zipfile.ZipFile(BytesIO(...))` e il parsing usa
-`load_by_format_bytes`.
+Il body FastAPI resta seekable; eventuali member ZIP passano da spool
+automatico RAM/disco e sono rimossi alla chiusura.
 """
 
 from __future__ import annotations
@@ -17,10 +14,12 @@ from typing_extensions import TypedDict
 from app.core.dataframes import load_dispatch as load_dispatch_module
 from app.core.dataframes import preview_loader as preview_loader_module
 from app.core.io import geospatial as geospatial_io_module
+from app.core.io.bounded_streams import read_prefix
 from app.utils.mime_validator import MimeMismatchError, validate_no_executable
 from app.core.io.zip_guards import (
-    open_zip_bytes_safe,
+    open_zip_stream_safe,
     pick_zip_member_by_extension,
+    spool_zip_member,
 )
 
 
@@ -86,9 +85,10 @@ def preview_file_temp(
         ValueError: formato non supportato o MIME mismatch (block-only).
     """
     file_content.seek(0)
-    raw_data = file_content.read()
+    source_stream = file_content
+    owned_stream = None
     try:
-        validate_no_executable(content=raw_data, filename=filename)
+        validate_no_executable(content=read_prefix(source_stream), filename=filename)
     except MimeMismatchError as e:
         logger.warning(
             f"preview_file_temp bloccato (MIME): filename={filename!r}: {e}"
@@ -99,12 +99,9 @@ def preview_file_temp(
     if format_type == 'unknown':
         raise ValueError(f"Formato file non supportato: {filename}")
 
-    inner_bytes = raw_data
-
     if format_type == 'zip':
         try:
-            # `open_zip_bytes_safe` valida i cap zip-bomb PRIMA di yield.
-            with open_zip_bytes_safe(raw_data) as z:
+            with open_zip_stream_safe(file_content) as z:
                 names = z.namelist()
                 inner_name, inner_format, inner_display = pick_zip_member_by_extension(
                     names,
@@ -121,14 +118,15 @@ def preview_file_temp(
 
                 format_type = inner_format
                 if inner_format in ('shp', 'gdb'):
-                    # Multi-file: pyogrio /vsizip sullo ZIP intero.
-                    inner_bytes = raw_data
+                    source_stream = file_content
                 else:
-                    inner_bytes = z.read(inner_name)
+                    owned_stream = spool_zip_member(z, inner_name)
+                    source_stream = owned_stream
                     # SAFETY: defense-in-depth MIME su inner file.
                     try:
                         validate_no_executable(
-                            content=inner_bytes, filename=inner_display,
+                            content=read_prefix(source_stream),
+                            filename=inner_display,
                         )
                     except MimeMismatchError as e:
                         logger.warning(
@@ -141,8 +139,12 @@ def preview_file_temp(
 
     # Multi-layer/sheet senza selezione: restituisce lista disponibile.
     if format_type in ['gpkg', 'gdb'] and not layer:
-        available_layers = geospatial_io_module.list_vector_layers(inner_bytes)
+        available_layers = geospatial_io_module.list_vector_layers_stream(
+            source_stream
+        )
         if len(available_layers) > 1:
+            if owned_stream is not None:
+                owned_stream.close()
             return {
                 "columns": [],
                 "row_count": 0,
@@ -155,10 +157,12 @@ def preview_file_temp(
             layer = available_layers[0]
 
     if format_type in ['xlsx', 'xls'] and not sheet:
-        available_sheets = load_dispatch_module.list_excel_sheets_from_bytes(
-            inner_bytes
+        available_sheets = load_dispatch_module.list_excel_sheets_from_stream(
+            source_stream
         )
         if len(available_sheets) > 1:
+            if owned_stream is not None:
+                owned_stream.close()
             return {
                 "columns": [],
                 "row_count": 0,
@@ -174,8 +178,9 @@ def preview_file_temp(
     # Bounded preview: carica al massimo `max_rows` righe/feature invece
     # del DataFrame intero. Per CSV/XLSX/JSON-lines il row_count totale non
     # e' disponibile cheap (None); per parquet e geospatial viene da metadata.
-    df_preview, total_row_count = preview_loader_module.preview_dataframe_from_bytes(
-        inner_bytes,
+    source_stream.seek(0)
+    df_preview, total_row_count = preview_loader_module.preview_dataframe_from_stream(
+        source_stream,
         format_type,
         layer=None if is_sheet else layer,
         sheet=sheet if is_sheet else None,
@@ -201,7 +206,7 @@ def preview_file_temp(
         row_count = len(df_preview)
         row_count_is_estimate = True
 
-    return {
+    result = {
         "columns": [{"name": c.name, "type": c.type} for c in columns],
         "row_count": row_count,
         "row_count_is_estimate": row_count_is_estimate,
@@ -209,3 +214,6 @@ def preview_file_temp(
         "layers": [],
         "sheets": [],
     }
+    if owned_stream is not None:
+        owned_stream.close()
+    return result

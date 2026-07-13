@@ -30,6 +30,7 @@ from app.observability.audit_action import audit_action
 from app.core.auth.visibility import visible_resource_ids
 from app.shared.error_sanitizer import sanitize_http_detail
 from app.core.security.upload_guards import enforce_upload_size_limit
+from app.core.io.bounded_streams import read_prefix
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 
@@ -320,14 +321,15 @@ async def analyze_upload(
     enforce_upload_size_limit(file)
 
     try:
-        content = await file.read()
+        content_stream = file.file
         # Block-only mode: il file viene salvato su disk e parsato dal
         # workflow eseguibile. Bloccare eseguibili reali e' la difesa
         # primaria (un binary su disk poi eseguito sarebbe RCE). Allowlist
         # stretta romperebbe i formati custom degli eseguibili (.dxf, .geojson
         try:
             validate_no_executable(
-                content=content, filename=file.filename or "upload",
+                content=read_prefix(content_stream),
+                filename=file.filename or "upload",
             )
         except MimeMismatchError as e:
             logger.warning(
@@ -341,7 +343,7 @@ async def analyze_upload(
         try:
             result = eseguibili_service.analyze_file_upload(
                 eseguibile=record,
-                file_content=content,
+                file_content=content_stream,
                 filename=file.filename,
             )
         except ValueError as e:
@@ -353,7 +355,7 @@ async def analyze_upload(
 
         durable_file_id = eseguibili_service.persist_upload_file_source(
             eseguibile=record,
-            file_content=content,
+            file_content=content_stream,
             filename=Path((file.filename or "upload.bin").replace("\\", "/")).name,
             user_id=current_user.user_id,
             group_id=current_user.group_id,

@@ -6,12 +6,25 @@ Verifica le invarianti minime del policy dispatch:
 
 from __future__ import annotations
 
+import io
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
+
+
+@pytest.fixture(autouse=True)
+def _isolate_reconciliation_db(monkeypatch):
+    """Questo test valida il routing, non il DB degli upload intent."""
+    from app.core.resources import blob_dispatch
+
+    monkeypatch.setattr(
+        blob_dispatch.reconciliation,
+        "record_upload_intent",
+        lambda **_kwargs: None,
+    )
 
 
 @pytest.fixture
@@ -101,6 +114,38 @@ def test_dispatch_db_policy_does_not_log(fake_logger):
 
     fake_logger.info.assert_not_called()
     fake_logger.error.assert_not_called()
+
+
+def test_dispatch_object_storage_streams_fileobj_without_bytes_copy(
+    fake_logger, fake_storage,
+):
+    """Canonical object storage path usa il file-like originale."""
+    from app.core.resources.blob_dispatch import dispatch_blob_storage
+
+    payload = io.BytesIO(b"streamed-payload")
+    with _patched_settings("object_storage"), patch(
+        "app.core.io.object_storage.get_runtime_object_storage",
+        return_value=fake_storage,
+    ):
+        out = dispatch_blob_storage(
+            "file_stream",
+            payload,
+            "stream.bin",
+            logger=fake_logger,
+            size_bytes=16,
+        )
+
+    assert out == {
+        "data": None,
+        "storage_key": "file-sources/file_stream/stream.bin",
+        "size_bytes": 16,
+    }
+    fake_storage.upload_bytes.assert_not_called()
+    fake_storage.upload_fileobj.assert_called_once_with(
+        payload,
+        "file-sources/file_stream/stream.bin",
+        size_bytes=16,
+    )
 
 
 # 2. Object storage upload failure

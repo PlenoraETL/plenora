@@ -223,10 +223,34 @@ class FileSourceService:
         """
         return self._get_blob_from_db(file_id, expected_group_id)
 
+    def get_blob_stream(
+        self, file_id: str, expected_group_id: str = None,
+    ):
+        """API streaming per download HTTP senza materializzazione bytes."""
+        return _source_blob.get_blob_stream(
+            file_id,
+            expected_group_id=expected_group_id,
+            assert_visible=self._assert_visible,
+            superadmin_bypass=self.SUPERADMIN_BYPASS,
+            logger=self._logger,
+        )
+
     def _get_blob_from_db(
         self, file_id: str, expected_group_id: str = None,
     ) -> Optional[bytes]:
         return _source_blob.get_blob_from_db(
+            file_id,
+            expected_group_id=expected_group_id,
+            assert_visible=self._assert_visible,
+            superadmin_bypass=self.SUPERADMIN_BYPASS,
+            logger=self._logger,
+        )
+
+    def _open_blob_spool(
+        self, file_id: str, expected_group_id: str = None,
+    ):
+        """Context manager seekable per parser, bounded RAM/disk."""
+        return _source_blob.open_blob_spool(
             file_id,
             expected_group_id=expected_group_id,
             assert_visible=self._assert_visible,
@@ -357,7 +381,7 @@ class FileSourceService:
             expected_group_id=expected_group_id,
             assert_visible=self._assert_visible,
             get_file_source=self.get_file_source,
-            get_blob=self._get_blob_from_db,
+            open_blob=self._open_blob_spool,
             logger=self._logger,
         )
 
@@ -368,12 +392,8 @@ class FileSourceService:
             get_file_source_by_id=self.get_file_source,
             load_dataframe=self.load_dataframe,
             column_builder_from_dataframe=self._column_builder.from_dataframe,
-            get_blob_from_db=self._get_blob_from_db,
             time_now=self._time.now,
             db_update_file_source_metadata=files_db.update_file_source_metadata,
-            db_get_file_source=files_db.get_file_source,
-            db_save_file_source=files_db.save_file_source,
-            default_group=settings.DEFAULT_GROUP,
             use_app_models=True,
             logger=self._logger,
         )
@@ -390,7 +410,7 @@ class FileSourceService:
             expected_group_id=expected_group_id,
             assert_visible=self._assert_visible,
             get_file_source=self.get_file_source,
-            get_blob=self._get_blob_from_db,
+            open_blob=self._open_blob_spool,
             logger=self._logger,
         )
 

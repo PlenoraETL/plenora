@@ -112,18 +112,16 @@ def test_execute_hydrates_upload_from_file_source_before_worker_handoff(monkeypa
 
     monkeypatch.setattr(
         file_source_service,
-        "get_blob_bytes",
-        lambda file_id, expected_group_id=None: b"source_customer_id\n1\n2\n",
+        "load_dataframe",
+        lambda file_id, expected_group_id=None: (
+            pd.DataFrame({"source_customer_id": [1, 2]}),
+            None,
+        ),
     )
     monkeypatch.setattr(
         service,
         "load_upload_metadata",
         lambda file_id: {"filename": "upload.csv", "group_id": "grp-user"},
-    )
-    monkeypatch.setattr(
-        frame_io,
-        "load_dataframe_from_file",
-        lambda path: pd.DataFrame({"source_customer_id": [1, 2]}),
     )
     monkeypatch.setattr(
         file_source_service,

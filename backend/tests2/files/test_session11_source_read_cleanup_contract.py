@@ -1,18 +1,9 @@
-"""Sessione 11 P1: source_read cleanup order — tombstone post-bytes-first.
+"""Sessione 11 P1: source_read cleanup order - stream/spool tombstone.
 
-Storico:
-- files/source_read.py:96-104 (vecchio path-mode) — gc.collect chiamato PRIMA
-  di `_cleanup_temp_path`. Su worker memory-constrained con GeoDataFrame
-  grandi (shp/gdb) il gc tentava di liberare memoria del GeoDataFrame
-  PRIMA del cleanup FS → picco memoria spurious.
-- Post-fix Sessione 11: cleanup FS PRIMA, gc.collect DOPO.
-- Post-Phase4 (bytes-first): `load_dataframe` consuma il blob direttamente
-  in RAM via `load_by_format_bytes` / `list_vector_layers`, senza piu'
-  materializzare temp file. `_cleanup_temp_path` non esiste piu' nel
-  codice, quindi il bug originale e' impossibile by-construction.
-
-Questo test resta come tombstone: garantisce che non si torni MAI piu'
-a un pattern path-mode con temp file in `load_dataframe`.
+Storico: il vecchio path-mode chiamava ``gc.collect`` prima del cleanup del
+file temporaneo. Il path corrente usa ``open_blob`` come context manager: lo
+spool anonimo viene chiuso all'uscita dal ``with`` e solo dopo viene chiamato
+``gc.collect``. Non esistono path da pulire manualmente.
 """
 
 from __future__ import annotations
@@ -27,26 +18,18 @@ from tests2.shared._ast_identifiers import all_identifiers
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
 
 
-def test_source_read_load_dataframe_is_bytes_first_no_tempfile():
-    """`load_dataframe` post-Phase4: deve consumare il blob in RAM,
-    niente piu' `_cleanup_temp_path`, niente piu' `temp_file_for`
-    nel finally block."""
+def test_source_read_load_dataframe_is_stream_first_with_scoped_spool():
+    """Il parser usa lo stream scoped, senza path/cleanup manuali."""
     from app.core.files import source_read
 
     src = inspect.getsource(source_read.load_dataframe)
+    identifiers = all_identifiers(src)
 
-    assert "_cleanup_temp_path" not in all_identifiers(src), (
-        "load_dataframe non deve piu' usare _cleanup_temp_path post-Phase4 "
-        "(bytes-first via load_by_format_bytes). Se torna, e' una regressione "
-        "verso il path-mode che il pattern Sessione 11 doveva proteggere."
+    assert "_cleanup_temp_path" not in identifiers
+    assert "temp_file_for" not in identifiers
+    assert "open_blob" in identifiers
+    assert "load_by_format_stream" in identifiers, (
+        "load_dataframe deve passare il file-like seekable direttamente al "
+        "parser, senza ricostruire un bytes completo."
     )
-    assert "temp_file_for" not in all_identifiers(src), (
-        "load_dataframe non deve materializzare tempfile post-Phase4 "
-        "(bytes-first). Se torna, contraddice il refactor che ha "
-        "eliminato il bounce su disco."
-    )
-    # Conferma che il path nuovo bytes-first sia in uso.
-    assert "load_by_format_bytes" in all_identifiers(src), (
-        "load_dataframe deve consumare il blob via load_by_format_bytes "
-        "(bytes-first contract). Se la helper cambia nome, aggiornare qui."
-    )
+    assert src.index("with open_blob") < src.index("gc.collect()")

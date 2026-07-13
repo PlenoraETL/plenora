@@ -66,6 +66,17 @@ def _mock_object_storage(uploads: dict):
 
     fake_storage.upload_bytes.side_effect = _capture_upload_bytes
 
+    def _capture_upload_fileobj(stream, key, *, size_bytes=None):
+        position = stream.tell()
+        stream.seek(0)
+        data = stream.read()
+        stream.seek(position)
+        if size_bytes is not None:
+            assert len(data) == size_bytes
+        uploads[key] = data
+
+    fake_storage.upload_fileobj.side_effect = _capture_upload_fileobj
+
     with patch(
         "app.core.io.object_storage.get_runtime_object_storage",
         return_value=fake_storage,

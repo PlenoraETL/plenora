@@ -8,6 +8,7 @@ column filtering, JSON-safe row normalization, and geospatial file dispatch.
 import time as _time_mod
 
 import json
+import zipfile
 from io import BytesIO, StringIO
 from pathlib import Path
 from typing import Optional, Union
@@ -105,7 +106,11 @@ from app.core.dataframes.tabular import (
     window_function_values,
 )
 from app.core.io.geospatial import read_vector_bytes
-from app.core.io.zip_guards import open_zip_bytes_safe
+from app.core.io.zip_guards import (
+    open_zip_bytes_safe,
+    spool_zip_member,
+    validate_zip_bomb_limits,
+)
 from app.core.resources.exceptions import MemoryLimitExceededError
 from app.utils.logger import get_logger
 
@@ -573,16 +578,16 @@ def _carica_da_zip(
     volta sola via BytesIO, e i cap zip-bomb sono validati prima
     di qualunque `inner.read()`.
     """
-    zip_bytes = zip_path.read_bytes()
-
-    # `open_zip_bytes_safe` valida i cap zip-bomb PRIMA di yield-are
-    # lo ZipFile: ogni `zf.read()` successivo e' guard-protetto.
-    with open_zip_bytes_safe(zip_bytes) as zf:
+    # ZipFile lavora direttamente sul path seekable. Nessuna copia completa
+    # dell'archivio viene creata nel processo.
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        validate_zip_bomb_limits(zf)
         contenuto = zf.namelist()
 
         shp_files = [n for n in contenuto if n.lower().endswith(".shp")]
         if shp_files:
-            df = read_vector_bytes(zip_bytes, layer=layer)
+            import pyogrio
+            df = pyogrio.read_dataframe(zip_path, layer=layer)
             logger.warning(
                 "Shapefile caricato - i nomi colonne potrebbero "
                 "essere troncati a 10 caratteri!"
@@ -593,7 +598,8 @@ def _carica_da_zip(
             n for n in contenuto if ".gdb/" in n or n.lower().endswith(".gdb")
         ]
         if gdb_entries:
-            return read_vector_bytes(zip_bytes, layer=layer)
+            import pyogrio
+            return pyogrio.read_dataframe(zip_path, layer=layer)
 
         if len(contenuto) == 1:
             # Singolo file (es. CSV/JSON/Parquet zippato): non possiamo
@@ -601,16 +607,22 @@ def _carica_da_zip(
             # + dispatch su `_load_dataframe_from_bytes` per i formati
             # tabulari supportati.
             inner_name = contenuto[0]
-            with zf.open(inner_name) as inner:
-                inner_bytes = inner.read()
             inner_suffix = Path(inner_name).suffix.lower().lstrip(".")
             if inner_suffix in _IN_MEMORY_ARTIFACT_FORMATS:
-                return _load_dataframe_from_bytes(
-                    inner_bytes,
-                    format_hint=inner_suffix,
-                    sheet=sheet,
-                    layer=layer,
-                )
+                inner_stream = spool_zip_member(zf, inner_name)
+                try:
+                    from app.core.dataframes.load_dispatch import (
+                        load_by_format_stream,
+                    )
+                    df, _ = load_by_format_stream(
+                        inner_stream,
+                        inner_suffix,
+                        sheet=sheet,
+                        layer=layer,
+                    )
+                    return df
+                finally:
+                    inner_stream.close()
             raise ValueError(
                 f"ZIP contiene file singolo con estensione non gestita: "
                 f"{inner_name!r}"

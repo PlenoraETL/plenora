@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, BinaryIO, Callable, Optional
 
 from app.core.resources.blob_dispatch import BlobDispatchResult
+from app.core.io.bounded_streams import read_prefix, stream_size
 from app.utils.mime_validator import MimeMismatchError, validate_no_executable
 
 
@@ -22,7 +23,7 @@ def create_raw_from_upload(
     *,
     generate_file_id: Callable[[str], str],
     time_now: Callable[[], Any],
-    dispatch_blob_storage: Callable[[str, bytes, str], BlobDispatchResult],
+    dispatch_blob_storage: Callable[..., BlobDispatchResult],
     db_save_file_source: Callable[..., None],
     default_group: str,
     build_file_source: Callable[..., Any],
@@ -35,10 +36,11 @@ def create_raw_from_upload(
 
     file_id = generate_file_id(name)
     file_content.seek(0)
-    raw_data = file_content.read()
+    size = stream_size(file_content)
+    mime_header = read_prefix(file_content)
 
     try:
-        mime_validate(content=raw_data, filename=filename or name)
+        mime_validate(content=mime_header, filename=filename or name)
     except Exception as exc:
         if isinstance(exc, MimeMismatchError):
             logger.warning(
@@ -62,7 +64,7 @@ def create_raw_from_upload(
         sheet=None,
         columns=[],
         row_count=0,
-        file_size=len(raw_data),
+        file_size=size,
         crs=None,
         group_id=resolved_group_id,
         created_at=now,
@@ -75,7 +77,13 @@ def create_raw_from_upload(
         else {}
     )
 
-    blob_kwargs = dispatch_blob_storage(file_id, raw_data, filename)
+    file_content.seek(0)
+    blob_kwargs = dispatch_blob_storage(
+        file_id,
+        file_content,
+        filename,
+        size_bytes=size,
+    )
     db_save_file_source(
         file_id=file_id,
         group_id=resolved_group_id,
@@ -88,7 +96,7 @@ def create_raw_from_upload(
 
     logger.info(
         f"FileSource raw creato: {file_id} format={file_ext} "
-        f"({len(raw_data)} bytes)"
+        f"({size} bytes)"
     )
     return file_source
 

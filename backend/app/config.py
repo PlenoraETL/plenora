@@ -214,6 +214,10 @@ class Settings:
         # boundary. This is a safety cap, never a storage-routing threshold:
         # all previews still go to object storage.
         "PREVIEW_PAYLOAD_MAX_BYTES": 50 * 1024 * 1024,
+        # File-like seekable prodotti durante serializzazione/decompressione:
+        # in RAM fino a 8 MiB, poi spool automatico su storage temporaneo OS.
+        # Il file e' sempre effimero e viene eliminato alla chiusura.
+        "IO_SPOOL_MAX_MEMORY_BYTES": 8 * 1024 * 1024,
 
         # Canvas validation: se True l'esecuzione e' bloccata quando
         # la catena del progetto non valida (gate a esecuzione, re-valida live) e

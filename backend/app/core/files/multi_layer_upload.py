@@ -1,9 +1,4 @@
-"""Multi-layer and multi-sheet upload parsing.
-
-RAM-only: il payload upload e' navigato in memoria via
-`zipfile.ZipFile(BytesIO(...))` e i parser bytes-first
-di `app.core.dataframes.load_dispatch`.
-"""
+"""Multi-layer/multi-sheet upload parsing da stream seekable bounded."""
 
 from __future__ import annotations
 
@@ -13,10 +8,12 @@ from typing import Any, BinaryIO, Callable, Dict, List, Optional
 
 from app.core.files.db import FileSourceRow
 from app.core.resources.blob_dispatch import BlobDispatchResult
+from app.core.io.bounded_streams import read_prefix, stream_size
 from app.utils.mime_validator import MimeMismatchError, validate_no_executable
 from app.core.io.zip_guards import (
-    open_zip_bytes_safe,
+    open_zip_stream_safe,
     pick_zip_member_by_extension,
+    spool_zip_member,
 )
 
 
@@ -46,8 +43,7 @@ def create_multi_layer_from_upload(
 ) -> List[Any]:
     """Crea N FileSource da un file multi-layer (GPKG/GDB) o multi-sheet (XLSX).
 
-    RAM-only: tutto il payload e' processato in memoria. Vedi docstring
-    del modulo per invarianti e collaborator.
+    Il BLOB viene riusato come file-like tra i layer, senza copie complete.
 
     Args:
         layers_config: lista di dict con chiavi opzionali:
@@ -67,7 +63,7 @@ def create_multi_layer_from_upload(
                     DB + cleanup compensativo del shared storage_key
                     best-effort.
     """
-    from app.core.dataframes.load_dispatch import load_by_format_bytes
+    from app.core.dataframes.load_dispatch import load_by_format_stream
 
     if mime_validate is None:
         mime_validate = validate_no_executable
@@ -76,11 +72,13 @@ def create_multi_layer_from_upload(
         raise ValueError("layers_config non puo essere vuota")
 
     file_content.seek(0)
-    raw_data = file_content.read()
+    source_stream = file_content
+    source_size = stream_size(source_stream)
+    owned_stream = None
 
     # MIME validation runs before parse, blob dispatch, or DB writes.
     try:
-        mime_validate(content=raw_data, filename=filename or name)
+        mime_validate(content=read_prefix(source_stream), filename=filename or name)
     except Exception as e:
         if isinstance(e, MimeMismatchError):
             logger.warning(
@@ -91,18 +89,13 @@ def create_multi_layer_from_upload(
         raise
 
     format_type = detect_format(filename)
-    # `inner_bytes` e' il payload usato per la schema inference (per ZIP
-    # con .gdb interno = lo ZIP intero che pyogrio legge via /vsizip;
-    # per ZIP con .gpkg interno = i bytes del gpkg estratti dallo ZIP).
-    inner_bytes = raw_data
-
     if format_type == 'zip':
-        # Navigazione del ZIP in RAM via zipfile.ZipFile(BytesIO).
+        # Navigazione seekable; decompressione member a chunk nello spool.
         # NB: SOLO .gpkg / .gdb (no .shp/.csv come create_from_upload).
         outer_filename = filename
         try:
             # `open_zip_bytes_safe` valida i cap zip-bomb PRIMA di yield.
-            with open_zip_bytes_safe(raw_data) as z:
+            with open_zip_stream_safe(file_content) as z:
                 names = z.namelist()
                 inner_name, inner_format, inner_display = pick_zip_member_by_extension(
                     names,
@@ -120,21 +113,18 @@ def create_multi_layer_from_upload(
                 format_type = inner_format
                 filename = inner_display
                 if inner_format == 'gdb':
-                    # .gdb e' una directory: pyogrio legge lo ZIP intero
-                    # via /vsizip (raw_data resta lo ZIP); inner_bytes
-                    # punta allo stesso ZIP per parse.
-                    inner_bytes = raw_data
+                    source_stream = file_content
+                    source_size = stream_size(file_content)
                 else:
-                    # .gpkg single-file: estrae i bytes dal ZIP e usa il GPKG
-                    # interno come blob persistito, coerente con il formato
-                    # dichiarato.
-                    raw_data = z.read(inner_name)
-                    inner_bytes = raw_data
+                    owned_stream = spool_zip_member(z, inner_name)
+                    source_stream = owned_stream
+                    source_size = stream_size(source_stream)
                     # SAFETY: ri-valida MIME sull'inner file (defense-in-depth
                     # contro ZIP-with-trojan-inside).
                     try:
                         mime_validate(
-                            content=inner_bytes, filename=inner_display,
+                            content=read_prefix(source_stream),
+                            filename=inner_display,
                         )
                     except MimeMismatchError as e:
                         logger.warning(
@@ -160,8 +150,9 @@ def create_multi_layer_from_upload(
     # orphan guard interno al dispatch.
     batch_id = f"batch_{uuid.uuid4().hex}"
     shared_blob_kwargs = dispatch_blob_storage(
-        batch_id, raw_data, filename,
+        batch_id, source_stream, filename,
         storage_key_id=batch_id,
+        size_bytes=source_size,
     )
 
     # Loop di staging: parse + DTO build per ogni layer, ZERO side
@@ -184,12 +175,12 @@ def create_multi_layer_from_upload(
         crs: Optional[str] = None
         try:
             if is_sheet_based:
-                df, gdf = load_by_format_bytes(
-                    inner_bytes, format_type, layer=None, sheet=layer,
+                df, gdf = load_by_format_stream(
+                    source_stream, format_type, layer=None, sheet=layer,
                 )
             else:
-                df, gdf = load_by_format_bytes(
-                    inner_bytes, format_type, layer=layer, sheet=None,
+                df, gdf = load_by_format_stream(
+                    source_stream, format_type, layer=layer, sheet=None,
                 )
             if selected_columns:
                 valid_cols = [c for c in selected_columns if c in df.columns]
@@ -224,7 +215,7 @@ def create_multi_layer_from_upload(
             sheet=layer if is_sheet_based else None,
             columns=columns_dicts,
             row_count=row_count,
-            file_size=len(raw_data),
+            file_size=source_size,
             crs=crs,
             group_id=group_id or default_group,
             created_at=now,
@@ -278,5 +269,8 @@ def create_multi_layer_from_upload(
             f"layer={getattr(fs, 'layer', None)!r} "
             f"sheet={getattr(fs, 'sheet', None)!r}"
         )
+
+    if owned_stream is not None:
+        owned_stream.close()
 
     return created

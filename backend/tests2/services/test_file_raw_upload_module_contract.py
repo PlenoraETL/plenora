@@ -65,10 +65,12 @@ def test_happy_path_db_storage_calls_dispatch_and_db_save(collaborators):
     collaborators["generate_file_id"].assert_called_once_with("MyDoc")
     # mime_validate chiamato coi bytes letti + filename
     collaborators["mime_validate"].assert_called_once_with(content=raw, filename="doc.dxf")
-    # dispatch chiamato con (file_id, raw, filename)
-    collaborators["dispatch_blob_storage"].assert_called_once_with(
-        "file_abc123", raw, "doc.dxf",
-    )
+    # dispatch riceve lo stream originale + size, non una copia bytes.
+    dispatch_call = collaborators["dispatch_blob_storage"].call_args
+    assert dispatch_call.args[0] == "file_abc123"
+    assert dispatch_call.args[1].getvalue() == raw
+    assert dispatch_call.args[2] == "doc.dxf"
+    assert dispatch_call.kwargs["size_bytes"] == len(raw)
     # db_save chiamato con kwargs correct (incluso **blob_kwargs propagato)
     collaborators["db_save_file_source"].assert_called_once()
     call_kwargs = collaborators["db_save_file_source"].call_args.kwargs

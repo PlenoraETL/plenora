@@ -71,7 +71,7 @@ def _create_multi(
     from app.core.files.multi_layer_upload import create_multi_layer_from_upload
 
     patcher = patch(
-        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        "app.core.dataframes.load_dispatch.load_by_format_stream",
     )
     mock_lbf = patcher.start()
     if load_side_effect is not None:
@@ -478,9 +478,15 @@ def test_zip_unwrap_gdb_directory_uses_original_zip_blob(collaborators):
     assert len(out) == 1
 
     dispatch_args = collaborators["dispatch_blob_storage"].call_args.args
-    assert dispatch_args[1] == zip_bytes, (
+    dispatch_stream = dispatch_args[1]
+    dispatch_stream.seek(0)
+    assert dispatch_stream.read() == zip_bytes, (
         "MULTI-GDB-001 fix RAM-only: per GDB il blob salvato deve essere "
         "il ZIP originale (pyogrio legge /vsizip)"
+    )
+    assert (
+        collaborators["dispatch_blob_storage"].call_args.kwargs["size_bytes"]
+        == len(zip_bytes)
     )
 
     build_kwargs = collaborators["build_file_source"].call_args.kwargs

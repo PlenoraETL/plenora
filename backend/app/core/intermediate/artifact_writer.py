@@ -6,13 +6,14 @@ Persiste lo snapshot completo di un nodo come `data.parquet` +
 
 from __future__ import annotations
 
-import io
 import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from tempfile import SpooledTemporaryFile
 from typing import Any, Optional, TypeAlias
 
+from app.core.io.bounded_streams import spool_memory_limit, stream_size
 from app.shared.resources.storage_layout import INTERMEDIATE_PREFIX
 
 logger = logging.getLogger(__name__)
@@ -132,8 +133,8 @@ def _build_manifest(
     }
 
 
-def _serialize_dataframe_to_parquet(df: Any) -> bytes:
-    """Serializza un DataFrame in bytes Parquet.
+def _serialize_dataframe_to_parquet(df: Any):
+    """Serializza un DataFrame in uno spool seekable bounded.
 
     `df.to_parquet(buf)` usa `pyarrow` se disponibile, altrimenti
     `fastparquet`. Niente `df.to_dict(full)` per definizione.
@@ -143,9 +144,14 @@ def _serialize_dataframe_to_parquet(df: Any) -> bytes:
     = "failed" senza crashare la run. Soluzione strutturale (WKB
     pre-conversion / GeoParquet) e' fuori scope di questo batch.
     """
-    buf = io.BytesIO()
-    df.to_parquet(buf, engine="pyarrow", compression="snappy", index=False)
-    return buf.getvalue()
+    buf = SpooledTemporaryFile(max_size=spool_memory_limit(), mode="w+b")
+    try:
+        df.to_parquet(buf, engine="pyarrow", compression="snappy", index=False)
+        buf.seek(0)
+        return buf
+    except Exception:
+        buf.close()
+        raise
 
 
 def persist_full_artifact(
@@ -260,7 +266,7 @@ def persist_full_artifact(
 
     # 1. Parquet payload
     try:
-        parquet_bytes = _serialize_dataframe_to_parquet(df)
+        parquet_stream = _serialize_dataframe_to_parquet(df)
     except Exception as e:
         logger.error(
             "[ARTIFACT] serialize Parquet fallito per node=%s run=%s: %s",
@@ -276,7 +282,11 @@ def persist_full_artifact(
 
     # 2. Upload data.parquet
     try:
-        storage.upload_bytes(parquet_bytes, data_key)
+        storage.upload_fileobj(
+            parquet_stream,
+            data_key,
+            size_bytes=stream_size(parquet_stream),
+        )
     except Exception as e:
         logger.error(
             "[ARTIFACT] upload data.parquet fallito per node=%s run=%s: %s",
@@ -289,6 +299,8 @@ def persist_full_artifact(
             artifact_status="failed",
             error=f"upload data.parquet fallito: {type(e).__name__}: {e}",
         )
+    finally:
+        parquet_stream.close()
 
     # 3. Manifest
     manifest = _build_manifest(

@@ -104,13 +104,26 @@ _CALLSITE_CLASSIFICATION: dict[str, tuple[Classification, str]] = {
         "True -> mark_done, False -> compensating_delete + "
         "mark_orphan_deleted, None -> mark_failed_attempt (retry).",
     ),
+    "app/core/orchestrator/preview_payload_store.py": (
+        "intentionally_excluded",
+        "Task-bound preview payload. The task envelope carries the object key; "
+        "authenticated hydration deletes it best-effort and the periodic TTL "
+        "sweep plus provider lifecycle remove crash orphans under previews/.",
+    ),
+    "app/infrastructure/storage/cloud_backends.py": (
+        "safe_no_persistent_artifact",
+        "Provider adapter only: upload_fileobj/upload_bytes implement transport "
+        "and post-upload size integrity. Domain callsites remain responsible "
+        "for upload intent, compensation or TTL classification.",
+    ),
 }
 
 
 # Scanner
 
 
-# Storage-method invocations. `.upload(` and `.upload_bytes(` are
+# Storage-method invocations. `.upload(`, `.upload_bytes(` e
+# `.upload_fileobj(` sono
 # specific to the ObjectStorage Protocol (no false positives from
 # stdlib / third-party APIs). `.delete(` is overloaded across many
 # APIs (Redis, dict-likes, files), so we scope it to lines where the
@@ -118,6 +131,7 @@ _CALLSITE_CLASSIFICATION: dict[str, tuple[Classification, str]] = {
 _STORAGE_UPLOAD_PATTERNS = (
     ".upload(",
     ".upload_bytes(",
+    ".upload_fileobj(",
 )
 _STORAGE_DELETE_RECEIVER_HINTS = (
     "storage.delete(",
@@ -170,7 +184,12 @@ def _is_storage_method_call(line: str) -> bool:
     if stripped.startswith("def ") or stripped.startswith("async def "):
         return False
     # Method definitions inside a class with annotation
-    if "def upload(" in stripped or "def upload_bytes(" in stripped or "def delete(" in stripped:
+    if (
+        "def upload(" in stripped
+        or "def upload_bytes(" in stripped
+        or "def upload_fileobj(" in stripped
+        or "def delete(" in stripped
+    ):
         return False
     for pat in _STORAGE_UPLOAD_PATTERNS:
         if pat in line:

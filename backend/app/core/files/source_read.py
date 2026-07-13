@@ -1,21 +1,17 @@
 """
 Portable read/preview orchestration for FileSourceService.
 
-Bytes-first: le funzioni `load_dataframe` / `get_layers_info` consumano il
-blob direttamente in RAM via
-`load_by_format_bytes` / `list_vector_layers` / `list_excel_sheets_from_bytes`,
-senza materializzare temp file.
-
-Il blob viene fornito dal caller come `get_blob` callable (firma
-`(file_id, expected_group_id) -> Optional[bytes]`), tipicamente
-`FileSourceService._get_blob_from_db`.
+Stream-first: `load_dataframe` e `get_layers_info` ricevono un context manager
+che espone un file-like seekable. Il payload object-storage viene copiato a
+chunk in uno `SpooledTemporaryFile`: resta in RAM solo sotto la soglia di spool
+e passa a un file temporaneo anonimo oltre soglia, sempre con cleanup.
 """
 
 from __future__ import annotations
 
 import gc
 
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, BinaryIO, Callable, ContextManager, Optional, Tuple
 from typing_extensions import TypedDict
 
 from app.core.dataframes import load_dispatch as load_dispatch_module
@@ -26,7 +22,7 @@ from app.core.files.models import FileSourceLayersResponse, FileSourcePreview
 
 AssertVisible = Callable[[str, str], None]
 GetFileSource = Callable[[str], Any]
-GetBlob = Callable[[str, Optional[str]], Optional[bytes]]
+OpenBlob = Callable[[str, Optional[str]], ContextManager[BinaryIO]]
 
 
 class FileSourceLayersPayload(TypedDict):
@@ -57,10 +53,10 @@ def load_dataframe(
     expected_group_id: Optional[str] = None,
     assert_visible: AssertVisible,
     get_file_source: GetFileSource,
-    get_blob: GetBlob,
+    open_blob: OpenBlob,
     logger: Any,
 ) -> Tuple[Any, Optional[Any]]:
-    """Load a persisted file source into a DataFrame (RAM-only).
+    """Load a persisted FileSource senza una copia completa ``bytes``.
 
     Visibility remains fail-closed: callers inject the same
     `FileSourceService._assert_visible` callback.
@@ -70,27 +66,18 @@ def load_dataframe(
     if not file_source:
         raise ValueError(f"File source '{file_id}' non trovato")
 
-    blob = get_blob(file_id, expected_group_id)
-    if not blob:
-        raise ValueError(f"Nessun dato trovato per '{file_id}'")
-
     try:
-        use_layer = layer or file_source.layer
-        use_sheet = sheet or file_source.sheet
-        df, gdf = load_dispatch_module.load_by_format_bytes(
-            blob, file_source.format,
-            layer=use_layer, sheet=use_sheet,
-        )
-        return df, gdf
-    finally:
-        # gc.collect() conservato: GeoDataFrame grandi su worker
-        # memory-constrained beneficiano della liberazione esplicita,
-        # anche se non ci sono piu' tempfile da rimuovere.
-        try:
-            del df, gdf
-        except NameError:
-            pass
-        gc.collect()
+        with open_blob(file_id, expected_group_id) as blob_stream:
+            use_layer = layer or file_source.layer
+            use_sheet = sheet or file_source.sheet
+            df, gdf = load_dispatch_module.load_by_format_stream(
+                blob_stream, file_source.format,
+                layer=use_layer, sheet=use_sheet,
+            )
+    except FileNotFoundError as exc:
+        raise ValueError(f"Nessun dato trovato per '{file_id}'") from exc
+    gc.collect()
+    return df, gdf
 
 
 def get_layers_info(
@@ -99,10 +86,10 @@ def get_layers_info(
     expected_group_id: Optional[str] = None,
     assert_visible: AssertVisible,
     get_file_source: GetFileSource,
-    get_blob: GetBlob,
+    open_blob: OpenBlob,
     logger: Any,
 ) -> FileSourceLayersPayload:
-    """Return layer/sheet metadata for a persisted file source (RAM-only)."""
+    """Return layer/sheet metadata da uno stream seekable bounded."""
     assert_visible(file_id, expected_group_id or "")
     file_source = get_file_source(file_id)
     if not file_source:
@@ -111,18 +98,21 @@ def get_layers_info(
     layers: list[str] = []
     sheets: list[str] = []
     if file_source.format in ["gdb", "gpkg", "xlsx"]:
-        blob = get_blob(file_id, expected_group_id)
-        if blob:
-            try:
+        try:
+            with open_blob(file_id, expected_group_id) as blob_stream:
                 if file_source.format in ["gdb", "gpkg"]:
-                    layers = geospatial_io_module.list_vector_layers(blob)
+                    layers = geospatial_io_module.list_vector_layers_stream(
+                        blob_stream
+                    )
                 elif file_source.format == "xlsx":
-                    sheets = load_dispatch_module.list_excel_sheets_from_bytes(blob)
-            except Exception as e:
-                logger.debug(
-                    f"get_layers_info inspect fallito per {file_id} "
-                    f"(fmt={file_source.format}): {e}"
-                )
+                    sheets = load_dispatch_module.list_excel_sheets_from_stream(
+                        blob_stream
+                    )
+        except Exception as e:
+            logger.debug(
+                f"get_layers_info inspect fallito per {file_id} "
+                f"(fmt={file_source.format}): {e}"
+            )
 
     try:
         return FileSourceLayersResponse(
@@ -186,7 +176,7 @@ def get_preview(
 
 __all__ = [
     "AssertVisible",
-    "GetBlob",
+    "OpenBlob",
     "GetFileSource",
     "get_layers_info",
     "get_preview",

@@ -11,7 +11,7 @@ import copy
 import hashlib
 import json
 import uuid
-from typing import Mapping, Optional, Sequence
+from typing import BinaryIO, Mapping, Optional, Sequence, Union
 
 from app.utils.logger import get_logger
 from app.core.dataframes import frame_io as dataframe_frame_io
@@ -121,7 +121,7 @@ def create_from_project(
 
 def analyze_file_upload(
     eseguibile: eseguibili_db.EseguibileRow,
-    file_content: bytes,
+    file_content: Union[bytes, BinaryIO],
     filename: str,
 ) -> AnalyzeFileUploadResult:
     """Carica un file caricato in bytes e ritorna colonne rilevate + auto-mapping.
@@ -139,10 +139,15 @@ def analyze_file_upload(
         dict con file_id, detected_columns, row_count, auto_mapping, preview_rows
     """
     fmt = filename.rsplit(".", 1)[1].lower() if "." in filename else "bin"
-    df = dataframe_frame_io._load_dataframe_from_bytes(
-        file_content,
-        format_hint=fmt,
-    )
+    owns_stream = isinstance(file_content, bytes)
+    stream = io.BytesIO(file_content) if owns_stream else file_content
+    try:
+        from app.core.dataframes.load_dispatch import load_by_format_stream
+
+        df, _ = load_by_format_stream(stream, fmt)
+    finally:
+        if owns_stream:
+            stream.close()
     if df is None or df.empty:
         raise ValueError("Il file caricato è vuoto o non è stato possibile leggerlo")
 
@@ -215,7 +220,7 @@ def analyze_file_upload(
 def persist_upload_file_source(
     *,
     eseguibile: eseguibili_db.EseguibileRow,
-    file_content: bytes,
+    file_content: Union[bytes, BinaryIO],
     filename: str,
     user_id: str,
     group_id: str,
@@ -223,13 +228,19 @@ def persist_upload_file_source(
     """Persist an analyzed upload behind a cross-host file_source id."""
     safe_filename = filename or "upload.bin"
     temp_name = f"__exec_upload_{eseguibile['id']}_{uuid.uuid4().hex[:8]}"
-    file_source = file_source_service.create_from_upload(
-        file_content=io.BytesIO(file_content),
-        filename=safe_filename,
-        name=temp_name,
-        description=f"Upload temporaneo per eseguibile {eseguibile['id']}",
-        group_id=group_id,
-    )
+    owns_stream = isinstance(file_content, bytes)
+    stream = io.BytesIO(file_content) if owns_stream else file_content
+    try:
+        file_source = file_source_service.create_from_upload(
+            file_content=stream,
+            filename=safe_filename,
+            name=temp_name,
+            description=f"Upload temporaneo per eseguibile {eseguibile['id']}",
+            group_id=group_id,
+        )
+    finally:
+        if owns_stream:
+            stream.close()
     file_source_id = (
         file_source.id if hasattr(file_source, "id") else file_source["id"]
     )
@@ -309,23 +320,14 @@ def execute(
         raise ValueError("File sorgente non specificato")
 
     # 1. Carica DataFrame originale.
-    # - `file_source_id`: bytes-first via `_load_dataframe_from_bytes`,
-    #   senza tempfile bounce.
+    # - `file_source_id`: stream S3 -> spool bounded -> parser file-like.
     # - `file_path`: path-based legitimate (file gia' presente sul
     #   filesystem dal flow analyze/eseguibili).
     if file_source_id:
-        blob = file_source_service.get_blob_bytes(
+        df, _gdf = file_source_service.load_dataframe(
             file_source_id,
             expected_group_id=upload_group_id or eseguibile["group_id"],
         )
-        if not blob:
-            raise ValueError("File sorgente vuoto o non trovato")
-        upload_meta = load_upload_metadata(file_source_id) or {}
-        filename = str(upload_meta.get("filename") or "upload.bin")
-        fmt = (
-            filename.rsplit(".", 1)[1].lower() if "." in filename else "bin"
-        )
-        df = dataframe_frame_io._load_dataframe_from_bytes(blob, format_hint=fmt)
     else:
         df = dataframe_frame_io.load_dataframe_from_file(file_path)
     if df is None or df.empty:

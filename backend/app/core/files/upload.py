@@ -1,12 +1,7 @@
-"""Single-file upload parsing and file-source creation.
+"""Single-file upload parsing e persistenza file-like bounded.
 
-Il payload upload e' processato interamente in RAM:
-- ZIP navigato via `zipfile.ZipFile(BytesIO(raw_data))` + `zf.read`
-  per estrarre il singolo inner file in bytes.
-- Schema inference via `load_by_format_bytes(raw_data, format_type,
-  ...)` (vedi `app.core.dataframes.load_dispatch`).
-- Layer/sheet listing via `list_vector_layers(bytes)` (io.geospatial)
-  o `list_excel_sheets_from_bytes(bytes)`.
+Il body seekable di FastAPI viene riusato da parser e object storage. I member
+ZIP single-file sono decompressi a chunk in uno spool RAM/disco automatico.
 """
 
 from __future__ import annotations
@@ -17,10 +12,12 @@ from typing import Any, BinaryIO, Callable, List, Optional
 from app.core.dataframes import load_dispatch as load_dispatch_module
 from app.core.io import geospatial as geospatial_io_module
 from app.core.resources.blob_dispatch import BlobDispatchResult
+from app.core.io.bounded_streams import read_prefix, stream_size
 from app.utils.mime_validator import MimeMismatchError
 from app.core.io.zip_guards import (
-    open_zip_bytes_safe,
+    open_zip_stream_safe,
     pick_zip_member_by_extension,
+    spool_zip_member,
 )
 
 
@@ -44,7 +41,7 @@ def create_from_upload(
     time_now: Callable[[], Any],
     detect_format: Callable[[str], str],
     column_builder_from_df: Callable[..., List[Any]],
-    dispatch_blob_storage: Callable[[str, bytes, str], BlobDispatchResult],
+    dispatch_blob_storage: Callable[..., BlobDispatchResult],
     db_save_file_source: Callable[..., None],
     build_file_source: Callable[..., Any],
     default_group: str,
@@ -53,8 +50,7 @@ def create_from_upload(
 ) -> Any:
     """Crea file source da upload single-file (con parsing colonne).
 
-    RAM-only: l'intero payload upload e' processato in memoria. Vedi
-    docstring del modulo per invarianti e collaborator.
+    Il BLOB sorgente resta file-like; solo il DataFrame parsato vive in RAM.
 
     Returns:
         L'istanza DTO costruita da `build_file_source`.
@@ -70,12 +66,14 @@ def create_from_upload(
     format_type = detect_format(filename)
 
     file_content.seek(0)
-    raw_data = file_content.read()
+    source_stream = file_content
+    source_size = stream_size(source_stream)
+    owned_stream = None
 
     # MIME validation runs before parsing, blob dispatch, or DB writes.
     if mime_validate is not None:
         try:
-            mime_validate(content=raw_data, filename=filename or name)
+            mime_validate(content=read_prefix(source_stream), filename=filename or name)
         except Exception as e:
             if isinstance(e, MimeMismatchError):
                 logger.warning(
@@ -85,21 +83,12 @@ def create_from_upload(
                 raise ValueError(str(e)) from e
             raise
 
-    zip_raw_data = raw_data
-    # `inner_bytes` e' il payload usato per la schema inference (per ZIP
-    # geospatial = lo ZIP intero che pyogrio sa navigare via /vsizip;
-    # per ZIP single-file tabular = i bytes del file interno).
-    inner_bytes = raw_data
-
     if format_type == 'zip':
-        # Naviga lo ZIP in RAM; per shapefile/gdb pyogrio gestisce
-        # direttamente lo ZIP via /vsizip (vedi `_load_dataframe_from_bytes`).
+        # Lo ZIP resta seekable nello spool HTTP; i member single-file sono
+        # decompressi a chunk in un secondo spool bounded.
         outer_filename = filename
         try:
-            # `open_zip_bytes_safe` valida i cap zip-bomb PRIMA di yield:
-            # un member da 10GB uncompressed esaurirebbe la RAM del worker.
-            # Stesso cap del path-based legacy (env ZIP_MAX_UNCOMPRESSED_BYTES).
-            with open_zip_bytes_safe(raw_data) as z:
+            with open_zip_stream_safe(file_content) as z:
                 names = z.namelist()
                 inner_name, inner_format, inner_display = pick_zip_member_by_extension(
                     names,
@@ -117,18 +106,20 @@ def create_from_upload(
                 format_type = inner_format
                 filename = inner_display
                 if inner_format in ('shp', 'gdb'):
-                    # Multi-file: pyogrio legge lo ZIP intero via /vsizip.
-                    inner_bytes = zip_raw_data
+                    source_stream = file_content
+                    source_size = stream_size(file_content)
                 else:
-                    # Single-file in ZIP: estrai i bytes dell'inner file.
-                    inner_bytes = z.read(inner_name)
+                    owned_stream = spool_zip_member(z, inner_name)
+                    source_stream = owned_stream
+                    source_size = stream_size(source_stream)
                     # SAFETY: ri-valida MIME sull'inner file. L'outer ZIP
                     # e' gia' passato per `mime_validate` sopra, ma un
                     # ZIP innocuo puo' contenere un .csv-named-but-PE.
                     if mime_validate is not None:
                         try:
                             mime_validate(
-                                content=inner_bytes, filename=inner_display,
+                                content=read_prefix(source_stream),
+                                filename=inner_display,
                             )
                         except MimeMismatchError as e:
                             logger.warning(
@@ -140,30 +131,30 @@ def create_from_upload(
         except zipfile.BadZipFile as e:
             raise ValueError(f"File ZIP non valido o corrotto: {e}") from e
 
-    # Layer/sheet auto-pick (RAM-only) -- listing da bytes, niente piu'
-    # chiamata a list_layers(tmp_path) / list_sheets(tmp_path).
+    source_stream.seek(0)
     if format_type in ('gdb', 'gpkg') and not layer:
         try:
-            layers = geospatial_io_module.list_vector_layers(inner_bytes)
+            layers = geospatial_io_module.list_vector_layers_stream(source_stream)
             if len(layers) == 1:
                 layer = layers[0]
         except Exception as e:
             logger.debug(f"list_vector_layers fallito: {e}")
     elif format_type == 'xlsx' and not sheet:
         try:
-            sheets = load_dispatch_module.list_excel_sheets_from_bytes(inner_bytes)
+            sheets = load_dispatch_module.list_excel_sheets_from_stream(source_stream)
             if len(sheets) == 1:
                 sheet = sheets[0]
         except Exception as e:
             logger.debug(f"list_excel_sheets_from_bytes fallito: {e}")
 
-    # Schema inference best-effort via bytes -> df/gdf (no filesystem).
+    # Schema inference dal file-like: nessuna copia completa del BLOB.
     columns: List[Any] = []
     row_count = 0
     crs: Optional[str] = None
     try:
-        df, gdf = load_dispatch_module.load_by_format_bytes(
-            inner_bytes, format_type, layer=layer, sheet=sheet,
+        source_stream.seek(0)
+        df, gdf = load_dispatch_module.load_by_format_stream(
+            source_stream, format_type, layer=layer, sheet=sheet,
         )
         if selected_columns:
             valid_cols = [c for c in selected_columns if c in df.columns]
@@ -198,7 +189,7 @@ def create_from_upload(
         sheet=sheet,
         columns=columns_dicts,
         row_count=row_count,
-        file_size=len(raw_data),
+        file_size=source_size,
         crs=crs,
         group_id=group_id or default_group,
         created_at=now,
@@ -212,7 +203,13 @@ def create_from_upload(
     )
 
     # Blob dispatch must complete before DB save to avoid orphan records.
-    blob_kwargs = dispatch_blob_storage(file_id, raw_data, filename)
+    source_stream.seek(0)
+    blob_kwargs = dispatch_blob_storage(
+        file_id,
+        source_stream,
+        filename,
+        size_bytes=source_size,
+    )
 
     db_save_file_source(
         file_id=file_id,
@@ -224,5 +221,7 @@ def create_from_upload(
         **blob_kwargs,
     )
 
-    logger.info(f"FileSource creato: {file_id} ({len(raw_data)} bytes)")
+    logger.info(f"FileSource creato: {file_id} ({source_size} bytes)")
+    if owned_stream is not None:
+        owned_stream.close()
     return file_source

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import BinaryIO, Optional, Tuple
 
 import pandas as pd
 
@@ -79,6 +79,60 @@ def load_by_format_bytes(
     return df, None
 
 
+def load_by_format_stream(
+    stream: BinaryIO,
+    format_type: str,
+    layer: Optional[str] = None,
+    sheet: Optional[str] = None,
+) -> Tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+    """Dispatch da file-like seekable senza creare una copia ``bytes``.
+
+    Pandas, PyArrow, openpyxl e pyogrio accettano tutti un file-like. Il
+    DataFrame risultante vive naturalmente in RAM, ma il BLOB sorgente resta
+    nello spool fornito dal boundary HTTP/ZIP.
+    """
+    fmt = _normalize_format(format_type)
+    stream.seek(0)
+    gdf: Optional[pd.DataFrame] = None
+
+    if fmt == "csv":
+        from app.core.dataframes.tabular import _CSV_ENCODINGS
+
+        last_error = None
+        for encoding in _CSV_ENCODINGS:
+            stream.seek(0)
+            try:
+                return pd.read_csv(
+                    stream,
+                    low_memory=False,
+                    encoding=encoding,
+                ), None
+            except UnicodeDecodeError as exc:
+                last_error = exc
+        assert last_error is not None
+        raise last_error
+    if fmt == "json":
+        return pd.read_json(stream), None
+    if fmt in ("xlsx", "xls"):
+        kwargs = {"sheet_name": sheet} if sheet else {}
+        return pd.read_excel(stream, **kwargs), None
+    if fmt == "parquet":
+        return pd.read_parquet(stream, dtype_backend="numpy_nullable"), None
+    if fmt in _GEOSPATIAL_FORMATS or fmt in _ZIP_LIKE_FORMATS:
+        import pyogrio
+
+        gdf = pyogrio.read_dataframe(stream, layer=layer)
+        df = pd.DataFrame(gdf)
+        geom_col = getattr(gdf, "geometry", None)
+        geom_col_name = geom_col.name if geom_col is not None else None
+        if geom_col_name and geom_col_name in df.columns:
+            df[geom_col_name] = (
+                geometry_serialization_module.geometry_series_to_wkt(gdf.geometry)
+            )
+        return df, gdf
+    raise ValueError(f"Formato '{format_type}' non supportato")
+
+
 def list_excel_sheets_from_bytes(data: bytes) -> list[str]:
     """List worksheet names in an XLSX file from bytes (no filesystem)."""
     from openpyxl import load_workbook
@@ -87,6 +141,19 @@ def list_excel_sheets_from_bytes(data: bytes) -> list[str]:
         return list(wb.sheetnames)
     finally:
         wb.close()
+
+
+def list_excel_sheets_from_stream(stream: BinaryIO) -> list[str]:
+    """Elenca i fogli da stream seekable senza materializzare il workbook."""
+    from openpyxl import load_workbook
+
+    stream.seek(0)
+    wb = load_workbook(stream, read_only=True, data_only=True)
+    try:
+        return list(wb.sheetnames)
+    finally:
+        wb.close()
+        stream.seek(0)
 
 
 def load_frame_by_format(
@@ -153,7 +220,9 @@ __all__ = [
     "LoadedFrame",
     "LoggerProtocol",
     "list_excel_sheets_from_bytes",
+    "list_excel_sheets_from_stream",
     "load_by_format",
     "load_by_format_bytes",
+    "load_by_format_stream",
     "load_frame_by_format",
 ]

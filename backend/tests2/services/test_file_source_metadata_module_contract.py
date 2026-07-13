@@ -123,12 +123,8 @@ def test_update_file_source_refreshes_columns_when_layer_changes():
         get_file_source_by_id=MagicMock(return_value=file_source),
         load_dataframe=load_dataframe,
         column_builder_from_dataframe=build_columns,
-        get_blob_from_db=MagicMock(),
         time_now=MagicMock(return_value=now),
         db_update_file_source_metadata=db_update,
-        db_get_file_source=MagicMock(),
-        db_save_file_source=MagicMock(),
-        default_group="default",
         use_app_models=True,
         logger=MagicMock(),
     )
@@ -143,7 +139,7 @@ def test_update_file_source_refreshes_columns_when_layer_changes():
     assert db_update.call_args.args[1]["row_count"] == 2
 
 
-def test_update_file_source_fallback_rewrites_full_row_with_default_group():
+def test_update_file_source_db_error_does_not_rehydrate_blob():
     from app.core.files.source_metadata import update_file_source
 
     file_source = SimpleNamespace(
@@ -161,28 +157,22 @@ def test_update_file_source_fallback_rewrites_full_row_with_default_group():
             "group_id": "owner-group",
         },
     )
-    db_save = MagicMock()
-
-    out = update_file_source(
-        "file-1",
-        {"name": "new"},
-        get_file_source_by_id=MagicMock(return_value=file_source),
-        load_dataframe=MagicMock(),
-        column_builder_from_dataframe=MagicMock(),
-        get_blob_from_db=MagicMock(return_value=b"blob"),
-        time_now=MagicMock(return_value=datetime(2026, 5, 9, tzinfo=timezone.utc)),
-        db_update_file_source_metadata=MagicMock(side_effect=RuntimeError("boom")),
-        db_get_file_source=MagicMock(return_value={}),
-        db_save_file_source=db_save,
-        default_group="default-group",
-        use_app_models=True,
-        logger=MagicMock(),
-    )
-
-    assert out.name == "new"
-    db_save.assert_called_once()
-    assert db_save.call_args.kwargs["group_id"] == "default-group"
-    assert db_save.call_args.kwargs["data"] == b"blob"
+    with pytest.raises(RuntimeError, match="boom"):
+        update_file_source(
+            "file-1",
+            {"name": "new"},
+            get_file_source_by_id=MagicMock(return_value=file_source),
+            load_dataframe=MagicMock(),
+            column_builder_from_dataframe=MagicMock(),
+            time_now=MagicMock(
+                return_value=datetime(2026, 5, 9, tzinfo=timezone.utc)
+            ),
+            db_update_file_source_metadata=MagicMock(
+                side_effect=RuntimeError("boom")
+            ),
+            use_app_models=True,
+            logger=MagicMock(),
+        )
 
 
 def test_file_source_service_get_file_source_facade_delegates():
@@ -212,7 +202,6 @@ def test_file_source_service_update_file_source_facade_delegates():
     svc._time.now = MagicMock(return_value="now")
     svc._column_builder = MagicMock()
     svc._column_builder.from_dataframe = MagicMock()
-    svc._get_blob_from_db = MagicMock()
 
     with patch("app.core.files.source_metadata.update_file_source") as delegated:
         delegated.return_value = "updated"
@@ -226,7 +215,6 @@ def test_file_source_service_update_file_source_facade_delegates():
         delegated.call_args.kwargs["column_builder_from_dataframe"]
         is svc._column_builder.from_dataframe
     )
-    assert delegated.call_args.kwargs["get_blob_from_db"] is svc._get_blob_from_db
     assert delegated.call_args.kwargs["time_now"] is svc._time.now
     assert delegated.call_args.kwargs["use_app_models"] is True
     assert delegated.call_args.kwargs["logger"] is svc._logger

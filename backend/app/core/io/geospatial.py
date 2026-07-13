@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import zipfile
 from io import BytesIO
-from typing import Any, Optional
+from typing import Any, BinaryIO, Optional
 
 from app.core.io import vsimem as vsimem_module
 
@@ -160,8 +160,21 @@ def list_vector_layers(data: bytes) -> list[str]:
     return [str(row[0]) for row in infos]
 
 
+def list_vector_layers_stream(stream: BinaryIO) -> list[str]:
+    """List layer names da file-like seekable, senza copia del payload."""
+    import pyogrio
+
+    stream.seek(0)
+    try:
+        infos = pyogrio.list_layers(stream)
+        return [str(row[0]) for row in infos]
+    finally:
+        stream.seek(0)
+
+
 __all__ = [
     "list_vector_layers",
+    "list_vector_layers_stream",
     "read_vector_bytes",
     "write_shapefile_zip_bytes",
     "write_vector_bytes",

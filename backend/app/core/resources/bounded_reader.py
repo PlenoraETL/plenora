@@ -5,18 +5,60 @@ Bounded stream reader — single shared helper.
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, Iterator
 
 from app.core.resources.exceptions import MemoryLimitExceededError
 
 
-__all__ = ["read_stream_bounded"]
+__all__ = ["iter_stream_bounded", "read_stream_bounded"]
 
 
 # Bytes-like types accepted as chunks. `memoryview` and `bytearray`
 # are accepted because requests / object-storage backends can
 # yield either; append normalizes with `bytes(chunk)`.
 _BYTES_LIKE = (bytes, bytearray, memoryview)
+
+
+def iter_stream_bounded(
+    body: Iterable[bytes],
+    *,
+    max_bytes: int,
+    label: str,
+    stage: str = "iter_stream_bounded",
+) -> Iterator[bytes]:
+    """Valida e inoltra chunk senza concatenarli in memoria.
+
+    Il controllo e' pre-yield: il chunk che supera il cap non viene mai
+    consegnato al consumer. Se l'iteratore espone ``close()``, viene chiuso
+    anche su errore o abbandono anticipato.
+    """
+    if max_bytes < 0:
+        raise ValueError(
+            f"iter_stream_bounded: max_bytes must be >= 0, got {max_bytes!r}"
+        )
+    iterator = iter(body)
+    running = 0
+    try:
+        for idx, chunk in enumerate(iterator):
+            if not isinstance(chunk, _BYTES_LIKE):
+                raise TypeError(
+                    f"iter_stream_bounded({label!r}): chunk #{idx} is not "
+                    f"bytes-like (got {type(chunk).__name__!r})"
+                )
+            next_size = running + len(chunk)
+            if next_size > max_bytes:
+                raise MemoryLimitExceededError(
+                    observed_bytes=next_size,
+                    limit_bytes=max_bytes,
+                    path_basename=label,
+                    stage=stage,
+                )
+            running = next_size
+            yield chunk if isinstance(chunk, bytes) else bytes(chunk)
+    finally:
+        close = getattr(iterator, "close", None)
+        if callable(close):
+            close()
 
 
 def read_stream_bounded(

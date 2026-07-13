@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, BinaryIO, Optional, Union
 from typing_extensions import TypedDict
 
 from app.core.io import object_storage as cloud_backends
 from app.core.resources import storage_reconciliation as reconciliation
 from app.shared.resources.storage_dispatch import resolve_payload_target
 from app.shared.resources.storage_layout import FILE_SOURCES_PREFIX
+from app.core.io.bounded_streams import stream_size
 
 
 class BlobDispatchResult(TypedDict):
@@ -22,16 +23,20 @@ class BlobDispatchResult(TypedDict):
 
 def dispatch_blob_storage(
     file_id: str,
-    raw_data: bytes,
+    raw_data: Union[bytes, BinaryIO],
     filename: str,
     *,
     logger: Any,
     storage_key_id: Optional[str] = None,
+    size_bytes: Optional[int] = None,
 ) -> BlobDispatchResult:
-    """Dispatch a file-source blob according to storage policy."""
+    """Dispatch bytes o stream; object storage non materializza il payload."""
     from app.config import settings
 
-    size = len(raw_data)
+    is_bytes = isinstance(raw_data, bytes)
+    size = len(raw_data) if is_bytes else (
+        int(size_bytes) if size_bytes is not None else stream_size(raw_data)
+    )
     policy = (settings.get("STORAGE_POLICY", "hybrid") or "hybrid").strip().lower()
     threshold = int(settings.get("FILE_SOURCE_S3_THRESHOLD_BYTES"))
 
@@ -42,7 +47,16 @@ def dispatch_blob_storage(
     ) == "object_storage"
 
     if not use_object_storage:
-        return {"data": raw_data, "storage_key": None, "size_bytes": size}
+        if is_bytes:
+            db_data = raw_data
+        else:
+            original_position = raw_data.tell()
+            raw_data.seek(0)
+            try:
+                db_data = raw_data.read()
+            finally:
+                raw_data.seek(original_position)
+        return {"data": db_data, "storage_key": None, "size_bytes": size}
 
     key_id = storage_key_id if storage_key_id is not None else file_id
     safe_filename = Path(str(filename)).name or "file.bin"
@@ -61,9 +75,13 @@ def dispatch_blob_storage(
             f"[FS-B1-large] upload_intent record fallito per {file_id}: {e}"
         )
 
+    upload_method = "upload_bytes" if is_bytes else "upload_fileobj"
     try:
         storage = cloud_backends.get_runtime_object_storage()
-        storage.upload_bytes(raw_data, storage_key)
+        if is_bytes:
+            storage.upload_bytes(raw_data, storage_key)
+        else:
+            storage.upload_fileobj(raw_data, storage_key, size_bytes=size)
     except Exception as e:
         logger.error(
             f"[FS-B1-large] Upload object storage fallito per {file_id} "
@@ -73,7 +91,7 @@ def dispatch_blob_storage(
             try:
                 reconciliation.mark_failed_attempt(
                     intent_id,
-                    error=f"upload_bytes failed: {type(e).__name__}: {e}",
+                    error=f"{upload_method} failed: {type(e).__name__}: {e}",
                 )
             except Exception as mark_err:
                 logger.warning(

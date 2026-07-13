@@ -15,11 +15,9 @@ DbGetFileSource = Callable[..., Optional[dict[str, Any]]]
 DbDeleteFileSource = Callable[[str], Any]
 DbListFileSources = Callable[[Optional[str]], list[dict[str, Any]]]
 DbUpdateFileSourceMetadata = Callable[[str, dict[str, Any]], None]
-DbSaveFileSource = Callable[..., Any]
 GetFileSource = Callable[[str], Optional[Any]]
 LoadDataFrame = Callable[..., tuple[Any, Optional[Any]]]
 ColumnBuilderFromDataFrame = Callable[[Any, Optional[Any]], list[Any]]
-GetBlobFromDb = Callable[..., Optional[bytes]]
 TimeNow = Callable[[], Any]
 
 
@@ -120,16 +118,12 @@ def update_file_source(
     get_file_source_by_id: GetFileSource,
     load_dataframe: LoadDataFrame,
     column_builder_from_dataframe: ColumnBuilderFromDataFrame,
-    get_blob_from_db: GetBlobFromDb,
     time_now: TimeNow,
     db_update_file_source_metadata: DbUpdateFileSourceMetadata,
-    db_get_file_source: DbGetFileSource,
-    db_save_file_source: DbSaveFileSource,
-    default_group: str,
     use_app_models: bool,
     logger: Any,
 ) -> Optional[Any]:
-    """Update FileSource metadata, including the full-row compatibility fallback."""
+    """Update FileSource metadata senza toccare il payload object storage."""
     file_source = get_file_source_by_id(file_id)
     if not file_source:
         return None
@@ -160,19 +154,8 @@ def update_file_source(
 
     file_source.updated_at = time_now()
     metadata = file_source.model_dump(mode="json") if use_app_models else {}
-    try:
-        db_update_file_source_metadata(file_id, metadata)
-    except Exception:
-        existing_row = db_get_file_source(file_id, include_data=False) or {}
-        db_save_file_source(
-            file_id=file_id,
-            group_id=existing_row.get("group_id") or default_group,
-            name=file_source.name,
-            original_filename=file_source.original_filename,
-            fmt=file_source.format,
-            data=get_blob_from_db(
-                file_id, expected_group_id=file_source.group_id,
-            ) or b"",
-            metadata=metadata,
-        )
+    # Fail loudly. Il vecchio fallback scaricava il BLOB completo e lo
+    # riscriveva come BYTEA: oltre al picco RAM, poteva spostare dati da S3 a
+    # Postgres durante un semplice update dei metadati.
+    db_update_file_source_metadata(file_id, metadata)
     return file_source

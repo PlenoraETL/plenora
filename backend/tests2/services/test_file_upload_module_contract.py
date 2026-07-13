@@ -2,8 +2,8 @@
 
 Verifica le invarianti del refactor RAM-only:
   - Nessun temp file su disco (no cleanup, no temp_dir, no safe_extractall).
-  - Schema inference via `load_by_format_bytes` (bytes -> df/gdf).
-  - Layer/sheet listing via `list_vector_layers` / `list_excel_sheets_from_bytes`.
+  - Schema inference da file-like seekable, senza copia completa del BLOB.
+  - Layer/sheet listing direttamente dallo stream.
 """
 
 from __future__ import annotations
@@ -68,7 +68,7 @@ def test_happy_path_csv_calls_parse_dispatch_db_save(collaborators):
     ):
         # Patch su load_dispatch (modulo origine) per intercettare la chiamata
         with patch(
-            "app.core.dataframes.load_dispatch.load_by_format_bytes",
+            "app.core.dataframes.load_dispatch.load_by_format_stream",
             return_value=(pd.DataFrame({"id": [1, 2, 3]}), None),
         ) as mock_lbf:
             out = upload_mod.create_from_upload(
@@ -110,10 +110,10 @@ def test_happy_path_gpkg_single_layer_autopicks_and_detects_crs(collaborators):
     fake_df = pd.DataFrame({"id": [1]})
 
     with patch(
-        "app.core.io.geospatial.list_vector_layers",
+        "app.core.io.geospatial.list_vector_layers_stream",
         return_value=["only_layer"],
     ) as mock_list, patch(
-        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        "app.core.dataframes.load_dispatch.load_by_format_stream",
         return_value=(fake_df, fake_gdf),
     ) as mock_lbf:
         upload_mod.create_from_upload(
@@ -142,7 +142,7 @@ def test_geo_crs_fallback_to_authority_when_no_epsg(collaborators):
     fake_gdf.crs.to_authority = MagicMock(return_value=("ESRI", "102100"))
 
     with patch(
-        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        "app.core.dataframes.load_dispatch.load_by_format_stream",
         return_value=(pd.DataFrame({"a": [1]}), fake_gdf),
     ):
         upload_mod.create_from_upload(
@@ -167,7 +167,7 @@ def test_mime_block_short_circuits_before_parse_dispatch_db(collaborators):
     mime = MagicMock(side_effect=MimeMismatchError("executable detected"))
 
     with patch(
-        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        "app.core.dataframes.load_dispatch.load_by_format_stream",
     ) as mock_lbf:
         with pytest.raises(ValueError, match="executable detected"):
             upload_mod.create_from_upload(
@@ -198,7 +198,7 @@ def test_parse_failure_continues_with_empty_columns_and_saves_to_db(collaborator
     from app.core.files import upload as upload_mod
 
     with patch(
-        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        "app.core.dataframes.load_dispatch.load_by_format_stream",
         side_effect=RuntimeError("parser exploded"),
     ):
         out = upload_mod.create_from_upload(
@@ -234,7 +234,7 @@ def test_dispatch_failure_propagates_no_db_save(collaborators):
     collaborators["dispatch_blob_storage"].side_effect = RuntimeError("S3 down")
 
     with patch(
-        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        "app.core.dataframes.load_dispatch.load_by_format_stream",
         return_value=(pd.DataFrame({"id": [1]}), None),
     ):
         with pytest.raises(RuntimeError, match="S3 down"):
@@ -258,7 +258,7 @@ def test_db_save_failure_propagates(collaborators):
     collaborators["db_save_file_source"].side_effect = RuntimeError("DB write fail")
 
     with patch(
-        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        "app.core.dataframes.load_dispatch.load_by_format_stream",
         return_value=(pd.DataFrame({"id": [1]}), None),
     ):
         with pytest.raises(RuntimeError, match="DB write fail"):
@@ -279,7 +279,7 @@ def test_default_group_used_when_group_id_is_none(collaborators):
     from app.core.files import upload as upload_mod
 
     with patch(
-        "app.core.dataframes.load_dispatch.load_by_format_bytes",
+        "app.core.dataframes.load_dispatch.load_by_format_stream",
         return_value=(pd.DataFrame({"id": [1]}), None),
     ):
         upload_mod.create_from_upload(

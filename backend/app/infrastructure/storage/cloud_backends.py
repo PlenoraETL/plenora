@@ -11,7 +11,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List, Protocol, runtime_checkable
+from typing import Any, BinaryIO, List, Optional, Protocol, runtime_checkable
 from typing_extensions import TypedDict
 
 from app import config as app_config
@@ -67,6 +67,16 @@ class ObjectStorage(Protocol):
         dimensione pratica; il limite reale e' la RAM del processo
         chiamante (se `data` entra in memoria, il provider la uploada).
         """
+        ...
+
+    def upload_fileobj(
+        self,
+        stream: BinaryIO,
+        key: str,
+        *,
+        size_bytes: Optional[int] = None,
+    ) -> None:
+        """Upload chunked da stream seekable senza materializzare ``bytes``."""
         ...
 
     def download(self, key: str, local_path: Path) -> None:
@@ -336,20 +346,46 @@ class AwsS3ObjectStorage:
           - GCS: `blob.upload_from_string(data)` resumable upload nativo +
             `blob.reload()` per size verification
         """
+        self.upload_fileobj(io.BytesIO(data), key, size_bytes=len(data))
+
+    def upload_fileobj(
+        self,
+        stream: BinaryIO,
+        key: str,
+        *,
+        size_bytes: Optional[int] = None,
+    ) -> None:
+        """Upload multipart da file-like seekable con footprint bounded.
+
+        La posizione originale viene ripristinata: lo stesso spool puo' essere
+        riutilizzato dal parser o da un retry controllato del caller.
+        """
         from boto3.s3.transfer import TransferConfig
+
+        original_position = stream.tell()
+        if size_bytes is None:
+            stream.seek(0, 2)
+            expected_size = int(stream.tell())
+        else:
+            expected_size = int(size_bytes)
+        stream.seek(0)
+
         client = self._client()
         config = TransferConfig(
             multipart_threshold=8 * 1024 * 1024,
             multipart_chunksize=8 * 1024 * 1024,
         )
-        expected_size = len(data)
-        client.upload_fileobj(
-            io.BytesIO(data),
-            self.bucket,
-            key,
-            ExtraArgs=self._extra_args(),
-            Config=config,
-        )
+        try:
+            client.upload_fileobj(
+                stream,
+                self.bucket,
+                key,
+                ExtraArgs=self._extra_args(),
+                Config=config,
+            )
+        finally:
+            if not getattr(stream, "closed", False):
+                stream.seek(original_position)
         _assert_upload_integrity(
             client=client,
             bucket=self.bucket,

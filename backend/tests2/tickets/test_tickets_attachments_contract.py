@@ -345,15 +345,21 @@ def test_delete_attachment_mismatched_ticket_returns_404(mock_tdb, mock_file_ser
 
 @pytest.fixture
 def mock_download_deps(mock_file_service, monkeypatch):
-    """Setup per download: mock blob + get_file_source metadata."""
-    mock_file_service.get_blob_bytes.return_value = b"FAKEBLOB" * 10
+    """Setup per download: mock stream + get_file_source metadata."""
+    from app.core.resources import Resource
+
+    mock_file_service.get_blob_stream.return_value = Resource(
+        kind="file_source_blob",
+        size_bytes=80,
+        stream=iter((b"FAKEBLOB" * 5, b"FAKEBLOB" * 5)),
+    )
 
     import app.core.files.db as db_mod
     monkeypatch.setattr(
         db_mod, "get_file_source",
         lambda file_id, include_data=False: {
             "id": file_id, "original_filename": "screenshot.png",
-            "format": "png",
+            "format": "png", "size_bytes": 80,
         },
     )
     return mock_file_service
@@ -365,8 +371,8 @@ def test_download_happy_path_returns_blob(mock_tdb, mock_download_deps):
     response = client.get("/api/tickets/t1/attachments/att-1/download")
     assert response.status_code == 200
     assert response.content == b"FAKEBLOB" * 10
-    # RBAC: get_blob_bytes chiamato col group_id del ticket
-    mock_download_deps.get_blob_bytes.assert_called_once_with(
+    # RBAC: get_blob_stream chiamato col group_id del ticket
+    mock_download_deps.get_blob_stream.assert_called_once_with(
         "fs-1", expected_group_id="g1",
     )
 
@@ -383,13 +389,20 @@ def test_download_image_sets_content_type_and_inline(mock_tdb, mock_download_dep
 def test_download_log_forces_attachment_disposition(
     mock_tdb, mock_file_service, monkeypatch,
 ):
-    mock_file_service.get_blob_bytes.return_value = b"log data\n"
+    from app.core.resources import Resource
+
+    mock_file_service.get_blob_stream.return_value = Resource(
+        kind="file_source_blob",
+        size_bytes=9,
+        stream=iter((b"log data\n",)),
+    )
 
     import app.core.files.db as db_mod
     monkeypatch.setattr(
         db_mod, "get_file_source",
         lambda file_id, include_data=False: {
             "id": file_id, "original_filename": "errors.log", "format": "log",
+            "size_bytes": 9,
         },
     )
     mock_tdb.get_attachment.return_value = _attachment(uploaded_at="x")
@@ -405,7 +418,7 @@ def test_download_attachment_not_found_returns_404(mock_tdb, mock_download_deps)
     client = _make_client(_user("user"))
     response = client.get("/api/tickets/t1/attachments/missing/download")
     assert response.status_code == 404
-    mock_download_deps.get_blob_bytes.assert_not_called()
+    mock_download_deps.get_blob_stream.assert_not_called()
 
 
 def test_download_attachment_wrong_ticket_returns_404(mock_tdb, mock_download_deps):
@@ -414,7 +427,7 @@ def test_download_attachment_wrong_ticket_returns_404(mock_tdb, mock_download_de
     client = _make_client(_user("user"))
     response = client.get("/api/tickets/t1/attachments/att-1/download")
     assert response.status_code == 404
-    mock_download_deps.get_blob_bytes.assert_not_called()
+    mock_download_deps.get_blob_stream.assert_not_called()
 
 
 def test_download_cross_tenant_gets_404(mock_tdb, mock_download_deps):
@@ -423,12 +436,12 @@ def test_download_cross_tenant_gets_404(mock_tdb, mock_download_deps):
     client = _make_client(_user("admin", user_id="u2", group_id="g2"))
     response = client.get("/api/tickets/t1/attachments/att-1/download")
     assert response.status_code == 404
-    mock_download_deps.get_blob_bytes.assert_not_called()
+    mock_download_deps.get_blob_stream.assert_not_called()
 
 
 def test_download_blob_unavailable_returns_404(mock_tdb, mock_file_service):
-    """Se get_blob_bytes ritorna None (blob perso / S3 error) → 404."""
-    mock_file_service.get_blob_bytes.return_value = None
+    """Se get_blob_stream ritorna None (blob perso / S3 error) -> 404."""
+    mock_file_service.get_blob_stream.return_value = None
     mock_tdb.get_attachment.return_value = _attachment(uploaded_at="x")
     client = _make_client(_user("user"))
     response = client.get("/api/tickets/t1/attachments/att-1/download")

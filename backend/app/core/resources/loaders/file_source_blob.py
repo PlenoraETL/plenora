@@ -6,12 +6,13 @@ File-source blob loader — second Resource Engine kind.
 from __future__ import annotations
 
 import time
-from typing import Mapping, Optional, Tuple
+from typing import Iterator, Mapping, Optional, Tuple
 
 from app.core.resources.exceptions import MemoryLimitExceededError
 from app.shared.contracts.payloads import ObjectMap
 
 from app.core.resources.resource_caps import resolve_resource_max_bytes
+from app.core.resources.bounded_reader import iter_stream_bounded
 from app.core.resources.types import (
     OutputMode,
     Resource,
@@ -184,18 +185,92 @@ def _dispatch_by_id(
     return data, "db_legacy"
 
 
+def _stream_by_id(
+    file_source_id: str,
+    *,
+    group_id_filter: Optional[str],
+) -> Tuple[Optional[Iterator[bytes]], int, str]:
+    """Dispatch bounded senza concatenare il payload object-storage."""
+    from app.utils.logger import get_logger
+
+    logger = get_logger(__name__)
+    max_bytes = resolve_resource_max_bytes()
+    row = _fetch_row(
+        file_source_id,
+        max_bytes=max_bytes,
+        group_id_filter=group_id_filter,
+    )
+    if not row:
+        return None, 0, "none"
+
+    storage_key = row.get("storage_key")
+    if storage_key:
+        try:
+            from app.core.io.object_storage import get_runtime_object_storage
+
+            opened = get_runtime_object_storage().get_object_stream(storage_key)
+            declared_size = int(opened.get("size") or 0)
+            if declared_size > max_bytes:
+                raise MemoryLimitExceededError(
+                    observed_bytes=declared_size,
+                    limit_bytes=max_bytes,
+                    path_basename=f"file_source_id={file_source_id}",
+                    stage="file_source_blob_oversize",
+                )
+            bounded = iter_stream_bounded(
+                opened.get("body", ()),
+                max_bytes=max_bytes,
+                label=f"file_source_id={file_source_id}",
+                stage="file_source_blob_oversize",
+            )
+            return bounded, declared_size, "object_storage"
+        except MemoryLimitExceededError:
+            raise
+        except Exception as exc:
+            logger.error(
+                "[FS-BLOB] apertura stream fallita file_source_id=%s: %s",
+                file_source_id,
+                exc,
+                exc_info=True,
+            )
+            return None, 0, "object_storage"
+
+    data_size = row.get("data_size")
+    if data_size is not None and data_size > max_bytes:
+        raise MemoryLimitExceededError(
+            observed_bytes=data_size,
+            limit_bytes=max_bytes,
+            path_basename=f"file_source_id={file_source_id}",
+            stage="file_source_blob_oversize",
+        )
+    data = row.get("data")
+    if isinstance(data, memoryview):
+        data = bytes(data)
+    if data is None:
+        return None, 0, "db_legacy"
+    if not isinstance(data, bytes):
+        raise TypeError(
+            "FileSource blob legacy deve essere bytes/memoryview/None; "
+            f"ricevuto {type(data).__name__}"
+        )
+
+    chunk_size = 1024 * 1024
+
+    def _legacy_chunks() -> Iterator[bytes]:
+        for start in range(0, len(data), chunk_size):
+            yield data[start:start + chunk_size]
+
+    return _legacy_chunks(), len(data), "db_legacy"
+
+
 # FileSourceBlobLoader — Protocol-compliant loader for `file_source_blob`
 
 
 class FileSourceBlobLoader:
     """File-source blob loader. Handles ``kind="file_source_blob"``.
 
-    v1 supports ``mode="bytes"`` only. ``mode="path"`` and
-    ``mode="stream"`` raise ``ValueError`` -- the file-source
-    consumers that need a filesystem path use
-    ``FileSourceService._temp_file_for`` which fetches the bytes
-    via this loader and owns its SHP/GDB ZIP-separation lifecycle
-    inline after the old helper module was retired.
+    Supporta ``bytes`` per compatibilita' e ``stream`` per il data-plane
+    canonico. ``path`` resta intenzionalmente escluso.
 
     Tenant binding (mirror of ``ResultBlobLoader``):
       - ``is_superadmin=False`` -> SQL ``WHERE group_id = %s``
@@ -222,18 +297,10 @@ class FileSourceBlobLoader:
                 "FileSourceBlobLoader.load: ref.file_source_id required "
                 f"(got {ref.file_source_id!r})."
             )
-        if mode != "bytes":
-            # path / stream are deferred. v1 keeps the surface narrow
-            # the file-source consumers that need a path (SHP/GDB
-            # separation) call FileSourceService._temp_file_for at
-            # the service layer, which fetches via this loader and
-            # owns its own zip-aware lifecycle
+        if mode not in ("bytes", "stream"):
             raise ValueError(
                 f"FileSourceBlobLoader.load: mode={mode!r} not supported. "
-                "v1 supports mode='bytes' only; path/stream are deferred. "
-                "For path-mode SHP/GDB consumers, use "
-                "`FileSourceService._temp_file_for` (post-024 lives "
-                "inline in the service, not in a separate module)."
+                "Supported modes: 'bytes', 'stream'."
             )
 
         # Tenant binding
@@ -253,9 +320,27 @@ class FileSourceBlobLoader:
         else:
             group_id_filter = ref.expected_group_id
 
+        if mode == "stream":
+            stream, size, backend = _stream_by_id(
+                ref.file_source_id,
+                group_id_filter=group_id_filter,
+            )
+            if backend == "none":
+                raise FileNotFoundError(
+                    f"FileSourceBlobLoader.load: file_source_id="
+                    f"{ref.file_source_id!r} not found (or not visible to "
+                    f"group_id={ref.expected_group_id!r})"
+                )
+            return Resource(
+                kind="file_source_blob",
+                size_bytes=size,
+                stream=stream,
+                format_hint=None,
+                is_temporary=False,
+            )
+
         data, backend = _dispatch_by_id(
-            ref.file_source_id,
-            group_id_filter=group_id_filter,
+            ref.file_source_id, group_id_filter=group_id_filter,
         )
         if backend == "none":
             raise FileNotFoundError(

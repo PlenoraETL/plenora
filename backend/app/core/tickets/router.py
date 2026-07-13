@@ -6,12 +6,12 @@ Endpoints:
 
 from __future__ import annotations
 
-import io
 from dataclasses import asdict
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from fastapi.encoders import jsonable_encoder
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.config import settings as _settings_cfg
@@ -24,6 +24,8 @@ from app.core.tickets import db as tdb
 from app.core.tickets import service as svc
 from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger
+from app.core.io.bounded_streams import read_prefix
+from app.core.security.upload_guards import enforce_upload_size_limit
 
 logger = get_logger(__name__)
 
@@ -274,13 +276,16 @@ async def upload_attachment_endpoint(
 
     filename = file.filename or "attachment"
 
-    # Read + size check (PRIMA della validazione MIME per evitare di
-    # leggere file giganti di cui poi rifiutiamo l'estensione
-    content = await file.read()
+    size_bytes = enforce_upload_size_limit(
+        file,
+        max_bytes=_MAX_ATTACHMENT_SIZE_BYTES,
+    )
+    content_header = read_prefix(file.file)
     _attachment_boundary.validate_attachment_upload(
-        content=content,
+        content=content_header,
         filename=filename,
         max_bytes=_MAX_ATTACHMENT_SIZE_BYTES,
+        size_bytes=size_bytes,
         allowed_extensions=set(_ALLOWED_EXTENSIONS.keys()),
         logger=logger,
         username=current_user.username,
@@ -289,7 +294,7 @@ async def upload_attachment_endpoint(
     # Salva via file_service (riusa storage dispatch DB/S3
     fs = file_service_module.FileSourceService()
     file_source = fs.create_raw_from_upload(
-        file_content=io.BytesIO(content),
+        file_content=file.file,
         filename=filename,
         name=f"ticket-{ticket_id[:8]}-{filename}",
         description=f"Allegato ticket {ticket_id}",
@@ -304,7 +309,7 @@ async def upload_attachment_endpoint(
     )
     logger.info(
         f"Allegato caricato su ticket {ticket_id}: {filename} "
-        f"({len(content)} bytes) by={current_user.username}",
+        f"({size_bytes} bytes) by={current_user.username}",
         op="ticket_attach",
     )
     return {
@@ -373,10 +378,10 @@ def download_attachment_endpoint(
         raise HTTPException(404, "Allegato non trovato")
 
     fs = file_service_module.FileSourceService()
-    blob = fs.get_blob_bytes(
+    resource = fs.get_blob_stream(
         attachment.file_source_id, expected_group_id=ticket.group_id,
     )
-    if blob is None:
+    if resource is None or resource.stream is None:
         raise HTTPException(404, "Blob allegato non disponibile")
 
     # Recupera metadata del file_source per filename + format
@@ -390,10 +395,14 @@ def download_attachment_endpoint(
     mime, headers = _attachment_boundary.download_headers(
         filename=filename,
         fmt=fmt,
-        blob_size=len(blob),
+        blob_size=int(fs_row.get("size_bytes") or resource.size_bytes or 0),
         allowed_extensions=_ALLOWED_EXTENSIONS,
     )
-    return Response(content=blob, media_type=mime, headers=headers)
+    return StreamingResponse(
+        resource.stream,
+        media_type=mime,
+        headers=headers,
+    )
 
 
 @router.delete("/{ticket_id}/attachments/{attachment_id}", status_code=204)

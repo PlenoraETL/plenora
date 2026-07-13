@@ -9,12 +9,15 @@ boundary.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import io
 import json
+from tempfile import SpooledTemporaryFile
 from typing import Mapping, Optional
 
 from app.core.io import object_storage as object_storage_module
 from app.shared.resources.storage_layout import PREVIEWS_PREFIX
 from app.utils.logger import get_logger
+from app.core.io.bounded_streams import spool_memory_limit, stream_size
 
 logger = get_logger(__name__)
 
@@ -43,25 +46,37 @@ def persist_preview_payload(
 ) -> dict[str, object]:
     """Persist a successful preview and return its small task envelope."""
     key = _storage_key(project_id, task_id)
+    spool = SpooledTemporaryFile(max_size=spool_memory_limit(), mode="w+b")
     try:
-        encoded = json.dumps(
+        text_stream = io.TextIOWrapper(spool, encoding="utf-8", write_through=True)
+        json.dump(
             dict(payload),
+            text_stream,
             ensure_ascii=False,
             allow_nan=False,
             separators=(",", ":"),
-        ).encode("utf-8")
-        object_storage_module.get_runtime_object_storage().upload_bytes(encoded, key)
+        )
+        text_stream.flush()
+        text_stream.detach()
+        size_bytes = stream_size(spool)
+        object_storage_module.get_runtime_object_storage().upload_fileobj(
+            spool,
+            key,
+            size_bytes=size_bytes,
+        )
     except Exception as exc:
         raise PreviewPayloadError(
             f"Salvataggio preview su object storage fallito: {type(exc).__name__}"
         ) from exc
+    finally:
+        spool.close()
 
     return {
         "success": True,
         "project_id": project_id,
         "task_id": task_id,
         PREVIEW_STORAGE_KEY_FIELD: key,
-        "preview_size_bytes": len(encoded),
+        "preview_size_bytes": size_bytes,
         "preview_count": payload.get("preview_count"),
         "total_count": payload.get("total_count"),
         "truncated": payload.get("truncated"),
@@ -89,6 +104,7 @@ def hydrate_preview_payload(
 
         max_bytes = int(settings.get("PREVIEW_PAYLOAD_MAX_BYTES", 50 * 1024 * 1024))
 
+    spool = None
     try:
         stream = object_storage_module.get_runtime_object_storage().get_object_stream(key)
         declared_size = int(stream.get("size") or 0)
@@ -96,20 +112,31 @@ def hydrate_preview_payload(
             raise PreviewPayloadError(
                 f"Preview {declared_size} byte supera PREVIEW_PAYLOAD_MAX_BYTES={max_bytes}"
             )
-        data = bytearray()
+        spool = SpooledTemporaryFile(max_size=spool_memory_limit(), mode="w+b")
+        downloaded_size = 0
         for chunk in stream["body"]:
-            data.extend(chunk)
-            if max_bytes > 0 and len(data) > max_bytes:
+            downloaded_size += len(chunk)
+            if max_bytes > 0 and downloaded_size > max_bytes:
                 raise PreviewPayloadError(
                     f"Preview supera PREVIEW_PAYLOAD_MAX_BYTES={max_bytes}"
                 )
-        decoded = json.loads(bytes(data))
+            spool.write(chunk)
+        spool.seek(0)
+        text_stream = io.TextIOWrapper(spool, encoding="utf-8")
+        try:
+            decoded = json.load(text_stream)
+        finally:
+            text_stream.detach()
+            spool.close()
     except PreviewPayloadError:
         raise
     except Exception as exc:
         raise PreviewPayloadError(
             f"Lettura preview da object storage fallita: {type(exc).__name__}"
         ) from exc
+    finally:
+        if spool is not None and not spool.closed:
+            spool.close()
     if not isinstance(decoded, dict):
         raise PreviewPayloadError("Payload preview object storage non valido")
     return decoded

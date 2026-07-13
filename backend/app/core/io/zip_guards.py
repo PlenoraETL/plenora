@@ -16,7 +16,9 @@ import zipfile
 from contextlib import contextmanager
 from io import BytesIO
 from pathlib import Path
-from typing import Callable, Iterator, Optional
+from typing import BinaryIO, Callable, Iterator, Optional
+
+from app.core.io.bounded_streams import copy_to_spool
 
 from app.environment import get_env
 
@@ -146,9 +148,33 @@ def open_zip_bytes_safe(data: bytes) -> Iterator[zipfile.ZipFile]:
             single-file, count, ratio).
         `zipfile.BadZipFile`: se `data` non e' uno ZIP valido.
     """
-    with zipfile.ZipFile(BytesIO(data), "r") as zf:
+    with open_zip_stream_safe(BytesIO(data)) as zf:
+        yield zf
+
+
+@contextmanager
+def open_zip_stream_safe(stream: BinaryIO) -> Iterator[zipfile.ZipFile]:
+    """Apre uno ZIP seekable senza copiarlo in RAM e applica i cap."""
+    stream.seek(0)
+    with zipfile.ZipFile(stream, "r") as zf:
         validate_zip_bomb_limits(zf)
         yield zf
+
+
+def spool_zip_member(zf: zipfile.ZipFile, member_name: str) -> BinaryIO:
+    """Decomprime un member a chunk in uno spool bounded e seekable.
+
+    ``validate_zip_bomb_limits`` deve essere gia' stata eseguita sullo ZIP.
+    La size dichiarata e' sia hard cap sia controllo finale: un archivio
+    corrotto non puo' espandersi silenziosamente oltre i metadata.
+    """
+    info = zf.getinfo(member_name)
+    with zf.open(info, "r") as source:
+        return copy_to_spool(
+            source,
+            max_bytes=info.file_size,
+            expected_size=info.file_size,
+        )
 
 
 def pick_zip_member_by_extension(

@@ -16,18 +16,20 @@ def validate_attachment_upload(
     content: bytes,
     filename: str,
     max_bytes: int,
+    size_bytes: Optional[int] = None,
     allowed_extensions: set[str],
     logger,
     username: str,
 ) -> None:
     """Validate ticket attachment size, emptiness and content MIME."""
-    if len(content) > max_bytes:
+    actual_size = len(content) if size_bytes is None else int(size_bytes)
+    if actual_size > max_bytes:
         raise HTTPException(
             413,
-            f"Allegato troppo grande ({len(content)} bytes). "
+            f"Allegato troppo grande ({actual_size} bytes). "
             f"Limite: {max_bytes} bytes",
         )
-    if not content:
+    if actual_size == 0:
         raise HTTPException(400, "File allegato vuoto")
 
     try:
@@ -49,14 +51,16 @@ def download_headers(
     *,
     filename: str,
     fmt: str,
-    blob_size: int,
+    blob_size: Optional[int],
     allowed_extensions: Mapping[str, Optional[str]],
 ) -> tuple[str, HeadersMap]:
     """Return media type and headers for attachment download."""
     mime = allowed_extensions.get(fmt) or "application/octet-stream"
     disposition = "inline" if mime.startswith("image/") else "attachment"
     safe_name = filename.replace('"', "").replace("\r", "").replace("\n", "")
-    return mime, {
+    headers: HeadersMap = {
         "Content-Disposition": f'{disposition}; filename="{safe_name}"',
-        "Content-Length": str(blob_size),
     }
+    if blob_size is not None and blob_size > 0:
+        headers["Content-Length"] = str(blob_size)
+    return mime, headers

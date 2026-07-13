@@ -185,11 +185,8 @@ def _abort_multipart_safe(client, bucket: str, key: str, upload_id: str) -> None
 def save(task_id: str, src_path: Path) -> str:
     """Upload del file su object storage, poi delete del local temp.
 
-    Thin wrapper su `save_bytes`: legge il contenuto del file una volta in
-    RAM e delega al path bytes-first. Trade-off: streaming upload sostituito
-    da buffered. Per gli eseguibili
-    Plenora il payload e' di solito small-to-medium (REST file
-    workflow output, < RESULT_DB_HARD_CAP); il tradeoff RAM e' accettabile.
+    Il provider usa upload_file/multipart direttamente dal path: nessuna copia
+    completa del file viene creata nel processo worker.
 
     Ritorna la key usata (utile per audit/logging).
     """
@@ -198,8 +195,9 @@ def save(task_id: str, src_path: Path) -> str:
     if not src_path.is_file():
         raise ValueError(f"Source non e' un file: {src_path}")
 
-    data = src_path.read_bytes()
-    key = save_bytes(task_id, src_path.name, data)
+    key = _key_for(task_id, src_path.name)
+    _storage().upload(src_path, key)
+    logger.info(f"[storage] eseguibili output uploaded (path streaming): {key}")
 
     # Cleanup eager del local file dopo upload riuscito. Se l'upload
     # fallisce sopra, il file resta su disco per retry manuale.

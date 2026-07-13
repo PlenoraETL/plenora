@@ -68,7 +68,7 @@ def test_save_uploads_and_deletes_local(fake_storage, tmp_path):
 
     assert key == "eseguibili-outputs/task-123/output.csv"
     assert len(fake_storage.uploads) == 1
-    assert fake_storage.uploads[0] == ("<bytes:14>", key)
+    assert fake_storage.uploads[0] == (str(local), key)
     # File locale cancellato
     assert not local.exists()
 

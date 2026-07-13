@@ -20,6 +20,14 @@ class _FakeStorage:
     def upload_bytes(self, data: bytes, key: str) -> None:
         self.objects[key] = data
 
+    def upload_fileobj(self, stream, key: str, *, size_bytes=None) -> None:
+        position = stream.tell()
+        stream.seek(0)
+        data = stream.read()
+        stream.seek(position)
+        assert size_bytes is None or len(data) == size_bytes
+        self.objects[key] = data
+
     def get_object_stream(self, key: str) -> dict:
         data = self.objects[key]
         return {"body": iter((data[:3], data[3:])), "size": len(data)}

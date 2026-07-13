@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 from io import BytesIO, StringIO
-from typing import Any, Optional, Tuple
+from typing import Any, BinaryIO, Optional, Tuple
 
 import pandas as pd
 
@@ -192,6 +192,83 @@ def preview_dataframe_from_bytes(
     raise ValueError(f"preview_dataframe_from_bytes: formato non supportato: {fmt!r}")
 
 
+def preview_dataframe_from_stream(
+    stream: BinaryIO,
+    format_hint: str,
+    *,
+    max_rows: int = _DEFAULT_PREVIEW_MAX_ROWS,
+    layer: Optional[str] = None,
+    sheet: Optional[str] = None,
+) -> Tuple[Any, Optional[int]]:
+    """Bounded preview da file-like seekable, senza copia completa del BLOB."""
+    fmt = _normalize_format(format_hint)
+    stream.seek(0)
+
+    if fmt == "csv":
+        from app.core.dataframes.tabular import _CSV_ENCODINGS
+
+        last_error = None
+        for encoding in _CSV_ENCODINGS:
+            stream.seek(0)
+            try:
+                return pd.read_csv(
+                    stream,
+                    low_memory=False,
+                    encoding=encoding,
+                    nrows=max_rows,
+                ), None
+            except UnicodeDecodeError as exc:
+                last_error = exc
+        assert last_error is not None
+        raise last_error
+    if fmt in ("xlsx", "xls"):
+        kwargs: dict = {"nrows": max_rows}
+        if sheet:
+            kwargs["sheet_name"] = sheet
+        return pd.read_excel(stream, **kwargs), None
+    if fmt == "parquet":
+        import pyarrow.parquet as pq
+
+        pf = pq.ParquetFile(stream)
+        total = int(pf.metadata.num_rows) if pf.metadata is not None else None
+        batches = pf.iter_batches(batch_size=max_rows)
+        try:
+            batch = next(batches)
+        except StopIteration:
+            return pf.schema_arrow.empty_table().to_pandas(), 0
+        return batch.to_pandas(), total
+    if fmt == "json":
+        # pandas legge direttamente dal file-like. Per JSON-lines nrows evita
+        # lo scan completo; il JSON array standard richiede comunque parsing
+        # strutturale del documento, ma non una seconda copia bytes.
+        try:
+            stream.seek(0)
+            return pd.read_json(stream, lines=True, nrows=max_rows), None
+        except Exception:
+            stream.seek(0)
+            df = pd.read_json(stream)
+            return df.head(max_rows), len(df)
+    if fmt in ("geojson", "gpkg", "shp", "gdb", "zip"):
+        import pyogrio
+
+        info = None
+        try:
+            info = pyogrio.read_info(stream, layer=layer)
+        except Exception:
+            info = None
+        stream.seek(0)
+        total = int(info["features"]) if info and "features" in info else None
+        return pyogrio.read_dataframe(
+            stream,
+            layer=layer,
+            max_features=max_rows,
+        ), total
+    raise ValueError(
+        f"preview_dataframe_from_stream: formato non supportato: {fmt!r}"
+    )
+
+
 __all__ = [
     "preview_dataframe_from_bytes",
+    "preview_dataframe_from_stream",
 ]

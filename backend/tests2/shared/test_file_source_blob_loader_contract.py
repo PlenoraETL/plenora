@@ -82,15 +82,36 @@ def test_loader_rejects_path_mode():
         FileSourceBlobLoader().load(ref, mode="path")
 
 
-def test_loader_rejects_stream_mode():
-    """``mode='stream'`` deferred."""
+def test_loader_stream_mode_returns_lazy_bounded_iterator():
+    """Lo stream S3 non viene concatenato durante ``load``."""
     from app.core.resources.loaders.file_source_blob import (
         FileSourceBlobLoader,
     )
 
-    ref = _make_ref()
-    with pytest.raises(ValueError, match="mode='stream' not supported"):
-        FileSourceBlobLoader().load(ref, mode="stream")
+    consumed: list[bytes] = []
+
+    def chunks():
+        for chunk in (b"hello", b"world"):
+            consumed.append(chunk)
+            yield chunk
+
+    _captured, fake = _fake_fetchone({
+        "data": None,
+        "storage_key": "file-sources/abc/data.bin",
+        "data_size": None,
+    })
+    fake_storage = _FakeStorage(chunks(), size=10)
+    with patch("app.db.pg_connection.fetchone", fake), patch(
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
+        return_value=fake_storage,
+    ):
+        out = FileSourceBlobLoader().load(_make_ref(), mode="stream")
+
+    assert consumed == []
+    assert out.data is None
+    assert out.size_bytes == 10
+    assert b"".join(out.stream) == b"helloworld"
+    assert consumed == [b"hello", b"world"]
 
 
 # 2. Tenant binding
@@ -238,11 +259,12 @@ def test_oversized_bytea_raises_memory_limit_exceeded(monkeypatch):
 
 
 class _FakeStorage:
-    def __init__(self, chunks):
+    def __init__(self, chunks, *, size=0):
         self._chunks = chunks
+        self._size = size
 
     def get_object_stream(self, _key):
-        return {"body": iter(self._chunks)}
+        return {"body": iter(self._chunks), "size": self._size}
 
 
 def test_storage_key_path_routes_through_bounded_read():
@@ -301,6 +323,52 @@ def test_storage_key_oversize_raises_memory_limit_exceeded(monkeypatch):
     assert err.limit_bytes == 100
     assert err.observed_bytes == 140  # 70 (running) + 70 (next chunk)
     assert err.stage == "file_source_blob_oversize"
+
+
+def test_stream_mode_enforces_cap_while_consumed(monkeypatch):
+    """Il chunk oltre cap non viene consegnato al consumer."""
+    from app.core.resources.exceptions import MemoryLimitExceededError
+    from app.core.resources.loaders.file_source_blob import (
+        FileSourceBlobLoader,
+    )
+
+    monkeypatch.setenv("RESOURCE_MAX_BYTES", "100")
+    _captured, fake = _fake_fetchone({
+        "data": None,
+        "storage_key": "file-sources/abc/big.bin",
+        "data_size": None,
+    })
+    fake_storage = _FakeStorage([b"x" * 70, b"y" * 70])
+    with patch("app.db.pg_connection.fetchone", fake), patch(
+        "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
+        return_value=fake_storage,
+    ):
+        resource = FileSourceBlobLoader().load(
+            _make_ref(), mode="stream",
+        )
+        iterator = iter(resource.stream)
+        assert next(iterator) == b"x" * 70
+        with pytest.raises(MemoryLimitExceededError) as exc_info:
+            next(iterator)
+
+    assert exc_info.value.observed_bytes == 140
+    assert exc_info.value.limit_bytes == 100
+
+
+def test_stream_mode_preserves_tenant_sql_filter():
+    from app.core.resources.loaders.file_source_blob import (
+        FileSourceBlobLoader,
+    )
+
+    captured, fake = _fake_fetchone({
+        "data": b"legacy", "storage_key": None, "data_size": 6,
+    })
+    with patch("app.db.pg_connection.fetchone", fake):
+        out = FileSourceBlobLoader().load(_make_ref(), mode="stream")
+
+    assert "AND group_id = %s" in captured["sql"]
+    assert captured["params"][2] == "g1"
+    assert b"".join(out.stream) == b"legacy"
 
 
 # 5. Cap resolution
