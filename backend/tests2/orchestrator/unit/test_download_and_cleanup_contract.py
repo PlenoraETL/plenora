@@ -95,7 +95,6 @@ def test_tasks_download_falls_back_to_db_blob_if_no_s3_key():
     """Se storage.find_keys ritorna [], salta al fallback DB blob."""
     from fastapi import BackgroundTasks
     from app.core.orchestrator.router import download_task_result
-    from app.core.resources.types import Resource
 
     fake_task_info = MagicMock()
     fake_task_info.status.value = "success"
@@ -104,32 +103,16 @@ def test_tasks_download_falls_back_to_db_blob_if_no_s3_key():
     bg = BackgroundTasks()
     fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
 
-    class _FakeRegistry:
-        def get(self, ref, *, mode):
-            assert ref.result_id == "res-abc"
-            assert ref.expected_group_id == "g1"
-            assert ref.expected_project_id == "p1"
-            assert mode == "bytes"
-            return Resource(
-                kind="result_blob",
-                size_bytes=8,
-                data=b"col\nval\n",
-                is_temporary=False,
-            )
-
-    from app.core.results.db import ResultMetadataRow
-
     with patch("app.core.orchestrator.router._assert_task_group", return_value=None), \
          patch("app.core.orchestrator.task_service.task_service.get_task_status",
                return_value=fake_task_info), \
          patch("app.core.eseguibili.storage.find_keys", return_value=[]), \
-         patch("app.core.results.db.get_result_row",
-               return_value=ResultMetadataRow(
-                   id="res-abc", project_id="p1", group_id="g1",
-                   filename="out.csv", format="csv"
-               )), \
-         patch("app.core.artifacts.resolver.default_registry",
-               return_value=_FakeRegistry()):
+         patch("app.core.orchestrator.router.results_blob.open_result_stream",
+               return_value={
+                   "body": iter((b"col\nval\n",)), "size": 8,
+                   "filename": "out.csv", "format": "csv",
+                   "backend": "db_legacy",
+               }):
         try:
             response = download_task_result(
                 task_id="t1",

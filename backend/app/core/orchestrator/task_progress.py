@@ -138,9 +138,28 @@ def finalize_task_result(
     if not task_id:
         return
     try:
-        _resolve_store(store).put(
-            task_id, state=state, payload=payload, name=name
+        resolved_store = _resolve_store(store)
+        put_terminal_with_run = getattr(
+            resolved_store,
+            "put_terminal_with_run",
+            None,
         )
+        if (
+            callable(put_terminal_with_run)
+            and state in {SUCCESS_STATE, FAILURE_STATE, REVOKED_STATE, "RETRY"}
+            and isinstance(payload, dict)
+            and payload.get("run_id")
+        ):
+            put_terminal_with_run(
+                task_id,
+                state=state,
+                payload=payload,
+                name=name,
+            )
+        else:
+            resolved_store.put(
+                task_id, state=state, payload=payload, name=name
+            )
     except Exception:
         # Best-effort safety-net (come report_task_progress): l'esito su PG
         # non deve mai propagare e alterare il risultato del task.
@@ -156,14 +175,17 @@ def finalize_revoked(
     store: Optional[TaskResultStore] = None,
 ) -> None:
     """Scrive l'esito terminale ``REVOKED`` (task annullato cooperativamente)."""
+    payload = {
+        "success": False,
+        "status": "revoked",
+        "message": "Task annullato",
+    }
+    if name == "pipeline.execute" and task_id:
+        payload["run_id"] = task_id
     finalize_task_result(
         task_id,
         state=REVOKED_STATE,
-        payload={
-            "success": False,
-            "status": "revoked",
-            "message": "Task annullato",
-        },
+        payload=payload,
         name=name,
         store=store,
     )
@@ -207,6 +229,8 @@ def finalize_from_celery(
         "success": False,
         "error": type(exc).__name__ if exc is not None else "TaskFailure",
     }
+    if name == "pipeline.execute" and task_id:
+        payload["run_id"] = task_id
     finalize_task_result(
         task_id, state=FAILURE_STATE, payload=payload, name=name, store=store
     )

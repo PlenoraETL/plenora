@@ -115,6 +115,29 @@ def test_large_null_partition_preserves_right_join_order(monkeypatch):
     assert result["right_order_R"].tolist() == list(range(null_rows * 2))
 
 
+def test_large_null_partition_outer_keeps_left_then_right_only_order(monkeypatch):
+    from app.config import settings
+    from app.core.manipola.transforms import joins
+
+    monkeypatch.setitem(settings.DEFAULTS, "WORKER_RSS_MAX_BYTES", 0)
+    null_rows = joins._NULL_PARTITION_MIN_ROWS
+    left = pd.DataFrame({
+        "key": pd.Series([None, "match"] * null_rows, dtype=object),
+        "left_order": range(null_rows * 2),
+    })
+    right = pd.DataFrame({
+        "key": pd.Series([None] * null_rows + ["match", "right-only"], dtype=object),
+        "right_order": range(null_rows + 2),
+    })
+
+    result = joins.op_join([left, right], left_on="key", right_on="key", how="outer")
+
+    left_rows = result[result["left_order_L"].notna()]
+    assert left_rows["left_order_L"].tolist() == list(range(null_rows * 2))
+    right_only = result[result["left_order_L"].isna()]
+    assert right_only["right_order_R"].tolist() == list(range(null_rows)) + [null_rows + 1]
+
+
 def test_hash_partitioned_left_join_preserves_order_and_values(monkeypatch):
     from app.config import settings
     from app.core.manipola.transforms import joins

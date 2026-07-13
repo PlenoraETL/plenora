@@ -278,11 +278,15 @@ def op_join(
     # partitions are concatenated after the mergeable rows; without this
     # marker a left join silently moves all null-key rows to the end.
     join_how = str(how).lower()
-    order_marker = None
-    if join_how in {"left", "right"}:
-        order_marker = f"__plenora_join_order_{uuid.uuid4().hex}"
-        ordered_side = left_df if join_how == "left" else right_df
-        ordered_side[order_marker] = np.arange(len(ordered_side), dtype=np.int64)
+    order_token = uuid.uuid4().hex
+    left_order_marker = None
+    right_order_marker = None
+    if join_how in {"left", "outer"}:
+        left_order_marker = f"__plenora_join_left_order_{order_token}"
+        left_df[left_order_marker] = np.arange(len(left_df), dtype=np.int64)
+    if join_how in {"right", "outer"}:
+        right_order_marker = f"__plenora_join_right_order_{order_token}"
+        right_df[right_order_marker] = np.arange(len(right_df), dtype=np.int64)
 
     # Guard post-rename [internal]: dopo la pre-validation in testa a
     # op_join, la chiave DEVE esistere qui. Se raggiungiamo questo raise
@@ -549,20 +553,29 @@ def op_join(
                 ignore_index=True,
             )
 
-    if order_marker is not None and order_marker in result.columns:
-        if not result[order_marker].is_monotonic_increasing:
+    order_columns = [
+        marker
+        for marker in (left_order_marker, right_order_marker)
+        if marker is not None and marker in result.columns
+    ]
+    if order_columns:
+        needs_restore = (
+            len(order_columns) > 1
+            or not result[order_columns[0]].is_monotonic_increasing
+        )
+        if needs_restore:
             guard_estimated_concat_memory(
                 [result],
                 stage=JOIN_MEMORY_STAGE,
                 path_basename="join_output_order_restore",
             )
             result = result.sort_values(
-                order_marker,
+                order_columns,
                 kind="stable",
                 na_position="last",
                 ignore_index=True,
             )
-        result = result.drop(columns=[order_marker])
+        result = result.drop(columns=order_columns)
 
     # Ripristina NaN nelle posizioni dei sentinel sulle key di output
     if (left_null_keys or right_null_keys) and not use_null_partition:

@@ -43,6 +43,9 @@ class TaskMetadataStore(Protocol):
     def get(self, task_id: str) -> PendingTaskMetadata | None:
         ...
 
+    def list_for_project(self, project_id: str) -> list[PendingTaskMetadata]:
+        ...
+
 
 def _normal_ttl(ttl_seconds: int | None) -> int:
     if ttl_seconds is None or ttl_seconds <= 0:
@@ -107,6 +110,14 @@ class KvTaskMetadataStore:
             task_type=str(task_type),
         )
 
+    def list_for_project(self, project_id: str) -> list[PendingTaskMetadata]:
+        matches: list[PendingTaskMetadata] = []
+        for key in self._kv.scan_keys(_KEY_PREFIX):
+            metadata = self.get(key.removeprefix(_KEY_PREFIX))
+            if metadata is not None and metadata.project_id == project_id:
+                matches.append(metadata)
+        return matches
+
 
 class InMemoryTaskMetadataStore:
     """Process-local test double; never used by the default runtime store."""
@@ -122,6 +133,14 @@ class InMemoryTaskMetadataStore:
     def get(self, task_id: str) -> PendingTaskMetadata | None:
         with self._lock:
             return self._metadata_by_task_id.get(task_id)
+
+    def list_for_project(self, project_id: str) -> list[PendingTaskMetadata]:
+        with self._lock:
+            return [
+                metadata
+                for metadata in self._metadata_by_task_id.values()
+                if metadata.project_id == project_id
+            ]
 
 
 def default_task_metadata_store() -> TaskMetadataStore:

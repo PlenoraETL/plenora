@@ -6,7 +6,7 @@ Esecuzione pipeline, preview, download risultati e gestione task Celery.
 
 import time
 from collections.abc import Mapping
-from typing import Literal, Optional, List, Iterator
+from typing import Literal, Optional, List
 from typing_extensions import TypedDict
 
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query
@@ -22,6 +22,7 @@ from app.core.orchestrator.task_service import (
     TaskType,
 )
 from app.core.orchestrator import task_service as task_service_module
+from app.core.orchestrator import preview_payload_store
 from app.core.orchestrator.service import canvas_validation_gate_blocks
 from app.core.orchestrator import log_cleanup as orchestrator_log_cleanup
 from app.core.orchestrator.execution_contract import (
@@ -40,6 +41,7 @@ from app.core.orchestrator.carica_payload_validation import (
 from app.core.orchestrator import download_response as _download_response
 from app.core.projects import service as project_service_module
 from app.core.results import cleanup as results_cleanup
+from app.core.results import blob as results_blob
 from app.utils.router_utils import require_service
 from app.observability.audit_action import audit_action
 from app.core.auth.dependencies import get_current_user, require_not_esecutore
@@ -47,7 +49,6 @@ from app.shared.contracts.auth import CurrentUser
 from app.shared.contracts.payloads import JsonObject
 from app.core.auth import resource_access as resource_access_module
 from app.core.auth.ownership import assert_group_access
-from app.core import artifacts as artifact_module
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.shared.execution.output_contract_types_enricher import (
     enrich_canvas_types_from_output_contract,
@@ -139,7 +140,7 @@ def execute_project_pipeline(
     project_id: str,
     request: ExecuteRequest = None,
     intermediate_mode: Optional[
-        Literal["metadata_only", "preview_only", "full_pg", "full_artifact"]
+        Literal["metadata_only", "full_artifact"]
     ] = Query(
         None,
         description=(
@@ -318,8 +319,13 @@ def create_task(
     conoscendone l'id (cross-tenant data exfil).
     """
     # Authz guard cross-tenant su project_id
-    resource_access_module.assert_project_access(request.project_id, current_user)
-    _gate_meta = _project_service().get_project_metadata(request.project_id)
+    # Reuse the metadata already loaded by the authorization boundary. A
+    # second direct ProjectService lookup both duplicated I/O and bypassed the
+    # injectable boundary used by tests and alternate runtimes.
+    _gate_meta = resource_access_module.assert_project_access(
+        request.project_id,
+        current_user,
+    )
     if _gate_meta is not None and canvas_validation_gate_blocks(
         getattr(_gate_meta, "canvas_validated", False)
     ):
@@ -393,6 +399,16 @@ def get_task_status(
         result = _task_info_to_dict(task_info)
         result["progress"] = int(result.get("progress") or 0)
 
+        # PostgreSQL stores only the preview reference. Hydrate the tabular
+        # payload at this authenticated boundary so existing FE consumers keep
+        # the same response contract without a second public endpoint.
+        task_payload = result.get("result")
+        if isinstance(task_payload, Mapping):
+            if preview_payload_store.is_preview_reference(task_payload):
+                result["result"] = preview_payload_store.hydrate_preview_payload(
+                    task_payload
+                )
+
         if result.get("status") == "pending" and not result.get("created_at"):
             raise HTTPException(
                 status_code=404,
@@ -406,6 +422,17 @@ def get_task_status(
 
     except HTTPException:
         raise
+    except preview_payload_store.PreviewPayloadError as e:
+        logger.warning(
+            "preview payload non disponibile task_id=%s: %s", task_id, e
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "preview_storage_unavailable",
+                "message": "Preview temporaneamente non disponibile",
+            },
+        )
     # intent: boundary broad→404 / outcome: fail-closed sanitizzato
     # detail fisso: task_id e' input utente, niente interpolazione in response
     except Exception as e:
@@ -715,15 +742,10 @@ def download_task_result(
                 ),
             )
 
-        try:
-            blob = artifact_module.ArtifactResolver().fetch_run_blob(
-                result_id=result_id,
-                expected_project_id=project_id,
-            )
-        except artifact_module.ArtifactResolutionError as e:
-            logger.error(
-                f"download task {task_id}: risoluzione blob fallita: {e}"
-            )
+        stream = results_blob.open_result_stream(
+            str(result_id), expected_project_id=str(project_id)
+        )
+        if stream is None:
             raise HTTPException(
                 status_code=404,
                 detail="Risultato del task non trovato (mismatch project_id)",
@@ -732,22 +754,8 @@ def download_task_result(
         time_blob_loaded = time.perf_counter()
 
         # Sanitizza filename per prevenire header injection (CRLF
-        safe_filename = blob.filename.replace("\r", "").replace("\n", "").replace('"', "'")
-
-        # StreamingResponse + chunked yield: evita di mantenere il
-        # blob intero in memoria nel buffer di Starlette/uvicorn e
-        # abbassa il time-to-first-byte percepito dal client. Per blob
-        # grandi (50+ MB di output Excel/parquet) il pattern
-        # `Response(content=blob.data)` faceva una copia completa del
-        # buffer prima di iniziare il send, raddoppiando l'occupazione
-        # di RAM e ritardando l'inizio del download
-        _CHUNK = 1 << 20  # 1 MB
-        data = blob.data
-        total = len(data)
-
-        def _stream_chunks() -> Iterator[bytes]:
-            for chunk_start in range(0, total, _CHUNK):
-                yield data[chunk_start:chunk_start + _CHUNK]
+        safe_filename = str(stream["filename"]).replace("\r", "").replace("\n", "").replace('"', "'")
+        total = int(stream["size"])
 
         time_prepared = time.perf_counter()
         logger.info(
@@ -758,8 +766,8 @@ def download_task_result(
         )
 
         return StreamingResponse(
-            _stream_chunks(),
-            media_type=_mime_for_filename(blob.filename),
+            stream["body"],
+            media_type=_mime_for_filename(str(stream["filename"])),
             headers={
                 "Content-Disposition": f'attachment; filename="{safe_filename}"',
                 "Content-Length": str(total),

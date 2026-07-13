@@ -40,6 +40,18 @@ def test_validate_settings_baseline_ok():
     validate_intermediate_settings(_settings_baseline())  # no raise
 
 
+@pytest.mark.parametrize("mode", ["preview_only", "full_pg"])
+def test_object_storage_policy_rejects_postgres_row_modes(monkeypatch, mode):
+    from app.core.intermediate.policy import (
+        IntermediateSettingsError,
+        validate_intermediate_settings,
+    )
+
+    monkeypatch.setenv("STORAGE_POLICY", "object_storage")
+    with pytest.raises(IntermediateSettingsError, match="legacy"):
+        validate_intermediate_settings(_settings_baseline(mode=mode))
+
+
 def test_resolve_fingerprint_policy_returns_explicit_hash_algo():
     from app.core.intermediate.policy import resolve_fingerprint_policy
 

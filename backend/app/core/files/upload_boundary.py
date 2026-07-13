@@ -161,6 +161,59 @@ def parse_layers_config(raw: str) -> list[Any]:
             status_code=400,
             detail="layers_config deve essere un array non vuoto",
         )
+    if len(layers_config) > 256:
+        raise HTTPException(
+            status_code=400,
+            detail="layers_config supera il massimo di 256 elementi",
+        )
+
+    seen_sources: set[tuple[str, str]] = set()
+    for index, item in enumerate(layers_config):
+        if not isinstance(item, dict):
+            raise HTTPException(
+                status_code=400,
+                detail=f"layers_config[{index}] deve essere un oggetto",
+            )
+        layer = item.get("layer")
+        sheet = item.get("sheet")
+        if bool(layer) == bool(sheet):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"layers_config[{index}] deve specificare esattamente "
+                    "uno tra layer e sheet"
+                ),
+            )
+        source_kind = "layer" if layer else "sheet"
+        source_name = layer if layer else sheet
+        if not isinstance(source_name, str) or not source_name.strip():
+            raise HTTPException(
+                status_code=400,
+                detail=f"layers_config[{index}].{source_kind} non valido",
+            )
+        source_key = (source_kind, source_name.strip())
+        if source_key in seen_sources:
+            raise HTTPException(
+                status_code=400,
+                detail=f"layers_config contiene {source_kind} duplicato: {source_name}",
+            )
+        seen_sources.add(source_key)
+
+        selected_columns = item.get("selected_columns")
+        if selected_columns is not None and (
+            not isinstance(selected_columns, list)
+            or not all(
+                isinstance(column, str) and bool(column.strip())
+                for column in selected_columns
+            )
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"layers_config[{index}].selected_columns deve essere "
+                    "null oppure un array di stringhe non vuote"
+                ),
+            )
     return layers_config
 
 

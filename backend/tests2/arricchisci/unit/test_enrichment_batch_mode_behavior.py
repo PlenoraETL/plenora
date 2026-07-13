@@ -370,7 +370,7 @@ class TestCallBatchApi:
         )
         host.api_config = {"request": {"allow_redirects": True}}
         host._call_batch_api([{"q": "a"}], [0])
-        assert session.post_calls[0]["allow_redirects"] is True
+        assert session.post_calls[0]["allow_redirects"] is False
 
     def test_async_batch_polls_and_extracts_final_results(self, monkeypatch):
         host, session = _make_host(

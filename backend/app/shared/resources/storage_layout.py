@@ -33,6 +33,12 @@ IMDF_BUNDLES_PREFIX = "imdf-bundles"
 # `eseguibili-outputs/{task_id}/{filename}`
 ESEGUIBILI_OUTPUTS_PREFIX = "eseguibili-outputs"
 
+# Payload tabellari delle preview asincrone. PostgreSQL conserva solamente
+# il piccolo envelope del task con questo riferimento; righe e colonne vivono
+# nell'object storage come JSON.
+# Layout: `previews/{project_id}/{task_id}.json`
+PREVIEWS_PREFIX = "previews"
+
 
 # Tutti i prefix conosciuti. Il contract test enumera questa tupla per
 # garantire unicita' / no-prefix-of-another. Ogni nuovo dominio storage
@@ -43,6 +49,7 @@ ALL_PREFIXES: Tuple[str, ...] = (
     INTERMEDIATE_PREFIX,
     IMDF_BUNDLES_PREFIX,
     ESEGUIBILI_OUTPUTS_PREFIX,
+    PREVIEWS_PREFIX,
 )
 
 

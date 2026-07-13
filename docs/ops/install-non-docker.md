@@ -98,6 +98,23 @@ sudo rabbitmq-diagnostics -q ping
 Expected: `Ping succeeded`. The default vhost `/` and the `guest` user
 (localhost-only) are sufficient for a single-machine install.
 
+### Object storage S3-compatible
+
+Scarica il binario SeaweedFS e avvialo in modalita' single-node. In produzione
+usa la unit [`plenora-object-storage.service`](../../backend/deploy/systemd/plenora-object-storage.service);
+per una prova manuale:
+
+```bash
+curl -fsSL https://github.com/seaweedfs/seaweedfs/releases/download/4.29/linux_amd64.tar.gz \
+  | sudo tar -xz -C /usr/local/bin weed
+mkdir -p ~/plenora-object-storage
+AWS_ACCESS_KEY_ID=plenora-storage AWS_SECRET_ACCESS_KEY=<generate> \
+  S3_BUCKET=plenora-runtime weed mini -dir="$HOME/plenora-object-storage" -ip=127.0.0.1
+```
+
+Il valore `AWS_SECRET_ACCESS_KEY` deve coincidere con `S3_SECRET_KEY` nel
+file applicativo seguente.
+
 ## 5. Backend Environment
 
 ```bash
@@ -117,8 +134,14 @@ PLENORA_ENCRYPTION_KEY=<generate>
 JWT_SECRET_KEY=<generate>
 DATABASE_URL=postgresql://plenora:plenora@localhost:5432/plenora
 DRAMATIQ_BROKER_URL=amqp://guest:guest@localhost:5672
-STORAGE_POLICY=db
-BACKUP_BUCKET=plenora-local-no-real-s3
+STORAGE_POLICY=object_storage
+OBJECT_STORAGE_ENABLED=true
+OBJECT_STORAGE_BACKEND=s3_compatible
+OBJECT_STORAGE_BUCKET=plenora-runtime
+PLENORA_ARTIFACT_BUCKET=plenora-runtime
+S3_ENDPOINT_URL=http://127.0.0.1:8333
+S3_ACCESS_KEY=plenora-storage
+S3_SECRET_KEY=<generate>
 INTERMEDIATE_PERSISTENCE_MODE=metadata_only
 EOF
 chmod 600 .env

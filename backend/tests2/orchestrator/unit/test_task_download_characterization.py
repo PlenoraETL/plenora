@@ -9,9 +9,6 @@ from unittest.mock import patch
 
 import pytest
 
-from app.core.artifacts.types import ArtifactResolutionError, RunBlob
-
-
 pytestmark = [pytest.mark.unit, pytest.mark.orchestrator, pytest.mark.contract, pytest.mark.regression]
 
 
@@ -24,14 +21,14 @@ def test_download_task_result_sanitizes_filename_headers(client):
     with patch("app.core.orchestrator.router._assert_task_group"), \
          patch("app.core.orchestrator.task_service.task_service.get_task_status", return_value=task_info), \
          patch(
-            "app.core.artifacts.ArtifactResolver.fetch_run_blob",
-            return_value=RunBlob(
-                data=b"id\n1\n",
-                filename='evil\\r\\nname.csv',
-                format="csv",
-                project_id="proj-1",
-                result_id="res-1",
-            ),
+            "app.core.orchestrator.router.results_blob.open_result_stream",
+            return_value={
+                "body": iter((b"id\n1\n",)),
+                "size": 5,
+                "filename": 'evil\r\nname.csv',
+                "format": "csv",
+                "backend": "object_storage",
+            },
          ):
         response = client.get("/api/tasks/task-1/download")
 
@@ -49,8 +46,8 @@ def test_download_task_result_rejects_project_result_mismatch(client):
     with patch("app.core.orchestrator.router._assert_task_group"), \
          patch("app.core.orchestrator.task_service.task_service.get_task_status", return_value=task_info), \
          patch(
-            "app.core.artifacts.ArtifactResolver.fetch_run_blob",
-            side_effect=ArtifactResolutionError("mismatch"),
+            "app.core.orchestrator.router.results_blob.open_result_stream",
+            return_value=None,
          ):
         response = client.get("/api/tasks/task-1/download")
 
@@ -76,14 +73,14 @@ def test_download_task_result_streams_body_with_content_length(client):
             return_value=task_info,
          ), \
          patch(
-            "app.core.artifacts.ArtifactResolver.fetch_run_blob",
-            return_value=RunBlob(
-                data=payload,
-                filename="out.csv",
-                format="csv",
-                project_id="proj-1",
-                result_id="res-1",
-            ),
+            "app.core.orchestrator.router.results_blob.open_result_stream",
+            return_value={
+                "body": iter((payload,)),
+                "size": len(payload),
+                "filename": "out.csv",
+                "format": "csv",
+                "backend": "object_storage",
+            },
          ):
         response = client.get("/api/tasks/task-1/download")
 

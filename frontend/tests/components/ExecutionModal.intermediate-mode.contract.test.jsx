@@ -51,7 +51,7 @@ describe('ExecutionModal config step pre-launch', () => {
     const select = screen.getByLabelText(/intermediate_mode/i);
     expect(select).toBeInTheDocument();
     const options = Array.from(select.querySelectorAll('option')).map(o => o.value);
-    expect(options).toEqual(['', 'metadata_only', 'preview_only', 'full_pg', 'full_artifact']);
+    expect(options).toEqual(['', 'metadata_only', 'full_artifact']);
 
     expect(screen.getByRole('button', { name: /avvia esecuzione/i })).toBeInTheDocument();
   });

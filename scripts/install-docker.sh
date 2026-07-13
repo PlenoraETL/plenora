@@ -410,9 +410,15 @@ ensure_env_docker() {
     if [ -z "$(env_value JWT_SECRET_KEY)" ]; then
         set_env_value JWT_SECRET_KEY "$(new_jwt_secret)"
     fi
-    if [ "$(env_value STORAGE_POLICY)" = "db" ] && [ -z "$(env_value OBJECT_STORAGE_ENABLED)" ]; then
-        set_env_value OBJECT_STORAGE_ENABLED "false"
+    if [ -z "$(env_value S3_ACCESS_KEY)" ]; then
+        set_env_value S3_ACCESS_KEY "plenora-storage"
     fi
+    if [ -z "$(env_value S3_SECRET_KEY)" ]; then
+        set_env_value S3_SECRET_KEY "$(new_jwt_secret)"
+    fi
+    set_env_value AWS_ACCESS_KEY_ID "$(env_value S3_ACCESS_KEY)"
+    set_env_value AWS_SECRET_ACCESS_KEY "$(env_value S3_SECRET_KEY)"
+    set_env_value S3_BUCKET "$(env_value OBJECT_STORAGE_BUCKET)"
     chmod 600 ".env.docker" || true
 
     [ -n "$(env_value PLENORA_ENCRYPTION_KEY)" ] || die "PLENORA_ENCRYPTION_KEY is still empty in .env.docker."
@@ -641,7 +647,7 @@ fi
 log_step "Build and start single-server stack"
 run_docker compose config --quiet
 run_docker compose build backend frontend
-run_docker compose up -d postgres rabbitmq
+run_docker compose up -d postgres rabbitmq object-storage
 run_docker compose up -d --wait backend
 seed_bootstrap_superadmin
 run_docker compose up -d --scale worker="$PLENORA_WORKER_REPLICAS" worker worker-control beat

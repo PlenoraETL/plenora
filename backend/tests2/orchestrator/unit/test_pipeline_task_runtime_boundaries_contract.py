@@ -134,3 +134,14 @@ def test_project_runtime_context_resolves_runtime_values_with_defaults(monkeypat
         "missing",
         default=10,
     ) == 10
+
+
+def test_pipeline_retry_classifier_is_conservative():
+    from workers.tasks.pipeline_task import _is_retryable_connection_message
+
+    assert _is_retryable_connection_message("Connection reset by peer") is True
+    assert _is_retryable_connection_message(
+        "SSL connection has been closed unexpectedly"
+    ) is True
+    assert _is_retryable_connection_message("query was cancelled") is False
+    assert _is_retryable_connection_message("password authentication failed") is False

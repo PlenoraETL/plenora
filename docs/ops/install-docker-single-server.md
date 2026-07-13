@@ -84,14 +84,14 @@ Both installers:
 - preserve existing non-empty secrets;
 - generate `PLENORA_ENCRYPTION_KEY` and `JWT_SECRET_KEY` if empty;
 - create the external Docker bridge network `plenora` if missing;
-- set `OBJECT_STORAGE_ENABLED=false` when `STORAGE_POLICY=db` and the key is
-  missing, so the local DB-only scaffold does not require cloud credentials;
+- configure `STORAGE_POLICY=object_storage` and generate credentials for the
+  bundled SeaweedFS S3-compatible data plane;
 - prompt for the number of Dramatiq worker containers, defaulting to one worker;
 - prompt for a bootstrap superadmin username/password on interactive installs,
   then create or update that user after the backend is healthy;
 - run `docker compose config --quiet`;
 - build backend and frontend images;
-- start Postgres, RabbitMQ, backend, worker, beat, and frontend;
+- start Postgres, RabbitMQ, SeaweedFS, backend, worker, beat, and frontend;
 - check Python DB providers: PostgreSQL, MySQL/MariaDB, Oracle, and SQL Server
   Python driver;
 - run health, readiness, frontend, and worker smoke checks unless smoke is

@@ -123,16 +123,16 @@ describe('useExecution prepareExecute / launch', () => {
     expect(startPollingMock.mock.calls[0][0]).toBe('t1');
   });
 
-  it('launch("full_pg") merge intermediate_mode negli opts della prepareExecute', async () => {
+  it('launch("full_artifact") merge intermediate_mode negli opts della prepareExecute', async () => {
     executeProjectQueryMock.mockResolvedValue({ async: true, task_id: 't2', message: 'queued' });
     const { result } = renderHook(() => useExecution('proj-1'));
 
     act(() => { result.current.prepareExecute({ force_recalculate: false }); });
-    await act(async () => { await result.current.launch('full_pg'); });
+    await act(async () => { await result.current.launch('full_artifact'); });
 
     expect(executeProjectQueryMock).toHaveBeenCalledWith('proj-1', {
       force_recalculate: false,
-      intermediate_mode: 'full_pg',
+      intermediate_mode: 'full_artifact',
     });
   });
 

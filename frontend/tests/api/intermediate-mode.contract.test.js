@@ -51,13 +51,13 @@ describe('executeProjectQuery — intermediate_mode pass-through', () => {
 
     await executeProjectQuery('proj-C', {
       force_recalculate: true,
-      intermediate_mode: 'full_pg',
+      intermediate_mode: 'full_artifact',
     });
 
     expect(httpMock.post).toHaveBeenCalledWith(
       '/projects/proj-C/execute',
       { force_recalculate: true },
-      { params: { intermediate_mode: 'full_pg' } },
+      { params: { intermediate_mode: 'full_artifact' } },
     );
   });
 

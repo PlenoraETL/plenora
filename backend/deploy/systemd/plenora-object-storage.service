@@ -1,0 +1,15 @@
+[Unit]
+Description=Plenora Object Storage (SeaweedFS S3-compatible)
+After=network.target
+Before=plenora-backend.service plenora-worker-data.service plenora-worker-control.service plenora-beat.service
+
+[Service]
+User=ubuntu
+EnvironmentFile=/home/ubuntu/plenora-etl/backend/.env
+ExecStart=/usr/local/bin/weed mini -dir=/home/ubuntu/plenora-object-storage -ip=127.0.0.1
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

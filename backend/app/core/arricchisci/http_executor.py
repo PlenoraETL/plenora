@@ -8,10 +8,10 @@ from typing import Any, Mapping, Optional
 
 import requests
 from requests.structures import CaseInsensitiveDict
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
-from app.core.security.outbound_url import validate_external_url
-from app.infrastructure.http.session import get_shared_session
+from app.core.security.outbound_url import resolve_external_url, validate_external_url
+from app.infrastructure.http.session import build_pinned_session, get_shared_session
 
 
 SUPPORTED_HTTP_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})
@@ -67,44 +67,12 @@ class HttpExecutor:
     """
 
     def execute(self, spec: RequestSpec) -> NormalizedResponse:
-        if spec.validate_url:
-            validate_external_url(spec.url)
-
         method, _body_type = validate_request_spec_config(
             spec.method,
             spec.body_type,
         )
-
-        session = get_shared_session()
         started = time.time()
-
-        kwargs: dict[str, Any] = {
-            "headers": dict(spec.headers or {}),
-            "timeout": spec.timeout,
-            "allow_redirects": spec.allow_redirects,
-            "stream": spec.stream,
-        }
-        if spec.allow_redirects:
-            # requests valida soltanto l'URL iniziale. Il response hook gira
-            # prima che Session.resolve_redirects segua ogni Location e resta
-            # associato anche alle richieste successive: in questo modo un
-            # endpoint pubblico non puo' redirigere verso localhost, reti
-            # private o metadata service cloud.
-            kwargs["hooks"] = {
-                "response": self._validate_redirect_target,
-            }
-        if spec.verify is not None:
-            kwargs["verify"] = spec.verify
-
-        if method == "GET":
-            response = session.get(spec.url, params=dict(spec.params or {}), **kwargs)
-        else:
-            request_fn = getattr(session, method.lower())
-            response = request_fn(
-                spec.url,
-                **self._encoded_body_kwargs(spec),
-                **kwargs,
-            )
+        response = self._execute_with_safe_redirects(spec, method)
 
         return NormalizedResponse(
             status_code=response.status_code,
@@ -114,11 +82,89 @@ class HttpExecutor:
             raw_response=response,
         )
 
-    @staticmethod
-    def _validate_redirect_target(response: Any, *args: Any, **kwargs: Any) -> Any:
-        location = response.headers.get("location")
-        if response.is_redirect and location:
-            validate_external_url(urljoin(response.url, location))
+    def _execute_with_safe_redirects(self, spec: RequestSpec, method: str) -> Any:
+        current_url = spec.url
+        current_method = method
+        original_host = urlparse(spec.url).hostname
+        for redirect_count in range(6):
+            response = self._execute_once(
+                spec,
+                method=current_method,
+                url=current_url,
+            )
+            location = response.headers.get("location")
+            is_redirect = bool(
+                getattr(
+                    response,
+                    "is_redirect",
+                    response.status_code in (301, 302, 303, 307, 308),
+                )
+            )
+            if not (spec.allow_redirects and is_redirect and location):
+                return response
+            if redirect_count >= 5:
+                raise ValueError("Troppi redirect HTTP (massimo 5)")
+
+            next_url = urljoin(current_url, location)
+            next_host = urlparse(next_url).hostname
+            if next_host != original_host:
+                raise ValueError("Redirect cross-host non consentito")
+            close_response = getattr(response, "close", None)
+            if callable(close_response):
+                close_response()
+            current_url = next_url
+            if response.status_code in (302, 303) or (
+                response.status_code == 301 and current_method == "POST"
+            ):
+                current_method = "GET"
+        raise ValueError("Troppi redirect HTTP")
+
+    def _execute_once(self, spec: RequestSpec, *, method: str, url: str) -> Any:
+        shared_session = get_shared_session()
+        request_url = url
+        headers = dict(spec.headers or {})
+        session = shared_session
+        if spec.validate_url:
+            if isinstance(shared_session, requests.Session):
+                target = resolve_external_url(url)
+                request_url = target.pinned_url
+                headers["Host"] = target.host_header
+                session = build_pinned_session(
+                    shared_session,
+                    hostname=target.hostname,
+                    pinned_url=target.pinned_url,
+                )
+            else:
+                # Injectable non-network session used by unit/adapter runtimes.
+                # Production always supplies requests.Session and takes the
+                # DNS-pinned branch above.
+                validate_external_url(url)
+
+        kwargs: dict[str, Any] = {
+            "headers": headers,
+            "timeout": spec.timeout,
+            "allow_redirects": False,
+            "stream": spec.stream,
+        }
+        if spec.verify is not None:
+            kwargs["verify"] = spec.verify
+        if method == "GET":
+            response = session.get(
+                request_url,
+                params=dict(spec.params or {}),
+                **kwargs,
+            )
+        else:
+            request_fn = getattr(session, method.lower())
+            response = request_fn(
+                request_url,
+                **self._encoded_body_kwargs(spec),
+                **kwargs,
+            )
+        if session is not shared_session:
+            # Streaming callers consume raw_response after this method returns;
+            # retain the isolated adapter/pool for that lifetime.
+            setattr(response, "_plenora_pinned_session", session)
         return response
 
     @staticmethod

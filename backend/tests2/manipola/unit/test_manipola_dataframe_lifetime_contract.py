@@ -213,3 +213,47 @@ def test_preview_clears_frame_map_before_group_by():
 
     assert result["success"] is True
     assert captured["dataframes"] == {}
+
+
+def test_preview_bounds_sources_before_transformations(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setitem(settings.DEFAULTS, "PIPELINE_PREVIEW_SOURCE_MAX_ROWS", 50)
+    executor = ManipolaExecutor(project_service=MagicMock())
+    canvas = CanvasState(
+        nodes=[_source_node("src"), _result_node()],
+        edges=[_edge("e1", "src", "result")],
+    )
+    captured = {}
+
+    def _load(_canvas, dataframes, *_args, **_kwargs):
+        dataframes["src"] = pd.DataFrame({"id": range(5_000)})
+        return None
+
+    def _transform(_canvas, dataframes, **_kwargs):
+        captured["rows_seen"] = len(dataframes["src"])
+        return dataframes["src"]
+
+    with patch.object(
+        executor, "_init_security_context", return_value="group-1"
+    ), patch.object(
+        executor, "_carica_sorgenti_progetto", side_effect=_load
+    ), patch.object(
+        executor, "_carica_sorgenti_file", return_value=None
+    ), patch.object(
+        executor, "_carica_sorgenti_datasource", return_value=None
+    ), patch.object(
+        executor, "_carica_sorgenti_statiche", return_value=None
+    ), patch.object(
+        executor, "_applica_trasformazioni", side_effect=_transform
+    ), patch.object(
+        executor, "_costruisci_mappa_tipi_canvas", return_value={}
+    ), patch.object(
+        executor, "_costruisci_colonne_con_tipi", return_value=[]
+    ):
+        result = executor.preview("project-1", canvas, limit=10)
+
+    assert captured["rows_seen"] == 50
+    assert result["approximate"] is True
+    assert result["truncated"] is True
+    assert result["source_row_counts"] == {"src": 5_000}

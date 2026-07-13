@@ -1,6 +1,6 @@
 [Unit]
 Description=PLENORA-ETL Control-plane Worker (Dramatiq)
-After=network.target rabbitmq-server.service postgresql.service
+After=network.target rabbitmq-server.service postgresql.service plenora-object-storage.service
 
 [Service]
 User=ubuntu

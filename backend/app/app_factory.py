@@ -219,6 +219,7 @@ def create_app(
         "manipola_cross_join_memory",
         "manipola_multi_join_memory",
     })
+    _TRANSFORM_MEMORY_STAGES = frozenset({"manipola_transform_memory"})
 
     @app.exception_handler(MemoryLimitExceededError)
     async def memory_limit_exceeded_handler(
@@ -233,10 +234,13 @@ def create_app(
         )
         is_row_count = exc.stage in _ROW_COUNT_STAGES
         is_join_memory = exc.stage in _JOIN_MEMORY_STAGES
+        is_transform_memory = exc.stage in _TRANSFORM_MEMORY_STAGES
         if is_row_count:
             suggested_action = "reduce_inputs_or_raise_cap"
         elif is_join_memory:
             suggested_action = "reduce_join_inputs_or_worker_concurrency"
+        elif is_transform_memory:
+            suggested_action = "reduce_transform_input_or_worker_concurrency"
         logger.warning(
             "Memory limit exceeded in stage=%s resource=%s observed=%d limit=%d status=%d",
             exc.stage,
@@ -276,6 +280,12 @@ def create_app(
                 f"Lo stage '{exc.stage}' richiederebbe circa {observed_mb} MB "
                 f"di picco, oltre il budget worker di {limit_mb} MB. Riduci "
                 "righe/colonne prima del join o limita la concorrenza data-plane."
+            )
+        elif is_transform_memory:
+            message = (
+                f"La trasformazione richiederebbe circa {observed_mb} MB di "
+                f"picco, oltre il budget worker di {limit_mb} MB. Riduci "
+                "l'input a monte o limita la concorrenza data-plane."
             )
         else:
             message = (

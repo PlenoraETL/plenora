@@ -23,6 +23,24 @@ from app.utils import debug_payload_builder as debug_payload_builder_module
 
 logger = get_logger("workers.pipeline_task")
 
+_RETRYABLE_CONNECTION_MESSAGES = (
+    "lost connection",
+    "server has gone away",
+    "connection refused",
+    "can't connect",
+    "connection was forcibly closed",
+    "broken pipe",
+    "connection reset",
+    "connection timed out",
+    "server closed the connection unexpectedly",
+    "ssl connection has been closed unexpectedly",
+)
+
+
+def _is_retryable_connection_message(message: str) -> bool:
+    normalized = str(message or "").lower()
+    return any(fragment in normalized for fragment in _RETRYABLE_CONNECTION_MESSAGES)
+
 
 def _update_progress(task: object, percent: int, message: str) -> None:
     # Progress scritto solo su PG via report_task_progress; il result backend
@@ -115,7 +133,8 @@ def _normalize_execution_contract(
 
 # Corpo task come funzione pura.
 # `self` e' il self-shim dell'actor Dramatiq (request.id/name). Fail-fast
-# senza retry (no doppie scritture): garantito dall'actor con max_retries=0.
+# con retry soltanto per errori di connessione esplicitamente classificati;
+# run_id stabile + idempotency evitano doppie finalizzazioni.
 def execute_pipeline_task(
     self,
     project_id: str,
@@ -249,12 +268,7 @@ def execute_pipeline_task(
             message = result.message or "Errore sconosciuto"
 
             # Errori di connessione DB: fail immediato
-            _CONNECTION_ERRORS = (
-                "Lost connection", "server has gone away", "Connection refused",
-                "Can't connect", "connection was forcibly closed", "broken pipe",
-                "Connection reset", "SSL connection", "query was cancelled",
-            )
-            if any(err.lower() in message.lower() for err in _CONNECTION_ERRORS):
+            if _is_retryable_connection_message(message):
                 _update_progress(self, 0, f"Connessione persa: {message}")
                 logger.warning(
                     f"Task PIPELINE {task_id} — connessione DB chiusa: {message}",
@@ -268,10 +282,15 @@ def execute_pipeline_task(
                     error_module=module,
                     error_message=f"Connessione al database persa: {message}",
                 )
-                # Il return success=False viene declassato a FAILURE da
-                # get_task_status leggendo da PG.
                 _update_progress(self, 0, f"Connessione al database persa. {message}")
-                return {"success": False, "message": f"Connessione al database persa: {message}"}
+                return {
+                    "success": False,
+                    "retryable": True,
+                    "message": f"Connessione al database persa: {message}",
+                    "project_id": project_id,
+                    "run_id": run_id,
+                    "task_id": task_id,
+                }
 
             # Errore logico — costruisce debug_payload
             if result.get("user_error"):
@@ -321,7 +340,13 @@ def execute_pipeline_task(
             )
 
             _update_progress(self, 0, message)
-            return {"success": False, "message": message}
+            return {
+                "success": False,
+                "message": message,
+                "project_id": project_id,
+                "run_id": run_id,
+                "task_id": task_id,
+            }
 
         rows_out = result.rows_count or 0
         _update_progress(self, 100, "Pipeline completata")
@@ -354,6 +379,8 @@ def execute_pipeline_task(
         return {
             "success": True,
             "project_id": project_id,
+            "run_id": run_id,
+            "task_id": task_id,
             **{k: v for k, v in result.items() if k not in ("success", "output_path")},
             **extra,
         }
@@ -472,6 +499,23 @@ def preview_pipeline_task(
             result = _to_serializable(result)
         except ImportError:
             pass
+
+        # In the object-storage-only data plane the tabular preview must not
+        # cross the subprocess pipe and end up in task_results JSONB. Persist
+        # it here, inside the disposable child, and return only a small
+        # control-plane reference. Legacy db/hybrid modes remain readable for
+        # transition tests and old deployments, but supported installs use
+        # object_storage.
+        if str(settings.get("STORAGE_POLICY", "object_storage")).lower() == "object_storage":
+            from app.core.orchestrator.preview_payload_store import (
+                persist_preview_payload,
+            )
+
+            return persist_preview_payload(
+                result,
+                project_id=project_id,
+                task_id=task_id,
+            )
 
         return result
 

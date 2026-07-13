@@ -16,7 +16,10 @@ from app.shared.contracts.auth import CurrentUser
 from app.core.auth.auth import require_project_owner
 from app.core.projects import router as projects_router_module
 from app.core.projects.router import router as projects_router
-from app.core.projects.exceptions import ProjectHasDependenciesError
+from app.core.projects.exceptions import (
+    ProjectHasActiveTasksError,
+    ProjectHasDependenciesError,
+)
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.regression]
@@ -97,3 +100,17 @@ def test_delete_project_happy_path_returns_204(client):
 
     assert response.status_code == 204
     assert response.content == b""
+
+
+def test_delete_project_returns_409_while_tasks_are_active(client):
+    mock_service = client.app.state.mock_service
+    mock_service.delete_project.side_effect = ProjectHasActiveTasksError(
+        "proj-1", ["task-1", "task-2"]
+    )
+
+    response = client.delete("/api/projects/proj-1")
+
+    assert response.status_code == 409
+    detail = response.json()["detail"]
+    assert detail["error"] == "project_has_active_tasks"
+    assert detail["task_ids"] == ["task-1", "task-2"]

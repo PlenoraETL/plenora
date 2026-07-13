@@ -46,6 +46,16 @@ _ACTIVE_MESSAGES = 0
 _RECYCLE_REQUESTED = False
 
 
+class RetryablePipelineError(RuntimeError):
+    """Sanitized signal used only for idempotent transient pipeline retries."""
+
+
+def _return_or_raise_retryable(result: object) -> object:
+    if isinstance(result, dict) and result.get("retryable") is True:
+        raise RetryablePipelineError("Transient pipeline infrastructure failure")
+    return result
+
+
 def broker_url() -> str:
     # Settings legge l'env live; il dotenv e' gia' stato caricato sopra.
     return settings.DRAMATIQ_BROKER_URL
@@ -68,7 +78,28 @@ class _TaskResultMiddleware(Middleware):
     ) -> None:
         # finalize_from_celery mappa TaskRevoked -> REVOKED,
         # SUCCESS/FAILURE altrimenti.
-        from app.core.orchestrator.task_progress import finalize_from_celery
+        from app.core.orchestrator.task_progress import (
+            finalize_from_celery,
+            finalize_task_result,
+        )
+
+        if isinstance(exception, RetryablePipelineError):
+            retries = int(getattr(message, "options", {}).get("retries", 0) or 0)
+            actor = broker.get_actor(message.actor_name)
+            max_retries = int(actor.options.get("max_retries", 0) or 0)
+            if retries < max_retries:
+                finalize_task_result(
+                    message.message_id,
+                    state="RETRY",
+                    payload={
+                        "success": False,
+                        "retryable": True,
+                        "message": "Errore transitorio: nuovo tentativo in corso",
+                        "run_id": message.message_id,
+                    },
+                    name=message.actor_name,
+                )
+                return
 
         status = "FAILURE" if exception is not None else "SUCCESS"
         einfo = (
@@ -477,20 +508,28 @@ def carica_execute(**kwargs: object) -> object:
     actor_name="pipeline.execute",
     queue_name=queue_for("pipeline.execute"),
     throws=(TaskRevoked,),
-    max_retries=0,
+    max_retries=2,
+    min_backoff=1_000,
+    max_backoff=10_000,
 )
 def pipeline_execute(**kwargs: object) -> object:
     """PIPELINE execute — stesso corpo del task Celery pipeline.execute."""
+    task_kwargs = dict(kwargs)
+    # Stable across Dramatiq attempts: open_run is an upsert and pipeline
+    # completion idempotency can recognize a successful previous attempt.
+    message_id = current_message_id()
+    if message_id:
+        task_kwargs.setdefault("run_id", message_id)
     execution_mode = str(
         settings.get("DATA_PLANE_EXECUTION_MODE", "subprocess") or "subprocess"
     ).strip().lower()
     if execution_mode == "subprocess":
         from workers.data_plane_subprocess import execute_task_in_subprocess
 
-        return execute_task_in_subprocess(
+        result = execute_task_in_subprocess(
             task_name="pipeline.execute",
             task_id=current_message_id() or "",
-            kwargs=dict(kwargs),
+            kwargs=task_kwargs,
             timeout_seconds=int(
                 settings.get(
                     "DATA_PLANE_CHILD_TIMEOUT_SECONDS",
@@ -499,6 +538,7 @@ def pipeline_execute(**kwargs: object) -> object:
             ),
             request_id=get_request_id(),
         )
+        return _return_or_raise_retryable(result)
     if execution_mode != "inline":
         raise RuntimeError(
             "DATA_PLANE_EXECUTION_MODE deve essere inline o subprocess, "
@@ -507,9 +547,10 @@ def pipeline_execute(**kwargs: object) -> object:
 
     from workers.tasks.pipeline_task import execute_pipeline_task
 
-    return _invoke_task_body(
-        execute_pipeline_task, name="pipeline.execute", kwargs=kwargs
+    result = _invoke_task_body(
+        execute_pipeline_task, name="pipeline.execute", kwargs=task_kwargs
     )
+    return _return_or_raise_retryable(result)
 
 
 @dramatiq.actor(
@@ -607,6 +648,7 @@ __all__ = [
     "execute_enrichment",
     "pipeline_execute",
     "pipeline_preview",
+    "RetryablePipelineError",
     "queue_for",
     "run_manual_backup_task",
     "schedule_pipeline_task",

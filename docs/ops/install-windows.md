@@ -2,12 +2,12 @@
 
 Manuale completo dell'installazione nativa su Windows (Server 2022/2025
 o Windows 11 Pro): **niente Docker, niente WSL**. PostgreSQL, RabbitMQ,
-backend FastAPI, worker Dramatiq, beat APScheduler, MinIO opzionale e
+backend FastAPI, worker Dramatiq, beat APScheduler, SeaweedFS S3 e
 frontend (Caddy) girano come **servizi Windows** con avvio automatico.
 
 Collaudato end-to-end su Windows Server 2025 (2026-07-04). Validazione
 post-install automatica con `scripts\validate-windows-install.ps1
--RunE2E -RequireFrontend -RequireMinio` verde su VM Windows Server 2025
+-RunE2E -RequireFrontend -RequireObjectStorage` verde su VM Windows Server 2025
 (2026-07-05): servizi, `/ready`, frontend, smoke nativo, `tests2/functional`
 23 passed, e ripartenza post-reboot confermata. Questo documento e' il
 sorgente canonico anche per il manuale PDF operativo.
@@ -38,13 +38,14 @@ sorgente canonico anche per il manuale PDF operativo.
 | Backend FastAPI | servizio `plenora-backend` (WinSW → uvicorn) | repo | 5004 (loopback) |
 | Worker Dramatiq | servizio `plenora-worker` (e, in modalita' split, `plenora-worker-control` + eventuali `plenora-worker-data-N`) | repo | — |
 | Beat APScheduler | servizio `plenora-beat` | repo | — |
-| MinIO (opzionale) | servizio `plenora-minio` | latest | 9000 (API), 9001 (console) |
+| Object storage SeaweedFS | servizio `plenora-object-storage` | 4.29 | 8333 (S3, loopback) |
 | Frontend (Caddy) | servizio `plenora-caddy` | latest | **80** (configurabile) |
 | Python + GDAL | env conda `plenora` (Miniforge) | 3.12 / GDAL 3.13 | — |
 
-Stato, lock, blacklist JWT, rate-limit e risultati dei task vivono su
-PostgreSQL; RabbitMQ e' solo il trasporto dei task (architettura
-Plenora 2.0). File di configurazione: `C:\plenora\backend\.env`
+Stato, lock, blacklist JWT, rate-limit e metadati dei task vivono su
+PostgreSQL; upload, risultati, preview e intermedi persistenti vivono su
+object storage S3-compatible. RabbitMQ e' solo il trasporto dei task.
+File di configurazione: `C:\plenora\backend\.env`
 (ACL ristretta ad Administrators+SYSTEM). Dati: `C:\plenora-data`.
 Servizi e log: `C:\plenora-services\<servizio>\`.
 
@@ -55,7 +56,7 @@ Servizi e log: `C:\plenora-services\<servizio>\`.
 - `winget` disponibile (incluso in Server 2025 / Windows 11)
 - PowerShell **da Amministratore** per l'installazione
 - Accesso di rete verso: sorgenti winget, GitHub releases (RabbitMQ,
-  WinSW), `dl.min.io` (se MinIO), `caddyserver.com` (se frontend),
+  WinSW e SeaweedFS), `caddyserver.com` (se frontend),
   conda-forge, PyPI, registry npm
 
 ## 3. Installazione passo-passo
@@ -88,7 +89,7 @@ dalla release ufficiale GitHub (non e' piu' su winget) impostando
 ```powershell
 cd C:\plenora
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1 `
-    -SkipWinget -InstallServices -InstallMinio -InstallFrontend -Production `
+    -SkipWinget -InstallServices -InstallFrontend -Production `
     -SplitWorkerServices -DataWorkerServices 1 `
     -DataWorkerThreads 1 -ControlWorkerThreads 2
 ```
@@ -103,8 +104,8 @@ Ti verranno chiesti:
 Il flusso esegue nell'ordine: utente+DB PostgreSQL → verifica RabbitMQ
 → env conda (python 3.12 + GDAL 3.13 da conda-forge) → dipendenze pip →
 `.env` con secrets random → **hardening broker** (utente RabbitMQ
-dedicato `plenora`, rimozione di `guest`) → ACL sul `.env` → **MinIO**
-(servizio + bucket `plenora-runtime`/`plenora-backups`) → **frontend**
+dedicato `plenora`, rimozione di `guest`) → ACL sul `.env` → **SeaweedFS**
+(servizio S3 + bucket `plenora-runtime`) → **frontend**
 (build Vite + servizio Caddy) → **servizi applicativi** (backend con
 migrations al primo boot, worker, beat) → **seed superadmin** con
 verifica via login API reale → **switch a production** (gates attivi,
@@ -136,8 +137,8 @@ su quell'origin; l'installer configura comunque CORS anche per
 | `-ControlWorkerThreads` | 2 | Thread del worker control/scheduler/default in modalita' split |
 | `-WorkerQueuePrefetch` / `-WorkerDelayQueuePrefetch` | 1 / 1 | Prefetch Dramatiq dei worker Windows; default basso per contenere RSS |
 | `-AdminUsername` / `-AdminPassword` / `-AdminGroupId` | prompt / `root` | Superadmin; `-SkipAdminBootstrap` per saltare |
-| `-InstallMinio` | off | MinIO come servizio + bucket + provider `minio` |
-| `-StoragePolicy` | `hybrid` | `db` \| `hybrid` \| `object_storage` |
+| `-InstallObjectStorage` | on | SeaweedFS locale; usare `$false` per un endpoint S3 esterno gia' configurato |
+| `-InstallMinio` | off | Alias deprecato di `-InstallObjectStorage` |
 | `-InstallFrontend` | off | Build FE + servizio Caddy |
 | `-FrontendPort` | 80 | Porta di Caddy (la build FE viene cablata su quell'origin) |
 | `-Production` | off | `ENVIRONMENT=production` coi gates (richiede object storage) |
@@ -173,7 +174,7 @@ ufficiale, impacchettata in uno script non distruttivo:
 ```powershell
 cd C:\plenora
 powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1 `
-    -RequireFrontend -RequireMinio
+    -RequireFrontend -RequireObjectStorage
 ```
 
 Lo script verifica servizi Windows, `/ready` attraverso Caddy, frontend
@@ -208,14 +209,14 @@ Con la suite functional isolata:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1 `
-    -RunE2E -RequireFrontend -RequireMinio
+    -RunE2E -RequireFrontend -RequireObjectStorage
 ```
 
 Con functional + integration:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1 `
-    -RunE2E -Integration -RequireFrontend -RequireMinio
+    -RunE2E -Integration -RequireFrontend -RequireObjectStorage
 ```
 
 Batteria estesa (collaudo da accettazione):
@@ -283,8 +284,8 @@ Stop-Service plenora-*                   # stop ordinato di tutto
   `C:\plenora-services\<servizio>\<servizio>.out.log` / `.err.log`
 - **Config**: `C:\plenora\backend\.env` — dopo una modifica,
   riavviare i servizi interessati
-- **Console MinIO**: `http://127.0.0.1:9001` (credenziali
-  `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` dal `.env`)
+- **Endpoint S3 SeaweedFS**: `http://127.0.0.1:8333` (credenziali
+  `S3_ACCESS_KEY`/`S3_SECRET_KEY` dal `.env`)
 - **Backup DB**: `pg_dump` dello schema `plenora` (vedi
   [backup-restore.md](backup-restore.md) per il modello completo)
 
@@ -296,20 +297,20 @@ git fetch origin
 git pull --ff-only origin main
 git log -1 --oneline
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1 `
-    -SkipWinget -InstallServices -InstallMinio -InstallFrontend `
+    -SkipWinget -InstallServices -InstallFrontend `
     -SkipAdminBootstrap -Production
 ```
 
 Idempotente: rigenera i servizi (stop/refresh config/start), riesegue
 le migrations al boot del backend, ricostruisce il FE. I dati (PG,
-MinIO) non vengono toccati.
+SeaweedFS) non vengono toccati.
 
 Se l'installazione usa una porta frontend diversa da 80, ripassare la
 stessa porta usata in installazione:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1 `
-    -SkipWinget -InstallServices -InstallMinio -InstallFrontend `
+    -SkipWinget -InstallServices -InstallFrontend `
     -SkipAdminBootstrap -Production -FrontendPort 8080
 ```
 
@@ -317,9 +318,9 @@ Validare sempre dopo l'update:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1 `
-    -RequireFrontend -RequireMinio
+    -RequireFrontend -RequireObjectStorage
 powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1 `
-    -RunE2E -RequireFrontend -RequireMinio
+    -RunE2E -RequireFrontend -RequireObjectStorage
 ```
 
 ## 9. Checklist operative
@@ -333,8 +334,8 @@ Installazione nuova:
 - [ ] PowerShell riaperta dopo winget.
 - [ ] Seconda fase installer completata con `-Production`.
 - [ ] Login superadmin riuscito.
-- [ ] `validate-windows-install.ps1 -RequireFrontend -RequireMinio` verde.
-- [ ] `validate-windows-install.ps1 -RunE2E -RequireFrontend -RequireMinio` verde.
+- [ ] `validate-windows-install.ps1 -RequireFrontend -RequireObjectStorage` verde.
+- [ ] `validate-windows-install.ps1 -RunE2E -RequireFrontend -RequireObjectStorage` verde.
 
 Update:
 
@@ -358,7 +359,7 @@ Update:
 | Password `postgres` sconosciuta (install winget) | Reset locale: procedura sotto. |
 | Login dal browser: "Impossibile contattare il server" | Hostname diverso dall'origin della build FE (es. `localhost` vs `127.0.0.1`): usare `http://127.0.0.1/`; l'installer scrive CORS per entrambe |
 | Porta 80 occupata (IIS?) | Reinstallare il FE con `-FrontendPort 8080` (ribuilda anche il bundle sull'origin nuovo) |
-| `/ready` not_ready su `object_storage` | Provider cloud configurato senza credenziali: con MinIO usare `-InstallMinio`; senza object storage (solo dev) `OBJECT_STORAGE_ENABLED=false` |
+| `/ready` not_ready su `object_storage` | Verificare `plenora-object-storage`, endpoint `127.0.0.1:8333` e credenziali `S3_*`; l'object storage e' obbligatorio |
 | Task in coda ma mai eseguiti | `plenora-worker*` giu' o `.env` broker cambiato senza restart dei servizi worker |
 | Un processo Erlang blocca update/cleanup | `epmd.exe` resta vivo dopo stop/uninstall: `Stop-Process -Name epmd -Force` |
 
@@ -386,7 +387,7 @@ CHIUDE la stringa (parse error fantasma piu' avanti nel file).
 
 ```powershell
 # Servizi applicativi (worker split inclusi)
-foreach ($svc in Get-Service plenora-caddy,plenora-beat,plenora-worker*,plenora-minio,plenora-backend -ErrorAction SilentlyContinue) {
+foreach ($svc in Get-Service plenora-caddy,plenora-beat,plenora-worker*,plenora-object-storage,plenora-backend -ErrorAction SilentlyContinue) {
     $id = $svc.Name
     Stop-Service $id -Force
     if (Test-Path "C:\plenora-services\$id\$id.exe") {
@@ -395,7 +396,7 @@ foreach ($svc in Get-Service plenora-caddy,plenora-beat,plenora-worker*,plenora-
 }
 Remove-Item -Recurse -Force C:\plenora-services
 
-# Dati e repo (IRREVERSIBILE: contiene DB MinIO e DATA_DIR)
+# Dati e repo (IRREVERSIBILE: contiene DB, object storage e DATA_DIR)
 Remove-Item -Recurse -Force C:\plenora-data, C:\plenora
 
 # Piattaforma (se non serve ad altro)

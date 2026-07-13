@@ -77,7 +77,7 @@ def test_validate_script_runs_eight_canonical_commands(validate_script_text: str
     expected_commands = (
         "docker compose config",
         "docker compose build backend frontend",
-        "docker compose up -d postgres rabbitmq",
+        "docker compose up -d postgres rabbitmq object-storage",
         "docker compose up -d --wait backend",
         "http://127.0.0.1:5004/health",
         "http://127.0.0.1:5004/ready",

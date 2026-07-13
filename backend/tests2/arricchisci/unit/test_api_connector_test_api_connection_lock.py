@@ -331,7 +331,8 @@ class TestTestApiConnectionHttp:
             "request": {"allow_redirects": True},
         }
         tac_env.svc.test_api_connection(config=cfg, test_params={})
-        assert tac_env.session.get.call_args.kwargs["allow_redirects"] is True
+        # HttpExecutor follows redirects manually after validation/pinning.
+        assert tac_env.session.get.call_args.kwargs["allow_redirects"] is False
 
     def test_options_timeout_used_for_http_call(self, tac_env):
         cfg = {

@@ -41,8 +41,6 @@ function caricaTaskErrorText(t) {
 const INTERMEDIATE_MODE_OPTIONS = [
   { value: '',               label: 'Default (settings globali)' },
   { value: 'metadata_only',  label: 'metadata_only' },
-  { value: 'preview_only',   label: 'preview_only' },
-  { value: 'full_pg',        label: 'full_pg' },
   { value: 'full_artifact',  label: 'full_artifact' },
 ];
 

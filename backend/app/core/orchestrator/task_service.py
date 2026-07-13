@@ -536,6 +536,19 @@ class TaskService:
             )
         )
 
+    def list_active_task_ids_for_project(self, project_id: str) -> list[str]:
+        """Return pending/running task ids bound to one project."""
+        list_for_project = getattr(self.metadata_store, "list_for_project", None)
+        if not callable(list_for_project):
+            return []
+        active_states = {"PENDING", "STARTED", "PROGRESS", "RETRY"}
+        active: list[str] = []
+        for metadata in list_for_project(project_id):
+            result = self.runtime.get_result(metadata.task_id)
+            if str(result.state or "PENDING").upper() in active_states:
+                active.append(metadata.task_id)
+        return active
+
     def get_task_status(self, task_id: str) -> TaskInfo:
         """
         Ottiene lo stato attuale di un task.
@@ -697,7 +710,23 @@ class TaskService:
         return None
 
     def forget_task_result(self, task_id: str) -> None:
-        """Forget the runtime result record for a task."""
+        """Forget the runtime result and its task-scoped preview object."""
+        try:
+            stored = self.runtime.get_result(task_id)
+            payload = stored.result
+            if isinstance(payload, Mapping):
+                from app.core.orchestrator.preview_payload_store import (
+                    delete_preview_payload,
+                    is_preview_reference,
+                )
+
+                if is_preview_reference(payload):
+                    delete_preview_payload(payload)
+        except Exception:
+            logger.warning(
+                "cleanup preview pre-forget fallito task_id=%s", task_id,
+                exc_info=True,
+            )
         self.runtime.forget_result(task_id)
 
     # PULIZIA TASK SCADUTI

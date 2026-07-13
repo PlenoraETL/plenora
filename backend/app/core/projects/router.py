@@ -16,6 +16,7 @@ from app.core.projects.canvas_models import CanvasState, Node, Edge, Column
 from app.core.projects.exceptions import (
     CanvasCorruptedError,
     ProjectCleanupPartialError,
+    ProjectHasActiveTasksError,
     ProjectHasDependenciesError,
     ProjectLineageCycleError,
 )
@@ -549,6 +550,16 @@ def delete_project(
     """
     try:
         _project_service.delete_project(project_id)
+    except ProjectHasActiveTasksError as e:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "project_has_active_tasks",
+                "message": str(e),
+                "project_id": e.project_id,
+                "task_ids": e.task_ids,
+            },
+        )
     except ProjectHasDependenciesError as e:
         # Shape 409 cascade canonica (6.1
         # { error, message, dependencies:[{kind, id, name, project_type?}] }

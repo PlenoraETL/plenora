@@ -243,6 +243,25 @@ def test_dedup_addrinfo_results(monkeypatch):
         validate_external_url("http://corp-internal.example.test/")
 
 
+def test_resolve_external_url_pins_the_validated_address(monkeypatch):
+    calls = []
+
+    def _resolve(host, port=None):
+        calls.append((host, port))
+        return _mk_addrinfo_result(["93.184.216.34"])
+
+    monkeypatch.setattr(outbound_url.socket, "getaddrinfo", _resolve)
+
+    target = outbound_url.resolve_external_url(
+        "https://public.example.test:8443/path?q=1"
+    )
+
+    assert calls == [("public.example.test", 8443)]
+    assert target.pinned_url == "https://93.184.216.34:8443/path?q=1"
+    assert target.hostname == "public.example.test"
+    assert target.host_header == "public.example.test:8443"
+
+
 def test_loopback_opt_in_still_works_for_ipv6_loopback(monkeypatch):
     """B3-B.8: l'opt-in `PLENORA_ALLOW_LOOPBACK_OUTBOUND=1` permette
     sia IPv4 loopback (`127.0.0.0/8`) sia IPv6 loopback (`::1`).

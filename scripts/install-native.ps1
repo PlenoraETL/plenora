@@ -4,7 +4,7 @@
 #
 # Collaudato end-to-end su Windows Server 2025 (2026-07-04): stack
 # completo PostgreSQL + Erlang/RabbitMQ + Miniforge/conda (GDAL nativo)
-# + worker Dramatiq + beat APScheduler + MinIO opzionale + frontend via
+# + worker Dramatiq + beat APScheduler + SeaweedFS S3 + frontend via
 # Caddy, tutto come SERVIZI Windows. Runbook: docs/ops/install-windows.md;
 # sessione di scoping e lezioni: docs/ops/scoping-windows-native.md.
 # `scripts/install.ps1` inoltra qui.
@@ -13,11 +13,11 @@
 #   1) powershell -ExecutionPolicy Bypass -File scripts\install-native.ps1
 #      (pacchetti piattaforma via winget; poi NUOVA shell admin)
 #   2) powershell -ExecutionPolicy Bypass -File scripts\install-native.ps1 `
-#          -SkipWinget -InstallServices -InstallMinio -InstallFrontend -Production
+#          -SkipWinget -InstallServices -InstallFrontend -Production
 #
 # Parametri principali: -WorkerProcesses/-WorkerThreads,
 # -SplitWorkerServices/-DataWorkerServices/-DataWorkerThreads,
-# -AdminUsername/-AdminPassword (-SkipAdminBootstrap), -StoragePolicy,
+# -AdminUsername/-AdminPassword (-SkipAdminBootstrap),
 # -FrontendPort, -PgSuperPassword. Non-interattivo via env
 # PLENORA_BOOTSTRAP_ADMIN_* / PLENORA_INSTALL_WORKER_*.
 #
@@ -48,18 +48,17 @@ param(
     [string]$AdminPassword = '',
     [string]$AdminGroupId = '',
     [switch]$SkipAdminBootstrap,
-    # W3 — MinIO opzionale come object storage locale (servizio WinSW):
-    # crea i bucket runtime/backup e configura CLOUD_PROVIDER=minio.
+    # W3 — object storage locale S3-compatible (SeaweedFS/WinSW).
+    [switch]$InstallObjectStorage = $true,
+    # Alias deprecato: mantenuto per non rompere vecchi comandi operativi.
     [switch]$InstallMinio,
-    [ValidateSet('db', 'hybrid', 'object_storage')]
-    [string]$StoragePolicy = 'hybrid',
     # W4 — frontend: build Vite + Caddy come servizio (statici + reverse
     # proxy /api verso il backend).
     [switch]$InstallFrontend,
     [int]$FrontendPort = 80,
     [string]$FrontendApiUrl = '',
     # W5 — switch a ENVIRONMENT=production coi gates attivi (richiede
-    # object storage configurato: -InstallMinio o AWS nel .env).
+    # object storage configurato localmente o tramite endpoint S3 nel .env).
     [switch]$Production
 )
 
@@ -74,6 +73,10 @@ if (-not $AdminUsername) { $AdminUsername = $env:PLENORA_BOOTSTRAP_ADMIN_USERNAM
 if (-not $AdminPassword) { $AdminPassword = $env:PLENORA_BOOTSTRAP_ADMIN_PASSWORD }
 if (-not $AdminGroupId) {
     $AdminGroupId = if ($env:PLENORA_BOOTSTRAP_ADMIN_GROUP_ID) { $env:PLENORA_BOOTSTRAP_ADMIN_GROUP_ID } else { 'root' }
+}
+if ($InstallMinio) {
+    Write-Warning '-InstallMinio e'' deprecato: viene installato SeaweedFS tramite -InstallObjectStorage.'
+    $InstallObjectStorage = $true
 }
 if (-not $PSBoundParameters.ContainsKey('WorkerProcesses') -and $env:PLENORA_INSTALL_WORKER_PROCESSES) {
     $WorkerProcesses = [int]$env:PLENORA_INSTALL_WORKER_PROCESSES
@@ -150,7 +153,7 @@ function Invoke-RabbitCtl {
 $ServicesRoot = 'C:\plenora-services'
 
 function Get-WinSWExe {
-    # WinSW.exe condiviso (W1 servizi app + W3 servizio MinIO): scarica
+    # WinSW.exe condiviso (W1 servizi app + W3 object storage): scarica
     # una volta dalla release GitHub, fallback pinnato v2.12.0.
     New-Item -ItemType Directory -Force $ServicesRoot | Out-Null
     $winswExe = Join-Path $ServicesRoot 'WinSW-x64.exe'
@@ -386,15 +389,13 @@ DRAMATIQ_BROKER_URL=amqp://guest:guest@127.0.0.1:5672
 JWT_SECRET_KEY=$jwt
 PLENORA_ENCRYPTION_KEY=$enc
 DATA_DIR=$DataDir
-# Storage: senza questi il bootstrap fallisce validate_storage_config
-# (default STORAGE_POLICY=hybrid esige un bucket object storage) e
-# SALTA anche le migrations -> errori 'relazione logs non esiste'.
-# Lezione scoping VM 2026-07-04.
-STORAGE_POLICY=db
-BACKUP_BUCKET=plenora-scoping-backup
-# Niente credenziali cloud sulla VM: senza questi due /ready resta
-# not_ready su object_storage (probe S3 -> NoCredentialsError).
-OBJECT_STORAGE_ENABLED=false
+# PostgreSQL e' solo control-plane; ogni payload persistente usa S3.
+STORAGE_POLICY=object_storage
+OBJECT_STORAGE_ENABLED=true
+OBJECT_STORAGE_BACKEND=s3_compatible
+OBJECT_STORAGE_BUCKET=plenora-runtime
+PLENORA_ARTIFACT_BUCKET=plenora-runtime
+BACKUP_BUCKET=plenora-backups
 CLOUD_PROVIDER=none
 "@ | Set-Content -Encoding ascii $envFile
     Ok '.env generato (secrets random; ENVIRONMENT=development per lo scoping)'
@@ -439,42 +440,50 @@ if ($LASTEXITCODE -ne 0) { Fail "icacls sul .env exit=$LASTEXITCODE" }
 Ok 'ACL ristretta sul .env (Administrators + SYSTEM)'
 
 # =============================================================================
-# W3 — MinIO opzionale (object storage locale come servizio Windows)
+# W3 — SeaweedFS (object storage locale S3-compatible come servizio Windows)
 # =============================================================================
-if ($InstallMinio) {
-    Step "W3: MinIO come servizio Windows (STORAGE_POLICY=$StoragePolicy)"
+if ($InstallObjectStorage) {
+    Step 'W3: SeaweedFS come servizio Windows (S3-compatible data-plane)'
 
-    $minioSvcDir = Join-Path $ServicesRoot 'plenora-minio'
-    New-Item -ItemType Directory -Force $minioSvcDir | Out-Null
-    $minioExe = Join-Path $minioSvcDir 'minio.exe'
-    if (-not (Test-Path $minioExe)) {
-        Write-Host '  Scarico minio.exe (release ufficiale windows-amd64)...'
-        Invoke-WebRequest 'https://dl.min.io/server/minio/release/windows-amd64/minio.exe' -OutFile $minioExe
+    $storageSvcDir = Join-Path $ServicesRoot 'plenora-object-storage'
+    New-Item -ItemType Directory -Force $storageSvcDir | Out-Null
+    $weedExe = Join-Path $storageSvcDir 'weed.exe'
+    if (-not (Test-Path $weedExe)) {
+        Write-Host '  Scarico SeaweedFS 4.29 (release ufficiale windows-amd64)...'
+        $archive = Join-Path $env:TEMP 'seaweedfs-windows-amd64.zip'
+        $extractDir = Join-Path $env:TEMP 'seaweedfs-windows-amd64'
+        Invoke-WebRequest 'https://github.com/seaweedfs/seaweedfs/releases/download/4.29/windows_amd64.zip' -OutFile $archive
+        if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
+        Expand-Archive -LiteralPath $archive -DestinationPath $extractDir -Force
+        $downloadedWeed = Get-ChildItem $extractDir -Recurse -Filter weed.exe | Select-Object -First 1
+        if (-not $downloadedWeed) { Fail 'weed.exe non trovato nell''archivio SeaweedFS' }
+        Copy-Item $downloadedWeed.FullName $weedExe -Force
+        Remove-Item $archive -Force -ErrorAction SilentlyContinue
+        Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue
     }
-    $minioData = Join-Path $DataDir 'minio'
-    New-Item -ItemType Directory -Force $minioData | Out-Null
+    $storageData = Join-Path $DataDir 'object-storage'
+    New-Item -ItemType Directory -Force $storageData | Out-Null
 
-    # Credenziali: riusa quelle gia' nel .env (idempotenza), altrimenti
-    # genera. NB: il .env e' la sorgente di verita' — la password non e'
-    # recuperabile da MinIO stesso.
-    $minioUser = 'plenora-minio'
-    $minioPw = ''
+    # Credenziali: riusa il .env per rendere i rerun idempotenti.
+    $storageUser = 'plenora-storage'
+    $storageSecret = ''
     foreach ($line in Get-Content $envFile) {
-        if ($line -match '^MINIO_ACCESS_KEY=(.+)$') { $minioUser = $Matches[1] }
-        if ($line -match '^MINIO_SECRET_KEY=(.+)$') { $minioPw = $Matches[1] }
+        if ($line -match '^S3_ACCESS_KEY=(.+)$') { $storageUser = $Matches[1] }
+        if ($line -match '^S3_SECRET_KEY=(.+)$') { $storageSecret = $Matches[1] }
     }
-    if (-not $minioPw) { $minioPw = New-RandomSecret }
+    if (-not $storageSecret) { $storageSecret = New-RandomSecret }
 
-    $minioXml = @"
+    $storageXml = @"
 <service>
-  <id>plenora-minio</id>
-  <name>Plenora MinIO</name>
+  <id>plenora-object-storage</id>
+  <name>Plenora Object Storage</name>
   <description>Object storage locale S3-compatible per Plenora-ETL</description>
-  <executable>$minioExe</executable>
-  <arguments>server $minioData --address 127.0.0.1:9000 --console-address 127.0.0.1:9001</arguments>
-  <workingdirectory>$minioSvcDir</workingdirectory>
-  <env name="MINIO_ROOT_USER" value="$minioUser"/>
-  <env name="MINIO_ROOT_PASSWORD" value="$minioPw"/>
+  <executable>$weedExe</executable>
+  <arguments>mini -dir=$storageData -ip=127.0.0.1</arguments>
+  <workingdirectory>$storageSvcDir</workingdirectory>
+  <env name="AWS_ACCESS_KEY_ID" value="$storageUser"/>
+  <env name="AWS_SECRET_ACCESS_KEY" value="$storageSecret"/>
+  <env name="S3_BUCKET" value="plenora-runtime"/>
   <startmode>Automatic</startmode>
   <onfailure action="restart" delay="5 sec"/>
   <stoptimeout>30 sec</stoptimeout>
@@ -484,69 +493,38 @@ if ($InstallMinio) {
   </log>
 </service>
 "@
-    Install-WinSWService -Id 'plenora-minio' -Xml $minioXml
-    Start-Service plenora-minio
+    Install-WinSWService -Id 'plenora-object-storage' -Xml $storageXml
+    Start-Service plenora-object-storage
 
     $up = $false
     foreach ($i in 1..20) {
-        $tnc = Test-NetConnection 127.0.0.1 -Port 9000 -WarningAction SilentlyContinue
+        $tnc = Test-NetConnection 127.0.0.1 -Port 8333 -WarningAction SilentlyContinue
         if ($tnc.TcpTestSucceeded) { $up = $true; break }
         Start-Sleep -Seconds 2
     }
-    if (-not $up) { Fail 'MinIO non in ascolto su 9000 entro 40s (vedi C:\plenora-services\plenora-minio\*.log)' }
-    Ok 'MinIO in ascolto su 127.0.0.1:9000 (console: 9001)'
+    if (-not $up) { Fail 'SeaweedFS S3 non in ascolto su 8333 entro 40s (vedi C:\plenora-services\plenora-object-storage\*.log)' }
+    Ok 'SeaweedFS S3 in ascolto su 127.0.0.1:8333'
 
-    # Bucket runtime + backup via boto3 (gia' nelle dipendenze), idempotente.
-    @'
-"""Crea i bucket MinIO per Plenora (runtime + backup). Idempotente."""
-import os
-import boto3
-from botocore.client import Config
-
-s3 = boto3.client(
-    "s3",
-    endpoint_url=os.environ["PLENORA_MINIO_URL"],
-    aws_access_key_id=os.environ["PLENORA_MINIO_USER"],
-    aws_secret_access_key=os.environ["PLENORA_MINIO_PASSWORD"],
-    config=Config(signature_version="s3v4"),
-    region_name="us-east-1",
-)
-for bucket in ("plenora-runtime", "plenora-backups"):
-    try:
-        s3.create_bucket(Bucket=bucket)
-        print("bucket creato:", bucket)
-    except Exception as e:
-        if "BucketAlreadyOwnedByYou" in str(e) or "BucketAlreadyExists" in str(e):
-            print("bucket ok:", bucket)
-        else:
-            raise
-'@ | Set-Content -Encoding ascii (Join-Path $BackendDir '_minio_buckets.py')
-    $env:PLENORA_MINIO_URL = 'http://127.0.0.1:9000'
-    $env:PLENORA_MINIO_USER = $minioUser
-    $env:PLENORA_MINIO_PASSWORD = $minioPw
-    try {
-        & $condaBat run -n $CondaEnv --cwd $BackendDir python _minio_buckets.py
-        if ($LASTEXITCODE -ne 0) { Fail "creazione bucket MinIO exit=$LASTEXITCODE" }
-    } finally {
-        Remove-Item (Join-Path $BackendDir '_minio_buckets.py') -ErrorAction SilentlyContinue
-        Remove-Item Env:\PLENORA_MINIO_PASSWORD -ErrorAction SilentlyContinue
-    }
-
-    # .env: attiva l'object storage sul provider minio.
-    Set-EnvValue -File $envFile -Key 'STORAGE_POLICY' -Value $StoragePolicy
+    # .env: applicazione disaccoppiata dal vendor, solo protocollo S3.
+    Set-EnvValue -File $envFile -Key 'STORAGE_POLICY' -Value 'object_storage'
     Set-EnvValue -File $envFile -Key 'OBJECT_STORAGE_ENABLED' -Value 'true'
-    Set-EnvValue -File $envFile -Key 'CLOUD_PROVIDER' -Value 'minio'
-    Set-EnvValue -File $envFile -Key 'MINIO_ENDPOINT_URL' -Value 'http://127.0.0.1:9000'
-    Set-EnvValue -File $envFile -Key 'MINIO_ACCESS_KEY' -Value $minioUser
-    Set-EnvValue -File $envFile -Key 'MINIO_SECRET_KEY' -Value $minioPw
+    Set-EnvValue -File $envFile -Key 'OBJECT_STORAGE_BACKEND' -Value 's3_compatible'
+    Set-EnvValue -File $envFile -Key 'CLOUD_PROVIDER' -Value 'none'
+    Set-EnvValue -File $envFile -Key 'S3_ENDPOINT_URL' -Value 'http://127.0.0.1:8333'
+    Set-EnvValue -File $envFile -Key 'S3_ACCESS_KEY' -Value $storageUser
+    Set-EnvValue -File $envFile -Key 'S3_SECRET_KEY' -Value $storageSecret
+    Set-EnvValue -File $envFile -Key 'AWS_ACCESS_KEY_ID' -Value $storageUser
+    Set-EnvValue -File $envFile -Key 'AWS_SECRET_ACCESS_KEY' -Value $storageSecret
+    Set-EnvValue -File $envFile -Key 'S3_BUCKET' -Value 'plenora-runtime'
     Set-EnvValue -File $envFile -Key 'OBJECT_STORAGE_BUCKET' -Value 'plenora-runtime'
+    Set-EnvValue -File $envFile -Key 'PLENORA_ARTIFACT_BUCKET' -Value 'plenora-runtime'
     Set-EnvValue -File $envFile -Key 'BACKUP_BUCKET' -Value 'plenora-backups'
 
-    # I servizi app leggono il .env al boot: restart per vedere MinIO.
+    # I servizi app leggono il .env al boot: restart per vedere lo storage.
     $running = Get-Service plenora-backend, plenora-worker*, plenora-beat -ErrorAction SilentlyContinue |
                Where-Object Status -eq 'Running'
     foreach ($s in $running) { Restart-Service $s.Name }
-    Ok "MinIO configurato: bucket plenora-runtime/plenora-backups, provider=minio, policy=$StoragePolicy"
+    Ok 'Object storage configurato: bucket plenora-runtime, backend=s3_compatible, policy=object_storage'
 }
 
 # =============================================================================
@@ -677,7 +655,7 @@ Write-Host '=============================================================' -Fore
 Write-Host ' Setup base completato.' -ForegroundColor Green
 Write-Host '=============================================================' -ForegroundColor Green
 Write-Host '  Servizi:    -InstallServices (backend/worker/beat come servizi Windows)'
-Write-Host '  MinIO:      -InstallMinio (object storage locale + bucket)'
+Write-Host '  Storage:    SeaweedFS S3 locale installato per default (-InstallObjectStorage:$false per endpoint esterno)'
 Write-Host '  Frontend:   -InstallFrontend (build Vite + Caddy su porta 80)'
 Write-Host '  Production: -Production (gates attivi, richiede object storage)'
 Write-Host ''
@@ -955,11 +933,11 @@ print(f"Superadmin ready: username={username} role=superadmin group_id={group_id
 if ($Production) {
     Step 'W5: switch a ENVIRONMENT=production (single-node gates)'
 
-    # I production gates esigono object storage condiviso: senza MinIO
-    # (o AWS gia' configurato nel .env) il boot fallirebbe fail-fast.
+    # I production gates esigono object storage condiviso: locale oppure
+    # endpoint S3-compatible gia' configurato nel .env.
     $envC = Get-Content $envFile -Raw
     if ($envC -notmatch 'OBJECT_STORAGE_ENABLED=true') {
-        Fail 'production richiede object storage: rilancia con -InstallMinio (o configura provider AWS nel .env) prima di -Production'
+        Fail 'production richiede object storage: usa -InstallObjectStorage o configura un endpoint S3 nel .env prima di -Production'
     }
 
     # NB dotenv in production: config_env_loader ignora il .env quando il

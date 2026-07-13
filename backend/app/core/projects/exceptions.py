@@ -59,6 +59,18 @@ class ProjectHasDependenciesError(Exception):
         )
 
 
+class ProjectHasActiveTasksError(Exception):
+    """Raised when deletion races with queued or running project tasks."""
+
+    def __init__(self, project_id: str, task_ids: List[str]):
+        self.project_id = project_id
+        self.task_ids = list(task_ids)
+        super().__init__(
+            f"Progetto '{project_id}' ha {len(self.task_ids)} task attivi: "
+            "annullarli o attenderne il completamento prima della cancellazione."
+        )
+
+
 class ProjectCleanupPartialError(Exception):
     """Raised when critical project cascade cleanup steps fail."""
 
@@ -81,6 +93,7 @@ class ProjectCleanupPartialError(Exception):
 __all__ = [
     "CanvasCorruptedError",
     "ProjectCleanupPartialError",
+    "ProjectHasActiveTasksError",
     "ProjectHasDependenciesError",
     "ProjectLineageCycleError",
 ]

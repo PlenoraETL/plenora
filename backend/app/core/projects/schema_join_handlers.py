@@ -29,8 +29,6 @@ class JoinSchemaHandlers:
 
         left_keys = self._normalize_str_list(config.get("left_keys") or config.get("left_on"))
         right_keys = self._normalize_str_list(config.get("right_keys") or config.get("right_on"))
-        left_on = left_keys[0] if left_keys else ""
-        right_on = right_keys[0] if right_keys else ""
         left_key_set = set(left_keys)
         right_key_set = set(right_keys)
         same_name_right_keys = {

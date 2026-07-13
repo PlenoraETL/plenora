@@ -55,10 +55,10 @@ describe('executeProjectQuery — payload shape contract', () => {
   });
 
   it('adds intermediate_mode as query param, not body', async () => {
-    await executeProjectQuery('proj-1', { intermediate_mode: 'full_pg' });
+    await executeProjectQuery('proj-1', { intermediate_mode: 'full_artifact' });
     const [, payload, config] = httpPostMock.mock.calls[0];
     expect(payload).toEqual({ force_recalculate: false });
-    expect(config).toEqual({ params: { intermediate_mode: 'full_pg' } });
+    expect(config).toEqual({ params: { intermediate_mode: 'full_artifact' } });
   });
 
   it('omits intermediate_mode config when not provided', async () => {

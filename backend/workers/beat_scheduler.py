@@ -1439,6 +1439,22 @@ class PlenoraBeatScheduler:
             deleted = default_task_result_store().cleanup_expired()
             if deleted:
                 logger.info(f"[CLEANUP] task_results scaduti rimossi: {deleted}")
+
+            # Preview rows/columns live on the runtime object storage, not in
+            # task_results JSONB. Sweep by age as a provider-independent
+            # fallback to bucket lifecycle rules.
+            from app.core.orchestrator.preview_payload_store import (
+                cleanup_expired_preview_payloads,
+            )
+
+            preview_deleted = cleanup_expired_preview_payloads(
+                ttl_seconds=int(app_config.settings.TASK_RESULT_EXPIRES)
+            )
+            if preview_deleted:
+                logger.info(
+                    "[CLEANUP] preview object scaduti rimossi: %s",
+                    preview_deleted,
+                )
         except Exception as e:
             logger.warning(f"[CLEANUP] sweep task_results fallito: {e}")
 

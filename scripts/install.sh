@@ -33,10 +33,12 @@
 #   PLENORA_INSTALL_DATABASE_URL    Postgres DSN
 #   PLENORA_INSTALL_DB_SCHEMA       default: plenora
 #   PLENORA_INSTALL_BROKER_URL      RabbitMQ broker URL (DRAMATIQ_BROKER_URL)
-#   PLENORA_INSTALL_STORAGE_POLICY  db | hybrid | object_storage
-#   PLENORA_INSTALL_BACKUP_BUCKET   non-empty even on STORAGE_POLICY=db
-#   PLENORA_INSTALL_OBJECT_STORAGE_BUCKET  required if STORAGE_POLICY != db
-#   PLENORA_INSTALL_CLOUD_PROVIDER  aws | minio | none (default: aws)
+#   PLENORA_INSTALL_STORAGE_POLICY  must be object_storage (legacy reads only)
+#   PLENORA_INSTALL_BACKUP_BUCKET   optional backup bucket
+#   PLENORA_INSTALL_OBJECT_STORAGE_BUCKET  runtime payload bucket
+#   PLENORA_INSTALL_S3_ENDPOINT_URL S3-compatible endpoint
+#   PLENORA_INSTALL_S3_ACCESS_KEY / PLENORA_INSTALL_S3_SECRET_KEY
+#   PLENORA_INSTALL_CLOUD_PROVIDER  secrets provider (default: none)
 #   PLENORA_INSTALL_AWS_REGION      e.g. eu-south-1 (CLOUD_PROVIDER=aws)
 #   PLENORA_INSTALL_ENVIRONMENT     production | staging | development
 #   PLENORA_INSTALL_BACKEND_PORT    default: 5004
@@ -555,6 +557,10 @@ step_gather_config() {
     STORAGE_POLICY="${PLENORA_INSTALL_STORAGE_POLICY:-}"
     BACKUP_BUCKET="${PLENORA_INSTALL_BACKUP_BUCKET:-}"
     OBJECT_STORAGE_BUCKET="${PLENORA_INSTALL_OBJECT_STORAGE_BUCKET:-}"
+    OBJECT_STORAGE_BACKEND="${PLENORA_INSTALL_OBJECT_STORAGE_BACKEND:-}"
+    S3_ENDPOINT_URL="${PLENORA_INSTALL_S3_ENDPOINT_URL:-}"
+    S3_ACCESS_KEY="${PLENORA_INSTALL_S3_ACCESS_KEY:-}"
+    S3_SECRET_KEY="${PLENORA_INSTALL_S3_SECRET_KEY:-}"
     CLOUD_PROVIDER="${PLENORA_INSTALL_CLOUD_PROVIDER:-}"
     AWS_REGION="${PLENORA_INSTALL_AWS_REGION:-}"
     ENVIRONMENT="${PLENORA_INSTALL_ENVIRONMENT:-}"
@@ -576,36 +582,33 @@ step_gather_config() {
         "RabbitMQ broker URL (DRAMATIQ_BROKER_URL)" \
         "amqp://guest:guest@localhost:5672"
 
-    prompt STORAGE_POLICY \
-        "STORAGE_POLICY (db | hybrid | object_storage)" \
-        "db"
+    prompt STORAGE_POLICY "STORAGE_POLICY" "object_storage"
 
     case "$STORAGE_POLICY" in
-        db|hybrid|object_storage) ;;
-        *) die "Invalid STORAGE_POLICY: ${STORAGE_POLICY}" ;;
+        object_storage) ;;
+        *) die "Nuove installazioni supportano solo STORAGE_POLICY=object_storage; db/hybrid restano disponibili per leggere dati legacy." ;;
     esac
 
-    # validate_storage_config requires non-empty BACKUP_BUCKET on every
-    # policy. A dummy is acceptable on STORAGE_POLICY=db.
     prompt BACKUP_BUCKET \
-        "BACKUP_BUCKET (non-empty even on db; dummy ok)" \
-        "plenora-backup-placeholder"
+        "BACKUP_BUCKET (separato dal runtime)" \
+        "plenora-backups"
 
-    if [[ "$STORAGE_POLICY" != "db" ]]; then
-        prompt OBJECT_STORAGE_BUCKET \
-            "OBJECT_STORAGE_BUCKET (distinct from BACKUP_BUCKET)" \
-            ""
-        if [[ "$OBJECT_STORAGE_BUCKET" == "$BACKUP_BUCKET" ]]; then
-            die "OBJECT_STORAGE_BUCKET must be DISTINCT from BACKUP_BUCKET."
-        fi
-        prompt CLOUD_PROVIDER \
-            "CLOUD_PROVIDER (aws | minio | none)" \
-            "aws"
-        if [[ "$CLOUD_PROVIDER" == "aws" ]]; then
-            prompt AWS_REGION \
-                "AWS_REGION" \
-                "eu-south-1"
-        fi
+    prompt OBJECT_STORAGE_BUCKET "OBJECT_STORAGE_BUCKET" "plenora-runtime"
+    [[ "$OBJECT_STORAGE_BUCKET" != "$BACKUP_BUCKET" ]] || \
+        die "OBJECT_STORAGE_BUCKET must be DISTINCT from BACKUP_BUCKET."
+    OBJECT_STORAGE_BACKEND="s3_compatible"
+    prompt S3_ENDPOINT_URL "S3 endpoint URL" "http://127.0.0.1:8333"
+    prompt S3_ACCESS_KEY "S3 access key" "plenora-storage"
+    if [[ -z "$S3_SECRET_KEY" ]]; then
+        S3_SECRET_KEY="$(read_env_var S3_SECRET_KEY)"
+    fi
+    if [[ -z "$S3_SECRET_KEY" ]]; then
+        S3_SECRET_KEY="$(generate_secret)"
+        log_info "Generated a new S3_SECRET_KEY."
+    fi
+    prompt CLOUD_PROVIDER "Secrets provider (aws | none)" "none"
+    if [[ "$CLOUD_PROVIDER" == "aws" ]]; then
+        prompt AWS_REGION "AWS_REGION" "eu-south-1"
     fi
 
     prompt BACKEND_PORT \
@@ -682,8 +685,15 @@ INSTALLER_MANAGED_KEYS=(
     STORAGE_POLICY
     BACKUP_BUCKET
     OBJECT_STORAGE_ENABLED
+    OBJECT_STORAGE_BACKEND
     OBJECT_STORAGE_BUCKET
     PLENORA_ARTIFACT_BUCKET
+    S3_ENDPOINT_URL
+    S3_ACCESS_KEY
+    S3_SECRET_KEY
+    AWS_ACCESS_KEY_ID
+    AWS_SECRET_ACCESS_KEY
+    S3_BUCKET
     CLOUD_PROVIDER
     AWS_REGION
     PLENORA_BACKEND_PORT
@@ -763,14 +773,20 @@ build_managed_values() {
     MANAGED_VALUES[STORAGE_POLICY]="$STORAGE_POLICY"
     MANAGED_VALUES[BACKUP_BUCKET]="$BACKUP_BUCKET"
     MANAGED_VALUES[PLENORA_BACKEND_PORT]="$BACKEND_PORT"
-    if [[ "$STORAGE_POLICY" != "db" ]]; then
-        MANAGED_VALUES[OBJECT_STORAGE_ENABLED]="true"
-        MANAGED_VALUES[OBJECT_STORAGE_BUCKET]="$OBJECT_STORAGE_BUCKET"
-        MANAGED_VALUES[PLENORA_ARTIFACT_BUCKET]="$OBJECT_STORAGE_BUCKET"
-        MANAGED_VALUES[CLOUD_PROVIDER]="$CLOUD_PROVIDER"
-        if [[ "$CLOUD_PROVIDER" == "aws" ]]; then
-            MANAGED_VALUES[AWS_REGION]="$AWS_REGION"
-        fi
+    MANAGED_VALUES[OBJECT_STORAGE_ENABLED]="true"
+    MANAGED_VALUES[OBJECT_STORAGE_BACKEND]="$OBJECT_STORAGE_BACKEND"
+    MANAGED_VALUES[OBJECT_STORAGE_BUCKET]="$OBJECT_STORAGE_BUCKET"
+    MANAGED_VALUES[PLENORA_ARTIFACT_BUCKET]="$OBJECT_STORAGE_BUCKET"
+    MANAGED_VALUES[S3_ENDPOINT_URL]="$S3_ENDPOINT_URL"
+    MANAGED_VALUES[S3_ACCESS_KEY]="$S3_ACCESS_KEY"
+    MANAGED_VALUES[S3_SECRET_KEY]="$S3_SECRET_KEY"
+    # SeaweedFS usa i nomi AWS standard; restano alias dello stesso secret.
+    MANAGED_VALUES[AWS_ACCESS_KEY_ID]="$S3_ACCESS_KEY"
+    MANAGED_VALUES[AWS_SECRET_ACCESS_KEY]="$S3_SECRET_KEY"
+    MANAGED_VALUES[S3_BUCKET]="$OBJECT_STORAGE_BUCKET"
+    MANAGED_VALUES[CLOUD_PROVIDER]="$CLOUD_PROVIDER"
+    if [[ "$CLOUD_PROVIDER" == "aws" ]]; then
+        MANAGED_VALUES[AWS_REGION]="$AWS_REGION"
     fi
 }
 
@@ -805,18 +821,23 @@ JWT_SECRET_KEY=${JWT_SECRET_KEY}
 STORAGE_POLICY=${STORAGE_POLICY}
 BACKUP_BUCKET=${BACKUP_BUCKET}
 EOF
-    if [[ "$STORAGE_POLICY" != "db" ]]; then
-        cat >> "$out" <<EOF
+    cat >> "$out" <<EOF
 OBJECT_STORAGE_ENABLED=true
+OBJECT_STORAGE_BACKEND=${OBJECT_STORAGE_BACKEND}
 OBJECT_STORAGE_BUCKET=${OBJECT_STORAGE_BUCKET}
 PLENORA_ARTIFACT_BUCKET=${OBJECT_STORAGE_BUCKET}
+S3_ENDPOINT_URL=${S3_ENDPOINT_URL}
+S3_ACCESS_KEY=${S3_ACCESS_KEY}
+S3_SECRET_KEY=${S3_SECRET_KEY}
+AWS_ACCESS_KEY_ID=${S3_ACCESS_KEY}
+AWS_SECRET_ACCESS_KEY=${S3_SECRET_KEY}
+S3_BUCKET=${OBJECT_STORAGE_BUCKET}
 CLOUD_PROVIDER=${CLOUD_PROVIDER}
 EOF
-        if [[ "$CLOUD_PROVIDER" == "aws" ]]; then
-            cat >> "$out" <<EOF
+    if [[ "$CLOUD_PROVIDER" == "aws" ]]; then
+        cat >> "$out" <<EOF
 AWS_REGION=${AWS_REGION}
 EOF
-        fi
     fi
     cat >> "$out" <<EOF
 
@@ -967,9 +988,13 @@ docs/ops/install-non-docker.md (sectionsection7-9):
        ./venv/bin/pip install --upgrade pip
        ./venv/bin/pip install -r requirements.txt
 
-  2. systemd units (requires sudo):
+  2. SeaweedFS + systemd units (requires sudo; salta la unit SeaweedFS
+     quando S3_ENDPOINT_URL punta a un provider esterno):
+       curl -fsSL https://github.com/seaweedfs/seaweedfs/releases/download/4.29/linux_amd64.tar.gz | sudo tar -xz -C /usr/local/bin weed
+       sudo mkdir -p /home/ubuntu/plenora-object-storage
+       sudo chown ubuntu:ubuntu /home/ubuntu/plenora-object-storage
        cd ${BACKEND_DIR}/deploy/systemd
-       sudo cp plenora-backend.service plenora-worker-data.service \\
+       sudo cp plenora-object-storage.service plenora-backend.service plenora-worker-data.service \\
               plenora-worker-control.service plenora-beat.service \\
               /etc/systemd/system/
        sudo cp plenora-backup.service plenora-backup.timer \\
@@ -977,7 +1002,7 @@ docs/ops/install-non-docker.md (sectionsection7-9):
               /etc/systemd/system/
        sudo systemctl daemon-reload
        sudo systemctl enable --now \\
-            plenora-backend.service plenora-worker-data.service \\
+            plenora-object-storage.service plenora-backend.service plenora-worker-data.service \\
             plenora-worker-control.service plenora-beat.service \\
             plenora-backup.timer plenora-backup-test.timer
 
@@ -998,9 +1023,9 @@ docs/ops/install-non-docker.md (sectionsection7-9):
      Both should return HTTP 200 with all checks green.
 
   5. Acceptance criteria (docs/ops/install-non-docker.md section0):
-       systemctl is-active plenora-backend plenora-worker-data \\
+       systemctl is-active plenora-object-storage plenora-backend plenora-worker-data \\
             plenora-worker-control plenora-beat
-     should print "active" four times.
+     should print "active" five times (quattro con storage S3 esterno).
 
 If /ready returns 503, inspect:
   journalctl -u plenora-backend -n 100 --no-pager

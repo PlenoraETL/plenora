@@ -696,7 +696,7 @@ def execute_enrichment_async(
     project_id: str,
     request: EnrichAsyncRequest = None,
     intermediate_mode: Optional[
-        Literal["metadata_only", "preview_only", "full_pg", "full_artifact"]
+        Literal["metadata_only", "full_artifact"]
     ] = Query(
         None,
         description=(

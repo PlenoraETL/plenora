@@ -41,6 +41,9 @@ class _FakeKeyValueStore:
     def get(self, key):
         return self.values.get(key)
 
+    def scan_keys(self, prefix):
+        return sorted(key for key in self.values if key.startswith(prefix))
+
 
 def test_store_maps_key_ttl_and_json_onto_kv_store():
     fake_kv = _FakeKeyValueStore()
@@ -126,3 +129,12 @@ def test_in_memory_task_metadata_store_is_explicit_test_double_only():
     store.put(metadata)
 
     assert store.get("task-1") == metadata
+
+
+def test_metadata_store_lists_tasks_for_one_project_only():
+    store = InMemoryTaskMetadataStore()
+    store.put(PendingTaskMetadata("t1", "p1", "execute"))
+    store.put(PendingTaskMetadata("t2", "p2", "preview"))
+    store.put(PendingTaskMetadata("t3", "p1", "carica"))
+
+    assert [item.task_id for item in store.list_for_project("p1")] == ["t1", "t3"]

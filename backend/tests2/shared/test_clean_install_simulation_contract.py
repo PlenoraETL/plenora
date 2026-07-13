@@ -48,7 +48,7 @@ def _assert_ordered(text: str, markers: tuple[str, ...]) -> None:
 
 def test_non_docker_installer_exposes_minimal_clean_install_config():
     """The guided installer must be able to produce the minimal runtime
-    config needed by a clean DB boot without depending on object storage."""
+    config needed by a clean boot with the S3 data plane."""
     text = _text(_INSTALL_SH)
 
     required_inputs = (
@@ -57,6 +57,8 @@ def test_non_docker_installer_exposes_minimal_clean_install_config():
         "PLENORA_INSTALL_BROKER_URL",
         "PLENORA_INSTALL_STORAGE_POLICY",
         "PLENORA_INSTALL_BACKUP_BUCKET",
+        "PLENORA_INSTALL_OBJECT_STORAGE_BUCKET",
+        "PLENORA_INSTALL_S3_ENDPOINT_URL",
         "PLENORA_INSTALL_ENVIRONMENT",
         "PLENORA_INSTALL_BACKEND_PORT",
     )
@@ -69,8 +71,8 @@ def test_non_docker_installer_exposes_minimal_clean_install_config():
     defaults = (
         ('prompt DB_SCHEMA', '"plenora"'),
         ('prompt BROKER_URL', '"amqp://guest:guest@localhost:5672"'),
-        ('prompt STORAGE_POLICY', '"db"'),
-        ('prompt BACKUP_BUCKET', '"plenora-backup-placeholder"'),
+        ('prompt STORAGE_POLICY', '"object_storage"'),
+        ('prompt BACKUP_BUCKET', '"plenora-backups"'),
         ('prompt BACKEND_PORT', '"5004"'),
     )
     for prompt_marker, default_marker in defaults:
@@ -90,6 +92,9 @@ def test_non_docker_installer_exposes_minimal_clean_install_config():
         "JWT_SECRET_KEY",
         "STORAGE_POLICY",
         "BACKUP_BUCKET",
+        "OBJECT_STORAGE_BACKEND",
+        "OBJECT_STORAGE_BUCKET",
+        "S3_ENDPOINT_URL",
         "PLENORA_BACKEND_PORT",
     )
     for key in managed_keys:
@@ -110,7 +115,7 @@ def test_docker_validate_models_empty_db_boot_readiness_and_smoke_order():
     _assert_ordered(
         text,
         (
-            'run_step 3a "up postgres + rabbitmq"',
+            'run_step 3a "up postgres + rabbitmq + object storage"',
             'run_step 3b "up backend (gates on HEALTHCHECK)"',
             'run_step 4a "GET /health"',
             'run_step 4b "GET /ready"',

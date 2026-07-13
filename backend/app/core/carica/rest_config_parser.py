@@ -40,11 +40,16 @@ def parse_carica_rest_config(carica_node_data: Mapping[str, object]) -> ParsedCa
     """
 
     rest_data = _rest_data(carica_node_data)
+    # Validate cheap, deterministic syntax before DNS/network policy checks so
+    # malformed methods do not trigger resolution and return a misleading
+    # "host non risolvibile" error.
+    method = _parse_method(rest_data)
+    url = _parse_url(rest_data)
     headers = _parse_headers(rest_data)
     body_mapping = _parse_body_mapping(_mapping_value(rest_data, "body_mapping") or {})
     sink_config = RestSinkConfig(
-        url=_parse_url(rest_data),
-        method=_parse_method(rest_data),
+        url=url,
+        method=method,
         headers=headers,
         body_mapping=body_mapping,
         batch_mode=_parse_batch_mode(rest_data),

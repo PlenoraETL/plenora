@@ -351,6 +351,23 @@ def test_startup_validation_rejects_invalid_mode_and_timeout():
     assert "DATA_PLANE_CHILD_TIMEOUT_SECONDS" in errors[1]
 
 
+@pytest.mark.parametrize("intermediate_mode", ["preview_only", "full_pg"])
+def test_startup_rejects_postgres_intermediates_on_s3_data_plane(intermediate_mode):
+    from app.startup_validation import validate_data_plane_config
+
+    errors: list[str] = []
+    validate_data_plane_config(
+        {
+            "DATA_PLANE_EXECUTION_MODE": "subprocess",
+            "DATA_PLANE_CHILD_TIMEOUT_SECONDS": 3900,
+            "STORAGE_POLICY": "object_storage",
+            "INTERMEDIATE_PERSISTENCE_MODE": intermediate_mode,
+        },
+        errors,
+    )
+    assert errors and "salva righe in PostgreSQL" in errors[0]
+
+
 def test_actor_contains_subprocess_feature_flag_contract():
     from pathlib import Path
 

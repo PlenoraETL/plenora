@@ -281,7 +281,7 @@ run_ready_step() {
     echo "Readiness is the dependency gate. Inspect the failed check details above, then paste:" >&2
     echo "  - docker compose ps" >&2
     echo "  - docker compose logs --tail 200 backend" >&2
-    echo "  - docker compose logs --tail 200 postgres rabbitmq" >&2
+    echo "  - docker compose logs --tail 200 postgres rabbitmq object-storage" >&2
     echo "  - docker compose exec -T backend python -c \"from app.observability.health import gather_readiness; print(gather_readiness().body)\"" >&2
     echo "Common blockers: Postgres/RabbitMQ connectivity, pending or failed migrations, object storage policy/config, bootstrap not complete." >&2
     exit 1
@@ -412,8 +412,8 @@ run_step 1 "config validation (no apply, no env dump)" -- \
 run_step 2 "build backend + frontend images" -- \
     docker compose build backend frontend
 
-run_step 3a "up postgres + rabbitmq" -- \
-    docker compose up -d postgres rabbitmq
+run_step 3a "up postgres + rabbitmq + object storage" -- \
+    docker compose up -d postgres rabbitmq object-storage
 
 run_step 3b "up backend (gates on HEALTHCHECK)" -- \
     docker compose up -d --wait backend

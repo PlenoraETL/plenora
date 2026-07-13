@@ -207,6 +207,15 @@ function Ensure-DockerEnv {
     if ([string]::IsNullOrWhiteSpace((Get-DockerEnvValue "JWT_SECRET_KEY"))) {
         Set-DockerEnvValue "JWT_SECRET_KEY" (New-TokenUrlSafe)
     }
+    if ([string]::IsNullOrWhiteSpace((Get-DockerEnvValue "S3_ACCESS_KEY"))) {
+        Set-DockerEnvValue "S3_ACCESS_KEY" "plenora-storage"
+    }
+    if ([string]::IsNullOrWhiteSpace((Get-DockerEnvValue "S3_SECRET_KEY"))) {
+        Set-DockerEnvValue "S3_SECRET_KEY" (New-TokenUrlSafe)
+    }
+    Set-DockerEnvValue "AWS_ACCESS_KEY_ID" (Get-DockerEnvValue "S3_ACCESS_KEY")
+    Set-DockerEnvValue "AWS_SECRET_ACCESS_KEY" (Get-DockerEnvValue "S3_SECRET_KEY")
+    Set-DockerEnvValue "S3_BUCKET" (Get-DockerEnvValue "OBJECT_STORAGE_BUCKET")
 
     if ([string]::IsNullOrWhiteSpace((Get-DockerEnvValue "PLENORA_ENCRYPTION_KEY"))) {
         throw "PLENORA_ENCRYPTION_KEY is still empty in .env.docker."
@@ -420,7 +429,7 @@ if (-not [string]::IsNullOrWhiteSpace($FrontendApiUrl)) {
 Write-Step "Build and start single-server stack"
 Invoke-External "docker" @("compose", "config")
 Invoke-External "docker" @("compose", "build", "backend", "frontend")
-Invoke-External "docker" @("compose", "up", "-d", "postgres", "rabbitmq")
+Invoke-External "docker" @("compose", "up", "-d", "postgres", "rabbitmq", "object-storage")
 Invoke-External "docker" @("compose", "up", "-d", "--wait", "backend")
 Invoke-External "docker" @("compose", "up", "-d", "worker", "worker-control", "beat")
 Invoke-External "docker" @("compose", "up", "-d", "--wait", "frontend")

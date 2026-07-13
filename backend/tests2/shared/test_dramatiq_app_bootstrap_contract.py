@@ -189,6 +189,51 @@ def test_broker_has_task_result_finalize_middleware():
     assert "CurrentMessage" in names
 
 
+def test_pipeline_actor_retries_only_explicit_transient_results():
+    from workers.dramatiq_app import (
+        RetryablePipelineError,
+        _return_or_raise_retryable,
+        pipeline_execute,
+    )
+
+    assert pipeline_execute.options["max_retries"] == 2
+    assert _return_or_raise_retryable({"success": False}) == {"success": False}
+    with pytest.raises(RetryablePipelineError):
+        _return_or_raise_retryable({"success": False, "retryable": True})
+
+
+def test_result_middleware_exposes_retry_instead_of_terminal_failure(monkeypatch):
+    from app.core.orchestrator import task_progress
+    from workers.dramatiq_app import (
+        RetryablePipelineError,
+        _TaskResultMiddleware,
+    )
+
+    writes = []
+    monkeypatch.setattr(
+        task_progress,
+        "finalize_task_result",
+        lambda task_id, **kwargs: writes.append((task_id, kwargs)),
+    )
+    broker = SimpleNamespace(
+        get_actor=lambda _name: SimpleNamespace(options={"max_retries": 2})
+    )
+    message = SimpleNamespace(
+        message_id="task-1",
+        actor_name="pipeline.execute",
+        options={"retries": 0},
+    )
+
+    _TaskResultMiddleware().after_process_message(
+        broker,
+        message,
+        exception=RetryablePipelineError("transient"),
+    )
+
+    assert writes[0][0] == "task-1"
+    assert writes[0][1]["state"] == "RETRY"
+
+
 def test_invoke_task_body_injects_message_id_as_self_request_id(monkeypatch):
 
     from workers import dramatiq_app

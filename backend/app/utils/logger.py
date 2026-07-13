@@ -380,7 +380,14 @@ class PostgresLogHandler(logging.Handler):
         pg_execute(
             "INSERT INTO log_runs "
             "(run_id, project_id, group_id, module, triggered_by, ts_start, status, user_id) "
-            "VALUES (%s,%s,%s,%s,%s,%s,'running',%s) ON CONFLICT DO NOTHING",
+            "VALUES (%s,%s,%s,%s,%s,%s,'running',%s) "
+            "ON CONFLICT (run_id) DO UPDATE SET "
+            "status='running', ts_start=EXCLUDED.ts_start, ts_end=NULL, "
+            "project_id=EXCLUDED.project_id, group_id=EXCLUDED.group_id, "
+            "module=EXCLUDED.module, triggered_by=EXCLUDED.triggered_by, "
+            "user_id=EXCLUDED.user_id, error_node_id=NULL, error_module=NULL, "
+            "error_message=NULL, debug_payload=NULL, rows_in=0, rows_out=0, "
+            "duration_ms=0, steps='[]'::jsonb",
             (run_id, project_id, group_id, module, triggered_by, ts_start, user_id),
         )
 

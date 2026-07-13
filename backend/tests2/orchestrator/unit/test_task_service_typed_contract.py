@@ -51,6 +51,39 @@ class _StaticRuntime:
         return self._result
 
 
+class _ByIdRuntime:
+    def __init__(self, states):
+        self._states = states
+
+    def get_result(self, task_id: str) -> object:
+        return SimpleNamespace(
+            state=self._states.get(task_id, "PENDING"),
+            info=None,
+            name=None,
+        )
+
+
+def test_list_active_tasks_for_project_excludes_terminal_results():
+    metadata_store = InMemoryTaskMetadataStore()
+    metadata_store.put(PendingTaskMetadata("t-pending", "p1", "execute"))
+    metadata_store.put(PendingTaskMetadata("t-running", "p1", "preview"))
+    metadata_store.put(PendingTaskMetadata("t-done", "p1", "carica"))
+    metadata_store.put(PendingTaskMetadata("t-other", "p2", "execute"))
+    service = TaskService(
+        runtime=_ByIdRuntime({
+            "t-pending": "PENDING",
+            "t-running": "PROGRESS",
+            "t-done": "SUCCESS",
+        }),
+        metadata_store=metadata_store,
+    )
+
+    assert service.list_active_task_ids_for_project("p1") == [
+        "t-pending",
+        "t-running",
+    ]
+
+
 def _imports(rel_path: str) -> set[str]:
     tree = ast.parse((_BACKEND_ROOT / rel_path).read_text(encoding="utf-8"))
     imports: set[str] = set()

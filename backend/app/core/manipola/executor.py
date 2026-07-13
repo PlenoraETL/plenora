@@ -526,6 +526,27 @@ class ManipolaExecutor:
             if not dataframes:
                 return {"success": False, "message": "Nessun dato sorgente disponibile"}
 
+            # Preview is a bounded sample, not a full execution followed by
+            # head(). Keep enough rows for truncation detection while capping
+            # every source before joins/group-by/formulas materialize large
+            # intermediate frames.
+            try:
+                configured_preview_cap = int(
+                    settings.get("PIPELINE_PREVIEW_SOURCE_MAX_ROWS", 10_000)
+                    or 10_000
+                )
+            except (TypeError, ValueError):
+                configured_preview_cap = 10_000
+            preview_source_cap = max(int(limit) + 1, configured_preview_cap, 1)
+            source_truncated = False
+            source_row_counts: dict[str, int] = {}
+            for source_id, source_df in list(dataframes.items()):
+                source_rows = int(len(source_df))
+                source_row_counts[source_id] = source_rows
+                if source_rows > preview_source_cap:
+                    dataframes[source_id] = source_df.head(preview_source_cap).copy()
+                    source_truncated = True
+
             current_df = self._applica_trasformazioni(
                 canvas, dataframes, project_id=project_id, canvas_graph=canvas_graph
             )
@@ -541,7 +562,7 @@ class ManipolaExecutor:
                 current_df = self._applica_group_by(current_df, result_node)
 
             total_count = len(current_df)
-            truncated = total_count > limit
+            truncated = source_truncated or total_count > limit
             preview_df = current_df.head(limit)
 
             canvas_type_map = self._costruisci_mappa_tipi_canvas(
@@ -553,7 +574,9 @@ class ManipolaExecutor:
             return {
                 "success": True, "columns": columns, "rows": rows,
                 "total_count": total_count, "preview_count": len(rows),
-                "truncated": truncated
+                "truncated": truncated,
+                "approximate": source_truncated,
+                "source_row_counts": source_row_counts,
             }
         except ValueError as user_err:
             # ValueError = errore di configurazione utente (es. GROUP BY su
@@ -862,7 +885,8 @@ class ManipolaExecutor:
                 logger.info(f"Multi-join: {len(inputs)} input -> {len(current_df)} righe", op="transform")
             else:
                 # Trasformazione normale
-                if _nf(node, "transform_op") == "join":
+                transform_op = _nf(node, "transform_op")
+                if transform_op == "join":
                     from app.core.manipola.join_optimization import (
                         compact_owned_join_string_columns,
                         project_columns_dropped_immediately_after_join,
@@ -896,6 +920,12 @@ class ManipolaExecutor:
                         cleanup_stats.get("collected"),
                         cleanup_stats.get("malloc_trim"),
                     )
+                else:
+                    from app.core.manipola.transform_memory import (
+                        guard_transform_headroom,
+                    )
+
+                    guard_transform_headroom(inputs, node_id=str(node.id))
                 current_df = self._esegui_trasformazione(node, inputs)
             
             # Salva risultato per nodi successivi

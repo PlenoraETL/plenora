@@ -180,6 +180,54 @@ class PgTaskResultStore:
             (task_id, state, name, payload_json, ttl),
         )
 
+    def put_terminal_with_run(
+        self,
+        task_id: str,
+        *,
+        state: str,
+        payload: dict,
+        name: Optional[str],
+    ) -> None:
+        """Atomically persist task state and its correlated pipeline run."""
+        run_id = str(payload.get("run_id") or "")
+        if not run_id:
+            self.put(task_id, state=state, payload=payload, name=name)
+            return
+        payload_json = json.dumps(
+            _json_safe_payload(payload),
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        run_status = {
+            "SUCCESS": "success",
+            "FAILURE": "failure",
+            "REVOKED": "revoked",
+        }.get(state, state.lower())
+        with unit_of_work() as session:
+            session.execute(
+                """
+                INSERT INTO task_results (
+                    task_id, state, name, payload,
+                    created_at, updated_at, expires_at
+                ) VALUES (
+                    %s, %s, %s, %s::jsonb,
+                    now(), now(), now() + (%s * interval '1 second')
+                )
+                ON CONFLICT (task_id) DO UPDATE
+                SET state = EXCLUDED.state,
+                    name = COALESCE(EXCLUDED.name, task_results.name),
+                    payload = EXCLUDED.payload,
+                    updated_at = now(),
+                    expires_at = EXCLUDED.expires_at
+                """,
+                (task_id, state, name, payload_json, self._ttl_seconds),
+            )
+            session.execute(
+                "UPDATE log_runs SET status = %s, "
+                "ts_end = COALESCE(ts_end, now()) WHERE run_id = %s",
+                (run_status, run_id),
+            )
+
     def get(self, task_id: str) -> Optional[TaskResultRecord]:
         with unit_of_work() as session:
             row = session.fetchone(

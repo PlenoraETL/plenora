@@ -421,15 +421,15 @@ class AwsS3ObjectStorage:
         )
 
 
-class MinioObjectStorage(AwsS3ObjectStorage):
-    """MinIO via boto3 (S3-compatible endpoint).
+class S3CompatibleObjectStorage(AwsS3ObjectStorage):
+    """Generic path-style S3 endpoint via boto3.
 
     Riusa `AwsS3ObjectStorage` per tutti gli operatori S3 (list/upload/
     download/delete/stream). Override minimi:
 
     - `_client`: passa `endpoint_url` + credenziali esplicite +
-      `addressing_style=path` (MinIO non supporta virtual-hosted style
-      per default).
+      `addressing_style=path`, compatibile con SeaweedFS, MinIO/AIStor,
+      R2 e altri provider on-prem.
     - `_extra_args`: rimuove `ServerSideEncryption` dal default. MinIO
       vanilla non ha SSE configurato (richiede integrazione KES o
       auto-encryption abilitata lato bucket); forzarlo a livello client
@@ -465,7 +465,7 @@ class MinioObjectStorage(AwsS3ObjectStorage):
         )
 
     def _readiness_client(self, timeout_seconds: int):
-        """Override del builder readiness per MinIO: stesso bound della
+        """Override readiness per endpoint S3 custom: stesso bound della
         parent (connect+read timeout, max_attempts=1) ma con
         endpoint_url + credenziali esplicite e addressing_style=path
         (MinIO non supporta virtual-hosted style)."""
@@ -488,6 +488,11 @@ class MinioObjectStorage(AwsS3ObjectStorage):
 
     def _extra_args(self) -> dict:
         return {"StorageClass": "STANDARD"}
+
+
+# Nome pubblico legacy: plugin e deployment esistenti possono continuare a
+# importarlo durante la transizione senza vincolare il nuovo design a MinIO.
+MinioObjectStorage = S3CompatibleObjectStorage
 
 
 # Factory - dispatch via typed storage config
@@ -516,6 +521,9 @@ class StorageBackendConfig:
     minio_endpoint_url: "str | None"
     minio_access_key: "str | None"
     minio_secret_key: "str | None"
+    s3_endpoint_url: "str | None"
+    s3_access_key: "str | None"
+    s3_secret_key: "str | None"
     log_archive_enabled: bool
     log_archive_bucket: "str | None"
     log_archive_key_prefix: Any
@@ -562,7 +570,8 @@ def _storage_config() -> StorageBackendConfig:
         object_storage_enabled=_get_bool_setting("OBJECT_STORAGE_ENABLED", True),
         object_storage_backend=_optional_str(_get_setting("OBJECT_STORAGE_BACKEND")),
         storage_policy=(
-            _optional_str(_get_setting("STORAGE_POLICY", "hybrid")) or "hybrid"
+            _optional_str(_get_setting("STORAGE_POLICY", "object_storage"))
+            or "object_storage"
         ).lower(),
         object_storage_bucket=_optional_str(_get_setting("OBJECT_STORAGE_BUCKET")),
         plenora_artifact_bucket=_optional_str(_get_setting("PLENORA_ARTIFACT_BUCKET")),
@@ -570,6 +579,9 @@ def _storage_config() -> StorageBackendConfig:
         minio_endpoint_url=_optional_str(_get_setting("MINIO_ENDPOINT_URL")),
         minio_access_key=_optional_str(_get_setting("MINIO_ACCESS_KEY")),
         minio_secret_key=_optional_str(_get_setting("MINIO_SECRET_KEY")),
+        s3_endpoint_url=_optional_str(_get_setting("S3_ENDPOINT_URL")),
+        s3_access_key=_optional_str(_get_setting("S3_ACCESS_KEY")),
+        s3_secret_key=_optional_str(_get_setting("S3_SECRET_KEY")),
         log_archive_enabled=_get_bool_setting("LOG_ARCHIVE_ENABLED", False),
         log_archive_bucket=_optional_str(_get_setting("LOG_ARCHIVE_BUCKET")),
         # os.getenv("LOG_ARCHIVE_KEY_PREFIX") is intentionally represented
@@ -688,7 +700,11 @@ def _effective_object_storage_backend(config: StorageBackendConfig | None = None
         else:
             backend = provider
     backend = str(backend).strip().lower()
-    return "aws" if backend == "s3" else backend
+    if backend == "s3":
+        return "aws"
+    if backend in {"s3-compatible", "s3_compatible", "seaweedfs"}:
+        return "s3_compatible"
+    return backend
 
 
 def object_storage_enabled() -> bool:
@@ -768,17 +784,26 @@ def _build_object_storage(bucket: str, *, region_default: str) -> ObjectStorage:
             bucket=bucket,
             region=cfg.aws_region or region_default,
         )
-    if provider == "minio":
-        endpoint_url = cfg.minio_endpoint_url
-        access_key = cfg.minio_access_key
-        secret_key = cfg.minio_secret_key
+    if provider in {"minio", "s3_compatible"}:
+        endpoint_url = cfg.s3_endpoint_url or cfg.minio_endpoint_url
+        access_key = cfg.s3_access_key or cfg.minio_access_key
+        secret_key = cfg.s3_secret_key or cfg.minio_secret_key
         if not endpoint_url:
-            raise ValueError("OBJECT_STORAGE_BACKEND=minio richiede MINIO_ENDPOINT_URL.")
+            raise ValueError(
+                "OBJECT_STORAGE_BACKEND=s3_compatible richiede S3_ENDPOINT_URL "
+                "(MINIO_ENDPOINT_URL e' accettato come alias legacy)."
+            )
         if not access_key:
-            raise ValueError("OBJECT_STORAGE_BACKEND=minio richiede MINIO_ACCESS_KEY.")
+            raise ValueError(
+                "OBJECT_STORAGE_BACKEND=s3_compatible richiede S3_ACCESS_KEY "
+                "(MINIO_ACCESS_KEY e' l'alias legacy)."
+            )
         if not secret_key:
-            raise ValueError("OBJECT_STORAGE_BACKEND=minio richiede MINIO_SECRET_KEY.")
-        return MinioObjectStorage(
+            raise ValueError(
+                "OBJECT_STORAGE_BACKEND=s3_compatible richiede S3_SECRET_KEY "
+                "(MINIO_SECRET_KEY e' l'alias legacy)."
+            )
+        return S3CompatibleObjectStorage(
             bucket=bucket,
             endpoint_url=endpoint_url,
             access_key=access_key,
@@ -914,8 +939,8 @@ def validate_storage_config() -> None:
     Controlli:
       1. STORAGE_POLICY in {db, object_storage, hybrid}
       2. CLOUD_PROVIDER in enum noto + implementato in factory
-      3. Se policy != db: BACKUP_BUCKET settato
-         e CLOUD_PROVIDER != none
+      3. Se policy != db: runtime OBJECT_STORAGE_BUCKET configurato e
+         backend object-storage reale. BACKUP_BUCKET e' indipendente.
       4. Se policy == db con bucket+provider cloud: warning non-blocking
          (probabile cut-paste)
       5. Soglie `RESULT_S3_THRESHOLD_BYTES` / `FILE_SOURCE_S3_THRESHOLD_BYTES`
@@ -981,12 +1006,12 @@ def validate_storage_config() -> None:
             f"{', '.join(IMPLEMENTED_PROVIDERS)}."
         )
 
-    bucket = _resolve_backup_bucket(cfg)
+    backup_bucket = _resolve_backup_bucket(cfg)
 
     if policy == "db":
         # NOTE: non-blocking: bucket + provider cloud settati ma policy=db
         # probabilmente e' cut-paste da altro env. Policy rispettata
-        if bucket and provider != "none":
+        if backup_bucket and provider != "none":
             logger.warning(
                 f"[BOOT] STORAGE_POLICY=db ma CLOUD_PROVIDER={provider!r} e "
                 "bucket configurati: policy rispettata (object storage "
@@ -994,17 +1019,25 @@ def validate_storage_config() -> None:
                 "verifica l'intento."
             )
     else:
-        # object_storage | hybrid: richiedono provider reale + bucket
+        # object_storage | hybrid: richiedono provider reale + bucket runtime.
+        # I backup sono una capability distinta e BACKUP_BUCKET non e'
+        # obbligatorio per il data plane applicativo.
         if object_provider == "none":
             _fail(
                 f"STORAGE_POLICY={policy} richiede un object storage provider, "
-                "ma OBJECT_STORAGE_BACKEND=none. Imposta OBJECT_STORAGE_BACKEND=s3/minio "
+                "ma OBJECT_STORAGE_BACKEND=none. Imposta "
+                "OBJECT_STORAGE_BACKEND=s3/s3_compatible "
                 "o cambia policy a db."
             )
-        if not bucket:
+        runtime_bucket = cfg.object_storage_bucket or cfg.plenora_artifact_bucket
+        if policy == "hybrid" and not runtime_bucket:
+            # Compatibilita' per la sola fase di migrazione dei deployment
+            # storici che usavano BACKUP_BUCKET anche per i payload runtime.
+            runtime_bucket = backup_bucket
+        if not runtime_bucket:
             _fail(
                 f"STORAGE_POLICY={policy} richiede un bucket object storage, "
-                "ma BACKUP_BUCKET non e' configurato."
+                "ma OBJECT_STORAGE_BUCKET non e' configurato."
             )
         # Policy `object_storage` richiede bucket runtime esplicito
         # niente fallback silenzioso su BACKUP_BUCKET (semanticamente
@@ -1012,17 +1045,6 @@ def validate_storage_config() -> None:
         # BACKUP_BUCKET resta consentito per deployment che non separano
         # ancora runtime artifacts e backup amministrativi.
         if policy == "object_storage":
-            runtime_bucket = cfg.object_storage_bucket or cfg.plenora_artifact_bucket
-            if not runtime_bucket:
-                _fail(
-                    "STORAGE_POLICY=object_storage richiede "
-                    "OBJECT_STORAGE_BUCKET (o alias PLENORA_ARTIFACT_BUCKET) "
-                    "configurato esplicitamente. Niente fallback su "
-                    "BACKUP_BUCKET in questa policy: i due bucket sono "
-                    "semanticamente distinti (runtime artifacts vs backup "
-                    "amministrativi). Imposta OBJECT_STORAGE_BUCKET o "
-                    "cambia policy a hybrid."
-                )
             # OBJECT_STORAGE_ENABLED deve essere true: senza la capability
             # i writer dei nuovi result fallirebbero comunque al primo upload
             # meglio fail-fast al boot con messaggio operativo
@@ -1034,16 +1056,18 @@ def validate_storage_config() -> None:
                     "IMDF/intermediate) non e' operativo. Abilita la "
                     "capability o cambia policy a db/hybrid."
                 )
-        # A1-B2: MinIO richiede credenziali esplicite + endpoint (no IAM chain
-        if object_provider == "minio":
-            for name in (
-                "MINIO_ENDPOINT_URL",
-                "MINIO_ACCESS_KEY",
-                "MINIO_SECRET_KEY",
-            ):
-                if not getattr(cfg, name.lower()):
+        # Custom S3 endpoints require explicit credentials (no AWS IAM chain).
+        if object_provider in {"minio", "s3_compatible"}:
+            required = {
+                "S3_ENDPOINT_URL/MINIO_ENDPOINT_URL": cfg.s3_endpoint_url or cfg.minio_endpoint_url,
+                "S3_ACCESS_KEY/MINIO_ACCESS_KEY": cfg.s3_access_key or cfg.minio_access_key,
+                "S3_SECRET_KEY/MINIO_SECRET_KEY": cfg.s3_secret_key or cfg.minio_secret_key,
+            }
+            for name, value in required.items():
+                if not value:
                     _fail(
-                        f"OBJECT_STORAGE_BACKEND=minio richiede {name} configurato."
+                        f"OBJECT_STORAGE_BACKEND=s3_compatible richiede {name} "
+                        "configurato (MINIO_* resta alias legacy)."
                     )
 
     # Soglie dispatch: solo hybrid le consulta effettivamente
@@ -1080,11 +1104,7 @@ def validate_storage_config() -> None:
                 "BACKUP_BUCKET)."
             )
         # 4. Bucket archive distinto da BACKUP_BUCKET.
-        # IAM boundary dedicato. A questo punto
-        # `bucket` e' guaranteed truthy: regola 1 ha escluso policy=db
-        # e il ramo A1 else-branch (riga 395) fallisce gia' se bucket
-        # e' unset con policy != db
-        if log_archive_bucket == bucket:
+        if backup_bucket and log_archive_bucket == backup_bucket:
             _fail(
                 f"LOG_ARCHIVE_BUCKET={log_archive_bucket!r} coincide con "
                 "BACKUP_BUCKET: IAM boundary richiesto "

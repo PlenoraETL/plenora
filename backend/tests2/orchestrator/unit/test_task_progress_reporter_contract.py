@@ -158,6 +158,32 @@ def test_finalize_from_celery_maps_application_failure_to_failure_state():
     assert record.payload == payload
 
 
+def test_finalize_uses_atomic_task_run_boundary_when_available():
+    calls = []
+
+    class _AtomicStore(InMemoryTaskResultStore):
+        def put_terminal_with_run(self, task_id, **kwargs):
+            calls.append((task_id, kwargs))
+
+    payload = {"success": True, "run_id": "run-1", "project_id": "p1"}
+    finalize_task_result(
+        "task-1",
+        state=SUCCESS_STATE,
+        payload=payload,
+        name="pipeline.execute",
+        store=_AtomicStore(),
+    )
+
+    assert calls == [(
+        "task-1",
+        {
+            "state": SUCCESS_STATE,
+            "payload": payload,
+            "name": "pipeline.execute",
+        },
+    )]
+
+
 def test_finalize_from_celery_wraps_non_dict_return():
     store = InMemoryTaskResultStore()
     finalize_from_celery("t1", "SUCCESS", "pong", None, store=store)

@@ -16,27 +16,33 @@ IntermediateSettingsSnapshot: TypeAlias = dict[str, Any]
 
 # Costanti / valori ammessi
 
-# Mode globale di persistenza. Tutti supportati end-to-end
-# metadata_only/preview_only/full_pg via node_rows (PG); full_artifact
-# via Parquet + manifest su runtime object storage
+# Mode globale di persistenza. Il data plane canonico non salva righe in
+# PostgreSQL: metadata_only conserva solo il catalogo; full_artifact scrive il
+# payload su object storage. preview_only/full_pg restano costanti di lettura
+# per record storici, ma non sono piu' selezionabili per nuove run.
 MODE_METADATA_ONLY = "metadata_only"
 MODE_PREVIEW_ONLY = "preview_only"
 MODE_FULL_PG = "full_pg"
 MODE_FULL_ARTIFACT = "full_artifact"
 
-# Valori che la pipeline puo' effettivamente eseguire.
-# `full_artifact` richiede OBJECT_STORAGE_ENABLED=true e bucket runtime
-# configurato (vedi validate_intermediate_settings).
+# Valori interni, inclusi i writer legacy necessari durante la migrazione.
+# Le API e il FE espongono solo OBJECT_STORAGE_PERSISTENCE_MODES; inoltre la
+# migration DB rende node_rows read-only. Conservare qui i mode storici evita
+# di rompere la lettura/test dei record precedenti al cutover.
 SUPPORTED_PERSISTENCE_MODES = frozenset({
     MODE_METADATA_ONLY,
     MODE_PREVIEW_ONLY,
     MODE_FULL_PG,
     MODE_FULL_ARTIFACT,
 })
+OBJECT_STORAGE_PERSISTENCE_MODES = frozenset({
+    MODE_METADATA_ONLY,
+    MODE_FULL_ARTIFACT,
+})
 
 # Mode pianificate ma non ancora implementate (riservato per evitare
 # typo). Mantenuto come hook per future estensioni
-PLANNED_PERSISTENCE_MODES = frozenset()
+PLANNED_PERSISTENCE_MODES: frozenset[str] = frozenset()
 
 # MANIPOLA checkpoint policy. Vedi `manipola_checkpoint_policy.md`
 MANIPOLA_CHECKPOINTS_NONE = "none"
@@ -244,6 +250,18 @@ def validate_intermediate_settings(values: Optional[dict] = None) -> None:
     cfg = values if values is not None else _read_settings()
 
     mode = cfg.get("mode")
+    if mode in {MODE_PREVIEW_ONLY, MODE_FULL_PG}:
+        from app.config import settings
+
+        storage_policy = str(
+            settings.get("STORAGE_POLICY", "object_storage")
+        ).strip().lower()
+        if storage_policy == "object_storage":
+            raise IntermediateSettingsError(
+                f"INTERMEDIATE_PERSISTENCE_MODE={mode!r} e' legacy e scrive "
+                "righe in PostgreSQL. Con STORAGE_POLICY=object_storage usa "
+                f"uno di {sorted(OBJECT_STORAGE_PERSISTENCE_MODES)}."
+            )
     if mode in PLANNED_PERSISTENCE_MODES:
         raise IntermediateSettingsError(
             f"INTERMEDIATE_PERSISTENCE_MODE={mode!r} non e' ancora "
@@ -268,7 +286,7 @@ def validate_intermediate_settings(values: Optional[dict] = None) -> None:
                 "OBJECT_STORAGE_ENABLED=true (capability runtime object "
                 "storage). Imposta OBJECT_STORAGE_ENABLED=true e "
                 "OBJECT_STORAGE_BUCKET, oppure cambia mode a "
-                "metadata_only / preview_only / full_pg."
+                "metadata_only."
             )
 
     preview_rows = cfg.get("preview_rows")

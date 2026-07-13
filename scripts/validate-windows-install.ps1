@@ -28,6 +28,8 @@ param(
     [switch]$SkipSmoke,
     [switch]$SkipFrontendPage,
     [switch]$RequireFrontend,
+    [switch]$RequireObjectStorage = $true,
+    # Alias deprecato per vecchi runbook.
     [switch]$RequireMinio,
     [switch]$RunE2E,
     [switch]$Integration,
@@ -38,6 +40,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $BackendDir = Join-Path $RepoRoot 'backend'
+if ($RequireMinio) { $RequireObjectStorage = $true }
 
 function Step($msg) { Write-Host "`n[STEP] $msg" -ForegroundColor Cyan }
 function Ok($msg)   { Write-Host "[OK]   $msg" -ForegroundColor Green }
@@ -138,7 +141,7 @@ Test-RequiredServicePattern 'RabbitMQ' 'RabbitMQ'
 Test-RequiredServicePattern 'plenora-backend' 'Plenora backend'
 Test-RequiredServicePattern 'plenora-worker*' 'Plenora worker'
 Test-RequiredServicePattern 'plenora-beat' 'Plenora beat'
-$minioPresent = Test-OptionalService 'plenora-minio' 'Plenora MinIO' -Required:$RequireMinio
+$storagePresent = Test-OptionalService 'plenora-object-storage' 'Plenora Object Storage' -Required:$RequireObjectStorage
 $caddyPresent = Test-OptionalService 'plenora-caddy' 'Plenora Caddy' -Required:$RequireFrontend
 
 # -----------------------------------------------------------------------------

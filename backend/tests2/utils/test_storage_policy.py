@@ -63,9 +63,9 @@ def _clean_storage_env(monkeypatch):
 # 1. STORAGE_POLICY enum
 
 
-def test_default_hybrid_requires_bucket(monkeypatch):
-    """Senza env: default = hybrid, richiede bucket -> fallisce."""
-    with pytest.raises(StorageConfigError, match="STORAGE_POLICY=hybrid"):
+def test_default_object_storage_requires_bucket(monkeypatch):
+    """Senza env: il nuovo default S3-only richiede un bucket runtime."""
+    with pytest.raises(StorageConfigError, match="STORAGE_POLICY=object_storage"):
         validate_storage_config()
 
 
@@ -154,7 +154,7 @@ def test_object_storage_rejects_removed_legacy_bucket_only(monkeypatch):
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
     monkeypatch.setenv("CLOUD_PROVIDER", "aws")
     monkeypatch.setenv("BACKUP_S3_BUCKET", "legacy-name")
-    with pytest.raises(StorageConfigError, match="BACKUP_BUCKET"):
+    with pytest.raises(StorageConfigError, match="OBJECT_STORAGE_BUCKET"):
         validate_storage_config()
 
 

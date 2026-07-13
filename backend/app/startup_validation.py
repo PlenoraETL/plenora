@@ -165,7 +165,7 @@ def validate_production_gates(settings: Any, errors: list[str]) -> None:
         )
 
     storage_policy = (
-        str(settings.get("STORAGE_POLICY", "hybrid") or "hybrid")
+        str(settings.get("STORAGE_POLICY", "object_storage") or "object_storage")
         .strip()
         .lower()
     )
@@ -199,6 +199,23 @@ def validate_data_plane_config(settings: Any, errors: list[str]) -> None:
         errors.append(
             "DATA_PLANE_CHILD_TIMEOUT_SECONDS deve essere un intero positivo "
             f"(ricevuto {raw_timeout!r})."
+        )
+
+    storage_policy = str(
+        settings.get("STORAGE_POLICY", "object_storage") or "object_storage"
+    ).strip().lower()
+    intermediate_mode = str(
+        settings.get("INTERMEDIATE_PERSISTENCE_MODE", "metadata_only")
+        or "metadata_only"
+    ).strip().lower()
+    if storage_policy == "object_storage" and intermediate_mode in {
+        "preview_only",
+        "full_pg",
+    }:
+        errors.append(
+            f"INTERMEDIATE_PERSISTENCE_MODE={intermediate_mode!r} e' legacy "
+            "e salva righe in PostgreSQL. Con STORAGE_POLICY=object_storage "
+            "usa 'metadata_only' o 'full_artifact'."
         )
 
 

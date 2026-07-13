@@ -10,14 +10,9 @@
 #   - beat       : APScheduler beat (python -m workers.beat)
 #   - frontend   : Vite production build served by nginx (:3000 -> :80)
 #
-# MinIO and the systemd backup unit are intentionally OUT of this
-# scaffold (target shape lives in docs/ops/install-docker.md and the
-# single-server runbook in docs/ops/install-docker-single-server.md). This
-# compose intentionally provides the minimum to
-# exercise the smoke harness from docs/ops/install-marco-dry-run.md.
-#
-# Production caveat: STORAGE_POLICY=db means BYTEA-only blob path.
-# Real deployments should switch to object_storage; not in scope here.
+# Runtime payloads live on an S3-compatible data plane. The bundled
+# single-node provider is SeaweedFS; applications only use the S3 API and can
+# point at MinIO/AIStor/AWS/R2 without code changes.
 
 services:
 
@@ -72,6 +67,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      object-storage:
+        condition: service_started
     # CMD inherited from Dockerfile (uvicorn). HEALTHCHECK inherited.
     # Plenora 2.0: l'API dispatcha i task su RabbitMQ (Dramatiq); stato,
     # lock, blacklist e rate-limit sono su PostgreSQL (Redis rimosso).
@@ -102,6 +99,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      object-storage:
+        condition: service_started
       backend:
         condition: service_started
     # Data-plane isolato: un solo thread per processo evita merge pandas
@@ -111,6 +110,15 @@ services:
     command: ["--queues", "data-plane", "--processes", "1", "--threads", "1"]
     healthcheck:
       disable: true
+    restart: unless-stopped
+
+  object-storage:
+    image: chrislusf/seaweedfs:4.29
+    command: ["mini", "-dir=/data"]
+    env_file:
+      - .env.docker
+    volumes:
+      - object-storage-data:/data
     restart: unless-stopped
 
   worker-control:
@@ -135,6 +143,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      object-storage:
+        condition: service_started
       backend:
         condition: service_started
     # Task leggeri e di coordinamento non competono con i DataFrame del
@@ -163,6 +173,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      object-storage:
+        condition: service_started
       backend:
         condition: service_started
     # Plenora 2.0 Fase 3: il beat gira su APScheduler (workers.beat), non piu'
@@ -195,6 +207,7 @@ volumes:
   postgres-data:
   rabbitmq-data:
   data-dir:
+  object-storage-data:
 
 networks:
   default:

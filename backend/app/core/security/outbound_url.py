@@ -1,103 +1,154 @@
-"""Outbound URL validation primitives.
-
-This module owns the anti-SSRF checks used before server-side HTTP calls.
-"""
+"""Outbound URL validation and DNS-pinning primitives."""
 
 from __future__ import annotations
 
 import ipaddress
 import os
 import socket
+from dataclasses import dataclass
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 from app.utils.logger import get_logger
 
+
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class ResolvedOutboundTarget:
+    original_url: str
+    pinned_url: str
+    hostname: str
+    host_header: str
+
+
+def _network_opt_ins(allow_loopback_opt_in: bool) -> tuple[bool, bool]:
+    env_name = os.environ.get(
+        "ENVIRONMENT", os.environ.get("ENV", "development")
+    ).lower()
+    prod_like = env_name in ("production", "prod", "staging", "stage")
+    allow_loopback = (
+        allow_loopback_opt_in
+        and not prod_like
+        and os.environ.get("PLENORA_ALLOW_LOOPBACK_OUTBOUND", "").strip() == "1"
+    )
+    allow_private = (
+        not prod_like
+        and os.environ.get("PLENORA_ALLOW_PRIVATE_NETWORK_OUTBOUND", "").strip()
+        == "1"
+    )
+    return allow_loopback, allow_private
+
+
+def _check_and_resolve(
+    url: str,
+    *,
+    allow_loopback_opt_in: bool,
+) -> tuple[Optional[str], list[str]]:
+    parsed = urlparse(url or "")
+    if parsed.scheme not in ("http", "https"):
+        return "URL non valido: solo schemi http/https sono permessi", []
+    host = parsed.hostname
+    if not host:
+        return "URL non valido: hostname mancante", []
+    if parsed.username is not None or parsed.password is not None:
+        return "URL non valido: credenziali inline non consentite", []
+
+    # RFC-reserved test domains intentionally do not require live DNS.
+    if host == "example.com" or host.endswith(".example.com"):
+        return None, []
+
+    try:
+        infos = socket.getaddrinfo(host, parsed.port)
+    except socket.gaierror:
+        return f"Host non risolvibile: {host}", []
+
+    allow_loopback, allow_private = _network_opt_ins(allow_loopback_opt_in)
+    addresses = sorted({info[4][0] for info in infos})
+    if not addresses:
+        return f"Host non risolvibile: {host}", []
+
+    for address in addresses:
+        try:
+            ip = ipaddress.ip_address(address)
+        except ValueError:
+            return f"URL bloccato: indirizzo risolto non valido ({address})", []
+        if ip.is_loopback:
+            if allow_loopback:
+                continue
+            return (
+                f"URL bloccato: l'host risolve a un IP privato/interno ({address})",
+                [],
+            )
+        if ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
+            return (
+                f"URL bloccato: l'host risolve a un IP privato/interno ({address})",
+                [],
+            )
+        if ip.is_private:
+            if allow_private:
+                continue
+            return (
+                f"URL bloccato: l'host risolve a un IP privato/interno ({address})",
+                [],
+            )
+    return None, addresses
 
 
 def check_outbound_address(
     url: str, allow_loopback_opt_in: bool = True
 ) -> Optional[str]:
-    """Anti-SSRF primitive shared by raising and return-string validators."""
-    parsed = urlparse(url or "")
-    if parsed.scheme not in ("http", "https"):
-        return "URL non valido: solo schemi http/https sono permessi"
-    host = parsed.hostname
-    if not host:
-        return "URL non valido: hostname mancante"
-    if host == "example.com" or host.endswith(".example.com"):
-        return None
-
-    if allow_loopback_opt_in:
-        env_name = os.environ.get(
-            "ENVIRONMENT", os.environ.get("ENV", "development")
-        ).lower()
-        if env_name in ("production", "prod", "staging", "stage"):
-            allow_loopback = False
-        else:
-            plenora_set = (
-                os.environ.get("PLENORA_ALLOW_LOOPBACK_OUTBOUND", "").strip()
-                == "1"
-            )
-            allow_loopback = plenora_set
-    else:
-        allow_loopback = False
-
-    try:
-        infos = socket.getaddrinfo(host, None)
-    except socket.gaierror:
-        return f"Host non risolvibile: {host}"
-
-    # Opt-in PLENORA_ALLOW_PRIVATE_NETWORK_OUTBOUND=1 per scenari di
-    # test/E2E: gli host del compose risolvono a IP privati (172.16/12,
-    # 192.168/16) — senza questo opt-in, ogni chiamata a un fake server
-    # interno (es. plenora-e2e-fake-rest) verrebbe bloccata. NEVER set
-    # in production: serve a fingere che la rete docker interna sia
-    # "esterna" per i test SSRF positivi e per chiamate a fixture.
-    env_name = os.environ.get(
-        "ENVIRONMENT", os.environ.get("ENV", "development")
-    ).lower()
-    is_prod_like = env_name in ("production", "prod", "staging", "stage")
-    allow_private = (
-        not is_prod_like
-        and os.environ.get(
-            "PLENORA_ALLOW_PRIVATE_NETWORK_OUTBOUND", ""
-        ).strip() == "1"
+    """Return a rejection reason, or None when the target is allowed."""
+    reason, _addresses = _check_and_resolve(
+        url,
+        allow_loopback_opt_in=allow_loopback_opt_in,
     )
-
-    addr_list = list({info[4][0] for info in infos})
-    for addr in addr_list:
-        try:
-            ip = ipaddress.ip_address(addr)
-        except ValueError:
-            continue
-        # Python `ipaddress.is_private` returns True ALSO for loopback,
-        # link-local, multicast, reserved (IPv6 ::1) and unspecified —
-        # not just RFC 1918. The two opt-ins must therefore be applied
-        # narrowly:
-        #   - allow_loopback only grants loopback
-        #   - allow_private only grants the RFC 1918 / RFC 4193 ranges
-        #     (IPv4 10/8, 172.16/12, 192.168/16; IPv6 fc00::/7),
-        #     never the categories above.
-        # Ordering matters: if loopback is allowed we must NOT fall
-        # through to the private-but-not-loopback gate (every loopback
-        # is also is_private).
-        if ip.is_loopback:
-            if allow_loopback:
-                continue
-            return f"URL bloccato: l'host risolve a un IP privato/interno ({addr})"
-        if ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
-            return f"URL bloccato: l'host risolve a un IP privato/interno ({addr})"
-        if ip.is_private:
-            if allow_private:
-                continue
-            return f"URL bloccato: l'host risolve a un IP privato/interno ({addr})"
-    return None
+    return reason
 
 
 def validate_external_url(url: str) -> None:
-    """Validate that an outbound URL is HTTP(S) and resolves publicly."""
     reason = check_outbound_address(url, allow_loopback_opt_in=True)
     if reason is not None:
         raise ValueError(reason)
+
+
+def resolve_external_url(url: str) -> ResolvedOutboundTarget:
+    """Resolve and validate once, returning the exact IP to connect to.
+
+    The caller must use ``pinned_url`` for the socket connection while
+    preserving ``hostname`` for HTTP Host, TLS SNI and certificate checks.
+    This closes the validation/connect DNS-rebinding window.
+    """
+    reason, addresses = _check_and_resolve(url, allow_loopback_opt_in=True)
+    if reason is not None:
+        raise ValueError(reason)
+
+    parsed = urlparse(url)
+    hostname = parsed.hostname or ""
+    if not addresses:
+        return ResolvedOutboundTarget(url, url, hostname, parsed.netloc)
+
+    address = addresses[0]
+    ip_literal = f"[{address}]" if ":" in address else address
+    pinned_netloc = ip_literal if parsed.port is None else f"{ip_literal}:{parsed.port}"
+    default_port = 443 if parsed.scheme == "https" else 80
+    host_header = (
+        hostname
+        if parsed.port in (None, default_port)
+        else f"{hostname}:{parsed.port}"
+    )
+    return ResolvedOutboundTarget(
+        original_url=url,
+        pinned_url=urlunparse(parsed._replace(netloc=pinned_netloc)),
+        hostname=hostname,
+        host_header=host_header,
+    )
+
+
+__all__ = [
+    "ResolvedOutboundTarget",
+    "check_outbound_address",
+    "resolve_external_url",
+    "validate_external_url",
+]

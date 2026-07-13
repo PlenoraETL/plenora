@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import HTTPException
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 
 from app.core.results import blob as results_blob
 from app.core.results import db as results_db
@@ -56,14 +56,16 @@ def project_result_response(
         )
         if match is not None:
             filename = match.filename or requested_file
-            blob = results_blob.get_result_data(match.id)
-            if blob is not None:
-                return Response(
-                    content=blob,
+            stream = results_blob.open_result_stream(
+                match.id, expected_project_id=project_id
+            )
+            if stream is not None:
+                return StreamingResponse(
+                    stream["body"],
                     media_type=mime_for_filename(filename),
                     headers={
                         "Content-Disposition": f'attachment; filename="{filename}"',
-                        "Content-Length": str(len(blob)),
+                        "Content-Length": str(stream["size"]),
                     },
                 )
         # Fallthrough: nessuna row con quel filename. Restituisce 404 invece
@@ -77,14 +79,16 @@ def project_result_response(
 
     if latest and latest.id:
         filename = latest.filename or f"{project_id}.{latest.format or 'csv'}"
-        blob = results_blob.get_result_data(latest.id)
-        if blob is not None:
-            return Response(
-                content=blob,
+        stream = results_blob.open_result_stream(
+            latest.id, expected_project_id=project_id
+        )
+        if stream is not None:
+            return StreamingResponse(
+                stream["body"],
                 media_type=mime_for_filename(filename),
                 headers={
                     "Content-Disposition": f'attachment; filename="{filename}"',
-                    "Content-Length": str(len(blob)),
+                    "Content-Length": str(stream["size"]),
                 },
             )
         raise HTTPException(

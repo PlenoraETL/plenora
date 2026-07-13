@@ -128,6 +128,13 @@ def test_pg_put_is_upsert_on_task_id_with_ttl_expiry():
     assert "COALESCE(EXCLUDED.name, task_results.name)" in src
 
 
+def test_terminal_task_and_run_use_one_postgres_unit_of_work():
+    src = inspect.getsource(PgTaskResultStore.put_terminal_with_run)
+    assert "with unit_of_work() as session" in src
+    assert "INSERT INTO task_results" in src
+    assert "UPDATE log_runs SET status" in src
+
+
 def test_pg_put_serializes_decimal_payload_before_jsonb_write(monkeypatch):
     import app.core.orchestrator.task_result_store as module
 

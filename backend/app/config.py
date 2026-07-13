@@ -180,7 +180,11 @@ class Settings:
         # rimuove le directory piu' vecchie di N ore. Default 24h
         "TEMP_ORPHAN_CLEANUP_HOURS": 24,
 
-        "STORAGE_POLICY": "hybrid",
+        # Canonical data plane: every new user file/result/preview/artifact is
+        # stored on S3-compatible object storage. `db`/`hybrid` remain
+        # transition-only reader/writer compatibility for existing installs;
+        # supported installers always emit `object_storage`.
+        "STORAGE_POLICY": "object_storage",
         "CLOUD_PROVIDER": "aws",
         # Hard cap per payload persistiti come BYTEA (mode "db" + ramo DB di "hybrid"
         # Default 500 MB: limite pratico di un BYTEA PG senza toast tuning
@@ -199,6 +203,17 @@ class Settings:
         "MINIO_ENDPOINT_URL": None,
         "MINIO_ACCESS_KEY": None,
         "MINIO_SECRET_KEY": None,
+        # Provider-neutral aliases used by SeaweedFS and any other
+        # S3-compatible implementation. MINIO_* remains accepted for existing
+        # deployments, but application code no longer depends on MinIO naming.
+        "S3_ENDPOINT_URL": None,
+        "S3_ACCESS_KEY": None,
+        "S3_SECRET_KEY": None,
+
+        # Maximum serialized preview accepted at the authenticated hydration
+        # boundary. This is a safety cap, never a storage-routing threshold:
+        # all previews still go to object storage.
+        "PREVIEW_PAYLOAD_MAX_BYTES": 50 * 1024 * 1024,
 
         # Canvas validation: se True l'esecuzione e' bloccata quando
         # la catena del progetto non valida (gate a esecuzione, re-valida live) e
@@ -250,6 +265,11 @@ class Settings:
         # WORKER_MEMORY_RECYCLE_RSS_BYTES. Cap <= 0 disabilita il recycle.
         "WORKER_MEMORY_RECYCLE_ENABLED": True,
         "WORKER_MEMORY_RECYCLE_RSS_BYTES": 1_500_000_000,
+        # Preview MANIPOLA: ogni sorgente viene campionata a questo numero di
+        # righe prima delle trasformazioni (mai meno di limit+1 richiesto).
+        "PIPELINE_PREVIEW_SOURCE_MAX_ROWS": 10_000,
+        # Headroom stimato per output/CoW delle trasformazioni non-join.
+        "MANIPOLA_TRANSFORM_HEADROOM_FACTOR": 1.25,
         # Boundary portabile per isolare pandas/GDAL/PyArrow dal processo
         # Dramatiq. `subprocess` usa un interprete spawn usa-e-getta ed e'
         # il default memory-safe (Windows/Linux/Docker); `inline` resta il
@@ -571,7 +591,8 @@ class Settings:
         # CLOUD_PROVIDER=aws + BACKUP_BUCKET. Per disabilitare: setta
         # OBJECT_STORAGE_ENABLED=false in env
         "OBJECT_STORAGE_ENABLED": True,
-        # Backend logico. "s3"=AWS, "minio"=S3-compatible, "local"=futuro
+        # Backend logico. "s3"=AWS, "s3_compatible"=endpoint custom
+        # (SeaweedFS/MinIO/AIStor), "minio"=alias legacy, "local"=futuro
         # filesystem-backed (dev), "webdav"=futuro, "none"=esplicitamente
         # disattivato (equivalente a OBJECT_STORAGE_ENABLED=False
         # Default None = derivato da CLOUD_PROVIDER (aws->s3, minio->minio

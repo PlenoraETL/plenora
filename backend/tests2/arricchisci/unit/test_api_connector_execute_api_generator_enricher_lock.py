@@ -260,7 +260,7 @@ class TestGeneratorBasics:
             "output_mapping": [],
         }
         gen_env.svc._execute_api_generator(cfg)
-        assert gen_env.session.get.call_args.kwargs["allow_redirects"] is True
+        assert gen_env.session.get.call_args.kwargs["allow_redirects"] is False
 
     def test_async_generator_polls_and_parses_final_result(self, gen_env):
         gen_env.session.post.return_value = _resp(202, json_body={"id": "job-1"})

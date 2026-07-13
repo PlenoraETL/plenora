@@ -22,6 +22,7 @@ from app.core.projects import cleanup as project_cleanup_module
 from app.core.projects import db as project_db
 from app.core.projects.exceptions import (
     ProjectCleanupPartialError,
+    ProjectHasActiveTasksError,
     ProjectHasDependenciesError,
 )
 from app.core.projects.models import ProjectCreate, ProjectMetadata
@@ -169,6 +170,14 @@ class ProjectLifecycleService:
         row = project_db.get_project_row(project_id, group_id=group_id)
         if not row:
             return False
+
+        # Fail closed before deleting outputs/intermediate data that a queued
+        # or running worker may still read/write.
+        from app.core.orchestrator.task_service import task_service
+
+        active_task_ids = task_service.list_active_task_ids_for_project(project_id)
+        if active_task_ids:
+            raise ProjectHasActiveTasksError(project_id, active_task_ids)
 
         # Blocco: non eliminare progetti con eseguibili collegati o progetti
         # downstream che lo usano come sorgente. Si raccolgono entrambi e si

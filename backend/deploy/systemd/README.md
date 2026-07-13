@@ -15,7 +15,7 @@ riportano il servizio allo stato live senza riscriverli a memoria.
 ## Stato operativo 1.0
 
 I servizi runtime installati usano solo naming `plenora-*`:
-`plenora-backend`, `plenora-worker-data`, `plenora-worker-control`, `plenora-beat`,
+`plenora-object-storage`, `plenora-backend`, `plenora-worker-data`, `plenora-worker-control`, `plenora-beat`,
 `plenora-backup{,.timer}` e `plenora-backup-test{,.timer}`.
 
 Per verificare l'allineamento con il repo:
@@ -65,6 +65,10 @@ Prerequisito IAM sul role EC2 (`plenora-backup-role`): permessi
 one-shot in `backend/deploy/iam/`.
 
 ## File
+
+- `plenora-object-storage.service` - SeaweedFS locale in modalita' `mini`,
+  endpoint S3 su `127.0.0.1:8333`. Va omesso quando si usa un provider S3
+  esterno; il backend applicativo resta vendor-neutral.
 
 - `plenora-backend.service` — long-running uvicorn (FastAPI), porta 5004
   locale. Restart=always.
