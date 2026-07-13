@@ -43,6 +43,9 @@ class TaskMetadataStore(Protocol):
     def get(self, task_id: str) -> PendingTaskMetadata | None:
         ...
 
+    def delete(self, task_id: str) -> bool:
+        ...
+
     def list_for_project(self, project_id: str) -> list[PendingTaskMetadata]:
         ...
 
@@ -110,6 +113,12 @@ class KvTaskMetadataStore:
             task_type=str(task_type),
         )
 
+    def delete(self, task_id: str) -> bool:
+        try:
+            return self._kv.delete(_key(task_id))
+        except Exception as exc:
+            raise TaskMetadataStoreUnavailable(str(exc)) from exc
+
     def list_for_project(self, project_id: str) -> list[PendingTaskMetadata]:
         matches: list[PendingTaskMetadata] = []
         for key in self._kv.scan_keys(_KEY_PREFIX):
@@ -133,6 +142,10 @@ class InMemoryTaskMetadataStore:
     def get(self, task_id: str) -> PendingTaskMetadata | None:
         with self._lock:
             return self._metadata_by_task_id.get(task_id)
+
+    def delete(self, task_id: str) -> bool:
+        with self._lock:
+            return self._metadata_by_task_id.pop(task_id, None) is not None
 
     def list_for_project(self, project_id: str) -> list[PendingTaskMetadata]:
         with self._lock:

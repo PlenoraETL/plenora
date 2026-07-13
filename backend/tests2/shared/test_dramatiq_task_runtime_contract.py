@@ -12,8 +12,8 @@ import pytest
 
 dramatiq = pytest.importorskip("dramatiq", reason="dramatiq non installato (Fase 1)")
 
-from app.core.task_runtime.dispatch import TaskRuntime
-from app.core.task_runtime.dramatiq_runtime import (
+from app.core.task_runtime.dispatch import TaskRuntime  # noqa: E402
+from app.core.task_runtime.dramatiq_runtime import (  # noqa: E402
     DramatiqDispatchHandle,
     DramatiqTaskRuntime,
 )
@@ -65,10 +65,22 @@ def test_countdown_maps_to_delay_milliseconds():
     assert delay == 90_000
 
 
+def test_preassigned_task_id_becomes_message_id():
+    broker = _FakeBroker()
+
+    handle = DramatiqTaskRuntime(broker=broker).send_task(
+        "x", kwargs={}, task_id="custom-id"
+    )
+
+    [(message, _)] = broker.enqueued
+    assert message.message_id == "custom-id"
+    assert handle.id == "custom-id"
+
+
 def test_unmapped_options_fail_loud():
     runtime = DramatiqTaskRuntime(broker=_FakeBroker())
     with pytest.raises(ValueError, match="non mappate"):
-        runtime.send_task("x", kwargs={}, task_id="custom-id")
+        runtime.send_task("x", kwargs={}, unsupported_option=True)
 
 
 def test_queue_option_routes_message():

@@ -8,6 +8,7 @@ Mappatura opzioni (superficie reale dei call-site censiti):
 - ``args`` / ``kwargs`` → payload del messaggio;
 - ``countdown`` (secondi, semantica Celery) → ``delay`` ms di Dramatiq;
 - ``queue`` → coda di destinazione (default "default").
+- ``task_id`` → ``message_id`` assegnato prima della pubblicazione.
 
 L'handle ritornato espone ``.id`` (message_id) come da
 ``TaskDispatchResult``. Import di dramatiq lazy: il modulo resta
@@ -47,9 +48,9 @@ class DramatiqTaskRuntime:
         kwargs = dict(options.pop("kwargs", {}) or {})
         countdown = options.pop("countdown", None)
         queue_name = options.pop("queue", None)
-        # opzioni Celery senza equivalente diretto vengono ignorate in
-        # modo esplicito qui (es. task_id custom non supportato): meglio
-        # fallire la review che perdere semantica in silenzio.
+        task_id = options.pop("task_id", None)
+        # Le opzioni Celery senza equivalente diretto falliscono in modo
+        # esplicito: meglio bloccare il dispatch che perderne la semantica.
         if options:
             raise ValueError(
                 f"Opzioni send_task non mappate su Dramatiq: {sorted(options)}"
@@ -63,12 +64,17 @@ class DramatiqTaskRuntime:
         if queue_name is None:
             queue_name = self._actor_queue_name(broker, name)
 
+        message_kwargs = {
+            "queue_name": queue_name,
+            "actor_name": name,
+            "args": args,
+            "kwargs": kwargs,
+            "options": {},
+        }
+        if task_id is not None:
+            message_kwargs["message_id"] = str(task_id)
         message = dramatiq.Message(
-            queue_name=queue_name,
-            actor_name=name,
-            args=args,
-            kwargs=kwargs,
-            options={},
+            **message_kwargs,
         )
         delay_ms = int(countdown * 1000) if countdown else None
         broker.enqueue(message, delay=delay_ms)

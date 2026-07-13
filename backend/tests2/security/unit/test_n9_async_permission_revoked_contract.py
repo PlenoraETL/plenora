@@ -248,12 +248,14 @@ def test_create_pipeline_task_forwards_user_id_to_dispatch(monkeypatch):
     captured = {}
 
     class _FakeResult:
-        id = "task-1"
+        def __init__(self, task_id):
+            self.id = task_id
 
     def fake_dispatch(name, **options):
         captured["name"] = name
+        captured["task_id"] = options["task_id"]
         captured.update(options.get("kwargs", {}))
-        return _FakeResult()
+        return _FakeResult(options["task_id"])
 
     monkeypatch.setattr(ts_mod, "dispatch_task_by_name", fake_dispatch)
 
@@ -263,7 +265,7 @@ def test_create_pipeline_task_forwards_user_id_to_dispatch(monkeypatch):
         user_id="usr_x",
     )
 
-    assert info.task_id == "task-1"
+    assert info.task_id == captured["task_id"]
     assert captured.get("name") == "pipeline.execute"
     assert captured.get("user_id") == "usr_x", (
         f"create_pipeline_task non forward user_id al dispatch. Captured: {captured}"
@@ -559,11 +561,12 @@ def test_other_services_forward_user_id_to_delay(
     captured = {}
 
     class _FakeResult:
-        id = "task-1"
+        def __init__(self, task_id):
+            self.id = task_id
 
     def fake_dispatch(name, **options):
         captured.update(options.get("kwargs", {}))
-        return _FakeResult()
+        return _FakeResult(options["task_id"])
 
     monkeypatch.setattr(ts_mod, "dispatch_task_by_name", fake_dispatch)
 

@@ -355,24 +355,36 @@ def test_forget_task_result_delegates_to_runtime_port():
 def test_submit_task_launches_celery_and_returns_pending_task_info(monkeypatch):
     captured_kwargs = {}
     captured_name = {}
+    events = []
 
     # Fase 1 cutover: submit_task dispatcha by-name via dispatch_task_by_name
     # (non piu' celery_task.delay). Si patcha il dispatch nel modulo
     # task_service e si verifica nome + kwargs propagati.
     from app.core.orchestrator import task_service as ts_mod
 
+    class OrderingMetadataStore(InMemoryTaskMetadataStore):
+        def put(self, metadata):
+            events.append("metadata")
+            super().put(metadata)
+
+    metadata_store = OrderingMetadataStore()
+
     def fake_dispatch(name, **options):
+        events.append("publish")
         captured_name["name"] = name
         captured_kwargs.update(options.get("kwargs", {}))
-        return CeleryLaunchResult(id="task-submit-1")
+        assert metadata_store.get(options["task_id"]) is not None
+        return CeleryLaunchResult(id=options["task_id"])
 
     monkeypatch.setattr(ts_mod, "dispatch_task_by_name", fake_dispatch)
 
     class FakeCeleryTask:
         name = "pipeline.execute"
 
-    metadata_store = InMemoryTaskMetadataStore()
-    service = TaskService(metadata_store=metadata_store)
+    service = TaskService(
+        metadata_store=metadata_store,
+        task_id_factory=lambda: "task-submit-1",
+    )
     task_info = service.submit_task(
         TaskSubmitRequest(
             celery_task=FakeCeleryTask(),
@@ -389,6 +401,7 @@ def test_submit_task_launches_celery_and_returns_pending_task_info(monkeypatch):
     )
 
     assert captured_name["name"] == "pipeline.execute"
+    assert events == ["metadata", "publish"]
     assert task_info.task_id == "task-submit-1"
     assert task_info.task_type is TaskType.EXECUTE
     assert task_info.project_id == "project-1"
@@ -406,6 +419,69 @@ def test_submit_task_launches_celery_and_returns_pending_task_info(monkeypatch):
         project_id="project-1",
         task_type="execute",
     )
+
+
+def test_submit_task_does_not_publish_when_metadata_persistence_fails(monkeypatch):
+    from app.core.orchestrator import task_service as ts_mod
+
+    class BrokenMetadataStore(InMemoryTaskMetadataStore):
+        def put(self, metadata):
+            raise RuntimeError("metadata unavailable")
+
+    def fail_dispatch(*args, **kwargs):
+        raise AssertionError("dispatch must not run")
+
+    monkeypatch.setattr(ts_mod, "dispatch_task_by_name", fail_dispatch)
+    service = TaskService(
+        metadata_store=BrokenMetadataStore(),
+        task_id_factory=lambda: "task-submit-2",
+    )
+
+    class FakeCeleryTask:
+        name = "pipeline.execute"
+
+    with pytest.raises(RuntimeError, match="metadata unavailable"):
+        service.submit_task(
+            TaskSubmitRequest(
+                celery_task=FakeCeleryTask(),
+                task_type=TaskType.EXECUTE,
+                project_id="project-1",
+                payload=PipelineTaskPayload(project_id="project-1"),
+                queued_message="Pipeline in coda...",
+                log_label="execute",
+            )
+        )
+
+
+def test_submit_task_removes_pending_metadata_when_publish_fails(monkeypatch):
+    from app.core.orchestrator import task_service as ts_mod
+
+    def fail_dispatch(*args, **kwargs):
+        raise RuntimeError("rabbit unavailable")
+
+    monkeypatch.setattr(ts_mod, "dispatch_task_by_name", fail_dispatch)
+    metadata_store = InMemoryTaskMetadataStore()
+    service = TaskService(
+        metadata_store=metadata_store,
+        task_id_factory=lambda: "task-submit-3",
+    )
+
+    class FakeCeleryTask:
+        name = "pipeline.execute"
+
+    with pytest.raises(RuntimeError, match="rabbit unavailable"):
+        service.submit_task(
+            TaskSubmitRequest(
+                celery_task=FakeCeleryTask(),
+                task_type=TaskType.EXECUTE,
+                project_id="project-1",
+                payload=PipelineTaskPayload(project_id="project-1"),
+                queued_message="Pipeline in coda...",
+                log_label="execute",
+            )
+        )
+
+    assert metadata_store.get("task-submit-3") is None
 
 
 def test_task_payload_to_celery_kwargs_rejects_unknown_payload():

@@ -44,6 +44,9 @@ class _FakeKeyValueStore:
     def scan_keys(self, prefix):
         return sorted(key for key in self.values if key.startswith(prefix))
 
+    def delete(self, key):
+        return self.values.pop(key, None) is not None
+
 
 def test_store_maps_key_ttl_and_json_onto_kv_store():
     fake_kv = _FakeKeyValueStore()
@@ -138,3 +141,22 @@ def test_metadata_store_lists_tasks_for_one_project_only():
     store.put(PendingTaskMetadata("t3", "p1", "carica"))
 
     assert [item.task_id for item in store.list_for_project("p1")] == ["t1", "t3"]
+
+
+@pytest.mark.parametrize("store_factory", [InMemoryTaskMetadataStore])
+def test_metadata_store_delete_is_idempotent(store_factory):
+    store = store_factory()
+    store.put(PendingTaskMetadata("t1", "p1", "execute"))
+
+    assert store.delete("t1") is True
+    assert store.delete("t1") is False
+    assert store.get("t1") is None
+
+
+def test_kv_metadata_store_delete_maps_to_namespaced_key():
+    fake_kv = _FakeKeyValueStore()
+    store = KvTaskMetadataStore(kv_store=fake_kv)
+    store.put(PendingTaskMetadata("t1", "p1", "execute"))
+
+    assert store.delete("t1") is True
+    assert fake_kv.values == {}

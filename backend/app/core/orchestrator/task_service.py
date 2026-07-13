@@ -7,6 +7,7 @@ from typing import Any, Callable, Mapping, Optional, List, Protocol, TypeAlias
 from datetime import datetime, timezone
 from enum import Enum
 from dataclasses import dataclass
+from uuid import uuid4
 from app.core.orchestrator.task_metadata_store import (
     PendingTaskMetadata,
     TaskMetadataStore,
@@ -288,6 +289,7 @@ class TaskService:
         runtime: TaskRuntimePort | None = None,
         metadata_store: TaskMetadataStore | None = None,
         revocation_store: TaskRevocationStore | None = None,
+        task_id_factory: Callable[[], str] | None = None,
     ):
         # Il runtime di default legge stato/esito da PostgreSQL
         # (task_result_store).
@@ -295,35 +297,54 @@ class TaskService:
         self.metadata_store = metadata_store or default_task_metadata_store()
         # Annullamento cooperativo su PG.
         self.revocation_store = revocation_store or default_task_revocation_store()
+        self._task_id_factory = task_id_factory or (lambda: str(uuid4()))
 
     def submit_task(self, request: TaskSubmitRequest) -> TaskInfo:
-        """Launch a task by-name and record the pending task metadata.
+        """Reserve an ID, persist pending metadata, then publish the task.
 
-        Il dispatch passa dal layer runtime-agnostico
-        (dispatch_task_by_name). Il nome registrato del task arriva da
-        `request.celery_task.name`.
+        Il persist-before-publish impedisce al worker di osservare il task
+        prima che il relativo stato pending sia disponibile. Se il broker
+        rifiuta la pubblicazione, il metadata viene rimosso per compensazione.
         """
 
-        result = dispatch_task_by_name(
-            request.celery_task.name,
-            kwargs=dict(task_payload_to_celery_kwargs(request.payload)),
+        task_id = self._task_id_factory()
+        metadata = PendingTaskMetadata(
+            task_id=task_id,
+            project_id=request.project_id,
+            task_type=request.task_type.value,
         )
+        # Persist-before-publish: un worker veloce non puo' piu' consumare il
+        # messaggio prima che l'API abbia registrato il relativo task pending.
+        self.metadata_store.put(metadata)
+
+        try:
+            result = dispatch_task_by_name(
+                request.celery_task.name,
+                kwargs=dict(task_payload_to_celery_kwargs(request.payload)),
+                task_id=task_id,
+            )
+            if result.id != task_id:
+                raise RuntimeError(
+                    "Il runtime ha pubblicato un task_id diverso da quello preparato"
+                )
+        except Exception:
+            try:
+                self.metadata_store.delete(task_id)
+            except Exception:
+                logger.exception(
+                    "Compensazione metadata fallita dopo errore di pubblicazione "
+                    "task_id=%s",
+                    task_id,
+                )
+            raise
 
         logger.info(
-            f"Creato task {request.log_label}: {result.id} "
+            f"Creato task {request.log_label}: {task_id} "
             f"per progetto {request.project_id}"
         )
 
-        self.metadata_store.put(
-            PendingTaskMetadata(
-                task_id=result.id,
-                project_id=request.project_id,
-                task_type=request.task_type.value,
-            )
-        )
-
         return TaskInfo(
-            task_id=result.id,
+            task_id=task_id,
             task_type=request.task_type,
             project_id=request.project_id,
             status=TaskStatus.PENDING,
