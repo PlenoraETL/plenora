@@ -202,6 +202,51 @@ def test_pipeline_actor_retries_only_explicit_transient_results():
         _return_or_raise_retryable({"success": False, "retryable": True})
 
 
+@pytest.mark.parametrize(
+    "actor_attr,task_name",
+    [
+        ("carica_execute", "carica.execute"),
+        ("pipeline_execute", "pipeline.execute"),
+        ("pipeline_preview", "pipeline.preview"),
+        ("execute_enrichment", "tasks.execute_enrichment"),
+    ],
+)
+def test_heavy_actors_use_disposable_process_with_rss_cap(
+    monkeypatch,
+    actor_attr,
+    task_name,
+):
+    from app.core.orchestrator.task_progress import TaskRevoked
+    from app.core.resources.exceptions import MemoryLimitExceededError
+    from workers import data_plane_subprocess, dramatiq_app
+
+    captured = {}
+
+    def _execute(**kwargs):
+        captured.update(kwargs)
+        return {"success": True}
+
+    monkeypatch.setattr(dramatiq_app, "_data_plane_execution_mode", lambda: "subprocess")
+    monkeypatch.setattr(dramatiq_app, "_data_plane_child_timeout_seconds", lambda: 99)
+    monkeypatch.setattr(
+        dramatiq_app,
+        "_data_plane_child_memory_limit_bytes",
+        lambda: 1_500,
+    )
+    monkeypatch.setattr(dramatiq_app, "current_message_id", lambda: "message-1")
+    monkeypatch.setattr(data_plane_subprocess, "execute_task_in_subprocess", _execute)
+
+    actor = getattr(dramatiq_app, actor_attr)
+    assert actor.fn(project_id="project-1") == {"success": True}
+    assert captured["task_name"] == task_name
+    assert captured["task_id"] == "message-1"
+    assert captured["timeout_seconds"] == 99
+    assert captured["memory_limit_bytes"] == 1_500
+    assert captured["kwargs"]["project_id"] == "project-1"
+    assert TaskRevoked in actor.options["throws"]
+    assert MemoryLimitExceededError in actor.options["throws"]
+
+
 def test_result_middleware_exposes_retry_instead_of_terminal_failure(monkeypatch):
     from app.core.orchestrator import task_progress
     from workers.dramatiq_app import (

@@ -20,6 +20,7 @@ from app.core.orchestrator.task_revocation_store import (
     TaskRevocationStore,
     default_task_revocation_store,
 )
+from app.core.resources.exceptions import MemoryLimitExceededError
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -207,7 +208,9 @@ def finalize_from_celery(
     (annullamento cooperativo). Altrimenti solo SUCCESS/FAILURE vengono
     persistiti: su SUCCESS la payload e' il dict di ritorno del task
     (semantica Celery ``result``); su FAILURE una payload minima e
-    sanitizzata (niente ``str(exc)`` raw nel canale letto dal FE)."""
+    sanitizzata. Solo ``MemoryLimitExceededError`` espone il messaggio e i
+    campi numerici, che sono strutturati e sicuri per il canale letto dal FE.
+    """
     exc = getattr(einfo, "exception", None)
     if isinstance(exc, TaskRevoked):
         finalize_revoked(task_id, name=name, store=store)
@@ -229,6 +232,17 @@ def finalize_from_celery(
         "success": False,
         "error": type(exc).__name__ if exc is not None else "TaskFailure",
     }
+    if isinstance(exc, MemoryLimitExceededError):
+        payload.update(
+            {
+                "error_code": "memory_limit_exceeded",
+                "message": str(exc),
+                "observed_bytes": exc.observed_bytes,
+                "limit_bytes": exc.limit_bytes,
+                "path_basename": exc.path_basename,
+                "stage": exc.stage,
+            }
+        )
     if name == "pipeline.execute" and task_id:
         payload["run_id"] = task_id
     finalize_task_result(

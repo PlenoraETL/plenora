@@ -54,6 +54,7 @@ _ESSENTIAL_CONFIG_KEYS = frozenset(
         "LOGIN_MAX_ATTEMPTS",
         "DATA_PLANE_EXECUTION_MODE",
         "DATA_PLANE_CHILD_TIMEOUT_SECONDS",
+        "DATA_PLANE_CHILD_RSS_MAX_BYTES",
     }
 )
 
@@ -121,6 +122,7 @@ _CONFIG_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "TASK_SCHEDULE_HARD_LIMIT",
             "DATA_PLANE_EXECUTION_MODE",
             "DATA_PLANE_CHILD_TIMEOUT_SECONDS",
+            "DATA_PLANE_CHILD_RSS_MAX_BYTES",
         ),
     ),
     (
@@ -296,6 +298,7 @@ def _requires_restart(key: str) -> list[str]:
         "WORKER_RSS_MAX_BYTES",
         "DATA_PLANE_EXECUTION_MODE",
         "DATA_PLANE_CHILD_TIMEOUT_SECONDS",
+        "DATA_PLANE_CHILD_RSS_MAX_BYTES",
     }:
         return ["backend", "worker", "beat"]
     if key in {

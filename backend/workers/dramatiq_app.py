@@ -22,6 +22,7 @@ from dramatiq.middleware import CurrentMessage, Middleware
 from app.config import settings
 from app.config_env_loader import load_backend_dotenv
 from app.core.orchestrator.task_progress import TaskRevoked
+from app.core.resources.exceptions import MemoryLimitExceededError
 from app.utils.logger import get_logger, get_request_id, set_request_id
 
 # Bare-metal (Windows/Linux senza compose): DRAMATIQ_BROKER_URL vive nel
@@ -398,6 +399,30 @@ def _invoke_task_body(task_fn: object, *, name: str, kwargs: dict) -> object:
         _cleanup_worker_memory_after_task(name)
 
 
+def _data_plane_execution_mode() -> str:
+    return str(
+        settings.get("DATA_PLANE_EXECUTION_MODE", "subprocess") or "subprocess"
+    ).strip().lower()
+
+
+def _data_plane_child_timeout_seconds() -> int:
+    return int(
+        settings.get(
+            "DATA_PLANE_CHILD_TIMEOUT_SECONDS",
+            settings.get("TASK_HARD_LIMIT", 3900),
+        )
+    )
+
+
+def _data_plane_child_memory_limit_bytes() -> int:
+    return int(
+        settings.get(
+            "DATA_PLANE_CHILD_RSS_MAX_BYTES",
+            settings.get("WORKER_RSS_MAX_BYTES", 1_500_000_000),
+        )
+    )
+
+
 # Routing actor -> coda: stessa tabella di celery_app.task_routes (stessa
 # fonte settings). Il contract test ne blinda la parita' finche' i due
 # stack convivono.
@@ -492,11 +517,28 @@ def run_manual_backup_task(*, owner_token: str) -> dict:
 @dramatiq.actor(
     actor_name="carica.execute",
     queue_name=queue_for("carica.execute"),
-    throws=(TaskRevoked,),
+    throws=(TaskRevoked, MemoryLimitExceededError),
     max_retries=0,
 )
 def carica_execute(**kwargs: object) -> object:
-    """CARICA — stesso corpo del task Celery carica.execute."""
+    """CARICA isolato in un processo data-plane usa-e-getta."""
+    execution_mode = _data_plane_execution_mode()
+    if execution_mode == "subprocess":
+        from workers.data_plane_subprocess import execute_task_in_subprocess
+
+        return execute_task_in_subprocess(
+            task_name="carica.execute",
+            task_id=current_message_id() or "",
+            kwargs=dict(kwargs),
+            timeout_seconds=_data_plane_child_timeout_seconds(),
+            memory_limit_bytes=_data_plane_child_memory_limit_bytes(),
+            request_id=get_request_id(),
+        )
+    if execution_mode != "inline":
+        raise RuntimeError(
+            "DATA_PLANE_EXECUTION_MODE deve essere inline o subprocess, "
+            f"ricevuto {execution_mode!r}"
+        )
     from workers.tasks.carica_task import execute_carica_task
 
     return _invoke_task_body(
@@ -507,7 +549,7 @@ def carica_execute(**kwargs: object) -> object:
 @dramatiq.actor(
     actor_name="pipeline.execute",
     queue_name=queue_for("pipeline.execute"),
-    throws=(TaskRevoked,),
+    throws=(TaskRevoked, MemoryLimitExceededError),
     max_retries=2,
     min_backoff=1_000,
     max_backoff=10_000,
@@ -520,9 +562,7 @@ def pipeline_execute(**kwargs: object) -> object:
     message_id = current_message_id()
     if message_id:
         task_kwargs.setdefault("run_id", message_id)
-    execution_mode = str(
-        settings.get("DATA_PLANE_EXECUTION_MODE", "subprocess") or "subprocess"
-    ).strip().lower()
+    execution_mode = _data_plane_execution_mode()
     if execution_mode == "subprocess":
         from workers.data_plane_subprocess import execute_task_in_subprocess
 
@@ -530,12 +570,8 @@ def pipeline_execute(**kwargs: object) -> object:
             task_name="pipeline.execute",
             task_id=current_message_id() or "",
             kwargs=task_kwargs,
-            timeout_seconds=int(
-                settings.get(
-                    "DATA_PLANE_CHILD_TIMEOUT_SECONDS",
-                    settings.get("TASK_HARD_LIMIT", 3900),
-                )
-            ),
+            timeout_seconds=_data_plane_child_timeout_seconds(),
+            memory_limit_bytes=_data_plane_child_memory_limit_bytes(),
             request_id=get_request_id(),
         )
         return _return_or_raise_retryable(result)
@@ -556,14 +592,12 @@ def pipeline_execute(**kwargs: object) -> object:
 @dramatiq.actor(
     actor_name="pipeline.preview",
     queue_name=queue_for("pipeline.preview"),
-    throws=(TaskRevoked,),
+    throws=(TaskRevoked, MemoryLimitExceededError),
     max_retries=0,
 )
 def pipeline_preview(**kwargs: object) -> object:
     """PIPELINE preview — isolata come pipeline.execute nel data-plane."""
-    execution_mode = str(
-        settings.get("DATA_PLANE_EXECUTION_MODE", "subprocess") or "subprocess"
-    ).strip().lower()
+    execution_mode = _data_plane_execution_mode()
     if execution_mode == "subprocess":
         from workers.data_plane_subprocess import execute_task_in_subprocess
 
@@ -571,12 +605,8 @@ def pipeline_preview(**kwargs: object) -> object:
             task_name="pipeline.preview",
             task_id=current_message_id() or "",
             kwargs=dict(kwargs),
-            timeout_seconds=int(
-                settings.get(
-                    "DATA_PLANE_CHILD_TIMEOUT_SECONDS",
-                    settings.get("TASK_HARD_LIMIT", 3900),
-                )
-            ),
+            timeout_seconds=_data_plane_child_timeout_seconds(),
+            memory_limit_bytes=_data_plane_child_memory_limit_bytes(),
             request_id=get_request_id(),
         )
     if execution_mode != "inline":
@@ -595,11 +625,29 @@ def pipeline_preview(**kwargs: object) -> object:
 @dramatiq.actor(
     actor_name="tasks.execute_enrichment",
     queue_name=queue_for("tasks.execute_enrichment"),
-    throws=(TaskRevoked,),
+    throws=(TaskRevoked, MemoryLimitExceededError),
     max_retries=0,
 )
 def execute_enrichment(**kwargs: object) -> object:
-    """ARRICCHISCI — stesso corpo del task Celery tasks.execute_enrichment."""
+    """ARRICCHISCI isolato in un processo data-plane usa-e-getta."""
+    execution_mode = _data_plane_execution_mode()
+    if execution_mode == "subprocess":
+        from workers.data_plane_subprocess import execute_task_in_subprocess
+
+        return execute_task_in_subprocess(
+            task_name="tasks.execute_enrichment",
+            task_id=current_message_id() or "",
+            kwargs=dict(kwargs),
+            timeout_seconds=_data_plane_child_timeout_seconds(),
+            memory_limit_bytes=_data_plane_child_memory_limit_bytes(),
+            request_id=get_request_id(),
+        )
+    if execution_mode != "inline":
+        raise RuntimeError(
+            "DATA_PLANE_EXECUTION_MODE deve essere inline o subprocess, "
+            f"ricevuto {execution_mode!r}"
+        )
+
     from workers.tasks.enrichment_task import execute_enrichment_task
 
     return _invoke_task_body(

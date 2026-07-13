@@ -209,6 +209,46 @@ def test_finalize_from_celery_failure_is_sanitized():
     assert "dettaglio interno" not in str(record.payload)
 
 
+def test_finalize_from_celery_exposes_safe_structured_memory_failure():
+    from app.core.resources.exceptions import MemoryLimitExceededError
+
+    store = InMemoryTaskResultStore()
+
+    class _Einfo:
+        exception = MemoryLimitExceededError(
+            observed_bytes=1_600,
+            limit_bytes=1_500,
+            path_basename="join_output",
+            stage="data_plane_child_rss",
+        )
+
+    finalize_from_celery(
+        "t-memory",
+        "FAILURE",
+        None,
+        _Einfo(),
+        name="pipeline.execute",
+        store=store,
+    )
+
+    record = store.get("t-memory")
+    assert record is not None
+    assert record.payload == {
+        "success": False,
+        "error": "MemoryLimitExceededError",
+        "error_code": "memory_limit_exceeded",
+        "message": (
+            "Memory limit exceeded in stage 'data_plane_child_rss' for "
+            "'join_output': observed=1600 bytes, limit=1500 bytes."
+        ),
+        "observed_bytes": 1_600,
+        "limit_bytes": 1_500,
+        "path_basename": "join_output",
+        "stage": "data_plane_child_rss",
+        "run_id": "t-memory",
+    }
+
+
 @pytest.mark.parametrize("status", ["RETRY", "REVOKED", "STARTED", "PENDING"])
 def test_finalize_from_celery_skips_non_terminal_states(status):
     store = InMemoryTaskResultStore()

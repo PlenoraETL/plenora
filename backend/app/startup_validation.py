@@ -187,6 +187,21 @@ def validate_data_plane_config(settings: Any, errors: list[str]) -> None:
             f"(ricevuto {raw_timeout!r})."
         )
 
+    raw_memory_limit = settings.get(
+        "DATA_PLANE_CHILD_RSS_MAX_BYTES",
+        settings.get("WORKER_RSS_MAX_BYTES", 1_500_000_000),
+    )
+    try:
+        memory_limit = int(raw_memory_limit)
+    except (TypeError, ValueError):
+        memory_limit = 0
+    if mode == "subprocess" and memory_limit <= 0:
+        errors.append(
+            "DATA_PLANE_CHILD_RSS_MAX_BYTES deve essere un intero positivo "
+            "quando DATA_PLANE_EXECUTION_MODE='subprocess' "
+            f"(ricevuto {raw_memory_limit!r})."
+        )
+
     intermediate_mode = str(
         settings.get("INTERMEDIATE_PERSISTENCE_MODE", "metadata_only")
         or "metadata_only"

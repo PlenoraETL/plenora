@@ -22,10 +22,21 @@ from typing import Any, Callable
 
 PIPELINE_EXECUTE_TASK = "pipeline.execute"
 PIPELINE_PREVIEW_TASK = "pipeline.preview"
-SUPPORTED_TASKS = frozenset({PIPELINE_EXECUTE_TASK, PIPELINE_PREVIEW_TASK})
-_POLL_INTERVAL_SECONDS = 0.2
+CARICA_EXECUTE_TASK = "carica.execute"
+ENRICHMENT_EXECUTE_TASK = "tasks.execute_enrichment"
+SUPPORTED_TASKS = frozenset(
+    {
+        PIPELINE_EXECUTE_TASK,
+        PIPELINE_PREVIEW_TASK,
+        CARICA_EXECUTE_TASK,
+        ENRICHMENT_EXECUTE_TASK,
+    }
+)
+_POLL_INTERVAL_SECONDS = 0.1
 _EXIT_GRACE_SECONDS = 5.0
 _STALE_TEMP_GRACE_SECONDS = 300
+_MAX_RSS_SAMPLE_FAILURES = 10
+_CHILD_RSS_STAGE = "data_plane_child_rss"
 
 
 class DataPlaneChildError(RuntimeError):
@@ -86,7 +97,35 @@ def _resolve_task_body(task_name: str) -> Callable[..., object]:
         from workers.tasks.pipeline_task import preview_pipeline_task
 
         return preview_pipeline_task
+    if task_name == CARICA_EXECUTE_TASK:
+        from workers.tasks.carica_task import execute_carica_task
+
+        return execute_carica_task
+    if task_name == ENRICHMENT_EXECUTE_TASK:
+        from workers.tasks.enrichment_task import execute_enrichment_task
+
+        return execute_enrichment_task
     raise ValueError(f"Task data-plane subprocess non supportato: {task_name}")
+
+
+def _error_envelope(exc: BaseException) -> dict[str, object]:
+    envelope: dict[str, object] = {
+        "kind": "error",
+        "error_type": type(exc).__name__,
+        "message": str(exc),
+        "traceback": traceback.format_exc(),
+    }
+    if type(exc).__name__ == "MemoryLimitExceededError":
+        for field_name in (
+            "observed_bytes",
+            "limit_bytes",
+            "path_basename",
+            "stage",
+        ):
+            value = getattr(exc, field_name, None)
+            if value is not None:
+                envelope[field_name] = value
+    return envelope
 
 
 def _child_entry(
@@ -128,24 +167,12 @@ def _child_entry(
                 "task_id": exc.task_id or task_id,
             }
         except BaseException as exc:
-            envelope = {
-                "kind": "error",
-                "error_type": type(exc).__name__,
-                "message": str(exc),
-                "traceback": traceback.format_exc(),
-            }
+            envelope = _error_envelope(exc)
         send_connection.send(envelope)
     except BaseException as exc:
         # Copre errori di import/bootstrap precedenti al task body.
         try:
-            send_connection.send(
-                {
-                    "kind": "error",
-                    "error_type": type(exc).__name__,
-                    "message": str(exc),
-                    "traceback": traceback.format_exc(),
-                }
-            )
+            send_connection.send(_error_envelope(exc))
         except Exception:
             pass
     finally:
@@ -156,11 +183,44 @@ def _child_entry(
 
 
 def _stop_process(process: Any) -> None:
-    """Termina un child bloccato, con fallback kill cross-platform."""
+    """Termina root e discendenti, con fallback kill cross-platform."""
     if not process.is_alive():
         return
+    descendants: list[Any] = []
+    process_pid = int(getattr(process, "pid", 0) or 0)
+    if process_pid > 0:
+        try:
+            import psutil
+
+            descendants = psutil.Process(process_pid).children(recursive=True)
+            # Prima i discendenti: se il root sparisce non possiamo piu'
+            # enumerarli e su Windows potrebbero restare orfani.
+            for child in reversed(descendants):
+                try:
+                    child.terminate()
+                except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
+                    pass
+        except Exception:
+            descendants = []
+
     process.terminate()
     process.join(timeout=_EXIT_GRACE_SECONDS)
+
+    if descendants:
+        try:
+            import psutil
+
+            _gone, alive = psutil.wait_procs(
+                descendants,
+                timeout=_EXIT_GRACE_SECONDS,
+            )
+            for child in alive:
+                try:
+                    child.kill()
+                except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
+                    pass
+        except Exception:
+            pass
     if process.is_alive():
         process.kill()
         process.join(timeout=_EXIT_GRACE_SECONDS)
@@ -170,6 +230,59 @@ def _remote_error_message(envelope: dict[str, object]) -> str:
     error_type = str(envelope.get("error_type") or "ChildError")
     message = str(envelope.get("message") or "errore senza dettaglio")
     return f"Data-plane child {error_type}: {message}"
+
+
+def _ensure_rss_supervisor_available() -> None:
+    try:
+        import psutil  # noqa: F401
+    except Exception as exc:
+        raise DataPlaneChildError(
+            "Limite RSS data-plane configurato ma psutil non disponibile"
+        ) from exc
+
+
+def _process_tree_rss_bytes(pid: int) -> int | None:
+    """RSS del child e dei suoi eventuali discendenti, senza double count."""
+    try:
+        import psutil
+
+        root = psutil.Process(pid)
+        processes = [root, *root.children(recursive=True)]
+    except Exception:
+        return None
+
+    total = 0
+    sampled = False
+    seen: set[int] = set()
+    for child in processes:
+        child_pid = int(getattr(child, "pid", 0) or 0)
+        if child_pid in seen:
+            continue
+        seen.add(child_pid)
+        try:
+            total += int(child.memory_info().rss)
+            sampled = True
+        except (psutil.NoSuchProcess, psutil.AccessDenied, OSError):
+            continue
+    return total if sampled else None
+
+
+def _memory_limit_from_envelope(
+    envelope: dict[str, object],
+) -> BaseException | None:
+    if envelope.get("error_type") != "MemoryLimitExceededError":
+        return None
+    try:
+        from app.core.resources.exceptions import MemoryLimitExceededError
+
+        return MemoryLimitExceededError(
+            observed_bytes=int(envelope["observed_bytes"]),
+            limit_bytes=int(envelope["limit_bytes"]),
+            path_basename=str(envelope.get("path_basename") or "data_plane"),
+            stage=str(envelope.get("stage") or "data_plane_child"),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def _receive_if_available(connection: Any, timeout: float) -> object | None:
@@ -187,6 +300,7 @@ def execute_task_in_subprocess(
     task_id: str,
     kwargs: dict[str, object],
     timeout_seconds: int,
+    memory_limit_bytes: int = 0,
     request_id: str = "",
     mp_context: Any = None,
 ) -> object:
@@ -202,6 +316,9 @@ def execute_task_in_subprocess(
         raise ValueError("task_id obbligatorio per executor subprocess")
 
     timeout = max(1, int(timeout_seconds))
+    memory_limit = max(0, int(memory_limit_bytes))
+    if memory_limit > 0:
+        _ensure_rss_supervisor_available()
     context = mp_context or mp.get_context("spawn")
     _cleanup_stale_task_temp_dirs(
         older_than_seconds=timeout + _STALE_TEMP_GRACE_SECONDS,
@@ -251,11 +368,39 @@ def execute_task_in_subprocess(
 
     deadline = time.monotonic() + timeout
     envelope: dict[str, object] | None = None
+    rss_sample_failures = 0
     try:
         while time.monotonic() < deadline:
             # Impedisce che lo sweep di un altro task concorrente scambi
             # questa directory per un residuo di crash.
             _touch_task_temp_dir(task_temp_dir)
+            if memory_limit > 0 and process.is_alive():
+                child_pid = int(getattr(process, "pid", 0) or 0)
+                observed_rss = (
+                    _process_tree_rss_bytes(child_pid) if child_pid > 0 else None
+                )
+                if observed_rss is None:
+                    rss_sample_failures += 1
+                    if rss_sample_failures >= _MAX_RSS_SAMPLE_FAILURES:
+                        _stop_process(process)
+                        raise DataPlaneChildError(
+                            f"Impossibile misurare RSS del child {task_name} "
+                            f"{task_id} dopo {rss_sample_failures} tentativi"
+                        )
+                else:
+                    rss_sample_failures = 0
+                    if observed_rss > memory_limit:
+                        from app.core.resources.exceptions import (
+                            MemoryLimitExceededError,
+                        )
+
+                        _stop_process(process)
+                        raise MemoryLimitExceededError(
+                            observed_bytes=observed_rss,
+                            limit_bytes=memory_limit,
+                            path_basename=f"{task_name}:{task_id[:12]}",
+                            stage=_CHILD_RSS_STAGE,
+                        )
             remaining = deadline - time.monotonic()
             received = _receive_if_available(
                 receive_connection,
@@ -324,6 +469,9 @@ def execute_task_in_subprocess(
             task_id,
             envelope.get("traceback") or "<assente>",
         )
+        memory_error = _memory_limit_from_envelope(envelope)
+        if memory_error is not None:
+            raise memory_error
         raise DataPlaneChildError(_remote_error_message(envelope))
     raise DataPlaneChildError(
         f"Task {task_name} {task_id}: kind envelope sconosciuto {kind!r}"
@@ -333,6 +481,8 @@ def execute_task_in_subprocess(
 __all__ = [
     "DataPlaneChildError",
     "DataPlaneChildTimeout",
+    "CARICA_EXECUTE_TASK",
+    "ENRICHMENT_EXECUTE_TASK",
     "PIPELINE_EXECUTE_TASK",
     "SUPPORTED_TASKS",
     "execute_task_in_subprocess",

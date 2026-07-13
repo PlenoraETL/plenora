@@ -51,9 +51,16 @@ class _SendConnection:
 
 
 class _FakeProcess:
-    def __init__(self, *, alive: bool, exitcode: int | None = 0) -> None:
+    def __init__(
+        self,
+        *,
+        alive: bool,
+        exitcode: int | None = 0,
+        pid: int = 12345,
+    ) -> None:
         self._alive = alive
         self.exitcode = exitcode
+        self.pid = pid
         self.started = False
         self.terminated = False
         self.killed = False
@@ -146,6 +153,31 @@ def test_child_entry_serializes_crash(monkeypatch):
     assert "RuntimeError: boom" in str(envelope["traceback"])
 
 
+def test_child_entry_preserves_structured_memory_error(monkeypatch):
+    from app.core.resources.exceptions import MemoryLimitExceededError
+    from workers import data_plane_subprocess as executor
+
+    connection = _CaptureSendConnection()
+
+    def _body(_self, **_kwargs):
+        raise MemoryLimitExceededError(
+            observed_bytes=1_600,
+            limit_bytes=1_500,
+            path_basename="join_output",
+            stage="manipola_join_memory",
+        )
+
+    monkeypatch.setattr(executor, "_resolve_task_body", lambda _name: _body)
+    executor._child_entry(connection, "pipeline.execute", "task-memory", {}, "")
+
+    envelope = connection.envelopes[0]
+    assert envelope["error_type"] == "MemoryLimitExceededError"
+    assert envelope["observed_bytes"] == 1_600
+    assert envelope["limit_bytes"] == 1_500
+    assert envelope["path_basename"] == "join_output"
+    assert envelope["stage"] == "manipola_join_memory"
+
+
 def test_child_entry_preserves_cooperative_revocation(monkeypatch):
     from app.core.orchestrator.task_progress import TaskRevoked
     from workers import data_plane_subprocess as executor
@@ -231,6 +263,25 @@ def test_child_entry_boots_with_real_spawn_context():
     assert envelope["kind"] == "error"
     assert envelope["error_type"] == "ValueError"
     assert "non supportato" in envelope["message"]
+
+
+def test_real_spawn_supervisor_enforces_rss_cap():
+    """Il parent misura e termina un vero child spawn sopra il cap."""
+    from app.core.resources.exceptions import MemoryLimitExceededError
+    from workers.data_plane_subprocess import execute_task_in_subprocess
+
+    with pytest.raises(MemoryLimitExceededError) as exc_info:
+        execute_task_in_subprocess(
+            task_name="pipeline.execute",
+            task_id="real-rss-cap",
+            kwargs={},
+            timeout_seconds=30,
+            memory_limit_bytes=1,
+        )
+
+    assert exc_info.value.observed_bytes > 1
+    assert exc_info.value.limit_bytes == 1
+    assert exc_info.value.stage == "data_plane_child_rss"
 
 
 def test_parent_returns_child_result():
@@ -355,6 +406,93 @@ def test_parent_raises_remote_crash_without_traceback_in_message():
     assert "secret remote traceback" not in str(exc_info.value)
 
 
+def test_parent_reconstructs_structured_memory_error():
+    from app.core.resources.exceptions import MemoryLimitExceededError
+    from workers.data_plane_subprocess import execute_task_in_subprocess
+
+    context = _FakeContext(
+        _ReceiveConnection(
+            {
+                "kind": "error",
+                "error_type": "MemoryLimitExceededError",
+                "message": "memory cap",
+                "traceback": "internal traceback",
+                "observed_bytes": 1_600,
+                "limit_bytes": 1_500,
+                "path_basename": "join_output",
+                "stage": "manipola_join_memory",
+            }
+        ),
+        _FakeProcess(alive=False, exitcode=1),
+    )
+
+    with pytest.raises(MemoryLimitExceededError) as exc_info:
+        execute_task_in_subprocess(
+            task_name="pipeline.execute",
+            task_id="task-memory",
+            kwargs={},
+            timeout_seconds=5,
+            mp_context=context,
+        )
+
+    assert exc_info.value.observed_bytes == 1_600
+    assert exc_info.value.limit_bytes == 1_500
+    assert exc_info.value.stage == "manipola_join_memory"
+
+
+def test_parent_terminates_process_tree_when_rss_exceeds_cap(
+    monkeypatch,
+):
+    from app.core.resources.exceptions import MemoryLimitExceededError
+    from workers import data_plane_subprocess as executor
+
+    receive = _ReceiveConnection(available=False)
+    process = _FakeProcess(alive=True, exitcode=None)
+    context = _FakeContext(receive, process)
+    monkeypatch.setattr(executor, "_ensure_rss_supervisor_available", lambda: None)
+    monkeypatch.setattr(executor, "_process_tree_rss_bytes", lambda _pid: 1_501)
+
+    with pytest.raises(MemoryLimitExceededError) as exc_info:
+        executor.execute_task_in_subprocess(
+            task_name="pipeline.execute",
+            task_id="task-rss",
+            kwargs={},
+            timeout_seconds=5,
+            memory_limit_bytes=1_500,
+            mp_context=context,
+        )
+
+    assert exc_info.value.observed_bytes == 1_501
+    assert exc_info.value.limit_bytes == 1_500
+    assert exc_info.value.stage == "data_plane_child_rss"
+    assert process.terminated is True
+    assert receive.closed is True
+    assert not Path(context.process_kwargs["args"][-1]).exists()
+
+
+def test_parent_fails_closed_when_rss_cannot_be_sampled(monkeypatch):
+    from workers import data_plane_subprocess as executor
+
+    receive = _ReceiveConnection(available=False)
+    process = _FakeProcess(alive=True, exitcode=None)
+    context = _FakeContext(receive, process)
+    monkeypatch.setattr(executor, "_ensure_rss_supervisor_available", lambda: None)
+    monkeypatch.setattr(executor, "_process_tree_rss_bytes", lambda _pid: None)
+
+    with pytest.raises(executor.DataPlaneChildError, match="Impossibile misurare RSS"):
+        executor.execute_task_in_subprocess(
+            task_name="pipeline.execute",
+            task_id="task-rss-unavailable",
+            kwargs={},
+            timeout_seconds=5,
+            memory_limit_bytes=1_500,
+            mp_context=context,
+        )
+
+    assert process.terminated is True
+    assert receive.closed is True
+
+
 def test_parent_terminates_child_on_timeout(monkeypatch):
     from workers import data_plane_subprocess as executor
 
@@ -404,12 +542,18 @@ def test_settings_default_to_memory_safe_subprocess_mode():
 
     assert Settings.DEFAULTS["DATA_PLANE_EXECUTION_MODE"] == "subprocess"
     assert Settings.DEFAULTS["DATA_PLANE_CHILD_TIMEOUT_SECONDS"] == 3900
+    assert Settings.DEFAULTS["DATA_PLANE_CHILD_RSS_MAX_BYTES"] == 1_500_000_000
 
 
-def test_execute_and_preview_are_allowlisted_in_disposable_process():
+def test_all_heavy_tasks_are_allowlisted_in_disposable_process():
     from workers import data_plane_subprocess as executor
 
-    assert executor.SUPPORTED_TASKS == {"pipeline.execute", "pipeline.preview"}
+    assert executor.SUPPORTED_TASKS == {
+        "pipeline.execute",
+        "pipeline.preview",
+        "carica.execute",
+        "tasks.execute_enrichment",
+    }
 
 
 @pytest.mark.parametrize("mode", ["inline", "subprocess", " SUBPROCESS "])
@@ -421,6 +565,7 @@ def test_startup_validation_accepts_supported_modes(mode):
         {
             "DATA_PLANE_EXECUTION_MODE": mode,
             "DATA_PLANE_CHILD_TIMEOUT_SECONDS": "3900",
+            "DATA_PLANE_CHILD_RSS_MAX_BYTES": "1500000000",
             "OBJECT_STORAGE_ENABLED": True,
             "OBJECT_STORAGE_BUCKET": "test-runtime",
         },
@@ -445,6 +590,24 @@ def test_startup_validation_rejects_invalid_mode_and_timeout():
     assert len(errors) == 2
     assert "DATA_PLANE_EXECUTION_MODE" in errors[0]
     assert "DATA_PLANE_CHILD_TIMEOUT_SECONDS" in errors[1]
+
+
+def test_startup_validation_rejects_non_positive_subprocess_rss_cap():
+    from app.startup_validation import validate_data_plane_config
+
+    errors: list[str] = []
+    validate_data_plane_config(
+        {
+            "DATA_PLANE_EXECUTION_MODE": "subprocess",
+            "DATA_PLANE_CHILD_TIMEOUT_SECONDS": 3900,
+            "DATA_PLANE_CHILD_RSS_MAX_BYTES": 0,
+            "OBJECT_STORAGE_ENABLED": True,
+            "OBJECT_STORAGE_BUCKET": "test-runtime",
+        },
+        errors,
+    )
+    assert len(errors) == 1
+    assert "DATA_PLANE_CHILD_RSS_MAX_BYTES" in errors[0]
 
 
 @pytest.mark.parametrize("intermediate_mode", ["preview_only", "full_pg"])
@@ -475,3 +638,6 @@ def test_actor_contains_subprocess_feature_flag_contract():
     assert "execute_task_in_subprocess" in source
     assert 'task_name="pipeline.execute"' in source
     assert 'task_name="pipeline.preview"' in source
+    assert 'task_name="carica.execute"' in source
+    assert 'task_name="tasks.execute_enrichment"' in source
+    assert "DATA_PLANE_CHILD_RSS_MAX_BYTES" in source

@@ -266,6 +266,10 @@ class Settings:
         # rollback operativo esplicito.
         "DATA_PLANE_EXECUTION_MODE": "subprocess",
         "DATA_PLANE_CHILD_TIMEOUT_SECONDS": 3900,
+        # Limite RSS hard del child e dei suoi discendenti. Il parent
+        # Dramatiq campiona l'albero processi e lo termina al superamento;
+        # funziona allo stesso modo su Windows, Linux e Docker.
+        "DATA_PLANE_CHILD_RSS_MAX_BYTES": 1_500_000_000,
         # massimo per il numero di righe di output di un cross-join
         # `op_cross_join` in `app.core.manipola.transforms.joins`
         # Il preflight stima `len(left) * len(right)` PRIMA di
