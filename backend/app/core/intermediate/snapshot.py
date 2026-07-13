@@ -15,17 +15,14 @@ from typing import Any, Dict, List, Optional, TypeAlias
 from app.core.intermediate import node_snapshots_db as _node_snapshots_db
 from app.core.intermediate import policy as _policy
 from app.core.intermediate import runs_db as _runs_db
-from app.core.intermediate.writer import compute_row_hash
 from app.core.dataframes.frame_io import (
     dataframe_from_mapping,
     dataframe_hash_bytes,
     is_dataframe,
 )
-from app.core.dataframes.tabular import dataframe_head_records
 
 logger = logging.getLogger(__name__)
 
-SnapshotRow: TypeAlias = Dict[str, Any]
 ColumnSchema: TypeAlias = Dict[str, str]
 
 
@@ -47,10 +44,8 @@ class SnapshotHandle:
     Quando `recorded=True`:
       - `node_hash` e' presente (salvo errore di compute);
       - `row_count` e' la lunghezza reale del DataFrame;
-      - `persisted_rows_count` e':
-          0 in mode `metadata_only`;
-          min(N, row_count) in `preview_only`;
-          row_count in `full_pg`.
+      - `persisted_rows_count` e' sempre 0: PostgreSQL contiene solo
+        metadati, mentre `full_artifact` salva il payload su object storage.
     """
     recorded: bool
     reason: str
@@ -220,51 +215,6 @@ def compute_dataframe_fingerprint(df: Any) -> tuple[str, str]:
     )
 
 
-# Preview & row-hash helpers (interni
-
-def _build_preview_rows(df: Any, n_rows: int) -> List[SnapshotRow]:
-    """Return preview records with `_row_hash` for each row.
-
-    Riusa `writer.compute_row_hash` per garantire che
-    il `row_hash` di una riga preview sia identico a quello di
-    `full_pg` (cosi' diff L2 fra una run preview_only e una full_pg
-    sullo stesso dataset combacia sulle prime N righe).
-    """
-    if df is None or n_rows <= 0:
-        return []
-    rows = dataframe_head_records(df, n_rows)
-    if not rows:
-        return []
-
-    cols_sorted = sorted(map(str, df.columns.tolist()))
-    out: List[SnapshotRow] = []
-    for row in rows:
-        out.append({
-            "_row_hash": compute_row_hash(row, cols_sorted),
-            **row,
-        })
-    return out
-
-
-def _build_full_rows_pg(df: Any) -> List[SnapshotRow]:
-    """Materializza l'intero DataFrame in lista di dict + `_row_hash`.
-
-    Usato solo dalla mode `full_pg`. Costoso su DataFrame grandi:
-    per definizione.
-    """
-    if df is None:
-        return []
-
-    cols_sorted = sorted(map(str, df.columns.tolist()))
-    out: List[SnapshotRow] = []
-    for row in dataframe_head_records(df, len(df)):
-        out.append({
-            "_row_hash": compute_row_hash(row, cols_sorted),
-            **row,
-        })
-    return out
-
-
 def _col_schema_from_df(df: Any) -> ColumnSchema:
     """`{col_name: dtype_str}` come gia' fatto da writer.write_node."""
     if df is None:
@@ -296,11 +246,8 @@ def _record_snapshot(
          `SnapshotHandle(recorded=False, reason=...)`.
       2. row_count = len(df); col_schema da df.dtypes.
       3. compute_dataframe_fingerprint(df) -> node_hash.
-      4. preview/full rows secondo `policy.persistence_mode`:
-         - metadata_only -> rows_to_persist = []
-         - preview_only -> rows_to_persist = head(N) + _row_hash
-         - full_pg -> rows_to_persist = full to_dict + _row_hash
-      5. write_node_snapshot_atomic(...) -> persiste meta + rows.
+      4. `full_artifact` salva il payload su object storage.
+      5. write_node_snapshot_atomic(...) persiste soltanto i metadati.
 
     `mode_override` (R-25 PR-B2): kwarg per-call che sostituisce
     `INTERMEDIATE_PERSISTENCE_MODE` globale. None = bit-compat default.
@@ -332,8 +279,8 @@ def _record_snapshot(
         )
 
     # Lazy len/schema/hash: arriviamo qui solo se la policy ha deciso
-    # di registrare. Hash sempre calcolato sul full DataFrame; le righe
-    # da scrivere variano per mode
+    # di registrare. Hash sempre calcolato sul DataFrame; nessuna riga
+    # viene materializzata per PostgreSQL.
     row_count = 0 if df is None else int(len(df))
     col_schema = _col_schema_from_df(df)
 
@@ -341,22 +288,9 @@ def _record_snapshot(
     node_hash, hash_algo = compute_dataframe_fingerprint(df)
     fingerprint_ms = _ms(_t_fp)
 
-    rows_to_persist: List[Dict] = []
     persistence_mode = policy.persistence_mode
-
-    if policy.should_record_rows:
-        if persistence_mode == _policy.MODE_FULL_PG:
-            rows_to_persist = _build_full_rows_pg(df)
-        elif persistence_mode == _policy.MODE_PREVIEW_ONLY:
-            rows_to_persist = _build_preview_rows(df, policy.preview_rows)
-        # mode metadata_only / full_artifact non entrano in questo branch
-        # should_record_rows=False -> zero node_rows
-
-    persisted_rows_count = len(rows_to_persist)
-    preview_truncated = (
-        persistence_mode == _policy.MODE_PREVIEW_ONLY
-        and persisted_rows_count < row_count
-    )
+    persisted_rows_count = 0
+    preview_truncated = False
 
     # In mode full_artifact serializziamo data.parquet + manifest.json
     # su runtime object storage. Il caller persistera' artifact_uri /
@@ -413,7 +347,7 @@ def _record_snapshot(
             run_id=run_id,
             node_id=node_id,
             node_type=node_type,
-            rows_to_persist=rows_to_persist,
+            rows_to_persist=[],
             col_schema=col_schema,
             exec_time=exec_time,
             status=status,
@@ -553,7 +487,7 @@ def record_checkpoint_snapshot(
     `mode_override` (R-25 PR-B2): override per-call della
     `INTERMEDIATE_PERSISTENCE_MODE` globale. Default None = bit-compat.
     Nota: l'override agisce SOLO sulla mode di persistenza
-    (`metadata_only/preview_only/full_pg/full_artifact`), NON sulla
+    (`metadata_only/full_artifact`), NON sulla
     decisione di skip checkpoint per un nodo (governata da
     `MANIPOLA_INTERMEDIATE_CHECKPOINTS`). Un nodo skipped resta skipped
     anche con override.

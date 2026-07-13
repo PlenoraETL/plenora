@@ -44,14 +44,18 @@ def _patch_settings(cfg: dict):
 def _reset_policy_cache():
     from app.core.intermediate.policy import reset_validation_cache
     reset_validation_cache()
-    yield
+    with patch(
+        "app.core.io.object_storage.object_storage_enabled",
+        return_value=True,
+    ):
+        yield
     reset_validation_cache()
 
 
 @pytest.fixture
 def small_df():
     """DataFrame piccolo deterministico, abbastanza per esercitare
-    metadata_only / preview_only / full_pg senza overhead."""
+    metadata_only / full_artifact senza overhead."""
     return pd.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]})
 
 
@@ -71,35 +75,34 @@ class TestResolvePolicyOverride:
             )
         assert result.persistence_mode == "metadata_only"
 
-    def test_override_full_pg_su_default_metadata_only(self):
+    def test_override_full_artifact_su_default_metadata_only(self):
         from app.core.intermediate import policy as _policy
 
         with _patch_settings(_make_cfg(mode="metadata_only")):
             result = _policy.resolve_intermediate_policy(
                 module="estrai", snapshot_kind="final",
-                node_type="estrai", mode_override="full_pg",
+                node_type="estrai", mode_override="full_artifact",
             )
-        assert result.persistence_mode == "full_pg"
+        assert result.persistence_mode == "full_artifact"
         assert result.should_record_meta is True
-        assert result.should_record_rows is True
+        assert result.should_record_rows is False
 
-    def test_override_preview_only_su_default_metadata_only(self):
+    @pytest.mark.parametrize("legacy_mode", ["preview_only", "full_pg"])
+    def test_override_legacy_postgres_rows_vietato(self, legacy_mode):
         from app.core.intermediate import policy as _policy
 
         with _patch_settings(_make_cfg(mode="metadata_only")):
-            result = _policy.resolve_intermediate_policy(
-                module="estrai", snapshot_kind="final",
-                node_type="estrai", mode_override="preview_only",
-            )
-        assert result.persistence_mode == "preview_only"
-        assert result.preview_rows == 500
-        assert result.should_record_rows is True
+            with pytest.raises(_policy.IntermediateSettingsError):
+                _policy.resolve_intermediate_policy(
+                    module="estrai", snapshot_kind="final",
+                    node_type="estrai", mode_override=legacy_mode,
+                )
 
-    def test_override_metadata_only_su_default_full_pg(self):
+    def test_override_metadata_only_su_default_full_artifact(self):
         """Override puo' anche RIDURRE la persistenza, non solo aumentarla."""
         from app.core.intermediate import policy as _policy
 
-        with _patch_settings(_make_cfg(mode="full_pg")):
+        with _patch_settings(_make_cfg(mode="full_artifact")):
             result = _policy.resolve_intermediate_policy(
                 module="manipola", snapshot_kind="final",
                 node_type="result", mode_override="metadata_only",
@@ -131,7 +134,7 @@ class TestResolvePolicyOverride:
         with _patch_settings(_make_cfg(mode="metadata_only")):
             result = _policy.resolve_intermediate_policy(
                 module="arricchisci", snapshot_kind="checkpoint",
-                node_type="api_enrich", mode_override="full_pg",
+                node_type="api_enrich", mode_override="full_artifact",
             )
         # Skip non e' alterato dall'override.
         assert result.should_record_meta is False
@@ -154,7 +157,7 @@ class TestSnapshotWrappersPropagation:
             captured.update(kwargs)
             return original(**kwargs)
 
-        with _patch_settings(_make_cfg(mode="metadata_only")):
+        with _patch_settings(_make_cfg(mode="full_artifact")):
             with patch.object(_snap._policy, "resolve_intermediate_policy", side_effect=spy):
                 # Mock del DB writer + fingerprint per evitare side-effect
                 # reali (qui ci interessa solo il kwarg propagato).
@@ -162,10 +165,10 @@ class TestSnapshotWrappersPropagation:
                     _snap.record_final_snapshot(
                         run_id="run-1", module="estrai",
                         node_id="n-1", node_type="estrai",
-                        df=small_df, mode_override="full_pg",
+                        df=small_df, mode_override="metadata_only",
                     )
 
-        assert captured.get("mode_override") == "full_pg"
+        assert captured.get("mode_override") == "metadata_only"
 
     def test_record_checkpoint_snapshot_propaga_a_resolve(self, small_df):
         from app.core.intermediate import snapshot as _snap
@@ -177,16 +180,16 @@ class TestSnapshotWrappersPropagation:
             captured.update(kwargs)
             return original(**kwargs)
 
-        with _patch_settings(_make_cfg(mode="metadata_only")):
+        with _patch_settings(_make_cfg(mode="full_artifact")):
             with patch.object(_snap._policy, "resolve_intermediate_policy", side_effect=spy):
                 with patch.object(_snap._node_snapshots_db, "write_node_snapshot_atomic"):
                     _snap.record_checkpoint_snapshot(
                         run_id="run-1", module="manipola",
                         node_id="n-1", node_type="multi_join",
-                        df=small_df, mode_override="preview_only",
+                        df=small_df, mode_override="metadata_only",
                     )
 
-        assert captured.get("mode_override") == "preview_only"
+        assert captured.get("mode_override") == "metadata_only"
 
     def test_record_final_snapshot_default_kwarg_e_none(self, small_df):
         """Senza passare mode_override, deve arrivare None a resolve
@@ -238,12 +241,12 @@ class TestSnapshotWrappersPropagation:
                 _snap.record_final_snapshot(
                     run_id="run-1", module="estrai",
                     node_id="n-1", node_type="estrai",
-                    df=small_df, mode_override="full_pg",
+                    df=small_df, mode_override="metadata_only",
                 )
 
         assert mock_writer.called
         call_kwargs = mock_writer.call_args.kwargs
-        assert call_kwargs["persistence_mode"] == "full_pg"
+        assert call_kwargs["persistence_mode"] == "metadata_only"
 
 
 # C. QueryExecutor.execute_query propaga (kwarg esplicito, no stato)
@@ -344,23 +347,23 @@ class TestQueryExecutorPropagation:
             f"Order: {params}"
         )
 
-    def test_execute_query_propaga_full_pg(self):
+    def test_execute_query_propaga_full_artifact(self):
         executor = self._build_executor()
         result, captured = self._run_with_spy(
-            executor, override="full_pg", settings_mode="metadata_only",
+            executor, override="full_artifact", settings_mode="metadata_only",
         )
-        assert captured.get("mode_override") == "full_pg", (
+        assert captured.get("mode_override") == "full_artifact", (
             f"Override non propagato. Captured: {captured}"
         )
         # La query stessa deve essere riuscita.
         assert result.get("success") is True or "result_id" in result
 
-    def test_execute_query_propaga_preview_only(self):
+    def test_execute_query_propaga_metadata_only(self):
         executor = self._build_executor()
         _, captured = self._run_with_spy(
-            executor, override="preview_only", settings_mode="metadata_only",
+            executor, override="metadata_only", settings_mode="full_artifact",
         )
-        assert captured.get("mode_override") == "preview_only"
+        assert captured.get("mode_override") == "metadata_only"
 
     def test_execute_query_default_kwarg_propaga_none(self):
         """Bit-compat: nessun kwarg passato => mode_override=None a record."""
@@ -412,14 +415,14 @@ class TestQueryExecutorPropagation:
                 project_id="p", output_filename="o1",
                 output_format="json",
                 run_id="r-1", node_id="n-1",
-                intermediate_mode_override="full_pg",
+                intermediate_mode_override="full_artifact",
             )
             executor.execute_query(
                 connection=fake_conn, sql="S2",
                 project_id="p", output_filename="o2",
                 output_format="json",
                 run_id="r-2", node_id="n-2",
-                intermediate_mode_override="preview_only",
+                intermediate_mode_override="metadata_only",
             )
             executor.execute_query(
                 connection=fake_conn, sql="S3",
@@ -429,7 +432,7 @@ class TestQueryExecutorPropagation:
                 # NO override: deve essere None
             )
 
-        assert captured_log == ["full_pg", "preview_only", None], (
+        assert captured_log == ["full_artifact", "metadata_only", None], (
             f"Stato d'istanza fragile rilevato. Log: {captured_log}. "
             "Una delle 3 chiamate ha contaminato lo stato delle altre."
         )

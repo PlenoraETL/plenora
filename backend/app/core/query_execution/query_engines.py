@@ -6,6 +6,7 @@ tested without importing the executor orchestration layer.
 """
 
 import hashlib
+import re
 from typing import Protocol
 from urllib.parse import quote_plus
 
@@ -20,6 +21,61 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+_MSSQL_DRIVER_PREFERENCE = (
+    "ODBC Driver 18 for SQL Server",
+    "ODBC Driver 17 for SQL Server",
+)
+
+
+def _installed_mssql_drivers() -> tuple[str, ...]:
+    try:
+        import pyodbc
+
+        installed = set(pyodbc.drivers())
+    except Exception:
+        return ()
+    return tuple(
+        driver for driver in _MSSQL_DRIVER_PREFERENCE if driver in installed
+    )
+
+
+def _preferred_mssql_driver() -> str:
+    installed = _installed_mssql_drivers()
+    return installed[0] if installed else _MSSQL_DRIVER_PREFERENCE[0]
+
+
+def _replace_mssql_driver(url: str, driver: str) -> str:
+    encoded = quote_plus(driver)
+    if re.search(r"(?i)([?&]driver=)[^&]+", url):
+        return re.sub(
+            r"(?i)([?&]driver=)[^&]+",
+            lambda match: f"{match.group(1)}{encoded}",
+            url,
+            count=1,
+        )
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}driver={encoded}"
+
+
+def _is_missing_odbc_driver_error(exc: Exception) -> bool:
+    """Distinguish a missing local driver from server/auth/TLS failures."""
+    message = str(exc).lower()
+    return (
+        ("odbc driver" in message and "not found" in message)
+        or any(
+            marker in message
+            for marker in (
+                "im002",
+                "can't open lib",
+                "cannot open lib",
+                "data source name not found",
+                "no default driver specified",
+                "driver not found",
+            )
+        )
+    )
+
+
 class EngineConnection(QueryConnection, Protocol):
     """Connection shape required by DefaultEngineFactory."""
 
@@ -31,7 +87,7 @@ class DefaultEngineFactory:
     Costruisce la connection string appropriata per ogni tipo di database
     e gestisce configurazioni specifiche:
         - Oracle: disabilita fetch LOB automaticamente (CLOB/BLOB -> str/bytes)
-        - MSSQL: fallback automatico da ODBC Driver 18 a Driver 17
+        - MSSQL: selezione del driver ODBC realmente installato
         - Tutti: timeout di connessione configurati per tipo
 
     Performance:
@@ -104,7 +160,8 @@ class DefaultEngineFactory:
         conn_str = self._costruisci_connection_string(conn)
         connect_args = self._ottieni_connect_args(conn)
 
-        # MSSQL: tentativo con Driver 18, fallback a Driver 17
+        # MSSQL: usa il driver realmente installato; fallback soltanto se il
+        # driver locale sparisce tra discovery e connessione.
         if conn.type == "mssql":
             engine = self._crea_engine_mssql(conn_str, connect_args)
         else:
@@ -147,8 +204,9 @@ class DefaultEngineFactory:
         """
         Crea engine MSSQL con fallback automatico del driver ODBC.
 
-        Tenta prima con ODBC Driver 18 (piu' recente), e se fallisce
-        per mancanza del driver, ritenta con ODBC Driver 17.
+        Normalizza la URL sul driver installato preferendo ODBC Driver 18.
+        Un fallback e' consentito soltanto per errori locali di driver
+        mancante (IM002 / can't open lib), mai per auth, rete o TLS.
 
         Bulk performance: abilita `fast_executemany=True` per pyodbc.
         Questo trasforma l'executemany standard (1 INSERT per riga, ~100
@@ -181,6 +239,11 @@ class DefaultEngineFactory:
         if fast_em not in ("off", "false", "0", "no", "disabled"):
             engine_kwargs["fast_executemany"] = True
 
+        installed_drivers = _installed_mssql_drivers()
+        if installed_drivers:
+            conn_str = _replace_mssql_driver(conn_str, installed_drivers[0])
+
+        engine = None
         try:
             engine = create_engine(
                 conn_str, connect_args=connect_args, **engine_kwargs,
@@ -190,11 +253,20 @@ class DefaultEngineFactory:
                 test_conn.execute(text("SELECT 1"))
             return engine
         except Exception as e:
-            if "ODBC Driver 18" in str(e):
-                conn_str_17 = conn_str.replace("ODBC+Driver+18", "ODBC+Driver+17")
-                return create_engine(
-                    conn_str_17, connect_args=connect_args, **engine_kwargs,
+            if engine is not None:
+                engine.dispose()
+            if not _is_missing_odbc_driver_error(e):
+                raise
+            for fallback_driver in installed_drivers[1:]:
+                fallback_url = _replace_mssql_driver(conn_str, fallback_driver)
+                fallback_engine = create_engine(
+                    fallback_url,
+                    connect_args=connect_args,
+                    **engine_kwargs,
                 )
+                with fallback_engine.connect() as test_conn:
+                    test_conn.execute(text("SELECT 1"))
+                return fallback_engine
             raise
 
     def _costruisci_connection_string(self, conn: EngineConnection) -> str:
@@ -233,7 +305,7 @@ class DefaultEngineFactory:
             return (
                 f"mssql+pyodbc://{usr}:{pwd}"
                 f"@{conn.host}:{conn.port}/{conn.database}"
-                f"?driver=ODBC+Driver+18+for+SQL+Server"
+                f"?driver={quote_plus(_preferred_mssql_driver())}"
                 f"&TrustServerCertificate=yes&Encrypt=Optional"
             )
         elif conn.type == "oracle":

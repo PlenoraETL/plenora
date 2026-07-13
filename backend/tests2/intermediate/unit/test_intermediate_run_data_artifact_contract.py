@@ -63,12 +63,11 @@ def _make_parquet_bytes(df: pd.DataFrame) -> bytes:
     return buf.getvalue()
 
 
-# 1. NULL / full_pg / preview_only -> node_rows path
+# 1. NULL fail-closed; mode legacy esplicita ancora leggibile
 
 
-def test_null_full_pg_node_rows_path_unchanged(superadmin_user):
-    """Persistence_mode NULL o full_pg: legge da
-    node_rows come prima del batch artifact. Regression."""
+def test_null_mode_is_metadata_only_and_does_not_read_node_rows(superadmin_user):
+    """Una mode NULL non autorizza piu' una lettura implicita da PostgreSQL."""
     client = build_client(superadmin_user)
 
     full_pg_rows = [{"id": 1, "v": "a"}, {"id": 2, "v": "b"}]
@@ -79,23 +78,23 @@ def test_null_full_pg_node_rows_path_unchanged(superadmin_user):
     ), patch(
         "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         return_value=_node_meta(
-            persistence_mode=None,  # NOTE: NULL -> trattato come full_pg
+            persistence_mode=None,
             row_count=2,
             col_schema={"id": "int", "v": "str"},
         ),
     ), patch(
         "app.core.intermediate.router.node_snapshots_db.get_node_table_rows",
-        return_value=full_pg_rows,
+        side_effect=AssertionError("node_rows NON deve essere letto"),
     ) as mock_rows:
         response = client.get("/api/runs/r1/nodes/n1/data")
 
     assert response.status_code == 200
     body = response.json()
-    assert body["rows"] == full_pg_rows
+    assert body["rows"] == []
     assert body["row_count"] == 2
-    # Persistence mode resa esplicita ai client (NULL -> "full_pg")
-    assert body["persistence_mode"] == "full_pg"
-    mock_rows.assert_called_once()
+    assert body["persistence_mode"] == "metadata_only"
+    assert "metadata_only" in body["message"]
+    mock_rows.assert_not_called()
 
 
 def test_preview_only_node_rows_path(superadmin_user):

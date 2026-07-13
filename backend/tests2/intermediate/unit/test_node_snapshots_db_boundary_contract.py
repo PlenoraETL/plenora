@@ -16,9 +16,11 @@ _INTERMEDIATE_ROOT = _BACKEND_ROOT / "app" / "core" / "intermediate"
 _NODE_TABLE_SQL_MARKERS = (
     "INSERT INTO node_meta",
     "SELECT * FROM node_meta",
+    "SELECT row_hash, row_data FROM node_rows",
+)
+_FORBIDDEN_NODE_ROW_WRITE_MARKERS = (
     "DELETE FROM node_rows",
     "INSERT INTO node_rows",
-    "SELECT row_hash, row_data FROM node_rows",
 )
 _NODE_FACADE_FUNCTIONS = {
     "upsert_node_meta",
@@ -106,13 +108,17 @@ def test_intermediate_db_facade_contains_no_embedded_node_snapshot_sql() -> None
         "Node snapshot SQL must be owned by node_snapshots_db.py. "
         f"Missing leaf markers: {missing_from_leaf}"
     )
+    assert all(
+        marker not in snapshots_literals
+        for marker in _FORBIDDEN_NODE_ROW_WRITE_MARKERS
+    )
 
 
 def test_intermediate_db_node_snapshot_facades_stay_tombstoned() -> None:
     assert not (_INTERMEDIATE_ROOT / "db.py").exists()
 
 
-def test_node_snapshots_db_preserves_patchable_batch_insert(
+def test_node_snapshots_db_tombstones_batch_insert(
     monkeypatch,
 ) -> None:
     from app.core.intermediate import node_snapshots_db as idb
@@ -146,14 +152,12 @@ def test_node_snapshots_db_preserves_patchable_batch_insert(
 
     monkeypatch.setattr(idb, "unit_of_work", lambda: Transaction())
 
-    idb.insert_node_rows(
-        "run-1",
-        "node-1",
-        [{"_row_hash": "h1", "value": 1}],
-        {"value": "int"},
-    )
+    with pytest.raises(RuntimeError, match="disabilitato"):
+        idb.insert_node_rows(
+            "run-1",
+            "node-1",
+            [{"_row_hash": "h1", "value": 1}],
+            {"value": "int"},
+        )
 
-    assert calls[0][0] == "execute"
-    assert "DELETE FROM node_rows" in calls[0][1]
-    assert calls[1][0] == "executemany"
-    assert "INSERT INTO node_rows" in calls[1][1]
+    assert calls == []

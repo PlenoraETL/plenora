@@ -69,9 +69,8 @@ def test_l2_full_pg_full_pg_returns_full_diff(superadmin_user):
     assert "reason" not in body or body.get("reason") != "preview_only"
 
 
-def test_l2_null_persistence_mode_treated_as_full_pg(superadmin_user):
-    """Record senza `persistence_mode` -> mappato a `full_pg`
-    (vedi `policy.persistence_mode_for_record`)."""
+def test_l2_null_persistence_mode_is_conservatively_metadata_only(superadmin_user):
+    """Un record senza mode non autorizza piu' letture implicite da PG."""
     client = build_client(superadmin_user)
 
     def _fake_meta(rid, _nid):
@@ -92,11 +91,12 @@ def test_l2_null_persistence_mode_treated_as_full_pg(superadmin_user):
     ):
         response = client.get("/api/runs/compare/l2?run_id_a=rA&run_id_b=rB&node_id=n1")
 
-    assert response.status_code == 200
+    assert response.status_code == 422
     body = response.json()
-    assert body["persistence_mode_a"] == "full_pg"
-    assert body["persistence_mode_b"] == "full_pg"
-    assert body["diff_available"] is True
+    detail = body["detail"]
+    assert detail["persistence_mode_a"] == "metadata_only"
+    assert detail["persistence_mode_b"] == "metadata_only"
+    assert detail["reason"] == "metadata_only_no_rows"
 
 
 # 2. preview_only + preview_only -> 200 partial=True
@@ -385,7 +385,7 @@ def test_l2_does_not_return_500_on_any_documented_mode(superadmin_user):
         ("full_artifact", "full_artifact", "pending", "complete", 422),
         ("full_artifact", "full_artifact", "failed", "complete", 422),
         ("preview_only", "full_pg", None, None, 422),
-        (None, None, None, None, 200),  # NOTE: NULL = full_pg
+        (None, None, None, None, 422),  # NULL e' metadata_only fail-closed
     ]
 
     for mode_a, mode_b, sa, sb, expected in cases:

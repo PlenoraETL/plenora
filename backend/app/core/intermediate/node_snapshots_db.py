@@ -1,8 +1,7 @@
 """Node snapshot persistence for intermediate runs.
 
-Owns `node_meta`, `node_rows`, and JSONB normalization for persisted
-intermediate node data. Runtime callers should use this leaf boundary
-directly.
+Owns current `node_meta` writes and read-only compatibility for historical
+`node_rows`. Runtime payloads are never written to PostgreSQL.
 """
 
 from __future__ import annotations
@@ -155,13 +154,12 @@ def write_node_snapshot_atomic(
 ) -> None:
     """Atomically write metadata; payload rows are never stored in PG."""
     transaction_boundary = transaction_func or unit_of_work
-    records = _build_node_row_records(run_id, node_id, rows_to_persist or [])
-    if records:
+    if rows_to_persist:
         raise ValueError(
             "write_node_snapshot_atomic non accetta payload rows: usa "
             "metadata_only o full_artifact"
         )
-    persisted_rows_count = len(records)
+    persisted_rows_count = 0
     if row_count is None:
         row_count = persisted_rows_count
 
@@ -288,65 +286,6 @@ def _from_jsonable_value(value):
     return value
 
 
-_SQL_DELETE_NODE_ROWS = "DELETE FROM node_rows WHERE run_id = %s AND node_id = %s"
-_SQL_INSERT_NODE_ROW = (
-    "INSERT INTO node_rows (run_id, node_id, row_idx, row_hash, row_data) "
-    "VALUES (%s, %s, %s, %s, %s::jsonb)"
-)
-
-
-def _bulk_insert_node_rows(cur, records: List[tuple]) -> None:
-    """Bulk insert node_rows via psycopg3 executemany.
-
-    Usa `cursor.executemany` su INSERT parametrizzata. psycopg3 internamente
-    cache la prepared
-    statement (default `prepare_threshold=5`), riducendo l'overhead
-    di parsing dopo le prime esecuzioni. Per dataset molto grandi
-    (>>10k righe) la migrazione successiva passera' a
-    `cursor.copy(...)` (binary COPY), ma il default executemany
-    e' gia' competitivo sul caso comune.
-    """
-    if not records:
-        return
-    cur.executemany(_SQL_INSERT_NODE_ROW, records)
-
-
-_SQL_UPSERT_NODE_META = (
-    "INSERT INTO node_meta "
-    "(run_id, node_id, node_type, row_count, col_schema, exec_time, status, error_msg) "
-    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) "
-    "ON CONFLICT (run_id, node_id) DO UPDATE SET "
-    "node_type=EXCLUDED.node_type, row_count=EXCLUDED.row_count, "
-    "col_schema=EXCLUDED.col_schema, exec_time=EXCLUDED.exec_time, "
-    "status=EXCLUDED.status, error_msg=EXCLUDED.error_msg"
-)
-
-
-def _build_node_row_records(
-    run_id: str,
-    node_id: str,
-    rows: List[Dict],
-) -> List[tuple]:
-    records: List[tuple] = []
-    for idx, row in enumerate(rows or []):
-        row_hash = row.get("_row_hash", "")
-        row_data = {
-            key: _to_jsonable(value)
-            for key, value in row.items()
-            if key != "_row_hash"
-        }
-        records.append(
-            (
-                run_id,
-                node_id,
-                idx,
-                row_hash,
-                json.dumps(row_data, ensure_ascii=False),
-            )
-        )
-    return records
-
-
 def insert_node_rows(
     run_id: str,
     node_id: str,
@@ -355,14 +294,10 @@ def insert_node_rows(
     *,
     transaction_func=None,
 ) -> None:
-    """Idempotently bulk insert node rows for one run/node pair."""
-    transaction_boundary = transaction_func or unit_of_work
-    records = _build_node_row_records(run_id, node_id, rows)
-
-    with transaction_boundary() as conn:
-        with conn.cursor() as cur:
-            cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
-            _bulk_insert_node_rows(cur, records)
+    """Tombstone: PostgreSQL payload writes were removed in 2026."""
+    raise RuntimeError(
+        "insert_node_rows e' disabilitato: salva il payload su object storage"
+    )
 
 
 def write_node_atomic(
@@ -377,25 +312,10 @@ def write_node_atomic(
     error_msg: Optional[str] = None,
     transaction_func=None,
 ) -> None:
-    """Atomically write `node_rows` plus base `node_meta`."""
-    transaction_boundary = transaction_func or unit_of_work
-    records = _build_node_row_records(run_id, node_id, rows or [])
-    meta_params = (
-        run_id,
-        node_id,
-        node_type,
-        len(records),
-        json.dumps(col_schema) if col_schema else None,
-        exec_time,
-        status,
-        error_msg,
+    """Tombstone: PostgreSQL payload writes were removed in 2026."""
+    raise RuntimeError(
+        "write_node_atomic e' disabilitato: usa metadata_only o full_artifact"
     )
-
-    with transaction_boundary() as conn:
-        with conn.cursor() as cur:
-            cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
-            _bulk_insert_node_rows(cur, records)
-            cur.execute(_SQL_UPSERT_NODE_META, meta_params)
 
 
 def get_node_table_rows(

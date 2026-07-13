@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
+import time
+from pathlib import Path
+
 import pytest
 
 
@@ -94,6 +99,12 @@ class _FakeContext:
         return self.process
 
 
+class _ProcessConstructionFailureContext(_FakeContext):
+    def Process(self, **kwargs):
+        self.process_kwargs = kwargs
+        raise OSError("process object construction denied")
+
+
 def test_child_entry_returns_result_envelope(monkeypatch):
     from workers import data_plane_subprocess as executor
 
@@ -158,6 +169,40 @@ def test_child_entry_preserves_cooperative_revocation(monkeypatch):
     ]
 
 
+def test_child_entry_routes_all_temp_files_to_task_directory(
+    monkeypatch,
+    tmp_path,
+):
+    from workers import data_plane_subprocess as executor
+
+    connection = _CaptureSendConnection()
+    task_temp = tmp_path / "task-temp"
+    monkeypatch.setattr(tempfile, "tempdir", tempfile.tempdir)
+    for name in ("TMPDIR", "TEMP", "TMP"):
+        monkeypatch.setenv(name, "original-temp")
+
+    def _body(_self, **_kwargs):
+        return {
+            "tempfile": tempfile.gettempdir(),
+            "env": {name: os.environ[name] for name in ("TMPDIR", "TEMP", "TMP")},
+        }
+
+    monkeypatch.setattr(executor, "_resolve_task_body", lambda _name: _body)
+    executor._child_entry(
+        connection,
+        "pipeline.execute",
+        "task-temp",
+        {},
+        "",
+        str(task_temp),
+    )
+
+    result = connection.envelopes[0]["result"]
+    assert result["tempfile"] == str(task_temp)
+    assert set(result["env"].values()) == {str(task_temp)}
+    assert task_temp.is_dir()
+
+
 def test_child_entry_boots_with_real_spawn_context():
     """Smoke reale del boundary usato su Windows, Linux e container."""
     import multiprocessing as mp
@@ -208,6 +253,8 @@ def test_parent_returns_child_result():
     assert context.send.closed is True
     assert receive.closed is True
     assert context.process_kwargs["target"].__name__ == "_child_entry"
+    task_temp = Path(context.process_kwargs["args"][-1])
+    assert not task_temp.exists()
 
 
 def test_parent_closes_pipe_when_process_start_fails():
@@ -233,7 +280,31 @@ def test_parent_closes_pipe_when_process_start_fails():
 
     assert receive.closed is True
     assert context.send.closed is True
+    assert not Path(context.process_kwargs["args"][-1]).exists()
 
+
+def test_parent_closes_pipe_when_process_construction_fails():
+    from workers.data_plane_subprocess import execute_task_in_subprocess
+
+    receive = _ReceiveConnection(available=False)
+    context = _ProcessConstructionFailureContext(
+        receive,
+        _FakeProcess(alive=False, exitcode=None),
+    )
+
+    with pytest.raises(OSError, match="construction denied"):
+        execute_task_in_subprocess(
+            task_name="pipeline.execute",
+            task_id="task-construction-failure",
+            kwargs={},
+            timeout_seconds=5,
+            mp_context=context,
+        )
+
+    assert receive.closed is True
+    assert context.send.closed is True
+    task_temp = Path(context.process_kwargs["args"][-1])
+    assert not task_temp.exists()
 
 def test_parent_re_raises_revocation():
     from app.core.orchestrator.task_progress import TaskRevoked
@@ -305,6 +376,27 @@ def test_parent_terminates_child_on_timeout(monkeypatch):
     assert process.terminated is True
     assert process.is_alive() is False
     assert receive.closed is True
+    assert not Path(context.process_kwargs["args"][-1]).exists()
+
+
+def test_stale_task_temp_sweep_preserves_recent_directories(
+    monkeypatch,
+    tmp_path,
+):
+    from workers import data_plane_subprocess as executor
+
+    stale = tmp_path / "plenora-data-stale"
+    recent = tmp_path / "plenora-data-recent"
+    stale.mkdir()
+    recent.mkdir()
+    old = time.time() - 10_000
+    os.utime(stale, (old, old))
+    monkeypatch.setattr(executor.tempfile, "gettempdir", lambda: str(tmp_path))
+
+    executor._cleanup_stale_task_temp_dirs(older_than_seconds=3_900)
+
+    assert not stale.exists()
+    assert recent.is_dir()
 
 
 def test_settings_default_to_memory_safe_subprocess_mode():
@@ -329,6 +421,8 @@ def test_startup_validation_accepts_supported_modes(mode):
         {
             "DATA_PLANE_EXECUTION_MODE": mode,
             "DATA_PLANE_CHILD_TIMEOUT_SECONDS": "3900",
+            "OBJECT_STORAGE_ENABLED": True,
+            "OBJECT_STORAGE_BUCKET": "test-runtime",
         },
         errors,
     )
@@ -343,6 +437,8 @@ def test_startup_validation_rejects_invalid_mode_and_timeout():
         {
             "DATA_PLANE_EXECUTION_MODE": "fork",
             "DATA_PLANE_CHILD_TIMEOUT_SECONDS": 0,
+            "OBJECT_STORAGE_ENABLED": True,
+            "OBJECT_STORAGE_BUCKET": "test-runtime",
         },
         errors,
     )
@@ -360,8 +456,9 @@ def test_startup_rejects_postgres_intermediates_on_s3_data_plane(intermediate_mo
         {
             "DATA_PLANE_EXECUTION_MODE": "subprocess",
             "DATA_PLANE_CHILD_TIMEOUT_SECONDS": 3900,
-            "STORAGE_POLICY": "object_storage",
             "INTERMEDIATE_PERSISTENCE_MODE": intermediate_mode,
+            "OBJECT_STORAGE_ENABLED": True,
+            "OBJECT_STORAGE_BUCKET": "test-runtime",
         },
         errors,
     )

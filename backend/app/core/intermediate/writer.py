@@ -166,12 +166,8 @@ def write_node(run_id: str, node_id: str, node_type: str,
                exec_time: float, status: str,
                error_msg: str = None) -> str:
     """
-    Scrive un nodo completo nello storage intermediate (PostgreSQL):
-    1. Crea tabella dinamica
-    2. Calcola _row_hash per ogni riga
-    3. Bulk insert
-    4. Scrive node_meta
-    5. Ritorna hash aggregato della tabella (per input/output_hash)
+    Calcola l'hash aggregato e scrive esclusivamente `node_meta` in
+    PostgreSQL. Il payload non viene mai inserito in `node_rows`.
 
     Returns: hash aggregato delle righe del nodo
     """

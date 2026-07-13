@@ -169,7 +169,8 @@ def get_node_data(
         # full_artifact + status=complete -> read parquet (object storage
         # full_artifact + altri status -> 200 con rows=[] + warning
         # metadata_only -> 200 con rows=[] + warning
-        # full_pg / preview_only / NULL -> read da node_rows
+        # full_pg / preview_only espliciti -> read storico da node_rows
+        # NULL -> metadata_only fail-closed
         # Tutti i path sanitizzano NaN/Inf via `_sanitize_for_json`
         # prima del JSONResponse.
         from app.core.intermediate.policy import (
@@ -252,7 +253,7 @@ def get_node_data(
                 "node_meta + node_hash sono comunque disponibili."
             )
         else:
-            # full_pg / preview_only / NULL -> legge node_rows
+            # Solo record storici con mode esplicita leggono node_rows.
             rows = node_snapshots_db.get_node_table_rows(
                 run_id=run_id,
                 node_id=node_id,
@@ -353,7 +354,7 @@ def compare_runs_l2(
 
     Dispatch su `persistence_mode` di entrambe le run. L'endpoint NON finge un
     diff completo se i dati non sono entrambi su `node_rows`:
-      - full_pg + full_pg (o NULL): 200, diff completo.
+      - full_pg + full_pg: 200, diff completo (compatibilita' storica).
       - preview_only + preview_only: 200, diff parziale dichiarato
         (`partial=true`, `reason="preview_only"`).
       - metadata_only su almeno un lato: 422 "diff_available=false,
@@ -396,7 +397,7 @@ def compare_runs_l2(
                 detail=f"Dati nodo '{node_id}' non trovati per run {run_id_b}"
             )
 
-        # Classifica le mode (NULL -> "full_pg" via helper
+        # Classifica le mode (NULL -> metadata_only fail-closed).
         mode_a = persistence_mode_for_record(meta_a)
         mode_b = persistence_mode_for_record(meta_b)
 

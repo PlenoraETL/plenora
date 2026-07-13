@@ -10,8 +10,12 @@ from __future__ import annotations
 
 import logging
 import multiprocessing as mp
+import os
+import shutil
+import tempfile
 import time
 import traceback
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
 
@@ -21,6 +25,7 @@ PIPELINE_PREVIEW_TASK = "pipeline.preview"
 SUPPORTED_TASKS = frozenset({PIPELINE_EXECUTE_TASK, PIPELINE_PREVIEW_TASK})
 _POLL_INTERVAL_SECONDS = 0.2
 _EXIT_GRACE_SECONDS = 5.0
+_STALE_TEMP_GRACE_SECONDS = 300
 
 
 class DataPlaneChildError(RuntimeError):
@@ -29,6 +34,46 @@ class DataPlaneChildError(RuntimeError):
 
 class DataPlaneChildTimeout(DataPlaneChildError):
     """Il processo data-plane ha superato il timeout configurato."""
+
+
+def _remove_task_temp_dir(path: str) -> None:
+    try:
+        shutil.rmtree(path)
+    except FileNotFoundError:
+        return
+    except Exception:
+        logging.getLogger(__name__).warning(
+            "Cleanup directory temporanea data-plane fallito: %s",
+            path,
+            exc_info=True,
+        )
+
+
+def _touch_task_temp_dir(path: str) -> None:
+    """Mantiene fresca la directory mentre il task e' ancora attivo."""
+    try:
+        os.utime(path, None)
+    except OSError:
+        pass
+
+
+def _cleanup_stale_task_temp_dirs(*, older_than_seconds: int) -> None:
+    """Best-effort sweep after a previous parent/host crash."""
+    root = Path(tempfile.gettempdir())
+    cutoff = time.time() - max(1, int(older_than_seconds))
+    try:
+        candidates = tuple(root.glob("plenora-data-*"))
+    except OSError:
+        return
+    for candidate in candidates:
+        try:
+            if candidate.is_symlink() or not candidate.is_dir():
+                continue
+            if candidate.stat().st_mtime >= cutoff:
+                continue
+            _remove_task_temp_dir(str(candidate))
+        except OSError:
+            continue
 
 
 def _resolve_task_body(task_name: str) -> Callable[..., object]:
@@ -50,9 +95,19 @@ def _child_entry(
     task_id: str,
     kwargs: dict[str, object],
     request_id: str,
+    temp_dir: str = "",
 ) -> None:
     """Entry point spawn-safe: esegue il task e invia un solo envelope."""
     try:
+        if temp_dir:
+            task_temp = Path(temp_dir)
+            task_temp.mkdir(parents=True, exist_ok=True)
+            for env_name in ("TMPDIR", "TEMP", "TMP"):
+                os.environ[env_name] = str(task_temp)
+            # ``tempfile`` puo' essere gia' stato importato dal bootstrap
+            # multiprocessing prima di _child_entry: azzera la cache globale.
+            tempfile.tempdir = str(task_temp)
+
         from app.config_env_loader import load_backend_dotenv
         from app.core.orchestrator.task_progress import TaskRevoked
         from app.utils.logger import set_request_id
@@ -148,17 +203,47 @@ def execute_task_in_subprocess(
 
     timeout = max(1, int(timeout_seconds))
     context = mp_context or mp.get_context("spawn")
-    receive_connection, send_connection = context.Pipe(duplex=False)
-    process = context.Process(
-        target=_child_entry,
-        args=(send_connection, task_name, task_id, dict(kwargs), request_id),
-        name=f"plenora-data-{task_id[:12]}",
+    _cleanup_stale_task_temp_dirs(
+        older_than_seconds=timeout + _STALE_TEMP_GRACE_SECONDS,
     )
+    try:
+        task_temp_dir = tempfile.mkdtemp(prefix="plenora-data-")
+    except Exception as exc:
+        raise DataPlaneChildError(
+            f"Impossibile creare la directory temporanea del task "
+            f"{task_name} {task_id}: {exc}"
+        ) from exc
+    receive_connection = None
+    send_connection = None
+    try:
+        receive_connection, send_connection = context.Pipe(duplex=False)
+        process = context.Process(
+            target=_child_entry,
+            args=(
+                send_connection,
+                task_name,
+                task_id,
+                dict(kwargs),
+                request_id,
+                task_temp_dir,
+            ),
+            name=f"plenora-data-{task_id[:12]}",
+        )
+    except BaseException:
+        for connection in (receive_connection, send_connection):
+            if connection is not None:
+                try:
+                    connection.close()
+                except Exception:
+                    pass
+        _remove_task_temp_dir(task_temp_dir)
+        raise
     try:
         process.start()
     except BaseException as exc:
         receive_connection.close()
         send_connection.close()
+        _remove_task_temp_dir(task_temp_dir)
         raise DataPlaneChildError(
             f"Impossibile avviare il child {task_name} {task_id}: {exc}"
         ) from exc
@@ -168,6 +253,9 @@ def execute_task_in_subprocess(
     envelope: dict[str, object] | None = None
     try:
         while time.monotonic() < deadline:
+            # Impedisce che lo sweep di un altro task concorrente scambi
+            # questa directory per un residuo di crash.
+            _touch_task_temp_dir(task_temp_dir)
             remaining = deadline - time.monotonic()
             received = _receive_if_available(
                 receive_connection,
@@ -208,6 +296,9 @@ def execute_task_in_subprocess(
         receive_connection.close()
         if process.is_alive():
             _stop_process(process)
+        # Parent-owned cleanup: copre anche terminate/kill/OOM del child, dove
+        # gli handler atexit di openpyxl non possono essere eseguiti.
+        _remove_task_temp_dir(task_temp_dir)
 
     if not isinstance(envelope, dict):
         raise DataPlaneChildError(

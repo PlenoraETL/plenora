@@ -33,7 +33,7 @@ def test_get_node_data_returns_200_when_rows_contain_nan(superadmin_user):
         return_value=rows_with_nan,
     ), patch(
         "app.core.intermediate.router.node_snapshots_db.get_node_meta",
-        return_value={"row_count": 2, "col_schema": {"id": "int", "value": "float"}},
+        return_value={"row_count": 2, "col_schema": {"id": "int", "value": "float"}, "persistence_mode": "preview_only"},
     ):
         response = client.get("/api/runs/run-1/nodes/n-1/data")
 
@@ -66,7 +66,7 @@ def test_get_node_data_returns_200_when_rows_contain_pos_inf_and_neg_inf(superad
         return_value=rows,
     ), patch(
         "app.core.intermediate.router.node_snapshots_db.get_node_meta",
-        return_value={"row_count": 3, "col_schema": {}},
+        return_value={"row_count": 3, "col_schema": {}, "persistence_mode": "preview_only"},
     ):
         response = client.get("/api/runs/r/nodes/n/data")
 
@@ -97,7 +97,7 @@ def test_get_node_data_recurses_into_nested_lists_and_dicts(superadmin_user):
         return_value=rows,
     ), patch(
         "app.core.intermediate.router.node_snapshots_db.get_node_meta",
-        return_value={"row_count": 1, "col_schema": {}},
+        return_value={"row_count": 1, "col_schema": {}, "persistence_mode": "preview_only"},
     ):
         response = client.get("/api/runs/r/nodes/n/data")
 
@@ -122,7 +122,7 @@ def test_get_node_data_response_is_strict_json_parseable(superadmin_user):
         return_value=rows,
     ), patch(
         "app.core.intermediate.router.node_snapshots_db.get_node_meta",
-        return_value={"row_count": 2, "col_schema": {}},
+        return_value={"row_count": 2, "col_schema": {}, "persistence_mode": "preview_only"},
     ):
         response = client.get("/api/runs/r/nodes/n/data")
 
@@ -175,7 +175,7 @@ def test_get_node_data_clean_dataframe_unchanged(superadmin_user):
         return_value=rows,
     ), patch(
         "app.core.intermediate.router.node_snapshots_db.get_node_meta",
-        return_value={"row_count": 2, "col_schema": {}},
+        return_value={"row_count": 2, "col_schema": {}, "persistence_mode": "preview_only"},
     ):
         response = client.get("/api/runs/r/nodes/n/data")
 

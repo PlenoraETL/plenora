@@ -80,7 +80,16 @@ def test_mssql_driver_17_fallback_preserves_fast_executemany(monkeypatch):
     monkeypatch.delenv("MSSQL_FAST_EXECUTEMANY", raising=False)
 
     from app.core.query_execution.query_engines import DefaultEngineFactory
+    from app.core.query_execution import query_engines as module
     factory = DefaultEngineFactory()
+    monkeypatch.setattr(
+        module,
+        "_installed_mssql_drivers",
+        lambda: (
+            "ODBC Driver 18 for SQL Server",
+            "ODBC Driver 17 for SQL Server",
+        ),
+    )
 
     calls = []
 
@@ -131,3 +140,66 @@ def test_non_driver18_error_not_caught(monkeypatch):
             factory._crea_engine_mssql(
                 "mssql+pyodbc://x?driver=ODBC+Driver+18", {},
             )
+
+
+def test_driver18_server_error_does_not_fallback_to_missing_driver17(
+    monkeypatch,
+):
+    """Il nome del driver nel messaggio non implica che manchi localmente."""
+    from app.core.query_execution import query_engines as module
+    from app.core.query_execution.query_engines import DefaultEngineFactory
+
+    monkeypatch.setattr(
+        module,
+        "_installed_mssql_drivers",
+        lambda: (
+            "ODBC Driver 18 for SQL Server",
+            "ODBC Driver 17 for SQL Server",
+        ),
+    )
+    calls: list[str] = []
+
+    def fake_create_engine(url, **_kwargs):
+        calls.append(url)
+        raise RuntimeError(
+            "[08001] [Microsoft][ODBC Driver 18 for SQL Server] "
+            "TCP Provider: connection refused"
+        )
+
+    with patch(
+        "app.core.query_execution.query_engines.create_engine",
+        side_effect=fake_create_engine,
+    ):
+        with pytest.raises(RuntimeError, match="connection refused"):
+            DefaultEngineFactory()._crea_engine_mssql(
+                "mssql+pyodbc://x?driver=ODBC+Driver+18+for+SQL+Server",
+                {},
+            )
+
+    assert len(calls) == 1
+    assert "Driver+17" not in calls[0]
+
+
+def test_connection_url_uses_the_installed_driver(monkeypatch):
+    from types import SimpleNamespace
+
+    from app.core.query_execution import query_engines as module
+    from app.core.query_execution.query_engines import DefaultEngineFactory
+
+    monkeypatch.setattr(
+        module,
+        "_installed_mssql_drivers",
+        lambda: ("ODBC Driver 17 for SQL Server",),
+    )
+    conn = SimpleNamespace(
+        type="mssql",
+        host="sql",
+        port=1433,
+        database="db",
+        username="user",
+        password="secret",
+    )
+
+    url = DefaultEngineFactory()._costruisci_connection_string(conn)
+    assert "ODBC+Driver+17+for+SQL+Server" in url
+    assert "ODBC+Driver+18" not in url

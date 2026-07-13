@@ -374,42 +374,35 @@ def test_full_artifact_does_not_call_to_dict_full():
     spy_to_dict.assert_not_called()
 
 
-# F. write_node legacy / full_pg invariato
+# F. Le mode che scrivevano righe in PostgreSQL restano vietate
 
 
-def test_full_pg_legacy_path_does_not_touch_object_storage():
-    """In mode `full_pg`, `_record_snapshot` continua a scrivere righe
-    in node_rows e NON invoca `persist_full_artifact` ne'
-    `get_runtime_object_storage`. Anti-regression sul path legacy."""
+def test_full_pg_write_path_is_rejected_before_any_persistence():
+    """`full_pg` puo' essere letto dai record storici ma non scritto."""
     from app.core.intermediate import snapshot as _snap
+    from app.core.intermediate.policy import IntermediateSettingsError
 
     df = pd.DataFrame({"a": [1, 2, 3]})
 
     fake_get_storage = MagicMock(side_effect=AssertionError(
         "get_runtime_object_storage NON deve essere chiamato in full_pg"
     ))
-    captured_db = {}
-
-    def _capture_db(**kwargs):
-        captured_db.update(kwargs)
+    writer = MagicMock()
 
     with _patch_settings(mode="full_pg"), patch(
         "app.core.io.object_storage.get_runtime_object_storage", fake_get_storage,
     ), patch(
         "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
-        side_effect=_capture_db,
+        writer,
     ):
-        _snap.record_final_snapshot(
-            run_id="run-fpg", module="manipola",
-            node_id="node-fpg", node_type="result", df=df,
-        )
+        with pytest.raises(IntermediateSettingsError):
+            _snap.record_final_snapshot(
+                run_id="run-fpg", module="manipola",
+                node_id="node-fpg", node_type="result", df=df,
+            )
 
     fake_get_storage.assert_not_called()
-    assert captured_db["persistence_mode"] == "full_pg"
-    assert captured_db["artifact_status"] == "none"
-    assert captured_db["artifact_uri"] is None
-    # full_pg: rows persistite (legacy)
-    assert len(captured_db["rows_to_persist"]) == 3
+    writer.assert_not_called()
 
 
 def test_metadata_only_path_does_not_touch_object_storage():

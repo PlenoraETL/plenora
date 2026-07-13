@@ -34,7 +34,7 @@ def test_write_node_happy_path_returns_real_hash():
     rows = [{"col_a": 1, "col_b": "x"}, {"col_a": 2, "col_b": "y"}]
     schema = {"col_a": "int64", "col_b": "object"}
 
-    with patch.object(w.node_snapshots_db, "write_node_atomic") as mock_atomic, \
+    with patch.object(w.node_snapshots_db, "upsert_node_meta_extended") as mock_atomic, \
          patch.object(w.node_snapshots_db, "upsert_node_meta") as mock_meta:
         result = w.write_node(
             run_id="run-ok", node_id="node-1", node_type="estrai",
@@ -71,7 +71,7 @@ def test_write_node_primary_fail_raises_intermediate_write_error():
     rows = [{"col_a": 1}]
     schema = {"col_a": "int64"}
 
-    with patch.object(w.node_snapshots_db, "write_node_atomic", side_effect=original_exc), \
+    with patch.object(w.node_snapshots_db, "upsert_node_meta_extended", side_effect=original_exc), \
          patch.object(w.node_snapshots_db, "upsert_node_meta"):
         with pytest.raises(IntermediateWriteError) as exc_info:
             w.write_node(
@@ -102,7 +102,7 @@ def test_write_node_fallback_upsert_node_meta_called_before_raise():
     rows = [{"col_a": 1}]
     schema = {"col_a": "int64"}
 
-    with patch.object(w.node_snapshots_db, "write_node_atomic", side_effect=original_exc), \
+    with patch.object(w.node_snapshots_db, "upsert_node_meta_extended", side_effect=original_exc), \
          patch.object(w.node_snapshots_db, "upsert_node_meta") as mock_meta:
         with pytest.raises(IntermediateWriteError):
             w.write_node(
@@ -136,7 +136,7 @@ def test_write_node_primary_and_fallback_fail_still_raises_with_original():
     rows = [{"col_a": 1}]
     schema = {"col_a": "int64"}
 
-    with patch.object(w.node_snapshots_db, "write_node_atomic", side_effect=primary_exc), \
+    with patch.object(w.node_snapshots_db, "upsert_node_meta_extended", side_effect=primary_exc), \
          patch.object(w.node_snapshots_db, "upsert_node_meta", side_effect=fallback_exc), \
          patch.object(w, "logger") as mock_logger:
         with pytest.raises(IntermediateWriteError) as exc_info:
@@ -167,7 +167,7 @@ def test_write_node_exception_chain_preserved():
     rows = [{"col_a": 1}]
     schema = {"col_a": "int64"}
 
-    with patch.object(w.node_snapshots_db, "write_node_atomic", side_effect=original_exc), \
+    with patch.object(w.node_snapshots_db, "upsert_node_meta_extended", side_effect=original_exc), \
          patch.object(w.node_snapshots_db, "upsert_node_meta"):
         with pytest.raises(IntermediateWriteError) as exc_info:
             w.write_node(
@@ -191,7 +191,7 @@ def test_write_node_logs_crash_with_exc_info():
     from app.core.intermediate import writer as w
 
     with patch.object(
-        w.node_snapshots_db, "write_node_atomic",
+        w.node_snapshots_db, "upsert_node_meta_extended",
         side_effect=RuntimeError("bang"),
     ), patch.object(w.node_snapshots_db, "upsert_node_meta"), \
         patch.object(w, "logger") as mock_logger:

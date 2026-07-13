@@ -10,9 +10,7 @@ import pytest
 
 from app.core.intermediate.policy import (
     MODE_FULL_ARTIFACT,
-    MODE_FULL_PG,
     MODE_METADATA_ONLY,
-    MODE_PREVIEW_ONLY,
     IntermediateSettingsError,
     SUPPORTED_PERSISTENCE_MODES,
     resolve_intermediate_mode,
@@ -26,7 +24,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.intermediate, pytest.mark.contract]
 
 @pytest.mark.parametrize(
     "default_mode",
-    [MODE_METADATA_ONLY, MODE_PREVIEW_ONLY, MODE_FULL_PG, MODE_FULL_ARTIFACT],
+    [MODE_METADATA_ONLY, MODE_FULL_ARTIFACT],
 )
 def test_override_none_returns_default(default_mode):
     """Override None deve essere bit-compatible col default-path pre-PR.
@@ -45,16 +43,11 @@ def test_override_none_returns_default(default_mode):
 @pytest.mark.parametrize(
     "default_mode,override_mode,expected",
     [
-        (MODE_METADATA_ONLY, MODE_PREVIEW_ONLY, MODE_PREVIEW_ONLY),
-        (MODE_METADATA_ONLY, MODE_FULL_PG, MODE_FULL_PG),
         (MODE_METADATA_ONLY, MODE_FULL_ARTIFACT, MODE_FULL_ARTIFACT),
-        (MODE_PREVIEW_ONLY, MODE_METADATA_ONLY, MODE_METADATA_ONLY),
-        (MODE_PREVIEW_ONLY, MODE_FULL_PG, MODE_FULL_PG),
-        (MODE_FULL_PG, MODE_METADATA_ONLY, MODE_METADATA_ONLY),
         (MODE_FULL_ARTIFACT, MODE_METADATA_ONLY, MODE_METADATA_ONLY),
         # Idempotenza: override == default ritorna default invariato.
         (MODE_METADATA_ONLY, MODE_METADATA_ONLY, MODE_METADATA_ONLY),
-        (MODE_FULL_PG, MODE_FULL_PG, MODE_FULL_PG),
+        (MODE_FULL_ARTIFACT, MODE_FULL_ARTIFACT, MODE_FULL_ARTIFACT),
     ],
 )
 def test_override_valid_sovrascrive_default(default_mode, override_mode, expected):
@@ -81,9 +74,9 @@ def test_override_stringa_sconosciuta_solleva():
 
 
 def test_override_case_mismatch_solleva():
-    """Validazione case-sensitive: 'FULL_PG' != 'full_pg'."""
+    """La validazione delle mode correnti e' case-sensitive."""
     with pytest.raises(IntermediateSettingsError):
-        resolve_intermediate_mode(MODE_METADATA_ONLY, "FULL_PG")
+        resolve_intermediate_mode(MODE_METADATA_ONLY, "FULL_ARTIFACT")
     with pytest.raises(IntermediateSettingsError):
         resolve_intermediate_mode(MODE_METADATA_ONLY, "Metadata_Only")
 

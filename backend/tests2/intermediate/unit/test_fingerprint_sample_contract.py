@@ -21,7 +21,7 @@ def _patch_settings(**overrides):
     from app.core.intermediate.policy import reset_validation_cache
 
     cfg = {
-        "mode": "preview_only",
+        "mode": "metadata_only",
         "preview_rows": 500,
         "artifact_format": "parquet",
         "manipola_checkpoints": "critical",
@@ -53,7 +53,7 @@ def test_validate_settings_rejects_unknown_fingerprint_mode():
         IntermediateSettingsError, validate_intermediate_settings,
     )
     cfg = {
-        "mode": "preview_only", "preview_rows": 500,
+        "mode": "metadata_only", "preview_rows": 500,
         "artifact_format": "parquet",
         "manipola_checkpoints": "critical",
         "estrai_checkpoints": "final_only",
@@ -71,7 +71,7 @@ def test_validate_settings_rejects_zero_fingerprint_sample_rows():
         IntermediateSettingsError, validate_intermediate_settings,
     )
     cfg = {
-        "mode": "preview_only", "preview_rows": 500,
+        "mode": "metadata_only", "preview_rows": 500,
         "artifact_format": "parquet",
         "manipola_checkpoints": "critical",
         "estrai_checkpoints": "final_only",
@@ -88,7 +88,7 @@ def test_validate_settings_accepts_full_mode():
     """`mode=full` e' una mode legittima per audit forte."""
     from app.core.intermediate.policy import validate_intermediate_settings
     cfg = {
-        "mode": "preview_only", "preview_rows": 500,
+        "mode": "metadata_only", "preview_rows": 500,
         "artifact_format": "parquet",
         "manipola_checkpoints": "critical",
         "estrai_checkpoints": "final_only",

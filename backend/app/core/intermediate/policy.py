@@ -112,7 +112,7 @@ SUPPORTED_FINGERPRINT_MODES = frozenset({
 # Artifact status legali. Popolati da `snapshot._record_snapshot` quando
 # mode=full_artifact: "complete" su upload Parquet+manifest riuscito
 # "failed" su errore best-effort (capability off, serialize/upload fail
-# "none" su tutti gli altri mode (metadata_only/preview_only/full_pg
+# "none" in mode metadata_only e sui record storici senza artefatto
 # "pending" riservato per future async writer
 ARTIFACT_STATUS_NONE = "none"
 ARTIFACT_STATUS_PENDING = "pending"
@@ -128,10 +128,11 @@ class IntermediatePolicy:
 
     Letta dal layer `snapshot.py`:
       - se `should_record_meta` False -> ritorno immediato, no hash, no DB
-      - se `should_record_meta` True ma `should_record_rows` False ->
-        scrivi solo meta+hash (mode metadata_only)
-      - se `should_record_rows` True con `preview_rows>0` -> persisti N
-      - se `persistence_mode == "full_pg"` -> persisti tutte le righe
+      - `metadata_only` scrive solo meta+hash in PostgreSQL
+      - `full_artifact` scrive meta+hash in PostgreSQL e il payload su
+        object storage
+      - `should_record_rows` resta sempre False: i payload non vengono
+        piu' salvati in PostgreSQL
 
     `reason` e' una stringa breve diagnostica usata in log/test
     (es. "manipola_critical_join", "manipola_skip_noncritical_rename").
@@ -590,10 +591,10 @@ def _build_record_policy(
 def persistence_mode_for_record(node_meta_row: dict) -> str:
     """Risolve la `persistence_mode` apparente di un record `node_meta`.
 
-    Usata dai reader (router/L2/diff) per sapere se trattare il record
-    come `full_pg` o secondo la policy dichiarata. Le righe con valore
-    NULL vengono lette come `full_pg`, perche' il dato completo vive in
-    `node_rows`.
+    Usata dai reader (router/L2/diff) per distinguere i record correnti
+    dai record storici. Un valore NULL viene trattato conservativamente
+    come `metadata_only`: non si presume piu' che il payload viva in
+    PostgreSQL.
     """
     val = (node_meta_row or {}).get("persistence_mode")
     if val is None or val == "":
