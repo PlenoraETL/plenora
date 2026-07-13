@@ -28,6 +28,10 @@ from app.core.manipola.transforms.spatial_helpers import (
     _resolve_metric_crs,
     _resolve_output_geom_crs,
 )
+from app.core.manipola.transform_memory import (
+    guard_spatial_binary_memory,
+    guard_spatial_explode_memory,
+)
 from app.core.manipola.transforms.spatial_construction import (
     op_geo_line_builder,
     op_geo_polygon_builder,
@@ -640,6 +644,13 @@ def op_geo_nearest(
             left_proj = left_gdf
             right_proj = right_gdf
 
+        guard_spatial_binary_memory(
+            left_proj,
+            right_proj,
+            operation="left",
+            path_basename="spatial_nearest_output",
+        )
+
         # sjoin_nearest con distanza
         result = geodataframe_sjoin_nearest(
             left_proj,
@@ -775,6 +786,8 @@ def op_geo_explode(
     try:
         gdf = df if is_geodataframe(df) else to_geodataframe(df, geom_column)
 
+        guard_spatial_explode_memory(gdf)
+
         result = gdf.explode(index_parts=False).reset_index(drop=True)
 
         logger.info(f"Explode completato: {len(gdf)} -> {len(result)} righe")
@@ -872,6 +885,13 @@ def op_geo_within(
 
         # Allinea CRS
         left_gdf, right_gdf = ensure_same_crs(left_gdf, right_gdf)
+
+        guard_spatial_binary_memory(
+            left_gdf,
+            right_gdf,
+            operation="inner",
+            path_basename="spatial_within_output",
+        )
 
         # Spatial join con predicato within
         joined = geodataframe_sjoin(

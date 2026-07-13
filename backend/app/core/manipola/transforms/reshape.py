@@ -16,6 +16,10 @@ from app.core.dataframes.tabular import (
     pivot_table_dataframe,
     table_diff_dataframe,
 )
+from app.core.manipola.transform_memory import (
+    guard_melt_memory,
+    guard_pivot_memory,
+)
 from app.core.manipola.types import StringMap
 from app.utils.logger import get_logger
 
@@ -105,6 +109,14 @@ def op_pivot(
     if missing:
         logger.warning(f"[GESTITO] Pivot: colonne mancanti: {missing}")
         return df
+
+    guard_pivot_memory(
+        df,
+        index_columns=index_cols,
+        pivot_column=pivot_col,
+        value_column=value_col,
+        mapping=mapping,
+    )
 
     needed_cols = list(dict.fromkeys(all_needed))
     # La proiezione crea gia' un frame distinto; Copy-on-Write isola la
@@ -369,6 +381,17 @@ def op_melt(
 
         var_name = _avoid_collision(var_name)
         value_name = _avoid_collision(value_name)
+
+        effective_value_columns = (
+            list(value_columns)
+            if value_columns is not None
+            else [column for column in df.columns if column not in id_columns]
+        )
+        guard_melt_memory(
+            df,
+            id_columns=id_columns,
+            value_columns=effective_value_columns,
+        )
 
         result = melt_dataframe(
             df,

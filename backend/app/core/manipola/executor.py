@@ -922,10 +922,12 @@ class ManipolaExecutor:
                     )
                 else:
                     from app.core.manipola.transform_memory import (
+                        SPECIALIZED_TRANSFORM_MEMORY_OPS,
                         guard_transform_headroom,
                     )
 
-                    guard_transform_headroom(inputs, node_id=str(node.id))
+                    if transform_op not in SPECIALIZED_TRANSFORM_MEMORY_OPS:
+                        guard_transform_headroom(inputs, node_id=str(node.id))
                 current_df = self._esegui_trasformazione(node, inputs)
             
             # Salva risultato per nodi successivi

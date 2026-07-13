@@ -10,6 +10,7 @@ from typing import List
 
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
+from app.core.manipola.transform_memory import guard_spatial_binary_memory
 from app.core.manipola.transforms.spatial_helpers import _ensure_active_geometry
 from app.core.dataframes.geodata import (
     empty_geodataframe,
@@ -66,6 +67,13 @@ def op_sjoin(
         # Allinea CRS
         left_gdf, right_gdf = ensure_same_crs(left_gdf, right_gdf)
 
+        guard_spatial_binary_memory(
+            left_gdf,
+            right_gdf,
+            operation=how,
+            path_basename="spatial_join_output",
+        )
+
         result = geodataframe_sjoin(left_gdf, right_gdf, how=how, predicate=predicate)
 
         # Rimuovi colonna index_right
@@ -110,6 +118,13 @@ def op_geo_clip(
         # Allinea CRS
         input_gdf, mask_gdf = ensure_same_crs(input_gdf, mask_gdf)
 
+        guard_spatial_binary_memory(
+            input_gdf,
+            mask_gdf,
+            operation="clip",
+            path_basename="spatial_clip_output",
+        )
+
         result = geodataframe_clip(input_gdf, mask_gdf)
 
         # Assicura geometria attiva valida.
@@ -147,6 +162,13 @@ def op_geo_intersection(
         right_gdf = inputs[1] if is_geodataframe(inputs[1]) else _to_gdf(inputs[1], right_geom)
 
         left_gdf, right_gdf = ensure_same_crs(left_gdf, right_gdf)
+
+        guard_spatial_binary_memory(
+            left_gdf,
+            right_gdf,
+            operation="intersection",
+            path_basename="spatial_intersection_output",
+        )
 
         result = geodataframe_overlay(left_gdf, right_gdf, how='intersection', keep_geom_type=False)
 
@@ -186,6 +208,13 @@ def op_geo_union(
 
         left_gdf, right_gdf = ensure_same_crs(left_gdf, right_gdf)
 
+        guard_spatial_binary_memory(
+            left_gdf,
+            right_gdf,
+            operation="union",
+            path_basename="spatial_union_output",
+        )
+
         result = geodataframe_overlay(left_gdf, right_gdf, how='union', keep_geom_type=False)
 
         # Assicura geometria attiva valida.
@@ -223,6 +252,13 @@ def op_geo_difference(
         right_gdf = inputs[1] if is_geodataframe(inputs[1]) else _to_gdf(inputs[1], right_geom)
 
         left_gdf, right_gdf = ensure_same_crs(left_gdf, right_gdf)
+
+        guard_spatial_binary_memory(
+            left_gdf,
+            right_gdf,
+            operation="difference",
+            path_basename="spatial_difference_output",
+        )
 
         result = geodataframe_overlay(left_gdf, right_gdf, how='difference', keep_geom_type=False)
 
@@ -264,6 +300,13 @@ def op_geo_symmetric_difference(
         right_gdf = dfs[1] if is_geodataframe(dfs[1]) else _to_gdf(dfs[1], right_geom_column)
 
         left_gdf, right_gdf = ensure_same_crs(left_gdf, right_gdf)
+
+        guard_spatial_binary_memory(
+            left_gdf,
+            right_gdf,
+            operation="symmetric_difference",
+            path_basename="spatial_symmetric_difference_output",
+        )
 
         result = geodataframe_overlay(left_gdf, right_gdf, how='symmetric_difference', keep_geom_type=False)
 
@@ -319,6 +362,13 @@ def op_geo_count_points_in_polygons(
 
         # Allinea CRS
         poly_gdf, point_gdf = ensure_same_crs(poly_gdf, point_gdf)
+
+        guard_spatial_binary_memory(
+            point_gdf,
+            poly_gdf,
+            operation="inner",
+            path_basename="spatial_point_in_polygon_join",
+        )
 
         # Salva indice originale dei poligoni
         poly_idx_col = "__poly_idx__"
@@ -412,6 +462,13 @@ def op_geo_overlay(
 
         # Allinea CRS
         left_gdf, right_gdf = ensure_same_crs(left_gdf, right_gdf)
+
+        guard_spatial_binary_memory(
+            left_gdf,
+            right_gdf,
+            operation=how,
+            path_basename=f"spatial_overlay_{how}_output",
+        )
 
         result = geodataframe_overlay(
             left_gdf, right_gdf,

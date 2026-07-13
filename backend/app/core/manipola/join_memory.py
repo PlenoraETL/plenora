@@ -5,8 +5,10 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from app.config import settings
 from app.core.dataframes.ports import FrameLike
+from app.core.manipola.transform_memory import (
+    configured_data_plane_memory_limit_bytes,
+)
 from app.core.resources.exceptions import MemoryLimitExceededError
 from app.core.resources.memory_guard import get_current_rss_bytes
 from app.utils.logger import get_logger
@@ -119,10 +121,7 @@ def guard_estimated_merge_memory(
     path_basename: str,
 ) -> MergeMemoryEstimate | None:
     """Blocca un merge se il picco stimato supera il cap RSS worker."""
-    try:
-        worker_limit = int(settings.get("WORKER_RSS_MAX_BYTES", 0) or 0)
-    except (TypeError, ValueError):
-        worker_limit = 0
+    worker_limit = configured_data_plane_memory_limit_bytes()
     if worker_limit <= 0:
         return None
 
@@ -173,10 +172,7 @@ def guard_estimated_concat_memory(
     management overhead, so the allocation must be checked independently from
     the per-partition merge guards.
     """
-    try:
-        worker_limit = int(settings.get("WORKER_RSS_MAX_BYTES", 0) or 0)
-    except (TypeError, ValueError):
-        worker_limit = 0
+    worker_limit = configured_data_plane_memory_limit_bytes()
     if worker_limit <= 0 or not frames:
         return None
 
@@ -219,10 +215,7 @@ def plan_merge_partitions(
     max_partitions: int = 32,
 ) -> int:
     """Numero di partizioni necessarie per far entrare un merge nel cap RSS."""
-    try:
-        worker_limit = int(settings.get("WORKER_RSS_MAX_BYTES", 0) or 0)
-    except (TypeError, ValueError):
-        return 1
+    worker_limit = configured_data_plane_memory_limit_bytes()
     if worker_limit <= 0:
         return 1
     estimate = estimate_merge_memory(

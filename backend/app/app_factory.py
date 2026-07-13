@@ -219,7 +219,12 @@ def create_app(
         "manipola_cross_join_memory",
         "manipola_multi_join_memory",
     })
-    _TRANSFORM_MEMORY_STAGES = frozenset({"manipola_transform_memory"})
+    _TRANSFORM_MEMORY_STAGES = frozenset({
+        "manipola_transform_memory",
+        "manipola_pivot_memory",
+        "manipola_melt_memory",
+        "manipola_spatial_memory",
+    })
 
     @app.exception_handler(MemoryLimitExceededError)
     async def memory_limit_exceeded_handler(
