@@ -450,8 +450,8 @@ def save_dataframe_to_result_blob_streaming(
       - geojson: single-chunk via geospatial_dataframe_to_bytes
         (formato JSON-doc unico, non si splitta row-by-row senza
         rompere il formato).
-      - xlsx, xls: single-chunk fallback (openpyxl write_only e'
-        invasivo; XLSX big rare in flow output).
+      - xlsx, xls: openpyxl write-only direttamente sul multipart writer;
+        nessun workbook object-model o BytesIO completo in RAM.
       - shp, gpkg, gdb: single-chunk via geospatial writer (multi-file
         zippato / driver footer-based, richiedono buffer pieno).
 
@@ -474,10 +474,10 @@ def save_dataframe_to_result_blob_streaming(
     # row-group via pyarrow.
     _STREAMING_FORMATS = {"csv", "json", "parquet"}
 
-    # Formati che cadono su single-chunk (geo binari, xlsx).
+    # Formati geospaziali che cadono su single-chunk.
     # Parquet ora e' fuori da qui: row-group writer real-time.
     # (gdb NON e' scrivibile: multi-file, rifiutato da io/geospatial; rimosso.)
-    _PATH_BOUND_FORMATS = {"shp", "gpkg", "xlsx", "xls"}
+    _PATH_BOUND_FORMATS = {"shp", "gpkg"}
 
     writer = StreamingResultBlobWriter(
         project_id=project_id,
@@ -516,6 +516,10 @@ def save_dataframe_to_result_blob_streaming(
                     "json",
                 ):
                     writer.write(chunk)
+        elif fmt_lower in {"xlsx", "xls"}:
+            # Openpyxl write_only emette il contenitore ZIP direttamente sul
+            # sink forward-only. Il buffer multipart resta limitato a 8 MiB.
+            export_writer_module.write_dataframe_to_xlsx_stream(df, writer)
         elif fmt_lower in _PATH_BOUND_FORMATS:
             # Single-chunk: i writer binari richiedono buffer pieno
             # (footer-based: parquet/xlsx) o sono multi-file zippati (shp/gpkg/gdb).

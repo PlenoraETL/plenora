@@ -334,3 +334,46 @@ def test_s3_mode_context_manager_aborts_on_exception(s3_mode_env, monkeypatch):
     assert "abort_multipart_upload" in ops
     assert "complete_multipart_upload" not in ops
     assert save_calls == []
+
+
+def test_xlsx_result_uses_write_only_stream_not_full_bytes(
+    s3_mode_env,
+    monkeypatch,
+):
+    import pandas as pd
+
+    from app.core.results import streaming_blob_writer as mod
+
+    streamed: list[object] = []
+
+    def _stream_xlsx(df, sink):
+        streamed.append(df)
+        sink.write(b"PK-streamed-xlsx")
+
+    def _forbidden_full_bytes(*_args, **_kwargs):
+        raise AssertionError("XLSX result non deve materializzare bytes completi")
+
+    monkeypatch.setattr(
+        mod.export_writer_module,
+        "write_dataframe_to_xlsx_stream",
+        _stream_xlsx,
+    )
+    monkeypatch.setattr(
+        mod.frame_io_module,
+        "save_dataframe_to_bytes",
+        _forbidden_full_bytes,
+    )
+
+    client, save_calls = s3_mode_env
+    df = pd.DataFrame({"id": [1, 2], "name": ["a", "b"]})
+    result_id = mod.save_dataframe_to_result_blob_streaming(
+        project_id="p",
+        df=df,
+        output_format="xlsx",
+        filename="output.xlsx",
+    )
+
+    assert streamed == [df]
+    assert result_id
+    assert save_calls[0]["size_bytes"] == len(b"PK-streamed-xlsx")
+    assert any(op == "complete_multipart_upload" for op, _ in client.calls)

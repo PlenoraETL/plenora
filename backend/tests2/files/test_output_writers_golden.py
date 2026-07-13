@@ -169,6 +169,65 @@ def test_xlsx_writer_produces_valid_excel(tortured_tabular_df: pd.DataFrame):
     assert df_back.iloc[2]["name"] == "北京 用户"
 
 
+class _ForwardOnlyXlsxSink:
+    def __init__(self) -> None:
+        self.parts: list[bytes] = []
+        self.position = 0
+
+    def write(self, data: bytes) -> int:
+        chunk = bytes(data)
+        self.parts.append(chunk)
+        self.position += len(chunk)
+        return len(chunk)
+
+    def tell(self) -> int:
+        return self.position
+
+    def flush(self) -> None:
+        return None
+
+    def seekable(self) -> bool:
+        return False
+
+    def getvalue(self) -> bytes:
+        return b"".join(self.parts)
+
+
+def test_xlsx_stream_writer_is_forward_only_and_roundtrips(
+    tortured_tabular_df: pd.DataFrame,
+    monkeypatch,
+):
+    from app.core.dataframes.export_writer import write_dataframe_to_xlsx_stream
+    from openpyxl.worksheet._writer import ALL_TEMP_FILES
+
+    def _forbidden_to_excel(*_args, **_kwargs):
+        raise AssertionError("Il path streaming non deve chiamare DataFrame.to_excel")
+
+    monkeypatch.setattr(pd.DataFrame, "to_excel", _forbidden_to_excel)
+    sink = _ForwardOnlyXlsxSink()
+    temp_files_before = set(ALL_TEMP_FILES)
+    write_dataframe_to_xlsx_stream(tortured_tabular_df, sink)
+    assert set(ALL_TEMP_FILES) == temp_files_before
+
+    raw = sink.getvalue()
+    assert raw.startswith(b"PK")
+    assert len(sink.parts) > 1
+    assert max(map(len, sink.parts)) < len(raw)
+
+    back = pd.read_excel(io.BytesIO(raw))
+    assert list(back.columns) == list(tortured_tabular_df.columns)
+    assert len(back) == len(tortured_tabular_df)
+    assert back.iloc[2]["name"] == "北京 用户"
+
+
+def test_xlsx_stream_writer_rejects_timezone_aware_datetimes():
+    from app.core.dataframes.export_writer import write_dataframe_to_xlsx_stream
+
+    df = pd.DataFrame({"when": [pd.Timestamp("2026-07-13T10:00:00Z")]})
+    with pytest.raises(ValueError, match="timezone"):
+        write_dataframe_to_xlsx_stream(df, _ForwardOnlyXlsxSink())
+
+
 def test_csv_writer_empty_dataframe_does_not_crash():
     """Un DF vuoto deve produrre solo l'header senza errori."""
     from app.core.dataframes.frame_io import save_dataframe_to_bytes

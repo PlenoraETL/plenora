@@ -16,8 +16,10 @@ Peak RAM ~4-5x del df serializzato:
 Scrittura diretta sul `BytesIO` via `io.TextIOWrapper` per i text-format
 (CSV/JSON), senza stringa Python intermedia. Picco ~2x (df + bytes finali).
 
-Per Excel (binary writer nativo pandas), il pattern `df.to_excel(buf)`
-e' gia' ottimale.
+Per Excel il path result usa openpyxl ``write_only`` direttamente su uno
+stream binario: evita sia il workbook object-model completo sia il ``BytesIO``
+contenente l'intero ZIP. Openpyxl puo' usare spool temporanei interni per gli
+XML dei worksheet, rimossi alla chiusura del workbook.
 
 API:
   - `dataframe_to_export_bytes(df, dest_format, *, chunksize)`:
@@ -29,9 +31,16 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import queue
 import threading
+from contextlib import suppress
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 from typing import Any, Iterator
+
+import numpy as np
+import pandas as pd
 
 from app.core.dataframes.tabular import (
     normalize_object_decimals,
@@ -40,6 +49,108 @@ from app.core.dataframes.tabular import (
 
 
 _DEFAULT_CHUNKSIZE = 10_000
+_XLSX_MAX_ROWS = 1_048_576
+_XLSX_MAX_COLUMNS = 16_384
+
+
+def _xlsx_cell_value(value: Any) -> Any:
+    """Normalize one pandas/numpy value for openpyxl without frame copies."""
+    if value is None or value is pd.NA or value is pd.NaT:
+        return None
+    if isinstance(value, np.generic):
+        value = value.item()
+    if isinstance(value, float):
+        if math.isnan(value):
+            return None
+        if math.isinf(value):
+            return "inf" if value > 0 else "-inf"
+        return value
+    if isinstance(value, Decimal):
+        if not value.is_finite():
+            return str(value)
+        text = format(value.normalize(), "f")
+        if "." in text:
+            text = text.rstrip("0").rstrip(".")
+        return text or "0"
+    if isinstance(value, pd.Timestamp):
+        value = value.to_pydatetime()
+    elif isinstance(value, pd.Timedelta):
+        return str(value)
+    if isinstance(value, datetime):
+        if value.tzinfo is not None and value.utcoffset() is not None:
+            raise ValueError(
+                "Excel non supporta datetime con timezone; "
+                "rimuovere la timezone prima dell'export"
+            )
+        return value
+    if isinstance(value, (date, time, timedelta, str, int, bool)):
+        return value
+    # pandas ExcelWriter converte gli object non nativi in testo. Manteniamo
+    # lo stesso comportamento per dict/list/geometry e tipi applicativi.
+    return str(value)
+
+
+def write_dataframe_to_xlsx_stream(
+    df: Any,
+    sink: Any,
+    *,
+    sheet_name: str = "Sheet1",
+) -> None:
+    """Write an XLSX incrementally to a forward-only binary sink.
+
+    ``Workbook(write_only=True)`` mantiene in RAM soltanto la riga corrente.
+    Il sink puo' essere :class:`StreamingResultBlobWriter`, quindi il file ZIP
+    viene inviato a S3 multipart senza un ``BytesIO`` completo.
+    """
+    from openpyxl import Workbook
+
+    row_count = len(df)
+    column_count = len(df.columns)
+    # Una riga e' riservata all'header, come ``DataFrame.to_excel(index=False)``.
+    if row_count + 1 > _XLSX_MAX_ROWS:
+        raise ValueError(
+            f"XLSX supporta al massimo {_XLSX_MAX_ROWS - 1} righe dati; "
+            f"ricevute {row_count}"
+        )
+    if column_count > _XLSX_MAX_COLUMNS:
+        raise ValueError(
+            f"XLSX supporta al massimo {_XLSX_MAX_COLUMNS} colonne; "
+            f"ricevute {column_count}"
+        )
+
+    # Fallisce prima di aprire gli XML temporanei openpyxl. E' lo stesso
+    # vincolo applicato da pandas.to_excel, ma evita generatori write-only
+    # parzialmente aperti in caso di errore.
+    if any(isinstance(dtype, pd.DatetimeTZDtype) for dtype in df.dtypes):
+        raise ValueError(
+            "Excel non supporta datetime con timezone; "
+            "rimuovere la timezone prima dell'export"
+        )
+
+    workbook = Workbook(write_only=True)
+    saved = False
+    try:
+        worksheet = workbook.create_sheet(title=sheet_name)
+        worksheet.append([_xlsx_cell_value(column) for column in df.columns])
+        for row in df.itertuples(index=False, name=None):
+            worksheet.append([_xlsx_cell_value(value) for value in row])
+        workbook.save(sink)
+        saved = True
+    finally:
+        if not saved:
+            # Workbook.close() non rimuove gli XML temporanei di un workbook
+            # write-only che non ha raggiunto save(). Chiudiamo esplicitamente
+            # i generatori e cancelliamo gli spool best-effort.
+            for worksheet in workbook.worksheets:
+                rows = getattr(worksheet, "_rows", None)
+                if rows is not None:
+                    with suppress(Exception):
+                        rows.close()
+                writer = getattr(worksheet, "_writer", None)
+                if writer is not None:
+                    with suppress(Exception):
+                        writer.cleanup()
+        workbook.close()
 
 
 def _records_json_inner(df_slice: Any) -> str:
@@ -353,10 +464,9 @@ def dataframe_to_export_chunks(
         Exception sollevata dal pandas writer nel producer thread
         viene rilanciata al consumer dopo il sentinel.
 
-    Note XLSX: openpyxl non supporta write_only streaming senza
-    riscrivere il flow; per XLSX cadiamo su `dataframe_to_export_bytes`
-    e yieldiamo come single chunk (peak invariato). XLSX export su
-    file grandi non e' un pattern comune in Plenora.
+    Note XLSX: questo generator mantiene il vecchio contratto bytes per i
+    caller generici. Il path canonical dei result usa invece
+    ``write_dataframe_to_xlsx_stream`` direttamente sul writer multipart.
     """
     fmt = (dest_format or "").strip().lower().lstrip(".")
 
@@ -412,4 +522,5 @@ def dataframe_to_export_chunks(
 __all__ = [
     "dataframe_to_export_bytes",
     "dataframe_to_export_chunks",
+    "write_dataframe_to_xlsx_stream",
 ]
