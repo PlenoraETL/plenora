@@ -550,7 +550,6 @@ class StorageBackendConfig:
     aws_region: str
     object_storage_enabled: bool
     object_storage_backend: "str | None"
-    storage_policy: str
     object_storage_bucket: "str | None"
     plenora_artifact_bucket: "str | None"
     backup_bucket: "str | None"
@@ -563,9 +562,6 @@ class StorageBackendConfig:
     log_archive_enabled: bool
     log_archive_bucket: "str | None"
     log_archive_key_prefix: Any
-    raw_result_s3_threshold_bytes: Any
-    raw_file_source_s3_threshold_bytes: Any
-    raw_result_db_hard_cap_bytes: Any
     raw_log_archive_batch_rows: Any
     raw_audit_retention_days: Any
 
@@ -605,10 +601,6 @@ def _storage_config() -> StorageBackendConfig:
         aws_region=_optional_str(_get_setting("AWS_REGION", "eu-south-1")) or "eu-south-1",
         object_storage_enabled=_get_bool_setting("OBJECT_STORAGE_ENABLED", True),
         object_storage_backend=_optional_str(_get_setting("OBJECT_STORAGE_BACKEND")),
-        storage_policy=(
-            _optional_str(_get_setting("STORAGE_POLICY", "object_storage"))
-            or "object_storage"
-        ).lower(),
         object_storage_bucket=_optional_str(_get_setting("OBJECT_STORAGE_BUCKET")),
         plenora_artifact_bucket=_optional_str(_get_setting("PLENORA_ARTIFACT_BUCKET")),
         backup_bucket=_optional_str(_get_setting("BACKUP_BUCKET")),
@@ -623,11 +615,6 @@ def _storage_config() -> StorageBackendConfig:
         # os.getenv("LOG_ARCHIVE_KEY_PREFIX") is intentionally represented
         # by _get_raw_setting to keep direct env reads centralized.
         log_archive_key_prefix=_get_raw_setting("LOG_ARCHIVE_KEY_PREFIX"),
-        raw_result_s3_threshold_bytes=_get_raw_setting("RESULT_S3_THRESHOLD_BYTES"),
-        raw_file_source_s3_threshold_bytes=_get_raw_setting(
-            "FILE_SOURCE_S3_THRESHOLD_BYTES"
-        ),
-        raw_result_db_hard_cap_bytes=_get_raw_setting("RESULT_DB_HARD_CAP_BYTES"),
         raw_log_archive_batch_rows=_get_raw_setting("LOG_ARCHIVE_BATCH_ROWS"),
         # os.getenv("AUDIT_RETENTION_DAYS") is intentionally represented
         # by _get_raw_setting to keep direct env reads centralized.
@@ -946,7 +933,6 @@ def get_log_archive_storage() -> ObjectStorage:
 # Storage policy — boot-time validation (A1
 
 
-VALID_STORAGE_POLICIES = ("db", "object_storage", "hybrid")
 # Provider effettivamente implementati in cloud_backends
 IMPLEMENTED_PROVIDERS = ("aws", "minio", "none")
 # Provider noti all'enum: validate_storage_config li accetta solo se
@@ -959,7 +945,7 @@ class StorageConfigError(ValueError):
     """Config di storage incoerente rilevata al boot.
 
     Sollevata da :func:`validate_storage_config` quando la combinazione
-    di STORAGE_POLICY, CLOUD_PROVIDER, BACKUP_BUCKET e soglie non e'
+    di provider, capability e bucket object storage non e'
     consistente. Fail-fast all'avvio e' preferito a lazy failure runtime
     (di solito in un task Celery oltre soglia).
     """
@@ -973,15 +959,10 @@ def validate_storage_config() -> None:
     dopo `settings.validate_startup`.
 
     Controlli:
-      1. STORAGE_POLICY in {db, object_storage, hybrid}
-      2. CLOUD_PROVIDER in enum noto + implementato in factory
-      3. Se policy != db: runtime OBJECT_STORAGE_BUCKET configurato e
-         backend object-storage reale. BACKUP_BUCKET e' indipendente.
-      4. Se policy == db con bucket+provider cloud: warning non-blocking
-         (probabile cut-paste)
-      5. Soglie `RESULT_S3_THRESHOLD_BYTES` / `FILE_SOURCE_S3_THRESHOLD_BYTES`
-         (solo in hybrid) sono intere > 0 se settate
-      6. `RESULT_DB_HARD_CAP_BYTES` (in db e hybrid) intero > 0 se settato
+      1. CLOUD_PROVIDER in enum noto + implementato in factory
+      2. OBJECT_STORAGE_ENABLED=true
+      3. OBJECT_STORAGE_BUCKET configurato
+      4. Backend object-storage reale; BACKUP_BUCKET resta indipendente
 
     Raises:
         StorageConfigError: config inconsistente — il processo deve terminare.
@@ -1014,19 +995,9 @@ def validate_storage_config() -> None:
 
     cfg = _storage_config()
     raw_values = {
-        "RESULT_S3_THRESHOLD_BYTES": cfg.raw_result_s3_threshold_bytes,
-        "FILE_SOURCE_S3_THRESHOLD_BYTES": cfg.raw_file_source_s3_threshold_bytes,
-        "RESULT_DB_HARD_CAP_BYTES": cfg.raw_result_db_hard_cap_bytes,
         "LOG_ARCHIVE_BATCH_ROWS": cfg.raw_log_archive_batch_rows,
         "AUDIT_RETENTION_DAYS": cfg.raw_audit_retention_days,
     }
-
-    policy = cfg.storage_policy
-    if policy not in VALID_STORAGE_POLICIES:
-        _fail(
-            f"STORAGE_POLICY={policy!r} non valido. "
-            f"Valori ammessi: {', '.join(VALID_STORAGE_POLICIES)}."
-        )
 
     provider = cfg.cloud_provider
     object_provider = _effective_object_storage_backend(cfg)
@@ -1043,13 +1014,17 @@ def validate_storage_config() -> None:
         )
 
     backup_bucket = _resolve_backup_bucket(cfg)
+    # Payload runtime storage is no longer configurable: object storage is
+    # the only data-plane backend. The local marker keeps archive validation
+    # below source-compatible while legacy policy branches are retired.
+    policy = "object_storage"
 
     if policy == "db":
         # NOTE: non-blocking: bucket + provider cloud settati ma policy=db
         # probabilmente e' cut-paste da altro env. Policy rispettata
         if backup_bucket and provider != "none":
             logger.warning(
-                f"[BOOT] STORAGE_POLICY=db ma CLOUD_PROVIDER={provider!r} e "
+                f"[BOOT] Object storage disattivato ma CLOUD_PROVIDER={provider!r} e "
                 "bucket configurati: policy rispettata (object storage "
                 "ignorato), ma la combinazione suggerisce cut-paste — "
                 "verifica l'intento."
@@ -1060,7 +1035,7 @@ def validate_storage_config() -> None:
         # obbligatorio per il data plane applicativo.
         if object_provider == "none":
             _fail(
-                f"STORAGE_POLICY={policy} richiede un object storage provider, "
+                "Il data-plane richiede un object storage provider, "
                 "ma OBJECT_STORAGE_BACKEND=none. Imposta "
                 "OBJECT_STORAGE_BACKEND=s3/s3_compatible "
                 "o cambia policy a db."
@@ -1072,7 +1047,7 @@ def validate_storage_config() -> None:
             runtime_bucket = backup_bucket
         if not runtime_bucket:
             _fail(
-                f"STORAGE_POLICY={policy} richiede un bucket object storage, "
+                "Il data-plane richiede un bucket object storage, "
                 "ma OBJECT_STORAGE_BUCKET non e' configurato."
             )
         # Policy `object_storage` richiede bucket runtime esplicito
@@ -1086,8 +1061,8 @@ def validate_storage_config() -> None:
             # meglio fail-fast al boot con messaggio operativo
             if not cfg.object_storage_enabled:
                 _fail(
-                    "STORAGE_POLICY=object_storage richiede "
-                    "OBJECT_STORAGE_ENABLED=true. Con la capability "
+                    "Il data-plane richiede OBJECT_STORAGE_ENABLED=true. "
+                    "Con la capability "
                     "disabilitata il path runtime (result/file_source/eseguibili/"
                     "IMDF/intermediate) non e' operativo. Abilita la "
                     "capability o cambia policy a db/hybrid."
@@ -1107,21 +1082,12 @@ def validate_storage_config() -> None:
                     )
 
     # Soglie dispatch: solo hybrid le consulta effettivamente
-    if policy == "hybrid":
-        _check_positive_int("RESULT_S3_THRESHOLD_BYTES")
-        _check_positive_int("FILE_SOURCE_S3_THRESHOLD_BYTES")
-
-    # Hard cap DB: attivo in db (primario) e in hybrid (guard ramo DB
-    if policy in ("db", "hybrid"):
-        _check_positive_int("RESULT_DB_HARD_CAP_BYTES")
-
     if cfg.log_archive_enabled:
-        # 1. STORAGE_POLICY deve essere object_storage o hybrid
+        # Object storage e' gia' obbligatorio per il data-plane.
         if policy == "db":
             _fail(
-                "LOG_ARCHIVE_ENABLED=true incompatibile con STORAGE_POLICY=db: "
-                "archive non ha target object storage. Imposta "
-                "STORAGE_POLICY=object_storage o hybrid, o disabilita "
+                "LOG_ARCHIVE_ENABLED=true richiede object storage: "
+                "archive non ha un target. Configura lo storage o disabilita "
                 "LOG_ARCHIVE_ENABLED."
             )
         # 2. CLOUD_PROVIDER reale richiesto

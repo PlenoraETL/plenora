@@ -37,7 +37,6 @@ _ESSENTIAL_CONFIG_KEYS = frozenset(
         "DB_SCHEMA",
         "DATABASE_URL",
         "DRAMATIQ_BROKER_URL",
-        "STORAGE_POLICY",
         "OBJECT_STORAGE_ENABLED",
         "OBJECT_STORAGE_BACKEND",
         "CLOUD_PROVIDER",
@@ -127,7 +126,6 @@ _CONFIG_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "Storage",
         (
-            "STORAGE_POLICY",
             "OBJECT_STORAGE_ENABLED",
             "OBJECT_STORAGE_BACKEND",
             "CLOUD_PROVIDER",
@@ -154,9 +152,6 @@ _CONFIG_SECTIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "RESOURCE_MAX_BYTES",
             "ARTIFACT_PREVIEW_MAX_BYTES",
             "PREVIEW_PAYLOAD_MAX_BYTES",
-            "RESULT_DB_HARD_CAP_BYTES",
-            "RESULT_S3_THRESHOLD_BYTES",
-            "FILE_SOURCE_S3_THRESHOLD_BYTES",
             "CROSS_JOIN_MAX_OUTPUT_ROWS",
             "MULTI_JOIN_MAX_OUTPUT_ROWS",
             "MAX_PREVIEW_ROWS",
@@ -187,9 +182,6 @@ _FUTURE_EDIT_ALLOWLIST = frozenset(
         "WORKER_RSS_MAX_BYTES",
         "RESOURCE_MAX_BYTES",
         "ARTIFACT_PREVIEW_MAX_BYTES",
-        "RESULT_DB_HARD_CAP_BYTES",
-        "RESULT_S3_THRESHOLD_BYTES",
-        "FILE_SOURCE_S3_THRESHOLD_BYTES",
         "MAX_PREVIEW_ROWS",
         "JWT_EXPIRE_HOURS",
         "LOGIN_MAX_ATTEMPTS",
@@ -316,7 +308,6 @@ def _requires_restart(key: str) -> list[str]:
     }:
         return ["backend", "worker", "beat"]
     if key.startswith("OBJECT_STORAGE") or key in {
-        "STORAGE_POLICY",
         "CLOUD_PROVIDER",
         "BACKUP_BUCKET",
         "MINIO_ENDPOINT_URL",

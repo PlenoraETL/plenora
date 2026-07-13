@@ -53,8 +53,7 @@ class FileSourceRow(TypedDict, total=False):
     name: str
     original_filename: str
     fmt: str
-    data: Optional[bytes]
-    storage_key: Optional[str]
+    storage_key: str
     size_bytes: int
     metadata: Dict[str, Any]
     created_by: Optional[str]
@@ -102,10 +101,10 @@ def _validate_row(row: FileSourceRow, *, context: str) -> None:
         context: tag prefix per il messaggio di errore (nome funzione
                  caller, es. "save_file_source" o "save_file_sources_batch").
     """
-    if row.get("data") is None and not row.get("storage_key"):
+    if not row.get("storage_key"):
         raise ValueError(
             f"{context}: row file_id={row.get('file_id')!r} "
-            f"senza data ne storage_key (almeno uno richiesto)"
+            "senza storage_key"
         )
 
 
@@ -115,26 +114,15 @@ def get_file_source(
     group_id: str = None,
 ) -> Optional[FileSourcePublicRow]:
     """Recupera file source. group_id=None → no filter (backward compat)."""
-    if include_data:
-        if group_id:
-            row = _fetchone(
-                "SELECT * FROM file_sources WHERE id = %s AND group_id = %s",
-                (file_id, group_id),
-            )
-        else:
-            row = _fetchone(
-                "SELECT * FROM file_sources WHERE id = %s",
-                (file_id,),
-            )
-    elif group_id:
+    if group_id:
         row = _fetchone(
-            "SELECT id, group_id, name, original_filename, format, size_bytes, metadata, created_at, created_by "
+            "SELECT id, group_id, name, original_filename, format, storage_key, size_bytes, metadata, created_at, created_by "
             "FROM file_sources WHERE id = %s AND group_id = %s",
             (file_id, group_id),
         )
     else:
         row = _fetchone(
-            "SELECT id, group_id, name, original_filename, format, size_bytes, metadata, created_at, created_by "
+            "SELECT id, group_id, name, original_filename, format, storage_key, size_bytes, metadata, created_at, created_by "
             "FROM file_sources WHERE id = %s",
             (file_id,),
         )
@@ -178,7 +166,7 @@ def list_file_source_ids_for_group(group_id: str) -> List[str]:
 
 
 def save_file_source(file_id: str, group_id: str, name: str, original_filename: str,
-                     fmt: str, data: Optional[bytes] = None,
+                     fmt: str,
                      metadata: dict = None, created_by: str = None,
                      storage_key: Optional[str] = None,
                      size_bytes: Optional[int] = None) -> FileSourcePublicRow:
@@ -194,18 +182,18 @@ def save_file_source(file_id: str, group_id: str, name: str, original_filename: 
     su data).
     """
     _validate_row(
-        {"file_id": file_id, "data": data, "storage_key": storage_key},
+        {"file_id": file_id, "storage_key": storage_key},
         context="save_file_source",
     )
     now = datetime.now(timezone.utc).isoformat()
-    effective_size = size_bytes if size_bytes is not None else (len(data) if data else 0)
+    effective_size = size_bytes if size_bytes is not None else 0
     _execute(
-        "INSERT INTO file_sources (id, group_id, name, original_filename, format, data, storage_key, size_bytes, metadata, created_at, updated_at, created_by) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO UPDATE SET "
+        "INSERT INTO file_sources (id, group_id, name, original_filename, format, storage_key, size_bytes, metadata, created_at, updated_at, created_by) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO UPDATE SET "
         "name=EXCLUDED.name, original_filename=EXCLUDED.original_filename, format=EXCLUDED.format, "
-        "data=EXCLUDED.data, storage_key=EXCLUDED.storage_key, size_bytes=EXCLUDED.size_bytes, "
+        "storage_key=EXCLUDED.storage_key, size_bytes=EXCLUDED.size_bytes, "
         "metadata=EXCLUDED.metadata, updated_at=EXCLUDED.updated_at",
-        (file_id, group_id, name, original_filename, fmt, data, storage_key,
+        (file_id, group_id, name, original_filename, fmt, storage_key,
          effective_size, json.dumps(metadata or {}), now, now, created_by)
     )
     return get_file_source(file_id)
@@ -257,21 +245,20 @@ def save_file_sources_batch(rows: List[FileSourceRow]) -> None:
     now = datetime.now(timezone.utc).isoformat()
     sql = (
         "INSERT INTO file_sources "
-        "(id, group_id, name, original_filename, format, data, storage_key, "
+        "(id, group_id, name, original_filename, format, storage_key, "
         "size_bytes, metadata, created_at, updated_at, created_by) "
-        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+        "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
         "ON CONFLICT (id) DO UPDATE SET "
         "name=EXCLUDED.name, original_filename=EXCLUDED.original_filename, "
-        "format=EXCLUDED.format, data=EXCLUDED.data, "
+        "format=EXCLUDED.format, "
         "storage_key=EXCLUDED.storage_key, size_bytes=EXCLUDED.size_bytes, "
         "metadata=EXCLUDED.metadata, updated_at=EXCLUDED.updated_at"
     )
     params_list = [
         (
             r["file_id"], r["group_id"], r["name"], r["original_filename"],
-            r["fmt"], r.get("data"), r.get("storage_key"),
-            r.get("size_bytes") if r.get("size_bytes") is not None
-            else (len(r["data"]) if r.get("data") else 0),
+            r["fmt"], r.get("storage_key"),
+            r.get("size_bytes") if r.get("size_bytes") is not None else 0,
             json.dumps(r.get("metadata") or {}),
             now, now, r.get("created_by"),
         )

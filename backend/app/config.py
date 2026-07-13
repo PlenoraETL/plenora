@@ -180,23 +180,9 @@ class Settings:
         # rimuove le directory piu' vecchie di N ore. Default 24h
         "TEMP_ORPHAN_CLEANUP_HOURS": 24,
 
-        # Canonical data plane: every new user file/result/preview/artifact is
-        # stored on S3-compatible object storage. `db`/`hybrid` remain
-        # transition-only reader/writer compatibility for existing installs;
-        # supported installers always emit `object_storage`.
-        "STORAGE_POLICY": "object_storage",
+        # Canonical data plane: every user payload is stored on
+        # S3-compatible object storage. PostgreSQL stores metadata only.
         "CLOUD_PROVIDER": "aws",
-        # Hard cap per payload persistiti come BYTEA (mode "db" + ramo DB di "hybrid"
-        # Default 500 MB: limite pratico di un BYTEA PG senza toast tuning
-        # Sopra cap: ResultSaveError al save (caller deve failare
-        "RESULT_DB_HARD_CAP_BYTES": 500 * 1024 * 1024,
-        # Soglie dispatch DB-vs-object-storage in policy=hybrid.
-        # Per-dominio (intenzionalmente separate):
-        # ops puo' tunare result e file_source in modo indipendente perche'
-        # la distribuzione di size differisce. Default 50 MB per entrambi
-        # = break-even empirico DB BYTEA vs roundtrip object storage
-        "RESULT_S3_THRESHOLD_BYTES": 50 * 1024 * 1024,
-        "FILE_SOURCE_S3_THRESHOLD_BYTES": 50 * 1024 * 1024,
         # MinIO provider. Required-if CLOUD_PROVIDER=minio, con validazione
         # fail-fast a boot
         # in app/shared/cloud_backends.validate_storage_config

@@ -84,7 +84,7 @@ Both installers:
 - preserve existing non-empty secrets;
 - generate `PLENORA_ENCRYPTION_KEY` and `JWT_SECRET_KEY` if empty;
 - create the external Docker bridge network `plenora` if missing;
-- configure `STORAGE_POLICY=object_storage` and generate credentials for the
+- configure mandatory object storage and generate credentials for the
   bundled SeaweedFS S3-compatible data plane;
 - prompt for the number of Dramatiq worker containers, defaulting to one worker;
 - prompt for a bootstrap superadmin username/password on interactive installs,

@@ -9,9 +9,6 @@ import time
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional, Tuple
 
-from app.core.resources.exceptions import MemoryLimitExceededError
-
-from app.core.resources.resource_caps import resolve_resource_max_bytes
 from app.core.resources.types import (
     OutputMode,
     Resource,
@@ -62,16 +59,12 @@ class ResultBlobLookupRow:
 
     storage_key: Optional[str]
     project_id: Optional[str]
-    data_size: Optional[int]
-    data: Any
 
     @classmethod
     def from_mapping(cls, row: Mapping[str, object]) -> "ResultBlobLookupRow":
         return cls(
             storage_key=_optional_str(row.get("storage_key")),
             project_id=_optional_str(row.get("project_id")),
-            data_size=_optional_int(row.get("data_size")),
-            data=row.get("data"),
         )
 
 
@@ -81,16 +74,9 @@ def _optional_str(value: object) -> Optional[str]:
     return str(value)
 
 
-def _optional_int(value: object) -> Optional[int]:
-    if value is None:
-        return None
-    return int(value)
-
-
 def _fetch_row(
     result_id: str,
     *,
-    max_bytes: int,
     group_id_filter: Optional[str],
     project_id_filter: Optional[str] = None,
 ) -> Optional[ResultBlobLookupRow]:
@@ -146,28 +132,8 @@ def _fetch_row(
         clauses.append("project_id = %s")
         where_params.append(project_id_filter)
 
-    # SQL fragment layout note: the SELECT projection is kept on
-    # a single source line so source-bound contract tests
-    # anti-god-engine lock) can grep the canonical token
-    # ``storage_key, project_id, length(data) AS data_size`` as
-    # one literal substring. The CASE / WHERE / FROM clauses span
-    # multiple lines for readability
-    sql = (
-        "SELECT storage_key, project_id, length(data) AS data_size, "
-        "CASE "
-        "WHEN storage_key IS NOT NULL THEN NULL "
-        "WHEN length(data) > %s THEN NULL "
-        "ELSE data "
-        "END AS data "
-        "FROM results WHERE " + " AND ".join(clauses)
-    )
-    # Parameter order matches placeholder order in the SQL text
-    # 1. CASE WHEN length(data) > %s -> max_bytes
-    # 2. WHERE id = %s -> result_id
-    # 3. AND group_id = %s -> group_id_filter (if set
-    # 4. AND project_id = %s -> project_id_filter (if set
-    params = (max_bytes, *where_params)
-    row = fetch_result_blob_lookup_row(sql, params)
+    sql = "SELECT storage_key, project_id FROM results WHERE " + " AND ".join(clauses)
+    row = fetch_result_blob_lookup_row(sql, tuple(where_params))
     if row is None:
         return None
     return ResultBlobLookupRow.from_mapping(row)
@@ -216,16 +182,8 @@ def _dispatch_by_id(
 
     logger = get_logger(__name__)
     _t0 = time.monotonic()
-    # Resolve once and pass through; the SQL preflight + the
-    # downstream cap enforcement MUST agree on the same cap value per
-    # dispatch. A runtime env mutation between two
-    # `resolve_resource_max_bytes` calls would otherwise create a
-    # tiny window of disagreement that would be hard to reason about
-    max_bytes = resolve_resource_max_bytes()
-
     row = _fetch_row(
         result_id,
-        max_bytes=max_bytes,
         group_id_filter=group_id_filter,
         project_id_filter=project_id_filter,
     )
@@ -233,56 +191,16 @@ def _dispatch_by_id(
         return None, "none"
 
     storage_key = row.storage_key
-    if storage_key:
-        data = _download_object_storage(storage_key)
-        duration_ms = round((time.monotonic() - _t0) * 1000, 1)
-        size = len(data) if data else 0
-        logger.info(
-            f"[PERF] get_result_data op=fetch_blob backend=object_storage "
-            f"result_id={result_id} size_bytes={size} duration_ms={duration_ms}"
-        )
-        return data, "object_storage"
-
-    # R-010.1 closure): BYTEA cap
-    # is now SQL preflight. ``data_size`` carries the authoritative
-    # ``length(data)`` projection; the SQL CASE has already nulled
-    # out ``data`` if oversize, so the BYTEA payload never crossed
-    # the PG/Python wire. Pre-013 the cap was post-fetch (PG had
-    # already loaded the bytes into the driver before any check
-    # could run
-    data_size = row.data_size
-    if data_size is not None and data_size > max_bytes:
-        duration_ms = round((time.monotonic() - _t0) * 1000, 1)
-        logger.error(
-            f"[PERF] get_result_data op=fetch_blob backend=db_legacy "
-            f"result_id={result_id} ABORTED oversize: "
-            f"observed_bytes={data_size} limit_bytes={max_bytes} "
-            f"duration_ms={duration_ms} preflight=length(data)"
-        )
-        raise MemoryLimitExceededError(
-            observed_bytes=data_size,
-            limit_bytes=max_bytes,
-            path_basename=f"result_id={result_id}",
-            stage="result_blob_oversize",
-        )
-
-    data = row.data
-    if isinstance(data, bytearray):
-        data = bytes(data)
-    if isinstance(data, memoryview):
-        data = bytes(data)
-    elif data is not None and not isinstance(data, bytes):
-        raise TypeError(
-            "ResultBlobLookupRow.data must be bytes, memoryview, "
-            f"bytearray or None; got {type(data).__name__}"
-        )
+    if not storage_key:
+        raise RuntimeError(f"Result {result_id} senza storage_key")
+    data = _download_object_storage(storage_key)
     duration_ms = round((time.monotonic() - _t0) * 1000, 1)
     size = len(data) if data else 0
     logger.info(
-        f"[PERF] get_result_data op=fetch_blob backend=db_legacy "
+        f"[PERF] get_result_data op=fetch_blob backend=object_storage "
         f"result_id={result_id} size_bytes={size} duration_ms={duration_ms}"
     )
-    return data, "db_legacy"
+    return data, "object_storage"
 
 
 # ResultBlobLoader — Protocol-compliant fail-closed entry point.

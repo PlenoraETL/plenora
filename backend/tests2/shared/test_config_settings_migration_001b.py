@@ -25,8 +25,6 @@ _BACKEND_WORKERS = Path(__file__).resolve().parent.parent.parent / "workers"
 @pytest.mark.parametrize(
     "key, expected_type, expected_default",
     [
-        ("RESULT_S3_THRESHOLD_BYTES", int, 50 * 1024 * 1024),
-        ("FILE_SOURCE_S3_THRESHOLD_BYTES", int, 50 * 1024 * 1024),
         ("TEMP_ORPHAN_CLEANUP_HOURS", int, 24),
         ("JWT_EXPIRE_HOURS", int, 8),
     ],
@@ -47,8 +45,6 @@ def test_default_present_and_typed(key, expected_type, expected_default):
 @pytest.mark.parametrize(
     "key, env_value, expected",
     [
-        ("RESULT_S3_THRESHOLD_BYTES", "1024", 1024),
-        ("FILE_SOURCE_S3_THRESHOLD_BYTES", "2048", 2048),
         ("TEMP_ORPHAN_CLEANUP_HOURS", "72", 72),
         ("JWT_EXPIRE_HOURS", "2", 2),
     ],
@@ -66,7 +62,7 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_result_storage_policy_reads_threshold_via_settings():
+def removed_result_storage_policy_reads_threshold_via_settings():
     """`result_s3_threshold` deve leggere `settings.get(...)` e non
     avere piu' un default inline duplicato."""
     src = _read(_BACKEND_APP / "core" / "results" / "storage_policy.py")
@@ -76,9 +72,9 @@ def test_result_storage_policy_reads_threshold_via_settings():
     assert "os.environ.get(\"RESULT_S3_THRESHOLD_BYTES" not in src
 
 
-def test_file_storage_dispatch_reads_threshold_via_settings():
+def test_file_storage_dispatch_has_no_threshold():
     src = _read(_BACKEND_APP / "core" / "resources" / "blob_dispatch.py")
-    assert "settings.get(\"FILE_SOURCE_S3_THRESHOLD_BYTES\")" in src
+    assert "FILE_SOURCE_S3_THRESHOLD_BYTES" not in src
     assert "os.getenv(\"FILE_SOURCE_S3_THRESHOLD_BYTES" not in src
     assert "os.environ.get(\"FILE_SOURCE_S3_THRESHOLD_BYTES" not in src
 
@@ -107,14 +103,12 @@ def test_jwt_token_constant_is_int_and_matches_default():
     assert jwt_token.ACCESS_TOKEN_EXPIRE_HOURS == Settings.DEFAULTS["JWT_EXPIRE_HOURS"]
 
 
-def test_result_storage_policy_threshold_helper_returns_int():
-    from app.core.results.storage_policy import result_s3_threshold
-    val = result_s3_threshold()
-    assert isinstance(val, int)
-    assert val == Settings.DEFAULTS["RESULT_S3_THRESHOLD_BYTES"]
+def test_result_storage_policy_settings_are_removed():
+    assert "STORAGE_POLICY" not in Settings.DEFAULTS
+    assert "RESULT_S3_THRESHOLD_BYTES" not in Settings.DEFAULTS
+    assert "RESULT_DB_HARD_CAP_BYTES" not in Settings.DEFAULTS
 
 
-def test_result_storage_policy_threshold_helper_honors_env(monkeypatch):
+def test_result_storage_policy_env_cannot_restore_removed_setting(monkeypatch):
     monkeypatch.setenv("RESULT_S3_THRESHOLD_BYTES", "12345")
-    from app.core.results import storage_policy
-    assert storage_policy.result_s3_threshold() == 12345
+    assert "RESULT_S3_THRESHOLD_BYTES" not in Settings.DEFAULTS

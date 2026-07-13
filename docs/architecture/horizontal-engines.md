@@ -252,7 +252,7 @@ Current contracts:
 
 - Resource loading is bounded by explicit byte limits.
 - `LoadedResource` pairs loaded data with `ResourceMetadata`.
-- Object storage is governed by `STORAGE_POLICY`.
+- Object storage is mandatory for every persisted data-plane payload.
 - Runtime intermediate callers use explicit leaf boundaries
   (`runs_db`, `node_snapshots_db`, `retention`, `run_lifecycle`), not the
   historical `app/core/intermediate/db.py` facade, which is tombstoned.

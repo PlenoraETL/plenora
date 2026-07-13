@@ -191,11 +191,11 @@ def _patch_pytest_windows_temp_dir_modes() -> None:
 
 _normalize_windows_temp_env()
 
-# I test non usano un bucket reale. Di default la test session vive in
-# STORAGE_POLICY=db (= on-prem single-node), cosi' `app.main` boota senza
-# richiedere BACKUP_BUCKET. I test che esercitano il dispatch S3 impostano
-# esplicitamente STORAGE_POLICY via monkeypatch.
-os.environ.setdefault("STORAGE_POLICY", "db")
+# Il data-plane e' object-storage-only. I test non fanno rete salvo quando
+# installano esplicitamente un fake backend, ma la config di bootstrap resta
+# strutturalmente valida.
+os.environ.setdefault("OBJECT_STORAGE_ENABLED", "true")
+os.environ.setdefault("OBJECT_STORAGE_BUCKET", "plenora-test")
 
 # Molti unit/contract test importano moduli che transitano da
 # `app.db.pg_connection` a collect time. Quel modulo valida

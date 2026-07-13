@@ -63,9 +63,10 @@ def test_result_metadata_sql_lives_in_core_results_db(monkeypatch):
         group_id="grp-1",
         filename="out.csv",
         fmt="csv",
-        data=b"id\n1\n",
         rows_count=1,
         created_by="user-1",
+        storage_key="results/proj-1/res-1.bin",
+        size_bytes=5,
     )
 
     assert isinstance(saved_row, results_db.ResultMetadataRow)
@@ -76,25 +77,25 @@ def test_result_metadata_sql_lives_in_core_results_db(monkeypatch):
         group_id="grp-1",
         filename="out.csv",
         fmt="csv",
-        data=b"id\n1\n",
         rows_count=1,
         created_by="user-1",
+        storage_key="results/proj-1/res-1.bin",
+        size_bytes=5,
     ) == {"id": "res-1"}
 
     assert calls[0][0] == "execute"
     assert "INSERT INTO results" in calls[0][1]
-    assert "ON CONFLICT (id) DO UPDATE" in calls[0][1]
-    assert calls[0][2][0:6] == (
+    assert "ON CONFLICT (id) DO NOTHING" in calls[0][1]
+    assert calls[0][2][0:5] == (
         "res-1",
         "proj-1",
         "grp-1",
         "out.csv",
         "csv",
-        b"id\n1\n",
     )
-    assert calls[0][2][6] == 5
-    assert calls[0][2][7] == 1
-    assert calls[0][2][9:] == ("user-1", None)
+    assert calls[0][2][5] == 5
+    assert calls[0][2][6] == 1
+    assert calls[0][2][8:] == ("user-1", "results/proj-1/res-1.bin")
 
     assert calls[1] == (
         "fetchone",

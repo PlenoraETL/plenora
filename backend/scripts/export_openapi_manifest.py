@@ -38,7 +38,6 @@ def _load_backend_openapi() -> tuple[dict[str, Any], str]:
         sys.path.insert(0, str(BACKEND_ROOT))
 
     os.environ.setdefault("ENVIRONMENT", "development")
-    os.environ.setdefault("STORAGE_POLICY", "db")
     os.environ.setdefault("DATABASE_URL", "postgresql://test:test@127.0.0.1:5432/test")
 
     import app.bootstrap as bootstrap

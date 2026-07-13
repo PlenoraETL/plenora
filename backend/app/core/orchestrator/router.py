@@ -643,9 +643,8 @@ def download_task_result(
     Per i task degli eseguibili (is_eseguibile=True) l'output vive su
     object storage (eseguibili-outputs/{task_id}/) — streamming S3 + cleanup
     post-send via background_task. Per tutti gli altri task il reader
-    `get_result_data(result_id)` risolve lo storage trasparente:
-      - DB BYTEA se il result era < RESULT_S3_THRESHOLD_BYTES
-      - S3 object se sopra (via storage_key della row results)
+    `get_result_data(result_id)` apre l'oggetto S3-compatible tramite la
+    storage_key della riga results.
     In entrambi i casi il payload viene streammato al client.
 
     SECURITY: verifica ownership via project_id del task.

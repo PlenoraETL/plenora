@@ -6,18 +6,9 @@ senza geometry): elimina l'output_path intermedio (`get_temp_output_path
 + save_result_blob(path)`) flushando direttamente i bytes prodotti dal
 writer CSV/Parquet verso lo storage canonico.
 
-Due mode-of-operation selezionati al construction time via
-`storage_policy()`:
-
-  - **object_storage / hybrid**: real S3 multipart upload via boto3
-    low-level API (`create_multipart_upload` / `upload_part` /
-    `complete_multipart_upload`). Buffer interno ~`PART_SIZE` (8MB
-    default, allineato a `TransferConfig.multipart_chunksize` usato
-    altrove). RAM footprint bounded.
-
-  - **db**: accumulo in `io.BytesIO` enforced da `RESULT_DB_HARD_CAP_BYTES`.
-    Cap check per ogni `.write()`: oltre il cap solleva
-    `ResultSaveError` mid-stream invece di accumulare oltre il limite.
+Il writer usa sempre S3 multipart. Il buffer interno e' limitato a
+`PART_SIZE` (8 MB), quindi il payload completo non viene mai accumulato
+in RAM ne' persistito in PostgreSQL.
 
 Interfaccia file-like minima (`write`, `tell`, `flush`) per i writer
 CSV (`csv.writer` su `io.TextIOWrapper`) e PyArrow `ParquetWriter`
@@ -41,7 +32,6 @@ USO TIPICO:
 
 from __future__ import annotations
 
-import io
 import uuid
 from typing import Optional
 
@@ -51,19 +41,13 @@ from app.core.dataframes import geospatial_io as geospatial_io_module
 from app.core.io import object_storage as object_storage_module
 from app.core.results import store
 from app.core.results.blob_writer import (
-    ResultSaveError,
     close_failed_result_upload_intent,
     close_result_upload_intent,
-    enforce_db_hard_cap,
     record_result_upload_intent,
     _runtime_storage_upload_error,
     _storage_key,
 )
 from app.core.results.retention import apply_results_retention
-from app.core.results.storage_policy import (
-    result_db_hard_cap,
-    storage_policy,
-)
 from app.infrastructure.storage.compensation import compensating_delete
 from app.utils.logger import get_logger
 
@@ -109,58 +93,13 @@ class StreamingResultBlobWriter:
         self._closed = False
         self._aborted = False
 
-        policy = storage_policy()
-        # Per streaming non conosciamo la size finale: scegliamo il
-        # backend dalla policy stessa. `db` -> buffer; tutto il resto
-        # (`object_storage`, `hybrid`) -> S3 multipart real-time.
-        if policy == "db":
-            self._mode = "db"
-            self._init_db()
-        else:
-            self._mode = "s3"
-            self._init_s3()
+        self._init_s3()
         logger.debug(
             f"StreamingResultBlobWriter init project_id={project_id} "
-            f"result_id={self.result_id} mode={self._mode} fmt={fmt}"
+            f"result_id={self.result_id} mode=object_storage fmt={fmt}"
         )
 
     # ── DB BYTEA mode ─────────────────────────────────────────────────
-
-    def _init_db(self) -> None:
-        self._db_buf = io.BytesIO()
-        self._db_cap = result_db_hard_cap()
-
-    def _write_db(self, data: bytes) -> int:
-        if self._total_bytes + len(data) > self._db_cap:
-            raise ResultSaveError(
-                f"[StreamingResultBlobWriter/db] Streaming result excede "
-                f"RESULT_DB_HARD_CAP_BYTES={self._db_cap} "
-                f"(scritti {self._total_bytes} + chunk {len(data)}). "
-                f"Cambia STORAGE_POLICY=object_storage o riduci la query."
-            )
-        return self._db_buf.write(data)
-
-    def _finalize_db(self) -> str:
-        data = self._db_buf.getvalue()
-        # Difensivo: il cap e' enforced per-write, ricontrolla.
-        enforce_db_hard_cap(len(data), ctx="StreamingResultBlobWriter/db")
-        resolved_group_id = store.resolve_group_id_for_result(
-            self.project_id, self.group_id,
-        )
-        store.save_result_row(
-            result_id=self.result_id,
-            project_id=self.project_id,
-            group_id=resolved_group_id,
-            filename=self.filename,
-            fmt=self.fmt,
-            data=data,
-            rows_count=self.rows_count,
-        )
-        logger.info(
-            f"Result {self.result_id} su DB (streaming, "
-            f"{len(data)} bytes, rows={self.rows_count})"
-        )
-        return self.result_id
 
     # ── S3 multipart mode ─────────────────────────────────────────────
 
@@ -297,7 +236,6 @@ class StreamingResultBlobWriter:
                 group_id=resolved_group_id,
                 filename=self.filename,
                 fmt=self.fmt,
-                data=None,
                 rows_count=self.rows_count,
                 storage_key=self._key,
                 size_bytes=self._total_bytes,
@@ -402,7 +340,7 @@ class StreamingResultBlobWriter:
             )
         if not data:
             return 0
-        n = self._write_db(data) if self._mode == "db" else self._write_s3(data)
+        n = self._write_s3(data)
         self._total_bytes += n
         return n
 
@@ -442,8 +380,7 @@ class StreamingResultBlobWriter:
         self.rows_count = int(n)
 
     def finalize(self) -> str:
-        """Completa lo stream: per S3 -> complete_multipart_upload +
-        DB row. Per DB -> save_result_row con BYTEA. Ritorna `result_id`.
+        """Completa il multipart upload e salva la riga metadata.
 
         Idempotente per re-call: solleva RuntimeError se gia' chiuso.
         """
@@ -453,30 +390,23 @@ class StreamingResultBlobWriter:
                 f"gia' finalizzato"
             )
         self._closed = True
-        if self._mode == "db":
-            rid = self._finalize_db()
-        else:
-            rid = self._finalize_s3()
+        rid = self._finalize_s3()
         apply_results_retention(self.project_id)
         return rid
 
     def abort(self) -> None:
-        """Aborta lo stream in modo idempotente. Su S3 cancella la
-        multipart upload + intent. Su DB scarta il buffer."""
+        """Aborta lo stream cancellando multipart upload e intent."""
         if self._closed or self._aborted:
             return
         self._aborted = True
         self._closed = True
-        if self._mode == "s3":
-            self._abort_s3_safe()
-            close_failed_result_upload_intent(
-                self._intent_id, cleanup_outcome="ok",
-            )
-        else:
-            self._db_buf = io.BytesIO()  # release memory
+        self._abort_s3_safe()
+        close_failed_result_upload_intent(
+            self._intent_id, cleanup_outcome="ok",
+        )
         logger.info(
             f"StreamingResultBlobWriter aborted result_id={self.result_id} "
-            f"mode={self._mode} bytes_written={self._total_bytes}"
+            f"mode=object_storage bytes_written={self._total_bytes}"
         )
 
     # Context manager: __exit__ aborta su exception, NON finalizza
@@ -507,7 +437,7 @@ def save_dataframe_to_result_blob_streaming(
     `bytes = save_dataframe_to_bytes(df, fmt)` -> `save_result_blob_from_bytes(bytes)`
     con un writer streaming: `dataframe_to_export_chunks(df, fmt)`
     yielda chunks, `StreamingResultBlobWriter` li accumula in S3 multipart
-    o DB BYTEA buffer. Peak ridotto da `DataFrame + bytes_serializzati`
+    con un S3 multipart. Peak ridotto da `DataFrame + bytes_serializzati`
     a `DataFrame + chunk_buffer (~few MB)`.
 
     Formati supportati come streaming reale:

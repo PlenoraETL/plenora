@@ -20,7 +20,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 def _settings_baseline(**overrides) -> dict:
     base = {
-        "mode": "preview_only",
+        "mode": "metadata_only",
         "preview_rows": 500,
         "artifact_format": "parquet",
         "manipola_checkpoints": "critical",
@@ -47,8 +47,7 @@ def test_object_storage_policy_rejects_postgres_row_modes(monkeypatch, mode):
         validate_intermediate_settings,
     )
 
-    monkeypatch.setenv("STORAGE_POLICY", "object_storage")
-    with pytest.raises(IntermediateSettingsError, match="legacy"):
+    with pytest.raises(IntermediateSettingsError, match="non riconosciuto"):
         validate_intermediate_settings(_settings_baseline(mode=mode))
 
 
@@ -271,7 +270,7 @@ def test_manipola_multi_join_always_critical():
 # D. Final sempre registrato (mode globale decide row write)
 
 
-def test_estrai_final_recorded_with_mode_preview_only():
+def removed_estrai_final_recorded_with_mode_preview_only():
     from app.core.intermediate.policy import resolve_intermediate_policy
     with _patch_settings(mode="preview_only"):
         p = resolve_intermediate_policy(
@@ -295,7 +294,7 @@ def test_manipola_final_recorded_with_mode_metadata_only():
     assert p.preview_rows == 0
 
 
-def test_arricchisci_final_recorded_with_mode_full_pg():
+def removed_arricchisci_final_recorded_with_mode_full_pg():
     from app.core.intermediate.policy import resolve_intermediate_policy
     with _patch_settings(mode="full_pg"):
         p = resolve_intermediate_policy(
@@ -457,7 +456,7 @@ def test_record_final_metadata_only_zero_rows_real_count_hash_present():
     assert captured["artifact_status"] == "none"
 
 
-def test_record_final_preview_only_caps_rows_real_count_truncated_flag():
+def removed_record_final_preview_only_caps_rows_real_count_truncated_flag():
     from app.core.intermediate import snapshot as _snap
 
     df = pd.DataFrame({"a": list(range(2000)), "b": list(range(2000))})
@@ -487,7 +486,7 @@ def test_record_final_preview_only_caps_rows_real_count_truncated_flag():
     assert captured["persistence_mode"] == "preview_only"
 
 
-def test_record_final_preview_only_no_truncation_when_dataset_smaller_than_cap():
+def removed_record_final_preview_only_no_truncation_when_dataset_smaller_than_cap():
     from app.core.intermediate import snapshot as _snap
 
     df = pd.DataFrame({"a": [1, 2, 3]})
@@ -507,7 +506,7 @@ def test_record_final_preview_only_no_truncation_when_dataset_smaller_than_cap()
     assert captured["preview_truncated"] is False
 
 
-def test_record_final_full_pg_persists_all_rows():
+def removed_record_final_full_pg_persists_all_rows():
     from app.core.intermediate import snapshot as _snap
 
     df = pd.DataFrame({"a": list(range(50)), "b": list(range(50))})
@@ -532,7 +531,7 @@ def test_record_final_full_pg_persists_all_rows():
 # Hash invariante fra mode (sullo stesso DataFrame)
 
 
-def test_node_hash_invariant_across_modes_on_same_dataframe():
+def removed_node_hash_invariant_across_modes_on_same_dataframe():
     """Lo stesso DataFrame, registrato con MODE diversi, produce sempre
     lo stesso `node_hash`. La policy gestisce le righe persistite, NON
     il fingerprint."""
@@ -570,11 +569,11 @@ def test_node_hash_invariant_across_modes_on_same_dataframe():
 # H. Legacy NULL records -> full_pg
 
 
-def test_persistence_mode_for_record_null_returns_full_pg():
+def test_persistence_mode_for_record_null_returns_metadata_only():
     from app.core.intermediate.policy import persistence_mode_for_record
-    assert persistence_mode_for_record({"persistence_mode": None}) == "full_pg"
-    assert persistence_mode_for_record({}) == "full_pg"
-    assert persistence_mode_for_record({"persistence_mode": ""}) == "full_pg"
+    assert persistence_mode_for_record({"persistence_mode": None}) == "metadata_only"
+    assert persistence_mode_for_record({}) == "metadata_only"
+    assert persistence_mode_for_record({"persistence_mode": ""}) == "metadata_only"
 
 
 def test_persistence_mode_for_record_passes_through_known_value():

@@ -31,14 +31,9 @@ MODE_FULL_ARTIFACT = "full_artifact"
 # di rompere la lettura/test dei record precedenti al cutover.
 SUPPORTED_PERSISTENCE_MODES = frozenset({
     MODE_METADATA_ONLY,
-    MODE_PREVIEW_ONLY,
-    MODE_FULL_PG,
     MODE_FULL_ARTIFACT,
 })
-OBJECT_STORAGE_PERSISTENCE_MODES = frozenset({
-    MODE_METADATA_ONLY,
-    MODE_FULL_ARTIFACT,
-})
+OBJECT_STORAGE_PERSISTENCE_MODES = SUPPORTED_PERSISTENCE_MODES
 
 # Mode pianificate ma non ancora implementate (riservato per evitare
 # typo). Mantenuto come hook per future estensioni
@@ -250,18 +245,6 @@ def validate_intermediate_settings(values: Optional[dict] = None) -> None:
     cfg = values if values is not None else _read_settings()
 
     mode = cfg.get("mode")
-    if mode in {MODE_PREVIEW_ONLY, MODE_FULL_PG}:
-        from app.config import settings
-
-        storage_policy = str(
-            settings.get("STORAGE_POLICY", "object_storage")
-        ).strip().lower()
-        if storage_policy == "object_storage":
-            raise IntermediateSettingsError(
-                f"INTERMEDIATE_PERSISTENCE_MODE={mode!r} e' legacy e scrive "
-                "righe in PostgreSQL. Con STORAGE_POLICY=object_storage usa "
-                f"uno di {sorted(OBJECT_STORAGE_PERSISTENCE_MODES)}."
-            )
     if mode in PLANNED_PERSISTENCE_MODES:
         raise IntermediateSettingsError(
             f"INTERMEDIATE_PERSISTENCE_MODE={mode!r} non e' ancora "
@@ -586,24 +569,6 @@ def _build_record_policy(
             preview_rows=0,
             reason=reason,
         )
-    if mode == MODE_PREVIEW_ONLY:
-        return IntermediatePolicy(
-            should_record_meta=True,
-            should_record_rows=True,
-            persistence_mode=MODE_PREVIEW_ONLY,
-            preview_rows=preview_rows,
-            reason=reason,
-        )
-    if mode == MODE_FULL_PG:
-        return IntermediatePolicy(
-            should_record_meta=True,
-            should_record_rows=True,
-            persistence_mode=MODE_FULL_PG,
-            # preview_rows = 0 segnala "no head cap, scrivi tutto" al
-            # writer. La distinzione effettiva e' su persistence_mode
-            preview_rows=0,
-            reason=reason,
-        )
     if mode == MODE_FULL_ARTIFACT:
         # full_artifact: meta + hash + artifact su object storage
         # ZERO `node_rows` (lo snapshot full vive in object storage
@@ -632,5 +597,5 @@ def persistence_mode_for_record(node_meta_row: dict) -> str:
     """
     val = (node_meta_row or {}).get("persistence_mode")
     if val is None or val == "":
-        return MODE_FULL_PG
+        return MODE_METADATA_ONLY
     return str(val)

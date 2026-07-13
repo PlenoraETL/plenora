@@ -49,7 +49,7 @@ _ALLOWED_EXTENSIONS = {
 }
 # Cap configurabile via env. Default 10MB; alzare richiede valutare
 # throughput rete (upload sincrono nel request handler
-# dimensione del blob in DB se sotto soglia FILE_SOURCE_S3_THRESHOLD_BYTES
+# Gli allegati usano lo stesso object storage dei file source.
 # Calcolato a import-time: per cambiare serve riavvio del processo
 # Calcolato a import-time: per cambiare serve riavvio del processo.
 _MAX_ATTACHMENT_SIZE_BYTES = int(_settings_cfg.get("TICKET_ATTACHMENT_MAX_BYTES"))

@@ -436,19 +436,28 @@ def test_successful_cleanup_emits_ok_event(
 # (d) policy=db -> nessun touch a object storage anche su DB save failure
 
 
-@pytest.mark.usefixtures("mock_db_save_fails")
-def test_db_policy_db_save_failure_does_not_touch_object_storage(
+@pytest.mark.usefixtures("mock_db_save_ok")
+def test_db_policy_env_cannot_disable_object_storage(
     stub_storage_factory, monkeypatch
 ):
-    """policy=db, DB save fallisce: il dispatch non passa MAI per
-    object storage. Nessuna upload, nessuna delete."""
+    import app.core.results.blob_writer as result_blob_writer
+
     monkeypatch.setenv("STORAGE_POLICY", "db")
+    monkeypatch.setattr(
+        result_blob_writer,
+        "record_result_upload_intent",
+        lambda *args, **kwargs: "intent-1",
+    )
+    monkeypatch.setattr(
+        result_blob_writer,
+        "close_result_upload_intent",
+        lambda intent_id: None,
+    )
     storage = stub_storage_factory()
 
-    with pytest.raises(ResultSaveError):
-        save_result_blob_from_bytes(
-            project_id="p1", data=b"payload", filename="out.bin", fmt="bin",
-        )
+    save_result_blob_from_bytes(
+        project_id="p1", data=b"payload", filename="out.bin", fmt="bin",
+    )
 
-    assert storage.uploads == []
+    assert len(storage.uploads) == 1
     assert storage.deletes == []

@@ -68,8 +68,7 @@ Lette da `.env` via systemd unit wrapper o SSM secrets (vedi `deploy/iam/README.
 
 | Variabile | Default | Consumato da |
 |---|---|---|
-| `STORAGE_POLICY` | `hybrid` (`object_storage` raccomandato in prod cloud) | `app/core/results/blob_writer.py`, `app/infrastructure/storage/cloud_backends.py` |
-| `OBJECT_STORAGE_ENABLED` | `true` | Gate capability object storage runtime; con `STORAGE_POLICY=object_storage` deve essere true |
+| `OBJECT_STORAGE_ENABLED` | `true` | Gate obbligatorio dello storage runtime S3-compatible |
 | `OBJECT_STORAGE_BUCKET` | -- (obbligatoria in `object_storage`) | Bucket runtime per result, file sources e artifact intermedi |
 | `PLENORA_ARTIFACT_BUCKET` | alias di `OBJECT_STORAGE_BUCKET` | Alias operativo per artifact runtime |
 | `BACKUP_BUCKET` | `plenora-backup-112011134642-eu-south-1-an` | Nome canonico bucket backup |
@@ -106,7 +105,7 @@ Permessi SSM per secrets (`/plenora/prod/*`):
 ## Bucket S3 e convenzioni di prefix
 
 `OBJECT_STORAGE_BUCKET` e' il bucket runtime per artefatti applicativi. Deve
-restare distinto da `BACKUP_BUCKET`: in `STORAGE_POLICY=object_storage` il boot
+restare distinto da `BACKUP_BUCKET`: il boot
 fallisce se e' configurato solo il bucket backup.
 
 | Bucket | Prefix | TTL | Uso |
@@ -192,7 +191,7 @@ Tabelle in `plenora.*` tracciate dalla dashboard `DB Schema` (vedi `_CRITICAL_TA
 
 Categorie `tickets.category` sono enum **applicativo** (non DB CHECK) → estensibili senza migration. Vedi `docs/ops/tickets.md` per come aggiungere una categoria.
 
-Allegati: allowlist MIME (immagini + log/txt) + cap 10MB enforced dal router. Se il threshold S3 globale (`FILE_SOURCE_S3_THRESHOLD_BYTES`) scende sotto 10MB, gli allegati finiscono su S3 trasparentemente (stesso dispatch pattern di `file_sources`).
+Allegati: allowlist MIME (immagini + log/txt) + cap 10MB enforced dal router. I payload sono sempre salvati su object storage come gli altri `file_sources`.
 
 Retention non presente. Se emerge necessità (GDPR, spazio), task Dramatiq proposto:
 ```sql

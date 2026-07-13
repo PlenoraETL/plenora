@@ -176,45 +176,27 @@ def write_node(run_id: str, node_id: str, node_type: str,
     Returns: hash aggregato delle righe del nodo
     """
     try:
-        if status == "ok" and rows:
-            # Calcola _row_hash per ogni riga. Non serve piu' sanitizzare
-            # list/dict/geometry qui: node_snapshots_db.write_node_atomic usa
-            # _to_jsonable
-            # che gestisce tutti i tipi per la serializzazione in JSONB
-            col_names_sorted = sorted(col_schema.keys())
-            rows_with_hash = [
-                {"_row_hash": compute_row_hash(row, col_names_sorted), **row}
-                for row in rows
-            ]
-
-            # Scrittura node_rows + node_meta in singola transazione:
-            # idempotente (DELETE-then-INSERT) e atomica.
-            node_snapshots_db.write_node_atomic(
-                run_id=run_id,
-                node_id=node_id,
-                node_type=node_type,
-                rows=rows_with_hash,
-                col_schema=col_schema,
-                exec_time=exec_time,
-                status=status,
-                error_msg=error_msg,
-            )
-
-            # Hash aggregato per questo nodo
-            node_hash = compute_aggregate_hash(rows, col_schema)
-        else:
-            node_hash = hashlib.sha256(b"empty").hexdigest()
-            # Branch error/empty: nessuna riga da scrivere, solo meta
-            node_snapshots_db.upsert_node_meta(
-                run_id=run_id,
-                node_id=node_id,
-                node_type=node_type,
-                row_count=len(rows) if rows else 0,
-                col_schema=col_schema,
-                exec_time=exec_time,
-                status=status,
-                error_msg=error_msg,
-            )
+        node_hash = (
+            compute_aggregate_hash(rows, col_schema)
+            if status == "ok" and rows
+            else hashlib.sha256(b"empty").hexdigest()
+        )
+        node_snapshots_db.upsert_node_meta_extended(
+            run_id=run_id,
+            node_id=node_id,
+            node_type=node_type,
+            row_count=len(rows) if rows else 0,
+            col_schema=col_schema,
+            exec_time=exec_time,
+            status=status,
+            error_msg=error_msg,
+            node_hash=node_hash,
+            hash_algo="aggregate_sha256_v1",
+            persistence_mode="metadata_only",
+            persisted_rows_count=0,
+            preview_truncated=False,
+            artifact_status="none",
+        )
 
         logger.info(
             f"Nodo scritto: run={run_id} node={node_id} "

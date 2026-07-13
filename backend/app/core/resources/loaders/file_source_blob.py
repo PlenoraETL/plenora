@@ -49,7 +49,6 @@ from app.core.resources.stores.file_source_blob import (
 def _fetch_row(
     file_source_id: str,
     *,
-    max_bytes: int,
     group_id_filter: Optional[str],
 ) -> Optional[ObjectMap]:
     """SELECT row metadata + bounded BYTEA via SQL preflight.
@@ -77,23 +76,8 @@ def _fetch_row(
         clauses.append("group_id = %s")
         where_params.append(group_id_filter)
 
-    # Single-line SELECT projection so source-bound contract tests
-    # can grep the canonical token as one literal substring
-    sql = (
-        "SELECT storage_key, length(data) AS data_size, "
-        "CASE "
-        "WHEN storage_key IS NOT NULL THEN NULL "
-        "WHEN length(data) > %s THEN NULL "
-        "ELSE data "
-        "END AS data "
-        "FROM file_sources WHERE " + " AND ".join(clauses)
-    )
-    # Parameter order matches placeholder order
-    # 1. CASE WHEN length(data) > %s -> max_bytes
-    # 2. WHERE id = %s -> file_source_id
-    # 3. AND group_id = %s -> group_id_filter (if set
-    params = (max_bytes, *where_params)
-    row = fetch_file_source_blob_lookup_row(sql, params)
+    sql = "SELECT storage_key FROM file_sources WHERE " + " AND ".join(clauses)
+    row = fetch_file_source_blob_lookup_row(sql, tuple(where_params))
     return dict(row) if isinstance(row, Mapping) else row
 
 
@@ -128,61 +112,25 @@ def _dispatch_by_id(
 
     logger = get_logger(__name__)
     _t0 = time.monotonic()
-    # Resolve once and pass through; the SQL preflight + the
-    # downstream cap enforcement MUST agree on the same cap value
-    max_bytes = resolve_resource_max_bytes()
-
     row = _fetch_row(
         file_source_id,
-        max_bytes=max_bytes,
         group_id_filter=group_id_filter,
     )
     if not row:
         return None, "none"
 
     storage_key = row.get("storage_key")
-    if storage_key:
-        data = _download_object_storage(storage_key)
-        duration_ms = round((time.monotonic() - _t0) * 1000, 1)
-        size = len(data) if data else 0
-        logger.info(
-            f"[PERF] get_file_source_blob op=fetch_blob "
-            f"backend=object_storage file_source_id={file_source_id} "
-            f"size_bytes={size} duration_ms={duration_ms}"
-        )
-        return data, "object_storage"
-
-    # BYTEA preflight already nulled out oversize via SQL CASE
-    # If the data_size exceeds the cap, raise loudly (same contract
-    # as result_blob): the caller can then decide whether to
-    # surface a 413 or downgrade to fail-soft
-    data_size = row.get("data_size")
-    if data_size is not None and data_size > max_bytes:
-        duration_ms = round((time.monotonic() - _t0) * 1000, 1)
-        logger.error(
-            f"[PERF] get_file_source_blob op=fetch_blob backend=db_legacy "
-            f"file_source_id={file_source_id} ABORTED oversize: "
-            f"observed_bytes={data_size} limit_bytes={max_bytes} "
-            f"duration_ms={duration_ms} preflight=length(data)"
-        )
-        raise MemoryLimitExceededError(
-            observed_bytes=data_size,
-            limit_bytes=max_bytes,
-            path_basename=f"file_source_id={file_source_id}",
-            stage="file_source_blob_oversize",
-        )
-
-    data = row.get("data")
-    if isinstance(data, memoryview):
-        data = bytes(data)
+    if not storage_key:
+        raise RuntimeError(f"File source {file_source_id} senza storage_key")
+    data = _download_object_storage(storage_key)
     duration_ms = round((time.monotonic() - _t0) * 1000, 1)
     size = len(data) if data else 0
     logger.info(
-        f"[PERF] get_file_source_blob op=fetch_blob backend=db_legacy "
+        f"[PERF] get_file_source_blob op=fetch_blob backend=object_storage "
         f"file_source_id={file_source_id} size_bytes={size} "
         f"duration_ms={duration_ms}"
     )
-    return data, "db_legacy"
+    return data, "object_storage"
 
 
 def _stream_by_id(
@@ -197,70 +145,43 @@ def _stream_by_id(
     max_bytes = resolve_resource_max_bytes()
     row = _fetch_row(
         file_source_id,
-        max_bytes=max_bytes,
         group_id_filter=group_id_filter,
     )
     if not row:
         return None, 0, "none"
 
     storage_key = row.get("storage_key")
-    if storage_key:
-        try:
-            from app.core.io.object_storage import get_runtime_object_storage
+    if not storage_key:
+        raise RuntimeError(f"File source {file_source_id} senza storage_key")
+    try:
+        from app.core.io.object_storage import get_runtime_object_storage
 
-            opened = get_runtime_object_storage().get_object_stream(storage_key)
-            declared_size = int(opened.get("size") or 0)
-            if declared_size > max_bytes:
-                raise MemoryLimitExceededError(
-                    observed_bytes=declared_size,
-                    limit_bytes=max_bytes,
-                    path_basename=f"file_source_id={file_source_id}",
-                    stage="file_source_blob_oversize",
-                )
-            bounded = iter_stream_bounded(
-                opened.get("body", ()),
-                max_bytes=max_bytes,
-                label=f"file_source_id={file_source_id}",
+        opened = get_runtime_object_storage().get_object_stream(storage_key)
+        declared_size = int(opened.get("size") or 0)
+        if declared_size > max_bytes:
+            raise MemoryLimitExceededError(
+                observed_bytes=declared_size,
+                limit_bytes=max_bytes,
+                path_basename=f"file_source_id={file_source_id}",
                 stage="file_source_blob_oversize",
             )
-            return bounded, declared_size, "object_storage"
-        except MemoryLimitExceededError:
-            raise
-        except Exception as exc:
-            logger.error(
-                "[FS-BLOB] apertura stream fallita file_source_id=%s: %s",
-                file_source_id,
-                exc,
-                exc_info=True,
-            )
-            return None, 0, "object_storage"
-
-    data_size = row.get("data_size")
-    if data_size is not None and data_size > max_bytes:
-        raise MemoryLimitExceededError(
-            observed_bytes=data_size,
-            limit_bytes=max_bytes,
-            path_basename=f"file_source_id={file_source_id}",
+        bounded = iter_stream_bounded(
+            opened.get("body", ()),
+            max_bytes=max_bytes,
+            label=f"file_source_id={file_source_id}",
             stage="file_source_blob_oversize",
         )
-    data = row.get("data")
-    if isinstance(data, memoryview):
-        data = bytes(data)
-    if data is None:
-        return None, 0, "db_legacy"
-    if not isinstance(data, bytes):
-        raise TypeError(
-            "FileSource blob legacy deve essere bytes/memoryview/None; "
-            f"ricevuto {type(data).__name__}"
+        return bounded, declared_size, "object_storage"
+    except MemoryLimitExceededError:
+        raise
+    except Exception as exc:
+        logger.error(
+            "[FS-BLOB] apertura stream fallita file_source_id=%s: %s",
+            file_source_id,
+            exc,
+            exc_info=True,
         )
-
-    chunk_size = 1024 * 1024
-
-    def _legacy_chunks() -> Iterator[bytes]:
-        for start in range(0, len(data), chunk_size):
-            yield data[start:start + chunk_size]
-
-    return _legacy_chunks(), len(data), "db_legacy"
+        return None, 0, "object_storage"
 
 
 # FileSourceBlobLoader — Protocol-compliant loader for `file_source_blob`

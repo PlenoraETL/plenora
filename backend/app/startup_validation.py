@@ -164,20 +164,6 @@ def validate_production_gates(settings: Any, errors: list[str]) -> None:
             "(alias legacy accettato: ARRICCHISCI_RATE_LIMIT_REDIS_REQUIRED)"
         )
 
-    storage_policy = (
-        str(settings.get("STORAGE_POLICY", "object_storage") or "object_storage")
-        .strip()
-        .lower()
-    )
-    if storage_policy not in {"object_storage", "hybrid"}:
-        errors.append(
-            f"STORAGE_POLICY={storage_policy!r} non e' coerente con "
-            "production/staging o cluster. Usa 'object_storage' o 'hybrid' "
-            "con OBJECT_STORAGE_ENABLED=true e OBJECT_STORAGE_BUCKET "
-            "configurato."
-        )
-
-
 def validate_data_plane_config(settings: Any, errors: list[str]) -> None:
     """Validate the portable data-plane process boundary before consuming jobs."""
 
@@ -201,21 +187,29 @@ def validate_data_plane_config(settings: Any, errors: list[str]) -> None:
             f"(ricevuto {raw_timeout!r})."
         )
 
-    storage_policy = str(
-        settings.get("STORAGE_POLICY", "object_storage") or "object_storage"
-    ).strip().lower()
     intermediate_mode = str(
         settings.get("INTERMEDIATE_PERSISTENCE_MODE", "metadata_only")
         or "metadata_only"
     ).strip().lower()
-    if storage_policy == "object_storage" and intermediate_mode in {
+    if intermediate_mode in {
         "preview_only",
         "full_pg",
     }:
         errors.append(
             f"INTERMEDIATE_PERSISTENCE_MODE={intermediate_mode!r} e' legacy "
-            "e salva righe in PostgreSQL. Con STORAGE_POLICY=object_storage "
-            "usa 'metadata_only' o 'full_artifact'."
+            "e salva righe in PostgreSQL. Usa 'metadata_only' o "
+            "'full_artifact'."
+        )
+
+    if not _as_bool(settings.get("OBJECT_STORAGE_ENABLED", True)):
+        errors.append(
+            "OBJECT_STORAGE_ENABLED deve essere true: il data-plane salva "
+            "tutti i payload su object storage."
+        )
+    if not settings.get("OBJECT_STORAGE_BUCKET"):
+        errors.append(
+            "OBJECT_STORAGE_BUCKET e' obbligatorio: PostgreSQL conserva "
+            "soltanto metadata e reference."
         )
 
 

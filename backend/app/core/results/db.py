@@ -92,20 +92,16 @@ def save_result_row(
     group_id: str,
     filename: str,
     fmt: str,
-    data: Optional[bytes] = None,
     rows_count: Optional[int] = None,
     created_by: Optional[str] = None,
     storage_key: Optional[str] = None,
     size_bytes: Optional[int] = None,
 ) -> Optional[ResultMetadataRow]:
-    """Persist result metadata.
-
-    Supports both legacy BYTEA blobs and object-storage backed rows.
-    """
+    """Persist result metadata and its required object-storage reference."""
+    if not storage_key:
+        raise ValueError("save_result_row richiede storage_key")
     now = datetime.now(timezone.utc).isoformat()
-    resolved_size_bytes = size_bytes
-    if resolved_size_bytes is None:
-        resolved_size_bytes = len(data) if data else 0
+    resolved_size_bytes = size_bytes if size_bytes is not None else 0
 
     with unit_of_work() as session:
         conflict_policy_marker = "ON CONFLICT (id) DO NOTHING"
@@ -114,9 +110,9 @@ def save_result_row(
         # su id non dovrebbe accadere. `DO NOTHING` evita overwrite di result
         # gia' persistiti e il warning su rowcount marca l'anomalia.
         cur = session.execute(
-            "INSERT INTO results (id, project_id, group_id, filename, format, data, "
+            "INSERT INTO results (id, project_id, group_id, filename, format, "
             "size_bytes, rows_count, created_at, created_by, storage_key) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
             "ON CONFLICT (id) DO NOTHING",
             (
                 result_id,
@@ -124,7 +120,6 @@ def save_result_row(
                 group_id,
                 filename,
                 fmt,
-                data,
                 resolved_size_bytes,
                 rows_count,
                 now,
@@ -175,11 +170,8 @@ def get_latest_result_row(
 ) -> Optional[ResultMetadataRow]:
     """Return latest typed result metadata for a project."""
     def _read(active_session: PgSession) -> Optional[ResultMetadataRow]:
-        # I result salvati con STORAGE_POLICY=object_storage hanno data=NULL
-        # nella tabella `results` e il blob su MinIO/S3 referenziato da
-        # storage_key. La SELECT deve includere `storage_key`, altrimenti i
-        # caller downstream pensano sia un result BYTEA. Allineato a
-        # `list_result_rows`, che include gia' storage_key.
+        # Il blob vive su S3-compatible storage ed e' referenziato da
+        # storage_key. La SELECT include sempre la reference.
         if group_id:
             row = active_session.fetchone(
                 "SELECT id, project_id, group_id, filename, format, size_bytes, "

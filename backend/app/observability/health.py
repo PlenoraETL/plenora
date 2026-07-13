@@ -213,7 +213,7 @@ def check_object_storage() -> CheckOutcome:
 
     Strategia (in ordine):
     1. Se `object_storage_enabled` e' False (policy:
-       `STORAGE_POLICY=db` o capability disabilitata) -> outcome
+       capability disabilitata) -> outcome
        `(True, "skipped: capability disabled")`. Modalita'
        on-prem/local senza object storage e' configurazione
        legittima, NON deve far fallire /ready.

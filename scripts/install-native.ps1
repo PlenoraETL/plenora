@@ -390,7 +390,6 @@ JWT_SECRET_KEY=$jwt
 PLENORA_ENCRYPTION_KEY=$enc
 DATA_DIR=$DataDir
 # PostgreSQL e' solo control-plane; ogni payload persistente usa S3.
-STORAGE_POLICY=object_storage
 OBJECT_STORAGE_ENABLED=true
 OBJECT_STORAGE_BACKEND=s3_compatible
 OBJECT_STORAGE_BUCKET=plenora-runtime
@@ -506,7 +505,6 @@ if ($InstallObjectStorage) {
     Ok 'SeaweedFS S3 in ascolto su 127.0.0.1:8333'
 
     # .env: applicazione disaccoppiata dal vendor, solo protocollo S3.
-    Set-EnvValue -File $envFile -Key 'STORAGE_POLICY' -Value 'object_storage'
     Set-EnvValue -File $envFile -Key 'OBJECT_STORAGE_ENABLED' -Value 'true'
     Set-EnvValue -File $envFile -Key 'OBJECT_STORAGE_BACKEND' -Value 's3_compatible'
     Set-EnvValue -File $envFile -Key 'CLOUD_PROVIDER' -Value 'none'

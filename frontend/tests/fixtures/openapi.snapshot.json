@@ -14699,7 +14699,7 @@
     },
     "/api/tasks/{task_id}/download": {
       "get": {
-        "description": "Scarica il file risultato di un task.\n\nPer i task degli eseguibili (is_eseguibile=True) l'output vive su\nobject storage (eseguibili-outputs/{task_id}/) — streamming S3 + cleanup\npost-send via background_task. Per tutti gli altri task il reader\n`get_result_data(result_id)` risolve lo storage trasparente:\n  - DB BYTEA se il result era < RESULT_S3_THRESHOLD_BYTES\n  - S3 object se sopra (via storage_key della row results)\nIn entrambi i casi il payload viene streammato al client.\n\nSECURITY: verifica ownership via project_id del task.",
+        "description": "Scarica il file risultato di un task.\n\nPer i task degli eseguibili (is_eseguibile=True) l'output vive su\nobject storage (eseguibili-outputs/{task_id}/) — streamming S3 + cleanup\npost-send via background_task. Per tutti gli altri task il reader\n`get_result_data(result_id)` apre l'oggetto S3-compatible tramite la\nstorage_key della riga results.\nIn entrambi i casi il payload viene streammato al client.\n\nSECURITY: verifica ownership via project_id del task.",
         "operationId": "download_task_result_api_tasks__task_id__download_get",
         "parameters": [
           {

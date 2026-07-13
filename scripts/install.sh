@@ -33,7 +33,6 @@
 #   PLENORA_INSTALL_DATABASE_URL    Postgres DSN
 #   PLENORA_INSTALL_DB_SCHEMA       default: plenora
 #   PLENORA_INSTALL_BROKER_URL      RabbitMQ broker URL (DRAMATIQ_BROKER_URL)
-#   PLENORA_INSTALL_STORAGE_POLICY  must be object_storage (legacy reads only)
 #   PLENORA_INSTALL_BACKUP_BUCKET   optional backup bucket
 #   PLENORA_INSTALL_OBJECT_STORAGE_BUCKET  runtime payload bucket
 #   PLENORA_INSTALL_S3_ENDPOINT_URL S3-compatible endpoint
@@ -554,7 +553,6 @@ step_gather_config() {
     DATABASE_URL="${PLENORA_INSTALL_DATABASE_URL:-}"
     DB_SCHEMA="${PLENORA_INSTALL_DB_SCHEMA:-}"
     BROKER_URL="${PLENORA_INSTALL_BROKER_URL:-}"
-    STORAGE_POLICY="${PLENORA_INSTALL_STORAGE_POLICY:-}"
     BACKUP_BUCKET="${PLENORA_INSTALL_BACKUP_BUCKET:-}"
     OBJECT_STORAGE_BUCKET="${PLENORA_INSTALL_OBJECT_STORAGE_BUCKET:-}"
     OBJECT_STORAGE_BACKEND="${PLENORA_INSTALL_OBJECT_STORAGE_BACKEND:-}"
@@ -581,13 +579,6 @@ step_gather_config() {
     prompt BROKER_URL \
         "RabbitMQ broker URL (DRAMATIQ_BROKER_URL)" \
         "amqp://guest:guest@localhost:5672"
-
-    prompt STORAGE_POLICY "STORAGE_POLICY" "object_storage"
-
-    case "$STORAGE_POLICY" in
-        object_storage) ;;
-        *) die "Nuove installazioni supportano solo STORAGE_POLICY=object_storage; db/hybrid restano disponibili per leggere dati legacy." ;;
-    esac
 
     prompt BACKUP_BUCKET \
         "BACKUP_BUCKET (separato dal runtime)" \
@@ -682,7 +673,6 @@ INSTALLER_MANAGED_KEYS=(
     DRAMATIQ_BROKER_URL
     PLENORA_ENCRYPTION_KEY
     JWT_SECRET_KEY
-    STORAGE_POLICY
     BACKUP_BUCKET
     OBJECT_STORAGE_ENABLED
     OBJECT_STORAGE_BACKEND
@@ -770,7 +760,6 @@ build_managed_values() {
     MANAGED_VALUES[DRAMATIQ_BROKER_URL]="$BROKER_URL"
     MANAGED_VALUES[PLENORA_ENCRYPTION_KEY]="$PLENORA_ENCRYPTION_KEY"
     MANAGED_VALUES[JWT_SECRET_KEY]="$JWT_SECRET_KEY"
-    MANAGED_VALUES[STORAGE_POLICY]="$STORAGE_POLICY"
     MANAGED_VALUES[BACKUP_BUCKET]="$BACKUP_BUCKET"
     MANAGED_VALUES[PLENORA_BACKEND_PORT]="$BACKEND_PORT"
     MANAGED_VALUES[OBJECT_STORAGE_ENABLED]="true"
@@ -817,8 +806,7 @@ DRAMATIQ_BROKER_URL=${BROKER_URL}
 PLENORA_ENCRYPTION_KEY=${PLENORA_ENCRYPTION_KEY}
 JWT_SECRET_KEY=${JWT_SECRET_KEY}
 
-# Storage policy + backup
-STORAGE_POLICY=${STORAGE_POLICY}
+# Object storage + backup
 BACKUP_BUCKET=${BACKUP_BUCKET}
 EOF
     cat >> "$out" <<EOF
@@ -888,7 +876,7 @@ merge_env_into() {
                     continue
                 fi
                 # Managed key but no current value (e.g. AWS_REGION when
-                # STORAGE_POLICY=db). Preserve verbatim - the operator
+                # legacy unmanaged settings). Preserve verbatim - the operator
                 # may want to keep it for a later switch back.
             fi
         fi

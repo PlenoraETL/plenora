@@ -503,21 +503,16 @@ def preview_pipeline_task(
         # In the object-storage-only data plane the tabular preview must not
         # cross the subprocess pipe and end up in task_results JSONB. Persist
         # it here, inside the disposable child, and return only a small
-        # control-plane reference. Legacy db/hybrid modes remain readable for
-        # transition tests and old deployments, but supported installs use
-        # object_storage.
-        if str(settings.get("STORAGE_POLICY", "object_storage")).lower() == "object_storage":
-            from app.core.orchestrator.preview_payload_store import (
-                persist_preview_payload,
-            )
+        # control-plane reference.
+        from app.core.orchestrator.preview_payload_store import (
+            persist_preview_payload,
+        )
 
-            return persist_preview_payload(
-                result,
-                project_id=project_id,
-                task_id=task_id,
-            )
-
-        return result
+        return persist_preview_payload(
+            result,
+            project_id=project_id,
+            task_id=task_id,
+        )
 
     except Exception as e:
         logger.error(f"[CRASH] Task PREVIEW {task_id} fallito: {e}", exc_info=True)

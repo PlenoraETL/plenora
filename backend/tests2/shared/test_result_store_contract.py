@@ -423,6 +423,16 @@ def _wire_object_storage_writer(monkeypatch, *, fake_storage, saved):
         lambda **kwargs: saved.update(kwargs),
     )
     monkeypatch.setattr(result_blob_writer, "apply_results_retention", lambda pid: None)
+    monkeypatch.setattr(
+        result_blob_writer,
+        "record_result_upload_intent",
+        lambda *args, **kwargs: "intent-1",
+    )
+    monkeypatch.setattr(
+        result_blob_writer,
+        "close_result_upload_intent",
+        lambda intent_id: None,
+    )
     # policy=object_storage: dispatcher forza sempre object storage
     monkeypatch.setenv("STORAGE_POLICY", "object_storage")
     monkeypatch.setattr(
@@ -463,7 +473,7 @@ def test_save_result_blob_object_storage_small_file_goes_to_runtime(
     upload_path, upload_key = fake.uploads_path[0]
     assert upload_key == "results/proj-1/res-os-1.bin"
     # Persistenza DB: solo metadata + storage_key, data=NULL.
-    assert saved["data"] is None
+    assert "data" not in saved
     assert saved["storage_key"] == "results/proj-1/res-os-1.bin"
     assert saved["size_bytes"] == expected_size
     # File temp pulito post-success (path-based usa _saved=True nel finally).
@@ -493,7 +503,7 @@ def test_save_result_blob_from_bytes_object_storage_small_payload_goes_to_runtim
     # In-memory writer usa upload_bytes (no path).
     assert fake.uploads_bytes == [(payload, "results/proj-1/res-os-1.bin")]
     assert fake.uploads_path == []
-    assert saved["data"] is None
+    assert "data" not in saved
     assert saved["storage_key"] == "results/proj-1/res-os-1.bin"
     assert saved["size_bytes"] == len(payload)
 

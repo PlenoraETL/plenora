@@ -10,10 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.core.results.blob_writer import (
-    ResultSaveError,
-    save_result_blob_from_bytes,
-)
+from app.core.results.blob_writer import save_result_blob_from_bytes
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
@@ -58,6 +55,10 @@ def mock_db(monkeypatch):
                         lambda **kw: saved.append(kw))
     monkeypatch.setattr(result_blob_writer, "apply_results_retention",
                         lambda pid: None)
+    monkeypatch.setattr(result_blob_writer, "record_result_upload_intent",
+                        lambda *args, **kwargs: "intent-1")
+    monkeypatch.setattr(result_blob_writer, "close_result_upload_intent",
+                        lambda intent_id: None)
     return saved
 
 
@@ -75,7 +76,7 @@ def _clean_policy_env(monkeypatch):
 # policy = db
 
 
-def test_db_policy_writes_bytea_and_never_calls_storage(mock_db, stub_storage, monkeypatch):
+def test_db_policy_env_is_ignored_and_uploads(mock_db, stub_storage, monkeypatch):
     monkeypatch.setenv("STORAGE_POLICY", "db")
 
     payload = b"x" * 10_000  # 10 KB, ampiamente sotto qualunque soglia
@@ -86,26 +87,23 @@ def test_db_policy_writes_bytea_and_never_calls_storage(mock_db, stub_storage, m
     assert rid == "res-pol"
     assert len(mock_db) == 1
     saved = mock_db[0]
-    assert saved["data"] == payload
-    assert saved.get("storage_key") is None
-    # Nessuna chiamata al backend, anche se il payload sarebbe andato
-    # su storage in policy=hybrid col default 50MB.
-    assert stub_storage.uploads == []
+    assert "data" not in saved
+    assert saved["storage_key"] == "results/p1/res-pol.bin"
+    assert len(stub_storage.uploads) == 1
 
 
-def test_db_policy_enforces_hard_cap(mock_db, stub_storage, monkeypatch):
+def test_db_hard_cap_env_is_ignored(mock_db, stub_storage, monkeypatch):
     """policy=db + payload > RESULT_DB_HARD_CAP_BYTES -> ResultSaveError,
     nessuna row DB. Hard cap evita BYTEA fuori controllo."""
     monkeypatch.setenv("STORAGE_POLICY", "db")
     monkeypatch.setenv("RESULT_DB_HARD_CAP_BYTES", "1024")  # 1 KB
 
     payload = b"x" * 2048  # 2 KB > 1 KB cap
-    with pytest.raises(ResultSaveError, match="RESULT_DB_HARD_CAP_BYTES"):
-        save_result_blob_from_bytes(
-            project_id="p1", data=payload, filename="f.bin", fmt="bin",
-        )
-    assert mock_db == []
-    assert stub_storage.uploads == []
+    save_result_blob_from_bytes(
+        project_id="p1", data=payload, filename="f.bin", fmt="bin",
+    )
+    assert len(mock_db) == 1
+    assert len(stub_storage.uploads) == 1
 
 
 # policy = object_storage
@@ -129,7 +127,7 @@ def test_object_storage_policy_always_uploads(mock_db, stub_storage, monkeypatch
 
     assert len(mock_db) == 1
     saved = mock_db[0]
-    assert saved["data"] is None
+    assert "data" not in saved
     assert saved["storage_key"] == "results/p1/res-pol.bin"
 
 
@@ -144,13 +142,13 @@ def test_object_storage_policy_ignores_threshold(mock_db, stub_storage, monkeypa
         project_id="p1", data=payload, filename="f.bin", fmt="bin",
     )
     assert len(stub_storage.uploads) == 1
-    assert mock_db[0]["data"] is None
+    assert "data" not in mock_db[0]
 
 
 # policy = hybrid (comportamento attuale + guard hard cap)
 
 
-def test_hybrid_below_threshold_goes_to_db(mock_db, stub_storage, monkeypatch):
+def test_hybrid_below_threshold_still_goes_to_storage(mock_db, stub_storage, monkeypatch):
     monkeypatch.setenv("STORAGE_POLICY", "hybrid")
     monkeypatch.setenv("RESULT_S3_THRESHOLD_BYTES", str(10 * 1024))
 
@@ -158,8 +156,8 @@ def test_hybrid_below_threshold_goes_to_db(mock_db, stub_storage, monkeypatch):
     save_result_blob_from_bytes(
         project_id="p1", data=payload, filename="f.bin", fmt="bin",
     )
-    assert mock_db[0]["data"] == payload
-    assert stub_storage.uploads == []
+    assert "data" not in mock_db[0]
+    assert len(stub_storage.uploads) == 1
 
 
 def test_hybrid_above_threshold_goes_to_storage(mock_db, stub_storage, monkeypatch):
@@ -170,12 +168,12 @@ def test_hybrid_above_threshold_goes_to_storage(mock_db, stub_storage, monkeypat
     save_result_blob_from_bytes(
         project_id="p1", data=payload, filename="f.bin", fmt="bin",
     )
-    assert mock_db[0]["data"] is None
+    assert "data" not in mock_db[0]
     assert mock_db[0]["storage_key"] == "results/p1/res-pol.bin"
     assert len(stub_storage.uploads) == 1
 
 
-def test_hybrid_hard_cap_guards_db_branch(mock_db, stub_storage, monkeypatch):
+def test_hybrid_hard_cap_env_cannot_enable_db_branch(mock_db, stub_storage, monkeypatch):
     """Config misconfigurata: threshold > hard_cap. In hybrid il dispatch sotto
     soglia va in DB, ma il hard cap interviene prima di inserire oltre cap.
     """
@@ -184,9 +182,8 @@ def test_hybrid_hard_cap_guards_db_branch(mock_db, stub_storage, monkeypatch):
     monkeypatch.setenv("RESULT_DB_HARD_CAP_BYTES", "500")
 
     payload = b"x" * 1024  # 1 KB: < threshold 1 MB ma > cap 500
-    with pytest.raises(ResultSaveError, match="RESULT_DB_HARD_CAP_BYTES"):
-        save_result_blob_from_bytes(
-            project_id="p1", data=payload, filename="f.bin", fmt="bin",
-        )
-    assert mock_db == []
-    assert stub_storage.uploads == []
+    save_result_blob_from_bytes(
+        project_id="p1", data=payload, filename="f.bin", fmt="bin",
+    )
+    assert len(mock_db) == 1
+    assert len(stub_storage.uploads) == 1

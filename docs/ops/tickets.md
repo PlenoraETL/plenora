@@ -72,7 +72,7 @@ Allowlist hardcoded in `app/core/tickets/router.py::_ALLOWED_EXTENSIONS`:
 
 Size cap: **10 MB** (`_MAX_ATTACHMENT_SIZE_BYTES`). Oltre: HTTP 413.
 
-Storage: riusa `file_sources` con dispatch DB/S3 (soglia `FILE_SOURCE_S3_THRESHOLD_BYTES`). Per la dimensione massima di 10MB il blob sta sempre in DB, non su S3 — ma se il threshold S3 è settato sotto 10MB (config operativa), l'allegato finisce su S3 trasparentemente.
+Storage: riusa `file_sources`; il catalogo resta in PostgreSQL e il payload dell'allegato viene sempre salvato su object storage S3-compatible.
 
 Cancellazione: `DELETE /tickets/{id}/attachments/{aid}` rimuove il link + best-effort cleanup del file_source sottostante. Se il cleanup S3 fallisce, il file resta orfano (loggato con warning, lifecycle rule S3 lo raccoglierà).
 

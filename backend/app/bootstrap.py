@@ -72,7 +72,7 @@ def bootstrap() -> None:
     # incompleta
     validate_startup(settings)
 
-    # 2. Coerenza STORAGE_POLICY + provider + bucket + soglie
+    # 2. Coerenza provider e bucket object storage obbligatorio
     # Fail-fast qui evita che un task worker scopra al primo upload
     # oltre soglia che il bucket non esiste o che il provider non e'
     # implementato

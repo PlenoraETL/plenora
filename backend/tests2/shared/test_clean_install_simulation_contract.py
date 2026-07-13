@@ -55,7 +55,6 @@ def test_non_docker_installer_exposes_minimal_clean_install_config():
         "PLENORA_INSTALL_DATABASE_URL",
         "PLENORA_INSTALL_DB_SCHEMA",
         "PLENORA_INSTALL_BROKER_URL",
-        "PLENORA_INSTALL_STORAGE_POLICY",
         "PLENORA_INSTALL_BACKUP_BUCKET",
         "PLENORA_INSTALL_OBJECT_STORAGE_BUCKET",
         "PLENORA_INSTALL_S3_ENDPOINT_URL",
@@ -71,7 +70,6 @@ def test_non_docker_installer_exposes_minimal_clean_install_config():
     defaults = (
         ('prompt DB_SCHEMA', '"plenora"'),
         ('prompt BROKER_URL', '"amqp://guest:guest@localhost:5672"'),
-        ('prompt STORAGE_POLICY', '"object_storage"'),
         ('prompt BACKUP_BUCKET', '"plenora-backups"'),
         ('prompt BACKEND_PORT', '"5004"'),
     )
@@ -90,7 +88,6 @@ def test_non_docker_installer_exposes_minimal_clean_install_config():
         "DRAMATIQ_BROKER_URL",
         "PLENORA_ENCRYPTION_KEY",
         "JWT_SECRET_KEY",
-        "STORAGE_POLICY",
         "BACKUP_BUCKET",
         "OBJECT_STORAGE_BACKEND",
         "OBJECT_STORAGE_BUCKET",

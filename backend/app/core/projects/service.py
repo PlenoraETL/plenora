@@ -407,11 +407,11 @@ class ProjectService:
         rows_count: Optional[int] = None,
         group_id: Optional[str] = None,
     ) -> str:
-        """Salva file risultato come blob nel DB. Ritorna result_id."""
-        result_id = str(uuid.uuid4())
+        """Salva il risultato su object storage. Ritorna result_id."""
         group_id = resolve_project_group_id(group_id, self.DEFAULT_GROUP)
-        results_store.save_result(
-            result_id=result_id,
+        from app.core.results.blob_writer import save_result_blob_from_bytes
+
+        result_id = save_result_blob_from_bytes(
             project_id=project_id,
             group_id=group_id,
             filename=filename,

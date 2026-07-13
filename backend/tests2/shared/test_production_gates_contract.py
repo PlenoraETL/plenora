@@ -224,13 +224,13 @@ def test_arricchisci_rate_limiter_must_use_required_redis(monkeypatch):
     assert "ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_REQUIRED" in joined
 
 
-def test_storage_policy_db_is_rejected_for_cluster(monkeypatch):
+def test_storage_policy_legacy_env_is_ignored_for_cluster(monkeypatch):
     _set_cluster_safe_env(monkeypatch)
     monkeypatch.setenv("STORAGE_POLICY", "db")
 
     errors = _errors_for_current_env()
 
-    assert any("STORAGE_POLICY='db'" in error for error in errors)
+    assert not any("STORAGE_POLICY" in error for error in errors)
 
 
 def test_validate_startup_runs_production_gates_before_boot_completes(

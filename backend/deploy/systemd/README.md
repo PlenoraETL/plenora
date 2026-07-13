@@ -44,7 +44,7 @@ I service **long-running** (`plenora-backend`, `plenora-worker-data`,
 `EnvironmentFile=/home/ubuntu/plenora-etl/backend/.env`
 per la configurazione runtime — inclusa `PLENORA_ENCRYPTION_KEY`.
 In produzione cloud lo stesso `.env` deve contenere anche
-`STORAGE_POLICY=object_storage`, `OBJECT_STORAGE_ENABLED=true`,
+`OBJECT_STORAGE_ENABLED=true`,
 `OBJECT_STORAGE_BUCKET` e `PLENORA_ARTIFACT_BUCKET`; il bucket runtime
 deve essere distinto dal bucket backup.
 Migrazione cross-cloud: aggiungi una classe nel file `cloud_backends.py`

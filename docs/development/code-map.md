@@ -626,7 +626,7 @@ Intervento/confini: unico punto di encrypt/decrypt - non reimplementare crypto a
 
 Entry-point: `backend/app/core/results/blob_writer.py`, `backend/app/core/results/db.py`, `backend/app/infrastructure/storage/cloud_backends.py`
 
-Responsabilita: salva e legge result finali, separando catalogo DB e payload runtime. In `STORAGE_POLICY=object_storage` i nuovi result devono andare sempre su runtime object storage; il fallback BYTEA resta solo per compatibility read.
+Responsabilita: salva e legge result finali, separando catalogo PostgreSQL e payload runtime S3-compatible obbligatorio.
 
 | file | funzioni/classi chiave | cosa guardare |
 |---|---|---|
@@ -635,14 +635,13 @@ Responsabilita: salva e legge result finali, separando catalogo DB e payload run
 | `app/infrastructure/storage/cloud_backends.py` | `ObjectStorage`, `ObjectStorageDisabledError`, `object_storage_enabled`, `get_runtime_object_storage`, `get_backup_object_storage`, `get_log_archive_storage`, `validate_storage_config` | factory e gate object storage |
 | `app/config.py` | `StoragePolicy`, `StorageProvider`, storage env accessors | policy storage dichiarativa |
 
-Keywords: `STORAGE_POLICY`, `OBJECT_STORAGE_BUCKET`, `PLENORA_ARTIFACT_BUCKET`, `OBJECT_STORAGE_ENABLED`, `get_runtime_object_storage`, `backend=object_storage`, `backend=db_legacy`, `storage_key`, `delete_results_for_project`
+Keywords: `OBJECT_STORAGE_BUCKET`, `PLENORA_ARTIFACT_BUCKET`, `OBJECT_STORAGE_ENABLED`, `get_runtime_object_storage`, `backend=object_storage`, `storage_key`, `delete_results_for_project`
 
 Intervento/confini:
-- Nuovi result in `STORAGE_POLICY=object_storage`: `storage_key` valorizzato, `data=NULL`, nessun fallback BYTEA su errore upload/capability off/bucket mancante.
-- Reader invariato compat: `get_result_data` legge `storage_key` da object storage oppure `data` BYTEA di record esistenti; logga `backend=object_storage` o `backend=db_legacy`.
-- `validate_storage_config` deve fallire al boot se `STORAGE_POLICY=object_storage` non ha `OBJECT_STORAGE_ENABLED=true` e bucket runtime esplicito (`OBJECT_STORAGE_BUCKET` o alias `PLENORA_ARTIFACT_BUCKET`). Non usare `BACKUP_BUCKET` come fallback runtime in questa policy.
+- Ogni result ha `storage_key` obbligatoria; le colonne BYTEA non esistono e non c'e' fallback DB.
+- `get_result_data` legge esclusivamente dall'object storage e logga `backend=object_storage`.
+- `validate_storage_config` fallisce al boot senza `OBJECT_STORAGE_ENABLED=true` e bucket runtime esplicito (`OBJECT_STORAGE_BUCKET` o alias `PLENORA_ARTIFACT_BUCKET`). Non usare `BACKUP_BUCKET` come fallback runtime.
 - Non chiamare `boto3.client("s3")` dai moduli business: passare dalle factory `cloud_backends`.
-- `RESULT_S3_THRESHOLD_BYTES` resta solo per `hybrid`; non usarlo per decidere i nuovi result in policy `object_storage`.
 
 ---
 
@@ -732,7 +731,7 @@ Sintesi trasversale dei confini operativi piu' importanti del repo. Toccarli sen
 
 
 - **`backend/app/core/intermediate/`** = contratto dati tra step pipeline. Estrai/Manipola/Arricchisci/Carica scambiano dataset *solo* tramite intermediate. Cambiare lo schema `RunSummary`/`node_meta` o il formato di `write_node`/`compute_row_hash` significa rompere tutti gli step a valle.
-- **Storage result/runtime object storage**: in `STORAGE_POLICY=object_storage`, i nuovi result non vanno mai in BYTEA. Il DB conserva metadata + `storage_key`; `data` BYTEA e' solo compatibility read path. Runtime artifacts/result usano `OBJECT_STORAGE_BUCKET`/`PLENORA_ARTIFACT_BUCKET`, non `BACKUP_BUCKET`.
+- **Storage result/runtime object storage**: i result non vanno mai in BYTEA. Il DB conserva metadata + `storage_key`; runtime artifacts/result usano `OBJECT_STORAGE_BUCKET`/`PLENORA_ARTIFACT_BUCKET`, non `BACKUP_BUCKET`.
 - **`backend/app/infrastructure/security/crypto.py`** = unico punto di crypto-at-rest. Env canonica unica `PLENORA_ENCRYPTION_KEY` (gli alias ritirati sono rimossi dal 2026-04-23). Qualsiasi nuovo segreto persistito passa da `encrypt`/`decrypt`/`encrypt_dict_fields`. Mai reimplementare Fernet altrove ne reintrodurre fallback runtime.
 - **`frontend/src/api/`** = unico punto HTTP del frontend. Pagine, componenti e store NON chiamano `fetch`/`axios` direttamente; auth/header/error globali vivono in `http.js`/`errors.js`. `openapiClient.js` e' contract/test-only e non fa parte del runtime app graph.
 - **`backend/app/core/orchestrator/`** coordina, non duplica logica step. Nuovi pezzi di pipeline vanno nel modulo step (`estrai`/`manipola`/`arricchisci`/`carica` + executor dedicato), non in `OrchestratorService`. Cancel/cleanup task devono restare idempotenti.

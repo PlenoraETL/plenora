@@ -134,7 +134,6 @@ PLENORA_ENCRYPTION_KEY=<generate>
 JWT_SECRET_KEY=<generate>
 DATABASE_URL=postgresql://plenora:plenora@localhost:5432/plenora
 DRAMATIQ_BROKER_URL=amqp://guest:guest@localhost:5672
-STORAGE_POLICY=object_storage
 OBJECT_STORAGE_ENABLED=true
 OBJECT_STORAGE_BACKEND=s3_compatible
 OBJECT_STORAGE_BUCKET=plenora-runtime

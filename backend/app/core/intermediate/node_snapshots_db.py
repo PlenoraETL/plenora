@@ -153,17 +153,20 @@ def write_node_snapshot_atomic(
     artifact_error: Optional[str] = None,
     transaction_func=None,
 ) -> None:
-    """Atomically write `node_rows` plus extended `node_meta`."""
+    """Atomically write metadata; payload rows are never stored in PG."""
     transaction_boundary = transaction_func or unit_of_work
     records = _build_node_row_records(run_id, node_id, rows_to_persist or [])
+    if records:
+        raise ValueError(
+            "write_node_snapshot_atomic non accetta payload rows: usa "
+            "metadata_only o full_artifact"
+        )
     persisted_rows_count = len(records)
     if row_count is None:
         row_count = persisted_rows_count
 
     with transaction_boundary() as conn:
         with conn.cursor() as cur:
-            cur.execute(_SQL_DELETE_NODE_ROWS, (run_id, node_id))
-            _bulk_insert_node_rows(cur, records)
             cur.execute(
                 _SQL_UPSERT_NODE_META_EXT,
                 (

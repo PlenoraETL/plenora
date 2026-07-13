@@ -9,11 +9,6 @@ from app.core.io import object_storage as object_storage_module
 from app.core.resources import storage_reconciliation as reconciliation_module
 from app.core.results import store
 from app.core.results.retention import apply_results_retention
-from app.core.results.storage_policy import (
-    result_db_hard_cap,
-    should_use_object_storage,
-    storage_policy,
-)
 from app.infrastructure.storage import compensation as compensation_module
 from app.infrastructure.storage.compensation import CompensateOutcome
 from app.shared.resources.storage_layout import RESULTS_PREFIX
@@ -85,17 +80,6 @@ def close_failed_result_upload_intent(
         reconciliation_module.mark_orphan_deleted(intent_id)
 
 
-def enforce_db_hard_cap(size: int, ctx: str) -> None:
-    """Reject DB-backed result blobs above RESULT_DB_HARD_CAP_BYTES."""
-    cap = result_db_hard_cap()
-    if size > cap:
-        raise ResultSaveError(
-            f"[{ctx}] Payload {size} byte supera RESULT_DB_HARD_CAP_BYTES={cap}. "
-            "Alza il cap, cambia STORAGE_POLICY a object_storage/hybrid, "
-            "o riduci la dimensione del result."
-        )
-
-
 def _storage_key(project_id: str, result_id: str) -> str:
     return f"{RESULTS_PREFIX}/{project_id}/{result_id}.bin"
 
@@ -127,72 +111,56 @@ def save_result_blob_from_bytes(
     rows_count: Optional[int] = None,
     group_id: Optional[str] = None,
 ) -> str:
-    """Persist in-memory result bytes as a DB blob or object-storage backed row."""
+    """Persist result bytes in object storage and only metadata in PostgreSQL."""
     try:
         size = len(data)
         resolved_group_id = store.resolve_group_id_for_result(project_id, group_id)
         result_id = str(uuid.uuid4())
 
-        policy = storage_policy()
-        use_object_storage = should_use_object_storage(size, policy)
+        storage_key = _storage_key(project_id, result_id)
+        upload_intent_id: Optional[str] = None
+        try:
+            storage = object_storage_module.get_runtime_object_storage()
+            upload_intent_id = record_result_upload_intent(
+                storage_key,
+                project_id=project_id,
+                result_id=result_id,
+                filename=filename,
+                size_bytes=size,
+            )
+            storage.upload_bytes(data, storage_key)
+        except Exception as exc:
+            raise _runtime_storage_upload_error(exc, result_id=result_id) from exc
 
-        if not use_object_storage:
-            enforce_db_hard_cap(size, ctx=f"save_result_blob_from_bytes/{policy}")
+        try:
             store.save_result_row(
                 result_id=result_id,
                 project_id=project_id,
                 group_id=resolved_group_id,
                 filename=filename,
                 fmt=fmt,
-                data=data,
                 rows_count=rows_count,
+                storage_key=storage_key,
+                size_bytes=size,
             )
-        else:
-            storage_key = _storage_key(project_id, result_id)
-            upload_intent_id: Optional[str] = None
-            try:
-                storage = object_storage_module.get_runtime_object_storage()
-                upload_intent_id = record_result_upload_intent(
-                    storage_key,
-                    project_id=project_id,
-                    result_id=result_id,
-                    filename=filename,
-                    size_bytes=size,
-                )
-                storage.upload_bytes(data, storage_key)
-            except Exception as exc:
-                raise _runtime_storage_upload_error(exc, result_id=result_id) from exc
-
-            try:
-                store.save_result_row(
-                    result_id=result_id,
-                    project_id=project_id,
-                    group_id=resolved_group_id,
-                    filename=filename,
-                    fmt=fmt,
-                    data=None,
-                    rows_count=rows_count,
-                    storage_key=storage_key,
-                    size_bytes=size,
-                )
-                close_result_upload_intent(upload_intent_id)
-            except Exception:
-                cleanup_outcome = cleanup_uploaded_result_blob(
-                    storage,
-                    storage_key,
-                    reason="db_save_failed_after_object_upload",
-                    project_id=project_id,
-                    result_id=result_id,
-                )
-                close_failed_result_upload_intent(
-                    upload_intent_id,
-                    cleanup_outcome=cleanup_outcome,
-                )
-                raise
-            logger.info(
-                f"[FS-4] Result {result_id} su object storage "
-                f"(policy={policy}, {size // (1024 * 1024)} MB): {storage_key}"
+            close_result_upload_intent(upload_intent_id)
+        except Exception:
+            cleanup_outcome = cleanup_uploaded_result_blob(
+                storage,
+                storage_key,
+                reason="db_save_failed_after_object_upload",
+                project_id=project_id,
+                result_id=result_id,
             )
+            close_failed_result_upload_intent(
+                upload_intent_id,
+                cleanup_outcome=cleanup_outcome,
+            )
+            raise
+        logger.info(
+            f"[FS-4] Result {result_id} su object storage "
+            f"({size // (1024 * 1024)} MB): {storage_key}"
+        )
 
         apply_results_retention(project_id)
         return result_id
@@ -214,7 +182,6 @@ __all__ = [
     "cleanup_uploaded_result_blob",
     "close_failed_result_upload_intent",
     "close_result_upload_intent",
-    "enforce_db_hard_cap",
     "record_result_upload_intent",
     "save_result_blob_from_bytes",
 ]

@@ -28,7 +28,7 @@ network dependencies and per-role containers.
 - `DATABASE_URL` and `DRAMATIQ_BROKER_URL` must point to shared network
   services, not compose-local names like `postgres` or `rabbitmq`.
 - Do not rely on local `DATA_DIR` for cross-host data sharing.
-- Use `STORAGE_POLICY=object_storage` for multi-host installs unless a specific
+- Object storage is mandatory for multi-host installs; use a specific
   fallback design has been validated.
 - Build the frontend with a browser-reachable API URL, not an internal Docker
   hostname.
@@ -119,12 +119,11 @@ Task state and results are not stored on the broker: they live in PostgreSQL
 ## 4. Shared Object Storage
 
 Use S3 or S3-compatible MinIO. Runtime object storage must be available before
-starting the backend when `STORAGE_POLICY=object_storage`.
+starting the backend.
 
 Canonical runtime env:
 
 ```bash
-STORAGE_POLICY=object_storage
 OBJECT_STORAGE_ENABLED=true
 OBJECT_STORAGE_BACKEND=s3
 OBJECT_STORAGE_BUCKET=<plenora-runtime-bucket>
@@ -226,7 +225,6 @@ PLENORA_ENCRYPTION_KEY=<same-fernet-key-on-all-app-containers>
 JWT_SECRET_KEY=<same-jwt-key-on-all-app-containers>
 CORS_ORIGINS=https://app.example.com,https://api.example.com
 TRUSTED_PROXIES=<reverse-proxy-ip-or-cidr>
-STORAGE_POLICY=object_storage
 OBJECT_STORAGE_ENABLED=true
 OBJECT_STORAGE_BACKEND=s3
 OBJECT_STORAGE_BUCKET=<plenora-runtime-bucket>
