@@ -17,6 +17,9 @@
 .storage-admin__key { max-width: 460px; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .storage-admin__legacy { color: #b45309; font-weight: 700; }
 .storage-admin__download { font-size: 12px; }
+.storage-admin__actions { display: flex; align-items: center; gap: 8px; }
+.storage-admin .storage-admin__delete { border-color: #fecaca; background: #fff1f2; color: #b91c1c; font-size: 12px; }
+.storage-admin .storage-admin__delete:hover:not(:disabled) { border-color: #f87171; background: #ffe4e6; }
 .storage-admin__empty { padding: 36px !important; text-align: center !important; color: var(--text-secondary, #667085); }
 .storage-admin__pager { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 @media (max-width: 900px) { .storage-admin__main { padding: 20px; } .storage-admin__filters { grid-template-columns: 1fr; } }

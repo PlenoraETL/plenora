@@ -25,3 +25,10 @@ export async function downloadStorageObject(key) {
     URL.revokeObjectURL(url);
   }
 }
+
+export async function deleteStorageObject(key) {
+  const response = await http.delete('/admin/object-storage', {
+    params: { key },
+  });
+  return response.data;
+}

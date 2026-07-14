@@ -8096,6 +8096,65 @@
       }
     },
     "/api/admin/object-storage": {
+      "delete": {
+        "description": "Delete one exact runtime object without a metadata cascade.\n\nThis is an operator-level emergency/cleanup action. Domain metadata is not\ncascaded and can remain dangling until its normal retention cleanup runs.",
+        "operationId": "delete_object_api_admin_object_storage_delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "boolean"
+                      }
+                    ]
+                  },
+                  "title": "Response Delete Object Api Admin Object Storage Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Object",
+        "tags": [
+          "admin-object-storage"
+        ]
+      },
       "get": {
         "operationId": "list_objects_api_admin_object_storage_get",
         "parameters": [

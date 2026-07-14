@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import AppSidebar from '../components/AppSidebar';
 import {
+  deleteStorageObject,
   downloadStorageObject,
   listObjectStorage,
 } from '../api/adminObjectStorage';
+import ConfirmDialog from '../components/common/ConfirmDialog';
+import { useConfirmModal } from '../hooks/useConfirmModal';
 import '../styles/AdminObjectStoragePage.css';
 
 const DOMAINS = [
@@ -33,6 +36,8 @@ export default function AdminObjectStoragePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [downloading, setDownloading] = useState('');
+  const [deleting, setDeleting] = useState('');
+  const confirmModal = useConfirmModal();
 
   const load = useCallback(async (requestedCursor = null) => {
     setLoading(true);
@@ -85,6 +90,31 @@ export default function AdminObjectStoragePage() {
     }
   };
 
+  const remove = async (item) => {
+    const confirmed = await confirmModal.confirm({
+      title: 'Eliminare definitivamente l\'oggetto?',
+      message: (
+        `Verrà cancellato “${item.key}”. L'operazione non è reversibile `
+        + 'e gli eventuali riferimenti applicativi potrebbero non essere più utilizzabili.'
+      ),
+      confirmText: 'Elimina definitivamente',
+      cancelText: 'Annulla',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+
+    setDeleting(item.key);
+    setError('');
+    try {
+      await deleteStorageObject(item.key);
+      await load(cursor);
+    } catch (err) {
+      setError(err.response?.data?.detail || err.message || 'Cancellazione non riuscita');
+    } finally {
+      setDeleting('');
+    }
+  };
+
   const totalBytes = (page?.objects || []).reduce(
     (sum, item) => sum + Number(item.size_bytes || 0), 0,
   );
@@ -96,7 +126,7 @@ export default function AdminObjectStoragePage() {
         <header className="storage-admin__header">
           <div>
             <h1>Object Storage</h1>
-            <p>Explorer read-only del bucket runtime, riservato ai superadmin.</p>
+            <p>Explorer del bucket runtime, riservato ai superadmin.</p>
           </div>
           <button type="button" onClick={() => load(cursor)} disabled={loading}>
             {loading ? 'Caricamento…' : 'Aggiorna'}
@@ -161,14 +191,22 @@ export default function AdminObjectStoragePage() {
                   <td className="storage-admin__key" title={item.key}>{item.key}</td>
                   <td>{formatBytes(item.size_bytes)}</td>
                   <td>{new Date(item.last_modified).toLocaleString('it-IT')}</td>
-                  <td>
+                  <td className="storage-admin__actions">
                     <button
                       type="button"
                       className="storage-admin__download"
                       onClick={() => download(item.key)}
-                      disabled={downloading === item.key}
+                      disabled={downloading === item.key || deleting === item.key}
                     >
                       {downloading === item.key ? '…' : 'Scarica'}
+                    </button>
+                    <button
+                      type="button"
+                      className="storage-admin__delete"
+                      onClick={() => remove(item)}
+                      disabled={deleting === item.key || downloading === item.key}
+                    >
+                      {deleting === item.key ? 'Eliminazione…' : 'Elimina'}
                     </button>
                   </td>
                 </tr>
@@ -184,6 +222,7 @@ export default function AdminObjectStoragePage() {
           <button type="button" onClick={previous} disabled={!history.length || loading}>Indietro</button>
           <button type="button" onClick={next} disabled={!page?.next_cursor || loading}>Avanti</button>
         </footer>
+        <ConfirmDialog {...confirmModal} />
       </main>
     </div>
   );

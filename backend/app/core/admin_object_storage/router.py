@@ -9,7 +9,12 @@ from fastapi.responses import StreamingResponse
 
 from app.core.auth.dependencies import require_superadmin
 from app.core.io.object_storage import get_runtime_object_storage
-from app.core.io.tenant_namespace import TenantStorageKeyError, assert_runtime_key
+from app.core.io.tenant_namespace import (
+    TenantStorageKeyError,
+    assert_runtime_key,
+    legacy_domain,
+    parse_tenant_key,
+)
 from app.observability.audit_action import audit_action
 from app.shared.contracts.auth import CurrentUser
 
@@ -81,6 +86,51 @@ def download_object(
         media_type=opened.get("content_type") or "application/octet-stream",
         headers=headers,
     )
+
+
+def _assert_object_key_not_prefix(key: str) -> None:
+    """Reject namespace roots: this endpoint deletes one exact object only."""
+    parsed = parse_tenant_key(key)
+    if parsed is not None:
+        if parsed.relative_segments:
+            return
+        raise TenantStorageKeyError("chiave object storage senza risorsa")
+
+    domain = legacy_domain(key)
+    if domain is not None and key.startswith(f"{domain}/") and key != f"{domain}/":
+        return
+    raise TenantStorageKeyError("chiave object storage senza risorsa")
+
+
+@router.delete("")
+@audit_action(action="object_storage.delete", target_param="key")
+def delete_object(
+    key: str = Query(..., min_length=1, max_length=2048),
+    current_user: CurrentUser = Depends(require_superadmin),
+) -> dict[str, str | bool]:
+    """Delete one exact runtime object without a metadata cascade.
+
+    This is an operator-level emergency/cleanup action. Domain metadata is not
+    cascaded and can remain dangling until its normal retention cleanup runs.
+    """
+    try:
+        assert_runtime_key(key, allow_legacy=True)
+        _assert_object_key_not_prefix(key)
+    except TenantStorageKeyError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Chiave object storage non valida",
+        ) from exc
+
+    try:
+        get_runtime_object_storage().delete(key)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Cancellazione object storage non riuscita",
+        ) from exc
+
+    return {"deleted": True, "key": key}
 
 
 __all__ = ["router"]

@@ -15,6 +15,9 @@ from app.shared.contracts.auth import CurrentUser
 class _Storage:
     bucket = "runtime-test"
 
+    def __init__(self):
+        self.deleted: list[str] = []
+
     def list_objects_page(self, prefix, *, limit, cursor=None):
         return {
             "objects": [
@@ -26,6 +29,9 @@ class _Storage:
             ],
             "next_cursor": None,
         }
+
+    def delete(self, key: str) -> None:
+        self.deleted.append(key)
 
 
 def _app(*, authenticated: bool) -> TestClient:
@@ -74,3 +80,52 @@ def test_download_rejects_keys_outside_runtime_namespace(monkeypatch) -> None:
     )
 
     assert response.status_code == 400
+
+
+def test_delete_requires_authentication() -> None:
+    response = _app(authenticated=False).delete(
+        "/api/admin/object-storage",
+        params={"key": "tenants/g1/results/p1/r1.bin"},
+    )
+    assert response.status_code in {401, 403}
+
+
+def test_superadmin_can_delete_one_exact_runtime_object(monkeypatch) -> None:
+    storage = _Storage()
+    monkeypatch.setattr(router_module, "get_runtime_object_storage", lambda: storage)
+
+    key = "tenants/g1/results/p1/r1.bin"
+    response = _app(authenticated=True).delete(
+        "/api/admin/object-storage",
+        params={"key": key},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted": True, "key": key}
+    assert storage.deleted == [key]
+
+
+def test_delete_rejects_namespace_root_without_calling_storage(monkeypatch) -> None:
+    storage = _Storage()
+    monkeypatch.setattr(router_module, "get_runtime_object_storage", lambda: storage)
+
+    response = _app(authenticated=True).delete(
+        "/api/admin/object-storage",
+        params={"key": "tenants/g1/results"},
+    )
+
+    assert response.status_code == 400
+    assert storage.deleted == []
+
+
+def test_delete_rejects_key_outside_runtime_namespace(monkeypatch) -> None:
+    storage = _Storage()
+    monkeypatch.setattr(router_module, "get_runtime_object_storage", lambda: storage)
+
+    response = _app(authenticated=True).delete(
+        "/api/admin/object-storage",
+        params={"key": "backups/database.dump"},
+    )
+
+    assert response.status_code == 400
+    assert storage.deleted == []
