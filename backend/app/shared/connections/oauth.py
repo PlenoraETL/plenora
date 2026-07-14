@@ -15,7 +15,7 @@ import requests
 from urllib3.exceptions import InsecureRequestWarning
 
 from app import config as app_config
-from app.core.security.outbound_url import validate_external_url
+from app.shared.security.outbound_url import validate_external_url
 from app.shared.security.tls_policy import resolve_tls_verify
 from app.infrastructure.http.session import get_shared_session
 from app.shared.contracts.payloads import HeadersMap, JsonObject, StringMap

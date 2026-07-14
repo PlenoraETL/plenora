@@ -84,13 +84,13 @@ def _as_aware_datetime(value: object):
 
 
 @router.get("/healthcheck", response_model=BeatHealthcheck)
-async def beat_healthcheck(current_user: CurrentUser = Depends(require_not_esecutore)):
+def beat_healthcheck(current_user: CurrentUser = Depends(require_not_esecutore)):
     """Verifica se Celery Beat (PlenoraBeatScheduler) e' attivo."""
     return get_beat_healthcheck()
 
 
 @router.get("", response_model=ScheduleList)
-async def list_schedules(project_id: Optional[str] = Query(None, description="Filtra per progetto"), current_user: CurrentUser = Depends(require_not_esecutore)):
+def list_schedules(project_id: Optional[str] = Query(None, description="Filtra per progetto"), current_user: CurrentUser = Depends(require_not_esecutore)):
     """
     Lista tutti gli schedule, ordinati per data aggiornamento.
     
@@ -109,7 +109,7 @@ async def list_schedules(project_id: Optional[str] = Query(None, description="Fi
 
 @router.post("", response_model=ScheduleConfig, status_code=201)
 @audit_action(action="schedule.create")
-async def create_schedule(data: ScheduleCreate, current_user: CurrentUser = Depends(require_admin)):
+def create_schedule(data: ScheduleCreate, current_user: CurrentUser = Depends(require_admin)):
     """
     Crea un nuovo schedule dai dati del wizard (6 step). Solo admin/superadmin.
     
@@ -132,7 +132,7 @@ async def create_schedule(data: ScheduleCreate, current_user: CurrentUser = Depe
 
 
 @router.get("/{schedule_id}", response_model=ScheduleConfig)
-async def get_schedule(schedule_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
+def get_schedule(schedule_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Dettaglio di uno schedule specifico."""
     try:
         service = ScheduleService()
@@ -165,7 +165,7 @@ async def get_schedule(schedule_id: str, current_user: CurrentUser = Depends(req
 
 @router.put("/{schedule_id}", response_model=ScheduleConfig)
 @audit_action(action="schedule.update", target_param="schedule_id")
-async def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user: CurrentUser = Depends(require_schedule_owner)):
+def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user: CurrentUser = Depends(require_schedule_owner)):
     """
     Modifica uno schedule esistente (wizard precompilato).
 
@@ -202,7 +202,7 @@ async def update_schedule(schedule_id: str, data: ScheduleUpdate, current_user: 
 
 @router.delete("/{schedule_id}", status_code=204)
 @audit_action(action="schedule.delete", target_param="schedule_id")
-async def delete_schedule(schedule_id: str, current_user: CurrentUser = Depends(require_schedule_owner)):
+def delete_schedule(schedule_id: str, current_user: CurrentUser = Depends(require_schedule_owner)):
     """Elimina uno schedule e i suoi log. Solo owner o admin/superadmin."""
     try:
         service = ScheduleService()
@@ -217,7 +217,7 @@ async def delete_schedule(schedule_id: str, current_user: CurrentUser = Depends(
 
 @router.patch("/{schedule_id}/toggle", response_model=ScheduleConfig)
 @audit_action(action="schedule.toggle", target_param="schedule_id")
-async def toggle_schedule(schedule_id: str, data: ScheduleToggle, current_user: CurrentUser = Depends(require_schedule_owner)):
+def toggle_schedule(schedule_id: str, data: ScheduleToggle, current_user: CurrentUser = Depends(require_schedule_owner)):
     """Abilita o disabilita uno schedule. Solo owner o admin/superadmin."""
     try:
         service = ScheduleService()
@@ -247,7 +247,7 @@ async def toggle_schedule(schedule_id: str, data: ScheduleToggle, current_user: 
 
 @router.patch("/{schedule_id}/catchup", response_model=ScheduleConfig)
 @audit_action(action="schedule.catchup", target_param="schedule_id")
-async def update_schedule_catchup(
+def update_schedule_catchup(
     schedule_id: str,
     data: ScheduleCatchupUpdate,
     current_user: CurrentUser = Depends(require_schedule_owner),
@@ -277,7 +277,7 @@ async def update_schedule_catchup(
 
 @router.post("/{schedule_id}/run")
 @audit_action(action="schedule.run_now", target_param="schedule_id")
-async def run_schedule_now(schedule_id: str, current_user: CurrentUser = Depends(require_schedule_owner)):
+def run_schedule_now(schedule_id: str, current_user: CurrentUser = Depends(require_schedule_owner)):
     """
     Esegui uno schedule immediatamente (manuale).
     
@@ -328,7 +328,7 @@ async def run_schedule_now(schedule_id: str, current_user: CurrentUser = Depends
 
 
 @router.get("/{schedule_id}/download")
-async def download_schedule_output(
+def download_schedule_output(
     schedule_id: str,
     run: str = Query(None, description="Timestamp specifico (YYYYMMDD_HHMMSS). Se omesso, scarica l'ultimo."),
     current_user: CurrentUser = Depends(require_not_esecutore),
@@ -448,7 +448,7 @@ async def download_schedule_output(
 
 
 @router.get("/{schedule_id}/runs")
-async def list_schedule_runs(schedule_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
+def list_schedule_runs(schedule_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """
     Lista tutte le esecuzioni archiviate di uno schedule.
 
@@ -515,7 +515,7 @@ def _format_size(size_bytes: int) -> str:
 
 
 @router.get("/{schedule_id}/logs", response_model=ScheduleLogList)
-async def get_schedule_logs(
+def get_schedule_logs(
     schedule_id: str,
     page: int = Query(1, ge=1, description="Pagina"),
     page_size: int = Query(20, ge=1, le=100, description="Risultati per pagina"),

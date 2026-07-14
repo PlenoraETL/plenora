@@ -87,6 +87,14 @@ def test_create_raw_from_upload_accepts_legitimate_binary(monkeypatch):
             "format": "png", "size_bytes": 100,
         },
     )
+    monkeypatch.setattr(
+        svc,
+        "_dispatch_blob_storage",
+        lambda file_id, raw_data, filename, **kwargs: {
+            "storage_key": f"file-sources/{file_id}/{filename}",
+            "size_bytes": kwargs["size_bytes"],
+        },
+    )
 
     svc.create_raw_from_upload(
         file_content=io.BytesIO(_png_bytes()),

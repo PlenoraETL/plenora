@@ -102,7 +102,7 @@ class TranslateResponse(BaseModel):
 
 
 @functions_router.get("/catalog")
-async def get_catalog(
+def get_catalog(
     current_user: CurrentUser = Depends(require_not_esecutore),
 ) -> JsonObject:
     """Catalogo completo funzioni SQL disponibili."""
@@ -130,7 +130,7 @@ async def get_catalog(
 
 
 @functions_router.post("/translate", response_model=TranslateResponse)
-async def translate_expression(request: TranslateRequest, current_user: CurrentUser = Depends(require_not_esecutore)) -> TranslateResponse:
+def translate_expression(request: TranslateRequest, current_user: CurrentUser = Depends(require_not_esecutore)) -> TranslateResponse:
     """Traduce un'espressione astratta in SQL per un tipo di database specifico."""
     try:
         if request.expression is not None:
@@ -176,7 +176,7 @@ class PreviewFormulaRequest(BaseModel):
 
 
 @functions_router.post("/preview-formula")
-async def preview_formula(
+def preview_formula(
     request: PreviewFormulaRequest,
     current_user: CurrentUser = Depends(require_not_esecutore),
 ) -> JsonObject:

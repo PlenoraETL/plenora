@@ -43,7 +43,7 @@ def _patch_settings(**overrides):
     from app.core.intermediate.policy import reset_validation_cache
 
     cfg = {
-        "mode": "preview_only",
+        "mode": "metadata_only",
         "preview_rows": 500,
         "artifact_format": "parquet",
         "manipola_checkpoints": "critical",
@@ -222,8 +222,8 @@ def test_critical_transform_triggers_db_write():
 
     assert captured["node_id"] == "t"
     assert captured["row_count"] == 20
-    assert captured["persistence_mode"] == "preview_only"
-    assert len(captured["rows_to_persist"]) == 20  # < preview_rows=500
+    assert captured["persistence_mode"] == "metadata_only"
+    assert captured["rows_to_persist"] == []  # metadata-only: no PG payload
     assert captured["node_hash"] is not None
 
 

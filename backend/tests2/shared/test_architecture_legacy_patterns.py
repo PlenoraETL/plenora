@@ -309,14 +309,14 @@ def test_os_getenv_only_at_boundary_modules():
 # - `app/shared/security/tls_policy.py`: gate di sicurezza; legge
 #   ENVIRONMENT/ENV + PLENORA_ALLOW_TLS_BYPASS raw per non dipendere
 #   da Settings nel path TLS (3 read).
-# - `app/core/security/outbound_url.py`: gate SSRF; stesse ragioni
-#   (ENVIRONMENT/ENV + PLENORA_ALLOW_LOOPBACK_OUTBOUND, 6 read).
+# - `app/shared/security/outbound_url.py`: gate SSRF condiviso; stesse
+#   ragioni (ENVIRONMENT/ENV + opt-in outbound, 4 read).
 # NB: `preview_caps`/`resource_caps` usano `os.environ` come mapping
 # iniettabile (attribute reference, non `.get` call) — non contati qui,
 # governati dai rispettivi centralization contract.
 ALLOWLIST_ENVIRON_GET_COUNTS: Dict[str, int] = {
     "app/shared/security/tls_policy.py": 3,
-    "app/core/security/outbound_url.py": 6,
+    "app/shared/security/outbound_url.py": 4,
 }
 
 

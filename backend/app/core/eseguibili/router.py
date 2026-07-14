@@ -301,7 +301,7 @@ def _load_task_owner(task_id: str) -> Optional[Mapping[str, object]]:
 
 @router.post("/{eseguibile_id}/analyze-upload", response_model=AnalyzeUploadResponse)
 @audit_action(action="eseguibile.analyze_upload", target_param="eseguibile_id")
-async def analyze_upload(
+def analyze_upload(
     eseguibile_id: str,
     file: UploadFile = File(...),
     current_user: CurrentUser = Depends(get_current_user)

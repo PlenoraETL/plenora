@@ -228,9 +228,31 @@ class PlenoraBeatScheduler:
         self._cleanup_orphan_temp_files()
         self._reconcile_storage()
         self._cleanup_task_results()
+        self._drain_task_dispatch_outbox()
         # Gli schedule dovuti passano dal layer dispatch mantenendo la stessa
         # valutazione di scadenza di BeatEntry.is_due.
         return self._emit_due_via_dispatch()
+
+    def _drain_task_dispatch_outbox(self) -> None:
+        """Retry API task submissions durably persisted before RabbitMQ."""
+        try:
+            from app.core.orchestrator.task_dispatch_outbox import (
+                drain_task_dispatch_outbox,
+            )
+
+            published, failed = drain_task_dispatch_outbox(limit=100)
+            if published or failed:
+                logger.info(
+                    "[OUTBOX] published=%d failed=%d",
+                    published,
+                    failed,
+                )
+        except Exception as exc:
+            logger.error(
+                "[OUTBOX] drain fallito: %s",
+                type(exc).__name__,
+                exc_info=True,
+            )
 
     def _dispatch_schedule_task(self, name: str, kwargs: dict) -> None:
         """Dispatcha un task schedule via il layer runtime-agnostico.

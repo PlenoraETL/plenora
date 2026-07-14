@@ -75,20 +75,18 @@ def test_returns_none_on_empty_blob(api_service, monkeypatch):
     """
     _bypass_security(monkeypatch, api_service)
 
-    calls = {"n": 0}
-
     def _get(fs_id, include_data=False):
-        calls["n"] += 1
-        if not include_data:
-            return {"original_filename": "input.xlsx", "metadata": {}}
-        return {"data": None}
+        return {"original_filename": "input.xlsx", "metadata": {}}
 
     monkeypatch.setattr(file_sources_db, "get_file_source", _get)
+    monkeypatch.setattr(
+        "app.core.resources.file_source_blob_access.load_file_source_blob_bytes",
+        lambda **kwargs: None,
+    )
 
     result = api_service._resolve_file_source_id_bytes("fs-empty", ctx=_TEST_CTX)
 
     assert result is None
-    assert calls["n"] == 2, "seconda query (blob) deve essere invocata"
 
 
 def test_raises_on_metadata_lookup_db_error(api_service, monkeypatch):
@@ -127,11 +125,13 @@ def test_raises_on_blob_lookup_db_error(api_service, monkeypatch):
     original = psycopg.OperationalError("connection lost")
 
     def _get(fs_id, include_data=False):
-        if not include_data:
-            return {"original_filename": "input.xlsx", "metadata": {}}
-        raise original
+        return {"original_filename": "input.xlsx", "metadata": {}}
 
     monkeypatch.setattr(file_sources_db, "get_file_source", _get)
+    monkeypatch.setattr(
+        "app.core.resources.file_source_blob_access.load_file_source_blob_bytes",
+        lambda **kwargs: (_ for _ in ()).throw(original),
+    )
 
     with pytest.raises(FileSourceResolutionError) as exc_info:
         api_service._resolve_file_source_id_bytes("fs-1", ctx=_TEST_CTX)
@@ -155,6 +155,10 @@ def test_bytes_first_resolver_does_not_materialize_to_filesystem(
         return {"data": b"payload"}
 
     monkeypatch.setattr(file_sources_db, "get_file_source", _get)
+    monkeypatch.setattr(
+        "app.core.resources.file_source_blob_access.load_file_source_blob_bytes",
+        lambda **kwargs: b"payload",
+    )
 
     original = PermissionError("filesystem read-only")
 

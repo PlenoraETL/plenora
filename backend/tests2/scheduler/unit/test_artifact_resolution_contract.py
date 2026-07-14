@@ -68,7 +68,7 @@ def test_execute_carica_prefers_result_id_before_output_path():
 
     with patch("app.core.dataframes.frame_io.load_dataframe_from_artifact", side_effect=_load_dataframe), \
          patch("app.core.results.db.get_result_row", return_value=ResultMetadataRow(id="res-1", project_id="proj-1", group_id="grp-1", format="csv")), \
-         patch("app.db.pg_connection.fetchone", return_value={"data": b"id\n1\n", "storage_key": None, "project_id": "proj-1"}), \
+         patch("app.core.resources.loaders.result_blob._dispatch_by_id", return_value=(b"id\n1\n", "object_storage")), \
          patch("app.core.carica.executor.CaricaExecutor") as executor_cls, \
          patch("pathlib.Path.exists", return_value=True):
         executor_cls.return_value.execute.return_value = _make_write_result()

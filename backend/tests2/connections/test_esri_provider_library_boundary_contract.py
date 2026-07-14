@@ -55,15 +55,15 @@ def _rel(path: Path) -> str:
 # entries here are refactored away (and so should be trimmed).
 _ACCEPTED_REST_DEBT: dict[str, set[tuple[int, str]]] = {
     "app/core/features/arcgis_auth.py": {
-        (198, "._http"),
-        (202, "._http"),
-        (359, "/sharing/rest"),
-        (440, "._http"),
-        (522, "/sharing/rest"),
-        (528, "/sharing/rest"),
-        (529, "/sharing/rest"),
-        (544, "/sharing/rest"),
-        (582, "._http"),
+        (200, "._http"),
+        (204, "._http"),
+        (358, "/sharing/rest"),
+        (439, "._http"),
+        (519, "/sharing/rest"),
+        (525, "/sharing/rest"),
+        (526, "/sharing/rest"),
+        (541, "/sharing/rest"),
+        (579, "._http"),
     },
     "app/core/features/arcgis_feature_write_methods.py": {
         (304, "/rest/admin"),

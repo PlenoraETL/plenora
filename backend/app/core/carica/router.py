@@ -118,7 +118,7 @@ def _assert_connection_visible(connection_id: str, current_user: CurrentUser) ->
 # ENDPOINT: LISTA SCHEMA
 
 @router.get("/schemas/{connection_id}")
-async def get_schemas(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
+def get_schemas(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """GET /api/carica/schemas/{connection_id}
 
     Ritorna la lista degli schema disponibili nel database.
@@ -149,7 +149,7 @@ async def get_schemas(connection_id: str, current_user: CurrentUser = Depends(re
 # ENDPOINT: LISTA TABELLE
 
 @router.get("/tables/{connection_id}/{schema_name}")
-async def get_tables(connection_id: str, schema_name: str, current_user: CurrentUser = Depends(require_not_esecutore)):
+def get_tables(connection_id: str, schema_name: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """GET /api/carica/tables/{connection_id}/{schema_name}
 
     Ritorna la lista delle tabelle nello schema specificato.
@@ -179,7 +179,7 @@ async def get_tables(connection_id: str, schema_name: str, current_user: Current
 # ENDPOINT: AUTO-MAPPING
 
 @router.post("/auto-mapping")
-async def auto_mapping(request: AutoMappingRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
+def auto_mapping(request: AutoMappingRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
     """POST /api/carica/auto-mapping
 
     Genera automaticamente il mapping colonne sorgente → destinazione.
@@ -259,7 +259,7 @@ async def auto_mapping(request: AutoMappingRequest, current_user: CurrentUser = 
 # ENDPOINT: CHECK CONFLITTI
 
 @router.post("/check-conflicts")
-async def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
+def check_conflicts(request: ConflictCheckRequest, current_user: CurrentUser = Depends(require_not_esecutore)):
     """POST /api/carica/check-conflicts
 
     Verifica i conflitti prima dell'inserimento in modalità APPEND.

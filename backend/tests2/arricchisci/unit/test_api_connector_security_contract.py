@@ -210,6 +210,10 @@ def test_resolve_file_source_id_bytes_ctx_wins_over_stale_singleton(api_service,
             "data": b"abc" if include_data else None,
         },
     )
+    monkeypatch.setattr(
+        "app.core.resources.file_source_blob_access.load_file_source_blob_bytes",
+        lambda **kwargs: b"abc",
+    )
 
     seen_group_ids = []
 

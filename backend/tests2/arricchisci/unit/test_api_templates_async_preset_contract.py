@@ -15,7 +15,7 @@ from app.core.arricchisci.async_poller import validate_async_config
 pytestmark = [pytest.mark.unit, pytest.mark.arricchisci, pytest.mark.contract]
 
 
-TEMPLATES_FILE = Path("backend/app/data/api_templates.json")
+TEMPLATES_FILE = Path(__file__).parents[3] / "app" / "data" / "api_templates.json"
 
 
 def _templates() -> list[dict]:

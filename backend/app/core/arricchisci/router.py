@@ -229,7 +229,7 @@ class EstimateResponse(BaseModel):
 # ENDPOINT: ENRICHMENT PREVIEW/VALIDATE/ESTIMATE
 
 @enrichment_router.post("/validate", response_model=ValidateResponse)
-async def validate_enrichment(
+def validate_enrichment(
     request: ValidateRequest,
     current_user: CurrentUser = Depends(require_not_esecutore),
 ):
@@ -274,7 +274,7 @@ async def validate_enrichment(
 
 
 @enrichment_router.post("/estimate", response_model=EstimateResponse)
-async def estimate_enrichment(
+def estimate_enrichment(
     request: EstimateRequest,
     current_user: CurrentUser = Depends(require_not_esecutore),
 ):

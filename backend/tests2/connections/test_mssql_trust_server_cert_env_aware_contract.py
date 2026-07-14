@@ -59,3 +59,26 @@ def test_tls_policy_blocks_bypass_in_prod():
             os.environ.pop("PLENORA_ALLOW_TLS_BYPASS", None)
         else:
             os.environ["PLENORA_ALLOW_TLS_BYPASS"] = saved_allow
+
+
+def test_mssql_prod_paths_require_encryption_and_disable_legacy_fallbacks():
+    from app.core.connections import service
+    from app.core.estrai import database_inspector
+
+    test_source = textwrap.dedent(
+        inspect.getsource(service.ConnectionService._test_mssql)
+    )
+    inspector_source = textwrap.dedent(
+        inspect.getsource(database_inspector.DefaultConnectionFactory._connetti_mssql)
+    )
+
+    for source in (test_source, inspector_source):
+        assert "Encrypt=Mandatory" in source
+        assert "Encrypt=Yes" in source
+        assert "tls_bypass_allowed" in all_identifiers(source)
+
+    # Il fallback pymssql/FreeTDS non ha una verifica certificato equivalente
+    # in questo boundary: in prod deve essere raggiungibile solo dopo il gate.
+    gate_pos = test_source.index("if not tls_policy_module.tls_bypass_allowed()")
+    pymssql_pos = test_source.index("import pymssql")
+    assert gate_pos < pymssql_pos

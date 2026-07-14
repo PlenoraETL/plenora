@@ -175,7 +175,7 @@ def test_preview_gpkg_multi_layer_without_selection_returns_layers(
 
     content = io.BytesIO(b"non-executable bytes for gpkg placeholder")
     with patch(
-        "app.core.io.geospatial.list_vector_layers",
+        "app.core.io.geospatial.list_vector_layers_stream",
         return_value=["roads", "buildings"],
     ) as list_vector, patch(
         "app.core.dataframes.preview_loader.preview_dataframe_from_bytes",
@@ -209,7 +209,7 @@ def test_preview_xlsx_multi_sheet_without_selection_returns_sheets(
 
     content = io.BytesIO(b"non-executable bytes for xlsx placeholder")
     with patch(
-        "app.core.dataframes.load_dispatch.list_excel_sheets_from_bytes",
+        "app.core.dataframes.load_dispatch.list_excel_sheets_from_stream",
         return_value=["Sheet1", "Sheet2"],
     ) as list_sheets, patch(
         "app.core.dataframes.preview_loader.preview_dataframe_from_bytes",
@@ -248,7 +248,7 @@ def test_preview_zip_unwrap_dispatches_to_inner_gpkg_format(
     zip_payload = buf.getvalue()
 
     with patch(
-        "app.core.io.geospatial.list_vector_layers",
+        "app.core.io.geospatial.list_vector_layers_stream",
         return_value=["a", "b"],
     ) as list_vector:
         out = preview_file_temp(

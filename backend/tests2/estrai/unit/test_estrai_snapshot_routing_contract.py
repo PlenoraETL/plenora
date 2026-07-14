@@ -166,52 +166,15 @@ def test_estrai_metadata_only_writes_meta_and_hash_no_rows(monkeypatch):
     assert captured["hash_algo"] == "pandas_sample_hash_v1"
 
 
-# C. policy preview_only sopra cap legacy non usa logica custom
+# C. i mode PostgreSQL legacy non sono selezionabili per nuove run
 
 
-def test_estrai_preview_only_above_legacy_cap_caps_to_preview_rows(monkeypatch):
-    """Previous contract 3A: sopra `INTERMEDIATE_SNAPSHOT_MAX_ROWS` (default 100k)
-    ESTRAI saltava le righe scrivendo `status=ok_sampled` con rows=[].
-    Current contract 3A: la policy centrale (`preview_only` + 500) decide,
-    indipendentemente dal cap legacy. Verifica che il DB write riceva
-    esattamente 500 righe e row_count reale."""
-    executor = _build_executor()
-    _stub_save(monkeypatch)
+def test_estrai_preview_only_is_rejected_for_new_runs():
+    from app.core.intermediate.exceptions import IntermediateSettingsError
+    from app.core.intermediate.policy import resolve_intermediate_mode
 
-    rows_data = [(i,) for i in range(5_000)]  # > preview_rows, < ESTRAI_MAX_ROWS
-    columns_data = ["id"]
-    monkeypatch.setattr(
-        executor, "execute_raw",
-        MagicMock(return_value=(rows_data, columns_data)),
-    )
-
-    captured = {}
-
-    def _capture(**kwargs):
-        captured.update(kwargs)
-
-    fake_conn = MagicMock()
-    fake_conn.type = "postgres"
-
-    # mode=preview_only + preview_rows=500
-    with patch(
-        "app.core.intermediate.node_snapshots_db.write_node_snapshot_atomic",
-        side_effect=_capture,
-    ), _patch_settings(mode="preview_only", preview_rows=500):
-        executor.execute_query(
-            connection=fake_conn,
-            sql="SELECT 1",
-            project_id="proj",
-            output_filename="out",
-            output_format="json",
-            run_id="run-3",
-            node_id="n-estrai",
-        )
-
-    assert captured["row_count"] == 5_000
-    assert len(captured["rows_to_persist"]) == 500
-    assert captured["persistence_mode"] == "preview_only"
-    assert captured["preview_truncated"] is True
+    with pytest.raises(IntermediateSettingsError, match="non riconosciuto"):
+        resolve_intermediate_mode("metadata_only", "preview_only")
 
 
 # D. Streaming branch (df=None) preserva legacy ok_streamed

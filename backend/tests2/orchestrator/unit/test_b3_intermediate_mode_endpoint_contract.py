@@ -99,7 +99,7 @@ class TestOrchestratorExecuteEndpoint:
         kwargs = create_task.call_args.kwargs
         assert kwargs.get("intermediate_mode_override") is None
 
-    def test_param_full_pg_superadmin_propaga(self):
+    def test_param_full_artifact_superadmin_propaga(self):
         """Superadmin con override valido -> task riceve kwarg."""
         client = _build_orchestrator_client(role="superadmin")
 
@@ -112,22 +112,22 @@ class TestOrchestratorExecuteEndpoint:
             create_task.return_value = mock_task_info
 
             response = client.post(
-                "/api/projects/proj-1/execute?intermediate_mode=full_pg",
+                "/api/projects/proj-1/execute?intermediate_mode=full_artifact",
             )
 
         assert response.status_code == 200
         kwargs = create_task.call_args.kwargs
-        assert kwargs.get("intermediate_mode_override") == "full_pg"
+        assert kwargs.get("intermediate_mode_override") == "full_artifact"
 
     @pytest.mark.parametrize("role", ["admin", "viewer"])
-    def test_param_full_pg_non_superadmin_403(self, role):
+    def test_param_full_artifact_non_superadmin_403(self, role):
         """Admin/viewer con override -> 403 esplicito."""
         client = _build_orchestrator_client(role=role)
 
         with patch("app.core.orchestrator.router._assert_project_group"), \
              patch("app.core.orchestrator.task_service.task_service.create_pipeline_task") as create_task:
             response = client.post(
-                "/api/projects/proj-1/execute?intermediate_mode=full_pg",
+                "/api/projects/proj-1/execute?intermediate_mode=full_artifact",
             )
 
         assert response.status_code == 403
@@ -152,7 +152,7 @@ class TestOrchestratorExecuteEndpoint:
         # Verifichiamo che almeno uno dei valori ammessi appaia.
         body_str = str(body).lower()
         assert any(m in body_str for m in [
-            "metadata_only", "preview_only", "full_pg", "full_artifact",
+            "metadata_only", "full_artifact",
         ])
         create_task.assert_not_called()
 
@@ -171,11 +171,9 @@ class TestOrchestratorExecuteEndpoint:
         # non e' superadmin.
         assert response.status_code == 422
 
-    @pytest.mark.parametrize("mode", [
-        "metadata_only", "preview_only", "full_pg", "full_artifact",
-    ])
-    def test_tutti_4_mode_validi_per_superadmin(self, mode):
-        """Tutti e 4 i mode supportati passano per superadmin."""
+    @pytest.mark.parametrize("mode", ["metadata_only", "full_artifact"])
+    def test_tutti_i_mode_validi_per_superadmin(self, mode):
+        """Tutti i mode attualmente supportati passano per superadmin."""
         client = _build_orchestrator_client(role="superadmin")
 
         with patch("app.core.orchestrator.router._assert_project_group"), \
@@ -217,7 +215,7 @@ class TestArricchisciEnrichAsyncEndpoint:
         kwargs = create_task.call_args.kwargs
         assert kwargs.get("intermediate_mode_override") is None
 
-    def test_param_full_pg_superadmin_propaga(self):
+    def test_param_full_artifact_superadmin_propaga(self):
         client = _build_arricchisci_client(role="superadmin")
 
         with patch("app.core.arricchisci.router._check_project_ownership"), \
@@ -229,20 +227,20 @@ class TestArricchisciEnrichAsyncEndpoint:
             create_task.return_value = mock_task_info
 
             response = client.post(
-                "/api/projects/proj-1/enrich-async?intermediate_mode=full_pg",
+                "/api/projects/proj-1/enrich-async?intermediate_mode=full_artifact",
             )
 
         assert response.status_code == 200
         kwargs = create_task.call_args.kwargs
-        assert kwargs.get("intermediate_mode_override") == "full_pg"
+        assert kwargs.get("intermediate_mode_override") == "full_artifact"
 
-    def test_param_full_pg_admin_403(self):
+    def test_param_full_artifact_admin_403(self):
         client = _build_arricchisci_client(role="admin")
 
         with patch("app.core.arricchisci.router._check_project_ownership"), \
              patch("app.core.orchestrator.task_service.task_service.create_enrichment_task") as create_task:
             response = client.post(
-                "/api/projects/proj-1/enrich-async?intermediate_mode=full_pg",
+                "/api/projects/proj-1/enrich-async?intermediate_mode=full_artifact",
             )
 
         assert response.status_code == 403

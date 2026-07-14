@@ -13,6 +13,10 @@ from app.core.orchestrator.task_metadata_store import (
     TaskMetadataStore,
     default_task_metadata_store,
 )
+from app.core.orchestrator.task_dispatch_outbox import (
+    TaskDispatchOutbox,
+    default_task_dispatch_outbox,
+)
 from app.core.orchestrator.task_revocation_store import (
     TaskRevocationStore,
     default_task_revocation_store,
@@ -290,6 +294,7 @@ class TaskService:
         metadata_store: TaskMetadataStore | None = None,
         revocation_store: TaskRevocationStore | None = None,
         task_id_factory: Callable[[], str] | None = None,
+        dispatch_outbox: TaskDispatchOutbox | None = None,
     ):
         # Il runtime di default legge stato/esito da PostgreSQL
         # (task_result_store).
@@ -298,13 +303,20 @@ class TaskService:
         # Annullamento cooperativo su PG.
         self.revocation_store = revocation_store or default_task_revocation_store()
         self._task_id_factory = task_id_factory or (lambda: str(uuid4()))
+        # Il runtime production usa un outbox PG. Con metadata store iniettato
+        # (unit test/adapter) il caller puo' iniettare esplicitamente l'outbox.
+        self.dispatch_outbox = (
+            dispatch_outbox
+            if dispatch_outbox is not None
+            else (default_task_dispatch_outbox() if metadata_store is None else None)
+        )
 
     def submit_task(self, request: TaskSubmitRequest) -> TaskInfo:
         """Reserve an ID, persist pending metadata, then publish the task.
 
-        Il persist-before-publish impedisce al worker di osservare il task
-        prima che il relativo stato pending sia disponibile. Se il broker
-        rifiuta la pubblicazione, il metadata viene rimosso per compensazione.
+        Il transactional outbox rende atomici metadata pending e intenzione
+        di dispatch. Se il broker rifiuta la pubblicazione, beat ritenta con
+        lo stesso task_id; gli adapter senza outbox mantengono compensazione.
         """
 
         task_id = self._task_id_factory()
@@ -313,30 +325,68 @@ class TaskService:
             project_id=request.project_id,
             task_type=request.task_type.value,
         )
-        # Persist-before-publish: un worker veloce non puo' piu' consumare il
-        # messaggio prima che l'API abbia registrato il relativo task pending.
-        self.metadata_store.put(metadata)
+        dispatch_options: dict[str, object] = {
+            "kwargs": dict(task_payload_to_celery_kwargs(request.payload)),
+        }
+        # Production: metadata e intenzione broker sono nello stesso commit PG.
+        if self.dispatch_outbox is not None:
+            self.dispatch_outbox.prepare(
+                metadata,
+                actor_name=request.celery_task.name,
+                options=dispatch_options,
+            )
+        else:
+            # Adapter/test path senza outbox: preserva persist-before-publish.
+            self.metadata_store.put(metadata)
 
         try:
             result = dispatch_task_by_name(
                 request.celery_task.name,
-                kwargs=dict(task_payload_to_celery_kwargs(request.payload)),
                 task_id=task_id,
+                **dispatch_options,
             )
             if result.id != task_id:
                 raise RuntimeError(
                     "Il runtime ha pubblicato un task_id diverso da quello preparato"
                 )
-        except Exception:
-            try:
-                self.metadata_store.delete(task_id)
-            except Exception:
-                logger.exception(
-                    "Compensazione metadata fallita dopo errore di pubblicazione "
-                    "task_id=%s",
+        except Exception as exc:
+            if self.dispatch_outbox is not None:
+                # Il task resta PENDING e beat ritentera' dallo stesso record.
+                try:
+                    self.dispatch_outbox.mark_retry(task_id, exc)
+                except Exception:
+                    # prepare ha gia' impostato next_attempt_at a +5s.
+                    logger.exception(
+                        "Impossibile anticipare il retry outbox task_id=%s",
+                        task_id,
+                    )
+                logger.warning(
+                    "Task accettato in outbox; broker non disponibile "
+                    "task_id=%s error=%s",
                     task_id,
+                    type(exc).__name__,
                 )
-            raise
+            else:
+                try:
+                    self.metadata_store.delete(task_id)
+                except Exception:
+                    logger.exception(
+                        "Compensazione metadata fallita dopo errore di "
+                        "pubblicazione task_id=%s",
+                        task_id,
+                    )
+                raise
+        else:
+            if self.dispatch_outbox is not None:
+                try:
+                    self.dispatch_outbox.mark_published(task_id)
+                except Exception:
+                    # Non trasformare un publish riuscito in 500. L'outbox
+                    # ritentera' con lo stesso message_id (at-least-once).
+                    logger.exception(
+                        "Publish riuscito ma ack outbox fallito task_id=%s",
+                        task_id,
+                    )
 
         logger.info(
             f"Creato task {request.log_label}: {task_id} "

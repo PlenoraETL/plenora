@@ -116,13 +116,9 @@ class DefaultConnectionFactory:
         """
         Connessione SQL Server via pyodbc.
 
-        Driver 18 ha cambiato i default: Encrypt=Mandatory.
-        Per supportare server senza TLS valido (sviluppo, on-prem legacy)
-        usiamo Encrypt=Optional + TrustServerCertificate gated.
-
-        TrustServerCertificate e' gated da `tls_bypass_allowed()` (env-aware):
-        in prod resta disattivo per non bypassare la verifica TLS su reti
-        non-trusted. Stessa policy di `connections/service.py:_test_mssql`.
+        In production/staging sono ammessi solo TLS cifrato e certificato
+        verificato. I fallback legacy restano confinati a dev/CI quando il
+        bypass TLS e' esplicitamente consentito.
         """
         import pyodbc
 
@@ -134,11 +130,17 @@ class DefaultConnectionFactory:
             f"PWD={conn.password};"
             f"TrustServerCertificate={trust_cert}"
         )
-        attempts = [
-            f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=Optional",
-            f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=No",
-            f"DRIVER={{ODBC Driver 17 for SQL Server}};{base}",
-        ]
+        if tls_policy_module.tls_bypass_allowed():
+            attempts = [
+                f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=Optional",
+                f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=No",
+                f"DRIVER={{ODBC Driver 17 for SQL Server}};{base};Encrypt=No",
+            ]
+        else:
+            attempts = [
+                f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=Mandatory",
+                f"DRIVER={{ODBC Driver 17 for SQL Server}};{base};Encrypt=Yes",
+            ]
         last_error = None
         for cs in attempts:
             try:

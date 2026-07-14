@@ -115,7 +115,7 @@ def _get_raw_key() -> str:
         if val == _LEGACY_COMMITTED_KEY_SIGNATURE:
             msg = (
                 f"[PLENORA-ETL] {env_name} contiene un default-key "
-                f"compromesso. E' considerato "
+                f"committato e compromesso. E' considerato "
                 f"compromesso: ruota la chiave usando `secrets.token_urlsafe(32)`."
             )
             if is_prod:

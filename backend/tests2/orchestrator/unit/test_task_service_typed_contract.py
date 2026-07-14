@@ -484,6 +484,57 @@ def test_submit_task_removes_pending_metadata_when_publish_fails(monkeypatch):
     assert metadata_store.get("task-submit-3") is None
 
 
+def test_submit_task_outbox_keeps_pending_when_broker_is_temporarily_down(
+    monkeypatch,
+):
+    from app.core.orchestrator import task_service as ts_mod
+
+    class FakeOutbox:
+        def __init__(self):
+            self.prepared = []
+            self.retried = []
+            self.published = []
+
+        def prepare(self, metadata, *, actor_name, options):
+            self.prepared.append((metadata, actor_name, options))
+
+        def mark_retry(self, task_id, error):
+            self.retried.append((task_id, type(error).__name__))
+
+        def mark_published(self, task_id):
+            self.published.append(task_id)
+
+    def fail_dispatch(*args, **kwargs):
+        raise RuntimeError("rabbit unavailable")
+
+    monkeypatch.setattr(ts_mod, "dispatch_task_by_name", fail_dispatch)
+    outbox = FakeOutbox()
+    service = TaskService(
+        metadata_store=InMemoryTaskMetadataStore(),
+        dispatch_outbox=outbox,
+        task_id_factory=lambda: "task-outbox-1",
+    )
+
+    class FakeCeleryTask:
+        name = "pipeline.execute"
+
+    info = service.submit_task(
+        TaskSubmitRequest(
+            celery_task=FakeCeleryTask(),
+            task_type=TaskType.EXECUTE,
+            project_id="project-1",
+            payload=PipelineTaskPayload(project_id="project-1"),
+            queued_message="Pipeline in coda...",
+            log_label="execute",
+        )
+    )
+
+    assert info.task_id == "task-outbox-1"
+    assert len(outbox.prepared) == 1
+    assert outbox.retried == [("task-outbox-1", "RuntimeError")]
+    assert outbox.published == []
+
+
 def test_task_payload_to_celery_kwargs_rejects_unknown_payload():
     with pytest.raises(TypeError, match="Unsupported task launch payload"):
         task_payload_to_celery_kwargs(object())  # type: ignore[arg-type]

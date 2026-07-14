@@ -51,8 +51,10 @@ def _row(file_id: str, **overrides):
         "name": f"name_{file_id}",
         "original_filename": "f.csv",
         "fmt": "csv",
-        "data": b"shared bytes",
-        "storage_key": None,
+        # File payloads are object-storage-only: PostgreSQL stores the key,
+        # never the BLOB bytes.
+        "data": None,
+        "storage_key": f"file-sources/{file_id}/f.csv",
         "size_bytes": 12,
         "metadata": {"k": "v"},
         "created_by": "u1",
@@ -79,10 +81,9 @@ def test_save_batch_happy_path_single_executemany_in_transaction(patched_transac
     assert "INSERT INTO file_sources" in sql_arg
     assert "ON CONFLICT (id) DO UPDATE SET" in sql_arg
     assert len(params_list) == 3
-    # Ogni tuple ha 12 colonne (id, group_id, name, original_filename, format,
-    # data, storage_key, size_bytes, metadata, created_at, updated_at, created_by)
+    # Ogni tuple ha 11 colonne: il BLOB `data` non esiste piu' nel piano DB.
     for t in params_list:
-        assert len(t) == 12
+        assert len(t) == 11
 
 
 def test_save_batch_shares_single_timestamp_across_rows(patched_transaction):
@@ -98,13 +99,13 @@ def test_save_batch_shares_single_timestamp_across_rows(patched_transaction):
 
     params_list = cursor.executemany.call_args.args[1]
     # tuple layout: (..., size_bytes, metadata_json, created_at, updated_at, created_by)
-    created_at_values = {t[9] for t in params_list}
-    updated_at_values = {t[10] for t in params_list}
+    created_at_values = {t[8] for t in params_list}
+    updated_at_values = {t[9] for t in params_list}
     assert len(created_at_values) == 1, "created_at deve essere shared"
     assert created_at_values == updated_at_values
     # E ovviamente created_at == updated_at per ogni row
     for t in params_list:
-        assert t[9] == t[10]
+        assert t[8] == t[9]
 
 
 # 2. Validation pre-transaction: fail-fast SENZA acquisire connessione
@@ -122,7 +123,7 @@ def test_save_batch_raises_before_transaction_when_row_missing_blob():
     ]
 
     with patch("app.core.files.db.unit_of_work") as mock_tx:
-        with pytest.raises(ValueError, match="senza data ne storage_key"):
+        with pytest.raises(ValueError, match="senza storage_key"):
             fs_db.save_file_sources_batch(bad_rows)
 
     mock_tx.assert_not_called(), (

@@ -58,6 +58,10 @@ def _use_in_memory_task_metadata_store(monkeypatch):
         "metadata_store",
         InMemoryTaskMetadataStore(),
     )
+    # These launch-contract tests exercise the injected/in-memory adapter
+    # path.  The production singleton normally owns the PostgreSQL outbox,
+    # which would otherwise make these unit tests require a live database.
+    monkeypatch.setattr(task_service_mod.task_service, "dispatch_outbox", None)
 
 
 @pytest.fixture(autouse=True)

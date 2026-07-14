@@ -102,7 +102,7 @@ def _check_arcgis_access(connection_id: str, current_user: CurrentUser) -> ArcGI
 
 @router.post("/connections", response_model=ArcGISConnection, status_code=201)
 @audit_action(action="arcgis.connection.create")
-async def create_connection(data: ArcGISCreate, current_user: CurrentUser = Depends(require_admin)):
+def create_connection(data: ArcGISCreate, current_user: CurrentUser = Depends(require_admin)):
     """Crea una nuova connessione ArcGIS. Solo admin/superadmin."""
     try:
         connection = get_service().create_connection(
@@ -122,7 +122,7 @@ async def create_connection(data: ArcGISCreate, current_user: CurrentUser = Depe
 
 
 @router.get("/connections", response_model=ArcGISList)
-async def list_connections(current_user: CurrentUser = Depends(require_not_esecutore)):
+def list_connections(current_user: CurrentUser = Depends(require_not_esecutore)):
     """Lista connessioni ArcGIS visibili: owned dal gruppo + condivise via allowed_groups.
     Ogni record include `can_edit` calcolato per l'utente corrente."""
     try:
@@ -148,7 +148,7 @@ async def list_connections(current_user: CurrentUser = Depends(require_not_esecu
 
 @router.put("/connections/{connection_id}", response_model=ArcGISConnection)
 @audit_action(action="arcgis.connection.update", target_param="connection_id")
-async def update_connection(connection_id: str, data: ArcGISUpdate, current_user: CurrentUser = Depends(require_admin)):
+def update_connection(connection_id: str, data: ArcGISUpdate, current_user: CurrentUser = Depends(require_admin)):
     """Aggiorna una connessione ArcGIS esistente. Solo admin/superadmin del gruppo,
     e solo se non creata da un superadmin (hierarchical ownership)."""
     _check_arcgis_owner(connection_id, current_user)
@@ -161,7 +161,7 @@ async def update_connection(connection_id: str, data: ArcGISUpdate, current_user
 
 @router.delete("/connections/{connection_id}", status_code=204)
 @audit_action(action="arcgis.connection.delete", target_param="connection_id")
-async def delete_connection(connection_id: str, current_user: CurrentUser = Depends(require_admin)):
+def delete_connection(connection_id: str, current_user: CurrentUser = Depends(require_admin)):
     """Elimina una connessione ArcGIS. Solo admin/superadmin del gruppo,
     e solo se non creata da un superadmin (hierarchical ownership)."""
     _check_arcgis_owner(connection_id, current_user)
@@ -173,7 +173,7 @@ async def delete_connection(connection_id: str, current_user: CurrentUser = Depe
 
 @router.post("/connections/{connection_id}/test", response_model=ArcGISTestResult)
 @audit_action(action="arcgis.connection.test", target_param="connection_id")
-async def test_connection(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
+def test_connection(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Testa una connessione ArcGIS. Qualsiasi utente del gruppo."""
     _check_arcgis_access(connection_id, current_user)
     try:
@@ -186,7 +186,7 @@ async def test_connection(connection_id: str, current_user: CurrentUser = Depend
 # BROWSE: SERVIZI E LAYER
 
 @router.get("/connections/{connection_id}/services", response_model=BrowseServicesResponse)
-async def browse_services(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
+def browse_services(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Lista i Feature Service disponibili nella connessione."""
     _check_arcgis_access(connection_id, current_user)
     try:
@@ -207,7 +207,7 @@ async def browse_services(connection_id: str, current_user: CurrentUser = Depend
 
 
 @router.get("/connections/{connection_id}/folders", response_model=ListFoldersResponse)
-async def list_folders(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
+def list_folders(connection_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
     """Lista le cartelle dell'utente nella connessione ArcGIS."""
     _check_arcgis_access(connection_id, current_user)
     try:
@@ -228,7 +228,7 @@ async def list_folders(connection_id: str, current_user: CurrentUser = Depends(r
 
 
 @router.get("/connections/{connection_id}/layers", response_model=BrowseLayersResponse)
-async def browse_layers(
+def browse_layers(
     connection_id: str,
     service_url: str = Query(..., description="URL del FeatureServer"),
     current_user: CurrentUser = Depends(require_not_esecutore),
@@ -253,7 +253,7 @@ async def browse_layers(
 
 
 @router.get("/connections/{connection_id}/schema")
-async def get_layer_schema(
+def get_layer_schema(
     connection_id: str,
     layer_url: str = Query(..., description="URL del layer (es. .../FeatureServer/0)"),
     current_user: CurrentUser = Depends(require_not_esecutore),
@@ -280,7 +280,7 @@ async def get_layer_schema(
 # QUERY (lettura dati
 
 @router.post("/query/preview")
-async def query_preview(
+def query_preview(
     connection_id: str = Query(...),
     layer_url: str = Query(...),
     where: str = Query("1=1"),
@@ -414,7 +414,7 @@ def _resolve_input_dataframe(
 # `request: WriteRequest`, l'extractor accetta solo str/int (vedi
 # audit_action.py:190). Audit registra action+user+status, non il target
 @audit_action(action="arcgis.feature.write")
-async def write_features(request: WriteRequest, current_user: CurrentUser = Depends(require_admin)):
+def write_features(request: WriteRequest, current_user: CurrentUser = Depends(require_admin)):
     """Scrittura su Feature Service esistente (add/update/delete).
 
     SECURITY: require_admin (non require_not_esecutore). La scrittura su
@@ -467,7 +467,7 @@ async def write_features(request: WriteRequest, current_user: CurrentUser = Depe
 
 @router.post("/create-service", response_model=CreateServiceResponse)
 @audit_action(action="arcgis.service.create")
-async def create_service(request: CreateServiceRequest, current_user: CurrentUser = Depends(require_admin)):
+def create_service(request: CreateServiceRequest, current_user: CurrentUser = Depends(require_admin)):
     """
     Crea un nuovo Feature Service su ArcGIS Online.
 

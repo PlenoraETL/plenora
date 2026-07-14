@@ -46,6 +46,16 @@ def pipeline_client(current_user: CurrentUser) -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
+def _object_stream(blob: bytes, filename: str, fmt: str):
+    return {
+        "body": iter((blob,)),
+        "size": len(blob),
+        "filename": filename,
+        "format": fmt,
+        "backend": "object_storage",
+    }
+
+
 # Scenario 1: filesystem vuoto + blob DB presente → scarica dal blob
 
 
@@ -75,8 +85,8 @@ def test_download_project_result_falls_back_to_db_blob(pipeline_client, tmp_path
             size_bytes=len(blob_bytes),
         ),
     ), patch(
-        "app.core.results.blob.get_result_data",
-        return_value=blob_bytes,
+        "app.core.results.blob.open_result_stream",
+        return_value=_object_stream(blob_bytes, "out.csv", "csv"),
     ):
         response = pipeline_client.get(f"/api/projects/{project_id}/download")
 
@@ -115,8 +125,8 @@ def test_download_project_result_blob_wins_over_filesystem_when_present(
             size_bytes=len(blob_bytes),
         ),
     ) as mock_latest, patch(
-        "app.core.results.blob.get_result_data",
-        return_value=blob_bytes,
+        "app.core.results.blob.open_result_stream",
+        return_value=_object_stream(blob_bytes, "out.csv", "csv"),
     ):
         response = pipeline_client.get(f"/api/projects/{project_id}/download")
 
@@ -243,8 +253,8 @@ def test_download_project_result_blob_fallback_preserves_mime_type(
             size_bytes=len(blob_bytes),
         ),
     ), patch(
-        "app.core.results.blob.get_result_data",
-        return_value=blob_bytes,
+        "app.core.results.blob.open_result_stream",
+        return_value=_object_stream(blob_bytes, "layer.geojson", "geojson"),
     ):
         response = pipeline_client.get(f"/api/projects/{project_id}/download")
 

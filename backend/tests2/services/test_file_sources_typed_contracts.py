@@ -60,15 +60,15 @@ def test_file_source_row_lives_only_at_canonical_contract():
 # 2. BlobDispatchResult contract
 
 
-def test_blob_dispatch_result_has_exactly_three_keys():
-    """`BlobDispatchResult` ha esattamente {data, storage_key, size_bytes}.
+def test_blob_dispatch_result_has_exactly_two_keys():
+    """`BlobDispatchResult` ha esattamente {storage_key, size_bytes}.
     I caller (`file_raw_upload`, `file_upload`, `file_multi_layer_upload`)
     fanno splattare il return con `**blob_kwargs` su `db.save_file_source`
     / `save_file_sources_batch`: aggiungere una chiave qui senza
     aggiornare i 3 caller crea row DB inconsistenti."""
     from app.core.resources.blob_dispatch import BlobDispatchResult
 
-    expected = {"data", "storage_key", "size_bytes"}
+    expected = {"storage_key", "size_bytes"}
     actual = set(BlobDispatchResult.__annotations__.keys())
     assert actual == expected, (
         f"BlobDispatchResult shape drift: atteso {sorted(expected)}, "
@@ -77,7 +77,7 @@ def test_blob_dispatch_result_has_exactly_three_keys():
 
 
 def test_blob_dispatch_result_subset_of_file_source_row():
-    """Le 3 chiavi di `BlobDispatchResult` devono essere un subset di
+    """Le chiavi di `BlobDispatchResult` devono essere un subset di
     `FileSourceRow`: il caller fa `**blob_kwargs` dentro la row del
     batch save / dei kwargs del single-row save. Se BlobDispatchResult
     introduce una chiave non presente in FileSourceRow, save_file_source

@@ -133,10 +133,13 @@ def test_load_dataframe_passes_when_group_matches_owner(svc):
     (ci fermiamo al blob lookup, sufficiente per confermare il check
     non blocca)."""
     fs = _file_source(group_id="A")
-    with patch.object(svc, "get_file_source", return_value=fs):
-        with patch("app.core.files.db.get_file_source", return_value=None):
-            with pytest.raises(ValueError, match="Nessun dato"):
-                svc.load_dataframe("f1", expected_group_id="A")
+    with patch.object(svc, "get_file_source", return_value=fs), patch.object(
+        svc,
+        "_open_blob_spool",
+        side_effect=FileNotFoundError("missing object"),
+    ):
+        with pytest.raises(ValueError, match="Nessun dato"):
+            svc.load_dataframe("f1", expected_group_id="A")
 
 
 # File ID entropy

@@ -260,7 +260,7 @@ def add_comment_endpoint(
 
 
 @router.post("/{ticket_id}/attachments", status_code=201)
-async def upload_attachment_endpoint(
+def upload_attachment_endpoint(
     ticket_id: str,
     file: UploadFile = File(...),
     current_user: CurrentUser = Depends(_require_not_esecutore),

@@ -312,12 +312,18 @@ class ConnectionService:
             f"TrustServerCertificate={trust_server_cert}"
         )
 
-        all_attempts = [
-            ("ODBC Driver 18 for SQL Server", f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=Optional"),
-            ("ODBC Driver 18 for SQL Server", f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=No"),
-            ("ODBC Driver 17 for SQL Server", f"DRIVER={{ODBC Driver 17 for SQL Server}};{base}"),
-            ("SQL Server",                    f"DRIVER={{SQL Server}};{base}"),
-        ]
+        if tls_policy_module.tls_bypass_allowed():
+            all_attempts = [
+                ("ODBC Driver 18 for SQL Server", f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=Optional"),
+                ("ODBC Driver 18 for SQL Server", f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=No"),
+                ("ODBC Driver 17 for SQL Server", f"DRIVER={{ODBC Driver 17 for SQL Server}};{base};Encrypt=No"),
+                ("SQL Server", f"DRIVER={{SQL Server}};{base}"),
+            ]
+        else:
+            all_attempts = [
+                ("ODBC Driver 18 for SQL Server", f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=Mandatory"),
+                ("ODBC Driver 17 for SQL Server", f"DRIVER={{ODBC Driver 17 for SQL Server}};{base};Encrypt=Yes"),
+            ]
 
         # Filtra solo i driver effettivamente installati per evitare IM002 fittizi
         attempts = [(d, cs) for d, cs in all_attempts if d in installed]
@@ -362,6 +368,18 @@ class ConnectionService:
                         )
                         errors.append(f"[{driver_name}] {sanitized}")
                     continue
+
+            # FreeTDS does not expose equivalent certificate verification here;
+            # keep that compatibility fallback restricted to explicit dev/CI.
+            if not tls_policy_module.tls_bypass_allowed():
+                return ConnectionTestResult(
+                    success=False,
+                    message=(
+                        "Connessione MS SQL Server TLS verificata fallita su tutti "
+                        "i driver ODBC disponibili."
+                    ),
+                    details={"errors": errors},
+                )
 
             # FreeTDS is often more tolerant of older SQL Server TLS/TDS setups.
             try:
