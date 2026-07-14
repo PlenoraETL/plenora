@@ -65,6 +65,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $BackendDir = Join-Path $RepoRoot 'backend'
+$envFile = Join-Path $BackendDir '.env'
 $DataDir = 'C:\plenora-data'
 $CondaEnv = 'plenora'
 
@@ -108,9 +109,25 @@ function Ok($msg)   { Write-Host "[OK]   $msg" -ForegroundColor Green }
 function Fail($msg) { Write-Host "[FAIL] $msg" -ForegroundColor Red; exit 1 }
 
 function New-RandomSecret {
-    # 48 char alfanumerici via RNG crittografico .NET
-    $chars = ([char[]]([char]'a'..[char]'z') + [char[]]([char]'A'..[char]'Z') + [char[]]([char]'0'..[char]'9'))
-    -join (1..48 | ForEach-Object { $chars | Get-Random })
+    # 48 caratteri alfanumerici via RNG crittografico .NET. Il rejection
+    # sampling evita il bias del semplice byte modulo 62.
+    $alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    $buffer = New-Object byte[] 64
+    $result = New-Object System.Text.StringBuilder
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        while ($result.Length -lt 48) {
+            $rng.GetBytes($buffer)
+            foreach ($value in $buffer) {
+                if ($value -lt 248 -and $result.Length -lt 48) {
+                    [void]$result.Append($alphabet[$value % 62])
+                }
+            }
+        }
+    } finally {
+        $rng.Dispose()
+    }
+    $result.ToString()
 }
 
 function Set-EnvValue {
@@ -279,23 +296,81 @@ Step 'PostgreSQL: utente e database plenora'
 $psql = 'C:\Program Files\PostgreSQL\17\bin\psql.exe'
 if (-not (Test-Path $psql)) { Fail "psql non trovato in $psql (install PostgreSQL fallita o path diverso)" }
 if (-not $PgSuperPassword) {
-    $sec = Read-Host 'Password del superuser postgres (impostata dall''installer PG)' -AsSecureString
-    $PgSuperPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
+    Write-Host "  Con installazione winget unattended la password iniziale EDB e' normalmente: postgres" -ForegroundColor Yellow
+    $sec = Read-Host 'Password corrente del superuser postgres' -AsSecureString
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)
+    try {
+        $PgSuperPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    } finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    }
 }
 $env:PGPASSWORD = $PgSuperPassword
-& $psql -U postgres -h 127.0.0.1 -tAc "SELECT 1 FROM pg_roles WHERE rolname='plenora'" | Out-String -OutVariable roleExists | Out-Null
-if ($roleExists.Trim() -ne '1') {
-    & $psql -U postgres -h 127.0.0.1 -c "CREATE USER plenora WITH PASSWORD 'plenora' CREATEDB;"
+$authResult = (& $psql -w -U postgres -h 127.0.0.1 -d postgres -tAc 'SELECT 1' 2>&1 | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $authResult -ne '1') {
+    Remove-Item Env:\PGPASSWORD -ErrorAction SilentlyContinue
+    Fail "Autenticazione postgres fallita. Con winget unattended provare 'postgres'; se non funziona seguire il reset in docs/ops/install-windows.md"
 }
-& $psql -U postgres -h 127.0.0.1 -tAc "SELECT 1 FROM pg_database WHERE datname='plenora'" | Out-String -OutVariable dbExists | Out-Null
-if ($dbExists.Trim() -ne '1') {
-    & $psql -U postgres -h 127.0.0.1 -c "CREATE DATABASE plenora OWNER plenora;"
+
+# Password applicativa random. Se esiste gia' un .env valido la riusiamo;
+# il vecchio default debole "plenora" viene ruotato automaticamente.
+$dbPassword = ''
+if (Test-Path $envFile) {
+    $existingEnv = Get-Content $envFile -Raw
+    if ($existingEnv -match '(?m)^DATABASE_URL=postgresql://plenora:([^@\r\n]+)@127\.0\.0\.1:5432/plenora\s*$') {
+        $dbPassword = $Matches[1]
+    }
 }
-$env:PGPASSWORD = 'plenora'
-$one = (& $psql -U plenora -h 127.0.0.1 -d plenora -tAc 'SELECT 1').Trim()
-Remove-Item Env:\PGPASSWORD
-if ($one -ne '1') { Fail 'SELECT 1 come utente plenora fallita' }
+if (-not $dbPassword -or $dbPassword -eq 'plenora') {
+    $dbPassword = New-RandomSecret
+}
+
+$roleExists = (& $psql -w -U postgres -h 127.0.0.1 -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='plenora'" 2>&1 | Out-String).Trim()
+if ($LASTEXITCODE -ne 0) { Fail "Verifica ruolo plenora fallita: $roleExists" }
+if ($roleExists -eq '1') {
+    $roleOutput = (& $psql -w -U postgres -h 127.0.0.1 -d postgres -c "ALTER ROLE plenora WITH PASSWORD '$dbPassword' CREATEDB;" 2>&1 | Out-String).Trim()
+} else {
+    $roleOutput = (& $psql -w -U postgres -h 127.0.0.1 -d postgres -c "CREATE USER plenora WITH PASSWORD '$dbPassword' CREATEDB;" 2>&1 | Out-String).Trim()
+}
+if ($LASTEXITCODE -ne 0) { Fail "Creazione/aggiornamento ruolo plenora fallita: $roleOutput" }
+
+$dbExists = (& $psql -w -U postgres -h 127.0.0.1 -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='plenora'" 2>&1 | Out-String).Trim()
+if ($LASTEXITCODE -ne 0) { Fail "Verifica database plenora fallita: $dbExists" }
+if ($dbExists -ne '1') {
+    $dbOutput = (& $psql -w -U postgres -h 127.0.0.1 -d postgres -c 'CREATE DATABASE plenora OWNER plenora;' 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0) { Fail "Creazione database plenora fallita: $dbOutput" }
+}
+$env:PGPASSWORD = $dbPassword
+$one = (& $psql -w -U plenora -h 127.0.0.1 -d plenora -tAc 'SELECT 1' 2>&1 | Out-String).Trim()
+Remove-Item Env:\PGPASSWORD -ErrorAction SilentlyContinue
+if ($LASTEXITCODE -ne 0 -or $one -ne '1') { Fail "SELECT 1 come utente plenora fallita: $one" }
+
+# L'installer EDB unattended usa "postgres" come password iniziale. Non
+# deve sopravvivere a un'installazione Plenora: la ruotiamo subito e non la
+# salviamo nel .env, perche' l'app usa esclusivamente il ruolo limitato.
+if ($PgSuperPassword -eq 'postgres') {
+    Write-Host '  La password PostgreSQL predefinita deve essere sostituita.' -ForegroundColor Yellow
+    $newSec = Read-Host 'Nuova password robusta del superuser postgres (minimo 12 caratteri)' -AsSecureString
+    $confirmSec = Read-Host 'Conferma nuova password del superuser postgres' -AsSecureString
+    $newBstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($newSec)
+    $confirmBstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($confirmSec)
+    try {
+        $newPgPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($newBstr)
+        $confirmPgPassword = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($confirmBstr)
+    } finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($newBstr)
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($confirmBstr)
+    }
+    if ($newPgPassword.Length -lt 12) { Fail 'La nuova password postgres deve avere almeno 12 caratteri' }
+    if ($newPgPassword -ne $confirmPgPassword) { Fail 'Le password postgres non coincidono' }
+    $escapedPgPassword = $newPgPassword.Replace("'", "''")
+    $env:PGPASSWORD = $PgSuperPassword
+    $rotateOutput = (& $psql -w -U postgres -h 127.0.0.1 -d postgres -c "ALTER ROLE postgres WITH PASSWORD '$escapedPgPassword';" 2>&1 | Out-String).Trim()
+    Remove-Item Env:\PGPASSWORD -ErrorAction SilentlyContinue
+    if ($LASTEXITCODE -ne 0) { Fail "Rotazione password postgres fallita: $rotateOutput" }
+    $PgSuperPassword = $newPgPassword
+    Ok 'Password predefinita del superuser postgres sostituita'
+}
 Ok 'PostgreSQL pronto (db plenora, utente plenora)'
 
 # -----------------------------------------------------------------------------
@@ -374,16 +449,16 @@ Ok 'Dipendenze python complete'
 # -----------------------------------------------------------------------------
 Step "Configurazione .env + DATA_DIR ($DataDir)"
 # -----------------------------------------------------------------------------
-$envFile = Join-Path $BackendDir '.env'
 if (Test-Path $envFile) {
-    Ok '.env gia'' presente: non tocco (rimuoverlo per rigenerarlo)'
+    Set-EnvValue -File $envFile -Key 'DATABASE_URL' -Value "postgresql://plenora:$dbPassword@127.0.0.1:5432/plenora"
+    Ok '.env gia'' presente: credenziali PostgreSQL sincronizzate; resto invariato'
 } else {
     $jwt = New-RandomSecret
     $enc = New-RandomSecret
     @"
 # Generato da install-native.ps1 (scoping) — $(Get-Date -Format 'yyyy-MM-dd HH:mm')
 ENVIRONMENT=development
-DATABASE_URL=postgresql://plenora:plenora@127.0.0.1:5432/plenora
+DATABASE_URL=postgresql://plenora:$dbPassword@127.0.0.1:5432/plenora
 DB_SCHEMA=plenora
 DRAMATIQ_BROKER_URL=amqp://guest:guest@127.0.0.1:5672
 JWT_SECRET_KEY=$jwt

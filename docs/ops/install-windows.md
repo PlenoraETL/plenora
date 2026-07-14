@@ -96,8 +96,9 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1 `
 
 Ti verranno chiesti:
 
-1. **Password del superuser `postgres`** — con l'install winget
-   unattended di solito NON e' nota: vedi §9 per il reset in locale.
+1. **Password corrente del superuser `postgres`** — con l'install winget
+   unattended EDB il valore iniziale e' `postgres`. L'installer verifica la
+   password senza prompt secondari e obbliga a sostituire subito il default.
 2. **Username e password del superadmin** (minimo 12 caratteri, doppia
    conferma). E' l'utente con cui farai login nell'applicazione.
 
@@ -356,7 +357,7 @@ Update:
 | Servizio RabbitMQ `Stopped`, zero log | `ERLANG_HOME` mancante a livello macchina (l'installer la imposta; verificare dopo update manuali di Erlang) |
 | RabbitMQ `BOOT FAILED ... incompatible_feature_flags {horus, unknown_instruction}` | Erlang/OTP troppo nuovo per la versione RabbitMQ: usare la serie OTP supportata (oggi 28.x — l'installer la pinna) |
 | `rabbitmqctl` → `incompatible cookie` | Cookie Erlang dell'utente ≠ LocalSystem: copiare `C:\Windows\System32\config\systemprofile\.erlang.cookie` in `%USERPROFILE%` (l'installer lo fa da solo) |
-| Password `postgres` sconosciuta (install winget) | Reset locale: procedura sotto. |
+| Password `postgres` rifiutata (install winget) | Il default EDB unattended e' `postgres`; se e' stato gia' cambiato, usare la password corrente oppure il reset locale sotto. |
 | Login dal browser: "Impossibile contattare il server" | Hostname diverso dall'origin della build FE (es. `localhost` vs `127.0.0.1`): usare `http://127.0.0.1/`; l'installer scrive CORS per entrambe |
 | Porta 80 occupata (IIS?) | Reinstallare il FE con `-FrontendPort 8080` (ribuilda anche il bundle sull'origin nuovo) |
 | `/ready` not_ready su `object_storage` | Verificare `plenora-object-storage`, endpoint `127.0.0.1:8333` e credenziali `S3_*`; l'object storage e' obbligatorio |
@@ -371,7 +372,7 @@ $pgBin = 'C:\Program Files\PostgreSQL\17\bin'
 Copy-Item "$pgData\pg_hba.conf" "$pgData\pg_hba.conf.bak"
 (Get-Content "$pgData\pg_hba.conf") `
     -replace 'scram-sha-256','trust' `
-    | Set-Content "$pgData\pg_hba.conf"
+    | Set-Content "$pgData\pg_hba.conf" -Encoding ascii
 Restart-Service postgresql-x64-17
 & "$pgBin\psql.exe" -U postgres -c "ALTER USER postgres WITH PASSWORD '<nuova-password-forte>';"
 Copy-Item "$pgData\pg_hba.conf.bak" "$pgData\pg_hba.conf" -Force
