@@ -291,6 +291,27 @@ if (-not $SkipWinget) {
 }
 
 # -----------------------------------------------------------------------------
+Step 'Microsoft ODBC Driver 18 per SQL Server'
+# -----------------------------------------------------------------------------
+$odbc18 = @(Get-OdbcDriver -Platform '64-bit' -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -eq 'ODBC Driver 18 for SQL Server' })
+if ($odbc18.Count -eq 0) {
+    Write-Host '  Scarico Microsoft ODBC Driver 18 x64 (release ufficiale)...'
+    $odbcMsi = Join-Path $env:TEMP 'msodbcsql18-x64.msi'
+    Invoke-WebRequest 'https://go.microsoft.com/fwlink/?linkid=2358430' -OutFile $odbcMsi
+    $odbcInstall = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @(
+        '/i', "`"$odbcMsi`"", '/quiet', '/norestart', 'IACCEPTMSODBCSQLLICENSETERMS=YES'
+    )
+    if ($odbcInstall.ExitCode -notin 0, 3010) {
+        Fail "Microsoft ODBC Driver 18 install exit=$($odbcInstall.ExitCode)"
+    }
+    $odbc18 = @(Get-OdbcDriver -Platform '64-bit' -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -eq 'ODBC Driver 18 for SQL Server' })
+}
+if ($odbc18.Count -eq 0) { Fail 'ODBC Driver 18 for SQL Server non risulta installato' }
+Ok 'Microsoft ODBC Driver 18 for SQL Server disponibile'
+
+# -----------------------------------------------------------------------------
 Step 'PostgreSQL: utente e database plenora'
 # -----------------------------------------------------------------------------
 $psql = 'C:\Program Files\PostgreSQL\17\bin\psql.exe'
@@ -484,6 +505,13 @@ CLOUD_PROVIDER=none
 "@ | Set-Content -Encoding ascii $envFile
     Ok '.env generato (secrets random; ENVIRONMENT=development per lo scoping)'
 }
+# Readiness/lease operative anche sul percorso nativo. Set-EnvValue rende
+# l'upgrade idempotente per installazioni create da versioni precedenti.
+Set-EnvValue -File $envFile -Key 'READINESS_BEAT_HEARTBEAT_MAX_AGE_SECONDS' -Value '180'
+Set-EnvValue -File $envFile -Key 'READINESS_WORKER_HEARTBEAT_MAX_AGE_SECONDS' -Value '45'
+Set-EnvValue -File $envFile -Key 'WORKER_HEARTBEAT_INTERVAL_SECONDS' -Value '10'
+Set-EnvValue -File $envFile -Key 'TASK_EXECUTION_LEASE_SECONDS' -Value '45'
+Set-EnvValue -File $envFile -Key 'READINESS_TASK_DLQ_MAX_MESSAGES' -Value '0'
 New-Item -ItemType Directory -Force $DataDir | Out-Null
 
 # -----------------------------------------------------------------------------

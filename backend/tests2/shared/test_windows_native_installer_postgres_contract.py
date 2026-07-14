@@ -5,6 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 INSTALLER = ROOT / "scripts" / "install-native.ps1"
+VALIDATOR = ROOT / "scripts" / "validate-windows-install.ps1"
 
 
 def _installer() -> str:
@@ -54,3 +55,28 @@ def test_frontend_build_does_not_depend_on_refreshed_machine_path() -> None:
     assert "& $npm ci" in installer
     assert "& $npm run build" in installer
     assert "& npm ci" not in installer
+
+
+def test_native_install_enables_runtime_heartbeat_and_lease_checks() -> None:
+    installer = _installer()
+
+    assert "'READINESS_BEAT_HEARTBEAT_MAX_AGE_SECONDS' -Value '180'" in installer
+    assert "'READINESS_WORKER_HEARTBEAT_MAX_AGE_SECONDS' -Value '45'" in installer
+    assert "'WORKER_HEARTBEAT_INTERVAL_SECONDS' -Value '10'" in installer
+    assert "'TASK_EXECUTION_LEASE_SECONDS' -Value '45'" in installer
+
+
+def test_windows_validator_rejects_disabled_beat_heartbeat() -> None:
+    validator = VALIDATOR.read_text(encoding="utf-8-sig")
+
+    assert "beat heartbeat disabilitato" in validator
+    assert "^skipped:\\s*disabled" in validator
+
+
+def test_native_installer_provisions_modern_sql_server_odbc_driver() -> None:
+    installer = _installer()
+
+    assert "ODBC Driver 18 for SQL Server" in installer
+    assert "https://go.microsoft.com/fwlink/?linkid=2358430" in installer
+    assert "IACCEPTMSODBCSQLLICENSETERMS=YES" in installer
+    assert "Get-OdbcDriver -Platform '64-bit'" in installer

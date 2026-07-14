@@ -97,6 +97,12 @@ function Wait-Ready([string]$Url, [int]$TimeoutSeconds) {
         try {
             $response = Invoke-RestMethod -Uri $Url -TimeoutSec 10
             if ($response.status -eq 'ready') {
+                $beatDetail = [string]$response.checks.beat_heartbeat.detail
+                if ($beatDetail -match '^skipped:\s*disabled') {
+                    $lastError = "beat heartbeat disabilitato: $beatDetail"
+                    Start-Sleep -Seconds 2
+                    continue
+                }
                 Ok "/ready verde: $Url"
                 Write-Host "  $(ConvertTo-CompactJson $response)"
                 return

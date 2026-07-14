@@ -41,6 +41,7 @@ sorgente canonico anche per il manuale PDF operativo.
 | Object storage SeaweedFS | servizio `plenora-object-storage` | 4.29 | 8333 (S3, loopback) |
 | Frontend (Caddy) | servizio `plenora-caddy` | latest | **80** (configurabile) |
 | Python + GDAL | env conda `plenora` (Miniforge) | 3.12 / GDAL 3.13 | — |
+| Microsoft ODBC Driver | connettore SQL Server/MSSQL | 18.x x64 | — |
 
 Stato, lock, blacklist JWT, rate-limit e metadati dei task vivono su
 PostgreSQL; upload, risultati, preview e intermedi persistenti vivono su
