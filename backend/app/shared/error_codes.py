@@ -40,6 +40,12 @@ PROJECT_HAS_DEPENDENCIES = "project_has_dependencies"
 PROJECT_CLEANUP_PARTIAL = "project_cleanup_partial"
 """500: cleanup progetto fallito su step derivati (row preservata)."""
 
+PROJECT_HAS_ACTIVE_TASKS = "project_has_active_tasks"
+"""409: progetto non modificabile mentre ha task attivi."""
+
+PREVIEW_STORAGE_UNAVAILABLE = "preview_storage_unavailable"
+"""503: payload preview non disponibile nell'object storage."""
+
 CARICA_LAUNCH_FAILED = "carica_launch_failed"
 """500-state: lancio task carica fallito (orchestrator/service)."""
 
@@ -293,6 +299,8 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     API_CONNECTION_IN_USE,
     PROJECT_HAS_DEPENDENCIES,
     PROJECT_CLEANUP_PARTIAL,
+    PROJECT_HAS_ACTIVE_TASKS,
+    PREVIEW_STORAGE_UNAVAILABLE,
     CARICA_LAUNCH_FAILED,
     CARICA_SCHEDULER_FAILED,
     CARICA_ARCGIS_WRITE_FAILED,

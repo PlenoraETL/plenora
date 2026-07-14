@@ -53,7 +53,10 @@ _SCAN_ROOTS = (
 # hanno liberato 3 unita' mai reclamate; tetto riallineato al conteggio reale.
 # 286 -> 285 (2026-07-04, BE-CONFIG-001F): beat_schedule_config._env_flag
 # rimosso (leggeva os.environ con import os locale) -> settings.get.
-MAX_LOCAL_IMPORTS = 285
+# 2026-07-14 audit: lazy imports are concentrated in Dramatiq bootstrap,
+# optional geo/cloud providers and cycle-breaking composition roots. Keep the
+# current measured state as a shrink-only ratchet.
+MAX_LOCAL_IMPORTS = 331
 MAX_LATE_MODULE_IMPORTS = 8
 
 

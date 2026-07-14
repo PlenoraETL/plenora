@@ -17,7 +17,7 @@ NON porta qui (richiede contesto DB):
 from __future__ import annotations
 
 import re
-from typing import Any, List, Mapping
+from typing import Any, List, Mapping, MutableMapping
 
 from app.shared.execution.schema_types import InferredSchema
 from app.shared.execution.validation_protocol import register_node_validator
@@ -27,10 +27,10 @@ _TEMPLATE_REF_RE = re.compile(r"\{([^}]+)\}")
 _TRAILING_PAREN_RE = re.compile(r"\s*\(.*\)$")
 
 
-def _node_config(node: Any) -> dict[str, Any]:
+def _node_config(node: Any) -> Mapping[str, Any]:
     """Return node config from top-level/model_extra plus node.data."""
     data = getattr(node, "data", None) or {}
-    config: dict[str, Any] = dict(data) if isinstance(data, Mapping) else {}
+    config: MutableMapping[str, Any] = dict(data) if isinstance(data, Mapping) else {}
     extra = getattr(node, "model_extra", None) or getattr(node, "__pydantic_extra__", None) or {}
     if isinstance(extra, Mapping):
         config.update({k: v for k, v in extra.items() if v is not None})

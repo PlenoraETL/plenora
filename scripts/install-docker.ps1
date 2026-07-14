@@ -365,7 +365,9 @@ print(f"Superadmin ready: username={username} role=superadmin group_id={group_id
             "backend", "python", "-c", $script
         )
     } finally {
-        Remove-Item Env:\PLENORA_BOOTSTRAP_ADMIN_PASSWORD -ErrorAction SilentlyContinue
+        [Environment]::SetEnvironmentVariable(
+            "PLENORA_BOOTSTRAP_ADMIN_PASSWORD", $null, "Process"
+        )
         $script:AdminPassword = ""
     }
 }

@@ -43,7 +43,7 @@ from app.core.arricchisci import enrichment_preflight as _enrichment_preflight
 from app.core.arricchisci.source_request_loader import load_request_data
 from app.core.arricchisci.types import JsonObject
 from app.core.auth.visibility import visible_resource_ids
-from app.core.security.outbound_url import validate_external_url
+from app.shared.security.outbound_url import validate_external_url
 
 
 def _load_request_data(request, current_user) -> JsonObject:

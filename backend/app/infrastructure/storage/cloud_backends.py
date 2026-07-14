@@ -971,6 +971,8 @@ def validate_storage_config() -> None:
         logger.critical("[BOOT] %s", msg)
         raise StorageConfigError(msg)
 
+    # BE-CONFIG-001E + ADR-0021: boot validation intentionally preserves raw
+    # environment semantics so malformed values cannot hide behind defaults.
     def _check_positive_int(name: str) -> None:
         # `os.getenv` diretto per design: questo helper e' un boot-time
         # fail-fast validator

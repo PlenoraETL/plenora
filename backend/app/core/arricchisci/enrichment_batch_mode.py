@@ -31,7 +31,7 @@ from app.core.arricchisci.success_evaluator import (
     evaluate_success,
     success_config_from_api_config,
 )
-from app.core.security.outbound_url import validate_external_url
+from app.shared.security.outbound_url import validate_external_url
 from app.shared.security.tls_policy import resolve_tls_verify
 from app.utils.logger import get_logger
 

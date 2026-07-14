@@ -90,7 +90,6 @@ def test_fetch_row_no_project_filter_when_none():
         ):
             result_blob._fetch_row(
                 "r-1",
-                max_bytes=1024,
                 group_id_filter="g-1",
                 project_id_filter=None,
             )
@@ -104,7 +103,7 @@ def test_fetch_row_no_project_filter_when_none():
     # 013: the BYTEA preflight prepends a `max_bytes` parameter for
     # the CASE WHEN length(data) > %s clause. The WHERE-clause params
     # follow in the same order as before.
-    assert captured["params"] == (1024, "r-1", "g-1")
+    assert captured["params"] == ("r-1", "g-1")
 
 
 def test_fetch_row_adds_project_clause_when_set():
@@ -125,7 +124,6 @@ def test_fetch_row_adds_project_clause_when_set():
     ):
         result_blob._fetch_row(
             "r-1",
-            max_bytes=2048,
             group_id_filter="g-1",
             project_id_filter="p-42",
         )
@@ -137,7 +135,7 @@ def test_fetch_row_adds_project_clause_when_set():
     )
     # 013: max_bytes is the leading parameter (CASE WHEN length(data)
     # > ?), followed by WHERE-clause params in declaration order.
-    assert captured["params"] == (2048, "r-1", "g-1", "p-42")
+    assert captured["params"] == ("r-1", "g-1", "p-42")
 
 
 def test_fetch_row_select_includes_project_id_column():
@@ -159,7 +157,6 @@ def test_fetch_row_select_includes_project_id_column():
     ):
         result_blob._fetch_row(
             "r-1",
-            max_bytes=1024,
             group_id_filter="g-1",
         )
 
@@ -167,10 +164,7 @@ def test_fetch_row_select_includes_project_id_column():
     assert "project_id" in sql, (
         "project_id column must remain in the SELECT projection"
     )
-    assert "length(data) AS data_size" in sql, (
-        "013 SQL preflight: length(data) AS data_size must project "
-        "the BYTEA byte count for caller-side cap enforcement"
-    )
+    assert "storage_key" in sql
 
 
 # 3. Loader end-to-end: optional project filter

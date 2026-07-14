@@ -32,7 +32,7 @@ from app.core.arricchisci.success_evaluator import (
     evaluate_success,
     success_config_from_api_config,
 )
-from app.core.security.outbound_url import validate_external_url
+from app.shared.security.outbound_url import validate_external_url
 from app.core.arricchisci.types import JsonObject
 from app.observability.log_sanitization import (
     sanitize_for_log,

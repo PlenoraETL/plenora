@@ -554,7 +554,7 @@ def delete_project(
         raise HTTPException(
             status_code=409,
             detail={
-                "error": "project_has_active_tasks",
+                "error": error_codes.PROJECT_HAS_ACTIVE_TASKS,
                 "message": str(e),
                 "project_id": e.project_id,
                 "task_ids": e.task_ids,

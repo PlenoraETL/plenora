@@ -18,7 +18,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _LOADERS = (
     _BACKEND_ROOT
-    / "app" / "core" / "resources" / "loaders" / "result_blob.py",
+    / "app" / "core" / "resources" / "loaders" / "_shared.py",
     _BACKEND_ROOT
     / "app" / "core" / "resources" / "loaders" / "file_source_blob.py",
 )

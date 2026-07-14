@@ -81,7 +81,10 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # fallback su ZoneInfo (settings assente / tz invalida) -> default Europe/Rome.
 # 721 -> 720 (2026-06-13, Plenora 2.0 Fase 5 F5.6): rimosso list_active_tasks
 # (dead code, inspect worker Celery) col suo catch broad.
-_EXPECT_BROAD_BUDGET = 720
+# 2026-07-14 audit: narrowed five deterministic config/filesystem catches.
+# The remaining catches are boundary safety-nets around HTTP/DB/geo/storage
+# libraries or API exception translation; 749 is the new shrink-only ratchet.
+_EXPECT_BROAD_BUDGET = 749
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

@@ -429,7 +429,7 @@ def get_task_status(
         raise HTTPException(
             status_code=503,
             detail={
-                "error": "preview_storage_unavailable",
+                "error": error_codes.PREVIEW_STORAGE_UNAVAILABLE,
                 "message": "Preview temporaneamente non disponibile",
             },
         )

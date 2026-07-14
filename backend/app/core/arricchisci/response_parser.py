@@ -42,7 +42,7 @@ def response_format_from_config(api_config: Mapping[str, Any] | None) -> str:
     return normalize_response_format(cfg.get("response_format"))
 
 
-def csv_dialect_from_config(api_config: Mapping[str, Any] | None) -> dict[str, str]:
+def csv_dialect_from_config(api_config: Mapping[str, Any] | None) -> Mapping[str, str]:
     """Read minimal CSV dialect options from connector response config."""
     cfg = dict(api_config or {})
     delimiter = ","

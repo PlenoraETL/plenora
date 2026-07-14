@@ -133,7 +133,7 @@ def _extract_auto_mapping_body_source() -> str:
     tree = ast.parse(src)
     src_lines = src.splitlines()
     for node in ast.walk(tree):
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "auto_mapping":
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "auto_mapping":
             start = node.lineno - 1
             end = node.end_lineno
             return "\n".join(src_lines[start:end])

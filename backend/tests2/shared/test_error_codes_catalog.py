@@ -46,6 +46,8 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
     "api_connection_in_use",
     "project_has_dependencies",
     "project_cleanup_partial",
+    "project_has_active_tasks",
+    "preview_storage_unavailable",
     "datasource_in_use",
     "object_storage_disabled",
     "aws_crt_missing",
@@ -196,7 +198,7 @@ def test_known_global_codes_matches_expected_lock():
     assert error_codes.KNOWN_GLOBAL_CODES == EXPECTED_GLOBAL_CODES
 
 
-def test_catalog_count_domain_fiftythree():
+def test_catalog_count_domain_sixty():
     """58 codici domain (5 pre-existing + 6 batch 006 + 10 batch 009
     not-found family + 1 batch 010 external-service +
     1 BE-GO-READY-MEMORY-OOM-001 memory_limit_exceeded +
@@ -205,7 +207,7 @@ def test_catalog_count_domain_fiftythree():
     27 BE-GO-READY-AUTH-DOMAIN-PROMOTION-001 auth family +
     1 compatibility domain conflict code +
     5 dispatch carica #18/#20 write/visibility family)."""
-    assert len(EXPECTED_DOMAIN_CODES) == 58
+    assert len(EXPECTED_DOMAIN_CODES) == 60
     assert len(error_codes.KNOWN_DOMAIN_CODES) == len(EXPECTED_DOMAIN_CODES)
 
 

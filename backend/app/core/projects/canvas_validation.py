@@ -22,7 +22,7 @@ from app.shared.execution.validation_protocol import validator_for
 from app.shared.execution.validation_types import Issue, ValidationReport
 
 
-def _node_config(node: Any, keys: tuple[str, ...]) -> dict[str, Any]:
+def _node_config(node: Any, keys: tuple[str, ...]) -> Mapping[str, Any]:
     data = getattr(node, "data", None) or {}
     config: dict[str, Any] = dict(data) if isinstance(data, Mapping) else {}
     extra = getattr(node, "model_extra", None) or getattr(node, "__pydantic_extra__", None) or {}

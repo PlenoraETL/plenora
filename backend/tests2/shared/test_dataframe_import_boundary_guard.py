@@ -27,6 +27,8 @@ _MAX_DIRECT_IMPORTS = 22
 
 _ALLOWED_DIRECT_IMPORT_PATHS = {
     "backend/app/core/dataframes/default_loader.py",
+    "backend/app/core/dataframes/export_writer.py",
+    "backend/app/core/dataframes/frame_copy.py",
     "backend/app/core/dataframes/frame_io.py",
     "backend/app/core/dataframes/geodata.py",
     "backend/app/core/dataframes/geometry_parsing.py",

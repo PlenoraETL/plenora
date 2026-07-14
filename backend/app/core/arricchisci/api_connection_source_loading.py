@@ -24,7 +24,7 @@ from app.core.output_contract import (
 )
 from app.core.projects.service import ProjectService
 from app.core.projects.source_freshness import get_project_source_freshness
-from app.core.security.outbound_url import check_outbound_address
+from app.shared.security.outbound_url import check_outbound_address
 from app.utils.logger import get_logger
 
 

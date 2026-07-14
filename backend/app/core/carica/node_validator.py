@@ -36,7 +36,7 @@ def _err(node_id: str, code: str, message: str) -> Issue:
     return Issue(node_id=node_id, severity="error", code=code, message=message, suggestion=None)
 
 
-def _node_config(node: Any) -> dict[str, Any]:
+def _node_config(node: Any) -> Mapping[str, Any]:
     data = getattr(node, "data", None) or {}
     config: dict[str, Any] = dict(data) if isinstance(data, Mapping) else {}
     extra = getattr(node, "model_extra", None) or getattr(node, "__pydantic_extra__", None) or {}

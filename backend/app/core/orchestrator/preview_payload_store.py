@@ -43,7 +43,7 @@ def persist_preview_payload(
     *,
     project_id: str,
     task_id: str,
-) -> dict[str, object]:
+) -> Mapping[str, object]:
     """Persist a successful preview and return its small task envelope."""
     key = _storage_key(project_id, task_id)
     spool = SpooledTemporaryFile(max_size=spool_memory_limit(), mode="w+b")
@@ -93,7 +93,7 @@ def hydrate_preview_payload(
     payload: Mapping[str, object],
     *,
     max_bytes: Optional[int] = None,
-) -> dict[str, object]:
+) -> Mapping[str, object]:
     """Read a preview reference from S3 and return the original JSON object."""
     key = str(payload.get(PREVIEW_STORAGE_KEY_FIELD) or "")
     if not key.startswith(f"{PREVIEWS_PREFIX}/"):

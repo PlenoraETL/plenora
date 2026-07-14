@@ -232,18 +232,9 @@ def test_loader_owns_the_dispatch_tokens():
     """
     text = _RESULT_BLOB_PY.read_text(encoding="utf-8")
     required_in_loader = (
-        # SQL row metadata projection (RESOURCE-ENGINE-007 +
-        # RESOURCE-ENGINE-013). storage_key and project_id are the
-        # always-present row-metadata columns; data_size is the
-        # 013 wire-level preflight projection.
-        "storage_key, project_id, length(data) AS data_size",
-        # 013: CASE-bounded `data` column. Without this, PG would
-        # ship the oversized BYTEA over the wire before any cap
-        # check could fire.
-        "WHEN length(data) > %s THEN NULL",
-        "ELSE data",
-        # BYTEA conversion path
-        "isinstance(data, memoryview)",
+        # Object-storage-only row metadata projection.
+        "SELECT storage_key, project_id FROM results",
+        "senza storage_key",
         # the structured timing log shape that ops dashboards
         # already filter on (preserve verbatim)
         "[PERF] get_result_data op=fetch_blob",

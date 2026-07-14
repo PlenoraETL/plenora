@@ -74,7 +74,7 @@ def check_postgres() -> CheckOutcome:
         from app.db.pg_connection import get_connection, put_connection
         try:
             timeout = int(settings.get("READINESS_PG_TIMEOUT_SECONDS", 2))
-        except Exception:
+        except (AttributeError, TypeError, ValueError):
             timeout = 2
         if timeout <= 0:
             timeout = 2
@@ -251,7 +251,7 @@ def check_object_storage() -> CheckOutcome:
         timeout = int(
             settings.get("READINESS_OBJECT_STORAGE_TIMEOUT_SECONDS", 3)
         )
-    except Exception:
+    except (AttributeError, TypeError, ValueError):
         timeout = 3
     if timeout <= 0:
         timeout = 3

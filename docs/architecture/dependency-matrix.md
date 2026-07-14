@@ -1,6 +1,6 @@
 # Dependency Matrix — Domini Backend
 
-Data baseline: 2026-06-11 (branch `main`)
+Data baseline: 2026-07-14 (branch `main`)
 Strumento: `backend/scripts/dependency_graph.py`
 Baseline versionata: `backend/tests2/shared/config/core_dependency_baseline.json`
 Guardia "non peggiorare": `backend/tests2/shared/test_core_dependency_matrix.py`
@@ -79,8 +79,12 @@ La mappa completa degli shim di compatibilita' (Fase 6) e' in
 | `projects -> arricchisci` | lazy, dependency check | Epic F: porta dependency checks |
 | `projects -> scheduler` | lazy, cleanup/dipendenze | Epic F |
 | `auth -> projects` / `auth -> files` | `resource_access` istanzia servizi | Epic C (PR 2): `ProjectMetadataReader` / `FileSourceReader` |
+| `orchestrator -> io` | preview payload object-storage e spool bounded | Intenzionale: `io` e' foundation con out-degree 0 |
+| `projects -> orchestrator` | verifica lazy dei task attivi prima del lifecycle delete | Estrarre `ActiveTaskProbe` condiviso quando si riduce il ciclo projects/orchestrator |
+| `tickets -> io` | lettura prefisso e streaming allegati senza materializzare BLOB | Intenzionale: support domain verso foundation |
+| `tickets -> security` | upload-size guard sugli allegati | Intenzionale: support domain verso foundation |
 
-## Stato misurato (baseline 2026-06-12, post Epic E/F + B4)
+## Stato misurato (baseline 2026-07-14, object-storage-only + dispatch outbox)
 
 - **SCC maggiore: 16 domini** — con B4 (`Column` in
   `app.shared.execution.canvas_column` + schema inference iniettata dai
@@ -88,10 +92,10 @@ La mappa completa degli shim di compatibilita' (Fase 6) e' in
   e **`output_contract` esce dal ciclo** (secondo dominio liberato dopo
   `dataframes`). Guardia dedicata:
   `test_canvas_column_shared_contract.py`.
-- **31 domini** (nuovo: `lifecycle`, foundation con out-degree 0),
-  **138 edge cross-domain** (erano 141: rimossi `auth -> arricchisci`,
-  `auth -> connections`, `auth -> datasources`,
-  `output_contract -> projects`; aggiunto `auth -> lifecycle`).
+- **31 domini**, **141 edge cross-domain**. I quattro edge aggiunti rispetto
+  alla vecchia baseline sono documentati sopra e coprono preview streaming,
+  task lifecycle e allegati ticket; tre puntano a foundation con out-degree 0.
+  Il maggiore SCC resta invariato a 16 domini.
   `auth` scende da out-degree 7 a 5.
 
 ### Snapshot precedente (post Epic E)

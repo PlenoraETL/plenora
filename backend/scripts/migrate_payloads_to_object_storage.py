@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.intermediate.artifact_writer import persist_full_artifact
+from app.core.dataframes.tabular import dataframe_from_records
 from app.core.io.object_storage import get_runtime_object_storage
 from app.core.orchestrator.preview_payload_store import persist_preview_payload
 from app.db.pg_connection import unit_of_work
@@ -159,8 +160,6 @@ def _migrate_node_rows(*, apply: bool) -> int:
     if not apply:
         print(f"node_rows: {len(candidates)} snapshot legacy")
         return len(candidates)
-    import pandas as pd
-
     moved = 0
     for meta in candidates:
         rows = _rows(
@@ -177,7 +176,7 @@ def _migrate_node_rows(*, apply: bool) -> int:
                     f"node_rows.row_data non e' un oggetto JSON: {type(value).__name__}"
                 )
             normalized_rows.append(value)
-        frame = pd.DataFrame(normalized_rows)
+        frame = dataframe_from_records(normalized_rows)
         artifact = persist_full_artifact(
             df=frame,
             run_id=str(meta["run_id"]),

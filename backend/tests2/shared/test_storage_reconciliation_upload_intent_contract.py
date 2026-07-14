@@ -340,7 +340,7 @@ def test_dispatch_records_upload_intent_before_upload(monkeypatch):
     assert len(upload_calls) == 1
     # On upload success, mark_done is NOT called — reconciler closes it.
     assert mark_done_calls == []
-    assert out["data"] is None
+    assert "data" not in out
     assert out["storage_key"].startswith("file-sources/file-1/")
 
 
@@ -388,12 +388,12 @@ def test_dispatch_marks_failed_when_upload_fails(monkeypatch):
     ]
 
 
-def test_dispatch_does_not_record_intent_on_db_bytea_path(monkeypatch):
-    """STORAGE_POLICY=db: no upload, no upload_intent. Intent is only
-    relevant for the object_storage path."""
+def test_dispatch_ignores_legacy_db_policy_and_uses_object_storage(monkeypatch):
+    """The retired DB policy must not re-enable BYTEA persistence."""
     from app.core.resources import blob_dispatch as file_storage_dispatch
 
     record_calls = []
+    upload_calls = []
 
     def _fake_record_upload_intent(**kwargs):
         record_calls.append(kwargs)
@@ -407,15 +407,24 @@ def test_dispatch_does_not_record_intent_on_db_bytea_path(monkeypatch):
         "app.core.resources.storage_reconciliation.record_upload_intent",
         _fake_record_upload_intent,
     )
+    fake_storage = MagicMock()
+    fake_storage.upload_bytes.side_effect = (
+        lambda raw, key: upload_calls.append((raw, key))
+    )
+    monkeypatch.setattr(
+        "app.core.resources.blob_dispatch.cloud_backends.get_runtime_object_storage",
+        lambda: fake_storage,
+    )
 
     log = MagicMock()
     out = file_storage_dispatch.dispatch_blob_storage(
         "file-3", b"data", "f.csv", logger=log,
     )
 
-    assert record_calls == []
-    assert out["data"] == b"data"
-    assert out["storage_key"] is None
+    assert len(record_calls) == 1
+    assert upload_calls == [(b"data", out["storage_key"])]
+    assert "data" not in out
+    assert out["storage_key"].startswith("file-sources/file-3/")
 
 
 def test_dispatch_proceeds_when_record_upload_intent_returns_none(monkeypatch):

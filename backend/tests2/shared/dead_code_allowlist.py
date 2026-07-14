@@ -27,7 +27,7 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     # (Plenora 2.0: _TaskResultMiddleware finalizza l'esito su PG simmetrico
     # a Celery after_return; _BootstrapMiddleware fa il bootstrap 4-step a
     # worker_boot; _RequestIdMiddleware propaga il correlation id via broker).
-    re.compile(r"backend[\\/]+workers[\\/]+dramatiq_app\.py:\d+: unused method '(after_process_message|before_process_message|before_enqueue|before_worker_boot)' "),
+    re.compile(r"backend[\\/]+workers[\\/]+dramatiq_app\.py:\d+: unused method '(after_process_message|before_process_message|before_enqueue|before_worker_boot|after_ack|after_nack)' "),
 
     # Task bodies (funzioni pure) sono invocate dagli actor Dramatiq via
     # import lazy / shim, non per nome a import-time.
@@ -74,7 +74,15 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+(connections[\\/]+arcgis_writer_boundary|features[\\/]+features_service)\.py:\d+: unused method '(create_service_with_layers|write_layers_to_existing_service|apply_layer_renderers)' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+features[\\/]+arcgis_feature_write_methods\.py:\d+: unused method 'apply_edits' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+files[\\/]service\.py:\d+: unused (method|function) '(_load_by_format|create_file_service|_rmtree_safe|model_(dump|validate)_json)' "),
+    # Public bytes compatibility surface; all internal callers are stream-first.
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+files[\\/]service\.py:\d+: unused method 'get_blob_bytes' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+intermediate[\\/]node_snapshots_db\.py:\d+: unused function '(upsert_node_meta_extended|insert_node_rows)' "),
+    # Fail-loud tombstone retained for callers from pre-object-storage builds.
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+intermediate[\\/]node_snapshots_db\.py:\d+: unused function 'write_node_atomic' "),
+    # Public deterministic helper retained for migration and contract tooling.
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]intermediate[\\/]writer\.py:\d+: unused function 'compute_row_hash' "),
+    # Bytes adapter delegates to the canonical stream-first zip guard.
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]io[\\/]zip_guards\.py:\d+: unused function 'open_zip_bytes_safe' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+intermediate[\\/]policy\.py:\d+: unused function 'reset_validation_cache' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+intermediate[\\/]snapshot\.py:\d+: unused function 'flush_snapshots' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+manipola[\\/]executor\.py:\d+: unused method '(set_pipeline_dispatcher|_rileva_geometria_da_contenuto)' "),

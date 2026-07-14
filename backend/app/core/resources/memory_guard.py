@@ -9,11 +9,18 @@ import ctypes
 import gc
 import logging
 import sys
-from typing import Optional
+from typing import Optional, TypedDict
 
 from app.core.resources.exceptions import MemoryLimitExceededError
 
 logger = logging.getLogger(__name__)
+
+
+class MemoryCleanupStats(TypedDict):
+    before_rss: int | None
+    after_rss: int | None
+    collected: int
+    malloc_trim: bool
 
 
 def get_current_rss_bytes() -> Optional[int]:
@@ -60,7 +67,7 @@ def cleanup_worker_memory(
     *,
     run_gc: bool = True,
     run_malloc_trim: bool = True,
-) -> dict[str, int | bool | None]:
+) -> MemoryCleanupStats:
     """Best-effort cleanup della memoria del processo worker.
 
     ``gc.collect`` libera oggetti Python ciclici. Su Linux/glibc,

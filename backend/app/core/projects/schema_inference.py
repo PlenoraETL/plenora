@@ -21,7 +21,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-def _node_config(node: Any, keys: tuple[str, ...]) -> dict[str, Any]:
+def _node_config(node: Any, keys: tuple[str, ...]) -> Mapping[str, Any]:
     data = getattr(node, "data", None) or {}
     config: dict[str, Any] = dict(data) if isinstance(data, Mapping) else {}
     extra = getattr(node, "model_extra", None) or getattr(node, "__pydantic_extra__", None) or {}

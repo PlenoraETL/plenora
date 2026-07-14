@@ -46,6 +46,28 @@ def mock_db(monkeypatch):
     monkeypatch.setattr(result_blob_writer, "apply_results_retention",
                         lambda pid: None)
 
+    class _MemoryStorage:
+        def __init__(self):
+            self.objects = {}
+
+        def upload_bytes(self, data, key):
+            self.objects[key] = data
+
+        def delete(self, key):
+            self.objects.pop(key, None)
+
+    storage = _MemoryStorage()
+    monkeypatch.setattr(
+        result_blob_writer.object_storage_module,
+        "get_runtime_object_storage",
+        lambda: storage,
+    )
+    monkeypatch.setattr(
+        result_blob_writer,
+        "record_result_upload_intent",
+        lambda *args, **kwargs: None,
+    )
+
     # Evita dependency su settings per MAX_RESULT_BLOB_SIZE
     class _FakeSettings:
         @staticmethod
@@ -211,7 +233,9 @@ def test_save_result_blob_from_bytes_happy_path(mock_db):
         rows_count=1,
     )
     assert result_id == "res-1"
-    assert mock_db["data"] == payload
+    assert "data" not in mock_db
+    assert mock_db["storage_key"] == "results/proj-1/res-1.bin"
+    assert mock_db["size_bytes"] == len(payload)
     assert mock_db["filename"] == "result.csv"
     assert mock_db["rows_count"] == 1
     assert mock_db["fmt"] == "csv"

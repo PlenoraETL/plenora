@@ -81,8 +81,8 @@ def mock_db(monkeypatch):
 # 1. Dispatch sul threshold
 
 
-def test_small_file_goes_to_db_blob(mock_db, stub_storage, monkeypatch):
-    """Sotto threshold -> DB blob, S3 non toccato."""
+def test_small_file_goes_to_object_storage(mock_db, stub_storage, monkeypatch):
+    """Object-storage-only: anche un payload piccolo non entra in PostgreSQL."""
     from app.core.results.blob_writer import save_result_blob_from_bytes
     import app.config as app_config
 
@@ -98,10 +98,10 @@ def test_small_file_goes_to_db_blob(mock_db, stub_storage, monkeypatch):
     assert rid == "res-fs4"
     assert len(mock_db) == 1
     saved = mock_db[0]
-    assert saved["data"] == payload
-    assert saved.get("storage_key") is None
-    # S3 non toccato
-    assert stub_storage.uploads == []
+    assert "data" not in saved
+    assert saved["storage_key"] == "results/p1/res-fs4.bin"
+    assert saved["size_bytes"] == len(payload)
+    assert stub_storage.uploads == [(payload, "results/p1/res-fs4.bin")]
 
 
 def test_large_file_goes_to_s3(mock_db, stub_storage, monkeypatch):
@@ -125,7 +125,7 @@ def test_large_file_goes_to_s3(mock_db, stub_storage, monkeypatch):
     assert len(mock_db) == 1
     saved = mock_db[0]
     # data NULL in DB — il blob vive su S3
-    assert saved["data"] is None
+    assert "data" not in saved
     assert saved["storage_key"] == "results/p1/res-fs4.bin"
     assert saved.get("size_bytes") == 500
     # S3 upload eseguito
@@ -162,7 +162,7 @@ def test_no_hard_cap_any_size_goes_to_s3(mock_db, stub_storage, monkeypatch):
     assert uploaded_data == payload
     # DB row con storage_key
     assert len(mock_db) == 1
-    assert mock_db[0]["data"] is None
+    assert "data" not in mock_db[0]
     assert mock_db[0]["storage_key"] == "results/p1/res-fs4.bin"
 
 

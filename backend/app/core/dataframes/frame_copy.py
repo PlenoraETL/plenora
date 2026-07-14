@@ -29,7 +29,9 @@ inutili sui transform che aggiungono o riassegnano colonne.
 
 from __future__ import annotations
 
-from typing import TypeVar
+from typing import Any, TypeVar
+
+import pandas as pd
 
 FrameT = TypeVar("FrameT")
 
@@ -43,4 +45,9 @@ def copy_frame_for_update(df: FrameT) -> FrameT:
     return df.copy(deep=False)
 
 
-__all__ = ["copy_frame_for_update"]
+def is_string_like_series(series: Any) -> bool:
+    """Return whether a series contains only string-like non-null values."""
+    return pd.api.types.infer_dtype(series, skipna=True) == "string"
+
+
+__all__ = ["copy_frame_for_update", "is_string_like_series"]

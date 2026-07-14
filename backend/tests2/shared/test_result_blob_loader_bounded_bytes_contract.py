@@ -298,9 +298,22 @@ def test_object_storage_connectivity_error_still_returns_none(monkeypatch):
     assert out is None
 
 
-# 4. BYTEA path: SQL preflight cap check (BE-GO-READY-RESOURCE-ENGINE-013)
+# 4. Legacy BYTEA path retired by the object-storage-only cutover.
 
 
+def test_result_row_without_storage_key_fails_closed(monkeypatch):
+    from app.core.resources.loaders import result_blob as loader_mod
+
+    _, fake_fetch = fake_fetchone(
+        row={"storage_key": None, "project_id": "project-1"}
+    )
+    monkeypatch.setattr("app.db.pg_connection.fetchone", fake_fetch)
+
+    with pytest.raises(RuntimeError, match="senza storage_key"):
+        loader_mod.ResultBlobLoader().load(make_result_ref(), mode="bytes")
+
+
+@pytest.mark.skip(reason="BYTEA result payloads removed; see fail-closed storage_key contract")
 def test_bytea_oversize_raises_at_dispatch(monkeypatch):
     """An oversized BYTEA row raises MemoryLimitExceededError
     BEFORE the bytes ever reach Python. Post-013 the SQL
@@ -335,6 +348,7 @@ def test_bytea_oversize_raises_at_dispatch(monkeypatch):
     assert err.stage == "result_blob_oversize"
 
 
+@pytest.mark.skip(reason="BYTEA result payloads removed; see fail-closed storage_key contract")
 def test_bytea_preflight_does_not_touch_data_field(monkeypatch):
     """013 contract: the loader's oversize decision is driven by
     ``data_size`` from the SQL projection, NOT by ``len(data)``.
@@ -381,6 +395,7 @@ def test_bytea_preflight_does_not_touch_data_field(monkeypatch):
     assert exc_info.value.limit_bytes == 50
 
 
+@pytest.mark.skip(reason="BYTEA result payloads removed; SQL now selects metadata only")
 def test_bytea_preflight_sql_carries_length_and_case(monkeypatch):
     """013 wire-level contract: the SQL fired by the loader MUST
     contain the ``length(data)`` projection AND a CASE that NULLs
@@ -423,6 +438,7 @@ def test_bytea_preflight_sql_carries_length_and_case(monkeypatch):
     assert captured["params"][0] == 12345
 
 
+@pytest.mark.skip(reason="BYTEA result payloads removed; object storage is mandatory")
 def test_bytea_under_cap_returns_normally(monkeypatch):
     """Sanity: BYTEA payloads under the cap pass through unchanged.
     Production SQL CASE returns the actual ``data`` and the

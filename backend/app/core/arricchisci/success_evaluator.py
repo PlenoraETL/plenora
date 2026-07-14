@@ -14,7 +14,7 @@ class SuccessEvaluation:
     error_message: str | None = None
 
 
-def success_config_from_api_config(api_config: Mapping[str, Any] | None) -> dict[str, Any]:
+def success_config_from_api_config(api_config: Mapping[str, Any] | None) -> Mapping[str, Any]:
     """Read success evaluation config from top-level or response config."""
 
     cfg = dict(api_config or {})

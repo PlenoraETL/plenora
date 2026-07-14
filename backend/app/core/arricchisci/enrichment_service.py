@@ -32,7 +32,7 @@ from app.core.arricchisci._rate_limiter import (
 from app.shared.connections.oauth import (
     prepare_headers as _shared_prepare_headers,
 )
-from app.core.security.outbound_url import validate_external_url
+from app.shared.security.outbound_url import validate_external_url
 from app.observability.log_sanitization import (
     sanitize_for_log,
 )

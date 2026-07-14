@@ -66,6 +66,22 @@ def read_vector_bytes(
     return pyogrio.read_dataframe(data, layer=layer, columns=columns)
 
 
+def read_vector_stream(
+    stream: BinaryIO,
+    *,
+    layer: Optional[str] = None,
+    columns: Optional[list[str]] = None,
+) -> Any:
+    """Read a vector dataset from a seekable stream inside the I/O boundary."""
+    import pyogrio
+
+    stream.seek(0)
+    try:
+        return pyogrio.read_dataframe(stream, layer=layer, columns=columns)
+    finally:
+        stream.seek(0)
+
+
 def write_vector_bytes(
     gdf: Any,
     *,
@@ -176,6 +192,7 @@ __all__ = [
     "list_vector_layers",
     "list_vector_layers_stream",
     "read_vector_bytes",
+    "read_vector_stream",
     "write_shapefile_zip_bytes",
     "write_vector_bytes",
 ]

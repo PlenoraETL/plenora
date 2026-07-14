@@ -75,6 +75,7 @@ def test_all_prefixes_matches_declared_constants():
         storage_layout.INTERMEDIATE_PREFIX,
         storage_layout.IMDF_BUNDLES_PREFIX,
         storage_layout.ESEGUIBILI_OUTPUTS_PREFIX,
+        storage_layout.PREVIEWS_PREFIX,
     }
     assert declared == set(storage_layout.ALL_PREFIXES)
 

@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, MutableMapping, Optional
 
 import requests
 from requests.structures import CaseInsensitiveDict
 from urllib.parse import urljoin, urlparse
 
-from app.core.security.outbound_url import resolve_external_url, validate_external_url
+from app.shared.security.outbound_url import resolve_external_url, validate_external_url
 from app.infrastructure.http.session import build_pinned_session, get_shared_session
 
 
@@ -140,7 +140,7 @@ class HttpExecutor:
                 # DNS-pinned branch above.
                 validate_external_url(url)
 
-        kwargs: dict[str, Any] = {
+        kwargs: MutableMapping[str, Any] = {
             "headers": headers,
             "timeout": spec.timeout,
             "allow_redirects": False,
@@ -174,7 +174,7 @@ class HttpExecutor:
         return dict(spec.params or {})
 
     @classmethod
-    def _encoded_body_kwargs(cls, spec: RequestSpec) -> dict[str, Any]:
+    def _encoded_body_kwargs(cls, spec: RequestSpec) -> Mapping[str, Any]:
         body_type = normalize_body_type(spec.body_type)
         if body_type == "none":
             return {"params": dict(spec.params or {})}

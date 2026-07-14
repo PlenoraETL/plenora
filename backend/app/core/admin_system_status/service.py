@@ -347,7 +347,7 @@ def _disk_usage_probe_path(data_dir: Path) -> Path:
     """
     try:
         resolved = data_dir.expanduser().resolve(strict=False)
-    except Exception:
+    except (OSError, RuntimeError):
         resolved = data_dir
 
     for candidate in (resolved, *resolved.parents):
@@ -437,7 +437,7 @@ def get_host_resources() -> AdminStatusBlock:
         # Path/settings). Diagnostica enriched per ridiagnosi rapida
         try:
             cwd_str = str(Path.cwd())
-        except Exception:
+        except OSError:
             cwd_str = "<unavailable>"
         # Qualified type: alcune eccezioni famose hanno __name__ generico
         # es. struct.error.__name__ == 'error'), che da solo non aiuta

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping
 
-import pandas as pd
-
-from app.core.dataframes.frame_copy import copy_frame_for_update
+from app.core.dataframes.frame_copy import (
+    copy_frame_for_update,
+    is_string_like_series,
+)
 from app.core.dataframes.ports import FrameLike
 from app.utils.logger import get_logger
 
@@ -14,7 +15,7 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-def _node_config(node: Any) -> dict[str, Any]:
+def _node_config(node: Any) -> Mapping[str, Any]:
     direct = getattr(node, "config", None)
     if isinstance(direct, dict) and direct:
         return direct
@@ -115,7 +116,7 @@ def compact_owned_join_string_columns(
         for column in result.columns:
             if column in keys or result[column].dtype != object:
                 continue
-            if pd.api.types.infer_dtype(result[column], skipna=True) != "string":
+            if not is_string_like_series(result[column]):
                 continue
             result[column] = result[column].astype("string[pyarrow]")
             frame_converted.append(str(column))

@@ -15,7 +15,7 @@ from app.core.connections.rest_sink import (
     RestSinkHeader,
     RestSinkMethod,
 )
-from app.core.security.outbound_url import validate_external_url
+from app.shared.security.outbound_url import validate_external_url
 
 
 _HEADER_NAME_PATTERN = re.compile(r"^[A-Za-z0-9!#$%&'*+.^_`|~-]+$")

@@ -5,7 +5,7 @@ Keeps transformation behavior isolated from orchestration callers.
 """
 
 import time as _time
-from typing import Any, List, Optional
+from typing import Any, List, MutableMapping, Optional
 
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
@@ -539,7 +539,7 @@ class ManipolaExecutor:
                 configured_preview_cap = 10_000
             preview_source_cap = max(int(limit) + 1, configured_preview_cap, 1)
             source_truncated = False
-            source_row_counts: dict[str, int] = {}
+            source_row_counts: MutableMapping[str, int] = {}
             for source_id, source_df in list(dataframes.items()):
                 source_rows = int(len(source_df))
                 source_row_counts[source_id] = source_rows
@@ -1059,7 +1059,7 @@ class ManipolaExecutor:
         # divergono
         try:
             _multi_cap = int(settings.get("MULTI_JOIN_MAX_OUTPUT_ROWS", 50_000_000))
-        except Exception:
+        except (AttributeError, TypeError, ValueError):
             # Contesto pure-test senza Settings: guard off
             _multi_cap = 0
 

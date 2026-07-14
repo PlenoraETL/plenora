@@ -10,6 +10,7 @@ import pandas as pd
 
 from app.core.dataframes import frame_io as frame_io_module
 from app.core.dataframes import geometry_serialization as geometry_serialization_module
+from app.core.io import geospatial as geospatial_io_module
 from app.core.dataframes.ports import (
     DataLoaderProtocol,
     FrameIOEngine,
@@ -119,9 +120,7 @@ def load_by_format_stream(
     if fmt == "parquet":
         return pd.read_parquet(stream, dtype_backend="numpy_nullable"), None
     if fmt in _GEOSPATIAL_FORMATS or fmt in _ZIP_LIKE_FORMATS:
-        import pyogrio
-
-        gdf = pyogrio.read_dataframe(stream, layer=layer)
+        gdf = geospatial_io_module.read_vector_stream(stream, layer=layer)
         df = pd.DataFrame(gdf)
         geom_col = getattr(gdf, "geometry", None)
         geom_col_name = geom_col.name if geom_col is not None else None
