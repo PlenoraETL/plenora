@@ -31,7 +31,7 @@ class _FakeStorage:
         return {"body": BytesIO(self.objects[key]), "size": len(self.objects[key])}
 
     def list_objects(self, prefix: str) -> list[dict[str, object]]:
-        return list(self.list_response)
+        return [item for item in self.list_response if str(item["key"]).startswith(prefix)]
 
     def delete(self, key: str) -> None:
         self.deleted.append(key)
@@ -54,14 +54,17 @@ def test_save_and_load_task_owner_uses_object_storage_sidecar(fake_storage, tmp_
         "task-1",
         "exe-1",
         "user-1",
+        group_id="g1",
         outputs_dir=tmp_path,
     )
 
-    key = "eseguibili-outputs/task-1/__owner.json"
+    key = "tenants/g1/eseguibili-outputs/task-1/__owner.json"
     assert key in fake_storage.objects
     assert not (tmp_path / ".owners" / "task-1.json").exists()
 
-    owner = output_store.load_task_owner("task-1", outputs_dir=tmp_path)
+    owner = output_store.load_task_owner(
+        "task-1", group_id="g1", outputs_dir=tmp_path,
+    )
 
     assert owner is not None
     assert owner["task_id"] == "task-1"
@@ -89,6 +92,7 @@ def test_save_task_owner_fails_closed_when_object_storage_unavailable(
             "task-1",
             "exe-1",
             "user-1",
+            group_id="g1",
             outputs_dir=tmp_path,
         )
 
@@ -111,7 +115,7 @@ def test_find_output_keys_filters_owner_sidecar(fake_storage):
         {"key": "eseguibili-outputs/task-1/out.csv", "size": 5},
     ]
 
-    assert output_store.find_output_keys("task-1") == [
+    assert output_store.find_output_keys("task-1", group_id="g1") == [
         "eseguibili-outputs/task-1/out.csv",
     ]
 
@@ -127,16 +131,16 @@ def test_delete_task_outputs_cleans_owner_even_if_storage_delete_fails(
     monkeypatch.setattr(
         storage,
         "delete_by_task",
-        lambda task_id: (_ for _ in ()).throw(RuntimeError("storage down")),
+        lambda task_id, **kwargs: (_ for _ in ()).throw(RuntimeError("storage down")),
     )
     monkeypatch.setattr(
         output_store,
         "delete_task_owner",
-        lambda task_id: deleted_owner.append(task_id),
+        lambda task_id, **kwargs: deleted_owner.append(task_id),
     )
 
     with pytest.raises(RuntimeError, match="storage down"):
-        output_store.delete_task_outputs("task-1")
+        output_store.delete_task_outputs("task-1", group_id="g1")
 
     assert deleted_owner == ["task-1"]
 
@@ -151,7 +155,9 @@ def test_invalid_remote_owner_metadata_fails_closed(fake_storage, tmp_path):
         encoding="utf-8",
     )
 
-    assert output_store.load_task_owner("task-1", outputs_dir=tmp_path) is None
+    assert output_store.load_task_owner(
+        "task-1", group_id="g1", outputs_dir=tmp_path,
+    ) is None
 
 
 def test_purge_expired_local_outputs_removes_only_expired(fake_storage, tmp_path):

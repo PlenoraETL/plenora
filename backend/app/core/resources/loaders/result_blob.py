@@ -21,6 +21,8 @@ from app.core.resources.loaders._shared import (
 from app.core.resources.stores.result_blob import (
     fetch_result_blob_lookup_row,
 )
+from app.core.io.tenant_namespace import assert_tenant_key
+from app.shared.resources.storage_layout import RESULTS_PREFIX
 
 
 # bound the previously unbounded `b"".join(list(stream["body"]))` read
@@ -59,12 +61,14 @@ class ResultBlobLookupRow:
 
     storage_key: Optional[str]
     project_id: Optional[str]
+    group_id: Optional[str]
 
     @classmethod
     def from_mapping(cls, row: Mapping[str, object]) -> "ResultBlobLookupRow":
         return cls(
             storage_key=_optional_str(row.get("storage_key")),
             project_id=_optional_str(row.get("project_id")),
+            group_id=_optional_str(row.get("group_id")),
         )
 
 
@@ -132,7 +136,7 @@ def _fetch_row(
         clauses.append("project_id = %s")
         where_params.append(project_id_filter)
 
-    sql = "SELECT storage_key, project_id FROM results WHERE " + " AND ".join(clauses)
+    sql = "SELECT storage_key, project_id, group_id FROM results WHERE " + " AND ".join(clauses)
     row = fetch_result_blob_lookup_row(sql, tuple(where_params))
     if row is None:
         return None
@@ -193,6 +197,14 @@ def _dispatch_by_id(
     storage_key = row.storage_key
     if not storage_key:
         raise RuntimeError(f"Result {result_id} senza storage_key")
+    if not row.group_id:
+        raise RuntimeError(f"Result {result_id} senza group_id")
+    assert_tenant_key(
+        storage_key,
+        expected_group_id=row.group_id,
+        expected_domain=RESULTS_PREFIX,
+        allow_legacy=True,
+    )
     data = _download_object_storage(storage_key)
     duration_ms = round((time.monotonic() - _t0) * 1000, 1)
     size = len(data) if data else 0

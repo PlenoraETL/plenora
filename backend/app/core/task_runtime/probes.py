@@ -7,11 +7,20 @@ usata dal readiness probe (/ready).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 
 class RabbitmqClientUnavailable(RuntimeError):
     """Raised when the RabbitMQ client library (pika) cannot be imported."""
+
+
+@dataclass(frozen=True)
+class RabbitmqQueueStats:
+    name: str
+    exists: bool
+    messages: int
+    consumers: int
 
 
 def _pika_module() -> Any:
@@ -44,9 +53,60 @@ class RabbitmqRuntimePort:
         finally:
             try:
                 connection.close()
-            except Exception:
+            except _pika.exceptions.AMQPError:
                 # La chiusura best-effort non deve alterare l'esito del ping.
                 pass
+
+    def queue_stats(
+        self,
+        queue_names: tuple[str, ...],
+        *,
+        timeout: int,
+    ) -> list[RabbitmqQueueStats]:
+        """Inspect queues through portable AMQP passive declarations."""
+        _pika = _pika_module()
+        params = _pika.URLParameters(self._broker_url)
+        params.socket_timeout = timeout
+        params.blocked_connection_timeout = timeout
+        connection = _pika.BlockingConnection(params)
+        stats: list[RabbitmqQueueStats] = []
+        try:
+            for name in queue_names:
+                channel = connection.channel()
+                try:
+                    result = channel.queue_declare(queue=name, passive=True)
+                    method = result.method
+                    stats.append(
+                        RabbitmqQueueStats(
+                            name=name,
+                            exists=True,
+                            messages=int(method.message_count),
+                            consumers=int(method.consumer_count),
+                        )
+                    )
+                except _pika.exceptions.ChannelClosedByBroker as exc:
+                    if int(getattr(exc, "reply_code", 0) or 0) != 404:
+                        raise
+                    stats.append(
+                        RabbitmqQueueStats(
+                            name=name,
+                            exists=False,
+                            messages=0,
+                            consumers=0,
+                        )
+                    )
+                finally:
+                    try:
+                        if channel.is_open:
+                            channel.close()
+                    except _pika.exceptions.AMQPError:
+                        pass
+        finally:
+            try:
+                connection.close()
+            except _pika.exceptions.AMQPError:
+                pass
+        return stats
 
 
 def rabbitmq_runtime_port(broker_url: str) -> RabbitmqRuntimePort:
@@ -59,9 +119,23 @@ def ping_rabbitmq_broker(broker_url: str, *, timeout: int) -> bool:
     return rabbitmq_runtime_port(broker_url).ping(timeout=timeout)
 
 
+def inspect_rabbitmq_queues(
+    broker_url: str,
+    queue_names: tuple[str, ...],
+    *,
+    timeout: int,
+) -> list[RabbitmqQueueStats]:
+    return rabbitmq_runtime_port(broker_url).queue_stats(
+        queue_names,
+        timeout=timeout,
+    )
+
+
 __all__ = [
     "RabbitmqClientUnavailable",
+    "RabbitmqQueueStats",
     "RabbitmqRuntimePort",
+    "inspect_rabbitmq_queues",
     "ping_rabbitmq_broker",
     "rabbitmq_runtime_port",
 ]

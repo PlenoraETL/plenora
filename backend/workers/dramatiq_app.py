@@ -12,17 +12,27 @@ from __future__ import annotations
 
 import logging
 import os
+import socket
 import threading
 from types import SimpleNamespace
+from uuid import uuid4
 
 import dramatiq
 from dramatiq.brokers.rabbitmq import RabbitmqBroker
-from dramatiq.middleware import CurrentMessage, Middleware
+from dramatiq.middleware import CurrentMessage, Middleware, SkipMessage
 
 from app.config import settings
 from app.config_env_loader import load_backend_dotenv
 from app.core.orchestrator.task_progress import TaskRevoked
 from app.core.resources.exceptions import MemoryLimitExceededError
+from app.core.task_runtime.runtime_leases import (
+    claim_task,
+    finish_task_claim,
+    heartbeat_task_claims,
+    heartbeat_worker,
+    register_worker,
+    unregister_worker,
+)
 from app.utils.logger import get_logger, get_request_id, set_request_id
 
 # Bare-metal (Windows/Linux senza compose): DRAMATIQ_BROKER_URL vive nel
@@ -258,6 +268,155 @@ class _BootstrapMiddleware(Middleware):
         _bootstrap_worker_process(force_reset=True)
 
 
+class _WorkerLeaseMiddleware(Middleware):
+    """Publish worker/task leases through PostgreSQL on every platform."""
+
+    def __init__(self) -> None:
+        self._worker_id: str | None = None
+        self._role: str | None = None
+        self._queues: tuple[str, ...] = ()
+        self._active_task_ids: set[str] = set()
+        self._active_lock = threading.Lock()
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    @staticmethod
+    def _worker_role(queues: tuple[str, ...]) -> str:
+        if settings.TASK_QUEUE_DATA_PLANE in queues:
+            return "data-plane"
+        return "control-plane"
+
+    def after_worker_boot(self, broker: object, worker: object) -> None:
+        whitelist = getattr(worker, "consumer_whitelist", None) or ()
+        self._queues = tuple(sorted(str(queue) for queue in whitelist))
+        self._role = self._worker_role(self._queues)
+        self._worker_id = (
+            f"{socket.gethostname()}:{os.getpid()}:{uuid4().hex[:12]}"
+        )
+        register_worker(
+            worker_id=self._worker_id,
+            role=self._role,  # type: ignore[arg-type]
+            queues=self._queues,
+            hostname=socket.gethostname(),
+            pid=os.getpid(),
+        )
+        self._stop.clear()
+        self._thread = threading.Thread(
+            target=self._heartbeat_loop,
+            name=f"worker-lease-{self._role}",
+            daemon=True,
+        )
+        self._thread.start()
+
+    def _heartbeat_loop(self) -> None:
+        try:
+            interval = max(
+                1,
+                int(settings.get("WORKER_HEARTBEAT_INTERVAL_SECONDS", 10)),
+            )
+            lease_seconds = max(
+                interval * 3,
+                int(settings.get("TASK_EXECUTION_LEASE_SECONDS", 45)),
+            )
+        except (TypeError, ValueError):
+            interval = 10
+            lease_seconds = 45
+
+        while not self._stop.wait(interval):
+            worker_id = self._worker_id
+            if not worker_id:
+                return
+            try:
+                heartbeat_worker(worker_id)
+                with self._active_lock:
+                    active = tuple(self._active_task_ids)
+                heartbeat_task_claims(
+                    worker_id=worker_id,
+                    task_ids=active,
+                    lease_seconds=lease_seconds,
+                )
+            except Exception:
+                logger.exception(
+                    "[WORKER-LEASE] heartbeat fallito worker_id=%s",
+                    worker_id,
+                )
+
+    def before_process_message(self, broker: object, message: object) -> None:
+        worker_id = self._worker_id
+        if not worker_id:
+            raise RuntimeError("Worker lease non inizializzato")
+        task_id = str(getattr(message, "message_id", "") or "")
+        actor_name = str(getattr(message, "actor_name", "") or "")
+        if not task_id or not actor_name:
+            raise RuntimeError("Messaggio Dramatiq senza task_id/actor_name")
+        try:
+            lease_seconds = max(
+                1,
+                int(settings.get("TASK_EXECUTION_LEASE_SECONDS", 45)),
+            )
+        except (TypeError, ValueError):
+            lease_seconds = 45
+        outcome = claim_task(
+            task_id=task_id,
+            actor_name=actor_name,
+            worker_id=worker_id,
+            lease_seconds=lease_seconds,
+        )
+        if outcome != "acquired":
+            logger.warning(
+                "[TASK-LEASE] duplicate task skipped task_id=%s actor=%s "
+                "outcome=%s",
+                task_id,
+                actor_name,
+                outcome,
+            )
+            raise SkipMessage()
+        with self._active_lock:
+            self._active_task_ids.add(task_id)
+
+    def after_process_message(
+        self,
+        broker: object,
+        message: object,
+        *,
+        result: object = None,
+        exception: object = None,
+    ) -> None:
+        task_id = str(getattr(message, "message_id", "") or "")
+        worker_id = self._worker_id
+        if not task_id or not worker_id:
+            return
+        with self._active_lock:
+            self._active_task_ids.discard(task_id)
+        try:
+            finish_task_claim(
+                task_id=task_id,
+                worker_id=worker_id,
+                succeeded=exception is None,
+            )
+        except Exception:
+            logger.exception(
+                "[TASK-LEASE] finalize claim fallito task_id=%s",
+                task_id,
+            )
+
+    def before_worker_shutdown(self, broker: object, worker: object) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+        worker_id = self._worker_id
+        if not worker_id:
+            return
+        try:
+            unregister_worker(worker_id)
+        except Exception:
+            logger.warning(
+                "[WORKER-LEASE] unregister fallito worker_id=%s",
+                worker_id,
+                exc_info=True,
+            )
+
+
 class _RequestIdMiddleware(Middleware):
     """Propaga il correlation id (X-Request-ID) attraverso il broker.
 
@@ -315,6 +474,8 @@ broker = RabbitmqBroker(url=broker_url())
 # Bootstrap del processo worker (4-step su boundary app.bootstrap): scatta
 # a worker_boot, rimpiazzo del signal Celery worker_process_init.
 broker.add_middleware(_BootstrapMiddleware())
+# Cross-platform worker presence, task leases and message-id deduplication.
+broker.add_middleware(_WorkerLeaseMiddleware())
 # CurrentMessage espone il messaggio in esecuzione all'actor: e' il
 # rimpiazzo Dramatiq di `self.request.id` (bind=True) di Celery, usato
 # dai task che mettono il task_id nel result payload.
@@ -522,6 +683,10 @@ def run_manual_backup_task(*, owner_token: str) -> dict:
 )
 def carica_execute(**kwargs: object) -> object:
     """CARICA isolato in un processo data-plane usa-e-getta."""
+    task_kwargs = dict(kwargs)
+    message_id = current_message_id()
+    if message_id:
+        task_kwargs.setdefault("run_id", message_id)
     execution_mode = _data_plane_execution_mode()
     if execution_mode == "subprocess":
         from workers.data_plane_subprocess import execute_task_in_subprocess
@@ -529,7 +694,7 @@ def carica_execute(**kwargs: object) -> object:
         return execute_task_in_subprocess(
             task_name="carica.execute",
             task_id=current_message_id() or "",
-            kwargs=dict(kwargs),
+            kwargs=task_kwargs,
             timeout_seconds=_data_plane_child_timeout_seconds(),
             memory_limit_bytes=_data_plane_child_memory_limit_bytes(),
             request_id=get_request_id(),
@@ -542,7 +707,7 @@ def carica_execute(**kwargs: object) -> object:
     from workers.tasks.carica_task import execute_carica_task
 
     return _invoke_task_body(
-        execute_carica_task, name="carica.execute", kwargs=kwargs
+        execute_carica_task, name="carica.execute", kwargs=task_kwargs
     )
 
 
@@ -630,6 +795,10 @@ def pipeline_preview(**kwargs: object) -> object:
 )
 def execute_enrichment(**kwargs: object) -> object:
     """ARRICCHISCI isolato in un processo data-plane usa-e-getta."""
+    task_kwargs = dict(kwargs)
+    message_id = current_message_id()
+    if message_id:
+        task_kwargs.setdefault("run_id", message_id)
     execution_mode = _data_plane_execution_mode()
     if execution_mode == "subprocess":
         from workers.data_plane_subprocess import execute_task_in_subprocess
@@ -637,7 +806,7 @@ def execute_enrichment(**kwargs: object) -> object:
         return execute_task_in_subprocess(
             task_name="tasks.execute_enrichment",
             task_id=current_message_id() or "",
-            kwargs=dict(kwargs),
+            kwargs=task_kwargs,
             timeout_seconds=_data_plane_child_timeout_seconds(),
             memory_limit_bytes=_data_plane_child_memory_limit_bytes(),
             request_id=get_request_id(),
@@ -651,7 +820,9 @@ def execute_enrichment(**kwargs: object) -> object:
     from workers.tasks.enrichment_task import execute_enrichment_task
 
     return _invoke_task_body(
-        execute_enrichment_task, name="tasks.execute_enrichment", kwargs=kwargs
+        execute_enrichment_task,
+        name="tasks.execute_enrichment",
+        kwargs=task_kwargs,
     )
 
 

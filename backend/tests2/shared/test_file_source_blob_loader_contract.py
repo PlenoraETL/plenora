@@ -32,7 +32,9 @@ def _fake_row(row):
 def test_bytes_mode_filters_tenant_and_downloads_object():
     from app.core.resources.loaders.file_source_blob import FileSourceBlobLoader
 
-    captured, fetch = _fake_row({"storage_key": "file-sources/fs1/a.csv"})
+    captured, fetch = _fake_row(
+        {"storage_key": "file-sources/fs1/a.csv", "group_id": "g1"}
+    )
     with patch("app.db.pg_connection.fetchone", fetch), patch(
         "app.core.resources.loaders.file_source_blob._download_object_storage",
         return_value=b"a,b\n1,2\n",
@@ -52,7 +54,9 @@ class _Storage:
 def test_stream_mode_is_lazy_and_bounded():
     from app.core.resources.loaders.file_source_blob import FileSourceBlobLoader
 
-    _, fetch = _fake_row({"storage_key": "file-sources/fs1/a.bin"})
+    _, fetch = _fake_row(
+        {"storage_key": "file-sources/fs1/a.bin", "group_id": "g1"}
+    )
     with patch("app.db.pg_connection.fetchone", fetch), patch(
         "app.infrastructure.storage.cloud_backends.get_runtime_object_storage",
         return_value=_Storage(),
@@ -72,7 +76,7 @@ def test_missing_row_and_missing_storage_key_fail_closed():
         with pytest.raises(FileNotFoundError, match="not found"):
             FileSourceBlobLoader().load(_ref(), mode="bytes")
 
-    _, corrupt = _fake_row({"storage_key": None})
+    _, corrupt = _fake_row({"storage_key": None, "group_id": "g1"})
     with patch("app.db.pg_connection.fetchone", corrupt):
         with pytest.raises(RuntimeError, match="senza storage_key"):
             FileSourceBlobLoader().load(_ref(), mode="bytes")

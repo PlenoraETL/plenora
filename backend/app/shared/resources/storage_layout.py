@@ -9,6 +9,11 @@ from __future__ import annotations
 from typing import Tuple
 
 
+# Root canonica di tutti i payload appartenenti a un tenant.
+# Layout: `tenants/{group_id}/{domain}/...`.
+TENANTS_PREFIX = "tenants"
+
+
 # Pipeline result finali user-visible (`results.storage_key`
 # Layout: `results/{project_id}/{result_id}.bin`
 RESULTS_PREFIX = "results"
@@ -51,6 +56,11 @@ ALL_PREFIXES: Tuple[str, ...] = (
     ESEGUIBILI_OUTPUTS_PREFIX,
     PREVIEWS_PREFIX,
 )
+
+# Domini ammessi sotto `tenants/{group_id}`. Tenuto separato da
+# `ALL_PREFIXES`, che descrive anche le chiavi legacy ancora leggibili durante
+# la migrazione.
+TENANT_DOMAINS: Tuple[str, ...] = ALL_PREFIXES
 
 
 _VALID_PREFIX_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-")

@@ -282,6 +282,8 @@ def test_gather_readiness_includes_beat_heartbeat_key():
     # Stub all 8 checks to OK; we only assert the keyset shape.
     with patch.object(h, "check_postgres", return_value=(True, "ok")), \
          patch.object(h, "check_broker", return_value=(True, "ok")), \
+         patch.object(h, "check_task_workers", return_value=(True, "ok")), \
+         patch.object(h, "check_task_queues", return_value=(True, "ok")), \
          patch.object(h, "check_pool_headroom", return_value=(True, "ok")), \
          patch.object(h, "check_migrations_aligned", return_value=(True, "ok")), \
          patch.object(h, "check_object_storage", return_value=(True, "ok")), \
@@ -295,8 +297,8 @@ def test_gather_readiness_includes_beat_heartbeat_key():
         "ok": True,
         "detail": "ok",
     }
-    # Total keyset is exactly 8.
-    assert len(payload.body["checks"]) == 8
+    # Total keyset is exactly 10.
+    assert len(payload.body["checks"]) == 10
 
 
 def test_gather_readiness_returns_503_on_stale_beat():
@@ -307,6 +309,8 @@ def test_gather_readiness_returns_503_on_stale_beat():
 
     with patch.object(h, "check_postgres", return_value=(True, "ok")), \
          patch.object(h, "check_broker", return_value=(True, "ok")), \
+         patch.object(h, "check_task_workers", return_value=(True, "ok")), \
+         patch.object(h, "check_task_queues", return_value=(True, "ok")), \
          patch.object(h, "check_pool_headroom", return_value=(True, "ok")), \
          patch.object(h, "check_migrations_aligned", return_value=(True, "ok")), \
          patch.object(h, "check_object_storage", return_value=(True, "ok")), \
@@ -346,6 +350,8 @@ def test_gather_readiness_default_disabled_keeps_200_without_beat():
 
     with patch.object(h, "check_postgres", return_value=(True, "ok")), \
          patch.object(h, "check_broker", return_value=(True, "ok")), \
+         patch.object(h, "check_task_workers", return_value=(True, "ok")), \
+         patch.object(h, "check_task_queues", return_value=(True, "ok")), \
          patch.object(h, "check_pool_headroom", return_value=(True, "ok")), \
          patch.object(h, "check_migrations_aligned", return_value=(True, "ok")), \
          patch.object(h, "check_object_storage", return_value=(True, "ok")), \

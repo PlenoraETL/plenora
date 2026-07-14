@@ -330,18 +330,20 @@ def test_dispatch_records_upload_intent_before_upload(monkeypatch):
 
     log = MagicMock()
     out = file_storage_dispatch.dispatch_blob_storage(
-        "file-1", b"x" * 2048, "f.csv", logger=log,
+        "file-1", b"x" * 2048, "f.csv", group_id="g1", logger=log,
     )
 
     assert len(record_calls) == 1
     assert record_calls[0]["domain"] == "file_source"
-    assert record_calls[0]["storage_key"].startswith("file-sources/file-1/")
+    assert record_calls[0]["storage_key"].startswith(
+        "tenants/g1/file-sources/file-1/"
+    )
     assert record_calls[0]["reason"] == "upload_intent_pre_dispatch"
     assert len(upload_calls) == 1
     # On upload success, mark_done is NOT called — reconciler closes it.
     assert mark_done_calls == []
     assert "data" not in out
-    assert out["storage_key"].startswith("file-sources/file-1/")
+    assert out["storage_key"].startswith("tenants/g1/file-sources/file-1/")
 
 
 def test_dispatch_marks_failed_when_upload_fails(monkeypatch):
@@ -380,7 +382,7 @@ def test_dispatch_marks_failed_when_upload_fails(monkeypatch):
     log = MagicMock()
     with pytest.raises(RuntimeError, match="S3 down"):
         file_storage_dispatch.dispatch_blob_storage(
-            "file-2", b"x" * 2048, "f.csv", logger=log,
+            "file-2", b"x" * 2048, "f.csv", group_id="g1", logger=log,
         )
 
     assert mark_failed_calls == [
@@ -418,13 +420,13 @@ def test_dispatch_ignores_legacy_db_policy_and_uses_object_storage(monkeypatch):
 
     log = MagicMock()
     out = file_storage_dispatch.dispatch_blob_storage(
-        "file-3", b"data", "f.csv", logger=log,
+        "file-3", b"data", "f.csv", group_id="g1", logger=log,
     )
 
     assert len(record_calls) == 1
     assert upload_calls == [(b"data", out["storage_key"])]
     assert "data" not in out
-    assert out["storage_key"].startswith("file-sources/file-3/")
+    assert out["storage_key"].startswith("tenants/g1/file-sources/file-3/")
 
 
 def test_dispatch_proceeds_when_record_upload_intent_returns_none(monkeypatch):
@@ -463,12 +465,12 @@ def test_dispatch_proceeds_when_record_upload_intent_returns_none(monkeypatch):
 
     log = MagicMock()
     out = file_storage_dispatch.dispatch_blob_storage(
-        "file-4", b"x" * 2048, "f.csv", logger=log,
+        "file-4", b"x" * 2048, "f.csv", group_id="g1", logger=log,
     )
 
     assert len(upload_calls) == 1
     assert mark_done_calls == []
-    assert out["storage_key"].startswith("file-sources/file-4/")
+    assert out["storage_key"].startswith("tenants/g1/file-sources/file-4/")
 
 
 # Beat hook _reconcile_storage upload_intent branch

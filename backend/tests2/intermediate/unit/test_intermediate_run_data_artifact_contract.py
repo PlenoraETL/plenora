@@ -244,7 +244,7 @@ def test_full_artifact_complete_sanitizes_nan_and_inf(superadmin_user):
         "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         return_value=_node_meta(
             persistence_mode="full_artifact",
-            artifact_uri="some/key/data.parquet",
+            artifact_uri="intermediate/some/key/data.parquet",
             artifact_status="complete",
             artifact_format="parquet",
             row_count=3,
@@ -368,7 +368,7 @@ def test_full_artifact_with_storage_disabled_returns_operational_message(
         "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         return_value=_node_meta(
             persistence_mode="full_artifact",
-            artifact_uri="key/data.parquet",
+            artifact_uri="intermediate/key/data.parquet",
             artifact_status="complete",
             artifact_format="parquet",
             row_count=100,
@@ -404,7 +404,7 @@ def test_full_artifact_default_limit_is_100(superadmin_user):
         "app.core.intermediate.router.node_snapshots_db.get_node_meta",
         return_value=_node_meta(
             persistence_mode="full_artifact",
-            artifact_uri="k/data.parquet",
+            artifact_uri="intermediate/k/data.parquet",
             artifact_status="complete",
             artifact_format="parquet",
             row_count=500,

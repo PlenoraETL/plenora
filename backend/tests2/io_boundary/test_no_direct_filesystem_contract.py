@@ -396,6 +396,10 @@ _BOUNDARY_FROZEN_SNAPSHOT: dict[str, int] = {
     # `open(target, "wb")` dentro `write_local_bytes` (1) e
     # `write_local_chunks` (1, RAM-B1 streaming write), by-design.
     "app/core/io/local_filesystem.py": 2,
+    # Worker runtime boundary (2026-07-14): temp directory usa-e-getta,
+    # scrittura dei due pseudo-file cgroup v2 e upload streaming da path.
+    # Nessun caller applicativo accede direttamente al filesystem.
+    "app/core/io/runtime_filesystem.py": 3,
 }
 
 

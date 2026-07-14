@@ -29,6 +29,8 @@ _TASK_RUNTIME_PROBES_PY = (
 _READINESS_CHECKS_OK = {
     "check_postgres": (True, "ok"),
     "check_broker": (True, "ok"),
+    "check_task_workers": (True, "ok"),
+    "check_task_queues": (True, "ok"),
     "check_pool_headroom": (True, "ok"),
     "check_migrations_aligned": (True, "ok"),
     "check_object_storage": (True, "ok"),
@@ -40,6 +42,8 @@ _READINESS_CHECKS_OK = {
 _READINESS_EXPECTED_ORDER = [
     "postgres",
     "broker",
+    "task_workers",
+    "task_queues",
     "pool_headroom",
     "migrations",
     "object_storage",
@@ -184,7 +188,7 @@ def test_beat_heartbeat_default_threshold_skip_returns_true():
 # BE_INSTALLATION_AUDIT.md).
 
 
-def test_gather_readiness_keyset_is_exactly_8_in_canonical_order():
+def test_gather_readiness_keyset_is_exactly_10_in_canonical_order():
     """Adding a 9th check MUST be paired with an audit update.
     This guard prevents silent expansion of the readiness surface.
     The 8 keys must also keep their stable insertion order.
@@ -202,10 +206,10 @@ def test_gather_readiness_keyset_is_exactly_8_in_canonical_order():
     with _patch_readiness_checks(h):
         payload = h.gather_readiness()
 
-    assert len(payload.body["checks"]) == 8, (
+    assert len(payload.body["checks"]) == 10, (
         f"Readiness check count regressed: got "
         f"{sorted(payload.body['checks'].keys())}. If you are adding a "
-        "9th check, see the audit guidance in the docstring above."
+        "11th check, see the audit guidance in the docstring above."
     )
 
     actual_order = list(payload.body["checks"].keys())

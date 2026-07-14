@@ -211,7 +211,11 @@ def test_object_storage_oversize_raises_without_consuming_full_iterator(
         lambda: fake_storage,
     )
     _, fake_fetch = fake_fetchone(
-        row={"data": None, "storage_key": "results/p/oversize.bin"}
+        row={
+            "data": None,
+            "storage_key": "results/p/oversize.bin",
+            "group_id": "g1",
+        }
     )
     monkeypatch.setattr("app.db.pg_connection.fetchone", fake_fetch)
 
@@ -247,7 +251,11 @@ def test_object_storage_under_cap_returns_full_bytes(monkeypatch):
         lambda: fake_storage,
     )
     _, fake_fetch = fake_fetchone(
-        row={"data": None, "storage_key": "results/p/r.bin"}
+        row={
+            "data": None,
+            "storage_key": "results/p/r.bin",
+            "group_id": "g1",
+        }
     )
     monkeypatch.setattr("app.db.pg_connection.fetchone", fake_fetch)
 

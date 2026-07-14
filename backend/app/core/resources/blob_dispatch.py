@@ -9,6 +9,7 @@ from typing_extensions import TypedDict
 from app.core.io import object_storage as cloud_backends
 from app.core.resources import storage_reconciliation as reconciliation
 from app.shared.resources.storage_layout import FILE_SOURCES_PREFIX
+from app.core.io.tenant_namespace import build_tenant_key
 from app.core.io.bounded_streams import stream_size
 
 
@@ -24,6 +25,7 @@ def dispatch_blob_storage(
     raw_data: Union[bytes, BinaryIO],
     filename: str,
     *,
+    group_id: str,
     logger: Any,
     storage_key_id: Optional[str] = None,
     size_bytes: Optional[int] = None,
@@ -35,7 +37,9 @@ def dispatch_blob_storage(
     )
     key_id = storage_key_id if storage_key_id is not None else file_id
     safe_filename = Path(str(filename)).name or "file.bin"
-    storage_key = f"{FILE_SOURCES_PREFIX}/{key_id}/{safe_filename}"
+    storage_key = build_tenant_key(
+        group_id, FILE_SOURCES_PREFIX, key_id, safe_filename,
+    )
 
     intent_id: Optional[str] = None
     try:

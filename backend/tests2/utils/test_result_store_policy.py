@@ -88,7 +88,7 @@ def test_db_policy_env_is_ignored_and_uploads(mock_db, stub_storage, monkeypatch
     assert len(mock_db) == 1
     saved = mock_db[0]
     assert "data" not in saved
-    assert saved["storage_key"] == "results/p1/res-pol.bin"
+    assert saved["storage_key"] == "tenants/grp-1/results/p1/res-pol.bin"
     assert len(stub_storage.uploads) == 1
 
 
@@ -123,12 +123,12 @@ def test_object_storage_policy_always_uploads(mock_db, stub_storage, monkeypatch
     assert len(stub_storage.uploads) == 1
     uploaded_data, uploaded_key = stub_storage.uploads[0]
     assert uploaded_data == payload
-    assert uploaded_key == "results/p1/res-pol.bin"
+    assert uploaded_key == "tenants/grp-1/results/p1/res-pol.bin"
 
     assert len(mock_db) == 1
     saved = mock_db[0]
     assert "data" not in saved
-    assert saved["storage_key"] == "results/p1/res-pol.bin"
+    assert saved["storage_key"] == "tenants/grp-1/results/p1/res-pol.bin"
 
 
 def test_object_storage_policy_ignores_threshold(mock_db, stub_storage, monkeypatch):
@@ -169,7 +169,7 @@ def test_hybrid_above_threshold_goes_to_storage(mock_db, stub_storage, monkeypat
         project_id="p1", data=payload, filename="f.bin", fmt="bin",
     )
     assert "data" not in mock_db[0]
-    assert mock_db[0]["storage_key"] == "results/p1/res-pol.bin"
+    assert mock_db[0]["storage_key"] == "tenants/grp-1/results/p1/res-pol.bin"
     assert len(stub_storage.uploads) == 1
 
 

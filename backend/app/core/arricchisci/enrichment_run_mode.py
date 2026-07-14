@@ -70,6 +70,7 @@ class EnrichmentRunMode:
     def persist_dataframe_result(
         self, *, project_id: str, task_id: str, final_df: Any,
         final_format: str, output_filename: str, final_filename: str,
+        group_id: str,
         source_names: Optional[Mapping[str, str]] = None,
     ) -> Tuple[Optional[str], Path]:
         """Persiste il DataFrame finale. Ritorna (result_id|None, saved_path).
@@ -120,7 +121,7 @@ class StandardRunMode(EnrichmentRunMode):
 
     def persist_dataframe_result(
         self, *, project_id, task_id, final_df, final_format, output_filename, final_filename,
-        source_names=None,
+        group_id, source_names=None,
     ):
         # Arricchisci standard: typed pipeline-result boundary (DB) + output_contract.
         saved = pipeline_result_module.save_pipeline_result_outcome(
@@ -183,7 +184,7 @@ class EseguibileRunMode(EnrichmentRunMode):
 
     def persist_dataframe_result(
         self, *, project_id, task_id, final_df, final_format, output_filename, final_filename,
-        source_names=None,
+        group_id, source_names=None,
     ):
         # Eseguibile: output DataFrame → object storage (S3) via streaming chunks.
         # Niente DB result/output_contract. result_id resta None (il frontend
@@ -199,6 +200,7 @@ class EseguibileRunMode(EnrichmentRunMode):
             task_id,
             storage_filename,
             dataframe_export_writer.dataframe_to_export_chunks(final_df, fmt_lower),
+            group_id=group_id,
         )
         logger.info(
             f"[Task {task_id}] Output eseguibile (df) su storage streaming: "

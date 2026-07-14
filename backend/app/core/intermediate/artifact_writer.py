@@ -15,6 +15,7 @@ from typing import Any, Optional, TypeAlias
 
 from app.core.io.bounded_streams import spool_memory_limit, stream_size
 from app.shared.resources.storage_layout import INTERMEDIATE_PREFIX
+from app.core.io.tenant_namespace import build_tenant_key
 
 logger = logging.getLogger(__name__)
 
@@ -80,9 +81,14 @@ def build_artifact_key_prefix(
     appende il filename specifico.
     """
     p_clean = (prefix or INTERMEDIATE_PREFIX).strip().strip("/")
+    tenant_root = build_tenant_key(group_id, INTERMEDIATE_PREFIX)
+    custom_namespace = (
+        "" if p_clean == INTERMEDIATE_PREFIX
+        else f"namespace={_slug(p_clean)}/"
+    )
     return (
-        f"{p_clean}/"
-        f"group={_slug(group_id)}/"
+        f"{tenant_root}/"
+        f"{custom_namespace}"
         f"project={_slug(project_id)}/"
         f"run={_slug(run_id)}/"
         f"module={_slug(module)}/"

@@ -158,7 +158,8 @@ def test_oversize_raises_memory_limit_exceeded(monkeypatch):
     ):
         with pytest.raises(MemoryLimitExceededError) as exc_info:
             ar.load_preview_from_artifact(
-                "s3://bucket/key/data.parquet", limit=10,
+                "intermediate/key/data.parquet",
+                expected_group_id="g1", limit=10,
             )
 
     err = exc_info.value
@@ -175,7 +176,8 @@ def test_under_cap_proceeds_without_raising_oom(monkeypatch):
     is transparent under cap and only fires on overrun."""
     ar = _patch_storage_and_cap(monkeypatch, [b"not-parquet-but-small"])
     result = ar.load_preview_from_artifact(
-        "s3://bucket/key/data.parquet", limit=10,
+        "intermediate/key/data.parquet",
+        expected_group_id="g1", limit=10,
     )
 
     # Did NOT raise. Decode failed -> error surfaced as best-effort.
@@ -399,7 +401,8 @@ def test_artifact_reader_delegates_to_preview_parser(monkeypatch):
     monkeypatch.setattr(ar, "parse_parquet_preview", _spy)
 
     result = ar.load_preview_from_artifact(
-        "s3://bucket/key/data.parquet", limit=7,
+        "intermediate/key/data.parquet",
+        expected_group_id="g1", limit=7,
     )
 
     assert len(captured) == 1, (
@@ -437,7 +440,8 @@ def test_artifact_reader_surfaces_parser_read_parquet_failure(monkeypatch):
     monkeypatch.setattr(ar, "parse_parquet_preview", _raising_parser)
 
     result = ar.load_preview_from_artifact(
-        "s3://bucket/key/data.parquet", limit=10,
+        "intermediate/key/data.parquet",
+        expected_group_id="g1", limit=10,
     )
 
     assert result.rows == []
@@ -474,7 +478,8 @@ def test_artifact_reader_surfaces_parser_to_dict_failure_with_partial_schema(mon
     monkeypatch.setattr(ar, "parse_parquet_preview", _raising_parser)
 
     result = ar.load_preview_from_artifact(
-        "s3://bucket/key/data.parquet", limit=10,
+        "intermediate/key/data.parquet",
+        expected_group_id="g1", limit=10,
     )
 
     assert result.error is not None
@@ -510,7 +515,8 @@ def test_oversize_still_propagates_after_parser_split(monkeypatch):
 
     with pytest.raises(MemoryLimitExceededError) as exc_info:
         ar.load_preview_from_artifact(
-            "s3://bucket/key/data.parquet", limit=10,
+            "intermediate/key/data.parquet",
+            expected_group_id="g1", limit=10,
         )
 
     assert exc_info.value.stage == "intermediate_artifact_preview"

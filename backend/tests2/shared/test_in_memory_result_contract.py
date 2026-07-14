@@ -234,7 +234,9 @@ def test_save_result_blob_from_bytes_happy_path(mock_db):
     )
     assert result_id == "res-1"
     assert "data" not in mock_db
-    assert mock_db["storage_key"] == "results/proj-1/res-1.bin"
+    assert mock_db["storage_key"] == (
+        "tenants/grp-1/results/proj-1/res-1.bin"
+    )
     assert mock_db["size_bytes"] == len(payload)
     assert mock_db["filename"] == "result.csv"
     assert mock_db["rows_count"] == 1

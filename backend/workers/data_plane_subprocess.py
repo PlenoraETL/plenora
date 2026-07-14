@@ -19,6 +19,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
 
+from app.core.io.runtime_filesystem import make_runtime_temp_dir
+from workers.process_memory_limit import apply_process_memory_limit
+
 
 PIPELINE_EXECUTE_TASK = "pipeline.execute"
 PIPELINE_PREVIEW_TASK = "pipeline.preview"
@@ -324,7 +327,7 @@ def execute_task_in_subprocess(
         older_than_seconds=timeout + _STALE_TEMP_GRACE_SECONDS,
     )
     try:
-        task_temp_dir = tempfile.mkdtemp(prefix="plenora-data-")
+        task_temp_dir = make_runtime_temp_dir(prefix="plenora-data-")
     except Exception as exc:
         raise DataPlaneChildError(
             f"Impossibile creare la directory temporanea del task "
@@ -365,6 +368,17 @@ def execute_task_in_subprocess(
             f"Impossibile avviare il child {task_name} {task_id}: {exc}"
         ) from exc
     send_connection.close()
+
+    hard_limit_handle = apply_process_memory_limit(
+        pid=int(getattr(process, "pid", 0) or 0),
+        limit_bytes=memory_limit,
+    )
+    logging.getLogger(__name__).info(
+        "Data-plane memory limiter backend=%s enforced=%s detail=%s",
+        hard_limit_handle.backend,
+        hard_limit_handle.enforced,
+        hard_limit_handle.detail,
+    )
 
     deadline = time.monotonic() + timeout
     envelope: dict[str, object] | None = None
@@ -441,6 +455,7 @@ def execute_task_in_subprocess(
         receive_connection.close()
         if process.is_alive():
             _stop_process(process)
+        hard_limit_handle.close()
         # Parent-owned cleanup: copre anche terminate/kill/OOM del child, dove
         # gli handler atexit di openpyxl non possono essere eseguiti.
         _remove_task_temp_dir(task_temp_dir)

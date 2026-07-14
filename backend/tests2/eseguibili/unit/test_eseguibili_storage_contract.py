@@ -19,13 +19,15 @@ class _FakeStorage:
         self.uploads = []
         self.deletes = []
         self.listed_prefix = None
+        self.listed_prefixes = []
         self.list_response = []
         self.stream_response = {"body": iter([b"chunk1"]), "size": 6, "content_type": "text/plain"}
         self.upload_should_fail = False
 
     def list_objects(self, prefix):
         self.listed_prefix = prefix
-        return list(self.list_response)
+        self.listed_prefixes.append(prefix)
+        return [item for item in self.list_response if item["key"].startswith(prefix)]
 
     def upload(self, local_path, key):
         if self.upload_should_fail:
@@ -64,9 +66,9 @@ def test_save_uploads_and_deletes_local(fake_storage, tmp_path):
     local = tmp_path / "output.csv"
     local.write_text("col1,col2\n1,2\n")
 
-    key = st.save("task-123", local)
+    key = st.save("task-123", local, group_id="g1")
 
-    assert key == "eseguibili-outputs/task-123/output.csv"
+    assert key == "tenants/g1/eseguibili-outputs/task-123/output.csv"
     assert len(fake_storage.uploads) == 1
     assert fake_storage.uploads[0] == (str(local), key)
     # File locale cancellato
@@ -82,7 +84,7 @@ def test_save_cleans_empty_parent_dir(fake_storage, tmp_path):
     local = parent / "output.csv"
     local.write_text("data")
 
-    st.save("task-1", local)
+    st.save("task-1", local, group_id="g1")
 
     assert not local.exists()
     assert not parent.exists()  # dir vuota -> rimossa
@@ -99,7 +101,7 @@ def test_save_keeps_parent_if_not_empty(fake_storage, tmp_path):
     sibling = parent / "other.txt"
     sibling.write_text("keep")
 
-    st.save("task-1", local)
+    st.save("task-1", local, group_id="g1")
 
     assert not local.exists()
     assert parent.exists()  # ancora li'
@@ -115,7 +117,7 @@ def test_save_does_not_delete_local_if_upload_fails(fake_storage, tmp_path):
     local.write_text("data")
 
     with pytest.raises(RuntimeError, match="upload failed"):
-        st.save("task-1", local)
+        st.save("task-1", local, group_id="g1")
 
     assert local.exists()  # preservato
 
@@ -125,7 +127,7 @@ def test_save_rejects_non_existent_file(fake_storage, tmp_path):
 
     missing = tmp_path / "nope.csv"
     with pytest.raises(FileNotFoundError):
-        st.save("task-1", missing)
+        st.save("task-1", missing, group_id="g1")
 
 
 def test_save_rejects_directory(fake_storage, tmp_path):
@@ -134,7 +136,7 @@ def test_save_rejects_directory(fake_storage, tmp_path):
     d = tmp_path / "adir"
     d.mkdir()
     with pytest.raises(ValueError, match="non e' un file"):
-        st.save("task-1", d)
+        st.save("task-1", d, group_id="g1")
 
 
 # find_keys()
@@ -147,9 +149,12 @@ def test_find_keys_uses_task_prefix(fake_storage):
         {"key": "eseguibili-outputs/task-42/foo.csv", "last_modified": None, "size": 100},
         {"key": "eseguibili-outputs/task-42/bar.xlsx", "last_modified": None, "size": 200},
     ]
-    keys = st.find_keys("task-42")
+    keys = st.find_keys("task-42", group_id="g1")
 
-    assert fake_storage.listed_prefix == "eseguibili-outputs/task-42/"
+    assert fake_storage.listed_prefixes == [
+        "tenants/g1/eseguibili-outputs/task-42/",
+        "eseguibili-outputs/task-42/",
+    ]
     assert keys == [
         "eseguibili-outputs/task-42/foo.csv",
         "eseguibili-outputs/task-42/bar.xlsx",
@@ -160,7 +165,7 @@ def test_find_keys_returns_empty_when_no_match(fake_storage):
     from app.core.eseguibili import storage as st
 
     fake_storage.list_response = []
-    assert st.find_keys("task-unknown") == []
+    assert st.find_keys("task-unknown", group_id="g1") == []
 
 
 # open_stream()
@@ -174,7 +179,9 @@ def test_open_stream_delegates_to_backend(fake_storage):
         "size": 6,
         "content_type": "text/csv",
     }
-    result = st.open_stream("eseguibili-outputs/task-1/output.csv")
+    result = st.open_stream(
+        "eseguibili-outputs/task-1/output.csv", expected_group_id="g1",
+    )
 
     assert result["size"] == 6
     assert result["content_type"] == "text/csv"
@@ -193,7 +200,7 @@ def test_delete_by_task_removes_all_keys(fake_storage):
         {"key": "eseguibili-outputs/task-1/a.csv", "last_modified": None, "size": 0},
         {"key": "eseguibili-outputs/task-1/b.xlsx", "last_modified": None, "size": 0},
     ]
-    count = st.delete_by_task("task-1")
+    count = st.delete_by_task("task-1", group_id="g1")
 
     assert count == 2
     assert set(fake_storage.deletes) == {
@@ -206,7 +213,7 @@ def test_delete_by_task_idempotent_when_empty(fake_storage):
     from app.core.eseguibili import storage as st
 
     fake_storage.list_response = []
-    assert st.delete_by_task("task-missing") == 0
+    assert st.delete_by_task("task-missing", group_id="g1") == 0
     assert fake_storage.deletes == []
 
 
@@ -229,7 +236,7 @@ def test_delete_by_task_continues_if_one_delete_fails(fake_storage):
         real_delete(key)
 
     fake_storage.delete = flaky_delete
-    count = st.delete_by_task("task-1")
+    count = st.delete_by_task("task-1", group_id="g1")
 
     # count riflette le key trovate, non i delete riusciti (best-effort)
     assert count == 2

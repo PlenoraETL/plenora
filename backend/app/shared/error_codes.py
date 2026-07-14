@@ -71,6 +71,9 @@ PROJECT_NOT_FOUND = "project_not_found"
 TASK_NOT_FOUND = "task_not_found"
 """404: task non trovato (orchestrator)."""
 
+WORKER_LOST = "worker_lost"
+"""Task interrotto perché il worker proprietario ha perso la lease."""
+
 SCHEDULE_NOT_FOUND = "schedule_not_found"
 """404: schedule non trovato (scheduler)."""
 
@@ -311,6 +314,7 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     SCHEDULE_EXECUTION_FATAL,
     PROJECT_NOT_FOUND,
     TASK_NOT_FOUND,
+    WORKER_LOST,
     SCHEDULE_NOT_FOUND,
     RUN_NOT_FOUND,
     BUNDLE_NOT_FOUND,

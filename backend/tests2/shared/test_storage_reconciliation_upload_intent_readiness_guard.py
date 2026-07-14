@@ -185,7 +185,7 @@ def test_backlog_check_detail_string_embeds_per_operation_breakdown():
     from app.observability import health as h
 
     with patch(
-        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain_strict",
         return_value=_stub_state_domain_counts(pending_total=15, lost_total=0),
     ), patch(
         "app.core.resources.storage_reconciliation.count_pending_by_operation",
@@ -207,7 +207,7 @@ def test_backlog_check_detail_string_omits_breakdown_when_per_op_empty():
     from app.observability import health as h
 
     with patch(
-        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain_strict",
         return_value=_stub_state_domain_counts(pending_total=0, lost_total=0),
     ), patch(
         "app.core.resources.storage_reconciliation.count_pending_by_operation",
@@ -247,7 +247,7 @@ def test_backlog_check_503_when_upload_intent_threshold_exceeded():
             }.get(key, default)
 
     with patch(
-        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain_strict",
         return_value=_stub_state_domain_counts(pending_total=20, lost_total=0),
     ), patch(
         "app.core.resources.storage_reconciliation.count_pending_by_operation",
@@ -277,7 +277,7 @@ def test_backlog_check_pending_global_threshold_still_fires():
             }.get(key, default)
 
     with patch(
-        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain_strict",
         return_value=_stub_state_domain_counts(pending_total=15, lost_total=0),
     ), patch(
         "app.core.resources.storage_reconciliation.count_pending_by_operation",
@@ -300,7 +300,7 @@ def test_backlog_check_swallows_per_op_helper_errors():
         raise RuntimeError("unexpected")
 
     with patch(
-        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain_strict",
         return_value=_stub_state_domain_counts(pending_total=0, lost_total=0),
     ), patch(
         "app.core.resources.storage_reconciliation.count_pending_by_operation",

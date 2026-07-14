@@ -30,13 +30,17 @@ def test_bytes_always_upload_even_with_legacy_db_env(monkeypatch):
         "app.core.io.object_storage.get_runtime_object_storage",
         return_value=storage,
     ):
-        out = dispatch_blob_storage("f1", b"abc", "a.csv", logger=logger)
+        out = dispatch_blob_storage(
+            "f1", b"abc", "a.csv", group_id="g1", logger=logger,
+        )
 
     assert out == {
-        "storage_key": "file-sources/f1/a.csv",
+        "storage_key": "tenants/g1/file-sources/f1/a.csv",
         "size_bytes": 3,
     }
-    storage.upload_bytes.assert_called_once_with(b"abc", "file-sources/f1/a.csv")
+    storage.upload_bytes.assert_called_once_with(
+        b"abc", "tenants/g1/file-sources/f1/a.csv"
+    )
 
 
 def test_stream_is_forwarded_without_materializing():
@@ -49,12 +53,13 @@ def test_stream_is_forwarded_without_materializing():
         return_value=storage,
     ):
         out = dispatch_blob_storage(
-            "f2", stream, "b.bin", logger=MagicMock(), size_bytes=6
+            "f2", stream, "b.bin", group_id="g1",
+            logger=MagicMock(), size_bytes=6,
         )
 
-    assert out["storage_key"] == "file-sources/f2/b.bin"
+    assert out["storage_key"] == "tenants/g1/file-sources/f2/b.bin"
     storage.upload_fileobj.assert_called_once_with(
-        stream, "file-sources/f2/b.bin", size_bytes=6
+        stream, "tenants/g1/file-sources/f2/b.bin", size_bytes=6
     )
 
 
@@ -68,4 +73,6 @@ def test_upload_failure_is_fail_closed():
         return_value=storage,
     ):
         with pytest.raises(RuntimeError, match="S3 down"):
-            dispatch_blob_storage("f3", b"x", "x.bin", logger=MagicMock())
+            dispatch_blob_storage(
+                "f3", b"x", "x.bin", group_id="g1", logger=MagicMock(),
+            )

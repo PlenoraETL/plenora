@@ -27,6 +27,10 @@ def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
     # Mock task_service: success status
     fake_task_info = MagicMock()
     fake_task_info.status.value = "success"
+    fake_task_info.result = {
+        "project_id": "exe-1", "is_eseguibile": True,
+    }
+    fake_task_info.project_id = "exe-1"
 
     bg = BackgroundTasks()
     fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
@@ -34,6 +38,8 @@ def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
     with patch("app.core.orchestrator.router._assert_task_group", return_value=None), \
          patch("app.core.orchestrator.task_service.task_service.get_task_status",
                return_value=fake_task_info), \
+         patch("app.core.orchestrator.router.eseguibili_db.get_eseguibile",
+               return_value={"id": "exe-1", "group_id": "g1"}), \
          patch("app.core.eseguibili.output_store.load_task_owner",
                return_value=None), \
          patch("app.core.eseguibili.storage.find_keys",
@@ -49,7 +55,7 @@ def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
             current_user=fake_user,
         )
 
-        mock_find.assert_called_once_with("t1")
+        mock_find.assert_called_once_with("t1", group_id="g1")
         mock_open.assert_called_once()
         # Response deve essere StreamingResponse
         from fastapi.responses import StreamingResponse
@@ -59,7 +65,7 @@ def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
         # Esegui cleanup DENTRO il with patch: MagicMock delete_by_task
         # resta attivo e la chiamata viene registrata.
         bg.tasks[0].func()
-        mock_delete.assert_called_once_with("t1")
+        mock_delete.assert_called_once_with("t1", group_id="g1")
 
 
 def test_tasks_download_eseguibile_blocks_owner_mismatch():
@@ -68,7 +74,9 @@ def test_tasks_download_eseguibile_blocks_owner_mismatch():
 
     fake_task_info = MagicMock()
     fake_task_info.status.value = "success"
-    fake_task_info.result = {"project_id": "exe-1"}
+    fake_task_info.result = {
+        "project_id": "exe-1", "is_eseguibile": True,
+    }
     fake_task_info.project_id = None
 
     fake_user = MagicMock(user_id="u1", role="viewer", group_id="g1")
@@ -76,6 +84,8 @@ def test_tasks_download_eseguibile_blocks_owner_mismatch():
     with patch("app.core.orchestrator.router._assert_task_group", return_value=None), \
          patch("app.core.orchestrator.task_service.task_service.get_task_status",
                return_value=fake_task_info), \
+         patch("app.core.orchestrator.router.eseguibili_db.get_eseguibile",
+               return_value={"id": "exe-1", "group_id": "g1"}), \
          patch("app.core.eseguibili.storage.find_keys",
                return_value=["eseguibili-outputs/t1/out.csv"]), \
          patch("app.core.eseguibili.output_store.load_task_owner",
@@ -164,8 +174,8 @@ def test_eseguibili_download_streams_from_storage_cleans_owner_meta():
 
         # Cleanup post-send (dentro il with patch: mock attivo)
         bg.tasks[0].func()
-        mock_delete.assert_called_once_with("t1")
-        mock_del_owner.assert_called_once_with("t1")
+        mock_delete.assert_called_once_with("t1", group_id="g1")
+        mock_del_owner.assert_called_once_with("t1", group_id="g1")
 
 
 def test_eseguibili_download_404_when_no_keys_on_storage():
@@ -221,7 +231,7 @@ def test_eseguibili_download_cleanup_runs_even_if_delete_by_task_raises():
 
         # Esegui cleanup: NON deve crashare, owner cleanup parte comunque
         bg.tasks[0].func()
-        mock_del_owner.assert_called_once_with("t1")
+        mock_del_owner.assert_called_once_with("t1", group_id="g1")
 
 
 # 3. Task result payload shape (post save_pipeline_result_outcome)

@@ -62,13 +62,17 @@ def test_preview_round_trip_keeps_postgres_envelope_small(monkeypatch):
     }
 
     envelope = store.persist_preview_payload(
-        payload, project_id="project-1", task_id="task_1"
+        payload, group_id="g1", project_id="project-1", task_id="task_1"
     )
 
     assert "rows" not in envelope
-    assert envelope["preview_storage_key"] == "previews/project-1/task_1.json"
+    assert envelope["preview_storage_key"] == (
+        "tenants/g1/previews/project-1/task_1.json"
+    )
     assert json.loads(fake.objects[envelope["preview_storage_key"]]) == payload
-    assert store.hydrate_preview_payload(envelope, max_bytes=1024) == payload
+    assert store.hydrate_preview_payload(
+        envelope, expected_group_id="g1", max_bytes=1024,
+    ) == payload
 
 
 def test_hydrate_enforces_declared_size_cap(monkeypatch):
@@ -84,7 +88,8 @@ def test_hydrate_enforces_declared_size_cap(monkeypatch):
     fake.get_object_stream = oversized  # type: ignore[method-assign]
     with pytest.raises(store.PreviewPayloadError, match="supera"):
         store.hydrate_preview_payload(
-            {"preview_storage_key": "previews/p/t.json"}, max_bytes=10
+            {"preview_storage_key": "previews/p/t.json"},
+            expected_group_id="g1", max_bytes=10,
         )
 
 
@@ -108,7 +113,27 @@ def test_cleanup_removes_only_expired_preview_objects(monkeypatch):
     assert fake.deleted == ["previews/p/old.json"]
 
 
+def test_delete_legacy_envelope_without_group_remains_compatible(monkeypatch):
+    fake = _patch_storage(monkeypatch)
+
+    assert store.delete_preview_payload(
+        {"preview_storage_key": "previews/project/task.json"}
+    ) is True
+    assert fake.deleted == ["previews/project/task.json"]
+
+
+def test_delete_canonical_envelope_without_group_fails_closed(monkeypatch):
+    fake = _patch_storage(monkeypatch)
+
+    assert store.delete_preview_payload(
+        {"preview_storage_key": "tenants/g1/previews/project/task.json"}
+    ) is False
+    assert fake.deleted == []
+
+
 def test_storage_key_rejects_path_traversal(monkeypatch):
     _patch_storage(monkeypatch)
     with pytest.raises(store.PreviewPayloadError, match="project_id"):
-        store.persist_preview_payload({}, project_id="../other", task_id="task")
+        store.persist_preview_payload(
+            {}, group_id="g1", project_id="../other", task_id="task",
+        )

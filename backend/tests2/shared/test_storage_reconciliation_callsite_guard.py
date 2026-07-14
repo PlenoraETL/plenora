@@ -110,6 +110,12 @@ _CALLSITE_CLASSIFICATION: dict[str, tuple[Classification, str]] = {
         "authenticated hydration deletes it best-effort and the periodic TTL "
         "sweep plus provider lifecycle remove crash orphans under previews/.",
     ),
+    "app/core/io/runtime_filesystem.py": (
+        "intentionally_excluded",
+        "Filesystem/object-storage transport boundary only. It does not own "
+        "artifact lifecycle: the current caller is eseguibili.storage, whose "
+        "task-scoped delete and TTL policy are classified separately above.",
+    ),
     "app/infrastructure/storage/cloud_backends.py": (
         "safe_no_persistent_artifact",
         "Provider adapter only: upload_fileobj/upload_bytes implement transport "

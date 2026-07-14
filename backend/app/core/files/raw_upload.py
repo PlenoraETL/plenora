@@ -82,6 +82,7 @@ def create_raw_from_upload(
         file_id,
         file_content,
         filename,
+        group_id=resolved_group_id,
         size_bytes=size,
     )
     db_save_file_source(

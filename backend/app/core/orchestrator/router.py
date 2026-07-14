@@ -54,6 +54,7 @@ from app.shared.execution.output_contract_types_enricher import (
     enrich_canvas_types_from_output_contract,
 )
 from app.core.eseguibili import output_store as _eseg_output_store
+from app.core.eseguibili import db as eseguibili_db
 from app.core.results import output_file_cleanup
 
 def _mime_for_filename(filename: str) -> str:
@@ -95,6 +96,7 @@ def _assert_eseguibile_task_owner(
     current_user: CurrentUser,
     *,
     expected_eseguibile_id: str | None = None,
+    expected_group_id: str | None = None,
 ) -> None:
     """Validate task-scoped eseguibile output ownership.
 
@@ -106,6 +108,7 @@ def _assert_eseguibile_task_owner(
         task_id,
         current_user,
         expected_eseguibile_id=expected_eseguibile_id,
+        expected_group_id=expected_group_id,
     )
 
 
@@ -405,8 +408,22 @@ def get_task_status(
         task_payload = result.get("result")
         if isinstance(task_payload, Mapping):
             if preview_payload_store.is_preview_reference(task_payload):
+                preview_project_id = getattr(task_info, "project_id", None)
+                if not preview_project_id:
+                    preview_project_id = _task_result_project_id(task_payload)
+                preview_meta = (
+                    _project_service().get_project_metadata(preview_project_id)
+                    if preview_project_id else None
+                )
+                preview_group_id = getattr(preview_meta, "group_id", None)
+                if not preview_group_id:
+                    raise HTTPException(
+                        status_code=404,
+                        detail="Tenant della preview non determinabile",
+                    )
                 result["result"] = preview_payload_store.hydrate_preview_payload(
-                    task_payload
+                    task_payload,
+                    expected_group_id=preview_group_id,
                 )
 
         if result.get("status") == "pending" and not result.get("created_at"):
@@ -661,37 +678,60 @@ def download_task_result(
             raise HTTPException(status_code=400, detail=f"Task non completato (stato: {task_info.status.value})")
 
         safe_task_id = "".join(c for c in task_id if c.isalnum() or c in "-_")
-        if safe_task_id == task_id:
+        raw_task_result = task_info.result
+        eseguibile_payload = (
+            _task_result_to_dict(raw_task_result)
+            if isinstance(raw_task_result, Mapping) else {}
+        )
+        if safe_task_id == task_id and bool(
+            eseguibile_payload.get("is_eseguibile")
+        ):
+            project_id = getattr(task_info, "project_id", None)
+            if not project_id and task_info.result:
+                project_id = _task_result_project_id(task_info.result)
+            eseguibile_record = (
+                eseguibili_db.get_eseguibile(project_id) if project_id else None
+            )
+            eseguibile_group_id = str(
+                eseguibile_record.get("group_id") or ""
+            ) if eseguibile_record else ""
             # intent: optional feature — fallback a DB blob se S3 lookup fallisce
             # outcome: fail-open con breadcrumb (exc_info per diagnosticare S3 down
             try:
-                storage_keys = _eseg_output_store.find_output_keys(safe_task_id)
+                storage_keys = (
+                    _eseg_output_store.find_output_keys(
+                        safe_task_id, group_id=eseguibile_group_id,
+                    )
+                    if eseguibile_group_id else []
+                )
             except Exception as storage_error:
                 logger.warning(f"lookup eseguibili storage fallito: {storage_error}", exc_info=True)
                 storage_keys = []
 
             if storage_keys:
-                project_id = getattr(task_info, "project_id", None)
-                if not project_id and task_info.result:
-                    project_id = _task_result_project_id(task_info.result)
                 _assert_eseguibile_task_owner(
                     safe_task_id,
                     current_user,
                     expected_eseguibile_id=project_id,
+                    expected_group_id=eseguibile_group_id,
                 )
                 # Tipicamente 1 file per task. Se multipli, primo e' OK
                 # convention: un solo output per task eseguibile
                 storage_key = storage_keys[0]
                 storage_filename = storage_key.rsplit("/", 1)[-1]
                 try:
-                    storage_stream = _eseg_output_store.open_stream(storage_key)
+                    storage_stream = _eseg_output_store.open_stream(
+                        storage_key, expected_group_id=eseguibile_group_id,
+                    )
                 except Exception as storage_error:
                     logger.error(f"[CRASH] open_stream eseguibile {storage_key}: {storage_error}", exc_info=True)
                     raise HTTPException(status_code=500, detail="Errore apertura stream output")
 
                 def _cleanup_after_send(task_id_to_delete: str = safe_task_id) -> None:
                     try:
-                        _eseg_output_store.delete_task_outputs(task_id_to_delete)
+                        _eseg_output_store.delete_task_outputs(
+                            task_id_to_delete, group_id=eseguibile_group_id,
+                        )
                     except Exception as storage_error:
                         logger.warning(f"Cleanup post-download S3 fallito per {task_id_to_delete}: {storage_error}")
 

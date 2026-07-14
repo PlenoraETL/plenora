@@ -56,7 +56,9 @@ def test_db_env_cannot_enable_bytea_write(monkeypatch):
     assert len(storage.uploads) == 1
     assert len(saved) == 1
     assert "data" not in saved[0]
-    assert saved[0]["storage_key"] == f"file-sources/{result.id}/tiny.bin"
+    assert saved[0]["storage_key"] == (
+        f"tenants/G1/file-sources/{result.id}/tiny.bin"
+    )
 
 
 def test_upload_failure_does_not_write_catalog_row(monkeypatch):

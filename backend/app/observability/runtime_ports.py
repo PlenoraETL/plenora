@@ -4,14 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.core.task_runtime.probes import ping_rabbitmq_broker
+from app.core.task_runtime.probes import (
+    inspect_rabbitmq_queues,
+    ping_rabbitmq_broker,
+)
 
 
 def bounded_readiness_timeout(settings: Any, key: str, default: int = 2) -> int:
     """Return a positive readiness timeout, falling back to default."""
     try:
         timeout = int(settings.get(key, default))
-    except Exception:
+    except (AttributeError, TypeError, ValueError):
         timeout = default
     if timeout <= 0:
         return default
@@ -20,5 +23,6 @@ def bounded_readiness_timeout(settings: Any, key: str, default: int = 2) -> int:
 
 __all__ = [
     "bounded_readiness_timeout",
+    "inspect_rabbitmq_queues",
     "ping_rabbitmq_broker",
 ]

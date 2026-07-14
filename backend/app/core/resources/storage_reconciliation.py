@@ -41,6 +41,7 @@ __all__ = [
     "is_storage_key_referenced",
     "compute_next_retry_at",
     "count_active_by_state_domain",
+    "count_active_by_state_domain_strict",
     "count_pending_by_operation",
     "prune_terminal_older_than",
 ]
@@ -476,9 +477,7 @@ def count_active_by_state_domain() -> list["ReconciliationStateCount"]:
         terminali. Su errore di lettura: `[]`.
     """
     try:
-        rows = _store.fetch_active_state_domain_count_rows(
-            _COUNT_ACTIVE_BY_STATE_DOMAIN_SQL,
-        )
+        return count_active_by_state_domain_strict()
     except Exception as e:
         logger.warning(
             "event=storage_reconciliation_count_failed "
@@ -487,6 +486,12 @@ def count_active_by_state_domain() -> list["ReconciliationStateCount"]:
         )
         return []
 
+
+def count_active_by_state_domain_strict() -> list["ReconciliationStateCount"]:
+    """Strict readiness variant: storage read errors propagate."""
+    rows = _store.fetch_active_state_domain_count_rows(
+        _COUNT_ACTIVE_BY_STATE_DOMAIN_SQL,
+    )
     out: list[ReconciliationStateCount] = []
     for row in rows or ():
         if isinstance(row, dict):

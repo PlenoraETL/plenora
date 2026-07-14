@@ -14,6 +14,7 @@ from typing import Any
 from app.core.intermediate.artifact_writer import persist_full_artifact
 from app.core.dataframes.tabular import dataframe_from_records
 from app.core.io.object_storage import get_runtime_object_storage
+from app.core.io.tenant_namespace import build_tenant_key
 from app.core.orchestrator.preview_payload_store import persist_preview_payload
 from app.db.pg_connection import unit_of_work
 from app.shared.resources.storage_layout import FILE_SOURCES_PREFIX, RESULTS_PREFIX
@@ -39,7 +40,7 @@ def _one(sql: str, params: tuple = ()) -> dict | None:
 
 def _migrate_results(*, apply: bool) -> int:
     candidates = _rows(
-        "SELECT id, project_id, filename, octet_length(data) AS size_bytes "
+        "SELECT id, project_id, group_id, filename, octet_length(data) AS size_bytes "
         "FROM results WHERE data IS NOT NULL ORDER BY created_at, id"
     )
     if not apply:
@@ -53,7 +54,10 @@ def _migrate_results(*, apply: bool) -> int:
         if not row:
             continue
         data = _bytes(row["data"])
-        key = f"{RESULTS_PREFIX}/{meta['project_id']}/{result_id}.bin"
+        key = build_tenant_key(
+            str(meta["group_id"]), RESULTS_PREFIX,
+            str(meta["project_id"]), f"{result_id}.bin",
+        )
         storage.upload_bytes(data, key)
         with unit_of_work() as session:
             cur = session.execute(
@@ -71,7 +75,7 @@ def _migrate_results(*, apply: bool) -> int:
 
 def _migrate_file_sources(*, apply: bool) -> int:
     candidates = _rows(
-        "SELECT id, original_filename, octet_length(data) AS size_bytes "
+        "SELECT id, group_id, original_filename, octet_length(data) AS size_bytes "
         "FROM file_sources WHERE data IS NOT NULL ORDER BY created_at, id"
     )
     if not apply:
@@ -89,7 +93,9 @@ def _migrate_file_sources(*, apply: bool) -> int:
             continue
         data = _bytes(row["data"])
         filename = Path(str(meta.get("original_filename") or "file.bin")).name
-        key = f"{FILE_SOURCES_PREFIX}/{file_id}/{filename}"
+        key = build_tenant_key(
+            str(meta["group_id"]), FILE_SOURCES_PREFIX, file_id, filename,
+        )
         storage.upload_bytes(data, key)
         with unit_of_work() as session:
             cur = session.execute(
@@ -128,8 +134,18 @@ def _migrate_previews(*, apply: bool) -> int:
         # il task non e' associabile a un progetto).
         had_project_id = bool(project_id)
         storage_project_id = project_id or "legacy"
+        project_row = _one(
+            "SELECT group_id FROM projects WHERE id=%s", (project_id,),
+        ) if project_id else None
+        preview_group_id = str(project_row.get("group_id") or "") if project_row else ""
+        if not preview_group_id:
+            print(f"preview {task_id}: skip, tenant non determinabile")
+            continue
         envelope = persist_preview_payload(
-            payload, project_id=storage_project_id, task_id=task_id
+            payload,
+            group_id=preview_group_id,
+            project_id=storage_project_id,
+            task_id=task_id,
         )
         if not had_project_id:
             envelope.pop("project_id", None)

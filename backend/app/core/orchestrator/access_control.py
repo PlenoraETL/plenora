@@ -104,9 +104,18 @@ def assert_eseguibile_task_owner(
     current_user: CurrentUser,
     *,
     expected_eseguibile_id: str | None = None,
+    expected_group_id: str | None = None,
 ) -> None:
     """Validate task-scoped eseguibile output ownership."""
-    owner_meta = eseguibili_output_store.load_task_owner(task_id)
+    owner_group_id = expected_group_id
+    if not owner_group_id and expected_eseguibile_id:
+        record = eseguibili_db.get_eseguibile(expected_eseguibile_id)
+        owner_group_id = str(record.get("group_id") or "") if record else ""
+    if not owner_group_id:
+        raise HTTPException(status_code=404, detail="Tenant output non determinabile")
+    owner_meta = eseguibili_output_store.load_task_owner(
+        task_id, group_id=owner_group_id,
+    )
     if owner_meta is None:
         if current_user.role != "superadmin":
             raise HTTPException(

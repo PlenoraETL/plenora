@@ -208,7 +208,7 @@ def test_object_storage_save_ok_closes_result_upload_intent(
 
     assert record_calls
     args, kwargs = record_calls[0]
-    assert args[0] == "results/p1/res-orph.bin"
+    assert args[0] == "tenants/grp-1/results/p1/res-orph.bin"
     assert kwargs["project_id"] == "p1"
     assert kwargs["result_id"] == "res-orph"
     assert kwargs["filename"] == "out.bin"
@@ -284,7 +284,7 @@ def test_object_storage_db_save_failure_triggers_compensating_delete(
     uploaded_key = storage.uploads[0][1]
     # cleanup compensativo chiamato esattamente sulla stessa key
     assert storage.deletes == [uploaded_key]
-    assert uploaded_key == "results/p1/res-orph.bin"
+    assert uploaded_key == "tenants/grp-1/results/p1/res-orph.bin"
 
 
 @pytest.mark.usefixtures("mock_db_save_fails")
@@ -353,7 +353,7 @@ def test_object_storage_db_save_failure_bytes_path_triggers_delete(
         )
 
     assert len(storage.uploads) == 1
-    assert storage.deletes == ["results/p1/res-orph.bin"]
+    assert storage.deletes == ["tenants/grp-1/results/p1/res-orph.bin"]
 
 
 # (c) upload OK + DB save fails + delete fails
@@ -377,13 +377,13 @@ def test_db_save_failure_with_cleanup_failure_logs_orphan_event(
 
     # Upload + delete tentativi entrambi visibili sullo stub
     assert len(storage.uploads) == 1
-    assert storage.deletes == ["results/p1/res-orph.bin"]
+    assert storage.deletes == ["tenants/grp-1/results/p1/res-orph.bin"]
 
     # Structured log strutturato presente
     messages = [r.getMessage() for r in caplog_app.records]
     assert any(
         "event=storage_compensating_delete_failed" in m
-        and "storage_key=results/p1/res-orph.bin" in m
+        and "storage_key=tenants/grp-1/results/p1/res-orph.bin" in m
         and "domain=result" in m
         for m in messages
     ), f"missing structured log; got: {messages}"
@@ -402,7 +402,7 @@ def test_db_save_failure_with_cleanup_failure_bytes_path(
         )
 
     assert len(storage.uploads) == 1
-    assert storage.deletes == ["results/p1/res-orph.bin"]
+    assert storage.deletes == ["tenants/grp-1/results/p1/res-orph.bin"]
 
     messages = [r.getMessage() for r in caplog_app.records]
     assert any(

@@ -33,6 +33,7 @@ class TaskOwner:
     task_id: str
     eseguibile_id: str
     user_id: str
+    group_id: str
     created_at: str
 
 
@@ -46,9 +47,9 @@ def task_owner_path(task_id: str, *, outputs_dir: Path | None = None) -> Path:
     return root / ".owners" / f"{safe_id}.json"
 
 
-def task_owner_key(task_id: str) -> str:
+def task_owner_key(task_id: str, *, group_id: str) -> str:
     safe_id = _safe_id(task_id)
-    return f"{storage.PREFIX}/{safe_id}/{OWNER_SIDECAR_FILENAME}"
+    return storage._key_for(group_id, safe_id, OWNER_SIDECAR_FILENAME)
 
 
 def _read_body(body: object) -> bytes:
@@ -102,18 +103,22 @@ def save_task_owner(
     eseguibile_id: str,
     user_id: str,
     *,
+    group_id: str,
     outputs_dir: Path | None = None,
 ) -> None:
     owner = TaskOwner(
         task_id=task_id,
         eseguibile_id=eseguibile_id,
         user_id=user_id,
+        group_id=group_id,
         created_at=datetime.now(timezone.utc).isoformat(),
     )
     payload = json.dumps(asdict(owner)).encode("utf-8")
 
     try:
-        storage.save_bytes(task_id, OWNER_SIDECAR_FILENAME, payload)
+        storage.save_bytes(
+            task_id, OWNER_SIDECAR_FILENAME, payload, group_id=group_id,
+        )
     except Exception as exc:
         logger.error(
             f"save task owner sidecar su object storage fallito per "
@@ -125,28 +130,43 @@ def save_task_owner(
 def load_task_owner(
     task_id: str,
     *,
+    group_id: str,
     outputs_dir: Path | None = None,
 ) -> Optional[Mapping[str, object]]:
-    key = task_owner_key(task_id)
-    try:
-        stream = storage.open_stream(key)
-        return _load_owner_payload(_read_body(stream["body"]))
-    except Exception as exc:
-        logger.debug(
-            f"load task owner sidecar da object storage fallito per "
-            f"task_id={task_id}: {exc}"
-        )
+    keys = [
+        task_owner_key(task_id, group_id=group_id),
+        f"{storage.PREFIX}/{_safe_id(task_id)}/{OWNER_SIDECAR_FILENAME}",
+    ]
+    for key in keys:
+        try:
+            stream = storage.open_stream(key, expected_group_id=group_id)
+            return _load_owner_payload(_read_body(stream["body"]))
+        except Exception as exc:
+            logger.debug(
+                f"load task owner sidecar da object storage fallito per "
+                f"task_id={task_id}: {exc}"
+            )
     return None
 
 
-def delete_task_owner(task_id: str, *, outputs_dir: Path | None = None) -> None:
-    try:
-        storage.delete_key(task_owner_key(task_id))
-    except Exception as exc:
-        logger.debug(
-            f"delete task owner sidecar best-effort fallito per "
-            f"task_id={task_id}: {exc}"
-        )
+def delete_task_owner(
+    task_id: str,
+    *,
+    group_id: str | None = None,
+    outputs_dir: Path | None = None,
+) -> None:
+    if group_id:
+        for key in (
+            task_owner_key(task_id, group_id=group_id),
+            f"{storage.PREFIX}/{_safe_id(task_id)}/{OWNER_SIDECAR_FILENAME}",
+        ):
+            try:
+                storage.delete_key(key, expected_group_id=group_id)
+            except Exception as exc:
+                logger.debug(
+                    f"delete task owner sidecar best-effort fallito per "
+                    f"task_id={task_id}: {exc}"
+                )
 
     try:
         path = task_owner_path(task_id, outputs_dir=outputs_dir)
@@ -159,22 +179,22 @@ def delete_task_owner(task_id: str, *, outputs_dir: Path | None = None) -> None:
         )
 
 
-def find_output_keys(task_id: str) -> list[str]:
+def find_output_keys(task_id: str, *, group_id: str) -> list[str]:
     return [
-        key for key in storage.find_keys(task_id)
+        key for key in storage.find_keys(task_id, group_id=group_id)
         if key.rsplit("/", 1)[-1] != OWNER_SIDECAR_FILENAME
     ]
 
 
-def open_stream(key: str) -> ObjectMap:
-    return storage.open_stream(key)
+def open_stream(key: str, *, expected_group_id: str) -> ObjectMap:
+    return storage.open_stream(key, expected_group_id=expected_group_id)
 
 
-def delete_task_outputs(task_id: str) -> int:
+def delete_task_outputs(task_id: str, *, group_id: str) -> int:
     try:
-        return storage.delete_by_task(task_id)
+        return storage.delete_by_task(task_id, group_id=group_id)
     finally:
-        delete_task_owner(task_id)
+        delete_task_owner(task_id, group_id=group_id)
 
 
 def purge_expired_local_outputs(

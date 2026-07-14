@@ -592,7 +592,12 @@ def execute_enrichment_task(
                 # locale persistente: backend+worker multi-host safe. Il
                 # frontend scarica via GET /api/eseguibili/{id}/download/{task_id}
                 # che streamma da S3 e cancella l'oggetto dopo l'invio.
-                eseg_storage.save_bytes(task_id, final_name, output_bytes)
+                eseg_storage.save_bytes(
+                    task_id,
+                    final_name,
+                    output_bytes,
+                    group_id=_group_id,
+                )
                 logger.info(
                     f"[Task {task_id}] Output eseguibile su storage: "
                     f"eseguibili-outputs/{task_id}/{final_name}"
@@ -726,6 +731,7 @@ def execute_enrichment_task(
             final_format=final_format,
             output_filename=output_filename,
             final_filename=final_filename,
+            group_id=_group_id,
             source_names=source_names_by_column,
         )
 

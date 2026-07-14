@@ -27,7 +27,7 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     # (Plenora 2.0: _TaskResultMiddleware finalizza l'esito su PG simmetrico
     # a Celery after_return; _BootstrapMiddleware fa il bootstrap 4-step a
     # worker_boot; _RequestIdMiddleware propaga il correlation id via broker).
-    re.compile(r"backend[\\/]+workers[\\/]+dramatiq_app\.py:\d+: unused method '(after_process_message|before_process_message|before_enqueue|before_worker_boot|after_ack|after_nack)' "),
+    re.compile(r"backend[\\/]+workers[\\/]+dramatiq_app\.py:\d+: unused method '(after_process_message|before_process_message|before_enqueue|before_worker_boot|after_worker_boot|before_worker_shutdown|after_ack|after_nack)' "),
 
     # Task bodies (funzioni pure) sono invocate dagli actor Dramatiq via
     # import lazy / shim, non per nome a import-time.

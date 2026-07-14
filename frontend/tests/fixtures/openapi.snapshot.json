@@ -968,7 +968,7 @@
       },
       "Column": {
         "additionalProperties": true,
-        "description": "Colonna di una tabella/dataset nel canvas.\n\n``extra=\"allow\"`` — simmetrico al fix di ``Node`` (commit fc86a999).\nIl frontend serializza per ogni colonna metadata extra (``selected``,\n``fromApi``, ``path`` per output_mapping, ecc.) che il backend NON\nmodella esplicitamente ma deve preservare nel round-trip\nPUT->GET->PUT del canvas. Senza ``extra=\"allow\"`` i campi extra\nvenivano droppati silenziosamente, rompendo p.es. la validation\nFE che si aspetta ``columns[i].fromApi`` per i fixed-param marker.",
+        "description": "Colonna di una tabella/dataset nel canvas.\n\n``extra=\"allow\"`` preserva i metadata extra del frontend.\nIl frontend serializza per ogni colonna metadata extra (``selected``,\n``fromApi``, ``path`` per output_mapping, ecc.) che il backend NON\nmodella esplicitamente ma deve preservare nel round-trip\nPUT->GET->PUT del canvas. Senza ``extra=\"allow\"`` i campi extra\nvenivano droppati silenziosamente, rompendo p.es. la validation\nFE che si aspetta ``columns[i].fromApi`` per i fixed-param marker.",
         "properties": {
           "alias": {
             "anyOf": [
@@ -2478,7 +2478,7 @@
         "type": "object"
       },
       "Edge": {
-        "description": "Arco (connessione) tra due nodi nel canvas.\n\nRappresenta una relazione JOIN tra tabelle o il collegamento verso\nil nodo di output.\n\nid/source/target sono obbligatori e stringhe non-vuote.\nsourceHandle/targetHandle sono metadata ReactFlow opzionali\ntollerati (il frontend li invia a volte con l'edge grezzo).\n\nManteniamo deliberatamente il default\nPydantic `extra=\"ignore\"` invece di `extra=\"forbid\"` raccomandato\ndal finding. Motivo: il serializer frontend al\n`frontend/src/utils/canvasSerializer.js:227` ritorna il raw edge\nReactFlow quando `data.join_type` manca (es. edge verso result /\ncarica). Quel raw edge porta con se' campi ReactFlow variabili\n(`type`, `animated`, `label`, `style`, `markerStart`, ...) che\ncambiano tra versioni di ReactFlow. Forbid spezzerebbe canvas\nlegittimi ad ogni upgrade library. Trade-off: accettiamo il rischio\nminore di tollerare typo/field ignorati; la validazione strutturale\n(id/source/target/join_type tipizzati) copre il 90% della superficie.",
+        "description": "Arco (connessione) tra due nodi nel canvas.\n\nRappresenta una relazione JOIN tra tabelle o il collegamento verso\nil nodo di output.\n\nid/source/target sono obbligatori e stringhe non-vuote.\nsourceHandle/targetHandle sono metadata ReactFlow opzionali\ntollerati (il frontend li invia a volte con l'edge grezzo).\n\nManteniamo deliberatamente il default Pydantic `extra=\"ignore\"`\ninvece di `extra=\"forbid\"`. Motivo: il serializer frontend al\n`frontend/src/utils/canvasSerializer.js:227` ritorna il raw edge\nReactFlow quando `data.join_type` manca (es. edge verso result /\ncarica). Quel raw edge porta con se' campi ReactFlow variabili\n(`type`, `animated`, `label`, `style`, `markerStart`, ...) che\ncambiano tra versioni di ReactFlow. Forbid spezzerebbe canvas\nlegittimi ad ogni upgrade library. Trade-off: accettiamo il rischio\nminore di tollerare typo/field ignorati; la validazione strutturale\n(id/source/target/join_type tipizzati) copre la superficie critica.",
         "properties": {
           "id": {
             "minLength": 1,
@@ -4798,6 +4798,24 @@
             "default": [],
             "title": "Join Keys"
           },
+          "join_pairs": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": [],
+            "title": "Join Pairs"
+          },
           "label": {
             "anyOf": [
               {
@@ -4830,6 +4848,21 @@
               }
             ],
             "title": "Layer Url"
+          },
+          "left_keys": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": [],
+            "title": "Left Keys"
           },
           "level": {
             "anyOf": [
@@ -5188,6 +5221,21 @@
               }
             ],
             "title": "Rest Url"
+          },
+          "right_keys": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": [],
+            "title": "Right Keys"
           },
           "schema_name": {
             "anyOf": [
@@ -6887,6 +6935,108 @@
         "title": "SharesResponse",
         "type": "object"
       },
+      "StorageObjectEntry": {
+        "properties": {
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "last_modified": {
+            "format": "date-time",
+            "title": "Last Modified",
+            "type": "string"
+          },
+          "legacy": {
+            "default": false,
+            "title": "Legacy",
+            "type": "boolean"
+          },
+          "resource_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Id"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "tenant_group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tenant Group Id"
+          }
+        },
+        "required": [
+          "key",
+          "size_bytes",
+          "last_modified",
+          "domain"
+        ],
+        "title": "StorageObjectEntry",
+        "type": "object"
+      },
+      "StorageObjectPage": {
+        "properties": {
+          "bucket": {
+            "title": "Bucket",
+            "type": "string"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "objects": {
+            "items": {
+              "$ref": "#/components/schemas/StorageObjectEntry"
+            },
+            "title": "Objects",
+            "type": "array"
+          },
+          "prefix": {
+            "title": "Prefix",
+            "type": "string"
+          },
+          "scope": {
+            "enum": [
+              "canonical",
+              "legacy"
+            ],
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bucket",
+          "scope",
+          "prefix",
+          "objects"
+        ],
+        "title": "StorageObjectPage",
+        "type": "object"
+      },
       "TaskStatusResponse": {
         "properties": {
           "completed_at": {
@@ -7912,9 +8062,168 @@
         ]
       }
     },
+    "/api/admin/object-storage": {
+      "get": {
+        "operationId": "list_objects_api_admin_object_storage_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "canonical",
+              "enum": [
+                "canonical",
+                "legacy"
+              ],
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "group_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Group Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "domain",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Domain"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageObjectPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Objects",
+        "tags": [
+          "admin-object-storage"
+        ]
+      }
+    },
+    "/api/admin/object-storage/download": {
+      "get": {
+        "operationId": "download_object_api_admin_object_storage_download_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "maxLength": 2048,
+              "minLength": 1,
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Download Object",
+        "tags": [
+          "admin-object-storage"
+        ]
+      }
+    },
     "/api/admin/runtime-config": {
       "get": {
-        "description": "Return redacted runtime configuration and service probes.\n\nThis endpoint is intentionally read-only. Configuration editing and\nservice restarts need a separate, audited operational boundary.\n\nAudit: ogni lettura emette un evento `admin.runtime_config.read`.\nPre-fix l'endpoint era senza traccia: un superadmin compromesso\npoteva estrarre la configurazione completa (DATABASE_URL host,\nbroker Redis, endpoint MinIO redatto, secret needles) senza lasciare\naudit trail per forensics.",
+        "description": "Return redacted runtime configuration and service probes.\n\nThis endpoint is intentionally read-only. Configuration editing and\nservice restarts need a separate, audited operational boundary.\n\nAudit: ogni lettura emette un evento `admin.runtime_config.read` per\nlasciare una traccia forense degli accessi alla configurazione runtime.",
         "operationId": "get_runtime_config_api_admin_runtime_config_get",
         "responses": {
           "200": {
@@ -7943,7 +8252,7 @@
     },
     "/api/admin/system-status": {
       "get": {
-        "description": "Ritorna un JSON con metriche aggregate per il dashboard admin:\n\n- `backup`: stato ultimo dump S3 (soglie 26h/48h)\n- `verify_restore`: stato ultimo `plenora-backup-test.service`\n- `schedules`: count attivi + failing negli ultimi 7gg\n- `workers`: Celery worker online + task attivi + queue depth\n- `host_resources`: disco/RAM/CPU via psutil (warn 80%, error 92-95%)\n- `db_pool`: conn pool Postgres (attive/idle/waiting, warn 80%)\n- `redis`: broker/cache memory + clients + uptime\n- `db_schema`: size schema `plenora` + row count tabelle critiche\n- `jwt_blacklist`: stato blacklist JWT (Redis) + contatori ops + warning \"inoperante da X min\"\n\nOgni blocco ha `status` in {ok, warn, error, unknown} e `message`\nhuman-readable. Ogni blocco espone anche `scope`:\n`cluster` per dipendenze condivise e `local_replica` per metriche\ndella sola replica backend che risponde. I blocchi locali includono\n`scope_warning`/`warnings`. Errori di uno NON bloccano gli altri\n(graceful degradation).",
+        "description": "Ritorna un JSON con metriche aggregate per il dashboard admin:\n\n- `backup`: stato ultimo dump S3 (soglie 26h/48h)\n- `verify_restore`: stato ultimo `plenora-backup-test.service`\n- `schedules`: count attivi + failing negli ultimi 7gg\n- `workers`: task in esecuzione (PROGRESS) derivati da PostgreSQL\n- `host_resources`: disco/RAM/CPU via psutil (warn 80%, error 92-95%)\n- `db_pool`: conn pool Postgres (attive/idle/waiting, warn 80%)\n- `db_schema`: size schema `plenora` + row count tabelle critiche\n- `jwt_blacklist`: stato blacklist JWT (PostgreSQL) + contatori ops + warning \"inoperante da X min\"\n\nOgni blocco ha `status` in {ok, warn, error, unknown} e `message`\nhuman-readable. Ogni blocco espone anche `scope`:\n`cluster` per dipendenze condivise e `local_replica` per metriche\ndella sola replica backend che risponde. I blocchi locali includono\n`scope_warning`/`warnings`. Errori di uno NON bloccano gli altri\n(graceful degradation).",
         "operationId": "get_system_status_api_admin_system_status_get",
         "responses": {
           "200": {
@@ -8369,7 +8678,7 @@
     },
     "/api/auth/change-password": {
       "post": {
-        "description": "Cambia la propria password. Richiede di conoscere la password attuale.\nQualsiasi utente autenticato (incluso viewer) può cambiare la propria.\n\nRate limit (P1 security-auth): pre-fix endpoint senza throttle.\nUn attaccante con JWT valido (token leak o sessione rubata) poteva\nbrute-forzare `old_password` senza freno: nessun limit per IP/utente,\nnessun lockout. Post-fix: stesso rate limit del login (IP-based)\n+ record di failed attempts per scenari di tentativo brute-force.",
+        "description": "Cambia la propria password. Richiede di conoscere la password attuale.\nQualsiasi utente autenticato (incluso viewer) può cambiare la propria.\n\nApplica lo stesso rate limit del login (IP-based) e registra i failed\nattempts per contenere tentativi brute-force su `old_password`.",
         "operationId": "change_password_api_auth_change_password_post",
         "requestBody": {
           "content": {
@@ -8935,7 +9244,7 @@
         ]
       },
       "put": {
-        "description": "Aggiorna utente.\nsuperadmin → può cambiare role e group_id\nadmin → solo email e is_active, solo nel proprio gruppo\n\nBody schema: `UserUpdateRequest` (Pydantic, extra=\"forbid\"). Type\ncheck + format validation gestiti dal modello; il router applica solo\nla whitelist per-ruolo, il check di esistenza del group_id e i\nself-modify guard.\n\nPre-fix il body era `dict` raw: shape/type non documentati in\nOpenAPI, validation duplicata in 4 punti con check manuali.",
+        "description": "Aggiorna utente.\nsuperadmin → può cambiare role e group_id\nadmin → solo email e is_active, solo nel proprio gruppo\n\nBody schema: `UserUpdateRequest` (Pydantic, extra=\"forbid\"). Type\ncheck + format validation gestiti dal modello; il router applica solo\nla whitelist per-ruolo, il check di esistenza del group_id e i\nself-modify guard.\n\nIl body resta tipizzato in OpenAPI e la validazione non viene duplicata\nmanualmente nel router.",
         "operationId": "update_user_api_auth_users__user_id__put",
         "parameters": [
           {
@@ -11120,7 +11429,7 @@
     },
     "/api/features/write": {
       "post": {
-        "description": "Scrittura su Feature Service esistente (add/update/delete).\n\nSECURITY: require_admin (non require_not_esecutore). Pre-fix qualunque\nutente loggato di ruolo `user` o superiore poteva scrivere su un\nFeature Service ArcGIS condiviso, anche se la mutation modifica dati\nvisibili ad altri tenant via FeatureServer pubblico. La feature di\nwrite su servizi esterni e' un'operazione admin-only per coerenza\ncon `create_connection`/`update_connection`.",
+        "description": "Scrittura su Feature Service esistente (add/update/delete).\n\nSECURITY: require_admin (non require_not_esecutore). La scrittura su\nservizi esterni e' admin-only perche' puo' modificare dati condivisi via\nFeatureServer pubblico.",
         "operationId": "write_features_api_features_write_post",
         "requestBody": {
           "content": {
@@ -12718,8 +13027,6 @@
                 {
                   "enum": [
                     "metadata_only",
-                    "preview_only",
-                    "full_pg",
                     "full_artifact"
                   ],
                   "type": "string"
@@ -12797,8 +13104,6 @@
                 {
                   "enum": [
                     "metadata_only",
-                    "preview_only",
-                    "full_pg",
                     "full_artifact"
                   ],
                   "type": "string"
@@ -13031,7 +13336,7 @@
     },
     "/api/projects/{project_id}/validate": {
       "post": {
-        "description": "Valida l'intero canvas del progetto (Epic Canvas Validation).\n\nOrizzontale: strutturale + per-nodo (i ``validate_node`` registrati al\ncomposition-root). Ritorna il ``ValidationReport`` tipizzato. Non blocca nulla\n(il gate a esecuzione e' separato); e' la valida-on-demand del pulsante.\nPersiste lo stato (``canvas_validated``) con l'esito: True se la catena valida\nsenza errori, altrimenti False (Epic CanvasVal §12).",
+        "description": "Valida l'intero canvas del progetto.\n\nOrizzontale: strutturale + per-nodo (i ``validate_node`` registrati al\ncomposition-root). Ritorna il ``ValidationReport`` tipizzato. Non blocca nulla\n(il gate a esecuzione e' separato); e' la valida-on-demand del pulsante.\nPersiste lo stato (``canvas_validated``) con l'esito: True se la catena valida\nsenza errori, altrimenti False.",
         "operationId": "validate_project_canvas_api_projects__project_id__validate_post",
         "parameters": [
           {
@@ -13415,7 +13720,7 @@
     },
     "/api/runs/compare/l2": {
       "get": {
-        "description": "Confronto L2 tra due run sullo stesso nodo.\nRitorna righe aggiunte in B (non presenti in A) e rimosse da A (non\npresenti in B), confrontando tramite row_hash.\n\nsemantics (2026-04-28): dispatch su\n`persistence_mode` di entrambe le run. L'endpoint NON finge un\ndiff completo se i dati non sono entrambi su `node_rows`:\n  - full_pg + full_pg (o NULL): 200, diff completo come prima.\n  - preview_only + preview_only: 200, diff parziale dichiarato\n    (`partial=true`, `reason=\"preview_only\"`).\n  - metadata_only su almeno un lato: 422 \"diff_available=false,\n    reason=metadata_only_no_rows\".\n  - full_artifact + complete: 501 \"non ancora implementato\"\n    (diff completo da artifact = ).\n  - full_artifact pending/failed/missing: 422 \"non pronto\".\n  - mode mismatch (preview_only vs full_pg): 422 conservativo.\n\nDopo il refactor a tabella unificata plenora.node_rows, il diff\nfull e' una singola query con NOT EXISTS che sfrutta l'indice\n(run_id, node_id, row_hash).",
+        "description": "Confronto L2 tra due run sullo stesso nodo.\nRitorna righe aggiunte in B (non presenti in A) e rimosse da A (non\npresenti in B), confrontando tramite row_hash.\n\nDispatch su `persistence_mode` di entrambe le run. L'endpoint NON finge un\ndiff completo se i dati non sono entrambi su `node_rows`:\n  - full_pg + full_pg: 200, diff completo (compatibilita' storica).\n  - preview_only + preview_only: 200, diff parziale dichiarato\n    (`partial=true`, `reason=\"preview_only\"`).\n  - metadata_only su almeno un lato: 422 \"diff_available=false,\n    reason=metadata_only_no_rows\".\n  - full_artifact + complete: 501 \"non ancora implementato\"\n    (diff completo da artifact = ).\n  - full_artifact pending/failed/missing: 422 \"non pronto\".\n  - mode mismatch (preview_only vs full_pg): 422 conservativo.\n\nDopo il refactor a tabella unificata plenora.node_rows, il diff\nfull e' una singola query con NOT EXISTS che sfrutta l'indice\n(run_id, node_id, row_hash).",
         "operationId": "compare_runs_l2_api_runs_compare_l2_get",
         "parameters": [
           {

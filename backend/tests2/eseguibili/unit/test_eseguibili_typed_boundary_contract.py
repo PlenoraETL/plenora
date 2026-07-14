@@ -174,11 +174,12 @@ def test_execute_router_serializes_typed_service_payload(monkeypatch):
     monkeypatch.setattr(
         router,
         "_save_task_owner",
-        lambda task_id, eseguibile_id, user_id: saved_owner.update(
+        lambda task_id, eseguibile_id, user_id, group_id: saved_owner.update(
             {
                 "task_id": task_id,
                 "eseguibile_id": eseguibile_id,
                 "user_id": user_id,
+                "group_id": group_id,
             }
         ),
     )
@@ -218,6 +219,7 @@ def test_execute_router_serializes_typed_service_payload(monkeypatch):
         "task_id": "task-1",
         "eseguibile_id": "exec-1",
         "user_id": "u-1",
+        "group_id": "grp-1",
     }
 
 

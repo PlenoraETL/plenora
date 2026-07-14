@@ -42,7 +42,7 @@ PR per consolidare il progresso.
 | Engine orizzontali | `auth`, `connections`, `dataframes`, `orchestrator`, `resources`, `results`, `scheduler` | servizi trasversali consumati dai verticali |
 | Applicativi centrali | `projects`, `files`, `datasources`, `eseguibili`, `artifacts`, `intermediate`, `output_contract`, `query_execution` | modelli e storage condivisi del prodotto |
 | Foundation | `io`, `security`, `task_runtime`, `runtime`, `lifecycle` | infrastruttura pura, zero import verso altri domini core (verificato: out-degree 0/1). `lifecycle` ospita il registry del group cleanup (Epic E); la composizione dei default e' in `app/runtime/group_cleanup_wiring.py` |
-| Admin & support | `admin_backups`, `admin_runtime_config`, `admin_system_status`, `logs`, `tickets` | superfici operative |
+| Admin & support | `admin_backups`, `admin_object_storage`, `admin_runtime_config`, `admin_system_status`, `logs`, `tickets` | superfici operative |
 
 `app.shared.*` non e' un dominio: e' la sede dei contratti strutturali
 (es. `ColumnInfo` in `app.shared.execution.column_info`) ed e' importabile da
@@ -83,6 +83,8 @@ La mappa completa degli shim di compatibilita' (Fase 6) e' in
 | `projects -> orchestrator` | verifica lazy dei task attivi prima del lifecycle delete | Estrarre `ActiveTaskProbe` condiviso quando si riduce il ciclo projects/orchestrator |
 | `tickets -> io` | lettura prefisso e streaming allegati senza materializzare BLOB | Intenzionale: support domain verso foundation |
 | `tickets -> security` | upload-size guard sugli allegati | Intenzionale: support domain verso foundation |
+| `admin_object_storage -> auth` | explorer read-only riservato ai superadmin | Intenzionale: RBAC al boundary HTTP |
+| `admin_object_storage -> io` | catalogo paginato e download streaming del bucket runtime | Intenzionale: support domain verso foundation con out-degree 0 |
 
 ## Stato misurato (baseline 2026-07-14, object-storage-only + dispatch outbox)
 
@@ -92,7 +94,9 @@ La mappa completa degli shim di compatibilita' (Fase 6) e' in
   e **`output_contract` esce dal ciclo** (secondo dominio liberato dopo
   `dataframes`). Guardia dedicata:
   `test_canvas_column_shared_contract.py`.
-- **31 domini**, **141 edge cross-domain**. I quattro edge aggiunti rispetto
+- **32 domini**, **143 edge cross-domain**. Il nuovo dominio
+  `admin_object_storage` aggiunge esclusivamente gli edge intenzionali verso
+  `auth` e `io`, resta fuori dalle SCC e non introduce cicli. I quattro edge aggiunti rispetto
   alla vecchia baseline sono documentati sopra e coprono preview streaming,
   task lifecycle e allegati ticket; tre puntano a foundation con out-degree 0.
   Il maggiore SCC resta invariato a 16 domini.

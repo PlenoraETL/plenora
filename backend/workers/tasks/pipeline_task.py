@@ -485,9 +485,12 @@ def preview_pipeline_task(
         try:
             import numpy as _np
             def _to_serializable(value: Any) -> Any:
-                if isinstance(value, _np.integer): return int(value)
-                if isinstance(value, _np.floating): return float(value)
-                if isinstance(value, _np.ndarray): return value.tolist()
+                if isinstance(value, _np.integer):
+                    return int(value)
+                if isinstance(value, _np.floating):
+                    return float(value)
+                if isinstance(value, _np.ndarray):
+                    return value.tolist()
                 if isinstance(value, dict):
                     return {
                         key: _to_serializable(nested_value)
@@ -508,8 +511,13 @@ def preview_pipeline_task(
             persist_preview_payload,
         )
 
+        preview_group_id = str(_get_project_info(project_id).get("group_id") or "")
+        if not preview_group_id:
+            raise RuntimeError("group_id progetto non determinabile per preview")
+
         return persist_preview_payload(
             result,
+            group_id=preview_group_id,
             project_id=project_id,
             task_id=task_id,
         )

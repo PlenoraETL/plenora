@@ -15,7 +15,11 @@ def test_get_result_data_reads_object_storage(monkeypatch):
 
     def fetch(sql, params=()):
         captured.update(sql=sql, params=params)
-        return {"storage_key": "results/p/r.bin", "project_id": "p"}
+        return {
+            "storage_key": "results/p/r.bin",
+            "project_id": "p",
+            "group_id": "g",
+        }
 
     monkeypatch.setattr("app.db.pg_connection.fetchone", fetch)
     with patch(
@@ -33,7 +37,11 @@ def test_get_result_data_rejects_missing_reference(monkeypatch):
 
     monkeypatch.setattr(
         "app.db.pg_connection.fetchone",
-        lambda sql, params=(): {"storage_key": None, "project_id": "p"},
+        lambda sql, params=(): {
+            "storage_key": None,
+            "project_id": "p",
+            "group_id": "g",
+        },
     )
     with pytest.raises(RuntimeError, match="senza storage_key"):
         blob.get_result_data("r")

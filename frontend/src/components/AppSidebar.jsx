@@ -207,6 +207,19 @@ export default function AppSidebar({ counts = {} }) {
         {role.isSuperadmin(user) && (
           <div
             className="app-sidebar__user-row app-sidebar__user-row--admin"
+            onClick={() => navigate('/admin/object-storage')}
+            title="Explorer object storage runtime"
+          >
+            <div className="app-sidebar__avatar app-sidebar__avatar--admin">S3</div>
+            <div className="app-sidebar__user-info">
+              <div className="app-sidebar__user-name">Object Storage</div>
+              <div className="app-sidebar__user-role">file runtime · superadmin</div>
+            </div>
+          </div>
+        )}
+        {role.isSuperadmin(user) && (
+          <div
+            className="app-sidebar__user-row app-sidebar__user-row--admin"
             onClick={() => navigate('/admin/system-status')}
             title="Dashboard stato sistema"
           >

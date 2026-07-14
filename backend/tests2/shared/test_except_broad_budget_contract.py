@@ -84,7 +84,10 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # 2026-07-14 audit: narrowed five deterministic config/filesystem catches.
 # The remaining catches are boundary safety-nets around HTTP/DB/geo/storage
 # libraries or API exception translation; 749 is the new shrink-only ratchet.
-_EXPECT_BROAD_BUDGET = 749
+# +2 (2026-07-14): explorer object storage superadmin. I due catch sono il
+# boundary HTTP fail-safe per provider S3 compatibili, che espongono famiglie
+# di eccezioni diverse; list risponde 503 e download 404 senza leak interni.
+_EXPECT_BROAD_BUDGET = 751
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

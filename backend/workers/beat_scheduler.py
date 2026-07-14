@@ -37,6 +37,10 @@ from app.core.scheduler import log_service as scheduler_log_service
 from app.core.scheduler import schedule_service as schedule_service_module
 from app.core.scheduler import beat_leader_store
 from app.core.resources import storage_reconciliation as storage_reconciliation_module
+from app.core.task_runtime.runtime_leases import (
+    cleanup_runtime_leases,
+    recover_stale_task_claims,
+)
 from app.core.io.local_cleanup import rmtree_safe
 from app.infrastructure.storage import compensation as storage_compensation
 
@@ -229,6 +233,7 @@ class PlenoraBeatScheduler:
         self._reconcile_storage()
         self._cleanup_task_results()
         self._drain_task_dispatch_outbox()
+        self._recover_runtime_leases()
         # Gli schedule dovuti passano dal layer dispatch mantenendo la stessa
         # valutazione di scadenza di BeatEntry.is_due.
         return self._emit_due_via_dispatch()
@@ -253,6 +258,43 @@ class PlenoraBeatScheduler:
                 type(exc).__name__,
                 exc_info=True,
             )
+
+    def _recover_runtime_leases(self) -> None:
+        """Finalize tasks abandoned by a dead worker process."""
+        try:
+            stale = recover_stale_task_claims(
+                limit=int(
+                    app_config.settings.get(
+                        "TASK_EXECUTION_STALE_BATCH_SIZE",
+                        100,
+                    )
+                ),
+                result_ttl_seconds=int(app_config.settings.TASK_RESULT_EXPIRES),
+                recovery_grace_seconds=int(
+                    app_config.settings.get(
+                        "TASK_EXECUTION_RECOVERY_GRACE_SECONDS",
+                        30,
+                    )
+                ),
+            )
+            removed_workers, removed_claims = cleanup_runtime_leases(
+                retention_seconds=int(
+                    app_config.settings.get(
+                        "RUNTIME_LEASE_RETENTION_SECONDS",
+                        app_config.settings.TASK_RESULT_EXPIRES,
+                    )
+                )
+            )
+            if stale or removed_workers or removed_claims:
+                logger.warning(
+                    "[RUNTIME-LEASE] stale_failed=%d workers_pruned=%d "
+                    "claims_pruned=%d",
+                    len(stale),
+                    removed_workers,
+                    removed_claims,
+                )
+        except Exception:
+            logger.exception("[RUNTIME-LEASE] recovery fallita")
 
     def _dispatch_schedule_task(self, name: str, kwargs: dict) -> None:
         """Dispatcha un task schedule via il layer runtime-agnostico.

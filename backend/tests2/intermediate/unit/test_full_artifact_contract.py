@@ -139,7 +139,7 @@ def test_full_artifact_writes_parquet_and_manifest_to_runtime_object_storage():
 
     # Layout deterministico
     expected_prefix = (
-        "intermediate/group=grp-FA/project=proj-FA/run=run-FA/"
+        "tenants/grp-FA/intermediate/project=proj-FA/run=run-FA/"
         "module=manipola/node=node-FA/kind=final/"
     )
     assert any(k == expected_prefix + "data.parquet" for k in keys), keys
@@ -288,7 +288,7 @@ def test_full_artifact_db_failure_compensates_uploaded_objects():
             )
 
     expected_prefix = (
-        "intermediate/group=grp-C/project=proj-C/run=run-C/"
+        "tenants/grp-C/intermediate/project=proj-C/run=run-C/"
         "module=manipola/node=node-C/kind=final/"
     )
     assert {k for k, _ in deleted} == {
@@ -318,7 +318,10 @@ def test_artifact_layout_key_is_deterministic_and_well_formed():
         node_id="n",
         snapshot_kind="checkpoint",
     )
-    assert key == "intermediate/group=g/project=p/run=r/module=manipola/node=n/kind=checkpoint/"
+    assert key == (
+        "tenants/g/intermediate/project=p/run=r/"
+        "module=manipola/node=n/kind=checkpoint/"
+    )
 
 
 def test_artifact_layout_rejects_slash_in_identifier():
@@ -340,7 +343,7 @@ def test_artifact_layout_strips_trailing_slash_from_prefix():
         group_id="g", project_id="p", run_id="r",
         module="manipola", node_id="n", snapshot_kind="final",
     )
-    assert key.startswith("intermediate/group=g/")
+    assert key.startswith("tenants/g/intermediate/")
     assert "//" not in key.replace("kind=", "k=")
 
 

@@ -283,18 +283,24 @@ def _task_owner_path(task_id: str) -> Path:
     )
 
 
-def _save_task_owner(task_id: str, eseguibile_id: str, user_id: str) -> None:
+def _save_task_owner(
+    task_id: str, eseguibile_id: str, user_id: str, group_id: str,
+) -> None:
     _output_store.save_task_owner(
         task_id,
         eseguibile_id,
         user_id,
+        group_id=group_id,
         outputs_dir=settings.ESEGUIBILI_OUTPUTS_DIR,
     )
 
 
-def _load_task_owner(task_id: str) -> Optional[Mapping[str, object]]:
+def _load_task_owner(
+    task_id: str, *, group_id: str,
+) -> Optional[Mapping[str, object]]:
     return _output_store.load_task_owner(
         task_id,
+        group_id=group_id,
         outputs_dir=settings.ESEGUIBILI_OUTPUTS_DIR,
     )
 
@@ -435,7 +441,12 @@ def execute_eseguibile(
             _task_id = None
             _task_id = result.task_id
             if _task_id:
-                _save_task_owner(_task_id, eseguibile_id, current_user.user_id)
+                _save_task_owner(
+                    _task_id,
+                    eseguibile_id,
+                    current_user.user_id,
+                    str(record.get("group_id") or current_user.group_id),
+                )
         except Exception as _me:
             logger.warning(f"save task owner meta failed: {_me}")
     except ValueError as e:
@@ -476,6 +487,9 @@ def download_eseguibile_output(
     """
     record = eseguibili_db.get_eseguibile(eseguibile_id)
     _check_visible(record, current_user)
+    owner_group_id = str(record.get("group_id") or "")
+    if not owner_group_id:
+        raise HTTPException(status_code=404, detail="Tenant eseguibile non determinabile")
 
     # Sanitizza task_id per evitare path traversal
     safe_task_id = "".join(c for c in task_id if c.isalnum() or c in "-_")
@@ -486,7 +500,7 @@ def download_eseguibile_output(
     # QUESTO eseguibile e da QUESTO utente. Senza questo check, chiunque
     # veda un eseguibile condiviso e conosca/indovini un task_id valido
     # puo' scaricare l'output di un'esecuzione altrui
-    owner_meta = _load_task_owner(safe_task_id)
+    owner_meta = _load_task_owner(safe_task_id, group_id=owner_group_id)
     if owner_meta is None:
         # Metadata assente: task precedente al tracking owner o cleanup gia' fatto.
         # Fail-closed: non consentire l'accesso se non siamo sicuri
@@ -507,7 +521,9 @@ def download_eseguibile_output(
     # Lookup dell'output su object storage (S3 via cloud_backends
     # Multi-host safe: backend e worker possono essere su macchine diverse
     try:
-        keys = _output_store.find_output_keys(safe_task_id)
+        keys = _output_store.find_output_keys(
+            safe_task_id, group_id=owner_group_id,
+        )
     except Exception as e:
         logger.warning(f"Lookup storage eseguibili fallito: {e}")
         keys = []
@@ -523,14 +539,18 @@ def download_eseguibile_output(
     filename = key.rsplit("/", 1)[-1]
 
     try:
-        stream = _output_store.open_stream(key)
+        stream = _output_store.open_stream(
+            key, expected_group_id=owner_group_id,
+        )
     except Exception as e:
         logger.error(f"[CRASH] open_stream eseguibile {key}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Errore apertura stream output")
 
     def _cleanup_after_send():
         try:
-            _output_store.delete_task_outputs(safe_task_id)
+            _output_store.delete_task_outputs(
+                safe_task_id, group_id=owner_group_id,
+            )
         except Exception as e:
             logger.warning(f"Cleanup storage post-download fallito per {safe_task_id}: {e}")
 

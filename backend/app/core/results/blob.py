@@ -11,6 +11,8 @@ from typing import Optional, TypedDict
 
 from app.core.resources.loaders.result_blob import _dispatch_by_id
 from app.core.results import db as results_db
+from app.core.io.tenant_namespace import assert_tenant_key
+from app.shared.resources.storage_layout import RESULTS_PREFIX
 
 
 class ResultStream(TypedDict):
@@ -57,6 +59,14 @@ def open_result_stream(
     fmt = row.format or "bin"
     if not row.storage_key:
         raise RuntimeError(f"Result {result_id} senza storage_key")
+    if not row.group_id:
+        raise RuntimeError(f"Result {result_id} senza group_id")
+    assert_tenant_key(
+        row.storage_key,
+        expected_group_id=row.group_id,
+        expected_domain=RESULTS_PREFIX,
+        allow_legacy=True,
+    )
     from app.core.io.object_storage import get_runtime_object_storage
 
     stream = get_runtime_object_storage().get_object_stream(row.storage_key)

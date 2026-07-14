@@ -29,6 +29,11 @@ class ObjectMeta(TypedDict):
     size: int
 
 
+class ObjectPage(TypedDict):
+    objects: List[ObjectMeta]
+    next_cursor: Optional[str]
+
+
 @runtime_checkable
 class SecretsBackend(Protocol):
     """Backend per recupero secrets (Parameter Store, Key Vault, Secret Manager)."""
@@ -67,6 +72,16 @@ class ObjectStorage(Protocol):
         dimensione pratica; il limite reale e' la RAM del processo
         chiamante (se `data` entra in memoria, il provider la uploada).
         """
+        ...
+
+    def list_objects_page(
+        self,
+        prefix: str,
+        *,
+        limit: int,
+        cursor: Optional[str] = None,
+    ) -> ObjectPage:
+        """Lista una pagina bounded senza materializzare tutto il bucket."""
         ...
 
     def upload_fileobj(
@@ -296,6 +311,37 @@ class AwsS3ObjectStorage:
                     "size": obj["Size"],
                 })
         return out
+
+    def list_objects_page(
+        self,
+        prefix: str,
+        *,
+        limit: int,
+        cursor: Optional[str] = None,
+    ) -> ObjectPage:
+        bounded_limit = max(1, min(int(limit), 500))
+        request: dict[str, Any] = {
+            "Bucket": self.bucket,
+            "Prefix": prefix,
+            "MaxKeys": bounded_limit,
+        }
+        if cursor:
+            request["ContinuationToken"] = cursor
+        page = self._client().list_objects_v2(**request)
+        objects: List[ObjectMeta] = [
+            {
+                "key": obj["Key"],
+                "last_modified": obj["LastModified"],
+                "size": obj["Size"],
+            }
+            for obj in page.get("Contents", [])
+        ]
+        next_cursor = (
+            str(page.get("NextContinuationToken"))
+            if page.get("IsTruncated") and page.get("NextContinuationToken")
+            else None
+        )
+        return {"objects": objects, "next_cursor": next_cursor}
 
     def upload(self, local_path: Path, key: str) -> None:
         """Upload file locale + integrity verification post-upload.

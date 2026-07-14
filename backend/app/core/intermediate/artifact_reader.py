@@ -19,6 +19,8 @@ from app.core.resources.preview_caps import (
     resolve_artifact_preview_max_bytes,
 )
 from app.core.resources.exceptions import MemoryLimitExceededError
+from app.core.io.tenant_namespace import TenantStorageKeyError, assert_tenant_key
+from app.shared.resources.storage_layout import INTERMEDIATE_PREFIX
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +58,7 @@ class ArtifactPreviewResult:
 def load_preview_from_artifact(
     artifact_uri: str,
     *,
+    expected_group_id: str,
     limit: int = 100,
 ) -> ArtifactPreviewResult:
     """Scarica `data.parquet` via runtime object storage e ritorna le
@@ -76,6 +79,15 @@ def load_preview_from_artifact(
         return ArtifactPreviewResult(error="artifact_uri vuoto")
     if limit <= 0:
         return ArtifactPreviewResult(error=f"limit invalido: {limit}")
+    try:
+        assert_tenant_key(
+            artifact_uri,
+            expected_group_id=expected_group_id,
+            expected_domain=INTERMEDIATE_PREFIX,
+            allow_legacy=True,
+        )
+    except TenantStorageKeyError:
+        return ArtifactPreviewResult(error="artifact_uri di un altro tenant")
 
     try:
         from app.core.io.object_storage import (

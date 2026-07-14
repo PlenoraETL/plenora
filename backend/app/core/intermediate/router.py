@@ -207,7 +207,9 @@ def get_node_data(
                     load_preview_from_artifact,
                 )
                 preview = load_preview_from_artifact(
-                    artifact_uri, limit=limit,
+                    artifact_uri,
+                    expected_group_id=(run or {}).get("group_id") or current_user.group_id,
+                    limit=limit,
                 )
                 if preview.error:
                     # 200 operativo: niente 500 sul boundary HTTP

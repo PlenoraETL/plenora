@@ -7,10 +7,16 @@ Chiude R3 del multi-host audit: gli output degli eseguibili non devono
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List
+from typing import Any, Iterable, List
 
+from app.core.io.runtime_filesystem import upload_local_path
 from app.shared.contracts.payloads import ObjectMap
 from app.shared.resources.storage_layout import ESEGUIBILI_OUTPUTS_PREFIX
+from app.core.io.tenant_namespace import (
+    assert_tenant_key,
+    build_tenant_key,
+    tenant_domain_prefix,
+)
 from app.utils.logger import get_logger
 
 
@@ -34,11 +40,13 @@ def _storage():
     return get_runtime_object_storage()
 
 
-def _key_for(task_id: str, filename: str) -> str:
-    return f"{PREFIX}/{task_id}/{filename}"
+def _key_for(group_id: str, task_id: str, filename: str) -> str:
+    return build_tenant_key(group_id, PREFIX, task_id, filename)
 
 
-def save_bytes(task_id: str, filename: str, data: bytes) -> str:
+def save_bytes(
+    task_id: str, filename: str, data: bytes, *, group_id: str,
+) -> str:
     """Upload diretto di bytes su object storage (no FS staging).
 
     Usato quando il produttore ha gia' i bytes in-memory (es.
@@ -47,7 +55,7 @@ def save_bytes(task_id: str, filename: str, data: bytes) -> str:
 
     Ritorna la key S3 usata.
     """
-    key = _key_for(task_id, filename)
+    key = _key_for(group_id, task_id, filename)
     storage = _storage()
     storage.upload_bytes(data, key)
     logger.info(f"[storage] eseguibili output uploaded (in-memory): {key}")
@@ -59,7 +67,13 @@ def save_bytes(task_id: str, filename: str, data: bytes) -> str:
 _PART_SIZE = 8 * 1024 * 1024
 
 
-def save_chunks(task_id: str, filename: str, chunks) -> str:
+def save_chunks(
+    task_id: str,
+    filename: str,
+    chunks: Iterable[bytes],
+    *,
+    group_id: str,
+) -> str:
     """Upload streaming via S3 multipart real-time.
 
     Mirror di `StreamingResultBlobWriter._init_s3` ma per il bucket
@@ -94,7 +108,7 @@ def save_chunks(task_id: str, filename: str, chunks) -> str:
         evitare parts orfane in S3.
     """
     storage = _storage()
-    key = _key_for(task_id, filename)
+    key = _key_for(group_id, task_id, filename)
 
     # boto3 client + bucket via internal helper (ABI interna stabile
     # del backend S3, stesso pattern di StreamingResultBlobWriter).
@@ -170,7 +184,12 @@ def save_chunks(task_id: str, filename: str, chunks) -> str:
         raise
 
 
-def _abort_multipart_safe(client, bucket: str, key: str, upload_id: str) -> None:
+def _abort_multipart_safe(
+    client: Any,
+    bucket: str,
+    key: str,
+    upload_id: str,
+) -> None:
     """Cleanup helper: aborta multipart upload swallow-error (best-effort)."""
     try:
         client.abort_multipart_upload(
@@ -182,7 +201,7 @@ def _abort_multipart_safe(client, bucket: str, key: str, upload_id: str) -> None
         )
 
 
-def save(task_id: str, src_path: Path) -> str:
+def save(task_id: str, src_path: Path, *, group_id: str) -> str:
     """Upload del file su object storage, poi delete del local temp.
 
     Il provider usa upload_file/multipart direttamente dal path: nessuna copia
@@ -195,8 +214,8 @@ def save(task_id: str, src_path: Path) -> str:
     if not src_path.is_file():
         raise ValueError(f"Source non e' un file: {src_path}")
 
-    key = _key_for(task_id, src_path.name)
-    _storage().upload(src_path, key)
+    key = _key_for(group_id, task_id, src_path.name)
+    upload_local_path(_storage(), src_path, key)
     logger.info(f"[storage] eseguibili output uploaded (path streaming): {key}")
 
     # Cleanup eager del local file dopo upload riuscito. Se l'upload
@@ -215,34 +234,55 @@ def save(task_id: str, src_path: Path) -> str:
     return key
 
 
-def find_keys(task_id: str) -> List[str]:
+def find_keys(task_id: str, *, group_id: str) -> List[str]:
     """Lista le key oggetti appartenenti a `task_id`. Oggi tipicamente 1."""
     storage = _storage()
-    prefix = f"{PREFIX}/{task_id}/"
-    objs = storage.list_objects(prefix)
+    prefix = f"{tenant_domain_prefix(group_id, PREFIX)}{task_id}/"
+    # Legacy prefix remains readable until the migration has completed.
+    objs = storage.list_objects(prefix) + storage.list_objects(
+        f"{PREFIX}/{task_id}/"
+    )
     return [o["key"] for o in objs]
 
 
-def open_stream(key: str) -> ObjectMap:
+def open_stream(key: str, *, expected_group_id: str) -> ObjectMap:
     """Apre uno stream di download. Delega al backend cloud."""
+    assert_tenant_key(
+        key,
+        expected_group_id=expected_group_id,
+        expected_domain=PREFIX,
+        allow_legacy=True,
+    )
     return _storage().get_object_stream(key)
 
 
-def delete_key(key: str) -> None:
+def delete_key(key: str, *, expected_group_id: str) -> None:
     """Cancella una singola key. Idempotenza delegata al backend cloud."""
+    assert_tenant_key(
+        key,
+        expected_group_id=expected_group_id,
+        expected_domain=PREFIX,
+        allow_legacy=True,
+    )
     _storage().delete(key)
 
 
-def delete_by_task(task_id: str) -> int:
+def delete_by_task(task_id: str, *, group_id: str) -> int:
     """Cancella tutti gli oggetti sotto `eseguibili-outputs/{task_id}/`.
 
     Ritorna count degli oggetti eliminati. Idempotente: se non c'e'
     niente, ritorna 0 senza errori.
     """
     storage = _storage()
-    keys = find_keys(task_id)
+    keys = find_keys(task_id, group_id=group_id)
     for key in keys:
         try:
+            assert_tenant_key(
+                key,
+                expected_group_id=group_id,
+                expected_domain=PREFIX,
+                allow_legacy=True,
+            )
             storage.delete(key)
         except Exception as e:
             logger.warning(f"[storage] delete {key} fallito (non-fatal): {e}")

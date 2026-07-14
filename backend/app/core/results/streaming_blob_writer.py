@@ -87,6 +87,9 @@ class StreamingResultBlobWriter:
         self.fmt = fmt
         self.rows_count = rows_count
         self.group_id = group_id
+        self.resolved_group_id = store.resolve_group_id_for_result(
+            self.project_id, self.group_id,
+        )
         self.result_id = str(uuid.uuid4())
 
         self._total_bytes = 0
@@ -110,7 +113,9 @@ class StreamingResultBlobWriter:
         # (parte dell'ABI interna del backend, stabile).
         self._client = self._storage._client()
         self._bucket = self._storage.bucket
-        self._key = _storage_key(self.project_id, self.result_id)
+        self._key = _storage_key(
+            self.resolved_group_id, self.project_id, self.result_id,
+        )
 
         try:
             extra = self._storage._extra_args()
@@ -226,14 +231,11 @@ class StreamingResultBlobWriter:
             self._verify_integrity_or_fail()
 
         # Object su S3 ora canonical. Save DB row referente.
-        resolved_group_id = store.resolve_group_id_for_result(
-            self.project_id, self.group_id,
-        )
         try:
             store.save_result_row(
                 result_id=self.result_id,
                 project_id=self.project_id,
-                group_id=resolved_group_id,
+                group_id=self.resolved_group_id,
                 filename=self.filename,
                 fmt=self.fmt,
                 rows_count=self.rows_count,

@@ -242,16 +242,26 @@ def install_enrichment_task_mocks(
     # fake. Consuma i chunk del generator per non lasciare thread producer appesi.
     import app.core.eseguibili.storage as _eseg_src
 
-    def _fake_eseg_save_chunks(task_id, filename, chunks):
+    def _fake_eseg_save_chunks(task_id, filename, chunks, *, group_id):
         for _ in chunks:
             pass
         spies.eseg_saves.append(
-            {"task_id": task_id, "filename": filename, "kind": "chunks"}
+            {
+                "task_id": task_id,
+                "filename": filename,
+                "group_id": group_id,
+                "kind": "chunks",
+            }
         )
 
-    def _fake_eseg_save_bytes(task_id, filename, data):
+    def _fake_eseg_save_bytes(task_id, filename, data, *, group_id):
         spies.eseg_saves.append(
-            {"task_id": task_id, "filename": filename, "kind": "bytes"}
+            {
+                "task_id": task_id,
+                "filename": filename,
+                "group_id": group_id,
+                "kind": "bytes",
+            }
         )
 
     monkeypatch.setattr(_eseg_src, "save_chunks", _fake_eseg_save_chunks, raising=False)
@@ -364,7 +374,8 @@ def install_enrichment_task_mocks(
     )
 
     # 10. snapshot / writer.close_run (lazy intermediate)
-    _rec_snapshot = lambda **kw: spies.final_snapshots.append(kw)
+    def _rec_snapshot(**kw):
+        spies.final_snapshots.append(kw)
     snap_name = "app.core.intermediate.snapshot"
     if snap_name in sys.modules:
         monkeypatch.setattr(f"{snap_name}.record_final_snapshot", _rec_snapshot)
@@ -373,7 +384,8 @@ def install_enrichment_task_mocks(
         stub.record_final_snapshot = _rec_snapshot
         monkeypatch.setitem(sys.modules, snap_name, stub)
 
-    _rec_iclose = lambda **kw: spies.intermediate_close_runs.append(kw)
+    def _rec_iclose(**kw):
+        spies.intermediate_close_runs.append(kw)
     writer_name = "app.core.intermediate.writer"
     if writer_name in sys.modules:
         monkeypatch.setattr(f"{writer_name}.close_run", _rec_iclose)

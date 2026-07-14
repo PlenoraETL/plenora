@@ -15,6 +15,12 @@ from tempfile import SpooledTemporaryFile
 from typing import Mapping, Optional
 
 from app.core.io import object_storage as object_storage_module
+from app.core.io.tenant_namespace import (
+    TenantStorageKeyError,
+    assert_tenant_key,
+    build_tenant_key,
+    legacy_domain,
+)
 from app.shared.resources.storage_layout import PREVIEWS_PREFIX
 from app.utils.logger import get_logger
 from app.core.io.bounded_streams import spool_memory_limit, stream_size
@@ -22,30 +28,34 @@ from app.core.io.bounded_streams import spool_memory_limit, stream_size
 logger = get_logger(__name__)
 
 PREVIEW_STORAGE_KEY_FIELD = "preview_storage_key"
+PREVIEW_GROUP_ID_FIELD = "preview_group_id"
 
 
 class PreviewPayloadError(RuntimeError):
     """Raised when a preview payload cannot be persisted or hydrated."""
 
 
-def _storage_key(project_id: str, task_id: str) -> str:
+def _storage_key(group_id: str, project_id: str, task_id: str) -> str:
     safe_project = "".join(c for c in str(project_id) if c.isalnum() or c in "-_")
     safe_task = "".join(c for c in str(task_id) if c.isalnum() or c in "-_")
     if not safe_project or safe_project != str(project_id):
         raise PreviewPayloadError("project_id non valido per preview storage")
     if not safe_task or safe_task != str(task_id):
         raise PreviewPayloadError("task_id non valido per preview storage")
-    return f"{PREVIEWS_PREFIX}/{safe_project}/{safe_task}.json"
+    return build_tenant_key(
+        group_id, PREVIEWS_PREFIX, safe_project, f"{safe_task}.json",
+    )
 
 
 def persist_preview_payload(
     payload: Mapping[str, object],
     *,
+    group_id: str,
     project_id: str,
     task_id: str,
 ) -> Mapping[str, object]:
     """Persist a successful preview and return its small task envelope."""
-    key = _storage_key(project_id, task_id)
+    key = _storage_key(group_id, project_id, task_id)
     spool = SpooledTemporaryFile(max_size=spool_memory_limit(), mode="w+b")
     try:
         text_stream = io.TextIOWrapper(spool, encoding="utf-8", write_through=True)
@@ -76,6 +86,7 @@ def persist_preview_payload(
         "project_id": project_id,
         "task_id": task_id,
         PREVIEW_STORAGE_KEY_FIELD: key,
+        PREVIEW_GROUP_ID_FIELD: group_id,
         "preview_size_bytes": size_bytes,
         "preview_count": payload.get("preview_count"),
         "total_count": payload.get("total_count"),
@@ -92,12 +103,22 @@ def is_preview_reference(payload: object) -> bool:
 def hydrate_preview_payload(
     payload: Mapping[str, object],
     *,
+    expected_group_id: str,
     max_bytes: Optional[int] = None,
 ) -> Mapping[str, object]:
     """Read a preview reference from S3 and return the original JSON object."""
     key = str(payload.get(PREVIEW_STORAGE_KEY_FIELD) or "")
-    if not key.startswith(f"{PREVIEWS_PREFIX}/"):
-        raise PreviewPayloadError("Riferimento preview object storage non valido")
+    try:
+        assert_tenant_key(
+            key,
+            expected_group_id=expected_group_id,
+            expected_domain=PREVIEWS_PREFIX,
+            allow_legacy=True,
+        )
+    except TenantStorageKeyError as exc:
+        raise PreviewPayloadError(
+            "Riferimento preview object storage non valido"
+        ) from exc
 
     if max_bytes is None:
         from app.config import settings
@@ -145,7 +166,20 @@ def hydrate_preview_payload(
 def delete_preview_payload(payload: Mapping[str, object]) -> bool:
     """Best-effort delete of the object referenced by a task envelope."""
     key = str(payload.get(PREVIEW_STORAGE_KEY_FIELD) or "")
-    if not key.startswith(f"{PREVIEWS_PREFIX}/"):
+    group_id = str(payload.get(PREVIEW_GROUP_ID_FIELD) or "")
+    if group_id:
+        try:
+            assert_tenant_key(
+                key,
+                expected_group_id=group_id,
+                expected_domain=PREVIEWS_PREFIX,
+                allow_legacy=True,
+            )
+        except TenantStorageKeyError:
+            return False
+    elif legacy_domain(key) != PREVIEWS_PREFIX:
+        # Old envelopes did not carry preview_group_id. Only their legacy,
+        # non-tenant key can be deleted without weakening canonical checks.
         return False
     try:
         object_storage_module.get_runtime_object_storage().delete(key)
@@ -166,7 +200,16 @@ def cleanup_expired_preview_payloads(*, ttl_seconds: int) -> int:
     storage = object_storage_module.get_runtime_object_storage()
     now = datetime.now(timezone.utc)
     removed = 0
-    for obj in storage.list_objects(f"{PREVIEWS_PREFIX}/"):
+    objects = storage.list_objects("tenants/") + storage.list_objects(
+        f"{PREVIEWS_PREFIX}/"
+    )
+    for obj in objects:
+        object_key = str(obj.get("key") or "")
+        if (
+            f"/{PREVIEWS_PREFIX}/" not in object_key
+            and not object_key.startswith(f"{PREVIEWS_PREFIX}/")
+        ):
+            continue
         modified = obj.get("last_modified")
         if modified is None:
             continue
@@ -174,13 +217,14 @@ def cleanup_expired_preview_payloads(*, ttl_seconds: int) -> int:
             modified = modified.replace(tzinfo=timezone.utc)
         if (now - modified).total_seconds() < ttl_seconds:
             continue
-        storage.delete(str(obj["key"]))
+        storage.delete(object_key)
         removed += 1
     return removed
 
 
 __all__ = [
     "PREVIEW_STORAGE_KEY_FIELD",
+    "PREVIEW_GROUP_ID_FIELD",
     "PreviewPayloadError",
     "cleanup_expired_preview_payloads",
     "delete_preview_payload",

@@ -140,6 +140,7 @@ def create_multi_layer_from_upload(
     is_sheet_based = format_type in ['xlsx', 'xls']
 
     now = time_now()
+    resolved_group_id = group_id or default_group
 
     # BE-HARDEN-001C E1 - shared blob dispatch
     # 1 chiamata a dispatch_blob_storage PRIMA del loop con
@@ -151,6 +152,7 @@ def create_multi_layer_from_upload(
     batch_id = f"batch_{uuid.uuid4().hex}"
     shared_blob_kwargs = dispatch_blob_storage(
         batch_id, source_stream, filename,
+        group_id=resolved_group_id,
         storage_key_id=batch_id,
         size_bytes=source_size,
     )
@@ -217,7 +219,7 @@ def create_multi_layer_from_upload(
             row_count=row_count,
             file_size=source_size,
             crs=crs,
-            group_id=group_id or default_group,
+            group_id=resolved_group_id,
             created_at=now,
             updated_at=now,
         )
@@ -230,7 +232,7 @@ def create_multi_layer_from_upload(
 
         rows.append({
             "file_id": file_id,
-            "group_id": group_id or default_group,
+            "group_id": resolved_group_id,
             "name": file_source_name,
             "original_filename": filename,
             "fmt": format_type,

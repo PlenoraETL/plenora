@@ -471,10 +471,12 @@ def test_save_result_blob_object_storage_small_file_goes_to_runtime(
     assert rid == "res-os-1"
     assert len(fake.uploads_path) == 1
     upload_path, upload_key = fake.uploads_path[0]
-    assert upload_key == "results/proj-1/res-os-1.bin"
+    assert upload_key == "tenants/grp-1/results/proj-1/res-os-1.bin"
     # Persistenza DB: solo metadata + storage_key, data=NULL.
     assert "data" not in saved
-    assert saved["storage_key"] == "results/proj-1/res-os-1.bin"
+    assert saved["storage_key"] == (
+        "tenants/grp-1/results/proj-1/res-os-1.bin"
+    )
     assert saved["size_bytes"] == expected_size
     # File temp pulito post-success (path-based usa _saved=True nel finally).
     assert not result_file.exists()
@@ -501,10 +503,14 @@ def test_save_result_blob_from_bytes_object_storage_small_payload_goes_to_runtim
 
     assert rid == "res-os-1"
     # In-memory writer usa upload_bytes (no path).
-    assert fake.uploads_bytes == [(payload, "results/proj-1/res-os-1.bin")]
+    assert fake.uploads_bytes == [
+        (payload, "tenants/grp-1/results/proj-1/res-os-1.bin")
+    ]
     assert fake.uploads_path == []
     assert "data" not in saved
-    assert saved["storage_key"] == "results/proj-1/res-os-1.bin"
+    assert saved["storage_key"] == (
+        "tenants/grp-1/results/proj-1/res-os-1.bin"
+    )
     assert saved["size_bytes"] == len(payload)
 
 

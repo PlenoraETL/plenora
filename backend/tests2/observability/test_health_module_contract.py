@@ -26,6 +26,8 @@ pytestmark = [pytest.mark.unit, pytest.mark.observability, pytest.mark.contract]
 _READINESS_CHECKS_OK = {
     "check_postgres": (True, "ok"),
     "check_broker": (True, "ok"),
+    "check_task_workers": (True, "data-plane=1 control-plane=1"),
+    "check_task_queues": (True, "ready=0 dead_letters=0"),
     "check_pool_headroom": (True, "1/12 in uso, 11 free"),
     "check_migrations_aligned": (True, "aligned"),
     "check_object_storage": (True, "ok"),
@@ -35,7 +37,8 @@ _READINESS_CHECKS_OK = {
 }
 
 _READINESS_KEYS = {
-    "postgres", "broker", "pool_headroom", "migrations",
+    "postgres", "broker", "task_workers", "task_queues",
+    "pool_headroom", "migrations",
     "object_storage", "reconciliation_backlog",
     "beat_heartbeat", "bootstrap_complete",
 }
@@ -369,9 +372,9 @@ def test_check_migrations_aligned_fail_open_on_exception():
         from app.observability.health import check_migrations_aligned
 
         ok, detail = check_migrations_aligned()
-    # Fail-OPEN preserved from main.py.
-    assert ok is True
-    assert "check skipped" in detail
+    # Migration alignment is mandatory: inability to verify it is not ready.
+    assert ok is False
+    assert "check failed" in detail
 
 
 # 7. gather_liveness - process-only /health
@@ -785,7 +788,7 @@ def _mk_count_row(state: str, domain: str, count: int):
 def test_check_reconciliation_backlog_ok_when_empty():
     """Tabella vuota -> outcome (True, "pending=0 lost=0")."""
     with patch(
-        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain_strict",
         return_value=[],
     ), patch(
         "app.core.resources.storage_reconciliation.count_pending_by_operation",
@@ -806,7 +809,7 @@ def test_check_reconciliation_backlog_ok_when_below_thresholds():
         _mk_count_row("lost", "file_source", 2),
     ]
     with patch(
-        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain_strict",
         return_value=counts,
     ), patch(
         "app.core.resources.storage_reconciliation.count_pending_by_operation",
@@ -838,7 +841,7 @@ def test_check_reconciliation_backlog_failed_above_pending_threshold(monkeypatch
         _mk_count_row("lost", "file_source", 1),
     ]
     with patch(
-        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain_strict",
         return_value=counts,
     ), patch(
         "app.core.resources.storage_reconciliation.count_pending_by_operation",
@@ -871,7 +874,7 @@ def test_check_reconciliation_backlog_failed_above_lost_threshold(monkeypatch):
         _mk_count_row("lost", "file_source", 15),  # over 5
     ]
     with patch(
-        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain_strict",
         return_value=counts,
     ):
         from app.observability.health import check_reconciliation_backlog
@@ -899,7 +902,7 @@ def test_check_reconciliation_backlog_failed_on_both_thresholds(monkeypatch):
         _mk_count_row("lost", "result_blob", 20),
     ]
     with patch(
-        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain_strict",
         return_value=counts,
     ):
         from app.observability.health import check_reconciliation_backlog
@@ -931,7 +934,7 @@ def test_check_reconciliation_backlog_skipped_when_pending_threshold_zero(monkey
         _mk_count_row("lost", "file_source", 1),
     ]
     with patch(
-        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain_strict",
         return_value=counts,
     ):
         from app.observability.health import check_reconciliation_backlog
@@ -942,7 +945,7 @@ def test_check_reconciliation_backlog_skipped_when_pending_threshold_zero(monkey
     assert "lost=1" in detail
 
 
-def test_check_reconciliation_backlog_fail_open_on_count_error():
+def test_check_reconciliation_backlog_fails_closed_on_count_error():
     """`count_active_by_state_domain` returns [] su DB error
     (best-effort); il backlog check segue lo stesso fail-OPEN del
     pattern `check_pool_headroom`/`check_migrations_aligned`: se la
@@ -952,14 +955,14 @@ def test_check_reconciliation_backlog_fail_open_on_count_error():
         raise RuntimeError("DB unreachable")
 
     with patch(
-        "app.core.resources.storage_reconciliation.count_active_by_state_domain",
+        "app.core.resources.storage_reconciliation.count_active_by_state_domain_strict",
         _raise,
     ):
         from app.observability.health import check_reconciliation_backlog
 
         ok, detail = check_reconciliation_backlog()
-    assert ok is True
-    assert "skipped" in detail
+    assert ok is False
+    assert "failed" in detail
     assert "RuntimeError" in detail
 
 
@@ -972,7 +975,7 @@ def test_check_reconciliation_backlog_does_not_import_db_directly():
     src = Path(h.__file__).read_text(encoding="utf-8")
     identifiers = all_identifiers(src)
     # Public boundary consumed.
-    assert "count_active_by_state_domain" in identifiers
+    assert "count_active_by_state_domain_strict" in identifiers
     # `check_reconciliation_backlog` chiamata in `gather_readiness`.
     assert "check_reconciliation_backlog" in identifiers
 

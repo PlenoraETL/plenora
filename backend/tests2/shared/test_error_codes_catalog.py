@@ -64,6 +64,7 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
     # batch 009 — Not-Found family
     "project_not_found",
     "task_not_found",
+    "worker_lost",
     "schedule_not_found",
     "run_not_found",
     "bundle_not_found",
@@ -207,7 +208,7 @@ def test_catalog_count_domain_sixty():
     27 BE-GO-READY-AUTH-DOMAIN-PROMOTION-001 auth family +
     1 compatibility domain conflict code +
     5 dispatch carica #18/#20 write/visibility family)."""
-    assert len(EXPECTED_DOMAIN_CODES) == 60
+    assert len(EXPECTED_DOMAIN_CODES) == 61
     assert len(error_codes.KNOWN_DOMAIN_CODES) == len(EXPECTED_DOMAIN_CODES)
 
 

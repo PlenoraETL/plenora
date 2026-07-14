@@ -97,6 +97,19 @@ class Settings:
         # TTL delle righe task_results su PG (era il result-expires del
         # result backend; alias env legacy CELERY_RESULT_EXPIRES accettato).
         "TASK_RESULT_EXPIRES":        86400,
+        # Runtime leases shared by native Windows/Linux and containers.
+        # Worker heartbeats make readiness reflect actual consumers; task
+        # leases make hard process loss observable and recoverable.
+        "WORKER_HEARTBEAT_INTERVAL_SECONDS": 10,
+        "READINESS_WORKER_HEARTBEAT_MAX_AGE_SECONDS": 45,
+        "TASK_EXECUTION_LEASE_SECONDS": 45,
+        "TASK_EXECUTION_RECOVERY_GRACE_SECONDS": 30,
+        "TASK_EXECUTION_STALE_BATCH_SIZE": 100,
+        "RUNTIME_LEASE_RETENTION_SECONDS": 86400,
+        # Zero means any dead-letter message makes readiness fail. Set a
+        # positive tolerance only during an explicitly managed incident.
+        "READINESS_TASK_DLQ_MAX_MESSAGES": 0,
+        "READINESS_TASK_QUEUE_TIMEOUT_SECONDS": 2,
 
         # Durata del token JWT in ore. Override env via type coercion `int`.
         "JWT_EXPIRE_HOURS": 8,

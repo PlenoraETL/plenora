@@ -179,6 +179,7 @@ def create_from_upload(
         {"name": c.name, "type": c.type} if not isinstance(c, dict) else c
         for c in columns
     ]
+    resolved_group_id = group_id or default_group
     file_source = build_file_source(
         id=file_id,
         name=name,
@@ -191,7 +192,7 @@ def create_from_upload(
         row_count=row_count,
         file_size=source_size,
         crs=crs,
-        group_id=group_id or default_group,
+        group_id=resolved_group_id,
         created_at=now,
         updated_at=now,
     )
@@ -208,12 +209,13 @@ def create_from_upload(
         file_id,
         source_stream,
         filename,
+        group_id=resolved_group_id,
         size_bytes=source_size,
     )
 
     db_save_file_source(
         file_id=file_id,
-        group_id=group_id or default_group,
+        group_id=resolved_group_id,
         name=name,
         original_filename=filename,
         fmt=format_type,

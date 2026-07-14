@@ -25,6 +25,8 @@ from app.core.resources.loaders._shared import (
 from app.core.resources.stores.file_source_blob import (
     fetch_file_source_blob_lookup_row,
 )
+from app.core.io.tenant_namespace import assert_tenant_key
+from app.shared.resources.storage_layout import FILE_SOURCES_PREFIX
 
 
 # Cap resolution — single source of truth shared with
@@ -76,7 +78,7 @@ def _fetch_row(
         clauses.append("group_id = %s")
         where_params.append(group_id_filter)
 
-    sql = "SELECT storage_key FROM file_sources WHERE " + " AND ".join(clauses)
+    sql = "SELECT storage_key, group_id FROM file_sources WHERE " + " AND ".join(clauses)
     row = fetch_file_source_blob_lookup_row(sql, tuple(where_params))
     return dict(row) if isinstance(row, Mapping) else row
 
@@ -122,6 +124,15 @@ def _dispatch_by_id(
     storage_key = row.get("storage_key")
     if not storage_key:
         raise RuntimeError(f"File source {file_source_id} senza storage_key")
+    owner_group_id = row.get("group_id")
+    if not owner_group_id:
+        raise RuntimeError(f"File source {file_source_id} senza group_id")
+    assert_tenant_key(
+        str(storage_key),
+        expected_group_id=str(owner_group_id),
+        expected_domain=FILE_SOURCES_PREFIX,
+        allow_legacy=True,
+    )
     data = _download_object_storage(storage_key)
     duration_ms = round((time.monotonic() - _t0) * 1000, 1)
     size = len(data) if data else 0
@@ -153,6 +164,15 @@ def _stream_by_id(
     storage_key = row.get("storage_key")
     if not storage_key:
         raise RuntimeError(f"File source {file_source_id} senza storage_key")
+    owner_group_id = row.get("group_id")
+    if not owner_group_id:
+        raise RuntimeError(f"File source {file_source_id} senza group_id")
+    assert_tenant_key(
+        str(storage_key),
+        expected_group_id=str(owner_group_id),
+        expected_domain=FILE_SOURCES_PREFIX,
+        allow_legacy=True,
+    )
     try:
         from app.core.io.object_storage import get_runtime_object_storage
 

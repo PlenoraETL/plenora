@@ -196,7 +196,7 @@ Get-Service plenora-*        # attesi Running: backend, worker*, beat (+minio, +
 
 # 2. Readiness completa (attraverso Caddy)
 curl.exe -s http://127.0.0.1/ready
-#    atteso: {"status":"ready", ...} con 8/8 check ok
+#    atteso: {"status":"ready", ...} con 10/10 check ok
 
 # 3. Smoke round-trip: dispatch -> RabbitMQ -> worker -> esito su PG
 & 'C:\ProgramData\miniforge3\condabin\conda.bat' run -n plenora --cwd C:\plenora\backend python smoke_native.py

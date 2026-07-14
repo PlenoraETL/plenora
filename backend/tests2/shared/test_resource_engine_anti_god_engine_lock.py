@@ -233,7 +233,7 @@ def test_loader_owns_the_dispatch_tokens():
     text = _RESULT_BLOB_PY.read_text(encoding="utf-8")
     required_in_loader = (
         # Object-storage-only row metadata projection.
-        "SELECT storage_key, project_id FROM results",
+        "SELECT storage_key, project_id, group_id FROM results",
         "senza storage_key",
         # the structured timing log shape that ops dashboards
         # already filter on (preserve verbatim)

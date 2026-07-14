@@ -12,6 +12,7 @@ from typing import Tuple
 
 import app.config as config
 from app.config import settings
+from app.core.task_runtime.runtime_leases import count_fresh_workers
 from app.infrastructure.storage import cloud_backends as cloud_backends_module
 from app.observability import runtime_ports as runtime_ports_module
 
@@ -24,6 +25,8 @@ __all__ = [
     "HealthPayload",
     "check_postgres",
     "check_broker",
+    "check_task_workers",
+    "check_task_queues",
     "check_pool_headroom",
     "check_migrations_aligned",
     "check_object_storage",
@@ -135,6 +138,98 @@ def check_broker() -> CheckOutcome:
         return False, "connessione broker non aperta"
     except Exception as e:
         return False, f"{type(e).__name__}: {e}"
+
+
+def check_task_workers() -> CheckOutcome:
+    """Require fresh data-plane and control-plane worker heartbeats."""
+    try:
+        max_age = int(
+            settings.get("READINESS_WORKER_HEARTBEAT_MAX_AGE_SECONDS", 45)
+        )
+    except (AttributeError, TypeError, ValueError):
+        max_age = 45
+    if max_age <= 0:
+        return True, "skipped: disabled (threshold=0)"
+    try:
+        counts = {
+            item.role: item.count
+            for item in count_fresh_workers(max_age_seconds=max_age)
+        }
+    except Exception as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+    data_count = int(counts.get("data-plane", 0))
+    control_count = int(counts.get("control-plane", 0))
+    detail = (
+        f"data-plane={data_count} control-plane={control_count} "
+        f"max_age={max_age}s"
+    )
+    if data_count < 1 or control_count < 1:
+        return False, f"missing worker: {detail}"
+    return True, detail
+
+
+def check_task_queues() -> CheckOutcome:
+    """Inspect consumers and dead letters using AMQP, never Docker APIs."""
+    try:
+        timeout = runtime_ports_module.bounded_readiness_timeout(
+            settings,
+            "READINESS_TASK_QUEUE_TIMEOUT_SECONDS",
+            2,
+        )
+        max_dlq = int(settings.get("READINESS_TASK_DLQ_MAX_MESSAGES", 0))
+    except (AttributeError, TypeError, ValueError):
+        timeout = 2
+        max_dlq = 0
+    active_queues = tuple(
+        dict.fromkeys(
+            (
+                settings.TASK_QUEUE_DATA_PLANE,
+                settings.TASK_QUEUE_CONTROL_PLANE,
+                settings.TASK_QUEUE_SCHEDULER,
+                settings.TASK_QUEUE_DEFAULT,
+            )
+        )
+    )
+    dead_letter_queues = tuple(f"{name}.XQ" for name in active_queues)
+    try:
+        stats = runtime_ports_module.inspect_rabbitmq_queues(
+            settings.DRAMATIQ_BROKER_URL,
+            active_queues + dead_letter_queues,
+            timeout=timeout,
+        )
+    except Exception as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+    by_name = {item.name: item for item in stats}
+    missing = [
+        name for name in active_queues
+        if name not in by_name or not by_name[name].exists
+    ]
+    without_consumers = [
+        name for name in active_queues
+        if name in by_name
+        and by_name[name].exists
+        and by_name[name].consumers < 1
+    ]
+    dlq_total = sum(
+        by_name[name].messages
+        for name in dead_letter_queues
+        if name in by_name and by_name[name].exists
+    )
+    ready_total = sum(
+        by_name[name].messages
+        for name in active_queues
+        if name in by_name and by_name[name].exists
+    )
+    detail = f"ready={ready_total} dead_letters={dlq_total}"
+    if missing:
+        return False, f"missing queues={','.join(missing)} {detail}"
+    if without_consumers:
+        return False, (
+            f"queues without consumers={','.join(without_consumers)} {detail}"
+        )
+    if dlq_total > max(0, max_dlq):
+        return False, f"dead_letters={dlq_total} over {max(0, max_dlq)}"
+    return True, detail
 
 
 def check_migrations_aligned() -> CheckOutcome:
@@ -295,7 +390,7 @@ def check_reconciliation_backlog() -> CheckOutcome:
     """
     try:
         from app.core.resources.storage_reconciliation import (
-            count_active_by_state_domain,
+            count_active_by_state_domain_strict,
             count_pending_by_operation,
         )
     except Exception as e:
@@ -321,11 +416,9 @@ def check_reconciliation_backlog() -> CheckOutcome:
         return True, f"check skipped: {type(e).__name__}"
 
     try:
-        counts = count_active_by_state_domain()
+        counts = count_active_by_state_domain_strict()
     except Exception as e:
-        # `count_active_by_state_domain` gia' swallow internamente
-        # ma defense-in-depth
-        return True, f"check skipped: {type(e).__name__}"
+        return False, f"check failed: {type(e).__name__}"
 
     # Per-operation breakdown: best-effort, errors degrade to empty
     # dict (no per-operation visibility but the global
@@ -536,7 +629,7 @@ def gather_readiness() -> HealthPayload:
     migrations_aligned + object_storage + reconciliation_backlog +
     beat_heartbeat + bootstrap_complete.
 
-    Status: 200 se tutti gli 8 check sono ok (o skipped da
+    Status: 200 se tutti i check sono ok (o skipped da
     capability/threshold), 503 altrimenti. Body shape:
     `{"status": "ready"|"not_ready", "checks": {...8 keys...}}`.
 
@@ -558,6 +651,16 @@ def gather_readiness() -> HealthPayload:
     broker_ok, broker_detail = check_broker()
     checks["broker"] = {"ok": broker_ok, "detail": broker_detail}
     if not broker_ok:
+        status_code = 503
+
+    workers_ok, workers_detail = check_task_workers()
+    checks["task_workers"] = {"ok": workers_ok, "detail": workers_detail}
+    if not workers_ok:
+        status_code = 503
+
+    queues_ok, queues_detail = check_task_queues()
+    checks["task_queues"] = {"ok": queues_ok, "detail": queues_detail}
+    if not queues_ok:
         status_code = 503
 
     pool_ok, pool_detail = check_pool_headroom()

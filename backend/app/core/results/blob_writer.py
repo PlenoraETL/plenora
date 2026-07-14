@@ -6,6 +6,7 @@ from typing import Optional
 import uuid
 
 from app.core.io import object_storage as object_storage_module
+from app.core.io.tenant_namespace import build_tenant_key
 from app.core.resources import storage_reconciliation as reconciliation_module
 from app.core.results import store
 from app.core.results.retention import apply_results_retention
@@ -80,8 +81,10 @@ def close_failed_result_upload_intent(
         reconciliation_module.mark_orphan_deleted(intent_id)
 
 
-def _storage_key(project_id: str, result_id: str) -> str:
-    return f"{RESULTS_PREFIX}/{project_id}/{result_id}.bin"
+def _storage_key(group_id: str, project_id: str, result_id: str) -> str:
+    return build_tenant_key(
+        group_id, RESULTS_PREFIX, project_id, f"{result_id}.bin",
+    )
 
 
 def _runtime_storage_upload_error(exc: Exception, *, result_id: str, filename: str | None = None) -> ResultSaveError:
@@ -117,7 +120,7 @@ def save_result_blob_from_bytes(
         resolved_group_id = store.resolve_group_id_for_result(project_id, group_id)
         result_id = str(uuid.uuid4())
 
-        storage_key = _storage_key(project_id, result_id)
+        storage_key = _storage_key(resolved_group_id, project_id, result_id)
         upload_intent_id: Optional[str] = None
         try:
             storage = object_storage_module.get_runtime_object_storage()

@@ -99,9 +99,11 @@ def test_small_file_goes_to_object_storage(mock_db, stub_storage, monkeypatch):
     assert len(mock_db) == 1
     saved = mock_db[0]
     assert "data" not in saved
-    assert saved["storage_key"] == "results/p1/res-fs4.bin"
+    assert saved["storage_key"] == "tenants/grp-1/results/p1/res-fs4.bin"
     assert saved["size_bytes"] == len(payload)
-    assert stub_storage.uploads == [(payload, "results/p1/res-fs4.bin")]
+    assert stub_storage.uploads == [
+        (payload, "tenants/grp-1/results/p1/res-fs4.bin")
+    ]
 
 
 def test_large_file_goes_to_s3(mock_db, stub_storage, monkeypatch):
@@ -126,13 +128,13 @@ def test_large_file_goes_to_s3(mock_db, stub_storage, monkeypatch):
     saved = mock_db[0]
     # data NULL in DB — il blob vive su S3
     assert "data" not in saved
-    assert saved["storage_key"] == "results/p1/res-fs4.bin"
+    assert saved["storage_key"] == "tenants/grp-1/results/p1/res-fs4.bin"
     assert saved.get("size_bytes") == 500
     # S3 upload eseguito
     assert len(stub_storage.uploads) == 1
     uploaded_data, uploaded_key = stub_storage.uploads[0]
     assert uploaded_data == payload
-    assert uploaded_key == "results/p1/res-fs4.bin"
+    assert uploaded_key == "tenants/grp-1/results/p1/res-fs4.bin"
 
 
 def test_no_hard_cap_any_size_goes_to_s3(mock_db, stub_storage, monkeypatch):
@@ -163,7 +165,7 @@ def test_no_hard_cap_any_size_goes_to_s3(mock_db, stub_storage, monkeypatch):
     # DB row con storage_key
     assert len(mock_db) == 1
     assert "data" not in mock_db[0]
-    assert mock_db[0]["storage_key"] == "results/p1/res-fs4.bin"
+    assert mock_db[0]["storage_key"] == "tenants/grp-1/results/p1/res-fs4.bin"
 
 
 # 2. Fault handling
@@ -412,11 +414,11 @@ def test_save_result_blob_path_large_goes_to_s3(mock_db, stub_storage, monkeypat
     # S3 upload via path (non via bytes)
     assert len(upload_calls) == 1
     path_used, key_used = upload_calls[0]
-    assert key_used == "results/p1/res-fs4.bin"
+    assert key_used == "tenants/grp-1/results/p1/res-fs4.bin"
     # DB row con storage_key, data None
     assert len(mock_db) == 1
     assert mock_db[0]["data"] is None
-    assert mock_db[0]["storage_key"] == "results/p1/res-fs4.bin"
+    assert mock_db[0]["storage_key"] == "tenants/grp-1/results/p1/res-fs4.bin"
     assert mock_db[0]["size_bytes"] == 500
 
 

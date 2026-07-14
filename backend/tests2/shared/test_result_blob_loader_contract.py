@@ -27,7 +27,7 @@ def test_loader_filters_tenant_and_downloads_object():
     from app.core.resources.loaders.result_blob import ResultBlobLoader
 
     captured, fake = fake_fetchone(
-        row={"storage_key": "results/p/r.bin", "project_id": "p"}
+        row={"storage_key": "results/p/r.bin", "project_id": "p", "group_id": "g1"}
     )
     with patch("app.db.pg_connection.fetchone", fake), patch(
         "app.core.resources.loaders.result_blob._download_object_storage",
@@ -53,7 +53,9 @@ def test_loader_missing_row_is_not_found():
 def test_loader_rejects_catalog_row_without_storage_key():
     from app.core.resources.loaders.result_blob import ResultBlobLoader
 
-    _, fake = fake_fetchone(row={"storage_key": None, "project_id": "p"})
+    _, fake = fake_fetchone(
+        row={"storage_key": None, "project_id": "p", "group_id": "g1"}
+    )
     with patch("app.db.pg_connection.fetchone", fake):
         with pytest.raises(RuntimeError, match="senza storage_key"):
             ResultBlobLoader().load(make_result_ref(), mode="bytes")
@@ -63,7 +65,7 @@ def test_result_boundary_uses_same_object_storage_dispatch():
     from app.core.results import blob
 
     captured, fake = fake_fetchone(
-        row={"storage_key": "results/p/r.bin", "project_id": "p"}
+        row={"storage_key": "results/p/r.bin", "project_id": "p", "group_id": "g1"}
     )
     with patch("app.db.pg_connection.fetchone", fake), patch(
         "app.core.resources.loaders.result_blob._download_object_storage",
