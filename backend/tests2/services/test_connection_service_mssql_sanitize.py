@@ -74,7 +74,7 @@ def test_sanitize_mssql_error_maps_tls_keywords_to_tls_error():
         "(certificate CN=SECRET_INTERNAL_CN)"
     )
     msg = _sanitize_mssql_error(e)
-    assert msg == "Errore protocollo TLS/TDS con MS SQL"
+    assert msg == "Errore certificato TLS MS SQL: catena non attendibile o nome host non valido"
     assert "SECRET_INTERNAL_CN" not in msg
 
 

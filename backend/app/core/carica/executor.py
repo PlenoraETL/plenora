@@ -24,7 +24,7 @@ from app.core.intermediate import run_idempotency
 from app.core.projects import service as project_service_module
 from app.core.query_execution.query_executor import DefaultEngineFactory
 from app.shared.contracts.payloads import JsonObject, StringRows
-from app.shared.security import tls_policy as tls_policy_module
+from app.shared.connections.mssql_tls import sqlalchemy_tls_query
 from app.utils.logger import append_step, get_logger
 from app.utils.logger import get_logger as _get_logger
 
@@ -375,12 +375,10 @@ class CaricaExecutor:
         elif db_type == "mysql" or db_type == "mariadb":
             url = f"mysql+pymysql://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
         elif db_type == "mssql":
-            # TrustServerCertificate e' consentito solo dalla policy TLS.
-            trust_cert = "yes" if tls_policy_module.tls_bypass_allowed() else "no"
             url = (
                 f"mssql+pyodbc://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
                 f"?driver=ODBC+Driver+18+for+SQL+Server"
-                f"&TrustServerCertificate={trust_cert}&Encrypt=Optional"
+                f"&{sqlalchemy_tls_query(conn)}"
             )
         elif db_type == "oracle":
             url = f"oracle+oracledb://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"

@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Literal
 from datetime import datetime
 
+from app.shared.connections.mssql_tls import MssqlTlsMode
+
 
 class DatabaseConnection(BaseModel):
     """Configurazione completa di una connessione a database."""
@@ -21,6 +23,7 @@ class DatabaseConnection(BaseModel):
     db_schema: Optional[str] = None
     username: str
     password: str
+    mssql_tls_mode: MssqlTlsMode = "verify"
     group_id: str = ""
     created_at: datetime
     updated_at: datetime
@@ -39,6 +42,7 @@ class ConnectionCreate(BaseModel):
     db_schema: Optional[str] = Field(None, max_length=255)
     username: str = Field(..., min_length=1, max_length=255)
     password: str = Field(..., max_length=1000)
+    mssql_tls_mode: MssqlTlsMode = "verify"
 
 
 class ConnectionUpdate(BaseModel):
@@ -52,6 +56,7 @@ class ConnectionUpdate(BaseModel):
     db_schema: Optional[str] = Field(None, max_length=255)
     username: Optional[str] = Field(None, max_length=255)
     password: Optional[str] = Field(None, max_length=1000)
+    mssql_tls_mode: Optional[MssqlTlsMode] = None
 
 
 class ConnectionList(BaseModel):

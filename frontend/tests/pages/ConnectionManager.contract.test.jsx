@@ -128,6 +128,7 @@ describe('ConnectionManager', () => {
         db_schema: 'public',
         username: '',
         password: '',
+        mssql_tls_mode: 'verify',
       });
     });
   });

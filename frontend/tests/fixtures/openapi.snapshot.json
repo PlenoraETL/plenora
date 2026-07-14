@@ -1272,6 +1272,15 @@
             "title": "Host",
             "type": "string"
           },
+          "mssql_tls_mode": {
+            "default": "verify",
+            "enum": [
+              "verify",
+              "trust_server_certificate"
+            ],
+            "title": "Mssql Tls Mode",
+            "type": "string"
+          },
           "name": {
             "maxLength": 255,
             "minLength": 1,
@@ -1417,6 +1426,21 @@
               }
             ],
             "title": "Host"
+          },
+          "mssql_tls_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "verify",
+                  "trust_server_certificate"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mssql Tls Mode"
           },
           "name": {
             "anyOf": [
@@ -1755,6 +1779,15 @@
           },
           "id": {
             "title": "Id",
+            "type": "string"
+          },
+          "mssql_tls_mode": {
+            "default": "verify",
+            "enum": [
+              "verify",
+              "trust_server_certificate"
+            ],
+            "title": "Mssql Tls Mode",
             "type": "string"
           },
           "name": {

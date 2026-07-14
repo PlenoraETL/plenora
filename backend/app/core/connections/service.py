@@ -13,7 +13,10 @@ from app.core.connections.errors import ConnectionDuplicateNameError
 from app.infrastructure.security.crypto import CredentialUnavailableError, is_encrypted
 from app.infrastructure.security.crypto import decrypt as _decrypt_password
 from app.infrastructure.security.crypto import encrypt as _encrypt_password
-from app.shared.security import tls_policy as tls_policy_module
+from app.shared.connections.mssql_tls import (
+    get_mssql_tls_mode,
+    trusts_server_certificate,
+)
 from app.core.connections.models import (
     DatabaseConnection,
     ConnectionCreate,
@@ -36,6 +39,11 @@ def _sanitize_mssql_error(e: Exception) -> str:
     """
     msg = str(e)
     msg_l = msg.lower()
+    # Gli errori TLS di pyodbc usano spesso anche SQLSTATE 08001: vanno
+    # riconosciuti prima del generico "host irraggiungibile".
+    tls_markers = ("ssl", "tls", "handshake", "certificate", "certificat")
+    if any(marker in msg_l for marker in tls_markers):
+        return "Errore certificato TLS MS SQL: catena non attendibile o nome host non valido"
     # SQLSTATE prima (piu' deterministico dei text match; un messaggio
     # pyodbc puo' contenere sia SQLSTATE che testo ambiguo
     if "[08001]" in msg:
@@ -46,7 +54,7 @@ def _sanitize_mssql_error(e: Exception) -> str:
         return "Autenticazione MS SQL fallita: credenziali non valide"
     if "[42s02]" in msg_l:
         return "Database MS SQL non trovato o accesso negato"
-    # Text patterns (fallback se SQLSTATE non presente, es. pymssql / socket
+    # Text patterns (fallback se SQLSTATE non presente, es. driver / socket)
     if "cannot open server" in msg_l or "cannot connect" in msg_l:
         return "Connessione MS SQL rifiutata o host irraggiungibile"
     if "login timeout" in msg_l or "timeout expired" in msg_l:
@@ -55,8 +63,6 @@ def _sanitize_mssql_error(e: Exception) -> str:
         return "Autenticazione MS SQL fallita: credenziali non valide"
     if "invalid object name" in msg_l:
         return "Database MS SQL non trovato o accesso negato"
-    if "ssl" in msg_l or "tls" in msg_l or "handshake" in msg_l or "certificate" in msg_l:
-        return "Errore protocollo TLS/TDS con MS SQL"
     if isinstance(e, TimeoutError) or "timeout" in msg_l:
         return "Timeout connessione MS SQL"
     if isinstance(e, ConnectionRefusedError) or "refused" in msg_l:
@@ -110,6 +116,7 @@ class ConnectionService:
             db_schema=row.db_schema,
             username=row.username,
             password=display_password,
+            mssql_tls_mode=get_mssql_tls_mode(extra),
             group_id=row.group_id,
             created_at=row.created_at,
             updated_at=row.updated_at,
@@ -134,7 +141,10 @@ class ConnectionService:
             )
 
         connection_id = self._generate_connection_id(data.name)
-        extra = {"description": getattr(data, "description", "")}
+        extra = {
+            "description": getattr(data, "description", ""),
+            "mssql_tls_mode": get_mssql_tls_mode(data),
+        }
         row = connection_db.create_connection(
             conn_id=connection_id,
             group_id=group_id,
@@ -150,6 +160,12 @@ class ConnectionService:
             created_by=created_by,
         )
         logger.info(f"Connessione creata: {connection_id}", op="create_connection")
+        if data.type == "mssql" and trusts_server_certificate(data):
+            logger.warning(
+                "[SECURITY] Eccezione TLS MSSQL abilitata sulla connessione %s: "
+                "Encrypt=Mandatory, verifica certificato server disabilitata",
+                connection_id,
+            )
         return self._row_to_connection(row)
 
     def list_connections(self, group_id: str | None = None) -> ConnectionList:
@@ -185,16 +201,25 @@ class ConnectionService:
                 db_fields.pop("password")
             else:
                 db_fields["password"] = _encrypt_password(pwd)
-        if "description" in update_fields:
+        if "description" in update_fields or "mssql_tls_mode" in update_fields:
             extra = row.extra or {}
             if isinstance(extra, str):
                 extra = json.loads(extra)
             else:
                 extra = dict(extra)
-            extra["description"] = update_fields["description"]
+            if "description" in update_fields:
+                extra["description"] = update_fields["description"]
+            if "mssql_tls_mode" in update_fields:
+                extra["mssql_tls_mode"] = update_fields["mssql_tls_mode"]
             db_fields["extra"] = extra
         if db_fields:
             row = connection_db.update_connection(connection_id, **db_fields)
+        if update_fields.get("mssql_tls_mode") == "trust_server_certificate":
+            logger.warning(
+                "[SECURITY] Eccezione TLS MSSQL abilitata sulla connessione %s: "
+                "Encrypt=Mandatory, verifica certificato server disabilitata",
+                connection_id,
+            )
         return self._row_to_connection(row)
 
     def delete_connection(self, connection_id: str) -> bool:
@@ -222,7 +247,7 @@ class ConnectionService:
                 return ConnectionTestResult(success=False, message=f"Tipo '{connection.type}' non supportato")
         except Exception as e:
             # Log con solo type+repr per evitare credential leak: i driver DB
-            # (psycopg, pyodbc, pymssql) possono includere host/user/password
+            # (psycopg, pyodbc e altri) possono includere host/user/password
             # nel str(e) di alcune eccezioni (es. "FATAL: password authentication
             # failed for user 'admin' at host postgres.internal:5432"). exc_info
             # mantiene la traceback completa per il debug operativo, ma il
@@ -255,14 +280,9 @@ class ConnectionService:
         """
         Test connessione SQL Server.
 
-        Strategia:
-        - Filtra i driver disponibili sul sistema (`pyodbc.drivers`).
-        - Per ogni driver disponibile prova varianti di Encrypt:
-          * Driver 18: Encrypt=Optional (Default ora è Mandatory che vuole TLS)
-          * Driver 18: Encrypt=No (server senza TLS)
-          * Driver 17: senza Encrypt (driver legacy, default no encryption)
-          * "SQL Server" (driver vintage MS, ultimo fallback)
-        - Riporta il PRIMO errore reale (non IM002 di driver mancanti).
+        Usa solo ODBC Driver 18/17 con cifratura obbligatoria. Per default
+        valida la catena del certificato; la singola connessione puo' avere
+        l'eccezione esplicita ``trust_server_certificate``.
         """
         try:
             import pyodbc
@@ -280,7 +300,7 @@ class ConnectionService:
             )
 
         # SECURITY: escape dei separatori ODBC (`;`, `{`, `}`) nei valori utente
-        # Senza escape, un username come "admin;Encrypt=No" inietta parametri
+        # Senza escape, un username con un secondo parametro ODBC inietta valori
         # arbitrari nella connection string, bypassando Encrypt/TrustServerCertificate
         # ODBC usa `{` `}` per delimitare valori che contengono `;`
         def _odbc_escape(val: str) -> str:
@@ -293,16 +313,14 @@ class ConnectionService:
         # TrustServerCertificate=yes accetta certificati self-signed sul lato
         # SQL Server senza validare la chain — equivalente a TLS verify=False
         # per HTTP. In prod un MITM puo' presentare un cert arbitrario e
-        # decryptare username/password. Gating env-aware via tls_policy:
-        # in prod/staging si forza TrustServerCertificate=no, in dev/CI
-        # rimane "yes" per supportare i certificati locali.
-        trust_server_cert = (
-            "yes" if tls_policy_module.tls_bypass_allowed() else "no"
-        )
+        # decryptare username/password. L'eccezione e' per-connessione e non
+        # disabilita mai Encrypt.
+        explicit_trust = trusts_server_certificate(conn)
+        trust_server_cert = "yes" if explicit_trust else "no"
         if trust_server_cert == "no":
             logger.info(
                 "[SECURITY] MSSQL test: TrustServerCertificate=no "
-                "(prod-like env, cert chain validata)."
+                "(cert chain validata)."
             )
         base = (
             f"SERVER={_odbc_escape(conn.host)},{conn.port};"
@@ -312,18 +330,16 @@ class ConnectionService:
             f"TrustServerCertificate={trust_server_cert}"
         )
 
-        if tls_policy_module.tls_bypass_allowed():
-            all_attempts = [
-                ("ODBC Driver 18 for SQL Server", f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=Optional"),
-                ("ODBC Driver 18 for SQL Server", f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=No"),
-                ("ODBC Driver 17 for SQL Server", f"DRIVER={{ODBC Driver 17 for SQL Server}};{base};Encrypt=No"),
-                ("SQL Server", f"DRIVER={{SQL Server}};{base}"),
-            ]
-        else:
-            all_attempts = [
-                ("ODBC Driver 18 for SQL Server", f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=Mandatory"),
-                ("ODBC Driver 17 for SQL Server", f"DRIVER={{ODBC Driver 17 for SQL Server}};{base};Encrypt=Yes"),
-            ]
+        all_attempts = [
+            (
+                "ODBC Driver 18 for SQL Server",
+                f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=Mandatory",
+            ),
+            (
+                "ODBC Driver 17 for SQL Server",
+                f"DRIVER={{ODBC Driver 17 for SQL Server}};{base};Encrypt=Yes",
+            ),
+        ]
 
         # Filtra solo i driver effettivamente installati per evitare IM002 fittizi
         attempts = [(d, cs) for d, cs in all_attempts if d in installed]
@@ -369,68 +385,18 @@ class ConnectionService:
                         errors.append(f"[{driver_name}] {sanitized}")
                     continue
 
-            # FreeTDS does not expose equivalent certificate verification here;
-            # keep that compatibility fallback restricted to explicit dev/CI.
-            if not tls_policy_module.tls_bypass_allowed():
-                return ConnectionTestResult(
-                    success=False,
-                    message=(
-                        "Connessione MS SQL Server TLS verificata fallita su tutti "
-                        "i driver ODBC disponibili."
-                    ),
-                    details={"errors": errors},
-                )
-
-            # FreeTDS is often more tolerant of older SQL Server TLS/TDS setups.
-            try:
-                import pymssql
-                try:
-                    c = pymssql.connect(
-                        server=conn.host,
-                        port=conn.port,
-                        user=conn.username,
-                        password=conn.password,
-                        database=conn.database,
-                        timeout=5,
-                        login_timeout=5,
-                    )
-                    try:
-                        cur = c.cursor()
-                        cur.execute("SELECT @@VERSION")
-                        version = cur.fetchone()[0]
-                        cur.close()
-                        return ConnectionTestResult(
-                            success=True,
-                            message="MS SQL riuscita (pymssql / FreeTDS)",
-                            details={"version": version[:100]},
-                        )
-                    finally:
-                        c.close()
-                except Exception as e:
-                    # pymssql puo' includere credenziali nel messaggio raw:
-                    # logghiamo solo type + messaggio sanitizzato, mantenendo
-                    # la traceback completa in `exc_info` per debug.
-                    sanitized = _sanitize_mssql_error(e)
-                    logger.warning(
-                        "[GESTITO] MS SQL pymssql fallback fallito: %s: %s",
-                        type(e).__name__, sanitized,
-                        exc_info=True,
-                    )
-                    errors.append(f"[pymssql] {sanitized}")
-            except ImportError:
-                errors.append("[pymssql non installato] Per server vecchi installa: pip install pymssql")
-
             return ConnectionTestResult(
                 success=False,
                 message=(
-                    f"Connessione SQL Server fallita su tutti i driver disponibili. "
+                    "Connessione MS SQL Server cifrata fallita su tutti i "
+                    "driver ODBC disponibili. "
                     f"Primo errore: {errors[0] if errors else 'sconosciuto'}. "
                     f"Tentativi totali: {len(errors)}."
                 ),
                 details={"errors": errors},
             )
         except Exception as e:
-            # Safety-net catch-all: stesso pattern del pymssql/pyodbc path.
+            # Safety-net catch-all: stesso pattern del path pyodbc.
             # Non loggare `str(e)` raw, per evitare leak di host o credenziali.
             sanitized = _sanitize_mssql_error(e)
             logger.error(

@@ -363,6 +363,7 @@ Update:
 | Porta 80 occupata (IIS?) | Reinstallare il FE con `-FrontendPort 8080` (ribuilda anche il bundle sull'origin nuovo) |
 | `/ready` not_ready su `object_storage` | Verificare `plenora-object-storage`, endpoint `127.0.0.1:8333` e credenziali `S3_*`; l'object storage e' obbligatorio |
 | Task in coda ma mai eseguiti | `plenora-worker*` giu' o `.env` broker cambiato senza restart dei servizi worker |
+| SQL Server: `certificate chain ... not trusted` | Soluzione preferita: installare la CA del server in `LocalMachine\\Root`. Per server interni legacy, un superadmin puo' modificare la connessione MSSQL e scegliere **Accetta certificato non attendibile**: `Encrypt=Mandatory` resta attivo, viene disabilitata solo la verifica dell'identita' del server. Non usare l'eccezione su reti non fidate. |
 | Un processo Erlang blocca update/cleanup | `epmd.exe` resta vivo dopo stop/uninstall: `Stop-Process -Name epmd -Force` |
 
 Reset locale della password `postgres`:

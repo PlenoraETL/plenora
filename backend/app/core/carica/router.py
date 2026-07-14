@@ -35,7 +35,7 @@ from app.shared import error_codes
 from app.shared.contracts.payloads import JsonObject, JsonRows, StringRows
 from app.core.auth.resource_access import assert_project_visible
 from app.shared.error_envelope import raise_typed_http
-from app.shared.security import tls_policy as tls_policy_module
+from app.shared.connections.mssql_tls import sqlalchemy_tls_query
 
 
 logger = get_logger("app.core.carica.router")
@@ -345,12 +345,10 @@ def _create_engine(connection: JsonObject):
         elif db_type in ("mysql", "mariadb"):
             url = f"mysql+pymysql://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
         elif db_type == "mssql":
-            # TrustServerCertificate e' consentito solo dalla policy TLS.
-            trust_cert = "yes" if tls_policy_module.tls_bypass_allowed() else "no"
             url = (
                 f"mssql+pyodbc://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"
                 f"?driver=ODBC+Driver+18+for+SQL+Server"
-                f"&TrustServerCertificate={trust_cert}&Encrypt=Optional"
+                f"&{sqlalchemy_tls_query(connection)}"
             )
         elif db_type == "oracle":
             url = f"oracle+oracledb://{_qp(username)}:{_qp(password)}@{host}:{port}/{database}"

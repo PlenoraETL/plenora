@@ -11,7 +11,7 @@ from typing_extensions import TypedDict
 from dataclasses import dataclass
 
 from app.core.estrai.types import DatabaseSchema
-from app.shared.security import tls_policy as tls_policy_module
+from app.shared.connections.mssql_tls import trusts_server_certificate
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -47,6 +47,7 @@ class DatabaseConnection:
     username: str
     password: str
     db_schema: Optional[str] = None
+    mssql_tls_mode: str = "verify"
 
 
 # PROTOCOLLI PER DEPENDENCY INJECTION
@@ -116,13 +117,13 @@ class DefaultConnectionFactory:
         """
         Connessione SQL Server via pyodbc.
 
-        In production/staging sono ammessi solo TLS cifrato e certificato
-        verificato. I fallback legacy restano confinati a dev/CI quando il
-        bypass TLS e' esplicitamente consentito.
+        La cifratura e' sempre obbligatoria. La verifica del certificato e'
+        disabilitabile soltanto tramite eccezione sulla singola connessione.
         """
         import pyodbc
 
-        trust_cert = "yes" if tls_policy_module.tls_bypass_allowed() else "no"
+        explicit_trust = trusts_server_certificate(conn)
+        trust_cert = "yes" if explicit_trust else "no"
         base = (
             f"SERVER={conn.host},{conn.port};"
             f"DATABASE={conn.database};"
@@ -130,17 +131,10 @@ class DefaultConnectionFactory:
             f"PWD={conn.password};"
             f"TrustServerCertificate={trust_cert}"
         )
-        if tls_policy_module.tls_bypass_allowed():
-            attempts = [
-                f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=Optional",
-                f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=No",
-                f"DRIVER={{ODBC Driver 17 for SQL Server}};{base};Encrypt=No",
-            ]
-        else:
-            attempts = [
-                f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=Mandatory",
-                f"DRIVER={{ODBC Driver 17 for SQL Server}};{base};Encrypt=Yes",
-            ]
+        attempts = [
+            f"DRIVER={{ODBC Driver 18 for SQL Server}};{base};Encrypt=Mandatory",
+            f"DRIVER={{ODBC Driver 17 for SQL Server}};{base};Encrypt=Yes",
+        ]
         last_error = None
         for cs in attempts:
             try:

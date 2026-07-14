@@ -185,15 +185,14 @@ def test_arcgis_token_fetch_does_not_leak_in_log(monkeypatch):
 # Path 4: architectural assertion
 
 def test_mssql_and_arcgis_log_paths_use_type_name_pattern():
-    """Architectural lint: i 3 path target NON devono avere `f"... {e}"` o
+    """Architectural lint: i path target NON devono avere `f"... {e}"` o
     `"%s", e` pattern raw. Anti-regression contro futuri commit che
     re-introducano il leak."""
     import inspect
     from app.core.connections import service as conn_service
     from app.shared.connections import oauth
 
-    # `_sanitize_mssql_error` deve essere usato (sia inline sia via variabile
-    # `sanitized` assegnata appena prima del log) nei 2 path mssql.
+    # `_sanitize_mssql_error` deve essere usato nel safety-net MSSQL.
     src_conn = inspect.getsource(conn_service)
 
     # Pattern anti-regression: NESSUN ramo `f"... {e}"` raw nei log
@@ -208,17 +207,6 @@ def test_mssql_and_arcgis_log_paths_use_type_name_pattern():
         "Detected raw f\"{e}\" pattern in connections/service.py — possibile "
         "leak credenziali. Usa type(e).__name__ + sanitized."
     )
-    pymssql_block_idx = src_conn.find("pymssql fallback")
-    assert pymssql_block_idx >= 0, "Codice pymssql fallback non trovato"
-    pymssql_block = src_conn[pymssql_block_idx:pymssql_block_idx + 600]
-    assert (
-        "_sanitize_mssql_error" in pymssql_block
-        or ("sanitized" in pymssql_block and "type(e).__name__" in pymssql_block)
-    ), (
-        "Il path pymssql fallback deve usare _sanitize_mssql_error per il log "
-        "(direttamente o tramite variabile `sanitized`)"
-    )
-
     safety_idx = src_conn.find("_test_mssql safety-net")
     assert safety_idx >= 0
     safety_block = src_conn[safety_idx:safety_idx + 400]

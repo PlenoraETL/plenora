@@ -46,6 +46,7 @@ class DatabaseConnection:
     database: str
     username: str
     password: str
+    mssql_tls_mode: str = "verify"
 
 
 @dataclass

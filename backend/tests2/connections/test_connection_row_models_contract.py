@@ -209,7 +209,10 @@ def test_connection_service_consumes_typed_connection_row(monkeypatch) -> None:
         db_schema="public",
         username="reader",
         password=encrypt("pwd-123"),
-        extra={"description": "primary"},
+        extra={
+            "description": "primary",
+            "mssql_tls_mode": "trust_server_certificate",
+        },
         created_at=fixed_now,
         updated_at=fixed_now,
         created_by="u-1",
@@ -226,6 +229,7 @@ def test_connection_service_consumes_typed_connection_row(monkeypatch) -> None:
     assert conn.id == "conn-1"
     assert conn.description == "primary"
     assert conn.password == "pwd-123"
+    assert conn.mssql_tls_mode == "trust_server_certificate"
 
 
 def test_connection_service_create_uses_typed_create_return(monkeypatch) -> None:

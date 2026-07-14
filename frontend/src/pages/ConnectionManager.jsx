@@ -61,6 +61,7 @@ function ConnectionManager() {
     name: '', description: '', type: 'postgres',
     host: '', port: 5432, database: '', db_schema: 'public',
     username: '', password: '',
+    mssql_tls_mode: 'verify',
     server_url: '', auth_type: 'public', client_id: '', client_secret: '',
   });
 
@@ -118,13 +119,13 @@ function ConnectionManager() {
       setEditingConnection(conn);
       setEditingCategory(conn._category);
       if (conn._category === 'arcgis') {
-        setFormData({ name: conn.name || '', description: '', type: 'arcgis', host: '', port: 0, database: '', db_schema: '', username: conn.username || '', password: conn.password || '', server_url: conn.server_url || '', auth_type: conn.auth_type || 'public', client_id: conn.client_id || '', client_secret: conn.client_secret || '' });
+        setFormData({ name: conn.name || '', description: '', type: 'arcgis', host: '', port: 0, database: '', db_schema: '', username: conn.username || '', password: conn.password || '', mssql_tls_mode: 'verify', server_url: conn.server_url || '', auth_type: conn.auth_type || 'public', client_id: conn.client_id || '', client_secret: conn.client_secret || '' });
       } else {
-        setFormData({ name: conn.name || '', description: conn.description || '', type: conn.type || 'postgres', host: conn.host || '', port: conn.port || 5432, database: conn.database || '', db_schema: conn.db_schema || '', username: conn.username || '', password: conn.password || '', server_url: '', auth_type: 'public', client_id: '', client_secret: '' });
+        setFormData({ name: conn.name || '', description: conn.description || '', type: conn.type || 'postgres', host: conn.host || '', port: conn.port || 5432, database: conn.database || '', db_schema: conn.db_schema || '', username: conn.username || '', password: conn.password || '', mssql_tls_mode: conn.mssql_tls_mode || 'verify', server_url: '', auth_type: 'public', client_id: '', client_secret: '' });
       }
     } else {
       setEditingConnection(null); setEditingCategory(null);
-      setFormData({ name: '', description: '', type: 'postgres', host: '', port: 5432, database: '', db_schema: 'public', username: '', password: '', server_url: '', auth_type: 'public', client_id: '', client_secret: '' });
+      setFormData({ name: '', description: '', type: 'postgres', host: '', port: 5432, database: '', db_schema: 'public', username: '', password: '', mssql_tls_mode: 'verify', server_url: '', auth_type: 'public', client_id: '', client_secret: '' });
     }
     setShowModal(true);
   };
@@ -149,7 +150,7 @@ function ConnectionManager() {
         const p = { name: formData.name, server_url: formData.server_url, auth_type: formData.auth_type, username: formData.username, password: formData.password, client_id: formData.client_id, client_secret: formData.client_secret };
         editingConnection && editingCategory === 'arcgis' ? await updateFeatureConnection(editingConnection.id, p) : await createFeatureConnection(p);
       } else {
-        const p = { name: formData.name, description: formData.description, type: formData.type, host: formData.host, port: formData.port, database: formData.database, db_schema: formData.db_schema, username: formData.username, password: formData.password };
+        const p = { name: formData.name, description: formData.description, type: formData.type, host: formData.host, port: formData.port, database: formData.database, db_schema: formData.db_schema, username: formData.username, password: formData.password, mssql_tls_mode: formData.type === 'mssql' ? formData.mssql_tls_mode : 'verify' };
         editingConnection && editingCategory === 'database' ? await updateConnection(editingConnection.id, p) : await createConnection(p);
       }
       handleCloseModal(); loadConnections();
@@ -375,6 +376,26 @@ function ConnectionManager() {
                     <input type="password" className="cm__modal-input" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} placeholder="••••••••" />
                   </div>
                 </div>
+                {formData.type === 'mssql' && (
+                  <div className="cm__modal-field cm__form-row--mt-md">
+                    <label className="cm__modal-label">Verifica certificato TLS</label>
+                    <select
+                      className="cm__modal-input"
+                      value={formData.mssql_tls_mode}
+                      disabled={!isSuperadmin}
+                      onChange={e => setFormData({ ...formData, mssql_tls_mode: e.target.value })}
+                    >
+                      <option value="verify">Verifica certificato (consigliato)</option>
+                      <option value="trust_server_certificate">Accetta certificato non attendibile</option>
+                    </select>
+                    {formData.mssql_tls_mode === 'trust_server_certificate' && (
+                      <div className="cm__modal-hint" role="alert">
+                        Attenzione: la connessione resta cifrata, ma l’identità del server non viene verificata. Usare solo per server interni conosciuti.
+                      </div>
+                    )}
+                    {!isSuperadmin && <div className="cm__modal-hint">Solo un superadmin può modificare questa impostazione.</div>}
+                  </div>
+                )}
               </>
             )}
 

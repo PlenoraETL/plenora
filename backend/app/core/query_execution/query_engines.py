@@ -14,6 +14,10 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
 from app.core.query_execution.query_session import QueryConnection
+from app.shared.connections.mssql_tls import (
+    get_mssql_tls_mode,
+    sqlalchemy_tls_query,
+)
 from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger
 
@@ -112,7 +116,11 @@ class DefaultEngineFactory:
         """
         secret = getattr(conn, "password", "") or ""
         cred_ver = hashlib.sha256(secret.encode("utf-8")).hexdigest()[:12]
-        return f"{conn.type}:{conn.host}:{conn.port}:{conn.database}:{conn.username}:{cred_ver}"
+        tls_mode = get_mssql_tls_mode(conn) if conn.type == "mssql" else ""
+        return (
+            f"{conn.type}:{conn.host}:{conn.port}:{conn.database}:"
+            f"{conn.username}:{cred_ver}:{tls_mode}"
+        )
 
     def create_engine(self, conn: EngineConnection) -> Engine:
         """
@@ -299,14 +307,13 @@ class DefaultEngineFactory:
                 f"@{conn.host}:{conn.port}/{conn.database}"
             )
         elif conn.type == "mssql":
-            # Encrypt=Optional: ODBC Driver 18 di default richiede TLS valido
-            # con Optional accetta sia server con TLS che senza, e con
-            # TrustServerCertificate=yes accetta self-signed
+            # Cifratura sempre obbligatoria. La sola eccezione configurabile
+            # per connessione riguarda la verifica della catena certificati.
             return (
                 f"mssql+pyodbc://{usr}:{pwd}"
                 f"@{conn.host}:{conn.port}/{conn.database}"
                 f"?driver={quote_plus(_preferred_mssql_driver())}"
-                f"&TrustServerCertificate=yes&Encrypt=Optional"
+                f"&{sqlalchemy_tls_query(conn)}"
             )
         elif conn.type == "oracle":
             return (

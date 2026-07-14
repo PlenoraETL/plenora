@@ -49,6 +49,22 @@ def init_connections(connection_service, database_inspector):
     _database_inspector = database_inspector
 
 
+def _assert_mssql_tls_change_allowed(data, current_user, existing=None) -> None:
+    """Only superadmins may change the certificate-validation exception."""
+    requested = getattr(data, "mssql_tls_mode", None)
+    if requested is None:
+        return
+    current = getattr(existing, "mssql_tls_mode", "verify") if existing else "verify"
+    if requested != current and current_user.role != "superadmin":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "MSSQL_TLS_OVERRIDE_FORBIDDEN",
+                "message": "Solo un superadmin può modificare l'eccezione di verifica del certificato MS SQL.",
+            },
+        )
+
+
 @router.post("/connections", response_model=DatabaseConnection, status_code=201)
 @audit_action(action="connection.create")
 def create_connection(
@@ -57,6 +73,7 @@ def create_connection(
 ):
     """Crea nuova connessione database. Solo admin/superadmin."""
     require_service(_connection_service, "ConnectionService")
+    _assert_mssql_tls_change_allowed(data, current_user)
     try:
         conn = _connection_service.create_connection(
             data,
@@ -118,6 +135,7 @@ def update_connection(
     except CredentialUnavailableError as e:
         raise_credential_unavailable(e)
     assert_can_modify(existing, current_user, "Connessione")
+    _assert_mssql_tls_change_allowed(data, current_user, existing)
     conn = _connection_service.update_connection(connection_id, data)
     if not conn:
         raise HTTPException(
