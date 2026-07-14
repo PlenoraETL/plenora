@@ -397,9 +397,19 @@ if (-not $svc) {
     Write-Host "  $($rel.tag_name) -> $($asset.name)"
     $exe = Join-Path $env:TEMP $asset.name
     Invoke-WebRequest $asset.browser_download_url -OutFile $exe
-    Start-Process $exe -ArgumentList '/S' -Wait     # NSIS silent; registra il servizio
-    Start-Sleep -Seconds 10
-    $svc = Get-Service -Name 'RabbitMQ' -ErrorAction SilentlyContinue
+    # Non usare -Wait: alcune release NSIS lasciano vivo il bootstrapper
+    # anche quando servizio e broker sono gia' operativi. Aspettiamo invece
+    # l'outcome reale con un timeout bounded.
+    $rabbitInstaller = Start-Process $exe -ArgumentList '/S' -PassThru
+    $rabbitDeadline = (Get-Date).AddMinutes(5)
+    do {
+        Start-Sleep -Seconds 2
+        $svc = Get-Service -Name 'RabbitMQ' -ErrorAction SilentlyContinue
+        if ($svc) { break }
+        if ($rabbitInstaller.HasExited -and $rabbitInstaller.ExitCode -ne 0) {
+            Fail "Installer RabbitMQ exit=$($rabbitInstaller.ExitCode)"
+        }
+    } while ((Get-Date) -lt $rabbitDeadline)
 }
 if (-not $svc) { Fail 'Servizio RabbitMQ non trovato dopo l''install (compat Erlang? vedi runbook)' }
 if ($svc.Status -ne 'Running') { Start-Service RabbitMQ; Start-Sleep -Seconds 5 }

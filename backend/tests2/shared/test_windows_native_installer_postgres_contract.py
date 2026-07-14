@@ -35,3 +35,12 @@ def test_installer_rotates_edb_default_superuser_password() -> None:
     assert "ALTER ROLE postgres WITH PASSWORD" in installer
     assert "ZeroFreeBSTR" in installer
     assert "RandomNumberGenerator]::Create()" in installer
+
+
+def test_rabbitmq_install_waits_for_service_with_a_bounded_deadline() -> None:
+    installer = _installer()
+
+    assert "Start-Process $exe -ArgumentList '/S' -Wait" not in installer
+    assert "Start-Process $exe -ArgumentList '/S' -PassThru" in installer
+    assert "$rabbitDeadline = (Get-Date).AddMinutes(5)" in installer
+    assert "Get-Service -Name 'RabbitMQ'" in installer
