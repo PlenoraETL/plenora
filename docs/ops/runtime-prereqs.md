@@ -137,6 +137,24 @@ Il broker dei task e' **RabbitMQ** (Dramatiq), configurato da `DRAMATIQ_BROKER_U
 - JWT blacklist → `kv_store` con cache in-memory (rimpiazza la chiave Redis);
 - rate-limit (login + arricchisci) e lock/cache token OAuth → PostgreSQL.
 
+### Dashboard code e worker
+
+Il superadmin dispone della pagina `/admin/task-runtime` (API
+`GET /api/admin/task-runtime`) per osservare lo stato operativo senza accedere
+direttamente alle macchine:
+
+- messaggi pronti, consumer e dead-letter per ogni coda, letti con dichiarazioni
+  AMQP passive e bounded;
+- worker online/stale, host, PID e code sottoscritte, ricavati dagli heartbeat
+  condivisi in PostgreSQL;
+- task in esecuzione, progresso e lease scaduti, ricavati dai lease PostgreSQL.
+
+Non e' necessario abilitare il plugin RabbitMQ Management, esporre la porta
+`15672` o configurare credenziali aggiuntive. La stessa implementazione funziona
+su Windows e Linux, sia nativi sia Docker. Il contatore RabbitMQ indica i
+messaggi **pronti**; i messaggi gia' consegnati a un worker sono rappresentati
+dai lease applicativi e non vengono letti o consumati dalla dashboard.
+
 Le chiavi config hanno i nomi nuovi `TASK_*` (code/limiti task, es. `TASK_QUEUE_DEFAULT`, `TASK_HARD_LIMIT`, `TASK_RESULT_EXPIRES`) e `*_DISTRIBUTED_*` (es. `LOGIN_RL_DISTRIBUTED_REQUIRED`, `ARRICCHISCI_RATE_LIMIT_DISTRIBUTED_*`). I nomi env storici ancora effettivamente consumati (`CELERY_*`, `*_REDIS_*`) restano **accettati come alias deprecati**: se il nome nuovo non e' impostato e quello storico si', il valore storico viene usato e il boot logga un warning una-tantum che invita a rinominare. Non esiste piu' una `REDIS_URL` ne' `CELERY_BROKER_URL`.
 
 ### JWT revocation (blacklist)

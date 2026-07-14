@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from datetime import datetime, timezone
 import json
 from types import SimpleNamespace
 
@@ -85,6 +86,39 @@ def test_recover_stale_claim_publishes_terminal_worker_lost(monkeypatch) -> None
     payload = json.loads(result_insert[2])
     assert payload["error"] == "worker_lost"
     assert payload["success"] is False
+
+
+def test_admin_runtime_lists_parse_worker_queues_and_task_progress(monkeypatch) -> None:
+    now = datetime.now(timezone.utc)
+    session = _Session(fetchall_rows=[
+        [{
+            "worker_id": "w1",
+            "role": "data-plane",
+            "queues": '["data-plane"]',
+            "hostname": "host-a",
+            "pid": 123,
+            "started_at": now,
+            "heartbeat_at": now,
+        }],
+        [{
+            "task_id": "t1",
+            "actor_name": "pipeline.execute",
+            "worker_id": "w1",
+            "acquired_at": now,
+            "heartbeat_at": now,
+            "lease_expires_at": now,
+            "payload": '{"progress":"55","message":"working"}',
+        }],
+    ])
+    _install_session(monkeypatch, session)
+
+    workers = runtime_leases.list_worker_heartbeats(limit=10)
+    tasks = runtime_leases.list_running_task_claims(limit=10)
+
+    assert workers[0].queues == ("data-plane",)
+    assert tasks[0].progress == 55
+    assert tasks[0].message == "working"
+    assert all(call[1] == (10,) for call in session.calls)
 
 
 def test_process_memory_limit_falls_back_without_a_valid_limit() -> None:

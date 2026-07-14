@@ -15,6 +15,10 @@ class RabbitmqClientUnavailable(RuntimeError):
     """Raised when the RabbitMQ client library (pika) cannot be imported."""
 
 
+class RabbitmqProbeError(RuntimeError):
+    """Portable error raised when the AMQP client cannot inspect the broker."""
+
+
 @dataclass(frozen=True)
 class RabbitmqQueueStats:
     name: str
@@ -125,14 +129,19 @@ def inspect_rabbitmq_queues(
     *,
     timeout: int,
 ) -> list[RabbitmqQueueStats]:
-    return rabbitmq_runtime_port(broker_url).queue_stats(
-        queue_names,
-        timeout=timeout,
-    )
+    _pika = _pika_module()
+    try:
+        return rabbitmq_runtime_port(broker_url).queue_stats(
+            queue_names,
+            timeout=timeout,
+        )
+    except _pika.exceptions.AMQPError as exc:
+        raise RabbitmqProbeError(type(exc).__name__) from exc
 
 
 __all__ = [
     "RabbitmqClientUnavailable",
+    "RabbitmqProbeError",
     "RabbitmqQueueStats",
     "RabbitmqRuntimePort",
     "inspect_rabbitmq_queues",

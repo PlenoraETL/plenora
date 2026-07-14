@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Literal, Sequence
 
 from app.db.pg_connection import unit_of_work
@@ -23,6 +24,29 @@ TaskClaimOutcome = Literal["acquired", "completed", "busy"]
 class WorkerRoleCount:
     role: WorkerRole
     count: int
+
+
+@dataclass(frozen=True)
+class WorkerHeartbeat:
+    worker_id: str
+    role: WorkerRole
+    queues: tuple[str, ...]
+    hostname: str
+    pid: int
+    started_at: datetime
+    heartbeat_at: datetime
+
+
+@dataclass(frozen=True)
+class RunningTaskClaim:
+    task_id: str
+    actor_name: str
+    worker_id: str
+    acquired_at: datetime
+    heartbeat_at: datetime
+    lease_expires_at: datetime
+    progress: int | None = None
+    message: str | None = None
 
 
 @dataclass(frozen=True)
@@ -83,6 +107,78 @@ def count_fresh_workers(*, max_age_seconds: int) -> list[WorkerRoleCount]:
         WorkerRoleCount(role=str(row["role"]), count=int(row["count"]))
         for row in rows
     ]
+
+
+def list_worker_heartbeats(*, limit: int = 200) -> list[WorkerHeartbeat]:
+    """List the bounded cross-platform worker registry for admin telemetry."""
+    bounded_limit = max(1, min(int(limit), 1000))
+    with unit_of_work() as session:
+        rows = session.fetchall(
+            "SELECT worker_id, role, queues, hostname, pid, started_at, "
+            "heartbeat_at FROM worker_heartbeats "
+            "ORDER BY heartbeat_at DESC LIMIT %s",
+            (bounded_limit,),
+        )
+    items: list[WorkerHeartbeat] = []
+    for row in rows:
+        raw_queues = row["queues"]
+        if isinstance(raw_queues, str):
+            try:
+                raw_queues = json.loads(raw_queues)
+            except json.JSONDecodeError:
+                raw_queues = []
+        queues = tuple(str(value) for value in raw_queues or [])
+        items.append(WorkerHeartbeat(
+            worker_id=str(row["worker_id"]),
+            role=str(row["role"]),
+            queues=queues,
+            hostname=str(row["hostname"]),
+            pid=int(row["pid"]),
+            started_at=row["started_at"],
+            heartbeat_at=row["heartbeat_at"],
+        ))
+    return items
+
+
+def list_running_task_claims(*, limit: int = 200) -> list[RunningTaskClaim]:
+    """List active execution leases with their latest bounded progress data."""
+    bounded_limit = max(1, min(int(limit), 1000))
+    with unit_of_work() as session:
+        rows = session.fetchall(
+            "SELECT c.task_id, c.actor_name, c.worker_id, c.acquired_at, "
+            "c.heartbeat_at, c.lease_expires_at, r.payload "
+            "FROM task_execution_claims AS c "
+            "LEFT JOIN task_results AS r ON r.task_id = c.task_id "
+            "WHERE c.state = 'running' ORDER BY c.acquired_at ASC LIMIT %s",
+            (bounded_limit,),
+        )
+    items: list[RunningTaskClaim] = []
+    for row in rows:
+        payload = row.get("payload") or {}
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except json.JSONDecodeError:
+                payload = {}
+        if not isinstance(payload, dict):
+            payload = {}
+        progress_value = payload.get("progress")
+        try:
+            progress = int(progress_value) if progress_value is not None else None
+        except (TypeError, ValueError):
+            progress = None
+        message_value = payload.get("message")
+        items.append(RunningTaskClaim(
+            task_id=str(row["task_id"]),
+            actor_name=str(row["actor_name"]),
+            worker_id=str(row["worker_id"]),
+            acquired_at=row["acquired_at"],
+            heartbeat_at=row["heartbeat_at"],
+            lease_expires_at=row["lease_expires_at"],
+            progress=progress,
+            message=(str(message_value)[:300] if message_value else None),
+        ))
+    return items
 
 
 def claim_task(
@@ -239,16 +335,20 @@ def cleanup_runtime_leases(*, retention_seconds: int) -> tuple[int, int]:
 
 
 __all__ = [
+    "RunningTaskClaim",
     "StaleTaskClaim",
     "TaskClaimOutcome",
     "WorkerRole",
     "WorkerRoleCount",
+    "WorkerHeartbeat",
     "claim_task",
     "cleanup_runtime_leases",
     "count_fresh_workers",
     "finish_task_claim",
     "heartbeat_task_claims",
     "heartbeat_worker",
+    "list_running_task_claims",
+    "list_worker_heartbeats",
     "recover_stale_task_claims",
     "register_worker",
     "unregister_worker",

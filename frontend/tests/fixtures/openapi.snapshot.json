@@ -5822,6 +5822,54 @@
         "title": "ProjectDetailsUpdate",
         "type": "object"
       },
+      "QueueStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "consumers": {
+            "title": "Consumers",
+            "type": "integer"
+          },
+          "exists": {
+            "title": "Exists",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "work",
+              "dead_letter"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "messages_ready": {
+            "title": "Messages Ready",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "warn",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "exists",
+          "messages_ready",
+          "consumers",
+          "status"
+        ],
+        "title": "QueueStatus",
+        "type": "object"
+      },
       "ResetPasswordRequest": {
         "properties": {
           "new_password": {
@@ -5986,6 +6034,89 @@
           "output_hash"
         ],
         "title": "RunSummary",
+        "type": "object"
+      },
+      "RunningTaskStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "acquired_at": {
+            "format": "date-time",
+            "title": "Acquired At",
+            "type": "string"
+          },
+          "actor_name": {
+            "title": "Actor Name",
+            "type": "string"
+          },
+          "elapsed_seconds": {
+            "title": "Elapsed Seconds",
+            "type": "integer"
+          },
+          "heartbeat_at": {
+            "format": "date-time",
+            "title": "Heartbeat At",
+            "type": "string"
+          },
+          "lease_expires_at": {
+            "format": "date-time",
+            "title": "Lease Expires At",
+            "type": "string"
+          },
+          "lease_remaining_seconds": {
+            "title": "Lease Remaining Seconds",
+            "type": "integer"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Progress"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "lease_expired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "worker_id": {
+            "title": "Worker Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "actor_name",
+          "worker_id",
+          "acquired_at",
+          "heartbeat_at",
+          "lease_expires_at",
+          "elapsed_seconds",
+          "lease_remaining_seconds",
+          "status"
+        ],
+        "title": "RunningTaskStatus",
         "type": "object"
       },
       "ScheduleCatchupUpdate": {
@@ -7070,6 +7201,121 @@
         "title": "StorageObjectPage",
         "type": "object"
       },
+      "TaskRuntimePayload": {
+        "additionalProperties": false,
+        "properties": {
+          "broker_available": {
+            "title": "Broker Available",
+            "type": "boolean"
+          },
+          "broker_message": {
+            "title": "Broker Message",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "queues": {
+            "items": {
+              "$ref": "#/components/schemas/QueueStatus"
+            },
+            "title": "Queues",
+            "type": "array"
+          },
+          "running_tasks": {
+            "items": {
+              "$ref": "#/components/schemas/RunningTaskStatus"
+            },
+            "title": "Running Tasks",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "warn",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/TaskRuntimeTotals"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
+          "workers": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerStatus"
+            },
+            "title": "Workers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "generated_at",
+          "status",
+          "broker_available",
+          "broker_message",
+          "queues",
+          "workers",
+          "running_tasks",
+          "totals",
+          "warnings"
+        ],
+        "title": "TaskRuntimePayload",
+        "type": "object"
+      },
+      "TaskRuntimeTotals": {
+        "additionalProperties": false,
+        "properties": {
+          "consumers": {
+            "title": "Consumers",
+            "type": "integer"
+          },
+          "dead_letters": {
+            "title": "Dead Letters",
+            "type": "integer"
+          },
+          "expired_task_leases": {
+            "title": "Expired Task Leases",
+            "type": "integer"
+          },
+          "messages_ready": {
+            "title": "Messages Ready",
+            "type": "integer"
+          },
+          "running_tasks": {
+            "title": "Running Tasks",
+            "type": "integer"
+          },
+          "workers_online": {
+            "title": "Workers Online",
+            "type": "integer"
+          },
+          "workers_stale": {
+            "title": "Workers Stale",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "messages_ready",
+          "dead_letters",
+          "consumers",
+          "workers_online",
+          "workers_stale",
+          "running_tasks",
+          "expired_task_leases"
+        ],
+        "title": "TaskRuntimeTotals",
+        "type": "object"
+      },
       "TaskStatusResponse": {
         "properties": {
           "completed_at": {
@@ -7752,6 +7998,69 @@
         "title": "ValidationRequest",
         "type": "object"
       },
+      "WorkerStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "heartbeat_age_seconds": {
+            "title": "Heartbeat Age Seconds",
+            "type": "integer"
+          },
+          "heartbeat_at": {
+            "format": "date-time",
+            "title": "Heartbeat At",
+            "type": "string"
+          },
+          "hostname": {
+            "title": "Hostname",
+            "type": "string"
+          },
+          "pid": {
+            "title": "Pid",
+            "type": "integer"
+          },
+          "queues": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Queues",
+            "type": "array"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "online",
+              "stale"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "worker_id": {
+            "title": "Worker Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "worker_id",
+          "role",
+          "queues",
+          "hostname",
+          "pid",
+          "started_at",
+          "heartbeat_at",
+          "heartbeat_age_seconds",
+          "status"
+        ],
+        "title": "WorkerStatus",
+        "type": "object"
+      },
       "WriteFeaturesResponse": {
         "description": "Response di POST /api/features/write — fotografia 1:1 di\n`features_service.write_features` (4 branch ritornano questa stessa shape:\nadd/update/delete + features-vuote). `errors` resta opaco (item Esri).",
         "properties": {
@@ -8368,6 +8677,32 @@
         "summary": "Aggregato stato sistema per dashboard admin",
         "tags": [
           "admin-system-status"
+        ]
+      }
+    },
+    "/api/admin/task-runtime": {
+      "get": {
+        "operationId": "get_task_runtime_api_admin_task_runtime_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskRuntimePayload"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Task Runtime",
+        "tags": [
+          "admin-task-runtime"
         ]
       }
     },

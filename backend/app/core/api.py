@@ -6,6 +6,7 @@ from app.core.admin_backups.router import router as admin_backups_router
 from app.core.admin_runtime_config.router import router as admin_runtime_config_router
 from app.core.admin_system_status.router import router as admin_system_status_router
 from app.core.admin_object_storage.router import router as admin_object_storage_router
+from app.core.admin_task_runtime.router import router as admin_task_runtime_router
 from app.core.arricchisci.router import (
     api_connections_router,
     enrich_router,
@@ -91,6 +92,7 @@ api_router.include_router(admin_backups_router)
 # Admin System Status dashboard: superadmin only.
 api_router.include_router(admin_system_status_router)
 api_router.include_router(admin_object_storage_router)
+api_router.include_router(admin_task_runtime_router)
 
 # Admin Runtime Config: superadmin only, read-only.
 api_router.include_router(admin_runtime_config_router)

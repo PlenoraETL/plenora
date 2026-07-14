@@ -207,6 +207,19 @@ export default function AppSidebar({ counts = {} }) {
         {role.isSuperadmin(user) && (
           <div
             className="app-sidebar__user-row app-sidebar__user-row--admin"
+            onClick={() => navigate('/admin/task-runtime')}
+            title="Code RabbitMQ, worker e task attivi"
+          >
+            <div className="app-sidebar__avatar app-sidebar__avatar--admin">MQ</div>
+            <div className="app-sidebar__user-info">
+              <div className="app-sidebar__user-name">Code e Worker</div>
+              <div className="app-sidebar__user-role">RabbitMQ · superadmin</div>
+            </div>
+          </div>
+        )}
+        {role.isSuperadmin(user) && (
+          <div
+            className="app-sidebar__user-row app-sidebar__user-row--admin"
             onClick={() => navigate('/admin/object-storage')}
             title="Explorer object storage runtime"
           >
