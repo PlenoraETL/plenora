@@ -622,6 +622,14 @@ if ($InstallFrontend) {
     $FrontendDir = Join-Path $RepoRoot 'frontend'
     if (-not (Test-Path (Join-Path $FrontendDir 'package.json'))) { Fail "frontend non trovato in $FrontendDir" }
 
+    # La shell che ha eseguito winget puo' non vedere ancora il PATH macchina
+    # aggiornato. Preferiamo il path stabile dell'installer Node ufficiale.
+    $npmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    $npm = if ($npmCommand) { $npmCommand.Source } else { Join-Path $env:ProgramFiles 'nodejs\npm.cmd' }
+    if (-not (Test-Path $npm)) {
+        Fail "npm.cmd non trovato in '$npm' (Node.js LTS installato correttamente?)"
+    }
+
     # Build: VITE_API_URL e' cablata nel bundle a build-time (config.js).
     # Con Caddy davanti, l'API e' sullo STESSO origin del FE: il valore
     # giusto e' l'origin di Caddy (le chiamate /api vengono proxate).
@@ -629,10 +637,10 @@ if ($InstallFrontend) {
     try {
         $env:VITE_API_URL = $FrontendApiUrl
         Write-Host '  npm ci...'
-        & npm ci
+        & $npm ci
         if ($LASTEXITCODE -ne 0) { Fail "npm ci exit=$LASTEXITCODE" }
         Write-Host '  npm run build...'
-        & npm run build
+        & $npm run build
         if ($LASTEXITCODE -ne 0) { Fail "npm run build exit=$LASTEXITCODE" }
     } finally {
         Pop-Location

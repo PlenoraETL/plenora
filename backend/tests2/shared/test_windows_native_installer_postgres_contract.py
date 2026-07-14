@@ -44,3 +44,12 @@ def test_rabbitmq_install_waits_for_service_with_a_bounded_deadline() -> None:
     assert "Start-Process $exe -ArgumentList '/S' -PassThru" in installer
     assert "$rabbitDeadline = (Get-Date).AddMinutes(5)" in installer
     assert "Get-Service -Name 'RabbitMQ'" in installer
+
+
+def test_frontend_build_does_not_depend_on_refreshed_machine_path() -> None:
+    installer = _installer()
+
+    assert "Join-Path $env:ProgramFiles 'nodejs\\npm.cmd'" in installer
+    assert "& $npm ci" in installer
+    assert "& $npm run build" in installer
+    assert "& npm ci" not in installer
