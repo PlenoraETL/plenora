@@ -634,7 +634,13 @@ if ($InstallFrontend) {
     # Con Caddy davanti, l'API e' sullo STESSO origin del FE: il valore
     # giusto e' l'origin di Caddy (le chiamate /api vengono proxate).
     Push-Location $FrontendDir
+    $originalPath = $env:PATH
     try {
+        # npm.cmd puo' essere invocato per path assoluto, ma lifecycle script
+        # come esbuild eseguono `node` tramite PATH: propaghiamo la directory
+        # Node anche ai processi figli della shell aperta prima di winget.
+        $nodeDir = Split-Path -Parent $npm
+        $env:PATH = "$nodeDir;$originalPath"
         $env:VITE_API_URL = $FrontendApiUrl
         Write-Host '  npm ci...'
         & $npm ci
@@ -644,6 +650,7 @@ if ($InstallFrontend) {
         if ($LASTEXITCODE -ne 0) { Fail "npm run build exit=$LASTEXITCODE" }
     } finally {
         Pop-Location
+        $env:PATH = $originalPath
         Remove-Item Env:\VITE_API_URL -ErrorAction SilentlyContinue
     }
     $distDir = Join-Path $FrontendDir 'dist'

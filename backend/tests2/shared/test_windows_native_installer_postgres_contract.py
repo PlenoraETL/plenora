@@ -50,6 +50,7 @@ def test_frontend_build_does_not_depend_on_refreshed_machine_path() -> None:
     installer = _installer()
 
     assert "Join-Path $env:ProgramFiles 'nodejs\\npm.cmd'" in installer
+    assert '$env:PATH = "$nodeDir;$originalPath"' in installer
     assert "& $npm ci" in installer
     assert "& $npm run build" in installer
     assert "& npm ci" not in installer
