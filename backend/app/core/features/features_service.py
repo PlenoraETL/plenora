@@ -709,7 +709,9 @@ class FeaturesService:
             "service_url": service_url,
             "item_id": first_result.get("item_id", ""),
             "layers": out_layers,
-            "feature_count": sum(int(l["feature_count"]) for l in out_layers),
+            "feature_count": sum(
+                int(layer["feature_count"]) for layer in out_layers
+            ),
             "errors": errors,
         }
 
@@ -737,7 +739,9 @@ class FeaturesService:
                 "success": False, "service_url": service_url,
                 "layers": [], "feature_count": 0, "errors": [f"list_layers: {exc}"],
             }
-        by_name = {l["name"]: l for l in existing if l.get("name")}
+        by_name = {
+            layer["name"]: layer for layer in existing if layer.get("name")
+        }
 
         out_layers: List[Mapping[str, object]] = []
         errors: List[str] = []
@@ -774,17 +778,20 @@ class FeaturesService:
             })
 
         real_activity = any(
-            (l.get("added_count", 0) or 0)
-            + (l.get("updated_count", 0) or 0)
-            + (l.get("deleted_count", 0) or 0) > 0
-            for l in out_layers
+            (layer.get("added_count", 0) or 0)
+            + (layer.get("updated_count", 0) or 0)
+            + (layer.get("deleted_count", 0) or 0) > 0
+            for layer in out_layers
         )
-        has_errors = any(l["errors"] for l in out_layers) or bool(errors)
+        has_errors = any(layer["errors"] for layer in out_layers) or bool(errors)
         return {
             "success": real_activity and not has_errors,
             "service_url": service_url,
             "layers": out_layers,
-            "feature_count": sum(int(l.get("feature_count", 0) or 0) for l in out_layers),
+            "feature_count": sum(
+                int(layer.get("feature_count", 0) or 0)
+                for layer in out_layers
+            ),
             "errors": errors,
         }
 

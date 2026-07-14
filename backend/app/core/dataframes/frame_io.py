@@ -107,7 +107,6 @@ from app.core.dataframes.tabular import (
 )
 from app.core.io.geospatial import read_vector_bytes
 from app.core.io.zip_guards import (
-    open_zip_bytes_safe,
     spool_zip_member,
     validate_zip_bomb_limits,
 )

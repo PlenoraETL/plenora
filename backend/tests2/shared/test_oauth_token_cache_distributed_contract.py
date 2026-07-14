@@ -9,13 +9,10 @@ from typing import Any
 import pytest
 
 from app.shared.connections import oauth
+from app.shared.kv import InMemoryKeyValueStore
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
-
-
-from app.shared.kv import InMemoryKeyValueStore
-
 
 class _RecordingStore(InMemoryKeyValueStore):
     """KeyValueStore in-memory (Fase 4: il backend e' PG) che registra le

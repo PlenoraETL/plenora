@@ -231,7 +231,10 @@ def test_every_storage_callsite_file_is_classified():
     if unclassified:
         details = "\n".join(
             f"  {p}:\n"
-            + "\n".join(f"    line {n}: {l}" for (n, l) in found[p][:3])
+            + "\n".join(
+                f"    line {line_number}: {line}"
+                for (line_number, line) in found[p][:3]
+            )
             for p in unclassified
         )
         raise AssertionError(

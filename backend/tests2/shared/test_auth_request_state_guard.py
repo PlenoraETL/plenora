@@ -103,10 +103,17 @@ def test_no_consumers_of_request_state_auth_fields_anywhere():
     # mentions the forbidden patterns. Any non-comment match here would
     # be a real regression.
     self_path = "tests2/shared/test_auth_request_state_guard.py"
-    real_hits = [(p, n, l) for (p, n, l) in hits if p != self_path]
+    real_hits = [
+        (path, line_number, line)
+        for (path, line_number, line) in hits
+        if path != self_path
+    ]
 
     if real_hits:
-        msg = "\n".join(f"  {p}:{n}: {l}" for (p, n, l) in real_hits)
+        msg = "\n".join(
+            f"  {path}:{line_number}: {line}"
+            for (path, line_number, line) in real_hits
+        )
         raise AssertionError(
             "request.state.{group_id,user_id,username,role} consumers "
             f"detected (regression):\n{msg}\n\n"

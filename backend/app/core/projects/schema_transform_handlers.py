@@ -85,7 +85,13 @@ class TransformSchemaHandlers:
         i transform_op tra i marker `# DISPATCH-REGISTRY:start` e
         `# DISPATCH-REGISTRY:end` qui sotto.
         """
-        pt = lambda i, c, n: self._schema_passthrough(i, n)
+        def pt(
+            i: List[List[ColumnSchema]],
+            _c: dict,
+            n: str,
+        ) -> List[ColumnSchema]:
+            return self._schema_passthrough(i, n)
+
         return {
             # DISPATCH-REGISTRY:start
             # base

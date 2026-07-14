@@ -139,10 +139,7 @@ def test_all_ten_task_names_have_a_dramatiq_actor():
     )
 
 
-import pytest as _pytest
-
-
-@_pytest.mark.parametrize(
+@pytest.mark.parametrize(
     "attr, actor_name, queue_attr",
     [
         ("carica_execute", "carica.execute", "TASK_QUEUE_DATA_PLANE"),

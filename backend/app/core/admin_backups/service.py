@@ -301,7 +301,9 @@ def get_last_run_status() -> LastBackupRunStatus:
 
     log_tail = row.get("log_tail")
     if log_tail:
-        out["log_tail"] = [l for l in str(log_tail).splitlines() if l.strip()]
+        out["log_tail"] = [
+            line for line in str(log_tail).splitlines() if line.strip()
+        ]
 
     return out
 

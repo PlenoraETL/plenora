@@ -201,7 +201,11 @@ def verify_dump_integrity(dump_file: Path) -> None:
         sys.exit(2)
 
     # Conta entry nel TOC (sanity: un dump valido ne ha decine/centinaia)
-    toc_lines = [l for l in result.stdout.splitlines() if l and not l.startswith(";")]
+    toc_lines = [
+        line
+        for line in result.stdout.splitlines()
+        if line and not line.startswith(";")
+    ]
     if len(toc_lines) < 5:
         log("ERROR", f"dump sospetto: solo {len(toc_lines)} entry nel TOC")
         sys.exit(2)

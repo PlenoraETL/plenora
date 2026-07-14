@@ -65,7 +65,7 @@ def get_logs(
     if level:
         placeholders = ",".join(["%s"] * len(level.split(",")))
         conditions.append(f"level IN ({placeholders})")
-        params.extend(l.strip().upper() for l in level.split(","))
+        params.extend(item.strip().upper() for item in level.split(","))
 
     if module:
         placeholders = ",".join(["%s"] * len(module.split(",")))

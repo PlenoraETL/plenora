@@ -143,11 +143,15 @@ class WhereClauseBuilder:
 
             def _coerce(v):
                 if col_type_norm in ("int", "integer", "bigint", "smallint"):
-                    try: return int(v)
-                    except (ValueError, TypeError): return v
+                    try:
+                        return int(v)
+                    except (ValueError, TypeError):
+                        return v
                 if col_type_norm in ("real", "float", "double", "numeric", "decimal"):
-                    try: return float(v)
-                    except (ValueError, TypeError): return v
+                    try:
+                        return float(v)
+                    except (ValueError, TypeError):
+                        return v
                 return v
 
             p_lo = self._next_param_name()
