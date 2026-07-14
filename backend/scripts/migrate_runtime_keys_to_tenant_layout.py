@@ -50,7 +50,7 @@ def _result_candidates() -> list[Candidate]:
     candidates: list[Candidate] = []
     for row in _rows(
         "SELECT id, project_id, group_id, storage_key FROM results "
-        "WHERE storage_key IS NOT NULL AND storage_key NOT LIKE 'tenants/%'"
+        "WHERE storage_key IS NOT NULL AND storage_key NOT LIKE 'tenants/%%'"
     ):
         old = str(row["storage_key"])
         if legacy_domain(old) != RESULTS_PREFIX:
@@ -74,7 +74,7 @@ def _file_source_candidates() -> list[Candidate]:
     candidates: list[Candidate] = []
     for row in _rows(
         "SELECT id, group_id, storage_key FROM file_sources "
-        "WHERE storage_key IS NOT NULL AND storage_key NOT LIKE 'tenants/%'"
+        "WHERE storage_key IS NOT NULL AND storage_key NOT LIKE 'tenants/%%'"
     ):
         old = str(row["storage_key"])
         if legacy_domain(old) != FILE_SOURCES_PREFIX:
@@ -99,7 +99,7 @@ def _preview_candidates() -> list[Candidate]:
         "FROM task_results tr "
         "LEFT JOIN projects p ON p.id=tr.payload->>'project_id' "
         "WHERE jsonb_exists(tr.payload, 'preview_storage_key') "
-        "AND tr.payload->>'preview_storage_key' NOT LIKE 'tenants/%'"
+        "AND tr.payload->>'preview_storage_key' NOT LIKE 'tenants/%%'"
     )
     for row in rows:
         payload = row["payload"]
@@ -132,7 +132,7 @@ def _intermediate_candidates() -> list[Candidate]:
         "SELECT nm.run_id, nm.node_id, nm.artifact_uri, r.group_id "
         "FROM node_meta nm JOIN runs r ON r.run_id=nm.run_id "
         "WHERE nm.artifact_uri IS NOT NULL "
-        "AND nm.artifact_uri NOT LIKE 'tenants/%'"
+        "AND nm.artifact_uri NOT LIKE 'tenants/%%'"
     ):
         old = str(row["artifact_uri"])
         if legacy_domain(old) != INTERMEDIATE_PREFIX:
