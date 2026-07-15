@@ -8,6 +8,7 @@
  * Usato da: ManipolaEditor, ArricchisciEditor
  */
 import { useCallback } from 'react';
+import { applyExtendedTransformSchema } from '../utils/extendedTransformSchema';
 
 /**
  * useColumnPropagation - UNICA FONTE DI VERITÀ per le colonne
@@ -104,7 +105,9 @@ export const useColumnPropagation = (setNodes) => {
         // outputColumns = simula il merge con rinomina come il backend
         outputColumns = computeMultiJoinOutput(node, sourcesColumns);
       } else if (node.type === 'transform' && node.data?.transform_op === 'concat') {
-        // CASO SPECIALE: Concat/Union - output = colonne del primo input (impila righe, non colonne)
+        // CASO SPECIALE: Concat/Union. Il backend usa join=outer come
+        // default (unione ordinata delle colonne) e join=inner per
+        // mantenere soltanto l'intersezione degli schemi.
         const sourcesColumns = incomingEdges.map(edge => 
           outputColumnsMap.get(edge.source) || []
         );
@@ -114,8 +117,10 @@ export const useColumnPropagation = (setNodes) => {
           inputColumns = [...inputColumns, ...cols];
         });
         
-        // outputColumns = colonne del primo input (concat mantiene schema del primo)
-        outputColumns = sourcesColumns.length > 0 ? [...sourcesColumns[0]] : [];
+        outputColumns = computeConcatOutput(
+          sourcesColumns,
+          node.data?.config?.join || 'outer',
+        );
       } else if (node.type === 'transform' && node.data?.transform_op === 'join') {
         // CASO SPECIALE: Join - applica suffissi _L e _R come il backend
         const config = node.data?.config || {};
@@ -154,11 +159,13 @@ export const useColumnPropagation = (setNodes) => {
         outputColumns = computeJoinOutput(leftCols, rightCols, leftKeys, rightKeys);
       } else {
         // Nodo normale - unisci tutte le colonne input
-        incomingEdges.forEach(edge => {
-          const sourceOutput = outputColumnsMap.get(edge.source) || [];
+        const sourcesColumns = incomingEdges.map(
+          edge => outputColumnsMap.get(edge.source) || []
+        );
+        sourcesColumns.forEach(sourceOutput => {
           inputColumns = [...inputColumns, ...sourceOutput];
         });
-        outputColumns = computeOutputColumns(node, inputColumns);
+        outputColumns = computeOutputColumns(node, inputColumns, sourcesColumns);
       }
       
       inputColumnsMap.set(nodeId, inputColumns);
@@ -249,7 +256,7 @@ function isSourceNode(node) {
 /**
  * Calcola le colonne OUTPUT di un nodo
  */
-function computeOutputColumns(node, inputColumns) {
+function computeOutputColumns(node, inputColumns, sourcesColumns = []) {
   const nodeType = node.type;
   
   // Nodi sorgente: usano le loro colonne salvate.
@@ -270,7 +277,7 @@ function computeOutputColumns(node, inputColumns) {
   
   // Transform node: applica la trasformazione
   if (nodeType === 'transform') {
-    return applyTransformation(node, inputColumns);
+    return applyTransformation(node, inputColumns, sourcesColumns);
   }
   
   // Default: passa colonne così come sono
@@ -280,9 +287,17 @@ function computeOutputColumns(node, inputColumns) {
 /**
  * Applica una trasformazione e restituisce le colonne output
  */
-function applyTransformation(node, inputColumns) {
+function applyTransformation(node, inputColumns, sourcesColumns = []) {
   const transform_op = node.data?.transform_op;
   const config = node.data?.config || {};
+
+  const extendedResult = applyExtendedTransformSchema(
+    transform_op,
+    config,
+    inputColumns,
+    sourcesColumns,
+  );
+  if (extendedResult !== null) return extendedResult;
   
   let result = [...inputColumns];
   
@@ -644,6 +659,31 @@ function computeMultiJoinOutput(node, sourcesColumns) {
   
   
   return result;
+}
+
+function computeConcatOutput(sourcesColumns, joinMode = 'outer') {
+  if (!sourcesColumns || sourcesColumns.length === 0) return [];
+  if (joinMode === 'inner') {
+    const commonNames = sourcesColumns.slice(1).reduce(
+      (common, columns) => {
+        const current = new Set(columns.map(col => col.name));
+        return new Set([...common].filter(name => current.has(name)));
+      },
+      new Set(sourcesColumns[0].map(col => col.name)),
+    );
+    return sourcesColumns[0]
+      .filter(col => commonNames.has(col.name))
+      .map(col => ({ ...col }));
+  }
+
+  const output = [];
+  const seen = new Set();
+  sourcesColumns.forEach(columns => columns.forEach(col => {
+    if (seen.has(col.name)) return;
+    output.push({ ...col });
+    seen.add(col.name);
+  }));
+  return output;
 }
 
 /**

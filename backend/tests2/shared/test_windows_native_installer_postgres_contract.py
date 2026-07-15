@@ -80,3 +80,16 @@ def test_native_installer_provisions_modern_sql_server_odbc_driver() -> None:
     assert "https://go.microsoft.com/fwlink/?linkid=2358430" in installer
     assert "IACCEPTMSODBCSQLLICENSETERMS=YES" in installer
     assert "Get-OdbcDriver -Platform '64-bit'" in installer
+
+
+def test_dependency_update_stops_services_once_and_cleans_pip_residuals() -> None:
+    installer = _installer()
+
+    stop_call = "$stoppedAppServiceIds = @(Stop-PlenoraAppServicesForDependencyUpdate)"
+    pip_call = "python -m pip install --require-hashes -r $requirementsLock"
+    assert stop_call in installer
+    assert installer.index(stop_call) < installer.index(pip_call)
+    assert "$orderedIds | Select-Object -Unique" in installer
+    assert "Remove-StalePipDirectories -CondaEnvRoot" in installer
+    assert "-Directory -Filter '~*'" in installer
+    assert "Start-PlenoraAppServicesAfterDependencyFailure" in installer

@@ -169,6 +169,66 @@ function Invoke-RabbitCtl {
 
 $ServicesRoot = 'C:\plenora-services'
 
+function Stop-PlenoraAppServicesForDependencyUpdate {
+    # I moduli nativi (pyarrow/pyogrio) restano lockati finche' backend e
+    # worker sono in esecuzione. Arrestiamo ogni servizio UNA sola volta,
+    # in ordine applicativo, prima di modificare l'env conda.
+    $installed = @(Get-Service -Name 'plenora-backend','plenora-worker*','plenora-beat' -ErrorAction SilentlyContinue)
+    if ($installed.Count -eq 0) { return @() }
+
+    $installedByName = @{}
+    foreach ($service in $installed) { $installedByName[$service.Name] = $service }
+    $orderedIds = @('plenora-beat') + @(
+        $installedByName.Keys |
+            Where-Object { $_ -like 'plenora-worker*' } |
+            Sort-Object
+    ) + @('plenora-backend')
+
+    $stopped = @()
+    foreach ($id in ($orderedIds | Select-Object -Unique)) {
+        $service = $installedByName[$id]
+        if (-not $service -or $service.Status -ne 'Running') { continue }
+        Write-Host "  Arresto $id per aggiornamento dipendenze..."
+        Stop-Service -Name $id -Force -ErrorAction Stop
+        $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(45))
+        $stopped += $id
+    }
+    return @($stopped)
+}
+
+function Start-PlenoraAppServicesAfterDependencyFailure {
+    param([string[]]$ServiceIds)
+    # Recovery best-effort: se pip/import falliscono, non lasciare una
+    # installazione precedentemente funzionante completamente spenta.
+    $ordered = @('plenora-backend') + @(
+        $ServiceIds | Where-Object { $_ -like 'plenora-worker*' } | Sort-Object
+    ) + @('plenora-beat')
+    foreach ($id in ($ordered | Select-Object -Unique)) {
+        if ($ServiceIds -notcontains $id) { continue }
+        try { Start-Service -Name $id -ErrorAction Stop }
+        catch { Write-Warning "Ripristino servizio $id fallito: $($_.Exception.Message)" }
+    }
+}
+
+function Remove-StalePipDirectories {
+    param([string]$CondaEnvRoot)
+    $sitePackages = Join-Path $CondaEnvRoot 'Lib\site-packages'
+    if (-not (Test-Path -LiteralPath $sitePackages)) { return }
+    $resolvedSitePackages = (Resolve-Path -LiteralPath $sitePackages).Path
+    foreach ($directory in @(Get-ChildItem -LiteralPath $resolvedSitePackages -Directory -Filter '~*' -ErrorAction SilentlyContinue)) {
+        if ($directory.Parent.FullName -ne $resolvedSitePackages) {
+            Write-Warning "Directory pip temporanea fuori scope ignorata: $($directory.FullName)"
+            continue
+        }
+        try {
+            Remove-Item -LiteralPath $directory.FullName -Recurse -Force -ErrorAction Stop
+            Write-Host "  Rimossa directory pip temporanea: $($directory.Name)"
+        } catch {
+            Write-Warning "Impossibile rimuovere $($directory.FullName): $($_.Exception.Message)"
+        }
+    }
+}
+
 function Get-WinSWExe {
     # WinSW.exe condiviso (W1 servizi app + W3 object storage): scarica
     # una volta dalla release GitHub, fallback pinnato v2.12.0.
@@ -468,10 +528,25 @@ Step 'Dipendenze pip dal lock verificato'
 # -----------------------------------------------------------------------------
 $requirementsLock = Join-Path $BackendDir 'requirements.lock'
 if (-not (Test-Path $requirementsLock)) { Fail 'requirements.lock mancante' }
+$stoppedAppServiceIds = @()
+if ($InstallServices) {
+    $stoppedAppServiceIds = @(Stop-PlenoraAppServicesForDependencyUpdate)
+    if ($stoppedAppServiceIds.Count -gt 0) {
+        Ok "Servizi applicativi arrestati una sola volta: $($stoppedAppServiceIds -join ', ')"
+    }
+}
 & $condaBat run -n $CondaEnv python -m pip install --require-hashes -r $requirementsLock
-if ($LASTEXITCODE -ne 0) { Fail 'pip install fallita (annotare il pacchetto incriminato)' }
+if ($LASTEXITCODE -ne 0) {
+    Start-PlenoraAppServicesAfterDependencyFailure -ServiceIds $stoppedAppServiceIds
+    Fail 'pip install fallita (annotare il pacchetto incriminato)'
+}
 & $condaBat run -n $CondaEnv python -c "import fastapi, dramatiq, psycopg, pika, apscheduler, croniter; print('deps ok')"
-if ($LASTEXITCODE -ne 0) { Fail 'import check fallito' }
+if ($LASTEXITCODE -ne 0) {
+    Start-PlenoraAppServicesAfterDependencyFailure -ServiceIds $stoppedAppServiceIds
+    Fail 'import check fallito'
+}
+$forgeRootForCleanup = Split-Path -Parent (Split-Path -Parent $condaBat)
+Remove-StalePipDirectories -CondaEnvRoot (Join-Path $forgeRootForCleanup "envs\$CondaEnv")
 Ok 'Dipendenze python complete'
 
 # -----------------------------------------------------------------------------
