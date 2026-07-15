@@ -608,7 +608,7 @@ class ApiConnectionRestFileMixin:
                     stream=True,
                     verify=verify_tls,
                     allow_redirects=False,
-                    validate_url=False,
+                    validate_url=True,
                     context="rest_file POST",
                 )
             )

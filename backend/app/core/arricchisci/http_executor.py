@@ -11,7 +11,12 @@ from requests.structures import CaseInsensitiveDict
 from urllib.parse import urljoin, urlparse
 
 from app.shared.security.outbound_url import resolve_external_url, validate_external_url
-from app.infrastructure.http.session import build_pinned_session, get_shared_session
+from app.infrastructure.http.session import (
+    DEFAULT_OUTBOUND_RESPONSE_MAX_BYTES,
+    OutboundResponseTooLarge,
+    build_pinned_session,
+    get_shared_session,
+)
 
 
 SUPPORTED_HTTP_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})
@@ -42,6 +47,7 @@ class RequestSpec:
     allow_redirects: bool = False
     stream: bool = False
     validate_url: bool = True
+    max_response_bytes: int = DEFAULT_OUTBOUND_RESPONSE_MAX_BYTES
     context: str = "REST connector request"
 
 
@@ -73,6 +79,9 @@ class HttpExecutor:
         )
         started = time.time()
         response = self._execute_with_safe_redirects(spec, method)
+
+        if not spec.stream:
+            self._buffer_response_bounded(response, spec.max_response_bytes)
 
         return NormalizedResponse(
             status_code=response.status_code,
@@ -144,7 +153,9 @@ class HttpExecutor:
             "headers": headers,
             "timeout": spec.timeout,
             "allow_redirects": False,
-            "stream": spec.stream,
+            # Always stream at the requests boundary. Non-streaming callers are
+            # buffered explicitly with a hard byte cap in ``execute``.
+            "stream": True,
         }
         if spec.verify is not None:
             kwargs["verify"] = spec.verify
@@ -162,10 +173,65 @@ class HttpExecutor:
                 **kwargs,
             )
         if session is not shared_session:
-            # Streaming callers consume raw_response after this method returns;
-            # retain the isolated adapter/pool for that lifetime.
-            setattr(response, "_plenora_pinned_session", session)
+            # Close the isolated adapter together with the response, including
+            # redirect and over-limit paths.
+            original_close = getattr(response, "close", lambda: None)
+            closed = False
+
+            def close_with_session() -> None:
+                nonlocal closed
+                if closed:
+                    return
+                closed = True
+                try:
+                    original_close()
+                finally:
+                    session.close()
+
+            response.close = close_with_session
         return response
+
+    @staticmethod
+    def _buffer_response_bounded(response: Any, limit: int) -> None:
+        limit = int(limit)
+        if limit <= 0:
+            raise ValueError("max_response_bytes deve essere positivo")
+
+        declared_size = response.headers.get("Content-Length")
+        if declared_size:
+            try:
+                parsed_size = int(declared_size)
+            except (TypeError, ValueError):
+                parsed_size = None
+            if parsed_size is not None and parsed_size > limit:
+                response.close()
+                raise OutboundResponseTooLarge(
+                    f"Risposta esterna oltre il limite di {limit} byte"
+                )
+
+        iter_content = getattr(response, "iter_content", None)
+        if not callable(iter_content):
+            raw = (getattr(response, "text", "") or "").encode("utf-8")
+            if len(raw) > limit:
+                raise OutboundResponseTooLarge(
+                    f"Risposta esterna oltre il limite di {limit} byte"
+                )
+            return
+
+        content = bytearray()
+        try:
+            for chunk in iter_content(chunk_size=64 * 1024):
+                if not chunk:
+                    continue
+                content.extend(chunk)
+                if len(content) > limit:
+                    raise OutboundResponseTooLarge(
+                        f"Risposta esterna oltre il limite di {limit} byte"
+                    )
+            response._content = bytes(content)
+            response._content_consumed = True
+        finally:
+            response.close()
 
     @staticmethod
     def _payload_from_spec(spec: RequestSpec) -> Any:

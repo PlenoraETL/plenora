@@ -412,40 +412,33 @@ class ProjectRepository:
         self,
         group_id: str | None = None,
         project_type: str | None = None,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[ProjectRow]:
         # Helper centralizzato per evitare drift fra i 4 SELECT del list.
         _COLS = (
             "id, group_id, name, project_type, connection_id, "
             "created_at, updated_at, created_by, description, canvas_validated, tags"
         )
-        if group_id is None:
-            if project_type:
-                return _project_rows(
-                    _fetchall(
-                        f"SELECT {_COLS} FROM projects "
-                        "WHERE project_type = %s ORDER BY updated_at DESC",
-                        (project_type,),
-                    )
-                )
-            return _project_rows(
-                _fetchall(
-                    f"SELECT {_COLS} FROM projects "
-                    "ORDER BY updated_at DESC"
-                )
-            )
+        predicates: list[str] = []
+        params: list[object] = []
+        if group_id is not None:
+            predicates.append("group_id = %s")
+            params.append(group_id)
         if project_type:
-            return _project_rows(
-                _fetchall(
-                    f"SELECT {_COLS} FROM projects "
-                    "WHERE group_id = %s AND project_type = %s ORDER BY updated_at DESC",
-                    (group_id, project_type),
-                )
-            )
+            predicates.append("project_type = %s")
+            params.append(project_type)
+        where = f" WHERE {' AND '.join(predicates)}" if predicates else ""
+        paging = ""
+        if limit is not None:
+            paging = " LIMIT %s OFFSET %s"
+            params.extend((limit, offset))
         return _project_rows(
             _fetchall(
-                f"SELECT {_COLS} FROM projects "
-                "WHERE group_id = %s ORDER BY updated_at DESC",
-                (group_id,),
+                f"SELECT {_COLS} FROM projects{where} "
+                f"ORDER BY updated_at DESC, id{paging}",
+                tuple(params),
             )
         )
 
@@ -569,7 +562,22 @@ class ProjectRepository:
             )
         )
 
-    def list_project_canvas_check_rows(self) -> list[ProjectCanvasCheckRow]:
+    def list_project_canvas_check_rows(
+        self,
+        project_ids: set[str] | None = None,
+    ) -> list[ProjectCanvasCheckRow]:
+        if project_ids is not None:
+            if not project_ids:
+                return []
+            ordered_ids = sorted(project_ids)
+            placeholders = ", ".join(["%s"] * len(ordered_ids))
+            return _project_canvas_check_rows(
+                _fetchall(
+                    f"SELECT id, name, project_type, canvas, group_id "
+                    f"FROM projects WHERE id IN ({placeholders})",
+                    tuple(ordered_ids),
+                )
+            )
         return _project_canvas_check_rows(
             _fetchall("SELECT id, name, project_type, canvas, group_id FROM projects")
         )
@@ -643,8 +651,16 @@ def get_project_raw_canvas_row(
 def list_projects(
     group_id: str | None = None,
     project_type: str | None = None,
+    *,
+    limit: int | None = None,
+    offset: int = 0,
 ) -> list[ProjectRow]:
-    return project_repository.list_projects(group_id=group_id, project_type=project_type)
+    return project_repository.list_projects(
+        group_id=group_id,
+        project_type=project_type,
+        limit=limit,
+        offset=offset,
+    )
 
 
 def create_project_row(
@@ -760,8 +776,10 @@ def list_project_dependency_rows_using_connection(
     )
 
 
-def list_project_canvas_check_rows() -> list[ProjectCanvasCheckRow]:
-    return project_repository.list_project_canvas_check_rows()
+def list_project_canvas_check_rows(
+    project_ids: set[str] | None = None,
+) -> list[ProjectCanvasCheckRow]:
+    return project_repository.list_project_canvas_check_rows(project_ids)
 
 
 def update_project_canvas_key_atomic(project_id: str, key: str, value: object) -> bool:

@@ -140,12 +140,23 @@ class ApiConnectionManagementMixin:
         category: str = None,
         connection_type: str = None,
         group_id: str = None,
+        resource_ids: set[str] | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> JsonRows:
         """Lista tutte le API connections dal DB.
 
         group_id=None → no filter (used by superadmin and by allowed_groups path).
         """
-        rows = db_svc.list_api_connection_rows(group_id)
+        rows = db_svc.list_api_connection_rows(
+            group_id,
+            resource_ids=resource_ids,
+            category=category,
+            connection_type=connection_type,
+            exclude_datasource=True,
+            limit=limit,
+            offset=offset,
+        )
         connections = []
         for row in rows:
             config = self._config_from_api_connection_row(row)

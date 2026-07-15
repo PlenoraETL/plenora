@@ -83,6 +83,7 @@ export default function AppSidebar({ counts = {} }) {
   useEffect(() => {
     if (!user || role.isEsecutore(user)) return undefined;
     let cancelled = false;
+    let timer = null;
     // Logga l'errore al massimo una volta per sessione del componente
     // — il polling 60s renderebbe inutile spammare console.warn ad ogni
     // tick se /tickets/counts e' down. Pieno fail-silent rendeva
@@ -109,10 +110,13 @@ export default function AppSidebar({ counts = {} }) {
           warnedThisSession = true;
         }
       }
+      if (!cancelled) timer = setTimeout(load, 60_000);
     };
     load();
-    const id = setInterval(load, 60_000);
-    return () => { cancelled = true; clearInterval(id); };
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [user]);
 
   // Merge del count ticket dentro `counts` senza modificare la prop

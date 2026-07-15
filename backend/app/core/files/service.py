@@ -275,9 +275,19 @@ class FileSourceService:
             logger=self._logger,
         )
 
-    def list_file_sources(self, group_id: str = None) -> Any:
+    def list_file_sources(
+        self,
+        group_id: str = None,
+        *,
+        resource_ids: set[str] | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> Any:
         return _source_metadata.list_file_sources(
             group_id,
+            resource_ids=resource_ids,
+            limit=limit,
+            offset=offset,
             db_list_file_sources=files_db.list_file_sources,
             get_file_source_by_id=self.get_file_source,
             file_source_list_model=FileSourceList,

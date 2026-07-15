@@ -6,6 +6,7 @@
  */
 
 import http from './http';
+import { fetchAllOffsetPages } from './pagination';
 
 /**
  * Restituisce tutti i connettori esterni configurati.
@@ -18,15 +19,14 @@ import http from './http';
  *   lato BE.
  */
 export const listApiConnections = async (filters = {}) => {
-  const params = new URLSearchParams();
-  if (filters.category)        params.append('category',        filters.category);
-  if (filters.connection_type) params.append('connection_type', filters.connection_type);
-
-  const query = params.toString();
-  const url   = query ? `/api-connections?${query}` : '/api-connections';
-
-  const response = await http.get(url);
-  return response.data;
+  const params = {};
+  if (filters.category) params.category = filters.category;
+  if (filters.connection_type) params.connection_type = filters.connection_type;
+  return fetchAllOffsetPages('/api-connections', {
+    params,
+    extractItems: data => data.api_connections,
+    mergeItems: (items, lastPage) => ({ ...lastPage, api_connections: items }),
+  });
 };
 
 /**

@@ -104,6 +104,7 @@ function ScheduleList() {
   const [tick,           setTick]           = useState(0);
   const pollingRef = useRef(null);
   const tickRef    = useRef(null);
+  const pollingGenerationRef = useRef(0);
   // Generation counter per scartare response stale dopo cambio projectFilter.
   // Pre-fix (P1 contracts-flows): se l'utente cambiava filter mentre una
   // listSchedules in volo non era ancora arrivata, la response stale
@@ -138,11 +139,20 @@ function ScheduleList() {
 
   const startPolling = () => {
     if (pollingRef.current) return;
-    pollingRef.current = setInterval(refreshData, 3000);
+    const generation = ++pollingGenerationRef.current;
+    const poll = async () => {
+      await refreshData();
+      if (
+        pollingRef.current
+        && pollingGenerationRef.current === generation
+      ) pollingRef.current = setTimeout(poll, 3000);
+    };
+    pollingRef.current = setTimeout(poll, 3000);
     tickRef.current    = setInterval(() => setTick(t => t+1), 1000);
   };
   const stopPolling = () => {
-    if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
+    pollingGenerationRef.current += 1;
+    if (pollingRef.current) { clearTimeout(pollingRef.current); pollingRef.current = null; }
     if (tickRef.current)    { clearInterval(tickRef.current);    tickRef.current    = null; }
   };
   const refreshData = async () => {

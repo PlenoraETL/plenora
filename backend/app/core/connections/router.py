@@ -4,7 +4,9 @@ Router API per il modulo Connections.
 Endpoint CRUD per le connessioni database.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Depends, Query
 
 from app.utils.logger import get_logger
 from app.core.auth.dependencies import (
@@ -95,23 +97,32 @@ def create_connection(
 
 
 @router.get("/connections", response_model=ConnectionList)
-def list_connections(current_user: CurrentUser = Depends(require_not_esecutore)):
+def list_connections(
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+):
     """Lista connessioni visibili: owned dal gruppo + condivise via allowed_groups.
     Ogni record include `can_edit` calcolato per l'utente corrente."""
     require_service(_connection_service, "ConnectionService")
     is_super = current_user.role == "superadmin"
 
-    all_resources = _connection_service.list_connections(group_id=None)
-
-    if not is_super:
+    if is_super:
+        all_resources = _connection_service.list_connections(
+            group_id=None, limit=limit, offset=offset,
+        )
+    else:
         visible_ids = visible_resource_ids(
             'connections',
             current_user.group_id,
             is_superadmin=False,
         )
-        all_resources.connections = [
-            c for c in all_resources.connections if c.id in visible_ids
-        ]
+        all_resources = _connection_service.list_connections(
+            group_id=None,
+            resource_ids=visible_ids,
+            limit=limit,
+            offset=offset,
+        )
 
     # Calcola can_edit per ogni record
     for c in all_resources.connections:
@@ -136,7 +147,18 @@ def update_connection(
         raise_credential_unavailable(e)
     assert_can_modify(existing, current_user, "Connessione")
     _assert_mssql_tls_change_allowed(data, current_user, existing)
-    conn = _connection_service.update_connection(connection_id, data)
+    try:
+        conn = _connection_service.update_connection(connection_id, data)
+    except connection_errors.ConnectionDuplicateNameError as e:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": connection_errors.CONNECTION_DUPLICATE_NAME,
+                "message": str(e),
+                "name": e.name,
+                "group_id": e.group_id,
+            },
+        )
     if not conn:
         raise HTTPException(
             status_code=404,
@@ -164,7 +186,7 @@ def delete_connection(
     """
     require_service(_connection_service, "ConnectionService")
     try:
-        existing = _connection_service.get_connection(connection_id)
+        existing = _connection_service.get_connection_public(connection_id)
     except CredentialUnavailableError as e:
         raise_credential_unavailable(e)
     assert_can_modify(existing, current_user, "Connessione")
@@ -241,11 +263,17 @@ def get_connection_tables(
     """Ottieni tabelle e viste del database (esplora schema). Read-only su risorsa visibile."""
     require_service(_connection_service, "ConnectionService")
     require_service(_database_inspector, "DatabaseInspector")
+    public_connection = _connection_service.get_connection_public(connection_id)
+    assert_resource_visible(
+        public_connection,
+        "connections",
+        current_user,
+        "Connessione",
+    )
     try:
         connection = _connection_service.get_connection(connection_id)
     except CredentialUnavailableError as e:
         raise_credential_unavailable(e)
-    assert_resource_visible(connection, "connections", current_user, "Connessione")
 
     try:
         tables = _database_inspector.get_tables_and_columns(connection)

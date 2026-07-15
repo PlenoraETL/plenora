@@ -4,9 +4,10 @@ Router admin backups — endpoint REST per la gestione backup PG -> S3.
 Tutti gli endpoint richiedono ruolo superadmin.
 """
 
+from typing import Annotated
 from typing_extensions import TypedDict
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.auth.dependencies import require_superadmin
 from app.shared.contracts.auth import CurrentUser
@@ -27,15 +28,20 @@ class AdminBackupsListResponse(TypedDict):
     region: str
     count: int
     items: list[service.BackupObjectPayload]
+    next_cursor: str | None
 
 
 @router.get("")
 def list_backups_endpoint(
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    cursor: Annotated[str | None, Query(max_length=2048)] = None,
     _user: CurrentUser = Depends(require_superadmin),
 ) -> AdminBackupsListResponse:
     """Lista dei dump presenti nel bucket S3."""
     try:
-        items = service.list_backups()
+        items, next_cursor = service.list_backups_page(
+            limit=limit, cursor=cursor,
+        )
     except AdminBackupDisabledError as e:
         # capability object storage off -> feature non
         # disponibile. NON e' lo stesso di "credenziali scadute"
@@ -71,6 +77,7 @@ def list_backups_endpoint(
         "region": service.REGION,
         "count": len(items),
         "items": items,
+        "next_cursor": next_cursor,
     }
 
 

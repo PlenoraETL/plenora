@@ -16,20 +16,25 @@ import { getTaskStatus } from '../api';
 export function useTaskPolling({ interval = 1000 } = {}) {
   const mountedRef = useRef(true);
   const pollingRef = useRef(null);
+  const generationRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+      generationRef.current += 1;
+    };
   }, []);
 
   // Cleanup su unmount: cancella interval direttamente dalla ref
   useEffect(() => () => {
-    if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
+    if (pollingRef.current) { clearTimeout(pollingRef.current); pollingRef.current = null; }
   }, []);
 
   const stopPolling = useCallback(() => {
+    generationRef.current += 1;
     if (pollingRef.current) {
-      clearInterval(pollingRef.current);
+      clearTimeout(pollingRef.current);
       pollingRef.current = null;
     }
   }, []);
@@ -57,29 +62,47 @@ export function useTaskPolling({ interval = 1000 } = {}) {
   const startPolling = useCallback((taskId, onStatus, opts = {}) => {
     stopPolling();
     const { immediate = false, onError = null } = opts;
+    const generation = generationRef.current;
+
+    const scheduleNext = () => {
+      if (!mountedRef.current || generation !== generationRef.current) return;
+      pollingRef.current = setTimeout(poll, interval);
+    };
 
     const poll = async () => {
+      if (!mountedRef.current || generation !== generationRef.current) return;
+      let completed = false;
       try {
         const data = await getTaskStatus(taskId);
-        if (!mountedRef.current) return;
-        if (!data) return;
-
-        const done = onStatus(data);
-        if (done) stopPolling();
-      } catch (e) {
-        // 404 = task non ancora registrato, aspetta il prossimo poll
-        if (e.response?.status === 404) return;
-        if (onError) {
-          const stop = onError(e);
-          if (stop) stopPolling();
+        if (!mountedRef.current || generation !== generationRef.current) return;
+        if (!data) {
+          scheduleNext();
           return;
         }
-        console.error('[useTaskPolling] Errore polling:', e);
+
+        const done = onStatus(data);
+        if (done) {
+          completed = true;
+          stopPolling();
+        }
+      } catch (e) {
+        if (!mountedRef.current || generation !== generationRef.current) return;
+        // 404 = task non ancora registrato, aspetta il prossimo poll
+        if (e.response?.status !== 404 && onError) {
+          const stop = onError(e);
+          if (stop) {
+            completed = true;
+            stopPolling();
+          }
+        } else if (e.response?.status !== 404) {
+          console.error('[useTaskPolling] Errore polling:', e);
+        }
       }
+      if (!completed) scheduleNext();
     };
 
     if (immediate) poll();
-    pollingRef.current = setInterval(poll, interval);
+    else scheduleNext();
   }, [interval, stopPolling]);
 
   return { mountedRef, pollingRef, stopPolling, startPolling };

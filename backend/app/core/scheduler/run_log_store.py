@@ -17,11 +17,16 @@ class ScheduleRunLogStore:
     def list_completed_runs(
         self,
         schedule_id: str,
+        *,
+        limit: int = 200,
+        offset: int = 0,
     ) -> list[scheduler_db.ScheduleLogRow]:
         try:
             return scheduler_db.list_schedule_logs(
                 schedule_id=schedule_id,
                 events=("PIPELINE_COMPLETED", "PIPELINE_PARTIAL"),
+                limit=limit,
+                offset=offset,
             )
         except (PsycopgError, OSError, RuntimeError, ValueError, TypeError) as exc:
             logger.debug(

@@ -28,14 +28,24 @@ jobs:
       PLENORA_SMOKE_USERNAME: "smoke@example.test"
       PLENORA_SMOKE_PASSWORD: "smoke-password"
     steps:
-      - uses: actions/checkout@v4
-      - run: docker compose config
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Prepare isolated CI environment
+        run: |
+          cp .env.docker.example .env.docker
+          sed -i 's/^ENVIRONMENT=.*/ENVIRONMENT=development/' .env.docker
+          sed -i 's|^PLENORA_ENCRYPTION_KEY=.*|PLENORA_ENCRYPTION_KEY=YmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmI=|' .env.docker
+          sed -i 's/^JWT_SECRET_KEY=.*/JWT_SECRET_KEY=ci-jwt-secret-ci-jwt-secret-ci-jwt-secret-ci-jwt-secret/' .env.docker
+          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-postgres-password/' .env.docker
+          sed -i 's/^RABBITMQ_DEFAULT_PASS=.*/RABBITMQ_DEFAULT_PASS=ci-rabbit-password/' .env.docker
+          sed -i 's|^DATABASE_URL=.*|DATABASE_URL=postgresql://plenora:ci-postgres-password@postgres:5432/plenora|' .env.docker
+          sed -i 's|^DRAMATIQ_BROKER_URL=.*|DRAMATIQ_BROKER_URL=amqp://plenora:ci-rabbit-password@rabbitmq:5672/|' .env.docker
+          docker network create plenora
       - name: Validate compose file
         run: docker compose config
       - name: Build images
         run: docker compose build backend frontend
       - name: Start infrastructure
-        run: docker compose up -d postgres redis
+        run: docker compose up -d --wait postgres rabbitmq object-storage
       - name: Start backend
         run: docker compose up -d backend
       - name: Infrastructure smoke
@@ -46,4 +56,6 @@ jobs:
         run: bash scripts/docker-api-smoke.sh
       - name: Stop services
         if: always()
-        run: docker compose stop
+        run: |
+          docker compose down -v
+          docker network rm plenora || true

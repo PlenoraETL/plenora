@@ -29,6 +29,8 @@ logger = get_logger(__name__)
 
 PREVIEW_STORAGE_KEY_FIELD = "preview_storage_key"
 PREVIEW_GROUP_ID_FIELD = "preview_group_id"
+_CLEANUP_PAGE_SIZE = 500
+_cleanup_cursors: dict[str, Optional[str]] = {}
 
 
 class PreviewPayloadError(RuntimeError):
@@ -200,25 +202,37 @@ def cleanup_expired_preview_payloads(*, ttl_seconds: int) -> int:
     storage = object_storage_module.get_runtime_object_storage()
     now = datetime.now(timezone.utc)
     removed = 0
-    objects = storage.list_objects("tenants/") + storage.list_objects(
-        f"{PREVIEWS_PREFIX}/"
-    )
-    for obj in objects:
-        object_key = str(obj.get("key") or "")
-        if (
-            f"/{PREVIEWS_PREFIX}/" not in object_key
-            and not object_key.startswith(f"{PREVIEWS_PREFIX}/")
-        ):
-            continue
-        modified = obj.get("last_modified")
-        if modified is None:
-            continue
-        if getattr(modified, "tzinfo", None) is None:
-            modified = modified.replace(tzinfo=timezone.utc)
-        if (now - modified).total_seconds() < ttl_seconds:
-            continue
-        storage.delete(object_key)
-        removed += 1
+    for prefix in ("tenants/", f"{PREVIEWS_PREFIX}/"):
+        list_page = getattr(storage, "list_objects_page", None)
+        if callable(list_page):
+            page = list_page(
+                prefix,
+                limit=_CLEANUP_PAGE_SIZE,
+                cursor=_cleanup_cursors.get(prefix),
+            )
+            objects = list(page.get("objects") or [])
+            _cleanup_cursors[prefix] = page.get("next_cursor")
+        else:
+            # Compatibility for test/in-memory adapters. Production providers
+            # implement the bounded page contract.
+            objects = storage.list_objects(prefix)
+
+        for obj in objects:
+            object_key = str(obj.get("key") or "")
+            if (
+                f"/{PREVIEWS_PREFIX}/" not in object_key
+                and not object_key.startswith(f"{PREVIEWS_PREFIX}/")
+            ):
+                continue
+            modified = obj.get("last_modified")
+            if modified is None:
+                continue
+            if getattr(modified, "tzinfo", None) is None:
+                modified = modified.replace(tzinfo=timezone.utc)
+            if (now - modified).total_seconds() < ttl_seconds:
+                continue
+            storage.delete(object_key)
+            removed += 1
     return removed
 
 

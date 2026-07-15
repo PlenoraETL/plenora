@@ -273,26 +273,43 @@ def get_eseguibile(eid: str, group_id: str = None) -> Optional[EseguibileRow]:
     return eseguibile_row_from_db(row) if row else None
 
 
-def list_eseguibili(group_id: Optional[str] = None) -> list[EseguibileSummaryRow]:
+def list_eseguibili(
+    group_id: Optional[str] = None,
+    *,
+    resource_ids: set[str] | None = None,
+    limit: int = 200,
+    offset: int = 0,
+) -> list[EseguibileSummaryRow]:
     """Lista eseguibili, opzionalmente filtrati per gruppo.
 
     Non carica canvas/expected_columns per la summary (prestazioni).
     Usa get_eseguibile per i dettagli completi.
     """
-    if group_id:
+    columns = """id, name, description, default_output_format, default_output_name,
+                 icon, source_canvas_id, group_id, created_by, created_at, updated_at,
+                 expected_columns"""
+    if resource_ids is not None:
+        if not resource_ids:
+            return []
+        ordered_ids = sorted(resource_ids)
+        placeholders = ", ".join(["%s"] * len(ordered_ids))
         rows = _fetchall(
-            """SELECT id, name, description, default_output_format, default_output_name,
-                      icon, source_canvas_id, group_id, created_by, created_at, updated_at,
-                      expected_columns
-               FROM eseguibili WHERE group_id = %s ORDER BY created_at DESC""",
-            (group_id,)
+            f"SELECT {columns} FROM eseguibili "
+            f"WHERE id IN ({placeholders}) ORDER BY created_at DESC "
+            "LIMIT %s OFFSET %s",
+            tuple(ordered_ids) + (limit, offset),
+        )
+    elif group_id:
+        rows = _fetchall(
+            f"SELECT {columns} FROM eseguibili WHERE group_id = %s "
+            "ORDER BY created_at DESC LIMIT %s OFFSET %s",
+            (group_id, limit, offset)
         )
     else:
         rows = _fetchall(
-            """SELECT id, name, description, default_output_format, default_output_name,
-                      icon, source_canvas_id, group_id, created_by, created_at, updated_at,
-                      expected_columns
-               FROM eseguibili ORDER BY created_at DESC"""
+            f"SELECT {columns} FROM eseguibili ORDER BY created_at DESC "
+            "LIMIT %s OFFSET %s",
+            (limit, offset),
         )
     return [eseguibile_summary_row_from_db(row) for row in rows]
 

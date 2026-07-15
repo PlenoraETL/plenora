@@ -4,10 +4,13 @@
  */
 
 import http from './http';
+import { fetchAllOffsetPages } from './pagination';
 
 export const listDataSources = async () => {
-  const res = await http.get('/datasources');
-  return res.data;
+  return fetchAllOffsetPages('/datasources', {
+    extractItems: data => data.datasources,
+    mergeItems: (items, lastPage) => ({ ...lastPage, datasources: items }),
+  });
 };
 
 export const createDataSource = async (data) => {

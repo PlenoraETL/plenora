@@ -73,14 +73,46 @@ def get_api_connection_row(
     return _row_from_record(record)
 
 
-def list_api_connection_rows(group_id: str | None = None) -> list[ApiConnectionRow]:
-    if group_id is None:
-        records = _fetchall("SELECT * FROM api_connections ORDER BY created_at DESC")
-    else:
-        records = _fetchall(
-            "SELECT * FROM api_connections WHERE group_id = %s ORDER BY created_at DESC",
-            (group_id,),
-        )
+def list_api_connection_rows(
+    group_id: str | None = None,
+    resource_ids: set[str] | None = None,
+    *,
+    category: str | None = None,
+    connection_type: str | None = None,
+    exclude_datasource: bool = False,
+    limit: int | None = None,
+    offset: int = 0,
+) -> list[ApiConnectionRow]:
+    predicates: list[str] = []
+    params: list[object] = []
+    if resource_ids is not None:
+        if not resource_ids:
+            return []
+        ordered_ids = sorted(resource_ids)
+        placeholders = ", ".join(["%s"] * len(ordered_ids))
+        predicates.append(f"id IN ({placeholders})")
+        params.extend(ordered_ids)
+    elif group_id is not None:
+        predicates.append("group_id = %s")
+        params.append(group_id)
+    if category:
+        predicates.append("config->>'category' = %s")
+        params.append(category)
+    if connection_type:
+        predicates.append("COALESCE(config->>'connection_type', 'manual') = %s")
+        params.append(connection_type)
+    if exclude_datasource:
+        predicates.append("COALESCE(config->>'category', '') <> 'datasource'")
+    paging = ""
+    if limit is not None:
+        paging = " LIMIT %s OFFSET %s"
+        params.extend((limit, offset))
+    where = f" WHERE {' AND '.join(predicates)}" if predicates else ""
+    records = _fetchall(
+        f"SELECT * FROM api_connections{where} "
+        f"ORDER BY created_at DESC, id{paging}",
+        tuple(params),
+    )
     return [_row_from_record(record) for record in records]
 
 

@@ -4,7 +4,7 @@
 # (`docker compose build backend`). Il codice NON viene ricopiato: a runtime
 # docker-compose.test2.yml monta ./backend su /app, quindi i test girano sul
 # working tree corrente senza rebuild. Rebuild necessaria solo quando cambiano
-# requirements.txt o requirements-dev.txt.
+# requirements.lock o requirements-dev.lock.
 #
 # Motivazione: suite riproducibile con lo stack pinnato del container
 # (python conda-forge + gdal/pyogrio identici al runtime), indipendente dal
@@ -15,9 +15,10 @@ FROM plenora-backend:scaffold
 
 USER root
 
-COPY backend/requirements-dev.txt /tmp/requirements-dev.txt
+COPY backend/requirements-dev.lock /tmp/requirements-dev.lock
 
-RUN pip install -r /tmp/requirements-dev.txt && rm /tmp/requirements-dev.txt
+RUN pip install --require-hashes -r /tmp/requirements-dev.lock \
+    && rm /tmp/requirements-dev.lock
 
 # L'utente effettivo viene impostato da docker-compose.test2.yml (uid host)
 # perche' /app e' un bind mount e .pytest-run deve restare scrivibile/rimovibile

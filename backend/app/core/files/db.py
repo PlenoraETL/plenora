@@ -136,15 +136,41 @@ def get_file_source(
     return row
 
 
-def list_file_sources(group_id: Optional[str] = None) -> list[FileSourcePublicRow]:
+def list_file_sources(
+    group_id: Optional[str] = None,
+    *,
+    resource_ids: set[str] | None = None,
+    limit: int | None = None,
+    offset: int = 0,
+    include_temp: bool = False,
+) -> list[FileSourcePublicRow]:
     """Lista file_sources. group_id=None → no filter (usato da superadmin)."""
-    if group_id is None:
-        return _fetchall(
-            "SELECT id, group_id, name, original_filename, format, size_bytes, created_at, created_by FROM file_sources ORDER BY created_at DESC"
-        )
+    columns = (
+        "id, group_id, name, original_filename, format, size_bytes, "
+        "created_at, created_by"
+    )
+    predicates: list[str] = []
+    params: list[object] = []
+    if not include_temp:
+        predicates.append("is_temp = FALSE")
+    if group_id is not None:
+        predicates.append("group_id = %s")
+        params.append(group_id)
+    if resource_ids is not None:
+        if not resource_ids:
+            return []
+        ordered_ids = sorted(resource_ids)
+        predicates.append("id IN (" + ", ".join(["%s"] * len(ordered_ids)) + ")")
+        params.extend(ordered_ids)
+    where = f" WHERE {' AND '.join(predicates)}" if predicates else ""
+    paging = ""
+    if limit is not None:
+        paging = " LIMIT %s OFFSET %s"
+        params.extend((limit, offset))
     return _fetchall(
-        "SELECT id, group_id, name, original_filename, format, size_bytes, created_at, created_by FROM file_sources WHERE group_id = %s ORDER BY created_at DESC",
-        (group_id,)
+        f"SELECT {columns} FROM file_sources{where} "
+        f"ORDER BY created_at DESC, id{paging}",
+        tuple(params),
     )
 
 

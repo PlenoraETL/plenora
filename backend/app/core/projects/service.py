@@ -249,9 +249,15 @@ class ProjectService:
         """
         return project_db.delete_project(project_id, group_id=group_id)
 
-    def list_projects(self, group_id: Optional[str] = None) -> ProjectList:
+    def list_projects(
+        self,
+        group_id: Optional[str] = None,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> ProjectList:
         """Lista progetti delegando al sub-service metadata."""
-        return self.metadata.list_projects(group_id)
+        return self.metadata.list_projects(group_id, limit=limit, offset=offset)
 
     def get_project_metadata(self, project_id: str, group_id: Optional[str] = None) -> Optional[ProjectMetadata]:
         """Carica metadati progetto delegando al sub-service metadata."""

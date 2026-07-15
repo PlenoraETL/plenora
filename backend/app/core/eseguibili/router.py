@@ -7,9 +7,9 @@ Endpoint:
 import json as _json
 
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
-from typing import List, Mapping, Optional
+from typing import Annotated, List, Mapping, Optional
 
 from app.core.auth.dependencies import (
     get_current_user,
@@ -95,20 +95,31 @@ def _details_response(
 # LIST
 
 @router.get("", response_model=List[EseguibileSummary])
-def list_eseguibili(current_user: CurrentUser = Depends(get_current_user)):
+def list_eseguibili(
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    current_user: CurrentUser = Depends(get_current_user),
+):
     """Lista eseguibili visibili: owned dal gruppo + condivisi via allowed_groups.
     Ogni record include `can_edit` calcolato per l'utente corrente."""
     is_super = current_user.role == "superadmin"
 
-    rows = eseguibili_db.list_eseguibili(group_id=None)
-
-    if not is_super:
+    if is_super:
+        rows = eseguibili_db.list_eseguibili(
+            group_id=None, limit=limit, offset=offset,
+        )
+    else:
         visible_ids = visible_resource_ids(
             'eseguibili',
             current_user.group_id,
             is_superadmin=False,
         )
-        rows = [r for r in rows if r.id in visible_ids]
+        rows = eseguibili_db.list_eseguibili(
+            group_id=None,
+            resource_ids=visible_ids,
+            limit=limit,
+            offset=offset,
+        )
 
     return [_summary_response(r, current_user) for r in rows]
 

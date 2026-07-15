@@ -95,7 +95,9 @@ def get_user_id() -> str:
 _SENSITIVE_KEY_NAMES = (
     "token", "api_key", "apikey", "password", "passwd", "secret",
     "authorization", "auth_key", "access_key", "client_secret",
-    "private_key", "x-api-key",
+    "private_key", "private_key_passphrase", "x-api-key", "refresh_token",
+    "access_token", "id_token", "cookie", "set-cookie", "session",
+    "session_id", "jwt", "database_url", "dramatiq_broker_url",
 )
 # Regex: catch "key=value" dove value non contiene & o spazi
 # Costruita per matchare anche varianti come "ApiKey", "API_KEY", "x-api-key"
@@ -103,7 +105,29 @@ _QS_REDACT_RE = re.compile(
     r"(?i)([?&]|^)((?:" + "|".join(re.escape(k) for k in _SENSITIVE_KEY_NAMES) + r")=)[^&\s'\"]+",
 )
 # Redazione anche di basic auth in URL: scheme://user:pass@host
-_BASIC_AUTH_RE = re.compile(r"(?i)(https?://)([^:/@\s]+):([^@\s]+)@")
+_BASIC_AUTH_RE = re.compile(
+    r"(?i)([a-z][a-z0-9+.-]*://)([^:/@\s]+):([^@\s]+)@"
+)
+_BEARER_RE = re.compile(r"(?i)(\bBearer\s+)[A-Za-z0-9._~+/=-]+")
+_AUTH_HEADER_RE = re.compile(
+    r"(?i)(\b(?:authorization|proxy-authorization)\s*[:=]\s*)"
+    r"(?:basic|bearer)?\s*[^\s,;]+"
+)
+_SENSITIVE_QUOTED_RE = re.compile(
+    r"(?i)([\"'](?:" + "|".join(re.escape(k) for k in _SENSITIVE_KEY_NAMES)
+    + r")[\"']\s*:\s*[\"'])[^\"']*([\"'])"
+)
+_SENSITIVE_ASSIGNMENT_RE = re.compile(
+    r"(?i)(\b(?:" + "|".join(re.escape(k) for k in _SENSITIVE_KEY_NAMES)
+    + r")\b\s*[:=]\s*)(?!\*{3}|<redacted>|\[redacted\])"
+    r"(?:\"[^\"]*\"|'[^']*'|[^\s,;&}\]]+)"
+)
+_AWS_ACCESS_KEY_RE = re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b")
+_PEM_PRIVATE_KEY_RE = re.compile(
+    r"-----BEGIN(?: [A-Z0-9]+)? PRIVATE KEY-----.*?"
+    r"-----END(?: [A-Z0-9]+)? PRIVATE KEY-----",
+    re.DOTALL,
+)
 
 _REDACTED = "***REDACTED***"
 
@@ -120,6 +144,16 @@ def _sanitize_log_text(text: str) -> str:
     text = _QS_REDACT_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}{_REDACTED}", text)
     # Basic auth in URL: https://user:pass@host → https://***REDACTED***@host
     text = _BASIC_AUTH_RE.sub(lambda m: f"{m.group(1)}{_REDACTED}@", text)
+    text = _BEARER_RE.sub(lambda m: f"{m.group(1)}{_REDACTED}", text)
+    text = _AUTH_HEADER_RE.sub(lambda m: f"{m.group(1)}{_REDACTED}", text)
+    text = _SENSITIVE_QUOTED_RE.sub(
+        lambda m: f"{m.group(1)}{_REDACTED}{m.group(2)}", text,
+    )
+    text = _SENSITIVE_ASSIGNMENT_RE.sub(
+        lambda m: f"{m.group(1)}{_REDACTED}", text,
+    )
+    text = _AWS_ACCESS_KEY_RE.sub(_REDACTED, text)
+    text = _PEM_PRIVATE_KEY_RE.sub(_REDACTED, text)
     return text
 
 
@@ -407,8 +441,18 @@ class PostgresLogHandler(logging.Handler):
         """Chiude una run aggiornando tutti i campi di esito."""
         from app.db.pg_connection import execute as pg_execute
         ts_end = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
-        steps_json = json.dumps(steps or [], ensure_ascii=False, default=str)
-        payload_json = json.dumps(debug_payload, ensure_ascii=False, default=str) if debug_payload else None
+        steps_json = _sanitize_log_text(
+            json.dumps(steps or [], ensure_ascii=False, default=str)
+        )
+        payload_json = (
+            _sanitize_log_text(
+                json.dumps(debug_payload, ensure_ascii=False, default=str)
+            )
+            if debug_payload else None
+        )
+        safe_error_message = (
+            _sanitize_log_text(error_message) if error_message else None
+        )
         pg_execute(
             """UPDATE log_runs SET
                 ts_end        = %s,
@@ -424,7 +468,7 @@ class PostgresLogHandler(logging.Handler):
             WHERE run_id = %s""",
             (
                 ts_end, status, rows_in, rows_out, duration_ms,
-                steps_json, error_node_id, error_module, error_message,
+                steps_json, error_node_id, error_module, safe_error_message,
                 payload_json, run_id,
             ),
         )

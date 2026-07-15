@@ -105,19 +105,23 @@ function LogViewer() {
   useEffect(() => { loadLogs(0); loadStats(); }, [filterLevel, filterModule, filterOp, searchText]);
 
   useEffect(() => {
+    let stopped = false;
     if (autoRefresh) {
-      intervalRef.current = setInterval(() => {
+      const poll = async () => {
         // Doppio check: il setInterval può scattare DOPO l'unmount se il
         // cleanup non è ancora stato eseguito (race tra clearInterval e tick).
-        if (!mountedRef.current) return;
-        loadLogs(0);
-        loadStats();
+        if (stopped || !mountedRef.current) return;
+        await Promise.all([loadLogs(0), loadStats()]);
+        if (stopped || !mountedRef.current) return;
         setRefreshTick(t => t + 1);
-      }, 5000);
+        intervalRef.current = setTimeout(poll, 5000);
+      };
+      intervalRef.current = setTimeout(poll, 5000);
     }
     return () => {
+      stopped = true;
       if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+        clearTimeout(intervalRef.current);
         intervalRef.current = null;
       }
     };

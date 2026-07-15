@@ -117,10 +117,26 @@ def get_schedule_row(schedule_id: str) -> Optional[ScheduleRow]:
     return _schedule_row(row) if row else None
 
 
-def list_schedule_rows(group_id: str) -> list[ScheduleRow]:
+def list_schedule_rows(
+    group_id: str,
+    *,
+    project_id: str | None = None,
+    limit: int | None = None,
+    offset: int = 0,
+) -> list[ScheduleRow]:
+    predicates = ["group_id = %s"]
+    params: list[object] = [group_id]
+    if project_id:
+        predicates.append("project_id = %s")
+        params.append(project_id)
+    paging = ""
+    if limit is not None:
+        paging = " LIMIT %s OFFSET %s"
+        params.extend((limit, offset))
     rows = fetchall(
-        "SELECT * FROM schedules WHERE group_id = %s ORDER BY created_at DESC",
-        (group_id,),
+        f"SELECT * FROM schedules WHERE {' AND '.join(predicates)} "
+        f"ORDER BY updated_at DESC, id{paging}",
+        tuple(params),
     )
     return _schedule_rows(rows)
 
@@ -360,6 +376,7 @@ def list_schedule_logs(
     schedule_id: str,
     events: Optional[Iterable[str]] = None,
     limit: int = 200,
+    offset: int = 0,
 ) -> list[ScheduleLogRow]:
     """Lista entries di `schedule_logs` per uno schedule.
 
@@ -386,8 +403,8 @@ def list_schedule_logs(
             f"pipeline_info, execution_info "
             f"FROM schedule_logs "
             f"WHERE schedule_id = %s AND event IN ({placeholders}) "
-            f"ORDER BY timestamp DESC LIMIT %s",
-            (schedule_id, *events, limit),
+            f"ORDER BY timestamp DESC, log_id LIMIT %s OFFSET %s",
+            (schedule_id, *events, limit, offset),
         )
     else:
         rows = fetchall(
@@ -395,8 +412,8 @@ def list_schedule_logs(
             "triggered_by, total_duration_ms, error_message, "
             "pipeline_info, execution_info "
             "FROM schedule_logs WHERE schedule_id = %s "
-            "ORDER BY timestamp DESC LIMIT %s",
-            (schedule_id, limit),
+            "ORDER BY timestamp DESC, log_id LIMIT %s OFFSET %s",
+            (schedule_id, limit, offset),
         )
     out: list[ScheduleLogRow] = []
     for r in rows:

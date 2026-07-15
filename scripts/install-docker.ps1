@@ -198,6 +198,7 @@ function Ensure-DockerEnv {
     if ($DryRun) {
         Write-Host "+ generate PLENORA_ENCRYPTION_KEY if empty"
         Write-Host "+ generate JWT_SECRET_KEY if empty"
+        Write-Host "+ generate PostgreSQL and RabbitMQ credentials if empty"
         return
     }
 
@@ -206,6 +207,33 @@ function Ensure-DockerEnv {
     }
     if ([string]::IsNullOrWhiteSpace((Get-DockerEnvValue "JWT_SECRET_KEY"))) {
         Set-DockerEnvValue "JWT_SECRET_KEY" (New-TokenUrlSafe)
+    }
+    if ([string]::IsNullOrWhiteSpace((Get-DockerEnvValue "POSTGRES_PASSWORD"))) {
+        Set-DockerEnvValue "POSTGRES_PASSWORD" (New-TokenUrlSafe)
+    }
+    if ([string]::IsNullOrWhiteSpace((Get-DockerEnvValue "RABBITMQ_DEFAULT_USER"))) {
+        Set-DockerEnvValue "RABBITMQ_DEFAULT_USER" "plenora"
+    }
+    if ([string]::IsNullOrWhiteSpace((Get-DockerEnvValue "RABBITMQ_DEFAULT_PASS"))) {
+        Set-DockerEnvValue "RABBITMQ_DEFAULT_PASS" (New-TokenUrlSafe)
+    }
+    foreach ($credentialName in @("POSTGRES_PASSWORD", "RABBITMQ_DEFAULT_USER", "RABBITMQ_DEFAULT_PASS")) {
+        $credentialValue = Get-DockerEnvValue $credentialName
+        if ([string]::IsNullOrWhiteSpace($credentialValue) -or $credentialValue -notmatch '^[A-Za-z0-9_-]+$') {
+            throw "$credentialName must contain only URL-safe characters: A-Z a-z 0-9 _ -."
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace((Get-DockerEnvValue "DATABASE_URL"))) {
+        $pgPassword = Get-DockerEnvValue "POSTGRES_PASSWORD"
+        Set-DockerEnvValue "DATABASE_URL" "postgresql://plenora:$pgPassword@postgres:5432/plenora"
+    }
+    if ([string]::IsNullOrWhiteSpace((Get-DockerEnvValue "DRAMATIQ_BROKER_URL"))) {
+        $rabbitUser = Get-DockerEnvValue "RABBITMQ_DEFAULT_USER"
+        $rabbitPassword = Get-DockerEnvValue "RABBITMQ_DEFAULT_PASS"
+        Set-DockerEnvValue "DRAMATIQ_BROKER_URL" "amqp://$rabbitUser`:$rabbitPassword@rabbitmq:5672/"
+    }
+    if ((Get-DockerEnvValue "ENVIRONMENT") -eq "development") {
+        Set-DockerEnvValue "ENVIRONMENT" "production"
     }
     if ([string]::IsNullOrWhiteSpace((Get-DockerEnvValue "S3_ACCESS_KEY"))) {
         Set-DockerEnvValue "S3_ACCESS_KEY" "plenora-storage"
@@ -222,6 +250,55 @@ function Ensure-DockerEnv {
     }
     if ([string]::IsNullOrWhiteSpace((Get-DockerEnvValue "JWT_SECRET_KEY"))) {
         throw "JWT_SECRET_KEY is still empty in .env.docker."
+    }
+    if ([string]::IsNullOrWhiteSpace((Get-DockerEnvValue "POSTGRES_PASSWORD"))) {
+        throw "POSTGRES_PASSWORD is still empty in .env.docker."
+    }
+    if ([string]::IsNullOrWhiteSpace((Get-DockerEnvValue "RABBITMQ_DEFAULT_PASS"))) {
+        throw "RABBITMQ_DEFAULT_PASS is still empty in .env.docker."
+    }
+}
+
+function Ensure-RabbitMqCredentials {
+    Write-Step "RabbitMQ application user"
+    if ($DryRun) {
+        Write-Host "+ create/update the non-guest RabbitMQ user and permissions"
+        return
+    }
+
+    $rabbitUser = Get-DockerEnvValue "RABBITMQ_DEFAULT_USER"
+    $rabbitPassword = Get-DockerEnvValue "RABBITMQ_DEFAULT_PASS"
+    $users = & docker compose exec -T rabbitmq rabbitmqctl list_users --silent
+    if ($LASTEXITCODE -ne 0) { throw "Unable to list RabbitMQ users." }
+    $userExists = @($users) | Where-Object {
+        (($_ -split '\s+')[0]) -eq $rabbitUser
+    }
+    if ($userExists) {
+        & docker compose exec -T rabbitmq rabbitmqctl change_password $rabbitUser $rabbitPassword | Out-Null
+    } else {
+        & docker compose exec -T rabbitmq rabbitmqctl add_user $rabbitUser $rabbitPassword | Out-Null
+    }
+    if ($LASTEXITCODE -ne 0) { throw "Unable to create/update the RabbitMQ application user." }
+    & docker compose exec -T rabbitmq rabbitmqctl set_permissions -p / $rabbitUser '.*' '.*' '.*' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Unable to assign RabbitMQ permissions." }
+    if ($rabbitUser -ne "guest") {
+        & docker compose exec -T rabbitmq rabbitmqctl delete_user guest 2>$null | Out-Null
+    }
+}
+
+function Ensure-PostgresCredentials {
+    Write-Step "PostgreSQL application user"
+    if ($DryRun) {
+        Write-Host "+ reconcile the PostgreSQL application password"
+        return
+    }
+
+    $postgresPassword = Get-DockerEnvValue "POSTGRES_PASSWORD"
+    & docker compose exec -T -u postgres postgres psql `
+        -U plenora -d plenora -v ON_ERROR_STOP=1 `
+        "--command=ALTER ROLE plenora WITH PASSWORD '$postgresPassword';" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to reconcile the PostgreSQL application password."
     }
 }
 
@@ -431,7 +508,9 @@ if (-not [string]::IsNullOrWhiteSpace($FrontendApiUrl)) {
 Write-Step "Build and start single-server stack"
 Invoke-External "docker" @("compose", "config")
 Invoke-External "docker" @("compose", "build", "backend", "frontend")
-Invoke-External "docker" @("compose", "up", "-d", "postgres", "rabbitmq", "object-storage")
+Invoke-External "docker" @("compose", "up", "-d", "--wait", "postgres", "rabbitmq", "object-storage")
+Ensure-PostgresCredentials
+Ensure-RabbitMqCredentials
 Invoke-External "docker" @("compose", "up", "-d", "--wait", "backend")
 Invoke-External "docker" @("compose", "up", "-d", "worker", "worker-control", "beat")
 Invoke-External "docker" @("compose", "up", "-d", "--wait", "frontend")

@@ -42,7 +42,9 @@ def list_projects_using_connection(connection_id: str) -> ProjectUsageRows:
     ]
 
 
-def list_projects_with_canvas_for_datasource_check() -> ProjectUsageRows:
+def list_projects_with_canvas_for_datasource_check(
+    project_ids: set[str] | None = None,
+) -> ProjectUsageRows:
     return [
         {
             "id": row.id,
@@ -51,5 +53,5 @@ def list_projects_with_canvas_for_datasource_check() -> ProjectUsageRows:
             "canvas": row.canvas,
             "group_id": row.group_id,
         }
-        for row in project_db.list_project_canvas_check_rows()
+        for row in project_db.list_project_canvas_check_rows(project_ids)
     ]

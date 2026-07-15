@@ -12,7 +12,8 @@ from typing_extensions import TypedDict
 
 import requests
 
-from app.infrastructure.http.session import get_shared_session
+from app.infrastructure.http.session import request_pinned
+from app.core.features.arcgis_url_policy import assert_arcgis_target_url
 from app.shared.connections.arcgis_connection import ArcGISConnectionInfo
 from app.shared.connections.oauth import (
     _get_or_refresh_token_record,
@@ -69,9 +70,8 @@ class DefaultHttpClient:
         timeout: int = 30,
         headers: dict = None,
     ) -> requests.Response:
-        return get_shared_session().get(
-            url, params=params, timeout=timeout, headers=headers,
-            allow_redirects=False,
+        return request_pinned(
+            "GET", url, params=params, timeout=timeout, headers=headers,
         )
 
     def post(
@@ -81,9 +81,8 @@ class DefaultHttpClient:
         timeout: int = 30,
         headers: dict = None,
     ) -> requests.Response:
-        return get_shared_session().post(
-            url, data=data, timeout=timeout, headers=headers,
-            allow_redirects=False,
+        return request_pinned(
+            "POST", url, data=data, timeout=timeout, headers=headers,
         )
 
 
@@ -139,6 +138,7 @@ class ArcGISAuthMixin:
         timeout: int = DEFAULT_TIMEOUT,
         max_retries_429: int = 3,
         extra_headers: Optional[dict] = None,
+        trusted_base_url: Optional[str] = None,
     ) -> "requests.Response":
         """Esegue una request autenticata verso ArcGIS con:
 
@@ -174,6 +174,12 @@ class ArcGISAuthMixin:
         refresh si attiva automaticamente prima di cedere la response
         finale al caller, cosi' il caller vede solo l'esito del retry.
         """
+
+        # Verifica l'origin prima ancora di ottenere il token: nessun endpoint
+        # fornito dal client puo' trasformare questa connessione in un proxy.
+        assert_arcgis_target_url(
+            conn.server_url, url, trusted_base_url=trusted_base_url,
+        )
 
         # Difesa in profondita': rimuovi token da params/data se qualche
         # caller ha ancora passato la vecchia forma. L'header e' l'unica
@@ -411,6 +417,7 @@ class ArcGISAuthMixin:
     ) -> TokenRecord:
         """Fetch diretto generateToken ArcGIS con strategie legacy."""
         token_url = self._resolve_token_url(conn)
+        assert_arcgis_target_url(conn.server_url, token_url)
 
         is_online = "arcgis.com" in conn.server_url.lower()
 

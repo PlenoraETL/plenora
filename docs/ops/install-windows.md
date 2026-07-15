@@ -122,10 +122,11 @@ Output finale atteso:
 
 ### 3.4 Primo accesso
 
-Browser (sulla macchina): **`http://127.0.0.1/`** → login con il
-superadmin. Usare esattamente quell'hostname (la build FE e' cablata
-su quell'origin; l'installer configura comunque CORS anche per
-`localhost`).
+Aprire nel browser **l'indirizzo del server**, per esempio
+`http://192.168.1.20/` oppure il relativo nome DNS, e accedere con il
+superadmin. Il frontend usa `/api` sullo stesso origin e Caddy inoltra
+le richieste al backend locale: non e' legato a `127.0.0.1` e funziona
+anche dai client remoti.
 
 ## 4. Parametri dell'installer
 
@@ -142,7 +143,8 @@ su quell'origin; l'installer configura comunque CORS anche per
 | `-InstallObjectStorage` | on | SeaweedFS locale; usare `$false` per un endpoint S3 esterno gia' configurato |
 | `-InstallMinio` | off | Alias deprecato di `-InstallObjectStorage` |
 | `-InstallFrontend` | off | Build FE + servizio Caddy |
-| `-FrontendPort` | 80 | Porta di Caddy (la build FE viene cablata su quell'origin) |
+| `-FrontendPort` | 80 | Porta pubblica di Caddy; frontend e API condividono lo stesso origin |
+| `-FrontendApiUrl` | vuoto | Override avanzato dell'API; lasciare vuoto nel deploy single-box per usare `/api` same-origin |
 | `-Production` | off | `ENVIRONMENT=production` coi gates (richiede object storage) |
 | `-PgSuperPassword` | prompt | Password del superuser postgres |
 | `-StartProcesses` | off | Modalita' dev: 3 finestre cmd al posto dei servizi |
@@ -359,7 +361,7 @@ Update:
 | RabbitMQ `BOOT FAILED ... incompatible_feature_flags {horus, unknown_instruction}` | Erlang/OTP troppo nuovo per la versione RabbitMQ: usare la serie OTP supportata (oggi 28.x — l'installer la pinna) |
 | `rabbitmqctl` → `incompatible cookie` | Cookie Erlang dell'utente ≠ LocalSystem: copiare `C:\Windows\System32\config\systemprofile\.erlang.cookie` in `%USERPROFILE%` (l'installer lo fa da solo) |
 | Password `postgres` rifiutata (install winget) | Il default EDB unattended e' `postgres`; se e' stato gia' cambiato, usare la password corrente oppure il reset locale sotto. |
-| Login dal browser: "Impossibile contattare il server" | Hostname diverso dall'origin della build FE (es. `localhost` vs `127.0.0.1`): usare `http://127.0.0.1/`; l'installer scrive CORS per entrambe |
+| Login dal browser: "Impossibile contattare il server" | Verificare che il bundle sia stato ricostruito con `-InstallFrontend` e senza `-FrontendApiUrl`; nella scheda Network del browser il login deve puntare a `/api/auth/login` sull'indirizzo del server, mai a `127.0.0.1:5004` |
 | Porta 80 occupata (IIS?) | Reinstallare il FE con `-FrontendPort 8080` (ribuilda anche il bundle sull'origin nuovo) |
 | `/ready` not_ready su `object_storage` | Verificare `plenora-object-storage`, endpoint `127.0.0.1:8333` e credenziali `S3_*`; l'object storage e' obbligatorio |
 | Task in coda ma mai eseguiti | `plenora-worker*` giu' o `.env` broker cambiato senza restart dei servizi worker |

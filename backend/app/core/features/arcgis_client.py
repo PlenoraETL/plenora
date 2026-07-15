@@ -1045,6 +1045,7 @@ class ArcGISClient(
                 params={"f": "json"},
                 timeout=self.DEFAULT_TIMEOUT,
                 extra_headers=referer_headers,
+                trusted_base_url=hosting_url,
             )
             admin_info = response.json()
             if "error" in admin_info:

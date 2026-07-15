@@ -69,13 +69,24 @@ def create_connection_db(data: ArcGISCreate, group_id: str = DEFAULT_GROUP,
     return arcgis_connection_store.create_connection(data, group_id=group_id, created_by=created_by)
 
 
-def list_connections_db(group_id: Optional[str] = None) -> ArcGISList:
+def list_connections_db(
+    group_id: Optional[str] = None,
+    resource_ids: set[str] | None = None,
+    *,
+    limit: int | None = None,
+    offset: int = 0,
+) -> ArcGISList:
     """
     Lista connessioni ArcGIS.
     - group_id None -> tutte (uso superadmin)
     - group_id "abc" -> solo del gruppo
     """
-    return arcgis_connection_store.list_connections(group_id=group_id)
+    return arcgis_connection_store.list_connections(
+        group_id=group_id,
+        resource_ids=resource_ids,
+        limit=limit,
+        offset=offset,
+    )
 
 
 def get_connection_db(connection_id: str) -> Optional[ArcGISConnection]:
@@ -127,9 +138,21 @@ class FeaturesService:
         """Crea nuova connessione ArcGIS nel DB (assegnata al group_id dato)."""
         return create_connection_db(data, group_id=group_id, created_by=created_by)
 
-    def list_connections(self, group_id: Optional[str] = None) -> ArcGISList:
+    def list_connections(
+        self,
+        group_id: Optional[str] = None,
+        resource_ids: set[str] | None = None,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> ArcGISList:
         """Lista connessioni ArcGIS. group_id None = tutte (superadmin)."""
-        return list_connections_db(group_id=group_id)
+        return list_connections_db(
+            group_id=group_id,
+            resource_ids=resource_ids,
+            limit=limit,
+            offset=offset,
+        )
     
     def get_connection(self, connection_id: str) -> Optional[ArcGISConnection]:
         """Ottieni connessione per ID dal DB."""

@@ -110,7 +110,7 @@ Expected: `Ping succeeded`.
 Use one canonical AMQP broker URL for the Dramatiq task queue:
 
 ```text
-DRAMATIQ_BROKER_URL=amqp://guest:guest@<rabbitmq-host>:5672
+DRAMATIQ_BROKER_URL=amqp://plenora:<generated-password>@<rabbitmq-host>:5672/
 ```
 
 Task state and results are not stored on the broker: they live in PostgreSQL
@@ -220,7 +220,7 @@ ENVIRONMENT=production
 LOG_LEVEL=INFO
 DB_SCHEMA=plenora
 DATABASE_URL=postgresql://plenora:<password>@<postgres-host>:5432/plenora
-DRAMATIQ_BROKER_URL=amqp://guest:guest@<rabbitmq-host>:5672
+DRAMATIQ_BROKER_URL=amqp://plenora:<generated-password>@<rabbitmq-host>:5672/
 PLENORA_ENCRYPTION_KEY=<same-fernet-key-on-all-app-containers>
 JWT_SECRET_KEY=<same-jwt-key-on-all-app-containers>
 CORS_ORIGINS=https://app.example.com,https://api.example.com

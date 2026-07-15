@@ -164,17 +164,22 @@ def get_user_by_username(username: str) -> Optional[UserRow]:
     return hydrate_user_row(row)
 
 
-def list_users(group_id: str) -> list[UserRow]:
+def list_users(
+    group_id: str, *, limit: int = 200, offset: int = 0,
+) -> list[UserRow]:
     rows = _fetchall(
         "SELECT id, username, email, group_id, role, is_active, created_at "
-        "FROM users WHERE group_id = %s ORDER BY username",
-        (group_id,),
+        "FROM users WHERE group_id = %s ORDER BY username LIMIT %s OFFSET %s",
+        (group_id, limit, offset),
     )
     return [row for row in (hydrate_user_row(row) for row in rows) if row is not None]
 
 
-def list_all_users() -> list[UserRow]:
-    rows = _fetchall("SELECT * FROM users ORDER BY username")
+def list_all_users(*, limit: int = 200, offset: int = 0) -> list[UserRow]:
+    rows = _fetchall(
+        "SELECT * FROM users ORDER BY username LIMIT %s OFFSET %s",
+        (limit, offset),
+    )
     return [row for row in (hydrate_user_row(row) for row in rows) if row is not None]
 
 
@@ -239,8 +244,11 @@ def get_group(group_id: str) -> Optional[GroupRow]:
     return hydrate_group_row(row)
 
 
-def list_groups() -> list[GroupRow]:
-    rows = _fetchall("SELECT * FROM groups ORDER BY name")
+def list_groups(*, limit: int = 200, offset: int = 0) -> list[GroupRow]:
+    rows = _fetchall(
+        "SELECT * FROM groups ORDER BY name LIMIT %s OFFSET %s",
+        (limit, offset),
+    )
     return [row for row in (hydrate_group_row(row) for row in rows) if row is not None]
 
 

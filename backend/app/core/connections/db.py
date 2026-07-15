@@ -227,14 +227,32 @@ def delete_connection(conn_id: str) -> bool:
     return cur.rowcount > 0
 
 
-def list_connection_configs(group_id: str | None = None) -> list[ConnectionConfigRow]:
-    if group_id is None:
-        rows = _fetchall("SELECT * FROM connections ORDER BY name")
-    else:
-        rows = _fetchall(
-            "SELECT * FROM connections WHERE group_id = %s ORDER BY name",
-            (group_id,),
-        )
+def list_connection_configs(
+    group_id: str | None = None,
+    resource_ids: set[str] | None = None,
+    *,
+    limit: int | None = None,
+    offset: int = 0,
+) -> list[ConnectionConfigRow]:
+    predicates: list[str] = []
+    params: list[object] = []
+    if resource_ids is not None:
+        if not resource_ids:
+            return []
+        ordered_ids = sorted(resource_ids)
+        placeholders = ", ".join(["%s"] * len(ordered_ids))
+        predicates.append(f"id IN ({placeholders})")
+        params.extend(ordered_ids)
+    elif group_id is not None:
+        predicates.append("group_id = %s")
+        params.append(group_id)
+    where = f" WHERE {' AND '.join(predicates)}" if predicates else ""
+    paging = ""
+    if limit is not None:
+        paging = " LIMIT %s OFFSET %s"
+        params.extend((limit, offset))
+    sql = f"SELECT * FROM connections{where} ORDER BY name, id{paging}"
+    rows = _fetchall(sql, tuple(params)) if params else _fetchall(sql)
     return [ConnectionConfigRow.from_mapping(row) for row in rows]
 
 

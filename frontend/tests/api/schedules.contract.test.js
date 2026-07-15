@@ -28,9 +28,9 @@ describe('api/schedules.js', () => {
   it('builds schedule download url with and without run parameter', async () => {
     const { getDownloadUrl } = await import('../../src/api/schedules');
 
-    expect(getDownloadUrl('sch-1')).toBe('http://localhost:5004/api/schedules/sch-1/download');
+    expect(getDownloadUrl('sch-1')).toBe('/api/schedules/sch-1/download');
     expect(getDownloadUrl('sch-1', '2026-04-15T10:00:00')).toBe(
-      'http://localhost:5004/api/schedules/sch-1/download?run=2026-04-15T10:00:00',
+      '/api/schedules/sch-1/download?run=2026-04-15T10:00:00',
     );
   });
 

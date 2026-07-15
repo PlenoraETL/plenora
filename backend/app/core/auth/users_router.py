@@ -12,9 +12,10 @@ schema generation con `TypeAdapter is not fully defined`.
 
 import uuid
 from collections.abc import Mapping
+from typing import Annotated
 from typing_extensions import TypedDict
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import ValidationError
 
@@ -93,16 +94,22 @@ def _user_update_fields(data: UserUpdateRequest | UserUpdateFields) -> UserUpdat
 
 
 @users_router.get("", response_model=list[UserResponse])
-def list_users(current_user: CurrentUser = Depends(require_admin)):
+def list_users(
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    current_user: CurrentUser = Depends(require_admin),
+):
     """
     Lista utenti.
     superadmin → tutti gli utenti di tutti i gruppi
     admin → solo utenti del proprio gruppo
     """
     if current_user.role == "superadmin":
-        users = _users_dal.list_all_users()
+        users = _users_dal.list_all_users(limit=limit, offset=offset)
     else:
-        users = _users_dal.list_users(current_user.group_id)
+        users = _users_dal.list_users(
+            current_user.group_id, limit=limit, offset=offset,
+        )
     return [UserResponse(**_user_response_payload(user)) for user in users]
 
 

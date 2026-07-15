@@ -276,7 +276,7 @@ class EnrichmentBatchModeMixin:
                         options_cfg,
                         request_cfg,
                     ),
-                    validate_url=False,
+                    validate_url=True,
                     context="API enricher batch",
                 )
 

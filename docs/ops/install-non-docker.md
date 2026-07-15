@@ -32,7 +32,7 @@ The install is green only when all of these are true:
 ```bash
 sudo apt update
 sudo apt install -y \
-  python3.11 python3.11-venv python3.11-dev \
+  python3.12 python3.12-venv python3.12-dev \
   build-essential libpq-dev \
   postgresql postgresql-client \
   rabbitmq-server \
@@ -44,7 +44,7 @@ sudo apt install -y \
 Verify:
 
 ```bash
-python3.11 --version
+python3.12 --version
 psql --version
 rabbitmqctl version
 gdalinfo --version
@@ -105,8 +105,11 @@ usa la unit [`plenora-object-storage.service`](../../backend/deploy/systemd/plen
 per una prova manuale:
 
 ```bash
-curl -fsSL https://github.com/seaweedfs/seaweedfs/releases/download/4.29/linux_amd64.tar.gz \
-  | sudo tar -xz -C /usr/local/bin weed
+archive="$(mktemp)"
+curl -fsSLo "${archive}" https://github.com/seaweedfs/seaweedfs/releases/download/4.29/linux_amd64.tar.gz
+echo "f090992272353bbf0e00ea5a26c452beb81fb1deac6a240c768b5b22fcbb7202  ${archive}" | sha256sum -c -
+sudo tar -xzf "${archive}" -C /usr/local/bin weed
+rm -f "${archive}"
 mkdir -p ~/plenora-object-storage
 AWS_ACCESS_KEY_ID=plenora-storage AWS_SECRET_ACCESS_KEY=<generate> \
   S3_BUCKET=plenora-runtime weed mini -dir="$HOME/plenora-object-storage" -ip=127.0.0.1
@@ -119,9 +122,8 @@ file applicativo seguente.
 
 ```bash
 cd ~/plenora/backend
-python3.11 -m venv venv
-./venv/bin/pip install --upgrade pip
-./venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+python3.12 -m venv venv
+./venv/bin/pip install --require-hashes -r requirements-dev.lock
 ```
 
 Create `backend/.env`:

@@ -44,7 +44,8 @@ class TableSchemaHandlers:
                     continue
                 col_name = agg.get("column")
                 agg_func = agg.get("function", "count")
-                alias = agg.get("alias")
+                raw_alias = agg.get("alias")
+                alias = raw_alias.strip() if isinstance(raw_alias, str) else raw_alias
                 if col_name:
                     agg_items.append((col_name, agg_func, alias))
         elif isinstance(aggs, dict):

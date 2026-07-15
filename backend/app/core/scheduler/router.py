@@ -6,7 +6,7 @@ Owns the HTTP boundary and delegates business logic to services or helpers.
 
 import json
 import re
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.responses import Response
@@ -90,7 +90,12 @@ def beat_healthcheck(current_user: CurrentUser = Depends(require_not_esecutore))
 
 
 @router.get("", response_model=ScheduleList)
-def list_schedules(project_id: Optional[str] = Query(None, description="Filtra per progetto"), current_user: CurrentUser = Depends(require_not_esecutore)):
+def list_schedules(
+    project_id: Optional[str] = Query(None, description="Filtra per progetto"),
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+):
     """
     Lista tutti gli schedule, ordinati per data aggiornamento.
     
@@ -100,7 +105,12 @@ def list_schedules(project_id: Optional[str] = Query(None, description="Filtra p
     try:
         service = ScheduleService()
         gid = group_filter(current_user)
-        return service.list_schedules(project_id=project_id, group_id=gid)
+        return service.list_schedules(
+            project_id=project_id,
+            group_id=gid,
+            limit=limit,
+            offset=offset,
+        )
         
     except Exception as e:
         logger.error(f"[GESTITO] Errore lista schedule: {e}", exc_info=True)
@@ -448,7 +458,12 @@ def download_schedule_output(
 
 
 @router.get("/{schedule_id}/runs")
-def list_schedule_runs(schedule_id: str, current_user: CurrentUser = Depends(require_not_esecutore)):
+def list_schedule_runs(
+    schedule_id: str,
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+):
     """
     Lista tutte le esecuzioni archiviate di uno schedule.
 
@@ -474,7 +489,9 @@ def list_schedule_runs(schedule_id: str, current_user: CurrentUser = Depends(req
 
         project_id = schedule.pipeline.project_id
         catalog = ScheduleRunsCatalog()
-        runs = catalog.list_runs(project_id, schedule_id)
+        runs = catalog.list_runs(
+            project_id, schedule_id, limit=limit, offset=offset,
+        )
 
         # Serializza in JSON HTTP-friendly. `_format_size` resta nel router
         # perche' e' un dettaglio di presentazione, non logica core

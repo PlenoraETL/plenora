@@ -11,7 +11,9 @@ function sampleRate(rawValue) {
 }
 
 export const FRONTEND_ENV = Object.freeze({
-  apiBaseUrl: import.meta.env.VITE_API_URL || 'http://localhost:5004',
+  // In produzione il default e' same-origin: il reverse proxy espone /api.
+  // Un URL assoluto resta disponibile solo per deployment multi-host espliciti.
+  apiBaseUrl: (import.meta.env.VITE_API_URL || '').trim().replace(/\/+$/, ''),
   mode: import.meta.env.MODE,
   sentryDsn: import.meta.env.VITE_SENTRY_DSN || '',
   sentryTracesSampleRate: sampleRate(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE),

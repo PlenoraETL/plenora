@@ -19,8 +19,10 @@ import http from './http';
  * Lista dei backup presenti nel bucket S3.
  * @returns {Promise<{bucket: string, region: string, count: number, items: Array}>}
  */
-export const listBackups = async () => {
-  const response = await http.get('/admin/backups');
+export const listBackups = async ({ limit = 100, cursor = null } = {}) => {
+  const params = { limit };
+  if (cursor) params.cursor = cursor;
+  const response = await http.get('/admin/backups', { params });
   return response.data;
 };
 

@@ -1,6 +1,7 @@
 """Domain service for database connections."""
 
 import sqlite3
+import psycopg
 
 import json
 import uuid
@@ -145,20 +146,26 @@ class ConnectionService:
             "description": getattr(data, "description", ""),
             "mssql_tls_mode": get_mssql_tls_mode(data),
         }
-        row = connection_db.create_connection(
-            conn_id=connection_id,
-            group_id=group_id,
-            name=data.name,
-            db_type=data.type,
-            host=data.host,
-            port=data.port,
-            database=data.database,
-            db_schema=data.db_schema,
-            username=data.username,
-            password=_encrypt_password(data.password),
-            extra=extra,
-            created_by=created_by,
-        )
+        try:
+            row = connection_db.create_connection(
+                conn_id=connection_id,
+                group_id=group_id,
+                name=data.name,
+                db_type=data.type,
+                host=data.host,
+                port=data.port,
+                database=data.database,
+                db_schema=data.db_schema,
+                username=data.username,
+                password=_encrypt_password(data.password),
+                extra=extra,
+                created_by=created_by,
+            )
+        except (psycopg.errors.UniqueViolation, psycopg.IntegrityError) as exc:
+            raise ConnectionDuplicateNameError(
+                name=data.name,
+                group_id=group_id,
+            ) from exc
         logger.info(f"Connessione creata: {connection_id}", op="create_connection")
         if data.type == "mssql" and trusts_server_certificate(data):
             logger.warning(
@@ -166,12 +173,24 @@ class ConnectionService:
                 "Encrypt=Mandatory, verifica certificato server disabilitata",
                 connection_id,
             )
-        return self._row_to_connection(row)
+        return self._row_to_connection(row, mask_password=True)
 
-    def list_connections(self, group_id: str | None = None) -> ConnectionList:
+    def list_connections(
+        self,
+        group_id: str | None = None,
+        resource_ids: set[str] | None = None,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> ConnectionList:
         # group_id=None → no filter (usato da superadmin e dalla path allowed_groups
         # Fetch unico delle righe complete, no loop di get_connection_config.
-        rows = connection_db.list_connection_configs(group_id)
+        rows = connection_db.list_connection_configs(
+            group_id,
+            resource_ids=resource_ids,
+            limit=limit,
+            offset=offset,
+        )
         connections = []
         for full_row in rows:
             conn = self._row_to_connection(full_row, mask_password=True)
@@ -182,6 +201,11 @@ class ConnectionService:
     def get_connection(self, connection_id: str) -> Optional[DatabaseConnection]:
         row = connection_db.get_connection_config(connection_id)
         return self._row_to_connection(row, mask_password=False)
+
+    def get_connection_public(self, connection_id: str) -> Optional[DatabaseConnection]:
+        """Return connection metadata without decrypting or exposing its password."""
+        row = connection_db.get_connection_config(connection_id)
+        return self._row_to_connection(row, mask_password=True)
 
     def update_connection(self, connection_id: str, data: ConnectionUpdate) -> Optional[DatabaseConnection]:
         row = connection_db.get_connection_config(connection_id)
@@ -213,14 +237,21 @@ class ConnectionService:
                 extra["mssql_tls_mode"] = update_fields["mssql_tls_mode"]
             db_fields["extra"] = extra
         if db_fields:
-            row = connection_db.update_connection(connection_id, **db_fields)
+            try:
+                row = connection_db.update_connection(connection_id, **db_fields)
+            except (psycopg.errors.UniqueViolation, psycopg.IntegrityError) as exc:
+                duplicate_name = str(db_fields.get("name") or row.name)
+                raise ConnectionDuplicateNameError(
+                    name=duplicate_name,
+                    group_id=row.group_id,
+                ) from exc
         if update_fields.get("mssql_tls_mode") == "trust_server_certificate":
             logger.warning(
                 "[SECURITY] Eccezione TLS MSSQL abilitata sulla connessione %s: "
                 "Encrypt=Mandatory, verifica certificato server disabilitata",
                 connection_id,
             )
-        return self._row_to_connection(row)
+        return self._row_to_connection(row, mask_password=True)
 
     def delete_connection(self, connection_id: str) -> bool:
         if not connection_db.get_connection_config(connection_id):

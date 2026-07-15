@@ -27,7 +27,9 @@ describe('apiConnections api contract', () => {
     const result = await listApiConnections();
 
     expect(httpMock.get).toHaveBeenCalledTimes(1);
-    expect(httpMock.get).toHaveBeenCalledWith('/api-connections');
+    expect(httpMock.get).toHaveBeenCalledWith('/api-connections', {
+      params: { limit: 200, offset: 0 },
+    });
     expect(result).toEqual({
       api_connections: [{ id: 'api-1', name: 'Geocode' }],
     });
@@ -41,7 +43,9 @@ describe('apiConnections api contract', () => {
     const { listApiConnections } = await import('../../src/api/apiConnections');
     await listApiConnections({ category: 'geocoding' });
 
-    expect(httpMock.get).toHaveBeenCalledWith('/api-connections?category=geocoding');
+    expect(httpMock.get).toHaveBeenCalledWith('/api-connections', {
+      params: { category: 'geocoding', limit: 200, offset: 0 },
+    });
   });
 
   it('listApiConnections forwards connection_type filter as querystring', async () => {
@@ -50,7 +54,9 @@ describe('apiConnections api contract', () => {
     const { listApiConnections } = await import('../../src/api/apiConnections');
     await listApiConnections({ connection_type: 'rest_file' });
 
-    expect(httpMock.get).toHaveBeenCalledWith('/api-connections?connection_type=rest_file');
+    expect(httpMock.get).toHaveBeenCalledWith('/api-connections', {
+      params: { connection_type: 'rest_file', limit: 200, offset: 0 },
+    });
   });
 
   it('listApiConnections combines both filters in querystring order', async () => {
@@ -59,9 +65,14 @@ describe('apiConnections api contract', () => {
     const { listApiConnections } = await import('../../src/api/apiConnections');
     await listApiConnections({ category: 'routing', connection_type: 'openapi' });
 
-    expect(httpMock.get).toHaveBeenCalledWith(
-      '/api-connections?category=routing&connection_type=openapi',
-    );
+    expect(httpMock.get).toHaveBeenCalledWith('/api-connections', {
+      params: {
+        category: 'routing',
+        connection_type: 'openapi',
+        limit: 200,
+        offset: 0,
+      },
+    });
   });
 
   // Le funzioni qui sotto erano definite come shadow inline in

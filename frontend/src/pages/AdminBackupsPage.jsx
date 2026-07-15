@@ -153,6 +153,7 @@ export default function AdminBackupsPage() {
   const [status, setStatus] = useState(null);
   const [schedule, setSchedule] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [triggering, setTriggering] = useState(false);
   const [backupUnavailable, setBackupUnavailable] = useState(null);
   // RB.#10: stato dedicato per credenziali AWS scadute. Bloccato in
@@ -230,6 +231,23 @@ export default function AdminBackupsPage() {
     setAwsCredentialsError(null);
     loadAll();
   }, [loadAll]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (!data?.next_cursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const page = await listBackups({ cursor: data.next_cursor });
+      setData(current => ({
+        ...page,
+        items: [...(current?.items || []), ...(page.items || [])],
+        count: (current?.items?.length || 0) + (page.items?.length || 0),
+      }));
+    } catch (error) {
+      toast.error(extractErrorMessage(error));
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [data?.next_cursor, loadingMore, toast]);
 
   const handleTrigger = async () => {
     const ok = await confirmModal.confirm({
@@ -363,6 +381,7 @@ export default function AdminBackupsPage() {
               Lista backup non disponibile in questo deployment.
             </div>
           ) : data?.items?.length > 0 ? (
+            <>
             <table className="ab__table">
               <thead>
                 <tr>
@@ -383,6 +402,17 @@ export default function AdminBackupsPage() {
                 ))}
               </tbody>
             </table>
+            {data.next_cursor && (
+              <button
+                type="button"
+                className="ab__btn ab__btn--secondary"
+                onClick={handleLoadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? 'Caricamento...' : 'Carica altri backup'}
+              </button>
+            )}
+            </>
           ) : (
             <div className="ab__empty">Nessun backup presente.</div>
           )}

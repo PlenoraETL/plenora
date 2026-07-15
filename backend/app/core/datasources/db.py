@@ -143,14 +143,32 @@ def get_datasource(
     return _optional_datasource_row(row)
 
 
-def list_datasources(group_id: str | None = None) -> list[DataSourceRow]:
-    if group_id is None:
-        rows = _fetchall("SELECT * FROM datasources ORDER BY name")
-    else:
-        rows = _fetchall(
-            "SELECT * FROM datasources WHERE group_id = %s ORDER BY name",
-            (group_id,),
-        )
+def list_datasources(
+    group_id: str | None = None,
+    resource_ids: set[str] | None = None,
+    *,
+    limit: int | None = None,
+    offset: int = 0,
+) -> list[DataSourceRow]:
+    predicates: list[str] = []
+    params: list[object] = []
+    if resource_ids is not None:
+        if not resource_ids:
+            return []
+        ordered_ids = sorted(resource_ids)
+        placeholders = ", ".join(["%s"] * len(ordered_ids))
+        predicates.append(f"id IN ({placeholders})")
+        params.extend(ordered_ids)
+    elif group_id is not None:
+        predicates.append("group_id = %s")
+        params.append(group_id)
+    where = f" WHERE {' AND '.join(predicates)}" if predicates else ""
+    paging = ""
+    if limit is not None:
+        paging = " LIMIT %s OFFSET %s"
+        params.extend((limit, offset))
+    sql = f"SELECT * FROM datasources{where} ORDER BY name, id{paging}"
+    rows = _fetchall(sql, tuple(params)) if params else _fetchall(sql)
     return [DataSourceRow.from_mapping(row) for row in rows]
 
 

@@ -7,7 +7,9 @@ generation per body parameter Pydantic BaseModel quando le annotation
 sono ForwardRef.
 """
 
-from fastapi import APIRouter, Depends
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from typing_extensions import TypedDict
 
@@ -95,7 +97,11 @@ def require_superadmin(
 
 
 @groups_router.get("", response_model=list[GroupResponse])
-def list_groups(current_user: CurrentUser = Depends(require_admin)):
+def list_groups(
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    current_user: CurrentUser = Depends(require_admin),
+):
     """
     Lista gruppi.
     superadmin → tutti i gruppi (cross-tenant)
@@ -103,10 +109,10 @@ def list_groups(current_user: CurrentUser = Depends(require_admin)):
                   cross-gruppo, quindi non ha bisogno di vedere gli altri)
     """
     if current_user.role == "superadmin":
-        groups = _groups.list_groups()
+        groups = _groups.list_groups(limit=limit, offset=offset)
     else:
         g = _groups.get_group(current_user.group_id)
-        groups = [g] if g else []
+        groups = [g] if g and offset == 0 else []
     return [GroupResponse(**_group_response_payload(group)) for group in groups if group]
 
 

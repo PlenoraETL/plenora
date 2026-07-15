@@ -19,7 +19,7 @@ from app.core.auth.ownership import (
     compute_can_edit,
 )
 from pydantic import BaseModel
-from typing import List, Literal, Optional
+from typing import Annotated, List, Literal, Optional
 
 from app.utils.logger import get_logger
 from app.utils.router_utils import require_service
@@ -44,6 +44,8 @@ from app.core.arricchisci.source_request_loader import load_request_data
 from app.core.arricchisci.types import JsonObject
 from app.core.auth.visibility import visible_resource_ids
 from app.shared.security.outbound_url import validate_external_url
+from app.infrastructure.http.session import request_pinned
+from starlette.concurrency import run_in_threadpool
 
 
 def _load_request_data(request, current_user) -> JsonObject:
@@ -162,20 +164,27 @@ async def fetch_openapi_schema(body: FetchSchemaRequest, _user: CurrentUser = De
         cloud, servizi interni, Redis, Postgres, ecc.)
       - SSL verification ATTIVA (impedisce MITM su certificati invalidi)
     """
-    import httpx
-
-    _validate_external_url(body.url)
-
     try:
         # verify=True (default) — niente più MITM via certificati invalidi
-        async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
-            r = await client.get(body.url, headers={"Accept": "application/json"})
-            r.raise_for_status()
-            return r.json()
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=f"HTTP {e.response.status_code}")
+        r = await run_in_threadpool(
+            lambda: request_pinned(
+                "GET", body.url,
+                headers={"Accept": "application/json"},
+                timeout=15,
+                verify=True,
+                max_response_bytes=8 * 1024 * 1024,
+            )
+        )
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=f"HTTP {r.status_code}")
+        return r.json()
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"[GESTITO] Errore fetch OpenAPI schema: {e}", exc_info=True)
+        logger.error(
+            "[GESTITO] Errore fetch OpenAPI schema: %s",
+            type(e).__name__,
+        )
         raise HTTPException(
             status_code=502,
             detail={
@@ -316,22 +325,36 @@ def estimate_enrichment(
 # ENDPOINT: API CONNECTIONS CRUD
 
 @api_connections_router.get("/api-connections")
-def list_api_connections(category: str = None, connection_type: str = None, current_user: CurrentUser = Depends(require_not_esecutore)):
+def list_api_connections(
+    category: str = None,
+    connection_type: str = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+):
     """Lista API connections visibili: owned dal gruppo + condivise via allowed_groups.
     Ogni record include `can_edit` calcolato per l'utente corrente."""
     try:
         is_super = current_user.role == "superadmin"
-        all_conns = _api_connection_service.list_api_connections(
-            category=category, connection_type=connection_type, group_id=None,
-        )
-
-        if not is_super:
+        if is_super:
+            all_conns = _api_connection_service.list_api_connections(
+                category=category, connection_type=connection_type, group_id=None,
+                limit=limit, offset=offset,
+            )
+        else:
             visible_ids = visible_resource_ids(
                 'api_connections',
                 current_user.group_id,
                 is_superadmin=False,
             )
-            all_conns = [c for c in all_conns if c.get("id") in visible_ids]
+            all_conns = _api_connection_service.list_api_connections(
+                category=category,
+                connection_type=connection_type,
+                group_id=None,
+                resource_ids=visible_ids,
+                limit=limit,
+                offset=offset,
+            )
 
         for c in all_conns:
             c["can_edit"] = compute_can_edit(c, current_user)

@@ -24,7 +24,9 @@ describe('eseguibili api contract', () => {
     const { listEseguibili } = await import('../../src/api/eseguibili');
     const result = await listEseguibili();
 
-    expect(httpMock.get).toHaveBeenCalledWith('/eseguibili');
+    expect(httpMock.get).toHaveBeenCalledWith('/eseguibili', {
+      params: { limit: 200, offset: 0 },
+    });
     expect(result).toEqual([{ id: 'e-1' }]);
   });
 

@@ -180,7 +180,7 @@ require_cmd() {
 # of truth; any source-bound test should derive expectations from this
 # array (see backend/tests2/shared/test_install_script_packaging_guard.py).
 INSTALLER_REQUIRED_COMMANDS=(
-    python3.11
+    python3.12
     node
     npm
     psql
@@ -190,7 +190,7 @@ INSTALLER_REQUIRED_COMMANDS=(
 
 # Required Python major.minor. Pinned to match all CI lanes
 # (.github/workflows/{ci,ci-cleanroom,ci-functional}.yml).
-INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR="3.11"
+INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR="3.12"
 
 # Native shared libraries the runtime imports through pip wheels. We do
 # NOT require building from source: psycopg2-binary bundles libpq, and
@@ -207,20 +207,20 @@ step_validate_prereqs() {
 
     local missing=0
 
-    # Python 3.11 specifically (per docs/ops/install-non-docker.md section1).
-    if command -v python3.11 &>/dev/null; then
+    # Python 3.12 specifically (per docs/ops/install-non-docker.md section1).
+    if command -v python3.12 &>/dev/null; then
         local pyver
-        pyver="$(python3.11 --version 2>&1)"
-        log_ok "python3.11: ${pyver}"
-        # Hard-pin major.minor. python3.11 binary should always report
-        # 3.11.x but we assert it explicitly: a compromised PATH or a
+        pyver="$(python3.12 --version 2>&1)"
+        log_ok "python3.12: ${pyver}"
+        # Hard-pin major.minor. python3.12 binary should always report
+        # 3.12.x but we assert it explicitly: a compromised PATH or a
         # symlink could redirect to a different interpreter.
         if [[ "$pyver" != *"Python ${INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR}."* ]]; then
-            log_err "python3.11 reports an unexpected version: ${pyver} (expected Python ${INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR}.x)."
+            log_err "python3.12 reports an unexpected version: ${pyver} (expected Python ${INSTALLER_REQUIRED_PYTHON_MAJOR_MINOR}.x)."
             missing=1
         fi
     else
-        log_err "python3.11 not found - install via apt or pyenv (see docs/ops/install-non-docker.md section1)."
+        log_err "python3.12 not found - install via apt or pyenv (see docs/ops/install-non-docker.md section1)."
         missing=1
     fi
 
@@ -228,7 +228,7 @@ step_validate_prereqs() {
     require_cmd npm "shipped with node" || missing=1
     require_cmd psql "postgresql-client-17 (apt PGDG repo on Ubuntu 24.04)" || missing=1
     # Il broker (RabbitMQ) non richiede un client host: la reachability si
-    # prova via TCP con python3.11 in step_probe_services (no redis-cli).
+    # prova via TCP con python3.12 in step_probe_services (no redis-cli).
     require_cmd curl "apt install curl" || missing=1
     require_cmd git "apt install git" || missing=1
 
@@ -260,13 +260,13 @@ step_validate_packaging() {
     # the dynamic linker path. Empty here means the runtime CANNOT
     # load the lib even if `apt list --installed` shows the package -
     # this is the signal that matches what the app sees at boot.
-    if command -v python3.11 &>/dev/null; then
+    if command -v python3.12 &>/dev/null; then
         local entry libname libhint found
         for entry in "${INSTALLER_REQUIRED_SHARED_LIBS[@]}"; do
             libname="${entry%%:*}"
             libhint="${entry#*:}"
             found="$(
-                python3.11 - <<PYEOF 2>/dev/null
+                python3.12 - <<PYEOF 2>/dev/null
 import ctypes.util
 print(ctypes.util.find_library("${libname}") or "")
 PYEOF
@@ -279,7 +279,7 @@ PYEOF
             fi
         done
     else
-        log_warn "python3.11 missing - shared library probes skipped (see Step 1)."
+        log_warn "python3.12 missing - shared library probes skipped (see Step 1)."
         missing=1
     fi
 
@@ -631,8 +631,8 @@ step_probe_services() {
     else
         # Il broker e' RabbitMQ (Dramatiq): niente redis-cli, niente client
         # host dedicato. Un connect TCP bounded all'host:porta del broker URL
-        # via python3.11 (gia' richiesto) e' sufficiente a fail-fast.
-        if python3.11 - "$BROKER_URL" <<'PYEOF'
+        # via python3.12 (gia' richiesto) e' sufficiente a fail-fast.
+        if python3.12 - "$BROKER_URL" <<'PYEOF'
 import socket
 import sys
 from urllib.parse import urlparse
@@ -714,9 +714,9 @@ read_env_var() {
 }
 
 # Generate a URL-safe random token via Python (always available since
-# we required python3.11 in step 1). 48 bytes approx 64 chars.
+# we required python3.12 in step 1). 48 bytes approx 64 chars.
 generate_secret() {
-    python3.11 -c 'import secrets; print(secrets.token_urlsafe(48))'
+    python3.12 -c 'import secrets; print(secrets.token_urlsafe(48))'
 }
 
 # Resolve a secret: keep existing if non-empty unless --overwrite-secrets.
@@ -972,13 +972,16 @@ docs/ops/install-non-docker.md (sectionsection7-9):
 
   1. Backend venv:
        cd ${BACKEND_DIR}
-       python3.11 -m venv venv
-       ./venv/bin/pip install --upgrade pip
-       ./venv/bin/pip install -r requirements.txt
+       python3.12 -m venv venv
+       ./venv/bin/pip install --require-hashes -r requirements.lock
 
   2. SeaweedFS + systemd units (requires sudo; salta la unit SeaweedFS
      quando S3_ENDPOINT_URL punta a un provider esterno):
-       curl -fsSL https://github.com/seaweedfs/seaweedfs/releases/download/4.29/linux_amd64.tar.gz | sudo tar -xz -C /usr/local/bin weed
+       archive="$(mktemp)"
+       curl -fsSLo "\${archive}" https://github.com/seaweedfs/seaweedfs/releases/download/4.29/linux_amd64.tar.gz
+       echo "f090992272353bbf0e00ea5a26c452beb81fb1deac6a240c768b5b22fcbb7202  \${archive}" | sha256sum -c -
+       sudo tar -xzf "\${archive}" -C /usr/local/bin weed
+       rm -f "\${archive}"
        sudo mkdir -p /home/ubuntu/plenora-object-storage
        sudo chown ubuntu:ubuntu /home/ubuntu/plenora-object-storage
        cd ${BACKEND_DIR}/deploy/systemd

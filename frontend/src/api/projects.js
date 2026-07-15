@@ -5,6 +5,7 @@
  */
 
 import http from './http';
+import { fetchAllOffsetPages } from './pagination';
 import { API_ENDPOINT } from './config';
 import { downloadBlob } from '../utils/downloadBlob';
 
@@ -107,8 +108,10 @@ export const restoreCanvasVersion = async (projectId, versionId) => {
  * @returns {Promise<Object>} { projects: [...] }
  */
 export const listProjects = async () => {
-  const response = await http.get('/projects');
-  return response.data;
+  return fetchAllOffsetPages('/projects', {
+    extractItems: data => data.projects,
+    mergeItems: (items, lastPage) => ({ ...lastPage, projects: items }),
+  });
 };
 
 /**

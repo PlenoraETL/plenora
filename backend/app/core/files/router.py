@@ -5,7 +5,7 @@ Gestione file sorgente per MANIPOLA e ARRICCHISCI.
 """
 
 from pathlib import Path
-from typing import Optional, List
+from typing import Annotated, Optional, List
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query, Depends
 
@@ -322,7 +322,11 @@ def upload_multi_layer(
 
 
 @router.get("", response_model=FileSourceList)
-def list_files(current_user: CurrentUser = Depends(require_not_esecutore)):
+def list_files(
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+):
     """Lista file visibili: owned dal proprio gruppo + condivisi via allowed_groups.
     Ogni record include `can_edit` calcolato per l'utente corrente.
 
@@ -334,28 +338,25 @@ def list_files(current_user: CurrentUser = Depends(require_not_esecutore)):
     is_super = current_user.role == "superadmin"
 
     # Carica TUTTI i file (senza filter) — il superadmin vede tutto
-    all_files = file_source_service.list_file_sources(group_id=None)
+    all_files = None
 
     # Filtro file_source temporanei degli eseguibili (sempre, anche per superadmin
-    def _is_temp(f):
-        name = getattr(f, "name", "") or ""
-        return name.startswith("__exec_temp_")
-
-    if hasattr(all_files, 'files'):
-        all_files.files = [f for f in all_files.files if not _is_temp(f)]
-    elif isinstance(all_files, list):
-        all_files = [f for f in all_files if not _is_temp(f)]
-
-    if not is_super:
+    if is_super:
+        all_files = file_source_service.list_file_sources(
+            group_id=None, limit=limit, offset=offset,
+        )
+    else:
         visible_ids = visible_resource_ids(
             'file_sources',
             current_user.group_id,
             is_superadmin=False,
         )
-        if hasattr(all_files, 'files'):
-            all_files.files = [f for f in all_files.files if f.id in visible_ids]
-        elif isinstance(all_files, list):
-            all_files = [f for f in all_files if f.id in visible_ids]
+        all_files = file_source_service.list_file_sources(
+            group_id=None,
+            resource_ids=visible_ids,
+            limit=limit,
+            offset=offset,
+        )
 
     # Inietta can_edit per ogni record
     files_iter = all_files.files if hasattr(all_files, 'files') else (all_files if isinstance(all_files, list) else [])

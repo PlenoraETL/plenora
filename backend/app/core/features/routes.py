@@ -6,7 +6,7 @@ Owns the HTTP boundary and delegates business logic to services or helpers.
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel, Field
-from typing import Dict, Optional, List
+from typing import Annotated, Dict, Optional, List
 
 from app.core.auth.dependencies import (
     require_not_esecutore,
@@ -122,21 +122,32 @@ def create_connection(data: ArcGISCreate, current_user: CurrentUser = Depends(re
 
 
 @router.get("/connections", response_model=ArcGISList)
-def list_connections(current_user: CurrentUser = Depends(require_not_esecutore)):
+def list_connections(
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+):
     """Lista connessioni ArcGIS visibili: owned dal gruppo + condivise via allowed_groups.
     Ogni record include `can_edit` calcolato per l'utente corrente."""
     try:
         is_super = current_user.role == "superadmin"
 
-        result = get_service().list_connections(group_id=None)
-
-        if not is_super:
+        if is_super:
+            result = get_service().list_connections(
+                group_id=None, limit=limit, offset=offset,
+            )
+        else:
             visible_ids = visible_resource_ids(
                 'arcgis_connections',
                 current_user.group_id,
                 is_superadmin=False,
             )
-            result.connections = [c for c in result.connections if c.id in visible_ids]
+            result = get_service().list_connections(
+                group_id=None,
+                resource_ids=visible_ids,
+                limit=limit,
+                offset=offset,
+            )
 
         for c in result.connections:
             c.can_edit = compute_can_edit(c, current_user)
@@ -285,7 +296,7 @@ def query_preview(
     layer_url: str = Query(...),
     where: str = Query("1=1"),
     out_fields: str = Query("*"),
-    max_features: int = Query(50, description="Max features per preview"),
+    max_features: int = Query(50, ge=1, le=5000, description="Max features per preview"),
     current_user: CurrentUser = Depends(require_not_esecutore),
 ):
     """Preview dati da un layer (max N features)."""

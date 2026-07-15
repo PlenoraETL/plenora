@@ -98,10 +98,19 @@ class ScheduleRunsCatalog:
             result_id=result_id,
         )
 
-    def list_runs(self, project_id: str, schedule_id: str) -> list[RunInfo]:
+    def list_runs(
+        self,
+        project_id: str,
+        schedule_id: str,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> list[RunInfo]:
         """List run history dal DB log, newest first."""
         runs_by_timestamp: dict[str, RunInfo] = {}
-        for entry in self._log_store.list_completed_runs(schedule_id):
+        for entry in self._log_store.list_completed_runs(
+            schedule_id, limit=limit, offset=offset,
+        ):
             run = self._run_info_from_log(entry, project_id=project_id)
             if run is None:
                 continue

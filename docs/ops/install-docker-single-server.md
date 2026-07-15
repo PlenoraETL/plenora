@@ -82,7 +82,12 @@ Both installers:
 
 - create `.env.docker` from `.env.docker.example` if missing;
 - preserve existing non-empty secrets;
-- generate `PLENORA_ENCRYPTION_KEY` and `JWT_SECRET_KEY` if empty;
+- generate `PLENORA_ENCRYPTION_KEY`, `JWT_SECRET_KEY`, PostgreSQL and RabbitMQ
+  credentials if empty;
+- reconcile the PostgreSQL role and RabbitMQ application user on existing
+  volumes, so credential upgrades do not require deleting persistent data;
+- compile `DATABASE_URL` and `DRAMATIQ_BROKER_URL` from those credentials and
+  switch the installed stack from `development` to `production`;
 - create the external Docker bridge network `plenora` if missing;
 - configure mandatory object storage and generate credentials for the
   bundled SeaweedFS S3-compatible data plane;
@@ -108,24 +113,11 @@ chmod 600 .env.docker
 
 Review `.env.docker` before continuing. Do not commit it.
 
-For a remote host, set the frontend build URL before building:
-
-```bash
-export FRONTEND_VITE_API_URL=http://<host-ip-or-dns>:5004
-```
-
-With the installer:
-
-```bash
-bash scripts/install-docker.sh --frontend-api-url http://<host-ip-or-dns>:5004
-```
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/install-docker.ps1 -FrontendApiUrl http://<host-ip-or-dns>:5004
-```
-
-For local validation on the same machine, the compose default
-`http://localhost:5004` is correct.
+Do not set `FRONTEND_VITE_API_URL` for a single-server install. The frontend
+uses same-origin `/api`, and its nginx container proxies requests to the
+backend service. This works unchanged with localhost, an IP address, or DNS.
+Use `FRONTEND_VITE_API_URL` only when frontend and backend are intentionally
+published on different origins.
 
 Interactive installs ask for the first superadmin credentials. The username
 defaults to `admin`; the password is not written to `.env.docker`.
@@ -325,13 +317,13 @@ http://<host-ip-or-dns>:3000/
 Confirm:
 
 - login screen loads;
-- browser can reach the backend API origin baked into the frontend build;
+- browser reaches `/api` on the same origin as the login page;
 - no CORS or network errors appear in browser dev tools.
 
-If the frontend points to the wrong API URL, rebuild it:
+If an old bundle still points to localhost, clear the override and rebuild it:
 
 ```bash
-FRONTEND_VITE_API_URL=http://<host-ip-or-dns>:5004 docker compose build frontend
+FRONTEND_VITE_API_URL= docker compose build --no-cache frontend
 docker compose up -d --wait frontend
 ```
 

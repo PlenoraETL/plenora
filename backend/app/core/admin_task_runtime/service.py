@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import threading
+import time
 
 from psycopg import Error as PsycopgError
 from psycopg_pool import PoolTimeout
@@ -21,6 +23,43 @@ from app.utils.logger import get_logger
 
 
 logger = get_logger(__name__)
+
+_broker_cache_lock = threading.Lock()
+_broker_cache_key: tuple[str, tuple[str, ...], int] | None = None
+_broker_cache_value: tuple[tuple[object, ...], str | None] = ((), None)
+_broker_cache_expires_at = 0.0
+
+
+def _inspect_queues_cached(
+    broker_url: str,
+    queue_names: tuple[str, ...],
+    *,
+    timeout: int,
+) -> tuple[tuple[object, ...], str | None]:
+    """Bound repeated dashboard probes while preserving fresh DB leases."""
+    global _broker_cache_key, _broker_cache_value, _broker_cache_expires_at
+    ttl = max(1, min(int(settings.get(
+        "ADMIN_TASK_RUNTIME_BROKER_CACHE_SECONDS", 5,
+    )), 60))
+    key = (broker_url, queue_names, timeout)
+    now = time.monotonic()
+    with _broker_cache_lock:
+        if key == _broker_cache_key and now < _broker_cache_expires_at:
+            return _broker_cache_value
+        try:
+            stats = tuple(runtime_ports.inspect_rabbitmq_queues(
+                broker_url, queue_names, timeout=timeout,
+            ))
+            value = (stats, None)
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            value = ((), type(exc).__name__)
+            logger.warning(
+                "task runtime queue probe failed: %s", type(exc).__name__,
+            )
+        _broker_cache_key = key
+        _broker_cache_value = value
+        _broker_cache_expires_at = now + ttl
+        return value
 
 
 def _utc(value: datetime) -> datetime:
@@ -49,15 +88,15 @@ def get_task_runtime_payload() -> TaskRuntimePayload:
     queues: list[QueueStatus] = []
     broker_available = True
     broker_message = "RabbitMQ raggiungibile"
-    try:
-        timeout = max(1, min(int(settings.get(
-            "READINESS_TASK_QUEUE_TIMEOUT_SECONDS", 2,
-        )), 10))
-        raw_stats = runtime_ports.inspect_rabbitmq_queues(
-            settings.DRAMATIQ_BROKER_URL,
-            active_names + dead_letter_names,
-            timeout=timeout,
-        )
+    timeout = max(1, min(int(settings.get(
+        "READINESS_TASK_QUEUE_TIMEOUT_SECONDS", 2,
+    )), 10))
+    raw_stats, broker_error = _inspect_queues_cached(
+        settings.DRAMATIQ_BROKER_URL,
+        active_names + dead_letter_names,
+        timeout=timeout,
+    )
+    if broker_error is None:
         for item in raw_stats:
             is_dead_letter = item.name in dead_letter_names
             if not item.exists:
@@ -76,11 +115,10 @@ def get_task_runtime_payload() -> TaskRuntimePayload:
                 consumers=item.consumers,
                 status=item_status,
             ))
-    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+    else:
         broker_available = False
-        broker_message = f"RabbitMQ non interrogabile: {type(exc).__name__}"
+        broker_message = f"RabbitMQ non interrogabile: {broker_error}"
         warnings.append(broker_message)
-        logger.warning("task runtime queue probe failed: %s", exc)
 
     max_age = max(1, int(settings.get(
         "READINESS_WORKER_HEARTBEAT_MAX_AGE_SECONDS", 45,

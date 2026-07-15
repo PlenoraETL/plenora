@@ -137,14 +137,35 @@ def create_connection(
     return row_to_connection(dict(row))
 
 
-def list_connections(group_id: Optional[str] = None) -> ArcGISList:
-    if group_id is None:
-        rows = _fetchall("SELECT * FROM arcgis_connections ORDER BY updated_at DESC")
-    else:
-        rows = _fetchall(
-            "SELECT * FROM arcgis_connections WHERE group_id = %s ORDER BY updated_at DESC",
-            (group_id,),
-        )
+def list_connections(
+    group_id: Optional[str] = None,
+    resource_ids: set[str] | None = None,
+    *,
+    limit: int | None = None,
+    offset: int = 0,
+) -> ArcGISList:
+    predicates: list[str] = []
+    params: list[object] = []
+    if resource_ids is not None:
+        if not resource_ids:
+            return ArcGISList(connections=[])
+        ordered_ids = sorted(resource_ids)
+        placeholders = ", ".join(["%s"] * len(ordered_ids))
+        predicates.append(f"id IN ({placeholders})")
+        params.extend(ordered_ids)
+    elif group_id is not None:
+        predicates.append("group_id = %s")
+        params.append(group_id)
+    where = f" WHERE {' AND '.join(predicates)}" if predicates else ""
+    paging = ""
+    if limit is not None:
+        paging = " LIMIT %s OFFSET %s"
+        params.extend((limit, offset))
+    sql = (
+        f"SELECT * FROM arcgis_connections{where} "
+        f"ORDER BY updated_at DESC, id{paging}"
+    )
+    rows = _fetchall(sql, tuple(params)) if params else _fetchall(sql)
     return ArcGISList(connections=[row_to_connection(dict(row)) for row in rows])
 
 

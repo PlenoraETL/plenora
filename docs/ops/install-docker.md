@@ -63,7 +63,11 @@ export PLENORA_WORKER_REPLICAS=2
 bash scripts/install-docker.sh
 ```
 
-For remote frontend builds:
+For a normal single-server installation, leave the frontend API URL unset. The
+browser calls same-origin `/api`, and nginx proxies it to the backend container,
+so the UI also works when opened through the server IP or DNS name.
+
+Only when the API is intentionally hosted on a different public origin, use:
 
 ```bash
 bash scripts/install-docker.sh --frontend-api-url http://<host-ip-or-dns>:5004

@@ -5,6 +5,7 @@
  */
 
 import http from './http';
+import { fetchAllOffsetPages } from './pagination';
 
 /**
  * Crea una nuova connessione DB.
@@ -21,8 +22,10 @@ export const createConnection = async (data) => {
  * @returns {Promise<Object>} { connections: [...] }
  */
 export const listConnections = async () => {
-  const response = await http.get('/connections');
-  return response.data;
+  return fetchAllOffsetPages('/connections', {
+    extractItems: data => data.connections,
+    mergeItems: (items, lastPage) => ({ ...lastPage, connections: items }),
+  });
 };
 
 /**

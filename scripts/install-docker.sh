@@ -401,6 +401,7 @@ ensure_env_docker() {
     if [ "$DRY_RUN" -eq 1 ]; then
         log "+ generate PLENORA_ENCRYPTION_KEY if empty"
         log "+ generate JWT_SECRET_KEY if empty"
+        log "+ generate PostgreSQL and RabbitMQ credentials if empty"
         return 0
     fi
 
@@ -409,6 +410,39 @@ ensure_env_docker() {
     fi
     if [ -z "$(env_value JWT_SECRET_KEY)" ]; then
         set_env_value JWT_SECRET_KEY "$(new_jwt_secret)"
+    fi
+    if [ -z "$(env_value POSTGRES_PASSWORD)" ]; then
+        set_env_value POSTGRES_PASSWORD "$(new_jwt_secret)"
+    fi
+    if [ -z "$(env_value RABBITMQ_DEFAULT_USER)" ]; then
+        set_env_value RABBITMQ_DEFAULT_USER "plenora"
+    fi
+    if [ -z "$(env_value RABBITMQ_DEFAULT_PASS)" ]; then
+        set_env_value RABBITMQ_DEFAULT_PASS "$(new_jwt_secret)"
+    fi
+    case "$(env_value POSTGRES_PASSWORD)" in
+        ''|*[!A-Za-z0-9_-]*)
+            die "POSTGRES_PASSWORD must contain only URL-safe characters: A-Z a-z 0-9 _ -."
+            ;;
+    esac
+    case "$(env_value RABBITMQ_DEFAULT_USER)" in
+        ''|*[!A-Za-z0-9_-]*)
+            die "RABBITMQ_DEFAULT_USER must contain only URL-safe characters: A-Z a-z 0-9 _ -."
+            ;;
+    esac
+    case "$(env_value RABBITMQ_DEFAULT_PASS)" in
+        ''|*[!A-Za-z0-9_-]*)
+            die "RABBITMQ_DEFAULT_PASS must contain only URL-safe characters: A-Z a-z 0-9 _ -."
+            ;;
+    esac
+    if [ -z "$(env_value DATABASE_URL)" ]; then
+        set_env_value DATABASE_URL "postgresql://plenora:$(env_value POSTGRES_PASSWORD)@postgres:5432/plenora"
+    fi
+    if [ -z "$(env_value DRAMATIQ_BROKER_URL)" ]; then
+        set_env_value DRAMATIQ_BROKER_URL "amqp://$(env_value RABBITMQ_DEFAULT_USER):$(env_value RABBITMQ_DEFAULT_PASS)@rabbitmq:5672/"
+    fi
+    if [ "$(env_value ENVIRONMENT)" = "development" ]; then
+        set_env_value ENVIRONMENT "production"
     fi
     if [ -z "$(env_value S3_ACCESS_KEY)" ]; then
         set_env_value S3_ACCESS_KEY "plenora-storage"
@@ -423,6 +457,49 @@ ensure_env_docker() {
 
     [ -n "$(env_value PLENORA_ENCRYPTION_KEY)" ] || die "PLENORA_ENCRYPTION_KEY is still empty in .env.docker."
     [ -n "$(env_value JWT_SECRET_KEY)" ] || die "JWT_SECRET_KEY is still empty in .env.docker."
+    [ -n "$(env_value POSTGRES_PASSWORD)" ] || die "POSTGRES_PASSWORD is still empty in .env.docker."
+    [ -n "$(env_value RABBITMQ_DEFAULT_PASS)" ] || die "RABBITMQ_DEFAULT_PASS is still empty in .env.docker."
+}
+
+ensure_rabbitmq_credentials() {
+    log_step "RabbitMQ application user"
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log "+ create/update the non-guest RabbitMQ user and permissions"
+        return 0
+    fi
+
+    local rabbit_user rabbit_password
+    rabbit_user="$(env_value RABBITMQ_DEFAULT_USER)"
+    rabbit_password="$(env_value RABBITMQ_DEFAULT_PASS)"
+    if "${DOCKER_CMD[@]}" compose exec -T rabbitmq rabbitmqctl list_users --silent \
+        | awk '{print $1}' | grep -Fxq "$rabbit_user"; then
+        "${DOCKER_CMD[@]}" compose exec -T rabbitmq rabbitmqctl \
+            change_password "$rabbit_user" "$rabbit_password" >/dev/null
+    else
+        "${DOCKER_CMD[@]}" compose exec -T rabbitmq rabbitmqctl \
+            add_user "$rabbit_user" "$rabbit_password" >/dev/null
+    fi
+    "${DOCKER_CMD[@]}" compose exec -T rabbitmq rabbitmqctl \
+        set_permissions -p / "$rabbit_user" '.*' '.*' '.*' >/dev/null
+    if [ "$rabbit_user" != "guest" ]; then
+        "${DOCKER_CMD[@]}" compose exec -T rabbitmq rabbitmqctl \
+            delete_user guest >/dev/null 2>&1 || true
+    fi
+}
+
+ensure_postgres_credentials() {
+    log_step "PostgreSQL application user"
+    if [ "$DRY_RUN" -eq 1 ]; then
+        log "+ reconcile the PostgreSQL application password"
+        return 0
+    fi
+
+    local postgres_password
+    postgres_password="$(env_value POSTGRES_PASSWORD)"
+    "${DOCKER_CMD[@]}" compose exec -T -u postgres postgres \
+        psql -U plenora -d plenora -v ON_ERROR_STOP=1 \
+        --command="ALTER ROLE plenora WITH PASSWORD '$postgres_password';" \
+        >/dev/null
 }
 
 validate_positive_int() {
@@ -647,7 +724,9 @@ fi
 log_step "Build and start single-server stack"
 run_docker compose config --quiet
 run_docker compose build backend frontend
-run_docker compose up -d postgres rabbitmq object-storage
+run_docker compose up -d --wait postgres rabbitmq object-storage
+ensure_postgres_credentials
+ensure_rabbitmq_credentials
 run_docker compose up -d --wait backend
 seed_bootstrap_superadmin
 run_docker compose up -d --scale worker="$PLENORA_WORKER_REPLICAS" worker worker-control beat

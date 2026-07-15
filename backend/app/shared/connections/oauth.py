@@ -17,7 +17,7 @@ from urllib3.exceptions import InsecureRequestWarning
 from app import config as app_config
 from app.shared.security.outbound_url import validate_external_url
 from app.shared.security.tls_policy import resolve_tls_verify
-from app.infrastructure.http.session import get_shared_session
+from app.infrastructure.http.session import get_shared_session, request_pinned
 from app.shared.contracts.payloads import HeadersMap, JsonObject, StringMap
 from app.utils.logger import get_logger
 
@@ -454,12 +454,12 @@ def _fetch_oauth2_password_token(auth: JsonObject) -> Optional[JsonObject]:
         if scope:
             payload["scope"] = scope
 
-        response = _get_shared_session().post(
+        response = request_pinned(
+            "POST",
             token_url,
             data=payload,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             timeout=_api_timeout_seconds(),
-            allow_redirects=False,
         )
         if response.status_code == 200:
             data = response.json()
@@ -515,13 +515,13 @@ def _fetch_oauth2_client_credentials_token(
         if extra_form_data:
             data.update(extra_form_data)
 
-        response = _get_shared_session().post(
+        response = request_pinned(
+            "POST",
             token_url,
             data=data,
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             timeout=_api_timeout_seconds(),
             verify=True,
-            allow_redirects=False,
         )
 
         if response.status_code == 200:
@@ -592,13 +592,13 @@ def get_arcgis_token(auth: JsonObject) -> Optional[str]:
             with _warnings.catch_warnings():
                 if not verify_ssl:
                     _warnings.simplefilter("ignore", InsecureRequestWarning)
-                response = requests.post(
+                response = request_pinned(
+                    "POST",
                     token_url,
                     data=payload,
                     headers={"Content-Type": "application/x-www-form-urlencoded"},
                     timeout=_api_timeout_seconds(),
                     verify=verify_ssl,
-                    allow_redirects=False,
                 )
             if response.status_code != 200:
                 logger.warning("ArcGIS token fallito: HTTP %s", response.status_code)

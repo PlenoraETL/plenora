@@ -151,7 +151,7 @@ ssh -i $PLENORA_DEPLOY_PEM <user>@<server> \
     'cd <REMOTE_BACKEND_PATH> && git fetch && git checkout <prev-tag-or-commit>'
 
 # 2. Re-install dipendenze (solo se requirements cambiati)
-ssh ... 'cd <path> && pip install -r requirements.txt --quiet'
+ssh ... 'cd <path> && pip install --require-hashes -r requirements.lock --quiet'
 
 # 3. Restart servizi
 ssh ... 'sudo systemctl restart plenora-backend plenora-worker-data plenora-worker-control plenora-beat'

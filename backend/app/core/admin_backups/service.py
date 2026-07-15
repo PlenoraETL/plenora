@@ -144,7 +144,11 @@ MANUAL_LOCK_HEARTBEAT_SEC = 120
 # ── S3: lista backup ────────────────────────────────────────────────────────
 
 
-def list_backups() -> list[BackupObjectPayload]:
+def list_backups_page(
+    *,
+    limit: int = 100,
+    cursor: str | None = None,
+) -> tuple[list[BackupObjectPayload], str | None]:
     """Lista oggetti del bucket backup con prefix 'plenora_'.
 
     passa per `get_backup_object_storage`
@@ -173,7 +177,24 @@ def list_backups() -> list[BackupObjectPayload]:
         raise AdminBackupDisabledError(str(e)) from e
 
     try:
-        objects = storage.list_objects("plenora_")
+        bounded_limit = max(1, min(int(limit), 500))
+        page_method = getattr(type(storage), "list_objects_page", None)
+        if callable(page_method):
+            page = storage.list_objects_page(
+                "plenora_", limit=bounded_limit, cursor=cursor,
+            )
+            objects = list(page.get("objects") or [])
+            next_cursor = page.get("next_cursor")
+        else:
+            # Compatibility for legacy/test adapters only. Production object
+            # storage implementations expose the bounded page contract.
+            all_objects = storage.list_objects("plenora_")
+            start = int(cursor or 0) if str(cursor or "").isdigit() else 0
+            objects = all_objects[start:start + bounded_limit]
+            next_offset = start + len(objects)
+            next_cursor = (
+                str(next_offset) if next_offset < len(all_objects) else None
+            )
         result = [
             {
                 "key": o["key"],
@@ -185,7 +206,7 @@ def list_backups() -> list[BackupObjectPayload]:
             for o in objects
         ]
         result.sort(key=lambda o: o["last_modified"], reverse=True)
-        return result
+        return result, next_cursor
     except Exception as e:
         if isinstance(e, ImportError):
             logger.error(
@@ -222,7 +243,13 @@ def list_backups() -> list[BackupObjectPayload]:
             raise AdminBackupCredentialsError(hint) from e
         # Errori non classificati: traceback completo resta utile per debug
         logger.error(f"list_backups fallito: {e}", exc_info=True)
-        return []
+        return [], None
+
+
+def list_backups() -> list[BackupObjectPayload]:
+    """Backward-compatible first page; never materializes an entire bucket."""
+    items, _next_cursor = list_backups_page(limit=500)
+    return items
 
 
 # ── Stato ultimo run (DB-based, container-friendly) ─────────────────────────

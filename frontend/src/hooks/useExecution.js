@@ -41,6 +41,7 @@ export function useExecution(projectId, options = {}) {
   const pendingOptsRef = useRef(null);
 
   const caricaRefs    = useRef({});
+  const caricaGenerationsRef = useRef({});
   const isCancelledRef = useRef(false);
 
   // Polling base dal hook condiviso
@@ -48,23 +49,36 @@ export function useExecution(projectId, options = {}) {
 
   // Cleanup carica refs su unmount
   useEffect(() => () => {
-    Object.values(caricaRefs.current).forEach(id => clearInterval(id));
+    Object.values(caricaRefs.current).forEach(id => clearTimeout(id));
     caricaRefs.current = {};
+    caricaGenerationsRef.current = {};
   }, []);
 
   const stopAllCaricaPolling = useCallback(() => {
-    Object.values(caricaRefs.current).forEach(id => clearInterval(id));
+    Object.values(caricaRefs.current).forEach(id => clearTimeout(id));
     caricaRefs.current = {};
+    caricaGenerationsRef.current = {};
     setCaricaPolling(false);
   }, []);
 const startCaricaPolling = useCallback((caricaTask) => {
     const { task_id } = caricaTask;
+    const generation = (caricaGenerationsRef.current[task_id] || 0) + 1;
+    caricaGenerationsRef.current[task_id] = generation;
+
+    const scheduleNext = () => {
+      if (!mountedRef.current || caricaGenerationsRef.current[task_id] !== generation) return;
+      caricaRefs.current[task_id] = setTimeout(poll, pollInterval);
+    };
 
     const poll = async () => {
+      if (!mountedRef.current || caricaGenerationsRef.current[task_id] !== generation) return;
       try {
         const data = await getTaskStatus(task_id);
-        if (!mountedRef.current) return;
-        if (!data) return;
+        if (!mountedRef.current || caricaGenerationsRef.current[task_id] !== generation) return;
+        if (!data) {
+          scheduleNext();
+          return;
+        }
 
         const isDone = ['success', 'failure', 'revoked'].includes(data.status);
 
@@ -101,35 +115,39 @@ const startCaricaPolling = useCallback((caricaTask) => {
         ));
 
         if (isDone) {
-          clearInterval(caricaRefs.current[task_id]);
+          clearTimeout(caricaRefs.current[task_id]);
           delete caricaRefs.current[task_id];
+          delete caricaGenerationsRef.current[task_id];
           if (Object.keys(caricaRefs.current).length === 0) {
             setCaricaPolling(false);
           }
+          return;
         }
       } catch (e) {
+        if (!mountedRef.current || caricaGenerationsRef.current[task_id] !== generation) return;
         // 404 = task non ancora registrato, aspetta il prossimo poll
-        if (e.response?.status === 404) return;
-        console.error('[useExecution] Errore polling CARICA:', e);
+        if (e.response?.status !== 404) {
+          console.error('[useExecution] Errore polling CARICA:', e);
+        }
       }
+      scheduleNext();
     };
 
     // Single-flight per task_id: se startCaricaPolling viene richiamato
     // sullo stesso task (retry, ri-build del result), non lasciare due
-    // interval orfani — clear del precedente prima di reassign.
+    // timeout orfani — clear del precedente prima di reassign.
     // Cfr. RESOURCE_LEAKS.md §3.
     if (caricaRefs.current[task_id]) {
-      clearInterval(caricaRefs.current[task_id]);
+      clearTimeout(caricaRefs.current[task_id]);
     }
-    // mountedRef guard PRIMA del setInterval. Pre-fix (P1 frontend-hooks):
+    // mountedRef guard PRIMA di avviare il loop. Pre-fix (P1 frontend-hooks):
     // startCaricaPolling poteva essere chiamato da una callback async di
     // un createTask che risolveva DOPO che il componente si era smontato
-    // → setInterval registrava un poll su componente unmounted. Il cleanup
+    // registrava un poll su componente unmounted. Il cleanup
     // useEffect alla riga 50-53 lo cancellava, ma il primo `poll()` sync
     // sotto poteva girare prima del cleanup → setState post-unmount.
     if (!mountedRef.current) return;
     poll();
-    caricaRefs.current[task_id] = setInterval(poll, pollInterval);
   }, [pollInterval, mountedRef]);
 const startCaricaTasksPolling = useCallback((pipelineResult) => {
     const tasks = pipelineResult?.carica?.tasks;

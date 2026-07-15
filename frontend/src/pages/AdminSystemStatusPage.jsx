@@ -343,9 +343,17 @@ export default function AdminSystemStatusPage() {
   }, []);
 
   useEffect(() => {
-    load();
-    const id = setInterval(load, REFRESH_INTERVAL_MS);
-    return () => clearInterval(id);
+    let stopped = false;
+    let timer = null;
+    const poll = async () => {
+      await load();
+      if (!stopped) timer = setTimeout(poll, REFRESH_INTERVAL_MS);
+    };
+    poll();
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [load]);
 
   const overall = useMemo(() => {

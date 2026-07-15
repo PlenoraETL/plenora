@@ -6,7 +6,7 @@ Endpoints CRUD per la gestione dei Data Source e operazioni sui file.
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Depends
 from fastapi.responses import StreamingResponse
-from typing import Optional
+from typing import Annotated, Optional
 
 from app.utils.logger import get_logger
 from app.core.datasources import errors as datasource_errors
@@ -44,6 +44,8 @@ from app.core.datasources.service import DataSourceService
 from app.core.datasources import dependency_checks as _dependency_checks
 from app.core.auth.visibility import visible_resource_ids
 from app.core.projects import usage as project_usage
+from app.config import settings
+from app.core.security.upload_guards import enforce_upload_size_limit
 
 logger = get_logger(__name__)
 
@@ -108,22 +110,31 @@ def create_datasource(data: DataSourceCreate, current_user: CurrentUser = Depend
 
 
 @router.get("", response_model=DataSourceList)
-def list_datasources(current_user: CurrentUser = Depends(require_not_esecutore)):
+def list_datasources(
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+):
     """Lista Data Source visibili: owned dal gruppo + condivisi via allowed_groups.
     Ogni record include `can_edit` calcolato per l'utente corrente."""
     is_super = current_user.role == "superadmin"
 
-    all_resources = _svc().list_datasources(group_id=None)
-
-    if not is_super:
+    if is_super:
+        all_resources = _svc().list_datasources(
+            group_id=None, limit=limit, offset=offset,
+        )
+    else:
         visible_ids = visible_resource_ids(
             'datasources',
             current_user.group_id,
             is_superadmin=False,
         )
-        all_resources.datasources = [
-            d for d in all_resources.datasources if d.id in visible_ids
-        ]
+        all_resources = _svc().list_datasources(
+            group_id=None,
+            resource_ids=visible_ids,
+            limit=limit,
+            offset=offset,
+        )
 
     # Calcola can_edit per ogni record
     for ds in all_resources.datasources:
@@ -349,6 +360,8 @@ def upload_file(
     """
     assert_group_access(_svc().get_datasource(ds_id), current_user, "Data Source")
     try:
+        max_upload_bytes = int(settings.get("MAX_FILE_SIZE", 100 * 1024 * 1024))
+        enforce_upload_size_limit(file, max_bytes=max_upload_bytes)
         # Upload streaming chunked: validate_no_executable sui primi 4KB
         # (header magic bytes sufficiente), poi write via `write_chunks`.
         # Peak RAM: ~4KB header + chunk buffer (~64KB) + bounded
@@ -384,10 +397,17 @@ def upload_file(
                 if not chunk:
                     break
                 total_bytes[0] += len(chunk)
+                if total_bytes[0] > max_upload_bytes:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="File troppo grande per il limite upload configurato.",
+                    )
                 yield chunk
 
         _svc().write_chunks(ds_id, path, _body_chunks())
         return {"ok": True, "path": path, "size": total_bytes[0]}
+    except HTTPException:
+        raise
     except DataSourceError as e:
         raise _ds_error_to_http(e)
     except Exception as e:

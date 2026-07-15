@@ -22,7 +22,7 @@ Main runtime domains:
 cd backend
 python -m venv venv
 source venv/bin/activate            # Windows: venv\Scripts\activate
-pip install -r requirements.txt -r requirements-dev.txt
+pip install --require-hashes -r requirements-dev.lock
 
 export PLENORA_ENCRYPTION_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
 export JWT_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"

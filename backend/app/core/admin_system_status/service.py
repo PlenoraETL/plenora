@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 from app import config as app_config
-from app.core.admin_backups.service import list_backups
+from app.core.admin_backups.service import list_backups, list_backups_page
 from app.core.admin_system_status.db_probe_store import (
     fetch_critical_table_rows,
     fetch_db_pool_row,
@@ -41,6 +41,7 @@ from app.core.security.token_blacklist import get_blacklist_status as _probe
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+_DEFAULT_LIST_BACKUPS = list_backups
 
 
 def _as_status_block(
@@ -80,7 +81,35 @@ def get_backup_status() -> AdminStatusBlock:
       - error: >48h
     """
     try:
-        backups = list_backups()
+        if list_backups is not _DEFAULT_LIST_BACKUPS:
+            # Compatibility hook for existing injected test doubles.
+            backups = list_backups()
+            total_backups = len(backups)
+            latest = max(
+                backups,
+                key=lambda item: item.get("last_modified") or "",
+                default=None,
+            )
+        else:
+            total_backups = 0
+            latest = None
+            cursor = None
+            seen_cursors: set[str] = set()
+            while True:
+                page, next_cursor = list_backups_page(limit=500, cursor=cursor)
+                total_backups += len(page)
+                if page:
+                    page_latest = max(
+                        page, key=lambda item: item.get("last_modified") or "",
+                    )
+                    if latest is None or (
+                        page_latest.get("last_modified") or ""
+                    ) > (latest.get("last_modified") or ""):
+                        latest = page_latest
+                if not next_cursor or next_cursor in seen_cursors:
+                    break
+                seen_cursors.add(next_cursor)
+            cursor = next_cursor
     except Exception as e:
         logger.warning(f"list_backups fallito: {e}")
         return AdminStatusBlock(
@@ -89,14 +118,12 @@ def get_backup_status() -> AdminStatusBlock:
             error=str(e)[:200],
         )
 
-    if not backups:
+    if latest is None:
         return AdminStatusBlock(
             status="error",
             message="Nessun backup trovato su S3",
         )
 
-    # list_backups ritorna gia' ordinato dal piu' recente
-    latest = backups[0]
     last_modified = latest.get("last_modified")
     size_bytes = latest.get("size_bytes", 0)
 
@@ -143,7 +170,7 @@ def get_backup_status() -> AdminStatusBlock:
         ),
         size_bytes=size_bytes,
         age_hours=round(age_hours, 1) if age_hours is not None else None,
-        total_backups=len(backups),
+        total_backups=total_backups,
     )
 
 

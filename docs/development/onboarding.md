@@ -98,7 +98,7 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 cd backend
 python -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt -r requirements-dev.txt
+pip install --require-hashes -r requirements-dev.lock
 uvicorn app.main:app --reload --port 5004
 ```
 

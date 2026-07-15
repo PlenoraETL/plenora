@@ -8,8 +8,15 @@ from typing import Optional
 import requests
 from requests.adapters import HTTPAdapter
 
+from app.shared.security.outbound_url import resolve_external_url
+
 _shared_session: Optional[requests.Session] = None
 _shared_session_lock = threading.Lock()
+DEFAULT_OUTBOUND_RESPONSE_MAX_BYTES = 32 * 1024 * 1024
+
+
+class OutboundResponseTooLarge(ValueError):
+    """Raised before an untrusted response can exhaust process memory."""
 
 
 class PinnedHostAdapter(HTTPAdapter):
@@ -91,4 +98,73 @@ def get_shared_session() -> requests.Session:
     return _shared_session
 
 
-__all__ = ["PinnedHostAdapter", "build_pinned_session", "get_shared_session"]
+def request_pinned(method: str, url: str, **kwargs) -> requests.Response:
+    """Execute a fully-buffered outbound request with DNS pinning.
+
+    Streaming callers must keep using their domain executor so the isolated
+    session can live as long as the response stream. This helper intentionally
+    covers the small JSON/token calls that previously validated and connected
+    in two separate steps.
+    """
+    if kwargs.pop("stream", False):
+        raise ValueError("request_pinned non supporta risposte streaming")
+    max_response_bytes = int(
+        kwargs.pop("max_response_bytes", DEFAULT_OUTBOUND_RESPONSE_MAX_BYTES)
+    )
+    if max_response_bytes <= 0:
+        raise ValueError("max_response_bytes deve essere positivo")
+    target = resolve_external_url(url)
+    headers = dict(kwargs.pop("headers", None) or {})
+    headers["Host"] = target.host_header
+    kwargs["allow_redirects"] = False
+    base_session = get_shared_session()
+    session = build_pinned_session(
+        base_session,
+        hostname=target.hostname,
+        pinned_url=target.pinned_url,
+    )
+    try:
+        response = session.request(
+            method,
+            target.pinned_url,
+            headers=headers,
+            stream=True,
+            **kwargs,
+        )
+        declared_size = response.headers.get("Content-Length")
+        if declared_size:
+            try:
+                parsed_size = int(declared_size)
+            except (TypeError, ValueError):
+                parsed_size = None
+            if parsed_size is not None and parsed_size > max_response_bytes:
+                response.close()
+                raise OutboundResponseTooLarge(
+                    f"Risposta esterna oltre il limite di {max_response_bytes} byte"
+                )
+
+        content = bytearray()
+        for chunk in response.iter_content(chunk_size=64 * 1024):
+            if not chunk:
+                continue
+            content.extend(chunk)
+            if len(content) > max_response_bytes:
+                response.close()
+                raise OutboundResponseTooLarge(
+                    f"Risposta esterna oltre il limite di {max_response_bytes} byte"
+                )
+        response._content = bytes(content)
+        response._content_consumed = True
+        return response
+    finally:
+        session.close()
+
+
+__all__ = [
+    "PinnedHostAdapter",
+    "OutboundResponseTooLarge",
+    "DEFAULT_OUTBOUND_RESPONSE_MAX_BYTES",
+    "build_pinned_session",
+    "get_shared_session",
+    "request_pinned",
+]

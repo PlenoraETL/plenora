@@ -89,6 +89,22 @@ def test_registry_filter_ignores_config(handlers):
     assert names(out) == ["a"]
 
 
+def test_registry_aggregate_uses_trimmed_output_alias(handlers):
+    registry = handlers.build_transform_handlers({})
+    inp = schema(col("categoria"), col("importo", "real"))
+    out = registry["aggregate"](
+        inp,
+        {
+            "group_by": ["categoria"],
+            "aggregations": [
+                {"column": "importo", "function": "sum", "alias": " aggregazioni "},
+            ],
+        },
+        NODE,
+    )
+    assert names(out) == ["categoria", "aggregazioni"]
+
+
 def test_registry_drop_via_dispatch(handlers):
     registry = handlers.build_transform_handlers({})
     inp = schema(col("a"), col("b"), col("c"))

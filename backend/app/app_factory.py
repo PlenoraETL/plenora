@@ -137,8 +137,10 @@ def create_app(
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):
         logger.error(
-            f"Eccezione non gestita: {request.method} {request.url.path} -> {exc}",
-            exc_info=True,
+            "Eccezione non gestita: %s %s (%s)",
+            request.method,
+            request.url.path,
+            type(exc).__name__,
         )
         return build_error_response(
             status_code=500,

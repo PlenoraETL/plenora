@@ -7,6 +7,7 @@
  */
 
 import http from './http';
+import { fetchAllOffsetPages } from './pagination';
 import { assertFileSize, throwIfUploadTooLarge } from './uploadGuards';
 
 /**
@@ -14,8 +15,7 @@ import { assertFileSize, throwIfUploadTooLarge } from './uploadGuards';
  * @returns {Promise<Array>} [{id, name, description, default_output_format, expected_columns_count, ...}]
  */
 export const listEseguibili = async () => {
-  const r = await http.get('/eseguibili');
-  return r.data;
+  return fetchAllOffsetPages('/eseguibili');
 };
 
 /**

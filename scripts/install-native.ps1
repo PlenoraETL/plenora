@@ -454,8 +454,9 @@ if (-not ($envList | Select-String -Pattern "^\s*$CondaEnv\s")) {
     # libjxl.so.0.11). Su win-64 partiamo senza pin: se gdalinfo fallisce
     # per DLL mancanti, aggiungere "libjxl=0.11.*" qui e annotare.
     & $condaBat create -y -n $CondaEnv -c conda-forge `
-        python=3.12 gdal=3.13.0 proj-data pyogrio geopandas-base `
-        pyproj shapely pandas numpy pyarrow openpyxl pip
+        python=3.12 gdal=3.13.0 proj-data pyogrio=0.13.0 geopandas-base=1.1.4 `
+        pyproj=3.7.2 shapely=2.1.2 pandas=3.0.3 numpy=2.5.1 `
+        pyarrow=25.0.0 openpyxl=3.1.5 pip
     if ($LASTEXITCODE -ne 0) { Fail 'conda create fallita (annotare output resolver)' }
 }
 $gdalVer = & $condaBat run -n $CondaEnv gdalinfo --version
@@ -463,15 +464,11 @@ if ($LASTEXITCODE -ne 0) { Fail "gdalinfo non parte nell'env (DLL? provare pin l
 Ok "Env conda pronto: $gdalVer"
 
 # -----------------------------------------------------------------------------
-Step 'Dipendenze pip (filtrando i pacchetti forniti da conda)'
+Step 'Dipendenze pip dal lock verificato'
 # -----------------------------------------------------------------------------
-$condaPkgs = 'geopandas', 'numpy', 'openpyxl', 'pandas', 'pyarrow', 'pyogrio', 'pyproj', 'shapely'
-$reqPip = Join-Path $BackendDir 'requirements-pip.txt'
-Get-Content (Join-Path $BackendDir 'requirements.txt') | Where-Object {
-    $pkg = ($_.Trim() -split '[<>=!~\[]')[0].Trim()
-    -not ($condaPkgs -contains $pkg)
-} | Set-Content -Encoding ascii $reqPip
-& $condaBat run -n $CondaEnv python -m pip install -r $reqPip
+$requirementsLock = Join-Path $BackendDir 'requirements.lock'
+if (-not (Test-Path $requirementsLock)) { Fail 'requirements.lock mancante' }
+& $condaBat run -n $CondaEnv python -m pip install --require-hashes -r $requirementsLock
 if ($LASTEXITCODE -ne 0) { Fail 'pip install fallita (annotare il pacchetto incriminato)' }
 & $condaBat run -n $CondaEnv python -c "import fastapi, dramatiq, psycopg, pika, apscheduler, croniter; print('deps ok')"
 if ($LASTEXITCODE -ne 0) { Fail 'import check fallito' }
@@ -565,6 +562,12 @@ if ($InstallObjectStorage) {
         $archive = Join-Path $env:TEMP 'seaweedfs-windows-amd64.zip'
         $extractDir = Join-Path $env:TEMP 'seaweedfs-windows-amd64'
         Invoke-WebRequest 'https://github.com/seaweedfs/seaweedfs/releases/download/4.29/windows_amd64.zip' -OutFile $archive
+        $actualHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+        $expectedHash = 'a5a343f2e2249b4e709842b846e596330a316e064b15f9d77899581ea545cb9b'
+        if ($actualHash -ne $expectedHash) {
+            Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
+            Fail "Checksum SeaweedFS non valido: $actualHash"
+        }
         if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force }
         Expand-Archive -LiteralPath $archive -DestinationPath $extractDir -Force
         $downloadedWeed = Get-ChildItem $extractDir -Recurse -Filter weed.exe | Select-Object -First 1
@@ -642,10 +645,7 @@ if ($InstallObjectStorage) {
 # W4 — Frontend: build Vite + Caddy come servizio Windows
 # =============================================================================
 if ($InstallFrontend) {
-    if (-not $FrontendApiUrl) {
-        $FrontendApiUrl = if ($FrontendPort -eq 80) { 'http://127.0.0.1' } else { "http://127.0.0.1:$FrontendPort" }
-    }
-    Step "W4: frontend (build Vite, API=$FrontendApiUrl) + Caddy su porta $FrontendPort"
+    Step "W4: frontend (build Vite, API same-origin /api) + Caddy su porta $FrontendPort"
 
     $FrontendDir = Join-Path $RepoRoot 'frontend'
     if (-not (Test-Path (Join-Path $FrontendDir 'package.json'))) { Fail "frontend non trovato in $FrontendDir" }
@@ -658,9 +658,8 @@ if ($InstallFrontend) {
         Fail "npm.cmd non trovato in '$npm' (Node.js LTS installato correttamente?)"
     }
 
-    # Build: VITE_API_URL e' cablata nel bundle a build-time (config.js).
-    # Con Caddy davanti, l'API e' sullo STESSO origin del FE: il valore
-    # giusto e' l'origin di Caddy (le chiamate /api vengono proxate).
+    # Vuoto = same-origin. Un valore assoluto serve solo a deployment
+    # intenzionalmente multi-host.
     Push-Location $FrontendDir
     $originalPath = $env:PATH
     try {
@@ -685,10 +684,8 @@ if ($InstallFrontend) {
     if (-not (Test-Path (Join-Path $distDir 'index.html'))) { Fail 'build FE senza dist\index.html' }
     Ok 'Frontend buildato (dist/)'
 
-    # CORS: il bundle chiama l'API su $FrontendApiUrl (assoluto). Se
-    # l'operatore naviga con un hostname diverso (localhost vs 127.0.0.1)
-    # il browser vede cross-origin e senza le origin nel backend il login
-    # muore con "Impossibile contattare il server" (visto sul campo).
+    # Manteniamo le origin locali per compatibilita' con tooling diretto; il
+    # browser in produzione usa /api same-origin e non dipende dal CORS.
     $portSuffix = if ($FrontendPort -eq 80) { '' } else { ":$FrontendPort" }
     Set-EnvValue -File $envFile -Key 'CORS_ORIGINS' -Value "http://127.0.0.1$portSuffix,http://localhost$portSuffix"
     $backendSvc = Get-Service plenora-backend -ErrorAction SilentlyContinue
@@ -748,7 +745,7 @@ if ($InstallFrontend) {
         Start-Sleep -Seconds 2
     }
     if (-not $up) { Fail "Caddy non in ascolto su $FrontendPort (vedi C:\plenora-services\plenora-caddy\*.log)" }
-    Ok "W4 completata: frontend su $FrontendApiUrl (login col superadmin dal browser della VM)"
+    Ok "W4 completata: frontend sulla porta $FrontendPort, API same-origin /api"
 }
 
 # -----------------------------------------------------------------------------

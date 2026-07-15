@@ -13,7 +13,7 @@ from typing import Any, Callable, Optional
 
 DbGetFileSource = Callable[..., Optional[dict[str, Any]]]
 DbDeleteFileSource = Callable[[str], Any]
-DbListFileSources = Callable[[Optional[str]], list[dict[str, Any]]]
+DbListFileSources = Callable[..., list[dict[str, Any]]]
 DbUpdateFileSourceMetadata = Callable[[str, dict[str, Any]], None]
 GetFileSource = Callable[[str], Optional[Any]]
 LoadDataFrame = Callable[..., tuple[Any, Optional[Any]]]
@@ -87,6 +87,9 @@ def delete_file_source(
 def list_file_sources(
     group_id: Optional[str] = None,
     *,
+    resource_ids: set[str] | None = None,
+    limit: int | None = None,
+    offset: int = 0,
     db_list_file_sources: DbListFileSources,
     get_file_source_by_id: GetFileSource,
     file_source_list_model: Any = None,
@@ -95,7 +98,12 @@ def list_file_sources(
 ) -> Any:
     """List file sources, preserving ``group_id=None`` as unfiltered."""
     try:
-        rows = db_list_file_sources(group_id)
+        rows = db_list_file_sources(
+            group_id,
+            resource_ids=resource_ids,
+            limit=limit,
+            offset=offset,
+        )
         files = []
         for row in rows:
             fs = get_file_source_by_id(row["id"])

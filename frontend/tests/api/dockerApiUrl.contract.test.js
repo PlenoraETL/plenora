@@ -20,6 +20,7 @@ describe('Docker frontend/backend API URL contract', () => {
     );
 
     expect(runtimeEnv).toContain("import.meta.env.VITE_API_URL");
+    expect(runtimeEnv).toContain("|| '').trim().replace");
     expect(config).toContain("FRONTEND_ENV.apiBaseUrl");
     expect(config).toContain("export const API_ENDPOINT = `${API_BASE_URL}/api`");
     expect(http).toContain("baseURL: API_ENDPOINT");
@@ -35,10 +36,12 @@ describe('Docker frontend/backend API URL contract', () => {
       'utf8',
     );
 
-    expect(dockerfile).toContain('ARG VITE_API_URL=http://localhost:5004');
+    expect(dockerfile).toContain('ARG VITE_API_URL=""');
     expect(dockerfile).toContain('ENV VITE_API_URL=${VITE_API_URL}');
     expect(dockerfile).toContain('ARG VITE_SENTRY_TRACES_SAMPLE_RATE="0.1"');
-    expect(compose).toContain('VITE_API_URL: ${FRONTEND_VITE_API_URL:-http://localhost:5004}');
+    expect(compose).toContain('VITE_API_URL: ${FRONTEND_VITE_API_URL:-}');
+    expect(fs.readFileSync(path.join(repoRoot, 'frontend/nginx.conf'), 'utf8'))
+      .toContain('proxy_pass http://backend:5004;');
     expect(compose).toContain('VITE_SENTRY_TRACES_SAMPLE_RATE: ${FRONTEND_VITE_SENTRY_TRACES_SAMPLE_RATE:-0.1}');
   });
 });

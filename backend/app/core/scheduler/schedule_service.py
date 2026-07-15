@@ -151,17 +151,29 @@ class ScheduleService:
             return None
         return updated_config
 
-    def list_schedules(self, project_id: Optional[str] = None,
-                       group_id: str = None) -> ScheduleList:
+    def list_schedules(
+        self,
+        project_id: Optional[str] = None,
+        group_id: str = None,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> ScheduleList:
         """Lista tutti gli schedule del gruppo, ordinati per data."""
         group_id = group_id or self.DEFAULT_GROUP
-        rows = db.list_schedule_rows(group_id)
+        if project_id is None and limit is None and offset == 0:
+            rows = db.list_schedule_rows(group_id)
+        else:
+            rows = db.list_schedule_rows(
+                group_id,
+                project_id=project_id,
+                limit=limit,
+                offset=offset,
+            )
         schedules = []
         for row in rows:
             config = self._row_to_config(row)
             if not config:
-                continue
-            if project_id and config.pipeline.project_id != project_id:
                 continue
             schedules.append(config)
 

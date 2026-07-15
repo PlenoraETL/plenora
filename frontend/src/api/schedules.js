@@ -8,11 +8,15 @@
 import http from './http';
 import { API_ENDPOINT } from './config';
 import { downloadBlob } from '../utils/downloadBlob';
+import { fetchAllOffsetPages } from './pagination';
 
 export const listSchedules = async (projectId = null) => {
   const params = projectId ? { project_id: projectId } : {};
-  const res = await http.get('/schedules', { params });
-  return res.data;
+  return fetchAllOffsetPages('/schedules', {
+    params,
+    extractItems: data => data.schedules,
+    mergeItems: items => ({ schedules: items, total: items.length }),
+  });
 };
 
 export const getSchedule = async (scheduleId) => {
@@ -63,8 +67,14 @@ export const getDownloadUrl = (scheduleId, run = null) => {
 };
 
 export const listScheduleRuns = async (scheduleId) => {
-  const res = await http.get(`/schedules/${scheduleId}/runs`);
-  return res.data;
+  return fetchAllOffsetPages(`/schedules/${scheduleId}/runs`, {
+    extractItems: data => data.runs,
+    mergeItems: (items, lastPage) => ({
+      ...lastPage,
+      runs: items,
+      runs_count: items.length,
+    }),
+  });
 };
 
 /**

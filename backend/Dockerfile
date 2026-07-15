@@ -10,7 +10,7 @@
 # Build deps marker: libpq-dev libgdal-dev build-essential
 # Runtime deps marker: libpq5 libgdal libmagic1
 
-FROM ubuntu:24.04 AS runtime
+FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     MAMBA_ROOT_PREFIX=/opt/conda \
@@ -47,8 +47,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get purge -y --auto-remove gnupg \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL https://micro.mamba.pm/api/micromamba/linux-64/latest \
-    | tar -xvj -C /usr/local/bin --strip-components=1 bin/micromamba
+ARG MICROMAMBA_VERSION=2.6.2-1
+ARG MICROMAMBA_SHA256=e9683b483df06dbd3fdd8a37f1b6826d7e5caf4e85bf15a0af4fbad3d4ad1a58
+RUN curl -fsSLo /tmp/micromamba \
+        "https://github.com/mamba-org/micromamba-releases/releases/download/${MICROMAMBA_VERSION}/micromamba-linux-64" \
+    && echo "${MICROMAMBA_SHA256}  /tmp/micromamba" | sha256sum -c - \
+    && install -m 0755 /tmp/micromamba /usr/local/bin/micromamba \
+    && rm -f /tmp/micromamba
 
 RUN micromamba create -y -n plenora -c conda-forge \
         python=3.12 \
@@ -58,28 +63,24 @@ RUN micromamba create -y -n plenora -c conda-forge \
         # gdalinfo non parte (drift upstream, visto 2026-07-04).
         "libjxl=0.11.*" \
         proj-data \
-        pyogrio \
-        geopandas-base \
-        pyproj \
-        shapely \
-        pandas \
-        numpy \
-        pyarrow \
-        openpyxl \
+        pyogrio=0.13.0 \
+        geopandas-base=1.1.4 \
+        pyproj=3.7.2 \
+        shapely=2.1.2 \
+        pandas=3.0.3 \
+        numpy=2.5.1 \
+        pyarrow=25.0.0 \
+        openpyxl=3.1.5 \
         pip \
     && micromamba clean -a -y
 
 WORKDIR /app
 
-COPY backend/requirements.txt ./requirements.txt
+COPY backend/requirements.lock ./requirements.lock
 
-# These packages are provided by conda-forge above. Let pip install the
-# application/runtime packages only, avoiding duplicate native geospatial stacks.
-RUN awk 'BEGIN {IGNORECASE=1} \
-    /^[[:space:]]*(geopandas|numpy|openpyxl|pandas|pyarrow|pyogrio|pyproj|shapely)(\[|[<>=!~[:space:]]|$)/ {print "# conda-forge provides: " $0; next} \
-    {print}' requirements.txt > requirements-pip.txt \
-    && pip install --upgrade pip setuptools wheel \
-    && pip install -r requirements-pip.txt
+# The native dataframe/geospatial packages above match this lock exactly, so
+# pip keeps the conda builds and installs only the missing hashed artifacts.
+RUN pip install --require-hashes -r requirements.lock
 
 RUN python --version \
     && gdalinfo --version \

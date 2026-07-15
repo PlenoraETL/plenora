@@ -398,12 +398,20 @@ function applyTransformation(node, inputColumns) {
       aggregations.forEach(agg => {
         const colName = resolveColumnName(inputColumns, agg.column_id, agg.column);
         const func = agg.function || 'count';
-        // Nome output potrebbe essere colonna_funzione o solo colonna
-        const outputName = aggregations.filter(a => a.column === colName).length > 1 
-          ? `${colName}_${func}` 
-          : colName;
+        // L'alias e' il nome effettivo prodotto dal backend e deve essere
+        // propagato immediatamente ai nodi downstream. Prima veniva ignorato:
+        // il canvas continuava quindi a esporre `colonna`/`colonna_funzione`
+        // fino al successivo save + refresh dell'inferenza server-side.
+        const alias = typeof agg.alias === 'string' ? agg.alias.trim() : '';
+        const outputName = alias || (
+          aggregations.filter(a => (
+            resolveColumnName(inputColumns, a.column_id, a.column) === colName
+          )).length > 1
+            ? `${colName}_${func}`
+            : colName
+        );
         
-        if (!result.find(c => c.name === outputName)) {
+        if (outputName && !result.find(c => c.name === outputName)) {
           const colType = func === 'count' ? 'int' : (func === 'concat' ? 'str' : 'real');
           result.push({ name: outputName, type: colType });
         }

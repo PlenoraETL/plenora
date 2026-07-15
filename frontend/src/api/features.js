@@ -6,11 +6,15 @@
  */
 
 import http from './http';
+import { fetchAllOffsetPages } from './pagination';
 
 const API_BASE = '/features';
 
 export async function listFeatureConnections() {
-  return http.get(`${API_BASE}/connections`).then(r => r.data);
+  return fetchAllOffsetPages(`${API_BASE}/connections`, {
+    extractItems: data => data.connections,
+    mergeItems: (items, lastPage) => ({ ...lastPage, connections: items }),
+  });
 }
 
 export async function createFeatureConnection(data) {

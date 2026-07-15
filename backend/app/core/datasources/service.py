@@ -40,8 +40,20 @@ class DataSourceService:
     Configurazioni e scan_state runtime nel DB (PostgreSQL).
     """
 
-    def list_datasources(self, group_id: Optional[str] = None) -> DataSourceList:
-        rows = datasource_db.list_datasources(group_id)
+    def list_datasources(
+        self,
+        group_id: Optional[str] = None,
+        resource_ids: set[str] | None = None,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> DataSourceList:
+        rows = datasource_db.list_datasources(
+            group_id,
+            resource_ids=resource_ids,
+            limit=limit,
+            offset=offset,
+        )
         result = []
         for row in rows:
             config = self._row_to_config(row)

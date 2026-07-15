@@ -59,7 +59,7 @@ describe('projects api contract', () => {
     const { downloadProjectOutput, getDownloadUrl } = await import('../../src/api/projects');
     const result = await downloadProjectOutput('proj-42', 'export.csv');
 
-    expect(getDownloadUrl('proj-42')).toBe('http://localhost:5004/api/projects/proj-42/download');
+    expect(getDownloadUrl('proj-42')).toBe('/api/projects/proj-42/download');
     expect(httpMock.get).toHaveBeenCalledWith('/projects/proj-42/download', {
       responseType: 'blob',
     });

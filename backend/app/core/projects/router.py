@@ -4,9 +4,9 @@ Router API per il modulo Projects.
 Endpoint CRUD progetti, gestione canvas, e inferenza schema.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
-from typing import Any, List, Optional
+from typing import Annotated, Any, List, Optional
 
 from app.utils.logger import get_logger
 from app.shared import error_codes
@@ -309,11 +309,15 @@ def restore_canvas_version(
 
 @router.get("")
 def list_projects(
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    offset: Annotated[int, Query(ge=0)] = 0,
     current_user: CurrentUser = Depends(require_not_esecutore),
 ) -> JsonObject:
     """Lista tutti i progetti con source_project_ids per manipola"""
     gid = group_filter(current_user)
-    project_list = _project_service.list_projects(group_id=gid)
+    project_list = _project_service.list_projects(
+        group_id=gid, limit=limit, offset=offset,
+    )
 
     # Batch-fetch dei canvas manipola in 1 query invece di N+1 chiamate
     # a `get_project_canvas`.
@@ -322,7 +326,8 @@ def list_projects(
     # e il sync e' gia' fatto in fase di save/load del canvas detail.
     canvas_by_id: dict = {}
     try:
-        for row in list_projects_with_canvas_for_datasource_check():
+        visible_project_ids = {str(project.id) for project in project_list.projects}
+        for row in list_projects_with_canvas_for_datasource_check(visible_project_ids):
             if row.get("project_type") == "manipola":
                 canvas_by_id[str(row["id"])] = row.get("canvas")
     except Exception as exc:

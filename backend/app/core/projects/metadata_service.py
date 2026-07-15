@@ -28,14 +28,26 @@ class ProjectMetadataService:
     def __init__(self, owner: "ProjectService") -> None:
         self._owner = owner
 
-    def list_projects(self, group_id: Optional[str] = None) -> ProjectList:
+    def list_projects(
+        self,
+        group_id: Optional[str] = None,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> ProjectList:
         """Lista progetti.
 
         - group_id=None → no filter (usato dal superadmin per vedere tutti i gruppi)
         - group_id="X" → solo progetti del gruppo X
         """
         self._owner._ensure_default_group()
-        rows = project_db.list_projects(group_id)
+        if limit is None and offset == 0:
+            # Preserve the narrow legacy port used by injected repositories.
+            rows = project_db.list_projects(group_id)
+        else:
+            rows = project_db.list_projects(
+                group_id, limit=limit, offset=offset,
+            )
         return ProjectList(
             projects=[
                 self._owner.project_row_to_metadata(row) for row in rows
