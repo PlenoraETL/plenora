@@ -202,6 +202,7 @@ def parse_layers_config(raw: str) -> list[Any]:
         selected_columns = item.get("selected_columns")
         if selected_columns is not None and (
             not isinstance(selected_columns, list)
+            or len(selected_columns) == 0
             or not all(
                 isinstance(column, str) and bool(column.strip())
                 for column in selected_columns
@@ -211,7 +212,7 @@ def parse_layers_config(raw: str) -> list[Any]:
                 status_code=400,
                 detail=(
                     f"layers_config[{index}].selected_columns deve essere "
-                    "null oppure un array di stringhe non vuote"
+                    "null oppure un array non vuoto di stringhe non vuote"
                 ),
             )
     return layers_config

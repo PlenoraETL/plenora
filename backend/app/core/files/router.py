@@ -31,6 +31,7 @@ from app.utils.logger import get_logger
 from app.core.files import upload_boundary as _upload_boundary
 from .models import (
     FileSource,
+    FileSourceUpdate,
     FileSourceLayersResponse,
     FileSourceList,
     FileSourcePreview,
@@ -373,6 +374,32 @@ def get_file(file_id: str, current_user: CurrentUser = Depends(require_not_esecu
     assert_resource_visible(file_source, "file_sources", current_user, "File")
     file_source.can_edit = compute_can_edit(file_source, current_user)
     return file_source
+
+
+@router.put("/{file_id}", response_model=FileSource)
+@audit_action(action="file.update", target_param="file_id")
+def update_file(
+    file_id: str,
+    data: FileSourceUpdate,
+    current_user: CurrentUser = Depends(require_file_owner),
+):
+    """Aggiorna i metadati del FileSource e ricalcola lo schema del foglio/layer."""
+    try:
+        file_source = file_source_service.update_file_source(file_id, data)
+        if file_source is None:
+            raise HTTPException(status_code=404, detail="File non trovato")
+        file_source.can_edit = True
+        return file_source
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error(f"[CRASH] Errore aggiornamento file: {exc}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail="Errore interno durante l'aggiornamento del file",
+        ) from exc
 
 
 @router.delete("/{file_id}", status_code=204)

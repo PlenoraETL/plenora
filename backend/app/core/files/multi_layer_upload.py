@@ -17,7 +17,7 @@ from app.core.io.zip_guards import (
 )
 
 
-_MULTI_LAYER_INNER_EXTENSIONS = ('.gpkg', '.gdb')
+_MULTI_LAYER_INNER_EXTENSIONS = ('.gpkg', '.gdb', '.xlsx', '.xls')
 
 
 def create_multi_layer_from_upload(
@@ -91,7 +91,7 @@ def create_multi_layer_from_upload(
     format_type = detect_format(filename)
     if format_type == 'zip':
         # Navigazione seekable; decompressione member a chunk nello spool.
-        # NB: SOLO .gpkg / .gdb (no .shp/.csv come create_from_upload).
+        # Sono ammessi i formati realmente multi-source gestiti dal wizard.
         outer_filename = filename
         try:
             # `open_zip_bytes_safe` valida i cap zip-bomb PRIMA di yield.
@@ -105,7 +105,7 @@ def create_multi_layer_from_upload(
 
                 if inner_name is None:
                     raise ValueError(
-                        f"ZIP non riconosciuto: nessun .gpkg/.gdb. "
+                        f"ZIP non riconosciuto: nessun .gpkg/.gdb/.xlsx/.xls. "
                         f"Contenuto: "
                         f"{names[:10]}{'...' if len(names) > 10 else ''}"
                     )
@@ -157,6 +157,20 @@ def create_multi_layer_from_upload(
         size_bytes=source_size,
     )
 
+    def cleanup_shared_blob() -> None:
+        shared_key = shared_blob_kwargs.get("storage_key")
+        if not shared_key:
+            return
+        try:
+            delete_blob(shared_key)
+        except Exception as cleanup_err:
+            logger.error(
+                f"event=orphan_blob_cleanup_failed "
+                f"batch_id={batch_id} "
+                f"storage_key={shared_key!r} "
+                f"error={cleanup_err!r}"
+            )
+
     # Loop di staging: parse + DTO build per ogni layer, ZERO side
     # effect DB. La persistenza avviene UNA volta sola dopo il loop
     # via db_save_file_sources_batch (E3 atomic transaction).
@@ -184,10 +198,18 @@ def create_multi_layer_from_upload(
                 df, gdf = load_by_format_stream(
                     source_stream, format_type, layer=layer, sheet=None,
                 )
-            if selected_columns:
-                valid_cols = [c for c in selected_columns if c in df.columns]
-                if valid_cols:
-                    df = df[valid_cols]
+            if selected_columns is not None:
+                missing_cols = [c for c in selected_columns if c not in df.columns]
+                if missing_cols:
+                    raise ValueError(
+                        "Colonne selezionate non presenti nel foglio/layer "
+                        f"'{layer}': {', '.join(missing_cols)}"
+                    )
+                if not selected_columns:
+                    raise ValueError(
+                        f"Seleziona almeno una colonna per '{layer}'"
+                    )
+                df = df[selected_columns]
             columns = column_builder_from_df(df, gdf, srid)
             row_count = len(df)
             if gdf is not None and hasattr(gdf, 'crs') and gdf.crs:
@@ -201,6 +223,12 @@ def create_multi_layer_from_upload(
                 crs = f"EPSG:{srid}"
         except Exception as e:
             logger.warning(f"Errore inferenza colonne layer '{layer}': {e}")
+            cleanup_shared_blob()
+            if owned_stream is not None:
+                owned_stream.close()
+            raise ValueError(
+                f"Impossibile leggere il foglio/layer '{layer}': {e}"
+            ) from e
 
         columns_dicts = [
             {"name": c.name, "type": c.type} if not isinstance(c, dict) else c
@@ -253,17 +281,7 @@ def create_multi_layer_from_upload(
         committed = True
     finally:
         if not committed:
-            shared_key = shared_blob_kwargs.get("storage_key")
-            if shared_key:
-                try:
-                    delete_blob(shared_key)
-                except Exception as cleanup_err:
-                    logger.error(
-                        f"event=orphan_blob_cleanup_failed "
-                        f"batch_id={batch_id} "
-                        f"storage_key={shared_key!r} "
-                        f"error={cleanup_err!r}"
-                    )
+            cleanup_shared_blob()
 
     for fs in created:
         logger.info(

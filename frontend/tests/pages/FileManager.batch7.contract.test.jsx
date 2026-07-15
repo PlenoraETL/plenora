@@ -50,6 +50,7 @@ vi.mock('../../src/context/AuthContext', () => ({
 }));
 vi.mock('../../src/api/files', () => ({
   getFiles: getFilesMock,
+  updateFile: vi.fn(),
   uploadFile: vi.fn(),
   uploadMultiLayer: vi.fn(),
   deleteFile: deleteFileMock,

@@ -33,6 +33,7 @@ USO TIPICO:
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 from typing import Optional
 
 from app.core.dataframes import export_writer as export_writer_module
@@ -432,6 +433,7 @@ def save_dataframe_to_result_blob_streaming(
     group_id: Optional[str] = None,
     geom_column: Optional[str] = None,
     crs: str = "EPSG:4326",
+    column_types: Optional[dict[str, str]] = None,
 ) -> str:
     """Persist DataFrame -> result blob streaming.
 
@@ -452,8 +454,9 @@ def save_dataframe_to_result_blob_streaming(
       - geojson: single-chunk via geospatial_dataframe_to_bytes
         (formato JSON-doc unico, non si splitta row-by-row senza
         rompere il formato).
-      - xlsx, xls: openpyxl write-only direttamente sul multipart writer;
+      - xlsx: openpyxl write-only direttamente sul multipart writer;
         nessun workbook object-model o BytesIO completo in RAM.
+        L'alias legacy xls viene normalizzato a formato/estensione xlsx.
       - shp, gpkg, gdb: single-chunk via geospatial writer (multi-file
         zippato / driver footer-based, richiedono buffer pieno).
 
@@ -470,7 +473,11 @@ def save_dataframe_to_result_blob_streaming(
     Returns:
         result_id del blob persistito.
     """
-    fmt_lower = (output_format or "").lower()
+    fmt_lower = export_writer_module.normalize_export_format(output_format)
+    if (output_format or "").strip().lower().lstrip(".") == "xls":
+        supplied_path = Path(filename)
+        if supplied_path.suffix.lower() == ".xls":
+            filename = str(supplied_path.with_suffix(".xlsx"))
 
     # Formati che vanno via streaming nativo: CSV/JSON tabular + Parquet
     # row-group via pyarrow.
@@ -518,10 +525,17 @@ def save_dataframe_to_result_blob_streaming(
                     "json",
                 ):
                     writer.write(chunk)
-        elif fmt_lower in {"xlsx", "xls"}:
+        elif fmt_lower == "xlsx":
             # Openpyxl write_only emette il contenitore ZIP direttamente sul
             # sink forward-only. Il buffer multipart resta limitato a 8 MiB.
-            export_writer_module.write_dataframe_to_xlsx_stream(df, writer)
+            if column_types:
+                export_writer_module.write_dataframe_to_xlsx_stream(
+                    df,
+                    writer,
+                    column_types=column_types,
+                )
+            else:
+                export_writer_module.write_dataframe_to_xlsx_stream(df, writer)
         elif fmt_lower in _PATH_BOUND_FORMATS:
             # Single-chunk: i writer binari richiedono buffer pieno
             # (footer-based: parquet/xlsx) o sono multi-file zippati (shp/gpkg/gdb).

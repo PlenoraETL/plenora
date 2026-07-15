@@ -243,6 +243,27 @@ def test_zip_unwrap_finds_gpkg_and_uses_inner_bytes(collaborators):
     assert build_kwargs["original_filename"] == "inner.gpkg"
 
 
+def test_zip_unwrap_supports_multi_sheet_xlsx(collaborators):
+    collaborators["detect_format"].side_effect = ["zip", "xlsx"]
+    inner_xlsx_bytes = b"inner xlsx payload"
+    zip_payload = _zip_bytes("workbook.xlsx", inner_xlsx_bytes)
+
+    out, mock_lbf = _create_multi(
+        collaborators,
+        zip_payload,
+        "bundle.zip",
+        "Workbook",
+        layers_config=[{"sheet": "Summary"}],
+    )
+
+    assert len(out) == 1
+    build_kwargs = collaborators["build_file_source"].call_args.kwargs
+    assert build_kwargs["format"] == "xlsx"
+    assert build_kwargs["sheet"] == "Summary"
+    assert build_kwargs["layer"] is None
+    assert mock_lbf.call_args.kwargs == {"layer": None, "sheet": "Summary"}
+
+
 # 6. BadZipFile -> ValueError, no save_batch
 
 
@@ -277,37 +298,39 @@ def test_zip_with_unsupported_content_raises_value_error(collaborators):
     collaborators["delete_blob"].assert_not_called()
 
 
-# 8. Parse failure per-layer: loop continua (soft preserve, E3 decision)
+# 8. Parse failure per-layer: batch abortito e shared blob ripulito
 
 
-def test_parse_failure_per_layer_continues_with_empty_columns(collaborators):
+def test_parse_failure_per_layer_aborts_batch_and_cleans_blob(collaborators):
     collaborators["detect_format"].return_value = "gpkg"
+    collaborators["dispatch_blob_storage"].return_value = {
+        "data": None,
+        "storage_key": "files/batch/blob",
+        "size_bytes": 3,
+    }
 
-    out, _mock_lbf = _create_multi(
-        collaborators, b"fake gpkg", "data.gpkg", "Multi",
-        layers_config=[
-            {"layer": "ok1"},
-            {"layer": "broken"},
-            {"layer": "ok3"},
-        ],
-        load_side_effect=[
-            (pd.DataFrame({"a": [1]}), None),
-            RuntimeError("parser exploded layer 2"),
-            (pd.DataFrame({"a": [2, 3]}), None),
-        ],
-    )
+    with pytest.raises(ValueError, match="foglio/layer 'broken'"):
+        _create_multi(
+            collaborators, b"fake gpkg", "data.gpkg", "Multi",
+            layers_config=[
+                {"layer": "ok1"},
+                {"layer": "broken"},
+                {"layer": "ok3"},
+            ],
+            load_side_effect=[
+                (pd.DataFrame({"a": [1]}), None),
+                RuntimeError("parser exploded layer 2"),
+                (pd.DataFrame({"a": [2, 3]}), None),
+            ],
+        )
 
-    assert len(out) == 3
     warning_calls = [
         c.args[0] for c in collaborators["logger"].warning.call_args_list
         if "Errore inferenza colonne layer 'broken'" in c.args[0]
     ]
     assert len(warning_calls) == 1
-    builds = _builds(collaborators)
-    assert builds[1]["columns"] == []
-    assert builds[1]["row_count"] == 0
-    assert collaborators["db_save_file_sources_batch"].call_count == 1
-    assert len(_batch_rows(collaborators)) == 3
+    collaborators["db_save_file_sources_batch"].assert_not_called()
+    collaborators["delete_blob"].assert_called_once_with("files/batch/blob")
 
 
 # 9. group_id None -> default_group propagato a tutti

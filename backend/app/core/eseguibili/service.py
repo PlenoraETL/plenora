@@ -438,7 +438,11 @@ def execute(
     )
 
     # 6. Lancia task enrichment
-    final_format = output_format or eseguibile.get("default_output_format") or "xlsx"
+    from app.core.dataframes.export_writer import normalize_export_format
+
+    final_format = normalize_export_format(
+        output_format or eseguibile.get("default_output_format") or "xlsx"
+    )
 
     # Determina il nome file finale (priorità: utente > default eseguibile > nome eseguibile
     # Strippa eventuale estensione: il task la riaggiunge con `final_format`

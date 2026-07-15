@@ -133,25 +133,22 @@ def load_by_format_stream(
 
 
 def list_excel_sheets_from_bytes(data: bytes) -> list[str]:
-    """List worksheet names in an XLSX file from bytes (no filesystem)."""
-    from openpyxl import load_workbook
-    wb = load_workbook(BytesIO(data), read_only=True, data_only=True)
+    """List worksheet names in an XLSX/XLS file from bytes."""
+    workbook = pd.ExcelFile(BytesIO(data))
     try:
-        return list(wb.sheetnames)
+        return list(workbook.sheet_names)
     finally:
-        wb.close()
+        workbook.close()
 
 
 def list_excel_sheets_from_stream(stream: BinaryIO) -> list[str]:
-    """Elenca i fogli da stream seekable senza materializzare il workbook."""
-    from openpyxl import load_workbook
-
+    """Elenca i fogli XLSX/XLS da stream seekable senza copiarne i byte."""
     stream.seek(0)
-    wb = load_workbook(stream, read_only=True, data_only=True)
+    workbook = pd.ExcelFile(stream)
     try:
-        return list(wb.sheetnames)
+        return list(workbook.sheet_names)
     finally:
-        wb.close()
+        workbook.close()
         stream.seek(0)
 
 

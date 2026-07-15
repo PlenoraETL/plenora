@@ -3456,6 +3456,57 @@
         "title": "FileSourcePreview",
         "type": "object"
       },
+      "FileSourceUpdate": {
+        "description": "Dati parziali per aggiornare un file sorgente.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layer"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "sheet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet"
+          }
+        },
+        "title": "FileSourceUpdate",
+        "type": "object"
+      },
       "Filter": {
         "description": "Filtro WHERE applicato a una colonna nel canvas.",
         "properties": {
@@ -11923,6 +11974,62 @@
           }
         ],
         "summary": "List Files",
+        "tags": [
+          "File Sources"
+        ]
+      },
+      "put": {
+        "description": "Aggiorna i metadati del FileSource e ricalcola lo schema del foglio/layer.",
+        "operationId": "update_file_api_files__file_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileSourceUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileSource"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update File",
         "tags": [
           "File Sources"
         ]

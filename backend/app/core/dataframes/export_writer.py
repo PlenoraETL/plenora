@@ -33,11 +33,12 @@ import io
 import json
 import math
 import queue
+import re
 import threading
 from contextlib import suppress
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 
 import numpy as np
 import pandas as pd
@@ -53,7 +54,55 @@ _XLSX_MAX_ROWS = 1_048_576
 _XLSX_MAX_COLUMNS = 16_384
 
 
-def _xlsx_cell_value(value: Any) -> Any:
+def normalize_export_format(dest_format: str) -> str:
+    """Return the canonical export format used for payload and metadata.
+
+    The legacy ``xls`` option has always been written with an XLSX engine.
+    Canonicalising it prevents OOXML bytes from being exposed with the
+    misleading binary-XLS extension.
+    """
+    fmt = (dest_format or "").strip().lower().lstrip(".")
+    return "xlsx" if fmt == "xls" else fmt
+
+
+def _is_declared_excel_temporal(raw_type: Any) -> bool:
+    logical = str(raw_type or "").strip().lower()
+    return logical in {"date", "datetime", "timestamp"} or logical.startswith(
+        "datetime64"
+    )
+
+
+def _coerce_declared_excel_temporal(value: Any, raw_type: Any) -> Any:
+    """Parse text only when its column is explicitly declared temporal."""
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        # The application accepts Italian day-first input, while ISO strings
+        # must retain year-first semantics (dayfirst=True swaps ambiguous ISO
+        # month/day values in pandas 3).
+        iso_year_first = re.match(r"^\d{4}[-/]\d{1,2}[-/]\d{1,2}", text)
+        parsed = pd.to_datetime(
+            text,
+            format="mixed",
+            dayfirst=not bool(iso_year_first),
+            errors="raise",
+        )
+    except (TypeError, ValueError, OverflowError):
+        # Mixed/dirty declared columns remain exportable: invalid cells stay
+        # text instead of being silently converted to NaT.
+        return value
+    if pd.isna(parsed):
+        return None
+    logical = str(raw_type or "").strip().lower()
+    if logical == "date":
+        return parsed.date()
+    return parsed
+
+
+def _xlsx_cell_value(value: Any, declared_type: Any = None) -> Any:
     """Normalize one pandas/numpy value for openpyxl without frame copies."""
     if value is None or value is pd.NA or value is pd.NaT:
         return None
@@ -72,18 +121,24 @@ def _xlsx_cell_value(value: Any) -> Any:
         if "." in text:
             text = text.rstrip("0").rstrip(".")
         return text or "0"
+    if _is_declared_excel_temporal(declared_type):
+        value = _coerce_declared_excel_temporal(value, declared_type)
     if isinstance(value, pd.Timestamp):
         value = value.to_pydatetime()
     elif isinstance(value, pd.Timedelta):
         return str(value)
     if isinstance(value, datetime):
         if value.tzinfo is not None and value.utcoffset() is not None:
-            raise ValueError(
-                "Excel non supporta datetime con timezone; "
-                "rimuovere la timezone prima dell'export"
-            )
+            value = value.astimezone(timezone.utc).replace(tzinfo=None)
+        # Excel's 1900 date system cannot round-trip these values reliably
+        # (openpyxl may read 1899-12-31 back as midnight time). Preserve the
+        # complete value as ISO text instead of rejecting or corrupting it.
+        if value.year < 1900:
+            return value.isoformat(sep=" ")
         return value
-    if isinstance(value, (date, time, timedelta, str, int, bool)):
+    if isinstance(value, date):
+        return value.isoformat() if value.year < 1900 else value
+    if isinstance(value, (time, timedelta, str, int, bool)):
         return value
     # pandas ExcelWriter converte gli object non nativi in testo. Manteniamo
     # lo stesso comportamento per dict/list/geometry e tipi applicativi.
@@ -95,6 +150,7 @@ def write_dataframe_to_xlsx_stream(
     sink: Any,
     *,
     sheet_name: str = "Sheet1",
+    column_types: Mapping[str, Any] | None = None,
 ) -> None:
     """Write an XLSX incrementally to a forward-only binary sink.
 
@@ -118,22 +174,25 @@ def write_dataframe_to_xlsx_stream(
             f"ricevute {column_count}"
         )
 
-    # Fallisce prima di aprire gli XML temporanei openpyxl. E' lo stesso
-    # vincolo applicato da pandas.to_excel, ma evita generatori write-only
-    # parzialmente aperti in caso di errore.
-    if any(isinstance(dtype, pd.DatetimeTZDtype) for dtype in df.dtypes):
-        raise ValueError(
-            "Excel non supporta datetime con timezone; "
-            "rimuovere la timezone prima dell'export"
-        )
-
     workbook = Workbook(write_only=True)
     saved = False
     try:
         worksheet = workbook.create_sheet(title=sheet_name)
         worksheet.append([_xlsx_cell_value(column) for column in df.columns])
+        declared_by_lower = {
+            str(name).lower(): declared_type
+            for name, declared_type in (column_types or {}).items()
+        }
+        declared_types = [
+            (column_types or {}).get(str(column))
+            or declared_by_lower.get(str(column).lower())
+            for column in df.columns
+        ]
         for row in df.itertuples(index=False, name=None):
-            worksheet.append([_xlsx_cell_value(value) for value in row])
+            worksheet.append([
+                _xlsx_cell_value(value, declared_type)
+                for value, declared_type in zip(row, declared_types)
+            ])
         workbook.save(sink)
         saved = True
     finally:
@@ -218,6 +277,7 @@ def dataframe_to_export_bytes(
     dest_format: str,
     *,
     chunksize: int = _DEFAULT_CHUNKSIZE,
+    column_types: Mapping[str, Any] | None = None,
 ) -> bytes:
     """Serializza `df` nel formato richiesto, ritorna i bytes.
 
@@ -229,7 +289,7 @@ def dataframe_to_export_bytes(
     Args:
         df: DataFrame pandas (o GeoDataFrame; il geojson branch ha la
             stessa semantica di to_json records).
-        dest_format: 'csv' | 'xlsx' | 'xls' | 'json' | 'geojson'.
+        dest_format: 'csv' | 'xlsx' | legacy alias 'xls' | 'json' | 'geojson'.
             Default per format sconosciuto: csv.
         chunksize: numero di righe per batch nella serializzazione
             CSV interna pandas (default 10_000). Riduce il peak
@@ -238,12 +298,13 @@ def dataframe_to_export_bytes(
     Returns:
         `bytes` del payload pronto per `DataSourceService.write_file()`.
     """
-    fmt = (dest_format or "").strip().lower().lstrip(".")
+    fmt = normalize_export_format(dest_format)
     buf = io.BytesIO()
 
-    if fmt in ("xlsx", "xls"):
-        # pandas Excel writer e' nativamente binary su buffer.
-        df.to_excel(buf, index=False)
+    if fmt == "xlsx":
+        # Unico path Excel: stesse policy per bytes e streaming (timezone,
+        # date dichiarate e valori anteriori al 1900).
+        write_dataframe_to_xlsx_stream(df, buf, column_types=column_types)
     elif fmt == "parquet":
         # engine="pyarrow" esplicito: gestisce Int64/Float64 nullable
         # nativamente (no degrado a float64 nel round-trip).
@@ -437,6 +498,7 @@ def dataframe_to_export_chunks(
     dest_format: str,
     *,
     chunksize: int = _DEFAULT_CHUNKSIZE,
+    column_types: Mapping[str, Any] | None = None,
 ) -> Iterator[bytes]:
     """Streaming export: yielda chunks invece di materializzare bytes.
 
@@ -452,7 +514,7 @@ def dataframe_to_export_chunks(
     Args:
         df: DataFrame pandas (o GeoDataFrame; geojson branch e'
             sintatticamente identico a json records).
-        dest_format: 'csv' | 'xlsx' | 'xls' | 'json' | 'geojson'.
+        dest_format: 'csv' | 'xlsx' | legacy alias 'xls' | 'json' | 'geojson'.
         chunksize: righe per batch nella serializzazione CSV pandas.
             Ignorato per JSON (pandas to_json non supporta chunksize)
             e XLSX (fallback).
@@ -468,12 +530,16 @@ def dataframe_to_export_chunks(
     caller generici. Il path canonical dei result usa invece
     ``write_dataframe_to_xlsx_stream`` direttamente sul writer multipart.
     """
-    fmt = (dest_format or "").strip().lower().lstrip(".")
+    fmt = normalize_export_format(dest_format)
 
-    if fmt in ("xlsx", "xls"):
+    if fmt == "xlsx":
         # Fallback: nessun vero streaming per openpyxl. Yield single
         # chunk (peak invariato rispetto a dataframe_to_export_bytes).
-        yield dataframe_to_export_bytes(df, dest_format)
+        yield dataframe_to_export_bytes(
+            df,
+            fmt,
+            column_types=column_types,
+        )
         return
 
     q: queue.Queue = queue.Queue(maxsize=_DEFAULT_QUEUE_MAXSIZE)
@@ -522,5 +588,6 @@ def dataframe_to_export_chunks(
 __all__ = [
     "dataframe_to_export_bytes",
     "dataframe_to_export_chunks",
+    "normalize_export_format",
     "write_dataframe_to_xlsx_stream",
 ]

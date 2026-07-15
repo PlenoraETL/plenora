@@ -268,6 +268,34 @@ def test_save_pipeline_result_outcome_shape(monkeypatch):
     assert saved_calls[0]["filename"] == "myreport.csv"
 
 
+def test_save_pipeline_result_normalizes_legacy_xls_to_xlsx(monkeypatch):
+    from app.core.results.pipeline_result import save_pipeline_result_outcome
+    import app.core.results.streaming_blob_writer as streaming_blob_writer
+
+    saved_calls = []
+
+    def fake_save_dataframe_to_result_blob_streaming(**kwargs):
+        saved_calls.append(kwargs)
+        return "res-xlsx"
+
+    monkeypatch.setattr(
+        streaming_blob_writer,
+        "save_dataframe_to_result_blob_streaming",
+        fake_save_dataframe_to_result_blob_streaming,
+    )
+
+    result = save_pipeline_result_outcome(
+        project_id="p1",
+        df=pd.DataFrame({"a": [1]}),
+        output_format="xls",
+        filename_stem="legacy-report",
+    )
+
+    assert result.output_filename == "legacy-report.xlsx"
+    assert saved_calls[0]["output_format"] == "xlsx"
+    assert saved_calls[0]["filename"] == "legacy-report.xlsx"
+
+
 def test_save_pipeline_result_rejects_unknown_format():
     """Formato non supportato → ValueError dalla serializzazione."""
     from app.core.results.pipeline_result import save_pipeline_result_outcome

@@ -85,6 +85,12 @@ export const getFile = async (fileId) => {
   return response.data;
 };
 
+/** Aggiorna metadati e selezione layer/sheet di un FileSource. */
+export const updateFile = async (fileId, data) => {
+  const response = await http.put(`/files/${fileId}`, data);
+  return response.data;
+};
+
 /**
  * Upload file multi-layer (GPKG, GDB): crea N FileSource separati, uno per layer.
  * @param {File} file - File da uploadare
@@ -173,6 +179,7 @@ export default {
   uploadFile,
   getFiles,
   getFile,
+  updateFile,
   deleteFile,
   getFileLayers,
   getFilePreview,

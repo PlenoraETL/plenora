@@ -189,38 +189,33 @@ def test_mime_block_short_circuits_before_parse_dispatch_db(collaborators):
     assert "create_from_upload bloccato (MIME)" in msg
 
 
-# 4. Parse failure: best-effort, NON aborta il flusso DB save
+# 4. Parse failure: fail-closed, nessun blob o record persistito
 
 
-def test_parse_failure_continues_with_empty_columns_and_saves_to_db(collaborators):
-    """load_by_format_bytes solleva -> logger.warning, columns=[],
-    row_count=0, MA dispatch e db_save SONO comunque chiamati."""
+def test_parse_failure_aborts_without_persisting(collaborators):
+    """Un file non leggibile non deve apparire come upload riuscito."""
     from app.core.files import upload as upload_mod
 
     with patch(
         "app.core.dataframes.load_dispatch.load_by_format_stream",
         side_effect=RuntimeError("parser exploded"),
     ):
-        out = upload_mod.create_from_upload(
-            io.BytesIO(b"data"), "data.csv", "BadFile",
-            group_id="g1",
-            **collaborators,
-        )
+        with pytest.raises(ValueError, match="Impossibile leggere il file"):
+            upload_mod.create_from_upload(
+                io.BytesIO(b"data"), "data.csv", "BadFile",
+                group_id="g1",
+                **collaborators,
+            )
 
     # Logger warning per il parse failure
     collaborators["logger"].warning.assert_called_once()
     msg = collaborators["logger"].warning.call_args[0][0]
     assert "Errore inferenza colonne" in msg
 
-    # DB save CHIAMATO comunque (best-effort save anche senza columns)
-    collaborators["db_save_file_source"].assert_called_once()
-    # column_builder_from_df NON chiamato (load fallisce prima)
+    collaborators["dispatch_blob_storage"].assert_not_called()
+    collaborators["db_save_file_source"].assert_not_called()
     collaborators["column_builder_from_df"].assert_not_called()
-    # DTO costruito con columns=[] e row_count=0
-    build_kwargs = collaborators["build_file_source"].call_args.kwargs
-    assert build_kwargs["columns"] == []
-    assert build_kwargs["row_count"] == 0
-    assert out is collaborators["build_file_source"].return_value
+    collaborators["build_file_source"].assert_not_called()
 
 
 # 5. Dispatch failure (orphan guard)

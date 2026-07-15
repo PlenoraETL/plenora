@@ -156,10 +156,16 @@ def create_from_upload(
         df, gdf = load_dispatch_module.load_by_format_stream(
             source_stream, format_type, layer=layer, sheet=sheet,
         )
-        if selected_columns:
-            valid_cols = [c for c in selected_columns if c in df.columns]
-            if valid_cols:
-                df = df[valid_cols]
+        if selected_columns is not None:
+            missing_cols = [c for c in selected_columns if c not in df.columns]
+            if missing_cols:
+                raise ValueError(
+                    "Colonne selezionate non presenti nel file: "
+                    + ", ".join(missing_cols)
+                )
+            if not selected_columns:
+                raise ValueError("Seleziona almeno una colonna")
+            df = df[selected_columns]
         columns = column_builder_from_df(df, gdf, srid)
         row_count = len(df)
         if gdf is not None and hasattr(gdf, 'crs') and gdf.crs:
@@ -173,6 +179,9 @@ def create_from_upload(
             crs = f"EPSG:{srid}"
     except Exception as e:
         logger.warning(f"Errore inferenza colonne: {e}")
+        if owned_stream is not None:
+            owned_stream.close()
+        raise ValueError(f"Impossibile leggere il file '{filename}': {e}") from e
 
     now = time_now()
     columns_dicts = [

@@ -6,7 +6,7 @@ Streaming end-to-end via `save_dataframe_to_result_blob_streaming` (combina
 Per formato:
   - csv, json: vero streaming via queue+thread bridge.
   - geojson: single-chunk (geospatial writer ritorna bytes interi).
-  - xlsx, xls, parquet, gpkg, shp, gdb: single-chunk by-design
+  - xlsx, parquet, gpkg, shp, gdb: single-chunk by-design
     (writer footer-based o multi-file zippato; lo SHP multi-file e'
     zippato dentro il boundary `io.geospatial.write_shapefile_zip_bytes`).
 
@@ -38,6 +38,7 @@ def save_pipeline_result_outcome(
     group_id: Optional[str] = None,
     geom_column: Optional[str] = None,
     crs: str = "EPSG:4326",
+    column_types: Optional[dict[str, str]] = None,
 ) -> PipelineResultSave:
     """Save a DataFrame as a result artifact through a single entry point.
 
@@ -45,16 +46,22 @@ def save_pipeline_result_outcome(
     `dataframe_to_export_chunks` (CSV/JSON via queue+thread bridge) con
     `StreamingResultBlobWriter` (S3 multipart o DB BYTEA buffer). Per
     CSV/JSON peak ridotto da `df + bytes_intere` a `df + chunk_buffer`.
-    Formati binari (parquet/xlsx/shp/gpkg/gdb) cadono su single-chunk
-    by-design (footer-based o multi-file) tramite save_dataframe_to_bytes
-    dentro il writer streaming.
+    Il nome legacy ``xls`` viene normalizzato a ``xlsx`` prima di creare
+    payload e metadati. I formati binari (parquet/xlsx/shp/gpkg/gdb) cadono
+    su single-chunk by-design (footer-based o multi-file) tramite
+    save_dataframe_to_bytes dentro il writer streaming.
     """
     from app.core.results.streaming_blob_writer import (
         save_dataframe_to_result_blob_streaming,
     )
 
-    fmt_lower = (output_format or "").lower()
-    supported_formats = {"csv", "json", "geojson", "xlsx", "xls", "parquet", "gpkg", "geopackage", "shp", "gdb"}
+    from app.core.dataframes.export_writer import normalize_export_format
+
+    fmt_lower = normalize_export_format(output_format)
+    supported_formats = {
+        "csv", "json", "geojson", "xlsx", "parquet",
+        "gpkg", "geopackage", "shp", "gdb",
+    }
     if fmt_lower not in supported_formats:
         raise ValueError(f"Formato output non supportato: {output_format}")
     # SHP esce zippato via `io.geospatial.write_shapefile_zip_bytes`;
@@ -73,6 +80,7 @@ def save_pipeline_result_outcome(
         group_id=group_id,
         geom_column=geom_column,
         crs=crs,
+        column_types=column_types,
     )
     output_columns = None
     try:

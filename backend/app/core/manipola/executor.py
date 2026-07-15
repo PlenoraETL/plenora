@@ -1369,6 +1369,12 @@ class ManipolaExecutor:
             # geojson (zero temp); i formati container sono gestiti
             # dentro il boundary risultati, senza duplicare branch nel
             # caller.
+            column_types = None
+            if canvas is not None:
+                column_types = self._costruisci_mappa_tipi_canvas(
+                    canvas,
+                    canvas_graph=canvas_graph,
+                )
             saved = save_pipeline_result_outcome(
                 project_id=project_id,
                 df=df,
@@ -1378,11 +1384,15 @@ class ManipolaExecutor:
                 group_id=group_id,
                 geom_column=geom_col,
                 crs=crs,
+                column_types=column_types,
+            )
+            saved_format = (
+                "xlsx" if str(fmt).lower() == "xls" else str(fmt).lower()
             )
             return {
                 "success": True,
                 "output_path": saved.output_filename,
-                "format": fmt.lower(),
+                "format": saved_format,
                 "rows_count": len(df),
                 "columns_count": len(df.columns),
                 "result_id": saved.result_id,

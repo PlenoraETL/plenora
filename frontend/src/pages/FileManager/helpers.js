@@ -31,3 +31,35 @@ export const formatFileSize = (bytes) => {
 };
 
 export const SPATIAL_FORMATS = ['gpkg', 'shp', 'gdb', 'geojson'];
+
+export const resolveMultiSourcePreview = (preview = {}) => {
+  const sheets = preview.sheets || [];
+  const layers = preview.layers || [];
+  const sourceKind = sheets.length > 0 ? 'sheet' : (layers.length > 0 ? 'layer' : null);
+  return {
+    sourceKind,
+    itemList: sourceKind === 'sheet' ? sheets : layers,
+  };
+};
+
+export const buildMultiSourceSelection = ({
+  checkedLayers,
+  layerColumns,
+  layerSelectedCols,
+  isSheet,
+}) => {
+  const checkedNames = Object.entries(checkedLayers)
+    .filter(([, checked]) => checked)
+    .map(([name]) => name);
+  const emptySelection = checkedNames.find(
+    name => (layerColumns[name]?.length || 0) > 0
+      && (layerSelectedCols[name]?.length || 0) === 0
+  );
+  const config = checkedNames.map(name => ({
+    [isSheet ? 'sheet' : 'layer']: name,
+    selected_columns: (layerColumns[name]?.length || 0) > 0
+      ? layerSelectedCols[name]
+      : null,
+  }));
+  return { config, emptySelection };
+};

@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
   getFiles,
+  updateFile,
   uploadFile,
   uploadMultiLayer,
   deleteFile,
@@ -30,6 +31,8 @@ import {
   getFormatConfig,
   formatFileSize,
   SPATIAL_FORMATS,
+  buildMultiSourceSelection,
+  resolveMultiSourcePreview,
 } from './FileManager/helpers';
 import FileCard from './FileManager/FileCard';
 import UploadModal from './FileManager/UploadModal';
@@ -89,6 +92,7 @@ const FileManager = () => {
 
   // Multi-layer wizard
   const [isMultiLayerFile,  setIsMultiLayerFile]  = useState(false);
+  const [multiSourceKind,   setMultiSourceKind]   = useState(null);
   const [checkedLayers,     setCheckedLayers]     = useState({});
   const [layerColumns,      setLayerColumns]      = useState({});
   const [layerSelectedCols, setLayerSelectedCols] = useState({});
@@ -157,8 +161,13 @@ const _loadColumnsForLayer = async (file, layerName, currentCols, currentSelecte
   const handleLayerTabChange = (layerName) => {
     setActiveLayerTab(layerName);
     if (!layerColumns[layerName] || layerColumns[layerName].length === 0) {
-      const ext = uploadFile_?.name.split('.').pop().toLowerCase();
-      _loadColumnsForLayer(uploadFile_, layerName, layerColumns, layerSelectedCols, ['xlsx','xls'].includes(ext));
+      _loadColumnsForLayer(
+        uploadFile_,
+        layerName,
+        layerColumns,
+        layerSelectedCols,
+        multiSourceKind === 'sheet',
+      );
     }
   };
 
@@ -178,10 +187,17 @@ const _loadColumnsForLayer = async (file, layerName, currentCols, currentSelecte
     });
   };
 const handleMultiLayerUpload = async () => {
-    const isSheet = ['xlsx','xls'].includes(uploadFile_?.name.split('.').pop().toLowerCase());
-    const selectedLayers = Object.entries(checkedLayers)
-      .filter(([, checked]) => checked)
-      .map(([name]) => ({ [isSheet ? 'sheet' : 'layer']: name, selected_columns: layerSelectedCols[name]?.length > 0 ? layerSelectedCols[name] : null }));
+    const isSheet = multiSourceKind === 'sheet';
+    const { config: selectedLayers, emptySelection } = buildMultiSourceSelection({
+      checkedLayers,
+      layerColumns,
+      layerSelectedCols,
+      isSheet,
+    });
+    if (emptySelection) {
+      setUploadError(`Seleziona almeno una colonna per "${emptySelection}"`);
+      return;
+    }
     if (selectedLayers.length === 0) { setUploadError('Seleziona almeno un layer'); return; }
     setUploading(true); setUploadError(null);
     try {
@@ -198,26 +214,23 @@ const handleNextStep = async () => {
     setLoadingColumns(true); setUploadError(null);
     try {
       const ext = uploadFile_.name.split('.').pop().toLowerCase();
-      const isMultiLayer  = ['gpkg','gdb'].includes(ext);
-      const isMultiSheet  = ['xlsx','xls'].includes(ext);
-
-      if (isMultiLayer || isMultiSheet) {
-        const preview  = await previewFileTemp(uploadFile_);
-        const itemList = isMultiSheet ? (preview.sheets || []) : (preview.layers || []);
-        if (itemList.length > 1) {
-          const initChecked = {}, initCols = {}, initSelected = {};
-          itemList.forEach(l => { initChecked[l] = true; initCols[l] = []; initSelected[l] = []; });
-          setIsMultiLayerFile(true);
-          setCheckedLayers(initChecked); setLayerColumns(initCols); setLayerSelectedCols(initSelected);
-          setActiveLayerTab(itemList[0]); setAvailableLayers(itemList);
-          setUploadStep(2); setLoadingColumns(false);
-          _loadColumnsForLayer(uploadFile_, itemList[0], initCols, initSelected, isMultiSheet);
-          return;
-        }
-        if (itemList.length === 1) { isMultiSheet ? setUploadSheet(itemList[0]) : setUploadLayer(itemList[0]); }
+      const preview = await previewFileTemp(uploadFile_);
+      const { sourceKind, itemList } = resolveMultiSourcePreview(preview);
+      if (itemList.length > 1) {
+        const initChecked = {}, initCols = {}, initSelected = {};
+        itemList.forEach(l => { initChecked[l] = true; initCols[l] = []; initSelected[l] = []; });
+        setIsMultiLayerFile(true);
+        setMultiSourceKind(sourceKind);
+        setCheckedLayers(initChecked); setLayerColumns(initCols); setLayerSelectedCols(initSelected);
+        setActiveLayerTab(itemList[0]); setAvailableLayers(itemList);
+        setUploadStep(2); setLoadingColumns(false);
+        _loadColumnsForLayer(uploadFile_, itemList[0], initCols, initSelected, sourceKind === 'sheet');
+        return;
+      }
+      if (itemList.length === 1) {
+        sourceKind === 'sheet' ? setUploadSheet(itemList[0]) : setUploadLayer(itemList[0]);
       }
 
-      const preview = await previewFileTemp(uploadFile_);
       if (preview.columns?.length > 0) {
         setIsMultiLayerFile(false);
         setAvailableColumns(preview.columns);
@@ -277,7 +290,20 @@ const handleUpload = async () => {
     } finally { setUploading(false); }
   };
 
-  const handleConfirmLayer = async () => { if (!pendingFile) return; await loadFiles(); resetLayerModal(); };
+  const handleConfirmLayer = async () => {
+    if (!pendingFile) return;
+    try {
+      await updateFile(pendingFile.id, {
+        layer: selectedLayer || null,
+        sheet: selectedSheet || null,
+      });
+      await loadFiles();
+      resetLayerModal();
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      toast.error(typeof detail === 'string' ? detail : (err.message || 'Errore nella selezione del foglio'));
+    }
+  };
 const handlePreview = async (file) => {
     try {
       const preview = await getFilePreview(file.id, 50);
@@ -332,7 +358,7 @@ const resetUploadModal = () => {
     setShowUploadModal(false); setUploadFile(null); setUploadName(''); setUploadDescription('');
     setUploadLayer(''); setUploadSheet(''); setUploadError(null); setUploadStep(1);
     setAvailableColumns([]); setSelectedColumns([]); setDetectedSrid(null); setUserSrid(''); setHasGeometryColumn(false);
-    setIsMultiLayerFile(false); setCheckedLayers({}); setLayerColumns({}); setLayerSelectedCols({}); setActiveLayerTab(null); setAvailableLayers([]);
+    setIsMultiLayerFile(false); setMultiSourceKind(null); setCheckedLayers({}); setLayerColumns({}); setLayerSelectedCols({}); setActiveLayerTab(null); setAvailableLayers([]);
   };
   const resetLayerModal = () => { setShowLayerModal(false); setPendingFile(null); setAvailableLayers([]); setAvailableSheets([]); setSelectedLayer(''); setSelectedSheet(''); };
   const filteredFiles = files.filter(f => {

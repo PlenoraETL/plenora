@@ -72,6 +72,8 @@ pyarrow>=24.0.0
 # Pin minimum sui wheel API.
 pyogrio>=0.12.1
 openpyxl>=3.1.5
+# Lettura dei workbook binari Excel 97-2003 (.xls). openpyxl copre solo XLSX.
+xlrd>=2.0.2
 
 # Network / HTTP clients
 requests>=2.34.2

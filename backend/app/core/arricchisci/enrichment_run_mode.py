@@ -189,13 +189,15 @@ class EseguibileRunMode(EnrichmentRunMode):
         # Eseguibile: output DataFrame → object storage (S3) via streaming chunks.
         # Niente DB result/output_contract. result_id resta None (il frontend
         # scarica via download_url, vedi decorate_result).
-        fmt_lower = (final_format or "").lower()
+        requested_format = (final_format or "").strip().lower().lstrip(".")
+        fmt_lower = dataframe_export_writer.normalize_export_format(final_format)
         # SHP esce zippato: rinomina il filename su storage in `.zip`.
-        storage_filename = (
-            Path(final_filename).with_suffix(".zip").name
-            if fmt_lower == "shp"
-            else final_filename
-        )
+        if fmt_lower == "shp":
+            storage_filename = Path(final_filename).with_suffix(".zip").name
+        elif requested_format == "xls":
+            storage_filename = Path(final_filename).with_suffix(".xlsx").name
+        else:
+            storage_filename = final_filename
         eseg_storage.save_chunks(
             task_id,
             storage_filename,

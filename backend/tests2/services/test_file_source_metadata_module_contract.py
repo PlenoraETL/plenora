@@ -74,7 +74,9 @@ def test_list_file_sources_preserves_none_filter_and_skips_missing_rows():
         logger=MagicMock(),
     )
 
-    db_list.assert_called_once_with(None)
+    db_list.assert_called_once_with(
+        None, resource_ids=None, limit=None, offset=0
+    )
     assert out.files == ["a", "b"]
 
 
@@ -134,9 +136,45 @@ def test_update_file_source_refreshes_columns_when_layer_changes():
     assert out.columns == [{"name": "city", "type": "str"}]
     assert out.row_count == 2
     assert out.updated_at is now
-    load_dataframe.assert_called_once_with("file-1", expected_group_id="group-1")
+    load_dataframe.assert_called_once_with(
+        "file-1", layer="roads", sheet=None, expected_group_id="group-1"
+    )
     db_update.assert_called_once()
     assert db_update.call_args.args[1]["row_count"] == 2
+
+
+def test_update_file_source_invalid_sheet_fails_without_mutating_metadata():
+    from app.core.files.source_metadata import update_file_source
+
+    file_source = SimpleNamespace(
+        id="file-1",
+        name="source",
+        group_id="group-1",
+        layer=None,
+        sheet="Original",
+        columns=[{"name": "old", "type": "str"}],
+        row_count=1,
+    )
+    db_update = MagicMock()
+
+    with pytest.raises(ValueError, match="Foglio inesistente"):
+        update_file_source(
+            "file-1",
+            {"layer": None, "sheet": "Missing"},
+            get_file_source_by_id=MagicMock(return_value=file_source),
+            load_dataframe=MagicMock(
+                side_effect=ValueError("Foglio inesistente")
+            ),
+            column_builder_from_dataframe=MagicMock(),
+            time_now=MagicMock(),
+            db_update_file_source_metadata=db_update,
+            use_app_models=True,
+            logger=MagicMock(),
+        )
+
+    assert file_source.sheet == "Original"
+    assert file_source.columns == [{"name": "old", "type": "str"}]
+    db_update.assert_not_called()
 
 
 def test_update_file_source_db_error_does_not_rehydrate_blob():

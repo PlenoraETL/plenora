@@ -11,6 +11,7 @@
  */
 
 import React from 'react';
+import { MAX_UPLOAD_SIZE_BYTES } from '../../api/uploadGuards';
 import Wizard from '../../components/common/Wizard';
 import { formatFileSize } from './helpers';
 
@@ -43,7 +44,9 @@ function UploadModal({
           <>
             <div className="fm__modal-drop-icon">↑</div>
             <div className="fm__modal-drop-text">Trascina qui il file oppure clicca</div>
-            <div className="fm__modal-drop-sub">Max 500 MB per file</div>
+            <div className="fm__modal-drop-sub">
+              Max {Math.round(MAX_UPLOAD_SIZE_BYTES / (1024 * 1024))} MB per file
+            </div>
           </>
         )}
       </div>

@@ -77,6 +77,19 @@ describe('files api contract', () => {
     expect(result).toEqual({ rows: [] });
   });
 
+  it('updateFile persists the selected sheet through the file endpoint', async () => {
+    httpMock.put.mockResolvedValueOnce({ data: { id: 'file-77', sheet: 'Q2' } });
+    const { updateFile } = await import('../../src/api/files');
+
+    const result = await updateFile('file-77', { layer: null, sheet: 'Q2' });
+
+    expect(httpMock.put).toHaveBeenCalledWith('/files/file-77', {
+      layer: null,
+      sheet: 'Q2',
+    });
+    expect(result.sheet).toBe('Q2');
+  });
+
 
   it('uploadFile rejects oversized files client-side without calling backend', async () => {
     const { uploadFile } = await import('../../src/api/files');

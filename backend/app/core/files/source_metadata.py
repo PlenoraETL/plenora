@@ -141,24 +141,32 @@ def update_file_source(
         if hasattr(data, "model_dump")
         else data
     )
+    if "layer" in update_data or "sheet" in update_data:
+        target_layer = update_data.get("layer", file_source.layer)
+        target_sheet = update_data.get("sheet", file_source.sheet)
+        if target_layer and target_sheet:
+            raise ValueError("Specificare un solo valore tra layer e sheet")
+        df, gdf = load_dataframe(
+            file_id,
+            layer=target_layer,
+            sheet=target_sheet,
+            expected_group_id=file_source.group_id,
+        )
+        raw_cols = column_builder_from_dataframe(df, gdf)
+        refreshed_columns = [
+            {"name": c.name, "type": c.type}
+            if not isinstance(c, dict)
+            else c
+            for c in raw_cols
+        ]
+        refreshed_row_count = len(df)
+
     for field_name, value in update_data.items():
         setattr(file_source, field_name, value)
 
     if "layer" in update_data or "sheet" in update_data:
-        try:
-            df, gdf = load_dataframe(
-                file_id, expected_group_id=file_source.group_id,
-            )
-            raw_cols = column_builder_from_dataframe(df, gdf)
-            file_source.columns = [
-                {"name": c.name, "type": c.type}
-                if not isinstance(c, dict)
-                else c
-                for c in raw_cols
-            ]
-            file_source.row_count = len(df)
-        except Exception as e:
-            logger.warning(f"Errore aggiornamento colonne: {e}")
+        file_source.columns = refreshed_columns
+        file_source.row_count = refreshed_row_count
 
     file_source.updated_at = time_now()
     metadata = file_source.model_dump(mode="json") if use_app_models else {}

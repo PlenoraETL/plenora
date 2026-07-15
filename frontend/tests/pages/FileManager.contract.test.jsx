@@ -44,6 +44,7 @@ vi.mock('../../src/context/AuthContext', () => ({
 
 vi.mock('../../src/api/files', () => ({
   getFiles: getFilesMock,
+  updateFile: vi.fn(),
   uploadFile: vi.fn(),
   uploadMultiLayer: vi.fn(),
   deleteFile: vi.fn(),
@@ -112,5 +113,14 @@ describe('FileManager', () => {
     });
     expect(await screen.findByText(/preview — cities/i)).toBeInTheDocument();
     expect(screen.getByText('Rome')).toBeInTheDocument();
+  });
+
+  it('shows the real 100 MB upload limit', async () => {
+    render(<FileManager />);
+    await screen.findByText('Cities');
+
+    await userEvent.click(screen.getByRole('button', { name: /Carica File/i }));
+
+    expect(await screen.findByText(/Max 100 MB per file/i)).toBeInTheDocument();
   });
 });

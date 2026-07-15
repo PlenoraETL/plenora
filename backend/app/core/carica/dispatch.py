@@ -34,7 +34,10 @@ from app.core.carica.rest_config_parser import parse_carica_rest_config
 from app.core.carica.rest_write_boundary import execute_carica_rest_write
 from app.core.connections.rest_sink import RestSinkHttpResponse
 from app.core.connections.service import ConnectionService
-from app.core.dataframes.export_writer import dataframe_to_export_chunks
+from app.core.dataframes.export_writer import (
+    dataframe_to_export_chunks,
+    normalize_export_format,
+)
 from app.core.datasources.service import DataSourceService
 from app.core.projects.runtime_context import get_project_runtime_context
 from app.core.projects.service import ProjectService
@@ -207,6 +210,8 @@ def execute_datasource_write(
             'total_rows': len(df),
         }
 
+    requested_format = (dest_format or '').strip().lower().lstrip('.')
+    dest_format = normalize_export_format(dest_format)
     progress(20, f'Serializzazione DataFrame ({dest_format})...')
     progress(50, f'Scrittura su DataSource {datasource_id}...')
 
@@ -214,10 +219,16 @@ def execute_datasource_write(
         ds_service = _get_datasource_service()
 
         # Componi path: dest_folder + dest_filename + .ext
-        ext = f'.{dest_format}' if not dest_filename.endswith(f'.{dest_format}') else ''
         # Sanitizza per prevenire path traversal
         safe_folder = PurePosixPath(dest_folder).as_posix().replace('..', '').strip('/')
         safe_filename = PurePosixPath(dest_filename).name  # solo il nome, no directory
+        if requested_format == 'xls' and safe_filename.lower().endswith('.xls'):
+            safe_filename = f'{safe_filename[:-4]}.xlsx'
+        ext = (
+            f'.{dest_format}'
+            if not safe_filename.lower().endswith(f'.{dest_format}')
+            else ''
+        )
         path = f'{safe_folder}/{safe_filename}{ext}'.lstrip('/')
 
         ds_service.write_chunks(

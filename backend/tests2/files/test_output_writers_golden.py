@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+from datetime import datetime
 from decimal import Decimal
 
 import pandas as pd
@@ -220,12 +221,69 @@ def test_xlsx_stream_writer_is_forward_only_and_roundtrips(
     assert back.iloc[2]["name"] == "北京 用户"
 
 
-def test_xlsx_stream_writer_rejects_timezone_aware_datetimes():
+def test_xlsx_stream_writer_normalizes_timezone_aware_datetimes_to_utc():
+    from openpyxl import load_workbook
+
     from app.core.dataframes.export_writer import write_dataframe_to_xlsx_stream
 
-    df = pd.DataFrame({"when": [pd.Timestamp("2026-07-13T10:00:00Z")]})
-    with pytest.raises(ValueError, match="timezone"):
-        write_dataframe_to_xlsx_stream(df, _ForwardOnlyXlsxSink())
+    df = pd.DataFrame({"when": [pd.Timestamp("2026-07-13T12:00:00+02:00")]})
+    sink = _ForwardOnlyXlsxSink()
+    write_dataframe_to_xlsx_stream(df, sink)
+
+    workbook = load_workbook(io.BytesIO(sink.getvalue()), data_only=True)
+    value = workbook.active["A2"].value
+    assert value == datetime(2026, 7, 13, 10, 0)
+    assert value.tzinfo is None
+
+
+def test_xlsx_declared_dates_are_cells_and_pre_1900_values_are_preserved():
+    from openpyxl import load_workbook
+
+    from app.core.dataframes.export_writer import write_dataframe_to_xlsx_stream
+
+    df = pd.DataFrame(
+        {
+            "date_it": ["31/12/2024", "dato-non-valido"],
+            "datetime_iso": ["2024-02-03T14:15:16+02:00", None],
+            "plain_text": ["31/12/2024", "testo"],
+            "old_date": ["1899-12-31", "1890-06-15"],
+        }
+    )
+    sink = _ForwardOnlyXlsxSink()
+    write_dataframe_to_xlsx_stream(
+        df,
+        sink,
+        column_types={
+            "date_it": "date",
+            "datetime_iso": "datetime",
+            "old_date": "date",
+        },
+    )
+
+    workbook = load_workbook(io.BytesIO(sink.getvalue()), data_only=True)
+    sheet = workbook.active
+    assert sheet["A2"].value == datetime(2024, 12, 31)
+    assert sheet["A2"].is_date
+    assert sheet["A3"].value == "dato-non-valido"
+    assert sheet["B2"].value == datetime(2024, 2, 3, 12, 15, 16)
+    assert sheet["B2"].is_date
+    assert sheet["C2"].value == "31/12/2024"
+    assert not sheet["C2"].is_date
+    assert sheet["D2"].value == "1899-12-31"
+    assert sheet["D3"].value == "1890-06-15"
+
+
+def test_xlsx_bytes_path_uses_same_date_policy_as_streaming():
+    from openpyxl import load_workbook
+
+    from app.core.dataframes.export_writer import dataframe_to_export_bytes
+
+    df = pd.DataFrame(
+        {"when": [pd.Timestamp("2026-07-13T12:00:00+02:00")]}
+    )
+    raw = dataframe_to_export_bytes(df, "xlsx")
+    workbook = load_workbook(io.BytesIO(raw), data_only=True)
+    assert workbook.active["A2"].value == datetime(2026, 7, 13, 10, 0)
 
 
 def test_csv_writer_empty_dataframe_does_not_crash():
