@@ -34,10 +34,12 @@ def _node(node_id: str, ntype: str, **data):
     return n
 
 
-def _edge(source: str, target: str):
+def _edge(source: str, target: str, target_handle: str | None = None):
     e = MagicMock()
+    e.id = f"edge-{source}-{target}-{target_handle or 'legacy'}"
     e.source = source
     e.target = target
+    e.targetHandle = target_handle
     e.source_column = None
     return e
 
@@ -100,6 +102,43 @@ def test_infer_all_schemas_maps_every_node_to_dict_rows():
     assert set(schemas.keys()) == {"f1", "a1", "r1"}
     assert [r["name"] for r in schemas["a1"]] == ["id", "lat", "risk"]
     assert [r["name"] for r in schemas["r1"]] == ["id", "lat", "risk"]
+
+
+def test_multi_input_schema_uses_handles_not_edge_array_order():
+    left = _node(
+        "left", "file_source",
+        data={"columns": [
+            {"name": "id", "type": "int"},
+            {"name": "geometry", "type": "geometry:point"},
+        ]},
+    )
+    right = _node(
+        "right", "file_source",
+        data={"columns": [
+            {"name": "id", "type": "int"},
+            {"name": "label", "type": "str"},
+            {"name": "geometry", "type": "geometry:point"},
+        ]},
+    )
+    nearest = _node(
+        "nearest", "transform",
+        transform_op="geo_nearest",
+        config={"output_column": "distance"},
+    )
+    # Persisted edge order is intentionally RIGHT then LEFT.
+    canvas = _canvas(
+        [left, right, nearest],
+        [
+            _edge("right", "nearest", "input-1"),
+            _edge("left", "nearest", "input-0"),
+        ],
+    )
+
+    rows = _svc_with_canvas(canvas).infer_node_schema("proj", "nearest")
+
+    assert [row["name"] for row in rows] == [
+        "id", "geometry", "id_right", "label", "distance",
+    ]
 
 
 # --- soft-fail return [] (i punti che 0.1b classificherà) ---

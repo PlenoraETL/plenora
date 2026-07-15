@@ -190,7 +190,12 @@ const ArricchisciEditorContent = () => {
   // scrive), solo gli input.
   const availableColumnsFingerprint = useMemo(() => {
     const relevant = nodes.map(n => {
-      if (n.type === 'project_source' || n.type === 'file_source') {
+      if (
+        n.type === 'project_source'
+        || n.type === 'file_source'
+        || n.type === 'datasourceNode'
+        || n.type === 'datasource_node'
+      ) {
         return { id: n.id, type: n.type, cols: n.data?.columns };
       }
       if (n.type === 'api_enrich') {
@@ -217,7 +222,12 @@ const ArricchisciEditorContent = () => {
         if (!cols) continue;
         const source = node.data?.source_project_id || node.data?.file_source_id || node.type;
 
-        if (node.type === 'project_source' || node.type === 'file_source') {
+        if (
+          node.type === 'project_source'
+          || node.type === 'file_source'
+          || node.type === 'datasourceNode'
+          || node.type === 'datasource_node'
+        ) {
           cols.forEach(col => {
             if (typeof col === 'object' && col !== null)
               availableColumns.push({ name: col.name || col.alias || 'unknown', type: col.type || col.dtype || 'str', source });

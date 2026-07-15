@@ -83,8 +83,9 @@ describe('useColumnPropagation - alias aggregate downstream', () => {
       },
     ];
     const edges = [
-      { source: 'left', target: 'nearest', targetHandle: 'input-0' },
+      // Ordine array intenzionalmente opposto ai targetHandle.
       { source: 'right', target: 'nearest', targetHandle: 'input-1' },
+      { source: 'left', target: 'nearest', targetHandle: 'input-0' },
       { source: 'nearest', target: 'next-transform' },
     ];
     const setNodes = updater => {

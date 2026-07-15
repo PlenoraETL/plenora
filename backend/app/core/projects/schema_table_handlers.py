@@ -26,16 +26,20 @@ class TableSchemaHandlers:
         input_schema = input_schemas[0]
         input_by_name = {col.name: col for col in input_schema}
 
-        group_by = config.get("group_by", [])
+        group_by = self._normalize_str_list(config.get("group_by"))
         aggs = config.get("aggs", {})
         aggregations = config.get("aggregations")
 
-        result = []
+        valid_group_by = [name for name in group_by if name in input_by_name]
+        # Runtime op_aggregate e' intenzionalmente no-op senza almeno una
+        # chiave valida: lo schema deve quindi restare quello di input.
+        if not valid_group_by:
+            return self._copy_schema(input_schema, node_id)
 
-        for col_name in group_by:
-            if col_name in input_by_name:
-                col = input_by_name[col_name]
-                result.append(self._copy_column(col, node_id, is_calculated=False))
+        result = [
+            self._copy_column(input_by_name[name], node_id, is_calculated=False)
+            for name in valid_group_by
+        ]
 
         agg_items = []
         if isinstance(aggregations, list):
@@ -46,26 +50,52 @@ class TableSchemaHandlers:
                 agg_func = agg.get("function", "count")
                 raw_alias = agg.get("alias")
                 alias = raw_alias.strip() if isinstance(raw_alias, str) else raw_alias
-                if col_name:
+                if col_name in input_by_name:
                     agg_items.append((col_name, agg_func, alias))
         elif isinstance(aggs, dict):
-            agg_items = [(col_name, agg_func, None) for col_name, agg_func in aggs.items()]
+            agg_items = [
+                (col_name, agg_func, None)
+                for col_name, agg_func in aggs.items()
+                if col_name in input_by_name
+            ]
+
+        # Runtime: group_by valido + aggregazioni assenti/tutte invalide
+        # produce una colonna count tramite group_size_reset.
+        if not agg_items:
+            result.append(self._column_schema_cls(
+                name="count",
+                type="int",
+                source_node=node_id,
+                is_calculated=True,
+            ))
+            return result
+
+        occurrences = {}
+        for col_name, _agg_func, _alias in agg_items:
+            occurrences[col_name] = occurrences.get(col_name, 0) + 1
 
         for col_name, agg_func, alias in agg_items:
             orig_col = input_by_name.get(col_name)
+            agg_func = str(agg_func or "count").lower()
 
             if agg_func in ("count", "nunique", "size"):
                 out_type = "int"
-            elif agg_func in ("sum", "mean", "std", "var", "min", "max"):
+            elif agg_func in ("sum", "mean", "avg", "std", "var", "min", "max"):
                 out_type = orig_col.type if orig_col else "real"
-                if agg_func in ("mean", "std", "var"):
+                if agg_func in ("mean", "avg", "std", "var"):
                     out_type = "real"
-            elif agg_func == "first" or agg_func == "last":
+            elif agg_func in ("first", "last"):
                 out_type = orig_col.type if orig_col else "str"
+            elif agg_func == "concat":
+                out_type = "str"
             else:
                 out_type = "str"
 
-            output_name = alias or col_name
+            output_name = alias or (
+                f"{col_name}_{agg_func}"
+                if occurrences[col_name] > 1
+                else col_name
+            )
             result.append(self._column_schema_cls(
                 name=output_name,
                 type=out_type,

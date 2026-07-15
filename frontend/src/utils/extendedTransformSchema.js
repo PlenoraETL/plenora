@@ -40,6 +40,23 @@ function normalizeOutputColumns(raw) {
   });
 }
 
+function isValidPythonRegex(pattern) {
+  // Il runtime usa Python `re`, il browser JavaScript. Convertiamo le
+  // estensioni Python piu' comuni solo per validare la sintassi usata
+  // nella propagazione; l'espressione originale resta invariata.
+  const javascriptPattern = pattern
+    .replace(/\(\?P<([A-Za-z_][A-Za-z0-9_]*)>/g, '(?<$1>')
+    .replace(/\(\?P=([A-Za-z_][A-Za-z0-9_]*)\)/g, '\\k<$1>')
+    .replace(/^\(\?[aiLmsux-]+\)/, '')
+    .replace(/\(\?[aiLmsux-]+:/g, '(?:');
+  try {
+    new RegExp(javascriptPattern);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function sourceSchemas(inputColumns, sourcesColumns) {
   if (Array.isArray(sourcesColumns) && sourcesColumns.length > 0) {
     return sourcesColumns.map(clone);
@@ -213,7 +230,9 @@ export function applyExtendedTransformSchema(
     case 'date_extract': {
       const column = config.column || '';
       if (!column) return result;
-      const parts = config.parts == null ? ['year'] : normalizeStringList(config.parts);
+      const parts = config.parts == null || !(typeof config.parts === 'string' || Array.isArray(config.parts))
+        ? ['year']
+        : normalizeStringList(config.parts);
       const valid = new Set(['year', 'month', 'day', 'quarter', 'weekday', 'week', 'hour', 'minute', 'second']);
       const prefix = config.prefix || `${column}_`;
       return parts.reduce((cols, part) => {
@@ -225,7 +244,7 @@ export function applyExtendedTransformSchema(
     case 'string_extract': {
       const column = config.column || '';
       const pattern = config.pattern || '';
-      if (!column || !pattern || !names(result).has(column)) return result;
+      if (!column || !pattern || !names(result).has(column) || !isValidPythonRegex(pattern)) return result;
       const groupNames = [...pattern.matchAll(/\(\?P?<([A-Za-z_][A-Za-z0-9_]*)>/g)]
         .map(match => match[1]);
       if (groupNames.length > 0) {

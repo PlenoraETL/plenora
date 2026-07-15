@@ -225,14 +225,35 @@ def test_convex_hull_adds_polygon_column(geo):
     assert by_name(out)["convex_hull"].type == "geometry:polygon"
 
 
-def test_convex_hull_no_new_column_when_output_equals_geom(geo):
+def test_convex_hull_overwrites_geometry_type(geo):
     out = geo._schema_geo_convex_hull([_point_layer()], {"output_column": "geometry"}, NODE)
-    # output == geom_column -> branch skipped, nothing appended/replaced
     assert names(out) == ["id", "geometry"]
+    assert by_name(out)["geometry"].type == "geometry:polygon"
+    assert by_name(out)["geometry"].is_calculated is True
 
 
 def test_convex_hull_empty_inputs(geo):
     assert geo._schema_geo_convex_hull([], {}, NODE) == []
+
+
+# --------------------------------------------------------------------------- #
+# _schema_geo_envelope
+# --------------------------------------------------------------------------- #
+def test_envelope_adds_polygon_column(geo):
+    out = geo._schema_geo_envelope([_point_layer()], {}, NODE)
+    assert names(out) == ["id", "geometry", "envelope"]
+    assert by_name(out)["envelope"].type == "geometry:polygon"
+
+
+def test_envelope_overwrites_geometry_type(geo):
+    out = geo._schema_geo_envelope(
+        [_point_layer()],
+        {"output_column": "geometry"},
+        NODE,
+    )
+    assert names(out) == ["id", "geometry"]
+    assert by_name(out)["geometry"].type == "geometry:polygon"
+    assert by_name(out)["geometry"].is_calculated is True
 
 
 # --------------------------------------------------------------------------- #

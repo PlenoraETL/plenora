@@ -129,10 +129,10 @@ class TransformSchemaHandlers:
             "type_cast": lambda i, c, n: self._schema_type_cast(i, c, n),
             "conditional": lambda i, c, n: self._formula_handlers._schema_conditional(i, c, n),
             "text_normalize": lambda i, c, n: self._schema_text_normalize(i, c, n),
-            # passthrough espliciti
+            # reshape / output strutturali
             "concat_columns": lambda i, c, n: self._schema_concat_columns(i, c, n),
             "pivot": lambda i, c, n: self._reshape_handlers._schema_pivot(i, c, n),
-            "geo_envelope": pt,
+            "geo_envelope": lambda i, c, n: self._geo_handlers._schema_geo_envelope(i, c, n),
             # spatial
             "geo_from_coords": lambda i, c, n: self._geo_handlers._schema_geo_from_coords(i, c, n),
             "add_row_number": lambda i, c, n: self._schema_add_row_number(i, c, n),
@@ -516,6 +516,8 @@ class TransformSchemaHandlers:
 
         result = self._copy_schema(input_schemas[0], node_id)
         column = config.get("column") or ""
+        if not column or column not in {c.name for c in result}:
+            return result
         configured_out = config.get("output_column")
         if configured_out:
             output_col = configured_out

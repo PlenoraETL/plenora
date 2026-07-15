@@ -102,4 +102,30 @@ describe('applyExtendedTransformSchema', () => {
       '_diff_old_values',
     ]);
   });
+
+  it('mantiene il runtime no-op per sorgenti mancanti e regex invalide', () => {
+    const input = [column('testo')];
+
+    expect(applyExtendedTransformSchema(
+      'string_length',
+      { output_column: 'len' },
+      input,
+    ).map(col => col.name)).toEqual(['testo']);
+
+    expect(applyExtendedTransformSchema(
+      'string_extract',
+      { column: 'testo', pattern: '([unclosed' },
+      input,
+    ).map(col => col.name)).toEqual(['testo']);
+  });
+
+  it('applica il default year quando parts ha una shape non valida', () => {
+    const output = applyExtendedTransformSchema(
+      'date_extract',
+      { column: 'data', parts: 123 },
+      [column('data', 'datetime')],
+    );
+
+    expect(output.map(col => col.name)).toEqual(['data', 'data_year']);
+  });
 });

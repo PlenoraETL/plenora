@@ -42,6 +42,49 @@ const useCanvasStore = create(
           : { isDirty: true };
       };
 
+      // Un solo writer per il canvas. Qualsiasi chiamante (editor, nodo,
+      // pre-flight execute) passa da qui: se arriva una modifica durante un
+      // PUT, il loop salva lo snapshot piu' recente prima di dichiarare clean.
+      let saveInFlight = null;
+      let saveRequested = false;
+      const saveCanvasSerialized = async () => {
+        saveRequested = true;
+        if (saveInFlight) return saveInFlight;
+
+        saveInFlight = (async () => {
+          while (saveRequested) {
+            saveRequested = false;
+            const snapshot = get();
+            if (snapshot.isReadOnly || !snapshot.isDirty || !snapshot.projectId) continue;
+
+            const payload = serializeCanvas(snapshot.nodes, snapshot.edges, {
+              mode: snapshot.mode,
+            });
+            await updateCanvas(snapshot.projectId, payload);
+
+            const current = get();
+            const sameSnapshot = current.projectId === snapshot.projectId
+              && current.nodes === snapshot.nodes
+              && current.edges === snapshot.edges;
+            if (sameSnapshot) {
+              set({ isDirty: false }, false, 'handleSaveQuiet:saved');
+            } else if (current.isDirty && !current.isReadOnly) {
+              // Un edit e' arrivato mentre il PUT era in volo.
+              saveRequested = true;
+            }
+          }
+        })();
+
+        try {
+          return await saveInFlight;
+        } finally {
+          saveInFlight = null;
+          // Copre anche una richiesta arrivata nella micro-finestra tra la
+          // risoluzione del runner e questo finally.
+          if (saveRequested) await saveCanvasSerialized();
+        }
+      };
+
       return {
 
       nodes:     [],
@@ -500,15 +543,7 @@ const useCanvasStore = create(
        * NOTA: rilancia l'eccezione così chi la usa come onBeforeExecute
        * può bloccare l'esecuzione se il salvataggio fallisce.
        */
-      handleSaveQuiet: async () => {
-        const { nodes, edges, projectId, mode, isDirty, isReadOnly } = get();
-        if (isReadOnly) return;
-        if (!isDirty) return;
-
-        const payload = serializeCanvas(nodes, edges, { mode });
-        await updateCanvas(projectId, payload);
-        set({ isDirty: false }, false, 'handleSaveQuiet:saved');
-      },
+      handleSaveQuiet: saveCanvasSerialized,
 
       /**
        * Marca il canvas come "in sync con il backend" (isDirty = false).

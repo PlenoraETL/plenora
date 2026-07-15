@@ -80,8 +80,13 @@ export const useColumnPropagation = (setNodes) => {
       const node = nodeMap.get(nodeId);
       if (!node) return;
       
-      // Trova edge in ingresso
-      const incomingEdges = edges.filter(e => e.target === nodeId);
+      // Stesso ordinamento usato dall'executor backend: targetHandle
+      // input-0/input-1 prima, posizione verticale come fallback legacy.
+      // L'ordine di inserimento nell'array edges non rappresenta LEFT/RIGHT.
+      const incomingEdges = sortIncomingEdges(
+        edges.filter(e => e.target === nodeId),
+        nodeMap,
+      );
       
       // Calcola inputColumns (colonne dai predecessori)
       let inputColumns = [];
@@ -125,19 +130,8 @@ export const useColumnPropagation = (setNodes) => {
         // CASO SPECIALE: Join - applica suffissi _L e _R come il backend
         const config = node.data?.config || {};
         
-        // Ordina edges per targetHandle per determinare left/right
-        const sortedEdges = [...incomingEdges].sort((a, b) => {
-          // Estrai handle dall'ID se non presente come attributo
-          const extractHandle = (edge) => {
-            if (edge.targetHandle) return edge.targetHandle;
-            const match = edge.id?.match(/(input-\d+)$/);
-            return match ? match[1] : 'input-9'; // fallback alto per ordinare dopo
-          };
-          return extractHandle(a).localeCompare(extractHandle(b));
-        });
-        
-        const leftCols = sortedEdges.length > 0 ? (outputColumnsMap.get(sortedEdges[0].source) || []) : [];
-        const rightCols = sortedEdges.length > 1 ? (outputColumnsMap.get(sortedEdges[1].source) || []) : [];
+        const leftCols = incomingEdges.length > 0 ? (outputColumnsMap.get(incomingEdges[0].source) || []) : [];
+        const rightCols = incomingEdges.length > 1 ? (outputColumnsMap.get(incomingEdges[1].source) || []) : [];
         const leftKeys = resolveColumnNameList(
           leftCols,
           config.left_keys_column_ids,
@@ -226,6 +220,31 @@ export const useColumnPropagation = (setNodes) => {
   
   return { propagateColumns };
 };
+
+function targetHandle(edge) {
+  if (edge.targetHandle) return edge.targetHandle;
+  return edge.id?.match(/(input-\d+)$/)?.[1] || null;
+}
+
+function inputOrderKey(edge, nodeMap) {
+  const handle = targetHandle(edge);
+  const match = handle?.match(/^input-(\d+)$/);
+  if (match) return [0, Number(match[1]), ''];
+  if (handle) return [0, Number.MAX_SAFE_INTEGER, handle];
+  const source = nodeMap.get(edge.source);
+  if (source) return [1, Number(source.position?.y || 0), edge.source];
+  return [2, 0, edge.source || ''];
+}
+
+function sortIncomingEdges(edges, nodeMap) {
+  return [...edges].sort((left, right) => {
+    const a = inputOrderKey(left, nodeMap);
+    const b = inputOrderKey(right, nodeMap);
+    return a[0] - b[0]
+      || a[1] - b[1]
+      || String(a[2]).localeCompare(String(b[2]));
+  });
+}
 
 /**
  * Estrae colonne da un nodo sorgente
@@ -351,17 +370,24 @@ function applyTransformation(node, inputColumns, sourcesColumns = []) {
       break;
     }
     
-    case 'add_column':
-    case 'formula': {
+    case 'add_column': {
       const newCol = config.column || config.output_column || config.new_column;
       if (newCol && !result.find(c => c.name === newCol)) {
-        result.push({ name: newCol, type: 'str' });
+        result.push({ name: newCol, type: config.output_type || 'str' });
+      }
+      break;
+    }
+
+    case 'formula': {
+      const newCol = config.new_column || config.column || config.output_column || 'calculated';
+      if (newCol && !result.find(c => c.name === newCol)) {
+        result.push({ name: newCol, type: config.output_type || 'real' });
       }
       break;
     }
     
     case 'concat_columns': {
-      const newCol = config.output_column;
+      const newCol = config.output_column || 'concatenated';
       if (newCol && !result.find(c => c.name === newCol)) {
         result.push({ name: newCol, type: 'str' });
       }
@@ -371,20 +397,39 @@ function applyTransformation(node, inputColumns, sourcesColumns = []) {
     case 'pivot': {
       // Pivot cambia completamente lo schema:
       // Output = index_col + colonne generate dal mapping
-      const indexCol = config.index_col;
+      const rawIndex = config.index_col;
+      const indexCols = (Array.isArray(rawIndex) ? rawIndex : String(rawIndex || '').split(','))
+        .map(name => String(name).trim())
+        .filter(name => inputColumns.some(col => col.name === name));
       const mapping = config.mapping || {};
+      const valueCol = inputColumns.find(col => col.name === config.value_col);
+      const mappingNames = Object.values(mapping).map(name => String(name || '').trim()).filter(Boolean);
+
+      // Senza i parametri runtime obbligatori o senza mapping esplicito le
+      // colonne dinamiche non sono inferibili: il backend conserva lo schema.
+      if (
+        indexCols.length === 0
+        || !inputColumns.some(col => col.name === config.pivot_col)
+        || !valueCol
+        || mappingNames.length === 0
+      ) break;
       
       // Inizia con colonna index
       result = [];
-      if (indexCol) {
-        const indexColObj = inputColumns.find(c => c.name === indexCol);
-        result.push({ name: indexCol, type: indexColObj?.type || 'str' });
-      }
+      indexCols.forEach(name => {
+        const indexColObj = inputColumns.find(c => c.name === name);
+        result.push({ ...indexColObj });
+      });
+
+      const aggrFunc = String(config.aggr_func || 'first').toLowerCase();
+      const outputType = aggrFunc === 'count'
+        ? 'int'
+        : (aggrFunc === 'concat' ? 'str' : (valueCol.type || 'str'));
       
       // Aggiungi colonne dal mapping (i valori del mapping sono i nomi output)
-      Object.values(mapping).forEach(colName => {
+      mappingNames.forEach(colName => {
         if (colName && !result.find(c => c.name === colName)) {
-          result.push({ name: colName, type: 'real' }); // pivot values sono tipicamente numerici
+          result.push({ name: colName, type: outputType });
         }
       });
       
@@ -395,31 +440,36 @@ function applyTransformation(node, inputColumns, sourcesColumns = []) {
       // Aggregate cambia lo schema:
       // Output = group_by columns + aggregated columns
       const groupBy = resolveColumnNameList(inputColumns, config.group_by_column_ids, config.group_by || []);
-      const aggregations = config.aggregations || [];
+      const aggregations = Array.isArray(config.aggregations) ? config.aggregations : [];
+      const validGroupBy = groupBy.filter(name => inputColumns.some(col => col.name === name));
+
+      // Runtime no-op se non esiste almeno una chiave group_by valida.
+      if (validGroupBy.length === 0) break;
       
       result = [];
       
       // Aggiungi colonne group_by
-      groupBy.forEach(colName => {
+      validGroupBy.forEach(colName => {
         const col = inputColumns.find(c => c.name === colName);
-        if (col) {
-          result.push({ ...col });
-        } else {
-          result.push({ name: colName, type: 'str' });
-        }
+        result.push({ ...col });
+      });
+
+      const validAggregations = aggregations.filter(agg => {
+        const name = resolveColumnName(inputColumns, agg.column_id, agg.column);
+        return inputColumns.some(col => col.name === name);
       });
       
       // Aggiungi colonne aggregate
-      aggregations.forEach(agg => {
+      validAggregations.forEach(agg => {
         const colName = resolveColumnName(inputColumns, agg.column_id, agg.column);
-        const func = agg.function || 'count';
+        const func = String(agg.function || 'count').toLowerCase();
         // L'alias e' il nome effettivo prodotto dal backend e deve essere
         // propagato immediatamente ai nodi downstream. Prima veniva ignorato:
         // il canvas continuava quindi a esporre `colonna`/`colonna_funzione`
         // fino al successivo save + refresh dell'inferenza server-side.
         const alias = typeof agg.alias === 'string' ? agg.alias.trim() : '';
         const outputName = alias || (
-          aggregations.filter(a => (
+          validAggregations.filter(a => (
             resolveColumnName(inputColumns, a.column_id, a.column) === colName
           )).length > 1
             ? `${colName}_${func}`
@@ -427,13 +477,18 @@ function applyTransformation(node, inputColumns, sourcesColumns = []) {
         );
         
         if (outputName && !result.find(c => c.name === outputName)) {
-          const colType = func === 'count' ? 'int' : (func === 'concat' ? 'str' : 'real');
+          const sourceType = inputColumns.find(col => col.name === colName)?.type || 'str';
+          const colType = ['count', 'nunique', 'size'].includes(func)
+            ? 'int'
+            : (['mean', 'avg', 'std', 'var'].includes(func)
+              ? 'real'
+              : (func === 'concat' ? 'str' : sourceType));
           result.push({ name: outputName, type: colType });
         }
       });
       
-      // Se nessuna aggregazione, aggiungi count di default
-      if (aggregations.length === 0 && !result.find(c => c.name === 'count')) {
+      // Se nessuna aggregazione valida, il runtime esegue group-size.
+      if (validAggregations.length === 0 && !result.find(c => c.name === 'count')) {
         result.push({ name: 'count', type: 'int' });
       }
       
@@ -442,7 +497,7 @@ function applyTransformation(node, inputColumns, sourcesColumns = []) {
     
     case 'conditional':
     case 'case_when': {
-      const outCol = config.output_column;
+      const outCol = config.output_column || 'result';
       if (outCol && !result.find(c => c.name === outCol)) {
         result.push({ name: outCol, type: 'str' });
       }
@@ -488,20 +543,39 @@ function applyTransformation(node, inputColumns, sourcesColumns = []) {
       break;
     }
     case 'convex_hull':
-    case 'geo_convex_hull':
+    case 'geo_convex_hull': {
+      const defaults = {
+        convex_hull: 'convex_hull',
+        geo_convex_hull: 'convex_hull',
+      };
+      const outCol = config.output_column || defaults[transform_op];
+      const geomCol = config.geom_column || 'geometry';
+      if (outCol !== geomCol && !result.find(c => c.name === outCol)) {
+        result.push({ name: outCol, type: 'geometry:polygon' });
+      } else if (outCol === geomCol) {
+        result = result.map(c => c.name === geomCol
+          ? { ...c, type: 'geometry:polygon', is_calculated: true }
+          : c);
+      }
+      break;
+    }
     case 'geo_envelope':
     case 'geo_point_on_surface':
     case 'geo_boundary': {
       const defaults = {
-        convex_hull: 'convex_hull',
-        geo_convex_hull: 'convex_hull',
-        geo_envelope: 'envelope',
-        geo_point_on_surface: 'point_on_surface',
-        geo_boundary: 'boundary',
+        geo_envelope: ['envelope', 'geometry:polygon'],
+        geo_point_on_surface: ['point_on_surface', 'geometry:point'],
+        geo_boundary: ['boundary', 'geometry'],
       };
-      const outCol = config.output_column || defaults[transform_op];
-      if (outCol !== (config.geom_column || 'geometry') && !result.find(c => c.name === outCol)) {
-        result.push({ name: outCol, type: 'geometry' });
+      const [defaultName, outputType] = defaults[transform_op];
+      const outCol = config.output_column || defaultName;
+      const geomCol = config.geom_column || 'geometry';
+      if (outCol !== geomCol && !result.find(c => c.name === outCol)) {
+        result.push({ name: outCol, type: outputType });
+      } else if (outCol === geomCol) {
+        result = result.map(c => c.name === geomCol
+          ? { ...c, type: outputType, is_calculated: true }
+          : c);
       }
       break;
     }

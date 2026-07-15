@@ -237,7 +237,52 @@ class GeoSchemaHandlers:
                     source_node=node_id,
                     is_calculated=True
                 ))
+        else:
+            for index, col in enumerate(result):
+                if col.name == geom_col:
+                    result[index] = self._copy_column(
+                        col,
+                        node_id,
+                        type_="geometry:polygon",
+                        is_calculated=True,
+                    )
+                    break
         
+        return result
+
+    def _schema_geo_envelope(
+        self,
+        input_schemas: List[List[ColumnSchema]],
+        config: dict,
+        node_id: str,
+    ) -> List[ColumnSchema]:
+        """geo_envelope: input + bounding-box polygon output."""
+        if not input_schemas:
+            return []
+
+        geom_col = config.get("geom_column") or "geometry"
+        output_col = config.get("output_column") or "envelope"
+        result = self._copy_schema(input_schemas[0], node_id)
+
+        if output_col != geom_col:
+            if output_col not in {col.name for col in result}:
+                result.append(self._column_schema_cls(
+                    name=output_col,
+                    type="geometry:polygon",
+                    source_node=node_id,
+                    is_calculated=True,
+                ))
+            return result
+
+        for index, col in enumerate(result):
+            if col.name == geom_col:
+                result[index] = self._copy_column(
+                    col,
+                    node_id,
+                    type_="geometry:polygon",
+                    is_calculated=True,
+                )
+                break
         return result
 
     def _schema_geo_overlay(

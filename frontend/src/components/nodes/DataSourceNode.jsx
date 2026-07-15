@@ -104,7 +104,6 @@ const openBrowser = useCallback(async (path = '') => {
     }
     upd({ file_path: file.path, format: file.type });
     setShowBrowser(false);
-    fetchSchema(file.path);
   }, [upd, openBrowser]);
 const fetchSchema = useCallback(async (filePath, opts = {}) => {
     if (!dsId || !filePath) return;
@@ -147,16 +146,26 @@ const fetchSchema = useCallback(async (filePath, opts = {}) => {
         updates.parse_options = newPo;
       }
       upd(updates);
-      setTimeout(() => { handleSaveQuiet().catch(() => {}); }, 100);
+      setTimeout(() => {
+        const onSchemaUpdated = useCanvasStore.getState()
+          .getEditorAction('onDataSourceSchemaUpdated');
+        const save = onSchemaUpdated
+          ? onSchemaUpdated(id, updates)
+          : handleSaveQuiet();
+        Promise.resolve(save).catch(() => {});
+      }, 100);
     } catch {
       setSchemaError(true);
     } finally {
       setLoadingSchema(false);
     }
-  }, [dsId, upd, data.format, data.parse_options, handleSaveQuiet]);
+  }, [dsId, id, upd, data.format, data.parse_options, handleSaveQuiet]);
 
   useEffect(() => {
     if (!dsId || !data.file_path) return;
+    // Unica fetch per cambio file: handleSelectFile aggiorna file_path e
+    // questo effect esegue schema + autosave. Prima entrambi i percorsi
+    // chiamavano fetchSchema, generando due richieste e due salvataggi.
     fetchSchema(data.file_path);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dsId, data.file_path]);

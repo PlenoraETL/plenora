@@ -29,7 +29,12 @@ class ReshapeSchemaHandlers:
             name for name in self._normalize_str_list(config.get("index_col"))
             if name in by_name
         ]
+        pivot_col = config.get("pivot_col") or ""
         value_col = config.get("value_col") or ""
+        # Runtime op_pivot e' no-op se uno dei parametri obbligatori e'
+        # assente o punta a una colonna inesistente.
+        if not index_cols or pivot_col not in by_name or value_col not in by_name:
+            return self._copy_schema(input_schema, node_id)
         value_type = getattr(by_name.get(value_col), "type", None) or "str"
         aggr_func = str(config.get("aggr_func") or "").strip().lower()
         if aggr_func == "count":
@@ -50,6 +55,11 @@ class ReshapeSchemaHandlers:
             output_names = mapping.values()
         else:
             output_names = []
+
+        # Senza mapping i nomi dipendono dai valori runtime di pivot_col e
+        # non sono determinabili staticamente: preserva lo schema di input.
+        if not mapping:
+            return self._copy_schema(input_schema, node_id)
 
         for raw_name in output_names:
             name = str(raw_name or "").strip()

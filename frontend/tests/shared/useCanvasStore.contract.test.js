@@ -201,4 +201,43 @@ describe('useCanvasStore save-path contract', () => {
     );
     expect(useCanvasStore.getState().isDirty).toBe(false);
   });
+
+  it('serializes concurrent save requests and persists the latest snapshot', async () => {
+    let releaseFirstSave;
+    updateCanvasMock
+      .mockImplementationOnce(() => new Promise(resolve => { releaseFirstSave = resolve; }))
+      .mockResolvedValueOnce({});
+
+    const store = useCanvasStore.getState();
+    store.init('proj-save-race', 'manipola');
+    store.setNodes([{
+      id: 'node-1',
+      type: 'transform',
+      position: { x: 0, y: 0 },
+      data: { transform_op: 'filter', config: { marker: 'iniziale' } },
+    }]);
+    store.markClean();
+    useCanvasStore.getState().updateNodeData('node-1', { config: { marker: 'prima' } });
+
+    const firstSave = useCanvasStore.getState().handleSaveQuiet();
+    await vi.waitFor(() => expect(updateCanvasMock).toHaveBeenCalledTimes(1));
+
+    useCanvasStore.getState().updateNodeData('node-1', { config: { marker: 'finale' } });
+    const queuedSave = useCanvasStore.getState().handleSaveQuiet();
+    expect(updateCanvasMock).toHaveBeenCalledTimes(1);
+
+    releaseFirstSave({});
+    await Promise.all([firstSave, queuedSave]);
+
+    expect(updateCanvasMock).toHaveBeenCalledTimes(2);
+    expect(updateCanvasMock.mock.calls[1][1]).toEqual(expect.objectContaining({
+      nodes: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'node-1',
+          config: { marker: 'finale' },
+        }),
+      ]),
+    }));
+    expect(useCanvasStore.getState().isDirty).toBe(false);
+  });
 });

@@ -14,6 +14,7 @@ from app.core.projects.types import (
     SchemaRows,
     TransformHandlerRegistry,
 )
+from app.core.manipola.transform_ordering import incoming_edge_sort_key_for_nodes
 from app.shared.execution.config_column_refs import resolve_config_column_refs
 from app.shared.execution.schema_types import ColumnSchema, InferredSchema
 from app.utils.logger import get_logger
@@ -566,7 +567,10 @@ class SchemaInferenceService:
         """
         Recupera gli schemi dei nodi in input a un nodo.
         """
-        incoming_edges = edges_by_target.get(node_id, [])
+        incoming_edges = sorted(
+            edges_by_target.get(node_id, []),
+            key=lambda edge: incoming_edge_sort_key_for_nodes(edge, nodes_by_id),
+        )
         
         input_schemas = []
         for edge in incoming_edges:

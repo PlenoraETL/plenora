@@ -105,6 +105,71 @@ def test_registry_aggregate_uses_trimmed_output_alias(handlers):
     assert names(out) == ["categoria", "aggregazioni"]
 
 
+def test_registry_aggregate_without_group_by_is_runtime_noop(handlers):
+    registry = handlers.build_transform_handlers({})
+    inp = schema(col("categoria"), col("importo", "real"))
+
+    out = registry["aggregate"](inp, {"aggregations": []}, NODE)
+
+    assert names(out) == ["categoria", "importo"]
+
+
+def test_registry_aggregate_without_valid_aggregations_adds_count(handlers):
+    registry = handlers.build_transform_handlers({})
+    inp = schema(col("categoria"), col("importo", "real"))
+
+    out = registry["aggregate"](
+        inp,
+        {"group_by": ["categoria"], "aggregations": []},
+        NODE,
+    )
+
+    assert names(out) == ["categoria", "count"]
+    assert by_name(out, "count").type == "int"
+
+
+def test_registry_aggregate_multiple_functions_use_runtime_flat_names(handlers):
+    registry = handlers.build_transform_handlers({})
+    inp = schema(col("categoria"), col("importo", "int"))
+
+    out = registry["aggregate"](
+        inp,
+        {
+            "group_by": ["categoria"],
+            "aggregations": [
+                {"column": "importo", "function": "sum"},
+                {"column": "importo", "function": "mean"},
+            ],
+        },
+        NODE,
+    )
+
+    assert names(out) == ["categoria", "importo_sum", "importo_mean"]
+    assert by_name(out, "importo_sum").type == "int"
+    assert by_name(out, "importo_mean").type == "real"
+
+
+def test_registry_pivot_requires_runtime_columns_and_explicit_mapping(handlers):
+    registry = handlers.build_transform_handlers({})
+    inp = schema(col("azienda"), col("anno", "int"), col("tipo"), col("valore", "real"))
+
+    incomplete = registry["pivot"](inp, {"index_col": "azienda"}, NODE)
+    assert names(incomplete) == ["azienda", "anno", "tipo", "valore"]
+
+    out = registry["pivot"](
+        inp,
+        {
+            "index_col": "azienda, anno",
+            "pivot_col": "tipo",
+            "value_col": "valore",
+            "mapping": {"A": "valore_a", "B": "valore_b"},
+        },
+        NODE,
+    )
+    assert names(out) == ["azienda", "anno", "valore_a", "valore_b"]
+    assert by_name(out, "valore_a").type == "real"
+
+
 def test_registry_drop_via_dispatch(handlers):
     registry = handlers.build_transform_handlers({})
     inp = schema(col("a"), col("b"), col("c"))
@@ -453,10 +518,10 @@ def test_string_length_no_column_no_output_noop(handlers):
     assert names(out) == ["name"]
 
 
-def test_string_length_output_without_column(handlers):
+def test_string_length_output_without_source_column_is_noop(handlers):
     inp = schema(col("name"))
     out = handlers._schema_string_length(inp, {"output_column": "len"}, NODE)
-    assert names(out) == ["name", "len"]
+    assert names(out) == ["name"]
 
 
 def test_string_length_dedup(handlers):

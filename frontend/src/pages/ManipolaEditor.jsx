@@ -322,6 +322,16 @@ const ManipolaEditorContent = () => {
     }, 50);
   }, [updateNodeData, propagateColumns]);
 
+  const handleDataSourceSchemaUpdated = useCallback((nodeId, updates) => {
+    const updatedNodes = nodesRef.current.map(node => (
+      node.id === nodeId
+        ? { ...node, data: { ...node.data, ...updates } }
+        : node
+    ));
+    propagateColumns(updatedNodes, edgesRef.current);
+    triggerAutosave();
+  }, [nodesRef, edgesRef, propagateColumns, triggerAutosave]);
+
   // handleUpdateProjectSource/Columns/FileSource/Transform rimangono perché
   // fanno side-effect (refreshSchemas, propagateColumns) registrati in setEditorActions
 
@@ -345,13 +355,15 @@ const ManipolaEditorContent = () => {
       onUpdateProjectSourceColumns: handleUpdateProjectSourceColumns,
       onUpdateFileSourceColumns:    handleUpdateFileSourceColumns,
       onUpdateTransform:            handleUpdateTransform,
+      onDataSourceSchemaUpdated:    handleDataSourceSchemaUpdated,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // toast/nodesRef/describeAccessDeniedNodes letti via closure stabile;
     // re-bind solo al cambio degli handler hook delle azioni canvas.
   }, [preview, execution, caricaExecution,
       handleUpdateProjectSource, handleUpdateProjectSourceColumns,
-      handleUpdateFileSourceColumns, handleUpdateTransform]);
+      handleUpdateFileSourceColumns, handleUpdateTransform,
+      handleDataSourceSchemaUpdated]);
 
   // Sincronizza connections nello store
   useEffect(() => {
@@ -490,12 +502,10 @@ const ManipolaEditorContent = () => {
     if (newNode) {
       setNodes(nds => nds.concat(newNode));
       setTimeout(() => {
-        handleSaveQuiet()
-          .then(() => refreshSchemas())
-          .catch(handleAutosaveError);
+        triggerAutosave();
       }, 100);
     }
-  }, [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns, refreshSchemas, handleSaveQuiet, handleAutosaveError]);
+  }, [screenToFlowPosition, setNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns, triggerAutosave]);
 
   const { confirmNavigation } = useUnsavedChangesGuard();
   const handleBack = () => { if (confirmNavigation()) navigate('/'); };
