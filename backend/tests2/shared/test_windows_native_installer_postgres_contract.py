@@ -82,6 +82,17 @@ def test_native_installer_provisions_modern_sql_server_odbc_driver() -> None:
     assert "Get-OdbcDriver -Platform '64-bit'" in installer
 
 
+def test_native_installer_provisions_runtime_and_backup_buckets() -> None:
+    installer = _installer()
+
+    bootstrap = "python scripts/provision_local_s3_buckets.py"
+    assert bootstrap in installer
+    assert "Bucket SeaweedFS pronti: plenora-runtime, plenora-backups" in installer
+    assert installer.index("'BACKUP_BUCKET' -Value 'plenora-backups'") < installer.index(
+        bootstrap
+    )
+
+
 def test_dependency_update_stops_services_once_and_cleans_pip_residuals() -> None:
     installer = _installer()
 

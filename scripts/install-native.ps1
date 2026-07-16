@@ -709,11 +709,21 @@ if ($InstallObjectStorage) {
     Set-EnvValue -File $envFile -Key 'PLENORA_ARTIFACT_BUCKET' -Value 'plenora-runtime'
     Set-EnvValue -File $envFile -Key 'BACKUP_BUCKET' -Value 'plenora-backups'
 
+    # S3_BUCKET inizializza soltanto il bucket runtime di SeaweedFS. Il bucket
+    # backup e' intenzionalmente separato e deve essere creato esplicitamente.
+    # Lo script usa HeadBucket + CreateBucket ed e' quindi sicuro sui rerun.
+    & $condaBat run -n $CondaEnv --cwd $BackendDir `
+        python scripts/provision_local_s3_buckets.py
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Provisioning bucket SeaweedFS fallito (exit=$LASTEXITCODE)"
+    }
+    Ok 'Bucket SeaweedFS pronti: plenora-runtime, plenora-backups'
+
     # I servizi app leggono il .env al boot: restart per vedere lo storage.
     $running = Get-Service plenora-backend, plenora-worker*, plenora-beat -ErrorAction SilentlyContinue |
                Where-Object Status -eq 'Running'
     foreach ($s in $running) { Restart-Service $s.Name }
-    Ok 'Object storage configurato: bucket plenora-runtime, backend=s3_compatible, policy=object_storage'
+    Ok 'Object storage configurato: runtime=plenora-runtime, backup=plenora-backups, backend=s3_compatible, policy=object_storage'
 }
 
 # =============================================================================

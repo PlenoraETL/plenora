@@ -7,6 +7,7 @@ from pathlib import Path as _Path
 import time as _time
 import traceback as _traceback
 import uuid as _uuid
+from collections.abc import Iterator as _Iterator
 from collections.abc import Mapping as _Mapping
 from typing import Any, Optional
 
@@ -22,6 +23,8 @@ from app.core.orchestrator.task_progress import report_task_progress
 from app.utils import debug_payload_builder as debug_payload_builder_module
 
 logger = get_logger("workers.pipeline_task")
+
+_EXECUTABLE_OUTPUT_CHUNK_SIZE = 8 * 1024 * 1024
 
 _RETRYABLE_CONNECTION_MESSAGES = (
     "lost connection",
@@ -164,6 +167,60 @@ def _cleanup_executable_inputs(contract: JsonObject | None) -> None:
             )
 
 
+def _iter_executable_output_chunks(
+    body: Any,
+    *,
+    chunk_size: int = _EXECUTABLE_OUTPUT_CHUNK_SIZE,
+) -> _Iterator[bytes]:
+    """Normalizza uno stream result in chunk binari senza materializzarlo."""
+    if chunk_size <= 0:
+        raise ValueError("chunk_size deve essere maggiore di zero")
+
+    iterator: Any = None
+    try:
+        if isinstance(body, bytes):
+            for offset in range(0, len(body), chunk_size):
+                yield body[offset : offset + chunk_size]
+            return
+        if isinstance(body, (bytearray, memoryview)):
+            for offset in range(0, len(body), chunk_size):
+                yield bytes(body[offset : offset + chunk_size])
+            return
+
+        read = getattr(body, "read", None)
+        if callable(read):
+            while True:
+                chunk = read(chunk_size)
+                if not chunk:
+                    break
+                if not isinstance(chunk, (bytes, bytearray, memoryview)):
+                    raise TypeError("Lo stream result deve produrre chunk binari")
+                yield chunk if isinstance(chunk, bytes) else bytes(chunk)
+            return
+
+        try:
+            iterator = iter(body)
+        except TypeError as exc:
+            raise TypeError(
+                "Il body del result deve essere uno stream leggibile o un iterabile"
+            ) from exc
+        for chunk in iterator:
+            if not chunk:
+                continue
+            if not isinstance(chunk, (bytes, bytearray, memoryview)):
+                raise TypeError("Lo stream result deve produrre chunk binari")
+            yield chunk if isinstance(chunk, bytes) else bytes(chunk)
+    finally:
+        closed_ids: set[int] = set()
+        for candidate in (iterator, body):
+            if candidate is None or id(candidate) in closed_ids:
+                continue
+            closed_ids.add(id(candidate))
+            close = getattr(candidate, "close", None)
+            if callable(close):
+                close()
+
+
 def _persist_executable_output(
     *,
     contract: JsonObject,
@@ -190,23 +247,11 @@ def _persist_executable_output(
         raise RuntimeError("Output eseguibile non leggibile dal result store")
     body = stream["body"]
 
-    def chunks():
-        try:
-            while True:
-                chunk = body.read(8 * 1024 * 1024)
-                if not chunk:
-                    break
-                yield chunk
-        finally:
-            close = getattr(body, "close", None)
-            if callable(close):
-                close()
-
     filename = str(stream.get("filename") or f"{task_id}.bin")
     key = eseguibili_storage.save_chunks(
         task_id,
         filename,
-        chunks(),
+        _iter_executable_output_chunks(body),
         group_id=group_id,
     )
     return {
