@@ -8,17 +8,17 @@ const source = readFileSync(
 );
 
 describe('ProjectInputNode visual binding contract', () => {
-  it('derives the destination from canvas edges', () => {
-    expect(source).toContain('edges.filter(edge => edge.source === id)');
-    expect(source).toContain('Destinazione:');
+  it('derives every destination from parameter-binding edges', () => {
+    expect(source).toContain('isParameterBindingEdge(edge) && edge.source === id');
+    expect(source).toContain('bindingEdges.map(edge =>');
+    expect(source).toContain('Destinazione');
     expect(source).not.toContain('ID nodo destinazione');
   });
 
-  it('offers only supported runtime-configurable fields', () => {
-    expect(source).toContain('filters.${index}.value');
-    expect(source).toContain('conditions.${index}.value');
-    expect(source).toContain('having_conditions.${index}.value');
-    expect(source).toContain('static_parameters.${name}');
+  it('uses the shared capability resolver instead of hardcoded fields', () => {
+    expect(source).toContain('getNodeBindableTargets(targetNode, registry)');
+    expect(source).toContain('Parametro configurabile');
+    expect(source).not.toContain('bindingOptionsForNode');
   });
 
   it('exposes advanced validation and multi-file authoring controls', () => {

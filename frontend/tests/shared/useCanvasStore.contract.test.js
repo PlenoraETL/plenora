@@ -125,6 +125,58 @@ describe('useCanvasStore save-path contract', () => {
     );
   });
 
+  it('marks parameter-edge edits dirty and persists the selected runtime field', async () => {
+    const store = useCanvasStore.getState();
+    store.init('proj-binding-1', 'manipola');
+    store.setNodes([
+      {
+        id: 'input-1',
+        type: 'project_input',
+        position: { x: 0, y: 0 },
+        data: {
+          input_key: 'province',
+          label: 'Provincia',
+          input_kind: 'text',
+          required: true,
+        },
+      },
+      {
+        id: 'filter-1',
+        type: 'transform',
+        position: { x: 300, y: 0 },
+        data: { transform_op: 'filter', config: { value: '' } },
+      },
+    ]);
+    store.setEdges([{
+      id: 'binding-1',
+      source: 'input-1',
+      target: 'filter-1',
+      data: { edge_kind: 'parameter_binding', target_field: '' },
+    }]);
+    store.markClean();
+
+    useCanvasStore.getState().updateEdge('binding-1', edge => ({
+      targetHandle: 'parameter:value',
+      data: { ...edge.data, target_field: 'config.value' },
+    }));
+
+    expect(useCanvasStore.getState().isDirty).toBe(true);
+    await useCanvasStore.getState().handleSaveQuiet();
+
+    expect(updateCanvasMock).toHaveBeenCalledWith(
+      'proj-binding-1',
+      expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'input-1',
+            bindings: [{ target_node_id: 'filter-1', target_field: 'config.value' }],
+          }),
+        ]),
+        edges: [],
+      }),
+    );
+  });
+
   it('does not mark automatic React Flow dimension measurements as unsaved changes', async () => {
     const store = useCanvasStore.getState();
     store.init('proj-dim-auto', 'estrai');

@@ -25,6 +25,12 @@ import { useEditorData } from '../hooks/useEditorData';
 import { describeAccessDeniedNodes } from '../utils/canvasAccessControl';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
 import useCanvasStore from '../store/useCanvasStore';
+import {
+  createParameterBindingEdge,
+  dataFlowEdges,
+  hydrateParameterBindingEdges,
+  isScalarProjectInputNode,
+} from '../utils/runtimeBindingEdges';
 import ValidationStatusBadge from '../components/editor/ValidationStatusBadge';
 import { deserializeNodes } from '../utils/nodeFactories';
 import EditorSidebar from '../components/panels/EditorSidebar';
@@ -149,7 +155,7 @@ const ArricchisciEditorContent = () => {
   });
   const caricarica = useCaricarica(projectId, {
     onBeforeExecute: handleSaveQuiet,
-    getCanvas: () => ({ nodes: nodesRef.current, edges: edgesRef.current })
+    getCanvas: () => ({ nodes: nodesRef.current, edges: dataFlowEdges(edgesRef.current) })
   });
 
   useEffect(() => {
@@ -168,7 +174,7 @@ const ArricchisciEditorContent = () => {
       if (!clean.sourceHandle || clean.sourceHandle === 'undefined') clean.sourceHandle = 'output';
       return clean;
     });
-    setEdges(sanitizedEdges);
+    setEdges([...sanitizedEdges, ...hydrateParameterBindingEdges(loadedNodes)]);
     // Reset dirty: setNodes/setEdges hanno marcato dirty perché inseriscono
     // nuovi ID, ma è un load programmatico, non una modifica utente.
     useCanvasStore.getState().markClean();
@@ -467,9 +473,16 @@ const ArricchisciEditorContent = () => {
   const onConnect = useCallback((params) => {
     // Normalizza handles: undefined → 'input'/'output'
     const cleanParams = { ...params };
-    if (!cleanParams.targetHandle || cleanParams.targetHandle === 'undefined') cleanParams.targetHandle = 'input';
-    if (!cleanParams.sourceHandle || cleanParams.sourceHandle === 'undefined') cleanParams.sourceHandle = 'output';
-    setEdges(eds => addEdge({ ...cleanParams, ...defaultEdgeOptions }, eds));
+    const sourceNode = nodesRef.current.find(node => node.id === cleanParams.source);
+    const scalarInput = isScalarProjectInputNode(sourceNode);
+    if (!scalarInput) {
+      if (!cleanParams.targetHandle || cleanParams.targetHandle === 'undefined') cleanParams.targetHandle = 'input';
+      if (!cleanParams.sourceHandle || cleanParams.sourceHandle === 'undefined') cleanParams.sourceHandle = 'output';
+    }
+    const edge = scalarInput
+      ? createParameterBindingEdge(cleanParams)
+      : { ...cleanParams, ...defaultEdgeOptions };
+    setEdges(eds => addEdge(edge, eds));
   }, [setEdges]);
   const onEdgeContextMenu  = useCallback((event, edge) => { event.preventDefault(); setEdges(eds => eds.filter(e => e.id !== edge.id)); }, [setEdges]);
   const onDragStart        = (event, nodeType, nodeData = {}) => { event.dataTransfer.setData('application/reactflow', nodeType); event.dataTransfer.setData('nodeData', JSON.stringify(nodeData)); event.dataTransfer.effectAllowed = 'move'; };

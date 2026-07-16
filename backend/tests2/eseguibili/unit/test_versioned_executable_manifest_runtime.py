@@ -87,6 +87,140 @@ def test_manifest_compiles_multiple_files_and_scalar_binding() -> None:
     ]
 
 
+def _real_manipola_parameter_canvas(target_field: str = "config.value") -> dict:
+    return {
+        "nodes": [
+            {
+                "id": "province-input",
+                "type": "project_input",
+                "position": {"x": 0, "y": 0},
+                "input_key": "province",
+                "label": "Provincia",
+                "input_kind": "text",
+                "bindings": [
+                    {"target_node_id": "filter-a", "target_field": target_field},
+                    {"target_node_id": "filter-b", "target_field": target_field},
+                ],
+            },
+            {
+                "id": "filter-a",
+                "type": "transform",
+                "position": {"x": 300, "y": 0},
+                "transform_op": "filter",
+                "config": {"column": "province", "operator": "==", "value": "RM"},
+            },
+            {
+                "id": "filter-b",
+                "type": "transform",
+                "position": {"x": 600, "y": 0},
+                "transform_op": "filter",
+                "config": {"column": "billing_province", "operator": "==", "value": "RM"},
+            },
+            {"id": "result", "type": "result", "position": {"x": 900, "y": 0}},
+        ],
+        "edges": [
+            {"id": "flow-1", "source": "filter-a", "target": "filter-b"},
+            {"id": "flow-2", "source": "filter-b", "target": "result"},
+        ],
+    }
+
+
+def test_real_manipola_parameter_binding_is_generic_and_supports_fanout() -> None:
+    canvas = _real_manipola_parameter_canvas(target_field="value")
+    manifest = compile_manifest(
+        source_project_id="project-1",
+        project_type="manipola",
+        canvas=canvas,
+    )
+
+    assert [binding.target_field for binding in manifest.bindings] == [
+        "config.value",
+        "config.value",
+    ]
+
+    resolved, cleanup_ids, _summary = executable_runtime.resolve_runtime_inputs(
+        eseguibile_id="exec-1",
+        canvas=canvas,
+        manifest=manifest,
+        values={"province": "MI"},
+        group_id="group-1",
+    )
+
+    filters = {
+        node["id"]: node
+        for node in resolved["nodes"]
+        if node.get("type") == "transform"
+    }
+    assert filters["filter-a"]["config"]["value"] == "MI"
+    assert filters["filter-b"]["config"]["value"] == "MI"
+    assert "province-input" not in {node["id"] for node in resolved["nodes"]}
+    assert cleanup_ids == []
+
+
+def test_runtime_binding_can_override_an_implicit_registry_default() -> None:
+    canvas = _real_manipola_parameter_canvas()
+    for node in canvas["nodes"]:
+        if node.get("id") == "filter-a":
+            node["config"].pop("value")
+    province_input = canvas["nodes"][0]
+    province_input["bindings"] = [province_input["bindings"][0]]
+    manifest = compile_manifest(
+        source_project_id="project-1",
+        project_type="manipola",
+        canvas=canvas,
+    )
+
+    resolved, _cleanup_ids, _summary = executable_runtime.resolve_runtime_inputs(
+        eseguibile_id="exec-1",
+        canvas=canvas,
+        manifest=manifest,
+        values={"province": "TO"},
+        group_id="group-1",
+    )
+
+    target = next(node for node in resolved["nodes"] if node["id"] == "filter-a")
+    assert target["config"]["value"] == "TO"
+
+
+def test_runtime_binding_rejects_schema_affecting_transform_parameter() -> None:
+    canvas = _real_manipola_parameter_canvas(target_field="config.new_column")
+    for node in canvas["nodes"]:
+        if node.get("type") == "transform":
+            node["transform_op"] = "formula"
+            node["config"] = {"new_column": "calculated", "formula": "1"}
+
+    with pytest.raises(ValueError, match="non configurabile"):
+        compile_manifest(
+            source_project_id="project-1",
+            project_type="manipola",
+            canvas=canvas,
+        )
+
+
+def test_manifest_rejects_two_inputs_bound_to_the_same_parameter() -> None:
+    canvas = _real_manipola_parameter_canvas()
+    canvas["nodes"].insert(
+        1,
+        {
+            "id": "second-input",
+            "type": "project_input",
+            "input_key": "second_province",
+            "label": "Seconda provincia",
+            "input_kind": "text",
+            "bindings": [
+                {"target_node_id": "filter-a", "target_field": "config.value"}
+            ],
+        },
+    )
+
+    with pytest.raises(ValueError, match="collegato a piu' input"):
+        compile_manifest(
+            source_project_id="project-1",
+            project_type="manipola",
+            canvas=canvas,
+        )
+
+
 def test_manifest_rejects_sensitive_runtime_binding() -> None:
     canvas = _multi_input_canvas()
     scalar = next(node for node in canvas["nodes"] if node["id"] == "country")

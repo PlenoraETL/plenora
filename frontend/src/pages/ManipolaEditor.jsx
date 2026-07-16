@@ -43,6 +43,12 @@ import DataSourceNode from '../components/nodes/DataSourceNode';
 import { useSchemaInference, usePreview, useExecution, useCanvasCore, useCanvasSave, useUnsavedChangesGuard, useValidationHighlights } from '../hooks';
 import { useEditorData } from '../hooks/useEditorData';
 import useCanvasStore from '../store/useCanvasStore';
+import {
+  createParameterBindingEdge,
+  dataFlowEdges,
+  hydrateParameterBindingEdges,
+  isScalarProjectInputNode,
+} from '../utils/runtimeBindingEdges';
 import ValidationStatusBadge from '../components/editor/ValidationStatusBadge';
 import { useToast } from '../hooks/useToast';
 import { useTheme } from '../hooks/useTheme';
@@ -142,7 +148,7 @@ const ManipolaEditorContent = () => {
   const executeCaricanTask = useCallback(async (projId, options) => {
     const res = await createTask({
       task_type: 'carica', project_id: projId,
-      canvas: { nodes: nodesRef.current, edges: edgesRef.current },
+      canvas: { nodes: nodesRef.current, edges: dataFlowEdges(edgesRef.current) },
       carica_node_data: options.carica_node_data
     });
     const result = res;
@@ -169,8 +175,9 @@ const ManipolaEditorContent = () => {
       return match ? { ...edge, targetHandle: match[1] } : edge;
     });
 
+    const loadedEdges = [...rawEdges, ...hydrateParameterBindingEdges(loadedNodes)];
     setNodes(loadedNodes);
-    setEdges(rawEdges);
+    setEdges(loadedEdges);
     // Reset dirty: setNodes/setEdges hanno marcato dirty perché inseriscono
     // nuovi ID, ma è un load programmatico, non una modifica utente.
     useCanvasStore.getState().markClean();
@@ -179,7 +186,7 @@ const ManipolaEditorContent = () => {
     // `refreshSchemas` giravano sul canvas del progetto successivo
     // (gia' resettato dallo store) sovrascrivendo dati appena caricati.
     const propagateTimer = setTimeout(
-      () => { propagateColumns(loadedNodes, rawEdges); },
+      () => { propagateColumns(loadedNodes, loadedEdges); },
       300,
     );
     const schemaTimer = setTimeout(() => { refreshSchemas(); }, 100);
@@ -211,7 +218,7 @@ const ManipolaEditorContent = () => {
     // nodes e edges vengono letti dentro la callback di setNodes (snapshot aggiornato)
     // e da edgesRef (ref stabile). schemas è la sola vera dipendenza esterna.
     setNodes(nds => {
-      const currentEdges = edgesRef.current;
+      const currentEdges = dataFlowEdges(edgesRef.current);
       const resultNode = nds.find(n => n.type === 'result');
       if (!resultNode) return nds;
       const incomingEdge = currentEdges.find(e => e.target === resultNode.id);
@@ -386,9 +393,15 @@ const ManipolaEditorContent = () => {
   // refreshSchemas resta accoppiato a connect (non a edge-remove).
   const onConnect = useCallback((params) => {
     setEdges(eds => {
-      const newEdges = addEdge({ ...params, ...defaultEdgeOptions }, eds);
+      const sourceNode = nodesRef.current.find(node => node.id === params.source);
+      const edge = isScalarProjectInputNode(sourceNode)
+        ? createParameterBindingEdge(params)
+        : { ...params, ...defaultEdgeOptions };
+      const newEdges = addEdge(edge, eds);
       setTimeout(() => {
-        propagateColumns(nodesRef.current, newEdges);
+        if (!isScalarProjectInputNode(sourceNode)) {
+          propagateColumns(nodesRef.current, newEdges);
+        }
         // triggerAutosave rispetta il single-flight semaphore.
         // refreshSchemas non e' piu' chained al save: il semaphore
         // potrebbe codarlo (re-fire) o saltarlo se gia' in flight.

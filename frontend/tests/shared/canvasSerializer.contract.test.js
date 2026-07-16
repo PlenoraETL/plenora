@@ -2,8 +2,51 @@ import { describe, expect, it } from 'vitest';
 
 import { serializeCanvas, serializeEdge } from '../../src/utils/canvasSerializer';
 import { createEdgeFromData, deserializeNodes } from '../../src/utils/nodeFactories';
+import { createParameterBindingEdge } from '../../src/utils/runtimeBindingEdges';
 
 describe('canvasSerializer contract', () => {
+  it('stores runtime bindings on the input node and omits virtual parameter edges', () => {
+    const nodes = [
+      {
+        id: 'input-province',
+        type: 'project_input',
+        position: { x: 0, y: 0 },
+        data: {
+          input_key: 'province',
+          label: 'Provincia',
+          input_kind: 'text',
+          required: true,
+        },
+      },
+      {
+        id: 'source-1',
+        type: 'projectSource',
+        position: { x: 0, y: 200 },
+        data: { source_project_id: 'project-1' },
+      },
+      {
+        id: 'filter-1',
+        type: 'transform',
+        position: { x: 300, y: 100 },
+        data: { transform_op: 'filter', config: { column: 'province', value: '' } },
+      },
+    ];
+    const parameterEdge = createParameterBindingEdge({
+      source: 'input-province',
+      target: 'filter-1',
+      targetField: 'config.value',
+      targetParameter: 'value',
+    });
+    const dataEdge = { id: 'data-1', source: 'source-1', target: 'filter-1' };
+
+    const payload = serializeCanvas(nodes, [dataEdge, parameterEdge]);
+
+    expect(payload.nodes[0].bindings).toEqual([
+      { target_node_id: 'filter-1', target_field: 'config.value' },
+    ]);
+    expect(payload.edges).toEqual([dataEdge]);
+  });
+
   it('serializes api_enrich and result nodes into the flat backend payload shape', () => {
     const nodes = [
       {

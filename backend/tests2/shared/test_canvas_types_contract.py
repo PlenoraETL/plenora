@@ -27,7 +27,7 @@ def test_node_types_lockin():
     assert set(ct.VALID_NODE_TYPES) == {
         "source", "result", "project_source", "file_source", "feature_source",
         "transform", "api_enrich", "staticValues", "carica", "carica_arcgis",
-        "multi_join", "comment", "datasource_node",
+        "multi_join", "comment", "datasource_node", "project_input",
     }
     # Sentinel: se qualcuno cambia un caso (es. "result" -> "Result") il
     # canvas non valida piu' — qui catturiamo prima del deploy.

@@ -33,13 +33,16 @@ import ColumnOrderInput from './parameter-inputs/ColumnOrderInput';
 import RenameListInput from './parameter-inputs/RenameListInput';
 import MaskingListInput from './parameter-inputs/MaskingListInput';
 import ConditionListInput from './parameter-inputs/ConditionListInput';
+import RuntimeInputBindingControl from './RuntimeInputBindingControl';
 
 const ParameterInput = ({
   param,
   value,
   onChange,
   columns = [],
-  sourceLabel = null  // "⬅ SX" o "➡ DX" per colonne join
+  sourceLabel = null,
+  targetNodeId = null,
+  transformDefinition = null,
 }) => {
   const {
     type,
@@ -263,6 +266,12 @@ const ParameterInput = ({
           )}
         </label>
       )}
+
+      <RuntimeInputBindingControl
+        targetNodeId={targetNodeId}
+        param={param}
+        transformDefinition={transformDefinition}
+      />
 
       <div className="parameter-input__control">
         {renderInput()}

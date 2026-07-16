@@ -1,6 +1,11 @@
-import React, { memo, useMemo } from 'react';
+import React, { memo, useEffect, useMemo, useState } from 'react';
 import { Handle, Position } from 'reactflow';
 import useCanvasStore from '../../store/useCanvasStore';
+import { getTransformRegistry } from '../../api/transforms';
+import {
+  getNodeBindableTargets,
+  isParameterBindingEdge,
+} from '../../utils/runtimeBindingEdges';
 import './ProjectInputNode.css';
 
 const INPUT_TYPES = [
@@ -21,41 +26,18 @@ const normalizeKey = value => String(value || '')
   .replace(/^_+|_+$/g, '')
   .replace(/^[^a-z]+/, '');
 
-const bindingOptionsForNode = node => {
-  if (!node) return [];
-  const data = node.data || {};
-  const options = [];
-  (data.filters || []).forEach((item, index) => options.push({
-    value: `filters.${index}.value`,
-    label: `Filtro ${index + 1}: ${item.column || item.field || 'valore'}`,
-  }));
-  (data.conditions || []).forEach((item, index) => {
-    options.push({
-      value: `conditions.${index}.value`,
-      label: `Condizione ${index + 1}: valore`,
-    });
-    if (Object.prototype.hasOwnProperty.call(item || {}, 'result')) {
-      options.push({
-        value: `conditions.${index}.result`,
-        label: `Condizione ${index + 1}: risultato`,
-      });
-    }
-  });
-  (data.having_conditions || []).forEach((item, index) => options.push({
-    value: `having_conditions.${index}.value`,
-    label: `HAVING ${index + 1}: ${item.column || item.field || 'valore'}`,
-  }));
-  Object.keys(data.static_parameters || {}).forEach(name => options.push({
-    value: `static_parameters.${name}`,
-    label: `Parametro statico: ${name}`,
-  }));
-  if (Object.prototype.hasOwnProperty.call(data, 'value')) {
-    options.push({ value: 'value', label: 'Valore del nodo' });
+let registryCache = null;
+let registryPromise = null;
+
+const loadRegistry = () => {
+  if (registryCache) return Promise.resolve(registryCache);
+  if (!registryPromise) {
+    registryPromise = getTransformRegistry().then(value => {
+      registryCache = value;
+      return value;
+    }).finally(() => { registryPromise = null; });
   }
-  if (Object.prototype.hasOwnProperty.call(data, 'default_value')) {
-    options.push({ value: 'default_value', label: 'Valore predefinito' });
-  }
-  return options;
+  return registryPromise;
 };
 
 function ProjectInputNode({ id, data, selected }) {
@@ -63,26 +45,62 @@ function ProjectInputNode({ id, data, selected }) {
   const deleteNode = useCanvasStore(s => s.deleteNode);
   const nodes = useCanvasStore(s => s.nodes);
   const edges = useCanvasStore(s => s.edges);
+  const setEdges = useCanvasStore(s => s.setEdges);
+  const updateEdge = useCanvasStore(s => s.updateEdge);
+  const isReadOnly = useCanvasStore(s => s.isReadOnly);
+  const [registry, setRegistry] = useState(registryCache);
+  const [registryStatus, setRegistryStatus] = useState(
+    registryCache ? 'ready' : 'idle',
+  );
   const kind = data.input_kind || 'file';
-  const binding = data.bindings?.[0] || {};
-  const targetIds = useMemo(
-    () => [...new Set(edges.filter(edge => edge.source === id).map(edge => edge.target))],
+  const bindingEdges = useMemo(
+    () => edges.filter(edge => isParameterBindingEdge(edge) && edge.source === id),
     [edges, id],
   );
-  const targetNode = targetIds.length === 1
-    ? nodes.find(node => node.id === targetIds[0])
-    : null;
-  const bindingOptions = useMemo(() => bindingOptionsForNode(targetNode), [targetNode]);
-  const targetLabel = targetNode?.data?.label || targetNode?.data?.name || targetNode?.type;
   const columnText = useMemo(
     () => (data.expected_columns || []).map(column => column.name).join(', '),
     [data.expected_columns],
   );
 
+  useEffect(() => {
+    if (kind === 'file' || registry) return undefined;
+    let active = true;
+    setRegistryStatus('loading');
+    loadRegistry()
+      .then(value => {
+        if (!active) return;
+        setRegistry(value);
+        setRegistryStatus('ready');
+      })
+      .catch(() => {
+        if (active) setRegistryStatus('error');
+      });
+    return () => { active = false; };
+  }, [kind, registry]);
+
   const update = changes => updateNodeData(id, changes);
-  const updateBinding = changes => update({
-    bindings: [{ ...binding, ...changes }],
-  });
+  const updateBinding = (edgeId, targetField) => {
+    const target = bindingEdges.find(edge => edge.id === edgeId)?.target;
+    const targetNode = nodes.find(node => node.id === target);
+    const option = getNodeBindableTargets(targetNode, registry)
+      .find(item => item.value === targetField);
+    const directParameter = option
+      && option.value === `config.${option.parameter}`
+      ? option.parameter
+      : '';
+    updateEdge(edgeId, edge => ({
+      targetHandle: directParameter ? `parameter:${directParameter}` : undefined,
+      data: {
+        ...edge.data,
+        target_field: targetField,
+        target_parameter: option?.parameter || '',
+      },
+    }));
+  };
+  const removeBinding = edgeId => {
+    if (isReadOnly) return;
+    setEdges(current => current.filter(edge => edge.id !== edgeId));
+  };
   const updateValidation = changes => update({
     validation: { ...(data.validation || {}), ...changes },
   });
@@ -111,7 +129,12 @@ function ProjectInputNode({ id, data, selected }) {
       </label>
       <label className="pin__field">
         <span>Tipo</span>
-        <select className="nodrag" value={kind} onChange={event => update({ input_kind: event.target.value, bindings: [] })}>
+        <select className="nodrag" value={kind} disabled={isReadOnly} onChange={event => {
+          if (isReadOnly) return;
+          const nextKind = event.target.value;
+          setEdges(current => current.filter(edge => edge.source !== id));
+          update({ input_kind: nextKind, bindings: [] });
+        }}>
           {INPUT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
       </label>
@@ -202,49 +225,82 @@ function ProjectInputNode({ id, data, selected }) {
             </div>
           )}
           <div className="pin__binding">
-          <div className="pin__binding-title">Collegamento al canvas</div>
-          {targetIds.length === 0 && (
-            <p className="pin__binding-hint pin__binding-hint--warning">
-              Trascina il collegamento sul nodo da configurare.
-            </p>
-          )}
-          {targetIds.length > 1 && (
-            <p className="pin__binding-hint pin__binding-hint--error">
-              Collega l'input a un solo nodo destinazione.
-            </p>
-          )}
-          {targetNode && (
-            <p className="pin__binding-hint pin__binding-hint--ok">
-              Destinazione: <strong>{targetLabel || targetNode.id}</strong>
-            </p>
-          )}
-          <label className="pin__field">
-            <span>Campo configurabile</span>
-            <select
-              className="nodrag"
-              value={binding.target_field || ''}
-              onChange={event => updateBinding({ target_field: event.target.value })}
-              disabled={!targetNode || bindingOptions.length === 0}
-            >
-              <option value="">Seleziona il campo...</option>
-              {binding.target_field && !bindingOptions.some(item => item.value === binding.target_field) && (
-                <option value={binding.target_field}>{binding.target_field} (precedente)</option>
-              )}
-              {bindingOptions.map(option => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </label>
-          {targetNode && bindingOptions.length === 0 && (
-            <p className="pin__binding-hint pin__binding-hint--error">
-              Il nodo collegato non espone campi configurabili.
-            </p>
-          )}
+            <div className="pin__binding-title">Collegamenti al canvas</div>
+            {bindingEdges.length === 0 && (
+              <p className="pin__binding-hint pin__binding-hint--warning">
+                Trascina il collegamento sul nodo da configurare oppure usa
+                “Input runtime” accanto a un suo parametro.
+              </p>
+            )}
+            {bindingEdges.map(edge => {
+              const targetNode = nodes.find(node => node.id === edge.target);
+              const options = getNodeBindableTargets(targetNode, registry);
+              const targetLabel = targetNode?.data?.label
+                || targetNode?.data?.name
+                || targetNode?.data?.transform_op
+                || targetNode?.type
+                || edge.target;
+              const currentField = edge.data?.target_field || '';
+              const awaitingRegistry = targetNode?.type === 'transform'
+                && registryStatus !== 'ready';
+              return (
+                <div className="pin__binding-row" key={edge.id}>
+                  <div className="pin__binding-target">
+                    <span>Destinazione</span>
+                    <strong>{targetLabel}</strong>
+                    <button type="button" className="nodrag" disabled={isReadOnly} onClick={() => removeBinding(edge.id)} title="Rimuovi collegamento">×</button>
+                  </div>
+                  <label className="pin__field">
+                    <span>Parametro configurabile</span>
+                    <select
+                      className="nodrag"
+                      value={currentField}
+                      onChange={event => updateBinding(edge.id, event.target.value)}
+                      disabled={isReadOnly || !targetNode || awaitingRegistry || options.length === 0}
+                    >
+                      <option value="">Seleziona il parametro…</option>
+                      {currentField && !options.some(item => item.value === currentField) && (
+                        <option value={currentField}>{currentField} (legacy)</option>
+                      )}
+                      {options.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {awaitingRegistry && registryStatus !== 'error' && (
+                    <p className="pin__binding-hint">
+                      Caricamento parametri configurabili…
+                    </p>
+                  )}
+                  {awaitingRegistry && registryStatus === 'error' && (
+                    <p className="pin__binding-hint pin__binding-hint--error">
+                      Impossibile caricare il registry dei parametri.
+                    </p>
+                  )}
+                  {targetNode && !awaitingRegistry && options.length === 0 && (
+                    <p className="pin__binding-hint pin__binding-hint--error">
+                      Il nodo collegato non espone parametri runtime sicuri.
+                    </p>
+                  )}
+                  {!awaitingRegistry && !currentField && options.length > 0 && (
+                    <p className="pin__binding-hint pin__binding-hint--warning">
+                      Seleziona il parametro da valorizzare.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </>
       )}
 
-      <Handle type="source" position={Position.Right} className="pin__handle" />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id={kind === 'file' ? 'output' : 'parameter'}
+        className="pin__handle"
+        isConnectable={!isReadOnly}
+      />
     </div>
   );
 }

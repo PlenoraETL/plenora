@@ -1,3 +1,5 @@
+import { isParameterBindingEdge } from './runtimeBindingEdges';
+
 /**
  * columnUtils.js
  * Utility per calcolare e propagare le colonne attraverso il grafo
@@ -144,7 +146,9 @@ export function calculateOutputColumnsRecursive(nodes, edges, resultNodeId) {
     }
 
     // Trova tutti gli edges che arrivano a questo nodo
-    const incomingEdges = edges.filter(e => e.target === nodeId);
+    const incomingEdges = edges.filter(
+      e => e.target === nodeId && !isParameterBindingEdge(e),
+    );
     
     // Traversa ricorsivamente i nodi sorgente
     for (const edge of incomingEdges) {

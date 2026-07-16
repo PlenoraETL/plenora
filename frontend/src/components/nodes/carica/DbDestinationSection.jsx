@@ -5,6 +5,7 @@ import { useCaricaSchemaSelect } from './useCaricaSchemaSelect';
 import ColumnMappingPanel from './ColumnMappingPanel';
 import DbAdvancedOptions from './DbAdvancedOptions';
 import ConflictModal from './ConflictModal';
+import { dataFlowEdges } from '../../../utils/runtimeBindingEdges';
 
 // Labels e descrizioni sono UX, restano locali. I `value` arrivano da
 // `canvasTypes.WRITE_MODES` (single source of truth allineata col BE);
@@ -92,7 +93,7 @@ function DbDestinationSection({
 
   // Trova il nodo ESTRAI (o altro nodo DB) connesso a questo nodo CARICA
   const getSourceNodeData = () => {
-    const incomingEdge = canvasEdges.find(e => e.target === nodeId);
+    const incomingEdge = dataFlowEdges(canvasEdges).find(e => e.target === nodeId);
     if (!incomingEdge) return null;
     const sourceNode = canvasNodes.find(n => n.id === incomingEdge.source);
     if (!sourceNode?.data) return null;

@@ -11,6 +11,7 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from .binding_capabilities import canonical_binding_path
 from .models import (
     ExecutableInputBinding,
     ExecutableInputDefinition,
@@ -54,10 +55,9 @@ def _as_expected_columns(value: Any) -> list[ExpectedColumn]:
 
 
 def _validate_target_field(path: str) -> str:
-    """Accetta solo campi di configurazione runtime non sensibili.
+    """Valida la sintassi del percorso e blocca i campi sensibili.
 
-    La allowlist è intenzionalmente stretta: un manifest non deve poter
-    sostituire riferimenti a connessioni, credenziali o risorse tenant.
+    La capability semantica viene verificata in seguito sul nodo concreto.
     """
 
     parts = path.split(".")
@@ -69,15 +69,8 @@ def _validate_target_field(path: str) -> str:
         if part.lower() in _BLOCKED_FIELD_PARTS:
             raise ValueError(f"Campo binding protetto: {path!r}")
 
-    allowed = (
-        re.fullmatch(r"filters\.\d+\.value", path)
-        or re.fullmatch(r"conditions\.\d+\.(value|result)", path)
-        or re.fullmatch(r"having_conditions\.\d+\.value", path)
-        or re.fullmatch(r"static_parameters\.[A-Za-z_][A-Za-z0-9_]*", path)
-        or path in {"value", "default_value"}
-    )
-    if not allowed:
-        raise ValueError(f"Campo non configurabile da input runtime: {path!r}")
+    # L'autorizzazione semantica dipende dal nodo destinazione ed e' applicata
+    # da ``canonical_binding_path`` dopo la compilazione dei riferimenti.
     return path
 
 
@@ -132,7 +125,7 @@ def _compile_project_input(
             ExecutableInputBinding(
                 input_key=definition.key,
                 target_node_id=str(
-                    inferred_target_id or raw.get("target_node_id") or ""
+                    raw.get("target_node_id") or inferred_target_id or ""
                 ),
                 mode="node_field",
                 target_field=_validate_target_field(
@@ -161,11 +154,12 @@ def compile_manifest(
     if not isinstance(nodes, list) or not nodes:
         raise ValueError("Il progetto non ha un canvas valido")
 
-    node_ids = {
-        str(node.get("id"))
+    nodes_by_id = {
+        str(node.get("id")): node
         for node in nodes
         if isinstance(node, Mapping) and node.get("id")
     }
+    node_ids = set(nodes_by_id)
     inputs: list[ExecutableInputDefinition] = []
     bindings: list[ExecutableInputBinding] = []
 
@@ -206,6 +200,25 @@ def compile_manifest(
                 f"Binding input '{binding.input_key}' verso nodo inesistente "
                 f"'{binding.target_node_id}'"
             )
+        if binding.mode == "node_field" and binding.target_field:
+            binding.target_field = canonical_binding_path(
+                nodes_by_id[binding.target_node_id],
+                binding.target_field,
+            )
+
+    claimed_targets: dict[tuple[str, str], str] = {}
+    for binding in bindings:
+        if binding.mode != "node_field" or not binding.target_field:
+            continue
+        target = (binding.target_node_id, binding.target_field)
+        previous_input = claimed_targets.get(target)
+        if previous_input is not None:
+            raise ValueError(
+                "Parametro runtime collegato a piu' input: "
+                f"{binding.target_node_id}.{binding.target_field} "
+                f"({previous_input}, {binding.input_key})"
+            )
+        claimed_targets[target] = binding.input_key
 
     # Adapter di pubblicazione per gli eseguibili già supportati: un canvas
     # Arricchisci senza project_input conserva il contratto single-file.

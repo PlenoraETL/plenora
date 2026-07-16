@@ -1,3 +1,5 @@
+import { dataFlowEdges } from './runtimeBindingEdges';
+
 /**
  * graphUtils.js — Utility pure condivise per la gestione dei grafi canvas
  * (detectCycle, getNodeName). Erano usate dai validatori canvas per-famiglia
@@ -14,7 +16,7 @@
 export function detectCycle(nodes, edges) {
   const adjacency = new Map();
   nodes.forEach(n => adjacency.set(n.id, []));
-  edges.forEach(e => {
+  dataFlowEdges(edges).forEach(e => {
     if (adjacency.has(e.source)) adjacency.get(e.source).push(e.target);
   });
   const colors = new Map();

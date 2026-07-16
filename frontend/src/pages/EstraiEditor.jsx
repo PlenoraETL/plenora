@@ -36,6 +36,7 @@ import { useEditorData } from '../hooks/useEditorData';
 import { describeAccessDeniedNodes } from '../utils/canvasAccessControl';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
 import useCanvasStore from '../store/useCanvasStore';
+import { dataFlowEdges, hydrateParameterBindingEdges } from '../utils/runtimeBindingEdges';
 import { useToast } from '../hooks/useToast';
 import { toastApiError } from '../utils/toastApiError';
 import { useTheme } from '../hooks/useTheme';
@@ -98,7 +99,7 @@ function EstraiEditor() {
   });
   const caricarica = useCaricarica(projectId, {
     onBeforeExecute: handleSaveQuiet,
-    getCanvas: () => ({ nodes: nodesRef.current, edges: edgesRef.current })
+    getCanvas: () => ({ nodes: nodesRef.current, edges: dataFlowEdges(edgesRef.current) })
   });
   // Highlight backend-driven (Epic CanvasVal §12): i nodi con issue sono
   // evidenziati dallo store (setValidationHighlights, popolato da Valida/Esegui
@@ -124,7 +125,7 @@ function EstraiEditor() {
     const loadedNodes = deserializeNodes(project.canvas.nodes, { connection: projectConnection });
     const loadedEdges = (project.canvas.edges || []).map(e => createEdgeFromData(e, loadedNodes));
     setNodes(loadedNodes);
-    setEdges(loadedEdges);
+    setEdges([...loadedEdges, ...hydrateParameterBindingEdges(loadedNodes)]);
     // setNodes/setEdges marcano dirty=true se inseriscono nuovi ID (lo fanno
     // sempre al load). Resettiamo il flag così handleSaveQuiet non farà PUT
     // inutili finché l'utente non modifica davvero qualcosa nel canvas.

@@ -1,4 +1,9 @@
 import { nd } from './nodeHelpers';
+import {
+  dataFlowEdges,
+  isParameterBindingEdge,
+  serializedBindingsForInput,
+} from './runtimeBindingEdges';
 
 /**
  * canvasSerializer.js
@@ -57,7 +62,7 @@ const serializers = {
     columns:        nd(node, 'columns', []),
   }),
 
-  project_input: (node) => ({
+  project_input: (node, { edges = [] } = {}) => ({
     id: node.id, type: 'project_input', position: node.position,
     input_key:       nd(node, 'input_key', ''),
     label:           nd(node, 'label', 'Input'),
@@ -68,7 +73,7 @@ const serializers = {
     multiple:        nd(node, 'multiple', false),
     expected_columns: nd(node, 'expected_columns', []),
     validation:      nd(node, 'validation', {}),
-    bindings:        nd(node, 'bindings', []),
+    bindings:        serializedBindingsForInput(node, edges),
     order:           nd(node, 'order', 0),
   }),
 
@@ -244,6 +249,7 @@ serializers.project_source = serializers.projectSource;
 serializers.file_source    = serializers.fileSource;
 
 export function serializeEdge(edge) {
+  if (isParameterBindingEdge(edge)) return null;
   if (!edge.data || !edge.data.join_type) return edge;
   return {
     id: edge.id, source: edge.source, target: edge.target,
@@ -266,7 +272,10 @@ export function serializeCanvas(nodes, edges, _options = {}) {
     const s = serializers[node.type];
     return s ? s(node, ctx) : { id: node.id, type: node.type, position: node.position, ...(node.data || {}) };
   });
-  return { nodes: serializedNodes, edges: edges.map(serializeEdge) };
+  return {
+    nodes: serializedNodes,
+    edges: edges.map(serializeEdge).filter(Boolean),
+  };
 }
 
 function _computeResultColumns(resultNode, allNodes, edges) {
@@ -284,7 +293,7 @@ function _computeResultColumns(resultNode, allNodes, edges) {
   // (source/transform/api_enrich/merge/join). Al reload la UI legge il
   // valore corretto dal canvas persistito.
   const saved = resultNode.data?.columns || [];
-  const incomingEdge = edges.find(e => e.target === resultNode.id);
+  const incomingEdge = dataFlowEdges(edges).find(e => e.target === resultNode.id);
   if (!incomingEdge) return saved;
   const sourceNode = allNodes.find(n => n.id === incomingEdge.source);
   const upstream = sourceNode?.data?.columns || [];

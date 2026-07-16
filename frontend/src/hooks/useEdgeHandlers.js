@@ -8,6 +8,11 @@
  */
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { addEdge } from 'reactflow';
+import {
+  createParameterBindingEdge,
+  isParameterBindingEdge,
+  isScalarProjectInputNode,
+} from '../utils/runtimeBindingEdges';
 
 /**
  * useEdgeHandlers - Hook per gestione edges e modal join
@@ -106,6 +111,13 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
    * Handler connessione nodi
    */
   const onConnect = useCallback((params) => {
+    const sourceNode = nodesRef.current.find(n => n.id === params.source);
+    if (isScalarProjectInputNode(sourceNode)) {
+      const newEdge = createParameterBindingEdge(params);
+      setEdges(eds => addEdge(newEdge, eds));
+      if (onEdgeCreated) onEdgeCreated(newEdge);
+      return;
+    }
     const targetNode = nodesRef.current.find(n => n.id === params.target);
     
     // Se target è nodo risultato, crea edge output direttamente
@@ -160,6 +172,7 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
    * Handler click su edge (per editing)
    */
   const onEdgeClick = useCallback((event, edge) => {
+    if (isParameterBindingEdge(edge)) return;
     // Non aprire modal per edge output
     if (edge.data?.join_type === 'output') return;
     
@@ -187,6 +200,10 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
    */
   const onEdgeContextMenu = useCallback((event, edge) => {
     event.preventDefault();
+    if (isParameterBindingEdge(edge)) {
+      setEdges((eds) => eds.filter((item) => item.id !== edge.id));
+      return;
+    }
     
     // Edge output e carica: eliminazione diretta (context menu è già intenzionale)
     if (edge.data?.join_type === 'output' || edge.data?.join_type === 'carica' || edge.data?.join_type === 'carica_arcgis') {

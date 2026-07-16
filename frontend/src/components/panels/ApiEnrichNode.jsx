@@ -21,6 +21,7 @@ import { humanizeError } from '../../utils/errorMessages';
 import useCanvasStore from '../../store/useCanvasStore';
 import './ApiEnrichNode.css';
 import RunHistoryModal from '../modals/RunHistoryModal';
+import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 
 /**
  * ApiEnrichNode - Nodo per arricchire dati chiamando API esterne
@@ -40,11 +41,11 @@ function ApiEnrichNode({ id, data, selected }) {
   
   // Sottoscrivi ai cambiamenti degli edge in ingresso (trigger re-render quando si collega/scollega)
   const incomingEdgeCount = useStore(
-    state => (state.edges || []).filter(e => e.target === id).length
+    state => dataFlowEdges(state.edges).filter(e => e.target === id).length
   );
   // Sottoscrivi ai cambiamenti delle colonne del nodo sorgente
   const sourceColumnsKey = useStore(state => {
-    const edges = state.edges || [];
+    const edges = dataFlowEdges(state.edges);
     const nodes = state.nodeInternals 
       ? Array.from(state.nodeInternals.values()) 
       : (state.nodes || []);
@@ -112,7 +113,7 @@ function ApiEnrichNode({ id, data, selected }) {
   };
 const connectedFileSource = useMemo(() => {
     if (!isExecutable) return null;
-    const edges = getEdges();
+    const edges = dataFlowEdges(getEdges());
     const nodes = getNodes();
     const inEdge = edges.find(e => e.target === id);
     if (!inEdge) return null;
@@ -133,7 +134,7 @@ const connectedFileSource = useMemo(() => {
   // (file_source o project_source). La validation a valle blocca
   // l'esecuzione anche per il flusso standard non-executable.
   const upstreamAccessDenied = useMemo(() => {
-    const edges = getEdges();
+    const edges = dataFlowEdges(getEdges());
     const nodes = getNodes();
     const inEdge = edges.find(e => e.target === id);
     if (!inEdge) return null;
@@ -196,7 +197,7 @@ const handleExecParamChange = (key, value) => {
   
   // Calcola colonne input disponibili (dal nodo precedente)
   const inputColumns = useMemo(() => {
-    const edges = getEdges();
+    const edges = dataFlowEdges(getEdges());
     const nodes = getNodes();
     
     const incomingEdge = edges.find(e => e.target === id);

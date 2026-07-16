@@ -9,6 +9,7 @@
  */
 import { useCallback } from 'react';
 import { applyExtendedTransformSchema } from '../utils/extendedTransformSchema';
+import { isParameterBindingEdge } from '../utils/runtimeBindingEdges';
 
 /**
  * useColumnPropagation - UNICA FONTE DI VERITÀ per le colonne
@@ -24,6 +25,7 @@ export const useColumnPropagation = (setNodes) => {
   
   const propagateColumns = useCallback((nodes, edges) => {
     if (!nodes || nodes.length === 0) return;
+    const dataEdges = (edges || []).filter(edge => !isParameterBindingEdge(edge));
     
     
     // 1. Costruisci il grafo
@@ -36,7 +38,7 @@ export const useColumnPropagation = (setNodes) => {
       outEdges.set(n.id, []);
     });
     
-    edges.forEach(e => {
+    dataEdges.forEach(e => {
       if (nodeMap.has(e.target) && nodeMap.has(e.source)) {
         inDegree.set(e.target, (inDegree.get(e.target) || 0) + 1);
         const outs = outEdges.get(e.source) || [];
@@ -84,7 +86,7 @@ export const useColumnPropagation = (setNodes) => {
       // input-0/input-1 prima, posizione verticale come fallback legacy.
       // L'ordine di inserimento nell'array edges non rappresenta LEFT/RIGHT.
       const incomingEdges = sortIncomingEdges(
-        edges.filter(e => e.target === nodeId),
+        dataEdges.filter(e => e.target === nodeId),
         nodeMap,
       );
       

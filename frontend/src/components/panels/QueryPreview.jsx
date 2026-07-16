@@ -6,6 +6,7 @@
  * Evidenzia gli errori di validazione con indicatori visivi.
  */
 import React, { useState } from 'react';
+import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 import './QueryPreview.css';
 
 /**
@@ -39,6 +40,7 @@ function QueryPreview({ nodes, edges, validationErrors = [] }) {
 
     const lines = [];
     const errors = [];
+    const flowEdges = dataFlowEdges(edges);
 
     // Trova nodo risultato
     const resultNode = nodes.find(n => n.type === 'resultNode');
@@ -117,7 +119,7 @@ function QueryPreview({ nodes, edges, validationErrors = [] }) {
       sourceNodeTypes.includes(n.type) &&
       !(n.type === 'datasourceNode' && n.data?.mode !== 'source')
     );
-    const targetNodeIds = new Set(edges.filter(e => {
+    const targetNodeIds = new Set(flowEdges.filter(e => {
       const targetNode = nodes.find(n => n.id === e.target);
       return targetNode && sourceNodeTypes.includes(targetNode.type);
     }).map(e => e.target));
@@ -140,7 +142,7 @@ function QueryPreview({ nodes, edges, validationErrors = [] }) {
     }
 
     // JOIN clauses
-    edges.forEach(edge => {
+    flowEdges.forEach(edge => {
       const sourceNode = nodes.find(n => n.id === edge.source);
       const targetNode = nodes.find(n => n.id === edge.target);
       

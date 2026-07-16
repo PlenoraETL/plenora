@@ -23,6 +23,7 @@ import ResultNodeStandardView from './result/ResultNodeStandardView';
 import ResultInlinePreview from './result/ResultInlinePreview';
 import useInlinePreview from '../../hooks/useInlinePreview';
 import { useConfirm } from '../../context/ConfirmContext';
+import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 import './ResultNode.css';
 
 // #5: righe caricate nell'anteprima inline auto post-run (la modale completa
@@ -77,13 +78,13 @@ const ResultNode = memo(({ data, id }) => {
 
   // Conta edge in entrata — utile per invalidare il memo di upstreamColumns
   const incomingEdgeCount = useStore((state) => {
-    const edges = state.edges || [];
+    const edges = dataFlowEdges(state.edges);
     return edges.filter(e => e.target === id).length;
   });
 
   // Signature delle colonne upstream — triggera re-calc quando cambia
   const sourceColumnsSignature = useStore((state) => {
-    const edges = state.edges || [];
+    const edges = dataFlowEdges(state.edges);
     const nodes = state.nodes || [];
     const incomingEdges = edges.filter(e => e.target === id);
 
@@ -96,7 +97,7 @@ const ResultNode = memo(({ data, id }) => {
 
   // Calcola colonne upstream (passate alla view standard e ai merge in geom)
   const upstreamColumns = useMemo(() => {
-    const edges = getEdges();
+    const edges = dataFlowEdges(getEdges());
     const nodes = getNodes();
     const incomingEdges = edges.filter(e => e.target === id);
 

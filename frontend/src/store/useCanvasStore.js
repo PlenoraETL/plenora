@@ -386,6 +386,26 @@ const useCanvasStore = create(
           'setEdges'
         ),
 
+      /** Aggiorna un edge esistente come mutazione utente salvabile. */
+      updateEdge: (edgeId, updater) => {
+        if (get().isReadOnly) return;
+        get().takeSnapshot();
+        set(
+          state => ({
+            edges: state.edges.map(edge => {
+              if (edge.id !== edgeId) return edge;
+              const changes = typeof updater === 'function'
+                ? updater(edge)
+                : updater;
+              return { ...edge, ...(changes || {}) };
+            }),
+            ...dirtyAndClearHighlights(),
+          }),
+          false,
+          'updateEdge',
+        );
+      },
+
       // NODE OPERATIONS
       // Usate direttamente dai componenti nodo via useCanvasStore(s => s.xxx)
       /** Aggiorna i data di un nodo. Sostituisce onUpdate/onChange nei props. */

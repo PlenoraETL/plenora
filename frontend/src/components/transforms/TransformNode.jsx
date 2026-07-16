@@ -14,6 +14,7 @@ import { authBus } from '../../utils/authBus';
 import { getTransformRegistry } from '../../api/transforms';
 import RunHistoryModal from '../modals/RunHistoryModal';
 import { useConfirm } from '../../context/ConfirmContext';
+import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 
 // Cache globale per il registry
 let registryCache = null;
@@ -113,7 +114,7 @@ const TransformNode = memo(({ data, id }) => {
       return { leftColumns: inputColumns, rightColumns: [], leftSourceName: '', rightSourceName: '' };
     }
 
-    const edges = getEdges();
+    const edges = dataFlowEdges(getEdges());
     const nodes = getNodes();
     const incomingEdges = edges.filter(e => e.target === id);
 
@@ -367,6 +368,7 @@ const TransformNode = memo(({ data, id }) => {
             leftColumns={leftColumns}
             rightColumns={rightColumns}
             geometryColumns={geometryColumns}
+            targetNodeId={id}
           />
         ) : (
           <div className="transform-node__message">

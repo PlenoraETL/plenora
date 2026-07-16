@@ -20,6 +20,7 @@ import {
   listFolders,
 } from '../../api/features';
 import { humanizeError } from '../../utils/errorMessages';
+import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 import './CaricanArcGISNode.css';
 
 const CaricanArcGISNode = memo(({ data, id }) => {
@@ -59,7 +60,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
   // (layer url / match column / nome layer) non servono. Il backend rileva il
   // bundle dai bytes; qui adattiamo solo la UX.
   const isMultiLayerUpstream = useCanvasStore((state) => {
-    const edges = state.edges || [];
+    const edges = dataFlowEdges(state.edges);
     const nodes = state.nodes || [];
     const byId = new Map(nodes.map(n => [n.id, n]));
     const seen = new Set();

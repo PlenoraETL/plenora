@@ -10,6 +10,7 @@ import useCanvasStore from '../../store/useCanvasStore';
 import './MultiJoinNode.css';
 import RunHistoryModal from '../modals/RunHistoryModal';
 import { useConfirm } from '../../context/ConfirmContext';
+import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 
 const MultiJoinNode = memo(({ data, id }) => {
   const { setNodes, getEdges, getNodes } = useReactFlow();
@@ -30,7 +31,7 @@ const MultiJoinNode = memo(({ data, id }) => {
 
   // Leggiamo info sulle sorgenti per mostrare nella UI
   const sources = useMemo(() => {
-    const edges = getEdges();
+    const edges = dataFlowEdges(getEdges());
     const nodes = getNodes();
     const incomingEdges = edges.filter(e => e.target === id);
     

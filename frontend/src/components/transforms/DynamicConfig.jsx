@@ -19,7 +19,8 @@ const DynamicConfig = ({
   inputColumns = [],
   leftColumns = [],
   rightColumns = [],
-  geometryColumns = []
+  geometryColumns = [],
+  targetNodeId = null,
 }) => {
   
   // Ottieni configurazione trasformazione dal registry
@@ -322,6 +323,8 @@ const DynamicConfig = ({
                 value={getParamValue(param)}
                 onChange={(value, meta) => handleParamChange(param, value, meta)}
                 columns={getColumnsForParam(param)}
+                targetNodeId={targetNodeId}
+                transformDefinition={transformConfig}
               />
             );
           })}

@@ -77,7 +77,13 @@ def _coerce_scalar(definition: ExecutableInputDefinition, value: Any) -> Any:
     return coerced
 
 
-def _set_existing_path(container: dict[str, Any], path: str, value: Any) -> None:
+def _set_existing_path(
+    container: dict[str, Any],
+    path: str,
+    value: Any,
+    *,
+    allow_missing_leaf: bool = False,
+) -> None:
     parts = path.split(".")
     current: Any = container
     for part in parts[:-1]:
@@ -99,7 +105,7 @@ def _set_existing_path(container: dict[str, Any], path: str, value: Any) -> None
             raise ValueError(f"Indice binding fuori range: {path}")
         current[index] = value
     elif isinstance(current, dict):
-        if leaf not in current:
+        if leaf not in current and not allow_missing_leaf:
             raise ValueError(f"Campo binding inesistente: {path}")
         current[leaf] = value
     else:
@@ -110,10 +116,15 @@ def _apply_scalar_binding(node: dict[str, Any], path: str, value: Any) -> None:
     data = node.get("data")
     applied = False
     if isinstance(data, dict) and path.split(".", 1)[0] in data:
-        _set_existing_path(data, path, value)
+        _set_existing_path(data, path, value, allow_missing_leaf=True)
         applied = True
     if path.split(".", 1)[0] in node:
-        _set_existing_path(node, path, value)
+        _set_existing_path(node, path, value, allow_missing_leaf=True)
+        applied = True
+    if not applied and path.split(".", 1)[0] == "config":
+        container = data if isinstance(data, dict) else node
+        container["config"] = {}
+        _set_existing_path(container, path, value, allow_missing_leaf=True)
         applied = True
     if not applied:
         raise ValueError(f"Nodo {node.get('id')} senza campo binding {path}")
