@@ -455,7 +455,7 @@ def save_dataframe_to_result_blob_streaming(
       - geojson: single-chunk via geospatial_dataframe_to_bytes
         (formato JSON-doc unico, non si splitta row-by-row senza
         rompere il formato).
-      - xlsx: openpyxl write-only direttamente sul multipart writer;
+      - xlsx: XlsxWriter constant-memory direttamente sul multipart writer;
         nessun workbook object-model o BytesIO completo in RAM.
         L'alias legacy xls viene normalizzato a formato/estensione xlsx.
       - shp, gpkg: single-chunk via geospatial writer (multi-file

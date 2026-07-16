@@ -1,7 +1,7 @@
 """Regressione RAM dell'export XLSX verso object storage.
 
-Confronta il vecchio payload XLSX interamente materializzato in ``BytesIO``
-con il writer corrente ``write_only`` su uno stream non seekable. Le varianti
+Confronta il payload XLSX interamente materializzato in ``BytesIO``
+con il writer corrente ``constant_memory`` su uno stream non seekable. Le varianti
 girano in processi spawn separati per non contaminare le misure RSS.
 """
 
@@ -23,8 +23,12 @@ import pytest
 _ROWS = 30_000
 _COLUMNS = 16
 _SAMPLE_INTERVAL_SECONDS = 0.001
-_MIN_SAVED_BYTES = 40 * 1024 * 1024
-_MAX_STREAMING_PEAK_RATIO = 0.35
+# Entrambi i path condividono ora XlsxWriter constant_memory: il delta non deve
+# piu' includere decine di MiB dell'object model OpenPyXL. Rimane il payload ZIP
+# materializzato dal path bytes, che il sink streaming deve evitare.
+_MIN_SAVED_BYTES = 512 * 1024
+_MAX_STREAMING_PEAK_RATIO = 0.60
+_MAX_STREAMING_PEAK_BYTES = 8 * 1024 * 1024
 _MAX_STREAM_WRITE_BYTES = 1024 * 1024
 
 
@@ -209,6 +213,9 @@ def test_xlsx_streaming_avoids_full_workbook_in_memory():
     )
     assert ratio <= _MAX_STREAMING_PEAK_RATIO, (
         f"Il writer streaming usa troppa RAM: ratio={ratio:.2f}"
+    )
+    assert streaming.peak_delta <= _MAX_STREAMING_PEAK_BYTES, (
+        f"Picco XLSX streaming eccessivo: {_mib(streaming.peak_delta):.1f} MiB"
     )
     assert streaming.max_write <= _MAX_STREAM_WRITE_BYTES
     assert streaming.retained_delta < legacy.retained_delta

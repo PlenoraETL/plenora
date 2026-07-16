@@ -7,6 +7,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel
 
+from app.core.projects import db as projects_db
+from app.core.results import db as results_db
 from app.core.io.object_storage import get_runtime_object_storage
 from app.core.io.tenant_namespace import (
     legacy_domain,
@@ -34,6 +36,30 @@ class StorageObjectPage(BaseModel):
     prefix: str
     objects: list[StorageObjectEntry]
     next_cursor: Optional[str] = None
+
+
+class StorageProjectResult(BaseModel):
+    id: str
+    key: str
+    filename: str
+    format: str
+    size_bytes: int
+    rows_count: Optional[int] = None
+    created_at: datetime
+
+
+class StorageProjectGroup(BaseModel):
+    project_id: str
+    project_name: str
+    project_type: Optional[str] = None
+    group_id: str
+    results: list[StorageProjectResult]
+
+
+class StorageProjectCatalog(BaseModel):
+    projects: list[StorageProjectGroup]
+    results_count: int
+    size_bytes: int
 
 
 def _resource_id(domain: str, segments: tuple[str, ...]) -> str | None:
@@ -120,8 +146,96 @@ def list_runtime_objects(
     )
 
 
+def list_project_results(group_id: str | None = None) -> StorageProjectCatalog:
+    """Group every retained result by project, newest first."""
+
+    project_rows = projects_db.list_projects(group_id=group_id)
+    projects = {(row.group_id, row.id): row for row in project_rows}
+    grouped: dict[tuple[str, str], list[StorageProjectResult]] = {}
+    total_size = 0
+    for row in results_db.list_admin_result_rows(group_id=group_id):
+        if not row.id or not row.project_id or not row.group_id or not row.storage_key:
+            continue
+        entry = StorageProjectResult(
+            id=row.id,
+            key=row.storage_key,
+            filename=row.filename or f"{row.id}.{row.format or 'bin'}",
+            format=row.format or "bin",
+            size_bytes=int(row.size_bytes or 0),
+            rows_count=row.rows_count,
+            created_at=row.created_at,
+        )
+        grouped.setdefault((row.group_id, row.project_id), []).append(entry)
+        total_size += entry.size_bytes
+
+    catalog: list[StorageProjectGroup] = []
+    for (owner_group, project_id), results in grouped.items():
+        project = projects.get((owner_group, project_id))
+        catalog.append(
+            StorageProjectGroup(
+                project_id=project_id,
+                project_name=(project.name if project else "Progetto eliminato"),
+                project_type=(project.project_type if project else None),
+                group_id=owner_group,
+                results=results,
+            )
+        )
+    catalog.sort(
+        key=lambda item: item.results[0].created_at if item.results else datetime.min,
+        reverse=True,
+    )
+    return StorageProjectCatalog(
+        projects=catalog,
+        results_count=sum(len(item.results) for item in catalog),
+        size_bytes=total_size,
+    )
+
+
+def delete_preview_objects(
+    *,
+    scope: Literal["canonical", "legacy"],
+    group_id: str | None = None,
+) -> int:
+    """Delete all preview payloads in the selected operator scope."""
+
+    if scope == "legacy":
+        if group_id:
+            raise ValueError("le preview legacy non contengono group_id")
+        prefixes = ["previews/"]
+    elif group_id:
+        prefixes = [tenant_domain_prefix(group_id, "previews")]
+    else:
+        # The tenant id sits before the domain, therefore a global canonical
+        # purge must scan tenants/ and retain only parsed preview keys.
+        prefixes = ["tenants/"]
+
+    storage = get_runtime_object_storage()
+    deleted = 0
+    for prefix in prefixes:
+        cursor = None
+        while True:
+            page = storage.list_objects_page(prefix, limit=500, cursor=cursor)
+            for raw in page.get("objects") or []:
+                key = str(raw.get("key") or "")
+                parsed = parse_tenant_key(key)
+                is_preview = (
+                    parsed is not None and parsed.domain == "previews"
+                ) or (scope == "legacy" and legacy_domain(key) == "previews")
+                if not is_preview:
+                    continue
+                storage.delete(key)
+                deleted += 1
+            cursor = page.get("next_cursor")
+            if not cursor:
+                break
+    return deleted
+
+
 __all__ = [
     "StorageObjectEntry",
     "StorageObjectPage",
+    "StorageProjectCatalog",
+    "delete_preview_objects",
+    "list_project_results",
     "list_runtime_objects",
 ]

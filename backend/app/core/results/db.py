@@ -19,6 +19,7 @@ __all__ = [
     "ResultMetadataRow",
     "get_latest_result_row",
     "get_result_row",
+    "list_admin_result_rows",
     "list_result_rows",
     "save_result_row",
 ]
@@ -216,3 +217,21 @@ def list_result_rows(
         return _read(session)
     with unit_of_work() as active_session:
         return _read(active_session)
+
+
+def list_admin_result_rows(
+    group_id: str | None = None,
+) -> list[ResultMetadataRow]:
+    """Return every retained result for the object-storage admin catalog."""
+
+    sql = (
+        "SELECT id, project_id, group_id, filename, format, size_bytes, "
+        "rows_count, created_at, storage_key FROM results"
+    )
+    params: tuple[object, ...] = ()
+    if group_id:
+        sql += " WHERE group_id = %s"
+        params = (group_id,)
+    sql += " ORDER BY project_id, created_at DESC"
+    with unit_of_work() as session:
+        return _result_metadata_rows(session.fetchall(sql, params))

@@ -16,10 +16,9 @@ Peak RAM ~4-5x del df serializzato:
 Scrittura diretta sul `BytesIO` via `io.TextIOWrapper` per i text-format
 (CSV/JSON), senza stringa Python intermedia. Picco ~2x (df + bytes finali).
 
-Per Excel il path result usa openpyxl ``write_only`` direttamente su uno
-stream binario: evita sia il workbook object-model completo sia il ``BytesIO``
-contenente l'intero ZIP. Openpyxl puo' usare spool temporanei interni per gli
-XML dei worksheet, rimossi alla chiusura del workbook.
+Per Excel il path result usa XlsxWriter ``constant_memory`` direttamente su
+uno stream binario: evita sia il workbook object-model completo sia il
+``BytesIO`` contenente l'intero ZIP.
 
 API:
   - `dataframe_to_export_bytes(df, dest_format, *, chunksize)`:
@@ -52,6 +51,37 @@ from app.core.dataframes.tabular import (
 _DEFAULT_CHUNKSIZE = 10_000
 _XLSX_MAX_ROWS = 1_048_576
 _XLSX_MAX_COLUMNS = 16_384
+_DIRTY_TEXT_CONTROLS = re.compile(r"[\x00-\x1f\u2028\u2029]+")
+
+
+def _clean_export_text(value: str) -> str:
+    """Flatten control/newline noise and remove fixed-width right padding."""
+
+    return _DIRTY_TEXT_CONTROLS.sub(" ", value).rstrip()
+
+
+def _clean_export_text_chunk(df: Any) -> Any:
+    """Normalize textual cells on a bounded frame slice without mutating input."""
+
+    if df is None or df.empty:
+        return df
+    result = df.copy(deep=False)
+    changed = False
+    for index, dtype in enumerate(df.dtypes):
+        if dtype != object and not pd.api.types.is_string_dtype(dtype):
+            continue
+        series = df.iloc[:, index]
+        cleaned = series.map(
+            lambda value: _clean_export_text(value)
+            if isinstance(value, str)
+            else value
+        )
+        if not cleaned.equals(series):
+            if not changed:
+                result = df.copy(deep=False)
+                changed = True
+            result.isetitem(index, cleaned)
+    return result
 
 
 def normalize_export_format(dest_format: str) -> str:
@@ -106,7 +136,7 @@ def _coerce_declared_excel_temporal(value: Any, raw_type: Any) -> Any:
 
 
 def _xlsx_cell_value(value: Any, declared_type: Any = None) -> Any:
-    """Normalize one pandas/numpy value for openpyxl without frame copies."""
+    """Normalize one pandas/numpy value for the XLSX writer."""
     if value is None or value is pd.NA or value is pd.NaT:
         return None
     if isinstance(value, np.generic):
@@ -124,6 +154,8 @@ def _xlsx_cell_value(value: Any, declared_type: Any = None) -> Any:
         if "." in text:
             text = text.rstrip("0").rstrip(".")
         return text or "0"
+    if isinstance(value, str):
+        value = _clean_export_text(value)
     if _is_declared_excel_temporal(declared_type):
         value = _coerce_declared_excel_temporal(value, declared_type)
     if isinstance(value, pd.Timestamp):
@@ -157,11 +189,11 @@ def write_dataframe_to_xlsx_stream(
 ) -> None:
     """Write an XLSX incrementally to a forward-only binary sink.
 
-    ``Workbook(write_only=True)`` mantiene in RAM soltanto la riga corrente.
+    ``constant_memory=True`` mantiene in RAM soltanto la riga corrente.
     Il sink puo' essere :class:`StreamingResultBlobWriter`, quindi il file ZIP
     viene inviato a S3 multipart senza un ``BytesIO`` completo.
     """
-    from openpyxl import Workbook
+    import xlsxwriter
 
     row_count = len(df)
     column_count = len(df.columns)
@@ -177,11 +209,26 @@ def write_dataframe_to_xlsx_stream(
             f"ricevute {column_count}"
         )
 
-    workbook = Workbook(write_only=True)
-    saved = False
+    workbook = xlsxwriter.Workbook(
+        sink,
+        {
+            "constant_memory": True,
+            "in_memory": False,
+            "strings_to_formulas": False,
+            "strings_to_urls": False,
+            "default_date_format": "yyyy-mm-dd hh:mm:ss",
+        },
+    )
+    closed = False
     try:
-        worksheet = workbook.create_sheet(title=sheet_name)
-        worksheet.append([_xlsx_cell_value(column) for column in df.columns])
+        worksheet = workbook.add_worksheet(sheet_name)
+        status = worksheet.write_row(
+            0,
+            0,
+            [_xlsx_cell_value(column) for column in df.columns],
+        )
+        if status != 0:
+            raise ValueError(f"Impossibile scrivere l'intestazione XLSX (codice {status})")
         declared_by_lower = {
             str(name).lower(): declared_type
             for name, declared_type in (column_types or {}).items()
@@ -191,28 +238,26 @@ def write_dataframe_to_xlsx_stream(
             or declared_by_lower.get(str(column).lower())
             for column in df.columns
         ]
-        for row in df.itertuples(index=False, name=None):
-            worksheet.append([
-                _xlsx_cell_value(value, declared_type)
-                for value, declared_type in zip(row, declared_types)
-            ])
-        workbook.save(sink)
-        saved = True
-    finally:
-        if not saved:
-            # Workbook.close() non rimuove gli XML temporanei di un workbook
-            # write-only che non ha raggiunto save(). Chiudiamo esplicitamente
-            # i generatori e cancelliamo gli spool best-effort.
-            for worksheet in workbook.worksheets:
-                rows = getattr(worksheet, "_rows", None)
-                if rows is not None:
-                    with suppress(Exception):
-                        rows.close()
-                writer = getattr(worksheet, "_writer", None)
-                if writer is not None:
-                    with suppress(Exception):
-                        writer.cleanup()
+        for row_number, row in enumerate(df.itertuples(index=False, name=None), 1):
+            status = worksheet.write_row(
+                row_number,
+                0,
+                [
+                    _xlsx_cell_value(value, declared_type)
+                    for value, declared_type in zip(row, declared_types)
+                ],
+            )
+            if status != 0:
+                raise ValueError(
+                    f"Impossibile scrivere la riga XLSX {row_number + 1} "
+                    f"(codice {status})"
+                )
         workbook.close()
+        closed = True
+    finally:
+        if not closed:
+            with suppress(Exception):
+                workbook.close()
 
 
 def _records_json_inner(df_slice: Any) -> str:
@@ -237,17 +282,25 @@ def _to_csv_minimal_copy(df: Any, buf: io.BytesIO, chunksize: int) -> None:
     text-mode senza materializzare la stringa Python intera. Il
     `chunksize` divide la serializzazione interna di pandas in batch
     da N righe, riducendo il peak intermedio."""
-    df = normalize_object_decimals(df)  # PG NUMERIC -> stringa compatta
     text_buf = io.TextIOWrapper(
         buf, encoding="utf-8", write_through=True, newline="",
     )
     try:
         # float_format="%.15g": precisione piena + compatta i whole-float
         # (5.0 -> "5"), profilo CSV canonico condiviso col path bytes.
-        df.to_csv(
-            text_buf, index=False, chunksize=chunksize,
-            encoding="utf-8", float_format="%.15g",
-        )
+        if len(df) == 0:
+            df.to_csv(text_buf, index=False, encoding="utf-8")
+        else:
+            for start in range(0, len(df), chunksize):
+                chunk = normalize_object_decimals(df.iloc[start:start + chunksize])
+                chunk = _clean_export_text_chunk(chunk)
+                chunk.to_csv(
+                    text_buf,
+                    index=False,
+                    header=start == 0,
+                    encoding="utf-8",
+                    float_format="%.15g",
+                )
         text_buf.flush()
     finally:
         # `detach()` riporta ownership del BytesIO al caller senza
@@ -370,15 +423,23 @@ def _csv_producer(
     df: Any, qbuf: _QueueBuf, chunksize: int, err_holder: list,
 ) -> None:
     try:
-        df = normalize_object_decimals(df)  # PG NUMERIC -> stringa compatta
         text_buffer = io.TextIOWrapper(
             qbuf, encoding="utf-8", write_through=True, newline="",
         )
         try:
-            df.to_csv(
-                text_buffer, index=False, chunksize=chunksize,
-                encoding="utf-8", float_format="%.15g",
-            )
+            if len(df) == 0:
+                df.to_csv(text_buffer, index=False, encoding="utf-8")
+            else:
+                for start in range(0, len(df), chunksize):
+                    chunk = normalize_object_decimals(df.iloc[start:start + chunksize])
+                    chunk = _clean_export_text_chunk(chunk)
+                    chunk.to_csv(
+                        text_buffer,
+                        index=False,
+                        header=start == 0,
+                        encoding="utf-8",
+                        float_format="%.15g",
+                    )
             text_buffer.flush()
         finally:
             text_buffer.detach()
@@ -520,7 +581,7 @@ def dataframe_to_export_chunks(
         dest_format: 'csv' | 'xlsx' | legacy alias 'xls' | 'json' | 'geojson'.
         chunksize: righe per batch nella serializzazione CSV pandas.
             Ignorato per JSON (pandas to_json non supporta chunksize)
-            e XLSX (fallback).
+            e XLSX (contratto generator a chunk singolo).
 
     Yields:
         `bytes` chunks. L'ultimo chunk puo' essere piu' piccolo o vuoto.
@@ -536,8 +597,8 @@ def dataframe_to_export_chunks(
     fmt = normalize_export_format(dest_format)
 
     if fmt == "xlsx":
-        # Fallback: nessun vero streaming per openpyxl. Yield single
-        # chunk (peak invariato rispetto a dataframe_to_export_bytes).
+        # Il contratto generator generico resta a chunk singolo; il path
+        # result usa write_dataframe_to_xlsx_stream sul sink multipart.
         yield dataframe_to_export_bytes(
             df,
             fmt,

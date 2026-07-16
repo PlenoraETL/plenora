@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import io
 import json
 from datetime import datetime
@@ -128,6 +129,26 @@ def test_csv_writer_internal_commas_and_quotes_escaped(
     assert '"Note con ""virgolette"" interne"' in raw
 
 
+def test_csv_writer_flattens_dirty_controls_and_fixed_width_padding():
+    from app.core.dataframes.frame_io import save_dataframe_to_bytes
+
+    frame = pd.DataFrame(
+        {
+            "code": ["A001     ", "B002\t"],
+            "notes": ["prima riga\r\nseconda riga   ", "testo\u2028sporco"],
+        }
+    )
+    raw = save_dataframe_to_bytes(frame, "csv").decode("utf-8")
+    rows = list(csv.reader(io.StringIO(raw, newline="")))
+
+    assert len(raw.splitlines()) == 3
+    assert rows == [
+        ["code", "notes"],
+        ["A001", "prima riga seconda riga"],
+        ["B002", "testo sporco"],
+    ]
+
+
 def test_json_writer_decimal_and_unicode(tortured_tabular_df: pd.DataFrame):
     """JSON: Decimal -> numero / stringa compatti, Unicode preservato."""
     from app.core.dataframes.frame_io import save_dataframe_to_bytes
@@ -168,6 +189,25 @@ def test_xlsx_writer_produces_valid_excel(tortured_tabular_df: pd.DataFrame):
     assert "name" in df_back.columns
     # Verifica una stringa con caratteri speciali
     assert df_back.iloc[2]["name"] == "北京 用户"
+
+
+def test_xlsx_writer_cleans_dirty_text_and_does_not_promote_formulas():
+    from openpyxl import load_workbook
+
+    from app.core.dataframes.export_writer import dataframe_to_export_bytes
+
+    frame = pd.DataFrame(
+        {"dirty": ["testo\r\na capo   "], "literal": ["=1+1"]}
+    )
+    workbook = load_workbook(
+        io.BytesIO(dataframe_to_export_bytes(frame, "xlsx")),
+        data_only=False,
+    )
+    sheet = workbook.active
+
+    assert sheet["A2"].value == "testo a capo"
+    assert sheet["B2"].value == "=1+1"
+    assert sheet["B2"].data_type == "s"
 
 
 class _ForwardOnlyXlsxSink:

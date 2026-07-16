@@ -18,13 +18,46 @@ from app.core.io.tenant_namespace import (
 from app.observability.audit_action import audit_action
 from app.shared.contracts.auth import CurrentUser
 
-from .service import StorageObjectPage, list_runtime_objects
+from .service import (
+    StorageObjectPage,
+    StorageProjectCatalog,
+    delete_preview_objects,
+    list_project_results,
+    list_runtime_objects,
+)
 
 
 router = APIRouter(
     prefix="/admin/object-storage",
     tags=["admin-object-storage"],
 )
+
+
+@router.get("/projects", response_model=StorageProjectCatalog)
+def project_results(
+    group_id: str | None = Query(None),
+    current_user: CurrentUser = Depends(require_superadmin),
+) -> StorageProjectCatalog:
+    return list_project_results(group_id=group_id)
+
+
+@router.delete("/previews")
+@audit_action(action="object_storage.previews.delete_all")
+def delete_all_previews(
+    scope: Literal["canonical", "legacy"] = Query("canonical"),
+    group_id: str | None = Query(None),
+    current_user: CurrentUser = Depends(require_superadmin),
+) -> dict[str, int | bool | str]:
+    try:
+        deleted = delete_preview_objects(scope=scope, group_id=group_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Cancellazione preview non riuscita",
+        ) from exc
+    return {"deleted": True, "deleted_count": deleted, "scope": scope}
 
 
 @router.get("", response_model=StorageObjectPage)

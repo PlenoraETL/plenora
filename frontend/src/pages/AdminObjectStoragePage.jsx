@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import AppSidebar from '../components/AppSidebar';
 import {
+  deleteAllStoragePreviews,
   deleteStorageObject,
   downloadStorageObject,
   listObjectStorage,
+  listObjectStorageProjects,
 } from '../api/adminObjectStorage';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
@@ -29,28 +31,42 @@ function formatBytes(value) {
 export default function AdminObjectStoragePage() {
   const [scope, setScope] = useState('canonical');
   const [groupId, setGroupId] = useState('');
-  const [domain, setDomain] = useState('');
+  const [domain, setDomain] = useState('results');
   const [page, setPage] = useState(null);
+  const [projectCatalog, setProjectCatalog] = useState(null);
   const [cursor, setCursor] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [downloading, setDownloading] = useState('');
   const [deleting, setDeleting] = useState('');
+  const [purgingPreviews, setPurgingPreviews] = useState(false);
   const confirmModal = useConfirmModal();
+  const groupedResults = scope === 'canonical' && domain === 'results';
 
   const load = useCallback(async (requestedCursor = null) => {
     setLoading(true);
     setError('');
     try {
-      const data = await listObjectStorage({
+      const objectRequest = listObjectStorage({
         scope,
         group_id: scope === 'canonical' && groupId.trim() ? groupId.trim() : undefined,
         domain: domain || undefined,
         limit: 100,
         cursor: requestedCursor || undefined,
       });
-      setPage(data);
+      if (scope === 'canonical' && domain === 'results') {
+        const [data, catalog] = await Promise.all([
+          objectRequest,
+          listObjectStorageProjects({ group_id: groupId.trim() || undefined }),
+        ]);
+        setPage(data);
+        setProjectCatalog(catalog);
+      } else {
+        setPage(await objectRequest);
+        setProjectCatalog(null);
+      }
       setCursor(requestedCursor);
     } catch (err) {
       setError(err.message || 'Errore caricamento object storage');
@@ -102,7 +118,6 @@ export default function AdminObjectStoragePage() {
       variant: 'danger',
     });
     if (!confirmed) return;
-
     setDeleting(item.key);
     setError('');
     try {
@@ -115,6 +130,36 @@ export default function AdminObjectStoragePage() {
     }
   };
 
+  const purgePreviews = async () => {
+    const scopedGroup = scope === 'canonical' ? groupId.trim() : '';
+    const target = scopedGroup
+      ? `del gruppo ${scopedGroup}`
+      : scope === 'legacy' ? 'legacy' : 'di tutti i tenant';
+    const confirmed = await confirmModal.confirm({
+      title: 'Eliminare tutte le preview?',
+      message: `Saranno eliminate definitivamente tutte le preview ${target}. I risultati finali non verranno toccati.`,
+      confirmText: 'Elimina tutte le preview',
+      cancelText: 'Annulla',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    setPurgingPreviews(true);
+    setError('');
+    setNotice('');
+    try {
+      const result = await deleteAllStoragePreviews({
+        scope,
+        group_id: scopedGroup || undefined,
+      });
+      setNotice(`Preview eliminate: ${result.deleted_count}`);
+      await load(null);
+    } catch (err) {
+      setError(err.response?.data?.detail || err.message || 'Cancellazione preview non riuscita');
+    } finally {
+      setPurgingPreviews(false);
+    }
+  };
+
   const totalBytes = (page?.objects || []).reduce(
     (sum, item) => sum + Number(item.size_bytes || 0), 0,
   );
@@ -124,44 +169,25 @@ export default function AdminObjectStoragePage() {
       <AppSidebar />
       <main className="storage-admin__main">
         <header className="storage-admin__header">
-          <div>
-            <h1>Object Storage</h1>
-            <p>Explorer del bucket runtime, riservato ai superadmin.</p>
+          <div><h1>Object Storage</h1><p>Explorer del bucket runtime, riservato ai superadmin.</p></div>
+          <div className="storage-admin__header-actions">
+            <button type="button" className="storage-admin__purge" onClick={purgePreviews} disabled={loading || purgingPreviews}>
+              {purgingPreviews ? 'Eliminazione preview...' : 'Elimina tutte le preview'}
+            </button>
+            <button type="button" onClick={() => load(cursor)} disabled={loading}>
+              {loading ? 'Caricamento…' : 'Aggiorna'}
+            </button>
           </div>
-          <button type="button" onClick={() => load(cursor)} disabled={loading}>
-            {loading ? 'Caricamento…' : 'Aggiorna'}
-          </button>
         </header>
 
         <section className="storage-admin__filters">
-          <label>
-            Namespace
-            <select value={scope} onChange={(event) => setScope(event.target.value)}>
-              <option value="canonical">Tenant canonici</option>
-              <option value="legacy">Chiavi legacy</option>
-            </select>
-          </label>
-          <label>
-            Gruppo
-            <input
-              value={groupId}
-              onChange={(event) => setGroupId(event.target.value)}
-              placeholder="group_id"
-              disabled={scope === 'legacy'}
-            />
-          </label>
-          <label>
-            Tipo
-            <select value={domain} onChange={(event) => setDomain(event.target.value)}>
-              <option value="">Tutti</option>
-              {DOMAINS.map(([value, label]) => (
-                <option key={value} value={value}>{label}</option>
-              ))}
-            </select>
-          </label>
+          <label>Namespace<select value={scope} onChange={(event) => setScope(event.target.value)}><option value="canonical">Tenant canonici</option><option value="legacy">Chiavi legacy</option></select></label>
+          <label>Gruppo<input value={groupId} onChange={(event) => setGroupId(event.target.value)} placeholder="group_id" disabled={scope === 'legacy'} /></label>
+          <label>Tipo<select value={domain} onChange={(event) => setDomain(event.target.value)}><option value="">Tutti</option>{DOMAINS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         </section>
 
         {error && <div className="storage-admin__error">{error}</div>}
+        {notice && <div className="storage-admin__notice">{notice}</div>}
 
         <div className="storage-admin__summary">
           <span>Bucket: <b>{page?.bucket || '—'}</b></span>
@@ -169,59 +195,53 @@ export default function AdminObjectStoragePage() {
           <span>Dimensione pagina: <b>{formatBytes(totalBytes)}</b></span>
         </div>
 
-        <div className="storage-admin__table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Tenant</th>
-                <th>Tipo</th>
-                <th>Risorsa</th>
-                <th>Chiave</th>
-                <th>Dimensione</th>
-                <th>Modificato</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {(page?.objects || []).map((item) => (
-                <tr key={item.key}>
-                  <td>{item.tenant_group_id || <span className="storage-admin__legacy">legacy</span>}</td>
-                  <td>{item.domain}</td>
-                  <td>{item.resource_id || '—'}</td>
-                  <td className="storage-admin__key" title={item.key}>{item.key}</td>
-                  <td>{formatBytes(item.size_bytes)}</td>
-                  <td>{new Date(item.last_modified).toLocaleString('it-IT')}</td>
-                  <td className="storage-admin__actions">
-                    <button
-                      type="button"
-                      className="storage-admin__download"
-                      onClick={() => download(item.key)}
-                      disabled={downloading === item.key || deleting === item.key}
-                    >
-                      {downloading === item.key ? '…' : 'Scarica'}
-                    </button>
-                    <button
-                      type="button"
-                      className="storage-admin__delete"
-                      onClick={() => remove(item)}
-                      disabled={deleting === item.key || downloading === item.key}
-                    >
-                      {deleting === item.key ? 'Eliminazione…' : 'Elimina'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {!loading && !(page?.objects || []).length && (
-                <tr><td colSpan="7" className="storage-admin__empty">Nessun oggetto</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        {groupedResults ? (
+          <section className="storage-admin__projects">
+            <div className="storage-admin__project-summary">
+              <span>Progetti: <b>{projectCatalog?.projects?.length || 0}</b></span>
+              <span>Risultati conservati: <b>{projectCatalog?.results_count || 0}</b></span>
+              <span>Dimensione risultati: <b>{formatBytes(projectCatalog?.size_bytes)}</b></span>
+            </div>
+            {(projectCatalog?.projects || []).map((project, index) => (
+              <details className="storage-admin__project" key={`${project.group_id}:${project.project_id}`} open={index === 0}>
+                <summary>
+                  <div><strong>{project.project_name}</strong><span>{project.project_type?.toUpperCase() || 'PROGETTO ELIMINATO'} - {project.project_id}</span></div>
+                  <div><span>{project.group_id}</span><b>{project.results.length} risultati</b></div>
+                </summary>
+                <div className="storage-admin__result-list">
+                  {project.results.map((result) => (
+                    <div className="storage-admin__result" key={result.id}>
+                      <div><strong>{result.filename}</strong><span>{result.format.toUpperCase()} · {result.rows_count ?? '—'} righe · {formatBytes(result.size_bytes)}</span><small>{new Date(result.created_at).toLocaleString('it-IT')}</small></div>
+                      <button type="button" className="storage-admin__download" onClick={() => download(result.key)} disabled={downloading === result.key}>{downloading === result.key ? '…' : 'Scarica'}</button>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ))}
+            {!loading && !(projectCatalog?.projects || []).length && <div className="storage-admin__empty">Nessun risultato conservato</div>}
+          </section>
+        ) : (
+          <div className="storage-admin__table-wrap">
+            <table>
+              <thead><tr><th>Tenant</th><th>Tipo</th><th>Risorsa</th><th>Chiave</th><th>Dimensione</th><th>Modificato</th><th /></tr></thead>
+              <tbody>
+                {(page?.objects || []).map((item) => (
+                  <tr key={item.key}>
+                    <td>{item.tenant_group_id || <span className="storage-admin__legacy">legacy</span>}</td><td>{item.domain}</td><td>{item.resource_id || '—'}</td>
+                    <td className="storage-admin__key" title={item.key}>{item.key}</td><td>{formatBytes(item.size_bytes)}</td><td>{new Date(item.last_modified).toLocaleString('it-IT')}</td>
+                    <td className="storage-admin__actions">
+                      <button type="button" className="storage-admin__download" onClick={() => download(item.key)} disabled={downloading === item.key || deleting === item.key}>{downloading === item.key ? '…' : 'Scarica'}</button>
+                      <button type="button" className="storage-admin__delete" onClick={() => remove(item)} disabled={deleting === item.key || downloading === item.key}>{deleting === item.key ? 'Eliminazione…' : 'Elimina'}</button>
+                    </td>
+                  </tr>
+                ))}
+                {!loading && !(page?.objects || []).length && <tr><td colSpan="7" className="storage-admin__empty">Nessun oggetto</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-        <footer className="storage-admin__pager">
-          <button type="button" onClick={previous} disabled={!history.length || loading}>Indietro</button>
-          <button type="button" onClick={next} disabled={!page?.next_cursor || loading}>Avanti</button>
-        </footer>
+        {!groupedResults && <footer className="storage-admin__pager"><button type="button" onClick={previous} disabled={!history.length || loading}>Indietro</button><button type="button" onClick={next} disabled={!page?.next_cursor || loading}>Avanti</button></footer>}
         <ConfirmDialog {...confirmModal} />
       </main>
     </div>

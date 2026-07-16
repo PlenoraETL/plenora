@@ -5,6 +5,16 @@ export async function listObjectStorage(params = {}) {
   return response.data;
 }
 
+export async function listObjectStorageProjects(params = {}) {
+  const response = await http.get('/admin/object-storage/projects', { params });
+  return response.data;
+}
+
+export async function deleteAllStoragePreviews(params = {}) {
+  const response = await http.delete('/admin/object-storage/previews', { params });
+  return response.data;
+}
+
 export async function downloadStorageObject(key) {
   const response = await http.get('/admin/object-storage/download', {
     params: { key },

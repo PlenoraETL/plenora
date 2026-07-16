@@ -3473,6 +3473,7 @@
           "pattern": {
             "anyOf": [
               {
+                "maxLength": 240,
                 "type": "string"
               },
               {
@@ -7858,6 +7859,124 @@
         "title": "StorageObjectPage",
         "type": "object"
       },
+      "StorageProjectCatalog": {
+        "properties": {
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/StorageProjectGroup"
+            },
+            "title": "Projects",
+            "type": "array"
+          },
+          "results_count": {
+            "title": "Results Count",
+            "type": "integer"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "projects",
+          "results_count",
+          "size_bytes"
+        ],
+        "title": "StorageProjectCatalog",
+        "type": "object"
+      },
+      "StorageProjectGroup": {
+        "properties": {
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "project_id": {
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "project_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Type"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/StorageProjectResult"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "project_id",
+          "project_name",
+          "group_id",
+          "results"
+        ],
+        "title": "StorageProjectGroup",
+        "type": "object"
+      },
+      "StorageProjectResult": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "rows_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rows Count"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "key",
+          "filename",
+          "format",
+          "size_bytes",
+          "created_at"
+        ],
+        "title": "StorageProjectResult",
+        "type": "object"
+      },
       "TaskRuntimePayload": {
         "additionalProperties": false,
         "properties": {
@@ -9285,6 +9404,142 @@
           }
         ],
         "summary": "Download Object",
+        "tags": [
+          "admin-object-storage"
+        ]
+      }
+    },
+    "/api/admin/object-storage/previews": {
+      "delete": {
+        "operationId": "delete_all_previews_api_admin_object_storage_previews_delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "canonical",
+              "enum": [
+                "canonical",
+                "legacy"
+              ],
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "group_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "title": "Response Delete All Previews Api Admin Object Storage Previews Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete All Previews",
+        "tags": [
+          "admin-object-storage"
+        ]
+      }
+    },
+    "/api/admin/object-storage/projects": {
+      "get": {
+        "operationId": "project_results_api_admin_object_storage_projects_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "group_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageProjectCatalog"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Project Results",
         "tags": [
           "admin-object-storage"
         ]
