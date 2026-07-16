@@ -4,7 +4,9 @@ import ftplib
 import io
 import queue
 import socket
+import ssl
 import threading
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -69,17 +71,28 @@ class FTPDataSource(DataSourceInterface):
         from app.shared.connections.retry import call_with_retry
 
         def _do_connect():
-            if tls:
-                ftp = ftplib.FTP_TLS()
-                ftp.connect(host=host, port=port, timeout=15)
-                ftp.login(user=username, passwd=password)
-                ftp.prot_p()
-            else:
-                ftp = ftplib.FTP()
-                ftp.connect(host=host, port=port, timeout=15)
-                ftp.login(user=username, passwd=password)
-            ftp.set_pasv(passive)
-            return ftp
+            ftp = None
+            try:
+                if tls:
+                    # FTP_TLS defaults to CERT_NONE in CPython.  Supplying a
+                    # default context enables CA and hostname verification.
+                    ftp = ftplib.FTP_TLS(context=ssl.create_default_context())
+                    ftp.connect(host=host, port=port, timeout=15)
+                    ftp.login(user=username, passwd=password)
+                    ftp.prot_p()
+                else:
+                    ftp = ftplib.FTP()
+                    ftp.connect(host=host, port=port, timeout=15)
+                    ftp.login(user=username, passwd=password)
+                ftp.set_pasv(passive)
+                return ftp
+            except Exception:
+                if ftp is not None:
+                    try:
+                        ftp.close()
+                    except Exception:
+                        pass
+                raise
 
         try:
             ftp = call_with_retry(
@@ -162,6 +175,7 @@ class FTPDataSource(DataSourceInterface):
         recursive: bool = False,
     ) -> list[FileInfo]:
         self._check()
+        path = self._validated_path(path, allow_empty=True)
         remote = path or "."
         results = []
 
@@ -281,6 +295,7 @@ class FTPDataSource(DataSourceInterface):
 
     def file_info(self, path: str) -> FileInfo:
         self._check()
+        path = self._validated_path(path)
         name = path.split("/")[-1]
         try:
             size = self._ftp.size(path)
@@ -308,6 +323,7 @@ class FTPDataSource(DataSourceInterface):
 
     def read_file(self, path: str) -> bytes:
         self._check()
+        path = self._validated_path(path)
         buf = io.BytesIO()
         try:
             self._ftp.retrbinary(f"RETR {path}", buf.write)
@@ -342,6 +358,7 @@ class FTPDataSource(DataSourceInterface):
         volo prima del join.
         """
         self._check()
+        path = self._validated_path(path)
         q: queue.Queue = queue.Queue(maxsize=4)  # bounded buffer
         sentinel = object()
         err_holder: list = []
@@ -374,16 +391,26 @@ class FTPDataSource(DataSourceInterface):
             except Exception as e:
                 err_holder.append(e)
             finally:
-                try:
-                    q.put(sentinel, timeout=1.0)
-                except queue.Full:
-                    pass
+                # Never drop the sentinel while a live consumer can still be
+                # waiting on q.get().  Cancellation is the only valid reason
+                # to stop trying.
+                while not cancel_event.is_set():
+                    try:
+                        q.put(sentinel, timeout=0.1)
+                        break
+                    except queue.Full:
+                        continue
 
         t = threading.Thread(target=_producer, daemon=True)
         t.start()
         try:
             while True:
-                item = q.get()
+                try:
+                    item = q.get(timeout=0.5)
+                except queue.Empty:
+                    if not t.is_alive():
+                        break
+                    continue
                 if item is sentinel:
                     break
                 yield item
@@ -393,12 +420,16 @@ class FTPDataSource(DataSourceInterface):
             # il producer poteva restare bloccato un secondo extra per
             # ogni chunk ancora in coda.
             cancel_event.set()
-            while t.is_alive():
+            # Drain briefly; a socket blocked in retrbinary is released by
+            # disconnect() when the surrounding service context exits.
+            for _ in range(20):
+                if not t.is_alive():
+                    break
                 try:
-                    q.get(timeout=0.1)
+                    q.get(timeout=0.05)
                 except queue.Empty:
                     pass
-            t.join(timeout=5.0)
+            t.join(timeout=0.1)
         if err_holder:
             e = err_holder[0]
             if isinstance(e, ftplib.error_perm):
@@ -409,12 +440,15 @@ class FTPDataSource(DataSourceInterface):
 
     def write_file(self, path: str, content: bytes) -> None:
         self._check()
+        path = self._validated_path(path)
         parent = "/".join(path.split("/")[:-1])
         if parent:
             self._mkdirs(parent)
+        temp_path = self._temporary_path(path)
         buf = io.BytesIO(content)
         try:
-            self._ftp.storbinary(f"STOR {path}", buf)
+            self._ftp.storbinary(f"STOR {temp_path}", buf)
+            self._replace_from_temp(temp_path, path)
         except ftplib.error_perm as e:
             raise DataSourcePermissionError(f"Scrittura negata: {path!r}") from e
         except ftplib.all_errors as e:
@@ -424,6 +458,8 @@ class FTPDataSource(DataSourceInterface):
                 exc_info=True,
             )
             raise DataSourceConnectionError(f"Errore write_file FTP: {_sanitize_ftp_error(e)}") from e
+        finally:
+            self._cleanup_remote(temp_path)
 
     def write_chunks(self, path: str, chunks) -> None:
         """Streaming write via ftplib storbinary + adapter file-like.
@@ -432,6 +468,7 @@ class FTPDataSource(DataSourceInterface):
         blocks; wrappiamo l'iterable con un adapter che concatena i
         chunk al volo (peak ~chunk_size)."""
         self._check()
+        path = self._validated_path(path)
         parent = "/".join(path.split("/")[:-1])
         if parent:
             self._mkdirs(parent)
@@ -456,8 +493,10 @@ class FTPDataSource(DataSourceInterface):
                 del leftover[:n]
                 return out
 
+        temp_path = self._temporary_path(path)
         try:
-            self._ftp.storbinary(f"STOR {path}", _ChunksAdapter())
+            self._ftp.storbinary(f"STOR {temp_path}", _ChunksAdapter())
+            self._replace_from_temp(temp_path, path)
         except ftplib.error_perm as e:
             raise DataSourcePermissionError(f"Scrittura negata: {path!r}") from e
         except ftplib.all_errors as e:
@@ -467,9 +506,12 @@ class FTPDataSource(DataSourceInterface):
                 exc_info=True,
             )
             raise DataSourceConnectionError(f"Errore write_chunks FTP: {_sanitize_ftp_error(e)}") from e
+        finally:
+            self._cleanup_remote(temp_path)
 
     def delete_file(self, path: str) -> None:
         self._check()
+        path = self._validated_path(path)
         try:
             self._ftp.delete(path)
         except ftplib.error_perm as e:
@@ -486,10 +528,17 @@ class FTPDataSource(DataSourceInterface):
 
     def file_exists(self, path: str) -> bool:
         self._check()
+        path = self._validated_path(path)
         try:
             return self._ftp.size(path) is not None
-        except ftplib.all_errors:
-            return False
+        except ftplib.error_perm as e:
+            if "550" in str(e):
+                return False
+            raise DataSourcePermissionError(f"Verifica accesso negata: {path!r}") from e
+        except ftplib.all_errors as e:
+            raise DataSourceConnectionError(
+                f"Errore file_exists FTP: {_sanitize_ftp_error(e)}"
+            ) from e
 
     def _check(self):
         if self._ftp is None:
@@ -516,11 +565,65 @@ class FTPDataSource(DataSourceInterface):
             try:
                 self._ftp.mkd(current)
             except ftplib.error_perm as e:
-                logger.debug(
-                    "ftp _mkdirs: mkd %r ignorato (probabile dir esistente): %s",
-                    current, e,
-                )
-                pass
+                if self._directory_exists(current):
+                    continue
+                raise DataSourcePermissionError(
+                    f"Creazione cartella FTP negata: {current!r}"
+                ) from e
+
+    def _directory_exists(self, path: str) -> bool:
+        try:
+            saved = self._ftp.pwd()
+            self._ftp.cwd(path)
+        except ftplib.all_errors:
+            return False
+        try:
+            self._ftp.cwd(saved)
+        except ftplib.all_errors as e:
+            raise DataSourceConnectionError(
+                "Impossibile ripristinare la directory FTP corrente"
+            ) from e
+        return True
+
+    @staticmethod
+    def _temporary_path(path: str) -> str:
+        parent, _, _ = path.rpartition("/")
+        temp_name = f"plenora-upload-{uuid.uuid4().hex}.part"
+        return f"{parent}/{temp_name}" if parent else temp_name
+
+    def _cleanup_remote(self, path: str) -> None:
+        try:
+            self._ftp.delete(path)
+        except ftplib.all_errors:
+            pass
+
+    def _replace_from_temp(self, temp_path: str, target_path: str) -> None:
+        """Promote a complete upload, preserving an existing target."""
+        try:
+            self._ftp.rename(temp_path, target_path)
+            return
+        except ftplib.error_perm as direct_error:
+            try:
+                target_exists = self._ftp.size(target_path) is not None
+            except ftplib.error_perm as size_error:
+                if "550" in str(size_error):
+                    target_exists = False
+                else:
+                    raise direct_error
+            if not target_exists:
+                raise direct_error
+
+        backup_path = f"{temp_path}.backup"
+        self._ftp.rename(target_path, backup_path)
+        try:
+            self._ftp.rename(temp_path, target_path)
+        except Exception:
+            try:
+                self._ftp.rename(backup_path, target_path)
+            except Exception as restore_error:
+                logger.error("FTP rollback replace fallito: %s", restore_error)
+            raise
+        self._cleanup_remote(backup_path)
 
     @staticmethod
     def _parse_mlsd_time(s: str) -> datetime:

@@ -22,7 +22,7 @@ from app.core.datasources.models import (
     ScanState,
 )
 from app.core.datasources.factory import create_backend
-from app.core.datasources.interface import DataSourceInterface
+from app.core.datasources.interface import DataSourceInterface, validate_relative_path
 from app.core.datasources import db as datasource_db
 from app.core.files.preview_temp import preview_file_temp
 from app.core.files.helpers import ColumnInfoBuilder, FormatDetector
@@ -219,6 +219,7 @@ class DataSourceService:
         include_hash: bool = False,
         recursive: bool = False,
     ) -> list[FileInfoResponse]:
+        path = validate_relative_path(path, allow_empty=True)
         backend = self._get_backend(ds_id)
         with backend as ds:
             files = ds.list_files(path=path, pattern=pattern, include_hash=include_hash, recursive=recursive)
@@ -235,6 +236,7 @@ class DataSourceService:
         ]
 
     def file_info(self, ds_id: str, path: str) -> FileInfoResponse:
+        path = validate_relative_path(path)
         backend = self._get_backend(ds_id)
         with backend as ds:
             datasource_file = ds.file_info(path)
@@ -248,6 +250,7 @@ class DataSourceService:
         )
 
     def read_file(self, ds_id: str, path: str) -> bytes:
+        path = validate_relative_path(path)
         backend = self._get_backend(ds_id)
         with backend as ds:
             return ds.read_file(path)
@@ -318,11 +321,17 @@ class DataSourceService:
         viene consumato — il caller DEVE consumare lo stream all'interno
         del `with` per evitare leak di connection (SFTP/FTP).
         """
+        path = validate_relative_path(path)
         backend = self._get_backend(ds_id)
-        with backend as ds:
-            yield from ds.iter_read_chunks(path, chunk_size=chunk_size)
+
+        def _stream():
+            with backend as ds:
+                yield from ds.iter_read_chunks(path, chunk_size=chunk_size)
+
+        return _stream()
 
     def write_file(self, ds_id: str, path: str, content: bytes) -> None:
+        path = validate_relative_path(path)
         backend = self._get_backend(ds_id)
         with backend as ds:
             ds.write_file(path, content)
@@ -334,16 +343,19 @@ class DataSourceService:
         chunk-per-chunk con peak ~chunk_size. SharePoint usa il default
         fallback (accumula in bytearray → write_file).
         """
+        path = validate_relative_path(path)
         backend = self._get_backend(ds_id)
         with backend as ds:
             ds.write_chunks(path, chunks)
 
     def delete_file(self, ds_id: str, path: str) -> None:
+        path = validate_relative_path(path)
         backend = self._get_backend(ds_id)
         with backend as ds:
             ds.delete_file(path)
 
     def file_exists(self, ds_id: str, path: str) -> bool:
+        path = validate_relative_path(path)
         backend = self._get_backend(ds_id)
         with backend as ds:
             return ds.file_exists(path)

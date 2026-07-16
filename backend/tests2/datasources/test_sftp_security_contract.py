@@ -194,7 +194,7 @@ def test_host_key_policy_auto_add_uses_auto_add_policy_no_system_keys():
     )
 
 
-def test_host_key_policy_unknown_value_falls_back_to_auto_add_policy():
+def test_host_key_policy_unknown_value_fails_closed():
     """Blinda che il check ``policy == "reject"`` sia ESATTO. Qualunque
     valore diverso (typo ``"rejetc"``, case-variant ``"Reject"``, policy
     sconosciuta ``"strict"``) cade su ``AutoAddPolicy``.
@@ -209,14 +209,9 @@ def test_host_key_policy_unknown_value_falls_back_to_auto_add_policy():
     for bad_value in ("Reject", "rejetc", "strict"):
         FakeSSHClient.instances.clear()
         ds = _make_ds(host_key_policy=bad_value)
-        ds.connect()
-
-        client = FakeSSHClient.instances[0]
-        assert client.policy_set_to == "AutoAddPolicy", (
-            f"policy={bad_value!r} DEVE cadere su AutoAddPolicy "
-            f"(check esatto '== reject'). Ottenuto: {client.policy_set_to!r}"
-        )
-        assert client.system_keys_loaded is False
+        with pytest.raises(DataSourceConnectionError, match="policy SFTP non valida"):
+            ds.connect()
+        assert FakeSSHClient.instances[0].policy_set_to is None
 
 
 def test_connect_without_password_or_private_key_fails_fast():

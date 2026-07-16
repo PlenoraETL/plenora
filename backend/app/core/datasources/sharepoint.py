@@ -9,6 +9,7 @@ from urllib.parse import quote, urlparse
 import uuid
 
 import io
+import tempfile
 from datetime import datetime
 from typing import Optional
 
@@ -87,6 +88,34 @@ def _import_office365():
         return None, None
 
 
+def _close_context_best_effort(ctx) -> None:
+    """Close a partially-created Office365 context without leaking a session."""
+    if ctx is None:
+        return
+    try:
+        close = getattr(ctx, "close", None)
+        if callable(close):
+            close()
+    except Exception:
+        pass
+    for attr in ("_session", "session", "_client_context_session"):
+        try:
+            session = getattr(ctx, attr, None)
+            close = getattr(session, "close", None)
+            if callable(close):
+                close()
+        except Exception:
+            pass
+    try:
+        pending = ctx.pending_request()
+        session = getattr(pending, "_session", None)
+        close = getattr(session, "close", None)
+        if callable(close):
+            close()
+    except Exception:
+        pass
+
+
 class SharePointDataSource(DataSourceInterface):
     """
     Data Source SharePoint Online tramite Office365-REST-Python-Client.
@@ -133,14 +162,19 @@ class SharePointDataSource(DataSourceInterface):
         from app.shared.connections.retry import call_with_retry
 
         def _do_auth():
-            credentials = ClientCredential(client_id, client_secret)
-            ctx = ClientContext(site_url).with_credentials(credentials)
-            if tenant_id:
-                ctx.authentication_context.tenant = tenant_id
-            web = ctx.web
-            ctx.load(web)
-            ctx.execute_query()
-            return ctx
+            ctx = None
+            try:
+                credentials = ClientCredential(client_id, client_secret)
+                ctx = ClientContext(site_url).with_credentials(credentials)
+                if tenant_id:
+                    ctx.authentication_context.tenant = tenant_id
+                web = ctx.web
+                ctx.load(web)
+                ctx.execute_query()
+                return ctx
+            except Exception:
+                _close_context_best_effort(ctx)
+                raise
 
         try:
             ctx = call_with_retry(
@@ -297,6 +331,7 @@ class SharePointDataSource(DataSourceInterface):
         recursive: bool = False,
     ) -> list[FileInfo]:
         self._check()
+        path = self._validated_path(path, allow_empty=True)
         try:
             doc_list = self._ctx.web.lists.get_by_title(self._library_name())
             root_folder = doc_list.root_folder
@@ -399,6 +434,7 @@ class SharePointDataSource(DataSourceInterface):
 
     def file_info(self, path: str) -> FileInfo:
         self._check()
+        path = self._validated_path(path)
         name = path.split("/")[-1]
         folder_path = "/".join(path.split("/")[:-1])
         folder = self._get_folder(folder_path)
@@ -435,6 +471,7 @@ class SharePointDataSource(DataSourceInterface):
 
     def read_file(self, path: str) -> bytes:
         self._check()
+        path = self._validated_path(path)
         server_relative_url = self._server_relative_url(path)
         try:
             f = self._ctx.web.get_file_by_server_relative_url(server_relative_url)
@@ -461,6 +498,7 @@ class SharePointDataSource(DataSourceInterface):
 
     def write_file(self, path: str, content: bytes) -> None:
         self._check()
+        path = self._validated_path(path)
         # Applica base_path dalla config (stessa logica di list_files
         effective_path = self._join_path(self._base_path(), path)
         parts = effective_path.split("/")
@@ -471,14 +509,17 @@ class SharePointDataSource(DataSourceInterface):
         if folder is None:
             raise DataSourceConnectionError(f"Impossibile creare la cartella: {folder_path!r}")
 
+        temp_name = self._temporary_name(name)
+        temp_url = self._sibling_url(self._server_relative_url(path), temp_name)
         try:
             if len(content) <= self._CHUNK_SIZE:
                 # File piccolo — upload diretto
-                folder.upload_file(name, content)
+                folder.upload_file(temp_name, content)
                 self._ctx.execute_query()
             else:
                 # File grande — upload a chunk
-                self._upload_chunked(folder, name, content)
+                self._upload_chunked(folder, temp_name, content)
+            self._promote_temp_file(temp_url, name)
         except (DataSourcePermissionError, DataSourceConnectionError):
             raise
         except Exception as e:
@@ -493,6 +534,8 @@ class SharePointDataSource(DataSourceInterface):
             raise DataSourceConnectionError(
                 f"Errore write_file SharePoint: {_sanitize_sharepoint_error(e)}"
             ) from e
+        finally:
+            self._cleanup_file_url(temp_url)
 
     def write_chunks(self, path: str, chunks) -> None:
         """Streaming write via SharePoint resumable upload API.
@@ -515,6 +558,7 @@ class SharePointDataSource(DataSourceInterface):
         diretto (no upload session overhead).
         """
         self._check()
+        path = self._validated_path(path)
         effective_path = self._join_path(self._base_path(), path)
         parts = effective_path.split("/")
         name = parts[-1]
@@ -531,11 +575,13 @@ class SharePointDataSource(DataSourceInterface):
         offset = 0
         upload_started = False
         file_ref = None
+        temp_name = self._temporary_name(name)
+        temp_url = self._sibling_url(self._server_relative_url(path), temp_name)
 
         def _ensure_file_ref():
             nonlocal file_ref
             if file_ref is None:
-                empty = folder.upload_file(name, b"")
+                empty = folder.upload_file(temp_name, b"")
                 self._ctx.execute_query()
                 file_ref = self._ctx.web.get_file_by_server_relative_url(
                     empty.serverRelativeUrl
@@ -567,11 +613,11 @@ class SharePointDataSource(DataSourceInterface):
             if not upload_started:
                 # File piccolo: upload diretto, niente upload session.
                 if leftover:
-                    folder.upload_file(name, leftover)
+                    folder.upload_file(temp_name, leftover)
                     self._ctx.execute_query()
                 else:
                     # Caso edge: iterable vuoto -> crea file vuoto.
-                    folder.upload_file(name, b"")
+                    folder.upload_file(temp_name, b"")
                     self._ctx.execute_query()
             else:
                 # Upload session attiva: finalizza con leftover (puo'
@@ -579,6 +625,7 @@ class SharePointDataSource(DataSourceInterface):
                 _ensure_file_ref()
                 file_ref.finish_upload(upload_id, offset, BytesIO(leftover))
                 self._ctx.execute_query()
+            self._promote_temp_file(temp_url, name)
         except (DataSourcePermissionError, DataSourceConnectionError):
             raise
         except Exception as e:
@@ -597,6 +644,69 @@ class SharePointDataSource(DataSourceInterface):
             raise DataSourceConnectionError(
                 f"Errore write_chunks SharePoint: {_sanitize_sharepoint_error(e)}"
             ) from e
+        finally:
+            self._cleanup_file_url(temp_url)
+
+    @staticmethod
+    def _temporary_name(_name: str) -> str:
+        return f"plenora-upload-{uuid.uuid4().hex}.part"
+
+    @staticmethod
+    def _sibling_url(file_url: str, sibling_name: str) -> str:
+        return f"{file_url.rsplit('/', 1)[0]}/{sibling_name}"
+
+    def _cleanup_file_url(self, file_url: str) -> None:
+        try:
+            file_ref = self._ctx.web.get_file_by_server_relative_url(file_url)
+            file_ref.delete_object()
+            self._ctx.execute_query()
+        except Exception as e:
+            msg = str(e).lower()
+            if "404" not in msg and "not found" not in msg:
+                logger.warning(
+                    "Cleanup file temporaneo SharePoint fallito: %s",
+                    _sanitize_sharepoint_error(e),
+                )
+
+    def _promote_temp_file(self, temp_url: str, target_name: str) -> None:
+        """Promote a complete upload while preserving the previous target."""
+        target_url = self._sibling_url(temp_url, target_name)
+        backup_name = self._temporary_name(f"{target_name}.backup")
+        backup_url = self._sibling_url(temp_url, backup_name)
+        existing = None
+        try:
+            existing = self._ctx.web.get_file_by_server_relative_url(target_url)
+            self._ctx.load(existing)
+            self._ctx.execute_query()
+        except Exception as e:
+            msg = str(e).lower()
+            if "404" not in msg and "not found" not in msg:
+                raise
+            existing = None
+
+        if existing is not None:
+            existing.rename(backup_name)
+            self._ctx.execute_query()
+
+        temp_ref = self._ctx.web.get_file_by_server_relative_url(temp_url)
+        try:
+            temp_ref.rename(target_name)
+            self._ctx.execute_query()
+        except Exception:
+            if existing is not None:
+                try:
+                    backup_ref = self._ctx.web.get_file_by_server_relative_url(backup_url)
+                    backup_ref.rename(target_name)
+                    self._ctx.execute_query()
+                except Exception as restore_error:
+                    logger.error(
+                        "SharePoint rollback replace fallito: %s",
+                        _sanitize_sharepoint_error(restore_error),
+                    )
+            raise
+
+        if existing is not None:
+            self._cleanup_file_url(backup_url)
 
     def _upload_chunked(self, folder, name: str, content: bytes) -> None:
         """Upload a chunk per file grandi (>10 MB). Usa le API SharePoint resumable upload."""
@@ -653,6 +763,7 @@ class SharePointDataSource(DataSourceInterface):
 
     def delete_file(self, path: str) -> None:
         self._check()
+        path = self._validated_path(path)
         server_relative_url = self._server_relative_url(path)
         try:
             f = self._ctx.web.get_file_by_server_relative_url(server_relative_url)
@@ -675,6 +786,7 @@ class SharePointDataSource(DataSourceInterface):
 
     def file_exists(self, path: str) -> bool:
         self._check()
+        path = self._validated_path(path)
         server_relative_url = self._server_relative_url(path)
         try:
             f = self._ctx.web.get_file_by_server_relative_url(server_relative_url)
@@ -682,8 +794,14 @@ class SharePointDataSource(DataSourceInterface):
             self._ctx.execute_query()
             return f.properties.get("Exists", True)
         except Exception as e:
-            logger.debug(f"file_exists probe fallito per {path!r}: {type(e).__name__}: {e}")
-            return False
+            msg = str(e).lower()
+            if "404" in msg or "not found" in msg:
+                return False
+            if "401" in msg or "403" in msg or "unauthorized" in msg or "forbidden" in msg:
+                raise DataSourcePermissionError(f"Verifica accesso negata: {path!r}") from e
+            raise DataSourceConnectionError(
+                f"Errore file_exists SharePoint: {_sanitize_sharepoint_error(e)}"
+            ) from e
 
     # ── Helpers privati ─────────────────────────────────────────────────────
 
@@ -715,9 +833,10 @@ class SharePointDataSource(DataSourceInterface):
         site_url = extra.get("site_url", "").rstrip("/")
         # Ricava il path relativo del sito dall'URL
         # es. "https://tenant.sharepoint.com/sites/workarea/gis" → "/sites/workarea/gis"
-        site_path = urlparse(site_url).path.rstrip("/")
+        site_path = urlparse(site_url).path.strip("/")
         library = self._library_name()
-        rel = relative_path.strip("/")
+        relative_path = self._validated_path(relative_path, allow_empty=True)
+        rel = self._join_path(self._base_path(), relative_path)
         parts = [p for p in [site_path, library, rel] if p]
         return "/" + "/".join(parts)
 
@@ -755,8 +874,16 @@ class SharePointDataSource(DataSourceInterface):
             self._ctx.execute_query()
             return folder
         except Exception as e:
-            logger.debug(f"_get_folder fallito per {relative_path!r}: {type(e).__name__}: {e}")
-            return None
+            msg = str(e).lower()
+            if "404" in msg or "not found" in msg:
+                return None
+            if "401" in msg or "403" in msg or "unauthorized" in msg or "forbidden" in msg:
+                raise DataSourcePermissionError(
+                    f"Accesso cartella SharePoint negato: {relative_path!r}"
+                ) from e
+            raise DataSourceConnectionError(
+                f"Errore accesso cartella SharePoint: {_sanitize_sharepoint_error(e)}"
+            ) from e
 
     def _get_or_create_folder(self, relative_path: str):
         """
@@ -838,6 +965,7 @@ class SharePointDataSource(DataSourceInterface):
         compatibile con l'interface uniforme.
         """
         self._check()
+        path = self._validated_path(path)
         server_relative_url = self._server_relative_url(path)
         extra = self.config.extra
         site_url = extra.get("site_url", "").rstrip("/")
@@ -856,6 +984,7 @@ class SharePointDataSource(DataSourceInterface):
         # `_request_session` a seconda della versione; usiamo
         # try/except per fragilita' API.
         session = None
+        yielded_any = False
         try:
             pending = self._ctx.pending_request()
             session = pending._session if hasattr(pending, "_session") else None
@@ -898,6 +1027,7 @@ class SharePointDataSource(DataSourceInterface):
                 resp.raise_for_status()
                 for chunk in resp.iter_content(chunk_size=chunk_size):
                     if chunk:
+                        yielded_any = True
                         yield chunk
         except (DataSourceFileNotFoundError, DataSourcePermissionError):
             raise
@@ -909,6 +1039,10 @@ class SharePointDataSource(DataSourceInterface):
                 f"{path!r}, fallback _download_file full: "
                 f"{type(exc).__name__}: {_sanitize_sharepoint_error(exc)}"
             )
+            if yielded_any:
+                raise DataSourceConnectionError(
+                    "Download SharePoint interrotto dopo l'inizio dello stream"
+                ) from exc
             yield from self._fallback_download_then_slice(path, chunk_size)
 
     def _fallback_download_then_slice(self, path: str, chunk_size: int):
@@ -918,10 +1052,9 @@ class SharePointDataSource(DataSourceInterface):
         il path REST diretto non e' disponibile.
 
         Questo fallback e' **best-effort**, NON garantisce streaming RAM.
-        Il `_download_file` interno carica
-        il file INTERO in BytesIO via office365 client `.download(buf)`.
-        Lo slice in chunks ha un'API uniforme con altri backend ma il
-        peak RAM resta O(file_size). Usato quando:
+        Il client Office365 scarica in uno ``SpooledTemporaryFile``: oltre
+        8 MB il contenuto passa su disco, mantenendo il peak RAM limitato.
+        Usato quando:
           - office365 session interna non e' accessibile (API SDK
             cambiata fra versioni);
           - REST stream fallisce con HTTP error / network error.
@@ -937,7 +1070,10 @@ class SharePointDataSource(DataSourceInterface):
             )
             self._ctx.load(file_obj)
             self._ctx.execute_query()
-            full = self._download_file(file_obj)
+            spool = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024)
+            file_obj.download(spool)
+            self._ctx.execute_query()
+            spool.seek(0)
         except Exception as e:
             msg = str(e).lower()
             if "not found" in msg or "404" in msg:
@@ -952,8 +1088,14 @@ class SharePointDataSource(DataSourceInterface):
                 f"Errore read_file SharePoint: {_sanitize_sharepoint_error(e)}"
             ) from e
 
-        for i in range(0, len(full), chunk_size):
-            yield full[i:i + chunk_size]
+        try:
+            while True:
+                chunk = spool.read(chunk_size)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            spool.close()
 
     @staticmethod
     def _parse_dt(s) -> datetime:

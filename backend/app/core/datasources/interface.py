@@ -33,6 +33,31 @@ class DataSourcePermissionError(DataSourceError):
     pass
 
 
+def validate_relative_path(path: str, *, allow_empty: bool = False) -> str:
+    """Validate and normalize an untrusted datasource-relative path."""
+    if not isinstance(path, str):
+        raise DataSourcePermissionError("Path Data Source non valido")
+    if "\x00" in path:
+        raise DataSourcePermissionError("Path Data Source contiene caratteri non validi")
+    if not path:
+        if allow_empty:
+            return ""
+        raise DataSourcePermissionError("Path Data Source vuoto")
+    if path.startswith(("/", "\\")) or (len(path) >= 2 and path[1] == ":"):
+        raise DataSourcePermissionError(f"Path assoluto non consentito: {path!r}")
+    if "\\" in path:
+        raise DataSourcePermissionError(f"Separatore non consentito nel path: {path!r}")
+
+    segments = [segment for segment in path.split("/") if segment]
+    if any(segment in (".", "..") for segment in segments):
+        raise DataSourcePermissionError(f"Path traversal rifiutato: {path!r}")
+    if not segments:
+        if allow_empty:
+            return ""
+        raise DataSourcePermissionError("Path Data Source vuoto")
+    return "/".join(segments)
+
+
 class FileInfoPayload(TypedDict):
     name: str
     path: str
@@ -257,7 +282,8 @@ class DataSourceInterface(ABC):
     @abstractmethod
     def file_exists(self, path: str) -> bool:
         """
-        Verifica se un file esiste. Non solleva eccezioni (ritorna False se non trovato).
+        Verifica se un file esiste. Ritorna False soltanto per un not-found
+        confermato; errori di rete o permessi restano eccezioni tipate.
         """
 
 
@@ -283,3 +309,6 @@ class DataSourceInterface(ABC):
         for p in parts:
             segments.extend(s for s in p.strip("/").split("/") if s)
         return "/".join(segments)
+
+    def _validated_path(self, path: str, *, allow_empty: bool = False) -> str:
+        return validate_relative_path(path, allow_empty=allow_empty)

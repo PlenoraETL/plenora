@@ -18,6 +18,17 @@
             "title": "Items",
             "type": "array"
           },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
           "region": {
             "title": "Region",
             "type": "string"
@@ -27,7 +38,8 @@
           "bucket",
           "region",
           "count",
-          "items"
+          "items",
+          "next_cursor"
         ],
         "title": "AdminBackupsListResponse",
         "type": "object"
@@ -657,7 +669,7 @@
       "Body_analyze_upload_api_eseguibili__eseguibile_id__analyze_upload_post": {
         "properties": {
           "file": {
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File",
             "type": "string"
           }
@@ -671,7 +683,7 @@
       "Body_preview_file_temp_api_files_preview_temp_post": {
         "properties": {
           "file": {
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File",
             "type": "string"
           },
@@ -707,7 +719,7 @@
       "Body_upload_attachment_endpoint_api_tickets__ticket_id__attachments_post": {
         "properties": {
           "file": {
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File",
             "type": "string"
           }
@@ -721,7 +733,7 @@
       "Body_upload_file_api_datasources__ds_id__files_upload_post": {
         "properties": {
           "file": {
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File",
             "type": "string"
           }
@@ -740,7 +752,7 @@
             "type": "string"
           },
           "file": {
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File",
             "type": "string"
           },
@@ -808,7 +820,7 @@
             "type": "string"
           },
           "file": {
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File",
             "type": "string"
           },
@@ -1781,15 +1793,6 @@
             "title": "Id",
             "type": "string"
           },
-          "mssql_tls_mode": {
-            "default": "verify",
-            "enum": [
-              "verify",
-              "trust_server_certificate"
-            ],
-            "title": "Mssql Tls Mode",
-            "type": "string"
-          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -2000,7 +2003,7 @@
                 "type": "null"
               }
             ],
-            "default": "auto_add",
+            "default": "reject",
             "title": "Host Key Policy"
           },
           "name": {
@@ -2460,6 +2463,15 @@
           },
           "id": {
             "title": "Id",
+            "type": "string"
+          },
+          "mssql_tls_mode": {
+            "default": "verify",
+            "enum": [
+              "verify",
+              "trust_server_certificate"
+            ],
+            "title": "Mssql Tls Mode",
             "type": "string"
           },
           "name": {
@@ -3125,6 +3137,29 @@
           "deduplication_savings_percent"
         ],
         "title": "EstimateResponse",
+        "type": "object"
+      },
+      "ExecuteRequest": {
+        "description": "Richiesta di esecuzione di una pipeline.",
+        "properties": {
+          "connection_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Id"
+          },
+          "force_recalculate": {
+            "default": false,
+            "title": "Force Recalculate",
+            "type": "boolean"
+          }
+        },
+        "title": "ExecuteRequest",
         "type": "object"
       },
       "ExpectedColumn": {
@@ -7980,13 +8015,6 @@
       },
       "ValidationError": {
         "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
           "loc": {
             "items": {
               "anyOf": [
@@ -8292,29 +8320,6 @@
         ],
         "title": "ExecuteRequest",
         "type": "object"
-      },
-      "app__core__projects__canvas_models__ExecuteRequest": {
-        "description": "Richiesta di esecuzione di una pipeline.",
-        "properties": {
-          "connection_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Connection Id"
-          },
-          "force_recalculate": {
-            "default": false,
-            "title": "Force Recalculate",
-            "type": "boolean"
-          }
-        },
-        "title": "ExecuteRequest",
-        "type": "object"
       }
     },
     "securitySchemes": {
@@ -8351,6 +8356,37 @@
       "get": {
         "description": "Lista dei dump presenti nel bucket S3.",
         "operationId": "list_backups_endpoint_api_admin_backups_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2048,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -8361,6 +8397,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -8778,6 +8824,29 @@
             "schema": {
               "title": "Connection Type",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
             }
           }
         ],
@@ -9203,6 +9272,31 @@
       "get": {
         "description": "Lista gruppi.\nsuperadmin → tutti i gruppi (cross-tenant)\nadmin → solo il proprio gruppo (l'admin non può fare sharing\n              cross-gruppo, quindi non ha bisogno di vedere gli altri)",
         "operationId": "list_groups_api_auth_groups_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -9217,6 +9311,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -9609,6 +9713,31 @@
       "get": {
         "description": "Lista utenti.\nsuperadmin → tutti gli utenti di tutti i gruppi\nadmin → solo utenti del proprio gruppo",
         "operationId": "list_users_api_auth_users_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -9623,6 +9752,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -10029,6 +10168,31 @@
       "get": {
         "description": "Lista connessioni visibili: owned dal gruppo + condivise via allowed_groups.\nOgni record include `can_edit` calcolato per l'utente corrente.",
         "operationId": "list_connections_api_connections_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -10039,6 +10203,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -10292,6 +10466,31 @@
       "get": {
         "description": "Lista Data Source visibili: owned dal gruppo + condivisi via allowed_groups.\nOgni record include `can_edit` calcolato per l'utente corrente.",
         "operationId": "list_datasources_api_datasources_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -10302,6 +10501,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -10960,6 +11169,31 @@
       "get": {
         "description": "Lista eseguibili visibili: owned dal gruppo + condivisi via allowed_groups.\nOgni record include `can_edit` calcolato per l'utente corrente.",
         "operationId": "list_eseguibili_api_eseguibili_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -10974,6 +11208,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -11346,6 +11590,31 @@
       "get": {
         "description": "Lista connessioni ArcGIS visibili: owned dal gruppo + condivise via allowed_groups.\nOgni record include `can_edit` calcolato per l'utente corrente.",
         "operationId": "list_connections_api_features_connections_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -11356,6 +11625,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -11869,6 +12148,8 @@
             "schema": {
               "default": 50,
               "description": "Max features per preview",
+              "maximum": 5000,
+              "minimum": 1,
               "title": "Max Features",
               "type": "integer"
             }
@@ -11956,58 +12237,37 @@
       "get": {
         "description": "Lista file visibili: owned dal proprio gruppo + condivisi via allowed_groups.\nOgni record include `can_edit` calcolato per l'utente corrente.\n\nI file_source temporanei creati dagli eseguibili (prefisso `__exec_temp_`)\nsono esclusi: esistono solo per ~20 secondi durante un'esecuzione e non\ndevono mai apparire in UI — sono un dettaglio implementativo del runner\ndell'eseguibile, non contenuto utente.",
         "operationId": "list_files_api_files_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/FileSourceList"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "List Files",
-        "tags": [
-          "File Sources"
-        ]
-      },
-      "put": {
-        "description": "Aggiorna i metadati del FileSource e ricalcola lo schema del foglio/layer.",
-        "operationId": "update_file_api_files__file_id__put",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "file_id",
-            "required": true,
-            "schema": {
-              "title": "File Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/FileSourceUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FileSource"
                 }
               }
             },
@@ -12029,7 +12289,7 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Update File",
+        "summary": "List Files",
         "tags": [
           "File Sources"
         ]
@@ -12260,6 +12520,62 @@
           }
         ],
         "summary": "Get File",
+        "tags": [
+          "File Sources"
+        ]
+      },
+      "put": {
+        "description": "Aggiorna i metadati del FileSource e ricalcola lo schema del foglio/layer.",
+        "operationId": "update_file_api_files__file_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "file_id",
+            "required": true,
+            "schema": {
+              "title": "File Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FileSourceUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileSource"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update File",
         "tags": [
           "File Sources"
         ]
@@ -13033,6 +13349,31 @@
       "get": {
         "description": "Lista tutti i progetti con source_project_ids per manipola",
         "operationId": "list_projects_api_projects_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -13045,6 +13386,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "security": [
@@ -13655,7 +14006,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/app__core__projects__canvas_models__ExecuteRequest"
+                "$ref": "#/components/schemas/ExecuteRequest"
               }
             }
           }
@@ -14537,6 +14888,29 @@
               "description": "Filtra per progetto",
               "title": "Project Id"
             }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -15053,6 +15427,29 @@
             "schema": {
               "title": "Schedule Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
             }
           }
         ],

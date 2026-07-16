@@ -132,6 +132,16 @@ describe('DataSourceManager contract', () => {
   });
 
 
+  it('defaults new SFTP sources to verified host keys', async () => {
+    render(<DataSourceManager />);
+    await screen.findByText('Nessun Data Source configurato');
+    await userEvent.click(screen.getAllByRole('button', { name: /Nuovo Data Source/i })[0]);
+    await userEvent.click(await screen.findByRole('button', { name: /SFTP/i }));
+
+    expect(screen.getByRole('combobox')).toHaveValue('reject');
+  });
+
+
   it('renders the success badge inline after a successful test connection', async () => {
     listDataSourcesMock.mockResolvedValueOnce({ datasources: [sampleDs] });
     testDataSourceMock.mockResolvedValueOnce({

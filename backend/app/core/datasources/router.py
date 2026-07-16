@@ -309,9 +309,22 @@ def download_file(
         # il peak RAM scende da O(file_size) a O(64KB). Per gli altri
         # backend il default fallback non riduce il peak ma evita la
         # doppia copia request->response di FastAPI.
-        chunks = _svc().iter_read_chunks(ds_id, path)
+        chunks = iter(_svc().iter_read_chunks(ds_id, path))
+        # Prefetch one chunk before constructing the response so connect,
+        # permission and not-found failures still receive the typed HTTP
+        # status instead of aborting after headers have been sent.
+        try:
+            first_chunk = next(chunks)
+        except StopIteration:
+            first_chunk = b""
+
+        def _response_chunks():
+            if first_chunk:
+                yield first_chunk
+            yield from chunks
+
         return StreamingResponse(
-            chunks,
+            _response_chunks(),
             media_type="application/octet-stream",
             headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
         )

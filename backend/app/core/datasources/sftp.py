@@ -1,8 +1,10 @@
 """SFTP data source backend."""
 
 import io
+import errno
 import socket
 import stat
+import uuid
 from datetime import datetime
 from typing import Any, Optional
 
@@ -91,11 +93,12 @@ class SFTPDataSource(DataSourceInterface):
 
         try:
             ssh = paramiko.SSHClient()
+            self._ssh = ssh
 
             if policy == "reject":
                 ssh.load_system_host_keys()
                 ssh.set_missing_host_key_policy(paramiko.RejectPolicy())
-            else:
+            elif policy == "auto_add":
                 # AutoAddPolicy accetta silenziosamente qualsiasi host key
                 # (incluso un attaccante MitM). Log esplicito per security
                 # monitoring: in prod/staging questo path richiede config
@@ -107,6 +110,10 @@ class SFTPDataSource(DataSourceInterface):
                     host, port,
                 )
                 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            else:
+                raise DataSourceConnectionError(
+                    f"host_key_policy SFTP non valida: {policy!r}"
+                )
 
             kwargs = {"hostname": host, "port": port, "username": username, "timeout": 15}
 
@@ -133,7 +140,6 @@ class SFTPDataSource(DataSourceInterface):
                 backoff_base=0.5,
                 retriable_excs=(OSError, TimeoutError),
             )
-            self._ssh = ssh
             self._sftp = ssh.open_sftp()
 
             root = self.config.root_path
@@ -150,23 +156,29 @@ class SFTPDataSource(DataSourceInterface):
                         f"Root path SFTP non accessibile: {root!r}"
                     ) from e
 
+        except DataSourceConnectionError:
+            self.disconnect()
+            raise
         except paramiko.AuthenticationException as e:
             logger.warning(
                 f"[GESTITO] SFTP auth fallita: {type(e).__name__}: {e}",
                 exc_info=True,
             )
+            self.disconnect()
             raise DataSourceConnectionError(_sanitize_sftp_error(e)) from e
         except paramiko.SSHException as e:
             logger.warning(
                 f"[GESTITO] SFTP SSH exception: {type(e).__name__}: {e}",
                 exc_info=True,
             )
+            self.disconnect()
             raise DataSourceConnectionError(_sanitize_sftp_error(e)) from e
         except OSError as e:
             logger.warning(
                 f"[GESTITO] SFTP OS error: {type(e).__name__}: {e}",
                 exc_info=True,
             )
+            self.disconnect()
             raise DataSourceConnectionError(_sanitize_sftp_error(e)) from e
 
     def disconnect(self) -> None:
@@ -217,11 +229,12 @@ class SFTPDataSource(DataSourceInterface):
         recursive: bool = False,
     ) -> list[FileInfo]:
         self._check()
+        path = self._validated_path(path, allow_empty=True)
         remote = path or "."
         try:
             entries = self._sftp.listdir_attr(remote)
         except IOError as e:
-            raise DataSourceFileNotFoundError(f"Path non trovato: {path!r}") from e
+            self._raise_io_error(e, path, "lettura")
 
         results = []
         for entry in entries:
@@ -269,10 +282,11 @@ class SFTPDataSource(DataSourceInterface):
 
     def file_info(self, path: str) -> FileInfo:
         self._check()
+        path = self._validated_path(path)
         try:
             attrs = self._sftp.stat(path)
         except IOError as e:
-            raise DataSourceFileNotFoundError(f"File non trovato: {path!r}") from e
+            self._raise_io_error(e, path, "lettura")
 
         name = path.split("/")[-1]
         return FileInfo(
@@ -285,14 +299,13 @@ class SFTPDataSource(DataSourceInterface):
 
     def read_file(self, path: str) -> bytes:
         self._check()
+        path = self._validated_path(path)
         buf = io.BytesIO()
         try:
             with self._sftp.open(path, "rb") as f:
                 buf.write(f.read())
         except IOError as e:
-            if "No such file" in str(e) or "does not exist" in str(e):
-                raise DataSourceFileNotFoundError(f"File non trovato: {path!r}") from e
-            raise DataSourcePermissionError(f"Accesso negato: {path!r}") from e
+            self._raise_io_error(e, path, "lettura")
         return buf.getvalue()
 
     def iter_read_chunks(self, path: str, *, chunk_size: int = 64 * 1024):
@@ -302,6 +315,7 @@ class SFTPDataSource(DataSourceInterface):
         supporta `.read(chunk_size)` con prefetch automatico. Peak RAM
         ~chunk_size, no double-buffer come in `read_file`."""
         self._check()
+        path = self._validated_path(path)
         try:
             with self._sftp.open(path, "rb") as f:
                 # paramiko ottimizza con prefetch per file > 32KB; lasciamo
@@ -312,56 +326,83 @@ class SFTPDataSource(DataSourceInterface):
                         break
                     yield chunk
         except IOError as e:
-            if "No such file" in str(e) or "does not exist" in str(e):
-                raise DataSourceFileNotFoundError(f"File non trovato: {path!r}") from e
-            raise DataSourcePermissionError(f"Accesso negato: {path!r}") from e
+            self._raise_io_error(e, path, "lettura")
 
     def write_file(self, path: str, content: bytes) -> None:
         self._check()
+        path = self._validated_path(path)
         parent = "/".join(path.split("/")[:-1])
         if parent:
             self._mkdirs(parent)
+        temp_path = self._temporary_path(path)
         try:
-            with self._sftp.open(path, "wb") as f:
+            with self._sftp.open(temp_path, "wb") as f:
                 f.write(content)
+            self._replace_from_temp(temp_path, path)
         except IOError as e:
-            raise DataSourcePermissionError(f"Scrittura negata: {path!r}") from e
+            self._raise_io_error(e, path, "scrittura")
+        finally:
+            self._cleanup_remote(temp_path)
 
     def write_chunks(self, path: str, chunks) -> None:
         """Streaming write via paramiko
         file-like. Scrive chunk-per-chunk con peak RAM ~chunk_size."""
         self._check()
+        path = self._validated_path(path)
         parent = "/".join(path.split("/")[:-1])
         if parent:
             self._mkdirs(parent)
+        temp_path = self._temporary_path(path)
         try:
-            with self._sftp.open(path, "wb") as f:
+            with self._sftp.open(temp_path, "wb") as f:
                 for chunk in chunks:
                     if chunk:
                         f.write(chunk)
+            self._replace_from_temp(temp_path, path)
         except IOError as e:
-            raise DataSourcePermissionError(f"Scrittura negata: {path!r}") from e
+            self._raise_io_error(e, path, "scrittura")
+        finally:
+            self._cleanup_remote(temp_path)
 
     def delete_file(self, path: str) -> None:
         self._check()
+        path = self._validated_path(path)
         try:
             self._sftp.remove(path)
         except IOError as e:
-            if "No such file" in str(e) or "does not exist" in str(e):
-                raise DataSourceFileNotFoundError(f"File non trovato: {path!r}") from e
-            raise DataSourcePermissionError(f"Cancellazione negata: {path!r}") from e
+            self._raise_io_error(e, path, "cancellazione")
 
     def file_exists(self, path: str) -> bool:
         self._check()
+        path = self._validated_path(path)
         try:
             self._sftp.stat(path)
             return True
-        except IOError:
-            return False
+        except IOError as e:
+            if self._is_not_found(e):
+                return False
+            self._raise_io_error(e, path, "verifica")
 
     def _check(self):
         if self._sftp is None:
             raise DataSourceConnectionError("Non connesso. Usa il context manager 'with'.")
+
+    @staticmethod
+    def _is_not_found(e: IOError) -> bool:
+        msg = str(e).lower()
+        return getattr(e, "errno", None) == errno.ENOENT or any(
+            marker in msg for marker in ("no such file", "does not exist", "not found")
+        )
+
+    @classmethod
+    def _raise_io_error(cls, e: IOError, path: str, action: str):
+        if cls._is_not_found(e):
+            raise DataSourceFileNotFoundError(f"File non trovato: {path!r}") from e
+        if getattr(e, "errno", None) in (errno.EACCES, errno.EPERM):
+            raise DataSourcePermissionError(f"Operazione SFTP negata: {path!r}") from e
+        raise DataSourceConnectionError(
+            f"Errore connessione SFTP durante {action}"
+        ) from e
 
     def _mkdirs(self, remote_path: str) -> None:
         parts = remote_path.strip("/").split("/")
@@ -371,10 +412,62 @@ class SFTPDataSource(DataSourceInterface):
             try:
                 self._sftp.mkdir(current)
             except IOError as e:
-                logger.debug(
-                    "sftp _mkdirs: mkdir %r ignorato (probabile dir esistente): %s",
-                    current, e,
-                )
+                try:
+                    attrs = self._sftp.stat(current)
+                    if stat.S_ISDIR(attrs.st_mode):
+                        continue
+                except IOError:
+                    pass
+                self._raise_io_error(e, current, "creazione cartella")
+
+    @staticmethod
+    def _temporary_path(path: str) -> str:
+        parent, _, _ = path.rpartition("/")
+        temp_name = f"plenora-upload-{uuid.uuid4().hex}.part"
+        return f"{parent}/{temp_name}" if parent else temp_name
+
+    def _cleanup_remote(self, path: str) -> None:
+        try:
+            self._sftp.remove(path)
+        except IOError:
+            pass
+
+    def _path_exists(self, path: str) -> bool:
+        try:
+            self._sftp.stat(path)
+            return True
+        except IOError as e:
+            if getattr(e, "errno", None) == 2 or "no such file" in str(e).lower():
+                return False
+            raise
+
+    def _replace_from_temp(self, temp_path: str, target_path: str) -> None:
+        # OpenSSH posix-rename is an atomic overwrite when supported.
+        posix_rename = getattr(self._sftp, "posix_rename", None)
+        if callable(posix_rename):
+            try:
+                posix_rename(temp_path, target_path)
+                return
+            except IOError as e:
+                msg = str(e).lower()
+                if getattr(e, "errno", None) != 95 and "unsupported" not in msg:
+                    raise
+
+        if not self._path_exists(target_path):
+            self._sftp.rename(temp_path, target_path)
+            return
+
+        backup_path = f"{temp_path}.backup"
+        self._sftp.rename(target_path, backup_path)
+        try:
+            self._sftp.rename(temp_path, target_path)
+        except Exception:
+            try:
+                self._sftp.rename(backup_path, target_path)
+            except Exception as restore_error:
+                logger.error("SFTP rollback replace fallito: %s", restore_error)
+            raise
+        self._cleanup_remote(backup_path)
 
     @staticmethod
     def _load_key(paramiko, pem: str, passphrase: Optional[str]):

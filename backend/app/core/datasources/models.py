@@ -27,7 +27,7 @@ class DataSourceCreate(BaseModel):
     # SFTP: chiave SSH
     private_key: Optional[str] = None          # Contenuto PEM
     private_key_passphrase: Optional[str] = None
-    host_key_policy: Optional[Literal["auto_add", "reject"]] = "auto_add"
+    host_key_policy: Optional[Literal["auto_add", "reject"]] = "reject"
 
     # FTP: opzioni trasporto
     tls: Optional[bool] = False

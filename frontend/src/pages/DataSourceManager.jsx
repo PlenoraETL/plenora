@@ -33,7 +33,7 @@ const EMPTY_FORM = {
   name:'', description:'', type:'local', root_path:'',
   host:'', port:'', username:'', password:'',
   tls:false, passive:true,
-  private_key:'', private_key_passphrase:'', host_key_policy:'auto_add',
+  private_key:'', private_key_passphrase:'', host_key_policy:'reject',
   tenant_id:'', client_id:'', client_secret:'', site_url:'', site_id:'', drive_id:'',
 };
 const formatSize = (bytes) => {
@@ -103,7 +103,7 @@ export default function DataSourceManager() {
   const openNew = () => { setEditing(null); setFormData(EMPTY_FORM); setFormError(null); setShowModal(true); };
   const openEdit = ds => {
     setEditing(ds);
-    setFormData({ ...EMPTY_FORM, name:ds.name||'', description:ds.description||'', type:ds.type||'local', root_path:ds.root_path||'', host:ds.host||'', port:ds.port||'', username:ds.username||'', password:'', tls:ds.tls||false, passive:ds.passive!==false, private_key:'', private_key_passphrase:'', host_key_policy:ds.host_key_policy||'auto_add', tenant_id:ds.tenant_id||'', client_id:ds.client_id||'', client_secret:'', site_url:ds.site_url||'', site_id:ds.site_id||'', drive_id:ds.drive_id||'' });
+    setFormData({ ...EMPTY_FORM, name:ds.name||'', description:ds.description||'', type:ds.type||'local', root_path:ds.root_path||'', host:ds.host||'', port:ds.port||'', username:ds.username||'', password:'', tls:ds.tls||false, passive:ds.passive!==false, private_key:'', private_key_passphrase:'', host_key_policy:ds.host_key_policy||'reject', tenant_id:ds.tenant_id||'', client_id:ds.client_id||'', client_secret:'', site_url:ds.site_url||'', site_id:ds.site_id||'', drive_id:ds.drive_id||'' });
     setFormError(null); setShowModal(true);
   };
   const closeModal = () => { setShowModal(false); setEditing(null); setFormError(null); };

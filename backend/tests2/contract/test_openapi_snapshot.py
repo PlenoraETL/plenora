@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -86,12 +87,19 @@ def test_openapi_snapshot_matches_or_update():
         f"Re-run con `UPDATE_OPENAPI_SNAPSHOT=1` se la modifica e' intenzionale."
     )
 
-    cur_models = set((current.get("components", {}).get("schemas") or {}).keys())
-    exp_models = set((expected.get("components", {}).get("schemas") or {}).keys())
+    # FastAPI/Pydantic may choose which of two same-named classes receives
+    # the short component key according to module import order.  Compare the
+    # logical schema titles (including multiplicity) so this contract remains
+    # deterministic while still detecting added/removed models.
+    cur_schemas = current.get("components", {}).get("schemas") or {}
+    exp_schemas = expected.get("components", {}).get("schemas") or {}
+    cur_models = Counter(schema.get("title") or key for key, schema in cur_schemas.items())
+    exp_models = Counter(schema.get("title") or key for key, schema in exp_schemas.items())
     m_added = cur_models - exp_models
     m_removed = exp_models - cur_models
     assert not m_added and not m_removed, (
         f"OpenAPI models drift vs snapshot:\n"
-        f"  Aggiunti: {sorted(m_added)}\n  Rimossi: {sorted(m_removed)}\n"
+        f"  Aggiunti: {sorted(m_added.elements())}\n"
+        f"  Rimossi: {sorted(m_removed.elements())}\n"
         f"Re-run con `UPDATE_OPENAPI_SNAPSHOT=1` se intenzionale."
     )
