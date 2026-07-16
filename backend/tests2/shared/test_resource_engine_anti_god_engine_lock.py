@@ -91,9 +91,23 @@ def test_resource_ref_rejects_multiple_ids_set():
 def test_resource_is_frozen():
     from app.core.resources import Resource
 
-    r = Resource(kind="result_blob", size_bytes=0)
+    r = Resource(kind="result_blob", size_bytes=0, data=b"")
     with pytest.raises(Exception):
         r.size_bytes = 99  # type: ignore[misc]
+
+
+def test_resource_rejects_missing_or_ambiguous_payload():
+    from app.core.resources import Resource
+
+    with pytest.raises(ValueError, match="exactly one"):
+        Resource(kind="result_blob", size_bytes=0)
+    with pytest.raises(ValueError, match="exactly one"):
+        Resource(
+            kind="result_blob",
+            size_bytes=1,
+            data=b"x",
+            stream=iter([b"x"]),
+        )
 
 
 # Group B — banned imports under app/core/resources/

@@ -131,6 +131,7 @@ class ExecutionManager:
         triggered_by: str = "cron",
         retry_attempt: int = 0,
         scheduled_for: Optional[str] = None,
+        queue_reserved: bool = False,
     ) -> SchedulerExecutionResult:
         """
         Esegue una pipeline schedulata — metodo principale.
@@ -155,9 +156,14 @@ class ExecutionManager:
         steps = []
         run_id = str(_uuid.uuid4())
 
+        def _cancel_reserved_queue() -> None:
+            if queue_reserved:
+                self.concurrency.cancel_queue_reservation(schedule_id)
+
         config = self.schedule_service.get_schedule(schedule_id)
         if not config:
             logger.error(f"[GESTITO] Schedule non trovato: {schedule_id}")
+            _cancel_reserved_queue()
             return {"success": False, "status": "failed", "message": "Schedule non trovato"}
 
         project_id = config.pipeline.project_id
@@ -193,6 +199,7 @@ class ExecutionManager:
             )
             self.log_service.write_log(entry)
 
+            _cancel_reserved_queue()
             return {"success": False, "status": "orphan", "message": "Progetto eliminato"}
 
         # Group isolation, FAIL-CLOSED
@@ -219,6 +226,7 @@ class ExecutionManager:
                 pipeline_info={"project_id": project_id},
             )
             self.log_service.write_log(entry)
+            _cancel_reserved_queue()
             return {
                 "success": False,
                 "status": "failed",
@@ -259,6 +267,7 @@ class ExecutionManager:
                 pipeline_info={"project_id": project_id, "project_name": config.pipeline.project_name},
             )
             self.log_service.write_log(entry)
+            _cancel_reserved_queue()
             return {
                 "success": False,
                 "status": "failed",
@@ -272,6 +281,8 @@ class ExecutionManager:
         lock_result = self.concurrency.try_acquire(
             schedule_id,
             max_queue_size=config.concurrency.max_queue_size,
+            owner_id=run_id,
+            queue_reserved=queue_reserved,
         )
 
         if lock_result == "skipped":
@@ -294,6 +305,22 @@ class ExecutionManager:
             )
             self.log_service.write_log(entry)
             # Il task Celery con countdown gestirà il retry dalla coda
+            try:
+                from app.core.scheduler.job_dispatcher import enqueue_schedule_run
+
+                enqueue_schedule_run(
+                    schedule_id,
+                    triggered_by=triggered_by,
+                    retry_attempt=retry_attempt,
+                    scheduled_for=scheduled_for,
+                    queue_reserved=True,
+                    countdown=5,
+                )
+            except Exception:
+                # Senza un successore nel broker lo slot non verrebbe mai
+                # consumato e renderebbe la coda permanentemente piena.
+                self.concurrency.cancel_queue_reservation(schedule_id)
+                raise
             return {"success": False, "status": "queued", "message": "In coda"}
 
         # Lock acquisito: apri la run nel checkpoint store.
@@ -331,7 +358,11 @@ class ExecutionManager:
         # nessuno dei due path canonici ha aggiornato lo status.
         runtime_status_finalized = False
 
-        heartbeat_state = start_lock_heartbeat(self.concurrency, schedule_id)
+        heartbeat_state = start_lock_heartbeat(
+            self.concurrency,
+            schedule_id,
+            owner_id=run_id,
+        )
 
         try:
             if config.destination and config.pre_check.verify_destination_connection:
@@ -603,7 +634,11 @@ class ExecutionManager:
                     )
             # Rilascia sempre il lock con retry bounded su transient PG.
             from app.core.scheduler.scheduler_release import release_lock_with_retry
-            release_lock_with_retry(self.concurrency, schedule_id)
+            release_lock_with_retry(
+                self.concurrency,
+                schedule_id,
+                owner_id=run_id,
+            )
             # Chiudi le connessioni PG thread-local del worker Celery
             # senza questa pulizia ogni esecuzione lascia conn aperte nel
             # thread.local del worker e dopo molte run le connessioni PG

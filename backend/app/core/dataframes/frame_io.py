@@ -32,6 +32,7 @@ from app.core.dataframes.tabular import (
     append_record_rows,
     concat_dataframes,
     concat_non_null_as_strings,
+    coerce_loaded_scalar_columns,
     constant_object_series,
     coerce_datetime_series,
     coerce_numeric_series,
@@ -92,6 +93,7 @@ from app.core.dataframes.tabular import (
     object_series,
     pivot_table_dataframe,
     read_csv_safe_bytes,
+    read_excel_safe,
     rename_duplicate_columns,
     sample_dataframe,
     sample_rows_reset_index,
@@ -257,37 +259,16 @@ def _coerce_json_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:
     il DF coerced; copia conservativa qui evita di
     sorprendere consumer futuri.
     """
-    out = df
-    cols_to_convert = []
-    for col in df.columns:
-        series = df[col]
-        is_object = pd.api.types.is_object_dtype(series)
-        is_string = pd.api.types.is_string_dtype(series)
-        if not is_object and not is_string:
-            continue
-        sample = series.dropna().head(100).astype(str)
-        has_underscore = sample.str.contains("_", na=False).any()
-        if has_underscore:
-            continue
-        converted = pd.to_numeric(series, errors="coerce")
-        original_count = series.notna().sum()
-        converted_count = converted.notna().sum()
-        if original_count > 0 and converted_count == original_count:
-            cols_to_convert.append((col, _prefer_nullable_int(series, converted)))
-        elif is_string:
-            cols_to_convert.append((col, series.astype(object)))
-
-    if cols_to_convert:
-        # Lazy copy: solo se ci sono modifiche reali, evita allocazione
-        # di un DF intero quando nessuna colonna e' candidate.
-        out = copy_frame_for_update(df)
-        for col, converted in cols_to_convert:
-            out[col] = converted
-    return out
+    return coerce_loaded_scalar_columns(df)
 
 
 def _load_json_dataframe_from_text(text: str) -> pd.DataFrame:
     data = json.loads(text)
+    if isinstance(data, dict) and all(
+        not isinstance(value, (list, tuple, dict))
+        for value in data.values()
+    ):
+        data = [data]
     return _coerce_json_dataframe_columns(pd.DataFrame(data))
 
 
@@ -310,7 +291,7 @@ def _load_dataframe_from_bytes(
         return _load_json_dataframe_from_text(text)
     if format_hint in {"xlsx", "xls"}:
         stream = BytesIO(data)
-        return pd.read_excel(stream, sheet_name=sheet) if sheet else pd.read_excel(stream)
+        return read_excel_safe(stream, sheet=sheet)
     if format_hint == "parquet":
         # dtype_backend="numpy_nullable" preserva integer nullable su pandas
         # Int64 e mantiene i null come pd.NA.
@@ -365,7 +346,7 @@ def load_dataframe_from_artifact(
     if fmt == "csv":
         return _read_csv_safe(artifact_path)
     if fmt in {"xlsx", "xls"}:
-        return pd.read_excel(artifact_path, sheet_name=sheet) if sheet else pd.read_excel(artifact_path)
+        return read_excel_safe(artifact_path, sheet=sheet)
     if fmt == "json":
         try:
             with open(artifact_path, "r", encoding="utf-8") as f:
@@ -438,7 +419,7 @@ def load_dataframe_from_file(
             df = _read_csv_safe(file_path)
 
         elif estensione in [".xlsx", ".xls"]:
-            df = pd.read_excel(file_path, sheet_name=sheet) if sheet else pd.read_excel(file_path)
+            df = read_excel_safe(file_path, sheet=sheet)
 
         elif estensione == ".json":
             try:
@@ -534,7 +515,7 @@ def load_arcgis_feature_dataframe(file_path: Union[str, Path]) -> pd.DataFrame:
         return pd.read_json(path)
 
     if suffix in (".xlsx", ".xls"):
-        return pd.read_excel(path)
+        return read_excel_safe(path)
 
     try:
         return gpd.read_file(path, engine="pyogrio")

@@ -68,6 +68,8 @@ def _run_execute_with_patches(manager, schedule_id, monkeypatch):
     ), patch(
         "app.core.scheduler.execution_manager.set_run_context"
     ), patch(
+        "app.core.scheduler.execution_manager.intermediate_run_lifecycle.create_run"
+    ), patch(
         "app.core.scheduler.execution_manager.close_run"
     ), patch(
         "app.core.scheduler.execution_manager.start_lock_heartbeat",
@@ -196,6 +198,7 @@ def test_release_retry_backoff_exponential_with_jitter(schedule_config, monkeypa
         patch("app.core.projects.service.ProjectService") as psc, \
         patch("app.core.scheduler.execution_manager.open_run"), \
         patch("app.core.scheduler.execution_manager.set_run_context"), \
+        patch("app.core.scheduler.execution_manager.intermediate_run_lifecycle.create_run"), \
         patch("app.core.scheduler.execution_manager.close_run"), \
         patch(
             "app.core.scheduler.execution_manager.start_lock_heartbeat",
@@ -253,6 +256,7 @@ def test_release_retry_budget_total_10s_interrupts(schedule_config, monkeypatch)
         patch("app.core.projects.service.ProjectService") as psc, \
         patch("app.core.scheduler.execution_manager.open_run"), \
         patch("app.core.scheduler.execution_manager.set_run_context"), \
+        patch("app.core.scheduler.execution_manager.intermediate_run_lifecycle.create_run"), \
         patch("app.core.scheduler.execution_manager.close_run"), \
         patch(
             "app.core.scheduler.execution_manager.start_lock_heartbeat",
@@ -319,7 +323,8 @@ def test_release_retry_mechanics_live_outside_execution_manager():
     assert "psycopg.OperationalError" not in execution_src
     assert "random.uniform" not in execution_src
     assert "time.sleep(backoff" not in execution_src
-    assert "release_lock_with_retry(self.concurrency, schedule_id)" in execution_src
+    assert "release_lock_with_retry(" in execution_src
+    assert "owner_id=run_id" in execution_src
 
     # La classificazione transitori delega al classificatore centrale
     # (#3): `is_transient` sostituisce il tuple hardcoded psycopg.*.

@@ -161,7 +161,7 @@ def test_release_removes_lock(manager):
     assert manager.is_running("sched-1") is False
 
 
-def test_release_decrements_queue(manager):
+def test_release_does_not_consume_another_runs_queue_reservation(manager):
     manager.try_acquire("sched-1")  # acquired
     manager.try_acquire("sched-1")  # queued (1)
     manager.try_acquire("sched-1")  # queued (2)
@@ -169,9 +169,10 @@ def test_release_decrements_queue(manager):
 
     manager.release("sched-1")
 
-    # Il lock e' rilasciato, la coda e' decrementata di 1
+    # Il lock attivo non possiede gli slot delle run accodate: sara' ogni
+    # retry ad eliminare la propria prenotazione quando acquisisce.
     assert manager.is_running("sched-1") is False
-    assert manager.get_status("sched-1")["queue_size"] == 1
+    assert manager.get_status("sched-1")["queue_size"] == 2
 
 
 def test_release_idempotent_when_lock_already_free(manager):

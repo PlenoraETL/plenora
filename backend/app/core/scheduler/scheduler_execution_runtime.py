@@ -35,6 +35,7 @@ class SchedulerFailureResult(TypedDict, total=False):
 def start_lock_heartbeat(
     concurrency,
     schedule_id: str,
+    owner_id: str = "running",
     interval: Optional[float] = None,
     clock=None,
 ) -> SchedulerHeartbeatState:
@@ -47,6 +48,7 @@ def start_lock_heartbeat(
     hb = LockHeartbeat(
         concurrency=concurrency,
         schedule_id=schedule_id,
+        owner_id=owner_id,
         interval=interval,
         clock=clock,
     )

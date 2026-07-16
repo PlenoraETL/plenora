@@ -92,18 +92,16 @@ def get_execution_order(
     ``app.shared.execution.graph.kahn_topological_order``. This wrapper
     is the canvas-arricchisci adapter: it pulls ``id`` /
     ``source`` / ``target`` from the canvas dict shape and
-    forwards to the pure utility with ``on_cycle='truncate'``
-    (legacy shape: cycle nodes silently omitted, no exception).
-    Behavior identical byte-for-byte to the pre-graph-engine
-    implementation; locked by
-    `tests2/arricchisci/unit/test_canvas_orchestrator_contract.py`.
+    forwards to the pure utility with ``on_cycle='raise'``. Anche se il
+    validator del canvas blocca gia' i cicli, il runtime resta fail-closed
+    contro dati legacy/corrotti o chiamanti che saltano il gate.
     """
     node_ids = [n["id"] for n in nodes]
     edge_pairs = [
         (edge.get("source"), edge.get("target")) for edge in edges
     ]
     return kahn_topological_order(
-        node_ids, edge_pairs, on_cycle="truncate",
+        node_ids, edge_pairs, on_cycle="raise",
     )
 
 

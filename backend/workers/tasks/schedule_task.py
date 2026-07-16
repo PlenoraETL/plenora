@@ -20,6 +20,7 @@ def schedule_pipeline_task(
     triggered_by: str = "cron",
     retry_attempt: int = 0,
     scheduled_for: str = None,
+    queue_reserved: bool = False,
 ):
     """
     Task Celery per eseguire una pipeline schedulata.
@@ -76,6 +77,7 @@ def schedule_pipeline_task(
             triggered_by=triggered_by,
             retry_attempt=retry_attempt,
             scheduled_for=scheduled_for,
+            queue_reserved=queue_reserved,
         )
         
         logger.info(f"Task schedule completato: {schedule_id} -> {result.get('status')}")
@@ -83,6 +85,17 @@ def schedule_pipeline_task(
         
     except Exception as e:
         logger.error(f"[CRASH] Errore fatale task schedule {schedule_id}: {e}", exc_info=True)
+
+        if queue_reserved:
+            try:
+                from app.core.scheduler.concurrency_manager import ConcurrencyManager
+
+                ConcurrencyManager().cancel_queue_reservation(schedule_id)
+            except Exception as cleanup_error:
+                logger.warning(
+                    f"[GESTITO] Cleanup prenotazione coda fallito per "
+                    f"{schedule_id}: {cleanup_error}"
+                )
         
         # Log di emergenza — se l'ExecutionManager stesso è crashato
         try:

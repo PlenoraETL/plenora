@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+from datetime import date, datetime
 import io
+import math
+import re
 from pathlib import Path
 from collections.abc import Mapping
 from typing import Any, Iterable, Iterator, List, Optional
@@ -30,6 +33,83 @@ _CSV_ENCODINGS = ("utf-8", "utf-8-sig", "cp1252", "latin-1")
 # 100k righe x ~12 colonne x avg 50B = ~60MB peak per batch.
 _JOIN_BATCH_SIZE = 100_000
 
+_INTEGER_TEXT_RE = re.compile(r"^[+-]?\d+$")
+_INT_TEXT_MIN = -(2**63)
+_INT_TEXT_MAX = 2**64 - 1
+
+
+def _numeric_text_requires_preservation(series: pd.Series) -> bool:
+    """Return True when numeric-looking text cannot be safely inferred."""
+    for raw in series.dropna():
+        if not isinstance(raw, str):
+            continue
+        text = raw.strip()
+        if not text:
+            continue
+        if _INTEGER_TEXT_RE.fullmatch(text):
+            digits = text.lstrip("+-")
+            if len(digits) > 1 and digits.startswith("0"):
+                return True
+            number = int(text)
+            if number < _INT_TEXT_MIN or number > _INT_TEXT_MAX:
+                return True
+            continue
+        try:
+            decimal_value = Decimal(text)
+            float_value = float(text)
+        except (ValueError, TypeError, OverflowError, InvalidOperation):
+            continue
+        if not decimal_value.is_finite() or not math.isfinite(float_value):
+            return True
+        if Decimal(str(float_value)) != decimal_value.normalize():
+            return True
+    return False
+
+
+def coerce_loaded_scalar_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Infer safe numeric columns without corrupting identifier-like text."""
+    conversions: list[tuple[object, pd.Series]] = []
+    for col in df.columns:
+        series = df[col]
+        if not (
+            pd.api.types.is_object_dtype(series)
+            or pd.api.types.is_string_dtype(series)
+        ):
+            continue
+        non_null_values = series.dropna()
+        if any(
+            isinstance(value, (date, datetime, pd.Timestamp, np.datetime64))
+            for value in non_null_values
+        ):
+            continue
+        sample = series.dropna().head(100).astype(str)
+        if sample.str.contains("_", na=False).any():
+            continue
+        if _numeric_text_requires_preservation(series):
+            if pd.api.types.is_string_dtype(series):
+                conversions.append((col, series.astype(object)))
+            continue
+        converted = pd.to_numeric(series, errors="coerce")
+        original_count = int(series.notna().sum())
+        if original_count and int(converted.notna().sum()) == original_count:
+            if pd.api.types.is_float_dtype(converted):
+                non_null = converted.dropna()
+                if not non_null.empty and ((non_null % 1) == 0).all():
+                    try:
+                        converted = series.astype("Int64")
+                    except (TypeError, ValueError):
+                        pass
+            conversions.append((col, converted))
+        elif pd.api.types.is_string_dtype(series):
+            conversions.append((col, series.astype(object)))
+
+    if not conversions:
+        return df
+    out = copy_frame_for_update(df)
+    for col, converted in conversions:
+        out[col] = converted
+    return out
+
 
 def _read_csv_with_encodings(
     source: "Path | io.BytesIO",
@@ -48,7 +128,15 @@ def _read_csv_with_encodings(
         try:
             if isinstance(source, io.BytesIO):
                 source.seek(0)
-            return pd.read_csv(source, low_memory=False, encoding=enc)
+            loaded = pd.read_csv(
+                source,
+                low_memory=False,
+                encoding=enc,
+                dtype=object,
+                keep_default_na=False,
+                na_values=[""],
+            )
+            return coerce_loaded_scalar_columns(loaded)
         except UnicodeDecodeError as e:
             last_err = e
             continue
@@ -75,6 +163,19 @@ def read_csv_safe_bytes(data: bytes, *, source_label: str = "in-memory CSV") -> 
     allinea il blob path al pattern multi-encoding del filesystem path.
     """
     return _read_csv_with_encodings(io.BytesIO(data), label=source_label)
+
+
+def read_excel_safe(source, *, sheet: Optional[str] = None, nrows: int | None = None) -> pd.DataFrame:
+    """Load Excel with the same lossless scalar policy used for CSV/JSON."""
+    kwargs: dict[str, object] = {
+        "sheet_name": sheet if sheet else 0,
+        "dtype": object,
+        "keep_default_na": False,
+        "na_values": [""],
+    }
+    if nrows is not None:
+        kwargs["nrows"] = nrows
+    return coerce_loaded_scalar_columns(pd.read_excel(source, **kwargs))
 
 
 def _compact_decimal(value: Decimal) -> str:
@@ -275,8 +376,13 @@ def sanitize_for_json(rows: JsonRows) -> JsonRows:
             return {k: _sanitizza_valore(v) for k, v in value.items()}
 
         try:
-            if value is None or (isinstance(value, float) and np.isnan(value)):
+            if value is None:
                 return None
+            if isinstance(value, float):
+                if np.isnan(value):
+                    return None
+                if not math.isfinite(value):
+                    return "inf" if value > 0 else "-inf"
         except (TypeError, ValueError):
             pass
 
@@ -289,7 +395,10 @@ def sanitize_for_json(rows: JsonRows) -> JsonRows:
         if isinstance(value, np.integer):
             return int(value)
         if isinstance(value, np.floating):
-            return float(value)
+            number = float(value)
+            if not math.isfinite(number):
+                return "inf" if number > 0 else "-inf"
+            return number
         if isinstance(value, np.bool_):
             return bool(value)
 
@@ -340,8 +449,11 @@ def _rest_json_safe_value(value: object) -> JsonPrimitive:
     if isinstance(value, bool):
         return value
     if isinstance(value, (str, int, float)):
-        if isinstance(value, float) and value != value:
-            return None
+        if isinstance(value, float):
+            if value != value:
+                return None
+            if not math.isfinite(value):
+                return "inf" if value > 0 else "-inf"
         return value
     # numpy scalars (itertuples emette nativi su nullable
     # Int64/boolean/float64)
@@ -351,7 +463,11 @@ def _rest_json_safe_value(value: object) -> JsonPrimitive:
         return int(value)
     if isinstance(value, np.floating):
         f = float(value)
-        return None if f != f else f
+        if f != f:
+            return None
+        if not math.isfinite(f):
+            return "inf" if f > 0 else "-inf"
+        return f
     # pandas/numpy datetime
     if isinstance(value, (pd.Timestamp, np.datetime64)):
         s = str(value)
@@ -1200,7 +1316,9 @@ __all__ = [
     "append_record_rows",
     "_compact_whole_number_floats",
     "normalize_object_decimals",
+    "coerce_loaded_scalar_columns",
     "_read_csv_safe",
+    "read_excel_safe",
     "apply_string_ops_to_string_subset",
     "concat_dataframes",
     "concat_non_null_as_strings",

@@ -134,6 +134,11 @@ def _dispatch_by_id(
         allow_legacy=True,
     )
     data = _download_object_storage(storage_key)
+    if data is None:
+        raise RuntimeError(
+            f"File source {file_source_id}: object storage non disponibile "
+            "o download fallito"
+        )
     duration_ms = round((time.monotonic() - _t0) * 1000, 1)
     size = len(data) if data else 0
     logger.info(
@@ -201,7 +206,9 @@ def _stream_by_id(
             exc,
             exc_info=True,
         )
-        return None, 0, "object_storage"
+        raise RuntimeError(
+            f"File source {file_source_id}: apertura stream object storage fallita"
+        ) from exc
 
 
 # FileSourceBlobLoader — Protocol-compliant loader for `file_source_blob`
@@ -272,6 +279,11 @@ class FileSourceBlobLoader:
                     f"{ref.file_source_id!r} not found (or not visible to "
                     f"group_id={ref.expected_group_id!r})"
                 )
+            if stream is None:
+                raise RuntimeError(
+                    f"FileSourceBlobLoader.load: file_source_id="
+                    f"{ref.file_source_id!r} senza stream disponibile"
+                )
             return Resource(
                 kind="file_source_blob",
                 size_bytes=size,
@@ -290,10 +302,12 @@ class FileSourceBlobLoader:
                 f"group_id={ref.expected_group_id!r})"
             )
 
-        # data may legitimately be None when object storage is
-        # disabled or download failed. Surface as size_bytes=0 with
-        # data=None so the caller can branch (mirrors result_blob
-        size = len(data) if data else 0
+        if data is None:
+            raise RuntimeError(
+                f"FileSourceBlobLoader.load: file_source_id="
+                f"{ref.file_source_id!r} senza payload disponibile"
+            )
+        size = len(data)
         return Resource(
             kind="file_source_blob",
             size_bytes=size,

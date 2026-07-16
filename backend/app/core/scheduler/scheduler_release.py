@@ -18,7 +18,7 @@ BUDGET_TOTAL_SECONDS = 10.0
 
 
 class ReleaseConcurrencyProtocol(Protocol):
-    def release(self, schedule_id: str) -> None:
+    def release(self, schedule_id: str, *, owner_id: str | None = None) -> None:
         ...
 
 
@@ -26,6 +26,7 @@ def release_lock_with_retry(
     concurrency: ReleaseConcurrencyProtocol,
     schedule_id: str,
     *,
+    owner_id: str | None = None,
     monotonic: Callable[[], float] | None = None,
     sleep: Callable[[float], None] | None = None,
     jitter: Callable[[float, float], float] | None = None,
@@ -40,7 +41,10 @@ def release_lock_with_retry(
         retry_start = monotonic()
         for attempt in range(MAX_RELEASE_RETRIES):
             try:
-                concurrency.release(schedule_id)
+                if owner_id is None:
+                    concurrency.release(schedule_id)
+                else:
+                    concurrency.release(schedule_id, owner_id=owner_id)
                 release_success = True
                 break
             except Exception as transient_err:

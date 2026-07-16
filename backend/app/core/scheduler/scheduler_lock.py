@@ -36,9 +36,11 @@ class LockHeartbeat:
         schedule_id: str,
         interval: float,
         clock: Optional[Clock] = None,
+        owner_id: str = "running",
     ):
         self._concurrency = concurrency
         self._schedule_id = schedule_id
+        self._owner_id = owner_id
         self._interval = interval
         self._stop_event = threading.Event()
         self._clock: Clock = clock if clock is not None else WALL_CLOCK
@@ -78,7 +80,13 @@ class LockHeartbeat:
     def _heartbeat_loop(self) -> None:
         while not self._clock.wait(self._stop_event, self._interval):
             try:
-                ok = self._concurrency.refresh_lock(self._schedule_id)
+                if self._owner_id == "running":
+                    ok = self._concurrency.refresh_lock(self._schedule_id)
+                else:
+                    ok = self._concurrency.refresh_lock(
+                        self._schedule_id,
+                        owner_id=self._owner_id,
+                    )
             except Exception as e:
                 logger.warning(
                     f"[HEARTBEAT] refresh_lock exception per "
@@ -90,7 +98,14 @@ class LockHeartbeat:
                 continue
 
             try:
-                reacquired = self._concurrency.try_acquire(self._schedule_id)
+                if self._owner_id == "running":
+                    reacquired = self._concurrency.try_acquire(self._schedule_id)
+                else:
+                    reacquired = self._concurrency.try_acquire(
+                        self._schedule_id,
+                        owner_id=self._owner_id,
+                        queue_on_busy=False,
+                    )
             except Exception as e:
                 logger.warning(
                     f"[HEARTBEAT] re-acquire exception per "

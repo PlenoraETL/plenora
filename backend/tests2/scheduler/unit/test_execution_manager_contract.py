@@ -190,10 +190,14 @@ def test_execute_passes_group_isolation_when_groups_match(schedule_config):
     manager.concurrency.try_acquire.return_value = "queued"
 
     with patch("app.core.scheduler.db.get_schedule_row", return_value=SimpleNamespace(id="s-1", group_id="grp-A")), \
-         patch("app.core.projects.service.ProjectService") as project_service_cls:
+         patch("app.core.projects.service.ProjectService") as project_service_cls, \
+         patch("app.core.scheduler.job_dispatcher.enqueue_schedule_run") as enqueue:
         project_service_cls.return_value.get_project_metadata.return_value = _project_meta("grp-A")
         result = manager.execute("s-1")
 
     # Group isolation passato: l'esecuzione e' arrivata almeno al lock
     manager.concurrency.try_acquire.assert_called_once()
     assert result["status"] == "queued"
+    enqueue.assert_called_once()
+    assert enqueue.call_args.kwargs["queue_reserved"] is True
+    assert enqueue.call_args.kwargs["countdown"] == 5

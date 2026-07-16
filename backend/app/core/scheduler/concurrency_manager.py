@@ -66,7 +66,7 @@ class ConcurrencyManager:
                 CREATE TABLE IF NOT EXISTS scheduler_locks (
                     key         TEXT PRIMARY KEY,
                     value       TEXT NOT NULL,
-                    expires_at  TEXT
+                    expires_at  TIMESTAMPTZ
                 )
             """)
         except Exception as e:
@@ -82,7 +82,12 @@ class ConcurrencyManager:
             return None
         if row["expires_at"]:
             try:
-                exp = datetime.fromisoformat(row["expires_at"])
+                raw_exp = row["expires_at"]
+                exp = (
+                    raw_exp
+                    if isinstance(raw_exp, datetime)
+                    else datetime.fromisoformat(raw_exp)
+                )
                 if exp.tzinfo is None:
                     exp = exp.replace(tzinfo=timezone.utc)
                 if datetime.now(timezone.utc) > exp:
@@ -189,7 +194,15 @@ class ConcurrencyManager:
         db.execute("DELETE FROM scheduler_locks WHERE key = %s", (key,))
 
 
-    def try_acquire(self, schedule_id: str, max_queue_size: int = 3) -> Literal["acquired", "queued", "skipped"]:
+    def try_acquire(
+        self,
+        schedule_id: str,
+        max_queue_size: int = 3,
+        *,
+        owner_id: str | None = None,
+        queue_reserved: bool = False,
+        queue_on_busy: bool = True,
+    ) -> Literal["acquired", "queued", "skipped"]:
         """Acquisisce il lock per lo schedule, o lo accoda, o lo skippa.
 
         Pattern atomic-safe contro race condition:
@@ -201,8 +214,19 @@ class ConcurrencyManager:
         lock_key  = f"scheduler:lock:{schedule_id}"
         queue_key = f"scheduler:queue:{schedule_id}"
 
-        if self._set_nx(lock_key, "running", LOCK_TTL_SECONDS):
+        owner = owner_id or "running"
+        if self._set_nx(lock_key, owner, LOCK_TTL_SECONDS):
+            if queue_reserved:
+                self._decr(queue_key)
             return "acquired"
+
+        if not queue_on_busy:
+            return "skipped"
+
+        # I retry broker riusano la prenotazione della stessa esecuzione
+        # logica: non devono incrementare la coda a ogni polling.
+        if queue_reserved:
+            return "queued"
 
         # Lock occupato. Incrementiamo PRIMA, poi verifichiamo: se siamo oltre
         # il limite, decrementiamo e skip. Questo elimina la race read+check+incr
@@ -215,7 +239,13 @@ class ConcurrencyManager:
             return "skipped"
         return "queued"
 
-    def refresh_lock(self, schedule_id: str, ttl_seconds: int = None) -> bool:
+    def refresh_lock(
+        self,
+        schedule_id: str,
+        ttl_seconds: int = None,
+        *,
+        owner_id: str | None = None,
+    ) -> bool:
         """Estende il TTL del lock durante heartbeat da ExecutionManager.
 
         Usato dal thread daemon di heartbeat durante l'esecuzione di una
@@ -246,6 +276,7 @@ class ConcurrencyManager:
             o e' stato preso da un altro worker.
         """
         lock_key = f"scheduler:lock:{schedule_id}"
+        owner = owner_id or "running"
         ttl = ttl_seconds if ttl_seconds is not None else LOCK_TTL_SECONDS
         new_expires = (
             datetime.now(timezone.utc) + timedelta(seconds=ttl)
@@ -257,8 +288,8 @@ class ConcurrencyManager:
             # del SET, quindi non c'e' finestra di race fra check e set.
             cur = db.execute(
                 "UPDATE scheduler_locks SET expires_at = %s "
-                "WHERE key = %s AND expires_at > now()",
-                (new_expires, lock_key),
+                "WHERE key = %s AND value = %s AND expires_at > now()",
+                (new_expires, lock_key, owner),
             )
             rowcount = getattr(cur, "rowcount", 0) or 0
             return rowcount > 0
@@ -266,14 +297,31 @@ class ConcurrencyManager:
             logger.warning(f"refresh_lock {schedule_id}: {e}")
             return False
 
-    def release(self, schedule_id: str) -> bool:
-        lock_key  = f"scheduler:lock:{schedule_id}"
-        queue_key = f"scheduler:queue:{schedule_id}"
+    def release(self, schedule_id: str, *, owner_id: str | None = None) -> bool:
+        """Rilascia il lock solo se appartiene al chiamante."""
+        lock_key = f"scheduler:lock:{schedule_id}"
+        if owner_id is None:
+            # Compatibilita' per caller amministrativi/legacy. Il runtime
+            # scheduler passa sempre il token esplicito e usa il path sicuro.
+            self._delete(lock_key)
+            return True
+        owner = owner_id or "running"
+        cur = db.execute(
+            "DELETE FROM scheduler_locks WHERE key = %s AND value = %s",
+            (lock_key, owner),
+        )
+        released = (getattr(cur, "rowcount", 0) or 0) > 0
+        if released:
+            logger.info(f"Lock rilasciato: {schedule_id} (owner={owner})")
+        else:
+            logger.warning(
+                f"Lock non rilasciato: {schedule_id} non appartiene a owner={owner}"
+            )
+        return released
 
-        self._delete(lock_key)
-        remaining = self._decr(queue_key)
-        logger.info(f"Lock rilasciato: {schedule_id} (coda rimanente: {remaining})")
-        return True
+    def cancel_queue_reservation(self, schedule_id: str) -> int:
+        """Libera lo slot se nessun task broker potra' consumarlo."""
+        return self._decr(f"scheduler:queue:{schedule_id}")
 
     def get_status(self, schedule_id: str) -> ConcurrencyStatusPayload:
         lock_key  = f"scheduler:lock:{schedule_id}"

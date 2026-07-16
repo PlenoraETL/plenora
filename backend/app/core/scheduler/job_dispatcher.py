@@ -64,6 +64,7 @@ class ScheduledRunKwargs(TypedDict, total=False):
     triggered_by: str
     retry_attempt: int
     scheduled_for: str
+    queue_reserved: bool
 
 
 def scheduled_run_kwargs(
@@ -71,6 +72,7 @@ def scheduled_run_kwargs(
     triggered_by: str,
     retry_attempt: int = 0,
     scheduled_for: str | None = None,
+    queue_reserved: bool = False,
 ) -> ScheduledRunKwargs:
     """Return the runtime kwargs for a scheduled pipeline task.
 
@@ -87,6 +89,8 @@ def scheduled_run_kwargs(
         "retry_attempt": retry_attempt,
         "scheduled_for": scheduled_for,
     }
+    if queue_reserved:
+        dispatch_kwargs["queue_reserved"] = True
     return dispatch_kwargs
 
 
@@ -96,6 +100,7 @@ def enqueue_schedule_run(
     triggered_by: str,
     retry_attempt: int,
     scheduled_for: str | None = None,
+    queue_reserved: bool = False,
     countdown: int | float | None = None,
     task: ScheduledJobTask | None = None,
     runtime: ScheduledJobRuntime | None = None,
@@ -106,6 +111,7 @@ def enqueue_schedule_run(
             triggered_by=triggered_by,
             retry_attempt=retry_attempt,
             scheduled_for=scheduled_for,
+            queue_reserved=queue_reserved,
         )
     )
     task_kwargs["schedule_id"] = schedule_id

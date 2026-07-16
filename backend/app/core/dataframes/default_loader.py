@@ -10,6 +10,7 @@ from typing import Any, List, Optional
 import pandas as pd
 
 from app.core.dataframes.ports import DataLoaderProtocol
+from app.core.dataframes.tabular import coerce_loaded_scalar_columns, read_excel_safe
 
 _logger = logging.getLogger(__name__)
 
@@ -41,13 +42,19 @@ class DefaultDataLoader:
         for encoding in ["utf-8", "latin-1", "cp1252"]:
             try:
                 sep = _detect_sep(path, encoding)
-                df = pd.read_csv(path, sep=sep, encoding=encoding)
+                df = coerce_loaded_scalar_columns(pd.read_csv(
+                    path, sep=sep, encoding=encoding, dtype=object,
+                    keep_default_na=False, na_values=[""],
+                ))
                 # Sanity check: se una sola colonna e contiene il delimitatore,
                 # riprova con separatori comuni prima di accettare il fallback.
                 if len(df.columns) == 1 and (";" in str(df.columns[0]) or "," in str(df.columns[0])):
                     for alt_sep in [";", ",", "\t"]:
                         try:
-                            df2 = pd.read_csv(path, sep=alt_sep, encoding=encoding)
+                            df2 = coerce_loaded_scalar_columns(pd.read_csv(
+                                path, sep=alt_sep, encoding=encoding, dtype=object,
+                                keep_default_na=False, na_values=[""],
+                            ))
                             if len(df2.columns) > 1:
                                 return df2
                         except Exception:
@@ -62,7 +69,10 @@ class DefaultDataLoader:
         # NON deve essere silenzioso (Backend master Part II #3): WARNING esplicito.
         # Niente conteggio via open() diretto: rispetta il boundary I/O
         # (app/core/io) — il segnale chiave e' che il path lossy e' stato usato.
-        df = pd.read_csv(path, encoding="latin-1", sep=";", on_bad_lines="skip")
+        df = coerce_loaded_scalar_columns(pd.read_csv(
+            path, encoding="latin-1", sep=";", on_bad_lines="skip",
+            dtype=object, keep_default_na=False, na_values=[""],
+        ))
         _logger.warning(
             "CSV %s: usato il fallback permissivo (on_bad_lines=skip): eventuali "
             "righe malformate sono state scartate",
@@ -71,9 +81,7 @@ class DefaultDataLoader:
         return df
 
     def load_excel(self, path: Path, sheet: Optional[str] = None) -> pd.DataFrame:
-        if sheet:
-            return pd.read_excel(path, sheet_name=sheet)
-        return pd.read_excel(path)
+        return read_excel_safe(path, sheet=sheet)
 
     def load_json(self, path: Path) -> pd.DataFrame:
         try:

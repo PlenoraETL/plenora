@@ -18,6 +18,7 @@ import io
 import json
 import os
 import zipfile
+from datetime import datetime
 
 import geopandas as gpd
 import pandas as pd
@@ -522,3 +523,68 @@ def test_save_format_case_insensitive():
     df = pd.DataFrame({"a": [1]})
     raw = save_dataframe_to_bytes(df, format="CSV")
     assert b"a" in bytes(raw)
+
+
+@pytest.mark.parametrize("format_hint", ["csv", "xlsx"])
+def test_tabular_upload_preserves_identifier_and_na_like_text(format_hint):
+    source = pd.DataFrame(
+        {
+            "code": ["00123"],
+            "huge": ["999999999999999999999"],
+            "label": ["NA"],
+            "nullable": [None],
+        }
+    )
+    if format_hint == "csv":
+        raw = source.to_csv(index=False).encode("utf-8")
+    else:
+        buffer = io.BytesIO()
+        source.to_excel(buffer, index=False)
+        raw = buffer.getvalue()
+
+    loaded = _load_dataframe_from_bytes(raw, format_hint=format_hint)
+
+    assert loaded.loc[0, "code"] == "00123"
+    assert loaded.loc[0, "huge"] == "999999999999999999999"
+    assert loaded.loc[0, "label"] == "NA"
+    assert pd.isna(loaded.loc[0, "nullable"])
+
+
+def test_single_record_json_object_loads_as_one_row_without_identifier_loss():
+    loaded = _load_json_dataframe_from_text(
+        '{"code":"00123","huge":"999999999999999999999","label":"NULL"}'
+    )
+
+    assert loaded.to_dict(orient="records") == [
+        {
+            "code": "00123",
+            "huge": "999999999999999999999",
+            "label": "NULL",
+        }
+    ]
+
+
+def test_json_export_is_strict_for_non_finite_numbers():
+    raw = save_dataframe_to_bytes(
+        pd.DataFrame({"value": [float("inf"), float("-inf"), float("nan")]}),
+        format="json",
+    )
+
+    assert json.loads(bytes(raw)) == [
+        {"value": "inf"},
+        {"value": "-inf"},
+        {"value": None},
+    ]
+    assert b"Infinity" not in bytes(raw)
+
+
+def test_excel_upload_keeps_real_date_cells_as_dates():
+    source = pd.DataFrame({"when": [datetime(2024, 2, 29, 12, 30)]})
+    buffer = io.BytesIO()
+    source.to_excel(buffer, index=False)
+
+    loaded = _load_dataframe_from_bytes(buffer.getvalue(), format_hint="xlsx")
+
+    assert pd.Timestamp(loaded.loc[0, "when"]) == pd.Timestamp(
+        "2024-02-29T12:30:00"
+    )

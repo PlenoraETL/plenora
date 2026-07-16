@@ -22,6 +22,8 @@ from typing import Any, BinaryIO, Optional, Tuple
 
 import pandas as pd
 
+from app.core.dataframes.tabular import coerce_loaded_scalar_columns, read_excel_safe
+
 
 _DEFAULT_PREVIEW_MAX_ROWS = 200
 
@@ -47,8 +49,11 @@ def _preview_csv(data: bytes, max_rows: int) -> Tuple[pd.DataFrame, Optional[int
                 low_memory=False,
                 encoding=enc,
                 nrows=max_rows,
+                dtype=object,
+                keep_default_na=False,
+                na_values=[""],
             )
-            return df, None
+            return coerce_loaded_scalar_columns(df), None
         except UnicodeDecodeError as e:
             last_err = e
             continue
@@ -68,11 +73,7 @@ def _preview_excel(
 ) -> Tuple[pd.DataFrame, Optional[int]]:
     """XLSX bounded: pandas `read_excel(nrows=max_rows)`. Total count
     richiederebbe parse completo, ritorna None."""
-    stream = BytesIO(data)
-    kwargs: dict = {"nrows": max_rows}
-    if sheet:
-        kwargs["sheet_name"] = sheet
-    return pd.read_excel(stream, **kwargs), None
+    return read_excel_safe(BytesIO(data), sheet=sheet, nrows=max_rows), None
 
 
 def _preview_parquet(data: bytes, max_rows: int) -> Tuple[pd.DataFrame, Optional[int]]:
@@ -211,21 +212,22 @@ def preview_dataframe_from_stream(
         for encoding in _CSV_ENCODINGS:
             stream.seek(0)
             try:
-                return pd.read_csv(
+                loaded = pd.read_csv(
                     stream,
                     low_memory=False,
                     encoding=encoding,
                     nrows=max_rows,
-                ), None
+                    dtype=object,
+                    keep_default_na=False,
+                    na_values=[""],
+                )
+                return coerce_loaded_scalar_columns(loaded), None
             except UnicodeDecodeError as exc:
                 last_error = exc
         assert last_error is not None
         raise last_error
     if fmt in ("xlsx", "xls"):
-        kwargs: dict = {"nrows": max_rows}
-        if sheet:
-            kwargs["sheet_name"] = sheet
-        return pd.read_excel(stream, **kwargs), None
+        return read_excel_safe(stream, sheet=sheet, nrows=max_rows), None
     if fmt == "parquet":
         import pyarrow.parquet as pq
 

@@ -155,7 +155,8 @@ def test_heartbeat_wrapper_logic_stays_outside_execution_manager():
     assert "SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS" not in execution_src
     assert "thread.join" not in execution_src
     assert "stop_event.set" not in execution_src
-    assert "start_lock_heartbeat(self.concurrency, schedule_id)" in execution_src
+    assert "start_lock_heartbeat(" in execution_src
+    assert "owner_id=run_id" in execution_src
     assert "stop_lock_heartbeat(heartbeat_state)" in execution_src
     assert "LockHeartbeat" in runtime_src
     assert "SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS" in runtime_src

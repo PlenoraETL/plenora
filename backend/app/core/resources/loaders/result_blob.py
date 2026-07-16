@@ -206,6 +206,10 @@ def _dispatch_by_id(
         allow_legacy=True,
     )
     data = _download_object_storage(storage_key)
+    if data is None:
+        raise RuntimeError(
+            f"Result {result_id}: object storage non disponibile o download fallito"
+        )
     duration_ms = round((time.monotonic() - _t0) * 1000, 1)
     size = len(data) if data else 0
     logger.info(
@@ -302,10 +306,12 @@ class ResultBlobLoader:
                 + ")"
             )
 
-        # mode == "bytes" (l'unico supportato).
-        # data=None indica una row visibile ma blob non disponibile
-        # per storage remoto disabilitato o download fallito.
-        size = len(data) if data else 0
+        if data is None:
+            raise RuntimeError(
+                f"ResultBlobLoader.load: result_id={ref.result_id!r} "
+                "senza payload disponibile"
+            )
+        size = len(data)
         return Resource(
             kind="result_blob",
             size_bytes=size,

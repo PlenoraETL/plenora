@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -22,6 +23,24 @@ from app.core.features.arcgis_rest_write import (
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.features, pytest.mark.contract]
+
+
+def test_esri_feature_attributes_serialize_dates_to_epoch_milliseconds() -> None:
+    frame = pd.DataFrame(
+        {
+            "before_1900": [date(1899, 12, 31)],
+            "aware": [datetime(2024, 1, 1, tzinfo=timezone.utc)],
+            "pandas": [pd.Timestamp("2024-01-01T01:00:00+01:00")],
+        }
+    )
+
+    features = ArcGISClient.dataframe_to_esri_features(frame)
+
+    attributes = features[0]["attributes"]
+    assert attributes["before_1900"] == -2209075200000
+    assert attributes["aware"] == 1704067200000
+    assert attributes["pandas"] == 1704067200000
+    json.dumps(features, allow_nan=False)
 
 
 class _Response:

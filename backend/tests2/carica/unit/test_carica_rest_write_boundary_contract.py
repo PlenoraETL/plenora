@@ -293,3 +293,26 @@ def test_carica_rest_boundary_rate_limit_failure_keeps_successful_batches() -> N
         "sent_count": 0,
         "error": "REST sink request failed with status 429: <html>too many requests</html>",
     }
+
+
+def test_carica_rest_auth_break_counts_unattempted_rows_as_failed() -> None:
+    df = pd.DataFrame({"id": range(250)})
+    client = FakeHttpClient(
+        responses=[RestSinkHttpResponse(status_code=401, text="unauthorized")]
+    )
+    config = RestSinkConfig(
+        url="https://api.example.test/features",
+        batch_mode=RestSinkBatchMode.BATCH,
+        batch_size=100,
+    )
+
+    result = execute_carica_rest_write(
+        df=df,
+        config=config,
+        http_client=client,
+    ).to_task_result()
+
+    assert len(client.requests) == 1
+    assert result["rows_written"] == 0
+    assert result["rows_failed"] == 250
+    assert result["total_rows"] == 250

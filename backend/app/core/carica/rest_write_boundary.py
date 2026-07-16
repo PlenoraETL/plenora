@@ -102,6 +102,10 @@ def execute_carica_rest_write(
 
 
 def _to_outcome(result: RestSinkWriteResult, total_rows: int) -> CaricaRestWriteOutcome:
+    # Il sink interrompe intenzionalmente i batch successivi su 401/403.
+    # Quelle righe non sono "attempted", ma per il contratto CARICA restano
+    # comunque non scritte e devono comparire nel conteggio dei fallimenti.
+    rows_failed = max(total_rows - result.written_count, 0)
     if result.success:
         return CaricaRestWriteOutcome(
             status="completed",
@@ -109,7 +113,7 @@ def _to_outcome(result: RestSinkWriteResult, total_rows: int) -> CaricaRestWrite
             rows_written=result.written_count,
             rows_inserted=result.written_count,
             rows_updated=0,
-            rows_failed=result.failed_count,
+            rows_failed=rows_failed,
             total_rows=total_rows,
             message=f"Scrittura REST completata: {result.written_count} righe",
             batches=_batch_summaries(result.batches),
@@ -123,7 +127,7 @@ def _to_outcome(result: RestSinkWriteResult, total_rows: int) -> CaricaRestWrite
         rows_written=result.written_count,
         rows_inserted=result.written_count,
         rows_updated=0,
-        rows_failed=result.failed_count,
+        rows_failed=rows_failed,
         total_rows=total_rows,
         message=message,
         batches=_batch_summaries(result.batches),

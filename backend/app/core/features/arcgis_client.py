@@ -7,8 +7,13 @@ Keeps provider-specific behavior behind a narrow integration boundary.
 from urllib.parse import urlparse
 
 import json
+import math
+from datetime import date, datetime, time, timezone
+from decimal import Decimal
 from typing import Dict, Iterator, Mapping, Optional, Sequence, Tuple
 
+import numpy as np
+import pandas as pd
 import requests
 
 from app.core.dataframes import geometry_parsing as geometry_parsing_module
@@ -52,6 +57,43 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 __all__ = ["ArcGISClient"]
+
+
+def _esri_json_attribute_value(value):
+    """Convert one dataframe scalar to an ArcGIS JSON attribute.
+
+    ArcGIS date fields use Unix epoch milliseconds. Returning Python/pandas
+    datetime objects here used to make the later ``json.dumps`` crash.
+    """
+    if dataframe_values_module.is_null_scalar(value):
+        return None
+
+    if isinstance(value, np.datetime64):
+        value = pd.Timestamp(value)
+    if isinstance(value, pd.Timestamp):
+        value = value.to_pydatetime(warn=False)
+    if isinstance(value, date) and not isinstance(value, datetime):
+        value = datetime.combine(value, time.min)
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        else:
+            value = value.astimezone(timezone.utc)
+        epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+        return int((value - epoch).total_seconds() * 1000)
+
+    if isinstance(value, Decimal):
+        return float(value) if value.is_finite() else None
+    if isinstance(value, (float, np.floating)):
+        number = float(value)
+        return number if math.isfinite(number) else None
+    if isinstance(value, np.integer):
+        return int(value)
+    if isinstance(value, np.bool_):
+        return bool(value)
+    if hasattr(value, "item"):
+        return _esri_json_attribute_value(value.item())
+    return value
 
 
 # CLIENT PRINCIPALE
@@ -162,13 +204,7 @@ class ArcGISClient(
         for row in df.itertuples(index=False, name=None):
             attributes = {}
             for col, pos in attr_positions:
-                attribute_value = row[pos]
-                if dataframe_values_module.is_null_scalar(attribute_value):
-                    attributes[col] = None
-                elif hasattr(attribute_value, "item"):
-                    attributes[col] = attribute_value.item()
-                else:
-                    attributes[col] = attribute_value
+                attributes[col] = _esri_json_attribute_value(row[pos])
 
             feature = {"attributes": attributes}
 

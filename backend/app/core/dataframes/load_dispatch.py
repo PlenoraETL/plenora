@@ -9,6 +9,10 @@ from typing import BinaryIO, Optional, Tuple
 import pandas as pd
 
 from app.core.dataframes import frame_io as frame_io_module
+from app.core.dataframes.tabular import (
+    coerce_loaded_scalar_columns,
+    read_excel_safe,
+)
 from app.core.dataframes import geometry_serialization as geometry_serialization_module
 from app.core.io import geospatial as geospatial_io_module
 from app.core.dataframes.ports import (
@@ -103,11 +107,15 @@ def load_by_format_stream(
         for encoding in _CSV_ENCODINGS:
             stream.seek(0)
             try:
-                return pd.read_csv(
+                loaded = pd.read_csv(
                     stream,
                     low_memory=False,
                     encoding=encoding,
-                ), None
+                    dtype=object,
+                    keep_default_na=False,
+                    na_values=[""],
+                )
+                return coerce_loaded_scalar_columns(loaded), None
             except UnicodeDecodeError as exc:
                 last_error = exc
         assert last_error is not None
@@ -115,8 +123,7 @@ def load_by_format_stream(
     if fmt == "json":
         return pd.read_json(stream), None
     if fmt in ("xlsx", "xls"):
-        kwargs = {"sheet_name": sheet} if sheet else {}
-        return pd.read_excel(stream, **kwargs), None
+        return read_excel_safe(stream, sheet=sheet), None
     if fmt == "parquet":
         return pd.read_parquet(stream, dtype_backend="numpy_nullable"), None
     if fmt in _GEOSPATIAL_FORMATS or fmt in _ZIP_LIKE_FORMATS:

@@ -132,6 +132,18 @@ class Resource:
     # caller-managed (e.g. pre-existing local FS path
     is_temporary: bool = False
 
+    def __post_init__(self) -> None:
+        populated = sum(
+            value is not None for value in (self.data, self.path, self.stream)
+        )
+        if populated != 1:
+            raise ValueError(
+                "Resource must populate exactly one of data/path/stream; "
+                f"got {populated}"
+            )
+        if self.size_bytes < 0:
+            raise ValueError("Resource.size_bytes cannot be negative")
+
 
 # ResourceLoader Protocol
 
