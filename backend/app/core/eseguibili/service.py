@@ -118,6 +118,53 @@ def create_from_project(
     return record
 
 
+def publish_new_version(
+    *,
+    eseguibile: eseguibili_db.EseguibileRow,
+    created_by: str,
+) -> eseguibili_db.EseguibileRow:
+    """Ripubblica lo snapshot corrente del progetto sorgente."""
+
+    source_project_id = eseguibile.source_canvas_id
+    if not source_project_id:
+        raise ValueError("L'eseguibile non ha un progetto sorgente ripubblicabile")
+    proj = project_access_context.load_project_publish_context(source_project_id)
+    if proj is None:
+        raise ValueError("Il progetto sorgente non esiste piu'")
+    if proj.group_id != eseguibile.group_id:
+        raise ValueError("Il progetto sorgente appartiene a un altro gruppo")
+    project_type = str(proj.project_type or "").lower()
+    if project_type != eseguibile.project_type:
+        raise ValueError(
+            "Il tipo del progetto sorgente e' cambiato; pubblica un nuovo eseguibile"
+        )
+    canvas = proj.canvas
+    if isinstance(canvas, str):
+        canvas = json.loads(canvas)
+    if not isinstance(canvas, dict) or not canvas.get("nodes"):
+        raise ValueError("Il progetto sorgente non ha un canvas valido")
+    cloned_canvas = copy.deepcopy(canvas)
+    manifest = compile_manifest(
+        source_project_id=source_project_id,
+        project_type=project_type,
+        canvas=cloned_canvas,
+        default_connection_id=getattr(proj, "default_connection_id", None),
+    )
+    version = eseguibili_db.create_eseguibile_version(
+        eseguibile_id=eseguibile.id,
+        canvas=cloned_canvas,
+        manifest=manifest.model_dump(mode="json"),
+        project_type=project_type,
+        source_project_id=source_project_id,
+        created_by=created_by,
+    )
+    eseguibili_db.activate_eseguibile_version(eseguibile.id, version.id)
+    updated = eseguibili_db.get_eseguibile(eseguibile.id)
+    if updated is None:
+        raise RuntimeError("Eseguibile non trovato dopo la ripubblicazione")
+    return updated
+
+
 # ANALYZE UPLOAD — upload file utente + estrazione colonne
 
 def analyze_file_upload(

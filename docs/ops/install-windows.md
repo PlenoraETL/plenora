@@ -327,6 +327,34 @@ powershell -ExecutionPolicy Bypass -File scripts\validate-windows-install.ps1 `
     -RunE2E -RequireFrontend -RequireObjectStorage
 ```
 
+### 8.1 Collaudo eseguibili versionati
+
+Dopo un aggiornamento che modifica gli eseguibili, completare anche questo
+collaudo applicativo con un amministratore e un utente esecutore:
+
+1. pubblicare un progetto per ciascun tipo: Estrai, Manipola e Arricchisci;
+2. verificare che un input scalare collegato visualmente a un filtro venga
+   richiesto nel form e applicato all'esecuzione;
+3. verificare un input file singolo e un input multi-file con due file aventi
+   le stesse colonne; il risultato multi-file deve contenere le righe di
+   entrambi;
+4. modificare il progetto sorgente e usare **Versioni > Ripubblica dal
+   progetto**; una run nuova deve indicare la nuova versione;
+5. usare **Ripristina** sulla versione precedente e verificare che le run gia'
+   avviate non cambino versione;
+6. ripetere almeno una run come utente non amministratore e verificare il
+   download dell'output.
+
+Il gate tecnico locale del modulo puo' essere ripetuto dall'ambiente installato:
+
+```powershell
+& 'C:\ProgramData\miniforge3\condabin\conda.bat' run -n plenora `
+    --cwd C:\plenora python -m pytest backend\tests2\eseguibili\unit -q
+```
+
+Questo test tecnico non sostituisce il collaudo applicativo sopra: la prova su
+Windows valida anche Caddy, autenticazione, broker, worker e object storage.
+
 ## 9. Checklist operative
 
 Installazione nuova:
@@ -351,6 +379,7 @@ Update:
 - [ ] `/ready` verde.
 - [ ] Validazione base verde.
 - [ ] Validazione e2e-v2 verde.
+- [ ] Collaudo eseguibili versionati completato per Estrai, Manipola e Arricchisci.
 
 ## 10. Troubleshooting
 

@@ -134,6 +134,32 @@ describe('eseguibili api contract', () => {
     expect(httpMock.delete).toHaveBeenCalledWith('/eseguibili/e-9');
   });
 
+  it('exposes list, republish and activate version endpoints', async () => {
+    httpMock.get.mockResolvedValueOnce({ data: [{ id: 'v-2' }] });
+    httpMock.post
+      .mockResolvedValueOnce({ data: { active_version: 3 } })
+      .mockResolvedValueOnce({ data: { active_version: 2 } });
+    const {
+      listEseguibileVersions,
+      republishEseguibile,
+      activateEseguibileVersion,
+    } = await import('../../src/api/eseguibili');
+
+    await expect(listEseguibileVersions('exec-1')).resolves.toEqual([{ id: 'v-2' }]);
+    await republishEseguibile('exec-1');
+    await activateEseguibileVersion('exec-1', 'v-2');
+
+    expect(httpMock.get).toHaveBeenCalledWith('/eseguibili/exec-1/versions');
+    expect(httpMock.post).toHaveBeenNthCalledWith(
+      1,
+      '/eseguibili/exec-1/versions',
+    );
+    expect(httpMock.post).toHaveBeenNthCalledWith(
+      2,
+      '/eseguibili/exec-1/versions/v-2/activate',
+    );
+  });
+
 
   it('analyzeUpload rejects oversized files client-side without calling backend', async () => {
     const { analyzeUpload } = await import('../../src/api/eseguibili');

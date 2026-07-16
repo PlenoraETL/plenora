@@ -33,15 +33,25 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
   const { startPolling } = useTaskPolling({ interval: 1500 });
   useDialogFocus(true, onClose, dialogRef, { closeOnEsc: !executing });
 
-  const updateFile = (key, patch) => setFiles(current => ({
-    ...current,
-    [key]: { ...(current[key] || {}), ...patch },
-  }));
+  const updateFile = (key, index, patch) => setFiles(current => {
+    const items = [...(current[key] || [])];
+    items[index] = { ...(items[index] || {}), ...patch };
+    return { ...current, [key]: items };
+  });
 
-  const analyzeFile = async definition => {
-    const state = files[definition.key];
+  const selectFiles = (definition, fileList) => {
+    const selected = Array.from(fileList || []);
+    setFiles(current => ({
+      ...current,
+      [definition.key]: selected.map(file => ({ file, analysis: null, mapping: {} })),
+    }));
+  };
+
+  const analyzeFile = async (definition, index) => {
+    const state = files[definition.key]?.[index];
     if (!state?.file) return;
-    setBusyKey(definition.key);
+    const itemKey = `${definition.key}:${index}`;
+    setBusyKey(itemKey);
     setError(null);
     try {
       const analysis = await analyzeEseguibileUpload(
@@ -49,7 +59,7 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
         state.file,
         definition.key,
       );
-      updateFile(definition.key, {
+      updateFile(definition.key, index, {
         analysis,
         mapping: { ...(analysis.auto_mapping || {}) },
       });
@@ -87,8 +97,12 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
   );
 
   const canRun = definitions.every(definition => {
+    if (definition.kind === 'file') {
+      const items = files[definition.key] || [];
+      if (definition.required && items.length === 0) return false;
+      return items.every(item => Boolean(item.analysis));
+    }
     if (!definition.required) return true;
-    if (definition.kind === 'file') return Boolean(files[definition.key]?.analysis);
     return values[definition.key] !== '' && values[definition.key] != null;
   });
 
@@ -100,14 +114,15 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
       const inputs = {};
       definitions.forEach(definition => {
         if (definition.kind === 'file') {
-          const state = files[definition.key];
-          if (!state?.analysis) return;
-          inputs[definition.key] = {
-            file_id: state.analysis.file_id,
-            column_mapping: Object.entries(state.mapping || {})
+          const items = (files[definition.key] || []).filter(item => item.analysis);
+          if (items.length === 0) return;
+          const payloads = items.map(item => ({
+            file_id: item.analysis.file_id,
+            column_mapping: Object.entries(item.mapping || {})
               .filter(([, value]) => value)
               .map(([chain_column, file_column]) => ({ chain_column, file_column })),
-          };
+          }));
+          inputs[definition.key] = definition.multiple ? payloads : payloads[0];
         } else if (values[definition.key] !== '' || definition.required) {
           inputs[definition.key] = values[definition.key];
         }
@@ -139,6 +154,12 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
       value: values[definition.key] ?? '',
       onChange: event => setValues(current => ({ ...current, [definition.key]: event.target.value })),
       disabled: executing,
+      min: definition.validation?.minimum,
+      max: definition.validation?.maximum,
+      minLength: definition.validation?.min_length,
+      maxLength: definition.validation?.max_length,
+      pattern: definition.validation?.pattern || undefined,
+      step: definition.kind === 'number' ? 'any' : definition.kind === 'integer' ? '1' : undefined,
     };
     if (definition.kind === 'boolean') {
       return <select {...common}><option value="">Seleziona…</option><option value="true">Sì</option><option value="false">No</option></select>;
@@ -174,30 +195,42 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
                 <>
                   <input
                     type="file"
+                    multiple={Boolean(definition.multiple)}
                     accept={(definition.validation?.accepted_extensions || []).map(ext => `.${String(ext).replace(/^\./, '')}`).join(',')}
                     disabled={executing}
-                    onChange={event => updateFile(definition.key, { file: event.target.files?.[0], analysis: null, mapping: {} })}
+                    onChange={event => selectFiles(definition, event.target.files)}
                   />
-                  <button type="button" className="esw-btn esw-btn--secondary" disabled={!files[definition.key]?.file || busyKey === definition.key} onClick={() => analyzeFile(definition)}>
-                    {busyKey === definition.key ? 'Analisi…' : 'Analizza file'}
-                  </button>
-                  {files[definition.key]?.analysis && (
-                    <div className="esw-dynamic__analysis">
-                      <span>✓ {files[definition.key].analysis.row_count} righe</span>
-                      {(definition.expected_columns || []).map(column => (
-                        <label key={column.name}>
-                          <code>{column.name}</code>
-                          <select
-                            value={files[definition.key]?.mapping?.[column.name] || ''}
-                            onChange={event => updateFile(definition.key, { mapping: { ...(files[definition.key]?.mapping || {}), [column.name]: event.target.value } })}
-                          >
-                            <option value="">Non mappata</option>
-                            {files[definition.key].analysis.detected_columns.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
-                          </select>
-                        </label>
-                      ))}
-                    </div>
-                  )}
+                  {definition.multiple && <small>{(files[definition.key] || []).length} file selezionati · saranno uniti per righe</small>}
+                  {(files[definition.key] || []).map((state, index) => {
+                    const itemKey = `${definition.key}:${index}`;
+                    return (
+                      <div className="esw-dynamic__file" key={`${state.file?.name || 'file'}:${index}`}>
+                        <div className="esw-dynamic__file-title">
+                          <strong>{state.file?.name}</strong>
+                          <button type="button" className="esw-btn esw-btn--secondary" disabled={!state.file || busyKey === itemKey} onClick={() => analyzeFile(definition, index)}>
+                            {busyKey === itemKey ? 'Analisi…' : state.analysis ? 'Rianalizza' : 'Analizza'}
+                          </button>
+                        </div>
+                        {state.analysis && (
+                          <div className="esw-dynamic__analysis">
+                            <span>✓ {state.analysis.row_count} righe</span>
+                            {(definition.expected_columns || []).map(column => (
+                              <label key={column.name}>
+                                <code>{column.name}</code>
+                                <select
+                                  value={state.mapping?.[column.name] || ''}
+                                  onChange={event => updateFile(definition.key, index, { mapping: { ...(state.mapping || {}), [column.name]: event.target.value } })}
+                                >
+                                  <option value="">Non mappata</option>
+                                  {state.analysis.detected_columns.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
+                                </select>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </>
               ) : renderScalar(definition)}
             </section>

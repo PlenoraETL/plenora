@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import pandas as pd
 import pytest
 
 from app.core.eseguibili import db as eseguibili_db
 from app.core.eseguibili import runtime as executable_runtime
 from app.core.eseguibili import service as executable_service
 from app.core.eseguibili.manifest import compile_manifest
+from app.core.eseguibili.models import ExecutableInputDefinition
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -96,6 +100,32 @@ def test_manifest_rejects_sensitive_runtime_binding() -> None:
         )
 
 
+@pytest.mark.parametrize("value", [1.5, "NaN", "Infinity", "-Infinity"])
+def test_scalar_runtime_rejects_lossy_or_non_finite_numbers(value) -> None:
+    kind = "integer" if value == 1.5 else "number"
+    definition = ExecutableInputDefinition(
+        key="amount",
+        label="Importo",
+        kind=kind,
+    )
+
+    with pytest.raises(ValueError, match="Valore non valido"):
+        executable_runtime._coerce_scalar(definition, value)
+
+
+def test_manifest_rejects_invalid_scalar_regex() -> None:
+    canvas = _multi_input_canvas()
+    scalar = next(node for node in canvas["nodes"] if node["id"] == "country")
+    scalar["data"]["validation"] = {"pattern": "["}
+
+    with pytest.raises(ValueError, match="pattern non valido"):
+        compile_manifest(
+            source_project_id="project-1",
+            project_type="manipola",
+            canvas=canvas,
+        )
+
+
 def test_runtime_resolves_two_file_nodes_and_scalar(monkeypatch) -> None:
     manifest = compile_manifest(
         source_project_id="project-1",
@@ -130,6 +160,150 @@ def test_runtime_resolves_two_file_nodes_and_scalar(monkeypatch) -> None:
     assert all(edge["source"] != "country" for edge in canvas["edges"])
     assert cleanup_ids == ["temp-customers", "temp-orders"]
     assert set(summary) == {"customers_file", "orders_file", "country_code"}
+
+
+def test_runtime_materializes_multiple_files_as_one_row_union(monkeypatch) -> None:
+    canvas = _multi_input_canvas()
+    customers = next(node for node in canvas["nodes"] if node["id"] == "customers")
+    customers["data"]["multiple"] = True
+    manifest = compile_manifest(
+        source_project_id="project-1",
+        project_type="manipola",
+        canvas=canvas,
+    )
+    definition = next(item for item in manifest.inputs if item.key == "customers_file")
+    loaded_groups: list[tuple[str, str]] = []
+    output: dict[str, str] = {}
+
+    def load_dataframe(file_id, *, expected_group_id):
+        loaded_groups.append((file_id, expected_group_id))
+        frames = {
+            "upload-a": pd.DataFrame({"id": [1], "name": ["Ada"]}),
+            "upload-b": pd.DataFrame({"id": [2], "name": ["Bob"]}),
+        }
+        return frames[file_id], None
+
+    def create_from_upload(*, file_content, **_kwargs):
+        output["csv"] = file_content.read().decode("utf-8")
+        return SimpleNamespace(id="temp-union")
+
+    monkeypatch.setattr(executable_runtime.file_source_service, "load_dataframe", load_dataframe)
+    monkeypatch.setattr(executable_runtime.file_source_service, "create_from_upload", create_from_upload)
+    monkeypatch.setattr(eseguibili_db, "mark_temp_file_source_ttl", lambda *_args: None)
+
+    temp_id = executable_runtime._materialize_file_input(
+        eseguibile_id="exec-1",
+        definition=definition,
+        payload=[
+            {
+                "file_id": "upload-a",
+                "column_mapping": [{"chain_column": "customer_id", "file_column": "id"}],
+                "_upload_group_id": "group-a",
+            },
+            {
+                "file_id": "upload-b",
+                "column_mapping": [{"chain_column": "customer_id", "file_column": "id"}],
+                "_upload_group_id": "group-b",
+            },
+        ],
+        group_id="group-default",
+    )
+
+    assert temp_id == "temp-union"
+    assert loaded_groups == [("upload-a", "group-a"), ("upload-b", "group-b")]
+    assert pd.read_csv(pd.io.common.StringIO(output["csv"])).to_dict("records") == [
+        {"customer_id": 1, "name": "Ada"},
+        {"customer_id": 2, "name": "Bob"},
+    ]
+
+
+def test_runtime_preserves_geospatial_multi_file_inputs(monkeypatch) -> None:
+    import json
+
+    import geopandas as gpd
+    from shapely.geometry import Point
+
+    canvas = _multi_input_canvas()
+    customers = next(node for node in canvas["nodes"] if node["id"] == "customers")
+    customers["data"]["multiple"] = True
+    manifest = compile_manifest(
+        source_project_id="project-1",
+        project_type="manipola",
+        canvas=canvas,
+    )
+    definition = next(item for item in manifest.inputs if item.key == "customers_file")
+    output: dict[str, object] = {}
+
+    def load_dataframe(file_id, *, expected_group_id):
+        _ = expected_group_id
+        offset = 0 if file_id == "geo-a" else 1
+        gdf = gpd.GeoDataFrame(
+            {"customer_id": [offset + 1]},
+            geometry=[Point(offset, offset)],
+            crs="EPSG:4326",
+        )
+        return pd.DataFrame(gdf), gdf
+
+    def create_from_upload(*, file_content, filename, **_kwargs):
+        output["filename"] = filename
+        output["body"] = json.loads(file_content.read().decode("utf-8"))
+        return SimpleNamespace(id="temp-geo-union")
+
+    monkeypatch.setattr(executable_runtime.file_source_service, "load_dataframe", load_dataframe)
+    monkeypatch.setattr(executable_runtime.file_source_service, "create_from_upload", create_from_upload)
+    monkeypatch.setattr(eseguibili_db, "mark_temp_file_source_ttl", lambda *_args: None)
+
+    executable_runtime._materialize_file_input(
+        eseguibile_id="exec-1",
+        definition=definition,
+        payload=[{"file_id": "geo-a"}, {"file_id": "geo-b"}],
+        group_id="group-1",
+    )
+
+    assert output["filename"].endswith(".geojson")
+    assert len(output["body"]["features"]) == 2
+    assert [feature["geometry"]["type"] for feature in output["body"]["features"]] == [
+        "Point",
+        "Point",
+    ]
+
+
+def test_runtime_cleans_materialized_files_when_later_binding_fails(monkeypatch) -> None:
+    canvas = _multi_input_canvas()
+    target = next(node for node in canvas["nodes"] if node["id"] == "filter")
+    del target["data"]["filters"]
+    manifest = compile_manifest(
+        source_project_id="project-1",
+        project_type="manipola",
+        canvas=_multi_input_canvas(),
+    )
+    generated = iter(["temp-customers", "temp-orders"])
+    deleted: list[str] = []
+    monkeypatch.setattr(
+        executable_runtime,
+        "_materialize_file_input",
+        lambda **_kwargs: next(generated),
+    )
+    monkeypatch.setattr(
+        executable_runtime.file_source_service,
+        "delete_file_source",
+        lambda file_id: deleted.append(file_id),
+    )
+
+    with pytest.raises(ValueError, match="senza campo binding"):
+        executable_runtime.resolve_runtime_inputs(
+            eseguibile_id="exec-1",
+            canvas=canvas,
+            manifest=manifest,
+            values={
+                "customers_file": {"file_id": "upload-customers"},
+                "orders_file": {"file_id": "upload-orders"},
+                "country_code": "DE",
+            },
+            group_id="group-1",
+        )
+
+    assert deleted == ["temp-customers", "temp-orders"]
 
 
 def test_runtime_rejects_binding_to_missing_field(monkeypatch) -> None:
@@ -250,3 +424,95 @@ def test_task_launch_failure_marks_run_and_cleans_inputs(monkeypatch) -> None:
             "error_message": "Avvio task fallito: RuntimeError",
         }
     ]
+
+
+@pytest.mark.parametrize("project_type", ["estrai", "manipola", "arricchisci"])
+def test_versioned_execution_dispatches_all_publishable_project_types(
+    monkeypatch,
+    project_type,
+) -> None:
+    from app.core.orchestrator.task_service import task_service
+
+    manifest = {
+        "schema_version": 2,
+        "project_type": project_type,
+        "source_project_id": "project-1",
+        "inputs": [],
+        "bindings": [],
+    }
+    canvas = {"nodes": [{"id": "out", "type": "result", "data": {}}], "edges": []}
+    version = eseguibili_db.EseguibileVersionRow(
+        id=f"version-{project_type}",
+        eseguibile_id="exec-1",
+        version_number=1,
+        schema_version=2,
+        project_type=project_type,
+        source_project_id="project-1",
+        source_hash="hash",
+        canvas=canvas,
+        manifest=manifest,
+        status="published",
+        created_by="user-1",
+        created_at="2026-07-16T00:00:00+00:00",
+    )
+    executable = eseguibili_db.EseguibileRow(
+        id="exec-1",
+        name="Executable",
+        description="",
+        canvas=canvas,
+        expected_columns=[],
+        default_output_format="xlsx",
+        group_id="group-1",
+        created_by="user-1",
+        created_at="2026-07-16T00:00:00+00:00",
+        updated_at="2026-07-16T00:00:00+00:00",
+        project_type=project_type,
+        active_version_id=version.id,
+        manifest=manifest,
+    )
+    pipeline_calls: list[dict] = []
+    enrichment_calls: list[dict] = []
+    bound: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        eseguibili_db,
+        "get_active_eseguibile_version",
+        lambda _id: version,
+    )
+    monkeypatch.setattr(
+        eseguibili_db,
+        "create_eseguibile_run",
+        lambda **_kwargs: "run-1",
+    )
+    monkeypatch.setattr(
+        eseguibili_db,
+        "bind_eseguibile_run_task",
+        lambda run_id, task_id: bound.append((run_id, task_id)),
+    )
+    monkeypatch.setattr(
+        task_service,
+        "create_pipeline_task",
+        lambda **kwargs: pipeline_calls.append(kwargs) or SimpleNamespace(task_id="task-pipeline"),
+    )
+    monkeypatch.setattr(
+        task_service,
+        "create_enrichment_task",
+        lambda **kwargs: enrichment_calls.append(kwargs) or SimpleNamespace(task_id="task-enrichment"),
+    )
+
+    result = executable_service.execute_versioned(
+        eseguibile=executable,
+        raw_inputs={},
+        user_id="user-1",
+    )
+
+    if project_type == "arricchisci":
+        assert not pipeline_calls
+        assert enrichment_calls[0]["execution_context"]["version_id"] == version.id
+        assert result.task_id == "task-enrichment"
+    else:
+        assert not enrichment_calls
+        contract = pipeline_calls[0]["execution_contract"]
+        assert contract["project_type"] == project_type
+        assert contract["execution_subject"]["version_id"] == version.id
+        assert result.task_id == "task-pipeline"
+    assert bound == [("run-1", result.task_id)]

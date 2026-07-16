@@ -435,40 +435,50 @@ def create_eseguibile_version(
     source_project_id: str | None,
     created_by: str,
 ) -> EseguibileVersionRow:
-    latest = _fetchone(
-        "SELECT COALESCE(MAX(version_number), 0) AS n "
-        "FROM eseguibile_versions WHERE eseguibile_id = %s",
-        (eseguibile_id,),
-    )
-    version_number = int((latest or {}).get("n") or 0) + 1
-    version_id = f"{eseguibile_id}_v{version_number}_{uuid.uuid4().hex[:6]}"
     source_hash = hashlib.sha256(
         json.dumps(canvas, ensure_ascii=False, sort_keys=True).encode("utf-8")
     ).hexdigest()
     now = _now()
-    _execute(
-        """
-        INSERT INTO eseguibile_versions (
-            id, eseguibile_id, version_number, schema_version, project_type,
-            source_project_id, source_hash, canvas, manifest, status,
-            created_by, created_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'published', %s, %s)
-        """,
-        (
-            version_id,
-            eseguibile_id,
-            version_number,
-            int(manifest.get("schema_version") or 2),
-            project_type,
-            source_project_id,
-            source_hash,
-            json.dumps(canvas, ensure_ascii=False),
-            json.dumps(manifest, ensure_ascii=False),
-            created_by,
-            now,
-        ),
-    )
-    row = _fetchone("SELECT * FROM eseguibile_versions WHERE id = %s", (version_id,))
+    with unit_of_work() as session:
+        parent = session.fetchone(
+            "SELECT id FROM eseguibili WHERE id = %s FOR UPDATE",
+            (eseguibile_id,),
+        )
+        if not parent:
+            raise ValueError("Eseguibile non trovato")
+        latest = session.fetchone(
+            "SELECT COALESCE(MAX(version_number), 0) AS n "
+            "FROM eseguibile_versions WHERE eseguibile_id = %s",
+            (eseguibile_id,),
+        )
+        version_number = int((latest or {}).get("n") or 0) + 1
+        version_id = f"{eseguibile_id}_v{version_number}_{uuid.uuid4().hex[:6]}"
+        session.execute(
+            """
+            INSERT INTO eseguibile_versions (
+                id, eseguibile_id, version_number, schema_version, project_type,
+                source_project_id, source_hash, canvas, manifest, status,
+                created_by, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'published', %s, %s)
+            """,
+            (
+                version_id,
+                eseguibile_id,
+                version_number,
+                int(manifest.get("schema_version") or 2),
+                project_type,
+                source_project_id,
+                source_hash,
+                json.dumps(canvas, ensure_ascii=False),
+                json.dumps(manifest, ensure_ascii=False),
+                created_by,
+                now,
+            ),
+        )
+        row = session.fetchone(
+            "SELECT * FROM eseguibile_versions WHERE id = %s",
+            (version_id,),
+        )
     if not row:
         raise RuntimeError(f"Versione eseguibile '{version_id}' non trovata dopo insert")
     return eseguibile_version_row_from_db(row)
@@ -500,12 +510,41 @@ def get_active_eseguibile_version(
     return eseguibile_version_row_from_db(row) if row else None
 
 
+def list_eseguibile_versions(eseguibile_id: str) -> list[EseguibileVersionRow]:
+    rows = _fetchall(
+        "SELECT * FROM eseguibile_versions WHERE eseguibile_id = %s "
+        "ORDER BY version_number DESC",
+        (eseguibile_id,),
+    )
+    return [eseguibile_version_row_from_db(row) for row in rows]
+
+
 def activate_eseguibile_version(eseguibile_id: str, version_id: str) -> None:
-    if get_eseguibile_version(version_id, eseguibile_id=eseguibile_id) is None:
+    version = get_eseguibile_version(version_id, eseguibile_id=eseguibile_id)
+    if version is None:
         raise ValueError("Versione eseguibile non trovata")
+    file_input = next(
+        (
+            item
+            for item in (version.manifest.get("inputs") or [])
+            if isinstance(item, dict) and item.get("kind") == "file"
+        ),
+        None,
+    )
+    expected_columns = (
+        file_input.get("expected_columns") or [] if file_input else []
+    )
     _execute(
-        "UPDATE eseguibili SET active_version_id = %s, updated_at = %s WHERE id = %s",
-        (version_id, _now(), eseguibile_id),
+        "UPDATE eseguibili SET active_version_id = %s, project_type = %s, "
+        "canvas = %s, expected_columns = %s, updated_at = %s WHERE id = %s",
+        (
+            version_id,
+            version.project_type,
+            json.dumps(version.canvas, ensure_ascii=False),
+            json.dumps(expected_columns, ensure_ascii=False),
+            _now(),
+            eseguibile_id,
+        ),
     )
 
 

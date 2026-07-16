@@ -97,3 +97,20 @@ export const runEseguibile = async (eseguibileId, payload) => {
   const r = await http.post(`/eseguibili/${eseguibileId}/runs`, payload);
   return r.data;
 };
+
+export const listEseguibileVersions = async (eseguibileId) => {
+  const r = await http.get(`/eseguibili/${eseguibileId}/versions`);
+  return r.data;
+};
+
+export const republishEseguibile = async (eseguibileId) => {
+  const r = await http.post(`/eseguibili/${eseguibileId}/versions`);
+  return r.data;
+};
+
+export const activateEseguibileVersion = async (eseguibileId, versionId) => {
+  const r = await http.post(
+    `/eseguibili/${eseguibileId}/versions/${versionId}/activate`,
+  );
+  return r.data;
+};

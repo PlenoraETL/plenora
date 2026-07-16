@@ -41,6 +41,7 @@ from .models import (
     EseguibileCreate, EseguibileUpdate, EseguibileSummary, EseguibileDetails,
     ExecuteRequest, AnalyzeUploadResponse, ExecutableManifest,
     ExecutableRunRequest,
+    EseguibileVersionSummary,
 )
 
 logger = get_logger(__name__)
@@ -172,6 +173,74 @@ def get_eseguibile(
     record = eseguibili_db.get_eseguibile(eseguibile_id)
     _check_visible(record, current_user)
     return _details_response(record, current_user)
+
+
+@router.get(
+    "/{eseguibile_id}/versions",
+    response_model=List[EseguibileVersionSummary],
+)
+def list_eseguibile_versions(
+    eseguibile_id: str,
+    current_user: CurrentUser = Depends(require_admin),
+):
+    record = eseguibili_db.get_eseguibile(eseguibile_id)
+    _check_group_access(record, current_user)
+    return [
+        {
+            "id": version.id,
+            "version_number": version.version_number,
+            "schema_version": version.schema_version,
+            "project_type": version.project_type,
+            "source_project_id": version.source_project_id,
+            "source_hash": version.source_hash,
+            "status": version.status,
+            "created_by": version.created_by,
+            "created_at": version.created_at,
+            "inputs_count": len(version.manifest.get("inputs") or []),
+            "active": version.id == record.active_version_id,
+        }
+        for version in eseguibili_db.list_eseguibile_versions(eseguibile_id)
+    ]
+
+
+@router.post("/{eseguibile_id}/versions", response_model=EseguibileDetails)
+@audit_action(action="eseguibile.republish", target_param="eseguibile_id")
+def republish_eseguibile(
+    eseguibile_id: str,
+    current_user: CurrentUser = Depends(require_admin),
+):
+    record = eseguibili_db.get_eseguibile(eseguibile_id)
+    _check_group_access(record, current_user)
+    try:
+        updated = eseguibili_service.publish_new_version(
+            eseguibile=record,
+            created_by=current_user.user_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _details_response(updated, current_user)
+
+
+@router.post(
+    "/{eseguibile_id}/versions/{version_id}/activate",
+    response_model=EseguibileDetails,
+)
+@audit_action(action="eseguibile.version.activate", target_param="eseguibile_id")
+def activate_eseguibile_version(
+    eseguibile_id: str,
+    version_id: str,
+    current_user: CurrentUser = Depends(require_admin),
+):
+    record = eseguibili_db.get_eseguibile(eseguibile_id)
+    _check_group_access(record, current_user)
+    try:
+        eseguibili_db.activate_eseguibile_version(eseguibile_id, version_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    updated = eseguibili_db.get_eseguibile(eseguibile_id)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Eseguibile non trovato")
+    return _details_response(updated, current_user)
 
 
 # UPDATE (solo admin
@@ -338,6 +407,7 @@ def analyze_upload(
     _check_visible(record, current_user)
 
     expected_columns_override = None
+    input_max_size = None
     if input_key:
         if not record.manifest:
             raise HTTPException(status_code=400, detail="Manifest eseguibile assente")
@@ -359,11 +429,17 @@ def analyze_upload(
                     status_code=400,
                     detail=f"Formato non ammesso per {selected_input.label}",
                 )
+        input_max_size = selected_input.validation.max_size_bytes
 
     # Size cap pre-read (helper centralizzato, vedi `app.core.security.upload_guards`
     # Coerente con `files/router.py`: rifiuta con 413 prima di leggere il
     # contenuto in RAM, evitando DoS interno credenziato via upload N GB
     enforce_upload_size_limit(file)
+    if input_max_size is not None:
+        # Verifica la dimensione reale dello stream anche quando il client non
+        # valorizza UploadFile.size; il limite dell'input non sostituisce quello
+        # globale, quindi entrambi restano applicati.
+        enforce_upload_size_limit(file, max_bytes=input_max_size)
 
     try:
         content_stream = file.file
@@ -543,31 +619,47 @@ def create_eseguibile_run(
             if definition.kind != "file" or definition.key not in trusted_inputs:
                 continue
             raw = trusted_inputs[definition.key]
-            if not isinstance(raw, Mapping):
+            raw_files = raw if isinstance(raw, list) else [raw]
+            if definition.multiple and not isinstance(raw, list):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Payload multi-file non valido per {definition.label}",
+                )
+            if not definition.multiple and not isinstance(raw, Mapping):
                 raise HTTPException(
                     status_code=400,
                     detail=f"Payload file non valido per {definition.label}",
                 )
-            file_id = str(raw.get("file_id") or "")
-            upload = _load_upload_meta(file_id) if file_id else None
-            if not upload:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Upload non trovato o scaduto per {definition.label}",
+            trusted_files = []
+            for raw_file in raw_files:
+                if not isinstance(raw_file, Mapping):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Payload file non valido per {definition.label}",
+                    )
+                file_id = str(raw_file.get("file_id") or "")
+                upload = _load_upload_meta(file_id) if file_id else None
+                if not upload:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Upload non trovato o scaduto per {definition.label}",
+                    )
+                if upload.get("eseguibile_id") != eseguibile_id:
+                    raise HTTPException(status_code=400, detail="Upload di altro eseguibile")
+                if upload.get("user_id") not in (None, current_user.user_id):
+                    raise HTTPException(status_code=403, detail="Upload di un altro utente")
+                upload_input_key = upload.get("input_key")
+                if upload_input_key not in (None, definition.key):
+                    raise HTTPException(status_code=400, detail="Upload associato a un altro input")
+                trusted_file = dict(raw_file)
+                trusted_file["_upload_group_id"] = str(
+                    upload.get("group_id") or current_user.group_id
                 )
-            if upload.get("eseguibile_id") != eseguibile_id:
-                raise HTTPException(status_code=400, detail="Upload di altro eseguibile")
-            if upload.get("user_id") not in (None, current_user.user_id):
-                raise HTTPException(status_code=403, detail="Upload di un altro utente")
-            upload_input_key = upload.get("input_key")
-            if upload_input_key not in (None, definition.key):
-                raise HTTPException(status_code=400, detail="Upload associato a un altro input")
-            trusted_file = dict(raw)
-            trusted_file["_upload_group_id"] = str(
-                upload.get("group_id") or current_user.group_id
+                trusted_files.append(trusted_file)
+                consumed_uploads.append(file_id)
+            trusted_inputs[definition.key] = (
+                trusted_files if definition.multiple else trusted_files[0]
             )
-            trusted_inputs[definition.key] = trusted_file
-            consumed_uploads.append(file_id)
 
         result = eseguibili_service.execute_versioned(
             eseguibile=record,

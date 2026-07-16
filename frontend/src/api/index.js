@@ -121,6 +121,9 @@ export {
   analyzeUpload as analyzeEseguibileUpload,
   executeEseguibile,
   runEseguibile,
+  listEseguibileVersions,
+  republishEseguibile,
+  activateEseguibileVersion,
 } from './eseguibili';
 
 export {

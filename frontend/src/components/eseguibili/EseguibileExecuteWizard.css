@@ -524,5 +524,9 @@
 .esw-dynamic__label code { margin-left: auto; color: var(--esw-text-sub); }
 .esw-dynamic__analysis { display: grid; gap: 7px; padding: 10px; border-radius: 8px; background: rgba(34, 197, 94, .08); }
 .esw-dynamic__analysis label { display: grid; grid-template-columns: 1fr 1.5fr; align-items: center; gap: 8px; }
+.esw-dynamic__file { display: grid; gap: 8px; padding: 9px; border: 1px solid var(--esw-border); border-radius: 8px; }
+.esw-dynamic__file-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.esw-dynamic__file-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.esw-dynamic__file-title .esw-btn { flex: 0 0 auto; }
 .esw-dynamic__output { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-top: 4px; }
 .esw-dynamic__output label { display: grid; gap: 5px; font-size: 12px; color: var(--esw-text-sub); }

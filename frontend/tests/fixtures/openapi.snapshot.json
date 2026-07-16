@@ -3120,6 +3120,86 @@
         "title": "EseguibileUpdate",
         "type": "object"
       },
+      "EseguibileVersionSummary": {
+        "description": "Revisione pubblicata selezionabile come versione attiva.",
+        "properties": {
+          "active": {
+            "default": false,
+            "title": "Active",
+            "type": "boolean"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inputs_count": {
+            "default": 0,
+            "title": "Inputs Count",
+            "type": "integer"
+          },
+          "project_type": {
+            "enum": [
+              "estrai",
+              "manipola",
+              "arricchisci"
+            ],
+            "title": "Project Type",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "source_hash": {
+            "title": "Source Hash",
+            "type": "string"
+          },
+          "source_project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Project Id"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "published",
+              "retired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version_number": {
+            "title": "Version Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version_number",
+          "schema_version",
+          "project_type",
+          "source_hash",
+          "status",
+          "created_by",
+          "created_at"
+        ],
+        "title": "EseguibileVersionSummary",
+        "type": "object"
+      },
       "EstimateRequest": {
         "properties": {
           "api_id": {
@@ -12145,6 +12225,158 @@
           }
         ],
         "summary": "Create Eseguibile Run",
+        "tags": [
+          "eseguibili"
+        ]
+      }
+    },
+    "/api/eseguibili/{eseguibile_id}/versions": {
+      "get": {
+        "operationId": "list_eseguibile_versions_api_eseguibili__eseguibile_id__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eseguibile_id",
+            "required": true,
+            "schema": {
+              "title": "Eseguibile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EseguibileVersionSummary"
+                  },
+                  "title": "Response List Eseguibile Versions Api Eseguibili  Eseguibile Id  Versions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Eseguibile Versions",
+        "tags": [
+          "eseguibili"
+        ]
+      },
+      "post": {
+        "operationId": "republish_eseguibile_api_eseguibili__eseguibile_id__versions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eseguibile_id",
+            "required": true,
+            "schema": {
+              "title": "Eseguibile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EseguibileDetails"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Republish Eseguibile",
+        "tags": [
+          "eseguibili"
+        ]
+      }
+    },
+    "/api/eseguibili/{eseguibile_id}/versions/{version_id}/activate": {
+      "post": {
+        "operationId": "activate_eseguibile_version_api_eseguibili__eseguibile_id__versions__version_id__activate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eseguibile_id",
+            "required": true,
+            "schema": {
+              "title": "Eseguibile Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "title": "Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EseguibileDetails"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Activate Eseguibile Version",
         "tags": [
           "eseguibili"
         ]

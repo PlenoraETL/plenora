@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import io
+import math
 import re
 from datetime import date, datetime
 from typing import Any, Mapping
@@ -29,11 +30,15 @@ def _coerce_scalar(definition: ExecutableInputDefinition, value: Any) -> Any:
         elif kind == "integer":
             if isinstance(value, bool):
                 raise ValueError
+            if isinstance(value, float) and not value.is_integer():
+                raise ValueError
             coerced = int(value)
         elif kind == "number":
             if isinstance(value, bool):
                 raise ValueError
             coerced = float(value)
+            if not math.isfinite(coerced):
+                raise ValueError
         elif kind == "boolean":
             if isinstance(value, bool):
                 coerced = value
@@ -118,51 +123,118 @@ def _materialize_file_input(
     *,
     eseguibile_id: str,
     definition: ExecutableInputDefinition,
-    payload: Mapping[str, Any],
+    payload: Mapping[str, Any] | list[Mapping[str, Any]],
     group_id: str,
 ) -> str:
-    file_id = str(payload.get("file_id") or "")
-    if not file_id:
-        raise ValueError(f"File mancante per '{definition.label}'")
-    df, _gdf = file_source_service.load_dataframe(
-        file_id,
-        expected_group_id=str(payload.get("_upload_group_id") or group_id),
-    )
-    if df is None or df.empty:
-        raise ValueError(f"Il file '{definition.label}' è vuoto o illeggibile")
-
-    rename_map: dict[str, str] = {}
-    raw_mapping = payload.get("column_mapping") or []
-    if not isinstance(raw_mapping, list):
-        raise ValueError(f"Mapping colonne non valido per '{definition.label}'")
-    for item in raw_mapping:
-        if not isinstance(item, Mapping):
-            continue
-        chain_col = str(item.get("chain_column") or "")
-        file_col = str(item.get("file_column") or "")
-        if chain_col and file_col and file_col in df.columns:
-            rename_map[file_col] = chain_col
-    if rename_map:
-        df = df.rename(columns=rename_map)
-
-    missing = [
-        column.name
-        for column in definition.expected_columns
-        if column.required and column.name not in df.columns
-    ]
-    if missing:
-        raise ValueError(
-            f"Colonne obbligatorie non mappate per '{definition.label}': "
-            + ", ".join(missing)
+    payloads = payload if isinstance(payload, list) else [payload]
+    frames = []
+    spatial_flags: list[bool] = []
+    for index, item_payload in enumerate(payloads, start=1):
+        file_id = str(item_payload.get("file_id") or "")
+        if not file_id:
+            raise ValueError(f"File {index} mancante per '{definition.label}'")
+        df, gdf = file_source_service.load_dataframe(
+            file_id,
+            expected_group_id=str(
+                item_payload.get("_upload_group_id") or group_id
+            ),
         )
+        if df is None or df.empty:
+            raise ValueError(
+                f"Il file {index} di '{definition.label}' è vuoto o illeggibile"
+            )
 
-    buffer = io.BytesIO()
-    df.to_csv(buffer, index=False, encoding="utf-8")
-    buffer.seek(0)
+        rename_map: dict[str, str] = {}
+        raw_mapping = item_payload.get("column_mapping") or []
+        if not isinstance(raw_mapping, list):
+            raise ValueError(
+                f"Mapping colonne non valido per '{definition.label}'"
+            )
+        for item in raw_mapping:
+            if not isinstance(item, Mapping):
+                continue
+            chain_col = str(item.get("chain_column") or "")
+            file_col = str(item.get("file_column") or "")
+            if chain_col and file_col and file_col in df.columns:
+                rename_map[file_col] = chain_col
+        frame = gdf if gdf is not None else df
+        if rename_map:
+            geometry = getattr(frame, "geometry", None)
+            geometry_name = getattr(geometry, "name", None)
+            if geometry_name in rename_map and hasattr(frame, "rename_geometry"):
+                frame = frame.rename_geometry(rename_map.pop(geometry_name))
+            if rename_map:
+                frame = frame.rename(columns=rename_map)
+
+        missing = [
+            column.name
+            for column in definition.expected_columns
+            if column.required and column.name not in frame.columns
+        ]
+        if missing:
+            raise ValueError(
+                f"Colonne obbligatorie non mappate nel file {index} per "
+                f"'{definition.label}': " + ", ".join(missing)
+            )
+        frames.append(frame)
+        spatial_flags.append(gdf is not None)
+
+    if len(frames) == 1:
+        df = frames[0]
+    else:
+        import pandas as pd
+
+        if any(spatial_flags) and not all(spatial_flags):
+            raise ValueError(
+                f"'{definition.label}' non puo' unire file geografici e tabellari"
+            )
+        if all(spatial_flags):
+            import geopandas as gpd
+
+            geometry_name = frames[0].geometry.name
+            reference_crs = frames[0].crs
+            aligned = []
+            for frame in frames:
+                if frame.geometry.name != geometry_name:
+                    raise ValueError(
+                        f"I file di '{definition.label}' usano colonne geometria diverse"
+                    )
+                if frame.crs != reference_crs:
+                    if reference_crs is None or frame.crs is None:
+                        raise ValueError(
+                            f"I file di '{definition.label}' hanno CRS incompatibili"
+                        )
+                    frame = frame.to_crs(reference_crs)
+                aligned.append(frame)
+            combined = pd.concat(aligned, ignore_index=True, sort=False)
+            df = gpd.GeoDataFrame(
+                combined,
+                geometry=geometry_name,
+                crs=reference_crs,
+            )
+        else:
+            df = pd.concat(frames, ignore_index=True, sort=False)
+
     name = f"__exec_input_{eseguibile_id}_{definition.key}"
+    if all(spatial_flags):
+        from app.core.dataframes.geospatial_io import geospatial_dataframe_to_bytes
+
+        content = geospatial_dataframe_to_bytes(
+            df,
+            "geojson",
+            df.geometry.name,
+            str(df.crs or ""),
+        )
+        buffer = io.BytesIO(content)
+        filename = f"{name}.geojson"
+    else:
+        buffer = io.BytesIO()
+        df.to_csv(buffer, index=False, encoding="utf-8")
+        buffer.seek(0)
+        filename = f"{name}.csv"
     created = file_source_service.create_from_upload(
         file_content=buffer,
-        filename=f"{name}.csv",
+        filename=filename,
         name=name,
         description=f"Input {definition.key} per eseguibile {eseguibile_id}",
         group_id=group_id,
@@ -174,6 +246,14 @@ def _materialize_file_input(
         # Il TTL è una safety net; il task riceve comunque l'elenco cleanup.
         pass
     return str(temp_id)
+
+
+def _cleanup_runtime_files(file_ids: list[str]) -> None:
+    for file_id in file_ids:
+        try:
+            file_source_service.delete_file_source(file_id)
+        except Exception:
+            pass
 
 
 def resolve_runtime_inputs(
@@ -221,10 +301,15 @@ def resolve_runtime_inputs(
                     raise ValueError(f"Input obbligatorio mancante: {definition.label}")
                 continue
             if definition.multiple:
-                raise ValueError(
-                    f"L'input multiplo '{definition.label}' non è ancora supportato"
-                )
-            if not isinstance(raw_value, Mapping):
+                if not isinstance(raw_value, list) or not raw_value:
+                    raise ValueError(
+                        f"Payload multi-file non valido per '{definition.label}'"
+                    )
+                if not all(isinstance(item, Mapping) for item in raw_value):
+                    raise ValueError(
+                        f"Payload multi-file non valido per '{definition.label}'"
+                    )
+            elif not isinstance(raw_value, Mapping):
                 raise ValueError(f"Payload file non valido per '{definition.label}'")
             try:
                 temp_id = _materialize_file_input(
@@ -234,36 +319,41 @@ def resolve_runtime_inputs(
                     group_id=group_id,
                 )
             except Exception:
-                for created_id in cleanup_ids:
-                    try:
-                        file_source_service.delete_file_source(created_id)
-                    except Exception:
-                        pass
+                _cleanup_runtime_files(cleanup_ids)
                 raise
             cleanup_ids.append(temp_id)
-            for binding in bindings:
-                if binding.mode != "data_source":
-                    continue
-                node = nodes_by_id.get(binding.target_node_id)
-                if node is None:
-                    raise ValueError(f"Nodo input non trovato: {binding.target_node_id}")
-                node["type"] = "file_source"
-                node["file_source_id"] = temp_id
-                node.setdefault("data", {})["file_source_id"] = temp_id
+            try:
+                for binding in bindings:
+                    if binding.mode != "data_source":
+                        continue
+                    node = nodes_by_id.get(binding.target_node_id)
+                    if node is None:
+                        raise ValueError(f"Nodo input non trovato: {binding.target_node_id}")
+                    node["type"] = "file_source"
+                    node["file_source_id"] = temp_id
+                    node.setdefault("data", {})["file_source_id"] = temp_id
+            except Exception:
+                _cleanup_runtime_files(cleanup_ids)
+                raise
             summary[definition.key] = {
                 "kind": "file",
                 "file_source_id": temp_id,
+                "files_count": len(raw_value) if isinstance(raw_value, list) else 1,
             }
             continue
 
         scalar = coerced_scalars[definition.key]
-        for binding in bindings:
-            if binding.mode != "node_field" or not binding.target_field:
-                continue
-            node = nodes_by_id.get(binding.target_node_id)
-            if node is None:
-                raise ValueError(f"Nodo binding non trovato: {binding.target_node_id}")
-            _apply_scalar_binding(node, binding.target_field, scalar)
+        try:
+            for binding in bindings:
+                if binding.mode != "node_field" or not binding.target_field:
+                    continue
+                node = nodes_by_id.get(binding.target_node_id)
+                if node is None:
+                    raise ValueError(f"Nodo binding non trovato: {binding.target_node_id}")
+                _apply_scalar_binding(node, binding.target_field, scalar)
+        except Exception:
+            _cleanup_runtime_files(cleanup_ids)
+            raise
         summary[definition.key] = {"kind": definition.kind, "provided": scalar is not None}
 
     # I project_input scalari e i loro archi sono configurazione di authoring,

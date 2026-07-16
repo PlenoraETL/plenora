@@ -4,6 +4,7 @@ Modelli Pydantic per il modulo ESEGUIBILI.
 
 from __future__ import annotations
 
+import re
 from typing import Any, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -33,13 +34,18 @@ class ExecutableInputValidation(BaseModel):
     max_length: Optional[int] = Field(None, ge=1)
     minimum: Optional[float] = None
     maximum: Optional[float] = None
-    pattern: Optional[str] = None
+    pattern: Optional[str] = Field(None, max_length=240)
     options: list[str] = Field(default_factory=list)
     accepted_extensions: list[str] = Field(default_factory=list)
     max_size_bytes: Optional[int] = Field(None, ge=1)
 
     @model_validator(mode="after")
     def validate_ranges(self):
+        if self.pattern:
+            try:
+                re.compile(self.pattern)
+            except re.error as exc:
+                raise ValueError("pattern non valido") from exc
         if (
             self.min_length is not None
             and self.max_length is not None
@@ -199,6 +205,22 @@ class EseguibileDetails(BaseModel):
     # perche' l'estensione e' determinata dal connettore, non dall'utente
     output_is_file_based: bool = False
     inferred_output_extension: Optional[str] = None  # senza punto, es. "zip"
+
+
+class EseguibileVersionSummary(BaseModel):
+    """Revisione pubblicata selezionabile come versione attiva."""
+
+    id: str
+    version_number: int
+    schema_version: int
+    project_type: ProjectType
+    source_project_id: Optional[str] = None
+    source_hash: str
+    status: Literal["draft", "published", "retired"]
+    created_by: str
+    created_at: str
+    inputs_count: int = 0
+    active: bool = False
 
 
 class ColumnMappingEntry(BaseModel):

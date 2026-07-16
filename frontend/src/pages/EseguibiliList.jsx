@@ -12,6 +12,7 @@ import { listEseguibili, deleteEseguibile, listProjects } from '../api';
 import { useAuth } from '../context/AuthContext';
 import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteWizard';
 import PublishEseguibileModal from '../components/eseguibili/PublishEseguibileModal';
+import EseguibileVersionsModal from '../components/eseguibili/EseguibileVersionsModal';
 import AllowedGroupsSelector from '../components/shared/AllowedGroupsSelector';
 import AppSidebar from '../components/AppSidebar';
 import { useToast } from '../hooks/useToast';
@@ -31,10 +32,11 @@ function EseguibiliList() {
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState(null); // id dell'eseguibile in esecuzione
   const [sharingEseguibile, setSharingEseguibile] = useState(null); // modal condivisione cross-gruppo
+  const [versioningEseguibile, setVersioningEseguibile] = useState(null);
 
   // Selettore progetto sorgente per creazione nuovo eseguibile
   const [showSelector, setShowSelector] = useState(false);
-  const [arricchisciProjects, setArricchisciProjects] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [projectSearch, setProjectSearch] = useState('');
   const [selectedSourceProject, setSelectedSourceProject] = useState(null);
@@ -69,7 +71,9 @@ function EseguibiliList() {
     try {
       const all = await listProjects();
       const projects = all?.projects || [];
-      setArricchisciProjects(projects.filter(p => p.project_type === 'arricchisci'));
+      setProjects(projects.filter(p => (
+        ['estrai', 'manipola', 'arricchisci'].includes(p.project_type)
+      )));
     } catch (e) {
       toastApiError(toast, e, 'Errore caricamento progetti');
     } finally {
@@ -103,7 +107,7 @@ function EseguibiliList() {
           <button type="button" className="esl__back" onClick={() => navigate('/')}>← Dashboard</button>
           <h1 className="esl__title">🚀 Eseguibili</h1>
           <p className="esl__subtitle">
-            Catene di arricchimento eseguibili on-demand — carica un file e ottieni il risultato
+            Progetti Estrai, Manipola e Arricchisci eseguibili on-demand
           </p>
         </div>
         {isAdmin && (
@@ -121,7 +125,7 @@ function EseguibiliList() {
           <h3>Nessun eseguibile disponibile</h3>
           <p>
             {isAdmin
-              ? 'Vai nella Dashboard, seleziona un progetto Arricchisci e clicca "📢 Pubblica come Eseguibile" sulla card.'
+              ? 'Seleziona un progetto Estrai, Manipola o Arricchisci e pubblicalo come eseguibile.'
               : 'Chiedi a un amministratore del gruppo di pubblicare una catena come eseguibile.'}
           </p>
         </div>
@@ -149,7 +153,7 @@ function EseguibiliList() {
                   <p className="esl__card-desc">{item.description}</p>
                 )}
                 <div className="esl__card-meta">
-                  <span>📊 {item.expected_columns_count} colonne attese</span>
+                  <span>{item.project_type?.toUpperCase()} - v{item.active_version} - {item.inputs_count} input</span>
                 </div>
                 <div className="esl__card-actions">
                   {isSuperadmin && canEdit && (
@@ -157,6 +161,11 @@ function EseguibiliList() {
                       onClick={() => setSharingEseguibile(item)}
                       title="Gestisci condivisione cross-gruppo (solo superadmin)"
                     >🔗 Condividi</button>
+                  )}
+                  {isAdmin && canEdit && (
+                    <button type="button" className="esl__btn esl__btn--ghost"
+                      onClick={() => setVersioningEseguibile(item)}
+                    >Versioni</button>
                   )}
                   {isAdmin && canEdit && (
                     <button type="button" className="esl__btn esl__btn--ghost"
@@ -192,7 +201,7 @@ function EseguibiliList() {
             tabIndex={-1}
           >
             <div className="esl__selector-header">
-              <h2 id="esl-selector-title">Seleziona il progetto Arricchisci da pubblicare</h2>
+              <h2 id="esl-selector-title">Seleziona il progetto da pubblicare</h2>
               <button type="button" className="esl__selector-close" onClick={() => setShowSelector(false)} aria-label="Chiudi">×</button>
             </div>
             <div className="esl__selector-body">
@@ -206,16 +215,16 @@ function EseguibiliList() {
               />
               {loadingProjects ? (
                 <div className="esl__selector-loading">Caricamento progetti...</div>
-              ) : arricchisciProjects.length === 0 ? (
+              ) : projects.length === 0 ? (
                 <div className="esl__selector-empty">
-                  <p>Nessun progetto Arricchisci disponibile.</p>
+                  <p>Nessun progetto pubblicabile disponibile.</p>
                   <p className="esl__selector-hint">
-                    Crea prima un progetto Arricchisci dalla Dashboard, poi torna qui per pubblicarlo.
+                    Crea prima un progetto Estrai, Manipola o Arricchisci.
                   </p>
                 </div>
               ) : (
                 <div className="esl__selector-list">
-                  {arricchisciProjects
+                  {projects
                     .filter(p => !projectSearch || (p.name || '').toLowerCase().includes(projectSearch.toLowerCase()))
                     .map(p => (
                       <div key={p.id} className="esl__selector-item" onClick={() => {
@@ -274,6 +283,13 @@ function EseguibiliList() {
             setSelectedSourceProject(null);
             loadItems();
           }}
+        />
+      )}
+      {versioningEseguibile && (
+        <EseguibileVersionsModal
+          eseguibile={versioningEseguibile}
+          onClose={() => setVersioningEseguibile(null)}
+          onUpdated={() => loadItems()}
         />
       )}
       <ConfirmDialog {...confirmModal} />
