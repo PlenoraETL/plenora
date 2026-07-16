@@ -385,6 +385,18 @@ function createTransformNode(node) {
   };
 }
 
+function createProjectInputNode(node) {
+  return {
+    id: node.id,
+    type: 'project_input',
+    position: node.position,
+    data: {
+      ...nodeTopLevelData(node),
+      ...(node.data || {}),
+    },
+  };
+}
+
 /**
  * Crea un nodo Multi-Join da dati backend flat.
  *
@@ -524,6 +536,8 @@ export function deserializeNodes(rawNodes, options = {}) {
 
       case 'file_source':
         return createFileSourceNode(node);
+      case 'project_input':
+        return createProjectInputNode(node);
       case 'transform':
         return createTransformNode(node);
       case 'multi_join':

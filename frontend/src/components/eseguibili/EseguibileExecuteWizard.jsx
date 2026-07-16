@@ -20,6 +20,7 @@ import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
 import { toastApiError } from '../../utils/toastApiError';
 import { humanizeError } from '../../utils/errorMessages';
 import './EseguibileExecuteWizard.css';
+import ExecutableDynamicRunForm from './ExecutableDynamicRunForm';
 
 const OUTPUT_FORMATS = [
   { value: 'xlsx',    label: 'Excel (.xlsx)' },
@@ -206,6 +207,16 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
   const missingRequired = eseguibile?.expected_columns
     ?.filter(c => c.required && !mapping[c.name])
     ?.map(c => c.name) || [];
+
+  if (!loading && eseguibile?.manifest) {
+    return (
+      <ExecutableDynamicRunForm
+        eseguibile={eseguibile}
+        onClose={onClose}
+        onAfterDownload={onAfterDownload}
+      />
+    );
+  }
 
   return (
     <div className="esw-overlay" onClick={(e) => e.target === e.currentTarget && !executing && onClose()}>

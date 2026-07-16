@@ -120,6 +120,7 @@ export {
   deleteEseguibile,
   analyzeUpload as analyzeEseguibileUpload,
   executeEseguibile,
+  runEseguibile,
 } from './eseguibili';
 
 export {

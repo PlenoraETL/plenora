@@ -23,6 +23,7 @@ import { ConfirmProvider } from '../context/ConfirmContext';
 import { createTask } from '../api';
 import ProjectSourceNode from '../components/nodes/ProjectSourceNode';
 import FileSourceNode from '../components/nodes/FileSourceNode';
+import ProjectInputNode from '../components/nodes/ProjectInputNode';
 import TransformNode from '../components/transforms/TransformNode';
 import MultiJoinNode from '../components/transforms/MultiJoinNode';
 import ResultNode from '../components/nodes/ResultNode';
@@ -62,6 +63,7 @@ const MANIPOLA_SOURCE_TYPES = ['estrai', 'manipola', 'arricchisci'];
 
 const nodeTypes = {
   project_source: ProjectSourceNode, file_source: FileSourceNode,
+  project_input: ProjectInputNode,
   transform: TransformNode, multi_join: MultiJoinNode,
   result: ResultNode, staticValues: StaticValuesNode,
   carica: CaricanNode, carica_arcgis: CaricanArcGISNode, caricaArcgis: CaricanArcGISNode, comment: AnnotationNode,
@@ -425,6 +427,16 @@ const ManipolaEditorContent = () => {
       data: { label: 'Valori Statici', fields: [] } }));
   }, [setNodes]);
 
+  const handleAddProjectInputNode = useCallback(() => {
+    const ordinal = nodesRef.current.filter(node => node.type === 'project_input').length + 1;
+    setNodes(nds => nds.concat({
+      id: `project_input_${Date.now()}`,
+      type: 'project_input',
+      position: getPos(),
+      data: { input_key: `input_${ordinal}`, label: `Input ${ordinal}`, input_kind: 'file', required: true, expected_columns: [], validation: {}, bindings: [], order: ordinal - 1 },
+    }));
+  }, [setNodes, nodesRef]);
+
   const handleAddCommentNode = useCallback(() => {
     setNodes(nds => nds.concat({ id: `comment_${Date.now()}`, type: 'comment', position: getPos(), zIndex: -1,
       style: { width: 250, height: 150 },
@@ -546,6 +558,7 @@ const ManipolaEditorContent = () => {
           {!isReadOnly && (
             <>
               <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--static" onClick={handleAddStaticValuesNode} title="Aggiungi valori statici con variabili template">📝 Valori Statici</button>
+              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--static" onClick={handleAddProjectInputNode} title="Aggiungi un input valorizzato quando il progetto viene eseguito">⌨ Input</button>
               <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--versions" onClick={() => setShowVersions(true)} title="Versioni del canvas (snapshot / ripristino)">🕘 Versioni</button>
               <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--annotation" onClick={handleAddCommentNode} title="Aggiungi annotazione al canvas">💬 Nota</button>
               <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--transform" onClick={handleAddTransformNode}>+ Transform</button>

@@ -134,15 +134,16 @@ _JOIN_SKIP_TARGET_TYPES = frozenset({"result", "carica", "carica_arcgis", "datas
 
 
 # Sorgenti non supportate da ESTRAI (SQL-only): porting fedele del FE.
-_ESTRAI_UNSUPPORTED_SOURCE_TYPES = frozenset({"staticValues", "datasource_node"})
+_ESTRAI_UNSUPPORTED_SOURCE_TYPES = frozenset({"staticValues", "datasource_node", "project_input"})
 
 # Tipi-nodo sorgente (per ISOLATED); sottoinsieme con colonne dichiarate (NO_VISIBLE).
 _SOURCE_NODE_TYPES = frozenset({
     "source", "feature_source", "project_source", "file_source",
-    "staticValues", "datasource_node",
+    "staticValues", "datasource_node", "project_input",
 })
 _DECLARED_COLUMN_SOURCE_TYPES = frozenset({
     "source", "feature_source", "project_source", "file_source",
+    "project_input",
 })
 _GEO_OUTPUT_FORMATS = frozenset({"geojson", "gpkg", "shp"})
 
@@ -177,6 +178,8 @@ def _source_node_issues(nodes: list, edges: list) -> List[Issue]:
     for n in nodes:
         ntype = getattr(n, "type", None)
         if ntype not in _SOURCE_NODE_TYPES:
+            continue
+        if ntype == "project_input" and getattr(n, "input_kind", None) != "file":
             continue
         if n.id not in touched:
             out.append(Issue(
@@ -286,7 +289,16 @@ def _type_specific_issues(
         # flaggato (falso-positivo scoperto via E2E v2).
         _estrai_outgoing = {getattr(e, "source", None) for e in edges}
         for n in nodes:
-            if getattr(n, "type", None) in _ESTRAI_UNSUPPORTED_SOURCE_TYPES and n.id in _estrai_outgoing:
+            ntype = getattr(n, "type", None)
+            scalar_project_input = (
+                ntype == "project_input"
+                and getattr(n, "input_kind", None) != "file"
+            )
+            if (
+                ntype in _ESTRAI_UNSUPPORTED_SOURCE_TYPES
+                and not scalar_project_input
+                and n.id in _estrai_outgoing
+            ):
                 out.append(Issue(
                     node_id=str(n.id), severity="error", code="SOURCE_UNSUPPORTED",
                     message="ESTRAI supporta solo tabelle database e layer ArcGIS come sorgenti.",
@@ -301,7 +313,14 @@ def _type_specific_issues(
         # RICHIEDE (porting fedele FE: gli enricher-generatori producono dati senza
         # sorgente → non vanno bloccati). Senza questa guardia si bloccavano ~118
         # pipeline generator valide (scoperto via E2E v2).
-        has_sources = any(getattr(n, "type", None) in _SOURCE_NODE_TYPES for n in nodes)
+        has_sources = any(
+            getattr(n, "type", None) in _SOURCE_NODE_TYPES
+            and not (
+                getattr(n, "type", None) == "project_input"
+                and getattr(n, "input_kind", None) != "file"
+            )
+            for n in nodes
+        )
         if not has_sources and any(_arricchisci_node_needs_source(n) for n in enrich_nodes):
             out.append(Issue(node_id="", severity="error", code="ARRICCHISCI_NO_SOURCES",
                              message='Nessuna sorgente dati. Aggiungi un nodo "Progetto", "File" o "Valori Statici".',

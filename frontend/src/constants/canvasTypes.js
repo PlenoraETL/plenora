@@ -26,7 +26,7 @@
 export const NODE_TYPES = Object.freeze([
   'source', 'result', 'project_source', 'file_source', 'feature_source',
   'transform', 'api_enrich', 'staticValues', 'carica', 'carica_arcgis',
-  'multi_join', 'comment', 'datasource_node',
+  'multi_join', 'comment', 'datasource_node', 'project_input',
 ]);
 
 // 6 column types base. I sottotipi geometry (geometry:point, ecc.)

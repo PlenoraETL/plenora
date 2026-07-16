@@ -352,6 +352,7 @@ class FeaturesService:
         max_features: int = None,
         out_sr: int = None,
         geom_column: str = "geometry",
+        group_id: str = None,
     ) -> ArcGISQueryExecutionResult:
         """
         Query completa con salvataggio file.
@@ -414,6 +415,7 @@ class FeaturesService:
                 rows_count=len(rows),
                 geom_column=geom_column if return_geometry else None,
                 crs=layer_crs,
+                group_id=group_id,
             )
             saved_path_display = saved.output_filename
             timings["save"] = time.time() - t_save

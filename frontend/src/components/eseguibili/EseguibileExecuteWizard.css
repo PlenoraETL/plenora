@@ -514,3 +514,15 @@
   color: var(--esw-text-sub);
   font-size: 12px;
 }
+
+.esw-dynamic { display: grid; gap: 14px; max-height: 62vh; overflow-y: auto; }
+.esw-dynamic__input { display: grid; gap: 9px; padding: 14px; border: 1px solid var(--esw-border); border-radius: 10px; background: var(--esw-surface); }
+.esw-dynamic__input p { margin: 0; color: var(--esw-text-sub); font-size: 12px; }
+.esw-dynamic__input input, .esw-dynamic__input select, .esw-dynamic__output input, .esw-dynamic__output select { width: 100%; box-sizing: border-box; padding: 9px 10px; border: 1px solid var(--esw-border); border-radius: 7px; background: var(--esw-input-bg); color: var(--esw-text); }
+.esw-dynamic__label { display: flex; align-items: center; gap: 7px; }
+.esw-dynamic__label span { color: #ef4444; }
+.esw-dynamic__label code { margin-left: auto; color: var(--esw-text-sub); }
+.esw-dynamic__analysis { display: grid; gap: 7px; padding: 10px; border-radius: 8px; background: rgba(34, 197, 94, .08); }
+.esw-dynamic__analysis label { display: grid; grid-template-columns: 1fr 1.5fr; align-items: center; gap: 8px; }
+.esw-dynamic__output { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-top: 4px; }
+.esw-dynamic__output label { display: grid; gap: 5px; font-size: 12px; color: var(--esw-text-sub); }

@@ -219,6 +219,7 @@ class SchemaInferenceService:
             "file_source": self._infer_file_source_node_schema,
             "feature_source": self._infer_feature_source_node_schema,
             "project_source": self._infer_project_source_node_schema,
+            "project_input": self._infer_project_input_node_schema,
             "transform": self._infer_transform_node_schema,
             "api_enrich": self._infer_api_enrich_node_schema,
             "result": self._infer_result_node_schema,
@@ -251,6 +252,27 @@ class SchemaInferenceService:
         context: _NodeSchemaContext,
     ) -> List[ColumnSchema]:
         return self._infer_project_source_schema(context.node)
+
+    def _infer_project_input_node_schema(
+        self,
+        context: _NodeSchemaContext,
+    ) -> List[ColumnSchema]:
+        if getattr(context.node, "input_kind", None) != "file":
+            return []
+        columns = []
+        for col in getattr(context.node, "expected_columns", None) or []:
+            if not isinstance(col, dict) or not col.get("name"):
+                continue
+            columns.append(
+                ColumnSchema(
+                    name=str(col["name"]),
+                    type=str(col.get("type") or "str"),
+                    id=col.get("id") or _stable_column_id(context.node.id, str(col["name"])),
+                    source_name=str(col["name"]),
+                    source_node=context.node.id,
+                )
+            )
+        return columns
 
     def _infer_transform_node_schema(
         self,

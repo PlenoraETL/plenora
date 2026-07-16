@@ -128,7 +128,92 @@ def _normalize_execution_contract(
     retention_n = raw_contract.get("retention_n")
     if retention_n is not None:
         contract["retention_n"] = retention_n
+    execution_subject = raw_contract.get("execution_subject")
+    if isinstance(execution_subject, _Mapping):
+        contract["execution_subject"] = dict(execution_subject)
+    runtime_context = raw_contract.get("runtime_context")
+    if isinstance(runtime_context, _Mapping):
+        contract["runtime_context"] = dict(runtime_context)
     return contract
+
+
+def _executable_subject(contract: JsonObject | None) -> JsonObject | None:
+    if not contract:
+        return None
+    subject = contract.get("execution_subject")
+    if isinstance(subject, _Mapping) and subject.get("kind") == "eseguibile":
+        return dict(subject)
+    return None
+
+
+def _cleanup_executable_inputs(contract: JsonObject | None) -> None:
+    if _executable_subject(contract) is None:
+        return
+    context = contract.get("runtime_context") or {}
+    ids = context.get("cleanup_file_source_ids") if isinstance(context, _Mapping) else []
+    if not isinstance(ids, list):
+        return
+    from app.core.files.service import file_source_service
+
+    for file_source_id in ids:
+        try:
+            file_source_service.delete_file_source(str(file_source_id))
+        except Exception as exc:
+            logger.warning(
+                f"Cleanup input eseguibile {file_source_id} fallito: {exc}"
+            )
+
+
+def _persist_executable_output(
+    *,
+    contract: JsonObject,
+    result: Any,
+    task_id: str,
+    group_id: str,
+) -> JsonObject | None:
+    subject = _executable_subject(contract)
+    if subject is None:
+        return None
+    result_id = result.get("result_id")
+    if not result_id:
+        raise RuntimeError("Executor eseguibile completato senza result_id")
+
+    from app.core.eseguibili import storage as eseguibili_storage
+    from app.core.results.blob import open_result_stream
+
+    stream = open_result_stream(
+        str(result_id),
+        expected_project_id=str(subject.get("id") or ""),
+        expected_group_id=group_id,
+    )
+    if stream is None:
+        raise RuntimeError("Output eseguibile non leggibile dal result store")
+    body = stream["body"]
+
+    def chunks():
+        try:
+            while True:
+                chunk = body.read(8 * 1024 * 1024)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            close = getattr(body, "close", None)
+            if callable(close):
+                close()
+
+    filename = str(stream.get("filename") or f"{task_id}.bin")
+    key = eseguibili_storage.save_chunks(
+        task_id,
+        filename,
+        chunks(),
+        group_id=group_id,
+    )
+    return {
+        "result_id": str(result_id),
+        "filename": filename,
+        "storage_key": key,
+    }
 
 
 # Corpo task come funzione pura.
@@ -187,11 +272,25 @@ def execute_pipeline_task(
         run_id = str(_uuid.uuid4())
     _run_start = _time.time()
 
-    _revoked = async_user_recheck_module.recheck_user_authorized(
-        user_id=user_id, project_id=project_id,
-        task_id=task_id, run_id=run_id, task_name="PIPELINE",
+    contract = _normalize_execution_contract(
+        execution_contract,
+        expected_project_id=project_id,
     )
+    subject = _executable_subject(contract)
+    if subject is not None:
+        _revoked = async_user_recheck_module.recheck_eseguibile_authorized(
+            user_id=user_id,
+            eseguibile_id=str(subject.get("id") or project_id),
+            task_id=task_id,
+            run_id=run_id,
+        )
+    else:
+        _revoked = async_user_recheck_module.recheck_user_authorized(
+            user_id=user_id, project_id=project_id,
+            task_id=task_id, run_id=run_id, task_name="PIPELINE",
+        )
     if _revoked is not None:
+        _cleanup_executable_inputs(contract)
         _revoked.update({"run_id": run_id, "task_id": task_id})
         return _revoked
 
@@ -201,17 +300,13 @@ def execute_pipeline_task(
     )
     _update_progress(self, 0, "Inizializzazione pipeline...")
 
-    contract = _normalize_execution_contract(
-        execution_contract,
-        expected_project_id=project_id,
-    )
     project_info = (
         contract if contract is not None else _get_project_info(project_id)
     )
     group_id = project_info.get("group_id", "")
     module   = project_info.get("project_type", "")
     retention_n = project_info.get("retention_n")
-    if retention_n is None:
+    if retention_n is None and subject is None:
         retention_n = _resolve_intermediate_retention_n(project_id)
 
     open_run(
@@ -251,6 +346,7 @@ def execute_pipeline_task(
                 run_id=run_id,
                 user_id=user_id,
                 intermediate_mode_override=intermediate_mode_override,
+                execution_context=contract.get("runtime_context"),
             )
         else:
             result = orchestrator.execute_pipeline(
@@ -262,10 +358,23 @@ def execute_pipeline_task(
                 intermediate_mode_override=intermediate_mode_override,
             )
 
+        _cleanup_executable_inputs(contract)
+
         elapsed_ms = int((_time.time() - _run_start) * 1000)
 
         if not result.success:
             message = result.message or "Errore sconosciuto"
+            if subject is not None:
+                try:
+                    from app.core.eseguibili import db as eseguibili_db
+
+                    eseguibili_db.complete_eseguibile_run(
+                        str(subject.get("run_id") or ""),
+                        success=False,
+                        error_message=message,
+                    )
+                except Exception as run_exc:
+                    logger.warning(f"Update run eseguibile fallito: {run_exc}")
 
             # Errori di connessione DB: fail immediato
             if _is_retryable_connection_message(message):
@@ -349,6 +458,24 @@ def execute_pipeline_task(
             }
 
         rows_out = result.rows_count or 0
+        executable_output = None
+        if subject is not None and contract is not None:
+            executable_output = _persist_executable_output(
+                contract=contract,
+                result=result,
+                task_id=task_id,
+                group_id=str(group_id),
+            )
+            try:
+                from app.core.eseguibili import db as eseguibili_db
+
+                eseguibili_db.complete_eseguibile_run(
+                    str(subject.get("run_id") or ""),
+                    success=True,
+                    output_metadata=executable_output,
+                )
+            except Exception as run_exc:
+                logger.warning(f"Update run eseguibile fallito: {run_exc}")
         _update_progress(self, 100, "Pipeline completata")
         logger.info(
             f"Task PIPELINE {task_id} completato per {project_id}",
@@ -376,6 +503,16 @@ def execute_pipeline_task(
         output_path = result.output_path
         output_file = _Path(output_path).name if output_path else None
         extra = {"output_file": output_file} if output_file else {}
+        if executable_output is not None:
+            extra.update(
+                {
+                    "output_file": executable_output["filename"],
+                    "download_url": (
+                        f"/api/eseguibili/{project_id}/download/{task_id}"
+                    ),
+                    "is_eseguibile": True,
+                }
+            )
         return {
             "success": True,
             "project_id": project_id,
@@ -386,6 +523,18 @@ def execute_pipeline_task(
         }
 
     except Exception as e:
+        _cleanup_executable_inputs(contract)
+        if subject is not None:
+            try:
+                from app.core.eseguibili import db as eseguibili_db
+
+                eseguibili_db.complete_eseguibile_run(
+                    str(subject.get("run_id") or ""),
+                    success=False,
+                    error_message=str(e),
+                )
+            except Exception as run_exc:
+                logger.warning(f"Update run eseguibile fallito: {run_exc}")
         elapsed_ms = int((_time.time() - _run_start) * 1000)
         tb_str = _traceback.format_exc()
 

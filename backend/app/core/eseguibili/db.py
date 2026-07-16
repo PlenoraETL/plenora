@@ -7,6 +7,7 @@ CRUD per la tabella `eseguibili` (storage: PostgreSQL via
 from __future__ import annotations
 
 import json
+import hashlib
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -64,6 +65,10 @@ class EseguibileRow:
     default_output_name: str | None = None
     icon: str | None = None
     source_canvas_id: str | None = None
+    project_type: str = "arricchisci"
+    active_version_id: str | None = None
+    active_version: int = 1
+    manifest: JsonObject | None = None
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
@@ -86,6 +91,9 @@ class EseguibileSummaryRow:
     default_output_name: str | None = None
     icon: str | None = None
     source_canvas_id: str | None = None
+    project_type: str = "arricchisci"
+    active_version: int = 1
+    inputs_count: int = 1
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
@@ -93,6 +101,22 @@ class EseguibileSummaryRow:
     def get(self, key: str, default: Any = None) -> Any:
         return getattr(self, key, default)
 
+
+@dataclass(frozen=True)
+class EseguibileVersionRow:
+    id: str
+    eseguibile_id: str
+    version_number: int
+    schema_version: int
+    project_type: str
+    source_project_id: str | None
+    source_hash: str
+    canvas: JsonObject
+    manifest: JsonObject
+    status: str
+    created_by: str
+    created_at: str
+    source_canvas_version_id: str | None = None
 
 @dataclass(frozen=True)
 class EseguibileSourceRefRow:
@@ -177,11 +201,17 @@ def _parse_expected_columns(value: object) -> ExpectedColumns:
 
 
 def eseguibile_row_from_db(row: Mapping[str, object]) -> EseguibileRow:
+    active_manifest = _parse_json_object(
+        row.get("active_manifest"), field_name="active_manifest"
+    ) if row.get("active_manifest") is not None else None
     return EseguibileRow(
         id=_required_str(row, "id"),
         name=_required_str(row, "name"),
         description=_optional_str(row, "description") or "",
-        canvas=_parse_json_object(row.get("canvas"), field_name="canvas"),
+        canvas=_parse_json_object(
+            row.get("version_canvas") if row.get("version_canvas") is not None else row.get("canvas"),
+            field_name="canvas",
+        ),
         expected_columns=_parse_expected_columns(row.get("expected_columns")),
         default_output_format=_required_str(row, "default_output_format"),
         default_output_name=_optional_str(row, "default_output_name"),
@@ -191,6 +221,10 @@ def eseguibile_row_from_db(row: Mapping[str, object]) -> EseguibileRow:
         created_by=_required_str(row, "created_by"),
         created_at=_required_str(row, "created_at"),
         updated_at=_required_str(row, "updated_at"),
+        project_type=_optional_str(row, "project_type") or "arricchisci",
+        active_version_id=_optional_str(row, "active_version_id"),
+        active_version=int(row.get("active_version") or 1),
+        manifest=active_manifest,
     )
 
 
@@ -208,6 +242,33 @@ def eseguibile_summary_row_from_db(row: Mapping[str, object]) -> EseguibileSumma
         created_at=_required_str(row, "created_at"),
         updated_at=_required_str(row, "updated_at"),
         expected_columns_count=len(_parse_expected_columns(row.get("expected_columns"))),
+        project_type=_optional_str(row, "project_type") or "arricchisci",
+        active_version=int(row.get("active_version") or 1),
+        inputs_count=(
+            int(row["inputs_count"])
+            if row.get("inputs_count") is not None
+            else 1
+        ),
+    )
+
+
+def eseguibile_version_row_from_db(
+    row: Mapping[str, object],
+) -> EseguibileVersionRow:
+    return EseguibileVersionRow(
+        id=_required_str(row, "id"),
+        eseguibile_id=_required_str(row, "eseguibile_id"),
+        version_number=int(row.get("version_number") or 1),
+        schema_version=int(row.get("schema_version") or 1),
+        project_type=_required_str(row, "project_type"),
+        source_project_id=_optional_str(row, "source_project_id"),
+        source_canvas_version_id=_optional_str(row, "source_canvas_version_id"),
+        source_hash=_required_str(row, "source_hash"),
+        canvas=_parse_json_object(row.get("canvas"), field_name="canvas"),
+        manifest=_parse_json_object(row.get("manifest"), field_name="manifest"),
+        status=_required_str(row, "status"),
+        created_by=_required_str(row, "created_by"),
+        created_at=_required_str(row, "created_at"),
     )
 
 
@@ -231,6 +292,8 @@ def create_eseguibile(
     default_output_name: Optional[str] = None,
     source_canvas_id: Optional[str] = None,
     icon: Optional[str] = None,
+    project_type: str = "arricchisci",
+    manifest: Optional[JsonObject] = None,
 ) -> EseguibileRow:
     """Crea un nuovo eseguibile. Ritorna il record creato."""
     eid = f"exec_{uuid.uuid4().hex[:12]}"
@@ -240,16 +303,28 @@ def create_eseguibile(
         INSERT INTO eseguibili (
             id, name, description, canvas, expected_columns,
             default_output_format, default_output_name, icon, source_canvas_id,
-            group_id, created_by, created_at, updated_at
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            group_id, created_by, created_at, updated_at, project_type
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             eid, name, description,
             json.dumps(canvas, ensure_ascii=False),
             json.dumps(expected_columns, ensure_ascii=False),
             default_output_format, default_output_name, icon, source_canvas_id,
-            group_id, created_by, now, now,
+            group_id, created_by, now, now, project_type,
         )
+    )
+    version = create_eseguibile_version(
+        eseguibile_id=eid,
+        canvas=canvas,
+        manifest=manifest or {},
+        project_type=project_type,
+        source_project_id=source_canvas_id,
+        created_by=created_by,
+    )
+    _execute(
+        "UPDATE eseguibili SET active_version_id = %s WHERE id = %s",
+        (version.id, eid),
     )
     created = get_eseguibile(eid)
     if created is None:
@@ -265,11 +340,20 @@ def get_eseguibile(eid: str, group_id: str = None) -> Optional[EseguibileRow]:
     """
     if group_id:
         row = _fetchone(
-            "SELECT * FROM eseguibili WHERE id = %s AND group_id = %s",
+            "SELECT e.*, v.id AS version_id, v.version_number AS active_version, "
+            "v.manifest AS active_manifest, v.canvas AS version_canvas "
+            "FROM eseguibili e LEFT JOIN eseguibile_versions v "
+            "ON v.id = e.active_version_id WHERE e.id = %s AND e.group_id = %s",
             (eid, group_id)
         )
     else:
-        row = _fetchone("SELECT * FROM eseguibili WHERE id = %s", (eid,))
+        row = _fetchone(
+            "SELECT e.*, v.id AS version_id, v.version_number AS active_version, "
+            "v.manifest AS active_manifest, v.canvas AS version_canvas "
+            "FROM eseguibili e LEFT JOIN eseguibile_versions v "
+            "ON v.id = e.active_version_id WHERE e.id = %s",
+            (eid,),
+        )
     return eseguibile_row_from_db(row) if row else None
 
 
@@ -285,29 +369,32 @@ def list_eseguibili(
     Non carica canvas/expected_columns per la summary (prestazioni).
     Usa get_eseguibile per i dettagli completi.
     """
-    columns = """id, name, description, default_output_format, default_output_name,
-                 icon, source_canvas_id, group_id, created_by, created_at, updated_at,
-                 expected_columns"""
+    columns = """e.id, e.name, e.description, e.default_output_format,
+                 e.default_output_name, e.icon, e.source_canvas_id, e.group_id,
+                 e.created_by, e.created_at, e.updated_at, e.expected_columns,
+                 e.project_type, COALESCE(v.version_number, 1) AS active_version,
+                 COALESCE(jsonb_array_length(v.manifest->'inputs'), 1) AS inputs_count"""
+    join = " LEFT JOIN eseguibile_versions v ON v.id = e.active_version_id "
     if resource_ids is not None:
         if not resource_ids:
             return []
         ordered_ids = sorted(resource_ids)
         placeholders = ", ".join(["%s"] * len(ordered_ids))
         rows = _fetchall(
-            f"SELECT {columns} FROM eseguibili "
-            f"WHERE id IN ({placeholders}) ORDER BY created_at DESC "
+            f"SELECT {columns} FROM eseguibili e {join} "
+            f"WHERE e.id IN ({placeholders}) ORDER BY e.created_at DESC "
             "LIMIT %s OFFSET %s",
             tuple(ordered_ids) + (limit, offset),
         )
     elif group_id:
         rows = _fetchall(
-            f"SELECT {columns} FROM eseguibili WHERE group_id = %s "
-            "ORDER BY created_at DESC LIMIT %s OFFSET %s",
+            f"SELECT {columns} FROM eseguibili e {join} WHERE e.group_id = %s "
+            "ORDER BY e.created_at DESC LIMIT %s OFFSET %s",
             (group_id, limit, offset)
         )
     else:
         rows = _fetchall(
-            f"SELECT {columns} FROM eseguibili ORDER BY created_at DESC "
+            f"SELECT {columns} FROM eseguibili e {join} ORDER BY e.created_at DESC "
             "LIMIT %s OFFSET %s",
             (limit, offset),
         )
@@ -336,6 +423,143 @@ def mark_temp_file_source_ttl(file_source_id: str) -> None:
         WHERE id = %s
         """,
         (file_source_id,),
+    )
+
+
+def create_eseguibile_version(
+    *,
+    eseguibile_id: str,
+    canvas: JsonObject,
+    manifest: JsonObject,
+    project_type: str,
+    source_project_id: str | None,
+    created_by: str,
+) -> EseguibileVersionRow:
+    latest = _fetchone(
+        "SELECT COALESCE(MAX(version_number), 0) AS n "
+        "FROM eseguibile_versions WHERE eseguibile_id = %s",
+        (eseguibile_id,),
+    )
+    version_number = int((latest or {}).get("n") or 0) + 1
+    version_id = f"{eseguibile_id}_v{version_number}_{uuid.uuid4().hex[:6]}"
+    source_hash = hashlib.sha256(
+        json.dumps(canvas, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    now = _now()
+    _execute(
+        """
+        INSERT INTO eseguibile_versions (
+            id, eseguibile_id, version_number, schema_version, project_type,
+            source_project_id, source_hash, canvas, manifest, status,
+            created_by, created_at
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'published', %s, %s)
+        """,
+        (
+            version_id,
+            eseguibile_id,
+            version_number,
+            int(manifest.get("schema_version") or 2),
+            project_type,
+            source_project_id,
+            source_hash,
+            json.dumps(canvas, ensure_ascii=False),
+            json.dumps(manifest, ensure_ascii=False),
+            created_by,
+            now,
+        ),
+    )
+    row = _fetchone("SELECT * FROM eseguibile_versions WHERE id = %s", (version_id,))
+    if not row:
+        raise RuntimeError(f"Versione eseguibile '{version_id}' non trovata dopo insert")
+    return eseguibile_version_row_from_db(row)
+
+
+def get_eseguibile_version(
+    version_id: str,
+    *,
+    eseguibile_id: str | None = None,
+) -> EseguibileVersionRow | None:
+    if eseguibile_id:
+        row = _fetchone(
+            "SELECT * FROM eseguibile_versions WHERE id = %s AND eseguibile_id = %s",
+            (version_id, eseguibile_id),
+        )
+    else:
+        row = _fetchone("SELECT * FROM eseguibile_versions WHERE id = %s", (version_id,))
+    return eseguibile_version_row_from_db(row) if row else None
+
+
+def get_active_eseguibile_version(
+    eseguibile_id: str,
+) -> EseguibileVersionRow | None:
+    row = _fetchone(
+        "SELECT v.* FROM eseguibile_versions v JOIN eseguibili e "
+        "ON e.active_version_id = v.id WHERE e.id = %s",
+        (eseguibile_id,),
+    )
+    return eseguibile_version_row_from_db(row) if row else None
+
+
+def activate_eseguibile_version(eseguibile_id: str, version_id: str) -> None:
+    if get_eseguibile_version(version_id, eseguibile_id=eseguibile_id) is None:
+        raise ValueError("Versione eseguibile non trovata")
+    _execute(
+        "UPDATE eseguibili SET active_version_id = %s, updated_at = %s WHERE id = %s",
+        (version_id, _now(), eseguibile_id),
+    )
+
+
+def create_eseguibile_run(
+    *,
+    eseguibile_id: str,
+    version_id: str,
+    group_id: str,
+    user_id: str,
+    input_summary: JsonObject,
+) -> str:
+    run_id = f"erun_{uuid.uuid4().hex}"
+    _execute(
+        "INSERT INTO eseguibile_runs "
+        "(id, eseguibile_id, version_id, group_id, user_id, status, input_summary) "
+        "VALUES (%s, %s, %s, %s, %s, 'pending', %s)",
+        (
+            run_id,
+            eseguibile_id,
+            version_id,
+            group_id,
+            user_id,
+            json.dumps(input_summary, ensure_ascii=False),
+        ),
+    )
+    return run_id
+
+
+def bind_eseguibile_run_task(run_id: str, task_id: str) -> None:
+    _execute(
+        "UPDATE eseguibile_runs SET task_id = %s, status = 'running', "
+        "started_at = now() WHERE id = %s",
+        (task_id, run_id),
+    )
+
+
+def complete_eseguibile_run(
+    run_id: str,
+    *,
+    success: bool,
+    output_metadata: JsonObject | None = None,
+    error_message: str | None = None,
+) -> None:
+    _execute(
+        "UPDATE eseguibile_runs SET status = %s, output_metadata = %s, "
+        "error_message = %s, completed_at = now() WHERE id = %s",
+        (
+            "success" if success else "failure",
+            json.dumps(output_metadata, ensure_ascii=False)
+            if output_metadata is not None
+            else None,
+            error_message,
+            run_id,
+        ),
     )
 
 

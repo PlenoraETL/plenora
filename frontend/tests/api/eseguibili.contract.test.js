@@ -79,6 +79,43 @@ describe('eseguibili api contract', () => {
     expect(result).toEqual({ async: true, task_id: 't-1', project_id: 'p-1' });
   });
 
+  it('analyzeUpload scopes a file to its manifest input', async () => {
+    httpMock.post.mockResolvedValueOnce({ data: { file_id: 'f-2' } });
+    const { analyzeUpload } = await import('../../src/api/eseguibili');
+    const file = new File(['id\n1'], 'customers.csv', { type: 'text/csv' });
+
+    await analyzeUpload('eseg-77', file, 'customers_file');
+
+    expect(httpMock.post).toHaveBeenCalledWith(
+      '/eseguibili/eseg-77/analyze-upload',
+      expect.any(FormData),
+      { params: { input_key: 'customers_file' } },
+    );
+  });
+
+  it('runEseguibile posts the versioned multi-input contract', async () => {
+    httpMock.post.mockResolvedValueOnce({
+      data: { async: true, task_id: 't-2', run_id: 'run-1' },
+    });
+    const { runEseguibile } = await import('../../src/api/eseguibili');
+    const payload = {
+      version_id: 'v-2',
+      inputs: {
+        customers_file: { file_id: 'f-2', column_mapping: [] },
+        country_code: 'IT',
+      },
+      output_format: 'xlsx',
+    };
+
+    const result = await runEseguibile('eseg-77', payload);
+
+    expect(httpMock.post).toHaveBeenCalledWith(
+      '/eseguibili/eseg-77/runs',
+      payload,
+    );
+    expect(result.run_id).toBe('run-1');
+  });
+
   it('createEseguibile and deleteEseguibile call expected endpoints', async () => {
     httpMock.post.mockResolvedValueOnce({ data: { id: 'e-9' } });
     httpMock.delete.mockResolvedValueOnce({ data: { ok: true } });

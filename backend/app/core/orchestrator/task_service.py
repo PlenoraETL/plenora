@@ -80,6 +80,7 @@ class EnrichmentTaskPayload:
     is_eseguibile: bool = False
     user_id: Optional[str] = None
     intermediate_mode_override: Optional[str] = None
+    execution_context: Optional[JsonMapping] = None
 
 
 @dataclass(frozen=True)
@@ -133,18 +134,19 @@ def task_payload_to_celery_kwargs(
     """Adapt typed task payloads to the task keyword-argument API."""
 
     if isinstance(payload, EnrichmentTaskPayload):
-        return MappingProxyType(
-            {
-                "project_id": payload.project_id,
-                "canvas": payload.canvas,
-                "output_format": payload.output_format,
-                "force_recalculate": payload.force_recalculate,
-                "cleanup_file_source_ids": payload.cleanup_file_source_ids,
-                "is_eseguibile": payload.is_eseguibile,
-                "user_id": payload.user_id,
-                "intermediate_mode_override": payload.intermediate_mode_override,
-            }
-        )
+        kwargs = {
+            "project_id": payload.project_id,
+            "canvas": payload.canvas,
+            "output_format": payload.output_format,
+            "force_recalculate": payload.force_recalculate,
+            "cleanup_file_source_ids": payload.cleanup_file_source_ids,
+            "is_eseguibile": payload.is_eseguibile,
+            "user_id": payload.user_id,
+            "intermediate_mode_override": payload.intermediate_mode_override,
+        }
+        if payload.execution_context is not None:
+            kwargs["execution_context"] = payload.execution_context
+        return MappingProxyType(kwargs)
     if isinstance(payload, CaricaTaskPayload):
         return MappingProxyType(
             {
@@ -413,6 +415,7 @@ class TaskService:
         is_eseguibile: bool = False,
         user_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
+        execution_context: Optional[JsonMapping] = None,
     ) -> TaskInfo:
         """Crea e avvia un task di arricchimento."""
         return self.submit_task(
@@ -429,6 +432,7 @@ class TaskService:
                     is_eseguibile=is_eseguibile,
                     user_id=user_id,
                     intermediate_mode_override=intermediate_mode_override,
+                    execution_context=execution_context,
                 ),
                 queued_message="Task in coda...",
                 log_label="enrichment",

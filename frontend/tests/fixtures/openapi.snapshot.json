@@ -2738,7 +2738,7 @@
         "type": "object"
       },
       "EseguibileCreate": {
-        "description": "Payload per creare un nuovo eseguibile da un progetto arricchisci esistente.",
+        "description": "Payload per pubblicare un progetto come eseguibile.",
         "properties": {
           "default_output_format": {
             "default": "xlsx",
@@ -2798,6 +2798,22 @@
       "EseguibileDetails": {
         "description": "Dettaglio completo (usato dal wizard).",
         "properties": {
+          "active_version": {
+            "default": 1,
+            "title": "Active Version",
+            "type": "integer"
+          },
+          "active_version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Version Id"
+          },
           "can_edit": {
             "anyOf": [
               {
@@ -2881,6 +2897,16 @@
             ],
             "title": "Inferred Output Extension"
           },
+          "manifest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExecutableManifest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -2889,6 +2915,16 @@
             "default": false,
             "title": "Output Is File Based",
             "type": "boolean"
+          },
+          "project_type": {
+            "default": "arricchisci",
+            "enum": [
+              "estrai",
+              "manipola",
+              "arricchisci"
+            ],
+            "title": "Project Type",
+            "type": "string"
           },
           "source_canvas_id": {
             "anyOf": [
@@ -2922,6 +2958,11 @@
       "EseguibileSummary": {
         "description": "Scheda compatta per la lista.",
         "properties": {
+          "active_version": {
+            "default": 1,
+            "title": "Active Version",
+            "type": "integer"
+          },
           "can_edit": {
             "anyOf": [
               {
@@ -2981,8 +3022,23 @@
             "title": "Id",
             "type": "string"
           },
+          "inputs_count": {
+            "default": 1,
+            "title": "Inputs Count",
+            "type": "integer"
+          },
           "name": {
             "title": "Name",
+            "type": "string"
+          },
+          "project_type": {
+            "default": "arricchisci",
+            "enum": [
+              "estrai",
+              "manipola",
+              "arricchisci"
+            ],
+            "title": "Project Type",
             "type": "string"
           },
           "updated_at": {
@@ -3137,6 +3193,318 @@
           "deduplication_savings_percent"
         ],
         "title": "EstimateResponse",
+        "type": "object"
+      },
+      "ExecutableInputBinding": {
+        "additionalProperties": false,
+        "description": "Collega un input a una sorgente dati o a un campo configurabile.",
+        "properties": {
+          "input_key": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Input Key",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "data_source",
+              "node_field"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "target_field": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Field"
+          },
+          "target_node_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Target Node Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "input_key",
+          "target_node_id",
+          "mode"
+        ],
+        "title": "ExecutableInputBinding",
+        "type": "object"
+      },
+      "ExecutableInputDefinition": {
+        "additionalProperties": false,
+        "description": "Un input pubblico dichiarato da un nodo ``project_input``.",
+        "properties": {
+          "default_value": {
+            "title": "Default Value"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "expected_columns": {
+            "items": {
+              "$ref": "#/components/schemas/ExpectedColumn"
+            },
+            "title": "Expected Columns",
+            "type": "array"
+          },
+          "key": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "file",
+              "text",
+              "integer",
+              "number",
+              "boolean",
+              "date",
+              "datetime",
+              "select"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "multiple": {
+            "default": false,
+            "title": "Multiple",
+            "type": "boolean"
+          },
+          "order": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Order",
+            "type": "integer"
+          },
+          "required": {
+            "default": true,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "validation": {
+            "$ref": "#/components/schemas/ExecutableInputValidation"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "kind"
+        ],
+        "title": "ExecutableInputDefinition",
+        "type": "object"
+      },
+      "ExecutableInputValidation": {
+        "additionalProperties": false,
+        "description": "Vincoli portabili tra form frontend e validazione backend.",
+        "properties": {
+          "accepted_extensions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Accepted Extensions",
+            "type": "array"
+          },
+          "max_length": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Length"
+          },
+          "max_size_bytes": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Size Bytes"
+          },
+          "maximum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maximum"
+          },
+          "min_length": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Length"
+          },
+          "minimum": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "pattern": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pattern"
+          }
+        },
+        "title": "ExecutableInputValidation",
+        "type": "object"
+      },
+      "ExecutableManifest": {
+        "additionalProperties": false,
+        "description": "Contratto immutabile prodotto dalla pubblicazione del canvas.",
+        "properties": {
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/ExecutableInputBinding"
+            },
+            "title": "Bindings",
+            "type": "array"
+          },
+          "default_connection_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Connection Id"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/ExecutableInputDefinition"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "project_type": {
+            "enum": [
+              "estrai",
+              "manipola",
+              "arricchisci"
+            ],
+            "title": "Project Type",
+            "type": "string"
+          },
+          "schema_version": {
+            "default": 2,
+            "minimum": 1.0,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "source_project_id": {
+            "title": "Source Project Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_type",
+          "source_project_id"
+        ],
+        "title": "ExecutableManifest",
+        "type": "object"
+      },
+      "ExecutableRunRequest": {
+        "additionalProperties": false,
+        "description": "Payload v2: valori indicizzati dalla chiave stabile del manifest.",
+        "properties": {
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "output_format": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Format"
+          },
+          "output_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Name"
+          },
+          "version_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id"
+          }
+        },
+        "title": "ExecutableRunRequest",
         "type": "object"
       },
       "ExecuteRequest": {
@@ -4110,7 +4478,7 @@
       },
       "Node": {
         "additionalProperties": true,
-        "description": "Nodo nel canvas visuale del progetto.\n\nTipologie supportate:\n    - source: tabella database (progetti ESTRAI)\n    - feature_source: layer ArcGIS Feature Service (progetti ESTRAI)\n    - result: nodo di output con formato e opzioni export\n    - project_source: riferimento a un altro progetto (MANIPOLA/ARRICCHISCI)\n    - file_source: file esterno caricato (MANIPOLA)\n    - transform: operazione di trasformazione (MANIPOLA)\n    - api_enrich: arricchimento via API esterna (ARRICCHISCI)\n    - staticValues: valori statici con supporto variabili template\n    - comment: annotazione/nota visuale nel canvas (non influenza il flusso dati)",
+        "description": "Nodo nel canvas visuale del progetto.\n\nTipologie supportate:\n    - source: tabella database (progetti ESTRAI)\n    - feature_source: layer ArcGIS Feature Service (progetti ESTRAI)\n    - result: nodo di output con formato e opzioni export\n    - project_source: riferimento a un altro progetto (MANIPOLA/ARRICCHISCI)\n    - file_source: file esterno caricato (MANIPOLA)\n    - transform: operazione di trasformazione (MANIPOLA)\n    - api_enrich: arricchimento via API esterna (ARRICCHISCI)\n    - staticValues: valori statici con supporto variabili template\n    - project_input: input file/scalare valorizzato a runtime da un eseguibile\n    - comment: annotazione/nota visuale nel canvas (non influenza il flusso dati)",
         "properties": {
           "aggregations": {
             "anyOf": [
@@ -4311,6 +4679,22 @@
             "default": 1000,
             "title": "Batch Size"
           },
+          "bindings": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": [],
+            "title": "Bindings"
+          },
           "calculated_columns": {
             "anyOf": [
               {
@@ -4507,6 +4891,15 @@
             ],
             "title": "Datasource Name"
           },
+          "default_value": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Value"
+          },
           "dest_filename": {
             "anyOf": [
               {
@@ -4628,6 +5021,22 @@
               }
             ],
             "title": "Execute If"
+          },
+          "expected_columns": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": [],
+            "title": "Expected Columns"
           },
           "extra_files": {
             "anyOf": [
@@ -4887,6 +5296,38 @@
             "default": "error",
             "title": "If Table Exists"
           },
+          "input_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Key"
+          },
+          "input_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "file",
+                  "text",
+                  "integer",
+                  "number",
+                  "boolean",
+                  "date",
+                  "datetime",
+                  "select"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Kind"
+          },
           "join_key_ids": {
             "anyOf": [
               {
@@ -5094,6 +5535,30 @@
             "default": "inner",
             "title": "Multi Join Type"
           },
+          "multiple": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "title": "Multiple"
+          },
+          "order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 0,
+            "title": "Order"
+          },
           "order_by_columns": {
             "anyOf": [
               {
@@ -5221,6 +5686,18 @@
               }
             ],
             "title": "Request"
+          },
+          "required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": true,
+            "title": "Required"
           },
           "response": {
             "anyOf": [
@@ -5599,7 +6076,8 @@
               "carica_arcgis",
               "multi_join",
               "comment",
-              "datasource_node"
+              "datasource_node",
+              "project_input"
             ],
             "title": "Type",
             "type": "string"
@@ -5629,6 +6107,19 @@
             ],
             "default": [],
             "title": "Update Columns"
+          },
+          "validation": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": {},
+            "title": "Validation"
           },
           "where": {
             "anyOf": [
@@ -11231,7 +11722,7 @@
         ]
       },
       "post": {
-        "description": "Crea un eseguibile clonando il canvas di un progetto arricchisci esistente.\n\nSolo gli admin del gruppo possono pubblicare. Il progetto sorgente deve appartenere\nallo stesso gruppo dell'admin (o qualsiasi gruppo se superadmin).",
+        "description": "Pubblica un progetto Estrai, Manipola o Arricchisci come eseguibile.\n\nSolo gli admin del gruppo possono pubblicare. Il progetto sorgente deve appartenere\nallo stesso gruppo dell'admin (o qualsiasi gruppo se superadmin).",
         "operationId": "create_eseguibile_api_eseguibili_post",
         "requestBody": {
           "content": {
@@ -11430,6 +11921,23 @@
               "title": "Eseguibile Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "input_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 80,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Input Key"
+            }
           }
         ],
         "requestBody": {
@@ -11581,6 +12089,62 @@
           }
         ],
         "summary": "Execute Eseguibile",
+        "tags": [
+          "eseguibili"
+        ]
+      }
+    },
+    "/api/eseguibili/{eseguibile_id}/runs": {
+      "post": {
+        "description": "Avvia una versione con un insieme arbitrario di input tipizzati.",
+        "operationId": "create_eseguibile_run_api_eseguibili__eseguibile_id__runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "eseguibile_id",
+            "required": true,
+            "schema": {
+              "title": "Eseguibile Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecutableRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Eseguibile Run",
         "tags": [
           "eseguibili"
         ]

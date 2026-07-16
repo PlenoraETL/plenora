@@ -7,6 +7,7 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 import time as _time
 import re
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Dict, Any, List, Mapping, MutableMapping, Optional, Protocol, Sequence, Tuple
 
 from app.core.projects.canvas_models import CanvasState
@@ -85,6 +86,7 @@ class ArcGISFeatureReaderProtocol(Protocol):
         max_features: Optional[int] = None,
         out_sr: Optional[int] = None,
         geom_column: str = "geometry",
+        group_id: Optional[str] = None,
     ) -> MutableMapping[str, object]:
         ...
 
@@ -296,6 +298,7 @@ class EstraiExecutor:
     def execute(
         self, project_id: str, canvas: CanvasState, run_id: str = None,
         intermediate_mode_override: Optional[str] = None,
+        execution_context: Optional[Mapping[str, Any]] = None,
     ) -> JsonObject:
         """
         Esegue la query del progetto e salva il file di output.
@@ -329,7 +332,14 @@ class EstraiExecutor:
         if not result_node:
             return _failure_step("Nodo risultato non trovato")
 
-        metadata = self.project_service.get_project_metadata(project_id)
+        metadata = (
+            SimpleNamespace(
+                default_connection_id=execution_context.get("default_connection_id"),
+                group_id=execution_context.get("group_id"),
+            )
+            if execution_context is not None
+            else self.project_service.get_project_metadata(project_id)
+        )
         if not metadata or not metadata.default_connection_id:
             return _failure_step("Il progetto non ha una connessione associata")
 
@@ -352,11 +362,18 @@ class EstraiExecutor:
             return _failure_step(str(e))
 
         if conn_type == 'arcgis':
-            res = self._execute_feature_service(project_id, canvas, result_node, connection)
+            res = self._execute_feature_service(
+                project_id,
+                canvas,
+                result_node,
+                connection,
+                execution_context=execution_context,
+            )
         else:
             res = self._execute_database(
                 project_id, canvas, result_node, connection, metadata, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
+                update_contract=execution_context is None,
             )
 
         duration_ms = int((_time.time() - _step_start) * 1000)
@@ -375,6 +392,7 @@ class EstraiExecutor:
         self, project_id: str, canvas: CanvasState, result_node, connection,
         metadata=None, run_id: str = None,
         intermediate_mode_override: Optional[str] = None,
+        update_contract: bool = True,
     ) -> JsonObject:
         """Percorso esecuzione SQL classico."""
         try:
@@ -411,7 +429,7 @@ class EstraiExecutor:
             intermediate_mode_override=intermediate_mode_override,
         )
 
-        if res.get("success"):
+        if res.get("success") and update_contract:
             # L'aggiornamento del contratto output e' best-effort: una failure
             # DB post-blob-save viene loggata e marcata nel risultato, senza
             # trasformare la run in stato ambiguo.
@@ -441,6 +459,7 @@ class EstraiExecutor:
         canvas: CanvasState,
         result_node,
         connection,
+        execution_context: Optional[Mapping[str, Any]] = None,
     ) -> JsonObject:
         """
         Percorso esecuzione ArcGIS Feature Service.
@@ -483,9 +502,10 @@ class EstraiExecutor:
                 return_geometry=return_geometry,
                 max_features=max_features,
                 geom_column=geom_column,
+                group_id=(execution_context or {}).get("group_id"),
             )
 
-            if res.get("success"):
+            if res.get("success") and execution_context is None:
                 # L'aggiornamento del contratto output e' best-effort anche
                 # per ArcGIS: errori transienti vengono loggati e marcati,
                 # senza ribaltare una persistenza blob gia' riuscita.

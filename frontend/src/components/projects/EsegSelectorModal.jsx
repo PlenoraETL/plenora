@@ -11,6 +11,7 @@ import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
  */
 function EsegSelectorModal({
   isOpen,
+  projects,
   arricchisciProjects = [],
   onClose,
   onSelect,
@@ -23,11 +24,13 @@ function EsegSelectorModal({
 
   if (!isOpen) return null;
 
+  const availableProjects = projects || arricchisciProjects;
+
   const filtered = search
-    ? arricchisciProjects.filter(p =>
+    ? availableProjects.filter(p =>
         (p.name || '').toLowerCase().includes(search.toLowerCase()),
       )
-    : arricchisciProjects;
+    : availableProjects;
 
   return (
     <ModalWrapper
@@ -35,7 +38,7 @@ function EsegSelectorModal({
       onClose={onClose}
       title="Pubblica come Eseguibile"
       icon="📢"
-      subtitle="Seleziona un progetto Arricchisci da pubblicare come catena on-demand"
+      subtitle="Seleziona un progetto Estrai, Manipola o Arricchisci"
       size="md"
       footer={
         <ModalButton variant="secondary" onClick={onClose}>Annulla</ModalButton>
@@ -45,7 +48,7 @@ function EsegSelectorModal({
         <input
           type="text"
           className="pl__modal-input"
-          placeholder="Cerca progetto Arricchisci..."
+          placeholder="Cerca progetto..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           autoFocus
@@ -53,10 +56,9 @@ function EsegSelectorModal({
       </div>
 
       <div className="pl__modal-list">
-        {arricchisciProjects.length === 0 ? (
+        {availableProjects.length === 0 ? (
           <div className="pl__modal-empty">
-            Nessun progetto Arricchisci disponibile.<br />
-            <span className="pl__modal-empty-hint">Crea prima un progetto Arricchisci.</span>
+            Nessun progetto disponibile.
           </div>
         ) : (
           filtered.map(p => (
@@ -68,6 +70,7 @@ function EsegSelectorModal({
               <span className="pl__modal-row-icon">◈</span>
               <div className="pl__modal-row-body">
                 <div className="pl__modal-row-name">{p.name}</div>
+                <div className="pl__modal-row-desc">{String(p.project_type || '').toUpperCase()}</div>
                 {p.description && (
                   <div className="pl__modal-row-desc">{p.description}</div>
                 )}

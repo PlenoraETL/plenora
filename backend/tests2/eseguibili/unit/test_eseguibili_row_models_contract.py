@@ -146,6 +146,9 @@ def test_router_serializes_summary_row_at_api_edge(monkeypatch) -> None:
         "created_at": "2026-05-08T08:00:00+00:00",
         "updated_at": "2026-05-08T08:00:00+00:00",
         "expected_columns_count": 2,
+        "project_type": "arricchisci",
+        "active_version": 1,
+        "inputs_count": 1,
         "can_edit": False,
     }
 

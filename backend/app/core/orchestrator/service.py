@@ -50,6 +50,7 @@ class EstraiExecutorProtocol(CanvasExecutorProtocol, Protocol):
         canvas: CanvasState,
         run_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
+        execution_context: Optional[Mapping[str, Any]] = None,
     ) -> ExecutionResult | JsonObject:
         ...
 
@@ -62,6 +63,7 @@ class TransformExecutorProtocol(CanvasExecutorProtocol, Protocol):
         force_recalculate: bool = False,
         run_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
+        execution_context: Optional[Mapping[str, Any]] = None,
     ) -> ExecutionResult | JsonObject:
         ...
 
@@ -160,6 +162,7 @@ class OrchestratorService:
         run_id: str = None,
         user_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
+        execution_context: Optional[Mapping[str, Any]] = None,
     ) -> PipelineArtifact:
         """Execute a data-plane contract supplied by the control plane.
 
@@ -183,6 +186,7 @@ class OrchestratorService:
             run_id=run_id,
             user_id=user_id,
             intermediate_mode_override=intermediate_mode_override,
+            execution_context=execution_context,
         )
 
     def execute_pipeline(self, project_id: str, force_recalculate: bool = False, skip_carica: bool = False, run_id: str = None, user_id: Optional[str] = None, intermediate_mode_override: Optional[str] = None) -> PipelineArtifact:
@@ -238,6 +242,7 @@ class OrchestratorService:
         run_id: str = None,
         user_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
+        execution_context: Optional[Mapping[str, Any]] = None,
     ) -> PipelineArtifact:
         if project_type not in self._executor_dispatch:
             return PipelineArtifact.failure(
@@ -249,16 +254,19 @@ class OrchestratorService:
             executor_result = self.estrai_executor.execute(
                 project_id, canvas, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
+                execution_context=execution_context,
             )
         elif project_type == "manipola":
             executor_result = self.manipola_executor.execute(
                 project_id, canvas, force_recalculate, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
+                execution_context=execution_context,
             )
         else:  # "arricchisci" — already validated by dispatch guard above
             executor_result = self.enrich_executor.execute(
                 project_id, canvas, force_recalculate, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
+                execution_context=execution_context,
             )
 
         exec_result = ExecutionResult.from_executor_dict(executor_result)

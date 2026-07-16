@@ -542,6 +542,7 @@ function ProjectList() {
       <EsegSelectorModal
         isOpen={showEsegSelector}
         arricchisciProjects={arricchisciProjects}
+        projects={projects}
         onClose={() => setShowEsegSelector(false)}
         onSelect={(p) => {
           setShowEsegSelector(false);

@@ -237,6 +237,8 @@ CREATE TABLE IF NOT EXISTS eseguibili (
     default_output_name   TEXT,
     icon                  TEXT,                       -- emoji/carattere visualizzato sulla card (fallback: ▶)
     source_canvas_id      TEXT,                       -- tracking progetto originale (nullable)
+    project_type         TEXT NOT NULL DEFAULT 'arricchisci',
+    active_version_id    TEXT,
     group_id              TEXT NOT NULL REFERENCES groups(id),
     created_by            TEXT NOT NULL REFERENCES users(id),
     created_at            TEXT NOT NULL,
@@ -244,6 +246,41 @@ CREATE TABLE IF NOT EXISTS eseguibili (
 );
 
 CREATE INDEX IF NOT EXISTS idx_eseguibili_group ON eseguibili(group_id);
+
+-- Le definizioni pubblicate sono immutabili: `eseguibili` mantiene
+-- l'identità, questa tabella conserva le revisioni eseguibili.
+CREATE TABLE IF NOT EXISTS eseguibile_versions (
+    id                    TEXT PRIMARY KEY,
+    eseguibile_id         TEXT NOT NULL REFERENCES eseguibili(id) ON DELETE CASCADE,
+    version_number        INTEGER NOT NULL,
+    schema_version        INTEGER NOT NULL DEFAULT 2,
+    project_type          TEXT NOT NULL,
+    source_project_id     TEXT,
+    source_canvas_version_id TEXT,
+    source_hash           TEXT NOT NULL,
+    canvas                TEXT NOT NULL,
+    manifest              TEXT NOT NULL,
+    status                TEXT NOT NULL DEFAULT 'published',
+    created_by            TEXT NOT NULL REFERENCES users(id),
+    created_at            TEXT NOT NULL,
+    UNIQUE (eseguibile_id, version_number)
+);
+
+CREATE TABLE IF NOT EXISTS eseguibile_runs (
+    id                    TEXT PRIMARY KEY,
+    eseguibile_id         TEXT NOT NULL REFERENCES eseguibili(id) ON DELETE CASCADE,
+    version_id            TEXT NOT NULL REFERENCES eseguibile_versions(id),
+    task_id               TEXT,
+    group_id              TEXT NOT NULL REFERENCES groups(id),
+    user_id               TEXT NOT NULL REFERENCES users(id),
+    status                TEXT NOT NULL DEFAULT 'pending',
+    input_summary         TEXT NOT NULL DEFAULT '{}',
+    output_metadata       TEXT,
+    error_message         TEXT,
+    created_at            TEXT NOT NULL,
+    started_at            TEXT,
+    completed_at          TEXT
+);
 
 -- ============================================================
 -- ALLOWED_GROUPS — tabelle di join per cross-group sharing.

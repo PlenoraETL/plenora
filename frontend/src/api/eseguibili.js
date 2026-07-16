@@ -58,7 +58,7 @@ export const deleteEseguibile = async (id) => {
  * @param {File} file
  * @returns {Promise<{file_id, detected_columns, row_count, auto_mapping, preview_rows}>}
  */
-export const analyzeUpload = async (eseguibileId, file) => {
+export const analyzeUpload = async (eseguibileId, file, inputKey = null) => {
   assertFileSize(file);
 
   const fd = new FormData();
@@ -67,7 +67,9 @@ export const analyzeUpload = async (eseguibileId, file) => {
   // a partire da FormData. Forzare manualmente "multipart/form-data" senza
   // boundary fa rifiutare il body al backend (Starlette/python-multipart).
   try {
-    const r = await http.post(`/eseguibili/${eseguibileId}/analyze-upload`, fd);
+    const r = await http.post(`/eseguibili/${eseguibileId}/analyze-upload`, fd, {
+      params: inputKey ? { input_key: inputKey } : undefined,
+    });
     return r.data;
   } catch (err) {
     throwIfUploadTooLarge(err);
@@ -87,5 +89,11 @@ export const analyzeUpload = async (eseguibileId, file) => {
  */
 export const executeEseguibile = async (eseguibileId, payload) => {
   const r = await http.post(`/eseguibili/${eseguibileId}/execute`, payload);
+  return r.data;
+};
+
+/** Avvia il contratto multi-input/versionato. */
+export const runEseguibile = async (eseguibileId, payload) => {
+  const r = await http.post(`/eseguibili/${eseguibileId}/runs`, payload);
   return r.data;
 };

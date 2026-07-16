@@ -30,6 +30,7 @@ import { deserializeNodes } from '../utils/nodeFactories';
 import EditorSidebar from '../components/panels/EditorSidebar';
 import ProjectSourceNode from '../components/nodes/ProjectSourceNode';
 import FileSourceNode from '../components/nodes/FileSourceNode';
+import ProjectInputNode from '../components/nodes/ProjectInputNode';
 import ApiEnrichNode from '../components/panels/ApiEnrichNode';
 import ResultNode from '../components/nodes/ResultNode';
 import CaricanNode from '../components/nodes/CaricanNode';
@@ -86,6 +87,7 @@ const FIT_VIEW_OPTIONS = { padding: 0.2, maxZoom: 0.8 };
 
 const nodeTypes = {
   project_source: ProjectSourceNode, file_source: FileSourceNode,
+  project_input: ProjectInputNode,
   api_enrich: ApiEnrichNode, result: ResultNode,
   staticValues: StaticValuesNode, carica: CaricanNode, carica_arcgis: CaricanArcGISNode, caricaArcgis: CaricanArcGISNode,
 };
@@ -412,6 +414,13 @@ const ArricchisciEditorContent = () => {
       data: { label: 'Valori Statici', fields: [] } }));
   }, [setNodes]);
 
+  const handleAddProjectInputNode = useCallback(() => {
+    const ordinal = nodesRef.current.filter(node => node.type === 'project_input').length + 1;
+    setNodes(nds => nds.concat({ id: `project_input_${Date.now()}`, type: 'project_input',
+      position: { x: 100, y: 100 + ordinal * 80 },
+      data: { input_key: `input_${ordinal}`, label: `Input ${ordinal}`, input_kind: 'file', required: true, expected_columns: [], validation: {}, bindings: [], order: ordinal - 1 } }));
+  }, [setNodes, nodesRef]);
+
   const handleAddResultNode = useCallback(() => {
     if (nodesRef.current.some(n => n.type === 'result')) { toast.warning('Puoi avere solo un nodo risultato per progetto'); return; }
     setNodes(nds => nds.concat({ id: `result_${Date.now()}`, type: 'result',
@@ -526,6 +535,7 @@ const ArricchisciEditorContent = () => {
               </div>
               <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--versions" onClick={() => setShowVersions(true)} title="Versioni del canvas (snapshot / ripristino)">🕘 Versioni</button>
               <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--static" onClick={handleAddStaticValuesNode} title="Aggiungi valori statici con variabili template">📝 Valori Statici</button>
+              <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--static" onClick={handleAddProjectInputNode} title="Aggiungi un input valorizzato quando il progetto viene eseguito">⌨ Input</button>
               <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--output" onClick={handleAddResultNode}>📁 Output</button>
               <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--carica" onClick={handleAddCaricanNode} disabled={!hasResultNode || hasCaricanNode} title="Aggiungi nodo per caricare su database">💾 Carica DB</button>
               <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--carica" onClick={handleAddCaricanArcGISNode} disabled={!hasResultNode || hasCaricanArcGISNode} title="Aggiungi nodo Carica ArcGIS" style={{ borderColor: 'rgba(45,212,191,0.4)', color: '#2DD4BF' }}>🌐 Carica ArcGIS</button>

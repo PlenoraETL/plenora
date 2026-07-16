@@ -23,6 +23,7 @@ const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'))
 const CaricaricaModal = lazy(() => import('../components/modals/CaricaricaModal'));
 const CanvasVersionsModal = lazy(() => import('../components/modals/CanvasVersionsModal'));
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
+import ProjectInputNode from '../components/nodes/ProjectInputNode';
 import AnnotationNode from '../components/nodes/AnnotationNode';
 import { ConfirmProvider } from '../context/ConfirmContext';
 import DataSourceNode from '../components/nodes/DataSourceNode';
@@ -49,6 +50,7 @@ import { useHexCanvas } from '../utils/hexCanvas';
 
 const nodeTypes = {
   tableNode: TableNode, resultNode: ResultNode, staticValues: StaticValuesNode,
+  project_input: ProjectInputNode,
   carica: CaricanNode, carica_arcgis: CaricanArcGISNode, caricaArcgis: CaricanArcGISNode,
   featureLayerNode: FeatureLayerNode, comment: AnnotationNode,
   datasourceNode: DataSourceNode
@@ -277,6 +279,16 @@ function EstraiEditor() {
 
   // Static values non sono una sorgente SQL ESTRAI.
 
+  const handleAddProjectInputNode = useCallback(() => {
+    const ordinal = nodesRef.current.filter(node => node.type === 'project_input').length + 1;
+    setNodes(nds => nds.concat({
+      id: `project_input_${Date.now()}`,
+      type: 'project_input',
+      position: getViewportCenter(reactFlowInstance),
+      data: { input_key: `input_${ordinal}`, label: `Input ${ordinal}`, input_kind: 'text', required: true, expected_columns: [], validation: {}, bindings: [], order: ordinal - 1 },
+    }));
+  }, [setNodes, nodesRef, getViewportCenter, reactFlowInstance]);
+
   const handleAddCommentNode = useCallback(() => {
     const pos = getViewportCenter(reactFlowInstance);
     setNodes(nds => nds.concat({ id: `comment_${Date.now()}`, type: 'comment', position: pos, zIndex: -1,
@@ -418,6 +430,7 @@ function EstraiEditor() {
                 💬 Nota
               </button>
               {/* Valori Statici non sono sorgenti SQL ESTRAI. */}
+              <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--annotation" onClick={handleAddProjectInputNode} title="Aggiungi un parametro runtime per filtri e condizioni">⌨ Input</button>
               <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--output"
                 onClick={handleAddResultNode} disabled={hasResultNode}>
                 📁 Output

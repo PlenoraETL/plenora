@@ -106,6 +106,7 @@ class Node(BaseModel):
         - transform: operazione di trasformazione (MANIPOLA)
         - api_enrich: arricchimento via API esterna (ARRICCHISCI)
         - staticValues: valori statici con supporto variabili template
+        - project_input: input file/scalare valorizzato a runtime da un eseguibile
         - comment: annotazione/nota visuale nel canvas (non influenza il flusso dati)
     """
 
@@ -165,6 +166,21 @@ class Node(BaseModel):
     source_freshness: Optional[dict] = None
 
     file_source_id: Optional[str] = None
+
+    # Input pubblico di progetto. Questi campi sono inerti durante la normale
+    # esecuzione del progetto e vengono compilati dal publisher eseguibili.
+    input_key: Optional[str] = None
+    input_kind: Optional[Literal[
+        "file", "text", "integer", "number", "boolean", "date",
+        "datetime", "select"
+    ]] = None
+    required: Optional[bool] = True
+    default_value: Optional[Any] = None
+    multiple: Optional[bool] = False
+    expected_columns: Optional[List[dict]] = []
+    validation: Optional[dict] = {}
+    bindings: Optional[List[dict]] = []
+    order: Optional[int] = 0
 
     label: Optional[str] = None
     fields: Optional[List[dict]] = []

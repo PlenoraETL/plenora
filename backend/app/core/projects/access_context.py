@@ -36,6 +36,7 @@ class ProjectPublishContext:
     group_id: Optional[str]
     project_type: str
     canvas: object
+    default_connection_id: Optional[str] = None
 
 
 def load_project_access_context(project_id: str) -> Optional[ProjectAccessContext]:
@@ -76,6 +77,7 @@ def load_project_publish_context(project_id: str) -> Optional[ProjectPublishCont
         group_id=row.group_id,
         project_type=row.project_type,
         canvas=row.canvas,
+        default_connection_id=row.connection_id,
     )
 
 

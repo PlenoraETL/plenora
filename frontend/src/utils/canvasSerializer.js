@@ -57,6 +57,21 @@ const serializers = {
     columns:        nd(node, 'columns', []),
   }),
 
+  project_input: (node) => ({
+    id: node.id, type: 'project_input', position: node.position,
+    input_key:       nd(node, 'input_key', ''),
+    label:           nd(node, 'label', 'Input'),
+    input_kind:      nd(node, 'input_kind', 'file'),
+    description:     nd(node, 'description', ''),
+    required:        nd(node, 'required', true),
+    default_value:   nd(node, 'default_value', null),
+    multiple:        nd(node, 'multiple', false),
+    expected_columns: nd(node, 'expected_columns', []),
+    validation:      nd(node, 'validation', {}),
+    bindings:        nd(node, 'bindings', []),
+    order:           nd(node, 'order', 0),
+  }),
+
   datasourceNode: (node) => ({
     id: node.id, type: 'datasource_node', position: node.position,
     mode:            nd(node, 'mode', 'source'),

@@ -63,6 +63,7 @@ class EnrichExecutor:
         format: str = 'csv',
         run_id: str = None,
         intermediate_mode_override: Optional[str] = None,
+        execution_context: Optional[Mapping[str, Any]] = None,
     ) -> JsonObject:
         """Esegue la pipeline di arricchimento tramite API esterne.
 

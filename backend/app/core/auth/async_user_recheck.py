@@ -15,6 +15,7 @@ from app.utils.logger import get_logger
 from app.core.auth.db import get_user
 from app.shared.contracts.auth import CurrentUser
 from app.core.auth.resource_access import assert_project_access
+from app.core.auth.ownership import assert_resource_visible
 
 logger = get_logger(__name__)
 
@@ -97,4 +98,62 @@ def recheck_user_authorized(
             "status": "permission_revoked",
             "success": False,
             "message": f"Re-check permessi fallito: {e}",
+        }
+
+
+def recheck_eseguibile_authorized(
+    user_id: Optional[str],
+    eseguibile_id: str,
+    *,
+    task_id: str = "",
+    run_id: str = "",
+) -> Optional[PermissionRevokedResult]:
+    """Re-check live equivalente, ma sul resource kind ``eseguibili``."""
+
+    if not user_id:
+        return None
+    try:
+        user = get_user(user_id)
+        if not user or not user.is_active:
+            return {
+                "status": "permission_revoked",
+                "success": False,
+                "message": "Utente non autorizzato (disabilitato o rimosso)",
+            }
+        from app.core.eseguibili import db as eseguibili_db
+
+        record = eseguibili_db.get_eseguibile(eseguibile_id)
+        if record is None:
+            return {
+                "status": "permission_revoked",
+                "success": False,
+                "message": "Eseguibile non più disponibile",
+            }
+        live_user = CurrentUser(
+            user_id=user.id,
+            username=user.username,
+            group_id=user.group_id,
+            role=user.role,
+        )
+        try:
+            assert_resource_visible(
+                record, "eseguibili", live_user, "Eseguibile"
+            )
+        except HTTPException as exc:
+            return {
+                "status": "permission_revoked",
+                "success": False,
+                "message": f"Accesso all'eseguibile non più valido: {exc.detail}",
+            }
+        return None
+    except Exception as exc:
+        logger.error(
+            f"Task eseguibile {task_id}: re-check user {user_id} fallito: {exc}",
+            run_id=run_id,
+            exc_info=True,
+        )
+        return {
+            "status": "permission_revoked",
+            "success": False,
+            "message": "Re-check permessi eseguibile fallito",
         }

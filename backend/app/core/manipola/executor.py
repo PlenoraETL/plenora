@@ -5,7 +5,7 @@ Keeps transformation behavior isolated from orchestration callers.
 """
 
 import time as _time
-from typing import Any, List, MutableMapping, Optional
+from typing import Any, List, Mapping, MutableMapping, Optional
 
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
@@ -272,6 +272,7 @@ class ManipolaExecutor:
         force_recalculate: bool = False,
         run_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
+        execution_context: Optional[Mapping[str, Any]] = None,
     ) -> JsonObject:
         """Esegue la pipeline completa: carica sorgenti, trasforma, salva.
 
@@ -284,7 +285,13 @@ class ManipolaExecutor:
         """
         logger.info(f"Esecuzione MANIPOLA: {project_id}", op="execute", project_id=project_id)
 
-        executing_group_id = self._init_security_context(project_id, strict=True)
+        executing_group_id = (
+            str(execution_context.get("group_id") or "")
+            if execution_context is not None
+            else self._init_security_context(project_id, strict=True)
+        )
+        if not executing_group_id:
+            raise ValueError(f"group_id non determinabile per esecuzione {project_id}")
         canvas_graph = CanvasGraph.from_canvas(canvas)
 
         _push_to_execution_chain(project_id)
@@ -417,11 +424,16 @@ class ManipolaExecutor:
             )
 
         save_result = self._salva_risultato(
-            project_id, result_node, current_df, canvas, canvas_graph=canvas_graph
+            project_id,
+            result_node,
+            current_df,
+            canvas,
+            canvas_graph=canvas_graph,
+            group_id_override=executing_group_id,
         )
 
         # Keep project_source reuse aligned with the actual persisted schema.
-        if save_result.get("success"):
+        if save_result.get("success") and execution_context is None:
             persisted_columns = save_result.get("output_columns")
             result_columns = [
                 {"name": c, "type": str(current_df[c].dtype)}
@@ -1333,6 +1345,7 @@ class ManipolaExecutor:
         df: FrameLike,
         canvas: Optional[CanvasState] = None,
         canvas_graph: Optional[CanvasGraph] = None,
+        group_id_override: Optional[str] = None,
     ) -> JsonObject:
         """Salva il risultato finale nel formato richiesto."""
         filename = _nf(result_node, 'fileName', 'output')
@@ -1353,17 +1366,18 @@ class ManipolaExecutor:
             # Errori DB sul lookup sono WARNING visibili; il save procede
             # con group_id=None preservando l'invariante "salvataggio
             # best-effort" del path attuale.
-            group_id = None
-            try:
-                metadata = self.project_service.get_project_metadata(project_id)
-                if metadata:
-                    group_id = getattr(metadata, 'group_id', None)
-            except Exception as meta_err:
-                logger.warning(
-                    f"[GESTITO] group_id non recuperabile per {project_id}: "
-                    f"{meta_err}; salvataggio procede con group_id=None.",
-                    op="execute", project_id=project_id, exc_info=True,
-                )
+            group_id = group_id_override
+            if group_id is None:
+                try:
+                    metadata = self.project_service.get_project_metadata(project_id)
+                    if metadata:
+                        group_id = getattr(metadata, 'group_id', None)
+                except Exception as meta_err:
+                    logger.warning(
+                        f"[GESTITO] group_id non recuperabile per {project_id}: "
+                        f"{meta_err}; salvataggio procede con group_id=None.",
+                        op="execute", project_id=project_id, exc_info=True,
+                    )
 
             # Single entry-point: in-memory per csv/xlsx/json/parquet/
             # geojson (zero temp); i formati container sono gestiti

@@ -39,7 +39,8 @@ from . import output_store as _output_store
 from . import service as eseguibili_service
 from .models import (
     EseguibileCreate, EseguibileUpdate, EseguibileSummary, EseguibileDetails,
-    ExecuteRequest, AnalyzeUploadResponse,
+    ExecuteRequest, AnalyzeUploadResponse, ExecutableManifest,
+    ExecutableRunRequest,
 )
 
 logger = get_logger(__name__)
@@ -77,6 +78,9 @@ def _summary_response(
         "created_at": record.created_at,
         "updated_at": record.updated_at,
         "expected_columns_count": record.expected_columns_count,
+        "project_type": record.project_type,
+        "active_version": record.active_version,
+        "inputs_count": record.inputs_count,
     }
     data["can_edit"] = compute_can_edit(record, user)
     return data
@@ -132,7 +136,7 @@ def create_eseguibile(
     payload: EseguibileCreate,
     current_user: CurrentUser = Depends(require_admin)
 ):
-    """Crea un eseguibile clonando il canvas di un progetto arricchisci esistente.
+    """Pubblica un progetto Estrai, Manipola o Arricchisci come eseguibile.
 
     Solo gli admin del gruppo possono pubblicare. Il progetto sorgente deve appartenere
     allo stesso gruppo dell'admin (o qualsiasi gruppo se superadmin).
@@ -321,6 +325,7 @@ def _load_task_owner(
 def analyze_upload(
     eseguibile_id: str,
     file: UploadFile = File(...),
+    input_key: Annotated[Optional[str], Query(max_length=80)] = None,
     current_user: CurrentUser = Depends(get_current_user)
 ):
     """Upload file utente, parse e restituisce colonne rilevate + auto-mapping.
@@ -331,6 +336,29 @@ def analyze_upload(
     """
     record = eseguibili_db.get_eseguibile(eseguibile_id)
     _check_visible(record, current_user)
+
+    expected_columns_override = None
+    if input_key:
+        if not record.manifest:
+            raise HTTPException(status_code=400, detail="Manifest eseguibile assente")
+        manifest = ExecutableManifest.model_validate(record.manifest)
+        selected_input = next(
+            (item for item in manifest.inputs if item.key == input_key), None
+        )
+        if selected_input is None or selected_input.kind != "file":
+            raise HTTPException(status_code=400, detail="Input file non valido")
+        expected_columns_override = [
+            column.model_dump() for column in selected_input.expected_columns
+        ]
+        accepted = selected_input.validation.accepted_extensions
+        if accepted:
+            ext = Path(file.filename or "").suffix.lower().lstrip(".")
+            normalized = {item.lower().lstrip(".") for item in accepted}
+            if ext not in normalized:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Formato non ammesso per {selected_input.label}",
+                )
 
     # Size cap pre-read (helper centralizzato, vedi `app.core.security.upload_guards`
     # Coerente con `files/router.py`: rifiuta con 413 prima di leggere il
@@ -362,6 +390,7 @@ def analyze_upload(
                 eseguibile=record,
                 file_content=content_stream,
                 filename=file.filename,
+                expected_columns_override=expected_columns_override,
             )
         except ValueError as e:
             # 6.2: sanitize detail (analyze_file_upload puo'
@@ -376,6 +405,7 @@ def analyze_upload(
             filename=Path((file.filename or "upload.bin").replace("\\", "/")).name,
             user_id=current_user.user_id,
             group_id=current_user.group_id,
+            input_key=input_key,
         )
         result = result.model_copy(
             update={"file_id": durable_file_id, "file_path": ""}
@@ -481,6 +511,98 @@ def execute_eseguibile(
     return result.to_api_dict()
 
 
+@router.post("/{eseguibile_id}/runs")
+@audit_action(action="eseguibile.run", target_param="eseguibile_id")
+def create_eseguibile_run(
+    eseguibile_id: str,
+    payload: ExecutableRunRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Avvia una versione con un insieme arbitrario di input tipizzati."""
+
+    record = eseguibili_db.get_eseguibile(eseguibile_id)
+    _check_visible(record, current_user)
+    version = (
+        eseguibili_db.get_eseguibile_version(
+            payload.version_id, eseguibile_id=eseguibile_id
+        )
+        if payload.version_id
+        else eseguibili_db.get_active_eseguibile_version(eseguibile_id)
+    )
+    if version is None:
+        raise HTTPException(status_code=404, detail="Versione eseguibile non trovata")
+    try:
+        manifest = ExecutableManifest.model_validate(version.manifest)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=sanitize_http_detail(str(exc)))
+
+    trusted_inputs = dict(payload.inputs)
+    consumed_uploads: list[str] = []
+    try:
+        for definition in manifest.inputs:
+            if definition.kind != "file" or definition.key not in trusted_inputs:
+                continue
+            raw = trusted_inputs[definition.key]
+            if not isinstance(raw, Mapping):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Payload file non valido per {definition.label}",
+                )
+            file_id = str(raw.get("file_id") or "")
+            upload = _load_upload_meta(file_id) if file_id else None
+            if not upload:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Upload non trovato o scaduto per {definition.label}",
+                )
+            if upload.get("eseguibile_id") != eseguibile_id:
+                raise HTTPException(status_code=400, detail="Upload di altro eseguibile")
+            if upload.get("user_id") not in (None, current_user.user_id):
+                raise HTTPException(status_code=403, detail="Upload di un altro utente")
+            upload_input_key = upload.get("input_key")
+            if upload_input_key not in (None, definition.key):
+                raise HTTPException(status_code=400, detail="Upload associato a un altro input")
+            trusted_file = dict(raw)
+            trusted_file["_upload_group_id"] = str(
+                upload.get("group_id") or current_user.group_id
+            )
+            trusted_inputs[definition.key] = trusted_file
+            consumed_uploads.append(file_id)
+
+        result = eseguibili_service.execute_versioned(
+            eseguibile=record,
+            raw_inputs=trusted_inputs,
+            user_id=current_user.user_id,
+            version_id=version.id,
+            output_format=payload.output_format,
+            output_name=payload.output_name,
+        )
+        _save_task_owner(
+            result.task_id,
+            eseguibile_id,
+            current_user.user_id,
+            record.group_id,
+        )
+        return result.to_api_dict()
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=sanitize_http_detail(str(exc)))
+    except Exception as exc:
+        logger.error(
+            f"[CRASH] Errore run eseguibile v2 {eseguibile_id}: {exc}",
+            exc_info=True,
+        )
+        raise_typed_http(
+            error_codes.INTERNAL_ERROR,
+            status_code=500,
+            message="Errore interno del server",
+        )
+    finally:
+        for file_id in consumed_uploads:
+            _delete_upload_meta(file_id)
+
+
 # DOWNLOAD OUTPUT
 
 @router.get("/{eseguibile_id}/download/{task_id}")
@@ -498,6 +620,7 @@ def download_eseguibile_output(
     """
     record = eseguibili_db.get_eseguibile(eseguibile_id)
     _check_visible(record, current_user)
+
     owner_group_id = str(record.get("group_id") or "")
     if not owner_group_id:
         raise HTTPException(status_code=404, detail="Tenant eseguibile non determinabile")
@@ -656,6 +779,10 @@ def _to_details(record: eseguibili_db.EseguibileRow) -> Mapping[str, object]:
         "created_by": record.created_by,
         "created_at": record.created_at,
         "updated_at": record.updated_at,
+        "project_type": record.project_type,
+        "active_version": record.active_version,
+        "active_version_id": record.active_version_id,
+        "manifest": record.manifest,
         "can_edit": None,
         "output_is_file_based": is_file_based,
         "inferred_output_extension": inferred_ext,

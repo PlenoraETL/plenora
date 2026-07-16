@@ -24,16 +24,21 @@ from . import db as eseguibili_db
 from .models import (
     AnalyzeFileUploadResult,
     DetectedUploadColumn,
+    ExecutableInputBinding,
+    ExecutableManifest,
+    ExecutableRunResult,
     EseguibileExecutionResult,
 )
+from .runtime import resolve_runtime_inputs
 from .scanner import extract_expected_columns
+from .manifest import compile_manifest
 
 logger = get_logger(__name__)
 
 UPLOAD_METADATA_KEY = "eseguibili_upload"
 
 
-# CREATE — clona canvas da progetto arricchisci esistente
+# CREATE — compila una versione immutabile da qualsiasi tipo progetto
 
 def create_from_project(
     source_project_id: str,
@@ -45,21 +50,20 @@ def create_from_project(
     default_output_name: Optional[str] = None,
     icon: Optional[str] = None,
 ) -> eseguibili_db.EseguibileRow:
-    """Crea un eseguibile clonando il canvas di un progetto arricchisci.
+    """Pubblica un progetto ESTRAI/MANIPOLA/ARRICCHISCI come eseguibile.
 
     Raises:
-        ValueError: se il progetto non esiste o non è di tipo arricchisci,
-                    o se l'utente non ha accesso al gruppo.
+        ValueError: se il progetto non esiste, il manifest non è valido o
+                    l'utente non ha accesso al gruppo.
     """
     proj = project_access_context.load_project_publish_context(source_project_id)
     if not proj:
         raise ValueError(f"Progetto '{source_project_id}' non trovato")
 
-    project_type = proj.project_type
-    if project_type != "arricchisci":
+    project_type = str(proj.project_type or "").lower()
+    if project_type not in {"estrai", "manipola", "arricchisci"}:
         raise ValueError(
-            f"Solo i progetti di tipo 'arricchisci' possono essere pubblicati come eseguibili "
-            f"(trovato: {project_type})"
+            f"Tipo progetto non pubblicabile come eseguibile: {project_type!r}"
         )
 
     # Verifica group_id — l'utente deve appartenere al gruppo del progetto
@@ -78,25 +82,20 @@ def create_from_project(
 
     cloned_canvas = copy.deepcopy(canvas)
 
-    # Scanner: estrai colonne attese
-    expected_columns = extract_expected_columns(cloned_canvas)
-
-    # Verifica che ci sia almeno una sorgente sostituibile
-    # file_source, project_source, staticValues — tutti "input entry point" validi
-    source_nodes = [
-        n for n in cloned_canvas.get("nodes", [])
-        if n.get("type") in ("file_source", "project_source", "staticValues")
-    ]
-    if not source_nodes:
-        raise ValueError(
-            "Il progetto non ha nodi sorgente (file_source, project_source o staticValues) "
-            "sostituibili a runtime."
-        )
-    if len(source_nodes) > 1:
-        raise ValueError(
-            f"Versione corrente: sono supportate solo catene con 1 sola sorgente. "
-            f"Trovate {len(source_nodes)} sorgenti. Riduci a 1 per pubblicare come eseguibile."
-        )
+    manifest = compile_manifest(
+        source_project_id=source_project_id,
+        project_type=project_type,
+        canvas=cloned_canvas,
+        default_connection_id=getattr(proj, "default_connection_id", None),
+    )
+    first_file_input = next(
+        (item for item in manifest.inputs if item.kind == "file"), None
+    )
+    expected_columns = (
+        [column.model_dump() for column in first_file_input.expected_columns]
+        if first_file_input
+        else []
+    )
 
     record = eseguibili_db.create_eseguibile(
         name=name,
@@ -109,6 +108,8 @@ def create_from_project(
         default_output_name=default_output_name,
         source_canvas_id=source_project_id,
         icon=icon,
+        project_type=project_type,
+        manifest=manifest.model_dump(mode="json"),
     )
     logger.info(
         f"Eseguibile creato: {record.id} ({name}) da progetto {source_project_id}",
@@ -123,6 +124,7 @@ def analyze_file_upload(
     eseguibile: eseguibili_db.EseguibileRow,
     file_content: Union[bytes, BinaryIO],
     filename: str,
+    expected_columns_override: Optional[Sequence[Mapping[str, object]]] = None,
 ) -> AnalyzeFileUploadResult:
     """Carica un file caricato in bytes e ritorna colonne rilevate + auto-mapping.
 
@@ -178,7 +180,11 @@ def analyze_file_upload(
         )
 
     # Auto-mapping euristico: match case-insensitive
-    expected_columns = eseguibile.get("expected_columns") or []
+    expected_columns = (
+        list(expected_columns_override)
+        if expected_columns_override is not None
+        else eseguibile.get("expected_columns") or []
+    )
     expected_names = [c.get("name") for c in expected_columns if c.get("name")]
     file_cols_lower = {c.lower(): c for c in df.columns}
 
@@ -224,6 +230,7 @@ def persist_upload_file_source(
     filename: str,
     user_id: str,
     group_id: str,
+    input_key: Optional[str] = None,
 ) -> str:
     """Persist an analyzed upload behind a cross-host file_source id."""
     safe_filename = filename or "upload.bin"
@@ -254,6 +261,7 @@ def persist_upload_file_source(
             "eseguibile_id": eseguibile["id"],
             "user_id": user_id,
             "group_id": group_id,
+            "input_key": input_key,
         }
         files_db.update_file_source_metadata(file_source_id, metadata)
     except Exception:
@@ -277,6 +285,7 @@ def load_upload_metadata(file_source_id: str) -> Optional[Mapping[str, object]]:
         "eseguibile_id": upload.get("eseguibile_id"),
         "user_id": upload.get("user_id"),
         "group_id": upload.get("group_id") or row.get("group_id"),
+        "input_key": upload.get("input_key"),
     }
 
 
@@ -496,4 +505,174 @@ def execute(
             "temp_file_source_id": temp_file_source_id,
             "message": "Esecuzione avviata. Usa GET /api/tasks/{task_id} per il progresso.",
         }
+    )
+
+
+def _configure_runtime_output(
+    canvas: dict,
+    *,
+    output_format: str,
+    output_name: str,
+) -> None:
+    for node in canvas.get("nodes") or []:
+        if not isinstance(node, dict) or node.get("type") not in {"result", "resultNode"}:
+            continue
+        data = node.setdefault("data", {})
+        data["fileName"] = output_name
+        data["format"] = output_format
+        node["fileName"] = output_name
+        node["format"] = output_format
+        return
+
+
+def execute_versioned(
+    *,
+    eseguibile: eseguibili_db.EseguibileRow,
+    raw_inputs: Mapping[str, object],
+    user_id: str,
+    version_id: Optional[str] = None,
+    output_format: Optional[str] = None,
+    output_name: Optional[str] = None,
+) -> ExecutableRunResult:
+    """Valida una run v2 e la inoltra all'executor del tipo progetto."""
+
+    from app.core.dataframes.export_writer import normalize_export_format
+    from app.core.orchestrator.task_service import task_service
+
+    version = (
+        eseguibili_db.get_eseguibile_version(
+            version_id, eseguibile_id=eseguibile.id
+        )
+        if version_id
+        else eseguibili_db.get_active_eseguibile_version(eseguibile.id)
+    )
+    if version is None:
+        raise ValueError("Versione eseguibile non trovata")
+    manifest = ExecutableManifest.model_validate(version.manifest)
+
+    # Le versioni migrate dal contratto v1 non avevano il binding esplicito.
+    # Lo ricostruiamo senza modificare lo snapshot persistito.
+    if manifest.schema_version == 1 and not manifest.bindings and manifest.inputs:
+        source = next(
+            (
+                node
+                for node in version.canvas.get("nodes", [])
+                if isinstance(node, dict)
+                and node.get("type") in ("file_source", "project_source", "staticValues")
+            ),
+            None,
+        )
+        if source is None:
+            raise ValueError("Canvas legacy senza sorgente sostituibile")
+        manifest = manifest.model_copy(
+            update={
+                "bindings": [
+                    ExecutableInputBinding(
+                        input_key=manifest.inputs[0].key,
+                        target_node_id=str(source.get("id")),
+                        mode="data_source",
+                    )
+                ]
+            }
+        )
+
+    canvas, cleanup_ids, input_summary = resolve_runtime_inputs(
+        eseguibile_id=eseguibile.id,
+        canvas=version.canvas,
+        manifest=manifest,
+        values=raw_inputs,
+        group_id=eseguibile.group_id,
+    )
+
+    final_format = normalize_export_format(
+        output_format or eseguibile.default_output_format or "xlsx"
+    )
+    raw_name = (
+        (output_name or "").strip()
+        or (eseguibile.default_output_name or "").strip()
+        or eseguibile.name
+    )
+    base_name = re.sub(r"\.[a-zA-Z0-9]{1,5}$", "", raw_name)
+    base_name = re.sub(r'[\\/:*?"<>|]', "_", base_name).strip() or "risultato"
+    _configure_runtime_output(
+        canvas,
+        output_format=final_format,
+        output_name=base_name,
+    )
+
+    run_id = eseguibili_db.create_eseguibile_run(
+        eseguibile_id=eseguibile.id,
+        version_id=version.id,
+        group_id=eseguibile.group_id,
+        user_id=user_id,
+        input_summary=input_summary,
+    )
+
+    try:
+        if manifest.project_type == "arricchisci":
+            task_info = task_service.create_enrichment_task(
+                project_id=eseguibile.id,
+                canvas=canvas,
+                output_format=final_format,
+                force_recalculate=True,
+                cleanup_file_source_ids=cleanup_ids,
+                is_eseguibile=True,
+                user_id=user_id,
+                execution_context={
+                    "eseguibile_id": eseguibile.id,
+                    "version_id": version.id,
+                    "run_id": run_id,
+                    "group_id": eseguibile.group_id,
+                },
+            )
+        else:
+            execution_contract = {
+                "schema_version": 2,
+                "project_id": eseguibile.id,
+                "project_type": manifest.project_type,
+                "group_id": eseguibile.group_id,
+                "canvas": canvas,
+                "artifact_refs": {},
+                "execution_subject": {
+                    "kind": "eseguibile",
+                    "id": eseguibile.id,
+                    "version_id": version.id,
+                    "run_id": run_id,
+                },
+                "runtime_context": {
+                    "group_id": eseguibile.group_id,
+                    "default_connection_id": manifest.default_connection_id,
+                    "cleanup_file_source_ids": cleanup_ids,
+                    "output_format": final_format,
+                    "output_name": base_name,
+                },
+            }
+            task_info = task_service.create_pipeline_task(
+                project_id=eseguibile.id,
+                force_recalculate=True,
+                triggered_by="eseguibile",
+                user_id=user_id,
+                execution_contract=execution_contract,
+            )
+
+        eseguibili_db.bind_eseguibile_run_task(run_id, task_info.task_id)
+    except Exception as exc:
+        from app.core.files.service import file_source_service
+
+        for file_source_id in cleanup_ids:
+            try:
+                file_source_service.delete_file_source(file_source_id)
+            except Exception:
+                pass
+        eseguibili_db.complete_eseguibile_run(
+            run_id,
+            success=False,
+            error_message=f"Avvio task fallito: {type(exc).__name__}",
+        )
+        raise
+    return ExecutableRunResult(
+        task_id=task_info.task_id,
+        run_id=run_id,
+        eseguibile_id=eseguibile.id,
+        version_id=version.id,
     )

@@ -11,7 +11,7 @@ import time
 import traceback as _tb
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, List
+from typing import Any, Mapping, Optional, List
 from app.core.artifacts import resolver as artifact_resolver_module
 from app.core.auth import async_user_recheck as async_user_recheck_module
 from app.core.arricchisci import api_connector as api_connector_module
@@ -55,6 +55,7 @@ def execute_enrichment_task(
     run_id: Optional[str] = None,
     user_id: Optional[str] = None,
     intermediate_mode_override: Optional[str] = None,
+    execution_context: Optional[Mapping[str, Any]] = None,
 ) -> JsonObject:
     """
     Task asincrono per eseguire l'arricchimento dati.
@@ -109,6 +110,49 @@ def execute_enrichment_task(
     # #28-B: la run-mode incapsula le divergenze standard vs eseguibile
     # (auth recheck, logger project_id, group_id + intermediate run).
     run_mode = enrichment_run_mode.for_task(is_eseguibile)
+
+    executable_run_id = str((execution_context or {}).get("run_id") or "")
+    executable_id = str(
+        (execution_context or {}).get("eseguibile_id") or project_id
+    )
+
+    def complete_executable_run(
+        *,
+        success: bool,
+        output_metadata: Optional[Mapping[str, Any]] = None,
+        error_message: Optional[str] = None,
+    ) -> None:
+        if not executable_run_id:
+            return
+        try:
+            from app.core.eseguibili import db as eseguibili_db
+
+            eseguibili_db.complete_eseguibile_run(
+                executable_run_id,
+                success=success,
+                output_metadata=dict(output_metadata or {}),
+                error_message=error_message,
+            )
+        except Exception as run_exc:
+            logger.warning(
+                f"[Task {task_id}] Update run eseguibile fallito: {run_exc}"
+            )
+
+    if is_eseguibile and execution_context:
+        _revoked = async_user_recheck_module.recheck_eseguibile_authorized(
+            user_id=user_id,
+            eseguibile_id=executable_id,
+            task_id=task_id,
+            run_id=executable_run_id,
+        )
+        if _revoked is not None:
+            complete_executable_run(
+                success=False,
+                error_message="Permesso di esecuzione revocato",
+            )
+            _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
+            _revoked.update({"task_id": task_id, "project_id": project_id})
+            return _revoked
 
     if run_mode.should_recheck_auth():
         _revoked = async_user_recheck_module.recheck_user_authorized(
@@ -710,6 +754,10 @@ def execute_enrichment_task(
                     )
 
             _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
+            complete_executable_run(
+                success=True,
+                output_metadata={"task_id": task_id, "filename": final_name},
+            )
             return result
         
         final_df = final_result
@@ -829,6 +877,11 @@ def execute_enrichment_task(
 
         _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
 
+        complete_executable_run(
+            success=True,
+            output_metadata={"task_id": task_id, "filename": saved_path.name},
+        )
+
         return result
 
     except Exception as e:
@@ -861,6 +914,10 @@ def execute_enrichment_task(
                     error_message=e.payload.get("error", "task early return"),
                 )
             _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
+            complete_executable_run(
+                success=False,
+                error_message=str(e.payload.get("error") or "Esecuzione fallita"),
+            )
             return e.payload
         if _run_id and run_mode.logs_run():
             try:
@@ -919,6 +976,7 @@ def execute_enrichment_task(
             logger.debug(f"progress update fallito: {type(e_prog).__name__}: {e_prog}")
 
         _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
+        complete_executable_run(success=False, error_message=error_message)
 
         # Ritorna dict con errore (serializzabile
         return {

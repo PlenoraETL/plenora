@@ -105,6 +105,7 @@ def test_node_dispatch_registry_contains_incrementally_migrated_types():
         "file_source",
         "feature_source",
         "project_source",
+        "project_input",
         "transform",
         "api_enrich",
         "result",

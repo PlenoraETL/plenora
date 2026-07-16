@@ -1,5 +1,5 @@
 /**
- * PublishEseguibileModal.jsx — Modal per pubblicare un progetto arricchisci
+ * PublishEseguibileModal.jsx — Modal per pubblicare un progetto
  * come eseguibile on-demand.
  *
  * Accessibile solo agli admin. Il backend valida i permessi e il tipo progetto.
@@ -72,7 +72,8 @@ function PublishEseguibileModal({ project, onClose, onSuccess }) {
         <div className="pem-body">
           <p className="pem-info">
             Il progetto <strong>{project.name}</strong> verrà pubblicato come eseguibile on-demand.
-            Gli utenti del gruppo potranno eseguirlo caricando un file con le colonne richieste.
+            Il form di esecuzione verrà generato dagli Input progetto presenti nel canvas.
+            Se non ci sono input, la catena userà la configurazione pubblicata.
           </p>
 
           {error && <div className="pem-error">❌ {error}</div>}
