@@ -296,6 +296,44 @@ def test_save_pipeline_result_normalizes_legacy_xls_to_xlsx(monkeypatch):
     assert saved_calls[0]["filename"] == "legacy-report.xlsx"
 
 
+def test_save_pipeline_result_normalizes_geopackage_to_gpkg(monkeypatch):
+    from app.core.results.pipeline_result import save_pipeline_result_outcome
+    import app.core.results.streaming_blob_writer as streaming_blob_writer
+
+    saved_calls = []
+
+    def fake_save_dataframe_to_result_blob_streaming(**kwargs):
+        saved_calls.append(kwargs)
+        return "res-gpkg"
+
+    monkeypatch.setattr(
+        streaming_blob_writer,
+        "save_dataframe_to_result_blob_streaming",
+        fake_save_dataframe_to_result_blob_streaming,
+    )
+    result = save_pipeline_result_outcome(
+        project_id="p1",
+        df=pd.DataFrame({"a": [1]}),
+        output_format="geopackage",
+        filename_stem="map",
+    )
+
+    assert result.output_filename == "map.gpkg"
+    assert saved_calls[0]["output_format"] == "gpkg"
+
+
+def test_save_pipeline_result_rejects_read_only_gdb_output():
+    from app.core.results.pipeline_result import save_pipeline_result_outcome
+
+    with pytest.raises(ValueError, match="non supportato"):
+        save_pipeline_result_outcome(
+            project_id="p1",
+            df=pd.DataFrame({"a": [1]}),
+            output_format="gdb",
+            filename_stem="map",
+        )
+
+
 def test_save_pipeline_result_rejects_unknown_format():
     """Formato non supportato → ValueError dalla serializzazione."""
     from app.core.results.pipeline_result import save_pipeline_result_outcome

@@ -16,9 +16,9 @@ GDAL 3.13.0):
     automaticamente lo shapefile dentro lo ZIP via `/vsizip`
   - FileGDB (read-only via ZIP bytes): idem
   - ESRI Shapefile WRITE-as-ZIP-bytes: `write_shapefile_zip_bytes`
-    usa una temp dir interna al boundary per scrivere i sidecar
-    (.shp/.shx/.dbf/.prj/.cpg) e li zippa in bytes. La temp dir
-    e' cleanup-deterministico via `TemporaryDirectory`.
+    usa `/vsimem` su Linux; su Windows usa una temp dir privata interna al
+    boundary, perche' pyogrio e ctypes GDAL possono avere namespace VSI
+    distinti. Entrambi i path hanno cleanup deterministico.
 
 Strategia generale:
   - LETTURA: `read_vector_bytes(data, ...)` per qualunque formato
@@ -29,11 +29,15 @@ Strategia generale:
 
 from __future__ import annotations
 
+import os
+import tempfile
 import zipfile
 from io import BytesIO
+from pathlib import Path
 from typing import Any, BinaryIO, Optional
 
 from app.core.io import vsimem as vsimem_module
+from app.core.io.policy import is_temp_disk_allowed
 
 
 def read_vector_bytes(
@@ -126,12 +130,12 @@ def write_shapefile_zip_bytes(
     *,
     name: str = "layer",
 ) -> bytes:
-    """Serialize a GeoDataFrame as a zipped ESRI Shapefile (bytes, fully RAM).
+    """Serialize a GeoDataFrame as a zipped ESRI Shapefile payload.
 
-    Shapefile e' multi-file (.shp/.shx/.dbf/.prj/.cpg). I sidecar vengono
-    scritti in `/vsimem/{uuid}/{name}.*` via pyogrio (GDAL
-    VSI handler), poi letti via `vsi_read_bytes` + assemblati come
-    zip in memoria. Zero disk touch.
+    Shapefile e' multi-file (.shp/.shx/.dbf/.prj/.cpg). Su Linux i sidecar
+    vengono scritti in `/vsimem/{uuid}/{name}.*`; su Windows in un tempdir
+    privato e usa-e-getta dentro questo boundary. Il risultato e' sempre uno
+    ZIP in memoria.
 
     Pattern mirror di IMDF-5 (`open_gdb_in_vsimem`): pyogrio scrive
     sul path /vsimem; `app.core.io.vsimem` (ctypes adapter) gestisce
@@ -145,6 +149,26 @@ def write_shapefile_zip_bytes(
         `bytes` dello ZIP che contiene i 4-5 sidecar dello Shapefile.
     """
     import pyogrio
+
+    if os.name == "nt":
+        if not is_temp_disk_allowed():
+            raise RuntimeError(
+                "Export SHP su Windows richiede temp disk esplicito; "
+                "PLENORA_IO_DISK_POLICY=memory_only lo vieta"
+            )
+        # Su Windows il GDAL caricato da pyogrio e quello raggiungibile via
+        # ctypes non condividono necessariamente lo stesso namespace
+        # /vsimem. Un tempdir privato e cleanup-deterministico evita ZIP
+        # vuoti mantenendo il disk touch dentro il boundary I/O autorizzato.
+        with tempfile.TemporaryDirectory(prefix="plenora_shp_") as temp_dir:
+            root = Path(temp_dir)
+            shp_path = root / f"{name}.shp"
+            pyogrio.write_dataframe(gdf, shp_path, driver="ESRI Shapefile")
+            zip_buf = BytesIO()
+            with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                for sidecar_path in sorted(root.glob(f"{name}.*")):
+                    zf.write(sidecar_path, arcname=sidecar_path.name)
+            return zip_buf.getvalue()
 
     with vsimem_module.vsi_temp_dir(prefix="plenora_shp_") as vsi_root:
         shp_vsi_path = f"{vsi_root}/{name}.shp"

@@ -400,6 +400,10 @@ _BOUNDARY_FROZEN_SNAPSHOT: dict[str, int] = {
     # scrittura dei due pseudo-file cgroup v2 e upload streaming da path.
     # Nessun caller applicativo accede direttamente al filesystem.
     "app/core/io/runtime_filesystem.py": 3,
+    # Windows SHP fallback: pyogrio e ctypes GDAL possono avere namespace
+    # /vsimem distinti. Un TemporaryDirectory privato nel boundary I/O crea
+    # i sidecar DBF/SHP/SHX e viene eliminato deterministicamente.
+    "app/core/io/geospatial.py": 1,
 }
 
 

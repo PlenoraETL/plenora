@@ -377,3 +377,47 @@ def test_xlsx_result_uses_write_only_stream_not_full_bytes(
     assert result_id
     assert save_calls[0]["size_bytes"] == len(b"PK-streamed-xlsx")
     assert any(op == "complete_multipart_upload" for op, _ in client.calls)
+
+
+def test_geojson_geospatial_error_does_not_fallback_to_plain_json(
+    s3_mode_env,
+    monkeypatch,
+):
+    geopandas = pytest.importorskip("geopandas")
+    from shapely.geometry import Point
+
+    from app.core.results import streaming_blob_writer as mod
+
+    def _broken_geo_writer(*_args, **_kwargs):
+        raise TypeError("temporal serialization failed")
+
+    def _forbidden_plain_json(*_args, **_kwargs):
+        raise AssertionError("GeoJSON non deve degradare a JSON tabulare")
+
+    monkeypatch.setattr(
+        mod.geospatial_io_module,
+        "geospatial_dataframe_to_bytes",
+        _broken_geo_writer,
+    )
+    monkeypatch.setattr(
+        mod.export_writer_module,
+        "dataframe_to_export_chunks",
+        _forbidden_plain_json,
+    )
+    gdf = geopandas.GeoDataFrame(
+        {"id": [1]},
+        geometry=[Point(9, 45)],
+        crs="EPSG:4326",
+    )
+
+    with pytest.raises(TypeError, match="temporal serialization failed"):
+        mod.save_dataframe_to_result_blob_streaming(
+            project_id="p",
+            df=gdf,
+            output_format="geojson",
+            filename="output.geojson",
+        )
+
+    client, save_calls = s3_mode_env
+    assert save_calls == []
+    assert any(op == "abort_multipart_upload" for op, _ in client.calls)

@@ -11,7 +11,7 @@ import json
 import zipfile
 from io import BytesIO, StringIO
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Mapping, Optional, Union
 
 import pandas as pd
 import geopandas as gpd
@@ -20,7 +20,10 @@ from shapely.errors import GEOSException
 
 from app import config as app_config
 from app.core.dataframes.frame_copy import copy_frame_for_update
-from app.core.dataframes.export_writer import dataframe_to_export_bytes
+from app.core.dataframes.export_writer import (
+    dataframe_to_export_bytes,
+    normalize_export_format,
+)
 from app.core.dataframes.geospatial_io import geospatial_dataframe_to_bytes
 from app.core.dataframes.geometry_parsing import parse_geometry_series
 from app.core.dataframes.tabular import (
@@ -651,6 +654,7 @@ def save_dataframe_to_bytes(
     format: str = "csv",
     geom_column: Optional[str] = None,
     crs: str = "EPSG:4326",
+    column_types: Optional[Mapping[str, Any]] = None,
 ) -> bytes:
     """Serialize a DataFrame, dispatching explicit file I/O boundaries by format.
 
@@ -658,9 +662,25 @@ def save_dataframe_to_bytes(
     dispatcher unico di serializzazione in export_writer (profilo data-safe
     condiviso col path streaming). Niente piu' serializzatore tabular parallelo.
     """
-    formato = format.lower()
+    formato = normalize_export_format(format)
+
+    if formato == "gdb":
+        raise ValueError(
+            "Formato output gdb non supportato: FileGDB e' disponibile "
+            "solo in lettura"
+        )
 
     if formato in _GEOSPATIAL_FORMATS:
-        return geospatial_dataframe_to_bytes(df, formato, geom_column, crs)
+        return geospatial_dataframe_to_bytes(
+            df,
+            formato,
+            geom_column,
+            crs,
+            column_types=column_types,
+        )
 
-    return dataframe_to_export_bytes(df, formato)
+    return dataframe_to_export_bytes(
+        df,
+        formato,
+        column_types=column_types,
+    )

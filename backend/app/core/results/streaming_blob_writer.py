@@ -39,6 +39,7 @@ from typing import Optional
 from app.core.dataframes import export_writer as export_writer_module
 from app.core.dataframes import frame_io as frame_io_module
 from app.core.dataframes import geospatial_io as geospatial_io_module
+from app.core.dataframes.geodata import detect_geometry_column
 from app.core.io import object_storage as object_storage_module
 from app.core.results import store
 from app.core.results.blob_writer import (
@@ -457,13 +458,13 @@ def save_dataframe_to_result_blob_streaming(
       - xlsx: openpyxl write-only direttamente sul multipart writer;
         nessun workbook object-model o BytesIO completo in RAM.
         L'alias legacy xls viene normalizzato a formato/estensione xlsx.
-      - shp, gpkg, gdb: single-chunk via geospatial writer (multi-file
+      - shp, gpkg: single-chunk via geospatial writer (multi-file
         zippato / driver footer-based, richiedono buffer pieno).
 
     Args:
         project_id: result project owner.
         df: DataFrame (o GeoDataFrame).
-        output_format: 'csv'/'xlsx'/'json'/'geojson'/'shp'/'gpkg'/'parquet'/'gdb'.
+        output_format: 'csv'/'xlsx'/'json'/'geojson'/'shp'/'gpkg'/'parquet'.
         filename: filename del result blob (es. "out.csv", "out.zip").
         rows_count: opzionale, scritto nella DB row.
         group_id: opzionale, scope multi-tenant.
@@ -474,6 +475,11 @@ def save_dataframe_to_result_blob_streaming(
         result_id del blob persistito.
     """
     fmt_lower = export_writer_module.normalize_export_format(output_format)
+    if fmt_lower == "gdb":
+        raise ValueError(
+            "Formato output gdb non supportato: FileGDB e' disponibile "
+            "solo in lettura"
+        )
     if (output_format or "").strip().lower().lstrip(".") == "xls":
         supplied_path = Path(filename)
         if supplied_path.suffix.lower() == ".xls":
@@ -504,22 +510,21 @@ def save_dataframe_to_result_blob_streaming(
             ):
                 writer.write(chunk)
         elif fmt_lower == "geojson":
-            # GeoJSON: usa export_writer (json) se non-geo, altrimenti
-            # geospatial path.
-            try:
-                # geojson da GeoDataFrame: usa il geospatial writer (singolo
-                # chunk; il GeoJSON e' un singolo doc JSON che non si
-                # divide row-by-row senza rompere il formato).
+            # GeoJSON geospaziale deve restare una FeatureCollection: gli
+            # errori del writer non possono degradare silenziosamente a un
+            # normale array JSON con estensione .geojson.
+            resolved_geom_column = geom_column or detect_geometry_column(df)
+            if resolved_geom_column:
                 data = geospatial_io_module.geospatial_dataframe_to_bytes(
                     df,
                     fmt_lower,
-                    geom_column,
+                    resolved_geom_column,
                     crs,
+                    column_types=column_types,
                 )
                 writer.write(data)
-            except Exception:
-                # Fallback su to_json records se geospatial_io fallisce
-                # (es. df non-geo).
+            else:
+                # Back-compat per DataFrame realmente non geospaziali.
                 for chunk in export_writer_module.dataframe_to_export_chunks(
                     df,
                     "json",
@@ -544,6 +549,7 @@ def save_dataframe_to_result_blob_streaming(
                 fmt_lower,
                 geom_column=geom_column,
                 crs=crs,
+                column_types=column_types,
             )
             writer.write(data)
         else:

@@ -6,7 +6,7 @@ Streaming end-to-end via `save_dataframe_to_result_blob_streaming` (combina
 Per formato:
   - csv, json: vero streaming via queue+thread bridge.
   - geojson: single-chunk (geospatial writer ritorna bytes interi).
-  - xlsx, parquet, gpkg, shp, gdb: single-chunk by-design
+  - xlsx, parquet, gpkg, shp: single-chunk by-design
     (writer footer-based o multi-file zippato; lo SHP multi-file e'
     zippato dentro il boundary `io.geospatial.write_shapefile_zip_bytes`).
 
@@ -60,10 +60,15 @@ def save_pipeline_result_outcome(
     fmt_lower = normalize_export_format(output_format)
     supported_formats = {
         "csv", "json", "geojson", "xlsx", "parquet",
-        "gpkg", "geopackage", "shp", "gdb",
+        "gpkg", "shp",
     }
     if fmt_lower not in supported_formats:
         raise ValueError(f"Formato output non supportato: {output_format}")
+    resolved_geom_column = geom_column
+    if fmt_lower in {"geojson", "gpkg", "shp"} and not resolved_geom_column:
+        from app.core.dataframes.geodata import detect_geometry_column
+
+        resolved_geom_column = detect_geometry_column(df)
     # SHP esce zippato via `io.geospatial.write_shapefile_zip_bytes`;
     # estensione del result blob diventa `.zip` (extracted by reader).
     if fmt_lower == "shp":
@@ -78,7 +83,7 @@ def save_pipeline_result_outcome(
         filename=filename,
         rows_count=rows_count,
         group_id=group_id,
-        geom_column=geom_column,
+        geom_column=resolved_geom_column,
         crs=crs,
         column_types=column_types,
     )
@@ -92,7 +97,7 @@ def save_pipeline_result_outcome(
             output_columns = exported_column_names_for_format(
                 df.columns,
                 fmt_lower,
-                geom_column=geom_column,
+                geom_column=resolved_geom_column,
             )
     except Exception:
         output_columns = None

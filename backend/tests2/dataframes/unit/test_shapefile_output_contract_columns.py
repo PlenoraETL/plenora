@@ -29,3 +29,13 @@ def test_shapefile_export_columns_use_dbf_laundered_physical_names():
 
     by_source = {column.source_name: column for column in contract.columns}
     assert by_source["producer_code"].physical_name == "producer_c"
+
+
+def test_geospatial_export_columns_reflect_geometry_and_secondary_wkt_names():
+    physical_columns = exported_column_names_for_format(
+        ["id", "shape", "geom"],
+        "gpkg",
+        geom_column="shape",
+    )
+
+    assert physical_columns == ["id", "geometry", "geom_wkt"]

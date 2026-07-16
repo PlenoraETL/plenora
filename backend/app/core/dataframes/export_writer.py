@@ -57,12 +57,15 @@ _XLSX_MAX_COLUMNS = 16_384
 def normalize_export_format(dest_format: str) -> str:
     """Return the canonical export format used for payload and metadata.
 
-    The legacy ``xls`` option has always been written with an XLSX engine.
-    Canonicalising it prevents OOXML bytes from being exposed with the
-    misleading binary-XLS extension.
+    Legacy aliases are mapped to the actual writer format. This prevents
+    OOXML/GPKG payloads from being exposed with misleading extensions.
     """
     fmt = (dest_format or "").strip().lower().lstrip(".")
-    return "xlsx" if fmt == "xls" else fmt
+    aliases = {
+        "xls": "xlsx",
+        "geopackage": "gpkg",
+    }
+    return aliases.get(fmt, fmt)
 
 
 def _is_declared_excel_temporal(raw_type: Any) -> bool:

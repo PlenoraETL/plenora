@@ -7,7 +7,9 @@ _salva_geo_vuoto, _switch_colonna_geometria) sono state rimosse —
 nessun caller live in app/. In produzione il flow e' bytes -> storage.
 """
 
-from typing import Optional
+import re
+from datetime import date, datetime, time, timezone
+from typing import Any, Mapping, Optional
 
 import pandas as pd
 
@@ -20,6 +22,13 @@ from app.core.io import geospatial as geospatial_io_module
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+_GEOMETRY_LIKE_COLUMN_NAMES = {
+    "geom", "geometry", "shape", "the_geom",
+    "geom_4326", "geom_wgs84",
+}
+_TEMPORAL_LOGICAL_TYPES = {"date", "datetime", "timestamp"}
 
 
 def _geo_helpers():
@@ -114,17 +123,186 @@ def exported_column_names_for_format(
     project-source contracts must expose those physical names or consumers
     fail when validating the materialized artifact.
     """
-    names = [str(col) for col in columns]
+    names: list[str] = []
+    seen: set[str] = set()
+    for raw_name in columns:
+        name = str(raw_name)
+        if name in seen:
+            counter = 2
+            candidate = f"{name}_{counter}"
+            while candidate in seen:
+                counter += 1
+                candidate = f"{name}_{counter}"
+            name = candidate
+        names.append(name)
+        seen.add(name)
+
+    # Pyogrio espone sempre la geometria attiva come ``geometry`` al
+    # round-trip. Le geometrie secondarie vengono convertite e rinominate in
+    # WKT da ``_converti_geometrie_secondarie_in_wkt``.
+    physical_names: list[str] = []
+    secondary_renames: set[str] = set()
+    for name in names:
+        if geom_column and name == geom_column:
+            physical_names.append("geometry")
+            continue
+        if name.lower() in _GEOMETRY_LIKE_COLUMN_NAMES:
+            candidate = f"{name}_wkt"
+            base_candidate = candidate
+            counter = 2
+            while candidate in names or candidate in secondary_renames:
+                candidate = f"{base_candidate}_{counter}"
+                counter += 1
+            secondary_renames.add(candidate)
+            physical_names.append(candidate)
+            continue
+        physical_names.append(name)
+
     if (formato or "").lower() != "shp":
-        return names
+        return physical_names
 
     used: set[str] = set()
     out: list[str] = []
-    for name in names:
-        if geom_column and name == geom_column:
+    for name in physical_names:
+        if name == "geometry":
             out.append(name)
             continue
         out.append(_unique_shapefile_field_name(name, used))
+    return out
+
+
+def _is_temporal_logical_type(raw_type: Any) -> bool:
+    logical = str(raw_type or "").strip().lower()
+    return logical in _TEMPORAL_LOGICAL_TYPES or logical.startswith("datetime64")
+
+
+def _parse_declared_temporal_text(value: str) -> datetime:
+    text = value.strip()
+    iso_year_first = re.match(r"^\d{4}[-/]\d{1,2}[-/]\d{1,2}", text)
+    parsed = pd.to_datetime(
+        text,
+        format="mixed",
+        dayfirst=not bool(iso_year_first),
+        errors="raise",
+    )
+    return parsed.to_pydatetime() if isinstance(parsed, pd.Timestamp) else parsed
+
+
+def _normalize_geo_temporal_scalar(
+    value: Any,
+    *,
+    declared_type: Any,
+) -> tuple[Any, bool]:
+    if value is None or value is pd.NA or value is pd.NaT:
+        return None, True
+    try:
+        if pd.isna(value):
+            return None, True
+    except (TypeError, ValueError):
+        pass
+
+    parsed = value
+    if isinstance(parsed, str):
+        if not _is_temporal_logical_type(declared_type):
+            return value, False
+        if not parsed.strip():
+            return None, True
+        try:
+            parsed = _parse_declared_temporal_text(parsed)
+        except (TypeError, ValueError, OverflowError):
+            return value, False
+    elif isinstance(parsed, pd.Timestamp):
+        parsed = parsed.to_pydatetime()
+    elif isinstance(parsed, date) and not isinstance(parsed, datetime):
+        parsed = datetime.combine(parsed, time.min)
+
+    if not isinstance(parsed, datetime):
+        return value, False
+    if parsed.tzinfo is not None and parsed.utcoffset() is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    if str(declared_type or "").strip().lower() == "date":
+        parsed = datetime.combine(parsed.date(), time.min)
+    return parsed, True
+
+
+def _prepare_temporal_columns_for_geo(
+    gdf,
+    formato: str,
+    column_types: Optional[Mapping[str, Any]],
+):
+    """Normalize temporal attributes for the target OGR driver."""
+    declared_exact = dict(column_types or {})
+    declared_lower = {
+        str(name).lower(): raw_type
+        for name, raw_type in declared_exact.items()
+    }
+    active_geometry = gdf.geometry.name
+    out = gdf
+
+    for column in gdf.columns:
+        if column == active_geometry:
+            continue
+        series = gdf[column]
+        declared_type = declared_exact.get(str(column)) or declared_lower.get(
+            str(column).lower()
+        )
+        dtype_temporal = pd.api.types.is_datetime64_any_dtype(series.dtype)
+        sample = series.dropna().head(20)
+        native_temporal = any(isinstance(value, (date, datetime, pd.Timestamp)) for value in sample)
+        if not (
+            dtype_temporal
+            or native_temporal
+            or _is_temporal_logical_type(declared_type)
+        ):
+            continue
+
+        normalized: list[Any] = []
+        invalid_values: list[Any] = []
+        for value in series:
+            converted, valid = _normalize_geo_temporal_scalar(
+                value,
+                declared_type=declared_type,
+            )
+            normalized.append(converted)
+            if not valid:
+                invalid_values.append(value)
+
+        if out is gdf:
+            out = copy_frame_for_update(gdf)
+
+        if formato == "shp":
+            # DBF non supporta DateTime. ISO conserva data, ora e valori
+            # anteriori al 1900 senza conversioni implicite del driver.
+            non_null_values = series.dropna().tolist()
+            native_date_only = bool(non_null_values) and all(
+                isinstance(value, date) and not isinstance(value, datetime)
+                for value in non_null_values
+            )
+            date_only = (
+                str(declared_type or "").strip().lower() == "date"
+                or native_date_only
+            )
+            out[column] = [
+                (
+                    value.date().isoformat()
+                    if date_only and isinstance(value, datetime)
+                    else value.isoformat(sep=" ")
+                    if isinstance(value, datetime)
+                    else value
+                )
+                for value in normalized
+            ]
+            continue
+
+        if invalid_values:
+            raise ValueError(
+                f"{formato}: colonna temporale dichiarata {column!r} contiene "
+                f"valori non validi (esempio: {invalid_values[0]!r})"
+            )
+        out[column] = pd.to_datetime(
+            pd.Series(normalized, index=series.index),
+            errors="raise",
+        )
     return out
 
 
@@ -133,16 +311,17 @@ def geospatial_dataframe_to_bytes(
     formato: str,
     geom_column: Optional[str],
     crs: str,
+    *,
+    column_types: Optional[Mapping[str, Any]] = None,
 ) -> bytes:
     """Serialize a DataFrame to bytes for supported geospatial formats.
 
-    Formati supportati (tutti RAM-only dal caller's perspective):
-      - `geojson`: single-file, serializzato via `gdf.to_json`.
+    Formati supportati (tutti bytes-only dal caller's perspective):
+      - `geojson`: single-file, serializzato dal driver OGR GeoJSON.
       - `gpkg` / `geopackage`: single-file SQLite via pyogrio bytes.
       - `shp`: multi-file zippato. Il boundary `io.geospatial.
-        write_shapefile_zip_bytes` usa una temp dir INTERNA al
-        modulo per scrivere i sidecar e li zippa; il caller riceve
-        solo lo ZIP di bytes.
+        write_shapefile_zip_bytes` usa `/vsimem` oppure, su Windows,
+        una temp dir interna per i sidecar; il caller riceve solo lo ZIP.
     """
     if formato not in ("geojson", "gpkg", "geopackage", "shp"):
         raise ValueError(f"Formato '{formato}' non supportato")
@@ -165,9 +344,10 @@ def geospatial_dataframe_to_bytes(
             gdf = gdf.set_geometry(geom_column)
     gdf = _converti_geometrie_secondarie_in_wkt(gdf)
     gdf = _compact_whole_number_float_properties(gdf)
+    gdf = _prepare_temporal_columns_for_geo(gdf, formato, column_types)
 
     if formato == "geojson":
-        return gdf.to_json().encode("utf-8")
+        return geospatial_io_module.write_vector_bytes(gdf, driver="GeoJSON")
     if formato == "shp":
         return geospatial_io_module.write_shapefile_zip_bytes(gdf, name="layer")
     # GPKG/GeoPackage: write via pyogrio bytes (RAM-only).
@@ -175,13 +355,6 @@ def geospatial_dataframe_to_bytes(
     # Passare "gpkg" come layer name e' vietato da OGR (prefisso
     # riservato GeoPackage).
     return geospatial_io_module.write_vector_bytes(gdf, driver="GPKG")
-
-
-_GEOMETRY_LIKE_COLUMN_NAMES = {
-    "geom", "geometry", "shape", "the_geom",
-    "geom_4326", "geom_wgs84",
-}
-
 
 def _converti_geometrie_secondarie_in_wkt(gdf):
     """Convert and rename non-active geometry-like columns for OGR export."""
