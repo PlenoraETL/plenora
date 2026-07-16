@@ -17,11 +17,26 @@ describe('ExecutableDynamicRunForm multi-file contract', () => {
 
   it('does not allow execution with selected but unanalyzed files', () => {
     expect(source).toContain('items.every(item => Boolean(item.analysis))');
+    expect(source).toContain('column => Boolean(item.mapping?.[column.name])');
   });
 
   it('projects manifest validation constraints into native form controls', () => {
     expect(source).toContain('min: definition.validation?.minimum');
     expect(source).toContain('maxLength: definition.validation?.max_length');
     expect(source).toContain('pattern: definition.validation?.pattern');
+  });
+
+  it('uses the shared modal and distinct configuration, progress and result states', () => {
+    expect(source).toContain('<ModalWrapper');
+    expect(source).toContain('className="esw-run-modal"');
+    expect(source).toContain('useSmoothProgress(taskProgress, isRunning)');
+    expect(source).toContain('Elaborazione in corso');
+    expect(source).toContain('Il risultato è pronto');
+    expect(source).not.toContain('className="esw-overlay"');
+  });
+
+  it('locks file-based output to the extension inferred by the backend', () => {
+    expect(source).toContain('eseguibile.output_is_file_based && eseguibile.inferred_output_extension');
+    expect(source).toContain("? eseguibile.inferred_output_extension");
   });
 });

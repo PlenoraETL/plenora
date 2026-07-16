@@ -1,16 +1,17 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { analyzeEseguibileUpload, downloadTaskOutput, runEseguibile } from '../../api';
 import { useTaskPolling } from '../../hooks/useTaskPolling';
-import useDialogFocus from '../../hooks/useDialogFocus';
+import { useSmoothProgress } from '../../hooks/useSmoothProgress';
 import { useToast } from '../../hooks/useToast';
 import { humanizeError } from '../../utils/errorMessages';
+import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
+import './EseguibileExecuteWizard.css';
 
 const OUTPUT_FORMATS = ['xlsx', 'csv', 'json', 'geojson', 'gpkg', 'shp'];
 
 function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
   const toast = useToast();
-  const dialogRef = useRef(null);
   const manifest = eseguibile.manifest;
   const definitions = useMemo(
     () => [...(manifest?.inputs || [])].sort((a, b) => (a.order || 0) - (b.order || 0)),
@@ -20,7 +21,11 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
     definitions.filter(item => item.kind !== 'file').map(item => [item.key, item.default_value ?? '']),
   ));
   const [files, setFiles] = useState({});
-  const [outputFormat, setOutputFormat] = useState(eseguibile.default_output_format || 'xlsx');
+  const [outputFormat, setOutputFormat] = useState(
+    eseguibile.output_is_file_based && eseguibile.inferred_output_extension
+      ? eseguibile.inferred_output_extension
+      : eseguibile.default_output_format || 'xlsx',
+  );
   const [outputName, setOutputName] = useState(eseguibile.default_output_name || '');
   const [error, setError] = useState(null);
   const [busyKey, setBusyKey] = useState(null);
@@ -31,7 +36,12 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
   const [taskMessage, setTaskMessage] = useState('');
   const [taskResult, setTaskResult] = useState(null);
   const { startPolling } = useTaskPolling({ interval: 1500 });
-  useDialogFocus(true, onClose, dialogRef, { closeOnEsc: !executing });
+  const isRunning = executing || ['pending', 'progress', 'started', 'retry'].includes(taskStatus);
+  const smoothProgress = useSmoothProgress(taskProgress, isRunning);
+  const projectType = String(eseguibile.project_type || 'estrai').toLowerCase();
+  const modalVariant = ['estrai', 'manipola', 'arricchisci'].includes(projectType)
+    ? projectType
+    : 'estrai';
 
   const updateFile = (key, index, patch) => setFiles(current => {
     const items = [...(current[key] || [])];
@@ -100,7 +110,13 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
     if (definition.kind === 'file') {
       const items = files[definition.key] || [];
       if (definition.required && items.length === 0) return false;
-      return items.every(item => Boolean(item.analysis));
+      const allAnalyzed = items.every(item => Boolean(item.analysis));
+      if (!allAnalyzed) return false;
+      const requiredColumns = (definition.expected_columns || [])
+        .filter(column => column.required);
+      return items.every(item => requiredColumns.every(
+        column => Boolean(item.mapping?.[column.name]),
+      ));
     }
     if (!definition.required) return true;
     return values[definition.key] !== '' && values[definition.key] != null;
@@ -143,10 +159,23 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
   };
 
   const download = async () => {
-    const base = (outputName || eseguibile.name || 'risultato').replace(/\.[^.]+$/, '');
-    await downloadTaskOutput(taskId, `${base}.${outputFormat}`);
-    if (onAfterDownload) await onAfterDownload(taskId);
-    onClose();
+    try {
+      const base = (outputName || eseguibile.name || 'risultato').replace(/\.[^.]+$/, '');
+      await downloadTaskOutput(taskId, `${base}.${outputFormat}`);
+      if (onAfterDownload) await onAfterDownload(taskId);
+      onClose();
+    } catch (exc) {
+      toast.error(humanizeError(exc).message);
+    }
+  };
+
+  const returnToInputs = () => {
+    setTaskId(null);
+    setTaskStatus(null);
+    setTaskProgress(0);
+    setTaskMessage('');
+    setTaskResult(null);
+    setError(null);
   };
 
   const renderScalar = definition => {
@@ -173,88 +202,246 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
     return <input {...common} type={type === 'text' ? 'text' : type} />;
   };
 
-  return (
-    <div className="esw-overlay" onClick={event => event.target === event.currentTarget && !executing && onClose()}>
-      <div className="esw-modal" ref={dialogRef} role="dialog" aria-modal="true" tabIndex={-1}>
-        <div className="esw-header">
-          <div><h2 className="esw-title">▶ {eseguibile.name}</h2><p className="esw-subtitle">Versione {eseguibile.active_version} · {String(eseguibile.project_type).toUpperCase()}</p></div>
-          <button type="button" className="esw-close" onClick={onClose} disabled={executing}>×</button>
-        </div>
-        <div className="esw-body esw-dynamic">
-          {taskResult?.permissionRevoked && <PermissionRevokedBanner message={taskResult.message} />}
-          {error && <div className="esw-error">❌ {error}</div>}
+  const footer = (
+    <>
+      {taskId && !isRunning && taskStatus !== 'success' && (
+        <ModalButton variant="secondary" onClick={returnToInputs}>
+          Torna agli input
+        </ModalButton>
+      )}
+      <ModalButton variant="secondary" onClick={onClose} disabled={isRunning}>
+        {taskId ? 'Chiudi' : 'Annulla'}
+      </ModalButton>
+      {!taskId && (
+        <ModalButton variant="primary" onClick={execute} disabled={!canRun} loading={executing}>
+          Esegui progetto
+        </ModalButton>
+      )}
+      {taskStatus === 'success' && (
+        <ModalButton variant="primary" onClick={download}>
+          Scarica risultato
+        </ModalButton>
+      )}
+    </>
+  );
 
-          {!taskId && definitions.map(definition => (
-            <section className="esw-dynamic__input" key={definition.key}>
-              <div className="esw-dynamic__label">
-                <strong>{definition.label}</strong>{definition.required && <span>*</span>}
-                <code>{definition.key}</code>
+  return (
+    <ModalWrapper
+      isOpen
+      onClose={onClose}
+      title={eseguibile.name}
+      subtitle={`Versione ${eseguibile.active_version} · ${projectType.toUpperCase()}`}
+      icon="▶"
+      size="lg"
+      variant={modalVariant}
+      className="esw-run-modal"
+      footer={footer}
+      closeOnOverlay={!isRunning}
+      closeOnEsc={!isRunning}
+      showCloseButton={!isRunning}
+    >
+      <div className="esw-run">
+        {taskResult?.permissionRevoked && (
+          <PermissionRevokedBanner message={taskResult.message} />
+        )}
+        {error && !taskResult?.permissionRevoked && (
+          <div className="esw-run__alert" role="alert">
+            <span className="esw-run__alert-icon">!</span>
+            <div>
+              <strong>Esecuzione non completata</strong>
+              <p>{error}</p>
+            </div>
+          </div>
+        )}
+
+        {!taskId && (
+          <>
+            <div className="esw-run__intro">
+              <div>
+                <span className="esw-run__eyebrow">Configurazione esecuzione</span>
+                <h3>Compila gli input richiesti</h3>
+                <p>I valori inseriti saranno applicati ai nodi collegati nel progetto.</p>
               </div>
-              {definition.description && <p>{definition.description}</p>}
-              {definition.kind === 'file' ? (
-                <>
-                  <input
-                    type="file"
-                    multiple={Boolean(definition.multiple)}
-                    accept={(definition.validation?.accepted_extensions || []).map(ext => `.${String(ext).replace(/^\./, '')}`).join(',')}
-                    disabled={executing}
-                    onChange={event => selectFiles(definition, event.target.files)}
-                  />
-                  {definition.multiple && <small>{(files[definition.key] || []).length} file selezionati · saranno uniti per righe</small>}
-                  {(files[definition.key] || []).map((state, index) => {
-                    const itemKey = `${definition.key}:${index}`;
-                    return (
-                      <div className="esw-dynamic__file" key={`${state.file?.name || 'file'}:${index}`}>
-                        <div className="esw-dynamic__file-title">
-                          <strong>{state.file?.name}</strong>
-                          <button type="button" className="esw-btn esw-btn--secondary" disabled={!state.file || busyKey === itemKey} onClick={() => analyzeFile(definition, index)}>
-                            {busyKey === itemKey ? 'Analisi…' : state.analysis ? 'Rianalizza' : 'Analizza'}
-                          </button>
-                        </div>
-                        {state.analysis && (
-                          <div className="esw-dynamic__analysis">
-                            <span>✓ {state.analysis.row_count} righe</span>
-                            {(definition.expected_columns || []).map(column => (
-                              <label key={column.name}>
-                                <code>{column.name}</code>
-                                <select
-                                  value={state.mapping?.[column.name] || ''}
-                                  onChange={event => updateFile(definition.key, index, { mapping: { ...(state.mapping || {}), [column.name]: event.target.value } })}
-                                >
-                                  <option value="">Non mappata</option>
-                                  {state.analysis.detected_columns.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}
-                                </select>
-                              </label>
-                            ))}
+              <span className={`esw-run__type esw-run__type--${modalVariant}`}>
+                {projectType}
+              </span>
+            </div>
+
+            <div className="esw-run__inputs">
+              {definitions.map((definition, definitionIndex) => (
+                <section className="esw-run__input-card" key={definition.key}>
+                  <div className="esw-run__input-heading">
+                    <span className="esw-run__input-index">{definitionIndex + 1}</span>
+                    <div className="esw-run__input-copy">
+                      <div className="esw-run__input-title">
+                        <strong>{definition.label}</strong>
+                        {definition.required && <span className="esw-run__required">Obbligatorio</span>}
+                      </div>
+                      {definition.description && <p>{definition.description}</p>}
+                    </div>
+                    <span className="esw-run__kind">{definition.kind}</span>
+                  </div>
+
+                  <div className="esw-run__control">
+                    {definition.kind === 'file' ? (
+                      <>
+                        <label className="esw-run__file-picker">
+                          <input
+                            type="file"
+                            multiple={Boolean(definition.multiple)}
+                            accept={(definition.validation?.accepted_extensions || []).map(ext => `.${String(ext).replace(/^\./, '')}`).join(',')}
+                            disabled={executing}
+                            onChange={event => selectFiles(definition, event.target.files)}
+                          />
+                          <span className="esw-run__file-picker-icon">＋</span>
+                          <span>
+                            <strong>{definition.multiple ? 'Seleziona uno o più file' : 'Seleziona un file'}</strong>
+                            <small>
+                              {(definition.validation?.accepted_extensions || []).length
+                                ? (definition.validation.accepted_extensions || []).join(', ').toUpperCase()
+                                : 'Formati supportati dal progetto'}
+                            </small>
+                          </span>
+                        </label>
+                        {definition.multiple && (files[definition.key] || []).length > 0 && (
+                          <div className="esw-run__selection-summary">
+                            {(files[definition.key] || []).length} file selezionati · unione per righe
                           </div>
                         )}
-                      </div>
-                    );
-                  })}
-                </>
-              ) : renderScalar(definition)}
-            </section>
-          ))}
-
-          {!taskId && (
-            <div className="esw-dynamic__output">
-              <label>Formato output<select value={outputFormat} disabled={eseguibile.output_is_file_based} onChange={event => setOutputFormat(event.target.value)}>{OUTPUT_FORMATS.map(format => <option key={format} value={format}>{format.toUpperCase()}</option>)}</select></label>
-              <label>Nome output<input value={outputName} onChange={event => setOutputName(event.target.value)} placeholder={eseguibile.name} /></label>
+                        {(files[definition.key] || []).map((state, index) => {
+                          const itemKey = `${definition.key}:${index}`;
+                          return (
+                            <article className="esw-run__file" key={`${state.file?.name || 'file'}:${index}`}>
+                              <div className="esw-run__file-head">
+                                <div className="esw-run__file-name">
+                                  <span>▤</span>
+                                  <div>
+                                    <strong title={state.file?.name}>{state.file?.name}</strong>
+                                    <small>{state.file ? `${Math.max(1, Math.round(state.file.size / 1024)).toLocaleString()} KB` : ''}</small>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="esw-run__analyze"
+                                  disabled={!state.file || busyKey === itemKey}
+                                  onClick={() => analyzeFile(definition, index)}
+                                >
+                                  {busyKey === itemKey ? 'Analisi…' : state.analysis ? 'Rianalizza' : 'Analizza file'}
+                                </button>
+                              </div>
+                              {state.analysis && (
+                                <div className="esw-run__analysis">
+                                  <div className="esw-run__analysis-summary">
+                                    <span className="esw-run__check">✓</span>
+                                    <strong>{state.analysis.row_count.toLocaleString()} righe rilevate</strong>
+                                    <span>{state.analysis.detected_columns.length} colonne</span>
+                                  </div>
+                                  {(definition.expected_columns || []).length > 0 && (
+                                    <div className="esw-run__mapping">
+                                      {(definition.expected_columns || []).map(column => (
+                                        <label key={column.name}>
+                                          <span><code>{column.name}</code>{column.required && ' *'}</span>
+                                          <select
+                                            value={state.mapping?.[column.name] || ''}
+                                            onChange={event => updateFile(definition.key, index, { mapping: { ...(state.mapping || {}), [column.name]: event.target.value } })}
+                                          >
+                                            <option value="">Non mappata</option>
+                                            {state.analysis.detected_columns.map(item => (
+                                              <option key={item.name} value={item.name}>{item.name}</option>
+                                            ))}
+                                          </select>
+                                        </label>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </article>
+                          );
+                        })}
+                      </>
+                    ) : renderScalar(definition)}
+                  </div>
+                </section>
+              ))}
             </div>
-          )}
 
-          {taskId && taskStatus !== 'success' && (
-            <div className="esw-progress"><div className="esw-progress-icon">⚙</div><div className="esw-progress-bar"><div className="esw-progress-fill" style={{ width: `${taskProgress}%` }} /></div><div className="esw-progress-text">{taskMessage || taskStatus}</div></div>
-          )}
-          {taskStatus === 'success' && <div className="esw-success"><div className="esw-success-icon">✓</div><h3>Esecuzione completata</h3></div>}
-        </div>
-        <div className="esw-actions">
-          <button type="button" className="esw-btn esw-btn--secondary" onClick={onClose} disabled={executing}>Chiudi</button>
-          {!taskId && <button type="button" className="esw-btn esw-btn--primary" onClick={execute} disabled={!canRun || executing}>{executing ? 'Avvio…' : '▶ Esegui'}</button>}
-          {taskStatus === 'success' && <button type="button" className="esw-btn esw-btn--primary" onClick={download}>Scarica risultato</button>}
-        </div>
+            <section className="esw-run__output-card">
+              <div className="esw-run__section-heading">
+                <div>
+                  <span className="esw-run__eyebrow">Risultato</span>
+                  <h3>File di output</h3>
+                </div>
+                <span className="esw-run__output-icon">↓</span>
+              </div>
+              <div className="esw-run__output-grid">
+                <label>
+                  <span>Formato</span>
+                  {eseguibile.output_is_file_based ? (
+                    <div className="esw-run__fixed-format">.{outputFormat}</div>
+                  ) : (
+                    <select value={outputFormat} onChange={event => setOutputFormat(event.target.value)}>
+                      {OUTPUT_FORMATS.map(format => (
+                        <option key={format} value={format}>{format.toUpperCase()}</option>
+                      ))}
+                    </select>
+                  )}
+                </label>
+                <label>
+                  <span>Nome file</span>
+                  <input
+                    value={outputName}
+                    onChange={event => setOutputName(event.target.value)}
+                    placeholder={eseguibile.name}
+                  />
+                </label>
+              </div>
+            </section>
+          </>
+        )}
+
+        {taskId && isRunning && (
+          <section className="esw-run__state" aria-live="polite">
+            <div className={`esw-run__state-mark esw-run__state-mark--${modalVariant}`}>
+              <span />
+            </div>
+            <span className="esw-run__eyebrow">Elaborazione in corso</span>
+            <h3>Stiamo eseguendo il progetto</h3>
+            <p>{taskMessage || 'Preparazione dei dati…'}</p>
+            <div className="esw-run__progress-row">
+              <div className="esw-run__progress-bar">
+                <div
+                  className={`esw-run__progress-fill esw-run__progress-fill--${modalVariant}`}
+                  style={{ width: `${smoothProgress}%` }}
+                />
+              </div>
+              <strong>{smoothProgress}%</strong>
+            </div>
+            <div className="esw-run__task-meta">
+              <span>Task</span><code>{taskId}</code>
+            </div>
+          </section>
+        )}
+
+        {taskStatus === 'success' && (
+          <section className="esw-run__state esw-run__state--success">
+            <div className="esw-run__success-mark">✓</div>
+            <span className="esw-run__eyebrow">Operazione completata</span>
+            <h3>Il risultato è pronto</h3>
+            <p>Puoi scaricare il file generato oppure chiudere questa finestra.</p>
+            <div className="esw-run__result-grid">
+              {taskResult?.rows_processed != null && (
+                <div><span>Righe processate</span><strong>{taskResult.rows_processed.toLocaleString()}</strong></div>
+              )}
+              <div><span>Formato</span><strong>{outputFormat.toUpperCase()}</strong></div>
+              {taskResult?.output_file && (
+                <div className="esw-run__result-file"><span>File</span><code>{taskResult.output_file}</code></div>
+              )}
+            </div>
+          </section>
+        )}
       </div>
-    </div>
+    </ModalWrapper>
   );
 }
 
