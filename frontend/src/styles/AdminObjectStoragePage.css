@@ -23,6 +23,10 @@
 .storage-admin__actions { display: flex; align-items: center; gap: 8px; }
 .storage-admin .storage-admin__delete { border-color: #fecaca; background: #fff1f2; color: #b91c1c; font-size: 12px; }
 .storage-admin .storage-admin__delete:hover:not(:disabled) { border-color: #f87171; background: #ffe4e6; }
+.storage-admin__orphan-warning { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 14px 0; padding: 14px 16px; border: 1px solid #fca5a5; border-radius: 10px; background: #fff1f2; color: #991b1b; }
+.storage-admin__orphan-warning div { display: flex; flex-direction: column; gap: 3px; }
+.storage-admin__orphan-warning span { font-size: 13px; }
+.storage-admin__orphan-warning button { flex: 0 0 auto; border-color: #dc2626; background: #dc2626; color: #fff; }
 .storage-admin__empty { padding: 36px !important; text-align: center !important; color: var(--text-secondary, #667085); }
 .storage-admin__pager { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
 .storage-admin__projects { display: grid; gap: 12px; }

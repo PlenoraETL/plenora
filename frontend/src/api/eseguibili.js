@@ -42,6 +42,12 @@ export const createEseguibile = async (payload) => {
   return r.data;
 };
 
+/** Aggiorna i metadati dell'eseguibile senza creare una nuova versione. */
+export const updateEseguibile = async (id, payload) => {
+  const r = await http.put(`/eseguibili/${id}`, payload);
+  return r.data;
+};
+
 /**
  * Elimina un eseguibile. Solo admin.
  */

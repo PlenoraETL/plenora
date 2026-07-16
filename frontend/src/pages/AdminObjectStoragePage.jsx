@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import AppSidebar from '../components/AppSidebar';
 import {
+  cleanupOrphanStorage,
   deleteAllStoragePreviews,
   deleteStorageObject,
   downloadStorageObject,
@@ -42,8 +43,12 @@ export default function AdminObjectStoragePage() {
   const [downloading, setDownloading] = useState('');
   const [deleting, setDeleting] = useState('');
   const [purgingPreviews, setPurgingPreviews] = useState(false);
+  const [cleaningOrphans, setCleaningOrphans] = useState(false);
   const confirmModal = useConfirmModal();
   const groupedResults = scope === 'canonical' && domain === 'results';
+  const orphanProjects = (projectCatalog?.projects || []).filter(
+    (project) => project.project_name === 'Progetto eliminato',
+  );
 
   const load = useCallback(async (requestedCursor = null) => {
     setLoading(true);
@@ -160,6 +165,42 @@ export default function AdminObjectStoragePage() {
     }
   };
 
+  const cleanupOrphans = async () => {
+    const orphanResults = orphanProjects.reduce(
+      (count, project) => count + project.results.length, 0,
+    );
+    const confirmed = await confirmModal.confirm({
+      title: 'Bonificare i risultati orfani?',
+      message: (
+        `Saranno rimossi ${orphanResults} risultati appartenenti a `
+        + `${orphanProjects.length} progetti non piu esistenti, inclusi i relativi file. `
+        + 'I progetti attivi non verranno modificati.'
+      ),
+      confirmText: 'Bonifica orfani',
+      cancelText: 'Annulla',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+    setCleaningOrphans(true);
+    setError('');
+    setNotice('');
+    try {
+      const report = await cleanupOrphanStorage();
+      const deleted = report?.orphan_results?.rows_deleted || 0;
+      const errors = report?.errors?.length || 0;
+      setNotice(
+        errors
+          ? `Bonifica parziale: ${deleted} risultati eliminati, ${errors} errori`
+          : `Bonifica completata: ${deleted} risultati orfani eliminati`,
+      );
+      await load(null);
+    } catch (err) {
+      setError(err.response?.data?.detail || err.message || 'Bonifica orfani non riuscita');
+    } finally {
+      setCleaningOrphans(false);
+    }
+  };
+
   const totalBytes = (page?.objects || []).reduce(
     (sum, item) => sum + Number(item.size_bytes || 0), 0,
   );
@@ -188,6 +229,20 @@ export default function AdminObjectStoragePage() {
 
         {error && <div className="storage-admin__error">{error}</div>}
         {notice && <div className="storage-admin__notice">{notice}</div>}
+
+        {groupedResults && orphanProjects.length > 0 && (
+          <div className="storage-admin__orphan-warning">
+            <div>
+              <strong>Rilevati risultati orfani</strong>
+              <span>
+                {orphanProjects.length} progetti eliminati conservano ancora risultati nello storage.
+              </span>
+            </div>
+            <button type="button" onClick={cleanupOrphans} disabled={loading || cleaningOrphans}>
+              {cleaningOrphans ? 'Bonifica in corso...' : 'Bonifica orfani'}
+            </button>
+          </div>
+        )}
 
         <div className="storage-admin__summary">
           <span>Bucket: <b>{page?.bucket || '—'}</b></span>

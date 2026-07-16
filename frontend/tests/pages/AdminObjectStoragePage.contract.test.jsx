@@ -6,12 +6,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminObjectStoragePage from '../../src/pages/AdminObjectStoragePage';
 
 const {
+  cleanupOrphanStorageMock,
   deleteAllStoragePreviewsMock,
   deleteStorageObjectMock,
   downloadStorageObjectMock,
   listObjectStorageMock,
   listObjectStorageProjectsMock,
 } = vi.hoisted(() => ({
+  cleanupOrphanStorageMock: vi.fn(),
   deleteAllStoragePreviewsMock: vi.fn(),
   deleteStorageObjectMock: vi.fn(),
   downloadStorageObjectMock: vi.fn(),
@@ -20,6 +22,7 @@ const {
 }));
 
 vi.mock('../../src/api/adminObjectStorage', () => ({
+  cleanupOrphanStorage: cleanupOrphanStorageMock,
   deleteAllStoragePreviews: deleteAllStoragePreviewsMock,
   deleteStorageObject: deleteStorageObjectMock,
   downloadStorageObject: downloadStorageObjectMock,
@@ -66,6 +69,10 @@ describe('AdminObjectStoragePage delete contract', () => {
     });
     deleteStorageObjectMock.mockResolvedValue({ deleted: true });
     deleteAllStoragePreviewsMock.mockResolvedValue({ deleted: true, deleted_count: 2 });
+    cleanupOrphanStorageMock.mockResolvedValue({
+      orphan_results: { rows_deleted: 1 },
+      errors: [],
+    });
   });
 
   it('requires explicit confirmation, deletes, and refreshes the page', async () => {
@@ -107,5 +114,40 @@ describe('AdminObjectStoragePage delete contract', () => {
       group_id: undefined,
     }));
     expect(await screen.findByText('Preview eliminate: 2')).toBeInTheDocument();
+  });
+
+  it('offers and applies cleanup when deleted projects retain results', async () => {
+    listObjectStorageProjectsMock.mockResolvedValue({
+      projects: [{
+        project_id: 'gone',
+        project_name: 'Progetto eliminato',
+        project_type: null,
+        group_id: 'g1',
+        results: [{
+          id: 'r-old',
+          key: 'tenants/g1/results/gone/r-old.bin',
+          filename: 'old.xlsx',
+          format: 'xlsx',
+          size_bytes: 42,
+          rows_count: 1,
+          created_at: '2026-07-14T12:00:00Z',
+        }],
+      }],
+      results_count: 1,
+      size_bytes: 42,
+    });
+    const user = userEvent.setup();
+    render(<AdminObjectStoragePage />);
+
+    await screen.findByText('Rilevati risultati orfani');
+    await user.click(screen.getByRole('button', { name: 'Bonifica orfani' }));
+    expect(cleanupOrphanStorageMock).not.toHaveBeenCalled();
+    const buttons = screen.getAllByRole('button', { name: 'Bonifica orfani' });
+    await user.click(buttons.at(-1));
+
+    await waitFor(() => expect(cleanupOrphanStorageMock).toHaveBeenCalledOnce());
+    expect(await screen.findByText(
+      'Bonifica completata: 1 risultati orfani eliminati',
+    )).toBeInTheDocument();
   });
 });

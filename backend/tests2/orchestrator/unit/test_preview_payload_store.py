@@ -39,6 +39,14 @@ class _FakeStorage:
     def list_objects(self, prefix: str) -> list[dict]:
         return [item for item in self.listed if item["key"].startswith(prefix)]
 
+    def list_objects_page(self, prefix: str, *, limit: int, cursor=None) -> dict:
+        assert limit > 0
+        assert cursor is None
+        return {
+            "objects": self.list_objects(prefix)[:limit],
+            "next_cursor": None,
+        }
+
 
 def _patch_storage(monkeypatch) -> _FakeStorage:
     fake = _FakeStorage()
@@ -129,6 +137,36 @@ def test_delete_canonical_envelope_without_group_fails_closed(monkeypatch):
         {"preview_storage_key": "tenants/g1/previews/project/task.json"}
     ) is False
     assert fake.deleted == []
+
+
+def test_delete_project_previews_removes_canonical_and_legacy_prefixes(monkeypatch):
+    fake = _patch_storage(monkeypatch)
+    now = datetime.now(timezone.utc)
+    fake.listed = [
+        {
+            "key": "tenants/g1/previews/project-1/task-a.json",
+            "last_modified": now,
+            "size": 2,
+        },
+        {
+            "key": "previews/project-1/task-old.json",
+            "last_modified": now,
+            "size": 2,
+        },
+        {
+            "key": "tenants/g1/previews/project-2/task-b.json",
+            "last_modified": now,
+            "size": 2,
+        },
+    ]
+
+    assert store.delete_project_preview_payloads(
+        group_id="g1", project_id="project-1",
+    ) == 2
+    assert fake.deleted == [
+        "tenants/g1/previews/project-1/task-a.json",
+        "previews/project-1/task-old.json",
+    ]
 
 
 def test_storage_key_rejects_path_traversal(monkeypatch):

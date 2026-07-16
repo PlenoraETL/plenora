@@ -20,6 +20,7 @@ from app.core.io.tenant_namespace import (
     assert_tenant_key,
     build_tenant_key,
     legacy_domain,
+    tenant_domain_prefix,
 )
 from app.shared.resources.storage_layout import PREVIEWS_PREFIX
 from app.utils.logger import get_logger
@@ -191,6 +192,44 @@ def delete_preview_payload(payload: Mapping[str, object]) -> bool:
         return False
 
 
+def delete_project_preview_payloads(*, group_id: str, project_id: str) -> int:
+    """Delete canonical and legacy preview payloads owned by one project.
+
+    Preview objects have no durable metadata row of their own, so project
+    lifecycle cleanup must address their deterministic prefix directly.
+    """
+    safe_project = "".join(
+        c for c in str(project_id) if c.isalnum() or c in "-_"
+    )
+    if not safe_project or safe_project != str(project_id):
+        raise PreviewPayloadError("project_id non valido per preview cleanup")
+
+    storage = object_storage_module.get_runtime_object_storage()
+    prefixes = (
+        f"{tenant_domain_prefix(group_id, PREVIEWS_PREFIX)}{safe_project}/",
+        f"{PREVIEWS_PREFIX}/{safe_project}/",
+    )
+    removed = 0
+    for prefix in prefixes:
+        cursor = None
+        while True:
+            page = storage.list_objects_page(
+                prefix,
+                limit=_CLEANUP_PAGE_SIZE,
+                cursor=cursor,
+            )
+            for obj in page.get("objects") or []:
+                key = str(obj.get("key") or "")
+                if not key.startswith(prefix):
+                    continue
+                storage.delete(key)
+                removed += 1
+            cursor = page.get("next_cursor")
+            if not cursor:
+                break
+    return removed
+
+
 def cleanup_expired_preview_payloads(*, ttl_seconds: int) -> int:
     """Delete preview objects older than the task-result TTL.
 
@@ -242,6 +281,7 @@ __all__ = [
     "PreviewPayloadError",
     "cleanup_expired_preview_payloads",
     "delete_preview_payload",
+    "delete_project_preview_payloads",
     "hydrate_preview_payload",
     "is_preview_reference",
     "persist_preview_payload",

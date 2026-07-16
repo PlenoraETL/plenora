@@ -281,6 +281,31 @@ class ProjectLifecycleService:
             )
             critical_failures.append("results_blobs")
 
+        # Preview payloads are derived and reconstructible, but unlike result
+        # rows they have no DB record whose deletion can drive storage cleanup.
+        # Remove their project prefix explicitly; TTL remains the safety net.
+        try:
+            from app.core.orchestrator.preview_payload_store import (
+                delete_project_preview_payloads,
+            )
+
+            deleted_previews = delete_project_preview_payloads(
+                group_id=row.group_id,
+                project_id=project_id,
+            )
+            if deleted_previews:
+                logger.info(
+                    f"Cleanup preview: {deleted_previews} payload eliminati per progetto {project_id}",
+                    op="delete_project",
+                )
+        except Exception as e:
+            logger.warning(
+                f"Cleanup preview fallito per {project_id}: {e}",
+                op="delete_project",
+                exc_info=True,
+            )
+            derived_failures.append("preview_payloads")
+
         # intent: cascade step derived — comparison_keys e' config derivata
         # volume minimo e nessun dato utente sensibile. Orfano innocuo
         # outcome: fail-open con breadcrumb

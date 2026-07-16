@@ -4,6 +4,7 @@ const { httpMock } = vi.hoisted(() => ({
   httpMock: {
     get: vi.fn(),
     delete: vi.fn(),
+    post: vi.fn(),
   },
 }));
 
@@ -60,5 +61,22 @@ describe('admin object storage api contract', () => {
       params: { scope: 'canonical', group_id: 'g1' },
     });
     expect(result.deleted_count).toBe(2);
+  });
+
+  it('runs the server-side orphan cleanup in apply mode', async () => {
+    httpMock.post.mockResolvedValueOnce({
+      data: { orphan_results: { rows_deleted: 2 }, errors: [] },
+    });
+    const { cleanupOrphanStorage } = await import(
+      '../../src/api/adminObjectStorage'
+    );
+
+    await cleanupOrphanStorage();
+
+    expect(httpMock.post).toHaveBeenCalledWith(
+      '/projects/admin/cleanup-orphans',
+      null,
+      { params: { dry_run: false } },
+    );
   });
 });

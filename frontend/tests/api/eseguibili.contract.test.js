@@ -134,6 +134,18 @@ describe('eseguibili api contract', () => {
     expect(httpMock.delete).toHaveBeenCalledWith('/eseguibili/e-9');
   });
 
+  it('updates executable metadata through PUT without publishing a version', async () => {
+    httpMock.put.mockResolvedValueOnce({ data: { id: 'e-9', name: 'Nuovo nome' } });
+    const { updateEseguibile } = await import('../../src/api/eseguibili');
+
+    await expect(
+      updateEseguibile('e-9', { name: 'Nuovo nome' }),
+    ).resolves.toEqual({ id: 'e-9', name: 'Nuovo nome' });
+    expect(httpMock.put).toHaveBeenCalledWith('/eseguibili/e-9', {
+      name: 'Nuovo nome',
+    });
+  });
+
   it('exposes list, republish and activate version endpoints', async () => {
     httpMock.get.mockResolvedValueOnce({ data: [{ id: 'v-2' }] });
     httpMock.post

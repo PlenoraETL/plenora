@@ -8,7 +8,12 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listEseguibili, deleteEseguibile, listProjects } from '../api';
+import {
+  listEseguibili,
+  updateEseguibile,
+  deleteEseguibile,
+  listProjects,
+} from '../api';
 import { useAuth } from '../context/AuthContext';
 import EseguibileExecuteWizard from '../components/eseguibili/EseguibileExecuteWizard';
 import PublishEseguibileModal from '../components/eseguibili/PublishEseguibileModal';
@@ -33,6 +38,9 @@ function EseguibiliList() {
   const [selectedId, setSelectedId] = useState(null); // id dell'eseguibile in esecuzione
   const [sharingEseguibile, setSharingEseguibile] = useState(null); // modal condivisione cross-gruppo
   const [versioningEseguibile, setVersioningEseguibile] = useState(null);
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [savingRename, setSavingRename] = useState(false);
 
   // Selettore progetto sorgente per creazione nuovo eseguibile
   const [showSelector, setShowSelector] = useState(false);
@@ -98,6 +106,43 @@ function EseguibiliList() {
     }
   };
 
+  const startRename = (item) => {
+    setRenamingId(item.id);
+    setRenameValue(item.name || '');
+  };
+
+  const cancelRename = () => {
+    if (savingRename) return;
+    setRenamingId(null);
+    setRenameValue('');
+  };
+
+  const commitRename = async (item) => {
+    const name = renameValue.trim();
+    if (!name) {
+      toast.error('Il nome non può essere vuoto');
+      return;
+    }
+    if (name === item.name) {
+      cancelRename();
+      return;
+    }
+    setSavingRename(true);
+    try {
+      const updated = await updateEseguibile(item.id, { name });
+      setItems(current => current.map(existing => (
+        existing.id === item.id ? { ...existing, ...updated, name } : existing
+      )));
+      setRenamingId(null);
+      setRenameValue('');
+      toast.success('Eseguibile rinominato');
+    } catch (e) {
+      toastApiError(toast, e, 'Errore rinomina');
+    } finally {
+      setSavingRename(false);
+    }
+  };
+
   return (
     <div className="esl esl--row">
       <AppSidebar counts={{ eseguibili: items.length }} />
@@ -136,17 +181,42 @@ function EseguibiliList() {
             return (
               <div key={item.id} className="esl__card">
                 <div className="esl__card-header">
-                  <h3 className="esl__card-title">
-                    {item.name}
-                    {!canEdit && (
-                      <span
-                        title="Solo un superadmin può modificare questa risorsa"
-                        className="esl__lock-icon"
-                      >
-                        🔒
-                      </span>
-                    )}
-                  </h3>
+                  {renamingId === item.id ? (
+                    <form
+                      className="esl__rename-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        commitRename(item);
+                      }}
+                    >
+                      <input
+                        className="esl__rename-input"
+                        value={renameValue}
+                        onChange={(event) => setRenameValue(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') cancelRename();
+                        }}
+                        maxLength={255}
+                        aria-label={`Nuovo nome per ${item.name}`}
+                        autoFocus
+                        disabled={savingRename}
+                      />
+                      <button type="submit" className="esl__rename-action" disabled={savingRename} aria-label="Salva nome">✓</button>
+                      <button type="button" className="esl__rename-action" onClick={cancelRename} disabled={savingRename} aria-label="Annulla rinomina">×</button>
+                    </form>
+                  ) : (
+                    <h3 className="esl__card-title">
+                      {item.name}
+                      {!canEdit && (
+                        <span
+                          title="Solo un superadmin può modificare questa risorsa"
+                          className="esl__lock-icon"
+                        >
+                          🔒
+                        </span>
+                      )}
+                    </h3>
+                  )}
                   <span className="esl__card-format">{item.default_output_format?.toUpperCase() || 'XLSX'}</span>
                 </div>
                 {item.description && (
@@ -161,6 +231,11 @@ function EseguibiliList() {
                       onClick={() => setSharingEseguibile(item)}
                       title="Gestisci condivisione cross-gruppo (solo superadmin)"
                     >🔗 Condividi</button>
+                  )}
+                  {isAdmin && canEdit && (
+                    <button type="button" className="esl__btn esl__btn--ghost"
+                      onClick={() => startRename(item)}
+                    >✎ Rinomina</button>
                   )}
                   {isAdmin && canEdit && (
                     <button type="button" className="esl__btn esl__btn--ghost"

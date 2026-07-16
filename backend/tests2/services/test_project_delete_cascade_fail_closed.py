@@ -88,6 +88,9 @@ def _patch_cascade(
             "app.core.projects.service.project_db.get_project_row",
             return_value=_mock_project_row()
         ), patch(
+            "app.core.orchestrator.task_service.task_service.list_active_task_ids_for_project",
+            return_value=[],
+        ), patch(
             # Epic F (F5): delete_project vive nel sub-service lifecycle, che
             # importa `list_eseguibili_by_source` a module level — il binding
             # da patchare e' il call-site su `lifecycle_service` (stessa
@@ -111,6 +114,9 @@ def _patch_cascade(
         ), patch(
             "app.core.results.cleanup.delete_results_for_project",
             **results_patch
+        ), patch(
+            "app.core.orchestrator.preview_payload_store.delete_project_preview_payloads",
+            return_value=0,
         ), patch(
             "app.core.projects.db.delete_comparison_keys",
             **ck_patch

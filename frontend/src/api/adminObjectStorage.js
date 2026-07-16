@@ -15,6 +15,13 @@ export async function deleteAllStoragePreviews(params = {}) {
   return response.data;
 }
 
+export async function cleanupOrphanStorage() {
+  const response = await http.post('/projects/admin/cleanup-orphans', null, {
+    params: { dry_run: false },
+  });
+  return response.data;
+}
+
 export async function downloadStorageObject(key) {
   const response = await http.get('/admin/object-storage/download', {
     params: { key },

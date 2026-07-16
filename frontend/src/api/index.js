@@ -117,6 +117,7 @@ export {
   listEseguibili,
   getEseguibile,
   createEseguibile,
+  updateEseguibile,
   deleteEseguibile,
   analyzeUpload as analyzeEseguibileUpload,
   executeEseguibile,
