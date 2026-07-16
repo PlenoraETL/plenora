@@ -268,6 +268,11 @@ def find_orphan_processing_nodes(
         "feature_source",
         "project_source",
         "file_source",
+        # Authoring/runtime declaration: a project_input is a source when it
+        # carries files and pure configuration when scalar. Parameter bindings
+        # are persisted on the node, not as data-flow edges, so neither variant
+        # can require an incoming edge.
+        "project_input",
         "staticValues",
         "datasource_node",
         "comment",

@@ -105,6 +105,21 @@ def test_source_node_alone_is_not_orphan():
     assert "structure.orphan" not in _codes(report)
 
 
+@pytest.mark.parametrize("input_kind", ["file", "text", "number", "boolean"])
+def test_project_input_without_incoming_data_edge_is_not_orphan(input_kind):
+    node = _node("runtime-input", "project_input")
+    node.input_kind = input_kind
+    node.bindings = (
+        []
+        if input_kind == "file"
+        else [{"target_node_id": "filter-1", "target_field": "config.value"}]
+    )
+
+    report = _validate(_canvas([node], []), project_type="manipola")
+
+    assert "structure.orphan" not in _codes(report)
+
+
 def test_result_node_missing_is_error():
     # canvas non vuoto ma senza nodo result
     report = _validate(_canvas([_node("s", "file_source")], []))
