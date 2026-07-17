@@ -264,6 +264,7 @@ def test_result_middleware_exposes_retry_instead_of_terminal_failure(monkeypatch
         message_id="task-1",
         actor_name="pipeline.execute",
         options={"retries": 0},
+        kwargs={"run_id": "logical-run-1"},
     )
 
     _TaskResultMiddleware().after_process_message(
@@ -274,6 +275,33 @@ def test_result_middleware_exposes_retry_instead_of_terminal_failure(monkeypatch
 
     assert writes[0][0] == "task-1"
     assert writes[0][1]["state"] == "RETRY"
+    assert writes[0][1]["payload"]["run_id"] == "logical-run-1"
+
+
+def test_result_middleware_finalizes_the_requested_run_id(monkeypatch):
+    from app.core.orchestrator import task_progress
+    from workers.dramatiq_app import _TaskResultMiddleware
+
+    calls = []
+    monkeypatch.setattr(
+        task_progress,
+        "finalize_from_celery",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+    message = SimpleNamespace(
+        message_id="task-1",
+        actor_name="tasks.execute_enrichment",
+        options={},
+        kwargs={"run_id": "logical-run-1"},
+    )
+
+    _TaskResultMiddleware().after_process_message(
+        SimpleNamespace(),
+        message,
+        exception=RuntimeError("boom"),
+    )
+
+    assert calls[0][1]["run_id"] == "logical-run-1"
 
 
 def test_invoke_task_body_injects_message_id_as_self_request_id(monkeypatch):

@@ -36,7 +36,7 @@ from app.core.dataframes.frame_io import (
 )
 from app.core.intermediate.cleanup import close_worker_connection
 from app.core.intermediate.run_idempotency import is_already_completed
-from app.core.orchestrator.task_progress import report_task_progress
+from app.core.orchestrator.task_progress import TaskRevoked, report_task_progress
 from app.core.projects.runtime_context import get_project_runtime_context
 from app.core.projects.service import ProjectService
 from app.db.pg_connection import close_connection as _close_config_connection
@@ -45,6 +45,25 @@ from app.utils.debug_payload_builder import DebugPayloadBuilder
 
 
 logger = get_logger("workers.carica_task")
+
+
+def _close_worker_connections(*, stage: str = "") -> None:
+    """Rilascia entrambe le connessioni thread-local del task CARICA."""
+    suffix = f" {stage}" if stage else ""
+    try:
+        close_worker_connection()
+    except Exception as cleanup_exc:
+        logger.debug(
+            f"close_connection intermediate fallito{suffix}: "
+            f"{type(cleanup_exc).__name__}: {cleanup_exc}"
+        )
+    try:
+        _close_config_connection()
+    except Exception as cleanup_exc:
+        logger.debug(
+            f"close_connection config fallito{suffix}: "
+            f"{type(cleanup_exc).__name__}: {cleanup_exc}"
+        )
 
 
 # Corpo task come funzione pura.
@@ -100,13 +119,15 @@ def execute_carica_task(
                 f"[IDEMPOTENCY] Task CARICA {task_id}: run_id {run_id} "
                 f"gia' completato con successo, skip."
             )
-            return {
+            result: CaricaTaskResultPayload = {
                 "status": "skipped_idempotent",
                 "success": True,
                 "message": f"Run {run_id} gia' completato",
                 "run_id": run_id,
                 "rows_written": 0,
             }
+            _close_worker_connections(stage="post-idempotency")
+            return result
     else:
         run_id = str(_uuid.uuid4())
 
@@ -120,6 +141,7 @@ def execute_carica_task(
     )
     if _revoked is not None:
         _revoked.update({"run_id": run_id, "task_id": task_id, "rows_written": 0})
+        _close_worker_connections(stage="post-permission-revoke")
         return cast(CaricaTaskResultPayload, _revoked)
 
     _group_id = ""
@@ -139,14 +161,13 @@ def execute_carica_task(
     )
     set_run_context(run_id=run_id, project_id=project_id)
 
-    _update_progress(self, 0, "Inizializzazione CARICA...")
-
     # Astrae lo stato Celery per il dispatch (carica/dispatch.py, Celery-free).
     def progress(percent: int, message: str) -> None:
         _update_progress(self, percent, message)
 
     target_lock_handle: CaricaTargetLockHandle | None = None
     try:
+        _update_progress(self, 0, "Inizializzazione CARICA...")
         write_branch = carica_dispatch.select_carica_write_branch(carica_node_data)
         target_lock_handle = _acquire_target_lock_or_return_busy(
             carica_node_data=carica_node_data,
@@ -281,6 +302,22 @@ def execute_carica_task(
         )
         return result
 
+    except TaskRevoked:
+        try:
+            close_run(
+                run_id=run_id,
+                status="revoked",
+                duration_ms=int((_time.time() - _run_start) * 1000),
+                error_module="carica",
+                error_message="Task annullato",
+            )
+        except Exception as close_exc:
+            logger.warning(
+                "close_run CARICA fallito post-revoke: "
+                f"{type(close_exc).__name__}: {close_exc}"
+            )
+        raise
+
     except Exception as e:
         # error_msg_internal: canale admin/diagnostics (log_runs DB via close_run
         # progress UI via _update_progress, log_service.create_log_entry
@@ -355,14 +392,7 @@ def execute_carica_task(
         # Chiude le connessioni thread-local del worker: senza cleanup ogni
         # esecuzione mantiene aperte le connessioni config/intermediate nel
         # thread pool, fino a saturare i pool PostgreSQL.
-        try:
-            close_worker_connection()
-        except Exception as e:
-            logger.debug(f"close_connection intermediate fallito: {type(e).__name__}: {e}")
-        try:
-            _close_config_connection()
-        except Exception as e:
-            logger.debug(f"close_connection config fallito: {type(e).__name__}: {e}")
+        _close_worker_connections()
 
 
 

@@ -65,6 +65,28 @@ def test_enrichment_task_invokes_idempotency_check_when_run_id_passed(
     )
 
 
+def test_enrichment_task_uses_same_run_id_for_intermediate_commit(monkeypatch):
+    """Il run_id controllato dal guard deve essere anche quello persistito.
+
+    Se il setup genera un UUID diverso, una consegna duplicata dello stesso
+    messaggio non trova mai la run completed e riesegue l'arricchimento.
+    """
+    from tests2._helpers.enrichment_task_harness import (
+        install_enrichment_task_mocks,
+        invoke_enrichment_task,
+    )
+
+    spies = install_enrichment_task_mocks(monkeypatch)
+    invoke_enrichment_task(
+        project_id="test-proj",
+        canvas={"nodes": [], "edges": []},
+        run_id="stable-message-id",
+    )
+
+    assert spies.intermediate_run_creates
+    assert spies.intermediate_run_creates[0]["run_id"] == "stable-message-id"
+
+
 def test_enrichment_task_returns_skipped_idempotent_when_already_completed(
     monkeypatch,
 ):

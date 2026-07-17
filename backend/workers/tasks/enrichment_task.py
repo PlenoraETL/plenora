@@ -6,7 +6,6 @@ Runs background execution while preserving backend runtime contracts.
 
 import csv as csv_mod
 import json as json_mod
-import threading
 import time
 import traceback as _tb
 from datetime import datetime, timezone
@@ -25,7 +24,7 @@ from app.core.files import service as files_service
 from app.core.intermediate import run_idempotency as run_idempotency_module
 from app.core.intermediate import snapshot as intermediate_snapshot
 from app.core.intermediate import writer as intermediate_writer
-from app.core.orchestrator.task_progress import report_task_progress
+from app.core.orchestrator.task_progress import TaskRevoked, report_task_progress
 from app.core.projects import service as project_service_module
 from app.core.results import blob_writer as result_blob_writer
 from app.core.results import store as result_store
@@ -40,6 +39,20 @@ from app.core.arricchisci.enrichment_service import (
 )
 
 logger = get_logger(__name__)
+
+
+def _close_worker_connection(*, stage: str = "") -> None:
+    """Rilascia la connessione thread-local anche sui ritorni pre-run."""
+    try:
+        from app.core.intermediate.cleanup import close_worker_connection
+
+        close_worker_connection()
+    except Exception as cleanup_exc:
+        suffix = f" {stage}" if stage else ""
+        logger.debug(
+            f"close_connection enrichment fallito{suffix}: "
+            f"{type(cleanup_exc).__name__}: {cleanup_exc}"
+        )
 
 
 # Corpo task come funzione pura: `self` e' il self-shim dell'actor
@@ -97,13 +110,15 @@ def execute_enrichment_task(
                 f"[IDEMPOTENCY] Task ENRICHMENT {task_id}: run_id {run_id} "
                 f"gia' completato con successo, skip."
             )
-            return {
+            result: JsonObject = {
                 "status": "skipped_idempotent",
                 "success": True,
                 "message": f"Run {run_id} gia' completato",
                 "run_id": run_id,
                 "task_id": task_id,
             }
+            _close_worker_connection(stage="post-idempotency")
+            return result
 
     start_time = time.time()
 
@@ -152,6 +167,7 @@ def execute_enrichment_task(
             )
             _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
             _revoked.update({"task_id": task_id, "project_id": project_id})
+            _close_worker_connection(stage="post-permission-revoke")
             return _revoked
 
     if run_mode.should_recheck_auth():
@@ -161,14 +177,22 @@ def execute_enrichment_task(
         )
         if _revoked is not None:
             _revoked.update({"task_id": task_id, "project_id": project_id})
+            _close_worker_connection(stage="post-permission-revoke")
             return _revoked
 
     _log_pid = run_mode.log_project_id(project_id)
 
     logger.info(f"[Task {task_id}] Avvio enrichment per progetto {project_id}", project_id=_log_pid)
 
-    # Aggiorna stato: STARTED
-    update_task_progress(self, 0, "Inizializzazione...", task_id=task_id)
+    # Aggiorna stato: STARTED. Il checkpoint puo' osservare una revoca prima
+    # dell'apertura delle run: gli input temporanei vanno comunque ripuliti.
+    try:
+        update_task_progress(self, 0, "Inizializzazione...", task_id=task_id)
+    except TaskRevoked:
+        _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
+        complete_executable_run(success=False, error_message="Task annullato")
+        _close_worker_connection(stage="pre-run")
+        raise
 
     # Variabili per statistiche enrichment
     enrichment_stats = None
@@ -193,7 +217,12 @@ def execute_enrichment_task(
     # `_load_*` / `_execute_rest_file` falliscono fail-closed con
     # "Contesto di sicurezza non determinabile (group_id mancante)"
     _run_start = time.time()
-    _ctx = run_mode.begin_run(project_id=project_id, user_id=user_id, task_id=task_id)
+    _ctx = run_mode.begin_run(
+        project_id=project_id,
+        user_id=user_id,
+        task_id=task_id,
+        run_id=run_id,
+    )
     _run_id = _ctx.run_id
     _group_id = _ctx.group_id
     _retention_n = _ctx.retention_n
@@ -826,22 +855,23 @@ def execute_enrichment_task(
 
         if _run_id and run_mode.logs_run():
             _exec_time = time.time() - _run_start
-            _rid_c = _run_id
-            _retention_c = _retention_n
-            def _async_close(_r: str = _rid_c, _t: float = _exec_time,
-                             _rn: int | None = _retention_c) -> None:
-                try:
-                    intermediate_writer.close_run(
-                        run_id=_r,
-                        input_hash="",
-                        output_hash="",
-                        total_exec_time=_t,
-                        success=True,
-                        retention_n=_rn,
-                    )
-                except Exception as e:
-                    logger.debug(f"cleanup async close_run fallito: {type(e).__name__}: {e}")
-            threading.Thread(target=_async_close, daemon=True).start()
+            # La run deve risultare completed PRIMA che il task ritorni.
+            # L'outbox/broker e' at-least-once: una seconda consegna puo'
+            # partire subito e il guard idempotente legge proprio questo stato.
+            try:
+                intermediate_writer.close_run(
+                    run_id=_run_id,
+                    input_hash="",
+                    output_hash="",
+                    total_exec_time=_exec_time,
+                    success=True,
+                    retention_n=_retention_n,
+                )
+            except Exception as close_exc:
+                logger.warning(
+                    "Chiusura run intermediate fallita prima del commit task: "
+                    f"{type(close_exc).__name__}: {close_exc}"
+                )
 
         if run_mode.logs_run():
             _elapsed_ms = int((time.time() - _run_start) * 1000)
@@ -883,6 +913,40 @@ def execute_enrichment_task(
         )
 
         return result
+
+    except TaskRevoked:
+        if _run_id and run_mode.logs_run():
+            try:
+                intermediate_writer.close_run(
+                    run_id=_run_id,
+                    input_hash="",
+                    output_hash="",
+                    total_exec_time=time.time() - _run_start,
+                    success=False,
+                    retention_n=_retention_n,
+                )
+            except Exception as close_exc:
+                logger.debug(
+                    "close_run intermediate fallito post-revoke: "
+                    f"{type(close_exc).__name__}: {close_exc}"
+                )
+        if run_mode.logs_run():
+            try:
+                close_run(
+                    run_id=_run_id or task_id,
+                    status="revoked",
+                    duration_ms=int((time.time() - _run_start) * 1000),
+                    error_module="arricchisci",
+                    error_message="Task annullato",
+                )
+            except Exception as close_exc:
+                logger.warning(
+                    "close_run ARRICCHISCI fallito post-revoke: "
+                    f"{type(close_exc).__name__}: {close_exc}"
+                )
+        _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
+        complete_executable_run(success=False, error_message="Task annullato")
+        raise
 
     except Exception as e:
         # Catch dei _EarlyTaskReturn (sollevati dal blocco che adatta
@@ -990,6 +1054,9 @@ def execute_enrichment_task(
             "error_report": error_report_file,
             "error_report_result_id": error_report_result_id,
         }
+
+    finally:
+        _close_worker_connection()
 
 
 def _cleanup_temp_file_sources(file_source_ids: Optional[List[str]], task_id: str) -> None:

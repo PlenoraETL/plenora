@@ -19,7 +19,7 @@ from app.core.intermediate import run_idempotency as run_idempotency_module
 from app.core.intermediate import run_lifecycle as run_lifecycle_module
 from app.core.projects import retention as project_retention
 from app.core.projects import runtime_context as project_runtime_context
-from app.core.orchestrator.task_progress import report_task_progress
+from app.core.orchestrator.task_progress import TaskRevoked, report_task_progress
 from app.utils import debug_payload_builder as debug_payload_builder_module
 
 logger = get_logger("workers.pipeline_task")
@@ -54,6 +54,18 @@ def _update_progress(task: object, percent: int, message: str) -> None:
         message,
         name=getattr(task, "name", None),
     )
+
+
+def _close_worker_connection(*, stage: str = "") -> None:
+    """Rilascia la connessione thread-local anche sui ritorni pre-run."""
+    try:
+        run_lifecycle_module.close_worker_connection()
+    except Exception as cleanup_exc:
+        suffix = f" {stage}" if stage else ""
+        logger.debug(
+            f"close_connection pipeline fallito{suffix}: "
+            f"{type(cleanup_exc).__name__}: {cleanup_exc}"
+        )
 
 
 def _build_orchestrator() -> Any:
@@ -305,13 +317,15 @@ def execute_pipeline_task(
                 f"[IDEMPOTENCY] Task PIPELINE {task_id}: run_id {run_id} "
                 f"gia' completato con successo, skip."
             )
-            return {
+            result: JsonObject = {
                 "status": "skipped_idempotent",
                 "success": True,
                 "message": f"Run {run_id} gia' completato",
                 "run_id": run_id,
                 "task_id": task_id,
             }
+            _close_worker_connection(stage="post-idempotency")
+            return result
 
     if run_id is None:
         run_id = str(_uuid.uuid4())
@@ -336,14 +350,48 @@ def execute_pipeline_task(
         )
     if _revoked is not None:
         _cleanup_executable_inputs(contract)
+        if subject is not None:
+            try:
+                from app.core.eseguibili import db as eseguibili_db
+
+                eseguibili_db.complete_eseguibile_run(
+                    str(subject.get("run_id") or ""),
+                    success=False,
+                    error_message="Permesso di esecuzione revocato",
+                )
+            except Exception as run_exc:
+                logger.warning(
+                    f"Update run eseguibile revocata fallito: {run_exc}"
+                )
         _revoked.update({"run_id": run_id, "task_id": task_id})
+        _close_worker_connection(stage="post-permission-revoke")
         return _revoked
 
     logger.info(
         f"Task PIPELINE {task_id} avviato per progetto {project_id}",
         run_id=run_id, project_id=project_id,
     )
-    _update_progress(self, 0, "Inizializzazione pipeline...")
+    try:
+        _update_progress(self, 0, "Inizializzazione pipeline...")
+    except TaskRevoked:
+        # Il primo checkpoint precede l'apertura delle run, ma gli input
+        # temporanei dell'eseguibile esistono gia' e vanno sempre rimossi.
+        _cleanup_executable_inputs(contract)
+        if subject is not None:
+            try:
+                from app.core.eseguibili import db as eseguibili_db
+
+                eseguibili_db.complete_eseguibile_run(
+                    str(subject.get("run_id") or ""),
+                    success=False,
+                    error_message="Task annullato",
+                )
+            except Exception as run_exc:
+                logger.warning(
+                    f"Update run eseguibile annullata fallito: {run_exc}"
+                )
+        _close_worker_connection(stage="pre-run")
+        raise
 
     project_info = (
         contract if contract is not None else _get_project_info(project_id)
@@ -503,6 +551,11 @@ def execute_pipeline_task(
             }
 
         rows_out = result.rows_count or 0
+        # Ultimo checkpoint revocabile prima della finalizzazione degli output.
+        # Dopo la persistenza non osserviamo piu' una cancellazione tardiva:
+        # l'operazione e' ormai completata e deve terminare SUCCESS, evitando
+        # output validi associati a un task marcato REVOKED.
+        _update_progress(self, 95, "Finalizzazione output...")
         executable_output = None
         if subject is not None and contract is not None:
             executable_output = _persist_executable_output(
@@ -521,7 +574,6 @@ def execute_pipeline_task(
                 )
             except Exception as run_exc:
                 logger.warning(f"Update run eseguibile fallito: {run_exc}")
-        _update_progress(self, 100, "Pipeline completata")
         logger.info(
             f"Task PIPELINE {task_id} completato per {project_id}",
             run_id=run_id, project_id=project_id,
@@ -566,6 +618,50 @@ def execute_pipeline_task(
             **{k: v for k, v in result.items() if k not in ("success", "output_path")},
             **extra,
         }
+
+    except TaskRevoked:
+        _cleanup_executable_inputs(contract)
+        if subject is not None:
+            try:
+                from app.core.eseguibili import db as eseguibili_db
+
+                eseguibili_db.complete_eseguibile_run(
+                    str(subject.get("run_id") or ""),
+                    success=False,
+                    error_message="Task annullato",
+                )
+            except Exception as run_exc:
+                logger.warning(f"Update run eseguibile annullata fallito: {run_exc}")
+        elapsed_ms = int((_time.time() - _run_start) * 1000)
+        try:
+            close_run(
+                run_id=run_id,
+                status="revoked",
+                duration_ms=elapsed_ms,
+                steps=get_steps(),
+                error_module=module,
+                error_message="Task annullato",
+            )
+        except Exception as close_exc:
+            logger.warning(
+                "close_run log fallito post-revoke: "
+                f"{type(close_exc).__name__}: {close_exc}"
+            )
+        try:
+            run_lifecycle_module.close_run(
+                run_id=run_id,
+                input_hash="",
+                output_hash="",
+                total_exec_time=_time.time() - _run_start,
+                success=False,
+                retention_n=retention_n,
+            )
+        except Exception as close_exc:
+            logger.debug(
+                "close_run intermediate fallito post-revoke: "
+                f"{type(close_exc).__name__}: {close_exc}"
+            )
+        raise
 
     except Exception as e:
         _cleanup_executable_inputs(contract)
@@ -629,15 +725,12 @@ def execute_pipeline_task(
         except Exception as e:
             logger.debug(f"close_run intermediate fallito post-crash: {type(e).__name__}: {e}")
 
-        # Chiudi connessione PostgreSQL del thread Celery: senza questo
-        # ogni task lascia aperto un handle che si accumula nel pool
-        # Pattern ereditato dalla migrazione SQLite -> PG.
-        try:
-            run_lifecycle_module.close_worker_connection()
-        except Exception as e:
-            logger.debug(f"close_connection intermediate fallito post-crash: {type(e).__name__}: {e}")
-
         raise
+
+    finally:
+        # Anche successo, failure gestita e revoca devono rilasciare la
+        # connessione thread-local (inline mode riusa il thread worker).
+        _close_worker_connection()
 
 
 def preview_pipeline_task(
@@ -719,6 +812,8 @@ def preview_pipeline_task(
     except Exception as e:
         logger.error(f"[CRASH] Task PREVIEW {task_id} fallito: {e}", exc_info=True)
         raise
+    finally:
+        _close_worker_connection(stage="preview")
 
 
 # Nomi registrati dei task.

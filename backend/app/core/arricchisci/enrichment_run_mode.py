@@ -64,7 +64,14 @@ class EnrichmentRunMode:
     def log_project_id(self, project_id: str) -> str:
         raise NotImplementedError
 
-    def begin_run(self, *, project_id: str, user_id: Optional[str], task_id: str) -> RunContext:
+    def begin_run(
+        self,
+        *,
+        project_id: str,
+        user_id: Optional[str],
+        task_id: str,
+        run_id: Optional[str] = None,
+    ) -> RunContext:
         raise NotImplementedError
 
     def persist_dataframe_result(
@@ -95,8 +102,18 @@ class StandardRunMode(EnrichmentRunMode):
     def log_project_id(self, project_id: str) -> str:
         return project_id
 
-    def begin_run(self, *, project_id: str, user_id: Optional[str], task_id: str) -> RunContext:
-        run_id: Optional[str] = str(uuid.uuid4())
+    def begin_run(
+        self,
+        *,
+        project_id: str,
+        user_id: Optional[str],
+        task_id: str,
+        run_id: Optional[str] = None,
+    ) -> RunContext:
+        # Il broker assegna un run_id stabile (normalmente il message_id).
+        # Preservarlo e' essenziale: la consegna e' at-least-once e il guard
+        # idempotente del task cerca proprio questa run al tentativo seguente.
+        effective_run_id = run_id or str(uuid.uuid4())
         group_id = "unknown"
         retention_n: Optional[int] = None
         try:
@@ -107,7 +124,7 @@ class StandardRunMode(EnrichmentRunMode):
                 default=run_lifecycle_module.get_default_runs_retention(),
             )
             run_lifecycle_module.create_run(
-                run_id=run_id,
+                run_id=effective_run_id,
                 canvas_id=project_id,
                 group_id=group_id,
                 user_id=user_id,
@@ -116,8 +133,12 @@ class StandardRunMode(EnrichmentRunMode):
             logger.warning(
                 f"[Task {task_id}] Intermediate: apertura run fallita (non bloccante): {e}"
             )
-            run_id = None
-        return RunContext(run_id=run_id, group_id=group_id, retention_n=retention_n)
+            effective_run_id = None
+        return RunContext(
+            run_id=effective_run_id,
+            group_id=group_id,
+            retention_n=retention_n,
+        )
 
     def persist_dataframe_result(
         self, *, project_id, task_id, final_df, final_format, output_filename, final_filename,
@@ -170,7 +191,14 @@ class EseguibileRunMode(EnrichmentRunMode):
         # Niente project_id ai logger: eviterebbe tracce persistenti su logs.project_id.
         return ""
 
-    def begin_run(self, *, project_id: str, user_id: Optional[str], task_id: str) -> RunContext:
+    def begin_run(
+        self,
+        *,
+        project_id: str,
+        user_id: Optional[str],
+        task_id: str,
+        run_id: Optional[str] = None,
+    ) -> RunContext:
         # No intermediate run (l'eseguibile non e' un progetto in `projects`);
         # group_id dalla tabella `eseguibili` per il tenant binding a valle.
         group_id = ""

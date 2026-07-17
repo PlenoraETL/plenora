@@ -143,6 +143,28 @@ def test_finalize_from_celery_success_stores_return_dict_as_payload():
     assert record.payload == {"success": True, "rows_written": 3}
 
 
+def test_finalize_from_celery_success_targets_explicit_logical_run_id():
+    calls = []
+
+    class _AtomicStore(InMemoryTaskResultStore):
+        def put_terminal_with_run(self, task_id, **kwargs):
+            calls.append((task_id, kwargs))
+
+    original = {"success": True, "rows_written": 3}
+    finalize_from_celery(
+        "task-1",
+        "SUCCESS",
+        original,
+        None,
+        name="carica.execute",
+        run_id="logical-run-1",
+        store=_AtomicStore(),
+    )
+
+    assert calls[0][1]["payload"]["run_id"] == "logical-run-1"
+    assert original == {"success": True, "rows_written": 3}
+
+
 def test_finalize_from_celery_maps_application_failure_to_failure_state():
     store = InMemoryTaskResultStore()
     payload = {"success": False, "message": "pipeline non valida"}
@@ -327,3 +349,20 @@ def test_finalize_from_celery_maps_taskrevoked_to_revoked():
     record = store.get("t1")
     assert record is not None
     assert record.state == REVOKED_STATE
+
+
+def test_finalize_revoked_targets_explicit_logical_run_id():
+    calls = []
+
+    class _AtomicStore(InMemoryTaskResultStore):
+        def put_terminal_with_run(self, task_id, **kwargs):
+            calls.append((task_id, kwargs))
+
+    finalize_revoked(
+        "task-1",
+        name="tasks.execute_enrichment",
+        run_id="logical-run-1",
+        store=_AtomicStore(),
+    )
+
+    assert calls[0][1]["payload"]["run_id"] == "logical-run-1"

@@ -173,6 +173,7 @@ def finalize_revoked(
     task_id: Optional[str],
     *,
     name: Optional[str] = None,
+    run_id: Optional[str] = None,
     store: Optional[TaskResultStore] = None,
 ) -> None:
     """Scrive l'esito terminale ``REVOKED`` (task annullato cooperativamente)."""
@@ -181,7 +182,9 @@ def finalize_revoked(
         "status": "revoked",
         "message": "Task annullato",
     }
-    if name == "pipeline.execute" and task_id:
+    if run_id:
+        payload["run_id"] = run_id
+    elif name == "pipeline.execute" and task_id:
         payload["run_id"] = task_id
     finalize_task_result(
         task_id,
@@ -199,6 +202,7 @@ def finalize_from_celery(
     einfo: object,
     *,
     name: Optional[str] = None,
+    run_id: Optional[str] = None,
     store: Optional[TaskResultStore] = None,
 ) -> None:
     """Adatta i parametri di ``Task.after_return`` (o del middleware Dramatiq)
@@ -213,12 +217,17 @@ def finalize_from_celery(
     """
     exc = getattr(einfo, "exception", None)
     if isinstance(exc, TaskRevoked):
-        finalize_revoked(task_id, name=name, store=store)
+        finalize_revoked(task_id, name=name, run_id=run_id, store=store)
         return
     if status not in _FINAL_CELERY_STATES:
         return
     if status == SUCCESS_STATE:
-        payload = retval if isinstance(retval, dict) else {"result": retval}
+        # Non mutare il dict restituito dal task: il middleware puo' dover
+        # aggiungere la correlazione logica usata dalla transazione atomica
+        # task_result + log_run.
+        payload = dict(retval) if isinstance(retval, dict) else {"result": retval}
+        if run_id:
+            payload["run_id"] = run_id
         resolved_state = (
             FAILURE_STATE
             if isinstance(payload, dict) and payload.get("success") is False
@@ -243,7 +252,9 @@ def finalize_from_celery(
                 "stage": exc.stage,
             }
         )
-    if name == "pipeline.execute" and task_id:
+    if run_id:
+        payload["run_id"] = run_id
+    elif name == "pipeline.execute" and task_id:
         payload["run_id"] = task_id
     finalize_task_result(
         task_id, state=FAILURE_STATE, payload=payload, name=name, store=store

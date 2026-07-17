@@ -56,6 +56,14 @@ _RECYCLE_LOCK = threading.Lock()
 _ACTIVE_MESSAGES = 0
 _RECYCLE_REQUESTED = False
 
+_RUN_BACKED_ACTORS = frozenset(
+    {
+        "pipeline.execute",
+        "carica.execute",
+        "tasks.execute_enrichment",
+    }
+)
+
 
 class RetryablePipelineError(RuntimeError):
     """Sanitized signal used only for idempotent transient pipeline retries."""
@@ -94,6 +102,18 @@ class _TaskResultMiddleware(Middleware):
             finalize_task_result,
         )
 
+        message_kwargs = getattr(message, "kwargs", None)
+        requested_run_id = (
+            str(message_kwargs.get("run_id") or "")
+            if isinstance(message_kwargs, dict)
+            else ""
+        )
+        effective_run_id = (
+            (requested_run_id or str(message.message_id))
+            if message.actor_name in _RUN_BACKED_ACTORS
+            else ""
+        )
+
         if isinstance(exception, RetryablePipelineError):
             retries = int(getattr(message, "options", {}).get("retries", 0) or 0)
             actor = broker.get_actor(message.actor_name)
@@ -106,7 +126,7 @@ class _TaskResultMiddleware(Middleware):
                         "success": False,
                         "retryable": True,
                         "message": "Errore transitorio: nuovo tentativo in corso",
-                        "run_id": message.message_id,
+                        "run_id": effective_run_id,
                     },
                     name=message.actor_name,
                 )
@@ -117,7 +137,12 @@ class _TaskResultMiddleware(Middleware):
             SimpleNamespace(exception=exception) if exception is not None else None
         )
         finalize_from_celery(
-            message.message_id, status, result, einfo, name=message.actor_name
+            message.message_id,
+            status,
+            result,
+            einfo,
+            name=message.actor_name,
+            run_id=effective_run_id,
         )
 
 
