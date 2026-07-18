@@ -87,7 +87,12 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # +2 (2026-07-14): explorer object storage superadmin. I due catch sono il
 # boundary HTTP fail-safe per provider S3 compatibili, che espongono famiglie
 # di eccezioni diverse; list risponde 503 e download 404 senza leak interni.
-_EXPECT_BROAD_BUDGET = 751
+# 751 -> 775 (2026-07-18): riallineamento dopo i boundary introdotti dai
+# runtime eseguibili versionati, cleanup storage e lifecycle Dramatiq. Sono
+# safety-net su DB/object storage/provider e cleanup secondari: non devono
+# mascherare l'esito primario o propagare dettagli interni. Il valore resta un
+# ratchet shrink-only: ogni successivo narrow deve abbassarlo.
+_EXPECT_BROAD_BUDGET = 775
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

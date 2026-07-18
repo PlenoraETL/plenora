@@ -72,7 +72,11 @@ def test_orchestrator_accepts_injected_executors_without_default_construction() 
     assert estrai_executor.execute_calls == [
         (
             ("proj-di", canvas),
-            {"run_id": "run-di", "intermediate_mode_override": "none"},
+            {
+                "run_id": "run-di",
+                "intermediate_mode_override": "none",
+                "execution_context": None,
+            },
         )
     ]
 
@@ -120,6 +124,7 @@ def test_orchestrator_executes_control_plane_contract_without_project_lookup(
         project_type="estrai",
         canvas={"nodes": [], "edges": []},
         run_id="run-contract",
+        execution_context={"input_bindings": {"source": "runtime-file-1"}},
     )
 
     assert artifact.success is True
@@ -127,6 +132,9 @@ def test_orchestrator_executes_control_plane_contract_without_project_lookup(
     assert args[0] == "proj-contract"
     assert isinstance(args[1], CanvasState)
     assert kwargs["run_id"] == "run-contract"
+    assert kwargs["execution_context"] == {
+        "input_bindings": {"source": "runtime-file-1"}
+    }
     project_service.get_project_metadata.assert_not_called()
     project_service.get_project_canvas.assert_not_called()
 
