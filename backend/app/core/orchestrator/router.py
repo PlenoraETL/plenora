@@ -119,7 +119,7 @@ _orchestrator = None
 
 
 class CancelTaskResponse(TypedDict):
-    status: Literal["cancelled"]
+    status: Literal["cancellation_requested"]
     task_id: str
 
 
@@ -478,9 +478,18 @@ def cancel_task(
     try:
         success = task_service_module.task_service.cancel_task(task_id)
         if success:
-            return {"status": "cancelled", "task_id": task_id}
+            return {"status": "cancellation_requested", "task_id": task_id}
         else:
             raise HTTPException(status_code=500, detail="Impossibile annullare il task")
+    except task_service_module.TaskAlreadyTerminalError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "task_already_terminal",
+                "message": "Il task e' gia' terminato",
+                "status": exc.state.lower(),
+            },
+        )
     except HTTPException:
         raise
     except Exception as e:

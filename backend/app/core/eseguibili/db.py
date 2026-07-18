@@ -602,6 +602,20 @@ def complete_eseguibile_run(
     )
 
 
+def cancel_eseguibile_run(
+    run_id: str,
+    *,
+    error_message: str = "Task annullato",
+) -> None:
+    """Close a cooperatively revoked executable run as cancelled."""
+    _execute(
+        "UPDATE eseguibile_runs SET status = 'cancelled', error_message = %s, "
+        "completed_at = now() WHERE id = %s "
+        "AND status IN ('pending', 'running')",
+        (error_message, run_id),
+    )
+
+
 def update_eseguibile(eid: str, **fields: object) -> Optional[EseguibileRow]:
     """Aggiorna i campi passati (solo metadata, non canvas/expected_columns)."""
     to_update = {

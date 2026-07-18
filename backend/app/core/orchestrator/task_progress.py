@@ -97,6 +97,7 @@ def report_task_progress(
     *,
     is_error: bool = False,
     name: Optional[str] = None,
+    check_revocation: bool = True,
     store: Optional[TaskResultStore] = None,
 ) -> None:
     """Registra un avanzamento (stato PROGRESS) per il task.
@@ -106,10 +107,12 @@ def report_task_progress(
     ``_update_progress`` in carica/pipeline)."""
     if not task_id:
         return
-    # Checkpoint di annullamento cooperativo: se il task e' stato revocato,
-    # solleva TaskRevoked PRIMA di scrivere il progress. Fuori dal try
-    # best-effort sotto: la TaskRevoked deve propagare, non essere inghiottita.
-    raise_if_task_revoked(task_id)
+    # Solo i progress dichiarati revocabili sono checkpoint cooperativi.
+    # Finalizzazione, error reporting e progress successivi a side-effect
+    # irreversibili devono poter aggiornare la UI senza trasformare un esito
+    # gia' materializzato in REVOKED.
+    if check_revocation:
+        raise_if_task_revoked(task_id)
     payload = {
         "progress": max(0, int(percent)),
         "message": message,

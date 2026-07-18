@@ -42,7 +42,6 @@ export function useExecution(projectId, options = {}) {
 
   const caricaRefs    = useRef({});
   const caricaGenerationsRef = useRef({});
-  const isCancelledRef = useRef(false);
 
   // Polling base dal hook condiviso
   const { mountedRef, stopPolling, startPolling } = useTaskPolling({ interval: pollInterval });
@@ -167,10 +166,7 @@ const startCaricaTasksPolling = useCallback((pipelineResult) => {
     initialTasks.forEach(t => startCaricaPolling(t));
   }, [startCaricaPolling]);
 const startMainPolling = useCallback((taskIdToWatch) => {
-    isCancelledRef.current = false;
     startPolling(taskIdToWatch, (data) => {
-      if (isCancelledRef.current) return true;
-
       setTaskStatus(data.status);
       setProgress(data.progress || 0);
       setProgressMessage(data.message || '');
@@ -212,7 +208,6 @@ const handleExecute = useCallback(async (executeOptions = {}) => {
     setCaricaTasks([]);
     setCaricaPolling(false);
     stopAllCaricaPolling();
-    isCancelledRef.current = false;
 
     try {
       if (onBeforeExecute) await onBeforeExecute();
@@ -249,18 +244,13 @@ const handleExecute = useCallback(async (executeOptions = {}) => {
   const cancelTask = useCallback(async () => {
     if (!taskId) return;
     try {
-      isCancelledRef.current = true;
-      stopPolling();
       await cancelTaskApi(taskId);
       if (!mountedRef.current) return;
-      setIsExecuting(false);
-      setTaskStatus('revoked');
-      setProgressMessage('Annullato');
-      setResult({ success: false, message: 'Task annullato dall\'utente' });
+      setProgressMessage('Annullamento richiesto...');
     } catch (error) {
       console.error('[useExecution] Errore annullamento:', error);
     }
-  }, [taskId, stopPolling, mountedRef]);
+  }, [taskId, mountedRef]);
 
   const closeModal = useCallback((resetResult = false) => {
     setShowModal(false);
@@ -279,7 +269,6 @@ const handleExecute = useCallback(async (executeOptions = {}) => {
     setTaskId(null); setProgress(0); setProgressMessage('');
     setTaskStatus(null); setCaricaTasks([]); setCaricaPolling(false);
     setAwaitingLaunch(false); pendingOptsRef.current = null;
-    isCancelledRef.current = false;
   }, [stopPolling, stopAllCaricaPolling]);
 
   // R-25 PR-B5: apre il modal in stato "config" (awaitingLaunch=true)
@@ -299,7 +288,6 @@ const handleExecute = useCallback(async (executeOptions = {}) => {
     setTaskStatus(null);
     setCaricaTasks([]);
     setCaricaPolling(false);
-    isCancelledRef.current = false;
   }, []);
 
   const launch = useCallback((intermediateMode = null) => {

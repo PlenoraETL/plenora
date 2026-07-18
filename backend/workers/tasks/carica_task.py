@@ -151,19 +151,44 @@ def execute_carica_task(
     except Exception as e:
         logger.debug(f"group_id lookup fallito: {type(e).__name__}: {e}")
 
-    open_run(
-        run_id=run_id,
-        project_id=project_id,
-        group_id=_group_id,
-        module="carica",
-        triggered_by=triggered_by,
-        user_id=user_id,
-    )
-    set_run_context(run_id=run_id, project_id=project_id)
+    log_run_opened = False
+    try:
+        open_run(
+            run_id=run_id,
+            project_id=project_id,
+            group_id=_group_id,
+            module="carica",
+            triggered_by=triggered_by,
+            user_id=user_id,
+        )
+        log_run_opened = True
+        set_run_context(run_id=run_id, project_id=project_id)
+    except BaseException:
+        if log_run_opened:
+            try:
+                close_run(
+                    run_id=run_id,
+                    status="failure",
+                    duration_ms=int((_time.time() - _run_start) * 1000),
+                    error_module="carica",
+                    error_message="Inizializzazione run fallita",
+                )
+            except Exception:
+                logger.warning("close_run CARICA fallito durante setup", exc_info=True)
+        _close_worker_connections(stage="setup")
+        raise
 
     # Astrae lo stato Celery per il dispatch (carica/dispatch.py, Celery-free).
     def progress(percent: int, message: str) -> None:
         _update_progress(self, percent, message)
+
+    def committed_progress(percent: int, message: str) -> None:
+        _update_progress(
+            self,
+            percent,
+            message,
+            check_revocation=False,
+        )
 
     target_lock_handle: CaricaTargetLockHandle | None = None
     try:
@@ -219,7 +244,8 @@ def execute_carica_task(
         result = None
         if write_branch == 'arcgis':
             result = carica_dispatch.maybe_multilayer_arcgis_write(
-                project_id, canvas, carica_node_data, task_id, progress=progress,
+                project_id, canvas, carica_node_data, task_id,
+                progress=progress, committed_progress=committed_progress,
             )
 
         if result is None:
@@ -265,16 +291,20 @@ def execute_carica_task(
 
             if write_branch == 'datasource':
                 result = carica_dispatch.execute_datasource_write(
-                    df, carica_node_data, project_id, task_id, progress=progress)
+                    df, carica_node_data, project_id, task_id,
+                    progress=progress, committed_progress=committed_progress)
             elif write_branch == 'rest':
                 result = carica_dispatch.execute_rest_write(
-                    df, carica_node_data, project_id, task_id, progress=progress)
+                    df, carica_node_data, project_id, task_id,
+                    progress=progress, committed_progress=committed_progress)
             elif write_branch == 'arcgis':
                 result = carica_dispatch.execute_arcgis_write(
-                    df, carica_node_data, project_id, task_id, progress=progress)
+                    df, carica_node_data, project_id, task_id,
+                    progress=progress, committed_progress=committed_progress)
             else:
                 result = carica_dispatch.execute_db_write(
-                    df, carica_node_data, project_id, task_id, triggered_by, run_id, progress=progress)
+                    df, carica_node_data, project_id, task_id, triggered_by, run_id,
+                    progress=progress, committed_progress=committed_progress)
 
         is_success = result.get("success", False)
         rows_written = result.get("rows_written", 0) or 0
@@ -362,7 +392,12 @@ def execute_carica_task(
             error_message=error_msg_internal,
             debug_payload=debug_payload,
         )
-        _update_progress(self, -1, public_error_message)
+        _update_progress(
+            self,
+            -1,
+            public_error_message,
+            check_revocation=False,
+        )
         # intent: boundary top-level task Celery / outcome: fail-closed sanitizzato
         # Il return dict finisce in Redis via AsyncResult → FE: niente str(e
         # error_details=error_trace preservato come canale diagnostic separato
@@ -451,7 +486,13 @@ def _acquire_target_lock_or_return_busy(
 
 
 
-def _update_progress(task, percent: int, message: str):
+def _update_progress(
+    task,
+    percent: int,
+    message: str,
+    *,
+    check_revocation: bool = True,
+):
     """Aggiorna il progresso del task su PostgreSQL.
 
     Stato sempre 'PROGRESS' (mai 'FAILURE') per non far interpretare il task
@@ -467,6 +508,7 @@ def _update_progress(task, percent: int, message: str):
         message,
         is_error=percent < 0,
         name="carica.execute",
+        check_revocation=check_revocation,
     )
 
 

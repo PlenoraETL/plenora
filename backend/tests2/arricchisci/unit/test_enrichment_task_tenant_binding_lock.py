@@ -262,7 +262,15 @@ def test_update_task_progress_accepts_explicit_task_id(monkeypatch):
     # Cattura il task_id propagato alla scrittura PG.
     captured = {}
 
-    def _capture_report(task_id, progress, message, *, is_error=False, name=None):
+    def _capture_report(
+        task_id,
+        progress,
+        message,
+        *,
+        is_error=False,
+        name=None,
+        check_revocation=True,
+    ):
         captured["task_id"] = task_id
 
     monkeypatch.setattr(enrichment_task_mod, "report_task_progress", _capture_report)

@@ -114,26 +114,24 @@ class StandardRunMode(EnrichmentRunMode):
         # Preservarlo e' essenziale: la consegna e' at-least-once e il guard
         # idempotente del task cerca proprio questa run al tentativo seguente.
         effective_run_id = run_id or str(uuid.uuid4())
-        group_id = "unknown"
-        retention_n: Optional[int] = None
-        try:
-            _meta = project_service_module.ProjectService().get_project_metadata(project_id)
-            group_id = getattr(_meta, "group_id", "unknown") if _meta else "unknown"
-            retention_n = project_retention.resolve_runs_retention_n(
-                project_id,
-                default=run_lifecycle_module.get_default_runs_retention(),
-            )
-            run_lifecycle_module.create_run(
-                run_id=effective_run_id,
-                canvas_id=project_id,
-                group_id=group_id,
-                user_id=user_id,
-            )
-        except Exception as e:
-            logger.warning(
-                f"[Task {task_id}] Intermediate: apertura run fallita (non bloccante): {e}"
-            )
-            effective_run_id = None
+        _meta = project_service_module.ProjectService().get_project_metadata(project_id)
+        if _meta is None:
+            raise LookupError(f"Progetto non trovato durante setup run: {project_id}")
+        group_id = str(getattr(_meta, "group_id", "") or "")
+        if not group_id:
+            raise RuntimeError("group_id mancante durante setup run enrichment")
+        retention_n = project_retention.resolve_runs_retention_n(
+            project_id,
+            default=run_lifecycle_module.get_default_runs_retention(),
+        )
+        # Fail-closed: senza questa riga non esiste alcuna barriera idempotente
+        # per una consegna at-least-once dello stesso messaggio.
+        run_lifecycle_module.create_run(
+            run_id=effective_run_id,
+            canvas_id=project_id,
+            group_id=group_id,
+            user_id=user_id,
+        )
         return RunContext(
             run_id=effective_run_id,
             group_id=group_id,

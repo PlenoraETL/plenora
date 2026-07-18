@@ -35,6 +35,7 @@ def test_carica_write_branch_selects_rest_without_stealing_existing_branches() -
 def test_rest_write_branch_delegates_to_carica_rest_boundary(monkeypatch) -> None:
     df = pd.DataFrame([{"id": 1, "name": "A"}, {"id": 2, "name": "B"}])
     progress_messages: list[str] = []
+    committed_messages: list[str] = []
     node_data = {
         "dest_type": "rest",
         "rest": {
@@ -66,6 +67,7 @@ def test_rest_write_branch_delegates_to_carica_rest_boundary(monkeypatch) -> Non
         project_id="proj-1",
         task_id="task-1",
         progress=lambda _p, m: progress_messages.append(m),
+        committed_progress=lambda _p, m: committed_messages.append(m),
     )
 
     assert result["status"] == "completed"
@@ -79,5 +81,5 @@ def test_rest_write_branch_delegates_to_carica_rest_boundary(monkeypatch) -> Non
     assert progress_messages == [
         "Preparazione scrittura REST...",
         "Scrittura REST...",
-        "REST completato: 2 righe scritte",
     ]
+    assert committed_messages == ["REST completato: 2 righe scritte"]

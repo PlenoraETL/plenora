@@ -33,7 +33,7 @@ export const getTaskStatus = async (taskId) => {
 /**
  * Annulla un task in esecuzione.
  * @param {string} taskId
- * @returns {Promise<Object>} { status: 'cancelled', task_id }
+ * @returns {Promise<Object>} { status: 'cancellation_requested', task_id }
  */
 export const cancelTask = async (taskId) => {
   const response = await http.delete(`/tasks/${taskId}`);

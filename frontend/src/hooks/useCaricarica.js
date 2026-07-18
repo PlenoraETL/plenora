@@ -7,7 +7,7 @@
  *
  * Usato da: EstraiEditor, ManipolaEditor, ArricchisciEditor (via CaricanNode)
  */
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import { executeProjectQuery, cancelTask as cancelTaskApi, createTask } from '../api';
 import { getTaskStatus } from '../api/tasks';
 import { useTaskPolling } from './useTaskPolling';
@@ -100,7 +100,6 @@ export function useCaricarica(projectId, options = {}) {
     batchesTotal: 0
   });
 
-  const isCancelledRef = useRef(false);
   const { mountedRef, stopPolling, startPolling } = useTaskPolling({ interval: pollInterval });
 
   /**
@@ -117,7 +116,6 @@ export function useCaricarica(projectId, options = {}) {
     setProgress(0);
     setProgressMessage('Preparazione...');
     setTaskStatus('pending');
-    isCancelledRef.current = false;
     setCaricaricaInfo({
       tableName: `${config.schema_name || 'public'}.${config.table_name || ''}`,
       writeMode: config.write_mode || 'create',
@@ -199,8 +197,6 @@ export function useCaricarica(projectId, options = {}) {
 
         // Polling con callback — ritorna true quando il task è completato
         startPolling(taskResult.task_id, (data) => {
-          if (isCancelledRef.current) return true;
-
           setTaskStatus(data.status);
           setProgress(data.progress || 0);
           setProgressMessage(data.message || '');
@@ -290,24 +286,14 @@ export function useCaricarica(projectId, options = {}) {
     if (!taskId) return;
 
     try {
-      isCancelledRef.current = true;
-      stopPolling();
-
       await cancelTaskApi(taskId);
       if (!mountedRef.current) return;
-
-      setIsExecuting(false);
-      setTaskStatus('revoked');
-      setProgressMessage('Annullato');
-      setResult({
-        success: false,
-        message: 'Caricamento annullato dall\'utente'
-      });
+      setProgressMessage('Annullamento richiesto...');
 
     } catch (error) {
       console.error('[useCaricarica] Errore annullamento:', error);
     }
-  }, [taskId, stopPolling, mountedRef]);
+  }, [taskId, mountedRef]);
 
   /**
    * Chiude il modal
@@ -335,7 +321,6 @@ export function useCaricarica(projectId, options = {}) {
     setProgress(0);
     setProgressMessage('');
     setTaskStatus(null);
-    isCancelledRef.current = false;
   }, [stopPolling]);
 
   return {

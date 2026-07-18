@@ -153,6 +153,21 @@ def execute_enrichment_task(
                 f"[Task {task_id}] Update run eseguibile fallito: {run_exc}"
             )
 
+    def cancel_executable_run() -> None:
+        if not executable_run_id:
+            return
+        try:
+            from app.core.eseguibili import db as eseguibili_db
+
+            eseguibili_db.cancel_eseguibile_run(
+                executable_run_id,
+                error_message="Task annullato",
+            )
+        except Exception as run_exc:
+            logger.warning(
+                f"[Task {task_id}] Cancellazione run eseguibile fallita: {run_exc}"
+            )
+
     if is_eseguibile and execution_context:
         _revoked = async_user_recheck_module.recheck_eseguibile_authorized(
             user_id=user_id,
@@ -190,7 +205,7 @@ def execute_enrichment_task(
         update_task_progress(self, 0, "Inizializzazione...", task_id=task_id)
     except TaskRevoked:
         _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
-        complete_executable_run(success=False, error_message="Task annullato")
+        cancel_executable_run()
         _close_worker_connection(stage="pre-run")
         raise
 
@@ -217,27 +232,102 @@ def execute_enrichment_task(
     # `_load_*` / `_execute_rest_file` falliscono fail-closed con
     # "Contesto di sicurezza non determinabile (group_id mancante)"
     _run_start = time.time()
-    _ctx = run_mode.begin_run(
-        project_id=project_id,
-        user_id=user_id,
-        task_id=task_id,
-        run_id=run_id,
-    )
-    _run_id = _ctx.run_id
-    _group_id = _ctx.group_id
-    _retention_n = _ctx.retention_n
-
-    # Per eseguibili: niente log_runs/logs su DB
-    if run_mode.logs_run():
-        open_run(
-            run_id=_run_id or task_id,
+    _run_id: Optional[str] = None
+    _group_id = ""
+    _retention_n: Optional[int] = None
+    log_run_opened = False
+    try:
+        _ctx = run_mode.begin_run(
             project_id=project_id,
-            group_id=_group_id,
-            module="arricchisci",
-            triggered_by="manual",
             user_id=user_id,
+            task_id=task_id,
+            run_id=run_id,
         )
-        set_run_context(run_id=_run_id or task_id, project_id=project_id)
+        _run_id = _ctx.run_id
+        _group_id = _ctx.group_id
+        _retention_n = _ctx.retention_n
+
+        # Per eseguibili: niente log_runs/logs su DB
+        if run_mode.logs_run():
+            open_run(
+                run_id=_run_id or task_id,
+                project_id=project_id,
+                group_id=_group_id,
+                module="arricchisci",
+                triggered_by="manual",
+                user_id=user_id,
+            )
+            log_run_opened = True
+            set_run_context(run_id=_run_id or task_id, project_id=project_id)
+    except BaseException as setup_exc:
+        if _run_id and run_mode.logs_run():
+            try:
+                intermediate_writer.close_run(
+                    run_id=_run_id,
+                    input_hash="",
+                    output_hash="",
+                    total_exec_time=time.time() - _run_start,
+                    success=False,
+                    retention_n=_retention_n,
+                )
+            except Exception:
+                logger.warning(
+                    "close_run intermediate fallito durante setup enrichment",
+                    exc_info=True,
+                )
+        if log_run_opened:
+            try:
+                close_run(
+                    run_id=_run_id or task_id,
+                    status="failure",
+                    duration_ms=int((time.time() - _run_start) * 1000),
+                    error_module="arricchisci",
+                    error_message="Inizializzazione run fallita",
+                )
+            except Exception:
+                logger.warning(
+                    "close_run ARRICCHISCI fallito durante setup",
+                    exc_info=True,
+                )
+        _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
+        complete_executable_run(
+            success=False,
+            error_message=f"Inizializzazione fallita: {type(setup_exc).__name__}",
+        )
+        _close_worker_connection(stage="setup")
+        raise
+
+    def finalize_standard_success(result: Mapping[str, Any]) -> None:
+        """Commit idempotente sincrono prima dell'ACK del task."""
+        elapsed = time.time() - _run_start
+        rows_out = int(result.get("rows_processed", 0) or 0)
+        if run_mode.logs_run():
+            elapsed_ms = int(elapsed * 1000)
+            append_step(
+                {
+                    "module": "arricchisci",
+                    "status": "success",
+                    "rows_out": rows_out,
+                    "duration_ms": elapsed_ms,
+                }
+            )
+            close_run(
+                run_id=_run_id or task_id,
+                status="success",
+                rows_out=rows_out,
+                duration_ms=elapsed_ms,
+            )
+        # Ultimo side effect fallibile: dopo status=completed un redelivery
+        # deve vedere la barriera idempotente e non rieseguire l'enrichment.
+        if _run_id and run_mode.logs_run():
+            intermediate_writer.close_run(
+                run_id=_run_id,
+                input_hash="",
+                output_hash="",
+                total_exec_time=elapsed,
+                success=True,
+                retention_n=_retention_n,
+            )
 
     try:
         # NOTE: istanziamo una NUOVA `ApiConnectionService` invece di
@@ -548,7 +638,13 @@ def execute_enrichment_task(
             #   - Se metadata `rows_count` e' None (es. connector non lo
             #     ha registrato): fallback al fetch_run_blob completo.
             elapsed_time = time.time() - start_time
-            update_task_progress(self, 100, "Completato!", task_id=task_id)
+            update_task_progress(
+                self,
+                90,
+                "Finalizzazione output...",
+                task_id=task_id,
+                check_revocation=False,
+            )
 
             # Eventuale rename in base a output_filename del nodo Result.
             src_ext = "." + (upstream_fmt or "bin")
@@ -787,6 +883,14 @@ def execute_enrichment_task(
                 success=True,
                 output_metadata={"task_id": task_id, "filename": final_name},
             )
+            finalize_standard_success(result)
+            update_task_progress(
+                self,
+                100,
+                "Completato!",
+                task_id=task_id,
+                check_revocation=False,
+            )
             return result
         
         final_df = final_result
@@ -812,7 +916,13 @@ def execute_enrichment_task(
             source_names=source_names_by_column,
         )
 
-        update_task_progress(self, 100, "Completato!", task_id=task_id)
+        update_task_progress(
+            self,
+            95,
+            "Finalizzazione output...",
+            task_id=task_id,
+            check_revocation=False,
+        )
 
         result = {
             "success": True,
@@ -853,42 +963,6 @@ def execute_enrichment_task(
             except Exception as _sne:
                 logger.warning(f"[Task {task_id}] Intermediate write result node fallita: {_sne}")
 
-        if _run_id and run_mode.logs_run():
-            _exec_time = time.time() - _run_start
-            # La run deve risultare completed PRIMA che il task ritorni.
-            # L'outbox/broker e' at-least-once: una seconda consegna puo'
-            # partire subito e il guard idempotente legge proprio questo stato.
-            try:
-                intermediate_writer.close_run(
-                    run_id=_run_id,
-                    input_hash="",
-                    output_hash="",
-                    total_exec_time=_exec_time,
-                    success=True,
-                    retention_n=_retention_n,
-                )
-            except Exception as close_exc:
-                logger.warning(
-                    "Chiusura run intermediate fallita prima del commit task: "
-                    f"{type(close_exc).__name__}: {close_exc}"
-                )
-
-        if run_mode.logs_run():
-            _elapsed_ms = int((time.time() - _run_start) * 1000)
-            _rows_ok = result.get("rows_processed", 0) or 0
-            append_step({
-                "module":      "arricchisci",
-                "status":      "success",
-                "rows_out":    _rows_ok,
-                "duration_ms": _elapsed_ms,
-            })
-            close_run(
-                run_id=_run_id or task_id,
-                status="success",
-                rows_out=_rows_ok,
-                duration_ms=_elapsed_ms,
-            )
-
         try:
             carica_info = _trigger_carica_if_present(
                 project_id=project_id,
@@ -912,6 +986,14 @@ def execute_enrichment_task(
             output_metadata={"task_id": task_id, "filename": saved_path.name},
         )
 
+        finalize_standard_success(result)
+        update_task_progress(
+            self,
+            100,
+            "Completato!",
+            task_id=task_id,
+            check_revocation=False,
+        )
         return result
 
     except TaskRevoked:
@@ -945,7 +1027,7 @@ def execute_enrichment_task(
                     f"{type(close_exc).__name__}: {close_exc}"
                 )
         _cleanup_temp_file_sources(cleanup_file_source_ids, task_id)
-        complete_executable_run(success=False, error_message="Task annullato")
+        cancel_executable_run()
         raise
 
     except Exception as e:
@@ -1035,7 +1117,14 @@ def execute_enrichment_task(
         # NON usare state="FAILURE" direttamente - causa problemi con Celery/Redis
         # Invece, aggiorniamo con progress negativo ma stato PROGRESS e is_error=True
         try:
-            update_task_progress(self, 0, f"Errore: {error_message}", is_error=True, task_id=task_id)
+            update_task_progress(
+                self,
+                0,
+                f"Errore: {error_message}",
+                is_error=True,
+                task_id=task_id,
+                check_revocation=False,
+            )
         except Exception as e_prog:
             logger.debug(f"progress update fallito: {type(e_prog).__name__}: {e_prog}")
 
@@ -1086,6 +1175,7 @@ def update_task_progress(
     is_error: bool = False,
     *,
     task_id: Optional[str] = None,
+    check_revocation: bool = True,
 ) -> None:
     """
     Aggiorna il progresso del task su PostgreSQL.
@@ -1109,6 +1199,7 @@ def update_task_progress(
         message,
         is_error=is_error,
         name=getattr(task, "name", None),
+        check_revocation=check_revocation,
     )
 
 

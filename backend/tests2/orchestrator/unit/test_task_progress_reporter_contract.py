@@ -323,6 +323,25 @@ def test_report_progress_writes_when_not_revoked():
     assert store.get("t1") is not None
 
 
+def test_report_progress_can_write_non_revocable_finalization_update():
+    revocations = InMemoryTaskRevocationStore()
+    revocations.revoke("t1")
+    task_progress_module._set_revocation_store_for_tests(revocations)
+    store = InMemoryTaskResultStore()
+
+    report_task_progress(
+        "t1",
+        100,
+        "Finalizzazione completata",
+        check_revocation=False,
+        store=store,
+    )
+
+    record = store.get("t1")
+    assert record is not None
+    assert record.payload["progress"] == 100
+
+
 def test_finalize_revoked_writes_revoked_state():
     store = InMemoryTaskResultStore()
     finalize_revoked("t1", name="carica.execute", store=store)

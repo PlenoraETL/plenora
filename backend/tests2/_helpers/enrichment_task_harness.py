@@ -328,6 +328,10 @@ def install_enrichment_task_mocks(
     monkeypatch.setattr(
         "app.core.projects.service.ProjectService", _FakeProjectService,
     )
+    monkeypatch.setattr(
+        "app.core.arricchisci.enrichment_run_mode.project_retention.resolve_runs_retention_n",
+        lambda _project_id, *, default: 5,
+    )
 
     # 8. Intermediate run creation (lazy)
     def _fake_create_run(**kwargs):

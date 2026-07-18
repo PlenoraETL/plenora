@@ -24,6 +24,22 @@ def _raise_on_second_progress():
     return _progress
 
 
+def test_cancel_executable_run_persists_cancelled_status(monkeypatch):
+    from app.core.eseguibili import db as eseguibili_db
+
+    statements = []
+    monkeypatch.setattr(
+        eseguibili_db,
+        "_execute",
+        lambda sql, params=(): statements.append((sql, params)),
+    )
+
+    eseguibili_db.cancel_eseguibile_run("run-1")
+
+    assert "status = 'cancelled'" in statements[0][0]
+    assert statements[0][1] == ("Task annullato", "run-1")
+
+
 def test_pipeline_revocation_closes_run_and_worker_connection(monkeypatch):
     from workers.tasks import pipeline_task as task
 
@@ -82,6 +98,58 @@ def test_pipeline_revocation_closes_run_and_worker_connection(monkeypatch):
     assert connection_closes == [True]
 
 
+def test_pipeline_setup_failure_closes_log_run_and_worker_connection(monkeypatch):
+    from workers.tasks import pipeline_task as task
+
+    log_closes = []
+    connection_closes = []
+    monkeypatch.setattr(
+        task.run_idempotency_module, "is_already_completed", lambda _run_id: False
+    )
+    monkeypatch.setattr(
+        task.async_user_recheck_module,
+        "recheck_user_authorized",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        task,
+        "_get_project_info",
+        lambda _project_id: {
+            "group_id": "group-1",
+            "project_type": "manipola",
+            "retention_n": 5,
+        },
+    )
+    monkeypatch.setattr(task, "open_run", lambda **_kwargs: None)
+    monkeypatch.setattr(task, "set_run_context", lambda **_kwargs: None)
+    monkeypatch.setattr(task, "close_run", lambda **kwargs: log_closes.append(kwargs))
+    monkeypatch.setattr(task, "_update_progress", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        task.run_lifecycle_module,
+        "create_run",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("run store down")),
+    )
+    monkeypatch.setattr(
+        task.run_lifecycle_module,
+        "close_worker_connection",
+        lambda: connection_closes.append(True),
+    )
+
+    shim = SimpleNamespace(
+        request=SimpleNamespace(id="task-1"),
+        name="pipeline.execute",
+    )
+    with pytest.raises(RuntimeError, match="run store down"):
+        task.execute_pipeline_task(
+            shim,
+            project_id="project-1",
+            run_id="logical-run-1",
+        )
+
+    assert log_closes[-1]["status"] == "failure"
+    assert connection_closes == [True]
+
+
 def test_pipeline_revocation_before_run_closes_executable_and_temp_inputs(monkeypatch):
     from app.core.eseguibili import db as eseguibili_db
     from app.core.files.service import file_source_service
@@ -105,7 +173,7 @@ def test_pipeline_revocation_before_run_closes_executable_and_temp_inputs(monkey
     )
     monkeypatch.setattr(
         eseguibili_db,
-        "complete_eseguibile_run",
+        "cancel_eseguibile_run",
         lambda run_id, **kwargs: executable_closes.append((run_id, kwargs)),
     )
     monkeypatch.setattr(
@@ -149,7 +217,7 @@ def test_pipeline_revocation_before_run_closes_executable_and_temp_inputs(monkey
     assert executable_closes == [
         (
             "executable-run-1",
-            {"success": False, "error_message": "Task annullato"},
+            {"error_message": "Task annullato"},
         )
     ]
     assert connection_closes == [True]

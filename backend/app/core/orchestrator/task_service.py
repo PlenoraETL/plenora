@@ -45,6 +45,15 @@ class TaskStatus(str, Enum):
     RETRY = "retry"          # In retry dopo errore
 
 
+class TaskAlreadyTerminalError(RuntimeError):
+    """Raised when cancellation is requested for an already terminal task."""
+
+    def __init__(self, task_id: str, state: str) -> None:
+        self.task_id = task_id
+        self.state = state
+        super().__init__(f"Task {task_id} already terminal: {state}")
+
+
 class TaskType(str, Enum):
     """Tipi di task supportati."""
     ENRICHMENT = "enrichment"
@@ -759,9 +768,14 @@ class TaskService:
             True se la revoca e' stata registrata con successo
         """
         try:
+            state = str(self.runtime.get_result(task_id).state or "PENDING").upper()
+            if state in {"SUCCESS", "FAILURE", "REVOKED"}:
+                raise TaskAlreadyTerminalError(task_id, state)
             self.revocation_store.revoke(task_id)
             logger.info(f"Task {task_id} revoca registrata (annullamento cooperativo)")
             return True
+        except TaskAlreadyTerminalError:
+            raise
         except Exception as e:
             logger.error(f"[CRASH] Errore annullamento task {task_id}: {e}", exc_info=True)
             return False

@@ -349,16 +349,23 @@ describe('useExecution — closeModal / reset / cancelTask', () => {
     expect(stopPollingMock).toHaveBeenCalled();
   });
 
-  it('cancelTask chiama cancelTaskApi + stopPolling, set status=revoked', async () => {
+  it('cancelTask richiede la revoca e mantiene il polling fino allo stato terminale', async () => {
     executeProjectQueryMock.mockResolvedValue({ async: true, task_id: 'tc3' });
-    cancelTaskMock.mockResolvedValue({ ok: true });
+    cancelTaskMock.mockResolvedValue({ status: 'cancellation_requested' });
     const { result } = renderHook(() => useExecution('proj-1'));
     await act(async () => { await result.current.handleExecute({}); });
 
     await act(async () => { await result.current.cancelTask(); });
     expect(cancelTaskMock).toHaveBeenCalledWith('tc3');
-    expect(stopPollingMock).toHaveBeenCalled();
-    expect(result.current.taskStatus).toBe('revoked');
-    expect(result.current.isExecuting).toBe(false);
+    expect(stopPollingMock).not.toHaveBeenCalled();
+    expect(result.current.taskStatus).toBe('pending');
+    expect(result.current.isExecuting).toBe(true);
+    expect(result.current.progressMessage).toMatch(/annullamento richiesto/i);
+
+    const onStatus = startPollingMock.mock.calls[0][1];
+    act(() => { onStatus({ status: 'success', result: { rows_count: 1 } }); });
+    await waitFor(() => { expect(result.current.isExecuting).toBe(false); });
+    expect(result.current.taskStatus).toBe('success');
+    expect(result.current.result?.success).toBe(true);
   });
 });

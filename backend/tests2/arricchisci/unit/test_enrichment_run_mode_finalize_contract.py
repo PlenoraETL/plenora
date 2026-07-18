@@ -47,6 +47,8 @@ def test_standard_run_persists_to_db_with_result_id_and_run_logging(monkeypatch)
     # FINALIZE run-logging: standard chiama close_run/append_step/snapshot
     assert len(spies.logger_close_runs) == 1
     assert spies.logger_close_runs[0].get("status") == "success"
+    assert len(spies.intermediate_close_runs) == 1
+    assert spies.intermediate_close_runs[0].get("success") is True
     assert len(spies.append_steps) == 1
     assert len(spies.final_snapshots) == 1
 

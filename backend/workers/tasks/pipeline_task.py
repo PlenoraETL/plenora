@@ -45,7 +45,13 @@ def _is_retryable_connection_message(message: str) -> bool:
     return any(fragment in normalized for fragment in _RETRYABLE_CONNECTION_MESSAGES)
 
 
-def _update_progress(task: object, percent: int, message: str) -> None:
+def _update_progress(
+    task: object,
+    percent: int,
+    message: str,
+    *,
+    check_revocation: bool = True,
+) -> None:
     # Progress scritto solo su PG via report_task_progress; il result backend
     # del task runtime non e' la fonte di verita' per la UI.
     report_task_progress(
@@ -53,6 +59,7 @@ def _update_progress(task: object, percent: int, message: str) -> None:
         percent,
         message,
         name=getattr(task, "name", None),
+        check_revocation=check_revocation,
     )
 
 
@@ -381,9 +388,8 @@ def execute_pipeline_task(
             try:
                 from app.core.eseguibili import db as eseguibili_db
 
-                eseguibili_db.complete_eseguibile_run(
+                eseguibili_db.cancel_eseguibile_run(
                     str(subject.get("run_id") or ""),
-                    success=False,
                     error_message="Task annullato",
                 )
             except Exception as run_exc:
@@ -402,27 +408,42 @@ def execute_pipeline_task(
     if retention_n is None and subject is None:
         retention_n = _resolve_intermediate_retention_n(project_id)
 
-    open_run(
-        run_id=run_id,
-        project_id=project_id,
-        group_id=group_id,
-        module=module,
-        triggered_by=triggered_by,
-        user_id=user_id,
-    )
-
-    set_run_context(run_id=run_id, project_id=project_id)
-
-    # Apri run su intermediate storage tramite boundary di lifecycle.
+    log_run_opened = False
     try:
+        open_run(
+            run_id=run_id,
+            project_id=project_id,
+            group_id=group_id,
+            module=module,
+            triggered_by=triggered_by,
+            user_id=user_id,
+        )
+        log_run_opened = True
+        set_run_context(run_id=run_id, project_id=project_id)
+
+        # L'apertura intermediate e' parte del contratto idempotente: senza
+        # la run stabile un redelivery potrebbe rieseguire l'intera pipeline.
         run_lifecycle_module.create_run(
             run_id=run_id,
             canvas_id=project_id,
             group_id=group_id,
             user_id=user_id,
         )
-    except Exception as _ie:
-        logger.warning(f"Intermediate: apertura run fallita (non bloccante): {_ie}")
+    except BaseException:
+        if log_run_opened:
+            try:
+                close_run(
+                    run_id=run_id,
+                    status="failure",
+                    duration_ms=int((_time.time() - _run_start) * 1000),
+                    error_module=module,
+                    error_message="Inizializzazione run fallita",
+                )
+            except Exception:
+                logger.warning("close_run pipeline fallito durante setup", exc_info=True)
+        _cleanup_executable_inputs(contract)
+        _close_worker_connection(stage="setup")
+        raise
 
     try:
         _update_progress(self, 5, "Caricamento configurazione...")
@@ -471,7 +492,12 @@ def execute_pipeline_task(
 
             # Errori di connessione DB: fail immediato
             if _is_retryable_connection_message(message):
-                _update_progress(self, 0, f"Connessione persa: {message}")
+                _update_progress(
+                    self,
+                    0,
+                    f"Connessione persa: {message}",
+                    check_revocation=False,
+                )
                 logger.warning(
                     f"Task PIPELINE {task_id} — connessione DB chiusa: {message}",
                     run_id=run_id, project_id=project_id,
@@ -484,7 +510,12 @@ def execute_pipeline_task(
                     error_module=module,
                     error_message=f"Connessione al database persa: {message}",
                 )
-                _update_progress(self, 0, f"Connessione al database persa. {message}")
+                _update_progress(
+                    self,
+                    0,
+                    f"Connessione al database persa. {message}",
+                    check_revocation=False,
+                )
                 return {
                     "success": False,
                     "retryable": True,
@@ -541,7 +572,7 @@ def execute_pipeline_task(
                 debug_payload=debug_payload,
             )
 
-            _update_progress(self, 0, message)
+            _update_progress(self, 0, message, check_revocation=False)
             return {
                 "success": False,
                 "message": message,
@@ -555,7 +586,12 @@ def execute_pipeline_task(
         # Dopo la persistenza non osserviamo piu' una cancellazione tardiva:
         # l'operazione e' ormai completata e deve terminare SUCCESS, evitando
         # output validi associati a un task marcato REVOKED.
-        _update_progress(self, 95, "Finalizzazione output...")
+        _update_progress(
+            self,
+            95,
+            "Finalizzazione output...",
+            check_revocation=False,
+        )
         executable_output = None
         if subject is not None and contract is not None:
             executable_output = _persist_executable_output(
@@ -587,15 +623,13 @@ def execute_pipeline_task(
             steps=get_steps(),
         )
 
-        # Chiudi run intermediate storage tramite boundary di lifecycle.
-        try:
-            run_lifecycle_module.close_run(
-                run_id=run_id, input_hash="", output_hash="",
-                total_exec_time=_time.time() - _run_start, success=True,
-                retention_n=retention_n,
-            )
-        except Exception as _ce:
-            logger.warning(f"Intermediate: chiusura run fallita: {_ce}")
+        # Barriera idempotente sincrona: deve riuscire prima dell'ACK, altrimenti
+        # un redelivery potrebbe rieseguire una pipeline gia' materializzata.
+        run_lifecycle_module.close_run(
+            run_id=run_id, input_hash="", output_hash="",
+            total_exec_time=_time.time() - _run_start, success=True,
+            retention_n=retention_n,
+        )
 
         output_path = result.output_path
         output_file = _Path(output_path).name if output_path else None
@@ -625,9 +659,8 @@ def execute_pipeline_task(
             try:
                 from app.core.eseguibili import db as eseguibili_db
 
-                eseguibili_db.complete_eseguibile_run(
+                eseguibili_db.cancel_eseguibile_run(
                     str(subject.get("run_id") or ""),
-                    success=False,
                     error_message="Task annullato",
                 )
             except Exception as run_exc:

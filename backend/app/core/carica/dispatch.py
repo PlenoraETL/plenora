@@ -164,6 +164,7 @@ def select_carica_write_branch(carica_node_data: JsonObject) -> str:
 
 def execute_datasource_write(
     df, carica_node_data, project_id, task_id, *, progress: ProgressFn,
+    committed_progress: Optional[ProgressFn] = None,
 ):
     """Scrive il DataFrame su un DataSource (local/FTP/SFTP/SharePoint)."""
     datasource_id = carica_node_data.get('datasource_id', '')
@@ -235,7 +236,7 @@ def execute_datasource_write(
             datasource_id, path, dataframe_to_export_chunks(df, dest_format),
         )
 
-        progress(100, f'Scrittura completata: {path}')
+        (committed_progress or progress)(100, f'Scrittura completata: {path}')
         logger.info(f'Task CARICA DS {task_id} completato: {path}')
 
         return {
@@ -265,15 +266,19 @@ def execute_datasource_write(
 
 def execute_db_write(
     df, carica_node_data, project_id, task_id, triggered_by, run_id=None,
-    *, progress: ProgressFn,
+    *, progress: ProgressFn, committed_progress: Optional[ProgressFn] = None,
 ):
     """Esegue il caricamento su database (percorso originale).
 
     ``run_id`` propagato all'executor come self-defense layer (N15).
     """
+    report_committed = committed_progress or progress
+
     def progress_callback(batch_progress):
         overall_percent = 10 + int(batch_progress.percent * 0.85)
-        progress(overall_percent, batch_progress.message)
+        # Il callback arriva dopo il commit del batch: una revoca osservata qui
+        # renderebbe il task REVOKED nonostante righe gia' persistite.
+        report_committed(overall_percent, batch_progress.message)
 
     # Passa connection_service per decriptare correttamente le password
     executor = CaricaExecutor(connection_service=_get_connection_service())
@@ -295,7 +300,7 @@ def execute_db_write(
     if not is_success and not result_dict.get("message"):
         result_dict["message"] = result_dict.get("error_message", f"Errore: {result.status.value}")
 
-    progress(
+    report_committed(
         100 if is_success else -1,
         f"Completato: {result.rows_written} righe scritte" if is_success
         else result_dict.get("error_message", "Errore"),
@@ -312,6 +317,7 @@ def execute_rest_write(
     task_id: str,
     *,
     progress: ProgressFn,
+    committed_progress: Optional[ProgressFn] = None,
 ) -> CaricaTaskResultPayload:
     """Coordinate REST write progress while the domain owns REST payload writes."""
     progress(15, "Preparazione scrittura REST...")
@@ -328,14 +334,15 @@ def execute_rest_write(
 
         is_success = result.get("success", False)
         rows = result.get("rows_written", 0) or 0
+        report_committed = committed_progress or progress
         if not is_success:
-            progress(
+            report_committed(
                 -1,
                 result.get("error_message") or result.get("message") or "Errore scrittura REST",
             )
             return result
 
-        progress(100, f"REST completato: {rows} righe scritte")
+        report_committed(100, f"REST completato: {rows} righe scritte")
         logger.info(f"Task CARICA REST {task_id} completato: {rows} righe")
         return result
 
@@ -359,6 +366,7 @@ def maybe_multilayer_arcgis_write(
     task_id: str,
     *,
     progress: ProgressFn,
+    committed_progress: Optional[ProgressFn] = None,
 ) -> Optional[JsonObject]:
     """Pubblica N layer su ArcGIS se l'artefatto upstream e' un bundle multi-layer.
 
@@ -433,8 +441,9 @@ def maybe_multilayer_arcgis_write(
         feature_writer=create_default_arcgis_feature_writer(),
     )
     result = outcome.to_task_result()
+    report_committed = committed_progress or progress
     if outcome.success:
-        progress(
+        report_committed(
             100,
             f"ArcGIS multi-layer completato: {outcome.rows_written} features",
         )
@@ -443,7 +452,7 @@ def maybe_multilayer_arcgis_write(
             f"{outcome.rows_written} features"
         )
     else:
-        progress(-1, outcome.error_message or outcome.message)
+        report_committed(-1, outcome.error_message or outcome.message)
     return result
 
 
@@ -454,6 +463,7 @@ def execute_arcgis_write(
     task_id: str,
     *,
     progress: ProgressFn,
+    committed_progress: Optional[ProgressFn] = None,
 ) -> Mapping[str, object]:
     """Coordinate ArcGIS write progress while the domain owns provider writes."""
     progress(15, "Preparazione scrittura ArcGIS...")
@@ -490,11 +500,12 @@ def execute_arcgis_write(
         result = outcome.to_task_result()
         rows = outcome.rows_written
 
+        report_committed = committed_progress or progress
         if not outcome.success:
-            progress(-1, outcome.error_message or outcome.message)
+            report_committed(-1, outcome.error_message or outcome.message)
             return result
 
-        progress(100, f"ArcGIS completato: {rows} features")
+        report_committed(100, f"ArcGIS completato: {rows} features")
         logger.info(f"Task CARICA ArcGIS {task_id} completato: {rows} features")
         return result
 
