@@ -181,7 +181,7 @@ def test_estrai_preview_only_is_rejected_for_new_runs():
 
 
 def test_estrai_streaming_branch_uses_legacy_write_node_ok_streamed(monkeypatch):
-    """Quando il path streaming attiva df=None (CSV/Parquet senza geom),
+    """Quando il path streaming attiva df=None (CSV/Parquet/XLSX senza geom),
     il fingerprint sul DataFrame non e' calcolabile: conserviamo lo
     status legacy `ok_streamed` via write_node legacy con rows=[]."""
     executor = _build_executor()

@@ -105,7 +105,8 @@ class TestQueryExecutorEndToEnd:
             logger=mock_logger,
         )
 
-        # Post RAM-A1: anche xlsx passa dal boundary streaming result blob.
+        # Il path DataFrame continua a propagare il result_id per i formati
+        # non streamable.
         with patch.object(
             executor, "execute_raw", return_value=(fake_rows, fake_columns)
         ), patch(
@@ -114,17 +115,17 @@ class TestQueryExecutorEndToEnd:
         ) as mock_save_blob:
             conn = MagicMock()
             conn.type = "mysql"
-            # NB (C11): csv/parquet passano ora dal path streaming che
+            # NB (C11): csv/parquet/xlsx passano dal path streaming che
             # non chiama execute_raw — per testare il flow end-to-end col
-            # mock di execute_raw usiamo xlsx (formato non-streamable,
-            # forzatamente legacy path). Il test verifica result_id
+            # mock di execute_raw usiamo JSON (formato non-streamable).
+            # Il test verifica result_id
             # propagation che e' invariante rispetto al formato.
             result = executor.execute_query(
                 connection=conn,
                 sql="SELECT 1",
                 project_id="proj-1",
                 output_filename="out",
-                output_format="xlsx",
+                output_format="json",
                 geom_column=None,
                 group_id="grp-1",
             )

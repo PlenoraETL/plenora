@@ -397,7 +397,7 @@ class QueryExecutor:
         # Streaming is enabled only without geometry; geospatial export requires
         # trasformazioni WKT/WKB sulla colonna geom che non si prestano al
         # chunk-write minimal. Other formats remain capped by ESTRAI_MAX_ROWS.
-        _streamable = output_format in ("csv", "parquet") and not geom_column
+        _streamable = output_format in ("csv", "parquet", "xlsx") and not geom_column
 
         try:
             self._logger.info(f"Esecuzione query per progetto {project_id}")

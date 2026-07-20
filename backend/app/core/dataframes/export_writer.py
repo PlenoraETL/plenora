@@ -37,7 +37,7 @@ import threading
 from contextlib import suppress
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Iterator, Mapping
+from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
@@ -139,6 +139,28 @@ def _xlsx_cell_value(value: Any, declared_type: Any = None) -> Any:
     """Normalize one pandas/numpy value for the XLSX writer."""
     if value is None or value is pd.NA or value is pd.NaT:
         return None
+
+    # Hot path: XLSX export visits this function once per cell.  Values
+    # returned by ``DataFrame.itertuples`` and database drivers are normally
+    # exact Python scalars, so handle those before the more general (and much
+    # more expensive) isinstance chain below.
+    value_type = type(value)
+    if value_type is int or value_type is bool:
+        return value
+    if value_type is float:
+        if math.isnan(value):
+            return None
+        if math.isinf(value):
+            return "inf" if value > 0 else "-inf"
+        return value
+    if value_type is str:
+        value = _clean_export_text(value)
+        if not declared_type or not _is_declared_excel_temporal(declared_type):
+            return value
+        value = _coerce_declared_excel_temporal(value, declared_type)
+        if isinstance(value, str):
+            return value
+
     if isinstance(value, np.generic):
         value = value.item()
     if isinstance(value, float):
@@ -156,7 +178,7 @@ def _xlsx_cell_value(value: Any, declared_type: Any = None) -> Any:
         return text or "0"
     if isinstance(value, str):
         value = _clean_export_text(value)
-    if _is_declared_excel_temporal(declared_type):
+    if declared_type and _is_declared_excel_temporal(declared_type):
         value = _coerce_declared_excel_temporal(value, declared_type)
     if isinstance(value, pd.Timestamp):
         value = value.to_pydatetime()
@@ -180,28 +202,34 @@ def _xlsx_cell_value(value: Any, declared_type: Any = None) -> Any:
     return str(value)
 
 
-def write_dataframe_to_xlsx_stream(
-    df: Any,
+def write_rows_to_xlsx_stream(
+    rows: Iterable[Sequence[Any]],
+    columns: Sequence[Any],
     sink: Any,
     *,
     sheet_name: str = "Sheet1",
     column_types: Mapping[str, Any] | None = None,
-) -> None:
-    """Write an XLSX incrementally to a forward-only binary sink.
+    row_count_hint: int | None = None,
+) -> int:
+    """Write tabular rows incrementally to a forward-only XLSX sink.
 
     ``constant_memory=True`` mantiene in RAM soltanto la riga corrente.
     Il sink puo' essere :class:`StreamingResultBlobWriter`, quindi il file ZIP
     viene inviato a S3 multipart senza un ``BytesIO`` completo.
+
+    ``rows`` puo' essere un iteratore di tuple proveniente da pandas oppure
+    direttamente da un cursore SQL. Il numero effettivo di righe scritte viene
+    restituito al chiamante; ``row_count_hint`` consente il fail-fast quando il
+    conteggio e' gia' noto.
     """
     import xlsxwriter
 
-    row_count = len(df)
-    column_count = len(df.columns)
+    column_count = len(columns)
     # Una riga e' riservata all'header, come ``DataFrame.to_excel(index=False)``.
-    if row_count + 1 > _XLSX_MAX_ROWS:
+    if row_count_hint is not None and row_count_hint + 1 > _XLSX_MAX_ROWS:
         raise ValueError(
             f"XLSX supporta al massimo {_XLSX_MAX_ROWS - 1} righe dati; "
-            f"ricevute {row_count}"
+            f"ricevute {row_count_hint}"
         )
     if column_count > _XLSX_MAX_COLUMNS:
         raise ValueError(
@@ -225,7 +253,7 @@ def write_dataframe_to_xlsx_stream(
         status = worksheet.write_row(
             0,
             0,
-            [_xlsx_cell_value(column) for column in df.columns],
+            [_xlsx_cell_value(column) for column in columns],
         )
         if status != 0:
             raise ValueError(f"Impossibile scrivere l'intestazione XLSX (codice {status})")
@@ -236,9 +264,14 @@ def write_dataframe_to_xlsx_stream(
         declared_types = [
             (column_types or {}).get(str(column))
             or declared_by_lower.get(str(column).lower())
-            for column in df.columns
+            for column in columns
         ]
-        for row_number, row in enumerate(df.itertuples(index=False, name=None), 1):
+        row_count = 0
+        for row_number, row in enumerate(rows, 1):
+            if row_number >= _XLSX_MAX_ROWS:
+                raise ValueError(
+                    f"XLSX supporta al massimo {_XLSX_MAX_ROWS - 1} righe dati"
+                )
             status = worksheet.write_row(
                 row_number,
                 0,
@@ -252,12 +285,32 @@ def write_dataframe_to_xlsx_stream(
                     f"Impossibile scrivere la riga XLSX {row_number + 1} "
                     f"(codice {status})"
                 )
+            row_count = row_number
         workbook.close()
         closed = True
+        return row_count
     finally:
         if not closed:
             with suppress(Exception):
                 workbook.close()
+
+
+def write_dataframe_to_xlsx_stream(
+    df: Any,
+    sink: Any,
+    *,
+    sheet_name: str = "Sheet1",
+    column_types: Mapping[str, Any] | None = None,
+) -> None:
+    """Write a DataFrame through the canonical forward-only XLSX writer."""
+    write_rows_to_xlsx_stream(
+        df.itertuples(index=False, name=None),
+        list(df.columns),
+        sink,
+        sheet_name=sheet_name,
+        column_types=column_types,
+        row_count_hint=len(df),
+    )
 
 
 def _records_json_inner(df_slice: Any) -> str:
@@ -654,4 +707,5 @@ __all__ = [
     "dataframe_to_export_chunks",
     "normalize_export_format",
     "write_dataframe_to_xlsx_stream",
+    "write_rows_to_xlsx_stream",
 ]

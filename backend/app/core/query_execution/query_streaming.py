@@ -1,6 +1,6 @@
 """Streaming writers for database query results.
 
-This module owns the CSV/Parquet zero-full-materialization path used by
+This module owns the CSV/Parquet/XLSX zero-full-materialization path used by
 QueryExecutor. It intentionally does not import QueryExecutor, so the large
 executor module can delegate streaming without creating a reverse dependency.
 """
@@ -10,12 +10,13 @@ from __future__ import annotations
 import csv
 import io
 from decimal import Decimal
-from typing import Any, BinaryIO, List, Optional, Protocol, Tuple
+from typing import Any, BinaryIO, Iterator, List, Optional, Protocol, Tuple
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.config import settings
+from app.core.dataframes import export_writer as export_writer_module
 from app.core.dataframes.tabular import dataframe_from_rows, make_unique_column_names
 from app.db.sql_types import QueryParams
 from app.utils.logger import get_logger
@@ -185,6 +186,33 @@ def _write_parquet_to_writer(
     return total_rows
 
 
+def _write_xlsx_to_writer(
+    result: Any, columns: List[str], writer: BinaryIO, max_rows: int,
+) -> int:
+    """Write cursor rows directly to a constant-memory XLSX workbook.
+
+    Unlike the legacy path this never builds ``list[tuple]`` plus a full
+    DataFrame before export. The cursor is consumed in bounded batches and
+    the canonical XLSX value policy remains owned by ``export_writer``.
+    """
+
+    def _iter_rows() -> Iterator[tuple[Any, ...]]:
+        total_rows = 0
+        while True:
+            chunk = result.fetchmany(CHUNK_SIZE)
+            if not chunk:
+                return
+            total_rows += len(chunk)
+            _raise_if_over_row_cap(total_rows, max_rows)
+            yield from (tuple(row) for row in chunk)
+
+    return export_writer_module.write_rows_to_xlsx_stream(
+        _iter_rows(),
+        columns,
+        writer,
+    )
+
+
 def execute_streaming_to_writer(
     *,
     engine_factory: StreamingEngineFactory,
@@ -194,7 +222,7 @@ def execute_streaming_to_writer(
     output_writer: BinaryIO,
     output_format: str,
 ) -> Tuple[int, List[str]]:
-    """Execute a query streaming CSV/Parquet bytes to `output_writer`.
+    """Execute a query streaming CSV/Parquet/XLSX to `output_writer`.
 
     Sostituisce `execute_streaming_to_file` per i caller storage-first:
     invece di scrivere su un path filesystem, scrive su un file-like
@@ -213,10 +241,12 @@ def execute_streaming_to_writer(
             total_rows = _write_csv_to_writer(result, columns, output_writer, max_rows)
         elif output_format == "parquet":
             total_rows = _write_parquet_to_writer(result, columns, output_writer, max_rows)
+        elif output_format == "xlsx":
+            total_rows = _write_xlsx_to_writer(result, columns, output_writer, max_rows)
         else:
             raise ValueError(
                 f"execute_streaming_to_writer: formato non supportato "
-                f"per streaming: {output_format}. Use csv o parquet."
+                f"per streaming: {output_format}. Usa csv, parquet o xlsx."
             )
 
     return total_rows, columns
