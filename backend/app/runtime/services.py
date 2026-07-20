@@ -32,10 +32,22 @@ if TYPE_CHECKING:
 __all__ = [
     "OrchestratorStack",
     "RuntimeServices",
+    "build_connection_service",
     "build_orchestrator_stack",
+    "build_project_service",
     "build_runtime_services",
     "build_scheduled_carica_executor",
 ]
+
+
+def build_project_service() -> project_service_module.ProjectService:
+    """Construct the project facade at the runtime composition boundary."""
+    return project_service_module.ProjectService()
+
+
+def build_connection_service() -> connection_service_module.ConnectionService:
+    """Construct the connection facade at the runtime composition boundary."""
+    return connection_service_module.ConnectionService()
 
 
 def build_scheduled_carica_executor(
@@ -157,9 +169,9 @@ def build_orchestrator_stack(
     composition boundary while preserving standalone callers such as
     scheduler and arricchisci recompute paths.
     """
-    project_service = project_service_module.ProjectService()
+    project_service = build_project_service()
     resolved_connection_service = (
-        connection_service or connection_service_module.ConnectionService()
+        connection_service or build_connection_service()
     )
     query_generator = query_generator_module.QueryGenerator()
     query_executor = query_executor_module.QueryExecutor()
@@ -225,7 +237,7 @@ def build_runtime_services() -> RuntimeServices:
         by `app.bootstrap`. A contract test locks the order
         invariant.
     """
-    connection_service = connection_service_module.ConnectionService()
+    connection_service = build_connection_service()
     database_inspector = database_inspector_module.DatabaseInspector()
     orchestrator_stack = build_orchestrator_stack(
         connection_service=connection_service,

@@ -23,7 +23,7 @@ config + roundtrip su un set documentato di extra noti.
 
 from __future__ import annotations
 
-from app.core.projects.canvas_models import Column
+from app.shared.execution.canvas_column import Column
 
 
 # Campi extra che il FE serializza per ogni Column al momento del fix

@@ -33,9 +33,10 @@ from app.core.intermediate import cleanup as intermediate_cleanup
 from app.core.intermediate import run_lifecycle as intermediate_run_lifecycle
 from app.core.intermediate import runs_db as intermediate_runs_db
 from app.core.orchestrator import execution_contract as execution_contract_module
-from app.core.projects import service as project_service_module
 from app.runtime.services import (
+    build_connection_service,
     build_orchestrator_stack,
+    build_project_service,
     build_scheduled_carica_executor,
 )
 
@@ -85,6 +86,8 @@ class ExecutionManager:
         self,
         *,
         connection_service: Optional[ConnectionService] = None,
+        connection_service_factory: Optional[Callable[[], ConnectionService]] = None,
+        project_service_factory: Optional[Callable[[], object]] = None,
         carica_executor_factory: Optional[Callable[..., object]] = None,
         orchestrator_factory: Optional[Callable[..., object]] = None,
     ):
@@ -95,6 +98,12 @@ class ExecutionManager:
         # ConnectionService iniettabile; default lazy per schedule_task e
         # riuso in _get_orchestrator, _pre_check_connection, _execute_carica.
         self._connection_service = connection_service
+        self._connection_service_factory = (
+            connection_service_factory or build_connection_service
+        )
+        self._project_service_factory = (
+            project_service_factory or build_project_service
+        )
         # Factory composition-root per la scrittura CARICA schedulata:
         # i test iniettano qui un fake runner senza toccare carica.
         self._carica_executor_factory = (
@@ -117,7 +126,12 @@ class ExecutionManager:
     def _get_connection_service(self) -> ConnectionService:
         """ConnectionService lazy singleton per questa istanza di ExecutionManager."""
         if self._connection_service is None:
-            self._connection_service = ConnectionService()
+            factory = getattr(
+                self,
+                "_connection_service_factory",
+                build_connection_service,
+            )
+            self._connection_service = factory()
         return self._connection_service
 
     def _get_orchestrator(self):
@@ -179,7 +193,12 @@ class ExecutionManager:
         # `return` senza `close_run` lascia il record in stato 'running'
         # per sempre (orphan run che sporca la dashboard e inquina il
         # check di task bloccate
-        project_service = project_service_module.ProjectService()
+        project_service_factory = getattr(
+            self,
+            "_project_service_factory",
+            build_project_service,
+        )
+        project_service = project_service_factory()
 
         schedule_row = scheduler_db.get_schedule_row(schedule_id)
         schedule_group_id = schedule_row.group_id if schedule_row else None

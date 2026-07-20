@@ -13,7 +13,8 @@ import pytest
 
 from app.core.estrai.query_generator import QueryGenerator
 from app.core.estrai.query_projection import QueryProjectionRenderer
-from app.core.projects.canvas_models import Column, Node
+from app.core.projects.canvas_models import Node
+from app.shared.execution.canvas_column import Column
 
 
 pytestmark = [

@@ -174,7 +174,8 @@ def test_core_allows_same_group_execution(schedule_config):
 
     with patch("app.core.scheduler.db.get_schedule_row",
                return_value=SimpleNamespace(id="s-1", group_id="grp-A")), \
-         patch("app.core.projects.service.ProjectService") as project_service_cls:
+         patch("app.core.projects.service.ProjectService") as project_service_cls, \
+         patch("app.core.scheduler.job_dispatcher.enqueue_schedule_run"):
         project_service_cls.return_value.get_project_metadata.return_value = _project_meta("grp-A")
         result = manager.execute("s-1")
 

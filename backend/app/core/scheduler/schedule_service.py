@@ -31,7 +31,7 @@ from app.core.scheduler.models import (
     ScheduleUpdate,
 )
 from app.core.scheduler.runtime_status import RuntimeStatus, coerce_runtime_status
-from app.core.projects.service import ProjectService
+from app.runtime.services import build_project_service
 from app.shared import error_codes
 from fastapi import HTTPException
 from app.utils.logger import get_logger
@@ -99,6 +99,13 @@ class ScheduleService:
     """
 
     DEFAULT_GROUP = settings.DEFAULT_GROUP
+
+    def __init__(
+        self,
+        *,
+        project_service_factory: Callable[[], object] = build_project_service,
+    ) -> None:
+        self._project_service_factory = project_service_factory
 
     def _generate_schedule_id(self) -> str:
         short_uuid = str(uuid.uuid4())[:12]
@@ -191,7 +198,7 @@ class ScheduleService:
         created_by: str,
     ) -> ScheduleConfig:
         """Create a schedule from the public request boundary."""
-        metadata = ProjectService().get_project_metadata(
+        metadata = self._project_service_factory().get_project_metadata(
             schedule_data.project_id,
             group_id=group_id,
         )

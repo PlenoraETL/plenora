@@ -2,7 +2,7 @@
 Contratto B4 (roadmap accoppiamento): Column come contratto shared.
 
 La sede canonica del modello Column e' ``app.shared.execution.canvas_column``;
-``projects.canvas_models`` mantiene il re-export compatibile (stessa classe).
+``projects.canvas_models`` lo usa internamente senza riesportarlo.
 ``output_contract`` non dipende piu' dal dominio projects: il 2-ciclo
 ``projects <-> output_contract`` e' spezzato e non deve riformarsi.
 """
@@ -31,12 +31,11 @@ def _imports(path: Path) -> set[str]:
     return modules
 
 
-def test_canvas_models_column_reexport_identity():
-    """Il re-export compatibile punta alla stessa classe shared."""
+def test_canvas_models_does_not_reexport_column():
+    """I consumer devono importare Column dalla sede shared canonica."""
     from app.core.projects import canvas_models
-    from app.shared.execution import canvas_column
 
-    assert canvas_models.Column is canvas_column.Column
+    assert not hasattr(canvas_models, "Column")
 
 
 def test_shared_canvas_column_is_leaf_contract():

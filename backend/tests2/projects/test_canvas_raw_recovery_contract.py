@@ -10,9 +10,10 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.auth.dependencies import require_not_esecutore
+from app.core.projects.canvas_service import RawProjectCanvas
 from app.core.projects import router as projects_router_module
 from app.core.projects.router import router as projects_router
-from app.core.projects.service import ProjectService, RawProjectCanvas
+from app.core.projects.service import ProjectService
 from app.shared.contracts.auth import CurrentUser
 from app.core.projects.exceptions import CanvasCorruptedError
 

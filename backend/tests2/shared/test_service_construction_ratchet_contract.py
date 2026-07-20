@@ -55,8 +55,6 @@ _DIRECT_CONSTRUCTION_BASELINE: dict[str, int] = {
     "app/core/arricchisci/enrichment_run_mode.py": 2,
     "app/core/carica/executor.py": 1,
     "app/core/manipola/project_source_runtime.py": 1,
-    "app/core/scheduler/execution_manager.py": 2,
-    "app/core/scheduler/schedule_service.py": 1,
 }
 
 

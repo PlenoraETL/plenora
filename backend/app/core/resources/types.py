@@ -81,11 +81,13 @@ class ResourceRef:
     expected_project_id: Optional[str] = None
 
     def __post_init__(self) -> None:
-        if not self.expected_group_id:
+        if (
+            not isinstance(self.expected_group_id, str)
+            or not self.expected_group_id.strip()
+        ):
             raise ValueError(
                 "ResourceRef.expected_group_id required (fail-closed). "
-                "Pass an empty string ONLY in explicit compatibility shims "
-                "that explicitly opt out of the engine path."
+                "Empty and whitespace-only tenant identifiers are forbidden."
             )
         active = sum(
             1

@@ -11,7 +11,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.core.projects.router import update_project_canvas
-from app.core.projects.canvas_models import Node, Edge, Position, Column
+from app.core.projects.canvas_models import Node, Edge, Position
+from app.shared.execution.canvas_column import Column
 
 
 pytestmark = [pytest.mark.integration, pytest.mark.contract]

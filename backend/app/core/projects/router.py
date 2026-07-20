@@ -11,8 +11,9 @@ from typing import Annotated, Any, List, Optional
 from app.utils.logger import get_logger
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
+from app.shared.execution.canvas_column import Column
 from app.observability.audit_action import audit_action
-from app.core.projects.canvas_models import CanvasState, Node, Edge, Column
+from app.core.projects.canvas_models import CanvasState, Node, Edge
 from app.core.projects.exceptions import (
     CanvasCorruptedError,
     ProjectCleanupPartialError,
@@ -45,6 +46,7 @@ from app.core.projects.types import (
 )
 from app.shared.execution import canvas_columns as canvas_columns_module
 from .models import ProjectCreate
+
 
 class ProjectCreateWithCanvas(ProjectCreate):
     canvas: Any = None

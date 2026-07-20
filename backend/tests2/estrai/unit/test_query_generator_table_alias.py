@@ -11,7 +11,8 @@ import re
 import pytest
 
 from app.core.estrai.query_generator import QueryGenerator
-from app.core.projects.canvas_models import Column, Edge, Node
+from app.core.projects.canvas_models import Edge, Node
+from app.shared.execution.canvas_column import Column
 
 
 pytestmark = [

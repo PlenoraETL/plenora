@@ -14,11 +14,8 @@ from app.shared.execution.canvas_types import (
     TransactionModeLiteral,
     WriteModeLiteral,
 )
-from app.shared.execution.canvas_column import Column as Column  # re-export compatibile
-from app.shared.execution.column_info import ColumnInfo as _ColumnInfo
+from app.shared.execution.canvas_column import Column as _Column
 from app.utils.logger import get_logger
-
-ColumnInfo = _ColumnInfo
 
 _canvas_logger = get_logger(__name__)
 
@@ -45,10 +42,6 @@ ColumnType = Literal[
     "geometry", "geometry:point", "geometry:line", "geometry:polygon",
     "geometry:multipolygon", "geometry:multipoint", "geometry:multiline"
 ]
-
-
-# INFO COLONNA: ColumnInfo e' re-esportato dall'import in testa al file;
-# sede canonica app.shared.execution.column_info.
 
 
 # CANVAS — NODI E ARCHI
@@ -144,7 +137,7 @@ class Node(BaseModel):
 
     table_name: Optional[str] = None
     alias: Optional[str] = None
-    columns: List[Column] = []
+    columns: List[_Column] = []
     filters: List[Filter] = []
     calculated_columns: Optional[List[dict]] = []
     connection_id: Optional[str] = None

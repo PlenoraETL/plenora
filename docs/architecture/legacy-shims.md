@@ -11,16 +11,19 @@ questa tabella e i test indicati nello stesso PR.
 
 | Shim | Sede | Motivo | Test che lo protegge | Criterio di rimozione |
 |---|---|---|---|---|
-| `ColumnInfo` re-export | `projects/canvas_models.py` | PR1: sede canonica `app.shared.execution.column_info`; ~30 file di test importano dal path storico | `test_import_hygiene_residual_contract` (sede canonica), `test_file_helpers_module_contract` (identita') | zero import di `ColumnInfo` da `canvas_models` in app+tests2 |
-| `Column` re-export | `projects/canvas_models.py` | B4: sede canonica `app.shared.execution.canvas_column` | `test_canvas_column_shared_contract` (identita' + boundary output_contract) | zero import di `Column` da `canvas_models` fuori da projects |
+I re-export `ColumnInfo` e `Column` da `projects/canvas_models.py` sono stati
+rimossi dopo la migrazione di tutti i consumer alle sedi canoniche in
+`app.shared.execution`.
 
 ## Re-export interni al dominio projects (Epic F)
 
 | Shim | Sede | Motivo | Test che lo protegge | Criterio di rimozione |
 |---|---|---|---|---|
-| `RawProjectCanvas` re-export | `projects/service.py` | F3: la classe vive in `canvas_service` | `test_raw_project_canvas_reexport_identity` | consumer migrati a `canvas_service` |
-| `ProjectDependencyPayload` re-export | `projects/service.py` | F5: la classe vive in `lifecycle_service` | `test_dependency_payload_reexport_identity` | consumer migrati a `lifecycle_service` |
 | Facade di delega `ProjectService` | `projects/service.py` | Epic F: i 29 metodi storici delegano ai 4 sub-service; la facade preserva firma e patch surface (~28 file di test la referenziano) | `test_project_metadata_service_contract` (delega + patch surface + perimetri) | di fatto permanente finche' router e chiamanti non consumano i sub-service direttamente; nuove feature NON aggiungono metodi alla facade (perimetri chiusi dai test) |
+
+I re-export `RawProjectCanvas` e `ProjectDependencyPayload` sono stati rimossi;
+i consumer importano ora rispettivamente da `canvas_service` e
+`lifecycle_service`.
 
 ## Wrapper di boundary (Epic E)
 

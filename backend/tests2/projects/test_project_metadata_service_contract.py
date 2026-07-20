@@ -166,11 +166,11 @@ def test_canvas_service_perimeter_is_closed():
     }, f"perimetro inatteso: {sorted(public)}"
 
 
-def test_raw_project_canvas_reexport_identity():
-    """Il re-export compatibile in service punta alla stessa classe."""
-    from app.core.projects import canvas_service, service
+def test_project_service_does_not_reexport_raw_canvas_contract():
+    """RawProjectCanvas belongs to the canvas sub-service."""
+    from app.core.projects import service
 
-    assert service.RawProjectCanvas is canvas_service.RawProjectCanvas
+    assert not hasattr(service, "RawProjectCanvas")
 
 
 # F5 — ProjectLifecycleService
@@ -260,13 +260,10 @@ def test_lifecycle_service_perimeter_is_closed():
     }, f"perimetro inatteso: {sorted(public)}"
 
 
-def test_dependency_payload_reexport_identity():
-    from app.core.projects import lifecycle_service, service
+def test_project_service_does_not_reexport_dependency_payload():
+    from app.core.projects import service
 
-    assert (
-        service.ProjectDependencyPayload
-        is lifecycle_service.ProjectDependencyPayload
-    )
+    assert not hasattr(service, "ProjectDependencyPayload")
 
 
 # F4 — ProjectOutputContractService

@@ -1,0 +1,79 @@
+name: CI Quality Gates
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/ci-quality.yml"
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/ci-quality.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.lock
+      - name: Install backend test dependencies
+        working-directory: backend
+        run: python -m pip install --require-hashes -r requirements-dev.lock
+      - name: Run backend PR gate
+        working-directory: backend
+        run: >-
+          python -m pytest tests2 -c tests2/pytest.ini
+          -m "not perf_bench and not developer_nightly and not optional_provider
+          and not requires_external_network and not requires_backend_http_service"
+          --maxfail=1
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Run frontend tests
+        working-directory: frontend
+        run: npm test
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+  terraform-validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/deploy/terraform
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.9.8"
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive
+      - name: Initialize Terraform without remote state
+        run: terraform init -backend=false -input=false
+      - name: Validate Terraform
+        run: terraform validate -no-color

@@ -32,12 +32,12 @@ from app.core.projects.lineage import detect_project_lineage_cycle
 from app.core.projects.exceptions import (
     ProjectLineageCycleError,
 )
-from app.core.projects.canvas_service import (  # noqa: F401  RawProjectCanvas re-export compatibile
+from app.core.projects.canvas_service import (
     ProjectCanvasService,
-    RawProjectCanvas,
+    RawProjectCanvas as _RawProjectCanvas,
 )
-from app.core.projects.lifecycle_service import (  # noqa: F401  ProjectDependencyPayload re-export compatibile
-    ProjectDependencyPayload,
+from app.core.projects.lifecycle_service import (
+    ProjectDependencyPayload as _ProjectDependencyPayload,
     ProjectLifecycleService,
 )
 from app.core.projects.metadata_service import ProjectMetadataService
@@ -56,10 +56,6 @@ class ProjectPublicPayload(TypedDict):
     metadata: Mapping[str, object]
     canvas: object
     id: str
-
-
-# ProjectDependencyPayload vive in lifecycle_service; RawProjectCanvas in
-# canvas_service. Re-export sopra.
 
 
 class ProjectService:
@@ -271,7 +267,7 @@ class ProjectService:
         self,
         project_id: str,
         group_id: Optional[str] = None,
-    ) -> Optional[RawProjectCanvas]:
+    ) -> Optional[_RawProjectCanvas]:
         """Carica il canvas raw del progetto."""
         return self.canvas.get_project_raw_canvas(project_id, group_id=group_id)
 
@@ -377,7 +373,7 @@ class ProjectService:
         self,
         project_id: str,
         group_id: Optional[str] = None,
-    ) -> list[ProjectDependencyPayload]:
+    ) -> list[_ProjectDependencyPayload]:
         """Trova progetti dipendenti tramite il sub-service lifecycle.
 
         Resta sulla facade come hook: i chiamanti interni (update_canvas

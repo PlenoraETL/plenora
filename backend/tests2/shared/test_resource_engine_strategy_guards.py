@@ -243,36 +243,9 @@ def test_resource_ref_post_init_is_present_in_source():
     )
 
 
-def test_resource_ref_post_init_rejects_whitespace_only_group_id():
-    """Behavioural defense-in-depth: an ``expected_group_id`` of pure
-    whitespace is semantically empty. The current ``__post_init__``
-    uses a falsy check (``if not self.expected_group_id``) which
-    accepts ``"  "`` -- this test pins down the current behavior so a
-    future tightening (``.strip()``) is an explicit choice, and a
-    future loosening (e.g. dropping the guard) is caught."""
-    from app.core.resources import ResourceRef
-
-    # Current behavior: whitespace IS accepted (truthy string).
-    # We pin this so a future tightening is intentional.
-    ref = ResourceRef(
-        kind="result_blob",
-        expected_group_id="  ",
-        result_id="r1",
-    )
-    assert ref.expected_group_id == "  ", (
-        "Current ResourceRef accepts whitespace-only group_id. "
-        "If you intentionally tightened the guard to reject it, "
-        "update this test to use pytest.raises(ValueError) and "
-        "document the change in BE_RESOURCE_ENGINE_AUDIT.md."
-    )
-
-
-@pytest.mark.parametrize("bad_group_id", ["", None])
+@pytest.mark.parametrize("bad_group_id", ["", "  ", None])
 def test_resource_ref_construction_rejects_empty_group_id_parametrized(bad_group_id):
-    """Defense-in-depth: cover both empty string and ``None`` as
-    inputs. ``None`` will fail the dataclass type at runtime via the
-    same falsy check (Python does not enforce the ``str`` annotation
-    at construction); the guard catches both."""
+    """Defense-in-depth: empty, whitespace and None all fail closed."""
     from app.core.resources import ResourceRef
 
     with pytest.raises(ValueError, match="expected_group_id required"):

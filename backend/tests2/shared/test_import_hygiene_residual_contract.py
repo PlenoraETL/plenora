@@ -95,6 +95,13 @@ def test_dataframe_schema_uses_canonical_column_info_model() -> None:
     assert "fallback dataclass" not in src
 
 
+def test_canvas_models_does_not_reexport_column_info() -> None:
+    """ColumnInfo has no legacy canvas_models consumers left."""
+    from app.core.projects import canvas_models
+
+    assert not hasattr(canvas_models, "ColumnInfo")
+
+
 def test_ticket_metrics_does_not_mask_internal_import_failures() -> None:
     tree = ast.parse(_read("core/admin_system_status/tickets_metrics.py"))
 
