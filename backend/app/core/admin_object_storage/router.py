@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Literal
+from typing_extensions import TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -37,6 +38,17 @@ router = APIRouter(
 )
 
 
+class PreviewDeleteResponse(TypedDict):
+    deleted: bool
+    deleted_count: int
+    scope: str
+
+
+class ObjectDeleteResponse(TypedDict):
+    deleted: bool
+    key: str
+
+
 @router.get("/projects", response_model=StorageProjectCatalog)
 def project_results(
     group_id: str | None = Query(None),
@@ -51,7 +63,7 @@ def delete_all_previews(
     scope: Literal["canonical", "legacy"] = Query("canonical"),
     group_id: str | None = Query(None),
     current_user: CurrentUser = Depends(require_superadmin),
-) -> dict[str, int | bool | str]:
+) -> PreviewDeleteResponse:
     try:
         deleted = delete_preview_objects(scope=scope, group_id=group_id)
     except ValueError as exc:
@@ -144,7 +156,7 @@ def _assert_object_key_not_prefix(key: str) -> None:
 def delete_object(
     key: str = Query(..., min_length=1, max_length=2048),
     current_user: CurrentUser = Depends(require_superadmin),
-) -> dict[str, str | bool]:
+) -> ObjectDeleteResponse:
     """Delete one exact runtime object without a metadata cascade.
 
     This is an operator-level emergency/cleanup action. Domain metadata is not

@@ -17,6 +17,16 @@ from app.core.projects.canvas_models import CanvasState, Edge, Node
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
+@pytest.fixture(autouse=True)
+def _disable_project_source_freshness_annotation(monkeypatch):
+    """Access-annotation tests must not consult the freshness store."""
+    monkeypatch.setattr(
+        "app.core.projects.router.source_freshness_module."
+        "annotate_canvas_project_source_freshness",
+        lambda *_args, **_kwargs: None,
+    )
+
+
 class _User:
     role = "admin"
     user_id = "u1"

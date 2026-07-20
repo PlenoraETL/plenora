@@ -273,6 +273,7 @@ class ManipolaExecutor:
         run_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
         execution_context: Optional[Mapping[str, Any]] = None,
+        output_persistence: Any = None,
     ) -> JsonObject:
         """Esegue la pipeline completa: carica sorgenti, trasforma, salva.
 
@@ -430,6 +431,7 @@ class ManipolaExecutor:
             canvas,
             canvas_graph=canvas_graph,
             group_id_override=executing_group_id,
+            output_persistence=output_persistence,
         )
 
         # Keep project_source reuse aligned with the actual persisted schema.
@@ -1346,6 +1348,7 @@ class ManipolaExecutor:
         canvas: Optional[CanvasState] = None,
         canvas_graph: Optional[CanvasGraph] = None,
         group_id_override: Optional[str] = None,
+        output_persistence: Any = None,
     ) -> JsonObject:
         """Salva il risultato finale nel formato richiesto."""
         filename = _nf(result_node, 'fileName', 'output')
@@ -1389,17 +1392,27 @@ class ManipolaExecutor:
                     canvas,
                     canvas_graph=canvas_graph,
                 )
-            saved = save_pipeline_result_outcome(
-                project_id=project_id,
-                df=df,
-                output_format=fmt,
-                filename_stem=filename,
-                rows_count=len(df),
-                group_id=group_id,
-                geom_column=geom_col,
-                crs=crs,
-                column_types=column_types,
-            )
+            if output_persistence is not None:
+                saved = output_persistence.persist_dataframe_output(
+                    df=df,
+                    output_format=fmt,
+                    filename_stem=filename,
+                    geom_column=geom_col,
+                    crs=crs,
+                    column_types=column_types,
+                )
+            else:
+                saved = save_pipeline_result_outcome(
+                    project_id=project_id,
+                    df=df,
+                    output_format=fmt,
+                    filename_stem=filename,
+                    rows_count=len(df),
+                    group_id=group_id,
+                    geom_column=geom_col,
+                    crs=crs,
+                    column_types=column_types,
+                )
             saved_format = (
                 "xlsx" if str(fmt).lower() == "xls" else str(fmt).lower()
             )
@@ -1409,7 +1422,8 @@ class ManipolaExecutor:
                 "format": saved_format,
                 "rows_count": len(df),
                 "columns_count": len(df.columns),
-                "result_id": saved.result_id,
+                "result_id": getattr(saved, "result_id", None),
+                "storage_key": getattr(saved, "storage_key", None),
                 "output_columns": saved.output_columns,
                 "message": f"Salvato {len(df)} righe in {saved.output_filename}"
             }

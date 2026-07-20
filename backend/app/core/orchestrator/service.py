@@ -51,6 +51,7 @@ class EstraiExecutorProtocol(CanvasExecutorProtocol, Protocol):
         run_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
         execution_context: Optional[Mapping[str, Any]] = None,
+        output_persistence: Any = None,
     ) -> ExecutionResult | JsonObject:
         ...
 
@@ -64,6 +65,7 @@ class TransformExecutorProtocol(CanvasExecutorProtocol, Protocol):
         run_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
         execution_context: Optional[Mapping[str, Any]] = None,
+        output_persistence: Any = None,
     ) -> ExecutionResult | JsonObject:
         ...
 
@@ -250,17 +252,35 @@ class OrchestratorService:
                 message=f"Tipo progetto '{project_type}' non supportato",
             )
 
+        output_persistence = None
+        if execution_context is not None and execution_context.get("output_task_id"):
+            from app.core.orchestrator.executable_output import (
+                ExecutableOutputPersistence,
+            )
+
+            output_persistence = ExecutableOutputPersistence(
+                task_id=str(execution_context["output_task_id"]),
+                group_id=str(execution_context.get("group_id") or ""),
+            )
+        output_kwargs = (
+            {"output_persistence": output_persistence}
+            if output_persistence is not None
+            else {}
+        )
+
         if project_type == "estrai":
             executor_result = self.estrai_executor.execute(
                 project_id, canvas, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
                 execution_context=execution_context,
+                **output_kwargs,
             )
         elif project_type == "manipola":
             executor_result = self.manipola_executor.execute(
                 project_id, canvas, force_recalculate, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
                 execution_context=execution_context,
+                **output_kwargs,
             )
         else:  # "arricchisci" — already validated by dispatch guard above
             executor_result = self.enrich_executor.execute(

@@ -62,6 +62,11 @@ def client(current_user: CurrentUser, monkeypatch) -> TestClient:
     monkeypatch.setattr(
         projects_router_module, "group_filter", lambda cu: None,
     )
+    monkeypatch.setattr(
+        projects_router_module,
+        "list_projects_with_canvas_for_datasource_check",
+        lambda _project_ids: [],
+    )
 
     app = FastAPI()
     app.dependency_overrides[require_not_esecutore] = lambda: current_user

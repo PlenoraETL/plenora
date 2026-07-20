@@ -140,7 +140,11 @@ def test_api_connection_service_reads_use_typed_rows(monkeypatch, api_service) -
         "get_api_connection_row",
         lambda api_id, group_id=None: row if api_id == "api-1" else None,
     )
-    monkeypatch.setattr(api_db, "list_api_connection_rows", lambda group_id=None: [row])
+    monkeypatch.setattr(
+        api_db,
+        "list_api_connection_rows",
+        lambda *_args, **_kwargs: [row],
+    )
 
     listed = api_service.list_api_connections()
     fetched = api_service.get_api_connection("api-1")

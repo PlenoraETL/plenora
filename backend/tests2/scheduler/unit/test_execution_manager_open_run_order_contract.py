@@ -49,6 +49,10 @@ def _make_executor_with_spies(monkeypatch, schedule_config):
     from app.core.scheduler.execution_manager import ExecutionManager
     import app.core.scheduler.execution_manager as em_module
 
+    monkeypatch.setattr(
+        "app.core.scheduler.concurrency_manager.ConcurrencyManager._ensure_table",
+        lambda _self: None,
+    )
     executor = ExecutionManager()
 
     # Servizi a livello istanza
@@ -105,6 +109,10 @@ def _make_executor_with_spies(monkeypatch, schedule_config):
     # release_lock_with_retry: no-op
     monkeypatch.setattr(
         "app.core.scheduler.scheduler_release.release_lock_with_retry",
+        lambda *_a, **_kw: None,
+    )
+    monkeypatch.setattr(
+        "app.core.scheduler.job_dispatcher.enqueue_schedule_run",
         lambda *_a, **_kw: None,
     )
 

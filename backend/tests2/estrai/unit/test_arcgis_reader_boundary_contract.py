@@ -57,6 +57,7 @@ class FakeArcGISReader:
         max_features: int | None = None,
         out_sr: int | None = None,
         geom_column: str = "geometry",
+        group_id: str | None = None,
     ) -> dict[str, object]:
         self.execute_calls.append(
             {
@@ -71,6 +72,7 @@ class FakeArcGISReader:
                 "max_features": max_features,
                 "out_sr": out_sr,
                 "geom_column": geom_column,
+                "group_id": group_id,
             }
         )
         return {
@@ -186,5 +188,6 @@ def test_execute_feature_service_uses_arcgis_reader_boundary_and_preserves_resou
             "max_features": 2,
             "out_sr": None,
             "geom_column": "geometry",
+            "group_id": None,
         }
     ]

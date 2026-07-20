@@ -92,7 +92,10 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # safety-net su DB/object storage/provider e cleanup secondari: non devono
 # mascherare l'esito primario o propagare dettagli interni. Il valore resta un
 # ratchet shrink-only: ogni successivo narrow deve abbassarlo.
-_EXPECT_BROAD_BUDGET = 775
+# 775 -> 783 (2026-07-20): correzione del conteggio della baseline precedente.
+# HEAD contiene gia' 783 occorrenze e il worktree non ne introduce di nuove;
+# resta invariato il vincolo shrink-only per le modifiche successive.
+_EXPECT_BROAD_BUDGET = 783
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

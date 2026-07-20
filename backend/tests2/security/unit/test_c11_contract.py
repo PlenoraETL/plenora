@@ -314,6 +314,9 @@ def test_canvas_put_accepts_when_all_refs_visible_to_owner_group():
     ), patch(
         "app.core.projects.router._visible_project_ids_strict",
         side_effect=_fake_strict,
+    ), patch(
+        "app.core.projects.router.canvas_columns_module.compute_result_columns",
+        return_value=[],
     ):
         resp = update_project_canvas("p1", body, _RB4User())
 
@@ -635,6 +638,9 @@ def test_canvas_put_with_project_source_does_not_raise_value_error_anymore():
 
     with patch("app.core.projects.router._project_service", fake_svc), patch(
         "app.core.projects.db.fetchall", side_effect=_fake_fetchall
+    ), patch(
+        "app.core.projects.router.canvas_columns_module.compute_result_columns",
+        return_value=[],
     ):
         # Non deve sollevare ValueError. Puo' sollevare HTTPException
         # (404 o altre validazioni a valle), ma non un errore generico.

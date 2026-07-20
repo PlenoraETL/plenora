@@ -43,6 +43,8 @@ def main_client():
     with (
         patch.object(health_mod, "check_postgres", return_value=(True, "ok")),
         patch.object(health_mod, "check_broker", return_value=(True, "ok")),
+        patch.object(health_mod, "check_task_workers", return_value=(True, "fresh=1")),
+        patch.object(health_mod, "check_task_queues", return_value=(True, "ok")),
         patch.object(health_mod, "check_pool_headroom", return_value=(True, "1/12 in uso, 11 free")),
         patch.object(health_mod, "check_migrations_aligned", return_value=(True, "aligned")),
         patch.object(health_mod, "check_object_storage", return_value=(True, "ok")),
@@ -50,6 +52,11 @@ def main_client():
             health_mod, "check_reconciliation_backlog",
             return_value=(True, "pending=0 lost=0"),
         ),
+        patch.object(
+            health_mod, "check_beat_heartbeat",
+            return_value=(True, "skipped: disabled (threshold=0)"),
+        ),
+        patch.object(health_mod, "check_bootstrap_complete", return_value=(True, "ok")),
     ):
         yield TestClient(main_mod.app)
 
@@ -103,6 +110,8 @@ def test_health_stays_200_when_broker_fails():
             "check_broker",
             return_value=(False, "ConnectionError: boom"),
         ),
+        patch.object(health_mod, "check_task_workers", return_value=(True, "fresh=1")),
+        patch.object(health_mod, "check_task_queues", return_value=(True, "ok")),
     ):
         client = TestClient(main_mod.app)
         response = client.get("/health")
@@ -124,6 +133,8 @@ def test_ready_returns_503_when_broker_fails():
             "check_broker",
             return_value=(False, "ConnectionError: boom"),
         ),
+        patch.object(health_mod, "check_task_workers", return_value=(True, "fresh=1")),
+        patch.object(health_mod, "check_task_queues", return_value=(True, "ok")),
         patch.object(health_mod, "check_pool_headroom", return_value=(True, "ok")),
         patch.object(
             health_mod,
@@ -163,6 +174,8 @@ def test_ready_returns_503_when_pool_or_migrations_are_not_ready():
     with (
         patch.object(health_mod, "check_postgres", return_value=(True, "ok")),
         patch.object(health_mod, "check_broker", return_value=(True, "ok")),
+        patch.object(health_mod, "check_task_workers", return_value=(True, "fresh=1")),
+        patch.object(health_mod, "check_task_queues", return_value=(True, "ok")),
         patch.object(health_mod, "check_pool_headroom", return_value=(False, "pool saturo")),
         patch.object(health_mod, "check_migrations_aligned", return_value=(False, "2 pending")),
         patch.object(health_mod, "check_object_storage", return_value=(True, "ok")),
@@ -170,6 +183,11 @@ def test_ready_returns_503_when_pool_or_migrations_are_not_ready():
             health_mod, "check_reconciliation_backlog",
             return_value=(True, "pending=0 lost=0"),
         ),
+        patch.object(
+            health_mod, "check_beat_heartbeat",
+            return_value=(True, "skipped: disabled (threshold=0)"),
+        ),
+        patch.object(health_mod, "check_bootstrap_complete", return_value=(True, "ok")),
     ):
         client = TestClient(main_mod.app)
         response = client.get("/ready")

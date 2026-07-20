@@ -172,9 +172,8 @@ def test_create_from_project_returns_typed_eseguibile_row(monkeypatch) -> None:
         ),
     )
     monkeypatch.setattr(
-        eseguibili_service,
-        "extract_expected_columns",
-        lambda canvas: [{"name": "codice", "required": True}],
+        "app.core.eseguibili.manifest.extract_expected_columns",
+        lambda _canvas: [{"name": "codice", "required": True}],
     )
     monkeypatch.setattr(
         eseguibili_service.eseguibili_db,

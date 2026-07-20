@@ -35,6 +35,8 @@ def _neutralize_db_bound_maintenance():
         "_cleanup_orphan_temp_files",
         "_reconcile_storage",
         "_cleanup_task_results",
+        "_drain_task_dispatch_outbox",
+        "_recover_runtime_leases",
     )
     with patch.multiple(
         PlenoraBeatScheduler,

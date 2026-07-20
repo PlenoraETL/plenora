@@ -57,6 +57,11 @@ def _client(canvas, monkeypatch) -> TestClient:
     svc.get_project_canvas.return_value = canvas
     monkeypatch.setattr(projects_router_module, "_project_service", svc)
     monkeypatch.setattr(projects_router_module, "assert_group_access", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "app.core.arricchisci.api_connector.api_connection_service."
+        "list_api_connections",
+        lambda *a, **k: [],
+    )
     app = FastAPI()
     app.dependency_overrides[require_not_esecutore] = lambda: _user()
     app.include_router(projects_router, prefix="/api")

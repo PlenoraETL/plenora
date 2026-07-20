@@ -72,6 +72,16 @@ def mock_db(monkeypatch):
     )
     monkeypatch.setattr(results_db, "save_result_row",
                         lambda **kw: saved.append(kw))
+    monkeypatch.setattr(
+        result_blob_writer,
+        "record_result_upload_intent",
+        lambda *args, **kwargs: "intent-fs4",
+    )
+    monkeypatch.setattr(
+        result_blob_writer,
+        "close_result_upload_intent",
+        lambda intent_id: None,
+    )
     monkeypatch.setattr(result_blob_writer, "apply_results_retention",
                         lambda pid: None)
 

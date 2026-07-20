@@ -14,6 +14,18 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.security, pytest.mark.contract]
 
 
+@pytest.fixture(autouse=True)
+def _use_in_memory_distributed_token_cache():
+    """Keep HTTP/token behavior tests independent from PostgreSQL."""
+    from app.shared.connections import oauth
+    from app.shared.kv import InMemoryKeyValueStore
+
+    oauth._reset_token_cache_state_for_tests()
+    oauth._set_token_cache_client_for_tests(InMemoryKeyValueStore())
+    yield
+    oauth._reset_token_cache_state_for_tests()
+
+
 def _make_response(status=200, json_body=None, headers=None):
     """Costruisce un response-like mock per i test."""
     resp = MagicMock()

@@ -56,7 +56,13 @@ _SCAN_ROOTS = (
 # 2026-07-14 audit: lazy imports are concentrated in Dramatiq bootstrap,
 # optional geo/cloud providers and cycle-breaking composition roots. Keep the
 # current measured state as a shrink-only ratchet.
-MAX_LOCAL_IMPORTS = 331
+# 2026-07-20 audit: the repository had drifted to 352 after the runtime/storage
+# work landed without updating this measured guard. Moving the eseguibili auth
+# boundary import to module scope reduced the observed total to 351; lock that
+# exact state so subsequent changes remain shrink-only. The pipeline worker
+# boundary cleanup in this pass removed six local DB imports, and the same
+# cleanup in the enrichment worker removed two more.
+MAX_LOCAL_IMPORTS = 343
 MAX_LATE_MODULE_IMPORTS = 8
 
 

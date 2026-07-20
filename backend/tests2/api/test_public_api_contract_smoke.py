@@ -271,6 +271,11 @@ def test_projects_public_shape_survives_typed_service_models(
     service.list_projects.return_value = SimpleNamespace(projects=[project])
     monkeypatch.setattr(router_mod, "_project_service", service)
     monkeypatch.setattr(router_mod, "group_filter", lambda current_user: "grp-1")
+    monkeypatch.setattr(
+        router_mod,
+        "list_projects_with_canvas_for_datasource_check",
+        lambda _project_ids: [],
+    )
 
     response = _client(router, require_not_esecutore).get("/api/projects")
 

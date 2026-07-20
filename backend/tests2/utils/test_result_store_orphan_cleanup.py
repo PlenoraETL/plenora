@@ -91,6 +91,16 @@ def mock_db_save_ok(monkeypatch):
     )
     monkeypatch.setattr(results_store, "save_result_row", lambda **kw: saved.append(kw))
     monkeypatch.setattr(
+        result_blob_writer,
+        "record_result_upload_intent",
+        lambda *_args, **_kwargs: "intent-default",
+    )
+    monkeypatch.setattr(
+        result_blob_writer,
+        "close_result_upload_intent",
+        lambda _intent_id: None,
+    )
+    monkeypatch.setattr(
         result_blob_writer, "apply_results_retention", lambda pid: None
     )
     return saved
@@ -116,6 +126,16 @@ def mock_db_save_fails(monkeypatch):
         raise RuntimeError("DB save FK violation")
 
     monkeypatch.setattr(results_store, "save_result_row", _raise)
+    monkeypatch.setattr(
+        result_blob_writer,
+        "record_result_upload_intent",
+        lambda *_args, **_kwargs: "intent-default",
+    )
+    monkeypatch.setattr(
+        result_blob_writer,
+        "close_result_upload_intent",
+        lambda _intent_id: None,
+    )
     monkeypatch.setattr(
         result_blob_writer, "apply_results_retention", lambda pid: None
     )

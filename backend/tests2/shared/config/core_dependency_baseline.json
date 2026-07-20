@@ -6,6 +6,10 @@
     "admin_backups -> task_runtime": 1,
     "admin_object_storage -> auth": 1,
     "admin_object_storage -> io": 2,
+    "admin_object_storage -> projects": 1,
+    "admin_object_storage -> results": 1,
+    "admin_task_runtime -> auth": 1,
+    "admin_task_runtime -> task_runtime": 1,
     "admin_runtime_config -> auth": 1,
     "admin_runtime_config -> orchestrator": 1,
     "admin_system_status -> admin_backups": 1,
@@ -57,6 +61,7 @@
     "datasources -> files": 1,
     "datasources -> io": 1,
     "datasources -> projects": 1,
+    "datasources -> security": 1,
     "eseguibili -> arricchisci": 1,
     "eseguibili -> auth": 1,
     "eseguibili -> dataframes": 1,
@@ -89,6 +94,7 @@
     "intermediate -> dataframes": 2,
     "intermediate -> io": 3,
     "intermediate -> resources": 2,
+    "io -> resources": 1,
     "logs -> auth": 2,
     "manipola -> artifacts": 3,
     "manipola -> auth": 2,
@@ -116,6 +122,7 @@
     "projects -> auth": 3,
     "projects -> eseguibili": 1,
     "projects -> intermediate": 2,
+    "projects -> manipola": 1,
     "projects -> orchestrator": 1,
     "projects -> output_contract": 1,
     "projects -> results": 4,
@@ -137,7 +144,6 @@
     "scheduler -> intermediate": 1,
     "scheduler -> io": 1,
     "scheduler -> orchestrator": 1,
-    "scheduler -> projects": 2,
     "scheduler -> results": 2,
     "scheduler -> task_runtime": 1,
     "tickets -> auth": 1,
@@ -158,11 +164,16 @@
       "features",
       "files",
       "intermediate",
+      "manipola",
       "orchestrator",
       "projects",
       "query_execution",
       "results",
       "scheduler"
+    ],
+    [
+      "io",
+      "resources"
     ]
   ]
 }

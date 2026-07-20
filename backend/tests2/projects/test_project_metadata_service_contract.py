@@ -197,6 +197,11 @@ def test_delete_project_via_facade_respects_dependent_patch(monkeypatch):
         lambda project_id: [],
     )
     monkeypatch.setattr(
+        "app.core.orchestrator.task_service.task_service."
+        "list_active_task_ids_for_project",
+        lambda _project_id: [],
+    )
+    monkeypatch.setattr(
         ProjectService,
         "_find_dependent_projects",
         lambda self, project_id, group_id=None: [

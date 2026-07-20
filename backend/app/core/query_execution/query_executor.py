@@ -74,6 +74,7 @@ class QueryResult:
     project_id: str = ""
     timings: QueryTimings = field(default_factory=dict)
     result_id: Optional[str] = None
+    storage_key: Optional[str] = None
 
 
 # PROTOCOLLI PER DEPENDENCY INJECTION
@@ -150,6 +151,7 @@ class ResultBuilder:
         project_id: str,
         timings: QueryTimings,
         result_id: Optional[str] = None,
+        storage_key: Optional[str] = None,
     ) -> QueryResult:
         """Costruisce un risultato di successo con tutti i dettagli.
 
@@ -166,6 +168,7 @@ class ResultBuilder:
             project_id=project_id,
             timings=timings,
             result_id=result_id,
+            storage_key=storage_key,
         )
 
     @staticmethod
@@ -196,6 +199,7 @@ class ResultBuilder:
                 "project_id": result.project_id,
                 "timings": result.timings,
                 "result_id": result.result_id,
+                "storage_key": result.storage_key,
             })
         return d
 
@@ -353,6 +357,7 @@ class QueryExecutor:
         run_id: Optional[str] = None,
         node_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
+        result_persistence: Optional[QueryPersistenceProtocol] = None,
     ) -> JsonObject:
         """
         Esegue una query SQL, salva i risultati su file e restituisce i metadata.
@@ -386,6 +391,8 @@ class QueryExecutor:
         """
         timings = {}
         inizio_totale = time.time()
+        persistence = result_persistence or self._result_persistence
+        storage_key: Optional[str] = None
 
         # Streaming is enabled only without geometry; geospatial export requires
         # trasformazioni WKT/WKB sulla colonna geom che non si prestano al
@@ -407,7 +414,7 @@ class QueryExecutor:
                     output_filename if output_filename.lower().endswith(_ext)
                     else f"{output_filename}{_ext}"
                 )
-                streamed = self._result_persistence.persist_streaming_query_to_storage(
+                streamed = persistence.persist_streaming_query_to_storage(
                     project_id=project_id,
                     engine_factory=self._engine_factory,
                     connection=connection,
@@ -420,7 +427,8 @@ class QueryExecutor:
                 row_count = streamed.rows_count
                 columns = streamed.columns
                 result_id = streamed.result_id
-                saved_path = Path(_streamed_filename)
+                storage_key = getattr(streamed, "storage_key", None)
+                saved_path = streamed.output_path or Path(_streamed_filename)
                 df = None
                 timings["query_total"] = time.time() - t_query
                 timings["dataframe"] = 0.0
@@ -452,7 +460,7 @@ class QueryExecutor:
                 # branch streaming sopra (persist_streaming_query_to_storage).
                 persisted = None
             else:
-                persisted = self._result_persistence.persist_dataframe_result(
+                persisted = persistence.persist_dataframe_result(
                     project_id=project_id,
                     df=df,
                     output_format=output_format,
@@ -462,6 +470,7 @@ class QueryExecutor:
                     geom_column=geom_column,
                 )
                 result_id = persisted.result_id
+                storage_key = getattr(persisted, "storage_key", None)
                 saved_path = persisted.output_path
             timings["save"] = time.time() - t_save
             self._logger.info(f"Salvataggio file ({output_format}): {timings['save']:.2f}s")
@@ -521,6 +530,7 @@ class QueryExecutor:
                 project_id=project_id,
                 timings=timings,
                 result_id=result_id,
+                storage_key=storage_key,
             )
             return self._result_builder.to_dict(result)
 

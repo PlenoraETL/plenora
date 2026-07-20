@@ -81,6 +81,139 @@ def save_bytes(
 _PART_SIZE = 8 * 1024 * 1024
 
 
+class ExecutableOutputWriter:
+    """Forward-only multipart writer for one executable output.
+
+    The query streaming path needs a binary file-like object, while the
+    DataFrame exporters expose iterables of chunks.  This writer is the common
+    boundary for both producers and deliberately does not create a ``results``
+    row: executable ids are not project ids and therefore must never cross the
+    ``results.project_id`` foreign-key boundary.
+    """
+
+    def __init__(self, task_id: str, filename: str, *, group_id: str) -> None:
+        self.key = _key_for(group_id, task_id, filename)
+        self._storage = _storage()
+        self._client = self._storage._client()
+        self._bucket = self._storage.bucket
+        try:
+            self._extra = self._storage._extra_args()
+        except Exception:
+            self._extra = {}
+        response = self._client.create_multipart_upload(
+            Bucket=self._bucket,
+            Key=self.key,
+            **self._extra,
+        )
+        self._upload_id = response["UploadId"]
+        self._parts: list[dict] = []
+        self._buffer = bytearray()
+        self._position = 0
+        self._closed = False
+
+    def writable(self) -> bool:
+        return True
+
+    def readable(self) -> bool:
+        return False
+
+    def seekable(self) -> bool:
+        return False
+
+    def tell(self) -> int:
+        return self._position
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+    def flush(self) -> None:
+        # Multipart parts below the minimum S3 size cannot be flushed early.
+        return None
+
+    def write(self, data: bytes | bytearray | memoryview) -> int:
+        if self._closed:
+            raise ValueError("write su ExecutableOutputWriter chiuso")
+        if not isinstance(data, (bytes, bytearray, memoryview)):
+            raise TypeError("ExecutableOutputWriter accetta solo bytes")
+        payload = bytes(data)
+        self._buffer.extend(payload)
+        self._position += len(payload)
+        while len(self._buffer) >= _PART_SIZE:
+            self._upload_part(bytes(self._buffer[:_PART_SIZE]))
+            del self._buffer[:_PART_SIZE]
+        return len(payload)
+
+    def _upload_part(self, payload: bytes) -> None:
+        part_number = len(self._parts) + 1
+        try:
+            response = self._client.upload_part(
+                Bucket=self._bucket,
+                Key=self.key,
+                UploadId=self._upload_id,
+                PartNumber=part_number,
+                Body=payload,
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                "ExecutableOutputWriter upload_part fallito "
+                f"(key={self.key}): {exc}"
+            ) from exc
+        self._parts.append(
+            {"PartNumber": part_number, "ETag": response["ETag"]}
+        )
+
+    def finalize(self) -> str:
+        if self._closed:
+            raise ValueError("ExecutableOutputWriter gia' chiuso")
+        try:
+            if self._buffer:
+                self._upload_part(bytes(self._buffer))
+                self._buffer.clear()
+            if not self._parts:
+                _abort_multipart_safe(
+                    self._client,
+                    self._bucket,
+                    self.key,
+                    self._upload_id,
+                )
+                self._client.put_object(
+                    Bucket=self._bucket,
+                    Key=self.key,
+                    Body=b"",
+                    **self._extra,
+                )
+            else:
+                self._client.complete_multipart_upload(
+                    Bucket=self._bucket,
+                    Key=self.key,
+                    UploadId=self._upload_id,
+                    MultipartUpload={"Parts": self._parts},
+                )
+            _mark_ephemeral(self._storage, self.key)
+            self._closed = True
+            logger.info(
+                "[storage] executable output uploaded streaming "
+                f"(parts={len(self._parts)}): {self.key}"
+            )
+            return self.key
+        except Exception:
+            self.abort()
+            raise
+
+    def abort(self) -> None:
+        if self._closed:
+            return
+        _abort_multipart_safe(
+            self._client,
+            self._bucket,
+            self.key,
+            self._upload_id,
+        )
+        self._buffer.clear()
+        self._closed = True
+
+
 def save_chunks(
     task_id: str,
     filename: str,
@@ -121,82 +254,15 @@ def save_chunks(
         Su exception mid-stream chiama abort_multipart_upload per
         evitare parts orfane in S3.
     """
-    storage = _storage()
-    key = _key_for(group_id, task_id, filename)
-
-    # boto3 client + bucket via internal helper (ABI interna stabile
-    # del backend S3, stesso pattern di StreamingResultBlobWriter).
-    client = storage._client()
-    bucket = storage.bucket
-    try:
-        extra = storage._extra_args()
-    except Exception:
-        extra = {}
-
-    resp = client.create_multipart_upload(Bucket=bucket, Key=key, **extra)
-    upload_id = resp["UploadId"]
-    parts: list[dict] = []
-    part_number = 0
-    part_buf = bytearray()
-
-    # Cleanup multipart centralizzato: ogni errore passa da un solo abort,
-    # evitando doppie call S3 e log secondari che coprirebbero il failure
-    # originale.
-    # Ora le sub-call alzano direttamente: l'unico abort vive nel
-    # `except` esterno.
-    def _flush_one_part(payload: bytes) -> None:
-        nonlocal part_number
-        part_number += 1
-        try:
-            r = client.upload_part(
-                Bucket=bucket, Key=key, UploadId=upload_id,
-                PartNumber=part_number, Body=payload,
-            )
-        except Exception as exc:
-            raise RuntimeError(
-                f"eseguibili.save_chunks upload_part fallito (key={key}): {exc}"
-            ) from exc
-        parts.append({"PartNumber": part_number, "ETag": r["ETag"]})
-
+    writer = ExecutableOutputWriter(task_id, filename, group_id=group_id)
     try:
         for chunk in chunks:
             if not chunk:
                 continue
-            part_buf.extend(chunk)
-            while len(part_buf) >= _PART_SIZE:
-                _flush_one_part(bytes(part_buf[:_PART_SIZE]))
-                del part_buf[:_PART_SIZE]
-
-        # Flusha la part residua finale (< _PART_SIZE).
-        if part_buf:
-            _flush_one_part(bytes(part_buf))
-            part_buf = bytearray()
-
-        if not parts:
-            # Zero parts: S3 multipart non permette complete con 0 parts.
-            # Aborta + put_object con corpo vuoto.
-            _abort_multipart_safe(client, bucket, key, upload_id)
-            client.put_object(Bucket=bucket, Key=key, Body=b"", **extra)
-        else:
-            try:
-                client.complete_multipart_upload(
-                    Bucket=bucket, Key=key, UploadId=upload_id,
-                    MultipartUpload={"Parts": parts},
-                )
-            except Exception as exc:
-                raise RuntimeError(
-                    f"eseguibili.save_chunks complete fallito (key={key}): {exc}"
-                ) from exc
-
-        _mark_ephemeral(storage, key)
-
-        logger.info(
-            f"[storage] eseguibili output uploaded streaming "
-            f"(parts={len(parts)}): {key}"
-        )
-        return key
+            writer.write(chunk)
+        return writer.finalize()
     except Exception:
-        _abort_multipart_safe(client, bucket, key, upload_id)
+        writer.abort()
         raise
 
 

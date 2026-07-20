@@ -25,6 +25,20 @@ from workers.beat_scheduler import PlenoraBeatScheduler
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
 
 
+@pytest.fixture(autouse=True)
+def _disable_reconciliation_reporting_queries(monkeypatch):
+    monkeypatch.setattr(
+        "app.core.resources.storage_reconciliation."
+        "count_active_by_state_domain",
+        lambda: [],
+    )
+    monkeypatch.setattr(
+        "app.core.resources.storage_reconciliation."
+        "prune_terminal_older_than",
+        lambda **_kwargs: 0,
+    )
+
+
 def _make_scheduler() -> PlenoraBeatScheduler:
     """Scheduler bypass __init__ con tutti gli slot time-gate azzerati.
 
@@ -437,7 +451,11 @@ def test_reconcile_storage_called_from_tick():
          patch.object(sched, "_cleanup_old_schedule_logs"), \
          patch.object(sched, "_archive_old_audit_actions"), \
          patch.object(sched, "_cleanup_orphan_temp_files"), \
-         patch.object(sched, "_reconcile_storage") as recon_mock:
+         patch.object(sched, "_reconcile_storage") as recon_mock, \
+         patch.object(sched, "_cleanup_task_results"), \
+         patch.object(sched, "_drain_task_dispatch_outbox"), \
+         patch.object(sched, "_recover_runtime_leases"), \
+         patch.object(sched, "_emit_due_via_dispatch"):
         sched.tick()
 
     recon_mock.assert_called_once()

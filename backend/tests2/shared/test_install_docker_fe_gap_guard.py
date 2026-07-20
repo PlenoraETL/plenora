@@ -73,7 +73,7 @@ def _ci_invokes_docker_compose() -> bool:
     if not _WORKFLOWS_DIR.exists():
         return False
     pattern = re.compile(
-        r"^\s*-\s+run:.*?(docker\s+compose|docker-compose)\b",
+        r"^\s*(?:-\s+)?run:.*?(docker\s+compose|docker-compose)\b",
         flags=re.MULTILINE,
     )
     for wf in _WORKFLOWS_DIR.glob("*.yml"):

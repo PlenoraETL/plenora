@@ -64,6 +64,7 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
     # batch 009 — Not-Found family
     "project_not_found",
     "task_not_found",
+    "task_already_terminal",
     "worker_lost",
     "schedule_not_found",
     "run_not_found",
@@ -199,16 +200,18 @@ def test_known_global_codes_matches_expected_lock():
     assert error_codes.KNOWN_GLOBAL_CODES == EXPECTED_GLOBAL_CODES
 
 
-def test_catalog_count_domain_sixty():
-    """58 codici domain (5 pre-existing + 6 batch 006 + 10 batch 009
+def test_catalog_count_domain_sixty_two():
+    """62 codici domain (catalogo storico + task terminal conflict).
+
+    Composizione storica: 5 pre-existing + 6 batch 006 + 10 batch 009
     not-found family + 1 batch 010 external-service +
     1 BE-GO-READY-MEMORY-OOM-001 memory_limit_exceeded +
     1 BE-GO-READY-ERROR-CODES-013 service_not_initialized +
     1 BE-GO-READY-ERROR-CODES-014 access_denied +
     27 BE-GO-READY-AUTH-DOMAIN-PROMOTION-001 auth family +
-    1 compatibility domain conflict code +
-    5 dispatch carica #18/#20 write/visibility family)."""
-    assert len(EXPECTED_DOMAIN_CODES) == 61
+    1 compatibility domain conflict code + 1 task terminal conflict +
+    5 dispatch carica #18/#20 write/visibility family."""
+    assert len(EXPECTED_DOMAIN_CODES) == 62
     assert len(error_codes.KNOWN_DOMAIN_CODES) == len(EXPECTED_DOMAIN_CODES)
 
 
@@ -834,7 +837,7 @@ def _scan_value_error_str_e_callsites() -> Dict[str, int]:
 
 
 # Lock per-file (BE-GO-READY-ERROR-CODES-015 closure).
-# 42 call site totali in 11 file, classificati `KEEP_DYNAMIC_VALIDATION_COMPAT`
+# 44 call site totali, classificati `KEEP_DYNAMIC_VALIDATION_COMPAT`
 # (vedi rationale in `error_codes.py::ACCEPTED_HTTP_FALLBACK_PATTERNS`).
 # Aggiunte/rimozioni richiedono aggiornamento esplicito del lock e
 # classificazione del nuovo sito (KEEP_DYNAMIC_VALIDATION_COMPAT,
@@ -843,14 +846,19 @@ def _scan_value_error_str_e_callsites() -> Dict[str, int]:
 EXPECTED_VALUE_ERROR_STR_E_COUNTS: Dict[str, int] = {
     "backend/app/shared/error_envelope.py": 1,
     "backend/app/core/arricchisci/router.py": 2,
+    # Scope/group/limit non validi: messaggio dinamico di validazione admin.
+    "backend/app/core/admin_object_storage/router.py": 1,
     "backend/app/core/carica/conflict_request_loader.py": 1,
     "backend/app/core/datasources/router.py": 5,
-    "backend/app/core/eseguibili/router.py": 4,
+    # Create/update/version/manifest/execute: ValueError di validazione
+    # boundary, con sanitizzazione dove il dettaglio puo' essere tecnico.
+    "backend/app/core/eseguibili/router.py": 8,
     # 1 -> 3: preview-formula (#26) usa 2 HTTPException(detail=str(e)) per i
     # messaggi di validazione dinamica (espressione/alias non validi).
     "backend/app/core/estrai/router.py": 3,
     "backend/app/core/features/routes.py": 9,
-    "backend/app/core/files/router.py": 7,
+    # Include l'update metadata file_source, ValueError di input utente.
+    "backend/app/core/files/router.py": 8,
     "backend/app/core/files/upload_boundary.py": 2,
     "backend/app/core/orchestrator/router.py": 2,
     "backend/app/core/projects/router.py": 1,
@@ -889,10 +897,10 @@ def test_value_error_str_e_callsite_lock():
 
 
 def test_value_error_str_e_total_count_lock():
-    """Sanity check: somma per-file == 42. Lock indipendente che
+    """Sanity check: somma per-file == 44. Lock indipendente che
     cattura desync fra `EXPECTED_VALUE_ERROR_STR_E_COUNTS` e somma
     intesa nel commit message."""
-    assert sum(EXPECTED_VALUE_ERROR_STR_E_COUNTS.values()) == 38
+    assert sum(EXPECTED_VALUE_ERROR_STR_E_COUNTS.values()) == 44
 
 
 def test_value_error_str_e_pattern_in_accepted_fallback():

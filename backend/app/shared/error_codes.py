@@ -71,6 +71,9 @@ PROJECT_NOT_FOUND = "project_not_found"
 TASK_NOT_FOUND = "task_not_found"
 """404: task non trovato (orchestrator)."""
 
+TASK_ALREADY_TERMINAL = "task_already_terminal"
+"""409: annullamento richiesto per un task gia' terminale."""
+
 WORKER_LOST = "worker_lost"
 """Task interrotto perché il worker proprietario ha perso la lease."""
 
@@ -314,6 +317,7 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     SCHEDULE_EXECUTION_FATAL,
     PROJECT_NOT_FOUND,
     TASK_NOT_FOUND,
+    TASK_ALREADY_TERMINAL,
     WORKER_LOST,
     SCHEDULE_NOT_FOUND,
     RUN_NOT_FOUND,

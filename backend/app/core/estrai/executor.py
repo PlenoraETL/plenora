@@ -87,6 +87,7 @@ class ArcGISFeatureReaderProtocol(Protocol):
         out_sr: Optional[int] = None,
         geom_column: str = "geometry",
         group_id: Optional[str] = None,
+        output_persistence: Any = None,
     ) -> MutableMapping[str, object]:
         ...
 
@@ -299,6 +300,7 @@ class EstraiExecutor:
         self, project_id: str, canvas: CanvasState, run_id: str = None,
         intermediate_mode_override: Optional[str] = None,
         execution_context: Optional[Mapping[str, Any]] = None,
+        output_persistence: Any = None,
     ) -> JsonObject:
         """
         Esegue la query del progetto e salva il file di output.
@@ -368,12 +370,14 @@ class EstraiExecutor:
                 result_node,
                 connection,
                 execution_context=execution_context,
+                output_persistence=output_persistence,
             )
         else:
             res = self._execute_database(
                 project_id, canvas, result_node, connection, metadata, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
                 update_contract=execution_context is None,
+                output_persistence=output_persistence,
             )
 
         duration_ms = int((_time.time() - _step_start) * 1000)
@@ -393,6 +397,7 @@ class EstraiExecutor:
         metadata=None, run_id: str = None,
         intermediate_mode_override: Optional[str] = None,
         update_contract: bool = True,
+        output_persistence: Any = None,
     ) -> JsonObject:
         """Percorso esecuzione SQL classico."""
         try:
@@ -415,6 +420,11 @@ class EstraiExecutor:
             geom_column = result_node.geomColumn.split('.')[-1] if '.' in result_node.geomColumn else result_node.geomColumn
 
         logger.info(f"SQL generato:\n{query_info['sql']}\nParams: {query_info.get('params', {})}")
+        persistence_kwargs = (
+            {"result_persistence": output_persistence}
+            if output_persistence is not None
+            else {}
+        )
         res = self.executor.execute_query(
             connection=connection,
             sql=query_info['sql'],
@@ -427,6 +437,7 @@ class EstraiExecutor:
             run_id=run_id,
             node_id=result_node.id,
             intermediate_mode_override=intermediate_mode_override,
+            **persistence_kwargs,
         )
 
         if res.get("success") and update_contract:
@@ -460,6 +471,7 @@ class EstraiExecutor:
         result_node,
         connection,
         execution_context: Optional[Mapping[str, Any]] = None,
+        output_persistence: Any = None,
     ) -> JsonObject:
         """
         Percorso esecuzione ArcGIS Feature Service.
@@ -491,6 +503,11 @@ class EstraiExecutor:
 
         try:
             feature_reader = self._require_feature_reader()
+            persistence_kwargs = (
+                {"output_persistence": output_persistence}
+                if output_persistence is not None
+                else {}
+            )
             res = feature_reader.execute_query(
                 connection_id=connection.id,
                 layer_url=layer_url,
@@ -503,6 +520,7 @@ class EstraiExecutor:
                 max_features=max_features,
                 geom_column=geom_column,
                 group_id=(execution_context or {}).get("group_id"),
+                **persistence_kwargs,
             )
 
             if res.get("success") and execution_context is None:

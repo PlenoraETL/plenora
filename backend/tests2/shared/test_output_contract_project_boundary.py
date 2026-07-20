@@ -174,7 +174,7 @@ def test_schema_inference_keeps_column_names_when_column_ids_companion_is_empty(
 
 
 def test_column_reference_sync_key_sets_cover_current_transform_registry():
-    from app.core.output_contract.canvas_sync import (
+    from app.shared.execution.config_column_refs import (
         LIST_COLUMN_CONFIG_KEYS,
         SCALAR_COLUMN_CONFIG_KEYS,
     )
@@ -206,7 +206,7 @@ def test_column_reference_sync_key_sets_cover_current_transform_registry():
 
 def test_plugin_executor_does_not_rewrite_column_param_shapes_by_source_name():
     from app.core.manipola.plugin_executor import PluginExecutor
-    from app.core.output_contract.canvas_sync import (
+    from app.shared.execution.config_column_refs import (
         LIST_COLUMN_CONFIG_KEYS,
         SCALAR_COLUMN_CONFIG_KEYS,
     )
@@ -253,10 +253,12 @@ def test_schema_inference_does_not_rewrite_column_param_shapes_by_source_name():
     pytest.importorskip("psycopg2")
 
     from app.core.projects.schema_inference import (
-        LIST_COLUMN_CONFIG_KEYS,
-        SCALAR_COLUMN_CONFIG_KEYS,
         ColumnSchema,
         SchemaInferenceService,
+    )
+    from app.shared.execution.config_column_refs import (
+        LIST_COLUMN_CONFIG_KEYS,
+        SCALAR_COLUMN_CONFIG_KEYS,
     )
 
     service = SchemaInferenceService(project_service=SimpleNamespace())
@@ -293,7 +295,7 @@ def test_arricchisci_project_source_consumes_output_contract_not_canvas_columns(
     from app.core.arricchisci.execution_context import ArricchisciExecutionContext
 
     svc = ApiConnectionSourceLoadingMixin()
-    svc._upstream_blob_is_stale = lambda _project_id: False
+    svc._upstream_blob_is_stale = lambda *_args, **_kwargs: False
     source_df = pd.DataFrame({"myid": [1, 2], "name": ["a", "b"]})
     contract = {
         "columns": [
@@ -586,7 +588,7 @@ def test_canvas_sync_propagates_alias_migration_through_transform_chain():
 
 def test_canvas_sync_rewrites_all_non_expression_column_param_shapes():
     from app.core.output_contract import sync_canvas_with_output_contracts
-    from app.core.output_contract.canvas_sync import (
+    from app.shared.execution.config_column_refs import (
         LIST_COLUMN_CONFIG_KEYS,
         SCALAR_COLUMN_CONFIG_KEYS,
     )

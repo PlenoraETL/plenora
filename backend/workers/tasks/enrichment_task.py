@@ -19,6 +19,7 @@ from app.core.arricchisci import enrichment_run_mode
 from app.core.arricchisci import execution_context as execution_context_module
 from app.core.arricchisci import parallel as parallel_module
 from app.core.dataframes.values import is_nonempty_dataframe
+from app.core.eseguibili import service as eseguibili_service
 from app.core.eseguibili import storage as eseg_storage
 from app.core.files import service as files_service
 from app.core.intermediate import run_idempotency as run_idempotency_module
@@ -140,9 +141,7 @@ def execute_enrichment_task(
         if not executable_run_id:
             return
         try:
-            from app.core.eseguibili import db as eseguibili_db
-
-            eseguibili_db.complete_eseguibile_run(
+            eseguibili_service.complete_eseguibile_run(
                 executable_run_id,
                 success=success,
                 output_metadata=dict(output_metadata or {}),
@@ -157,9 +156,7 @@ def execute_enrichment_task(
         if not executable_run_id:
             return
         try:
-            from app.core.eseguibili import db as eseguibili_db
-
-            eseguibili_db.cancel_eseguibile_run(
+            eseguibili_service.cancel_eseguibile_run(
                 executable_run_id,
                 error_message="Task annullato",
             )
@@ -172,6 +169,7 @@ def execute_enrichment_task(
         _revoked = async_user_recheck_module.recheck_eseguibile_authorized(
             user_id=user_id,
             eseguibile_id=executable_id,
+            eseguibile_loader=eseguibili_service.get_eseguibile_for_access_check,
             task_id=task_id,
             run_id=executable_run_id,
         )

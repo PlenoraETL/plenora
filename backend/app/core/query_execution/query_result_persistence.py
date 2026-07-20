@@ -29,15 +29,18 @@ from app.db.sql_types import QueryParams
 
 @dataclass(frozen=True)
 class PersistedQueryResult:
-    result_id: str
+    result_id: Optional[str]
     output_path: Path
+    storage_key: Optional[str] = None
 
 
 @dataclass(frozen=True)
 class StreamedQueryResult:
-    result_id: str
+    result_id: Optional[str]
     rows_count: int
     columns: List[str]
+    output_path: Optional[Path] = None
+    storage_key: Optional[str] = None
 
 
 class QueryResultPersistence:

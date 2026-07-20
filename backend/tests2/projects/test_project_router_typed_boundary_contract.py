@@ -58,6 +58,16 @@ def test_project_router_list_get_and_update_stay_off_legacy_get_project(
     monkeypatch.setattr(router_mod, "_project_service", service)
     monkeypatch.setattr(router_mod, "group_filter", lambda current_user: "grp-1")
     monkeypatch.setattr(router_mod, "assert_group_access", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        router_mod,
+        "list_projects_with_canvas_for_datasource_check",
+        lambda _project_ids: [],
+    )
+    monkeypatch.setattr(
+        router_mod.source_freshness_module,
+        "annotate_canvas_project_source_freshness",
+        lambda *_args, **_kwargs: None,
+    )
     assert not hasattr(project_db, "get_project")
 
     listed = router_mod.list_projects(current_user=_user())

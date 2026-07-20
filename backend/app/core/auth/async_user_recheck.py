@@ -6,6 +6,7 @@ Contesto: tra submit (endpoint HTTP) e pickup (worker Celery) puo' passare
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Optional
 from typing_extensions import TypedDict
 
@@ -105,6 +106,7 @@ def recheck_eseguibile_authorized(
     user_id: Optional[str],
     eseguibile_id: str,
     *,
+    eseguibile_loader: Callable[[str], object | None],
     task_id: str = "",
     run_id: str = "",
 ) -> Optional[PermissionRevokedResult]:
@@ -120,9 +122,7 @@ def recheck_eseguibile_authorized(
                 "success": False,
                 "message": "Utente non autorizzato (disabilitato o rimosso)",
             }
-        from app.core.eseguibili import db as eseguibili_db
-
-        record = eseguibili_db.get_eseguibile(eseguibile_id)
+        record = eseguibile_loader(eseguibile_id)
         if record is None:
             return {
                 "status": "permission_revoked",

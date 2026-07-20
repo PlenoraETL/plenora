@@ -11,6 +11,8 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from app.shared.contracts.payloads import JsonObject
+
 from .binding_capabilities import canonical_binding_path
 from .models import (
     ExecutableInputBinding,
@@ -40,7 +42,7 @@ _BLOCKED_FIELD_PARTS = frozenset(
 )
 
 
-def _node_data(node: Mapping[str, Any]) -> dict[str, Any]:
+def _node_data(node: Mapping[str, Any]) -> JsonObject:
     data = node.get("data")
     merged = dict(node)
     if isinstance(data, Mapping):

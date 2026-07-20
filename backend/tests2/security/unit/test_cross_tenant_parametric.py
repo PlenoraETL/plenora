@@ -97,6 +97,7 @@ def _arricchisci_project_source_denied():
 
     service = ApiConnectionService.__new__(ApiConnectionService)
     service._current_group_id = "stale-grp-LEAK"
+    service._upstream_blob_is_stale = lambda *_args, **_kwargs: False
     node_data = {"source_project_id": "proj-99"}
     ctx = ArricchisciExecutionContext(
         project_id="p-1", group_id="grp-1", preview_limit=None,

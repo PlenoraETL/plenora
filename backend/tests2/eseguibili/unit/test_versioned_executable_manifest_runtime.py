@@ -454,6 +454,11 @@ def test_runtime_rejects_binding_to_missing_field(monkeypatch) -> None:
         "_materialize_file_input",
         lambda **kwargs: f"temp-{kwargs['definition'].key}",
     )
+    monkeypatch.setattr(
+        executable_runtime.file_source_service,
+        "delete_file_source",
+        lambda _file_id: None,
+    )
 
     with pytest.raises(ValueError, match="senza campo binding"):
         executable_runtime.resolve_runtime_inputs(

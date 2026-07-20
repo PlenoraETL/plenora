@@ -7,7 +7,7 @@ Keeps provider-specific behavior behind a narrow integration boundary.
 import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
+from typing import Any, List, Optional, Sequence, Tuple
 
 from app.utils.logger import get_logger
 from app.core.results.pipeline_result import save_pipeline_result_outcome
@@ -353,6 +353,7 @@ class FeaturesService:
         out_sr: int = None,
         geom_column: str = "geometry",
         group_id: str = None,
+        output_persistence: Any = None,
     ) -> ArcGISQueryExecutionResult:
         """
         Query completa con salvataggio file.
@@ -407,16 +408,25 @@ class FeaturesService:
             # Step 4: salvataggio risultato.
             t_save = time.time()
             filename_stem = Path(output_filename).stem or "result"
-            saved = save_pipeline_result_outcome(
-                project_id=project_id,
-                df=df,
-                output_format=output_format,
-                filename_stem=filename_stem,
-                rows_count=len(rows),
-                geom_column=geom_column if return_geometry else None,
-                crs=layer_crs,
-                group_id=group_id,
-            )
+            if output_persistence is not None:
+                saved = output_persistence.persist_dataframe_output(
+                    df=df,
+                    output_format=output_format,
+                    filename_stem=filename_stem,
+                    geom_column=geom_column if return_geometry else None,
+                    crs=layer_crs,
+                )
+            else:
+                saved = save_pipeline_result_outcome(
+                    project_id=project_id,
+                    df=df,
+                    output_format=output_format,
+                    filename_stem=filename_stem,
+                    rows_count=len(rows),
+                    geom_column=geom_column if return_geometry else None,
+                    crs=layer_crs,
+                    group_id=group_id,
+                )
             saved_path_display = saved.output_filename
             timings["save"] = time.time() - t_save
 
@@ -430,6 +440,8 @@ class FeaturesService:
                 "output_path": saved_path_display,
                 "project_id": project_id,
                 "timings": timings,
+                "result_id": getattr(saved, "result_id", None),
+                "storage_key": getattr(saved, "storage_key", None),
             }
             
         except Exception as e:

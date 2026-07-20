@@ -46,7 +46,7 @@ def test_docker_compose_workflow_runs_backend_smoke_after_build():
         (
             "docker compose config",
             "docker compose build backend frontend",
-            "docker compose up -d postgres redis",
+            "docker compose up -d --wait postgres rabbitmq object-storage",
             "docker compose up -d backend",
             "bash scripts/docker-api-smoke.sh --infrastructure-only",
             "python -m app.core.auth.smoke_seed",
@@ -72,21 +72,26 @@ def test_docker_compose_workflow_uses_bounded_api_polling_script():
         )
 
 
-def test_docker_compose_workflow_is_non_destructive():
+def test_docker_compose_workflow_cleans_up_isolated_resources():
     text = _workflow_text()
-    assert "docker compose stop" in text, (
-        "Docker Compose CI should stop services in an always() cleanup step "
-        "without deleting containers or volumes."
+    _assert_ordered(
+        text,
+        (
+            "docker network create plenora",
+            "Run full Docker API smoke",
+            "if: always()",
+            "docker compose down -v",
+            "docker network rm plenora || true",
+        ),
     )
     banned_markers = (
-        "docker compose down",
-        "docker compose rm",
         "docker volume rm",
         "docker system prune",
     )
     offenders = [marker for marker in banned_markers if marker in text]
     assert not offenders, (
-        "Docker Compose CI smoke must stay non-destructive. Banned markers "
+        "Docker Compose CI smoke must only clean up its isolated resources. "
+        "Broad destructive markers "
         f"found: {offenders}."
     )
 

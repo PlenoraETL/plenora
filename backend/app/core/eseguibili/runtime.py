@@ -9,7 +9,10 @@ import re
 from datetime import date, datetime
 from typing import Any, Mapping
 
+from app.core.dataframes import geodata as dataframe_geodata
+from app.core.dataframes import tabular as dataframe_tabular
 from app.core.files.service import file_source_service
+from app.shared.contracts.payloads import JsonObject
 
 from . import db as eseguibili_db
 from .models import ExecutableInputDefinition, ExecutableManifest
@@ -193,15 +196,11 @@ def _materialize_file_input(
     if len(frames) == 1:
         df = frames[0]
     else:
-        import pandas as pd
-
         if any(spatial_flags) and not all(spatial_flags):
             raise ValueError(
                 f"'{definition.label}' non puo' unire file geografici e tabellari"
             )
         if all(spatial_flags):
-            import geopandas as gpd
-
             geometry_name = frames[0].geometry.name
             reference_crs = frames[0].crs
             aligned = []
@@ -217,14 +216,17 @@ def _materialize_file_input(
                         )
                     frame = frame.to_crs(reference_crs)
                 aligned.append(frame)
-            combined = pd.concat(aligned, ignore_index=True, sort=False)
-            df = gpd.GeoDataFrame(
+            combined = dataframe_tabular.concat_dataframes(
+                aligned,
+                ignore_index=True,
+            )
+            df = dataframe_geodata.geodataframe_from_geometry(
                 combined,
                 geometry=geometry_name,
                 crs=reference_crs,
             )
         else:
-            df = pd.concat(frames, ignore_index=True, sort=False)
+            df = dataframe_tabular.concat_dataframes(frames, ignore_index=True)
 
     name = f"__exec_input_{eseguibile_id}_{definition.key}"
     if all(spatial_flags):
@@ -274,7 +276,7 @@ def resolve_runtime_inputs(
     manifest: ExecutableManifest,
     values: Mapping[str, Any],
     group_id: str,
-) -> tuple[dict[str, Any], list[str], dict[str, Any]]:
+) -> tuple[JsonObject, list[str], JsonObject]:
     """Valida gli input e restituisce canvas risolto, cleanup ids e audit."""
 
     expected_keys = {item.key for item in manifest.inputs}

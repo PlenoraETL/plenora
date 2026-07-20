@@ -167,7 +167,7 @@ def read_csv_safe_bytes(data: bytes, *, source_label: str = "in-memory CSV") -> 
 
 def read_excel_safe(source, *, sheet: Optional[str] = None, nrows: int | None = None) -> pd.DataFrame:
     """Load Excel with the same lossless scalar policy used for CSV/JSON."""
-    kwargs: dict[str, object] = {
+    kwargs: JsonObject = {
         "sheet_name": sheet if sheet else 0,
         "dtype": object,
         "keep_default_na": False,

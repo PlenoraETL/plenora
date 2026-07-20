@@ -13,7 +13,14 @@ def test_run_log_store_reads_completed_and_partial_events(monkeypatch) -> None:
 
     calls: list[tuple[str, tuple[str, ...]]] = []
 
-    def fake_list_schedule_logs(*, schedule_id: str, events: tuple[str, ...]):
+    def fake_list_schedule_logs(
+        *,
+        schedule_id: str,
+        events: tuple[str, ...],
+        limit: int = 200,
+        offset: int = 0,
+    ):
+        assert (limit, offset) == (200, 0)
         calls.append((schedule_id, events))
         return [{"timestamp_str": "20260101_100000"}]
 
@@ -32,7 +39,13 @@ def test_run_log_store_reads_completed_and_partial_events(monkeypatch) -> None:
 def test_run_log_store_db_failure_is_empty_best_effort(monkeypatch) -> None:
     from app.core.scheduler import run_log_store
 
-    def fail_list_schedule_logs(*, schedule_id: str, events: tuple[str, ...]):
+    def fail_list_schedule_logs(
+        *,
+        schedule_id: str,
+        events: tuple[str, ...],
+        limit: int = 200,
+        offset: int = 0,
+    ):
         raise RuntimeError("db offline")
 
     monkeypatch.setattr(

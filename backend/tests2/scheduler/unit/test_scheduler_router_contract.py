@@ -235,6 +235,7 @@ def test_list_runs_filesystem_archive_no_longer_supported(current_user, tmp_path
 
     with patch("app.core.scheduler.schedule_service.ScheduleService.get_schedule", return_value=schedule_cfg), \
          patch("app.core.scheduler.db.get_schedule_row", return_value=SimpleNamespace(id=schedule_id, group_id="grp-1")), \
+         patch("app.core.scheduler.db.list_schedule_logs", return_value=[]), \
          patch("app.config.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)):
         response = client.get(f"/api/schedules/{schedule_id}/runs")
 
@@ -278,7 +279,8 @@ def test_list_runs_returns_empty_payload_when_no_archived_runs(current_user):
     schedule_cfg = SimpleNamespace(pipeline=SimpleNamespace(project_id=project_id))
 
     with patch("app.core.scheduler.schedule_service.ScheduleService.get_schedule", return_value=schedule_cfg), \
-         patch("app.core.scheduler.db.get_schedule_row", return_value=SimpleNamespace(id=schedule_id, group_id="grp-1")):
+         patch("app.core.scheduler.db.get_schedule_row", return_value=SimpleNamespace(id=schedule_id, group_id="grp-1")), \
+         patch("app.core.scheduler.db.list_schedule_logs", return_value=[]):
         response = client.get(f"/api/schedules/{schedule_id}/runs")
 
     assert response.status_code == 200

@@ -17,6 +17,14 @@ from app.core.scheduler.execution_manager import ExecutionManager
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
 
 
+@pytest.fixture(autouse=True)
+def _disable_intermediate_run_persistence(monkeypatch):
+    monkeypatch.setattr(
+        "app.core.intermediate.run_lifecycle.create_run",
+        lambda *_args, **_kwargs: None,
+    )
+
+
 def _make_manager() -> ExecutionManager:
     """ExecutionManager bypassando ``__init__`` per non creare
     connessioni reali (pattern dagli altri file test del modulo)."""

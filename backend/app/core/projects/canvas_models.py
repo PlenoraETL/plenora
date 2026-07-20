@@ -176,6 +176,7 @@ class Node(BaseModel):
     order: Optional[int] = 0
 
     label: Optional[str] = None
+    description: Optional[str] = None
     fields: Optional[List[dict]] = []
 
     collapsed: Optional[bool] = False

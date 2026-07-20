@@ -25,6 +25,15 @@ from app.core.scheduler.execution_manager import ExecutionManager
 pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
 
 
+@pytest.fixture(autouse=True)
+def _disable_concurrency_table_bootstrap(monkeypatch):
+    """ExecutionManager unit tests must not open a real PostgreSQL pool."""
+    monkeypatch.setattr(
+        "app.core.scheduler.concurrency_manager.ConcurrencyManager._ensure_table",
+        lambda _self: None,
+    )
+
+
 class _FakeCaricaExecutor:
     def __init__(self) -> None:
         self.calls: list[dict] = []

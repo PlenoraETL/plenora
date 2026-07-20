@@ -20,6 +20,14 @@ pytestmark = [pytest.mark.unit, pytest.mark.scheduler, pytest.mark.contract]
 _SCHEDULED_FOR = "2026-04-17T10:00:00+00:00"
 
 
+@pytest.fixture(autouse=True)
+def _disable_intermediate_run_persistence(monkeypatch):
+    monkeypatch.setattr(
+        "app.core.intermediate.run_lifecycle.create_run",
+        lambda *_args, **_kwargs: None,
+    )
+
+
 def _project_meta(group_id: str):
     return SimpleNamespace(id="proj-1", group_id=group_id, project_type="estrai")
 

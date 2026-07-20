@@ -18,6 +18,15 @@ from app.shared.contracts.auth import CurrentUser
 pytestmark = [pytest.mark.unit, pytest.mark.contract, pytest.mark.eseguibili]
 
 
+@pytest.fixture(autouse=True)
+def _isolate_temp_file_ttl_store(monkeypatch):
+    monkeypatch.setattr(
+        service.eseguibili_db,
+        "mark_temp_file_source_ttl",
+        lambda _file_source_id: None,
+    )
+
+
 def _row() -> EseguibileRow:
     return EseguibileRow(
         id="exec-1",

@@ -876,6 +876,9 @@ def test_check_reconciliation_backlog_failed_above_lost_threshold(monkeypatch):
     with patch(
         "app.core.resources.storage_reconciliation.count_active_by_state_domain_strict",
         return_value=counts,
+    ), patch(
+        "app.core.resources.storage_reconciliation.count_pending_by_operation",
+        return_value={"upload_intent": 0},
     ):
         from app.observability.health import check_reconciliation_backlog
 
@@ -904,6 +907,9 @@ def test_check_reconciliation_backlog_failed_on_both_thresholds(monkeypatch):
     with patch(
         "app.core.resources.storage_reconciliation.count_active_by_state_domain_strict",
         return_value=counts,
+    ), patch(
+        "app.core.resources.storage_reconciliation.count_pending_by_operation",
+        return_value={"upload_intent": 0},
     ):
         from app.observability.health import check_reconciliation_backlog
 
@@ -936,6 +942,9 @@ def test_check_reconciliation_backlog_skipped_when_pending_threshold_zero(monkey
     with patch(
         "app.core.resources.storage_reconciliation.count_active_by_state_domain_strict",
         return_value=counts,
+    ), patch(
+        "app.core.resources.storage_reconciliation.count_pending_by_operation",
+        return_value={"upload_intent": 0},
     ):
         from app.observability.health import check_reconciliation_backlog
 

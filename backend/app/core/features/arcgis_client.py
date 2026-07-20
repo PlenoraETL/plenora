@@ -13,7 +13,6 @@ from decimal import Decimal
 from typing import Dict, Iterator, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
-import pandas as pd
 import requests
 
 from app.core.dataframes import geometry_parsing as geometry_parsing_module
@@ -68,10 +67,7 @@ def _esri_json_attribute_value(value):
     if dataframe_values_module.is_null_scalar(value):
         return None
 
-    if isinstance(value, np.datetime64):
-        value = pd.Timestamp(value)
-    if isinstance(value, pd.Timestamp):
-        value = value.to_pydatetime(warn=False)
+    value = dataframe_values_module.to_python_datetime(value)
     if isinstance(value, date) and not isinstance(value, datetime):
         value = datetime.combine(value, time.min)
     if isinstance(value, datetime):

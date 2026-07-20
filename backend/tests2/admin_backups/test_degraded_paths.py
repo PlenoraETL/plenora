@@ -411,7 +411,8 @@ def test_schedule_info_returns_default_cron(monkeypatch):
     monkeypatch.delenv("BACKUP_SCHEDULE_CRON", raising=False)
     monkeypatch.delenv("BACKUP_SCHEDULE_DESCRIPTION", raising=False)
 
-    out = service.get_schedule_info()
+    with patch.object(service, "fetch_latest_backup_started_at", return_value=None):
+        out = service.get_schedule_info()
 
     assert out["schedule_cron"] == "0 2 * * *"
     assert out["timezone"] == "UTC"
@@ -424,7 +425,8 @@ def test_schedule_info_respects_env_override(monkeypatch):
     monkeypatch.setenv("BACKUP_SCHEDULE_CRON", "0 4 * * *")
     monkeypatch.setenv("BACKUP_SCHEDULE_DESCRIPTION", "Daily 04:00 UTC")
 
-    out = service.get_schedule_info()
+    with patch.object(service, "fetch_latest_backup_started_at", return_value=None):
+        out = service.get_schedule_info()
 
     assert out["schedule_cron"] == "0 4 * * *"
     assert out["description"] == "Daily 04:00 UTC"

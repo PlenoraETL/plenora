@@ -17,6 +17,21 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
 
 
+@pytest.fixture(autouse=True)
+def _disable_reconciliation_reporting_queries(monkeypatch):
+    """Hook behavior tests do not exercise summary or retention storage."""
+    monkeypatch.setattr(
+        "app.core.resources.storage_reconciliation."
+        "count_active_by_state_domain",
+        lambda: [],
+    )
+    monkeypatch.setattr(
+        "app.core.resources.storage_reconciliation."
+        "prune_terminal_older_than",
+        lambda **_kwargs: 0,
+    )
+
+
 # Settings.DEFAULTS — 4 new tunables
 
 

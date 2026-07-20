@@ -29,6 +29,15 @@ def to_python_scalar(value: Any) -> Any:
     return value
 
 
+def to_python_datetime(value: Any) -> Any:
+    """Convert pandas/numpy datetime scalars to Python ``datetime`` values."""
+    if isinstance(value, np.datetime64):
+        value = pd.Timestamp(value)
+    if isinstance(value, pd.Timestamp):
+        return value.to_pydatetime(warn=False)
+    return value
+
+
 def is_dataframe(value: Any) -> bool:
     """Return True when value is a pandas DataFrame."""
     return isinstance(value, pd.DataFrame)
@@ -55,5 +64,6 @@ __all__ = [
     "is_geometry_series",
     "is_nonempty_dataframe",
     "is_null_scalar",
+    "to_python_datetime",
     "to_python_scalar",
 ]

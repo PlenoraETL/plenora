@@ -183,6 +183,24 @@ def _patch_pipeline_eager_success(monkeypatch):
     fake_result.to_dict = lambda: {"success": True}
     fake_orchestrator.execute_pipeline.return_value = fake_result
     monkeypatch.setattr(pt, "_build_orchestrator", lambda: fake_orchestrator)
+    # Progress reporting performs the production revocation lookup before
+    # publishing metadata.  That boundary has dedicated unit coverage; these
+    # launch-contract tests only need to exercise identity propagation through
+    # the task body and must not require PostgreSQL.
+    monkeypatch.setattr(pt, "_update_progress", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        "app.core.intermediate.run_lifecycle.close_run",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        pt,
+        "_get_project_info",
+        lambda _project_id: {
+            "group_id": "g_1",
+            "project_type": "estrai",
+            "retention_n": 1,
+        },
+    )
     return pt
 
 

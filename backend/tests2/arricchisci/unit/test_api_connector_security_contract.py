@@ -369,6 +369,9 @@ def test_load_source_project_force_recalculate_blocks_cross_tenant_before_recomp
     solo a recompute gia' avvenuta. Il pre-check fail-closed deve
     sollevare ValueError PRIMA che execute_pipeline venga invocato.
     """
+    monkeypatch.setattr(
+        api_service, "_upstream_blob_is_stale", lambda *_args, **_kwargs: False
+    )
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx typed context contract.
     # source_project_id appartiene al tenant B, non a grp-A
     monkeypatch.setattr(
@@ -407,6 +410,9 @@ def test_load_source_project_force_recalculate_blocks_unknown_project(
     """Se il source_project_id non esiste in DB, fail-closed: nessun
     fallthrough che possa diventare un probe per l'enumeration dei
     project_id cross-tenant."""
+    monkeypatch.setattr(
+        api_service, "_upstream_blob_is_stale", lambda *_args, **_kwargs: False
+    )
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx typed context contract.
     monkeypatch.setattr(
         "app.core.arricchisci.api_connection_source_loading.load_project_access_context",
@@ -427,6 +433,9 @@ def test_load_source_project_force_recalculate_allows_same_tenant(
     """Same-tenant con force_recalculate=True deve passare il pre-check
     e procedere al recompute. Se il pre-check fosse troppo stretto,
     questo test lo catturerebbe."""
+    monkeypatch.setattr(
+        api_service, "_upstream_blob_is_stale", lambda *_args, **_kwargs: False
+    )
     # BE-GO-READY-TRANSFORMATION-ENGINE-022: typed ctx typed context contract.
     monkeypatch.setattr(
         "app.core.arricchisci.api_connection_source_loading.load_project_access_context",

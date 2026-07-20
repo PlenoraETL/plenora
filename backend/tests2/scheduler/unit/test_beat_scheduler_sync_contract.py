@@ -41,6 +41,27 @@ def scheduler():
     return _FakeScheduler()
 
 
+@pytest.fixture(autouse=True)
+def _neutralize_unrelated_tick_hooks(monkeypatch):
+    hook_names = (
+        "_emit_catchup_runs",
+        "_archive_old_logs",
+        "_cleanup_old_schedule_logs",
+        "_archive_old_audit_actions",
+        "_cleanup_orphan_temp_files",
+        "_reconcile_storage",
+        "_cleanup_task_results",
+        "_drain_task_dispatch_outbox",
+        "_recover_runtime_leases",
+    )
+    for name in hook_names:
+        monkeypatch.setattr(
+            PlenoraBeatScheduler,
+            name,
+            lambda _self: None,
+        )
+
+
 # tick() — delega a super + chiama sync + heartbeat + 4 cleanup
 
 

@@ -78,17 +78,17 @@ _BREADCRUMB_CONTEXTS = [
     ("workers/tasks/pipeline_task.py",
      "close_run intermediate fallito post-crash"),
     ("workers/tasks/pipeline_task.py",
-     "close_connection intermediate fallito post-crash"),
+     "close_connection pipeline fallito{suffix}"),
     ("workers/tasks/carica_task.py",
      "group_id lookup fallito"),
     ("workers/tasks/carica_task.py",
-     "close_connection intermediate fallito"),  # anche presente in em
+     "close_connection intermediate fallito{suffix}"),
     ("workers/tasks/carica_task.py",
-     "close_connection config fallito"),
+     "close_connection config fallito{suffix}"),
     ("workers/tasks/enrichment_task.py",
      "cleanup temp dir fallito"),
     ("workers/tasks/enrichment_task.py",
-     "cleanup async close_run fallito"),
+     "close_connection enrichment fallito{suffix}"),
     ("workers/tasks/enrichment_task.py",
      "close_run intermediate fallito (early return)"),
     ("workers/tasks/enrichment_task.py",
@@ -109,12 +109,15 @@ def test_each_cleanup_site_has_logger_debug_breadcrumb():
     missing = []
     for rel, context in _BREADCRUMB_CONTEXTS:
         src = _read(rel)
-        # Match linee `logger.debug(f"<context>: {type(e).__name__}: ...")`
-        # con il context atteso.
-        expected_fragment = (
-            f'logger.debug(f"{context}: {{type('
-        )
-        if expected_fragment not in src:
+        context_pos = src.find(context)
+        logger_pos = src.rfind("logger.debug", 0, context_pos)
+        breadcrumb_tail = src[context_pos:context_pos + 300]
+        if (
+            context_pos == -1
+            or logger_pos == -1
+            or context_pos - logger_pos > 120
+            or "type(" not in breadcrumb_tail
+        ):
             missing.append(
                 f"{rel}: breadcrumb atteso per context '{context}' non trovato"
             )

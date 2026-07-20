@@ -15,6 +15,7 @@ from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, get_steps
 from app.config import settings
 from app.core.auth import async_user_recheck as async_user_recheck_module
+from app.core.eseguibili import service as eseguibili_service
 from app.core.intermediate import run_idempotency as run_idempotency_module
 from app.core.intermediate import run_lifecycle as run_lifecycle_module
 from app.core.projects import retention as project_retention
@@ -347,6 +348,7 @@ def execute_pipeline_task(
         _revoked = async_user_recheck_module.recheck_eseguibile_authorized(
             user_id=user_id,
             eseguibile_id=str(subject.get("id") or project_id),
+            eseguibile_loader=eseguibili_service.get_eseguibile_for_access_check,
             task_id=task_id,
             run_id=run_id,
         )
@@ -359,9 +361,7 @@ def execute_pipeline_task(
         _cleanup_executable_inputs(contract)
         if subject is not None:
             try:
-                from app.core.eseguibili import db as eseguibili_db
-
-                eseguibili_db.complete_eseguibile_run(
+                eseguibili_service.complete_eseguibile_run(
                     str(subject.get("run_id") or ""),
                     success=False,
                     error_message="Permesso di esecuzione revocato",
@@ -386,9 +386,7 @@ def execute_pipeline_task(
         _cleanup_executable_inputs(contract)
         if subject is not None:
             try:
-                from app.core.eseguibili import db as eseguibili_db
-
-                eseguibili_db.cancel_eseguibile_run(
+                eseguibili_service.cancel_eseguibile_run(
                     str(subject.get("run_id") or ""),
                     error_message="Task annullato",
                 )
@@ -451,6 +449,12 @@ def execute_pipeline_task(
 
         _update_progress(self, 10, "Esecuzione pipeline...")
         if contract is not None:
+            execution_context = dict(contract.get("runtime_context") or {})
+            if subject is not None:
+                # Runtime-only binding: the stable queue task id determines
+                # the executable object prefix. It is not trusted from the
+                # serialized execution contract.
+                execution_context["output_task_id"] = task_id
             result = orchestrator.execute_pipeline_from_contract(
                 project_id=project_id,
                 project_type=str(contract["project_type"]),
@@ -460,7 +464,7 @@ def execute_pipeline_task(
                 run_id=run_id,
                 user_id=user_id,
                 intermediate_mode_override=intermediate_mode_override,
-                execution_context=contract.get("runtime_context"),
+                execution_context=execution_context,
             )
         else:
             result = orchestrator.execute_pipeline(
@@ -480,9 +484,7 @@ def execute_pipeline_task(
             message = result.message or "Errore sconosciuto"
             if subject is not None:
                 try:
-                    from app.core.eseguibili import db as eseguibili_db
-
-                    eseguibili_db.complete_eseguibile_run(
+                    eseguibili_service.complete_eseguibile_run(
                         str(subject.get("run_id") or ""),
                         success=False,
                         error_message=message,
@@ -594,16 +596,25 @@ def execute_pipeline_task(
         )
         executable_output = None
         if subject is not None and contract is not None:
-            executable_output = _persist_executable_output(
-                contract=contract,
-                result=result,
-                task_id=task_id,
-                group_id=str(group_id),
-            )
+            direct_storage_key = result.get("storage_key")
+            if direct_storage_key:
+                output_name = _Path(result.output_path or str(direct_storage_key)).name
+                executable_output = {
+                    "result_id": None,
+                    "filename": output_name,
+                    "storage_key": str(direct_storage_key),
+                }
+            else:
+                # Compatibility for results produced before the direct output
+                # adapter. New executable runs never enter this copy path.
+                executable_output = _persist_executable_output(
+                    contract=contract,
+                    result=result,
+                    task_id=task_id,
+                    group_id=str(group_id),
+                )
             try:
-                from app.core.eseguibili import db as eseguibili_db
-
-                eseguibili_db.complete_eseguibile_run(
+                eseguibili_service.complete_eseguibile_run(
                     str(subject.get("run_id") or ""),
                     success=True,
                     output_metadata=executable_output,
@@ -657,9 +668,7 @@ def execute_pipeline_task(
         _cleanup_executable_inputs(contract)
         if subject is not None:
             try:
-                from app.core.eseguibili import db as eseguibili_db
-
-                eseguibili_db.cancel_eseguibile_run(
+                eseguibili_service.cancel_eseguibile_run(
                     str(subject.get("run_id") or ""),
                     error_message="Task annullato",
                 )
@@ -700,9 +709,7 @@ def execute_pipeline_task(
         _cleanup_executable_inputs(contract)
         if subject is not None:
             try:
-                from app.core.eseguibili import db as eseguibili_db
-
-                eseguibili_db.complete_eseguibile_run(
+                eseguibili_service.complete_eseguibile_run(
                     str(subject.get("run_id") or ""),
                     success=False,
                     error_message=str(e),

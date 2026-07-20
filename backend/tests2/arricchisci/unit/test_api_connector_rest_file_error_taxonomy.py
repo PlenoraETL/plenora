@@ -193,6 +193,10 @@ def test_remote_processor_http_error_returns_structured_error_kind(
              "app.core.arricchisci.http_executor.get_shared_session",
              return_value=session,
          ), \
+         patch(
+             "app.core.arricchisci.http_executor.validate_external_url",
+             return_value=None,
+         ), \
          patch.object(service, "_parse_http_error_body", return_value="Service Unavailable"):
 
         result = service._execute_rest_file(
@@ -231,6 +235,10 @@ def test_remote_processor_timeout_returns_structured_error_kind(
          patch(
              "app.core.arricchisci.http_executor.get_shared_session",
              return_value=session,
+         ), \
+         patch(
+             "app.core.arricchisci.http_executor.validate_external_url",
+             return_value=None,
          ):
 
         result = service._execute_rest_file(

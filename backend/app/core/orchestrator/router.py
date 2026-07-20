@@ -490,7 +490,7 @@ def cancel_task(
         raise HTTPException(
             status_code=409,
             detail={
-                "error": "task_already_terminal",
+                "error": error_codes.TASK_ALREADY_TERMINAL,
                 "message": "Il task e' gia' terminato",
                 "status": exc.state.lower(),
             },

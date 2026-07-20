@@ -252,7 +252,7 @@ class ExecutableRunRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     version_id: Optional[str] = None
-    inputs: dict[str, Any] = Field(default_factory=dict)
+    inputs: ObjectMap = Field(default_factory=dict)
     output_format: Optional[str] = None
     output_name: Optional[str] = None
 

@@ -237,6 +237,13 @@ def test_task_uses_target_lock_before_loading_upstream_and_releases_in_finally(m
     import workers.tasks.carica_task as carica_task
 
     events: list[str] = []
+    monkeypatch.setattr(carica_task, "is_already_completed", lambda _run_id: False)
+    monkeypatch.setattr(carica_task, "_update_progress", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        carica_task.DebugPayloadBuilder,
+        "build",
+        lambda self, **kwargs: {},
+    )
     handle = SimpleNamespace(
         target=SimpleNamespace(key="carica:db:hash", kind="db"),
         owner_token="owner-1",
@@ -300,6 +307,8 @@ def test_task_fails_fast_when_target_lock_is_busy(monkeypatch):
     import workers.tasks.carica_task as carica_task
 
     events: list[str] = []
+    monkeypatch.setattr(carica_task, "is_already_completed", lambda _run_id: False)
+    monkeypatch.setattr(carica_task, "_update_progress", lambda *args, **kwargs: None)
     lock_target = SimpleNamespace(key="carica:db:hash", kind="db")
     close_calls: list[dict[str, object]] = []
 

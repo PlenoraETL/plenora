@@ -14,6 +14,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from app.shared.contracts.payloads import JsonObject
+
 _SCALAR_PARAMETER_TYPES = frozenset({"string", "number", "boolean", "select"})
 _SCHEMA_AFFECTING_PARAMETER_IDS = frozenset(
     {
@@ -65,7 +67,7 @@ def _transform_registry() -> Mapping[str, Any]:
     return transforms if isinstance(transforms, Mapping) else {}
 
 
-def _node_data(node: Mapping[str, Any]) -> dict[str, Any]:
+def _node_data(node: Mapping[str, Any]) -> JsonObject:
     merged = dict(node)
     data = node.get("data")
     if isinstance(data, Mapping):

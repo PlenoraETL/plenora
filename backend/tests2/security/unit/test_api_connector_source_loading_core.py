@@ -35,6 +35,9 @@ def _make_service_no_singleton():
     il caller deve passare `ctx=ArricchisciExecutionContext(...)`
     per la tenant binding."""
     svc = ApiConnectionService.__new__(ApiConnectionService)
+    # Source freshness is a separate PostgreSQL-backed concern.  The tests in
+    # this module exercise tenant propagation and source-loader behavior.
+    svc._upstream_blob_is_stale = lambda *_args, **_kwargs: False
     return svc
 
 

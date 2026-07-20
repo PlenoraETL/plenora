@@ -59,7 +59,7 @@ class _Host(EnrichmentRetryHttpMixin):
         return data
 
 
-def test_per_row_validates_url_once_before_retry_loop(monkeypatch):
+def test_per_row_retains_executor_url_validation_across_retries(monkeypatch):
     host = _Host(options=EnrichmentOptions(max_retries=1, retry_on_status=[500]))
     validated_urls = []
     specs = []
@@ -90,7 +90,10 @@ def test_per_row_validates_url_once_before_retry_loop(monkeypatch):
     assert result == {"ok": True}
     assert validated_urls == ["https://api.example.com/q"]
     assert len(specs) == 2
-    assert all(spec.validate_url is False for spec in specs)
+    # La pre-validazione produce un errore di dominio prima del retry loop;
+    # l'executor deve comunque rivalidare e applicare il DNS pinning a ogni
+    # richiesta effettiva, incluse retry e redirect.
+    assert all(spec.validate_url is True for spec in specs)
 
 
 def test_per_row_request_config_reaches_request_spec(monkeypatch):

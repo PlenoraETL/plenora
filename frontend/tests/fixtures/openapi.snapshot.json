@@ -891,7 +891,7 @@
       "CancelTaskResponse": {
         "properties": {
           "status": {
-            "const": "cancelled",
+            "const": "cancellation_requested",
             "title": "Status",
             "type": "string"
           },
@@ -4981,6 +4981,17 @@
             ],
             "title": "Default Value"
           },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
           "dest_filename": {
             "anyOf": [
               {
@@ -6253,6 +6264,24 @@
         "title": "Node",
         "type": "object"
       },
+      "ObjectDeleteResponse": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deleted",
+          "key"
+        ],
+        "title": "ObjectDeleteResponse",
+        "type": "object"
+      },
       "OrderByConfig": {
         "description": "Configurazione di una colonna per ORDER BY.",
         "properties": {
@@ -6304,6 +6333,29 @@
           "y"
         ],
         "title": "Position",
+        "type": "object"
+      },
+      "PreviewDeleteResponse": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "deleted_count": {
+            "title": "Deleted Count",
+            "type": "integer"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deleted",
+          "deleted_count",
+          "scope"
+        ],
+        "title": "PreviewDeleteResponse",
         "type": "object"
       },
       "PreviewFormulaRequest": {
@@ -9213,18 +9265,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "boolean"
-                      }
-                    ]
-                  },
-                  "title": "Response Delete Object Api Admin Object Storage Delete",
-                  "type": "object"
+                  "$ref": "#/components/schemas/ObjectDeleteResponse"
                 }
               }
             },
@@ -9449,21 +9490,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "anyOf": [
-                      {
-                        "type": "integer"
-                      },
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "string"
-                      }
-                    ]
-                  },
-                  "title": "Response Delete All Previews Api Admin Object Storage Previews Delete",
-                  "type": "object"
+                  "$ref": "#/components/schemas/PreviewDeleteResponse"
                 }
               }
             },
@@ -12320,7 +12347,7 @@
     },
     "/api/eseguibili/{eseguibile_id}/download/{task_id}": {
       "get": {
-        "description": "Scarica il file di output prodotto da un'esecuzione dell'eseguibile.\n\nIl file vive in ESEGUIBILI_OUTPUTS_DIR/{task_id}/ ed e' stato creato dal task\nCelery (execute_enrichment_task con is_eseguibile=True). Dopo l'invio il file\nviene rimosso. Un celery beat periodico pulisce eventuali file orfani (> 2h).",
+        "description": "Scarica il file di output prodotto da un'esecuzione dell'eseguibile.\n\nL'output vive nell'object storage tenant-scoped. Viene eliminato solo dopo\nun trasferimento completo; download interrotti restano disponibili per un\nretry. La lifecycle S3 rimuove gli artifact effimeri rimasti oltre il TTL.",
         "operationId": "download_eseguibile_output_api_eseguibili__eseguibile_id__download__task_id__get",
         "parameters": [
           {
@@ -16986,7 +17013,7 @@
     },
     "/api/tasks/{task_id}/download": {
       "get": {
-        "description": "Scarica il file risultato di un task.\n\nPer i task degli eseguibili (is_eseguibile=True) l'output vive su\nobject storage (eseguibili-outputs/{task_id}/) — streamming S3 + cleanup\npost-send via background_task. Per tutti gli altri task il reader\n`get_result_data(result_id)` apre l'oggetto S3-compatible tramite la\nstorage_key della riga results.\nIn entrambi i casi il payload viene streammato al client.\n\nSECURITY: verifica ownership via project_id del task.",
+        "description": "Scarica il file risultato di un task.\n\nPer i task degli eseguibili (is_eseguibile=True) l'output vive su\nobject storage tenant-scoped: la response elimina l'output solo dopo un\ntrasferimento completo e lo conserva se il client si disconnette. Per\ntutti gli altri task il reader\n`get_result_data(result_id)` apre l'oggetto S3-compatible tramite la\nstorage_key della riga results.\nIn entrambi i casi il payload viene streammato al client.\n\nSECURITY: verifica ownership via project_id del task.",
         "operationId": "download_task_result_api_tasks__task_id__download_get",
         "parameters": [
           {
@@ -17032,7 +17059,7 @@
     },
     "/api/tasks/{task_id}/full-cleanup": {
       "delete": {
-        "description": "Cleanup completo di un task: elimina result file/blob, log entries e revoca\nil record Celery. Pensato per il ruolo \"esecutore\" che richiede privacy\nGDPR-style: dopo aver scaricato il risultato, l'esecutore (o la sua UI)\nchiama questo endpoint per rimuovere ogni traccia dell'esecuzione dal\nserver.\n\nSECURITY:\n  - Verifica che il project_id collegato al task appartenga al gruppo\n    dell'utente corrente. Cross-tenant → 403.\n  - Senza project_id non possiamo verificare ownership: 404.\n  - Idempotente: ripetere su stesso task non è un errore.\n\nSTATUS CODE:\n  - 204: tutti e 4 gli step cleanup (delete_result, unlink_output_file,\n    delete_log_runs, celery_forget) sono andati a buon fine.\n  - 207: almeno uno step ha sollevato. Body JSON con `failed_steps`\n    list espone al caller quali step non sono stati completati.\n    Gli step sono best-effort individualmente (uno che fallisce non\n    blocca gli altri), ma il caller deve poter sapere che il cleanup\n    non e' integrale — altrimenti il claim GDPR \"rimuovere ogni traccia\"\n    resta silenziosamente violato.",
+        "description": "Cleanup completo di un task: elimina result file/blob, log entries e revoca\nil record Celery. Pensato per il ruolo \"esecutore\" che richiede privacy\nGDPR-style: dopo aver scaricato il risultato, l'esecutore (o la sua UI)\nchiama questo endpoint per rimuovere ogni traccia dell'esecuzione dal\nserver.\n\nSECURITY:\n  - Verifica che il project_id collegato al task appartenga al gruppo\n    dell'utente corrente. Cross-tenant → 403.\n  - Senza project_id non possiamo verificare ownership: 404.\n  - Idempotente: ripetere su stesso task non è un errore.\n\nSTATUS CODE:\n  - 204: tutti gli step applicabili, incluso l'object storage degli\n    eseguibili, sono andati a buon fine.\n  - 207: almeno uno step ha sollevato. Body JSON con `failed_steps`\n    list espone al caller quali step non sono stati completati.\n    Gli step sono best-effort individualmente (uno che fallisce non\n    blocca gli altri), ma il caller deve poter sapere che il cleanup\n    non e' integrale — altrimenti il claim GDPR \"rimuovere ogni traccia\"\n    resta silenziosamente violato.",
         "operationId": "cleanup_task_completely_api_tasks__task_id__full_cleanup_delete",
         "parameters": [
           {
@@ -17050,7 +17077,7 @@
             "description": "Cleanup completato — tutti gli step ok"
           },
           "207": {
-            "description": "Cleanup parziale — almeno uno degli step ha fallito. Body: {status: 'partial', failed_steps: [step_name, ...]} dove step_name in {delete_result, unlink_output_file, delete_log_runs, celery_forget}."
+            "description": "Cleanup parziale — almeno uno degli step ha fallito. Body: {status: 'partial', failed_steps: [step_name, ...]} dove step_name in {delete_result, unlink_output_file, delete_eseguibile_outputs, delete_log_runs, celery_forget}."
           },
           "422": {
             "content": {

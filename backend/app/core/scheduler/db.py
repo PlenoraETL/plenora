@@ -124,20 +124,34 @@ def list_schedule_rows(
     limit: int | None = None,
     offset: int = 0,
 ) -> list[ScheduleRow]:
-    predicates = ["group_id = %s"]
     params: list[object] = [group_id]
     if project_id:
-        predicates.append("project_id = %s")
         params.append(project_id)
-    paging = ""
     if limit is not None:
-        paging = " LIMIT %s OFFSET %s"
         params.extend((limit, offset))
-    rows = fetchall(
-        f"SELECT * FROM schedules WHERE {' AND '.join(predicates)} "
-        f"ORDER BY updated_at DESC, id{paging}",
-        tuple(params),
-    )
+
+    if project_id and limit is not None:
+        query = (
+            "SELECT * FROM schedules WHERE group_id = %s AND project_id = %s "
+            "ORDER BY updated_at DESC, id LIMIT %s OFFSET %s"
+        )
+    elif project_id:
+        query = (
+            "SELECT * FROM schedules WHERE group_id = %s AND project_id = %s "
+            "ORDER BY updated_at DESC, id"
+        )
+    elif limit is not None:
+        query = (
+            "SELECT * FROM schedules WHERE group_id = %s "
+            "ORDER BY updated_at DESC, id LIMIT %s OFFSET %s"
+        )
+    else:
+        query = (
+            "SELECT * FROM schedules WHERE group_id = %s "
+            "ORDER BY updated_at DESC, id"
+        )
+
+    rows = fetchall(query, tuple(params))
     return _schedule_rows(rows)
 
 

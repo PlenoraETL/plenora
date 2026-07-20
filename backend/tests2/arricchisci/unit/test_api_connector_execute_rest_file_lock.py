@@ -121,6 +121,10 @@ def rf_env(api_service, tmp_path):
                 "app.core.arricchisci.http_executor.get_shared_session",
                 return_value=session,
             ),
+            executor_ssrf=_p(
+                "app.core.arricchisci.http_executor.validate_external_url",
+                return_value=None,
+            ),
             requests_post=session.post,
         )
         # Default response: 200, bytes validi

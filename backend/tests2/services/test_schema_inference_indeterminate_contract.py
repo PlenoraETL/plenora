@@ -22,6 +22,7 @@ def _node(node_id, ntype, **data):
     n.data = data.get("data", {}) or {}
     n.columns = data.get("columns", []) or []
     n.calculated_columns = data.get("calculated_columns", []) or []
+    n.position = {"y": data.get("position_y", 0)}
     n.source_project_id = data.get("source_project_id")
     n.file_source_id = data.get("file_source_id")
     n.transform_op = data.get("transform_op")

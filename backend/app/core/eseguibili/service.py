@@ -19,6 +19,7 @@ from app.core.dataframes import tabular as dataframe_tabular
 from app.core.projects import access_context as project_access_context
 from app.core.files import db as files_db
 from app.core.files.service import file_source_service
+from app.shared.contracts.payloads import JsonObject
 
 from . import db as eseguibili_db
 from .models import (
@@ -343,6 +344,41 @@ def get_eseguibile_group_id(eseguibile_id: str) -> str:
     """
     row = eseguibili_db.get_eseguibile(eseguibile_id)
     return (row.get("group_id") or "") if row else ""
+
+
+def get_eseguibile_for_access_check(
+    eseguibile_id: str,
+) -> Optional[eseguibili_db.EseguibileRow]:
+    """Expose the executable ownership record through the domain service."""
+    return eseguibili_db.get_eseguibile(eseguibile_id)
+
+
+def complete_eseguibile_run(
+    run_id: str,
+    *,
+    success: bool,
+    output_metadata: JsonObject | None = None,
+    error_message: str | None = None,
+) -> None:
+    """Close an executable run through the public domain boundary."""
+    eseguibili_db.complete_eseguibile_run(
+        run_id,
+        success=success,
+        output_metadata=output_metadata,
+        error_message=error_message,
+    )
+
+
+def cancel_eseguibile_run(
+    run_id: str,
+    *,
+    error_message: str = "Task annullato",
+) -> None:
+    """Cancel an executable run through the public domain boundary."""
+    eseguibili_db.cancel_eseguibile_run(
+        run_id,
+        error_message=error_message,
+    )
 
 
 # EXECUTE — sostituisce sorgente nel canvas e lancia task

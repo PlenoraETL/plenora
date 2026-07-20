@@ -85,8 +85,13 @@ La mappa completa degli shim di compatibilita' (Fase 6) e' in
 | `tickets -> security` | upload-size guard sugli allegati | Intenzionale: support domain verso foundation |
 | `admin_object_storage -> auth` | explorer read-only riservato ai superadmin | Intenzionale: RBAC al boundary HTTP |
 | `admin_object_storage -> io` | catalogo paginato e download streaming del bucket runtime | Intenzionale: support domain verso foundation con out-degree 0 |
+| `admin_object_storage -> projects` / `results` | catalogo operativo correla oggetti runtime con metadati progetto e risultati | Estrarre una read-model port se il catalogo cresce oltre l'ispezione admin |
+| `admin_task_runtime -> auth` / `task_runtime` | endpoint admin protetto espone le lease del runtime task | Intenzionale: adapter operativo read-only sul dominio runtime |
+| `datasources -> security` | upload datasource applica il limite centralizzato | Intenzionale: `security` e' una policy foundation |
+| `io -> resources` | bounded range reader usa l'errore canonico di limite memoria | Spostare l'eccezione in shared quando si separa il ciclo `io/resources` |
+| `projects -> manipola` | schema inference riusa l'ordinamento deterministico degli input transform | Estrarre l'helper di ordering in shared execution per spezzare il ciclo |
 
-## Stato misurato (baseline 2026-07-14, object-storage-only + dispatch outbox)
+## Stato misurato (baseline 2026-07-20)
 
 - **SCC maggiore: 16 domini** — con B4 (`Column` in
   `app.shared.execution.canvas_column` + schema inference iniettata dai
@@ -94,13 +99,11 @@ La mappa completa degli shim di compatibilita' (Fase 6) e' in
   e **`output_contract` esce dal ciclo** (secondo dominio liberato dopo
   `dataframes`). Guardia dedicata:
   `test_canvas_column_shared_contract.py`.
-- **32 domini**, **143 edge cross-domain**. Il nuovo dominio
-  `admin_object_storage` aggiunge esclusivamente gli edge intenzionali verso
-  `auth` e `io`, resta fuori dalle SCC e non introduce cicli. I quattro edge aggiunti rispetto
-  alla vecchia baseline sono documentati sopra e coprono preview streaming,
-  task lifecycle e allegati ticket; tre puntano a foundation con out-degree 0.
-  Il maggiore SCC resta invariato a 16 domini.
-  `auth` scende da out-degree 7 a 5.
+- **33 domini**, **149 edge cross-domain**. `admin_task_runtime` resta fuori
+  dalle SCC; `admin_object_storage` espone anche la read model progetti/risultati.
+  Il maggiore SCC sale a **17 domini** per `projects -> manipola`, mentre
+  `io -> resources` crea una SCC separata di 2 domini. Entrambi i percorsi di
+  rimozione sono registrati nella tabella sopra. `auth` resta a out-degree 5.
 
 ### Snapshot precedente (post Epic E)
 

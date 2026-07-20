@@ -151,7 +151,7 @@ def test_pipeline_setup_failure_closes_log_run_and_worker_connection(monkeypatch
 
 
 def test_pipeline_revocation_before_run_closes_executable_and_temp_inputs(monkeypatch):
-    from app.core.eseguibili import db as eseguibili_db
+    from app.core.eseguibili import service as eseguibili_service
     from app.core.files.service import file_source_service
     from workers.tasks import pipeline_task as task
 
@@ -172,7 +172,7 @@ def test_pipeline_revocation_before_run_closes_executable_and_temp_inputs(monkey
         lambda *_args, **_kwargs: (_ for _ in ()).throw(TaskRevoked("task-1")),
     )
     monkeypatch.setattr(
-        eseguibili_db,
+        eseguibili_service,
         "cancel_eseguibile_run",
         lambda run_id, **kwargs: executable_closes.append((run_id, kwargs)),
     )

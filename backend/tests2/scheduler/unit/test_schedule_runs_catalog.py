@@ -24,6 +24,15 @@ pytestmark = [
 ]
 
 
+@pytest.fixture(autouse=True)
+def _disable_result_row_lookup(monkeypatch):
+    """Catalog ordering tests do not require result blob metadata."""
+    monkeypatch.setattr(
+        "app.core.results.store.get_result_row",
+        lambda _result_id: None,
+    )
+
+
 # _schedule_short: convenzione folder/URL token
 
 
