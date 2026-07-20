@@ -201,6 +201,24 @@ def test_pipeline_worker_preserves_contract_schema_extensions():
     }
 
 
+def test_pipeline_worker_rejects_contract_without_tenant():
+    from workers.tasks.pipeline_task import _normalize_execution_contract
+
+    with pytest.raises(
+        ValueError,
+        match="execution_contract.group_id is required",
+    ):
+        _normalize_execution_contract(
+            {
+                "schema_version": 1,
+                "project_id": "project-1",
+                "project_type": "manipola",
+                "canvas": {"nodes": [], "edges": []},
+            },
+            expected_project_id="project-1",
+        )
+
+
 def test_scheduler_pipeline_path_uses_execution_contract_boundary():
     from pathlib import Path
 

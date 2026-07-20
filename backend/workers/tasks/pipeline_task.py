@@ -136,13 +136,16 @@ def _normalize_execution_contract(
         raise ValueError("execution_contract.project_type is required")
     if not isinstance(canvas, _Mapping):
         raise ValueError("execution_contract.canvas is required")
+    group_id = str(raw_contract.get("group_id") or "").strip()
+    if not group_id:
+        raise ValueError("execution_contract.group_id is required")
 
     contract: JsonObject = {
         "schema_version": raw_contract.get("schema_version", 1),
         "project_id": project_id,
         "project_type": project_type,
         "canvas": dict(canvas),
-        "group_id": str(raw_contract.get("group_id") or ""),
+        "group_id": group_id,
         "artifact_refs": raw_contract.get("artifact_refs") or {},
     }
     output_contract = raw_contract.get("output_contract")
@@ -489,6 +492,11 @@ def execute_pipeline_task(
         _update_progress(self, 10, "Esecuzione pipeline...")
         if contract is not None:
             execution_context = dict(contract.get("runtime_context") or {})
+            # Il tenant del contratto e' il binding canonico deciso dal control
+            # plane. Non puo' essere omesso o sovrascritto da runtime_context:
+            # i due casi farebbero eseguire MANIPOLA/ESTRAI senza ownership
+            # determinabile oppure nel namespace storage sbagliato.
+            execution_context["group_id"] = group_id
             if subject is not None:
                 # Runtime-only binding: the stable queue task id determines
                 # the executable object prefix. It is not trusted from the
