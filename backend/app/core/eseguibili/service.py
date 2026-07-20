@@ -17,6 +17,7 @@ from app.utils.logger import get_logger
 from app.core.dataframes import frame_io as dataframe_frame_io
 from app.core.dataframes import tabular as dataframe_tabular
 from app.core.projects import access_context as project_access_context
+from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.files import db as files_db
 from app.core.files.service import file_source_service
 from app.shared.contracts.payloads import JsonObject
@@ -743,33 +744,32 @@ def execute_versioned(
                 task_id=reserved_task_id,
             )
         else:
-            execution_contract = {
-                "schema_version": 2,
-                "project_id": eseguibile.id,
-                "project_type": manifest.project_type,
-                "group_id": eseguibile.group_id,
-                "canvas": canvas,
-                "artifact_refs": {},
-                "execution_subject": {
+            execution_contract = PipelineExecutionContract(
+                schema_version=2,
+                project_id=eseguibile.id,
+                project_type=manifest.project_type,
+                group_id=eseguibile.group_id,
+                canvas=canvas,
+                artifact_refs={},
+                execution_subject={
                     "kind": "eseguibile",
                     "id": eseguibile.id,
                     "version_id": version.id,
                     "run_id": run_id,
                 },
-                "runtime_context": {
-                    "group_id": eseguibile.group_id,
+                runtime_context={
                     "default_connection_id": manifest.default_connection_id,
                     "cleanup_file_source_ids": cleanup_ids,
                     "output_format": final_format,
                     "output_name": base_name,
                 },
-            }
+            )
             task_info = task_service.create_pipeline_task(
                 project_id=eseguibile.id,
                 force_recalculate=True,
                 triggered_by="eseguibile",
                 user_id=user_id,
-                execution_contract=execution_contract,
+                execution_contract=execution_contract.to_payload(),
                 task_id=reserved_task_id,
             )
         if task_info.task_id != reserved_task_id:

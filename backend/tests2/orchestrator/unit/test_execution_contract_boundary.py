@@ -76,7 +76,7 @@ def test_build_pipeline_execution_contract_is_self_contained():
         project_service=_ProjectService(),
     )
 
-    assert contract == {
+    assert contract.to_payload() == {
         "schema_version": 1,
         "project_id": "project-1",
         "project_type": "manipola",
@@ -177,7 +177,7 @@ def test_pipeline_worker_preserves_contract_schema_extensions():
         expected_project_id="project-1",
     )
 
-    assert normalized == {
+    assert normalized.to_payload() == {
         "schema_version": 1,
         "project_id": "project-1",
         "project_type": "manipola",
@@ -217,6 +217,113 @@ def test_pipeline_worker_rejects_contract_without_tenant():
             },
             expected_project_id="project-1",
         )
+
+
+def test_pipeline_contract_rejects_divergent_runtime_tenant():
+    from app.core.orchestrator.execution_contract import (
+        PipelineExecutionContract,
+    )
+
+    with pytest.raises(ValueError, match="conflicts with group_id"):
+        PipelineExecutionContract.from_payload(
+            {
+                "project_id": "project-1",
+                "project_type": "manipola",
+                "group_id": "group-1",
+                "canvas": {"nodes": [], "edges": []},
+                "runtime_context": {"group_id": "group-2"},
+            }
+        )
+
+
+def test_pipeline_contract_migrates_equal_legacy_runtime_tenant():
+    from app.core.orchestrator.execution_contract import (
+        PipelineExecutionContract,
+    )
+
+    contract = PipelineExecutionContract.from_payload(
+        {
+            "project_id": "project-1",
+            "project_type": "manipola",
+            "group_id": "group-1",
+            "canvas": {"nodes": [], "edges": []},
+            "runtime_context": {
+                "group_id": "group-1",
+                "output_format": "xlsx",
+            },
+        }
+    )
+
+    assert "group_id" not in contract.runtime_context
+    assert contract.build_runtime_context() == {
+        "group_id": "group-1",
+        "output_format": "xlsx",
+    }
+
+
+def test_pipeline_contract_roundtrip_keeps_tenant_through_executor():
+    """API build -> queue payload -> worker parse -> MANIPOLA context."""
+    from unittest.mock import MagicMock
+
+    from app.core.orchestrator.execution_contract import (
+        build_pipeline_execution_contract,
+    )
+    from app.core.orchestrator.service import OrchestratorService
+    from app.shared.execution.executor_protocol import ExecutionResult
+    from workers.tasks.pipeline_task import _normalize_execution_contract
+
+    class _RoundTripProjectService(_ProjectService):
+        def get_project_canvas(self, project_id: str):
+            assert project_id == "project-1"
+            return SimpleNamespace(
+                model_dump=lambda: {"nodes": [], "edges": []},
+            )
+
+    built = build_pipeline_execution_contract(
+        project_id="project-1",
+        project_service=_RoundTripProjectService(),
+    )
+    payload = built.to_payload()
+    assert payload["group_id"] == "group-1"
+    assert "group_id" not in payload.get("runtime_context", {})
+
+    parsed = _normalize_execution_contract(
+        payload,
+        expected_project_id="project-1",
+    )
+    class _Executor:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def execute(self, *args, **kwargs):
+            self.calls.append((args, kwargs))
+            return ExecutionResult(success=True, payload={"rows_count": 1})
+
+        def preview(self, *args, **kwargs):
+            return {"success": True, "rows": []}
+
+    manipola_executor = _Executor()
+    other_executor = _Executor()
+    project_service = MagicMock()
+    orchestrator = OrchestratorService(
+        project_service=project_service,
+        executor=MagicMock(),
+        generator=MagicMock(),
+        connection_service=MagicMock(),
+        estrai_executor=other_executor,
+        manipola_executor=manipola_executor,
+        enrich_executor=other_executor,
+    )
+    orchestrator._execute_carica_if_present = MagicMock(return_value=None)
+
+    result = orchestrator.execute_pipeline_from_contract(contract=parsed)
+
+    assert result.success is True
+    assert manipola_executor.calls[0][1]["execution_context"] == {
+        "group_id": "group-1",
+    }
+    project_service.get_project_metadata.assert_not_called()
+    project_service.get_project_canvas.assert_not_called()
 
 
 def test_scheduler_pipeline_path_uses_execution_contract_boundary():

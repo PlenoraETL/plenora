@@ -17,6 +17,7 @@ from app.core.projects.canvas_models import CanvasState
 from app.core.resources import memory_guard
 from app.core.query_execution.query_executor import QueryExecutor
 from app.core.query_execution.query_streaming import execute_streaming_to_writer
+from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.shared import error_codes
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution.executor_protocol import CanvasExecutorProtocol, ExecutionResult
@@ -157,15 +158,13 @@ class OrchestratorService:
 
     def execute_pipeline_from_contract(
         self,
-        project_id: str,
-        project_type: str,
-        canvas: CanvasState | Mapping[str, Any],
+        contract: PipelineExecutionContract,
         force_recalculate: bool = False,
         skip_carica: bool = False,
         run_id: str = None,
         user_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
-        execution_context: Optional[Mapping[str, Any]] = None,
+        output_task_id: Optional[str] = None,
     ) -> PipelineArtifact:
         """Execute a data-plane contract supplied by the control plane.
 
@@ -175,21 +174,23 @@ class OrchestratorService:
         runs the Python data engine only.
         """
         logger.info(
-            f"Esecuzione pipeline da contract: {project_id}",
+            f"Esecuzione pipeline da contract: {contract.project_id}",
             op="execute",
-            project_id=project_id,
+            project_id=contract.project_id,
         )
         self._check_pipeline_memory()
         return self._execute_loaded_pipeline(
-            project_id=project_id,
-            project_type=project_type,
-            canvas=self._coerce_canvas(canvas),
+            project_id=contract.project_id,
+            project_type=contract.project_type,
+            canvas=self._coerce_canvas(contract.canvas),
             force_recalculate=force_recalculate,
             skip_carica=skip_carica,
             run_id=run_id,
             user_id=user_id,
             intermediate_mode_override=intermediate_mode_override,
-            execution_context=execution_context,
+            execution_context=contract.build_runtime_context(
+                output_task_id=output_task_id,
+            ),
         )
 
     def execute_pipeline(self, project_id: str, force_recalculate: bool = False, skip_carica: bool = False, run_id: str = None, user_id: Optional[str] = None, intermediate_mode_override: Optional[str] = None) -> PipelineArtifact:

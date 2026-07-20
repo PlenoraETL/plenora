@@ -406,9 +406,7 @@ class ExecutionManager:
             )
 
             result = orchestrator.execute_pipeline_from_contract(
-                project_id=project_id,
-                project_type=str(execution_contract["project_type"]),
-                canvas=execution_contract["canvas"],
+                contract=execution_contract,
                 force_recalculate=force_recalculate,
                 skip_carica=True,  # Lo scheduler gestisce CARICA separatamente
                 run_id=run_id,

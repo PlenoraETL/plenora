@@ -256,14 +256,16 @@ def test_executable_pipeline_skips_project_runs_and_carica(monkeypatch):
                 "id": "exec_1",
                 "run_id": "erun_1",
             },
-            # Il runtime context non e' autorevole per il tenant. Un valore
-            # divergente deve essere sostituito dal group_id del contratto.
-            "runtime_context": {"group_id": "forged-group"},
+            # Compatibilita' con task gia' in coda: il duplicato uguale viene
+            # rimosso dal contratto tipizzato.
+            "runtime_context": {"group_id": "group-1"},
         },
     )
 
     call = orchestrator.execute_pipeline_from_contract.call_args
     assert call.kwargs["skip_carica"] is True
     assert call.kwargs["run_id"] is None
-    assert call.kwargs["execution_context"]["group_id"] == "group-1"
+    assert call.kwargs["contract"].group_id == "group-1"
+    assert "group_id" not in call.kwargs["contract"].runtime_context
+    assert call.kwargs["output_task_id"] == "task-1"
     assert result["is_eseguibile"] is True

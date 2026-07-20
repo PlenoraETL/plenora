@@ -2,6 +2,7 @@ from io import BytesIO
 
 import pytest
 
+from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from workers.tasks import pipeline_task
 
 
@@ -32,9 +33,13 @@ def test_persist_executable_output_accepts_chunk_iterator(monkeypatch):
     monkeypatch.setattr("app.core.eseguibili.storage.save_chunks", save_chunks)
 
     result = pipeline_task._persist_executable_output(
-        contract={
-            "execution_subject": {"kind": "eseguibile", "id": "executable-1"}
-        },
+        contract=PipelineExecutionContract(
+            project_id="executable-1",
+            project_type="estrai",
+            group_id="group-1",
+            canvas={"nodes": [], "edges": []},
+            execution_subject={"kind": "eseguibile", "id": "executable-1"},
+        ),
         result={"result_id": "result-1"},
         task_id="task-1",
         group_id="group-1",

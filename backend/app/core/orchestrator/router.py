@@ -211,7 +211,7 @@ def execute_project_pipeline(
             force_recalculate=force_recalculate,
             user_id=current_user.user_id,
             intermediate_mode_override=intermediate_mode,
-            execution_contract=execution_contract,
+            execution_contract=execution_contract.to_payload(),
         )
         result = dict(_task_info_to_dict(task_info))
         result["async"] = True

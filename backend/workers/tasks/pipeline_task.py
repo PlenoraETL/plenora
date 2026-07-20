@@ -20,6 +20,7 @@ from app.core.intermediate import run_idempotency as run_idempotency_module
 from app.core.intermediate import run_lifecycle as run_lifecycle_module
 from app.core.projects import retention as project_retention
 from app.core.projects import runtime_context as project_runtime_context
+from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.orchestrator.task_progress import TaskRevoked, report_task_progress
 from app.utils import debug_payload_builder as debug_payload_builder_module
 
@@ -119,64 +120,31 @@ def _normalize_execution_contract(
     raw_contract: Any,
     *,
     expected_project_id: str,
-) -> JsonObject | None:
+) -> PipelineExecutionContract | None:
     """Validate the optional control-plane to data-plane execution contract."""
     if raw_contract is None:
         return None
-    if not isinstance(raw_contract, _Mapping):
-        raise ValueError("execution_contract must be a JSON object")
-
-    project_id = str(raw_contract.get("project_id") or expected_project_id)
-    if project_id != expected_project_id:
-        raise ValueError("execution_contract project_id mismatch")
-
-    project_type = raw_contract.get("project_type")
-    canvas = raw_contract.get("canvas")
-    if not isinstance(project_type, str) or not project_type:
-        raise ValueError("execution_contract.project_type is required")
-    if not isinstance(canvas, _Mapping):
-        raise ValueError("execution_contract.canvas is required")
-    group_id = str(raw_contract.get("group_id") or "").strip()
-    if not group_id:
-        raise ValueError("execution_contract.group_id is required")
-
-    contract: JsonObject = {
-        "schema_version": raw_contract.get("schema_version", 1),
-        "project_id": project_id,
-        "project_type": project_type,
-        "canvas": dict(canvas),
-        "group_id": group_id,
-        "artifact_refs": raw_contract.get("artifact_refs") or {},
-    }
-    output_contract = raw_contract.get("output_contract")
-    if isinstance(output_contract, _Mapping):
-        contract["output_contract"] = dict(output_contract)
-    retention_n = raw_contract.get("retention_n")
-    if retention_n is not None:
-        contract["retention_n"] = retention_n
-    execution_subject = raw_contract.get("execution_subject")
-    if isinstance(execution_subject, _Mapping):
-        contract["execution_subject"] = dict(execution_subject)
-    runtime_context = raw_contract.get("runtime_context")
-    if isinstance(runtime_context, _Mapping):
-        contract["runtime_context"] = dict(runtime_context)
-    return contract
+    return PipelineExecutionContract.from_payload(
+        raw_contract,
+        expected_project_id=expected_project_id,
+    )
 
 
-def _executable_subject(contract: JsonObject | None) -> JsonObject | None:
+def _executable_subject(
+    contract: PipelineExecutionContract | None,
+) -> JsonObject | None:
     if not contract:
         return None
-    subject = contract.get("execution_subject")
-    if isinstance(subject, _Mapping) and subject.get("kind") == "eseguibile":
-        return dict(subject)
-    return None
+    return contract.executable_subject
 
 
-def _cleanup_executable_inputs(contract: JsonObject | None) -> None:
+def _cleanup_executable_inputs(
+    contract: PipelineExecutionContract | None,
+) -> None:
     if _executable_subject(contract) is None:
         return
-    context = contract.get("runtime_context") or {}
-    ids = context.get("cleanup_file_source_ids") if isinstance(context, _Mapping) else []
+    context = contract.runtime_context
+    ids = context.get("cleanup_file_source_ids")
     if not isinstance(ids, list):
         return
     from app.core.files.service import file_source_service
@@ -246,7 +214,7 @@ def _iter_executable_output_chunks(
 
 def _persist_executable_output(
     *,
-    contract: JsonObject,
+    contract: PipelineExecutionContract,
     result: Any,
     task_id: str,
     group_id: str,
@@ -433,12 +401,22 @@ def execute_pipeline_task(
         _close_worker_connection(stage="post-idempotency")
         return result
 
-    project_info = (
-        contract if contract is not None else _get_project_info(project_id)
+    project_info = _get_project_info(project_id) if contract is None else None
+    group_id = (
+        contract.group_id
+        if contract is not None
+        else str((project_info or {}).get("group_id") or "")
     )
-    group_id = project_info.get("group_id", "")
-    module   = project_info.get("project_type", "")
-    retention_n = project_info.get("retention_n")
+    module = (
+        contract.project_type
+        if contract is not None
+        else str((project_info or {}).get("project_type") or "")
+    )
+    retention_n = (
+        contract.retention_n
+        if contract is not None
+        else (project_info or {}).get("retention_n")
+    )
     if retention_n is None and subject is None:
         retention_n = _resolve_intermediate_retention_n(project_id)
 
@@ -491,27 +469,14 @@ def execute_pipeline_task(
 
         _update_progress(self, 10, "Esecuzione pipeline...")
         if contract is not None:
-            execution_context = dict(contract.get("runtime_context") or {})
-            # Il tenant del contratto e' il binding canonico deciso dal control
-            # plane. Non puo' essere omesso o sovrascritto da runtime_context:
-            # i due casi farebbero eseguire MANIPOLA/ESTRAI senza ownership
-            # determinabile oppure nel namespace storage sbagliato.
-            execution_context["group_id"] = group_id
-            if subject is not None:
-                # Runtime-only binding: the stable queue task id determines
-                # the executable object prefix. It is not trusted from the
-                # serialized execution contract.
-                execution_context["output_task_id"] = task_id
             result = orchestrator.execute_pipeline_from_contract(
-                project_id=project_id,
-                project_type=str(contract["project_type"]),
-                canvas=contract["canvas"],
+                contract=contract,
                 force_recalculate=force_recalculate,
                 skip_carica=subject is not None,
                 run_id=executor_run_id,
                 user_id=user_id,
                 intermediate_mode_override=intermediate_mode_override,
-                execution_context=execution_context,
+                output_task_id=task_id if subject is not None else None,
             )
         else:
             result = orchestrator.execute_pipeline(

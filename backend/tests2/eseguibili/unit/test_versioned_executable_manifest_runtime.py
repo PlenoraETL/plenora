@@ -666,5 +666,7 @@ def test_versioned_execution_dispatches_all_publishable_project_types(
         contract = pipeline_calls[0]["execution_contract"]
         assert contract["project_type"] == project_type
         assert contract["execution_subject"]["version_id"] == version.id
+        assert contract["group_id"] == executable.group_id
+        assert "group_id" not in contract.get("runtime_context", {})
         assert result.task_id == pipeline_calls[0]["task_id"]
     assert bound == [("run-1", result.task_id)]

@@ -97,6 +97,7 @@ def test_orchestrator_executes_control_plane_contract_without_project_lookup(
     monkeypatch,
 ) -> None:
     from app.core.projects.canvas_models import CanvasState
+    from app.core.orchestrator.execution_contract import PipelineExecutionContract
     from app.core.orchestrator.service import OrchestratorService
 
     project_service = MagicMock()
@@ -120,11 +121,14 @@ def test_orchestrator_executes_control_plane_contract_without_project_lookup(
     svc._execute_carica_if_present = MagicMock(return_value=None)
 
     artifact = svc.execute_pipeline_from_contract(
-        project_id="proj-contract",
-        project_type="estrai",
-        canvas={"nodes": [], "edges": []},
+        contract=PipelineExecutionContract(
+            project_id="proj-contract",
+            project_type="estrai",
+            group_id="group-contract",
+            canvas={"nodes": [], "edges": []},
+            runtime_context={"input_bindings": {"source": "runtime-file-1"}},
+        ),
         run_id="run-contract",
-        execution_context={"input_bindings": {"source": "runtime-file-1"}},
     )
 
     assert artifact.success is True
@@ -133,7 +137,8 @@ def test_orchestrator_executes_control_plane_contract_without_project_lookup(
     assert isinstance(args[1], CanvasState)
     assert kwargs["run_id"] == "run-contract"
     assert kwargs["execution_context"] == {
-        "input_bindings": {"source": "runtime-file-1"}
+        "input_bindings": {"source": "runtime-file-1"},
+        "group_id": "group-contract",
     }
     project_service.get_project_metadata.assert_not_called()
     project_service.get_project_canvas.assert_not_called()
