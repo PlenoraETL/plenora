@@ -324,7 +324,9 @@ Responsabilita: governa catalogo e lancio di eseguibili registrati a partire da 
 | `router.py` | `_check_group_access`, `_check_visible`, `list_eseguibili`, `create_eseguibile`, `get_eseguibile`, `update_eseguibile`, `delete_eseguibile` | contratto API eseguibili |
 | `service.py` | `create_from_project`, `analyze_file_upload`, `execute` | creazione, analisi input, esecuzione |
 | `scanner.py` | `extract_expected_columns`, `_expand_mapping_columns` | colonne attese dal canvas |
-| `storage.py` | `save_bytes`, `save`, `find_keys`, `open_stream`, `delete_by_task` | storage isolato per task |
+| `storage.py` | `save_bytes`, `save`, `find_keys`, `open_stream`, `delete_by_task` | trasporto e lifecycle tag degli output task-scoped |
+| `output_store.py` | `save_task_owner`, `select_output_key`, `delete_task_outputs` | ownership, selezione univoca e cleanup consume-once |
+| `download_response.py` | `build_consume_once_response` | lease cross-host, streaming completo e cleanup post-EOF |
 | `db.py` | `create_eseguibile`, `get_eseguibile`, `list_eseguibili`, `update_eseguibile`, `delete_eseguibile`, `list_eseguibili_by_source` | persistenza catalogo |
 | `models.py` | `ExpectedColumn`, `EseguibileCreate`, `EseguibileUpdate`, `EseguibileSummary`, `EseguibileDetails`, `ColumnMappingEntry`, `ExecuteRequest`, `AnalyzeUploadResponse` | contratti |
 

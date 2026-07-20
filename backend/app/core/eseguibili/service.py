@@ -30,7 +30,6 @@ from .models import (
     EseguibileExecutionResult,
 )
 from .runtime import resolve_runtime_inputs
-from .scanner import extract_expected_columns
 from .manifest import compile_manifest
 
 logger = get_logger(__name__)

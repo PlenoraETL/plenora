@@ -86,10 +86,22 @@ _CALLSITE_CLASSIFICATION: dict[str, tuple[Classification, str]] = {
     ),
     "app/core/eseguibili/storage.py": (
         "intentionally_excluded",
-        "Task-bound output. Lifecycle managed by eager "
-        "delete_by_task post-download + S3 lifecycle on "
-        "`eseguibili-outputs/` prefix (7-day TTL). The task_id "
+        "Task-bound output. Lifecycle managed by completion-aware "
+        "delete_task_outputs after download plus the explicit "
+        "`plenora-retention=ephemeral` S3 tag (7-day TTL). The task_id "
         "IS the lifecycle key - no DB-row pairing required.",
+    ),
+    "app/core/admin_object_storage/router.py": (
+        "intentionally_excluded",
+        "Superadmin-only emergency delete of one validated runtime key. "
+        "The endpoint documents that domain metadata is not cascaded; normal "
+        "retention/reconciliation remains responsible for dangling metadata.",
+    ),
+    "app/core/admin_object_storage/service.py": (
+        "intentionally_excluded",
+        "Superadmin preview purge. It scans an explicitly selected canonical "
+        "tenant scope or legacy preview prefix and deletes only parsed preview "
+        "keys; this is an operator retention action, not a create/DB race.",
     ),
     "app/core/resources/blob_dispatch.py": (
         "tracked",

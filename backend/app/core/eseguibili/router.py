@@ -5,10 +5,9 @@ Endpoint:
 """
 
 import json as _json
-from uuid import uuid4
 
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks, Query
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query
 from typing import Annotated, List, Mapping, Optional
 
 from app.core.auth.dependencies import (
@@ -31,18 +30,13 @@ from app.core.auth.visibility import visible_resource_ids
 from app.shared.error_sanitizer import sanitize_http_detail
 from app.core.security.upload_guards import enforce_upload_size_limit
 from app.core.io.bounded_streams import read_prefix
-from app.core.io.http_streaming import (
-    CloseableStreamingResponse,
-    CompletionTrackingIterator,
-    safe_download_filename,
-)
 from app.core.orchestrator.task_service import task_service as _task_service
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 
 from . import db as eseguibili_db
 from . import output_store as _output_store
-from . import download_claim_store as _download_claim_store
+from .download_response import build_consume_once_response
 from . import service as eseguibili_service
 from .models import (
     EseguibileCreate, EseguibileUpdate, EseguibileSummary, EseguibileDetails,
@@ -722,14 +716,13 @@ def create_eseguibile_run(
 def download_eseguibile_output(
     eseguibile_id: str,
     task_id: str,
-    background_tasks: BackgroundTasks,
     current_user: CurrentUser = Depends(get_current_user),
 ):
     """Scarica il file di output prodotto da un'esecuzione dell'eseguibile.
 
-    Il file vive in ESEGUIBILI_OUTPUTS_DIR/{task_id}/ ed e' stato creato dal task
-    Celery (execute_enrichment_task con is_eseguibile=True). Dopo l'invio il file
-    viene rimosso. Un celery beat periodico pulisce eventuali file orfani (> 2h).
+    L'output vive nell'object storage tenant-scoped. Viene eliminato solo dopo
+    un trasferimento completo; download interrotti restano disponibili per un
+    retry. La lifecycle S3 rimuove gli artifact effimeri rimasti oltre il TTL.
     """
     record = eseguibili_db.get_eseguibile(eseguibile_id)
     _check_visible(record, current_user)
@@ -793,106 +786,12 @@ def download_eseguibile_output(
             status_code=409,
             detail="Output ambiguo; cleanup manuale richiesto",
         ) from exc
-    filename = safe_download_filename(key, fallback="output.bin")
-
-    claim_token = uuid4().hex
-    try:
-        claimed = _download_claim_store.try_acquire(
-            task_id=safe_task_id,
-            group_id=owner_group_id,
-            owner_token=claim_token,
-        )
-    except Exception as e:
-        logger.error(
-            "Claim download eseguibile fallito task_id=%s: %s",
-            safe_task_id,
-            e,
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=503,
-            detail="Download temporaneamente non disponibile",
-        ) from e
-    if not claimed:
-        raise HTTPException(status_code=409, detail="Output gia' in download")
-
-    try:
-        stream = _output_store.open_stream(
-            key, expected_group_id=owner_group_id,
-        )
-    except Exception as e:
-        try:
-            _download_claim_store.release(
-                task_id=safe_task_id,
-                group_id=owner_group_id,
-                owner_token=claim_token,
-            )
-        except Exception:
-            logger.warning(
-                "Release claim dopo open_stream fallito task_id=%s",
-                safe_task_id,
-                exc_info=True,
-            )
-        logger.error(f"[CRASH] open_stream eseguibile {key}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Errore apertura stream output")
-
-    size = int(stream.get("size") or 0)
-
-    def _refresh_download_claim(_bytes_yielded: int) -> None:
-        if not _download_claim_store.refresh(
-            task_id=safe_task_id,
-            group_id=owner_group_id,
-            owner_token=claim_token,
-        ):
-            raise RuntimeError("Lease download eseguibile persa")
-
-    tracked_body = CompletionTrackingIterator(
-        stream["body"],
-        expected_size=size or None,
-        on_progress=_refresh_download_claim,
-    )
-
-    def _cleanup_after_send():
-        try:
-            if tracked_body.completed:
-                _output_store.delete_task_outputs(
-                    safe_task_id,
-                    group_id=owner_group_id,
-                    retain_owner=True,
-                )
-            else:
-                logger.info(
-                    "Download incompleto: output conservato task_id=%s bytes=%s",
-                    safe_task_id,
-                    tracked_body.bytes_yielded,
-                )
-        except Exception as e:
-            logger.warning(f"Cleanup storage post-download fallito per {safe_task_id}: {e}")
-        finally:
-            try:
-                _download_claim_store.release(
-                    task_id=safe_task_id,
-                    group_id=owner_group_id,
-                    owner_token=claim_token,
-                )
-            except Exception:
-                logger.warning(
-                    "Release claim download fallito task_id=%s",
-                    safe_task_id,
-                    exc_info=True,
-                )
-    headers = {
-        "Cache-Control": "no-store, no-cache, must-revalidate",
-        "Content-Disposition": f'attachment; filename="{filename}"',
-    }
-    if size:
-        headers["Content-Length"] = str(size)
-
-    return CloseableStreamingResponse(
-        tracked_body,
+    return build_consume_once_response(
+        task_id=safe_task_id,
+        group_id=owner_group_id,
+        storage_key=key,
         media_type="application/octet-stream",
-        headers=headers,
-        on_close=_cleanup_after_send,
+        fallback_filename="output.bin",
     )
 
 

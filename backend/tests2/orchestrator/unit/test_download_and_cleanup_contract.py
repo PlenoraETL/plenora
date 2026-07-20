@@ -19,9 +19,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
 def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
-    """Fast-path: find_keys ritorna 1 key → StreamingResponse + background
-    cleanup registrato."""
-    from fastapi import BackgroundTasks
+    """Fast-path: uno stream completo elimina l'output alla chiusura."""
     from app.core.orchestrator.router import download_task_result
 
     # Mock task_service: success status
@@ -32,7 +30,6 @@ def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
     }
     fake_task_info.project_id = "exe-1"
 
-    bg = BackgroundTasks()
     fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
 
     with patch("app.core.orchestrator.router._assert_task_group", return_value=None), \
@@ -54,7 +51,6 @@ def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
 
         response = download_task_result(
             task_id="t1",
-            background_tasks=bg,
             current_user=fake_user,
         )
 
@@ -63,7 +59,6 @@ def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
         # Response deve essere StreamingResponse
         from fastapi.responses import StreamingResponse
         assert isinstance(response, StreamingResponse)
-        assert len(bg.tasks) == 0
         assert b"".join(response.owned_content) == b"col\nval\n"
         response.close()
         mock_delete.assert_called_once_with(
@@ -73,7 +68,7 @@ def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
 
 
 def test_tasks_download_eseguibile_blocks_owner_mismatch():
-    from fastapi import BackgroundTasks, HTTPException
+    from fastapi import HTTPException
     from app.core.orchestrator.router import download_task_result
 
     fake_task_info = MagicMock()
@@ -98,7 +93,6 @@ def test_tasks_download_eseguibile_blocks_owner_mismatch():
         with pytest.raises(HTTPException) as exc:
             download_task_result(
                 task_id="t1",
-                background_tasks=BackgroundTasks(),
                 current_user=fake_user,
             )
 
@@ -107,14 +101,12 @@ def test_tasks_download_eseguibile_blocks_owner_mismatch():
 
 def test_tasks_download_falls_back_to_db_blob_if_no_s3_key():
     """Se storage.find_keys ritorna [], salta al fallback DB blob."""
-    from fastapi import BackgroundTasks
     from app.core.orchestrator.router import download_task_result
 
     fake_task_info = MagicMock()
     fake_task_info.status.value = "success"
     fake_task_info.result = {"result_id": "res-abc", "project_id": "p1"}
 
-    bg = BackgroundTasks()
     fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
 
     with patch("app.core.orchestrator.router._assert_task_group", return_value=None), \
@@ -130,7 +122,6 @@ def test_tasks_download_falls_back_to_db_blob_if_no_s3_key():
         try:
             response = download_task_result(
                 task_id="t1",
-                background_tasks=bg,
                 current_user=fake_user,
             )
             # Se arriva qui il fallback DB blob ha trovato il result
@@ -147,10 +138,8 @@ def test_tasks_download_falls_back_to_db_blob_if_no_s3_key():
 
 def test_eseguibili_download_streams_and_retains_owner_for_full_cleanup():
     """Dopo lo stream elimina l'output ma conserva l'owner per full-cleanup."""
-    from fastapi import BackgroundTasks
     from app.core.eseguibili.router import download_eseguibile_output
 
-    bg = BackgroundTasks()
     fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
 
     with patch("app.core.eseguibili.router.eseguibili_db.get_eseguibile",
@@ -169,12 +158,11 @@ def test_eseguibili_download_streams_and_retains_owner_for_full_cleanup():
 
         response = download_eseguibile_output(
             eseguibile_id="exe-1", task_id="t1",
-            background_tasks=bg, current_user=fake_user,
+            current_user=fake_user,
         )
         from fastapi.responses import StreamingResponse
         assert isinstance(response, StreamingResponse)
 
-        assert len(bg.tasks) == 0
         assert b"".join(response.owned_content) == b"abc"
         response.close()
         mock_delete.assert_called_once_with(
@@ -184,10 +172,9 @@ def test_eseguibili_download_streams_and_retains_owner_for_full_cleanup():
 
 
 def test_eseguibili_download_404_when_no_keys_on_storage():
-    from fastapi import BackgroundTasks, HTTPException
+    from fastapi import HTTPException
     from app.core.eseguibili.router import download_eseguibile_output
 
-    bg = BackgroundTasks()
     fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
 
     with patch("app.core.eseguibili.router.eseguibili_db.get_eseguibile",
@@ -200,17 +187,15 @@ def test_eseguibili_download_404_when_no_keys_on_storage():
         with pytest.raises(HTTPException) as exc:
             download_eseguibile_output(
                 eseguibile_id="exe-1", task_id="t1",
-                background_tasks=bg, current_user=fake_user,
+                current_user=fake_user,
             )
         assert exc.value.status_code == 404
 
 
 def test_eseguibili_download_cleanup_swallows_storage_failure():
     """Un failure S3 post-send non interrompe la risposta già completata."""
-    from fastapi import BackgroundTasks
     from app.core.eseguibili.router import download_eseguibile_output
 
-    bg = BackgroundTasks()
     fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
 
     with patch("app.core.eseguibili.router.eseguibili_db.get_eseguibile",
@@ -230,7 +215,7 @@ def test_eseguibili_download_cleanup_swallows_storage_failure():
 
         response = download_eseguibile_output(
             eseguibile_id="exe-1", task_id="t1",
-            background_tasks=bg, current_user=fake_user,
+            current_user=fake_user,
         )
         from fastapi.responses import StreamingResponse
         assert isinstance(response, StreamingResponse)
@@ -244,7 +229,6 @@ def test_eseguibili_download_cleanup_swallows_storage_failure():
 
 
 def test_eseguibili_partial_download_keeps_output_and_releases_claim():
-    from fastapi import BackgroundTasks
     from app.core.eseguibili.router import download_eseguibile_output
 
     fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
@@ -264,7 +248,6 @@ def test_eseguibili_partial_download_keeps_output_and_releases_claim():
         response = download_eseguibile_output(
             eseguibile_id="exe-1",
             task_id="t1",
-            background_tasks=BackgroundTasks(),
             current_user=fake_user,
         )
         assert next(response.owned_content) == b"abc"
@@ -275,7 +258,7 @@ def test_eseguibili_partial_download_keeps_output_and_releases_claim():
 
 
 def test_eseguibili_concurrent_download_returns_conflict():
-    from fastapi import BackgroundTasks, HTTPException
+    from fastapi import HTTPException
     from app.core.eseguibili.router import download_eseguibile_output
 
     fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
@@ -293,7 +276,6 @@ def test_eseguibili_concurrent_download_returns_conflict():
             download_eseguibile_output(
                 eseguibile_id="exe-1",
                 task_id="t1",
-                background_tasks=BackgroundTasks(),
                 current_user=fake_user,
             )
 

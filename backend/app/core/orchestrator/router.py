@@ -8,10 +8,9 @@ import time
 from collections.abc import Mapping
 from typing import Literal, Optional, List
 from typing_extensions import TypedDict
-from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, field_validator
 
 from app.config import settings
@@ -55,11 +54,10 @@ from app.shared.execution.output_contract_types_enricher import (
     enrich_canvas_types_from_output_contract,
 )
 from app.core.eseguibili import output_store as _eseg_output_store
-from app.core.eseguibili import download_claim_store as _download_claim_store
 from app.core.eseguibili import db as eseguibili_db
+from app.core.eseguibili.download_response import build_consume_once_response
 from app.core.io.http_streaming import (
     CloseableStreamingResponse,
-    CompletionTrackingIterator,
     safe_download_filename,
 )
 from app.core.results import output_file_cleanup
@@ -705,14 +703,14 @@ def cleanup_task_completely(
 @tasks_router.get("/{task_id}/download")
 def download_task_result(
     task_id: str,
-    background_tasks: BackgroundTasks,
     current_user: CurrentUser = Depends(get_current_user),
-) -> StreamingResponse:
+) -> CloseableStreamingResponse:
     """Scarica il file risultato di un task.
 
     Per i task degli eseguibili (is_eseguibile=True) l'output vive su
-    object storage (eseguibili-outputs/{task_id}/) — streamming S3 + cleanup
-    post-send via background_task. Per tutti gli altri task il reader
+    object storage tenant-scoped: la response elimina l'output solo dopo un
+    trasferimento completo e lo conserva se il client si disconnette. Per
+    tutti gli altri task il reader
     `get_result_data(result_id)` apre l'oggetto S3-compatible tramite la
     storage_key della riga results.
     In entrambi i casi il payload viene streammato al client.
@@ -788,112 +786,22 @@ def download_task_result(
                 storage_filename = safe_download_filename(
                     storage_key, fallback="output.bin",
                 )
-                claim_token = uuid4().hex
-                try:
-                    claimed = _download_claim_store.try_acquire(
-                        task_id=safe_task_id,
-                        group_id=eseguibile_group_id,
-                        owner_token=claim_token,
-                    )
-                except Exception as claim_error:
-                    logger.error(
-                        "Claim download eseguibile fallito task_id=%s: %s",
-                        safe_task_id,
-                        claim_error,
-                        exc_info=True,
-                    )
-                    raise HTTPException(
-                        status_code=503,
-                        detail="Download temporaneamente non disponibile",
-                    ) from claim_error
-                if not claimed:
-                    raise HTTPException(
-                        status_code=409,
-                        detail="Output gia' in download",
-                    )
-                try:
-                    storage_stream = _eseg_output_store.open_stream(
-                        storage_key, expected_group_id=eseguibile_group_id,
-                    )
-                except Exception as storage_error:
-                    try:
-                        _download_claim_store.release(
-                            task_id=safe_task_id,
-                            group_id=eseguibile_group_id,
-                            owner_token=claim_token,
-                        )
-                    except Exception:
-                        logger.warning(
-                            "Release claim dopo open_stream fallito task_id=%s",
-                            safe_task_id,
-                            exc_info=True,
-                        )
-                    logger.error(f"[CRASH] open_stream eseguibile {storage_key}: {storage_error}", exc_info=True)
-                    raise HTTPException(status_code=500, detail="Errore apertura stream output")
-
-                stream_size = int(storage_stream.get("size") or 0)
-
-                def _refresh_download_claim(_bytes_yielded: int) -> None:
-                    if not _download_claim_store.refresh(
-                        task_id=safe_task_id,
-                        group_id=eseguibile_group_id,
-                        owner_token=claim_token,
-                    ):
-                        raise RuntimeError("Lease download eseguibile persa")
-
-                tracked_body = CompletionTrackingIterator(
-                    storage_stream["body"],
-                    expected_size=stream_size or None,
-                    on_progress=_refresh_download_claim,
+                response = build_consume_once_response(
+                    task_id=safe_task_id,
+                    group_id=eseguibile_group_id,
+                    storage_key=storage_key,
+                    download_filename=storage_filename,
+                    fallback_filename="output.bin",
+                    media_type=_mime_for_filename(storage_filename),
                 )
-
-                def _cleanup_after_send(task_id_to_delete: str = safe_task_id) -> None:
-                    try:
-                        if tracked_body.completed:
-                            _eseg_output_store.delete_task_outputs(
-                                task_id_to_delete,
-                                group_id=eseguibile_group_id,
-                                retain_owner=True,
-                            )
-                        else:
-                            logger.info(
-                                "Download incompleto: output conservato task_id=%s bytes=%s",
-                                task_id_to_delete,
-                                tracked_body.bytes_yielded,
-                            )
-                    except Exception as storage_error:
-                        logger.warning(f"Cleanup post-download S3 fallito per {task_id_to_delete}: {storage_error}")
-                    finally:
-                        try:
-                            _download_claim_store.release(
-                                task_id=task_id_to_delete,
-                                group_id=eseguibile_group_id,
-                                owner_token=claim_token,
-                            )
-                        except Exception:
-                            logger.warning(
-                                "Release claim download fallito task_id=%s",
-                                task_id_to_delete,
-                                exc_info=True,
-                            )
+                stream_size = int(response.headers.get("content-length") or 0)
                 logger.info(
                     f"download task {task_id}: fast-path eseguibile (S3 stream) "
                     f"celery={time_celery_loaded - time_started:.3f}s "
                     f"size={stream_size / (1024*1024):.2f}MB "
                     f"key={storage_key}"
                 )
-                response_headers = {
-                    "Cache-Control": "no-store, no-cache, must-revalidate",
-                    "Content-Disposition": f'attachment; filename="{storage_filename}"',
-                }
-                if stream_size:
-                    response_headers["Content-Length"] = str(stream_size)
-                return CloseableStreamingResponse(
-                    tracked_body,
-                    media_type=_mime_for_filename(storage_filename),
-                    headers=response_headers,
-                    on_close=_cleanup_after_send,
-                )
+                return response
 
         # Ogni task_id ha il proprio result_id nel payload Celery. Usiamo
         # quello per leggere ESATTAMENTE il result generato da questo task

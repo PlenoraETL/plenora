@@ -6,6 +6,7 @@ from app.db.pg_connection import unit_of_work
 
 
 DEFAULT_LEASE_SECONDS = 300
+DEFAULT_PURGE_BATCH_SIZE = 1000
 
 
 def try_acquire(
@@ -67,4 +68,35 @@ def release(*, task_id: str, group_id: str, owner_token: str) -> bool:
     return bool(getattr(cur, "rowcount", 0))
 
 
-__all__ = ["DEFAULT_LEASE_SECONDS", "refresh", "release", "try_acquire"]
+def purge_expired(*, limit: int = DEFAULT_PURGE_BATCH_SIZE) -> int:
+    """Delete an ordered, bounded batch of expired download leases."""
+    batch_size = max(1, min(int(limit), 10_000))
+    with unit_of_work() as session:
+        cur = session.execute(
+            """
+            WITH expired AS (
+                SELECT task_id, group_id
+                FROM eseguibili_download_claims
+                WHERE lease_expires_at <= now()
+                ORDER BY lease_expires_at
+                FOR UPDATE SKIP LOCKED
+                LIMIT %s
+            )
+            DELETE FROM eseguibili_download_claims AS claims
+            USING expired
+            WHERE claims.task_id = expired.task_id
+              AND claims.group_id = expired.group_id
+            """,
+            (batch_size,),
+        )
+    return int(getattr(cur, "rowcount", 0) or 0)
+
+
+__all__ = [
+    "DEFAULT_LEASE_SECONDS",
+    "DEFAULT_PURGE_BATCH_SIZE",
+    "purge_expired",
+    "refresh",
+    "release",
+    "try_acquire",
+]

@@ -68,11 +68,29 @@ def test_cleanup_eseguibili_outputs_removes_only_expired(tmp_path, monkeypatch):
     with patch(
         "app.config.settings",
         new=SimpleNamespace(ESEGUIBILI_OUTPUTS_DIR=outputs_dir),
-    ):
+    ), patch(
+        "workers.beat_scheduler.download_claim_store.purge_expired",
+        return_value=3,
+    ) as purge_claims:
         scheduler._cleanup_eseguibili_outputs()
 
     assert fresh.exists()
     assert not expired.exists()
+    purge_claims.assert_called_once_with()
+
+
+def test_cleanup_eseguibili_outputs_tolerates_claim_purge_failure(monkeypatch):
+    scheduler = _make_scheduler()
+    monkeypatch.setattr(time, "time", lambda: 2_000_000.0)
+
+    with patch(
+        "workers.beat_scheduler.output_store.purge_expired_local_outputs",
+        return_value=0,
+    ), patch(
+        "workers.beat_scheduler.download_claim_store.purge_expired",
+        side_effect=RuntimeError("database unavailable"),
+    ):
+        scheduler._cleanup_eseguibili_outputs()
 
 
 def test_cleanup_old_logs_deletes_rows_older_than_retention():

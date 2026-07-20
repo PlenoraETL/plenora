@@ -105,7 +105,6 @@ def test_execute_returns_typed_internal_payload(monkeypatch):
 
 def test_execute_hydrates_upload_from_file_source_before_worker_handoff(monkeypatch):
     from app.core.files.service import file_source_service
-    from app.core.dataframes import frame_io
     from app.core.orchestrator.task_service import task_service
 
     captured: dict[str, object] = {}

@@ -26,7 +26,7 @@ from app.core.scheduler.cron_schedule import (
 )
 from app.core.scheduler.beat_schedule_config import beat_schedule_config
 from app import config as app_config
-from app.core.eseguibili import output_store
+from app.core.eseguibili import download_claim_store, output_store
 from app.core.io import object_storage as object_storage_module
 from app.core.scheduler.job_dispatcher import (
     SCHEDULE_PIPELINE_TASK_NAME,
@@ -770,11 +770,11 @@ class PlenoraBeatScheduler:
     # Cleanup output eseguibili orfani
 
     def _cleanup_eseguibili_outputs(self) -> None:
-        """Ogni 30 minuti rimuove le directory di output eseguibili piu' vecchie di 2 ore.
+        """Ogni 30 minuti pulisce output locali e lease download scadute.
 
-        Il path /api/eseguibili/{id}/download/{task_id} cancella il file subito
-        dopo l'invio, ma se l'utente abbandona il download o il frontend non fa
-        mai la GET, il file resterebbe orfano — questo cleanup lo recupera.
+        Gli artifact remoti hanno una lifecycle S3; questo janitor copre i
+        residui filesystem legacy e limita la crescita della tabella lease in
+        caso di crash del processo durante un download.
         """
         now = _t.time()
         if now - self._last_eseguibili_cleanup < 1800:  # 30 minuti
@@ -791,6 +791,16 @@ class PlenoraBeatScheduler:
                 logger.info(f"Cleanup eseguibili_outputs: rimosse {removed} directory orfane")
         except Exception as e:
             logger.warning(f"Errore cleanup eseguibili_outputs: {e}")
+
+        try:
+            removed_claims = download_claim_store.purge_expired()
+            if removed_claims:
+                logger.info(
+                    "Cleanup lease download eseguibili: rimosse %s righe scadute",
+                    removed_claims,
+                )
+        except Exception as e:
+            logger.warning(f"Errore cleanup lease download eseguibili: {e}")
 
     # Cleanup orfani DATA_DIR/temp/
 

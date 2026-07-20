@@ -80,3 +80,16 @@ def test_refresh_and_release_are_token_scoped(monkeypatch):
 
     assert "owner_token = %s" in cursor.calls[0][0]
     assert "owner_token = %s" in cursor.calls[1][0]
+
+
+def test_purge_expired_is_bounded_and_skip_locked(monkeypatch):
+    cursor = _Cursor(rowcount=7)
+    _patch_uow(monkeypatch, cursor)
+
+    assert store.purge_expired(limit=50_000) == 7
+
+    sql, params = cursor.calls[0]
+    assert "lease_expires_at <= now()" in sql
+    assert "FOR UPDATE SKIP LOCKED" in sql
+    assert "DELETE FROM eseguibili_download_claims" in sql
+    assert params == (10_000,)
