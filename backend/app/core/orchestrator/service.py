@@ -233,6 +233,7 @@ class OrchestratorService:
             run_id=run_id,
             user_id=user_id,
             intermediate_mode_override=intermediate_mode_override,
+            carica_group_id=str(getattr(metadata, "group_id", "") or ""),
         )
 
     def _execute_loaded_pipeline(
@@ -247,6 +248,7 @@ class OrchestratorService:
         user_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
         execution_context: Optional[Mapping[str, Any]] = None,
+        carica_group_id: str = "",
     ) -> PipelineArtifact:
         if project_type not in self._executor_dispatch:
             return PipelineArtifact.failure(
@@ -299,7 +301,17 @@ class OrchestratorService:
         # skip se chiamato dal task CARICA stesso per evitare loop
         # PipelineArtifact e' dict-like quindi supporta `artifact["carica"] = ...`.
         if artifact.success and not skip_carica:
-            carica_info = self._execute_carica_if_present(project_id, canvas, user_id=user_id)
+            carica_info = self._execute_carica_if_present(
+                project_id,
+                canvas,
+                project_type=project_type,
+                group_id=str(
+                    (execution_context or {}).get("group_id")
+                    or carica_group_id
+                    or ""
+                ),
+                user_id=user_id,
+            )
             if carica_info:
                 artifact["carica"] = carica_info
 
@@ -324,6 +336,28 @@ class OrchestratorService:
             return {"success": False, "message": f"Preview non supportata per tipo '{metadata.project_type}'"}
         return executor.preview(project_id, canvas, limit)
 
+    def execute_preview_from_contract(
+        self,
+        contract: PipelineExecutionContract,
+        limit: int = 100,
+    ) -> JsonObject:
+        """Execute a preview from the immutable control-plane snapshot."""
+        executor = self._executor_dispatch.get(contract.project_type)
+        if executor is None:
+            return {
+                "success": False,
+                "message": (
+                    "Preview non supportata per tipo "
+                    f"'{contract.project_type}'"
+                ),
+            }
+        return executor.preview(
+            contract.project_id,
+            self._coerce_canvas(contract.canvas),
+            limit,
+            execution_context=contract.build_runtime_context(),
+        )
+
     # CARICA — Rilevamento e avvio task caricamento su database
 
     def _execute_carica_if_present(
@@ -331,6 +365,8 @@ class OrchestratorService:
         project_id: str,
         canvas: CanvasState,
         *,
+        project_type: str,
+        group_id: str,
         user_id: Optional[str] = None,
     ) -> Optional[JsonObject]:
         """
@@ -348,6 +384,8 @@ class OrchestratorService:
                 project_id,
                 canvas,
                 output_contract_loader=self.project_service.get_project_output_contract,
+                project_type=project_type,
+                group_id=group_id,
                 output_format="geojson",
                 triggered_by="pipeline",
                 user_id=user_id,

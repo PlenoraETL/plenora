@@ -8,6 +8,7 @@ from typing import Optional
 
 from app.utils.logger import get_logger
 from app.core.arricchisci.types import JsonObject
+from app.core.arricchisci.execution_context import ArricchisciExecutionContext
 from app.shared.contracts.payloads import HeadersMap
 from app.shared.connections.oauth import (
     prepare_headers as _shared_prepare_headers,
@@ -113,7 +114,8 @@ class ApiConnectionService(
     def execute_enrichment(self, project_id: str, canvas: JsonObject, format: str = 'csv',
                           force_recalculate: bool = False, preview_limit: int = None,
                           run_id: str = None,
-                          intermediate_mode_override: Optional[str] = None) -> JsonObject:
+                          intermediate_mode_override: Optional[str] = None,
+                          execution_context: Optional[ArricchisciExecutionContext] = None) -> JsonObject:
         """Public service facade for canvas enrichment execution.
 
         The module-level orchestrator contains the execution algorithm;
@@ -132,6 +134,7 @@ class ApiConnectionService(
             preview_limit=preview_limit,
             run_id=run_id,
             intermediate_mode_override=intermediate_mode_override,
+            execution_context=execution_context,
         )
 
 

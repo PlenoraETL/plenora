@@ -80,6 +80,7 @@ def _run_trigger_capturing_payload():
             project_id="p1",
             canvas=_canvas_with_carica_node(),
             output_format="csv",
+            group_id="group-1",
         )
 
     assert result is not None and result["tasks"][0]["task_id"] == "ct-1"

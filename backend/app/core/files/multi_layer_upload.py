@@ -150,12 +150,17 @@ def create_multi_layer_from_upload(
     # Failure pre-loop -> nessuna row, nessun cleanup necessario
     # orphan guard interno al dispatch.
     batch_id = f"batch_{uuid.uuid4().hex}"
-    shared_blob_kwargs = dispatch_blob_storage(
-        batch_id, source_stream, filename,
-        group_id=resolved_group_id,
-        storage_key_id=batch_id,
-        size_bytes=source_size,
-    )
+    try:
+        shared_blob_kwargs = dispatch_blob_storage(
+            batch_id, source_stream, filename,
+            group_id=resolved_group_id,
+            storage_key_id=batch_id,
+            size_bytes=source_size,
+        )
+    except BaseException:
+        if owned_stream is not None:
+            owned_stream.close()
+        raise
 
     def cleanup_shared_blob() -> None:
         shared_key = shared_blob_kwargs.get("storage_key")
@@ -282,6 +287,8 @@ def create_multi_layer_from_upload(
     finally:
         if not committed:
             cleanup_shared_blob()
+        if owned_stream is not None:
+            owned_stream.close()
 
     for fs in created:
         logger.info(
@@ -289,8 +296,5 @@ def create_multi_layer_from_upload(
             f"layer={getattr(fs, 'layer', None)!r} "
             f"sheet={getattr(fs, 'sheet', None)!r}"
         )
-
-    if owned_stream is not None:
-        owned_stream.close()
 
     return created

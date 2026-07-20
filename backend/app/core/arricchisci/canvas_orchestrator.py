@@ -463,6 +463,7 @@ def execute_canvas_enrichment(
     run_id: Optional[str] = None,
     intermediate_mode_override: Optional[str] = None,
     finalizer: Optional[Callable[[Any, str, str, str], JsonObject]] = None,
+    execution_context: Optional[ArricchisciExecutionContext] = None,
 ) -> JsonObject:
     """Orchestra l'esecuzione del canvas arricchisci.
 
@@ -505,7 +506,13 @@ def execute_canvas_enrichment(
         if not nodes:
             return {"success": False, "error": "Nessun nodo nel canvas"}
 
-        ctx = init_execution_context(svc, project_id, preview_limit)
+        ctx = execution_context or init_execution_context(
+            svc,
+            project_id,
+            preview_limit,
+        )
+        if ctx.project_id != project_id:
+            raise ValueError("execution context project_id mismatch")
 
         # Carica tutte le API connections con credenziali decifrate (1 query
         api_connections = svc.list_api_connections_decrypted()

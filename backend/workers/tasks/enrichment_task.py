@@ -25,6 +25,7 @@ from app.core.files import service as files_service
 from app.core.intermediate import run_idempotency as run_idempotency_module
 from app.core.intermediate import snapshot as intermediate_snapshot
 from app.core.intermediate import writer as intermediate_writer
+from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.orchestrator.task_progress import TaskRevoked, report_task_progress
 from app.core.projects import service as project_service_module
 from app.core.resources.bounded_reader import read_stream_bounded
@@ -72,6 +73,7 @@ def execute_enrichment_task(
     user_id: Optional[str] = None,
     intermediate_mode_override: Optional[str] = None,
     execution_context: Optional[Mapping[str, Any]] = None,
+    execution_contract: Optional[Mapping[str, Any]] = None,
 ) -> JsonObject:
     """
     Task asincrono per eseguire l'arricchimento dati.
@@ -106,6 +108,47 @@ def execute_enrichment_task(
         se il run_id era gia' completo.
     """
     task_id = self.request.id
+    parsed_contract: PipelineExecutionContract | None = None
+    if execution_contract is not None:
+        parsed_contract = PipelineExecutionContract.from_payload(
+            execution_contract,
+            expected_project_id=project_id,
+        )
+        if parsed_contract.project_type != "arricchisci":
+            raise ValueError(
+                "execution_contract.project_type non valido per enrichment"
+            )
+        subject = parsed_contract.executable_subject
+        contract_is_eseguibile = subject is not None
+        if is_eseguibile and not contract_is_eseguibile:
+            raise ValueError(
+                "execution_contract privo di execution_subject eseguibile"
+            )
+        is_eseguibile = contract_is_eseguibile
+        canvas = dict(parsed_contract.canvas)
+        runtime_context = parsed_contract.build_runtime_context(
+            output_task_id=task_id if is_eseguibile else None,
+        )
+        if subject is not None:
+            runtime_context.update(
+                {
+                    "eseguibile_id": str(subject.get("id") or project_id),
+                    "version_id": str(subject.get("version_id") or ""),
+                    "run_id": str(subject.get("run_id") or ""),
+                }
+            )
+        execution_context = runtime_context
+        if runtime_context.get("output_format"):
+            output_format = str(runtime_context["output_format"])
+        cleanup_ids = runtime_context.get("cleanup_file_source_ids")
+        if cleanup_ids is not None:
+            if not isinstance(cleanup_ids, list):
+                raise ValueError(
+                    "execution_contract.runtime_context.cleanup_file_source_ids "
+                    "deve essere una lista"
+                )
+            cleanup_file_source_ids = [str(value) for value in cleanup_ids]
+
     executable_run_id = str((execution_context or {}).get("run_id") or "")
     executable_id = str(
         (execution_context or {}).get("eseguibile_id") or project_id
@@ -269,6 +312,11 @@ def execute_enrichment_task(
             user_id=user_id,
             task_id=task_id,
             run_id=run_id,
+            canonical_group_id=(
+                parsed_contract.group_id
+                if parsed_contract is not None
+                else str((execution_context or {}).get("group_id") or "")
+            ),
         )
         _run_id = _ctx.run_id
         _group_id = _ctx.group_id
@@ -924,6 +972,7 @@ def execute_enrichment_task(
                         canvas=canvas,
                         output_format=ext.lstrip(".") or "bin",
                         user_id=user_id,
+                        group_id=_group_id,
                     )
                     if carica_info:
                         result["carica"] = carica_info
@@ -1024,6 +1073,7 @@ def execute_enrichment_task(
                 canvas=canvas,
                 output_format=final_format,
                 user_id=user_id,
+                group_id=_group_id,
             )
             if carica_info:
                 # Il frontend legge result.carica.tasks per fare polling sui task carica
@@ -1274,6 +1324,8 @@ def _trigger_carica_if_present(
     canvas: JsonObject,
     output_format: str = "csv",
     user_id: Optional[str] = None,
+    *,
+    group_id: str,
 ) -> Optional[JsonObject]:
     """Cerca nodi CARICA collegati all'output e lancia i relativi task.
 
@@ -1295,6 +1347,8 @@ def _trigger_carica_if_present(
         output_contract_loader=(
             project_service_module.ProjectService().get_project_output_contract
         ),
+        project_type="arricchisci",
+        group_id=group_id,
         output_format=output_format,
         triggered_by="manual",
         user_id=user_id,

@@ -30,6 +30,7 @@ def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
     # Celery originale. Questo e' il contratto che il router deve riconoscere.
     fake_task_info.result = TaskResultPayload.from_celery_meta({
         "project_id": "exec_1",
+        "is_eseguibile": True,
     })
     fake_task_info.project_id = "exec_1"
 
@@ -76,7 +77,10 @@ def test_tasks_download_eseguibile_storage_outage_is_service_unavailable():
 
     fake_task_info = MagicMock()
     fake_task_info.status.value = "success"
-    fake_task_info.result = {"project_id": "exec_1"}
+    fake_task_info.result = {
+        "project_id": "exec_1",
+        "is_eseguibile": True,
+    }
     fake_task_info.project_id = "exec_1"
     fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
 

@@ -212,27 +212,32 @@ def create_from_upload(
         else {}
     )
 
-    # Blob dispatch must complete before DB save to avoid orphan records.
-    source_stream.seek(0)
-    blob_kwargs = dispatch_blob_storage(
-        file_id,
-        source_stream,
-        filename,
-        group_id=resolved_group_id,
-        size_bytes=source_size,
-    )
+    try:
+        # Blob dispatch must complete before DB save to avoid orphan records.
+        source_stream.seek(0)
+        blob_kwargs = dispatch_blob_storage(
+            file_id,
+            source_stream,
+            filename,
+            group_id=resolved_group_id,
+            size_bytes=source_size,
+        )
 
-    db_save_file_source(
-        file_id=file_id,
-        group_id=resolved_group_id,
-        name=name,
-        original_filename=filename,
-        fmt=format_type,
-        metadata=metadata,
-        **blob_kwargs,
-    )
+        db_save_file_source(
+            file_id=file_id,
+            group_id=resolved_group_id,
+            name=name,
+            original_filename=filename,
+            fmt=format_type,
+            metadata=metadata,
+            **blob_kwargs,
+        )
 
-    logger.info(f"FileSource creato: {file_id} ({source_size} bytes)")
-    if owned_stream is not None:
-        owned_stream.close()
-    return file_source
+        logger.info(f"FileSource creato: {file_id} ({source_size} bytes)")
+        return file_source
+    finally:
+        # Gli inner ZIP usano uno SpooledTemporaryFile posseduto da questo
+        # helper. Chiuderlo anche se upload o INSERT falliscono evita handle
+        # e file temporanei trattenuti nel worker long-lived.
+        if owned_stream is not None:
+            owned_stream.close()

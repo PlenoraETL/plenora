@@ -581,6 +581,23 @@ def execute(
     )
 
     try:
+        execution_contract = PipelineExecutionContract(
+            schema_version=2,
+            project_id=str(eseguibile["id"]),
+            project_type="arricchisci",
+            group_id=str(eseguibile["group_id"]),
+            canvas=canvas,
+            artifact_refs={},
+            execution_subject={
+                "kind": "eseguibile",
+                "id": str(eseguibile["id"]),
+            },
+            runtime_context={
+                "cleanup_file_source_ids": [temp_file_source_id],
+                "output_format": final_format,
+                "output_name": base_name,
+            },
+        )
         task_info = task_service.create_enrichment_task(
             project_id=eseguibile["id"],
             canvas=canvas,
@@ -589,10 +606,7 @@ def execute(
             cleanup_file_source_ids=[temp_file_source_id],
             is_eseguibile=True,
             user_id=user_id,
-            execution_context={
-                "eseguibile_id": eseguibile["id"],
-                "group_id": eseguibile["group_id"],
-            },
+            execution_contract=execution_contract.to_payload(),
             task_id=task_id,
         )
     except Exception:
@@ -727,6 +741,26 @@ def execute_versioned(
         eseguibili_db.bind_eseguibile_run_task(run_id, reserved_task_id)
 
         if manifest.project_type == "arricchisci":
+            execution_contract = PipelineExecutionContract(
+                schema_version=2,
+                project_id=eseguibile.id,
+                project_type=manifest.project_type,
+                group_id=eseguibile.group_id,
+                canvas=canvas,
+                artifact_refs={},
+                execution_subject={
+                    "kind": "eseguibile",
+                    "id": eseguibile.id,
+                    "version_id": version.id,
+                    "run_id": run_id,
+                },
+                runtime_context={
+                    "default_connection_id": manifest.default_connection_id,
+                    "cleanup_file_source_ids": cleanup_ids,
+                    "output_format": final_format,
+                    "output_name": base_name,
+                },
+            )
             task_info = task_service.create_enrichment_task(
                 project_id=eseguibile.id,
                 canvas=canvas,
@@ -735,12 +769,7 @@ def execute_versioned(
                 cleanup_file_source_ids=cleanup_ids,
                 is_eseguibile=True,
                 user_id=user_id,
-                execution_context={
-                    "eseguibile_id": eseguibile.id,
-                    "version_id": version.id,
-                    "run_id": run_id,
-                    "group_id": eseguibile.group_id,
-                },
+                execution_contract=execution_contract.to_payload(),
                 task_id=reserved_task_id,
             )
         else:

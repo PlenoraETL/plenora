@@ -107,9 +107,10 @@ def _make_executor_with_spies(monkeypatch, schedule_config):
     )
 
     # release_lock_with_retry: no-op
+    spy_release_lock = MagicMock()
     monkeypatch.setattr(
         "app.core.scheduler.scheduler_release.release_lock_with_retry",
-        lambda *_a, **_kw: None,
+        spy_release_lock,
     )
     monkeypatch.setattr(
         "app.core.scheduler.job_dispatcher.enqueue_schedule_run",
@@ -132,6 +133,7 @@ def _make_executor_with_spies(monkeypatch, schedule_config):
         "set_runtime_status": executor.schedule_service.set_runtime_status,
         "update_runtime": executor.schedule_service.update_runtime,
         "try_acquire": executor.concurrency.try_acquire,
+        "release_lock": spy_release_lock,
     }
     return executor, spies
 
@@ -225,3 +227,19 @@ class TestRuntimeStatusRollback:
         # update_runtime NON deve essere stato chiamato (path canonico
         # non raggiunto).
         spies["update_runtime"].assert_not_called()
+
+
+class TestSetupFailureCleanup:
+    def test_open_run_failure_releases_acquired_lock(
+        self, monkeypatch, schedule_config,
+    ):
+        executor, spies = _make_executor_with_spies(monkeypatch, schedule_config)
+        spies["try_acquire"].return_value = "acquired"
+        spies["open_run"].side_effect = RuntimeError("log db down")
+
+        with pytest.raises(RuntimeError, match="log db down"):
+            _invoke_execute(executor, schedule_config)
+
+        spies["release_lock"].assert_called_once()
+        assert spies["release_lock"].call_args.kwargs["owner_id"]
+        spies["set_runtime_status"].assert_not_called()

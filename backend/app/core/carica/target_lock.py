@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import threading
 from typing import Mapping
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -18,6 +19,10 @@ logger = get_logger(__name__)
 _TABLE_NAME = "carica_target_locks"
 _LOCK_VERSION = "v1"
 _DEFAULT_DB_SCHEMA = "public"
+
+
+class CaricaTargetResolutionError(ValueError):
+    """Raised when a CARICA write target cannot be locked safely."""
 
 
 @dataclass(frozen=True)
@@ -36,6 +41,68 @@ class CaricaTargetLockHandle:
 
     target: CaricaTargetLock
     owner_token: str
+
+
+class CaricaTargetLockHeartbeat:
+    """Periodically renew an owned lock and expose ownership loss."""
+
+    def __init__(
+        self,
+        handle: CaricaTargetLockHandle,
+        *,
+        ttl_seconds: int,
+    ) -> None:
+        self.handle = handle
+        self.ttl_seconds = max(1, int(ttl_seconds))
+        self.lost = False
+        self.error: str | None = None
+        self._stop = threading.Event()
+        self._thread = threading.Thread(
+            target=self._run,
+            name=f"carica-lock-{handle.target.key[-12:]}",
+            daemon=True,
+        )
+
+    def start(self) -> "CaricaTargetLockHeartbeat":
+        self._thread.start()
+        return self
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread.is_alive():
+            self._thread.join(timeout=5.0)
+        if self._thread.is_alive():
+            self.lost = True
+            self.error = "heartbeat_stop_timeout"
+            logger.error(
+                "CARICA target lock heartbeat non terminato entro timeout "
+                f"(key={self.handle.target.key})"
+            )
+
+    def _run(self) -> None:
+        interval = max(0.25, min(30.0, self.ttl_seconds / 3.0))
+        while not self._stop.wait(interval):
+            try:
+                if not refresh_carica_target_lock(
+                    self.handle,
+                    ttl_seconds=self.ttl_seconds,
+                ):
+                    self.lost = True
+                    self.error = "ownership_lost"
+                    logger.error(
+                        "CARICA target lock heartbeat: ownership persa "
+                        f"(key={self.handle.target.key})"
+                    )
+                    return
+            except Exception as exc:
+                self.lost = True
+                self.error = type(exc).__name__
+                logger.error(
+                    "CARICA target lock heartbeat fallito "
+                    f"(key={self.handle.target.key}): {exc}",
+                    exc_info=True,
+                )
+                return
 
 
 def resolve_carica_target_lock(
@@ -84,6 +151,31 @@ def resolve_carica_target_lock(
     )
 
 
+def require_carica_target_lock(
+    *,
+    node_data: Mapping[str, object],
+    project_id: str,
+    group_id: str,
+    write_branch: str,
+) -> CaricaTargetLock:
+    """Resolve a lock target or fail before any destination side effect."""
+    if not group_id:
+        raise CaricaTargetResolutionError(
+            "Tenant CARICA non determinabile per il target lock"
+        )
+    target = resolve_carica_target_lock(
+        node_data=node_data,
+        project_id=project_id,
+        group_id=group_id,
+        write_branch=write_branch,
+    )
+    if target is None:
+        raise CaricaTargetResolutionError(
+            "Destinazione CARICA non determinabile per il target lock"
+        )
+    return target
+
+
 def acquire_carica_target_lock(
     *,
     target: CaricaTargetLock,
@@ -122,6 +214,35 @@ def release_carica_target_lock(handle: CaricaTargetLockHandle) -> bool:
         lock_key=handle.target.key,
         owner_token=handle.owner_token,
     )
+
+
+def refresh_carica_target_lock(
+    handle: CaricaTargetLockHandle,
+    *,
+    ttl_seconds: int,
+) -> bool:
+    """Renew a lock only if it is still unexpired and owned by the caller."""
+    ttl = max(1, int(ttl_seconds))
+    now = datetime.now(timezone.utc)
+    return target_lock_store.refresh_target_lock_row(
+        table_name=_TABLE_NAME,
+        lock_key=handle.target.key,
+        owner_token=handle.owner_token,
+        refreshed_at=now,
+        expires_at=now + timedelta(seconds=ttl),
+    )
+
+
+def start_carica_target_lock_heartbeat(
+    handle: CaricaTargetLockHandle,
+    *,
+    ttl_seconds: int,
+) -> CaricaTargetLockHeartbeat:
+    """Start bounded periodic renewal for a CARICA target lock."""
+    return CaricaTargetLockHeartbeat(
+        handle,
+        ttl_seconds=ttl_seconds,
+    ).start()
 
 
 def _tenant_scope(*, project_id: str, group_id: str) -> Mapping[str, str]:

@@ -52,15 +52,10 @@ def test_load_upstream_data_does_not_fallback_to_latest_project_result_after_fai
         execute_pipeline=lambda **kwargs: {"success": True},
     )
 
-    # `_load_upstream_data` con `force_recalculate=False` fa pre-cache
-    # check tramite runtime context typed. Restituiamo None per simulare
-    # "progetto non trovato in pre-cache" -> il flow procede come previsto
-    # dal test (fail-closed su _project_group_id, execute via orchestrator
-    # stub).
-    # carica_task imports get_project_runtime_context by name at module level,
-    # so patch its cached binding on carica_task (patching the runtime_context
-    # module would miss the copy the task actually calls).
-    with patch("workers.tasks.carica_task.get_project_runtime_context", return_value=None), \
+    # Il tenant della cache e' quello congelato nel contratto CARICA: il
+    # loader non deve fare un secondo lookup del progetto durante la run.
+    fake_loader = SimpleNamespace(load=lambda *args, **kwargs: None)
+    with patch("workers.tasks.carica_task.SourceLoader", return_value=fake_loader), \
          patch(
              "app.runtime.services.build_orchestrator_stack",
              return_value=SimpleNamespace(orchestrator=orchestrator),
@@ -70,6 +65,7 @@ def test_load_upstream_data_does_not_fallback_to_latest_project_result_after_fai
             canvas={},
             force_recalculate=False,
             output_format="parquet",
+            expected_group_id="group-1",
         )
 
     import workers.tasks.carica_task as ct

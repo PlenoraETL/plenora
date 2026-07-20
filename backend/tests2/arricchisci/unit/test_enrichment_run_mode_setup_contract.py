@@ -51,6 +51,34 @@ def test_setup_eseguibile_resolves_group_via_eseg_db_and_skips_run(monkeypatch):
     assert spies.intermediate_run_creates == []
 
 
+def test_setup_eseguibile_uses_contract_tenant_without_db_lookup(monkeypatch):
+    spies = install_enrichment_task_mocks(monkeypatch, eseguibile_group_id=None)
+    canvas = make_minimal_source_canvas()
+
+    invoke_enrichment_task(
+        project_id="exec-1",
+        canvas=canvas,
+        is_eseguibile=True,
+        execution_contract={
+            "schema_version": 2,
+            "project_id": "exec-1",
+            "project_type": "arricchisci",
+            "group_id": "g-contract",
+            "canvas": canvas,
+            "artifact_refs": {},
+            "execution_subject": {
+                "kind": "eseguibile",
+                "id": "exec-1",
+                "version_id": "version-1",
+                "run_id": "run-1",
+            },
+        },
+    )
+
+    assert spies.eseguibile_lookups == []
+    assert spies.intermediate_run_creates == []
+
+
 # Concern: auth recheck (standard si, eseguibile no)
 
 

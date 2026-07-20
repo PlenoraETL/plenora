@@ -10,6 +10,7 @@ from typing import Any, Mapping, Optional
 from app.core.projects.canvas_models import CanvasState
 from app.utils.logger import get_logger, append_step
 from app.core.arricchisci.api_connector import api_connection_service
+from app.core.arricchisci.execution_context import ArricchisciExecutionContext
 from app.core.arricchisci.canvas_orchestrator import execute_canvas_enrichment
 from app.core.arricchisci.types import JsonObject
 from app.core.dataframes.tabular import dataframe_preview_records, non_null_head_values
@@ -75,6 +76,17 @@ class EnrichExecutor:
 
         canvas_dict = canvas.model_dump()
 
+        typed_context = None
+        if execution_context is not None:
+            typed_context = ArricchisciExecutionContext(
+                project_id=project_id,
+                group_id=str(execution_context.get("group_id") or "") or None,
+                preview_limit=None,
+                output_task_id=(
+                    str(execution_context.get("output_task_id") or "") or None
+                ),
+            )
+
         result = api_connection_service.execute_enrichment(
             project_id=project_id,
             canvas=canvas_dict,
@@ -82,6 +94,7 @@ class EnrichExecutor:
             force_recalculate=force_recalculate,
             run_id=run_id,
             intermediate_mode_override=intermediate_mode_override,
+            execution_context=typed_context,
         )
 
         if result.get("success"):
@@ -242,7 +255,13 @@ class EnrichExecutor:
                     out[str(column)] = str(path)
         return out
 
-    def preview(self, project_id: str, canvas: CanvasState, limit: int = 10) -> JsonObject:
+    def preview(
+        self,
+        project_id: str,
+        canvas: CanvasState,
+        limit: int = 10,
+        execution_context: Optional[Mapping[str, Any]] = None,
+    ) -> JsonObject:
         """Preview ARRICCHISCI: riusa il loop canonico `execute_canvas_enrichment`
         con `preview_limit`, e un finalizer che costruisce le righe in-memory
         senza persistere il blob.
@@ -255,6 +274,15 @@ class EnrichExecutor:
         logger.info(f"Preview ARRICCHISCI: {project_id} (limit={limit})", op="preview", project_id=project_id)
         canvas_dict = canvas.model_dump()
 
+        typed_context = None
+        if execution_context is not None:
+            typed_context = ArricchisciExecutionContext(
+                project_id=project_id,
+                group_id=str(execution_context.get("group_id") or "") or None,
+                preview_limit=limit,
+                output_task_id=None,
+            )
+
         def _finalize_preview(final_df, _output_name, _output_format, _project_id):
             return self._build_preview_response(final_df, limit)
 
@@ -264,6 +292,7 @@ class EnrichExecutor:
             canvas=canvas_dict,
             preview_limit=limit,
             finalizer=_finalize_preview,
+            execution_context=typed_context,
         )
 
         # Mappa gli early-return del loop canonico (error dict / file-result)

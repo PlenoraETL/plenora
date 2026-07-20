@@ -315,6 +315,16 @@ def test_carica_revocation_closes_run_and_worker_connections(monkeypatch):
     monkeypatch.setattr(task, "open_run", lambda **_kwargs: None)
     monkeypatch.setattr(task, "close_run", lambda **kwargs: log_closes.append(kwargs))
     monkeypatch.setattr(
+        task.intermediate_run_lifecycle,
+        "create_run",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        task.intermediate_runs_db,
+        "update_run",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
         task,
         "_update_progress",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(TaskRevoked("task-1")),

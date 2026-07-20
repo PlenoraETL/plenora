@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
 from app.core.carica.target_lock import (
+    CaricaTargetResolutionError,
     CaricaTargetLock,
     acquire_carica_target_lock,
+    refresh_carica_target_lock,
     release_carica_target_lock,
+    require_carica_target_lock,
     resolve_carica_target_lock,
+    start_carica_target_lock_heartbeat,
 )
 
 
@@ -99,7 +104,7 @@ def test_db_target_lock_is_tenant_aware_and_project_independent_inside_group():
     assert '"group_id":"group-1"' in first.identity
 
 
-def test_unknown_destination_keeps_legacy_no_lock_behavior():
+def test_unknown_destination_is_rejected_at_required_lock_boundary():
     assert (
         resolve_carica_target_lock(
             node_data={"connection_id": "conn-1"},
@@ -109,6 +114,20 @@ def test_unknown_destination_keeps_legacy_no_lock_behavior():
         )
         is None
     )
+    with pytest.raises(CaricaTargetResolutionError):
+        require_carica_target_lock(
+            node_data={"connection_id": "conn-1"},
+            project_id="project-1",
+            group_id="group-1",
+            write_branch="db",
+        )
+    with pytest.raises(CaricaTargetResolutionError):
+        require_carica_target_lock(
+            node_data={"dest_type": "rest"},
+            project_id="project-1",
+            group_id="group-1",
+            write_branch="rest",
+        )
     assert (
         resolve_carica_target_lock(
             node_data={"dest_type": "rest"},
@@ -233,10 +252,66 @@ def test_release_deletes_only_matching_owner(monkeypatch):
     assert params == ("carica:db:hash", "owner-1")
 
 
+def test_refresh_extends_only_unexpired_lock_owned_by_caller(monkeypatch):
+    cursor = _FakeCursor(rowcount=1)
+    conn = _FakeConnection(cursor)
+    monkeypatch.setattr(
+        "app.core.carica.target_lock_store.unit_of_work",
+        lambda: _fake_unit_of_work(conn),
+    )
+    target = CaricaTargetLock(
+        key="carica:db:hash",
+        kind="db",
+        identity="{}",
+        group_id="group-1",
+    )
+
+    refreshed = refresh_carica_target_lock(
+        SimpleNamespace(target=target, owner_token="owner-1"),
+        ttl_seconds=60,
+    )
+
+    assert refreshed is True
+    sql, params = cursor.executed[0]
+    assert "owner_token = %s" in sql
+    assert "expires_at > %s" in sql
+    assert params[2:4] == ("carica:db:hash", "owner-1")
+
+
+def test_heartbeat_marks_lock_lost_when_refresh_loses_ownership(monkeypatch):
+    attempted = threading.Event()
+    target = CaricaTargetLock(
+        key="carica:db:hash",
+        kind="db",
+        identity="{}",
+        group_id="group-1",
+    )
+    handle = SimpleNamespace(target=target, owner_token="owner-1")
+
+    def _lost(*args, **kwargs):
+        attempted.set()
+        return False
+
+    monkeypatch.setattr(
+        "app.core.carica.target_lock.refresh_carica_target_lock",
+        _lost,
+    )
+    heartbeat = start_carica_target_lock_heartbeat(
+        handle,
+        ttl_seconds=1,
+    )
+    assert attempted.wait(timeout=2.0)
+    heartbeat.stop()
+
+    assert heartbeat.lost is True
+    assert heartbeat.error == "ownership_lost"
+
+
 def test_task_uses_target_lock_before_loading_upstream_and_releases_in_finally(monkeypatch):
     import workers.tasks.carica_task as carica_task
 
     events: list[str] = []
+    lock_groups: list[str] = []
     monkeypatch.setattr(carica_task, "is_already_completed", lambda _run_id: False)
     monkeypatch.setattr(carica_task, "_update_progress", lambda *args, **kwargs: None)
     monkeypatch.setattr(
@@ -251,8 +326,11 @@ def test_task_uses_target_lock_before_loading_upstream_and_releases_in_finally(m
 
     monkeypatch.setattr(
         carica_task,
-        "resolve_carica_target_lock",
-        lambda **kwargs: SimpleNamespace(key="carica:db:hash", kind="db"),
+        "require_carica_target_lock",
+        lambda **kwargs: (
+            lock_groups.append(kwargs["group_id"])
+            or SimpleNamespace(key="carica:db:hash", kind="db")
+        ),
     )
     monkeypatch.setattr(
         carica_task,
@@ -270,11 +348,25 @@ def test_task_uses_target_lock_before_loading_upstream_and_releases_in_finally(m
     )
     monkeypatch.setattr(
         "app.core.projects.service.ProjectService.get_project_metadata",
-        lambda self, project_id: SimpleNamespace(group_id="group-1"),
+        lambda self, project_id: (_ for _ in ()).throw(
+            AssertionError("tenant lookup must not run with CARICA contract")
+        ),
     )
     monkeypatch.setattr(carica_task, "open_run", lambda **kwargs: None)
     monkeypatch.setattr(carica_task, "close_run", lambda **kwargs: None)
     monkeypatch.setattr(carica_task, "set_run_context", lambda **kwargs: None)
+    monkeypatch.setattr(
+        carica_task.intermediate_run_lifecycle,
+        "create_run",
+        lambda **kwargs: events.append("create"),
+    )
+    monkeypatch.setattr(
+        carica_task.intermediate_runs_db,
+        "update_run",
+        lambda _run_id, **kwargs: events.append(
+            f"update:{kwargs['status']}"
+        ),
+    )
 
     def _load(*args, **kwargs):
         events.append("load")
@@ -297,10 +389,33 @@ def test_task_uses_target_lock_before_loading_upstream_and_releases_in_finally(m
             "write_mode": "append",
         },
         run_id="run-1",
+        execution_contract={
+            "schema_version": 1,
+            "project_id": "project-1",
+            "project_type": "manipola",
+            "group_id": "group-contract",
+            "canvas": {},
+            "carica_node_data": {
+                "connection_id": "conn-1",
+                "schema_name": "public",
+                "table_name": "dest",
+                "write_mode": "append",
+            },
+            "output_format": "geojson",
+            "force_recalculate": False,
+            "triggered_by": "manual",
+        },
     )
 
     assert result["success"] is False
-    assert events == ["acquire", "load", "release"]
+    assert events == [
+        "create",
+        "acquire",
+        "load",
+        "update:failed",
+        "release",
+    ]
+    assert lock_groups == ["group-contract"]
 
 
 def test_task_fails_fast_when_target_lock_is_busy(monkeypatch):
@@ -314,7 +429,7 @@ def test_task_fails_fast_when_target_lock_is_busy(monkeypatch):
 
     monkeypatch.setattr(
         carica_task,
-        "resolve_carica_target_lock",
+        "require_carica_target_lock",
         lambda **kwargs: lock_target,
     )
     monkeypatch.setattr(
@@ -343,6 +458,18 @@ def test_task_fails_fast_when_target_lock_is_busy(monkeypatch):
     )
     monkeypatch.setattr(carica_task, "set_run_context", lambda **kwargs: None)
     monkeypatch.setattr(
+        carica_task.intermediate_run_lifecycle,
+        "create_run",
+        lambda **kwargs: events.append("create"),
+    )
+    monkeypatch.setattr(
+        carica_task.intermediate_runs_db,
+        "update_run",
+        lambda _run_id, **kwargs: events.append(
+            f"update:{kwargs['status']}"
+        ),
+    )
+    monkeypatch.setattr(
         carica_task,
         "_load_upstream_data",
         lambda *args, **kwargs: events.append("load"),
@@ -368,5 +495,5 @@ def test_task_fails_fast_when_target_lock_is_busy(monkeypatch):
     assert result["success"] is False
     assert result["status"] == "conflict"
     assert result["error"] == "carica_target_locked"
-    assert events == ["acquire"]
+    assert events == ["create", "acquire", "update:failed"]
     assert close_calls[-1]["status"] == "failure"

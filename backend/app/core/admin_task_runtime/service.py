@@ -18,6 +18,7 @@ from app.core.admin_task_runtime.models import (
     WorkerStatus,
 )
 from app.core.task_runtime import runtime_leases
+from app.core.task_runtime import uncertain_recovery
 from app.observability import runtime_ports
 from app.utils.logger import get_logger
 
@@ -181,6 +182,30 @@ def get_task_runtime_payload() -> TaskRuntimePayload:
         warnings.append(warning)
         logger.warning("task runtime claim probe failed: %s", exc)
 
+    uncertain_runs = []
+    try:
+        uncertain_runs = [
+            {
+                "run_id": item.run_id,
+                "project_id": item.project_id,
+                "group_id": item.group_id,
+                "timestamp": item.timestamp,
+                "error_message": item.error_message,
+            }
+            for item in uncertain_recovery.list_uncertain_carica_runs(limit=100)
+        ]
+    except (
+        PsycopgError,
+        PoolTimeout,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        warning = f"Run CARICA incerte non disponibili: {type(exc).__name__}"
+        warnings.append(warning)
+        logger.warning("task runtime uncertain-run probe failed: %s", exc)
+
     work_queues = [item for item in queues if item.kind == "work"]
     dead_queues = [item for item in queues if item.kind == "dead_letter"]
     totals = TaskRuntimeTotals(
@@ -193,6 +218,7 @@ def get_task_runtime_payload() -> TaskRuntimePayload:
         expired_task_leases=sum(
             item.status == "lease_expired" for item in running_tasks
         ),
+        uncertain_carica_runs=len(uncertain_runs),
     )
 
     has_error = (
@@ -204,6 +230,7 @@ def get_task_runtime_payload() -> TaskRuntimePayload:
         bool(warnings)
         or totals.workers_stale > 0
         or totals.expired_task_leases > 0
+        or totals.uncertain_carica_runs > 0
         or any(item.status == "warn" for item in queues)
     )
     status = "error" if has_error else "warn" if has_warning else "ok"
@@ -215,6 +242,7 @@ def get_task_runtime_payload() -> TaskRuntimePayload:
         queues=queues,
         workers=workers,
         running_tasks=running_tasks,
+        uncertain_runs=uncertain_runs,
         totals=totals,
         warnings=warnings,
     )

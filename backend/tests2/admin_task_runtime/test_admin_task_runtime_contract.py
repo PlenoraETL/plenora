@@ -12,6 +12,7 @@ from app.core.admin_task_runtime import service
 from app.core.auth.dependencies import require_superadmin
 from app.core.task_runtime.probes import RabbitmqQueueStats
 from app.core.task_runtime.runtime_leases import RunningTaskClaim, WorkerHeartbeat
+from app.core.task_runtime.uncertain_recovery import UncertainResolutionOutcome
 from app.shared.contracts.auth import CurrentUser
 
 
@@ -94,6 +95,11 @@ def test_service_aggregates_queues_workers_and_expired_leases(monkeypatch) -> No
         ],
     )
     monkeypatch.setattr(
+        service.uncertain_recovery,
+        "list_uncertain_carica_runs",
+        lambda **_kwargs: [],
+    )
+    monkeypatch.setattr(
         service.runtime_leases,
         "list_running_task_claims",
         lambda **_kwargs: [
@@ -126,3 +132,36 @@ def test_service_aggregates_queues_workers_and_expired_leases(monkeypatch) -> No
     assert payload.totals.expired_task_leases == 1
     assert payload.status == "warn"
     assert payload.running_tasks[1].status == "lease_expired"
+
+
+def test_uncertain_resolution_requires_superadmin() -> None:
+    response = _client(authenticated=False).post(
+        "/api/admin/task-runtime/uncertain-carica/run-1/resolve",
+        json={"resolution": "allow_retry", "note": "Target verificato"},
+    )
+    assert response.status_code in {401, 403}
+
+
+def test_superadmin_can_resolve_uncertain_run(monkeypatch) -> None:
+    monkeypatch.setattr(
+        router_module,
+        "resolve_uncertain_carica_run",
+        lambda **_kwargs: UncertainResolutionOutcome(
+            run_id="run-1",
+            previous_status="completion_uncertain",
+            status="failed",
+            resolution="allow_retry",
+        ),
+    )
+
+    response = _client(authenticated=True).post(
+        "/api/admin/task-runtime/uncertain-carica/run-1/resolve",
+        json={
+            "resolution": "allow_retry",
+            "note": "Destinazione verificata, nessuna riga presente",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "failed"
+    assert response.json()["resolution"] == "allow_retry"

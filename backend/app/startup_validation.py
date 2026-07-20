@@ -228,6 +228,57 @@ def validate_data_plane_config(settings: Any, errors: list[str]) -> None:
         )
 
 
+def validate_runtime_timing_config(settings: Any, errors: list[str]) -> None:
+    """Reject lease/heartbeat combinations that make ownership unsafe."""
+
+    def positive_int(key: str, default: int) -> int:
+        raw_value = settings.get(key, default)
+        try:
+            value = int(raw_value)
+        except (TypeError, ValueError):
+            value = 0
+        if value <= 0:
+            errors.append(
+                f"{key} deve essere un intero positivo (ricevuto {raw_value!r})."
+            )
+        return value
+
+    worker_heartbeat = positive_int("WORKER_HEARTBEAT_INTERVAL_SECONDS", 10)
+    task_lease = positive_int("TASK_EXECUTION_LEASE_SECONDS", 45)
+    readiness_age = positive_int(
+        "READINESS_WORKER_HEARTBEAT_MAX_AGE_SECONDS", 45,
+    )
+    schedule_ttl = positive_int("SCHEDULE_LOCK_TTL_SECONDS", 600)
+    schedule_heartbeat = positive_int(
+        "SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS", 180,
+    )
+    task_hard_limit = positive_int("TASK_HARD_LIMIT", 3900)
+    schedule_hard_limit = positive_int("TASK_SCHEDULE_HARD_LIMIT", 3600)
+    result_ttl = positive_int("TASK_RESULT_EXPIRES", 86400)
+    positive_int("CARICA_TARGET_LOCK_TTL_SECONDS", task_hard_limit + 300)
+
+    if task_lease and worker_heartbeat and task_lease < worker_heartbeat * 3:
+        errors.append(
+            "TASK_EXECUTION_LEASE_SECONDS deve essere almeno tre volte "
+            "WORKER_HEARTBEAT_INTERVAL_SECONDS per tollerare tick mancati."
+        )
+    if readiness_age and worker_heartbeat and readiness_age < worker_heartbeat * 2:
+        errors.append(
+            "READINESS_WORKER_HEARTBEAT_MAX_AGE_SECONDS deve essere almeno "
+            "due volte WORKER_HEARTBEAT_INTERVAL_SECONDS."
+        )
+    if schedule_ttl and schedule_heartbeat and schedule_ttl <= schedule_heartbeat * 2:
+        errors.append(
+            "SCHEDULE_LOCK_TTL_SECONDS deve essere maggiore del doppio di "
+            "SCHEDULE_LOCK_HEARTBEAT_INTERVAL_SECONDS."
+        )
+    if result_ttl and result_ttl <= max(task_hard_limit, schedule_hard_limit):
+        errors.append(
+            "TASK_RESULT_EXPIRES deve superare i limiti massimi dei task, "
+            "altrimenti metadata ed esito possono scadere durante la run."
+        )
+
+
 def ensure_broker(settings: Any, errors: list) -> None:
     """Verify RabbitMQ broker reachability with a bounded TCP connect.
 
@@ -295,6 +346,7 @@ def validate_startup(settings: Any) -> None:
 
     validate_production_gates(settings, errors)
     validate_data_plane_config(settings, errors)
+    validate_runtime_timing_config(settings, errors)
     _validate_data_dir(settings, errors)
     _cleanup_temp_dir(settings)
     ensure_broker(settings, errors)
@@ -314,5 +366,6 @@ __all__ = [
     "production_gates_required",
     "validate_data_plane_config",
     "validate_production_gates",
+    "validate_runtime_timing_config",
     "validate_startup",
 ]

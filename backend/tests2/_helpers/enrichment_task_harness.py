@@ -467,6 +467,7 @@ def invoke_enrichment_task(
     *, project_id: str, canvas: Dict, run_id: Optional[str] = None,
     is_eseguibile: bool = False, output_format: str = "csv",
     user_id: Optional[str] = "test-user",
+    execution_contract: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Invoca `execute_enrichment_task` (funzione pura) e ritorna il dict.
 
@@ -485,6 +486,7 @@ def invoke_enrichment_task(
     return execute_enrichment_task(
         shim, project_id, canvas, output_format, False, None,
         is_eseguibile, run_id, user_id,
+        execution_contract=execution_contract,
     )
 
 

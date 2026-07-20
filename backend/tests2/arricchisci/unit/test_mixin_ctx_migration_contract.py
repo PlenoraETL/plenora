@@ -373,15 +373,13 @@ def test_canvas_orchestrator_passes_ctx_to_mixin_callsites():
             )
 
 
-def test_canvas_orchestrator_init_returns_ctx_used_in_dispatch():
-    """Lock the wiring: `init_execution_context(...)` -> variabile
-    `ctx` -> passata ai callsite. Verificato leggendo il sorgente."""
+def test_canvas_orchestrator_prefers_supplied_ctx_with_legacy_lookup_fallback():
+    """Lock canonical queued context plus compatibility lookup fallback."""
     src = (
         _BACKEND_ROOT / "app" / "core" / "arricchisci" / "canvas_orchestrator.py"
     ).read_text(encoding="utf-8")
-    assert "ctx = init_execution_context(svc, project_id, preview_limit)" in src, (
-        "Atteso assignment `ctx = init_execution_context(...)` nel "
-        "body di `execute_canvas_enrichment`."
+    assert "ctx = execution_context or init_execution_context(" in src, (
+        "Il contesto accodato deve prevalere sul lookup runtime legacy."
     )
 def test_rest_file_strict_helpers_still_present():
     """Assicura che le strict boundary (`_extract_file_source_group_id`,

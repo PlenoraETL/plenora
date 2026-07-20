@@ -797,9 +797,14 @@ def preview_pipeline_task(
     project_id: str,
     limit: int = settings.MAX_PREVIEW_ROWS,
     user_id: Optional[str] = None,
+    execution_contract: Optional[JsonObject] = None,
 ) -> JsonObject:
     """Task asincrono per preview pipeline."""
     task_id = self.request.id
+    contract = _normalize_execution_contract(
+        execution_contract,
+        expected_project_id=project_id,
+    )
     logger.info(f"Task PREVIEW {task_id} avviato per progetto {project_id}")
     _update_progress(self, 0, "Inizializzazione preview...")
 
@@ -816,7 +821,14 @@ def preview_pipeline_task(
     try:
         _update_progress(self, 10, "Esecuzione preview...")
         orchestrator = _build_orchestrator()
-        result = orchestrator.execute_preview(project_id, limit=limit)
+        if contract is not None:
+            result = orchestrator.execute_preview_from_contract(
+                contract,
+                limit=limit,
+            )
+        else:
+            # Compatibility for preview messages queued before contracts.
+            result = orchestrator.execute_preview(project_id, limit=limit)
 
         if not result.get("success"):
             message = result.get("message", "Errore preview")
@@ -857,7 +869,11 @@ def preview_pipeline_task(
             persist_preview_payload,
         )
 
-        preview_group_id = str(_get_project_info(project_id).get("group_id") or "")
+        preview_group_id = (
+            contract.group_id
+            if contract is not None
+            else str(_get_project_info(project_id).get("group_id") or "")
+        )
         if not preview_group_id:
             raise RuntimeError("group_id progetto non determinabile per preview")
 

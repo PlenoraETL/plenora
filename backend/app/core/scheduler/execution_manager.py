@@ -27,6 +27,14 @@ from app.core.scheduler.scheduler_preflight import pre_check_destination_connect
 from app.utils.logger import get_logger, open_run, close_run, set_run_context
 from app.core import artifacts as artifact_module
 from app.core.carica import models as carica_models
+from app.core.carica.target_lock import (
+    CaricaTargetLockHandle,
+    acquire_carica_target_lock,
+    release_carica_target_lock,
+    require_carica_target_lock,
+    start_carica_target_lock_heartbeat,
+)
+from app.config import settings
 from app.core.connections.service import ConnectionService
 from app.core.dataframes import frame_io as dataframe_frame_io
 from app.core.intermediate import cleanup as intermediate_cleanup
@@ -65,6 +73,23 @@ class SchedulerCaricaResult(TypedDict, total=False):
     rows_inserted: int
     rows_updated: int
     rows_skipped: int
+
+
+def _release_carica_target_lock_safely(handle: CaricaTargetLockHandle) -> None:
+    """Release a CARICA target lock without masking the write outcome."""
+    try:
+        released = release_carica_target_lock(handle)
+    except Exception as exc:
+        logger.warning(
+            f"Rilascio target lock CARICA scheduler fallito: {exc}",
+            op="execution_manager._execute_carica",
+        )
+        return
+    if not released:
+        logger.warning(
+            "Rilascio target lock CARICA scheduler non confermato",
+            op="execution_manager._execute_carica",
+        )
 
 
 class ExecutionManager:
@@ -342,33 +367,104 @@ class ExecutionManager:
                 raise
             return {"success": False, "status": "queued", "message": "In coda"}
 
-        # Lock acquisito: apri la run nel checkpoint store.
-        open_run(
-            run_id=run_id,
-            project_id=project_id,
-            group_id=_group_id,
-            module=config.pipeline.project_type if config else "scheduler",
-            triggered_by=triggered_by,
-        )
-        # Apri run anche su intermediate storage: `open_run` popola
-        # `log_runs` per la dashboard, mentre `node_meta` ha FK su `runs.id`.
+        # Da qui il concurrency lock e' posseduto. Ogni failure di setup deve
+        # rilasciarlo esplicitamente, perche' il try/finally principale parte
+        # solo dopo che heartbeat e runtime state sono stati inizializzati.
+        setup_log_run_opened = False
+        setup_intermediate_run_opened = False
+        setup_runtime_started = False
         try:
+            open_run(
+                run_id=run_id,
+                project_id=project_id,
+                group_id=_group_id,
+                module=config.pipeline.project_type if config else "scheduler",
+                triggered_by=triggered_by,
+            )
+            setup_log_run_opened = True
+
+            # `node_meta` ha FK su `runs.id`: senza questa riga la pipeline
+            # non puo' procedere in modo consistente.
             intermediate_run_lifecycle.create_run(
                 run_id=run_id,
                 canvas_id=project_id,
                 group_id=_group_id,
                 user_id=None,  # cron / scheduled: no user umano
             )
-        except Exception as _ie:
-            logger.warning(
-                f"Intermediate: apertura run fallita (non bloccante): {_ie}",
-                op="execution_manager.create_intermediate_run",
-            )
-        set_run_context(run_id=run_id, project_id=project_id)
+            setup_intermediate_run_opened = True
+            set_run_context(run_id=run_id, project_id=project_id)
 
-        # Qui siamo gia' dentro `execute()`: non c'e' un enqueue futuro che
-        # possa fallire, quindi RUNNING rappresenta lo stato reale della run.
-        self.schedule_service.set_runtime_status(schedule_id, RuntimeStatus.RUNNING)
+            # Qui siamo gia' dentro `execute()`: non c'e' un enqueue futuro
+            # che possa fallire, quindi RUNNING rappresenta lo stato reale.
+            self.schedule_service.set_runtime_status(
+                schedule_id,
+                RuntimeStatus.RUNNING,
+            )
+            setup_runtime_started = True
+            heartbeat_state = start_lock_heartbeat(
+                self.concurrency,
+                schedule_id,
+                owner_id=run_id,
+            )
+        except BaseException:
+            if setup_intermediate_run_opened:
+                try:
+                    intermediate_runs_db.update_run(run_id, status="failed")
+                except Exception as cleanup_error:
+                    logger.warning(
+                        "Cleanup run intermediate fallito durante setup "
+                        f"scheduler {schedule_id}: {cleanup_error}"
+                    )
+            if setup_log_run_opened:
+                try:
+                    close_run(
+                        run_id=run_id,
+                        status="failure",
+                        duration_ms=int((time.time() - start_time) * 1000),
+                        error_module="scheduler",
+                        error_message="Inizializzazione scheduler fallita",
+                    )
+                except Exception as cleanup_error:
+                    logger.warning(
+                        "Cleanup log run fallito durante setup scheduler "
+                        f"{schedule_id}: {cleanup_error}"
+                    )
+            if setup_runtime_started:
+                try:
+                    self.schedule_service.set_runtime_status(
+                        schedule_id,
+                        RuntimeStatus.IDLE,
+                    )
+                except Exception as cleanup_error:
+                    logger.warning(
+                        "Rollback runtime status fallito durante setup "
+                        f"scheduler {schedule_id}: {cleanup_error}"
+                    )
+            from app.core.scheduler.scheduler_release import (
+                release_lock_with_retry,
+            )
+
+            release_lock_with_retry(
+                self.concurrency,
+                schedule_id,
+                owner_id=run_id,
+            )
+            try:
+                intermediate_cleanup.close_worker_connection()
+            except Exception as cleanup_error:
+                logger.debug(
+                    "close_connection intermediate fallito durante setup: "
+                    f"{type(cleanup_error).__name__}: {cleanup_error}"
+                )
+            try:
+                scheduler_db.close_connection()
+            except Exception as cleanup_error:
+                logger.debug(
+                    "close_connection config fallito durante setup: "
+                    f"{type(cleanup_error).__name__}: {cleanup_error}"
+                )
+            raise
+
         # Tracker per il rollback del runtime status nel finally. Settato
         # a True quando `update_runtime` viene chiamato (success path) o
         # quando `handle_failure` viene invocato (failure path); il
@@ -376,12 +472,6 @@ class ExecutionManager:
         # rollback se il worker e' stato killato a metà esecuzione e
         # nessuno dei due path canonici ha aggiornato lo status.
         runtime_status_finalized = False
-
-        heartbeat_state = start_lock_heartbeat(
-            self.concurrency,
-            schedule_id,
-            owner_id=run_id,
-        )
 
         try:
             if config.destination and config.pre_check.verify_destination_connection:
@@ -454,7 +544,12 @@ class ExecutionManager:
             
             if config.destination:
                 carica_start = time.time()
-                carica_result = self._execute_carica(config, result, scheduled_for=scheduled_for)
+                carica_result = self._execute_carica(
+                    config,
+                    result,
+                    group_id=_group_id,
+                    scheduled_for=scheduled_for,
+                )
                 carica_duration = int((time.time() - carica_start) * 1000)
                 
                 if carica_result.get("success"):
@@ -689,6 +784,8 @@ class ExecutionManager:
         self,
         config: ScheduleConfig,
         pipeline_result: dict,
+        *,
+        group_id: str,
         scheduled_for: Optional[str] = None,
     ) -> SchedulerCaricaResult:
         """
@@ -728,6 +825,7 @@ class ExecutionManager:
             f"schedule-{config.id}-{scheduled_for}-carica"
             if scheduled_for else None
         )
+        write_started = False
 
         try:
             # Risoluzione artefatto centralizzata via PipelineArtifact +
@@ -795,35 +893,148 @@ class ExecutionManager:
                 connection_service=self._get_connection_service()
             )
 
+            target_lock = require_carica_target_lock(
+                node_data=node_data,
+                project_id=project_id,
+                group_id=group_id,
+                write_branch="db",
+            )
+            owner_token = carica_run_id or (
+                f"schedule={config.id};attempt={_uuid.uuid4()}"
+            )
+            target_lock_ttl_seconds = max(
+                1,
+                int(
+                    settings.get(
+                        "CARICA_TARGET_LOCK_TTL_SECONDS",
+                        settings.TASK_HARD_LIMIT + 300,
+                    )
+                ),
+            )
+            target_lock_handle = acquire_carica_target_lock(
+                target=target_lock,
+                owner_token=owner_token,
+                ttl_seconds=target_lock_ttl_seconds,
+            )
+            if target_lock_handle is None:
+                return {
+                    "success": False,
+                    "error": (
+                        "Destinazione CARICA gia' in scrittura da un altro task"
+                    ),
+                }
+
             # Registra la run intermediate prima dell'execute: il run_id
             # deterministico deve esistere per permettere al guard
             # idempotente di riconoscere replay dello stesso tick.
             if carica_run_id:
                 try:
-                    if intermediate_runs_db.get_run(carica_run_id) is None:
+                    existing_run = intermediate_runs_db.get_run(carica_run_id)
+                    if existing_run is None:
                         intermediate_run_lifecycle.create_run(
                             run_id=carica_run_id,
                             canvas_id=project_id,
-                            group_id=f"schedule-{config.id}-carica",
+                            group_id=group_id,
                             user_id=None,
                         )
+                    else:
+                        existing_status = str(existing_run.get("status") or "")
+                        if existing_status == "completed":
+                            _release_carica_target_lock_safely(
+                                target_lock_handle
+                            )
+                            return {
+                                "success": True,
+                                "rows_written": 0,
+                                "rows_inserted": 0,
+                                "rows_updated": 0,
+                                "rows_skipped": 0,
+                            }
+                        if existing_status == "running":
+                            _release_carica_target_lock_safely(
+                                target_lock_handle
+                            )
+                            return {
+                                "success": False,
+                                "error": "Stato CARICA incerto: replay bloccato",
+                                "message": (
+                                    "Esiste una scrittura CARICA non terminale; "
+                                    "verifica la destinazione prima di rilanciare."
+                                ),
+                            }
+                        if existing_status != "failed":
+                            raise RuntimeError(
+                                "Stato idempotente CARICA non riconosciuto: "
+                                f"{existing_status or '<vuoto>'}"
+                            )
+                        intermediate_runs_db.update_run(
+                            carica_run_id,
+                            status="running",
+                        )
                 except Exception as _ie:
-                    # Fail-open: se l'apertura della run intermediate esplode,
-                    # non blocco la scrittura. L'unico effetto collaterale e'
-                    # che il guard idempotency non scattera' al replay.
-                    logger.warning(
+                    logger.error(
                         f"Intermediate: apertura run CARICA fallita "
-                        f"(non bloccante) per {carica_run_id}: {_ie}",
+                        f"(scrittura bloccata) per {carica_run_id}: {_ie}",
                         op="execution_manager._execute_carica",
                     )
+                    _release_carica_target_lock_safely(target_lock_handle)
+                    return {
+                        "success": False,
+                        "error": "Barriera idempotente CARICA non disponibile",
+                    }
 
-            write_result = carica_executor.execute(
-                df=df,
-                node_data=node_data,
-                project_id=project_id,
-                triggered_by="scheduler",
-                run_id=carica_run_id,
-            )
+            try:
+                target_lock_heartbeat = (
+                    start_carica_target_lock_heartbeat(
+                        target_lock_handle,
+                        ttl_seconds=target_lock_ttl_seconds,
+                    )
+                )
+            except BaseException:
+                _release_carica_target_lock_safely(target_lock_handle)
+                raise
+            try:
+                write_started = True
+                write_result = carica_executor.execute(
+                    df=df,
+                    node_data=node_data,
+                    project_id=project_id,
+                    triggered_by="scheduler",
+                    run_id=carica_run_id,
+                    expected_group_id=group_id,
+                )
+            finally:
+                target_lock_heartbeat.stop()
+                _release_carica_target_lock_safely(target_lock_handle)
+
+            if target_lock_heartbeat.lost:
+                logger.error(
+                    "CARICA scheduler: target lock perso durante la write "
+                    f"(run={carica_run_id}, error={target_lock_heartbeat.error})",
+                    op="execution_manager._execute_carica",
+                )
+                if carica_run_id:
+                    try:
+                        intermediate_runs_db.update_run(
+                            carica_run_id,
+                            status="completion_uncertain",
+                        )
+                    except Exception:
+                        logger.error(
+                            "Intermediate: marcatura completion_uncertain "
+                            f"fallita per {carica_run_id}",
+                            op="execution_manager._execute_carica",
+                            exc_info=True,
+                        )
+                return {
+                    "success": False,
+                    "error": "carica_target_lock_lost",
+                    "run_id": carica_run_id,
+                    "message": (
+                        "Ownership del target lock persa durante la scrittura; "
+                        "verifica la destinazione prima di rilanciare."
+                    ),
+                }
 
             # SKIPPED_IDEMPOTENT is a safe no-op on retry.
             # Se non incluso qui, il guard causa retry loop infiniti
@@ -845,11 +1056,34 @@ class ExecutionManager:
                         status="completed" if success else "failed",
                     )
                 except Exception as _ue:
-                    logger.warning(
+                    logger.error(
                         f"Intermediate: chiusura run CARICA fallita "
-                        f"(non bloccante) per {carica_run_id}: {_ue}",
+                        f"per {carica_run_id}: {_ue}",
                         op="execution_manager._execute_carica",
                     )
+                    if success:
+                        try:
+                            intermediate_runs_db.update_run(
+                                carica_run_id,
+                                status="completion_uncertain",
+                            )
+                        except Exception:
+                            logger.error(
+                                "Intermediate: marcatura completion_uncertain "
+                                f"fallita per {carica_run_id}",
+                                op="execution_manager._execute_carica",
+                                exc_info=True,
+                            )
+                        return {
+                            "success": False,
+                            "error": "carica_completion_uncertain",
+                            "run_id": carica_run_id,
+                            "message": (
+                                "Scrittura completata, ma conferma idempotente "
+                                "non persistita: verifica la destinazione prima "
+                                "di rilanciare."
+                            ),
+                        }
 
             if not success:
                 error_msg = write_result.error_message or f"Scrittura fallita: {write_result.status.value}"
@@ -876,21 +1110,22 @@ class ExecutionManager:
 
         except Exception as e:
             logger.error(f"[GESTITO] Errore CARICA scheduler: {e}", op="carica", exc_info=True)
-            # Marcatura best-effort della run come failed: se il
-            # crash e' arrivato dopo create_run ma prima
-            # dell'update_run di chiusura, la riga resta "running" e
-            # nessun guard scatterebbe al replay. Marcandola "failed"
-            # il replay del prossimo tick riprova (e non skippa).
+            # Prima dell'avvio della write il retry e' sicuro e la run puo'
+            # diventare failed. Dopo l'avvio l'esito esterno e' incerto:
+            # persisti una barriera esplicita che richiede verifica operatore.
             # Se la run non era mai stata creata, l'UPDATE colpisce 0
             # righe → no-op silente, comportamento corretto.
             if carica_run_id:
                 try:
                     intermediate_runs_db.update_run(
-                        carica_run_id, status="failed"
+                        carica_run_id,
+                        status=(
+                            "completion_uncertain" if write_started else "failed"
+                        ),
                     )
                 except Exception as _ue:
                     logger.warning(
-                        f"Intermediate: marcatura run CARICA failed "
+                        f"Intermediate: marcatura run CARICA terminale "
                         f"fallita (non bloccante) per {carica_run_id}: {_ue}",
                         op="execution_manager._execute_carica",
                     )

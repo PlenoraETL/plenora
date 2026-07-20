@@ -172,6 +172,7 @@ class CanvasExecutorProtocol(Protocol):
         project_id: str,
         canvas: Any,
         limit: int,
+        execution_context: Optional[Mapping[str, Any]] = None,
     ) -> JsonObject:
         """Run the pipeline without persisting. Truncate output to ``limit`` rows.
 

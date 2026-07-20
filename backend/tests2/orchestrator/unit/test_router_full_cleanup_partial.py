@@ -127,6 +127,7 @@ def test_full_cleanup_authorizes_and_deletes_eseguibile_artifacts(client, tmp_pa
         result={
             "project_id": "exec_1",
             "result_id": "res-1",
+            "is_eseguibile": True,
         },
     )
     with patch(

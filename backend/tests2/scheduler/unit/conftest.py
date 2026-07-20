@@ -24,6 +24,37 @@ from app.core.scheduler.models import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _stub_carica_target_lock(monkeypatch):
+    """I test unit scheduler non devono aprire il lock store PostgreSQL.
+
+    I contratti dedicati possono sovrascrivere questi stub per verificare
+    contenuto e ordine delle chiamate.
+    """
+    target = type(
+        "Target",
+        (),
+        {"key": "carica:db:test", "kind": "db", "group_id": "group-1"},
+    )()
+    handle = type(
+        "Handle",
+        (),
+        {"target": target, "owner_token": "scheduler-test"},
+    )()
+    monkeypatch.setattr(
+        "app.core.scheduler.execution_manager.require_carica_target_lock",
+        lambda **_kwargs: target,
+    )
+    monkeypatch.setattr(
+        "app.core.scheduler.execution_manager.acquire_carica_target_lock",
+        lambda **_kwargs: handle,
+    )
+    monkeypatch.setattr(
+        "app.core.scheduler.execution_manager.release_carica_target_lock",
+        lambda _handle: True,
+    )
+
+
 
 
 @pytest.fixture(autouse=True)

@@ -106,6 +106,9 @@ class Settings:
         "TASK_EXECUTION_RECOVERY_GRACE_SECONDS": 30,
         "TASK_EXECUTION_STALE_BATCH_SIZE": 100,
         "RUNTIME_LEASE_RETENTION_SECONDS": 86400,
+        # Lock per destinazione CARICA. Viene rinnovato da heartbeat durante
+        # la write; il default lascia margine oltre il task hard limit.
+        "CARICA_TARGET_LOCK_TTL_SECONDS": 4200,
         # Zero means any dead-letter message makes readiness fail. Set a
         # positive tolerance only during an explicitly managed incident.
         "READINESS_TASK_DLQ_MAX_MESSAGES": 0,

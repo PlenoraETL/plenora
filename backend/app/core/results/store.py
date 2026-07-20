@@ -32,17 +32,23 @@ def resolve_group_id_for_result(
     project_id: str,
     group_id: Optional[str] = None,
 ) -> str:
-    """Return the explicit group id or the owning project's group fallback."""
-    if group_id:
-        return group_id
+    """Resolve and validate the result tenant against project ownership."""
 
     from app.config import settings
-    from app.core.projects.runtime_context import resolve_project_runtime_group_id
+    from app.core.projects.runtime_context import get_project_runtime_context
 
-    return resolve_project_runtime_group_id(
-        project_id,
-        default_group=settings.DEFAULT_GROUP,
-    )
+    context = get_project_runtime_context(project_id)
+    if context is None:
+        raise LookupError(
+            f"Progetto {project_id} non trovato durante salvataggio risultato"
+        )
+    persisted_group_id = str(context.group_id or settings.DEFAULT_GROUP).strip()
+    requested_group_id = str(group_id or "").strip()
+    if requested_group_id and requested_group_id != persisted_group_id:
+        raise ValueError(
+            "group_id risultato non coerente con il progetto proprietario"
+        )
+    return persisted_group_id
 
 
 def save_result_row(

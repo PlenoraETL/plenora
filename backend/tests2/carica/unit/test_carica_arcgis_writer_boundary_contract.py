@@ -222,7 +222,10 @@ def test_worker_delegates_arcgis_provider_write_to_carica_boundary() -> None:
     ) as create_writer, patch(
         "app.core.carica.dispatch.execute_carica_arcgis_write",
         return_value=outcome,
-    ) as execute_boundary:
+    ) as execute_boundary, patch(
+        "app.core.carica.dispatch.is_resource_visible",
+        return_value=True,
+    ):
         result = execute_arcgis_write(
             df=df,
             carica_node_data={
@@ -238,6 +241,7 @@ def test_worker_delegates_arcgis_provider_write_to_carica_boundary() -> None:
             project_id="proj-1",
             task_id="task-1",
             progress=lambda _p, _m: None,
+            expected_group_id="group-1",
         )
 
     create_writer.assert_called_once_with()

@@ -63,7 +63,15 @@ def apply_runs_retention(
             list_boundary = list_runs
 
         all_runs = list_boundary(canvas_id, group_id, 1000)
-        unpinned = [r for r in all_runs if not r.get("pinned")]
+        # Solo run terminali sicure sono candidabili. Una run ``running`` o
+        # ``completion_uncertain`` e' una barriera di idempotenza: cancellarla
+        # renderebbe possibile un replay mentre la write originale e' ancora
+        # attiva o ha un esito non verificato.
+        unpinned = [
+            r for r in all_runs
+            if not r.get("pinned")
+            and str(r.get("status") or "") in {"completed", "failed"}
+        ]
 
         if len(unpinned) <= retention_n:
             return

@@ -162,9 +162,29 @@ def select_carica_write_branch(carica_node_data: JsonObject) -> str:
     return 'db'
 
 
+def _arcgis_connection_visible(connection_id: str, group_id: str) -> bool:
+    """Fail-closed visibility check at the background write boundary."""
+    if not connection_id or not group_id:
+        return False
+    try:
+        return bool(is_resource_visible(
+            "arcgis_connections",
+            connection_id,
+            group_id,
+            is_superadmin=False,
+        ))
+    except Exception:
+        logger.error(
+            "[SECURITY] Verifica visibilita connessione ArcGIS fallita",
+            exc_info=True,
+        )
+        return False
+
+
 def execute_datasource_write(
     df, carica_node_data, project_id, task_id, *, progress: ProgressFn,
     committed_progress: Optional[ProgressFn] = None,
+    expected_group_id: Optional[str] = None,
 ):
     """Scrive il DataFrame su un DataSource (local/FTP/SFTP/SharePoint)."""
     datasource_id = carica_node_data.get('datasource_id', '')
@@ -182,8 +202,12 @@ def execute_datasource_write(
         }
 
     try:
-        metadata = _get_project_service().get_project_metadata(project_id)
-        group_id = getattr(metadata, "group_id", None) if metadata else None
+        group_id = str(expected_group_id or "").strip()
+        if not group_id:
+            metadata = _get_project_service().get_project_metadata(project_id)
+            group_id = str(
+                getattr(metadata, "group_id", None) if metadata else ""
+            ).strip()
         if not group_id or not is_resource_visible(
             "datasources",
             datasource_id,
@@ -267,6 +291,7 @@ def execute_datasource_write(
 def execute_db_write(
     df, carica_node_data, project_id, task_id, triggered_by, run_id=None,
     *, progress: ProgressFn, committed_progress: Optional[ProgressFn] = None,
+    expected_group_id: Optional[str] = None,
 ):
     """Esegue il caricamento su database (percorso originale).
 
@@ -290,6 +315,7 @@ def execute_db_write(
         progress_callback=progress_callback,
         triggered_by=triggered_by,
         run_id=run_id,
+        expected_group_id=expected_group_id,
     )
 
     result_dict = result.to_dict()
@@ -367,6 +393,7 @@ def maybe_multilayer_arcgis_write(
     *,
     progress: ProgressFn,
     committed_progress: Optional[ProgressFn] = None,
+    expected_group_id: Optional[str] = None,
 ) -> Optional[JsonObject]:
     """Pubblica N layer su ArcGIS se l'artefatto upstream e' un bundle multi-layer.
 
@@ -376,12 +403,14 @@ def maybe_multilayer_arcgis_write(
     composition root. Se nessun adapter riconosce il payload -> ``None`` e il
     chiamante ricade sul path mono-layer (DataFrame).
     """
-    try:
-        _ctx = get_project_runtime_context(project_id)
-        group_id = _ctx.group_id if _ctx else None
-    except Exception as exc:
-        logger.warning(f"[GESTITO] multilayer: lookup group_id fallito: {exc}")
-        return None
+    group_id = str(expected_group_id or "").strip()
+    if not group_id:
+        try:
+            _ctx = get_project_runtime_context(project_id)
+            group_id = str(_ctx.group_id or "").strip() if _ctx else ""
+        except Exception as exc:
+            logger.warning(f"[GESTITO] multilayer: lookup group_id fallito: {exc}")
+            return None
     if not group_id:
         logger.error(
             f"[SECURITY] multilayer: group_id non determinabile per {project_id}, "
@@ -435,6 +464,22 @@ def maybe_multilayer_arcgis_write(
         renderers=artifact.renderers_by_layer_name or None,
     )
 
+    connection_id = request.connection_id
+    if not _arcgis_connection_visible(connection_id, group_id):
+        logger.error(
+            "[SECURITY] Connessione ArcGIS non visibile al tenant CARICA "
+            f"(project={project_id}, group={group_id})"
+        )
+        return {
+            "status": "connection_error",
+            "success": False,
+            "error": "arcgis_connection_not_visible",
+            "message": "Connessione ArcGIS non visibile al gruppo del progetto",
+            "error_message": "Connessione ArcGIS non visibile al gruppo del progetto",
+            "rows_written": 0,
+            "total_rows": sum(len(layer.df) for layer in artifact.layers),
+        }
+
     outcome = arcgis_write_boundary_module.execute_carica_arcgis_multilayer_write(
         layers=list(artifact.layers),
         request=request,
@@ -464,6 +509,7 @@ def execute_arcgis_write(
     *,
     progress: ProgressFn,
     committed_progress: Optional[ProgressFn] = None,
+    expected_group_id: Optional[str] = None,
 ) -> Mapping[str, object]:
     """Coordinate ArcGIS write progress while the domain owns provider writes."""
     progress(15, "Preparazione scrittura ArcGIS...")
@@ -483,6 +529,28 @@ def execute_arcgis_write(
         layer_name=carica_node_data.get("arcgis_new_layer_name", "Layer 0"),
         folder_id=carica_node_data.get("arcgis_folder_id", ""),
     )
+
+    group_id = str(expected_group_id or "").strip()
+    if not group_id:
+        try:
+            context = get_project_runtime_context(project_id)
+            group_id = str(context.group_id or "").strip() if context else ""
+        except Exception:
+            logger.error(
+                "[SECURITY] Tenant CARICA ArcGIS non determinabile",
+                exc_info=True,
+            )
+            group_id = ""
+    if not _arcgis_connection_visible(request.connection_id, group_id):
+        return {
+            "status": "connection_error",
+            "success": False,
+            "error": "arcgis_connection_not_visible",
+            "message": "Connessione ArcGIS non visibile al gruppo del progetto",
+            "error_message": "Connessione ArcGIS non visibile al gruppo del progetto",
+            "rows_written": 0,
+            "total_rows": len(df),
+        }
 
     progress(25, f"Scrittura ArcGIS ({operation})...")
 

@@ -553,3 +553,34 @@ def test_save_result_blob_object_storage_capability_off_raises(
     assert result_file.exists()
     # __cause__ preserva la classe originale per debugging/observability.
     assert isinstance(excinfo.value.__cause__, ObjectStorageDisabledError)
+
+
+def test_result_tenant_binding_rejects_group_divergent_from_project(monkeypatch):
+    from app.core.projects import runtime_context as runtime_context_module
+    from app.core.results import store
+
+    monkeypatch.setattr(
+        runtime_context_module,
+        "get_project_runtime_context",
+        lambda _project_id: SimpleNamespace(group_id="group-owner"),
+    )
+
+    with pytest.raises(ValueError, match="non coerente"):
+        store.resolve_group_id_for_result(
+            "project-1",
+            group_id="group-other",
+        )
+
+
+def test_result_tenant_binding_rejects_missing_project(monkeypatch):
+    from app.core.projects import runtime_context as runtime_context_module
+    from app.core.results import store
+
+    monkeypatch.setattr(
+        runtime_context_module,
+        "get_project_runtime_context",
+        lambda _project_id: None,
+    )
+
+    with pytest.raises(LookupError, match="Progetto project-1 non trovato"):
+        store.resolve_group_id_for_result("project-1", group_id="group-1")

@@ -6,8 +6,12 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+class IdempotencyStateUnavailable(RuntimeError):
+    """Raised when a side-effecting task cannot verify its run state."""
+
+
 def is_already_completed(run_id: str | None) -> bool:
-    """Return True only when the intermediate run exists and is completed."""
+    """Return True only when the run is completed; state errors fail closed."""
     if not run_id:
         return False
     try:
@@ -16,8 +20,10 @@ def is_already_completed(run_id: str | None) -> bool:
             return False
         return row.get("status") == "completed"
     except Exception as exc:
-        logger.warning(
+        logger.error(
             f"[IDEMPOTENCY] get_run failed for {run_id}: {exc}; "
-            f"fail-open and continue execution"
+            "execution blocked"
         )
-        return False
+        raise IdempotencyStateUnavailable(
+            f"Stato idempotente non disponibile per run {run_id}"
+        ) from exc

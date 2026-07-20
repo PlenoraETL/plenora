@@ -83,3 +83,35 @@ def release_target_lock_row(
             )
             rowcount = cur.rowcount
     return rowcount > 0
+
+
+def refresh_target_lock_row(
+    *,
+    table_name: str,
+    lock_key: str,
+    owner_token: str,
+    refreshed_at: datetime,
+    expires_at: datetime,
+) -> bool:
+    """Extend an unexpired lock only while the same owner still holds it."""
+    with unit_of_work() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                UPDATE {table_name}
+                SET expires_at = %s,
+                    updated_at = %s
+                WHERE lock_key = %s
+                  AND owner_token = %s
+                  AND expires_at > %s
+                """,
+                (
+                    expires_at,
+                    refreshed_at,
+                    lock_key,
+                    owner_token,
+                    refreshed_at,
+                ),
+            )
+            rowcount = cur.rowcount
+    return rowcount > 0

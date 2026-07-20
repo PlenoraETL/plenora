@@ -117,9 +117,7 @@ class TestRunLifecycleCloseAfterExecute:
     def test_update_run_failed_in_except_handler(
         self, execute_carica_source
     ):
-        """Best-effort: anche nell'except handler la run deve essere
-        marcata failed cosi' un crash a meta' run non lascia status
-        'running' permanente (che bloccherebbe i replay successivi)."""
+        """Prima della write abilita retry; dopo la write blocca il replay."""
         src = execute_carica_source
         # Cerca pattern: dopo `except Exception as e:` deve esserci
         # un update_run(..., status="failed")
@@ -131,18 +129,16 @@ class TestRunLifecycleCloseAfterExecute:
             "una run crashata resta 'running' indefinitamente, i "
             "replay successivi vengono bloccati"
         )
-        assert 'status="failed"' in post_except, (
-            "regressione: except handler non setta status='failed'"
+        assert '"completion_uncertain" if write_started else "failed"' in post_except, (
+            "regressione: except handler non distingue crash pre/post-write"
         )
 
 
-class TestFailOpenOnIntermediateError:
-    """Gli errori sull'intermediate DB NON devono bloccare la
-    scrittura CARICA principale (fail-open con warning)."""
+class TestFailClosedOnIdempotencyBarrierError:
+    """Gli errori sull'intermediate DB devono bloccare la write CARICA."""
 
     def test_create_run_wrapped_in_try_except(self, execute_carica_source):
-        """`create_run` deve essere dentro try/except con
-        logger.warning, non sollevare verso il caller."""
+        """`create_run` deve essere gestito e produrre un errore esplicito."""
         src = execute_carica_source
         # Trova la sezione che apre la run
         i_create = src.find("intermediate_run_lifecycle.create_run(")
@@ -154,21 +150,61 @@ class TestFailOpenOnIntermediateError:
             "DB sull'intermediate blocca la scrittura CARICA principale"
         )
         # E un warning nel except sotto
-        post_create = src[i_create:i_create + 1500]
-        assert "logger.warning" in post_create, (
+        i_execute = src.find("carica_executor.execute(")
+        post_create = src[i_create:i_execute]
+        assert "logger.error" in post_create, (
             "regressione: nessun warning sul fallimento create_run "
             "— l'errore silente rende debugging impossibile"
         )
 
+    def test_create_run_failure_returns_before_write(self, execute_carica_source):
+        src = execute_carica_source
+        barrier_error = '"error": "Barriera idempotente CARICA non disponibile"'
+        i_barrier_return = src.find(barrier_error)
+        i_execute = src.find("carica_executor.execute(")
+        assert i_barrier_return != -1
+        assert i_barrier_return < i_execute
+
     def test_update_run_close_wrapped_in_try_except(
         self, execute_carica_source
     ):
-        """Stesso pattern fail-open per update_run."""
+        """Un errore in chiusura deve produrre completion_uncertain."""
         src = execute_carica_source
         i_update = src.find('status="completed" if success else "failed"')
         assert i_update != -1
         prev_lines = src[max(0, i_update - 400):i_update]
         assert "try:" in prev_lines
+        assert '"error": "carica_completion_uncertain"' in src[i_update:]
+
+    def test_running_replay_is_blocked_before_write(self, execute_carica_source):
+        src = execute_carica_source
+        i_running = src.find('existing_status == "running"')
+        i_execute = src.find("carica_executor.execute(")
+        assert i_running != -1
+        assert i_running < i_execute
+        assert "replay bloccato" in src[i_running:i_execute]
+
+
+class TestTargetLockBoundary:
+    """Scheduler e worker CARICA condividono tenant e destination lock."""
+
+    def test_lock_uses_canonical_group_and_precedes_write(
+        self, execute_carica_source
+    ):
+        src = execute_carica_source
+        i_require = src.find("require_carica_target_lock(")
+        i_acquire = src.find("acquire_carica_target_lock(")
+        i_execute = src.find("carica_executor.execute(")
+        assert -1 not in (i_require, i_acquire, i_execute)
+        assert i_require < i_acquire < i_execute
+        assert "group_id=group_id" in src[i_require:i_acquire]
+
+    def test_lock_is_released_in_finally(self, execute_carica_source):
+        src = execute_carica_source
+        i_execute = src.find("carica_executor.execute(")
+        post_execute = src[i_execute:i_execute + 1000]
+        assert "finally:" in post_execute
+        assert "_release_carica_target_lock_safely(target_lock_handle)" in post_execute
 
 
 class TestImportsExist:

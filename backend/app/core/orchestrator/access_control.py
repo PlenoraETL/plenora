@@ -97,7 +97,6 @@ def assert_task_group(task_id: str, current_user: CurrentUser, *, logger: Any) -
     is_executable = (
         subject_kind == "executable"
         or bool(result_payload.get("is_eseguibile"))
-        or project_id.startswith("exec_")
     )
     if is_executable:
         from app.core.eseguibili.router import _check_visible

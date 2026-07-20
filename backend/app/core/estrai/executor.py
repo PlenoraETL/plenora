@@ -549,7 +549,13 @@ class EstraiExecutor:
 
     # ANTEPRIMA (PREVIEW
 
-    def preview(self, project_id: str, canvas: CanvasState, limit: int) -> JsonObject:
+    def preview(
+        self,
+        project_id: str,
+        canvas: CanvasState,
+        limit: int,
+        execution_context: Optional[Mapping[str, Any]] = None,
+    ) -> JsonObject:
         """
         Anteprima dati per progetti ESTRAI.
         Rileva automaticamente se usare percorso SQL o ArcGIS REST.
@@ -560,15 +566,32 @@ class EstraiExecutor:
         if not result_node:
             return {"success": False, "message": "Nodo risultato non trovato"}
 
-        metadata = self.project_service.get_project_metadata(project_id)
-        if not metadata or not metadata.default_connection_id:
+        context = execution_context or {}
+        context_connection_id = str(
+            context.get("default_connection_id") or ""
+        )
+        context_group_id = str(context.get("group_id") or "")
+        metadata = None
+        if not context_connection_id or not context_group_id:
+            metadata = self.project_service.get_project_metadata(project_id)
+        default_connection_id = str(
+            context_connection_id
+            or getattr(metadata, "default_connection_id", "")
+            or ""
+        )
+        group_id = str(
+            context_group_id
+            or getattr(metadata, "group_id", "")
+            or ""
+        )
+        if not default_connection_id:
             return {"success": False, "message": "Connessione non configurata"}
 
         try:
-            connection, conn_type = self._resolve_connection(metadata.default_connection_id)
+            connection, conn_type = self._resolve_connection(default_connection_id)
             self._assert_connection_visible_for_project(
-                metadata.default_connection_id,
-                metadata,
+                default_connection_id,
+                SimpleNamespace(group_id=group_id),
                 conn_type,
             )
         except CredentialUnavailableError as e:

@@ -160,12 +160,11 @@ def test_execute_without_run_id_skips_guard(monkeypatch):
     )
 
 
-# 6. Fail-open: eccezione nel check non blocca il flusso
+# 6. Fail-closed: eccezione nel check blocca il flusso
 
 
-def test_execute_proceeds_when_idempotency_check_raises(monkeypatch):
-    """Se is_already_completed solleva (es. intermediate.db corrotto),
-    NON bloccare la run — fail open al flow normale."""
+def test_execute_blocks_when_idempotency_check_raises(monkeypatch):
+    """Senza stato idempotente leggibile una write non deve partire."""
     executor = CaricaExecutor(connection_service=MagicMock())
 
     def _boom(_run_id):
@@ -180,19 +179,13 @@ def test_execute_proceeds_when_idempotency_check_raises(monkeypatch):
     )
     monkeypatch.setattr(executor, "_create_engine", lambda c: MagicMock())
 
-    try:
+    with pytest.raises(RuntimeError, match="intermediate db corrupt"):
         executor.execute(
             df=pd.DataFrame({"x": [1]}),
             node_data={"connection_id": "c", "table_name": "t"},
             run_id="whatever",
         )
-    except Exception:
-        pass
-
-    assert conn_calls, (
-        "Guard ha bloccato il flusso su errore di is_already_completed — "
-        "dovrebbe essere fail-open."
-    )
+    assert conn_calls == []
 
 
 # 7. Sentinel: import e chiamata corretti nell'executor

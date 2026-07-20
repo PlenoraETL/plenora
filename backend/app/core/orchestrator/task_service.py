@@ -24,6 +24,7 @@ from app.core.orchestrator.task_revocation_store import (
 from app.core.task_runtime import TaskRuntimePort
 from app.core.task_runtime.dispatch import dispatch_task_by_name
 from app.core.orchestrator.pg_task_runtime import PgResultTaskRuntime
+from app.core.orchestrator.execution_contract import CaricaExecutionContract
 from app.shared.execution import carica_dispatcher
 from app.utils.logger import get_logger
 
@@ -90,6 +91,7 @@ class EnrichmentTaskPayload:
     user_id: Optional[str] = None
     intermediate_mode_override: Optional[str] = None
     execution_context: Optional[JsonMapping] = None
+    execution_contract: Optional[JsonMapping] = None
 
 
 @dataclass(frozen=True)
@@ -101,6 +103,7 @@ class CaricaTaskPayload:
     force_recalculate: bool = False
     triggered_by: str = "manual"
     user_id: Optional[str] = None
+    execution_contract: Optional[JsonMapping] = None
 
 
 @dataclass(frozen=True)
@@ -118,6 +121,7 @@ class PreviewTaskPayload:
     project_id: str
     limit: int = 100
     user_id: Optional[str] = None
+    execution_contract: Optional[JsonMapping] = None
 
 
 TaskLaunchPayload: TypeAlias = (
@@ -152,11 +156,20 @@ def _pending_metadata_for_submit(
     group_id: Optional[str] = None
 
     if isinstance(payload, EnrichmentTaskPayload) and payload.is_eseguibile:
+        contract = payload.execution_contract or {}
+        subject = contract.get("execution_subject")
         context = payload.execution_context or {}
         subject_kind = "executable"
-        subject_id = str(context.get("eseguibile_id") or request.project_id)
-        if context.get("group_id") is not None:
-            group_id = str(context["group_id"])
+        if isinstance(subject, Mapping) and subject.get("kind") == "eseguibile":
+            subject_id = str(subject.get("id") or request.project_id)
+            if contract.get("group_id") is not None:
+                group_id = str(contract["group_id"])
+        else:
+            # Compatibility for enrichment tasks queued before the typed
+            # execution contract was introduced.
+            subject_id = str(context.get("eseguibile_id") or request.project_id)
+            if context.get("group_id") is not None:
+                group_id = str(context["group_id"])
     elif isinstance(payload, PipelineTaskPayload):
         contract = payload.execution_contract or {}
         subject = contract.get("execution_subject")
@@ -165,6 +178,14 @@ def _pending_metadata_for_submit(
             subject_id = str(subject.get("id") or request.project_id)
             if contract.get("group_id") is not None:
                 group_id = str(contract["group_id"])
+    elif isinstance(payload, CaricaTaskPayload):
+        contract = payload.execution_contract or {}
+        if contract.get("group_id") is not None:
+            group_id = str(contract["group_id"])
+    elif isinstance(payload, PreviewTaskPayload):
+        contract = payload.execution_contract or {}
+        if contract.get("group_id") is not None:
+            group_id = str(contract["group_id"])
 
     return PendingTaskMetadata(
         task_id=task_id,
@@ -195,19 +216,22 @@ def task_payload_to_celery_kwargs(
         }
         if payload.execution_context is not None:
             kwargs["execution_context"] = payload.execution_context
+        if payload.execution_contract is not None:
+            kwargs["execution_contract"] = payload.execution_contract
         return MappingProxyType(kwargs)
     if isinstance(payload, CaricaTaskPayload):
-        return MappingProxyType(
-            {
-                "project_id": payload.project_id,
-                "canvas": payload.canvas,
-                "carica_node_data": payload.carica_node_data,
-                "output_format": payload.output_format,
-                "force_recalculate": payload.force_recalculate,
-                "triggered_by": payload.triggered_by,
-                "user_id": payload.user_id,
-            }
-        )
+        kwargs: dict[str, JsonValue] = {
+            "project_id": payload.project_id,
+            "canvas": payload.canvas,
+            "carica_node_data": payload.carica_node_data,
+            "output_format": payload.output_format,
+            "force_recalculate": payload.force_recalculate,
+            "triggered_by": payload.triggered_by,
+            "user_id": payload.user_id,
+        }
+        if payload.execution_contract is not None:
+            kwargs["execution_contract"] = payload.execution_contract
+        return MappingProxyType(kwargs)
     if isinstance(payload, PipelineTaskPayload):
         kwargs: dict[str, JsonValue] = {
             "project_id": payload.project_id,
@@ -220,13 +244,14 @@ def task_payload_to_celery_kwargs(
             kwargs["execution_contract"] = payload.execution_contract
         return MappingProxyType(kwargs)
     if isinstance(payload, PreviewTaskPayload):
-        return MappingProxyType(
-            {
-                "project_id": payload.project_id,
-                "limit": payload.limit,
-                "user_id": payload.user_id,
-            }
-        )
+        kwargs: dict[str, JsonValue] = {
+            "project_id": payload.project_id,
+            "limit": payload.limit,
+            "user_id": payload.user_id,
+        }
+        if payload.execution_contract is not None:
+            kwargs["execution_contract"] = payload.execution_contract
+        return MappingProxyType(kwargs)
 
     raise TypeError(f"Unsupported task launch payload: {type(payload).__name__}")
 
@@ -257,6 +282,7 @@ class TaskResultPayload:
     rows_count: Optional[int] = None
     rows_written: Optional[int] = None
     total_rows: Optional[int] = None
+    is_eseguibile: Optional[bool] = None
     public_fields: tuple[TaskResultField, ...] = ()
 
     @classmethod
@@ -313,6 +339,7 @@ def task_result_payload_from_celery_meta(meta: Mapping[str, object]) -> TaskResu
         rows_count=_optional_int(meta.get("rows_count")),
         rows_written=_optional_int(meta.get("rows_written")),
         total_rows=_optional_int(meta.get("total_rows")),
+        is_eseguibile=_optional_bool(meta.get("is_eseguibile")),
         public_fields=tuple(
             TaskResultField(name=str(key), value=_to_json_value(value))
             for key, value in meta.items()
@@ -473,6 +500,7 @@ class TaskService:
         user_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
         execution_context: Optional[JsonMapping] = None,
+        execution_contract: Optional[JsonMapping] = None,
         task_id: Optional[str] = None,
     ) -> TaskInfo:
         """Crea e avvia un task di arricchimento."""
@@ -491,6 +519,7 @@ class TaskService:
                     user_id=user_id,
                     intermediate_mode_override=intermediate_mode_override,
                     execution_context=execution_context,
+                    execution_contract=execution_contract,
                 ),
                 queued_message="Task in coda...",
                 log_label="enrichment",
@@ -507,6 +536,7 @@ class TaskService:
         force_recalculate: bool = False,
         triggered_by: str = "manual",
         user_id: Optional[str] = None,
+        execution_contract: Optional[JsonMapping] = None,
     ) -> TaskInfo:
         """Crea e avvia un task CARICA."""
         return self.submit_task(
@@ -522,6 +552,7 @@ class TaskService:
                     force_recalculate=force_recalculate,
                     triggered_by=triggered_by,
                     user_id=user_id,
+                    execution_contract=execution_contract,
                 ),
                 queued_message="Task CARICA in coda...",
                 log_label="carica",
@@ -534,6 +565,8 @@ class TaskService:
         canvas: Any,
         *,
         output_contract_loader: Callable[[str], object],
+        project_type: str,
+        group_id: str,
         output_format: str = "geojson",
         triggered_by: str = "manual",
         user_id: Optional[str] = None,
@@ -570,6 +603,11 @@ class TaskService:
         if not carica_nodes:
             return None
 
+        if not str(project_type or "").strip():
+            raise ValueError("project_type non determinabile per lancio CARICA")
+        if not str(group_id or "").strip():
+            raise ValueError("group_id non determinabile per lancio CARICA")
+
         canvas_payload = (
             canvas.model_dump() if hasattr(canvas, "model_dump") else canvas
         )
@@ -582,6 +620,16 @@ class TaskService:
                     project_id=project_id,
                     output_contract_loader=output_contract_loader,
                 )
+                execution_contract = CaricaExecutionContract(
+                    project_id=project_id,
+                    project_type=project_type,
+                    group_id=group_id,
+                    canvas=canvas_payload,
+                    carica_node_data=carica_node_data,
+                    output_format=output_format,
+                    force_recalculate=False,
+                    triggered_by=triggered_by,
+                )
                 task_info = self.create_carica_task(
                     project_id=project_id,
                     canvas=canvas_payload,
@@ -589,6 +637,7 @@ class TaskService:
                     output_format=output_format,
                     triggered_by=triggered_by,
                     user_id=user_id,
+                    execution_contract=execution_contract.to_payload(),
                 )
                 logger.info(
                     f"Task CARICA avviato: {task_info.task_id} (nodo: {node_id}, "
@@ -655,6 +704,7 @@ class TaskService:
         project_id: str,
         limit: int = 100,
         user_id: Optional[str] = None,
+        execution_contract: Optional[JsonMapping] = None,
     ) -> TaskInfo:
         """Crea e avvia un task di preview pipeline."""
         return self.submit_task(
@@ -666,6 +716,7 @@ class TaskService:
                     project_id=project_id,
                     limit=limit,
                     user_id=user_id,
+                    execution_contract=execution_contract,
                 ),
                 queued_message="Preview in coda...",
                 log_label="preview",
@@ -802,7 +853,14 @@ class TaskService:
             subject_kind=(
                 pending_metadata.subject_kind
                 if pending_metadata is not None
-                else ("executable" if project_id.startswith("exec_") else "project")
+                else (
+                    "executable"
+                    if (
+                        isinstance(task_result, TaskResultPayload)
+                        and task_result.is_eseguibile is True
+                    )
+                    else "project"
+                )
             ),
             subject_id=(
                 pending_metadata.subject_id

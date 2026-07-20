@@ -37,6 +37,7 @@ def _make_schedule_config():
         batch_size=1000,
     )
     return SimpleNamespace(
+        id="schedule-1",
         pipeline=SimpleNamespace(project_id="proj-1"),
         destination=dest,
     )
@@ -75,6 +76,7 @@ def test_execute_carica_prefers_result_id_before_output_path():
         result = manager._execute_carica(
             config,
             {"result_id": "res-1", "output_path": "C:/tmp/legacy.csv"},
+            group_id="group-1",
         )
 
     assert result["success"] is True
@@ -100,6 +102,7 @@ def test_execute_carica_rejects_result_id_from_other_project_even_if_output_path
         result = manager._execute_carica(
             config,
             {"result_id": "res-1", "output_path": "C:/tmp/fallback.csv"},
+            group_id="group-1",
         )
 
     assert result["success"] is False

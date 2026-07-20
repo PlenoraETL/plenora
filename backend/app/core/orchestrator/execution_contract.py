@@ -17,6 +17,10 @@ from pydantic import (
 from app.shared.contracts.payloads import JsonObject
 
 
+SUPPORTED_PIPELINE_EXECUTION_CONTRACT_VERSIONS = frozenset({1, 2})
+SUPPORTED_CARICA_EXECUTION_CONTRACT_VERSIONS = frozenset({1})
+
+
 class ProjectExecutionContractService(Protocol):
     """Project service surface required to build a data-plane contract."""
 
@@ -79,6 +83,22 @@ class PipelineExecutionContract(BaseModel):
             raise ValueError(f"execution_contract.{info.field_name} is required")
         return normalized
 
+    @field_validator("schema_version")
+    @classmethod
+    def _supported_schema_version(cls, value: int) -> int:
+        if value not in SUPPORTED_PIPELINE_EXECUTION_CONTRACT_VERSIONS:
+            supported = ", ".join(
+                str(version)
+                for version in sorted(
+                    SUPPORTED_PIPELINE_EXECUTION_CONTRACT_VERSIONS
+                )
+            )
+            raise ValueError(
+                "execution_contract.schema_version non supportata: "
+                f"{value}; supportate: {supported}"
+            )
+        return value
+
     @classmethod
     def from_payload(
         cls,
@@ -137,6 +157,87 @@ class PipelineExecutionContract(BaseModel):
         if subject and subject.get("kind") == "eseguibile":
             return dict(subject)
         return None
+
+
+class CaricaExecutionContract(BaseModel):
+    """Immutable queue contract for one CARICA destination write."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: int = 1
+    project_id: str
+    project_type: str
+    group_id: str
+    canvas: JsonObject
+    carica_node_data: JsonObject
+    output_format: str = "geojson"
+    force_recalculate: bool = False
+    triggered_by: str = "manual"
+
+    @field_validator(
+        "project_id",
+        "project_type",
+        "group_id",
+        "output_format",
+        "triggered_by",
+    )
+    @classmethod
+    def _required_text(cls, value: str, info: ValidationInfo) -> str:
+        normalized = str(value or "").strip()
+        if not normalized:
+            raise ValueError(f"carica_execution_contract.{info.field_name} is required")
+        return normalized
+
+    @field_validator("schema_version")
+    @classmethod
+    def _supported_schema_version(cls, value: int) -> int:
+        if value not in SUPPORTED_CARICA_EXECUTION_CONTRACT_VERSIONS:
+            raise ValueError(
+                "carica_execution_contract.schema_version non supportata: "
+                f"{value}"
+            )
+        return value
+
+    @classmethod
+    def from_payload(
+        cls,
+        raw: Any,
+        *,
+        expected_project_id: Optional[str] = None,
+    ) -> "CaricaExecutionContract":
+        if not isinstance(raw, Mapping):
+            raise ValueError("carica_execution_contract must be a JSON object")
+        values = dict(raw)
+        if expected_project_id and not values.get("project_id"):
+            values["project_id"] = expected_project_id
+        contract = cls.model_validate(values)
+        if expected_project_id and contract.project_id != expected_project_id:
+            raise ValueError("carica_execution_contract project_id mismatch")
+        return contract
+
+    def to_payload(self) -> JsonObject:
+        return {
+            "schema_version": self.schema_version,
+            "project_id": self.project_id,
+            "project_type": self.project_type,
+            "group_id": self.group_id,
+            "canvas": dict(self.canvas),
+            "carica_node_data": dict(self.carica_node_data),
+            "output_format": self.output_format,
+            "force_recalculate": self.force_recalculate,
+            "triggered_by": self.triggered_by,
+        }
+
+    def to_pipeline_contract(self) -> PipelineExecutionContract:
+        """Return the canonical upstream recomputation snapshot."""
+        return PipelineExecutionContract(
+            schema_version=1,
+            project_id=self.project_id,
+            project_type=self.project_type,
+            group_id=self.group_id,
+            canvas=dict(self.canvas),
+            artifact_refs={},
+        )
 
 
 def _as_json_object(value: Any, *, field_name: str) -> JsonObject:
@@ -227,6 +328,11 @@ def build_pipeline_execution_contract(
 
     canvas_payload = _as_json_object(canvas, field_name="canvas")
     retention_n = getattr(metadata, "retention_n", None)
+    runtime_context: JsonObject = {}
+    default_connection_id = getattr(metadata, "default_connection_id", None)
+    if default_connection_id:
+        runtime_context["default_connection_id"] = str(default_connection_id)
+
     return PipelineExecutionContract(
         schema_version=1,
         project_id=project_id,
@@ -240,4 +346,5 @@ def build_pipeline_execution_contract(
         ),
         artifact_refs=_build_artifact_refs(canvas_payload),
         retention_n=retention_n,
+        runtime_context=runtime_context,
     )

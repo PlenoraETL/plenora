@@ -70,6 +70,7 @@ class EnrichmentRunMode:
         user_id: Optional[str],
         task_id: str,
         run_id: Optional[str] = None,
+        canonical_group_id: Optional[str] = None,
     ) -> RunContext:
         raise NotImplementedError
 
@@ -108,6 +109,7 @@ class StandardRunMode(EnrichmentRunMode):
         user_id: Optional[str],
         task_id: str,
         run_id: Optional[str] = None,
+        canonical_group_id: Optional[str] = None,
     ) -> RunContext:
         # Il broker assegna un run_id stabile (normalmente il message_id).
         # Preservarlo e' essenziale: la consegna e' at-least-once e il guard
@@ -195,15 +197,18 @@ class EseguibileRunMode(EnrichmentRunMode):
         user_id: Optional[str],
         task_id: str,
         run_id: Optional[str] = None,
+        canonical_group_id: Optional[str] = None,
     ) -> RunContext:
-        # No intermediate run (l'eseguibile non e' un progetto in `projects`);
-        # group_id dalla tabella `eseguibili` per il tenant binding a valle.
-        group_id = ""
-        try:
-            group_id = eseguibili_service.get_eseguibile_group_id(project_id)
-        except Exception as e:
-            logger.warning(
-                f"[Task {task_id}] Eseguibile group_id lookup fallito (non bloccante): {e}"
+        # Il contratto accodato e' il tenant binding canonico. Il lookup resta
+        # soltanto per i task legacy gia' presenti nel broker al deploy.
+        group_id = str(canonical_group_id or "").strip()
+        if not group_id:
+            group_id = str(
+                eseguibili_service.get_eseguibile_group_id(project_id) or ""
+            ).strip()
+        if not group_id:
+            raise RuntimeError(
+                "group_id eseguibile non determinabile durante setup enrichment"
             )
         return RunContext(run_id=None, group_id=group_id, retention_n=None)
 

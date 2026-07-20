@@ -38,8 +38,8 @@ def mock_db(monkeypatch):
                         SimpleNamespace(uuid4=lambda: "res-1"))
     monkeypatch.setattr(
         project_runtime_context,
-        "resolve_project_runtime_group_id",
-        lambda pid, *, default_group: "grp-1",
+        "get_project_runtime_context",
+        lambda pid: SimpleNamespace(group_id="grp-1"),
     )
     monkeypatch.setattr(results_db, "save_result_row",
                         lambda **kwargs: saved.update(kwargs))

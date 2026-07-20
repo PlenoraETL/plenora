@@ -48,14 +48,18 @@ def test_run_idempotency_false_for_failed_or_running():
         assert is_already_completed("x") is False
 
 
-def test_run_idempotency_swallows_db_error_fail_open():
-    from app.core.intermediate.run_idempotency import is_already_completed
+def test_run_idempotency_raises_when_state_is_unavailable():
+    from app.core.intermediate.run_idempotency import (
+        IdempotencyStateUnavailable,
+        is_already_completed,
+    )
 
     with patch(
         "app.core.intermediate.runs_db.get_run",
         side_effect=RuntimeError("db down"),
     ):
-        assert is_already_completed("x") is False
+        with pytest.raises(IdempotencyStateUnavailable):
+            is_already_completed("x")
 
 
 def test_run_idempotency_returns_false_on_empty_run_id():

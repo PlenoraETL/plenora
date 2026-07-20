@@ -367,6 +367,39 @@ def test_task_service_does_not_call_task_result_to_dict_internally(monkeypatch):
     assert task_info.result.result_id == "result-1"
 
 
+def test_task_subject_fallback_uses_result_contract_not_id_prefix():
+    metadata_store = InMemoryTaskMetadataStore()
+    project_result = SimpleNamespace(
+        state="SUCCESS",
+        info={
+            "success": True,
+            "project_id": "exec_project_but_not_executable",
+        },
+        name="pipeline.execute",
+    )
+    executable_result = SimpleNamespace(
+        state="SUCCESS",
+        info={
+            "success": True,
+            "project_id": "published-model-1",
+            "is_eseguibile": True,
+        },
+        name="pipeline.execute",
+    )
+
+    project_info = TaskService(
+        runtime=_StaticRuntime(project_result),
+        metadata_store=metadata_store,
+    ).get_task_status("task-project")
+    executable_info = TaskService(
+        runtime=_StaticRuntime(executable_result),
+        metadata_store=metadata_store,
+    ).get_task_status("task-executable")
+
+    assert project_info.subject_kind == "project"
+    assert executable_info.subject_kind == "executable"
+
+
 # Plenora 2.0 Fase 5 (F5.6): list_active_tasks/ActiveTaskInfo rimossi (dead
 # code: nessun endpoint li usava; l'inspect dei worker Celery non esiste piu').
 
@@ -646,6 +679,23 @@ def test_preview_router_uses_task_service_boundary(monkeypatch):
 
     router_mod.init_orchestrator(object())
     monkeypatch.setattr(router_mod, "_assert_project_group", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        router_mod,
+        "_project_service",
+        lambda: SimpleNamespace(
+            get_project_metadata=lambda _project_id: SimpleNamespace(
+                project_type="manipola",
+                group_id="group-1",
+                retention_n=3,
+                default_connection_id=None,
+            ),
+            get_project_canvas=lambda _project_id: {
+                "nodes": [],
+                "edges": [],
+            },
+            get_project_output_contract=lambda _project_id: None,
+        ),
+    )
 
     captured_kwargs = {}
 
@@ -675,10 +725,13 @@ def test_preview_router_uses_task_service_boundary(monkeypatch):
     assert response["task_type"] == "preview"
     assert response["project_id"] == "project-1"
     assert response["async"] is True
-    assert captured_kwargs == {
-        "project_id": "project-1",
-        "limit": 42,
-        "user_id": "user-1",
+    assert captured_kwargs["project_id"] == "project-1"
+    assert captured_kwargs["limit"] == 42
+    assert captured_kwargs["user_id"] == "user-1"
+    assert captured_kwargs["execution_contract"]["group_id"] == "group-1"
+    assert captured_kwargs["execution_contract"]["canvas"] == {
+        "nodes": [],
+        "edges": [],
     }
 
 
@@ -862,7 +915,14 @@ def test_create_task_router_uses_carica_task_service_boundary(monkeypatch):
     def fail_submit_task(_request):
         raise AssertionError("router bypassed create_carica_task")
 
-    monkeypatch.setattr("app.core.auth.resource_access.assert_project_access", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        "app.core.auth.resource_access.assert_project_access",
+        lambda *a, **kw: SimpleNamespace(
+            project_type="manipola",
+            group_id="group-1",
+            canvas_validated=True,
+        ),
+    )
     monkeypatch.setattr("app.core.auth.resource_access.assert_canvas_resources_access", lambda *a, **kw: None)
     monkeypatch.setattr(
         router_mod,
@@ -894,4 +954,15 @@ def test_create_task_router_uses_carica_task_service_boundary(monkeypatch):
         "force_recalculate": True,
         "triggered_by": "cron",
         "user_id": "user-1",
+        "execution_contract": {
+            "schema_version": 1,
+            "project_id": "project-1",
+            "project_type": "manipola",
+            "group_id": "group-1",
+            "canvas": {"nodes": [], "edges": []},
+            "carica_node_data": {"id": "carica-1", "dest_type": "pg"},
+            "output_format": "geojson",
+            "force_recalculate": True,
+            "triggered_by": "cron",
+        },
     }

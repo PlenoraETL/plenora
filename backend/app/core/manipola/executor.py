@@ -503,16 +503,22 @@ class ManipolaExecutor:
 
     # ANTEPRIMA
 
-    def preview(self, project_id: str, canvas: CanvasState, limit: int) -> JsonObject:
+    def preview(
+        self,
+        project_id: str,
+        canvas: CanvasState,
+        limit: int,
+        execution_context: Optional[Mapping[str, Any]] = None,
+    ) -> JsonObject:
         """Preview: stessa pipeline dell'execute ma senza salvataggio."""
         logger.info(f"Preview MANIPOLA: {project_id}", op="preview", project_id=project_id)
         try:
             # Stesso tenant binding di execute. `strict=False` perche'
             # preview non persiste output: se il lookup DB fallisce
             # `executing_group_id` resta None e i loader fail-closed
-            executing_group_id = self._init_security_context(
-                project_id, strict=False
-            )
+            executing_group_id = str(
+                (execution_context or {}).get("group_id") or ""
+            ) or self._init_security_context(project_id, strict=False)
             canvas_graph = CanvasGraph.from_canvas(canvas)
 
             dataframes = {}

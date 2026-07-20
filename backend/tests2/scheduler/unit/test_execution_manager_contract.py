@@ -74,6 +74,7 @@ def test_execute_carica_uses_result_id_artifact_before_output_path(schedule_conf
         result = manager._execute_carica(
             schedule_config,
             {"result_id": "res-1", "output_path": str(stale_path)},
+            group_id="group-1",
         )
 
     assert result["success"] is True
@@ -84,7 +85,7 @@ def test_execute_carica_uses_result_id_artifact_before_output_path(schedule_conf
 def test_execute_carica_fails_when_no_run_specific_artifact_is_available(schedule_config):
     manager = _make_manager()
 
-    result = manager._execute_carica(schedule_config, {})
+    result = manager._execute_carica(schedule_config, {}, group_id="group-1")
 
     assert result["success"] is False
     assert "Artefatto della run non disponibile" in result["error"]
@@ -113,6 +114,7 @@ def test_execute_carica_uses_explicit_write_result_insert_update_counts(schedule
         result = manager._execute_carica(
             schedule_config,
             {"result_id": "res-1", "output_path": str(tmp_path / "stale.csv")},
+            group_id="group-1",
         )
 
     assert result["success"] is True

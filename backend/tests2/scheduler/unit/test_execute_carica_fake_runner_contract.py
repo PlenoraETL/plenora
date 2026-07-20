@@ -77,9 +77,10 @@ def _schedule_config() -> SimpleNamespace:
     )
 
 
-def test_execute_carica_runs_through_injected_fake_runner():
+def test_execute_carica_runs_through_injected_fake_runner(monkeypatch):
     fake_executor = _FakeCaricaExecutor()
     factory_calls: list[dict] = []
+    lock_calls: dict[str, object] = {}
     connection_sentinel = object()
 
     def fake_factory(**kwargs):
@@ -95,6 +96,25 @@ def test_execute_carica_runs_through_injected_fake_runner():
         artifact_kind="run",
         to_run_artifact_ref=lambda: object(),
     )
+    target = SimpleNamespace(key="carica:db:test", kind="db")
+    handle = SimpleNamespace(target=target, owner_token="scheduler-test")
+
+    def resolve_lock(**kwargs):
+        lock_calls["resolve"] = kwargs
+        return target
+
+    def acquire_lock(**kwargs):
+        lock_calls["acquire"] = kwargs
+        return handle
+
+    monkeypatch.setattr(
+        "app.core.scheduler.execution_manager.require_carica_target_lock",
+        resolve_lock,
+    )
+    monkeypatch.setattr(
+        "app.core.scheduler.execution_manager.acquire_carica_target_lock",
+        acquire_lock,
+    )
 
     with patch(
         "app.core.scheduler.execution_manager.artifact_module.PipelineArtifact"
@@ -107,11 +127,14 @@ def test_execute_carica_runs_through_injected_fake_runner():
         result = manager._execute_carica(
             _schedule_config(),
             pipeline_result={"success": True},
+            group_id="group-1",
             scheduled_for=None,
         )
 
     # La factory composition-root riceve la ConnectionService iniettata.
     assert factory_calls == [{"connection_service": connection_sentinel}]
+    assert lock_calls["resolve"]["group_id"] == "group-1"
+    assert lock_calls["acquire"]["target"] is target
 
     # L'executor riceve la destination dello schedule, non il nodo canvas.
     assert len(fake_executor.calls) == 1
@@ -127,6 +150,48 @@ def test_execute_carica_runs_through_injected_fake_runner():
     # Mappatura del write_result sul payload scheduler.
     assert result["success"] is True
     assert result["rows_written"] == 3
+
+
+def test_successful_scheduled_write_requires_completion_marker(monkeypatch):
+    fake_executor = _FakeCaricaExecutor()
+    manager = ExecutionManager(
+        connection_service=object(),
+        carica_executor_factory=lambda **_kwargs: fake_executor,
+    )
+    fake_artifact = SimpleNamespace(
+        artifact_kind="run",
+        to_run_artifact_ref=lambda: object(),
+    )
+    monkeypatch.setattr(
+        "app.core.scheduler.execution_manager.intermediate_runs_db.get_run",
+        lambda _run_id: None,
+    )
+    monkeypatch.setattr(
+        "app.core.scheduler.execution_manager.intermediate_run_lifecycle.create_run",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "app.core.scheduler.execution_manager.intermediate_runs_db.update_run",
+        lambda *_a, **_kw: (_ for _ in ()).throw(RuntimeError("marker down")),
+    )
+
+    with patch(
+        "app.core.scheduler.execution_manager.artifact_module.PipelineArtifact"
+    ) as artifact_cls, patch(
+        "app.core.scheduler.execution_manager.artifact_module.ArtifactResolver"
+    ) as resolver_cls:
+        artifact_cls.from_executor_result.return_value = fake_artifact
+        resolver_cls.return_value.materialize_run.return_value = _Materialized()
+        result = manager._execute_carica(
+            _schedule_config(),
+            pipeline_result={"success": True},
+            group_id="group-1",
+            scheduled_for="2026-07-20T10:00:00+00:00",
+        )
+
+    assert len(fake_executor.calls) == 1
+    assert result["success"] is False
+    assert result["error"] == "carica_completion_uncertain"
 
 
 def test_orchestrator_factory_is_injectable():

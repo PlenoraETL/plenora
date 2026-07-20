@@ -26,6 +26,7 @@ from app.core.orchestrator import preview_payload_store
 from app.core.orchestrator.service import canvas_validation_gate_blocks
 from app.core.orchestrator import log_cleanup as orchestrator_log_cleanup
 from app.core.orchestrator.execution_contract import (
+    CaricaExecutionContract,
     build_pipeline_execution_contract,
 )
 from app.core.orchestrator.router_mappers import (
@@ -121,14 +122,11 @@ def _task_eseguibile_record(
     project_id: object,
     task_result_payload: Mapping[str, object],
 ):
-    """Resolve executable identity even when an old result omits its flag."""
+    """Resolve executable identity from explicit task-result metadata."""
     candidate = str(project_id or "")
     if not candidate:
         return None
-    if not (
-        bool(task_result_payload.get("is_eseguibile"))
-        or candidate.startswith("exec_")
-    ):
+    if not bool(task_result_payload.get("is_eseguibile")):
         return None
     return eseguibili_db.get_eseguibile(candidate)
 
@@ -247,10 +245,18 @@ def preview_project(
     require_service(_orchestrator, "OrchestratorService")
     _assert_project_group(project_id, current_user)
     try:
+        try:
+            execution_contract = build_pipeline_execution_contract(
+                project_id=project_id,
+                project_service=_project_service(),
+            )
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
         task_info = task_service_module.task_service.create_preview_task(
             project_id=project_id,
             limit=limit,
             user_id=current_user.user_id,
+            execution_contract=execution_contract.to_payload(),
         )
         result = dict(_task_info_to_dict(task_info))
         result["async"] = True
@@ -386,6 +392,18 @@ def create_task(
                 request.project_id,
                 _project_service().get_project_output_contract,
             )
+            execution_contract = CaricaExecutionContract(
+                project_id=request.project_id,
+                project_type=str(
+                    getattr(_gate_meta, "project_type", "") or ""
+                ),
+                group_id=str(getattr(_gate_meta, "group_id", "") or ""),
+                canvas=request.canvas,
+                carica_node_data=request.carica_node_data,
+                output_format=request.output_format,
+                force_recalculate=request.force_recalculate,
+                triggered_by=request.triggered_by,
+            )
             task_info = task_service_module.task_service.create_carica_task(
                 project_id=request.project_id,
                 canvas=request.canvas,
@@ -394,6 +412,7 @@ def create_task(
                 force_recalculate=request.force_recalculate,
                 triggered_by=request.triggered_by,
                 user_id=current_user.user_id,
+                execution_contract=execution_contract.to_payload(),
             )
         else:
             raise HTTPException(status_code=400, detail=f"Tipo task '{request.task_type}' non supportato")
@@ -502,6 +521,8 @@ def get_task_status(
         )
     # intent: boundary broad→404 / outcome: fail-closed sanitizzato
     # detail fisso: task_id e' input utente, niente interpolazione in response
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[CRASH] Errore lettura stato task {task_id}: {e}", exc_info=True)
         raise_typed_http(

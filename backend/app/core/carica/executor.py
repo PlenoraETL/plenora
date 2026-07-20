@@ -130,6 +130,7 @@ class CaricaExecutor:
         progress_callback: Optional[Callable] = None,
         triggered_by: str = "manual",
         run_id: Optional[str] = None,
+        expected_group_id: Optional[str] = None,
     ) -> WriteResult:
         """Esegue il caricamento su database.
 
@@ -144,7 +145,11 @@ class CaricaExecutor:
                 WriteStatus.SKIPPED_IDEMPOTENT senza toccare il DB.
                 Il task async ha gia' il check all'ingresso; questo guard
                 protegge i sync caller.
-                Fail-open: eccezioni nel check NON bloccano il flusso.
+                Fail-closed: se lo stato idempotente non e' leggibile la
+                write non deve partire.
+            expected_group_id: tenant canonico dell'execution contract. I
+                caller runtime devono valorizzarlo; il lookup del progetto
+                resta soltanto per compatibilita' con caller sincroni legacy.
 
         Returns:
             WriteResult con esito dell'operazione.
@@ -169,37 +174,27 @@ class CaricaExecutor:
             )
 
         if run_id:
-            try:
-                if run_idempotency.is_already_completed(run_id):
-                    logger.info(
-                        f"[IDEMPOTENCY] CARICA run_id {run_id} gia' completato, skip.",
-                        op="execute", project_id=project_id,
-                    )
-                    # SKIPPED_IDEMPOTENT non e' un failure: emettiamo step
-                    # con status "skipped" per visibilita' senza inquinare
-                    # le metriche di failure.
-                    duration_ms = int((_time.time() - _step_start) * 1000)
-                    append_step({
-                        "module":      "carica",
-                        "status":      "skipped",
-                        "rows_out":    0,
-                        "duration_ms": duration_ms,
-                        "error":       None,
-                    })
-                    return WriteResult(
-                        status=WriteStatus.SKIPPED_IDEMPOTENT,
-                        total_rows=len(df),
-                        rows_written=0,
-                        error_message=f"Run {run_id} gia' completato",
-                    )
-            except Exception as _idem_err:
-                # Fail-open: se il check idempotency esplode, NON blocchiamo
-                # Meglio un possibile duplicato che bloccare la run su un
-                # errore di lettura dello stato intermedio
-                logger.warning(
-                    f"[IDEMPOTENCY] check fallito per run_id={run_id}: {_idem_err}. "
-                    f"Proseguo senza guard (fail-open).",
+            if run_idempotency.is_already_completed(run_id):
+                logger.info(
+                    f"[IDEMPOTENCY] CARICA run_id {run_id} gia' completato, skip.",
                     op="execute", project_id=project_id,
+                )
+                # SKIPPED_IDEMPOTENT non e' un failure: emettiamo step
+                # con status "skipped" per visibilita' senza inquinare
+                # le metriche di failure.
+                duration_ms = int((_time.time() - _step_start) * 1000)
+                append_step({
+                    "module":      "carica",
+                    "status":      "skipped",
+                    "rows_out":    0,
+                    "duration_ms": duration_ms,
+                    "error":       None,
+                })
+                return WriteResult(
+                    status=WriteStatus.SKIPPED_IDEMPOTENT,
+                    total_rows=len(df),
+                    rows_written=0,
+                    error_message=f"Run {run_id} gia' completato",
                 )
 
         logger.info(f"Avvio CARICA: {project_id}", op="execute", project_id=project_id)
@@ -217,6 +212,7 @@ class CaricaExecutor:
             self._assert_connection_visible_for_project(
                 config.connection_id,
                 project_id,
+                expected_group_id=expected_group_id,
             )
             connection = self._get_connection(config.connection_id)
             db_type = connection.get("type", "postgres")
@@ -328,14 +324,20 @@ class CaricaExecutor:
         self,
         connection_id: str,
         project_id: str,
+        *,
+        expected_group_id: Optional[str] = None,
     ) -> None:
         if not project_id:
             return
 
-        metadata = project_service_module.ProjectService().get_project_metadata(
-            project_id
-        )
-        group_id = getattr(metadata, "group_id", None) if metadata else None
+        group_id = str(expected_group_id or "").strip()
+        if not group_id:
+            metadata = project_service_module.ProjectService().get_project_metadata(
+                project_id
+            )
+            group_id = str(
+                getattr(metadata, "group_id", None) if metadata else ""
+            ).strip()
         if not group_id:
             raise ValueError("Gruppo progetto non determinabile")
         if not visibility_module.is_resource_visible(

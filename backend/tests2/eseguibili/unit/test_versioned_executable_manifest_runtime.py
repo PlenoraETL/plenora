@@ -659,7 +659,12 @@ def test_versioned_execution_dispatches_all_publishable_project_types(
 
     if project_type == "arricchisci":
         assert not pipeline_calls
-        assert enrichment_calls[0]["execution_context"]["version_id"] == version.id
+        contract = enrichment_calls[0]["execution_contract"]
+        assert contract["project_type"] == "arricchisci"
+        assert contract["execution_subject"]["version_id"] == version.id
+        assert contract["group_id"] == executable.group_id
+        assert "group_id" not in contract.get("runtime_context", {})
+        assert "execution_context" not in enrichment_calls[0]
         assert result.task_id == enrichment_calls[0]["task_id"]
     else:
         assert not enrichment_calls

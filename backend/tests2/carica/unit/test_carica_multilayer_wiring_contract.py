@@ -94,6 +94,7 @@ def _patch_common(monkeypatch, fetched_bytes, fake_writer):
 
     monkeypatch.setattr(ct, "SourceLoader", _FakeLoader)
     monkeypatch.setattr(ct, "create_default_arcgis_feature_writer", lambda: fake_writer)
+    monkeypatch.setattr(ct, "is_resource_visible", lambda *_a, **_k: True)
 
 
 def test_bundle_upstream_routes_to_multilayer_publish(monkeypatch):

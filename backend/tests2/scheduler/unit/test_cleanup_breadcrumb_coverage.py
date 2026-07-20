@@ -71,7 +71,8 @@ def test_no_bare_except_pass_in_target_files():
 # erano:
 #   - "async intermediate write fallito"  (in _async_write body)
 #   - "cleanup async write fallito"       (in _async_write_result body)
-# Restano i 13 siti che NON dipendevano dal pattern async daemon.
+# Restano i 12 siti effettivi: il vecchio lookup tenant CARICA e il relativo
+# cleanup sono stati eliminati dal contratto queue-bound canonico.
 _BREADCRUMB_CONTEXTS = [
     ("workers/tasks/schedule_task.py",
      "log emergenza post-crash fallito"),
@@ -79,8 +80,6 @@ _BREADCRUMB_CONTEXTS = [
      "close_run intermediate fallito post-crash"),
     ("workers/tasks/pipeline_task.py",
      "close_connection pipeline fallito{suffix}"),
-    ("workers/tasks/carica_task.py",
-     "group_id lookup fallito"),
     ("workers/tasks/carica_task.py",
      "close_connection intermediate fallito{suffix}"),
     ("workers/tasks/carica_task.py",
@@ -103,7 +102,7 @@ _BREADCRUMB_CONTEXTS = [
 
 
 def test_each_cleanup_site_has_logger_debug_breadcrumb():
-    """Per ciascuno dei 15 siti, verifica che esista una linea
+    """Per ciascun sito, verifica che esista una linea
     `logger.debug(f"<context>: {type(e).__name__}: {e}")` col contesto
     unico attribuito in checkpoint."""
     missing = []
@@ -131,9 +130,9 @@ def test_each_cleanup_site_has_logger_debug_breadcrumb():
 def test_cleanup_sites_count_matches_scope():
     """Sanity aggregata: conta i contesti cleanup attesi nei 5 file.
 
-    Contract: soglia abbassata da 15 a 13 dopo la rimozione del
+    Contract: soglia derivata dalla lista dopo la rimozione del
     pattern `_async_write` thread daemon in enrichment_task.py (vedi
-    `_BREADCRUMB_CONTEXTS` per il dettaglio). Restano i 13 siti
+    `_BREADCRUMB_CONTEXTS` per il dettaglio). Restano i siti
     cleanup non-async, piu' eventuali altri debug pre-esistenti dei
     current contract.c/7.b.
     """

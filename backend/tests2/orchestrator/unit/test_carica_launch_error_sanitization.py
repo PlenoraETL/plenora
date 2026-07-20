@@ -42,9 +42,13 @@ def _make_orchestrator_with_carica_node():
 
     mock_project_service = MagicMock()
     mock_project_service.get_project_metadata.return_value = MagicMock(
-        project_type="estrai"
+        project_type="estrai",
+        group_id="group-1",
     )
-    mock_project_service.get_project_canvas.return_value = MagicMock()
+    mock_project_service.get_project_canvas.return_value = {
+        "nodes": [],
+        "edges": [],
+    }
 
     estrai_executor = _ExecutorStub({"success": True, "result_id": "res-1"})
     svc = OrchestratorService(

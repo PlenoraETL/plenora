@@ -261,6 +261,120 @@ def test_pipeline_contract_migrates_equal_legacy_runtime_tenant():
     }
 
 
+def test_pipeline_contract_rejects_unknown_schema_version():
+    from app.core.orchestrator.execution_contract import (
+        PipelineExecutionContract,
+    )
+
+    with pytest.raises(ValueError, match="schema_version non supportata"):
+        PipelineExecutionContract.from_payload(
+            {
+                "schema_version": 99,
+                "project_id": "project-1",
+                "project_type": "manipola",
+                "group_id": "group-1",
+                "canvas": {"nodes": [], "edges": []},
+            }
+        )
+
+
+def test_carica_contract_roundtrip_preserves_tenant_and_write_snapshot():
+    from app.core.orchestrator.execution_contract import CaricaExecutionContract
+
+    payload = {
+        "schema_version": 1,
+        "project_id": "project-1",
+        "project_type": "manipola",
+        "group_id": "group-1",
+        "canvas": {"nodes": [], "edges": []},
+        "carica_node_data": {
+            "connection_id": "conn-1",
+            "schema_name": "public",
+            "table_name": "dest",
+        },
+        "output_format": "xlsx",
+        "force_recalculate": True,
+        "triggered_by": "cron",
+    }
+
+    contract = CaricaExecutionContract.from_payload(
+        payload,
+        expected_project_id="project-1",
+    )
+
+    assert contract.to_payload() == payload
+    upstream = contract.to_pipeline_contract()
+    assert upstream.project_id == "project-1"
+    assert upstream.group_id == "group-1"
+    assert upstream.canvas == {"nodes": [], "edges": []}
+
+
+def test_carica_contract_rejects_project_mismatch_and_missing_tenant():
+    from app.core.orchestrator.execution_contract import CaricaExecutionContract
+
+    base = {
+        "project_id": "project-1",
+        "project_type": "manipola",
+        "group_id": "group-1",
+        "canvas": {"nodes": [], "edges": []},
+        "carica_node_data": {"table_name": "dest"},
+    }
+    with pytest.raises(ValueError, match="project_id mismatch"):
+        CaricaExecutionContract.from_payload(
+            base,
+            expected_project_id="project-2",
+        )
+    with pytest.raises(ValueError, match="group_id is required"):
+        CaricaExecutionContract.from_payload({**base, "group_id": ""})
+
+
+def test_preview_contract_threads_canonical_tenant_without_project_lookup():
+    from unittest.mock import MagicMock
+
+    from app.core.orchestrator.execution_contract import (
+        PipelineExecutionContract,
+    )
+    from app.core.orchestrator.service import OrchestratorService
+
+    class _PreviewExecutor:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def preview(self, *args, **kwargs):
+            self.calls.append((args, kwargs))
+            return {"success": True, "rows": []}
+
+        def execute(self, *args, **kwargs):
+            return {"success": True}
+
+    executor = _PreviewExecutor()
+    project_service = MagicMock()
+    orchestrator = OrchestratorService(
+        project_service=project_service,
+        executor=MagicMock(),
+        generator=MagicMock(),
+        connection_service=MagicMock(),
+        estrai_executor=executor,
+        manipola_executor=executor,
+        enrich_executor=executor,
+    )
+    contract = PipelineExecutionContract(
+        project_id="project-1",
+        project_type="manipola",
+        group_id="group-1",
+        canvas={"nodes": [], "edges": []},
+    )
+
+    result = orchestrator.execute_preview_from_contract(contract, limit=25)
+
+    assert result["success"] is True
+    assert executor.calls[0][1]["execution_context"] == {
+        "group_id": "group-1",
+    }
+    project_service.get_project_metadata.assert_not_called()
+    project_service.get_project_canvas.assert_not_called()
+
+
 def test_pipeline_contract_roundtrip_keeps_tenant_through_executor():
     """API build -> queue payload -> worker parse -> MANIPOLA context."""
     from unittest.mock import MagicMock

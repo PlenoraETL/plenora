@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class QueueStatus(BaseModel):
@@ -49,6 +49,32 @@ class RunningTaskStatus(BaseModel):
     message: str | None = None
 
 
+class UncertainCaricaRunStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    project_id: str
+    group_id: str
+    timestamp: datetime
+    error_message: str | None = None
+
+
+class UncertainCaricaResolutionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    resolution: Literal["confirm_completed", "allow_retry"]
+    note: str = Field(min_length=3, max_length=1000)
+
+
+class UncertainCaricaResolutionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    run_id: str
+    previous_status: str
+    status: Literal["completed", "failed"]
+    resolution: Literal["confirm_completed", "allow_retry"]
+
+
 class TaskRuntimeTotals(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -59,6 +85,7 @@ class TaskRuntimeTotals(BaseModel):
     workers_stale: int
     running_tasks: int
     expired_task_leases: int
+    uncertain_carica_runs: int = 0
 
 
 class TaskRuntimePayload(BaseModel):
@@ -71,5 +98,6 @@ class TaskRuntimePayload(BaseModel):
     queues: list[QueueStatus]
     workers: list[WorkerStatus]
     running_tasks: list[RunningTaskStatus]
+    uncertain_runs: list[UncertainCaricaRunStatus] = Field(default_factory=list)
     totals: TaskRuntimeTotals
     warnings: list[str]

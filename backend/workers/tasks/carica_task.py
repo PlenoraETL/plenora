@@ -7,7 +7,7 @@ Runs background execution while preserving backend runtime contracts.
 import time as _time
 import traceback
 import uuid as _uuid
-from typing import Any, Optional, cast
+from typing import Any, Mapping, Optional, cast
 
 from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger, open_run, close_run, set_run_context, append_step
@@ -25,19 +25,23 @@ from app.core.auth.async_user_recheck import recheck_user_authorized
 from app.core.carica import dispatch as carica_dispatch
 from app.core.carica.dispatch import CaricaTaskResultPayload
 from app.core.carica.target_lock import (
+    CaricaTargetLockHeartbeat,
     CaricaTargetLockHandle,
     acquire_carica_target_lock,
+    require_carica_target_lock,
     release_carica_target_lock,
-    resolve_carica_target_lock,
+    start_carica_target_lock_heartbeat,
 )
 from app.core.dataframes.frame_io import (
     load_dataframe_from_artifact,
     load_dataframe_from_file,
 )
 from app.core.intermediate.cleanup import close_worker_connection
+from app.core.intermediate import run_lifecycle as intermediate_run_lifecycle
+from app.core.intermediate import runs_db as intermediate_runs_db
 from app.core.intermediate.run_idempotency import is_already_completed
 from app.core.orchestrator.task_progress import TaskRevoked, report_task_progress
-from app.core.projects.runtime_context import get_project_runtime_context
+from app.core.orchestrator.execution_contract import CaricaExecutionContract
 from app.core.projects.service import ProjectService
 from app.db.pg_connection import close_connection as _close_config_connection
 from app.runtime import services as runtime_services_module
@@ -81,6 +85,7 @@ def execute_carica_task(
     triggered_by: str = "manual",
     run_id: Optional[str] = None,
     user_id: Optional[str] = None,
+    execution_contract: Optional[Mapping[str, Any]] = None,
 ) -> CaricaTaskResultPayload:
     """Task asincrono per eseguire il caricamento su database.
 
@@ -113,6 +118,17 @@ def execute_carica_task(
         o status='skipped_idempotent' se il run_id era gia' completo.
     """
     task_id = self.request.id
+    contract: CaricaExecutionContract | None = None
+    if execution_contract is not None:
+        contract = CaricaExecutionContract.from_payload(
+            execution_contract,
+            expected_project_id=project_id,
+        )
+        canvas = dict(contract.canvas)
+        carica_node_data = dict(contract.carica_node_data)
+        output_format = contract.output_format
+        force_recalculate = contract.force_recalculate
+        triggered_by = contract.triggered_by
     if run_id is not None:
         if is_already_completed(run_id):
             logger.info(
@@ -144,14 +160,19 @@ def execute_carica_task(
         _close_worker_connections(stage="post-permission-revoke")
         return cast(CaricaTaskResultPayload, _revoked)
 
-    _group_id = ""
-    try:
+    if contract is not None:
+        _group_id = contract.group_id
+    else:
+        # Compatibility for messages queued before CARICA contracts. This
+        # lookup is deliberately fail-closed: a write cannot proceed without
+        # a tenant binding.
         _meta = ProjectService().get_project_metadata(project_id)
-        _group_id = getattr(_meta, "group_id", "") if _meta else ""
-    except Exception as e:
-        logger.debug(f"group_id lookup fallito: {type(e).__name__}: {e}")
+        _group_id = str(getattr(_meta, "group_id", "") or "") if _meta else ""
+        if not _group_id:
+            raise RuntimeError("group_id progetto non determinabile per CARICA")
 
     log_run_opened = False
+    intermediate_run_finalized = False
     try:
         open_run(
             run_id=run_id,
@@ -163,6 +184,15 @@ def execute_carica_task(
         )
         log_run_opened = True
         set_run_context(run_id=run_id, project_id=project_id)
+        # La riga intermediate e' la barriera idempotente del task CARICA.
+        # Un redelivery con lo stesso message/run id incontra la PK esistente
+        # e si ferma prima di qualunque side effect sulla destinazione.
+        intermediate_run_lifecycle.create_run(
+            run_id=run_id,
+            canvas_id=project_id,
+            group_id=_group_id,
+            user_id=user_id,
+        )
     except BaseException:
         if log_run_opened:
             try:
@@ -191,6 +221,8 @@ def execute_carica_task(
         )
 
     target_lock_handle: CaricaTargetLockHandle | None = None
+    target_lock_heartbeat: CaricaTargetLockHeartbeat | None = None
+    write_started = False
     try:
         _update_progress(self, 0, "Inizializzazione CARICA...")
         write_branch = carica_dispatch.select_carica_write_branch(carica_node_data)
@@ -203,35 +235,35 @@ def execute_carica_task(
             write_branch=write_branch,
         )
         if target_lock_handle is None:
-            lock_target = resolve_carica_target_lock(
-                node_data=carica_node_data,
-                project_id=project_id,
-                group_id=_group_id,
-                write_branch=write_branch,
+            elapsed_ms = int((_time.time() - _run_start) * 1000)
+            message = (
+                "Destinazione CARICA gia' in scrittura da un altro task; "
+                "riprova al termine della run corrente."
             )
-            if lock_target is not None:
-                elapsed_ms = int((_time.time() - _run_start) * 1000)
-                message = (
-                    "Destinazione CARICA gia' in scrittura da un altro task; "
-                    "riprova al termine della run corrente."
-                )
-                _update_progress(self, -1, message)
-                close_run(
-                    run_id=run_id,
-                    status="failure",
-                    duration_ms=elapsed_ms,
-                    error_module="carica",
-                    error_message=message,
-                )
-                return {
-                    "status": "conflict",
-                    "success": False,
-                    "error": "carica_target_locked",
-                    "message": message,
-                    "error_message": message,
-                    "rows_written": 0,
-                    "total_rows": 0,
-                }
+            _update_progress(self, -1, message)
+            intermediate_runs_db.update_run(run_id, status="failed")
+            intermediate_run_finalized = True
+            close_run(
+                run_id=run_id,
+                status="failure",
+                duration_ms=elapsed_ms,
+                error_module="carica",
+                error_message=message,
+            )
+            return {
+                "status": "conflict",
+                "success": False,
+                "error": "carica_target_locked",
+                "message": message,
+                "error_message": message,
+                "rows_written": 0,
+                "total_rows": 0,
+            }
+
+        target_lock_heartbeat = start_carica_target_lock_heartbeat(
+            target_lock_handle,
+            ttl_seconds=_carica_target_lock_ttl_seconds(),
+        )
 
         _update_progress(self, 5, "Caricamento dati dal nodo Output...")
 
@@ -243,16 +275,27 @@ def execute_carica_task(
         # composition root).
         result = None
         if write_branch == 'arcgis':
+            write_started = True
             result = carica_dispatch.maybe_multilayer_arcgis_write(
                 project_id, canvas, carica_node_data, task_id,
                 progress=progress, committed_progress=committed_progress,
+                expected_group_id=_group_id,
             )
 
         if result is None:
-            df = _load_upstream_data(project_id, canvas, force_recalculate, output_format)
+            df = _load_upstream_data(
+                project_id,
+                canvas,
+                force_recalculate,
+                output_format,
+                expected_group_id=_group_id,
+                execution_contract=contract,
+            )
 
             if df is None:
                 logger.warning("Nessun dato dal nodo upstream — DataFrame None")
+                intermediate_runs_db.update_run(run_id, status="failed")
+                intermediate_run_finalized = True
                 close_run(
                     run_id=run_id, status="failure",
                     duration_ms=int((_time.time() - _run_start) * 1000),
@@ -270,6 +313,8 @@ def execute_carica_task(
             if len(df) == 0:
                 # 0 righe è un caso legittimo — completato con successo senza scrivere nulla
                 logger.info("Dataset vuoto (0 righe) — CARICA completato senza scritture")
+                intermediate_runs_db.update_run(run_id, status="completed")
+                intermediate_run_finalized = True
                 close_run(
                     run_id=run_id, status="success",
                     rows_out=0,
@@ -290,25 +335,154 @@ def execute_carica_task(
             )
 
             if write_branch == 'datasource':
+                write_started = True
                 result = carica_dispatch.execute_datasource_write(
                     df, carica_node_data, project_id, task_id,
-                    progress=progress, committed_progress=committed_progress)
+                    progress=progress, committed_progress=committed_progress,
+                    expected_group_id=_group_id)
             elif write_branch == 'rest':
+                write_started = True
                 result = carica_dispatch.execute_rest_write(
                     df, carica_node_data, project_id, task_id,
                     progress=progress, committed_progress=committed_progress)
             elif write_branch == 'arcgis':
+                write_started = True
                 result = carica_dispatch.execute_arcgis_write(
                     df, carica_node_data, project_id, task_id,
-                    progress=progress, committed_progress=committed_progress)
+                    progress=progress, committed_progress=committed_progress,
+                    expected_group_id=_group_id)
             else:
+                write_started = True
                 result = carica_dispatch.execute_db_write(
                     df, carica_node_data, project_id, task_id, triggered_by, run_id,
-                    progress=progress, committed_progress=committed_progress)
+                    progress=progress, committed_progress=committed_progress,
+                    expected_group_id=_group_id)
 
         is_success = result.get("success", False)
         rows_written = result.get("rows_written", 0) or 0
         elapsed_ms = int((_time.time() - _run_start) * 1000)
+
+        target_lock_heartbeat.stop()
+        if target_lock_heartbeat.lost:
+            message = (
+                "Ownership del target lock persa durante la scrittura; "
+                "verifica la destinazione prima di rilanciare."
+            )
+            logger.error(
+                "[IDEMPOTENCY] CARICA target lock perso "
+                f"(run={run_id}, error={target_lock_heartbeat.error})"
+            )
+            try:
+                intermediate_runs_db.update_run(
+                    run_id, status="completion_uncertain",
+                )
+                intermediate_run_finalized = True
+            except Exception:
+                logger.error(
+                    "Marcatura intermediate CARICA completion_uncertain "
+                    "fallita dopo perdita target lock",
+                    exc_info=True,
+                )
+            close_run(
+                run_id=run_id,
+                status="failure",
+                rows_out=rows_written,
+                duration_ms=elapsed_ms,
+                error_module="carica",
+                error_message=message,
+            )
+            return {
+                "status": "completion_uncertain",
+                "success": False,
+                "error": "carica_target_lock_lost",
+                "message": message,
+                "error_message": message,
+                "rows_written": rows_written,
+                "total_rows": result.get("total_rows", rows_written) or 0,
+                "run_id": run_id,
+                "project_id": project_id,
+            }
+
+        # I sink remoti possono aver accettato una richiesta anche quando la
+        # risposta finale e' un errore o si perde in rete. Non autorizzare un
+        # replay automatico: richiedi una decisione esplicita dell'operatore.
+        if not is_success and write_branch in {"datasource", "rest", "arcgis"}:
+            message = (
+                "Esito della scrittura esterna non determinabile: verifica "
+                "la destinazione prima di rilanciare."
+            )
+            intermediate_runs_db.update_run(
+                run_id, status="completion_uncertain",
+            )
+            intermediate_run_finalized = True
+            close_run(
+                run_id=run_id,
+                status="failure",
+                rows_out=rows_written,
+                duration_ms=elapsed_ms,
+                error_module="carica",
+                error_message=message,
+            )
+            return {
+                "status": "completion_uncertain",
+                "success": False,
+                "error": "carica_external_write_uncertain",
+                "message": message,
+                "error_message": message,
+                "rows_written": rows_written,
+                "total_rows": result.get("total_rows", rows_written) or 0,
+                "run_id": run_id,
+                "project_id": project_id,
+            }
+
+        try:
+            intermediate_runs_db.update_run(
+                run_id,
+                status="completed" if is_success else "failed",
+            )
+            intermediate_run_finalized = True
+        except Exception as state_exc:
+            if is_success:
+                logger.error(
+                    "[IDEMPOTENCY] Scrittura CARICA riuscita ma marker "
+                    f"completed non persistito per run {run_id}: {state_exc}",
+                    exc_info=True,
+                )
+                try:
+                    intermediate_runs_db.update_run(
+                        run_id, status="completion_uncertain",
+                    )
+                    intermediate_run_finalized = True
+                except Exception:
+                    logger.error(
+                        "Marcatura intermediate CARICA completion_uncertain "
+                        "fallita dopo errore del marker completed",
+                        exc_info=True,
+                    )
+                message = (
+                    "Scrittura completata, ma conferma idempotente non "
+                    "persistita: verifica la destinazione prima di rilanciare."
+                )
+                close_run(
+                    run_id=run_id,
+                    status="failure",
+                    rows_out=rows_written,
+                    duration_ms=elapsed_ms,
+                    error_module="carica",
+                    error_message=message,
+                )
+                return {
+                    "status": "completion_uncertain",
+                    "success": False,
+                    "error": "carica_completion_uncertain",
+                    "message": message,
+                    "error_message": message,
+                    "rows_written": rows_written,
+                    "total_rows": result.get("total_rows", rows_written) or 0,
+                    "run_id": run_id,
+                    "project_id": project_id,
+                }
+            raise
 
         # Emit `append_step` solo per branch non-db: il path `db` ha gia'
         # emit interno in `CaricaExecutor.execute()` e mappa correttamente
@@ -333,6 +507,20 @@ def execute_carica_task(
         return result
 
     except TaskRevoked:
+        if not intermediate_run_finalized:
+            try:
+                intermediate_runs_db.update_run(
+                    run_id,
+                    status=(
+                        "completion_uncertain" if write_started else "failed"
+                    ),
+                )
+                intermediate_run_finalized = True
+            except Exception:
+                logger.warning(
+                    "Marcatura intermediate CARICA revoked fallita",
+                    exc_info=True,
+                )
         try:
             close_run(
                 run_id=run_id,
@@ -355,12 +543,36 @@ def execute_carica_task(
         error_msg_internal = f"Errore task CARICA: {str(e)}"
         public_error_message = "Errore task CARICA (consulta log)"
         public_error_code = "carica_task_fatal"
+        public_status = "write_error"
+        if write_started:
+            public_status = "completion_uncertain"
+            public_error_code = "carica_external_write_uncertain"
+            public_error_message = (
+                "Scrittura avviata ma esito non determinabile: verifica la "
+                "destinazione prima di rilanciare."
+            )
         if isinstance(e, ValueError) and "[UNSAFE WRITE CONFIG]" in str(e):
             public_error_message = str(e)
             public_error_code = "carica_unsafe_write_config"
         error_trace = traceback.format_exc()
         elapsed_ms = int((_time.time() - _run_start) * 1000)
         logger.error(f"[CRASH] {error_msg_internal}\n{error_trace}")
+
+        if not intermediate_run_finalized:
+            try:
+                intermediate_runs_db.update_run(
+                    run_id,
+                    status=(
+                        "completion_uncertain" if write_started else "failed"
+                    ),
+                )
+                intermediate_run_finalized = True
+            except Exception:
+                logger.warning(
+                    "Marcatura intermediate CARICA terminale non riuscita; "
+                    "run lasciata non terminale per bloccare replay incerti",
+                    exc_info=True,
+                )
 
         # debug_payload --- (diagnostic canonico, str(e) intenzionale
         try:
@@ -402,7 +614,7 @@ def execute_carica_task(
         # Il return dict finisce in Redis via AsyncResult → FE: niente str(e
         # error_details=error_trace preservato come canale diagnostic separato
         return {
-            "status": "write_error",
+            "status": public_status,
             "success": False,
             "error": public_error_code,
             "message": public_error_message,
@@ -410,8 +622,12 @@ def execute_carica_task(
             "error_details": error_trace,
             "rows_written": 0,
             "total_rows": 0,
+            "run_id": run_id,
+            "project_id": project_id,
         }
     finally:
+        if target_lock_heartbeat is not None:
+            target_lock_heartbeat.stop()
         if target_lock_handle is not None:
             try:
                 released = release_carica_target_lock(target_lock_handle)
@@ -441,26 +657,14 @@ def _acquire_target_lock_or_return_busy(
     run_id: str,
     write_branch: str,
 ) -> CaricaTargetLockHandle | None:
-    """Acquire the distributed destination lock, or None when busy/unknown."""
-    target_lock = resolve_carica_target_lock(
+    """Acquire the distributed destination lock, or None when busy."""
+    target_lock = require_carica_target_lock(
         node_data=carica_node_data,
         project_id=project_id,
         group_id=group_id,
         write_branch=write_branch,
     )
-    if target_lock is None:
-        logger.info(
-            "CARICA target lock skipped: destinazione non identificabile "
-            f"(branch={write_branch}, project_id={project_id})"
-        )
-        return None
-
-    ttl_seconds = int(
-        settings.get(
-            "CARICA_TARGET_LOCK_TTL_SECONDS",
-            settings.TASK_HARD_LIMIT + 300,
-        )
-    )
+    ttl_seconds = _carica_target_lock_ttl_seconds()
     owner_token = f"task={task_id};run={run_id}"
     handle = acquire_carica_target_lock(
         target=target_lock,
@@ -479,6 +683,18 @@ def _acquire_target_lock_or_return_busy(
         f"(kind={target_lock.kind}, key={target_lock.key}, ttl={ttl_seconds}s)"
     )
     return handle
+
+
+def _carica_target_lock_ttl_seconds() -> int:
+    return max(
+        1,
+        int(
+            settings.get(
+                "CARICA_TARGET_LOCK_TTL_SECONDS",
+                settings.TASK_HARD_LIMIT + 300,
+            )
+        ),
+    )
 
 
 
@@ -517,6 +733,9 @@ def _load_upstream_data(
     canvas: JsonObject,
     force_recalculate: bool,
     output_format: str,
+    *,
+    expected_group_id: str,
+    execution_contract: CaricaExecutionContract | None = None,
 ) -> Optional[Any]:
     """Carica il DataFrame dal nodo Result upstream.
 
@@ -526,44 +745,20 @@ def _load_upstream_data(
     3. Dopo ricalcolo rilegge l'artefatto specifico della run
     """
     try:
-        # Pre-cache check: se il blob e' gia' presente, salta execute_pipeline
-        # Il group_id viene letto dal progetto per chiudere il check
-        # cross-tenant del resolver (defense-in-depth: il task CARICA
-        # opera su un project_id arrivato dal payload Celery, garantito
-        # dal layer HTTP a monte ma comunque verificato qui
+        # Pre-cache check: il tenant viene dal contratto accodato, non da un
+        # secondo lookup che potrebbe osservare uno stato progetto diverso.
         if not force_recalculate:
             try:
-                _project_context = get_project_runtime_context(project_id)
-                _project_group_id = (
-                    _project_context.group_id if _project_context else None
+                df = SourceLoader().load(
+                    SourceRef(project=LatestProjectArtifactRef(project_id=project_id)),
+                    expected_group_id=expected_group_id,
                 )
-            except Exception as _ge:
-                logger.warning(
-                    f"[GESTITO] _load_upstream_data: lookup group_id "
-                    f"per {project_id} fallito: {_ge}"
-                )
-                _project_group_id = None
-
-            if not _project_group_id:
-                logger.error(
-                    f"[SECURITY] _load_upstream_data: group_id non "
-                    f"determinabile per {project_id}, fail-closed sul "
-                    f"pre-cache (procedo con execute_pipeline)"
-                )
-            else:
-                try:
-                    df = SourceLoader().load(
-                        SourceRef(project=LatestProjectArtifactRef(project_id=project_id)),
-                        expected_group_id=_project_group_id,
-                    )
-                except SourceLoadingError as _sle:
-                    logger.error(
-                        f"[SECURITY] CARICA pre-cache: {_sle}"
-                    )
-                    return None
-                if df is not None:
-                    logger.info(f"Caricamento output dal DB per {project_id}")
-                    return df
+            except SourceLoadingError as _sle:
+                logger.error(f"[SECURITY] CARICA pre-cache: {_sle}")
+                return None
+            if df is not None:
+                logger.info(f"Caricamento output dal DB per {project_id}")
+                return df
 
         # Nessun risultato in cache o force_recalculate → riesegui pipeline
         # Runtime composition owns the executor graph. CARICA must not rely on
@@ -572,11 +767,18 @@ def _load_upstream_data(
         orchestrator_stack = runtime_services_module.build_orchestrator_stack()
         orchestrator = orchestrator_stack.orchestrator
 
-        result = orchestrator.execute_pipeline(
-            project_id=project_id,
-            force_recalculate=force_recalculate,
-            skip_carica=True,
-        )
+        if execution_contract is not None:
+            result = orchestrator.execute_pipeline_from_contract(
+                contract=execution_contract.to_pipeline_contract(),
+                force_recalculate=force_recalculate,
+                skip_carica=True,
+            )
+        else:
+            result = orchestrator.execute_pipeline(
+                project_id=project_id,
+                force_recalculate=force_recalculate,
+                skip_carica=True,
+            )
 
         # Controlla se la pipeline ha fallito — errore gestito, non crash
         if not result or not result.get("success"):
