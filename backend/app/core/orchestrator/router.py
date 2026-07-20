@@ -729,11 +729,11 @@ def download_task_result(
             raise HTTPException(status_code=400, detail=f"Task non completato (stato: {task_info.status.value})")
 
         safe_task_id = "".join(c for c in task_id if c.isalnum() or c in "-_")
-        raw_task_result = task_info.result
-        eseguibile_payload = (
-            _task_result_to_dict(raw_task_result)
-            if isinstance(raw_task_result, Mapping) else {}
-        )
+        # In produzione TaskService normalizza il risultato Celery in
+        # TaskResultPayload. Il mapper gestisce sia quel contratto tipizzato
+        # sia i dict legacy: filtrare qui per Mapping faceva perdere
+        # ``is_eseguibile`` e instradava erroneamente il download sul blob DB.
+        eseguibile_payload = _task_result_to_dict(task_info.result)
         if safe_task_id == task_id and bool(
             eseguibile_payload.get("is_eseguibile")
         ):

@@ -21,13 +21,16 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
     """Fast-path: uno stream completo elimina l'output alla chiusura."""
     from app.core.orchestrator.router import download_task_result
+    from app.core.orchestrator.task_service import TaskResultPayload
 
     # Mock task_service: success status
     fake_task_info = MagicMock()
     fake_task_info.status.value = "success"
-    fake_task_info.result = {
+    # TaskService espone in produzione un payload tipizzato, non il dict
+    # Celery originale. Questo e' il contratto che il router deve riconoscere.
+    fake_task_info.result = TaskResultPayload.from_celery_meta({
         "project_id": "exe-1", "is_eseguibile": True,
-    }
+    })
     fake_task_info.project_id = "exe-1"
 
     fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
