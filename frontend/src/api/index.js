@@ -122,6 +122,7 @@ export {
   analyzeUpload as analyzeEseguibileUpload,
   executeEseguibile,
   runEseguibile,
+  downloadEseguibileOutput,
   listEseguibileVersions,
   republishEseguibile,
   activateEseguibileVersion,

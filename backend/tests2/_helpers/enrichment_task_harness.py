@@ -264,8 +264,39 @@ def install_enrichment_task_mocks(
             }
         )
 
+    class _FakeExecutableOutputWriter:
+        def __init__(self, task_id, filename, *, group_id):
+            self.task_id = task_id
+            self.filename = filename
+            self.group_id = group_id
+            self.data = bytearray()
+
+        def write(self, data):
+            self.data.extend(data)
+            return len(data)
+
+        def finalize(self):
+            spies.eseg_saves.append({
+                "task_id": self.task_id,
+                "filename": self.filename,
+                "group_id": self.group_id,
+                "kind": "writer",
+            })
+            return (
+                f"tenants/{self.group_id}/eseguibili-outputs/"
+                f"{self.task_id}/{self.filename}"
+            )
+
+        def abort(self):
+            return None
+
     monkeypatch.setattr(_eseg_src, "save_chunks", _fake_eseg_save_chunks, raising=False)
     monkeypatch.setattr(_eseg_src, "save_bytes", _fake_eseg_save_bytes, raising=False)
+    monkeypatch.setattr(
+        _eseg_src,
+        "ExecutableOutputWriter",
+        _FakeExecutableOutputWriter,
+    )
 
     # 4. ApiConnectionService → tracked (con final_df per run-a-completamento)
     monkeypatch.setattr(

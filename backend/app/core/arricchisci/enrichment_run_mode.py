@@ -18,10 +18,9 @@ from pathlib import Path
 from typing import Any, Mapping, MutableMapping, Optional, Tuple
 
 from app.core import output_contract as output_contract_module
-from app.core.dataframes import export_writer as dataframe_export_writer
 from app.core.eseguibili import service as eseguibili_service
-from app.core.eseguibili import storage as eseg_storage
 from app.core.intermediate import run_lifecycle as run_lifecycle_module
+from app.core.orchestrator.executable_output import ExecutableOutputPersistence
 from app.core.projects import retention as project_retention
 from app.core.projects import service as project_service_module
 from app.core.results import pipeline_result as pipeline_result_module
@@ -215,29 +214,23 @@ class EseguibileRunMode(EnrichmentRunMode):
         # Eseguibile: output DataFrame → object storage (S3) via streaming chunks.
         # Niente DB result/output_contract. result_id resta None (il frontend
         # scarica via download_url, vedi decorate_result).
-        requested_format = (final_format or "").strip().lower().lstrip(".")
-        fmt_lower = dataframe_export_writer.normalize_export_format(final_format)
-        # SHP esce zippato: rinomina il filename su storage in `.zip`.
-        if fmt_lower == "shp":
-            storage_filename = Path(final_filename).with_suffix(".zip").name
-        elif requested_format == "xls":
-            storage_filename = Path(final_filename).with_suffix(".xlsx").name
-        else:
-            storage_filename = final_filename
-        eseg_storage.save_chunks(
-            task_id,
-            storage_filename,
-            dataframe_export_writer.dataframe_to_export_chunks(final_df, fmt_lower),
+        saved = ExecutableOutputPersistence(
+            task_id=task_id,
             group_id=group_id,
+        ).persist_dataframe_output(
+            df=final_df,
+            output_format=final_format,
+            filename_stem=Path(final_filename).stem,
         )
         logger.info(
-            f"[Task {task_id}] Output eseguibile (df) su storage streaming: "
-            f"eseguibili-outputs/{task_id}/{storage_filename}"
+            f"[Task {task_id}] Output eseguibile (df) su storage: "
+            f"{saved.storage_key}"
         )
-        return None, Path(storage_filename)
+        return None, Path(saved.output_filename)
 
     def decorate_result(self, result, *, project_id, task_id):
         result["download_url"] = f"/api/eseguibili/{project_id}/download/{task_id}"
+        result["is_eseguibile"] = True
 
 
 def for_task(is_eseguibile: bool) -> EnrichmentRunMode:

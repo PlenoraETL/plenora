@@ -32,10 +32,25 @@ from .models import (
 )
 from .runtime import resolve_runtime_inputs
 from .manifest import compile_manifest
+from .storage import INTERNAL_ARTIFACT_PREFIX
 
 logger = get_logger(__name__)
 
 UPLOAD_METADATA_KEY = "eseguibili_upload"
+
+
+def _sanitize_output_base_name(raw_name: str) -> str:
+    """Return a safe public filename that cannot collide with internal objects."""
+
+    base_name = re.sub(r"\.[a-zA-Z0-9]{1,5}$", "", raw_name)
+    base_name = re.sub(r'[\\/:*?"<>|]', "_", base_name).strip() or "risultato"
+    if base_name.startswith(INTERNAL_ARTIFACT_PREFIX):
+        base_name = f"result_{base_name}"
+    return base_name
+
+
+def get_eseguibile_run(run_id: str) -> JsonObject | None:
+    return eseguibili_db.get_eseguibile_run(run_id)
 
 
 # CREATE — compila una versione immutabile da qualsiasi tipo progetto
@@ -544,8 +559,7 @@ def execute(
         or eseguibile.get("name", "risultato")
     )
     # Sanitizza: rimuovi estensione, caratteri pericolosi per filesystem
-    base_name = re.sub(r"\.[a-zA-Z0-9]{1,5}$", "", raw_name)  # togli .xlsx, .csv, etc
-    base_name = re.sub(r'[\\/:*?"<>|]', "_", base_name).strip() or "risultato"
+    base_name = _sanitize_output_base_name(raw_name)
 
     # Applica al result node (sempre, non solo se l'utente ha specificato qualcosa
     for n in nodes:
@@ -684,8 +698,7 @@ def execute_versioned(
         or (eseguibile.default_output_name or "").strip()
         or eseguibile.name
     )
-    base_name = re.sub(r"\.[a-zA-Z0-9]{1,5}$", "", raw_name)
-    base_name = re.sub(r'[\\/:*?"<>|]', "_", base_name).strip() or "risultato"
+    base_name = _sanitize_output_base_name(raw_name)
     _configure_runtime_output(
         canvas,
         output_format=final_format,

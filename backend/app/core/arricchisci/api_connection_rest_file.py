@@ -40,7 +40,9 @@ from app.core.arricchisci.http_executor import (
 )
 from app.core.arricchisci.types import JsonObject, JsonRows
 from app.core.files.exceptions import FileSourceResolutionError
+from app.core.eseguibili import storage as eseguibili_storage
 from app.core.io.local_cleanup import rmtree_safe
+from app.core.resources.bounded_reader import read_stream_bounded
 from app.core.resources.exceptions import MemoryLimitExceededError
 from app.core.resources import resource_caps as resource_caps_module
 from app.core.results import blob_writer as blob_writer_module
@@ -665,26 +667,38 @@ class ApiConnectionRestFileMixin:
                 f"({total_bytes // 1024} KB, {elapsed_ms:.0f}ms)"
             )
 
-            # Persistenza immediata come result_blob. Il resolver downstream
-            # (`ArtifactResolver.fetch_run_blob`) ricarica i bytes verificando
-            # `expected_project_id`. Per rest_file -> rest_file chain
-            # questo significa un round-trip DB/MinIO in piu' rispetto al
-            # passthrough disco precedente, ma evita disco-leak su worker
-            # Celery long-running e uniforma il contratto di scambio
-            # inter-node (sempre result_id, mai path).
-            result_id = blob_writer_module.save_result_blob_from_bytes(
-                project_id=project_id,
-                data=output_bytes,
-                filename=output_filename,
-                fmt=fmt,
-                rows_count=0,
-                group_id=(ctx.group_id if ctx is not None else None),
-            )
+            # Nei progetti persistiamo come result_blob; negli eseguibili come
+            # artefatto interno task-scoped, evitando FK verso projects.
+            # Entrambi i percorsi restano bytes-first e senza tempfile locali.
+            result_id = None
+            storage_key = None
+            if ctx is not None and ctx.output_task_id:
+                internal_filename = eseguibili_storage.internal_artifact_filename(
+                    "rest-file",
+                    node_id,
+                    output_filename,
+                )
+                storage_key = eseguibili_storage.save_bytes(
+                    ctx.output_task_id,
+                    internal_filename,
+                    output_bytes,
+                    group_id=str(ctx.group_id or ""),
+                )
+            else:
+                result_id = blob_writer_module.save_result_blob_from_bytes(
+                    project_id=project_id,
+                    data=output_bytes,
+                    filename=output_filename,
+                    fmt=fmt,
+                    rows_count=0,
+                    group_id=(ctx.group_id if ctx is not None else None),
+                )
 
             return {
                 "is_file_result": True,
                 "success": True,
                 "result_id": result_id,
+                "storage_key": storage_key,
                 "filename": output_filename,
                 "format": fmt,
                 "size_bytes": total_bytes,
@@ -941,9 +955,33 @@ class ApiConnectionRestFileMixin:
                 # verifica cross-tenant fail-closed.
                 if isinstance(upstream_result, dict) and upstream_result.get('is_file_result'):
                     upstream_result_id = upstream_result.get('result_id')
+                    upstream_storage_key = upstream_result.get('storage_key')
                     upstream_filename = (
                         upstream_result.get('filename') or 'upstream_output.bin'
                     )
+                    if (
+                        upstream_storage_key
+                        and ctx is not None
+                        and ctx.output_task_id
+                        and ctx.group_id
+                    ):
+                        stream = eseguibili_storage.open_task_stream(
+                            ctx.output_task_id,
+                            str(upstream_storage_key),
+                            expected_group_id=ctx.group_id,
+                        )
+                        data = read_stream_bounded(
+                            stream["body"],
+                            max_bytes=resource_caps_module.resolve_resource_max_bytes(),
+                            label=upstream_filename,
+                            stage="rest_file_executable_upstream",
+                        )
+                        logger.info(
+                            f"file-processor input: bytes upstream {source_id} "
+                            f"da executable storage ({len(data)} bytes, "
+                            f"filename={upstream_filename})"
+                        )
+                        return (data, upstream_filename), False
                     if upstream_result_id and ctx is not None and ctx.project_id:
                         try:
                             blob = (

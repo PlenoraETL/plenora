@@ -195,6 +195,17 @@ def test_open_stream_delegates_to_backend(fake_storage):
     assert chunks == [b"abc", b"def"]
 
 
+def test_open_task_stream_rejects_artifact_from_another_task(fake_storage):
+    from app.core.eseguibili import storage as st
+
+    with pytest.raises(ValueError, match="altro task"):
+        st.open_task_stream(
+            "task-2",
+            "tenants/g1/eseguibili-outputs/task-1/output.csv",
+            expected_group_id="g1",
+        )
+
+
 # delete_by_task()
 
 

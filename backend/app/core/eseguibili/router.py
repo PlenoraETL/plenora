@@ -758,15 +758,18 @@ def download_eseguibile_output(
                 detail="Output non accessibile (task eseguito da un altro utente)"
             )
 
-    # Lookup dell'output su object storage (S3 via cloud_backends
-    # Multi-host safe: backend e worker possono essere su macchine diverse
+    # Solo dopo l'ownership lookup interroghiamo gli output. Un outage del
+    # listing non deve essere presentato come risultato scaduto.
     try:
         keys = _output_store.find_output_keys(
             safe_task_id, group_id=owner_group_id,
         )
-    except Exception as e:
-        logger.warning(f"Lookup storage eseguibili fallito: {e}")
-        keys = []
+    except Exception as exc:
+        logger.error(f"Lookup storage eseguibili fallito: {exc}", exc_info=True)
+        raise HTTPException(
+            status_code=503,
+            detail="Storage output temporaneamente non disponibile",
+        ) from exc
 
     if not keys:
         raise HTTPException(

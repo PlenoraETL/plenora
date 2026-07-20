@@ -138,11 +138,6 @@ class ExecutableOutputPersistence:
                     writer,
                     column_types=column_types,
                 )
-            elif fmt == "geojson" and not resolved_geom:
-                for chunk in export_writer_module.dataframe_to_export_chunks(
-                    df, "json"
-                ):
-                    writer.write(chunk)
             else:
                 writer.write(
                     frame_io_module.save_dataframe_to_bytes(

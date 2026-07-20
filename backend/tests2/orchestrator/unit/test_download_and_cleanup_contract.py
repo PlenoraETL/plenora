@@ -29,9 +29,9 @@ def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
     # TaskService espone in produzione un payload tipizzato, non il dict
     # Celery originale. Questo e' il contratto che il router deve riconoscere.
     fake_task_info.result = TaskResultPayload.from_celery_meta({
-        "project_id": "exe-1", "is_eseguibile": True,
+        "project_id": "exec_1",
     })
-    fake_task_info.project_id = "exe-1"
+    fake_task_info.project_id = "exec_1"
 
     fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
 
@@ -39,7 +39,7 @@ def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
          patch("app.core.orchestrator.task_service.task_service.get_task_status",
                return_value=fake_task_info), \
          patch("app.core.orchestrator.router.eseguibili_db.get_eseguibile",
-               return_value={"id": "exe-1", "group_id": "g1"}), \
+               return_value={"id": "exec_1", "group_id": "g1"}), \
          patch("app.core.eseguibili.output_store.load_task_owner",
                return_value=None), \
          patch("app.core.eseguibili.storage.find_keys",
@@ -68,6 +68,30 @@ def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
             "t1", group_id="g1", retain_owner=True,
         )
         mock_release.assert_called_once()
+
+
+def test_tasks_download_eseguibile_storage_outage_is_service_unavailable():
+    from fastapi import HTTPException
+    from app.core.orchestrator.router import download_task_result
+
+    fake_task_info = MagicMock()
+    fake_task_info.status.value = "success"
+    fake_task_info.result = {"project_id": "exec_1"}
+    fake_task_info.project_id = "exec_1"
+    fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
+
+    with patch("app.core.orchestrator.router._assert_task_group"), \
+         patch("app.core.orchestrator.task_service.task_service.get_task_status",
+               return_value=fake_task_info), \
+         patch("app.core.orchestrator.router.eseguibili_db.get_eseguibile",
+               return_value={"id": "exec_1", "group_id": "g1"}), \
+         patch("app.core.orchestrator.router._assert_eseguibile_task_owner"), \
+         patch("app.core.eseguibili.output_store.find_output_keys",
+               side_effect=RuntimeError("storage down")):
+        with pytest.raises(HTTPException) as exc:
+            download_task_result(task_id="t1", current_user=fake_user)
+
+    assert exc.value.status_code == 503
 
 
 def test_tasks_download_eseguibile_blocks_owner_mismatch():
@@ -193,6 +217,30 @@ def test_eseguibili_download_404_when_no_keys_on_storage():
                 current_user=fake_user,
             )
         assert exc.value.status_code == 404
+
+
+def test_eseguibili_download_503_when_storage_lookup_fails():
+    from fastapi import HTTPException
+    from app.core.eseguibili.router import download_eseguibile_output
+
+    fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
+
+    with patch("app.core.eseguibili.router.eseguibili_db.get_eseguibile",
+               return_value={"id": "exe-1", "group_id": "g1"}), \
+         patch("app.core.eseguibili.router._check_visible", return_value=None), \
+         patch("app.core.eseguibili.router._load_task_owner",
+               return_value={"eseguibile_id": "exe-1", "user_id": "u1"}) as owner_lookup, \
+         patch("app.core.eseguibili.storage.find_keys",
+               side_effect=RuntimeError("storage down")):
+
+        with pytest.raises(HTTPException) as exc:
+            download_eseguibile_output(
+                eseguibile_id="exe-1", task_id="t1",
+                current_user=fake_user,
+            )
+
+    assert exc.value.status_code == 503
+    owner_lookup.assert_called_once_with("t1", group_id="g1")
 
 
 def test_eseguibili_download_cleanup_swallows_storage_failure():

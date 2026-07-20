@@ -146,7 +146,14 @@ def load_task_owner(
     for key in keys:
         try:
             stream = storage.open_stream(key, expected_group_id=group_id)
-            return _load_owner_payload(_read_body(stream["body"]))
+            body = stream["body"]
+            try:
+                payload = _read_body(body)
+            finally:
+                close = getattr(body, "close", None)
+                if callable(close):
+                    close()
+            return _load_owner_payload(payload)
         except Exception as exc:
             logger.debug(
                 f"load task owner sidecar da object storage fallito per "
@@ -202,6 +209,7 @@ def find_output_keys(task_id: str, *, group_id: str) -> list[str]:
     return sorted(set(
         key for key in storage.find_keys(task_id, group_id=group_id)
         if key.rsplit("/", 1)[-1] != OWNER_SIDECAR_FILENAME
+        and not storage.is_internal_artifact_key(key)
     ))
 
 
@@ -246,7 +254,10 @@ def delete_task_outputs(
     ``retain_owner`` is used by the consume-once download: the sidecar remains
     available to authorize the subsequent GDPR full-cleanup request.
     """
-    keys = find_output_keys(task_id, group_id=group_id)
+    keys = sorted(set(
+        key for key in storage.find_keys(task_id, group_id=group_id)
+        if key.rsplit("/", 1)[-1] != OWNER_SIDECAR_FILENAME
+    ))
     deleted = 0
     failures: list[tuple[str, Exception]] = []
     for key in keys:

@@ -11,7 +11,7 @@ import {
   getEseguibile,
   analyzeEseguibileUpload,
   executeEseguibile,
-  downloadTaskOutput,
+  downloadEseguibileOutput,
 } from '../../api';
 import { useToast } from '../../hooks/useToast';
 import { useTaskPolling } from '../../hooks/useTaskPolling';
@@ -181,7 +181,7 @@ function EseguibileExecuteWizard({ eseguibileId, onClose, onAfterDownload = null
         .replace(/[\\/:*?"<>|]/g, '_')        // sanitizza
         || 'risultato';
       const fallbackName = `${cleanBase}.${outputFormat}`;
-      await downloadTaskOutput(taskId, fallbackName);
+      await downloadEseguibileOutput(eseguibileId, taskId, fallbackName);
 
       // Hook post-download: usato dalla kiosk page degli esecutori per
       // chiamare cleanupTaskCompletely(taskId) e cancellare ogni traccia

@@ -23,8 +23,11 @@ class CanvasExecutionContext:
             must fail-closed when ``group_id is None``.
         preview_limit: if ``int > 0``, truncates loaded DataFrames
             (preview UI). ``None`` or ``<= 0`` = full execution.
+        output_task_id: stable executable task id used to persist outputs
+            outside project-scoped result tables. ``None`` for projects.
     """
 
     project_id: str
     group_id: Optional[str]
     preview_limit: Optional[int]
+    output_task_id: Optional[str] = None

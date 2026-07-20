@@ -9,6 +9,7 @@
 import http from './http';
 import { fetchAllOffsetPages } from './pagination';
 import { assertFileSize, throwIfUploadTooLarge } from './uploadGuards';
+import { downloadBlob } from '../utils/downloadBlob';
 
 /**
  * Lista gli eseguibili visibili al gruppo dell'utente.
@@ -102,6 +103,19 @@ export const executeEseguibile = async (eseguibileId, payload) => {
 export const runEseguibile = async (eseguibileId, payload) => {
   const r = await http.post(`/eseguibili/${eseguibileId}/runs`, payload);
   return r.data;
+};
+
+/** Scarica l'output consume-once dal boundary dedicato agli eseguibili. */
+export const downloadEseguibileOutput = async (
+  eseguibileId,
+  taskId,
+  filename = null,
+) => {
+  const response = await http.get(
+    `/eseguibili/${encodeURIComponent(eseguibileId)}/download/${encodeURIComponent(taskId)}`,
+    { responseType: 'blob' },
+  );
+  downloadBlob(response, filename, `eseguibile_${taskId}_output`);
 };
 
 export const listEseguibileVersions = async (eseguibileId) => {

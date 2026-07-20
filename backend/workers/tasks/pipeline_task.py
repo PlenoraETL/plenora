@@ -318,32 +318,17 @@ def execute_pipeline_task(
             fresh e non si applica idempotency cross-run.
     """
     task_id = self.request.id
-
-    if run_id is not None:
-        if run_idempotency_module.is_already_completed(run_id):
-            logger.info(
-                f"[IDEMPOTENCY] Task PIPELINE {task_id}: run_id {run_id} "
-                f"gia' completato con successo, skip."
-            )
-            result: JsonObject = {
-                "status": "skipped_idempotent",
-                "success": True,
-                "message": f"Run {run_id} gia' completato",
-                "run_id": run_id,
-                "task_id": task_id,
-            }
-            _close_worker_connection(stage="post-idempotency")
-            return result
-
-    if run_id is None:
-        run_id = str(_uuid.uuid4())
-    _run_start = _time.time()
-
     contract = _normalize_execution_contract(
         execution_contract,
         expected_project_id=project_id,
     )
     subject = _executable_subject(contract)
+    has_external_run_id = run_id is not None
+
+    if run_id is None:
+        run_id = str(_uuid.uuid4())
+    _run_start = _time.time()
+
     if subject is not None:
         _revoked = async_user_recheck_module.recheck_eseguibile_authorized(
             user_id=user_id,
@@ -381,8 +366,8 @@ def execute_pipeline_task(
     try:
         _update_progress(self, 0, "Inizializzazione pipeline...")
     except TaskRevoked:
-        # Il primo checkpoint precede l'apertura delle run, ma gli input
-        # temporanei dell'eseguibile esistono gia' e vanno sempre rimossi.
+        # Il primo checkpoint precede sia i lookup di idempotenza sia
+        # l'apertura delle run, ma gli input temporanei esistono gia'.
         _cleanup_executable_inputs(contract)
         if subject is not None:
             try:
@@ -397,6 +382,54 @@ def execute_pipeline_task(
         _close_worker_connection(stage="pre-run")
         raise
 
+    # Authorization and the cancellation checkpoint must precede idempotency
+    # lookups: revoked callers must not receive metadata from an earlier run.
+    if subject is not None:
+        if subject.get("run_id"):
+            previous_run = eseguibili_service.get_eseguibile_run(
+                str(subject["run_id"])
+            )
+            if previous_run and previous_run.get("status") == "success":
+                output_metadata = previous_run.get("output_metadata") or {}
+                if isinstance(output_metadata, str):
+                    import json as _json
+
+                    try:
+                        output_metadata = _json.loads(output_metadata)
+                    except ValueError:
+                        output_metadata = {}
+                output_file = (
+                    output_metadata.get("filename")
+                    if isinstance(output_metadata, _Mapping)
+                    else None
+                )
+                _close_worker_connection(stage="post-eseguibile-idempotency")
+                return {
+                    "status": "skipped_idempotent",
+                    "success": True,
+                    "project_id": project_id,
+                    "task_id": task_id,
+                    "run_id": run_id,
+                    "result_id": None,
+                    "output_file": output_file,
+                    "download_url": f"/api/eseguibili/{project_id}/download/{task_id}",
+                    "is_eseguibile": True,
+                }
+    elif has_external_run_id and run_idempotency_module.is_already_completed(run_id):
+        logger.info(
+            f"[IDEMPOTENCY] Task PIPELINE {task_id}: run_id {run_id} "
+            f"gia' completato con successo, skip."
+        )
+        result: JsonObject = {
+            "status": "skipped_idempotent",
+            "success": True,
+            "message": f"Run {run_id} gia' completato",
+            "run_id": run_id,
+            "task_id": task_id,
+        }
+        _close_worker_connection(stage="post-idempotency")
+        return result
+
     project_info = (
         contract if contract is not None else _get_project_info(project_id)
     )
@@ -408,25 +441,30 @@ def execute_pipeline_task(
 
     log_run_opened = False
     try:
-        open_run(
-            run_id=run_id,
-            project_id=project_id,
-            group_id=group_id,
-            module=module,
-            triggered_by=triggered_by,
-            user_id=user_id,
-        )
-        log_run_opened = True
-        set_run_context(run_id=run_id, project_id=project_id)
+        if subject is None:
+            open_run(
+                run_id=run_id,
+                project_id=project_id,
+                group_id=group_id,
+                module=module,
+                triggered_by=triggered_by,
+                user_id=user_id,
+            )
+            log_run_opened = True
+            set_run_context(run_id=run_id, project_id=project_id)
 
-        # L'apertura intermediate e' parte del contratto idempotente: senza
-        # la run stabile un redelivery potrebbe rieseguire l'intera pipeline.
-        run_lifecycle_module.create_run(
-            run_id=run_id,
-            canvas_id=project_id,
-            group_id=group_id,
-            user_id=user_id,
-        )
+            # L'apertura intermediate e' parte del contratto idempotente per
+            # i progetti. Gli eseguibili usano ``eseguibile_runs``.
+            run_lifecycle_module.create_run(
+                run_id=run_id,
+                canvas_id=project_id,
+                group_id=group_id,
+                user_id=user_id,
+            )
+        else:
+            # Evita di ereditare il contesto di una precedente run sullo
+            # stesso thread worker senza creare log_runs per ``exec_*``.
+            set_run_context(run_id="", project_id="")
     except BaseException:
         if log_run_opened:
             try:
@@ -446,6 +484,7 @@ def execute_pipeline_task(
     try:
         _update_progress(self, 5, "Caricamento configurazione...")
         orchestrator = _build_orchestrator()
+        executor_run_id = None if subject is not None else run_id
 
         _update_progress(self, 10, "Esecuzione pipeline...")
         if contract is not None:
@@ -460,8 +499,8 @@ def execute_pipeline_task(
                 project_type=str(contract["project_type"]),
                 canvas=contract["canvas"],
                 force_recalculate=force_recalculate,
-                skip_carica=False,
-                run_id=run_id,
+                skip_carica=subject is not None,
+                run_id=executor_run_id,
                 user_id=user_id,
                 intermediate_mode_override=intermediate_mode_override,
                 execution_context=execution_context,
@@ -471,7 +510,7 @@ def execute_pipeline_task(
                 project_id,
                 force_recalculate=force_recalculate,
                 skip_carica=False,
-                run_id=run_id,
+                run_id=executor_run_id,
                 user_id=user_id,
                 intermediate_mode_override=intermediate_mode_override,
             )
@@ -504,14 +543,15 @@ def execute_pipeline_task(
                     f"Task PIPELINE {task_id} — connessione DB chiusa: {message}",
                     run_id=run_id, project_id=project_id,
                 )
-                close_run(
-                    run_id=run_id,
-                    status="failure",
-                    duration_ms=elapsed_ms,
-                    steps=get_steps(),
-                    error_module=module,
-                    error_message=f"Connessione al database persa: {message}",
-                )
+                if subject is None:
+                    close_run(
+                        run_id=run_id,
+                        status="failure",
+                        duration_ms=elapsed_ms,
+                        steps=get_steps(),
+                        error_module=module,
+                        error_message=f"Connessione al database persa: {message}",
+                    )
                 _update_progress(
                     self,
                     0,
@@ -563,16 +603,17 @@ def execute_pipeline_task(
                 logger.warning(f"DebugPayloadBuilder fallito (non bloccante): {_pe}")
                 debug_payload = None
 
-            close_run(
-                run_id=run_id,
-                status="failure",
-                duration_ms=elapsed_ms,
-                steps=get_steps(),
-                error_node_id=error_node_id,
-                error_module=module,
-                error_message=message,
-                debug_payload=debug_payload,
-            )
+            if subject is None:
+                close_run(
+                    run_id=run_id,
+                    status="failure",
+                    duration_ms=elapsed_ms,
+                    steps=get_steps(),
+                    error_node_id=error_node_id,
+                    error_module=module,
+                    error_message=message,
+                    debug_payload=debug_payload,
+                )
 
             _update_progress(self, 0, message, check_revocation=False)
             return {
@@ -626,21 +667,21 @@ def execute_pipeline_task(
             run_id=run_id, project_id=project_id,
         )
 
-        close_run(
-            run_id=run_id,
-            status="success",
-            rows_out=rows_out,
-            duration_ms=elapsed_ms,
-            steps=get_steps(),
-        )
+        if subject is None:
+            close_run(
+                run_id=run_id,
+                status="success",
+                rows_out=rows_out,
+                duration_ms=elapsed_ms,
+                steps=get_steps(),
+            )
 
-        # Barriera idempotente sincrona: deve riuscire prima dell'ACK, altrimenti
-        # un redelivery potrebbe rieseguire una pipeline gia' materializzata.
-        run_lifecycle_module.close_run(
-            run_id=run_id, input_hash="", output_hash="",
-            total_exec_time=_time.time() - _run_start, success=True,
-            retention_n=retention_n,
-        )
+            # Barriera idempotente sincrona per le run dei progetti.
+            run_lifecycle_module.close_run(
+                run_id=run_id, input_hash="", output_hash="",
+                total_exec_time=_time.time() - _run_start, success=True,
+                retention_n=retention_n,
+            )
 
         output_path = result.output_path
         output_file = _Path(output_path).name if output_path else None
@@ -675,34 +716,35 @@ def execute_pipeline_task(
             except Exception as run_exc:
                 logger.warning(f"Update run eseguibile annullata fallito: {run_exc}")
         elapsed_ms = int((_time.time() - _run_start) * 1000)
-        try:
-            close_run(
-                run_id=run_id,
-                status="revoked",
-                duration_ms=elapsed_ms,
-                steps=get_steps(),
-                error_module=module,
-                error_message="Task annullato",
-            )
-        except Exception as close_exc:
-            logger.warning(
-                "close_run log fallito post-revoke: "
-                f"{type(close_exc).__name__}: {close_exc}"
-            )
-        try:
-            run_lifecycle_module.close_run(
-                run_id=run_id,
-                input_hash="",
-                output_hash="",
-                total_exec_time=_time.time() - _run_start,
-                success=False,
-                retention_n=retention_n,
-            )
-        except Exception as close_exc:
-            logger.debug(
-                "close_run intermediate fallito post-revoke: "
-                f"{type(close_exc).__name__}: {close_exc}"
-            )
+        if subject is None:
+            try:
+                close_run(
+                    run_id=run_id,
+                    status="revoked",
+                    duration_ms=elapsed_ms,
+                    steps=get_steps(),
+                    error_module=module,
+                    error_message="Task annullato",
+                )
+            except Exception as close_exc:
+                logger.warning(
+                    "close_run log fallito post-revoke: "
+                    f"{type(close_exc).__name__}: {close_exc}"
+                )
+            try:
+                run_lifecycle_module.close_run(
+                    run_id=run_id,
+                    input_hash="",
+                    output_hash="",
+                    total_exec_time=_time.time() - _run_start,
+                    success=False,
+                    retention_n=retention_n,
+                )
+            except Exception as close_exc:
+                logger.debug(
+                    "close_run intermediate fallito post-revoke: "
+                    f"{type(close_exc).__name__}: {close_exc}"
+                )
         raise
 
     except Exception as e:
@@ -745,25 +787,29 @@ def execute_pipeline_task(
             logger.warning(f"DebugPayloadBuilder fallito (non bloccante): {_pe}")
             debug_payload = None
 
-        close_run(
-            run_id=run_id,
-            status="failure",
-            duration_ms=elapsed_ms,
-            steps=get_steps(),
-            error_module=module,
-            error_message=str(e),
-            debug_payload=debug_payload,
-        )
-
-        # Chiudi run intermediate storage tramite boundary di lifecycle.
-        try:
-            run_lifecycle_module.close_run(
-                run_id=run_id, input_hash="", output_hash="",
-                total_exec_time=_time.time() - _run_start, success=False,
-                retention_n=retention_n,
+        if subject is None:
+            close_run(
+                run_id=run_id,
+                status="failure",
+                duration_ms=elapsed_ms,
+                steps=get_steps(),
+                error_module=module,
+                error_message=str(e),
+                debug_payload=debug_payload,
             )
-        except Exception as e:
-            logger.debug(f"close_run intermediate fallito post-crash: {type(e).__name__}: {e}")
+
+            # Chiudi run intermediate storage tramite boundary di lifecycle.
+            try:
+                run_lifecycle_module.close_run(
+                    run_id=run_id, input_hash="", output_hash="",
+                    total_exec_time=_time.time() - _run_start, success=False,
+                    retention_n=retention_n,
+                )
+            except Exception as close_error:
+                logger.debug(
+                    "close_run intermediate fallito post-crash: "
+                    f"{type(close_error).__name__}: {close_error}"
+                )
 
         raise
 

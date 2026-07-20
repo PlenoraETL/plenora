@@ -581,6 +581,15 @@ def bind_eseguibile_run_task(run_id: str, task_id: str) -> None:
     )
 
 
+def get_eseguibile_run(run_id: str) -> JsonObject | None:
+    return _fetchone(
+        "SELECT id, eseguibile_id, task_id, group_id, user_id, status, "
+        "output_metadata, error_message, started_at, completed_at "
+        "FROM eseguibile_runs WHERE id = %s",
+        (run_id,),
+    )
+
+
 def complete_eseguibile_run(
     run_id: str,
     *,

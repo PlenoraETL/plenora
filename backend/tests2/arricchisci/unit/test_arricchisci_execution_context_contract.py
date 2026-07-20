@@ -64,13 +64,18 @@ def test_context_is_frozen_dataclass():
 
 
 def test_context_fields_typed():
-    """Lock di shape: 3 campi tipati nel dataclass."""
+    """Lock di shape per i campi tipati nel dataclass."""
     from app.core.arricchisci.execution_context import (
         ArricchisciExecutionContext,
     )
 
     field_names = {f.name for f in fields(ArricchisciExecutionContext)}
-    assert field_names == {"project_id", "group_id", "preview_limit"}
+    assert field_names == {
+        "project_id",
+        "group_id",
+        "preview_limit",
+        "output_task_id",
+    }
 
 
 # 3. Concurrency / isolation

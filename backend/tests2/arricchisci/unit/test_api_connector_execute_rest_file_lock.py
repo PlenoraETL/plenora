@@ -13,6 +13,7 @@ import pytest
 import requests
 
 from app.core.files.exceptions import FileSourceResolutionError
+from app.core.arricchisci.execution_context import ArricchisciExecutionContext
 
 
 pytestmark = [
@@ -466,6 +467,40 @@ class TestExecuteRestFileDownload:
         assert call_kwargs["filename"] == "output.zip"
         assert call_kwargs["fmt"] == "zip"
         assert call_kwargs["project_id"] == "p1"
+
+    def test_executable_download_uses_task_storage_not_results(self, rf_env):
+        rf_env.requests_post.return_value = _mock_http_response(
+            status_code=200,
+            body_chunks=[b"executable-output"],
+        )
+        ctx = ArricchisciExecutionContext(
+            project_id="exec_1",
+            group_id="group-1",
+            preview_limit=None,
+            output_task_id="task-1",
+        )
+        with patch(
+            "app.core.eseguibili.storage.save_bytes",
+            return_value=(
+                "tenants/group-1/eseguibili-outputs/task-1/"
+                "__internal__rest-file__n1__output.zip"
+            ),
+        ) as save_executable:
+            result = rf_env.svc._execute_rest_file(
+                {},
+                _api_config(output_extension=".zip"),
+                [],
+                [],
+                "n1",
+                "exec_1",
+                ctx=ctx,
+            )
+
+        assert result["success"] is True
+        assert result["result_id"] is None
+        assert result["storage_key"].endswith("__internal__rest-file__n1__output.zip")
+        rf_env.save_blob.assert_not_called()
+        save_executable.assert_called_once()
 
 
 # Section 5: exception handling + tmp cleanup

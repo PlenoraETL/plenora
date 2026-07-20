@@ -68,6 +68,7 @@ def test_download_allows_superadmin_past_missing_owner_metadata(superadmin_user,
 
     with patch("app.core.eseguibili.router.eseguibili_db.get_eseguibile", return_value={"id": "exe-1", "group_id": "grp-1"}), \
          patch("app.core.eseguibili.router._load_task_owner", return_value=None), \
+         patch("app.core.eseguibili.output_store.find_output_keys", return_value=[]), \
          patch("app.core.eseguibili.router.settings", type("S", (), {"ESEGUIBILI_OUTPUTS_DIR": output_dir})):
         response = client.get("/api/eseguibili/exe-1/download/task-1")
 

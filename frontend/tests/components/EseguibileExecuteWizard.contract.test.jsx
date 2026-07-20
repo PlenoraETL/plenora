@@ -10,14 +10,14 @@ const {
   analyzeEseguibileUploadMock,
   executeEseguibileMock,
   getTaskStatusMock,
-  downloadTaskOutputMock,
+  downloadEseguibileOutputMock,
   toastMock,
 } = vi.hoisted(() => ({
   getEseguibileMock: vi.fn(),
   analyzeEseguibileUploadMock: vi.fn(),
   executeEseguibileMock: vi.fn(),
   getTaskStatusMock: vi.fn(),
-  downloadTaskOutputMock: vi.fn(),
+  downloadEseguibileOutputMock: vi.fn(),
   toastMock: globalThis.__frontendTestHelpers.createToastMock(vi),
 }));
 
@@ -30,7 +30,7 @@ vi.mock('../../src/api', () => ({
   analyzeEseguibileUpload: analyzeEseguibileUploadMock,
   executeEseguibile: executeEseguibileMock,
   getTaskStatus: getTaskStatusMock,
-  downloadTaskOutput: downloadTaskOutputMock,
+  downloadEseguibileOutput: downloadEseguibileOutputMock,
 }));
 
 describe('EseguibileExecuteWizard contract', () => {
@@ -87,7 +87,7 @@ describe('EseguibileExecuteWizard contract', () => {
       },
     });
 
-    downloadTaskOutputMock.mockResolvedValue({ success: true });
+    downloadEseguibileOutputMock.mockResolvedValue({ success: true });
   });
 
   afterEach(() => {
@@ -159,7 +159,11 @@ describe('EseguibileExecuteWizard contract', () => {
     await user.click(screen.getByRole('button', { name: /scarica risultato/i }));
 
     await waitFor(() => {
-      expect(downloadTaskOutputMock).toHaveBeenCalledWith('task-1', 'custom_export.xlsx');
+      expect(downloadEseguibileOutputMock).toHaveBeenCalledWith(
+        'exe-1',
+        'task-1',
+        'custom_export.xlsx',
+      );
       expect(onAfterDownload).toHaveBeenCalledWith('task-1');
       expect(onClose).toHaveBeenCalledTimes(1);
     });

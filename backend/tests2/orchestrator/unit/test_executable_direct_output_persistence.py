@@ -2,6 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
 from app.core.manipola.executor import ManipolaExecutor
 from app.core.eseguibili import storage as executable_storage
@@ -126,6 +127,46 @@ def test_executable_dataframe_output_bypasses_results_table(monkeypatch):
     assert bytes(writer.data).replace(b"\r\n", b"\n") == b"id\n1\n2\n"
     assert saved.output_filename == "report.csv"
     assert saved.storage_key.endswith("/task-1/report.csv")
+
+
+@pytest.mark.parametrize(
+    ("output_format", "expected_filename"),
+    [("gpkg", "report.gpkg"), ("shp", "report.zip")],
+)
+def test_executable_geospatial_output_never_falls_back_to_csv(
+    monkeypatch,
+    output_format,
+    expected_filename,
+):
+    _MemoryExecutableWriter.instances.clear()
+    monkeypatch.setattr(
+        executable_output.executable_storage,
+        "ExecutableOutputWriter",
+        _MemoryExecutableWriter,
+    )
+    monkeypatch.setattr(
+        executable_output.frame_io_module,
+        "save_dataframe_to_bytes",
+        lambda *args, **kwargs: b"real-geospatial-payload",
+    )
+    monkeypatch.setattr(
+        executable_output,
+        "detect_geometry_column",
+        lambda df: "geometry",
+    )
+
+    saved = ExecutableOutputPersistence(
+        task_id="task-geo",
+        group_id="group-1",
+    ).persist_dataframe_output(
+        df=pd.DataFrame({"id": [1], "geometry": ["POINT (0 0)"]}),
+        output_format=output_format,
+        filename_stem="report",
+    )
+
+    writer = _MemoryExecutableWriter.instances[-1]
+    assert bytes(writer.data) == b"real-geospatial-payload"
+    assert saved.output_filename == expected_filename
 
 
 def test_executable_sql_stream_returns_storage_key_without_result_id(monkeypatch):

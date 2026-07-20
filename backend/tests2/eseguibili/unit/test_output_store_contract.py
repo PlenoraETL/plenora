@@ -22,6 +22,7 @@ class _FakeStorage:
         self.deleted: list[str] = []
         self.list_response: list[dict[str, object]] = []
         self.tags: dict[str, dict[str, str]] = {}
+        self.last_stream_body: BytesIO | None = None
 
     def upload_bytes(self, data: bytes, key: str) -> None:
         self.objects[key] = data
@@ -32,7 +33,8 @@ class _FakeStorage:
     def get_object_stream(self, key: str) -> dict:
         if key not in self.objects:
             raise KeyError(key)
-        return {"body": BytesIO(self.objects[key]), "size": len(self.objects[key])}
+        self.last_stream_body = BytesIO(self.objects[key])
+        return {"body": self.last_stream_body, "size": len(self.objects[key])}
 
     def list_objects(self, prefix: str) -> list[dict[str, object]]:
         return [item for item in self.list_response if str(item["key"]).startswith(prefix)]
@@ -74,6 +76,8 @@ def test_save_and_load_task_owner_uses_object_storage_sidecar(fake_storage, tmp_
     assert owner["task_id"] == "task-1"
     assert owner["eseguibile_id"] == "exe-1"
     assert owner["user_id"] == "user-1"
+    assert fake_storage.last_stream_body is not None
+    assert fake_storage.last_stream_body.closed is True
 
 
 def test_save_task_owner_fails_closed_when_object_storage_unavailable(
@@ -116,12 +120,33 @@ def test_find_output_keys_filters_owner_sidecar(fake_storage):
 
     fake_storage.list_response = [
         {"key": "eseguibili-outputs/task-1/__owner.json", "size": 100},
+        {"key": "eseguibili-outputs/task-1/__internal__rest-file__n1__out.zip", "size": 20},
         {"key": "eseguibili-outputs/task-1/out.csv", "size": 5},
     ]
 
     assert output_store.find_output_keys("task-1", group_id="g1") == [
         "eseguibili-outputs/task-1/out.csv",
     ]
+
+
+def test_delete_task_outputs_also_removes_internal_artifacts(fake_storage):
+    from app.core.eseguibili import output_store
+
+    fake_storage.list_response = [
+        {"key": "eseguibili-outputs/task-1/__owner.json", "size": 100},
+        {"key": "eseguibili-outputs/task-1/__internal__rest-file__n1__out.zip", "size": 20},
+        {"key": "eseguibili-outputs/task-1/out.csv", "size": 5},
+    ]
+
+    deleted = output_store.delete_task_outputs(
+        "task-1", group_id="g1", retain_owner=True,
+    )
+
+    assert deleted == 2
+    assert set(fake_storage.deleted) == {
+        "eseguibili-outputs/task-1/__internal__rest-file__n1__out.zip",
+        "eseguibili-outputs/task-1/out.csv",
+    }
 
 
 def test_delete_task_outputs_preserves_owner_if_storage_delete_fails(

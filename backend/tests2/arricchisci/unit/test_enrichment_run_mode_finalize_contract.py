@@ -70,6 +70,7 @@ def test_eseguibile_run_persists_to_storage_with_download_url_no_logging(monkeyp
     assert spies.output_contract_saves == []
     # RESPONSE: download_url presente, result_id None
     assert res.get("download_url") == "/api/eseguibili/exec-1/download/{}".format(res["task_id"])
+    assert res.get("is_eseguibile") is True
     assert res.get("result_id") is None
     # FINALIZE run-logging: eseguibile NON logga nulla
     assert spies.logger_close_runs == []

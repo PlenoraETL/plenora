@@ -15,6 +15,12 @@ from app.core.eseguibili.models import ExecutableInputDefinition
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
+def test_public_output_name_cannot_collide_with_internal_artifacts():
+    assert executable_service._sanitize_output_base_name(
+        "__internal__error-report.csv"
+    ) == "result___internal__error-report"
+
+
 def _multi_input_canvas() -> dict:
     return {
         "nodes": [

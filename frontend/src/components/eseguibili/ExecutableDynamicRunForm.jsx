@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { analyzeEseguibileUpload, downloadTaskOutput, runEseguibile } from '../../api';
+import { analyzeEseguibileUpload, downloadEseguibileOutput, runEseguibile } from '../../api';
 import { useTaskPolling } from '../../hooks/useTaskPolling';
 import { useSmoothProgress } from '../../hooks/useSmoothProgress';
 import { useToast } from '../../hooks/useToast';
@@ -161,7 +161,11 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
   const download = async () => {
     try {
       const base = (outputName || eseguibile.name || 'risultato').replace(/\.[^.]+$/, '');
-      await downloadTaskOutput(taskId, `${base}.${outputFormat}`);
+      await downloadEseguibileOutput(
+        eseguibile.id,
+        taskId,
+        `${base}.${outputFormat}`,
+      );
       if (onAfterDownload) await onAfterDownload(taskId);
       onClose();
     } catch (exc) {

@@ -117,6 +117,22 @@ def _assert_eseguibile_task_owner(
     )
 
 
+def _task_eseguibile_record(
+    project_id: object,
+    task_result_payload: Mapping[str, object],
+):
+    """Resolve executable identity even when an old result omits its flag."""
+    candidate = str(project_id or "")
+    if not candidate:
+        return None
+    if not (
+        bool(task_result_payload.get("is_eseguibile"))
+        or candidate.startswith("exec_")
+    ):
+        return None
+    return eseguibili_db.get_eseguibile(candidate)
+
+
 pipeline_router = APIRouter(prefix="/projects", tags=["orchestrator"])
 tasks_router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -564,15 +580,12 @@ def cleanup_task_completely(
             status_code=404,
             detail="Task non trovato o senza progetto associato — cleanup non eseguibile",
         )
-    is_eseguibile = bool(task_result_payload.get("is_eseguibile"))
+    eseguibile_record = _task_eseguibile_record(
+        project_id, task_result_payload,
+    )
+    is_eseguibile = eseguibile_record is not None
     eseguibile_group_id = ""
     if is_eseguibile:
-        eseguibile_record = eseguibili_db.get_eseguibile(project_id)
-        if eseguibile_record is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Eseguibile associato al task non trovato",
-            )
         from app.core.eseguibili.router import _check_visible
 
         _check_visible(eseguibile_record, current_user)
@@ -734,18 +747,22 @@ def download_task_result(
         # sia i dict legacy: filtrare qui per Mapping faceva perdere
         # ``is_eseguibile`` e instradava erroneamente il download sul blob DB.
         eseguibile_payload = _task_result_to_dict(task_info.result)
-        if safe_task_id == task_id and bool(
-            eseguibile_payload.get("is_eseguibile")
-        ):
-            project_id = getattr(task_info, "project_id", None)
-            if not project_id and task_info.result:
-                project_id = _task_result_project_id(task_info.result)
-            eseguibile_record = (
-                eseguibili_db.get_eseguibile(project_id) if project_id else None
-            )
+        project_id = getattr(task_info, "project_id", None)
+        if not project_id and task_info.result:
+            project_id = _task_result_project_id(task_info.result)
+        eseguibile_record = _task_eseguibile_record(
+            project_id, eseguibile_payload,
+        )
+        if safe_task_id == task_id and eseguibile_record is not None:
             eseguibile_group_id = str(
                 eseguibile_record.get("group_id") or ""
-            ) if eseguibile_record else ""
+            )
+            _assert_eseguibile_task_owner(
+                safe_task_id,
+                current_user,
+                expected_eseguibile_id=str(project_id),
+                expected_group_id=eseguibile_group_id,
+            )
             # intent: optional feature — fallback a DB blob se S3 lookup fallisce
             # outcome: fail-open con breadcrumb (exc_info per diagnosticare S3 down
             try:
@@ -756,16 +773,16 @@ def download_task_result(
                     if eseguibile_group_id else []
                 )
             except Exception as storage_error:
-                logger.warning(f"lookup eseguibili storage fallito: {storage_error}", exc_info=True)
-                storage_keys = []
+                logger.error(
+                    f"lookup eseguibili storage fallito: {storage_error}",
+                    exc_info=True,
+                )
+                raise HTTPException(
+                    status_code=503,
+                    detail="Storage output temporaneamente non disponibile",
+                ) from storage_error
 
             if storage_keys:
-                _assert_eseguibile_task_owner(
-                    safe_task_id,
-                    current_user,
-                    expected_eseguibile_id=project_id,
-                    expected_group_id=eseguibile_group_id,
-                )
                 try:
                     storage_key = _eseg_output_store.select_output_key(
                         storage_keys,
@@ -802,6 +819,13 @@ def download_task_result(
                     f"key={storage_key}"
                 )
                 return response
+            raise HTTPException(
+                status_code=410,
+                detail=(
+                    "Il risultato di questo task non e' piu' disponibile. "
+                    "Rilancia la pipeline per generare un nuovo output."
+                ),
+            )
 
         # Ogni task_id ha il proprio result_id nel payload Celery. Usiamo
         # quello per leggere ESATTAMENTE il result generato da questo task

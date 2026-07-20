@@ -27,6 +27,8 @@ from app.core.intermediate import snapshot as intermediate_snapshot
 from app.core.intermediate import writer as intermediate_writer
 from app.core.orchestrator.task_progress import TaskRevoked, report_task_progress
 from app.core.projects import service as project_service_module
+from app.core.resources.bounded_reader import read_stream_bounded
+from app.core.resources.resource_caps import resolve_resource_max_bytes
 from app.core.results import blob_writer as result_blob_writer
 from app.core.results import store as result_store
 from app.shared.contracts.payloads import JsonObject
@@ -91,8 +93,8 @@ def execute_enrichment_task(
             per rimuovere i file temporanei creati durante l'esecuzione on-demand.
         is_eseguibile: True quando il task gira per un "eseguibile" pubblicato.
             In questa modalita' il task NON scrive nulla su DB (runs, log_runs,
-            results, node_rows, output_contract): persiste l'output su disco in
-            ESEGUIBILI_OUTPUTS_DIR/{task_id}/ e il frontend lo scarica via
+            results, node_rows, output_contract): persiste l'output nello
+            storage oggetti task-scoped e il frontend lo scarica via
             GET /api/eseguibili/{id}/download/{task_id}, che elimina il file
             dopo l'invio. Un cleanup periodico (celery beat) rimuove eventuali
             file orfani.
@@ -104,33 +106,16 @@ def execute_enrichment_task(
         se il run_id era gia' completo.
     """
     task_id = self.request.id
-
-    if run_id is not None:
-        if run_idempotency_module.is_already_completed(run_id):
-            logger.info(
-                f"[IDEMPOTENCY] Task ENRICHMENT {task_id}: run_id {run_id} "
-                f"gia' completato con successo, skip."
-            )
-            result: JsonObject = {
-                "status": "skipped_idempotent",
-                "success": True,
-                "message": f"Run {run_id} gia' completato",
-                "run_id": run_id,
-                "task_id": task_id,
-            }
-            _close_worker_connection(stage="post-idempotency")
-            return result
+    executable_run_id = str((execution_context or {}).get("run_id") or "")
+    executable_id = str(
+        (execution_context or {}).get("eseguibile_id") or project_id
+    )
 
     start_time = time.time()
 
     # #28-B: la run-mode incapsula le divergenze standard vs eseguibile
     # (auth recheck, logger project_id, group_id + intermediate run).
     run_mode = enrichment_run_mode.for_task(is_eseguibile)
-
-    executable_run_id = str((execution_context or {}).get("run_id") or "")
-    executable_id = str(
-        (execution_context or {}).get("eseguibile_id") or project_id
-    )
 
     def complete_executable_run(
         *,
@@ -206,6 +191,50 @@ def execute_enrichment_task(
         cancel_executable_run()
         _close_worker_connection(stage="pre-run")
         raise
+
+    # Authorization and the cancellation checkpoint must precede idempotency
+    # lookups, so revoked callers cannot observe metadata from earlier runs.
+    if is_eseguibile:
+        if executable_run_id:
+            previous_run = eseguibili_service.get_eseguibile_run(executable_run_id)
+            if previous_run and previous_run.get("status") == "success":
+                output_metadata = previous_run.get("output_metadata") or {}
+                if isinstance(output_metadata, str):
+                    try:
+                        output_metadata = json_mod.loads(output_metadata)
+                    except ValueError:
+                        output_metadata = {}
+                output_file = (
+                    output_metadata.get("filename")
+                    if isinstance(output_metadata, Mapping)
+                    else None
+                )
+                _close_worker_connection(stage="post-eseguibile-idempotency")
+                return {
+                    "status": "skipped_idempotent",
+                    "success": True,
+                    "project_id": project_id,
+                    "task_id": task_id,
+                    "run_id": run_id,
+                    "result_id": None,
+                    "output_file": output_file,
+                    "download_url": f"/api/eseguibili/{project_id}/download/{task_id}",
+                    "is_eseguibile": True,
+                }
+    elif run_id is not None and run_idempotency_module.is_already_completed(run_id):
+        logger.info(
+            f"[IDEMPOTENCY] Task ENRICHMENT {task_id}: run_id {run_id} "
+            f"gia' completato con successo, skip."
+        )
+        result: JsonObject = {
+            "status": "skipped_idempotent",
+            "success": True,
+            "message": f"Run {run_id} gia' completato",
+            "run_id": run_id,
+            "task_id": task_id,
+        }
+        _close_worker_connection(stage="post-idempotency")
+        return result
 
     # Variabili per statistiche enrichment
     enrichment_stats = None
@@ -348,6 +377,7 @@ def execute_enrichment_task(
                 _group_id if _group_id and _group_id != 'unknown' else None
             ),
             preview_limit=None,  # task celery non e' preview
+            output_task_id=task_id if run_mode.is_eseguibile else None,
         )
 
         nodes = canvas.get("nodes", [])
@@ -547,14 +577,27 @@ def execute_enrichment_task(
                 )
                 if error_report_bytes:
                     error_report_file = f"enrichment_errors_{task_id}.csv"
-                    error_report_result_id = result_blob_writer.save_result_blob_from_bytes(
-                        project_id=project_id,
-                        data=error_report_bytes,
-                        filename=error_report_file,
-                        fmt="csv",
-                        rows_count=len(enrichment_result.errors),
-                        group_id=_group_id or None,
-                    )
+                    if run_mode.is_eseguibile:
+                        internal_name = eseg_storage.internal_artifact_filename(
+                            "error-report",
+                            api_id,
+                            error_report_file,
+                        )
+                        eseg_storage.save_bytes(
+                            task_id,
+                            internal_name,
+                            error_report_bytes,
+                            group_id=_group_id,
+                        )
+                    else:
+                        error_report_result_id = result_blob_writer.save_result_blob_from_bytes(
+                            project_id=project_id,
+                            data=error_report_bytes,
+                            filename=error_report_file,
+                            fmt="csv",
+                            rows_count=len(enrichment_result.errors),
+                            group_id=_group_id or None,
+                        )
             logger.info(
                 f"[Task {task_id}] {api_name}: "
                 f"{enrichment_result.stats.success}/{enrichment_result.stats.total_rows} OK, "
@@ -621,11 +664,12 @@ def execute_enrichment_task(
             # i bytes via il resolver per row counting / IMDF extraction
             # / eseguibili upload. Niente piu' `output_path` cross-process.
             upstream_result_id = final_result.get("result_id")
+            upstream_storage_key = final_result.get("storage_key")
             upstream_filename = final_result.get("filename") or "output.bin"
             upstream_fmt = final_result.get("format") or "bin"
-            if not upstream_result_id:
+            if not upstream_result_id and not upstream_storage_key:
                 raise ValueError(
-                    "rest_file: result_id mancante nel risultato"
+                    "rest_file: riferimento artifact mancante nel risultato"
                 )
 
             # Result_id propagation con metadata short-circuit:
@@ -670,7 +714,7 @@ def execute_enrichment_task(
 
             # Tenta metadata short-circuit prima del full fetch.
             metadata_rows_count: Optional[int] = None
-            if not needs_full_bytes:
+            if not needs_full_bytes and upstream_result_id:
                 try:
                     metadata_row = result_store.get_result_row(upstream_result_id)
                     if metadata_row is not None and metadata_row.rows_count is not None:
@@ -702,11 +746,24 @@ def execute_enrichment_task(
                         f"(placeholder connector), fetch_run_blob per "
                         f"count reale"
                     )
-                blob = artifact_resolver_module.ArtifactResolver().fetch_run_blob(
-                    result_id=upstream_result_id,
-                    expected_project_id=project_id,
-                )
-                output_bytes = blob.data
+                if upstream_storage_key:
+                    stream = eseg_storage.open_task_stream(
+                        task_id,
+                        str(upstream_storage_key),
+                        expected_group_id=_group_id,
+                    )
+                    output_bytes = read_stream_bounded(
+                        stream["body"],
+                        max_bytes=resolve_resource_max_bytes(),
+                        label=upstream_filename,
+                        stage="enrichment_executable_final_file",
+                    )
+                else:
+                    blob = artifact_resolver_module.ArtifactResolver().fetch_run_blob(
+                        result_id=upstream_result_id,
+                        expected_project_id=project_id,
+                    )
+                    output_bytes = blob.data
 
                 try:
                     if len(output_bytes) == 0:

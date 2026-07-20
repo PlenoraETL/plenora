@@ -27,6 +27,30 @@ logger = get_logger(__name__)
 # bucket pattern cosi' le lifecycle rule possono essere distinte.
 PREFIX = ESEGUIBILI_OUTPUTS_PREFIX
 EPHEMERAL_TAGS = {"plenora-retention": "ephemeral"}
+INTERNAL_ARTIFACT_PREFIX = "__internal__"
+
+
+def internal_artifact_filename(
+    kind: str,
+    source_id: str,
+    filename: str,
+) -> str:
+    """Build a reserved basename for task-internal executable artifacts."""
+    safe_kind = "".join(
+        char for char in str(kind) if char.isalnum() or char in "-_"
+    ) or "artifact"
+    safe_source = "".join(
+        char for char in str(source_id) if char.isalnum() or char in "-_"
+    ) or "source"
+    safe_name = str(filename).replace("\\", "/").rsplit("/", 1)[-1]
+    return (
+        f"{INTERNAL_ARTIFACT_PREFIX}{safe_kind}__"
+        f"{safe_source}__{safe_name}"
+    )
+
+
+def is_internal_artifact_key(key: str) -> bool:
+    return key.rsplit("/", 1)[-1].startswith(INTERNAL_ARTIFACT_PREFIX)
 
 
 def _storage():
@@ -337,6 +361,37 @@ def open_stream(key: str, *, expected_group_id: str) -> ObjectMap:
         expected_domain=PREFIX,
         allow_legacy=True,
     )
+    return _storage().get_object_stream(key)
+
+
+def open_task_stream(
+    task_id: str,
+    key: str,
+    *,
+    expected_group_id: str,
+) -> ObjectMap:
+    """Open an executable artifact only if it belongs to the expected task."""
+    safe_task_id = "".join(
+        char for char in str(task_id) if char.isalnum() or char in "-_"
+    )
+    if not safe_task_id or safe_task_id != task_id:
+        raise ValueError("task_id non valido")
+    parsed = assert_tenant_key(
+        key,
+        expected_group_id=expected_group_id,
+        expected_domain=PREFIX,
+        allow_legacy=True,
+    )
+    if parsed is not None:
+        belongs_to_task = (
+            bool(parsed.relative_segments)
+            and parsed.relative_segments[0] == safe_task_id
+        )
+    else:
+        parts = str(key).split("/")
+        belongs_to_task = len(parts) >= 3 and parts[1] == safe_task_id
+    if not belongs_to_task:
+        raise ValueError("artifact di un altro task")
     return _storage().get_object_stream(key)
 
 

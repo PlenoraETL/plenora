@@ -39,4 +39,10 @@ describe('ExecutableDynamicRunForm multi-file contract', () => {
     expect(source).toContain('eseguibile.output_is_file_based && eseguibile.inferred_output_extension');
     expect(source).toContain("? eseguibile.inferred_output_extension");
   });
+
+  it('downloads through the executable-owned endpoint', () => {
+    expect(source).toContain('downloadEseguibileOutput(');
+    expect(source).toContain('eseguibile.id,');
+    expect(source).not.toContain('downloadTaskOutput(');
+  });
 });
