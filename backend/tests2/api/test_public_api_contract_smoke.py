@@ -200,12 +200,12 @@ def test_eseguibili_public_shapes_survive_typed_rows(
         updated_at="2026-05-08T00:00:00Z",
         expected_columns_count=3,
     )
-    monkeypatch.setattr(eseguibili_db, "list_eseguibili", lambda group_id=None: [row])
+    monkeypatch.setattr(eseguibili_db, "list_eseguibili", lambda **_kwargs: [row])
     monkeypatch.setattr(router_mod, "visible_resource_ids", lambda *a, **kw: {"exec-1"})
 
     response = _client(router, get_current_user).get("/api/eseguibili")
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     body = response.json()
     assert body[0]["id"] == "exec-1"
     assert body[0]["can_edit"] is True
