@@ -19,6 +19,7 @@ from app.core.resources.preview_caps import (
     resolve_artifact_preview_max_bytes,
 )
 from app.core.resources.exceptions import MemoryLimitExceededError
+from app.core.io.bounded_range_reader import BoundedRangeReader
 from app.core.io.tenant_namespace import TenantStorageKeyError, assert_tenant_key
 from app.shared.resources.storage_layout import INTERMEDIATE_PREFIX
 
@@ -116,36 +117,62 @@ def load_preview_from_artifact(
             error=f"object storage non risolvibile: {type(e).__name__}: {e}",
         )
 
-    # Streaming download: la preview e' piccola (limit << dataset
-    # ma il boundary object-storage ci consegna chunks bytes; la
-    # materializzazione del buffer e' BOUNDED e il decode resta nel
-    # parser leaf (`preview_parser.parse_parquet_preview`, pyarrow
-    # iter_batches), non in questo orchestrator
-    # L'iteratore viene abortito al
-    # primo chunk che supererebbe ``ARTIFACT_PREVIEW_MAX_BYTES``
-    # default 25 MB — preview-specific cap, separato da
-    # ``RESOURCE_MAX_BYTES``). Oversize NON viene mascherato da error
-    # best-effort: ``MemoryLimitExceededError`` propaga al boundary
-    # handler (HTTP 413 con stage ``intermediate_artifact_preview``
+    # I backend range-capable alimentano PyArrow con un source seekable:
+    # footer e primi row group vengono letti senza scaricare l'intero
+    # oggetto. I backend legacy mantengono il fallback stream bounded.
     max_bytes = resolve_artifact_preview_max_bytes()
-    try:
-        stream = storage.get_object_stream(artifact_uri)
-    except Exception as e:
-        logger.warning(
-            "[ARTIFACT-READ] download artifact fallito per %s: %s",
-            artifact_uri, e,
-        )
-        return ArtifactPreviewResult(
-            error=f"download artifact fallito: {type(e).__name__}: {e}",
-        )
+    preview_source = None
+    get_size = getattr(storage, "get_object_size", None)
+    get_range = getattr(storage, "get_object_range", None)
+    if callable(get_size) and callable(get_range):
+        try:
+            object_size = get_size(artifact_uri)
+            preview_source = BoundedRangeReader(
+                size=object_size,
+                read_range=lambda start, end: get_range(
+                    artifact_uri,
+                    start=start,
+                    end=end,
+                ),
+                max_bytes=max_bytes,
+                label=_short_label(artifact_uri),
+                stage="intermediate_artifact_preview",
+            )
+        except Exception as e:
+            logger.warning(
+                "[ARTIFACT-READ] metadata artifact fallita per %s: %s",
+                artifact_uri, e,
+            )
+
+    if preview_source is None:
+        try:
+            stream = storage.get_object_stream(artifact_uri)
+            preview_source = read_stream_bounded(
+                stream["body"],
+                max_bytes=max_bytes,
+                label=_short_label(artifact_uri),
+                stage="intermediate_artifact_preview",
+            )
+        except MemoryLimitExceededError as oversize:
+            logger.error(
+                "[ARTIFACT-READ] preview artifact ABORTED oversize "
+                "artifact_uri=%s observed_bytes=%s limit_bytes=%s",
+                _short_label(artifact_uri),
+                oversize.observed_bytes,
+                oversize.limit_bytes,
+            )
+            raise
+        except Exception as e:
+            logger.warning(
+                "[ARTIFACT-READ] download artifact fallito per %s: %s",
+                artifact_uri, e,
+            )
+            return ArtifactPreviewResult(
+                error=f"download artifact fallito: {type(e).__name__}: {e}",
+            )
 
     try:
-        body_bytes = read_stream_bounded(
-            stream["body"],
-            max_bytes=max_bytes,
-            label=_short_label(artifact_uri),
-            stage="intermediate_artifact_preview",
-        )
+        parsed = parse_parquet_preview(preview_source, limit=limit)
     except MemoryLimitExceededError as oversize:
         logger.error(
             "[ARTIFACT-READ] preview artifact ABORTED oversize "
@@ -159,17 +186,7 @@ def load_preview_from_artifact(
         # empty rows on a 50-GB artifact would hide the resource cap
         # signal from the operator and from the client
         raise
-    except Exception as e:
-        logger.warning(
-            "[ARTIFACT-READ] download artifact fallito per %s: %s",
-            artifact_uri, e,
-        )
-        return ArtifactPreviewResult(
-            error=f"download artifact fallito: {type(e).__name__}: {e}",
-        )
-
-    # parsing the bounded byte
-    # buffer is delegated to the leaf parser module. Pandas lives
+    # Parsing del source bounded delegato al leaf parser. Pandas vive
     # ONLY inside ``preview_parser.parse_parquet_preview``
     # ``artifact_reader`` (this file) is a pure I/O orchestrator
     # and contains zero pandas references at any indentation
@@ -177,8 +194,6 @@ def load_preview_from_artifact(
     # fallito: ...`` and ``to_dict fallito: ...`` strings
     # is preserved verbatim so router callers and existing
     # contract tests do not regress
-    try:
-        parsed = parse_parquet_preview(body_bytes, limit=limit)
     except ParquetPreviewParseError as e:
         if e.stage == "read_parquet":
             logger.warning(

@@ -6,9 +6,10 @@ Leaf Parquet preview parser.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, BinaryIO, Dict, List, Optional, Union
 
 from app.core.dataframes.tabular import dataframe_head_records
+from app.core.resources.exceptions import MemoryLimitExceededError
 
 
 @dataclass
@@ -69,7 +70,7 @@ class ParquetPreviewParseError(Exception):
 
 
 def parse_parquet_preview(
-    body_bytes: bytes,
+    body_bytes: Union[bytes, BinaryIO],
     *,
     limit: int,
 ) -> ParquetPreview:
@@ -78,9 +79,8 @@ def parse_parquet_preview(
     018).
 
     Caller contract:
-      - ``body_bytes`` is the full Parquet file in memory
-        (the I/O orchestrator owns the bounded materialization
-        upstream).
+      - ``body_bytes`` is a bounded in-memory payload or a bounded,
+        seekable source backed by object-storage byte ranges.
       - ``limit > 0`` is validated upstream; this function
         accepts any positive int and stops reading batches
         once the cumulative row count meets it.
@@ -112,7 +112,11 @@ def parse_parquet_preview(
         # ``body_bytes``. ``ParquetFile`` parses only the file
         # footer here (a few KB at the tail of the file
         # regardless of the file's data size
-        reader = pa.BufferReader(body_bytes)
+        reader = (
+            pa.BufferReader(body_bytes)
+            if isinstance(body_bytes, bytes)
+            else body_bytes
+        )
         pf = pq.ParquetFile(reader)
         row_count = int(pf.metadata.num_rows)
         # Schema derivation uses an empty table materialized through
@@ -123,6 +127,8 @@ def parse_parquet_preview(
         col_schema: Dict[str, str] = {
             str(c): str(empty_df[c].dtype) for c in empty_df.columns
         }
+    except MemoryLimitExceededError:
+        raise
     except Exception as e:
         raise ParquetPreviewParseError(
             stage="read_parquet",
@@ -157,6 +163,8 @@ def parse_parquet_preview(
             # Zero-row file: head_df is the same empty-schema
             # frame we already built for col_schema
             head_df = empty_df
+    except MemoryLimitExceededError:
+        raise
     except Exception as e:
         raise ParquetPreviewParseError(
             stage="read_parquet",

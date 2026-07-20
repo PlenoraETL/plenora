@@ -114,6 +114,14 @@ class ObjectStorage(Protocol):
         """
         ...
 
+    def get_object_size(self, key: str) -> int:
+        """Return the object size without downloading its payload."""
+        ...
+
+    def get_object_range(self, key: str, *, start: int, end: int) -> bytes:
+        """Read the inclusive byte range ``start``..``end``."""
+        ...
+
     def delete(self, key: str) -> None:
         """Cancella `key` dal bucket. Idempotente (no error se gia' assente)."""
         ...
@@ -500,6 +508,32 @@ class AwsS3ObjectStorage:
             "size": resp.get("ContentLength", 0),
             "content_type": resp.get("ContentType", "application/octet-stream"),
         }
+
+    def get_object_size(self, key: str) -> int:
+        """Return object length through a metadata-only HEAD request."""
+        client = self._client()
+        resp = client.head_object(Bucket=self.bucket, Key=key)
+        return int(resp.get("ContentLength", 0))
+
+    def get_object_range(self, key: str, *, start: int, end: int) -> bytes:
+        """Read one inclusive range and release its HTTP response body."""
+        if start < 0 or end < start:
+            raise ValueError(
+                f"invalid object range: start={start}, end={end}"
+            )
+        client = self._client()
+        resp = client.get_object(
+            Bucket=self.bucket,
+            Key=key,
+            Range=f"bytes={start}-{end}",
+        )
+        body = resp["Body"]
+        try:
+            return bytes(body.read())
+        finally:
+            close = getattr(body, "close", None)
+            if callable(close):
+                close()
 
     def delete(self, key: str) -> None:
         """DELETE S3 object. Idempotente: S3 non errora se la key non esiste."""

@@ -259,6 +259,40 @@ def test_s3_download_delegates_correctly(cb, tmp_path):
     fake_client.download_file.assert_called_once_with("my-bucket", "key.dump", str(dest))
 
 
+def test_s3_object_size_uses_head(cb):
+    _requires_boto3()
+    storage = cb.AwsS3ObjectStorage(bucket="my-bucket", region="eu-south-1")
+    fake_client = MagicMock()
+    fake_client.head_object.return_value = {"ContentLength": 321}
+
+    with patch("boto3.client", return_value=fake_client):
+        assert storage.get_object_size("key.parquet") == 321
+
+    fake_client.head_object.assert_called_once_with(
+        Bucket="my-bucket", Key="key.parquet"
+    )
+
+
+def test_s3_object_range_is_inclusive_and_closes_body(cb):
+    _requires_boto3()
+    storage = cb.AwsS3ObjectStorage(bucket="my-bucket", region="eu-south-1")
+    fake_client = MagicMock()
+    body = MagicMock()
+    body.read.return_value = b"payload"
+    fake_client.get_object.return_value = {"Body": body}
+
+    with patch("boto3.client", return_value=fake_client):
+        result = storage.get_object_range("key.parquet", start=10, end=16)
+
+    assert result == b"payload"
+    fake_client.get_object.assert_called_once_with(
+        Bucket="my-bucket",
+        Key="key.parquet",
+        Range="bytes=10-16",
+    )
+    body.close.assert_called_once_with()
+
+
 # 4. Protocol conformance (duck-typing sanity)
 
 
