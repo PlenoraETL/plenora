@@ -10,6 +10,7 @@ import pytest
 
 from app.core.orchestrator.task_service import (
     CeleryLaunchResult,
+    EnrichmentTaskPayload,
     PipelineTaskPayload,
     TaskInfo,
     TaskResultPayload,
@@ -18,6 +19,7 @@ from app.core.orchestrator.task_service import (
     TaskSubmitRequest,
     TaskType,
     task_payload_to_celery_kwargs,
+    _pending_metadata_for_submit,
 )
 from app.core.orchestrator.task_metadata_store import (
     InMemoryTaskMetadataStore,
@@ -32,6 +34,58 @@ pytestmark = [
     pytest.mark.contract,
     pytest.mark.regression,
 ]
+
+
+def test_executable_enrichment_metadata_carries_tenant_and_owner():
+    request = TaskSubmitRequest(
+        celery_task=SimpleNamespace(name="tasks.execute_enrichment"),
+        task_type=TaskType.ENRICHMENT,
+        project_id="exec_1",
+        payload=EnrichmentTaskPayload(
+            project_id="exec_1",
+            canvas={},
+            is_eseguibile=True,
+            user_id="u-1",
+            execution_context={"eseguibile_id": "exec_1", "group_id": "g-1"},
+        ),
+        queued_message="queued",
+        log_label="enrichment",
+    )
+
+    metadata = _pending_metadata_for_submit(request, task_id="task-1")
+
+    assert metadata.subject_kind == "executable"
+    assert metadata.subject_id == "exec_1"
+    assert metadata.group_id == "g-1"
+    assert metadata.owner_user_id == "u-1"
+
+
+def test_executable_pipeline_metadata_uses_execution_subject():
+    request = TaskSubmitRequest(
+        celery_task=SimpleNamespace(name="pipeline.execute"),
+        task_type=TaskType.EXECUTE,
+        project_id="published-model-1",
+        payload=PipelineTaskPayload(
+            project_id="published-model-1",
+            user_id="u-2",
+            execution_contract={
+                "group_id": "g-2",
+                "execution_subject": {
+                    "kind": "eseguibile",
+                    "id": "published-model-1",
+                },
+            },
+        ),
+        queued_message="queued",
+        log_label="execute",
+    )
+
+    metadata = _pending_metadata_for_submit(request, task_id="task-2")
+
+    assert metadata.subject_kind == "executable"
+    assert metadata.subject_id == "published-model-1"
+    assert metadata.group_id == "g-2"
+    assert metadata.owner_user_id == "u-2"
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[3]
 
@@ -418,6 +472,8 @@ def test_submit_task_launches_celery_and_returns_pending_task_info(monkeypatch):
         task_id="task-submit-1",
         project_id="project-1",
         task_type="execute",
+        subject_id="project-1",
+        owner_user_id="user-1",
     )
 
 

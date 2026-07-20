@@ -27,6 +27,7 @@ import ThemeToggle from '../components/common/ThemeToggle';
 import { useTheme } from '../hooks/useTheme';
 import { can, role } from '../utils/permissions';
 import { toastApiError } from '../utils/toastApiError';
+import { humanizeErrorMessage } from '../utils/errorMessages';
 import '../styles/ProjectList.css';
 function ProjectList() {
   const toast    = useToast();
@@ -130,8 +131,7 @@ function ProjectList() {
       }
       // Fallback: se detail e' oggetto (shape inattesa), usa err.message
       // per evitare "[object Object]" nel toast.
-      const detailText = typeof detail === 'string' ? detail : err.message;
-      toast.error('Errore eliminazione: ' + (detailText || 'errore sconosciuto'));
+      toast.error('Errore eliminazione: ' + humanizeErrorMessage(err));
     }
   };
 

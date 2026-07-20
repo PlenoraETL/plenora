@@ -63,7 +63,7 @@ def test_orchestrator_task_status_public_shape_survives_typed_payload(
         message="done",
         result=payload,
     )
-    monkeypatch.setattr(router_mod, "_assert_task_group", lambda *a, **kw: None)
+    monkeypatch.setattr(router_mod, "_assert_task_group", lambda *a, **kw: task_info)
     monkeypatch.setattr(
         "app.core.orchestrator.task_service.task_service.get_task_status",
         lambda task_id: task_info,

@@ -68,6 +68,12 @@ http.interceptors.response.use(
           return loc ? `${loc}: ${d?.msg || 'invalid'}` : (d?.msg || JSON.stringify(d));
         })
         .join('; ');
+    } else if (detailMessage && typeof detailMessage === 'object') {
+      detailMessage = typeof detailMessage.message === 'string'
+        ? detailMessage.message
+        : null;
+    } else if (typeof detailMessage !== 'string') {
+      detailMessage = null;
     }
     const message =
       data?.message                 ||

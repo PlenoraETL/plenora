@@ -62,7 +62,7 @@ def test_store_maps_key_ttl_and_json_onto_kv_store():
     assert fake_kv.set_calls == [
         (
             "plenora:orchestrator:task_metadata:task-1",
-            '{"task_id":"task-1","project_id":"project-1","task_type":"carica"}',
+            '{"task_id":"task-1","project_id":"project-1","task_type":"carica","subject_kind":"project","subject_id":null,"group_id":null,"owner_user_id":null}',
             123,
         )
     ]

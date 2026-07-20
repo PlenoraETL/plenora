@@ -35,7 +35,7 @@ def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
 
     fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
 
-    with patch("app.core.orchestrator.router._assert_task_group", return_value=None), \
+    with patch("app.core.orchestrator.router._assert_task_group", return_value=fake_task_info), \
          patch("app.core.orchestrator.task_service.task_service.get_task_status",
                return_value=fake_task_info), \
          patch("app.core.orchestrator.router.eseguibili_db.get_eseguibile",
@@ -80,7 +80,7 @@ def test_tasks_download_eseguibile_storage_outage_is_service_unavailable():
     fake_task_info.project_id = "exec_1"
     fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
 
-    with patch("app.core.orchestrator.router._assert_task_group"), \
+    with patch("app.core.orchestrator.router._assert_task_group", return_value=fake_task_info), \
          patch("app.core.orchestrator.task_service.task_service.get_task_status",
                return_value=fake_task_info), \
          patch("app.core.orchestrator.router.eseguibili_db.get_eseguibile",
@@ -107,7 +107,7 @@ def test_tasks_download_eseguibile_blocks_owner_mismatch():
 
     fake_user = MagicMock(user_id="u1", role="viewer", group_id="g1")
 
-    with patch("app.core.orchestrator.router._assert_task_group", return_value=None), \
+    with patch("app.core.orchestrator.router._assert_task_group", return_value=fake_task_info), \
          patch("app.core.orchestrator.task_service.task_service.get_task_status",
                return_value=fake_task_info), \
          patch("app.core.orchestrator.router.eseguibili_db.get_eseguibile",
@@ -136,7 +136,7 @@ def test_tasks_download_falls_back_to_db_blob_if_no_s3_key():
 
     fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
 
-    with patch("app.core.orchestrator.router._assert_task_group", return_value=None), \
+    with patch("app.core.orchestrator.router._assert_task_group", return_value=fake_task_info), \
          patch("app.core.orchestrator.task_service.task_service.get_task_status",
                return_value=fake_task_info), \
          patch("app.core.eseguibili.storage.find_keys", return_value=[]), \

@@ -138,6 +138,45 @@ class TaskSubmitRequest:
     task_id: Optional[str] = None
 
 
+def _pending_metadata_for_submit(
+    request: TaskSubmitRequest,
+    *,
+    task_id: str,
+) -> PendingTaskMetadata:
+    """Derive stable authorization metadata from the typed launch payload."""
+
+    payload = request.payload
+    owner_user_id = getattr(payload, "user_id", None)
+    subject_kind = "project"
+    subject_id = request.project_id
+    group_id: Optional[str] = None
+
+    if isinstance(payload, EnrichmentTaskPayload) and payload.is_eseguibile:
+        context = payload.execution_context or {}
+        subject_kind = "executable"
+        subject_id = str(context.get("eseguibile_id") or request.project_id)
+        if context.get("group_id") is not None:
+            group_id = str(context["group_id"])
+    elif isinstance(payload, PipelineTaskPayload):
+        contract = payload.execution_contract or {}
+        subject = contract.get("execution_subject")
+        if isinstance(subject, Mapping) and subject.get("kind") == "eseguibile":
+            subject_kind = "executable"
+            subject_id = str(subject.get("id") or request.project_id)
+            if contract.get("group_id") is not None:
+                group_id = str(contract["group_id"])
+
+    return PendingTaskMetadata(
+        task_id=task_id,
+        project_id=request.project_id,
+        task_type=request.task_type.value,
+        subject_kind=subject_kind,
+        subject_id=subject_id,
+        group_id=group_id,
+        owner_user_id=(str(owner_user_id) if owner_user_id else None),
+    )
+
+
 def task_payload_to_celery_kwargs(
     payload: TaskLaunchPayload,
 ) -> Mapping[str, JsonValue]:
@@ -295,6 +334,10 @@ class TaskInfo:
     created_at: Optional[str] = None
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
+    subject_kind: str = "project"
+    subject_id: Optional[str] = None
+    group_id: Optional[str] = None
+    owner_user_id: Optional[str] = None
 
 
 class TaskService:
@@ -332,11 +375,7 @@ class TaskService:
         """
 
         task_id = request.task_id or self.reserve_task_id()
-        metadata = PendingTaskMetadata(
-            task_id=task_id,
-            project_id=request.project_id,
-            task_type=request.task_type.value,
-        )
+        metadata = _pending_metadata_for_submit(request, task_id=task_id)
         dispatch_options: dict[str, object] = {
             "kwargs": dict(task_payload_to_celery_kwargs(request.payload)),
         }
@@ -728,11 +767,9 @@ class TaskService:
         if isinstance(task_result, TaskResultPayload):
             project_id = task_result.project_id
 
-        pending_metadata = None
-        if not project_id:
-            pending_metadata = self.metadata_store.get(task_id)
-            if pending_metadata is not None:
-                project_id = pending_metadata.project_id
+        pending_metadata = self.metadata_store.get(task_id)
+        if not project_id and pending_metadata is not None:
+            project_id = pending_metadata.project_id
         
         # Determina task_type dal nome del task Celery
         # Nomi registrati: "pipeline.execute", "pipeline.preview", "carica.execute", "tasks.execute_enrichment"
@@ -761,7 +798,21 @@ class TaskService:
             progress=progress,
             message=message,
             result=task_result,
-            error=error
+            error=error,
+            subject_kind=(
+                pending_metadata.subject_kind
+                if pending_metadata is not None
+                else ("executable" if project_id.startswith("exec_") else "project")
+            ),
+            subject_id=(
+                pending_metadata.subject_id
+                if pending_metadata is not None
+                else (project_id or None)
+            ),
+            group_id=(pending_metadata.group_id if pending_metadata else None),
+            owner_user_id=(
+                pending_metadata.owner_user_id if pending_metadata else None
+            ),
         )
     
     # ANNULLAMENTO TASK

@@ -54,6 +54,11 @@ jobs:
         run: docker compose exec -T backend python -m app.core.auth.smoke_seed
       - name: Run full Docker API smoke
         run: bash scripts/docker-api-smoke.sh
+      - name: Dump Compose diagnostics
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker compose logs --no-color --tail=300 backend postgres rabbitmq object-storage
       - name: Stop services
         if: always()
         run: |

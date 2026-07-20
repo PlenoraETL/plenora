@@ -11,7 +11,7 @@ import uuid
 import io
 import tempfile
 from datetime import datetime
-from typing import Optional
+from typing import Iterator, Optional
 
 from app.config import settings
 from app.core.datasources.interface import (
@@ -415,8 +415,7 @@ class SharePointDataSource(DataSourceInterface):
             hash_val = None
             if include_hash:
                 try:
-                    content = self._download_file(f)
-                    hash_val = self._compute_hash(content)
+                    hash_val = self._compute_stream_hash(file_path)
                 except Exception as e:
                     logger.debug(f"Hash computation fallita per {name!r}: {type(e).__name__}: {e}")
 
@@ -944,7 +943,9 @@ class SharePointDataSource(DataSourceInterface):
         self._ctx.execute_query()
         return buf.getvalue()
 
-    def iter_read_chunks(self, path: str, *, chunk_size: int = 64 * 1024):
+    def iter_read_chunks(
+        self, path: str, *, chunk_size: int = 64 * 1024
+    ) -> Iterator[bytes]:
         """Streaming download via REST API + Range header.
 
         Bypassa office365 `File.download(buffer)` che e' full-buffer

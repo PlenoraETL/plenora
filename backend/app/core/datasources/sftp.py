@@ -6,7 +6,7 @@ import socket
 import stat
 import uuid
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 from app.core.datasources.interface import (
     BackendConfig,
@@ -261,7 +261,7 @@ class SFTPDataSource(DataSourceInterface):
             hash_val = None
             if include_hash:
                 try:
-                    hash_val = self._compute_hash(self.read_file(file_path))
+                    hash_val = self._compute_stream_hash(file_path)
                 except Exception as e:
                     logger.debug(
                         "sftp list_files: hash non calcolato per %r: %s: %s",
@@ -308,7 +308,9 @@ class SFTPDataSource(DataSourceInterface):
             self._raise_io_error(e, path, "lettura")
         return buf.getvalue()
 
-    def iter_read_chunks(self, path: str, *, chunk_size: int = 64 * 1024):
+    def iter_read_chunks(
+        self, path: str, *, chunk_size: int = 64 * 1024
+    ) -> Iterator[bytes]:
         """Streaming read via paramiko file-like.
 
         `paramiko.SFTPClient.open(path, 'rb')` ritorna un file-like che

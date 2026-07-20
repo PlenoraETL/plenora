@@ -7,8 +7,8 @@ import pytest
 from app.core.manipola.executor import ManipolaExecutor
 from app.core.eseguibili import storage as executable_storage
 from app.core.features.features_service import FeaturesService
-from app.core.orchestrator import executable_output
-from app.core.orchestrator.executable_output import ExecutableOutputPersistence
+from app.core.eseguibili import output_persistence as executable_output
+from app.core.eseguibili.output_persistence import ExecutableOutputPersistence
 from app.core.orchestrator.service import OrchestratorService
 from app.core.projects.canvas_models import CanvasState
 
@@ -181,9 +181,11 @@ def test_executable_sql_stream_returns_storage_key_without_result_id(monkeypatch
         kwargs["output_writer"].write(b"id\n1\n")
         return 1, ["id"]
 
-    monkeypatch.setattr(executable_output, "execute_streaming_to_writer", stream_query)
-
-    persistence = ExecutableOutputPersistence(task_id="task-sql", group_id="group-1")
+    persistence = ExecutableOutputPersistence(
+        task_id="task-sql",
+        group_id="group-1",
+        stream_query_to_writer=stream_query,
+    )
     saved = persistence.persist_streaming_query_to_storage(
         project_id="exec_123",
         engine_factory=object(),

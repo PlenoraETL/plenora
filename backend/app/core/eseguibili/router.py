@@ -548,6 +548,7 @@ def execute_eseguibile(
             "output_format": payload.output_format,
             "output_name": payload.output_name,
             "task_id": reserved_task_id,
+            "user_id": current_user.user_id,
         }
         if upload.get("file_source_id"):
             execute_kwargs["file_source_id"] = str(upload["file_source_id"])

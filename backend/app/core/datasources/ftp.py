@@ -8,7 +8,7 @@ import ssl
 import threading
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Iterator, Optional
 
 from app.core.datasources.interface import (
     BackendConfig,
@@ -340,7 +340,9 @@ class FTPDataSource(DataSourceInterface):
             raise DataSourceConnectionError(f"Errore read_file FTP: {_sanitize_ftp_error(e)}") from e
         return buf.getvalue()
 
-    def iter_read_chunks(self, path: str, *, chunk_size: int = 64 * 1024):
+    def iter_read_chunks(
+        self, path: str, *, chunk_size: int = 64 * 1024
+    ) -> Iterator[bytes]:
         """Streaming read via ftplib retrbinary + queue.
 
         `retrbinary` chiama il callback per ogni chunk; usiamo
@@ -548,7 +550,7 @@ class FTPDataSource(DataSourceInterface):
         if not include_hash:
             return None
         try:
-            return self._compute_hash(self.read_file(path))
+            return self._compute_stream_hash(path)
         except Exception as e:
             logger.debug(
                 "ftp _maybe_hash: hash non calcolato per %r: %s: %s",

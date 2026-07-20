@@ -303,6 +303,13 @@ class DataSourceInterface(ABC):
         """md5 del contenuto, hex string."""
         return hashlib.md5(content).hexdigest()
 
+    def _compute_stream_hash(self, path: str) -> str:
+        """Compute md5 incrementally without retaining the whole file."""
+        digest = hashlib.md5()
+        for chunk in self.iter_read_chunks(path):
+            digest.update(chunk)
+        return digest.hexdigest()
+
     def _join_path(self, *parts: str) -> str:
         """Unisce parti di path usando '/', rimuovendo slash ridondanti."""
         segments = []

@@ -26,6 +26,10 @@ def _make_task_info(project_id="p1", result_id="res-1", output_file=None):
     return SimpleNamespace(
         project_id=project_id,
         result=result,
+        subject_kind="project",
+        subject_id=project_id,
+        group_id="grp-1",
+        owner_user_id=None,
     )
 
 
@@ -116,6 +120,10 @@ def test_full_cleanup_returns_204_when_all_steps_succeed(client, tmp_path):
 def test_full_cleanup_authorizes_and_deletes_eseguibile_artifacts(client, tmp_path):
     task_info = SimpleNamespace(
         project_id="exec_1",
+        subject_kind="executable",
+        subject_id="exec_1",
+        group_id="grp-1",
+        owner_user_id="u-1",
         result={
             "project_id": "exec_1",
             "result_id": "res-1",
@@ -130,8 +138,6 @@ def test_full_cleanup_authorizes_and_deletes_eseguibile_artifacts(client, tmp_pa
     ), patch(
         "app.core.eseguibili.router._check_visible",
     ), patch(
-        "app.core.orchestrator.router._assert_eseguibile_task_owner",
-    ) as owner_check, patch(
         "app.core.eseguibili.output_store.delete_task_outputs",
         return_value=1,
     ) as delete_outputs, patch(
@@ -150,7 +156,6 @@ def test_full_cleanup_authorizes_and_deletes_eseguibile_artifacts(client, tmp_pa
         response = client.delete("/api/tasks/task-exec/full-cleanup")
 
     assert response.status_code == 204
-    owner_check.assert_called_once()
     delete_outputs.assert_called_once_with("task-exec", group_id="grp-1")
 
 

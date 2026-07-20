@@ -12,7 +12,7 @@ import threading
 from dataclasses import dataclass
 from typing import Optional, Protocol
 
-from app.shared.kv import KeyValueStore, PgKeyValueStore
+from app.shared.kv import KeyValueStore, KeyValueStoreUnavailable, PgKeyValueStore
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -27,11 +27,15 @@ class TaskMetadataStoreUnavailable(RuntimeError):
 
 @dataclass(frozen=True)
 class PendingTaskMetadata:
-    """Minimal metadata needed before the task result metadata exists."""
+    """Authorization and routing metadata retained for the task lifetime."""
 
     task_id: str
     project_id: str
     task_type: str
+    subject_kind: str = "project"
+    subject_id: Optional[str] = None
+    group_id: Optional[str] = None
+    owner_user_id: Optional[str] = None
 
 
 class TaskMetadataStore(Protocol):
@@ -82,6 +86,10 @@ class KvTaskMetadataStore:
                 "task_id": metadata.task_id,
                 "project_id": metadata.project_id,
                 "task_type": metadata.task_type,
+                "subject_kind": metadata.subject_kind,
+                "subject_id": metadata.subject_id,
+                "group_id": metadata.group_id,
+                "owner_user_id": metadata.owner_user_id,
             },
             separators=(",", ":"),
         )
@@ -89,11 +97,14 @@ class KvTaskMetadataStore:
             self._kv.set(
                 _key(metadata.task_id), payload, ttl_seconds=self._ttl_seconds
             )
-        except Exception as exc:
+        except KeyValueStoreUnavailable as exc:
             raise TaskMetadataStoreUnavailable(str(exc)) from exc
 
     def get(self, task_id: str) -> PendingTaskMetadata | None:
-        raw_payload = self._kv.get(_key(task_id))
+        try:
+            raw_payload = self._kv.get(_key(task_id))
+        except KeyValueStoreUnavailable as exc:
+            raise TaskMetadataStoreUnavailable(str(exc)) from exc
         if not raw_payload:
             return None
         try:
@@ -111,20 +122,42 @@ class KvTaskMetadataStore:
             task_id=str(payload.get("task_id") or task_id),
             project_id=str(project_id),
             task_type=str(task_type),
+            subject_kind=str(payload.get("subject_kind") or "project"),
+            subject_id=(
+                str(payload["subject_id"])
+                if payload.get("subject_id") is not None
+                else (None if "subject_id" in payload else str(project_id))
+            ),
+            group_id=(
+                str(payload["group_id"])
+                if payload.get("group_id") is not None
+                else None
+            ),
+            owner_user_id=(
+                str(payload["owner_user_id"])
+                if payload.get("owner_user_id") is not None
+                else None
+            ),
         )
 
     def delete(self, task_id: str) -> bool:
         try:
             return self._kv.delete(_key(task_id))
-        except Exception as exc:
+        except KeyValueStoreUnavailable as exc:
             raise TaskMetadataStoreUnavailable(str(exc)) from exc
 
     def list_for_project(self, project_id: str) -> list[PendingTaskMetadata]:
         matches: list[PendingTaskMetadata] = []
-        for key in self._kv.scan_keys(_KEY_PREFIX):
-            metadata = self.get(key.removeprefix(_KEY_PREFIX))
-            if metadata is not None and metadata.project_id == project_id:
-                matches.append(metadata)
+        try:
+            keys = self._kv.scan_keys(_KEY_PREFIX)
+            for key in keys:
+                metadata = self.get(key.removeprefix(_KEY_PREFIX))
+                if metadata is not None and metadata.project_id == project_id:
+                    matches.append(metadata)
+        except TaskMetadataStoreUnavailable:
+            raise
+        except KeyValueStoreUnavailable as exc:
+            raise TaskMetadataStoreUnavailable(str(exc)) from exc
         return matches
 
 

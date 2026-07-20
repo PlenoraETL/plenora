@@ -1,4 +1,4 @@
-"""Direct output persistence for versioned executable runs.
+"""Output persistence owned by the versioned executable domain.
 
 Executable identifiers (``exec_*``) do not belong to ``projects``.  This
 adapter implements the same persistence port used by QueryExecutor, but writes
@@ -9,17 +9,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from app.core.dataframes import export_writer as export_writer_module
 from app.core.dataframes import frame_io as frame_io_module
 from app.core.dataframes.geodata import detect_geometry_column
 from app.core.eseguibili import storage as executable_storage
-from app.core.query_execution.query_result_persistence import (
+from app.shared.execution.query_results import (
     PersistedQueryResult,
     StreamedQueryResult,
 )
-from app.core.query_execution.query_streaming import execute_streaming_to_writer
 
 
 @dataclass(frozen=True)
@@ -32,13 +31,20 @@ class ExecutableDataFrameResult:
 class ExecutableOutputPersistence:
     """Persistence adapter bound to one executable task and tenant."""
 
-    def __init__(self, *, task_id: str, group_id: str) -> None:
+    def __init__(
+        self,
+        *,
+        task_id: str,
+        group_id: str,
+        stream_query_to_writer: Optional[Callable[..., tuple[int, list[str]]]] = None,
+    ) -> None:
         if not task_id:
             raise ValueError("task_id output eseguibile mancante")
         if not group_id:
             raise ValueError("group_id output eseguibile mancante")
         self.task_id = task_id
         self.group_id = group_id
+        self._stream_query_to_writer = stream_query_to_writer
 
     def persist_streaming_query_to_storage(
         self,
@@ -59,7 +65,9 @@ class ExecutableOutputPersistence:
             group_id=self.group_id,
         )
         try:
-            rows_count, columns = execute_streaming_to_writer(
+            if self._stream_query_to_writer is None:
+                raise RuntimeError("Streaming query writer non configurato")
+            rows_count, columns = self._stream_query_to_writer(
                 engine_factory=engine_factory,
                 connection=connection,
                 sql=sql,

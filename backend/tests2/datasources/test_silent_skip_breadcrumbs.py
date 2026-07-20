@@ -60,7 +60,7 @@ def test_ftp_maybe_hash_logs_debug_on_silent_return_none(monkeypatch):
         def _raising_read(path):
             raise RuntimeError("hash boom token=LEAK")
 
-        monkeypatch.setattr(ds, "read_file", _raising_read, raising=False)
+        monkeypatch.setattr(ds, "iter_read_chunks", _raising_read, raising=False)
 
         result = ds._maybe_hash("/some/path.csv", include_hash=True)
 
@@ -81,6 +81,26 @@ def test_ftp_maybe_hash_logs_debug_on_silent_return_none(monkeypatch):
         )
     finally:
         _detach_collector(logger, handler, prev)
+
+
+def test_ftp_hash_uses_chunk_iterator_without_full_file_read(monkeypatch):
+    from app.core.datasources.ftp import FTPDataSource
+
+    ds = FTPDataSource.__new__(FTPDataSource)
+
+    def _chunks(_path):
+        yield b"large-"
+        yield b"file"
+
+    monkeypatch.setattr(ds, "iter_read_chunks", _chunks, raising=False)
+    monkeypatch.setattr(
+        ds,
+        "read_file",
+        lambda _path: (_ for _ in ()).throw(AssertionError("full read used")),
+        raising=False,
+    )
+
+    assert ds._maybe_hash("large.csv", include_hash=True) == "32efcb41274bef25399c3561990f204e"
 
 
 def test_sftp_disconnect_logs_debug_on_close_failure():

@@ -38,6 +38,7 @@ import ctypes
 import threading
 import uuid
 from contextlib import contextmanager
+from ctypes.util import find_library
 from typing import Iterator, List, Optional
 
 from app.utils.logger import get_logger
@@ -76,7 +77,9 @@ def _resolve_libgdal() -> ctypes.CDLL:
             return _libgdal
         last_err: Optional[Exception] = None
         lib: Optional[ctypes.CDLL] = None
-        for cand in _LIBGDAL_CANDIDATES:
+        discovered = find_library("gdal")
+        candidates = _LIBGDAL_CANDIDATES + ((discovered,) if discovered else ())
+        for cand in dict.fromkeys(candidates):
             try:
                 lib = ctypes.CDLL(cand)
                 break
@@ -84,7 +87,7 @@ def _resolve_libgdal() -> ctypes.CDLL:
                 last_err = exc
         if lib is None:
             raise VsiAdapterError(
-                f"libgdal non trovata. Tentativi: {list(_LIBGDAL_CANDIDATES)}. "
+                f"libgdal non trovata. Tentativi: {list(dict.fromkeys(candidates))}. "
                 f"Ultimo errore: {last_err!r}"
             )
         # VSILFILE *VSIFileFromMemBuffer(const char *path, GByte *data,

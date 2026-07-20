@@ -25,6 +25,7 @@ import AppSidebar from '../components/AppSidebar';
 import ThemeToggle from '../components/common/ThemeToggle';
 import ModalWrapper from '../components/common/ModalWrapper';
 import { can, role } from '../utils/permissions';
+import { humanizeErrorMessage } from '../utils/errorMessages';
 import '../styles/FileManager.css';
 import {
   FORMAT_CONFIG,
@@ -114,11 +115,7 @@ const loadFiles = useCallback(async () => {
       // generico. Pre-fix nascondeva sempre `err.message` o
       // `err.response.data.detail` rendendo impossibile distinguere
       // 401/403/500/timeout dall'UI.
-      setError(
-        err?.response?.data?.detail
-          || err?.message
-          || 'Errore nel caricamento dei file'
-      );
+      setError(humanizeErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -301,7 +298,7 @@ const handleUpload = async () => {
       resetLayerModal();
     } catch (err) {
       const detail = err?.response?.data?.detail;
-      toast.error(typeof detail === 'string' ? detail : (err.message || 'Errore nella selezione del foglio'));
+      toast.error(typeof detail === 'string' ? detail : humanizeErrorMessage(err));
     }
   };
 const handlePreview = async (file) => {
@@ -332,11 +329,7 @@ const handlePreview = async (file) => {
       }
       // P1 (2026-05-26): propaga dettaglio server invece di toast
       // generico. Allineato al pattern 404/403 sopra.
-      toast.error(
-        err?.response?.data?.detail
-          || err?.message
-          || 'Errore nel caricamento della preview'
-      );
+      toast.error(humanizeErrorMessage(err));
     }
   };
 const handleDelete = async (fileId, fileName) => {
@@ -350,8 +343,7 @@ const handleDelete = async (fileId, fileName) => {
       // err.message e impediva il troubleshooting di errori specifici
       // (es. file in uso da un canvas, lock DB). Post-fix mostriamo il
       // messaggio originale quando disponibile, fallback al generico.
-      const msg = err?.response?.data?.message || err?.message || "Errore durante l'eliminazione";
-      toast.error(msg);
+      toast.error(humanizeErrorMessage(err));
     }
   };
 const resetUploadModal = () => {

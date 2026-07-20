@@ -73,7 +73,7 @@ describe('api/http error interceptor contract', () => {
     expect(error.code).toBeUndefined();
   });
 
-  it('preserves existing object-detail fallback behavior for specialized consumers', async () => {
+  it('normalizes legacy object detail to a scalar message', async () => {
     const onRejected = await loadRejectedInterceptor();
     const detail = {
       error: 'project_cleanup_partial',
@@ -91,7 +91,7 @@ describe('api/http error interceptor contract', () => {
 
     await expect(onRejected(error)).rejects.toBe(error);
 
-    expect(error.message).toBe(detail);
+    expect(error.message).toBe(detail.message);
     expect(error.response.data.detail).toBe(detail);
   });
 

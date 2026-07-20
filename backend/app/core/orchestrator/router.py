@@ -6,7 +6,7 @@ Esecuzione pipeline, preview, download risultati e gestione task Celery.
 
 import time
 from collections.abc import Mapping
-from typing import Literal, Optional, List
+from typing import Any, Literal, Optional, List
 from typing_extensions import TypedDict
 
 from fastapi import APIRouter, HTTPException, Depends, Query
@@ -86,14 +86,14 @@ def _assert_project_group(project_id: str, current_user: CurrentUser) -> None:
     _access_control.assert_project_group(project_id, current_user)
 
 
-def _assert_task_group(task_id: str, current_user: CurrentUser) -> None:
+def _assert_task_group(task_id: str, current_user: CurrentUser) -> Any:
     """Verifica che il task appartenga al gruppo dell'utente via project_id.
 
     Estrae project_id dal task, poi verifica ownership sul progetto.
     Se il progetto non esiste più (cancellato), solo admin/superadmin possono
     operare sul task.
     """
-    _access_control.assert_task_group(task_id, current_user, logger=logger)
+    return _access_control.assert_task_group(task_id, current_user, logger=logger)
 
 
 def _assert_eseguibile_task_owner(
@@ -416,10 +416,9 @@ def get_task_status(
 
     SECURITY: verifica ownership via project_id del task.
     """
-    _assert_task_group(task_id, current_user)
+    task_info = _assert_task_group(task_id, current_user)
 
     try:
-        task_info = task_service_module.task_service.get_task_status(task_id)
         result = _task_info_to_dict(task_info)
         result["progress"] = int(result.get("progress") or 0)
 
@@ -432,15 +431,45 @@ def get_task_status(
                 preview_project_id = getattr(task_info, "project_id", None)
                 if not preview_project_id:
                     preview_project_id = _task_result_project_id(task_payload)
-                preview_meta = (
-                    _project_service().get_project_metadata(preview_project_id)
-                    if preview_project_id else None
+                preview_group_id = task_payload.get(
+                    preview_payload_store.PREVIEW_GROUP_ID_FIELD
                 )
-                preview_group_id = getattr(preview_meta, "group_id", None)
+                if not preview_group_id:
+                    try:
+                        preview_meta = (
+                            _project_service().get_project_metadata(preview_project_id)
+                            if preview_project_id else None
+                        )
+                    except _access_control.TASK_LOOKUP_ERRORS as exc:
+                        logger.error(
+                            "preview tenant lookup unavailable task_id=%s error=%s",
+                            task_id,
+                            type(exc).__name__,
+                            exc_info=True,
+                        )
+                        raise HTTPException(
+                            status_code=503,
+                            detail={
+                                "error": error_codes.TASK_STORE_UNAVAILABLE,
+                                "message": "Stato task temporaneamente non disponibile",
+                            },
+                        ) from exc
+                    preview_group_id = getattr(preview_meta, "group_id", None)
                 if not preview_group_id:
                     raise HTTPException(
                         status_code=404,
                         detail="Tenant della preview non determinabile",
+                    )
+                if (
+                    current_user.role != "superadmin"
+                    and str(preview_group_id) != current_user.group_id
+                ):
+                    raise HTTPException(
+                        status_code=404,
+                        detail={
+                            "error": error_codes.TASK_NOT_FOUND,
+                            "message": "Task non trovato",
+                        },
                     )
                 result["result"] = preview_payload_store.hydrate_preview_payload(
                     task_payload,
@@ -475,12 +504,10 @@ def get_task_status(
     # detail fisso: task_id e' input utente, niente interpolazione in response
     except Exception as e:
         logger.error(f"[CRASH] Errore lettura stato task {task_id}: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error": error_codes.TASK_NOT_FOUND,
-                "message": "Task non trovato",
-            },
+        raise_typed_http(
+            error_codes.INTERNAL_ERROR,
+            status_code=500,
+            message="Errore interno del server",
         )
 
 
@@ -562,18 +589,13 @@ def cleanup_task_completely(
         non e' integrale — altrimenti il claim GDPR "rimuovere ogni traccia"
         resta silenziosamente violato.
     """
-    project_id = None
+    task_info = _assert_task_group(task_id, current_user)
+    project_id = task_info.project_id
     task_result_payload: JsonObject = {}
-    task_info = None
-    try:
-        task_info = task_service_module.task_service.get_task_status(task_id)
-        project_id = task_info.project_id
-        if task_info.result:
-            task_result_payload = _task_result_to_dict(task_info.result)
-            if not project_id:
-                project_id = task_result_payload.get("project_id")
-    except Exception as e:
-        logger.warning(f"cleanup: impossibile leggere task_info: {e}")
+    if task_info.result:
+        task_result_payload = _task_result_to_dict(task_info.result)
+        if not project_id:
+            project_id = task_result_payload.get("project_id")
 
     if not project_id:
         raise HTTPException(
@@ -586,35 +608,7 @@ def cleanup_task_completely(
     is_eseguibile = eseguibile_record is not None
     eseguibile_group_id = ""
     if is_eseguibile:
-        from app.core.eseguibili.router import _check_visible
-
-        _check_visible(eseguibile_record, current_user)
         eseguibile_group_id = str(eseguibile_record.get("group_id") or "")
-        _assert_eseguibile_task_owner(
-            task_id,
-            current_user,
-            expected_eseguibile_id=project_id,
-            expected_group_id=eseguibile_group_id,
-        )
-    if not is_eseguibile:
-        try:
-            _meta = _project_service().get_project_metadata(project_id)
-        except Exception as e:
-            logger.warning(
-                f"[GESTITO] full-cleanup tenant check: project lookup project_id={project_id} fallito: {e}",
-                exc_info=True,
-            )
-            _meta = None
-        if _meta is None:
-            # Progetto già eliminato: solo admin/superadmin possono fare cleanup residui
-            if current_user.role not in ("admin", "superadmin"):
-                raise HTTPException(
-                    status_code=404,
-                    detail="Progetto associato al task non trovato",
-                )
-        else:
-            assert_group_access(_meta, current_user, f"Task '{task_id}'")
-
     # Cleanup scoped AL SINGOLO task_id (NON all'intero progetto!
     # Rimuoviamo
     # il record `result` collegato a questo task_id
@@ -732,10 +726,9 @@ def download_task_result(
     """
     time_started = time.perf_counter()
 
-    _assert_task_group(task_id, current_user)
+    task_info = _assert_task_group(task_id, current_user)
 
     try:
-        task_info = task_service_module.task_service.get_task_status(task_id)
         time_celery_loaded = time.perf_counter()
 
         if task_info.status.value != "success":

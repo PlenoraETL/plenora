@@ -12,9 +12,8 @@ Il path streamable evita il tempfile intermedio.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 from app.core.dataframes.ports import FrameLike
 from app.core.results.pipeline_result import save_pipeline_result_outcome
@@ -25,22 +24,10 @@ from app.core.query_execution.query_streaming import (
     execute_streaming_to_writer,
 )
 from app.db.sql_types import QueryParams
-
-
-@dataclass(frozen=True)
-class PersistedQueryResult:
-    result_id: Optional[str]
-    output_path: Path
-    storage_key: Optional[str] = None
-
-
-@dataclass(frozen=True)
-class StreamedQueryResult:
-    result_id: Optional[str]
-    rows_count: int
-    columns: List[str]
-    output_path: Optional[Path] = None
-    storage_key: Optional[str] = None
+from app.shared.execution.query_results import (
+    PersistedQueryResult,
+    StreamedQueryResult,
+)
 
 
 class QueryResultPersistence:

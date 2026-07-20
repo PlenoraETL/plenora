@@ -10,6 +10,7 @@ import {
 } from '../api/adminObjectStorage';
 import ConfirmDialog from '../components/common/ConfirmDialog';
 import { useConfirmModal } from '../hooks/useConfirmModal';
+import { humanizeErrorMessage } from '../utils/errorMessages';
 import '../styles/AdminObjectStoragePage.css';
 
 const DOMAINS = [
@@ -74,7 +75,7 @@ export default function AdminObjectStoragePage() {
       }
       setCursor(requestedCursor);
     } catch (err) {
-      setError(err.message || 'Errore caricamento object storage');
+      setError(humanizeErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -105,7 +106,7 @@ export default function AdminObjectStoragePage() {
     try {
       await downloadStorageObject(key);
     } catch (err) {
-      setError(err.message || 'Download non riuscito');
+      setError(humanizeErrorMessage(err));
     } finally {
       setDownloading('');
     }
@@ -129,7 +130,7 @@ export default function AdminObjectStoragePage() {
       await deleteStorageObject(item.key);
       await load(cursor);
     } catch (err) {
-      setError(err.response?.data?.detail || err.message || 'Cancellazione non riuscita');
+      setError(humanizeErrorMessage(err));
     } finally {
       setDeleting('');
     }
@@ -159,7 +160,7 @@ export default function AdminObjectStoragePage() {
       setNotice(`Preview eliminate: ${result.deleted_count}`);
       await load(null);
     } catch (err) {
-      setError(err.response?.data?.detail || err.message || 'Cancellazione preview non riuscita');
+      setError(humanizeErrorMessage(err));
     } finally {
       setPurgingPreviews(false);
     }
@@ -195,7 +196,7 @@ export default function AdminObjectStoragePage() {
       );
       await load(null);
     } catch (err) {
-      setError(err.response?.data?.detail || err.message || 'Bonifica orfani non riuscita');
+      setError(humanizeErrorMessage(err));
     } finally {
       setCleaningOrphans(false);
     }

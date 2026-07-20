@@ -129,8 +129,7 @@ def test_each_cleanup_site_has_logger_debug_breadcrumb():
 
 
 def test_cleanup_sites_count_matches_scope():
-    """Sanity aggregata: conta quante occorrenze di `logger.debug(f"`
-    con `type(e).__name__` esistono nei 5 file.
+    """Sanity aggregata: conta i contesti cleanup attesi nei 5 file.
 
     Contract: soglia abbassata da 15 a 13 dopo la rimozione del
     pattern `_async_write` thread daemon in enrichment_task.py (vedi
@@ -138,22 +137,17 @@ def test_cleanup_sites_count_matches_scope():
     cleanup non-async, piu' eventuali altri debug pre-esistenti dei
     current contract.c/7.b.
     """
-    # Pattern flessibile: accetta `type(e)`, `type(e_inner)`, `type(e_prog)`,
-    # ecc. (alcuni siti nested usano variable name diverso per evitare shadow).
-    pattern = re.compile(
-        r"""logger\.debug\(f"[^"]+:\s*\{type\([A-Za-z_][A-Za-z0-9_]*\)\.__name__\}""",
-    )
     total_breadcrumbs = 0
     per_file: dict[str, int] = {}
     for rel in _TARGET_FILES:
         src = _read(rel)
-        count = len(pattern.findall(src))
+        contexts = [context for path, context in _BREADCRUMB_CONTEXTS if path == rel]
+        count = sum(src.count(context) for context in contexts)
         per_file[rel] = count
         total_breadcrumbs += count
 
-    # Minimo atteso = 13 siti 7.f Current contract 3B. Altri batch potrebbero
-    # averne aggiunti.
-    assert total_breadcrumbs >= 13, (
-        f"Atteso >=13 breadcrumb cleanup, ricevuto {total_breadcrumbs}.\n"
+    assert total_breadcrumbs >= len(_BREADCRUMB_CONTEXTS), (
+        f"Atteso >={len(_BREADCRUMB_CONTEXTS)} breadcrumb cleanup, "
+        f"ricevuto {total_breadcrumbs}.\n"
         f"Per-file: {per_file}"
     )

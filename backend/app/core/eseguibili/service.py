@@ -407,6 +407,7 @@ def execute(
     output_format: Optional[str] = None,
     output_name: Optional[str] = None,
     task_id: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> EseguibileExecutionResult:
     """Esegue un eseguibile: rinomina colonne, crea FileSource temp, sostituisce
     il nodo sorgente nel canvas clonato, lancia execute_enrichment_task.
@@ -586,6 +587,11 @@ def execute(
             force_recalculate=True,
             cleanup_file_source_ids=[temp_file_source_id],
             is_eseguibile=True,
+            user_id=user_id,
+            execution_context={
+                "eseguibile_id": eseguibile["id"],
+                "group_id": eseguibile["group_id"],
+            },
             task_id=task_id,
         )
     except Exception:

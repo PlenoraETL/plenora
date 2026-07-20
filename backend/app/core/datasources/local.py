@@ -4,7 +4,7 @@ from pathlib import Path as _Path
 
 import os
 from datetime import datetime
-from typing import Optional
+from typing import Iterator, Optional
 
 from app.core.datasources.interface import (
     BackendConfig,
@@ -155,13 +155,13 @@ class LocalDataSource(DataSourceInterface):
                                 entry_path, type(e).__name__, e,
                             )
                             continue
+                        rel = self._rel(entry_path)
                         hash_val = None
                         if include_hash:
                             try:
-                                hash_val = self._compute_hash(self._raw_read(entry_path))
-                            except OSError:
+                                hash_val = self._compute_stream_hash(rel)
+                            except (OSError, DataSourceFileNotFoundError, DataSourcePermissionError):
                                 pass
-                        rel = self._rel(entry_path)
                         results.append(FileInfo(
                             name=filename,
                             path=rel,
@@ -204,16 +204,16 @@ class LocalDataSource(DataSourceInterface):
                                     entry.path, type(e).__name__, e,
                                 )
                                 continue
+                            rel = self._rel(entry.path)
                             hash_val = None
                             if include_hash:
                                 try:
-                                    hash_val = self._compute_hash(self._raw_read(entry.path))
-                                except OSError as e:
+                                    hash_val = self._compute_stream_hash(rel)
+                                except (OSError, DataSourceFileNotFoundError, DataSourcePermissionError) as e:
                                     logger.debug(
                                         "local list_files: hash non calcolato per %r: %s: %s",
                                         entry.path, type(e).__name__, e,
                                     )
-                            rel = self._rel(entry.path)
                             results.append(FileInfo(
                                 name=entry.name,
                                 path=rel,
@@ -259,7 +259,9 @@ class LocalDataSource(DataSourceInterface):
         except PermissionError as e:
             raise DataSourcePermissionError(f"Accesso negato: {full_path}") from e
 
-    def iter_read_chunks(self, path: str, *, chunk_size: int = 64 * 1024):
+    def iter_read_chunks(
+        self, path: str, *, chunk_size: int = 64 * 1024
+    ) -> Iterator[bytes]:
         """Streaming nativo per filesystem locale.
 
         Apre il file in binary mode e itera `chunk_size` byte

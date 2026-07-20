@@ -4,7 +4,7 @@ Tests the http cross tenant behavior.
 Locks backend contracts and regression boundaries for the current architecture.
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from app.core.auth.auth import require_not_esecutore
 from app.core.orchestrator.router import tasks_router
 from app.core.orchestrator.task_service import TaskInfo, TaskStatus, TaskType
+from app.core.orchestrator.access_control import assert_task_group
 from app.shared.execution.canvas_graph import CanvasGraph
 from tests2.helpers.builders import build_current_user
 
@@ -143,3 +144,62 @@ def test_create_carica_rest_task_rejects_bad_method_before_task_creation():
     assert response.status_code == 400
     assert "method must be one of" in str(response.json()).lower()
     submit_task.assert_not_called()
+
+
+def test_executable_task_is_private_to_the_user_who_launched_it():
+    task_info = TaskInfo(
+        task_id="task-exec-1",
+        task_type=TaskType.ENRICHMENT,
+        project_id="exec_1",
+        status=TaskStatus.SUCCESS,
+        progress=100,
+        message="done",
+        subject_kind="executable",
+        subject_id="exec_1",
+        group_id="grp-1",
+        owner_user_id="u-owner",
+    )
+    user = build_current_user(user_id="u-other", group_id="grp-1", role="user")
+
+    with patch(
+        "app.core.orchestrator.task_service.task_service.get_task_status",
+        return_value=task_info,
+    ), patch(
+        "app.core.eseguibili.db.get_eseguibile",
+        return_value={"id": "exec_1", "group_id": "grp-1"},
+    ), patch("app.core.eseguibili.router._check_visible"):
+        with pytest.raises(HTTPException) as exc:
+            assert_task_group("task-exec-1", user, logger=MagicMock())
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail["error"] == "task_not_found"
+
+
+def test_executable_task_owner_is_authorized_without_output_sidecar():
+    task_info = TaskInfo(
+        task_id="task-exec-1",
+        task_type=TaskType.ENRICHMENT,
+        project_id="exec_1",
+        status=TaskStatus.SUCCESS,
+        progress=100,
+        message="done",
+        subject_kind="executable",
+        subject_id="exec_1",
+        group_id="grp-1",
+        owner_user_id="u-owner",
+    )
+    user = build_current_user(user_id="u-owner", group_id="grp-1", role="user")
+
+    with patch(
+        "app.core.orchestrator.task_service.task_service.get_task_status",
+        return_value=task_info,
+    ), patch(
+        "app.core.eseguibili.db.get_eseguibile",
+        return_value={"id": "exec_1", "group_id": "grp-1"},
+    ), patch("app.core.eseguibili.router._check_visible"), patch(
+        "app.core.eseguibili.output_store.load_task_owner"
+    ) as load_owner:
+        authorized = assert_task_group("task-exec-1", user, logger=MagicMock())
+
+    assert authorized is task_info
+    load_owner.assert_not_called()

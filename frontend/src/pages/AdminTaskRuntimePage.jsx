@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import AppSidebar from '../components/AppSidebar';
 import { getTaskRuntime } from '../api/adminTaskRuntime';
+import { humanizeErrorMessage } from '../utils/errorMessages';
 import '../styles/AdminTaskRuntimePage.css';
 
 
@@ -28,7 +29,7 @@ export default function AdminTaskRuntimePage() {
       setData(await getTaskRuntime());
       setError('');
     } catch (err) {
-      setError(err.response?.data?.detail || err.message || 'Stato task non disponibile');
+      setError(humanizeErrorMessage(err));
     } finally {
       setLoading(false);
     }

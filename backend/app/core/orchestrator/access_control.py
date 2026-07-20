@@ -5,14 +5,28 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import HTTPException
+from psycopg import Error as PostgresError
+from psycopg_pool import PoolTimeout
 
 from app.core.auth.ownership import assert_group_access
 from app.core.eseguibili import db as eseguibili_db
 from app.core.eseguibili import output_store as eseguibili_output_store
-from app.core.orchestrator.router_mappers import task_result_project_id
+from app.core.orchestrator.router_mappers import (
+    task_result_project_id,
+    task_result_to_dict,
+)
 from app.core.projects.service import ProjectService
 from app.shared import error_codes
 from app.shared.contracts.auth import CurrentUser
+from app.core.orchestrator.task_metadata_store import TaskMetadataStoreUnavailable
+
+
+TASK_LOOKUP_ERRORS = (
+    TaskMetadataStoreUnavailable,
+    PostgresError,
+    PoolTimeout,
+    OSError,
+)
 
 
 def _get_project_service() -> ProjectService:
@@ -38,24 +52,30 @@ def assert_project_group(project_id: str, current_user: CurrentUser) -> None:
     assert_group_access(meta, current_user, f"Progetto '{project_id}'")
 
 
-def assert_task_group(task_id: str, current_user: CurrentUser, *, logger: Any) -> None:
-    """Verify that the current user can access a task by its project binding."""
+def _task_store_unavailable(task_id: str, *, logger: Any, exc: Exception) -> None:
+    logger.error(
+        "task access lookup unavailable task_id=%s error=%s",
+        task_id,
+        type(exc).__name__,
+        exc_info=True,
+    )
+    raise HTTPException(
+        status_code=503,
+        detail={
+            "error": error_codes.TASK_STORE_UNAVAILABLE,
+            "message": "Stato task temporaneamente non disponibile",
+        },
+    ) from exc
+
+
+def assert_task_group(task_id: str, current_user: CurrentUser, *, logger: Any) -> Any:
+    """Resolve and authorize one task, including executable ownership."""
     from app.core.orchestrator.task_service import task_service
 
     try:
         task_info = task_service.get_task_status(task_id)
-    except Exception as e:
-        logger.warning(
-            f"[GESTITO] _assert_task_group: lookup task_id={task_id} fallito: {e}",
-            exc_info=True,
-        )
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error": error_codes.TASK_NOT_FOUND,
-                "message": f"Task '{task_id}' non trovato",
-            },
-        )
+    except TASK_LOOKUP_ERRORS as e:
+        _task_store_unavailable(task_id, logger=logger, exc=e)
 
     project_id = getattr(task_info, "project_id", None)
     if not project_id and task_info.result:
@@ -70,15 +90,23 @@ def assert_task_group(task_id: str, current_user: CurrentUser, *, logger: Any) -
                     "message": "Task non trovato",
                 },
             )
-        return
+        return task_info
 
-    meta = _get_project_service().get_project_metadata(project_id)
-    if meta:
-        assert_group_access(meta, current_user, f"Task '{task_id}'")
-    elif project_id.startswith("exec_"):
+    subject_kind = str(getattr(task_info, "subject_kind", "") or "")
+    result_payload = task_result_to_dict(task_info.result)
+    is_executable = (
+        subject_kind == "executable"
+        or bool(result_payload.get("is_eseguibile"))
+        or project_id.startswith("exec_")
+    )
+    if is_executable:
         from app.core.eseguibili.router import _check_visible
 
-        record = eseguibili_db.get_eseguibile(project_id)
+        executable_id = str(getattr(task_info, "subject_id", None) or project_id)
+        try:
+            record = eseguibili_db.get_eseguibile(executable_id)
+        except TASK_LOOKUP_ERRORS as exc:
+            _task_store_unavailable(task_id, logger=logger, exc=exc)
         if record:
             _check_visible(record, current_user)
         elif current_user.role not in ("admin", "superadmin"):
@@ -89,6 +117,38 @@ def assert_task_group(task_id: str, current_user: CurrentUser, *, logger: Any) -
                     "message": "Task non trovato",
                 },
             )
+        owner_user_id = getattr(task_info, "owner_user_id", None)
+        if owner_user_id:
+            if (
+                str(owner_user_id) != current_user.user_id
+                and current_user.role != "superadmin"
+            ):
+                raise HTTPException(
+                    status_code=404,
+                    detail={
+                        "error": error_codes.TASK_NOT_FOUND,
+                        "message": "Task non trovato",
+                    },
+                )
+        elif record:
+            assert_eseguibile_task_owner(
+                task_id,
+                current_user,
+                expected_eseguibile_id=executable_id,
+                expected_group_id=str(
+                    getattr(task_info, "group_id", None)
+                    or record.get("group_id")
+                    or ""
+                ),
+            )
+        return task_info
+
+    try:
+        meta = _get_project_service().get_project_metadata(project_id)
+    except TASK_LOOKUP_ERRORS as exc:
+        _task_store_unavailable(task_id, logger=logger, exc=exc)
+    if meta:
+        assert_group_access(meta, current_user, f"Task '{task_id}'")
     elif current_user.role not in ("admin", "superadmin"):
         raise HTTPException(
             status_code=404,
@@ -97,6 +157,7 @@ def assert_task_group(task_id: str, current_user: CurrentUser, *, logger: Any) -
                 "message": "Task non trovato",
             },
         )
+    return task_info
 
 
 def assert_eseguibile_task_owner(

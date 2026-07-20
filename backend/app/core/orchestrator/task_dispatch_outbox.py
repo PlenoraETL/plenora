@@ -56,6 +56,10 @@ class PgTaskDispatchOutbox:
                 "task_id": metadata.task_id,
                 "project_id": metadata.project_id,
                 "task_type": metadata.task_type,
+                "subject_kind": metadata.subject_kind,
+                "subject_id": metadata.subject_id,
+                "group_id": metadata.group_id,
+                "owner_user_id": metadata.owner_user_id,
             },
             separators=(",", ":"),
         )

@@ -65,6 +65,7 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
     "project_not_found",
     "task_not_found",
     "task_already_terminal",
+    "task_store_unavailable",
     "worker_lost",
     "schedule_not_found",
     "run_not_found",
@@ -200,8 +201,8 @@ def test_known_global_codes_matches_expected_lock():
     assert error_codes.KNOWN_GLOBAL_CODES == EXPECTED_GLOBAL_CODES
 
 
-def test_catalog_count_domain_sixty_two():
-    """62 codici domain (catalogo storico + task terminal conflict).
+def test_catalog_count_domain_sixty_three():
+    """63 codici domain (catalogo storico + task availability).
 
     Composizione storica: 5 pre-existing + 6 batch 006 + 10 batch 009
     not-found family + 1 batch 010 external-service +
@@ -210,8 +211,9 @@ def test_catalog_count_domain_sixty_two():
     1 BE-GO-READY-ERROR-CODES-014 access_denied +
     27 BE-GO-READY-AUTH-DOMAIN-PROMOTION-001 auth family +
     1 compatibility domain conflict code + 1 task terminal conflict +
-    5 dispatch carica #18/#20 write/visibility family."""
-    assert len(EXPECTED_DOMAIN_CODES) == 62
+    5 dispatch carica #18/#20 write/visibility family +
+    1 task store availability code."""
+    assert len(EXPECTED_DOMAIN_CODES) == 63
     assert len(error_codes.KNOWN_DOMAIN_CODES) == len(EXPECTED_DOMAIN_CODES)
 
 

@@ -60,7 +60,7 @@ def test_download_task_result_returns_gone_when_payload_has_no_result_id(client)
         result={"project_id": "proj-1"},
     )
 
-    with patch("app.core.orchestrator.router._assert_task_group"), \
+    with patch("app.core.orchestrator.router._assert_task_group", return_value=task_info), \
          patch("app.core.orchestrator.task_service.task_service.get_task_status", return_value=task_info):
         response = client.get("/api/tasks/task-1/download")
 

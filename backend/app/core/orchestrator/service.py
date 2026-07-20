@@ -16,6 +16,7 @@ from app.core.projects.service import ProjectService
 from app.core.projects.canvas_models import CanvasState
 from app.core.resources import memory_guard
 from app.core.query_execution.query_executor import QueryExecutor
+from app.core.query_execution.query_streaming import execute_streaming_to_writer
 from app.shared import error_codes
 from app.shared.contracts.payloads import JsonObject
 from app.shared.execution.executor_protocol import CanvasExecutorProtocol, ExecutionResult
@@ -254,13 +255,14 @@ class OrchestratorService:
 
         output_persistence = None
         if execution_context is not None and execution_context.get("output_task_id"):
-            from app.core.orchestrator.executable_output import (
+            from app.core.eseguibili.output_persistence import (
                 ExecutableOutputPersistence,
             )
 
             output_persistence = ExecutableOutputPersistence(
                 task_id=str(execution_context["output_task_id"]),
                 group_id=str(execution_context.get("group_id") or ""),
+                stream_query_to_writer=execute_streaming_to_writer,
             )
         output_kwargs = (
             {"output_persistence": output_persistence}

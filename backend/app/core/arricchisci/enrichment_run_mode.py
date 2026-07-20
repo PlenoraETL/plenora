@@ -20,7 +20,7 @@ from typing import Any, Mapping, MutableMapping, Optional, Tuple
 from app.core import output_contract as output_contract_module
 from app.core.eseguibili import service as eseguibili_service
 from app.core.intermediate import run_lifecycle as run_lifecycle_module
-from app.core.orchestrator.executable_output import ExecutableOutputPersistence
+from app.core.eseguibili.output_persistence import ExecutableOutputPersistence
 from app.core.projects import retention as project_retention
 from app.core.projects import service as project_service_module
 from app.core.results import pipeline_result as pipeline_result_module

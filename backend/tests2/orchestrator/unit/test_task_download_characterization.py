@@ -18,7 +18,7 @@ def test_download_task_result_sanitizes_filename_headers(client):
         result={"project_id": "proj-1", "result_id": "res-1"},
     )
 
-    with patch("app.core.orchestrator.router._assert_task_group"), \
+    with patch("app.core.orchestrator.router._assert_task_group", return_value=task_info), \
          patch("app.core.orchestrator.task_service.task_service.get_task_status", return_value=task_info), \
          patch(
             "app.core.orchestrator.router.results_blob.open_result_stream",
@@ -43,7 +43,7 @@ def test_download_task_result_rejects_project_result_mismatch(client):
         result={"project_id": "proj-1", "result_id": "res-1"},
     )
 
-    with patch("app.core.orchestrator.router._assert_task_group"), \
+    with patch("app.core.orchestrator.router._assert_task_group", return_value=task_info), \
          patch("app.core.orchestrator.task_service.task_service.get_task_status", return_value=task_info), \
          patch(
             "app.core.orchestrator.router.results_blob.open_result_stream",
@@ -67,7 +67,7 @@ def test_download_task_result_streams_body_with_content_length(client):
         result={"project_id": "proj-1", "result_id": "res-1"},
     )
 
-    with patch("app.core.orchestrator.router._assert_task_group"), \
+    with patch("app.core.orchestrator.router._assert_task_group", return_value=task_info), \
          patch(
             "app.core.orchestrator.task_service.task_service.get_task_status",
             return_value=task_info,

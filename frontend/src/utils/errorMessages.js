@@ -16,6 +16,7 @@
 // Mappa codice backend → { title, message }. Copre i codici con valore di
 // branching reale per l'utente; i restanti ricadono sul generico per status.
 export const ERROR_MESSAGES = {
+  task_store_unavailable: { title: 'Stato non disponibile', message: 'Lo stato delle operazioni non e temporaneamente disponibile. Riprova tra poco.' },
   // Generici / framework
   internal_error: { title: 'Errore del server', message: 'Si è verificato un errore interno. Riprova; se il problema persiste, contatta l’amministratore.' },
   canvas_corrupted: { title: 'Canvas corrotto', message: 'Il canvas del progetto non è leggibile e potrebbe essere danneggiato. Contatta l’amministratore.' },
