@@ -11,7 +11,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, BinaryIO, List, Optional, Protocol, runtime_checkable
+from typing import Any, BinaryIO, Iterator, List, Mapping, Optional, Protocol, runtime_checkable
 from typing_extensions import TypedDict
 
 from app import config as app_config
@@ -74,6 +74,10 @@ class ObjectStorage(Protocol):
         """
         ...
 
+    def set_object_tags(self, key: str, tags: Mapping[str, str]) -> None:
+        """Replace lifecycle/audit tags associated with one object."""
+        ...
+
     def list_objects_page(
         self,
         prefix: str,
@@ -113,6 +117,37 @@ class ObjectStorage(Protocol):
     def delete(self, key: str) -> None:
         """Cancella `key` dal bucket. Idempotente (no error se gia' assente)."""
         ...
+
+
+class OwnedObjectBody(Iterator[bytes]):
+    """Iterator that always releases the provider HTTP response it owns."""
+
+    def __init__(self, raw_body: Any, *, chunk_size: int = 64 * 1024) -> None:
+        self._raw_body = raw_body
+        self._chunk_size = chunk_size
+        self.closed = False
+
+    def __iter__(self) -> "OwnedObjectBody":
+        return self
+
+    def __next__(self) -> bytes:
+        if self.closed:
+            raise StopIteration
+        try:
+            chunk = self._raw_body.read(self._chunk_size)
+        except BaseException:
+            self.close()
+            raise
+        if not chunk:
+            self.close()
+            raise StopIteration
+        return chunk
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        self.closed = True
+        self._raw_body.close()
 
 
 # AWS credential error classification (helper boundary
@@ -394,6 +429,18 @@ class AwsS3ObjectStorage:
         """
         self.upload_fileobj(io.BytesIO(data), key, size_bytes=len(data))
 
+    def set_object_tags(self, key: str, tags: Mapping[str, str]) -> None:
+        self._client().put_object_tagging(
+            Bucket=self.bucket,
+            Key=key,
+            Tagging={
+                "TagSet": [
+                    {"Key": str(tag_key), "Value": str(tag_value)}
+                    for tag_key, tag_value in sorted(tags.items())
+                ]
+            },
+        )
+
     def upload_fileobj(
         self,
         stream: BinaryIO,
@@ -447,9 +494,9 @@ class AwsS3ObjectStorage:
         """GetObject e ritorna body streaming + metadata."""
         client = self._client()
         resp = client.get_object(Bucket=self.bucket, Key=key)
-        body = resp["Body"]  # botocore StreamingBody — iterable di chunks
+        body = resp["Body"]  # botocore StreamingBody
         return {
-            "body": body.iter_chunks(chunk_size=64 * 1024),
+            "body": OwnedObjectBody(body),
             "size": resp.get("ContentLength", 0),
             "content_type": resp.get("ContentType", "application/octet-stream"),
         }

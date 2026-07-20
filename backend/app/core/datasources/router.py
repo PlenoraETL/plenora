@@ -5,11 +5,14 @@ Endpoints CRUD per la gestione dei Data Source e operazioni sui file.
 """
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Depends
-from fastapi.responses import StreamingResponse
 from typing import Annotated, Optional
 
 from app.utils.logger import get_logger
 from app.core.datasources import errors as datasource_errors
+from app.core.io.http_streaming import (
+    CloseableStreamingResponse,
+    safe_download_filename,
+)
 from app.shared import error_codes
 from app.shared.error_envelope import raise_credential_unavailable, raise_typed_http
 from app.infrastructure.security.crypto import CredentialUnavailableError
@@ -298,14 +301,8 @@ def download_file(
         # basename only (no full path leak
         # rimuove caratteri non sicuri per il header HTTP (quote, CRLF
         # fallback "download" se vuoto
-        raw_basename = path.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
-        safe_filename = "".join(
-            c for c in raw_basename
-            if c.isprintable() and c not in '"\\\r\n'
-        )[:200]
-        if not safe_filename:
-            safe_filename = "download"
-        # StreamingResponse + iter_read_chunks. Per LocalDataSource
+        safe_filename = safe_download_filename(path, fallback="download")
+        # CloseableStreamingResponse + iter_read_chunks. Per LocalDataSource
         # il peak RAM scende da O(file_size) a O(64KB). Per gli altri
         # backend il default fallback non riduce il peak ma evita la
         # doppia copia request->response di FastAPI.
@@ -323,7 +320,7 @@ def download_file(
                 yield first_chunk
             yield from chunks
 
-        return StreamingResponse(
+        return CloseableStreamingResponse(
             _response_chunks(),
             media_type="application/octet-stream",
             headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},

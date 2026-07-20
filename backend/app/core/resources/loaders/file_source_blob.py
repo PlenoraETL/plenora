@@ -26,6 +26,7 @@ from app.core.resources.stores.file_source_blob import (
     fetch_file_source_blob_lookup_row,
 )
 from app.core.io.tenant_namespace import assert_tenant_key
+from app.core.io.http_streaming import close_stream_body
 from app.shared.resources.storage_layout import FILE_SOURCES_PREFIX
 
 
@@ -184,6 +185,7 @@ def _stream_by_id(
         opened = get_runtime_object_storage().get_object_stream(storage_key)
         declared_size = int(opened.get("size") or 0)
         if declared_size > max_bytes:
+            close_stream_body(opened)
             raise MemoryLimitExceededError(
                 observed_bytes=declared_size,
                 limit_bytes=max_bytes,

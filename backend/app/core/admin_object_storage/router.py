@@ -9,6 +9,10 @@ from fastapi.responses import StreamingResponse
 
 from app.core.auth.dependencies import require_superadmin
 from app.core.io.object_storage import get_runtime_object_storage
+from app.core.io.http_streaming import (
+    CloseableStreamingResponse,
+    safe_download_filename,
+)
 from app.core.io.tenant_namespace import (
     TenantStorageKeyError,
     assert_runtime_key,
@@ -106,7 +110,7 @@ def download_object(
         opened = get_runtime_object_storage().get_object_stream(key)
     except Exception as exc:
         raise HTTPException(status_code=404, detail="Oggetto non trovato") from exc
-    filename = key.rsplit("/", 1)[-1].replace('"', "") or "object.bin"
+    filename = safe_download_filename(key, fallback="object.bin")
     headers = {
         "Cache-Control": "no-store",
         "Content-Disposition": f'attachment; filename="{filename}"',
@@ -114,7 +118,7 @@ def download_object(
     size = int(opened.get("size") or 0)
     if size:
         headers["Content-Length"] = str(size)
-    return StreamingResponse(
+    return CloseableStreamingResponse(
         opened["body"],
         media_type=opened.get("content_type") or "application/octet-stream",
         headers=headers,

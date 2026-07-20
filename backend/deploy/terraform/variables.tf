@@ -6,11 +6,16 @@ variable "aws_region" {
 
 variable "backup_bucket_name" {
   description = <<-EOT
-    Nome del bucket S3 che ospita backup, eseguibili-outputs e imdf-bundles.
+    Nome del bucket S3 dedicato ai backup amministrativi.
     Deve esistere gia' (creato manualmente o via altra stack TF).
   EOT
   type        = string
   default     = "plenora-backup-112011134642-eu-south-1-an"
+}
+
+variable "runtime_bucket_name" {
+  description = "Bucket runtime OBJECT_STORAGE_BUCKET per artifact tenant-scoped."
+  type        = string
 }
 
 variable "db_backup_retention_days" {

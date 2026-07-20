@@ -116,29 +116,35 @@ def read_stream_bounded(
 
     buffer = bytearray()
     running = 0
+    iterator = iter(body)
 
-    for idx, chunk in enumerate(body):
-        if not isinstance(chunk, _BYTES_LIKE):
-            raise TypeError(
-                f"read_stream_bounded({label!r}): chunk #{idx} is "
-                f"not bytes-like (got {type(chunk).__name__!r}). "
-                "Expected bytes / bytearray / memoryview."
-            )
-        chunk_len = len(chunk)
-        # Pre-append size check: the over-limit chunk does NOT
-        # enlarge the buffer. Memory bound: peak is
-        # `running + chunk_len` for the brief moment between
-        # this check and the raise
-        if running + chunk_len > max_bytes:
-            raise MemoryLimitExceededError(
-                observed_bytes=running + chunk_len,
-                limit_bytes=max_bytes,
-                path_basename=label,
-                stage=stage,
-            )
-        # Normalize bytearray / memoryview to bytes via the
-        # buffer's `extend` (zero-copy for bytes-like objects
-        buffer.extend(chunk)
-        running += chunk_len
+    try:
+        for idx, chunk in enumerate(iterator):
+            if not isinstance(chunk, _BYTES_LIKE):
+                raise TypeError(
+                    f"read_stream_bounded({label!r}): chunk #{idx} is "
+                    f"not bytes-like (got {type(chunk).__name__!r}). "
+                    "Expected bytes / bytearray / memoryview."
+                )
+            chunk_len = len(chunk)
+            # Pre-append size check: the over-limit chunk does NOT
+            # enlarge the buffer. Memory bound: peak is
+            # `running + chunk_len` for the brief moment between
+            # this check and the raise
+            if running + chunk_len > max_bytes:
+                raise MemoryLimitExceededError(
+                    observed_bytes=running + chunk_len,
+                    limit_bytes=max_bytes,
+                    path_basename=label,
+                    stage=stage,
+                )
+            # Normalize bytearray / memoryview to bytes via the
+            # buffer's `extend` (zero-copy for bytes-like objects
+            buffer.extend(chunk)
+            running += chunk_len
+    finally:
+        close = getattr(iterator, "close", None)
+        if callable(close):
+            close()
 
     return bytes(buffer)

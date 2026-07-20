@@ -135,6 +135,7 @@ class TaskSubmitRequest:
     payload: TaskLaunchPayload
     queued_message: str
     log_label: str
+    task_id: Optional[str] = None
 
 
 def task_payload_to_celery_kwargs(
@@ -330,7 +331,7 @@ class TaskService:
         lo stesso task_id; gli adapter senza outbox mantengono compensazione.
         """
 
-        task_id = self._task_id_factory()
+        task_id = request.task_id or self.reserve_task_id()
         metadata = PendingTaskMetadata(
             task_id=task_id,
             project_id=request.project_id,
@@ -413,6 +414,14 @@ class TaskService:
             message=request.queued_message,
             created_at=datetime.now(timezone.utc).isoformat(),
         )
+
+    def reserve_task_id(self) -> str:
+        """Reserve the stable identifier used by metadata, outbox and broker.
+
+        Callers that must persist authorization/run metadata before publish can
+        reserve the identifier first and pass it back to ``create_*_task``.
+        """
+        return self._task_id_factory()
     
     def create_enrichment_task(
         self,
@@ -425,6 +434,7 @@ class TaskService:
         user_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
         execution_context: Optional[JsonMapping] = None,
+        task_id: Optional[str] = None,
     ) -> TaskInfo:
         """Crea e avvia un task di arricchimento."""
         return self.submit_task(
@@ -445,6 +455,7 @@ class TaskService:
                 ),
                 queued_message="Task in coda...",
                 log_label="enrichment",
+                task_id=task_id,
             )
         )
 
@@ -569,6 +580,7 @@ class TaskService:
         user_id: Optional[str] = None,
         intermediate_mode_override: Optional[str] = None,
         execution_contract: Optional[JsonMapping] = None,
+        task_id: Optional[str] = None,
     ) -> TaskInfo:
         """Crea e avvia un task di esecuzione pipeline (ESTRAI/MANIPOLA/ARRICCHISCI).
 
@@ -595,6 +607,7 @@ class TaskService:
                 ),
                 queued_message="Pipeline in coda...",
                 log_label="execute",
+                task_id=task_id,
             )
         )
 

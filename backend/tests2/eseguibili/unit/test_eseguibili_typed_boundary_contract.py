@@ -157,6 +157,7 @@ def test_execute_router_serializes_typed_service_payload(monkeypatch):
     from app.core.eseguibili import router
 
     saved_owner: dict[str, str] = {}
+    monkeypatch.setattr(router._task_service, "reserve_task_id", lambda: "task-1")
     monkeypatch.setattr(router.eseguibili_db, "get_eseguibile", lambda eid: _row())
     monkeypatch.setattr(router, "_check_visible", lambda *args, **kwargs: None)
     monkeypatch.setattr(
@@ -227,6 +228,7 @@ def test_execute_router_passes_file_source_id_not_local_path(monkeypatch):
     from app.core.eseguibili import router
 
     captured: dict[str, object] = {}
+    monkeypatch.setattr(router._task_service, "reserve_task_id", lambda: "task-1")
     monkeypatch.setattr(router.eseguibili_db, "get_eseguibile", lambda eid: _row())
     monkeypatch.setattr(router, "_check_visible", lambda *args, **kwargs: None)
     monkeypatch.setattr(

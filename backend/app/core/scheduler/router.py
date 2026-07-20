@@ -18,6 +18,7 @@ from app.core.auth.dependencies import (
 from app.core.auth.owner_dependencies import require_schedule_owner
 from app.core.auth.ownership import assert_group_access
 from app.core.auth.resource_access import assert_project_access
+from app.core.io.http_streaming import safe_download_filename
 from app.core.results import store as _results_store
 from app.core.scheduler import db as scheduler_db
 from app.core.scheduler.healthcheck_service import (
@@ -71,7 +72,10 @@ def _download_result_file(
             status_code=404,
             detail=f"Blob risultato '{result_id}' non disponibile",
         )
-    filename = result_row.filename or f"{schedule_id}.bin"
+    filename = safe_download_filename(
+        result_row.filename or f"{schedule_id}.bin",
+        fallback="result.bin",
+    )
     return Response(
         content=result_bytes,
         media_type="application/octet-stream",

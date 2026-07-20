@@ -5,10 +5,14 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import HTTPException
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import Response
 
 from app.core.results import blob as results_blob
 from app.core.results import db as results_db
+from app.core.io.http_streaming import (
+    CloseableStreamingResponse,
+    safe_download_filename,
+)
 
 
 MIME_TYPES = {
@@ -55,12 +59,15 @@ def project_result_response(
             None,
         )
         if match is not None:
-            filename = match.filename or requested_file
+            filename = safe_download_filename(
+                match.filename or requested_file,
+                fallback="result.bin",
+            )
             stream = results_blob.open_result_stream(
                 match.id, expected_project_id=project_id
             )
             if stream is not None:
-                return StreamingResponse(
+                return CloseableStreamingResponse(
                     stream["body"],
                     media_type=mime_for_filename(filename),
                     headers={
@@ -78,12 +85,15 @@ def project_result_response(
     latest = results_db.get_latest_result_row(project_id)
 
     if latest and latest.id:
-        filename = latest.filename or f"{project_id}.{latest.format or 'csv'}"
+        filename = safe_download_filename(
+            latest.filename or f"{project_id}.{latest.format or 'csv'}",
+            fallback="result.bin",
+        )
         stream = results_blob.open_result_stream(
             latest.id, expected_project_id=project_id
         )
         if stream is not None:
-            return StreamingResponse(
+            return CloseableStreamingResponse(
                 stream["body"],
                 media_type=mime_for_filename(filename),
                 headers={

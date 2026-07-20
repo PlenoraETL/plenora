@@ -528,6 +528,11 @@ def test_task_launch_failure_marks_run_and_cleans_inputs(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         eseguibili_db,
+        "bind_eseguibile_run_task",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        eseguibili_db,
         "complete_eseguibile_run",
         lambda run_id, **kwargs: completed.append({"run_id": run_id, **kwargs}),
     )
@@ -625,12 +630,14 @@ def test_versioned_execution_dispatches_all_publishable_project_types(
     monkeypatch.setattr(
         task_service,
         "create_pipeline_task",
-        lambda **kwargs: pipeline_calls.append(kwargs) or SimpleNamespace(task_id="task-pipeline"),
+        lambda **kwargs: pipeline_calls.append(kwargs)
+        or SimpleNamespace(task_id=kwargs["task_id"]),
     )
     monkeypatch.setattr(
         task_service,
         "create_enrichment_task",
-        lambda **kwargs: enrichment_calls.append(kwargs) or SimpleNamespace(task_id="task-enrichment"),
+        lambda **kwargs: enrichment_calls.append(kwargs)
+        or SimpleNamespace(task_id=kwargs["task_id"]),
     )
 
     result = executable_service.execute_versioned(
@@ -642,11 +649,11 @@ def test_versioned_execution_dispatches_all_publishable_project_types(
     if project_type == "arricchisci":
         assert not pipeline_calls
         assert enrichment_calls[0]["execution_context"]["version_id"] == version.id
-        assert result.task_id == "task-enrichment"
+        assert result.task_id == enrichment_calls[0]["task_id"]
     else:
         assert not enrichment_calls
         contract = pipeline_calls[0]["execution_contract"]
         assert contract["project_type"] == project_type
         assert contract["execution_subject"]["version_id"] == version.id
-        assert result.task_id == "task-pipeline"
+        assert result.task_id == pipeline_calls[0]["task_id"]
     assert bound == [("run-1", result.task_id)]

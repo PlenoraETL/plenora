@@ -66,12 +66,18 @@ def _read_body(body: object) -> bytes:
         if len(body.encode("utf-8")) > OWNER_SIDECAR_MAX_BYTES:
             raise ValueError("task owner metadata exceeds max size")
         return body.encode("utf-8")
-    return read_stream_bounded(
-        (_coerce_chunk(chunk) for chunk in body),  # type: ignore[arg-type]
-        max_bytes=OWNER_SIDECAR_MAX_BYTES,
-        label="eseguibili_task_owner",
-        stage="eseguibili_output_store_owner",
-    )
+    iterator = iter(body)  # type: ignore[arg-type]
+    try:
+        return read_stream_bounded(
+            (_coerce_chunk(chunk) for chunk in iterator),
+            max_bytes=OWNER_SIDECAR_MAX_BYTES,
+            label="eseguibili_task_owner",
+            stage="eseguibili_output_store_owner",
+        )
+    finally:
+        close = getattr(iterator, "close", None)
+        if callable(close):
+            close()
 
 
 def _coerce_chunk(chunk: object) -> bytes:
@@ -154,7 +160,10 @@ def delete_task_owner(
     *,
     group_id: str | None = None,
     outputs_dir: Path | None = None,
-) -> None:
+    strict: bool = False,
+) -> int:
+    deleted = 0
+    failures: list[Exception] = []
     if group_id:
         for key in (
             task_owner_key(task_id, group_id=group_id),
@@ -162,7 +171,9 @@ def delete_task_owner(
         ):
             try:
                 storage.delete_key(key, expected_group_id=group_id)
+                deleted += 1
             except Exception as exc:
+                failures.append(exc)
                 logger.debug(
                     f"delete task owner sidecar best-effort fallito per "
                     f"task_id={task_id}: {exc}"
@@ -172,29 +183,87 @@ def delete_task_owner(
         path = task_owner_path(task_id, outputs_dir=outputs_dir)
         if path.exists():
             rmtree_safe(path, logger=logger)
+            deleted += 1
     except Exception as exc:
+        failures.append(exc)
         logger.debug(
             f"delete task owner locale best-effort fallito per "
             f"task_id={task_id}: {exc}"
         )
+    if strict and failures:
+        raise RuntimeError(
+            f"Cleanup owner incompleto per task_id={task_id}: "
+            f"{len(failures)} delete falliti"
+        ) from failures[0]
+    return deleted
 
 
 def find_output_keys(task_id: str, *, group_id: str) -> list[str]:
-    return [
+    return sorted(set(
         key for key in storage.find_keys(task_id, group_id=group_id)
         if key.rsplit("/", 1)[-1] != OWNER_SIDECAR_FILENAME
-    ]
+    ))
+
+
+def select_output_key(
+    keys: list[str],
+    *,
+    expected_filename: str | None = None,
+) -> str:
+    """Select one output without silently consuming a different artifact."""
+    unique_keys = sorted(set(keys))
+    if expected_filename:
+        safe_filename = expected_filename.replace("\\", "/").rsplit("/", 1)[-1]
+        matches = [
+            key for key in unique_keys
+            if key.rsplit("/", 1)[-1] == safe_filename
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise RuntimeError(f"Output duplicato per filename={safe_filename}")
+    if len(unique_keys) == 1:
+        return unique_keys[0]
+    if not unique_keys:
+        raise FileNotFoundError("Output eseguibile non trovato")
+    raise RuntimeError(
+        f"Output eseguibile ambiguo: trovati {len(unique_keys)} artifact"
+    )
 
 
 def open_stream(key: str, *, expected_group_id: str) -> ObjectMap:
     return storage.open_stream(key, expected_group_id=expected_group_id)
 
 
-def delete_task_outputs(task_id: str, *, group_id: str) -> int:
-    try:
-        return storage.delete_by_task(task_id, group_id=group_id)
-    finally:
-        delete_task_owner(task_id, group_id=group_id)
+def delete_task_outputs(
+    task_id: str,
+    *,
+    group_id: str,
+    retain_owner: bool = False,
+) -> int:
+    """Delete task outputs, preserving authorization metadata on failure.
+
+    ``retain_owner`` is used by the consume-once download: the sidecar remains
+    available to authorize the subsequent GDPR full-cleanup request.
+    """
+    keys = find_output_keys(task_id, group_id=group_id)
+    deleted = 0
+    failures: list[tuple[str, Exception]] = []
+    for key in keys:
+        try:
+            storage.delete_key(key, expected_group_id=group_id)
+            deleted += 1
+        except Exception as exc:
+            failures.append((key, exc))
+            logger.warning(f"delete output {key} fallito: {exc}")
+    if failures:
+        raise RuntimeError(
+            f"Cleanup output incompleto per task_id={task_id}: "
+            f"{len(failures)}/{len(keys)} delete falliti"
+        ) from failures[0][1]
+    if not retain_owner:
+        delete_task_owner(task_id, group_id=group_id, strict=True)
+    return deleted
 
 
 def purge_expired_local_outputs(
@@ -232,6 +301,7 @@ __all__ = [
     "OWNER_SIDECAR_FILENAME",
     "TaskOwner",
     "delete_task_outputs",
+    "select_output_key",
     "delete_task_owner",
     "find_output_keys",
     "load_task_owner",

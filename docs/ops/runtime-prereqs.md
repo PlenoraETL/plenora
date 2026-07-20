@@ -88,10 +88,11 @@ Lette da `.env` via systemd unit wrapper o SSM secrets (vedi `deploy/iam/README.
 
 **Modello**: IAM role attached all'istanza EC2 (`plenora-backup-role`, account `112011134642`). `boto3` raccoglie credenziali automaticamente dal metadata endpoint EC2 — nessuna chiave statica in `.env`.
 
-Permessi richiesti sul bucket `plenora-backup-112011134642-eu-south-1-an`:
+Permessi richiesti sui bucket backup e runtime, limitati alle rispettive key:
 - `s3:ListBucket`
 - `s3:GetObject`
 - `s3:PutObject`
+- `s3:PutObjectTagging` sul bucket runtime (retention artifact effimeri)
 - `s3:DeleteObject` (per eager cleanup post-download IMDF + eseguibili)
 
 Permessi SSM per secrets (`/plenora/prod/*`):
@@ -114,8 +115,8 @@ fallisce se e' configurato solo il bucket backup.
 | `plenora-runtime-artifacts-...` | `results/` | Retention TBD | Blob dei result pipeline |
 | `plenora-runtime-artifacts-...` | `file-sources/` | Retention TBD | File source sopra soglia / object storage |
 | `plenora-runtime-artifacts-...` | `intermediate/` | Retention TBD | Artifact intermedi `full_artifact` |
-| `plenora-runtime-artifacts-...` | `eseguibili-outputs/` | 7gg delete (safety net sopra eager cleanup) | Output eseguibili workflow |
-| `plenora-runtime-artifacts-...` | `imdf-bundles/` | 7gg delete (safety net sopra eager cleanup) | Bundle IMDF (zip + meta.json) |
+| `plenora-runtime-artifacts-...` | `tenants/{group}/eseguibili-outputs/` + tag `plenora-retention=ephemeral` | 7gg delete (safety net sopra eager cleanup) | Output eseguibili workflow |
+| `plenora-runtime-artifacts-...` | `tenants/{group}/imdf-bundles/` | Retention applicativa/legacy | Bundle IMDF (zip + meta.json) |
 
 Lifecycle rule gestite via Terraform (`deploy/terraform/lifecycle.tf`), state su `s3://plenora-terraform-state-112011134642/plenora-etl/lifecycle.tfstate`.
 

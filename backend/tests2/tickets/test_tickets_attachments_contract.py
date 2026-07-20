@@ -439,13 +439,31 @@ def test_download_cross_tenant_gets_404(mock_tdb, mock_download_deps):
     mock_download_deps.get_blob_stream.assert_not_called()
 
 
-def test_download_blob_unavailable_returns_404(mock_tdb, mock_file_service):
+def test_download_blob_unavailable_returns_404(mock_tdb, mock_download_deps):
     """Se get_blob_stream ritorna None (blob perso / S3 error) -> 404."""
-    mock_file_service.get_blob_stream.return_value = None
+    mock_download_deps.get_blob_stream.return_value = None
     mock_tdb.get_attachment.return_value = _attachment(uploaded_at="x")
     client = _make_client(_user("user"))
     response = client.get("/api/tickets/t1/attachments/att-1/download")
     assert response.status_code == 404
+
+
+def test_download_missing_metadata_does_not_open_blob(
+    mock_tdb, mock_file_service, monkeypatch,
+):
+    import app.core.files.db as db_mod
+
+    monkeypatch.setattr(
+        db_mod, "get_file_source", lambda _file_id, include_data=False: None,
+    )
+    mock_tdb.get_attachment.return_value = _attachment(uploaded_at="x")
+
+    response = _make_client(_user("user")).get(
+        "/api/tickets/t1/attachments/att-1/download"
+    )
+
+    assert response.status_code == 404
+    mock_file_service.get_blob_stream.assert_not_called()
 
 
 # DELETE (continua)

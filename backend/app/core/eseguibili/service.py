@@ -356,6 +356,7 @@ def execute(
     upload_group_id: Optional[str] = None,
     output_format: Optional[str] = None,
     output_name: Optional[str] = None,
+    task_id: Optional[str] = None,
 ) -> EseguibileExecutionResult:
     """Esegue un eseguibile: rinomina colonne, crea FileSource temp, sostituisce
     il nodo sorgente nel canvas clonato, lancia execute_enrichment_task.
@@ -528,16 +529,24 @@ def execute(
         op="eseguibili_execute"
     )
 
-    task_info = task_service.create_enrichment_task(
-        project_id=eseguibile["id"],   # usiamo l'id dell'eseguibile come "project_id" per tracking
-        canvas=canvas,
-        output_format=final_format,
-        force_recalculate=True,        # sempre True: ogni esecuzione è una nuova run
-        # Cleanup automatico al termine del task: rimuove il FileSource temporaneo
-        # creato sopra (sia in caso di successo sia in caso di errore
-        cleanup_file_source_ids=[temp_file_source_id],
-        is_eseguibile=True,
-    )
+    try:
+        task_info = task_service.create_enrichment_task(
+            project_id=eseguibile["id"],
+            canvas=canvas,
+            output_format=final_format,
+            force_recalculate=True,
+            cleanup_file_source_ids=[temp_file_source_id],
+            is_eseguibile=True,
+            task_id=task_id,
+        )
+    except Exception:
+        try:
+            file_source_service.delete_file_source(temp_file_source_id)
+        except Exception:
+            logger.exception(
+                "Cleanup FileSource temporaneo fallito dopo dispatch legacy"
+            )
+        raise
 
     logger.info(
         f"Task eseguibile avviato: task_id={task_info.task_id} eseguibile={eseguibile['id']}",
@@ -580,6 +589,7 @@ def execute_versioned(
     version_id: Optional[str] = None,
     output_format: Optional[str] = None,
     output_name: Optional[str] = None,
+    task_id: Optional[str] = None,
 ) -> ExecutableRunResult:
     """Valida una run v2 e la inoltra all'executor del tipo progetto."""
 
@@ -647,15 +657,20 @@ def execute_versioned(
         output_name=base_name,
     )
 
-    run_id = eseguibili_db.create_eseguibile_run(
-        eseguibile_id=eseguibile.id,
-        version_id=version.id,
-        group_id=eseguibile.group_id,
-        user_id=user_id,
-        input_summary=input_summary,
-    )
-
+    reserved_task_id = task_id or task_service.reserve_task_id()
+    run_id: str | None = None
     try:
+        run_id = eseguibili_db.create_eseguibile_run(
+            eseguibile_id=eseguibile.id,
+            version_id=version.id,
+            group_id=eseguibile.group_id,
+            user_id=user_id,
+            input_summary=input_summary,
+        )
+        # The transactional outbox may publish or retry immediately after task
+        # submission. Bind the stable id before handing control to it.
+        eseguibili_db.bind_eseguibile_run_task(run_id, reserved_task_id)
+
         if manifest.project_type == "arricchisci":
             task_info = task_service.create_enrichment_task(
                 project_id=eseguibile.id,
@@ -671,6 +686,7 @@ def execute_versioned(
                     "run_id": run_id,
                     "group_id": eseguibile.group_id,
                 },
+                task_id=reserved_task_id,
             )
         else:
             execution_contract = {
@@ -700,9 +716,12 @@ def execute_versioned(
                 triggered_by="eseguibile",
                 user_id=user_id,
                 execution_contract=execution_contract,
+                task_id=reserved_task_id,
             )
-
-        eseguibili_db.bind_eseguibile_run_task(run_id, task_info.task_id)
+        if task_info.task_id != reserved_task_id:
+            raise RuntimeError(
+                "Task service ha restituito un task_id diverso da quello riservato"
+            )
     except Exception as exc:
         from app.core.files.service import file_source_service
 
@@ -711,11 +730,12 @@ def execute_versioned(
                 file_source_service.delete_file_source(file_source_id)
             except Exception:
                 pass
-        eseguibili_db.complete_eseguibile_run(
-            run_id,
-            success=False,
-            error_message=f"Avvio task fallito: {type(exc).__name__}",
-        )
+        if run_id is not None:
+            eseguibili_db.complete_eseguibile_run(
+                run_id,
+                success=False,
+                error_message=f"Avvio task fallito: {type(exc).__name__}",
+            )
         raise
     return ExecutableRunResult(
         task_id=task_info.task_id,

@@ -23,6 +23,7 @@ class _FakeStorage:
         self.list_response = []
         self.stream_response = {"body": iter([b"chunk1"]), "size": 6, "content_type": "text/plain"}
         self.upload_should_fail = False
+        self.tags = {}
 
     def list_objects(self, prefix):
         self.listed_prefix = prefix
@@ -38,6 +39,9 @@ class _FakeStorage:
         if self.upload_should_fail:
             raise RuntimeError("S3 upload failed")
         self.uploads.append((f"<bytes:{len(data)}>", key))
+
+    def set_object_tags(self, key, tags):
+        self.tags[key] = dict(tags)
 
     def download(self, key, local_path):
         raise NotImplementedError
@@ -71,6 +75,7 @@ def test_save_uploads_and_deletes_local(fake_storage, tmp_path):
     assert key == "tenants/g1/eseguibili-outputs/task-123/output.csv"
     assert len(fake_storage.uploads) == 1
     assert fake_storage.uploads[0] == (str(local), key)
+    assert fake_storage.tags[key] == {"plenora-retention": "ephemeral"}
     # File locale cancellato
     assert not local.exists()
 
@@ -236,9 +241,8 @@ def test_delete_by_task_continues_if_one_delete_fails(fake_storage):
         real_delete(key)
 
     fake_storage.delete = flaky_delete
-    count = st.delete_by_task("task-1", group_id="g1")
+    with pytest.raises(RuntimeError, match="Cleanup object storage incompleto"):
+        st.delete_by_task("task-1", group_id="g1")
 
-    # count riflette le key trovate, non i delete riusciti (best-effort)
-    assert count == 2
     # Il secondo delete e' comunque avvenuto
     assert len(fake_storage.deletes) == 1

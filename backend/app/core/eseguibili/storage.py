@@ -26,6 +26,7 @@ logger = get_logger(__name__)
 # Prefix object storage condiviso con il layout centrale; separato dal backup
 # bucket pattern cosi' le lifecycle rule possono essere distinte.
 PREFIX = ESEGUIBILI_OUTPUTS_PREFIX
+EPHEMERAL_TAGS = {"plenora-retention": "ephemeral"}
 
 
 def _storage():
@@ -44,6 +45,18 @@ def _key_for(group_id: str, task_id: str, filename: str) -> str:
     return build_tenant_key(group_id, PREFIX, task_id, filename)
 
 
+def _mark_ephemeral(storage: Any, key: str) -> None:
+    """Tag an output for bucket lifecycle; roll back if tagging fails."""
+    try:
+        storage.set_object_tags(key, EPHEMERAL_TAGS)
+    except Exception:
+        try:
+            storage.delete(key)
+        except Exception:
+            logger.exception("Rollback output non taggato fallito key=%s", key)
+        raise
+
+
 def save_bytes(
     task_id: str, filename: str, data: bytes, *, group_id: str,
 ) -> str:
@@ -58,6 +71,7 @@ def save_bytes(
     key = _key_for(group_id, task_id, filename)
     storage = _storage()
     storage.upload_bytes(data, key)
+    _mark_ephemeral(storage, key)
     logger.info(f"[storage] eseguibili output uploaded (in-memory): {key}")
     return key
 
@@ -174,6 +188,8 @@ def save_chunks(
                     f"eseguibili.save_chunks complete fallito (key={key}): {exc}"
                 ) from exc
 
+        _mark_ephemeral(storage, key)
+
         logger.info(
             f"[storage] eseguibili output uploaded streaming "
             f"(parts={len(parts)}): {key}"
@@ -215,7 +231,9 @@ def save(task_id: str, src_path: Path, *, group_id: str) -> str:
         raise ValueError(f"Source non e' un file: {src_path}")
 
     key = _key_for(group_id, task_id, src_path.name)
-    upload_local_path(_storage(), src_path, key)
+    storage = _storage()
+    upload_local_path(storage, src_path, key)
+    _mark_ephemeral(storage, key)
     logger.info(f"[storage] eseguibili output uploaded (path streaming): {key}")
 
     # Cleanup eager del local file dopo upload riuscito. Se l'upload
@@ -275,6 +293,8 @@ def delete_by_task(task_id: str, *, group_id: str) -> int:
     """
     storage = _storage()
     keys = find_keys(task_id, group_id=group_id)
+    deleted = 0
+    failures: list[tuple[str, Exception]] = []
     for key in keys:
         try:
             assert_tenant_key(
@@ -284,6 +304,14 @@ def delete_by_task(task_id: str, *, group_id: str) -> int:
                 allow_legacy=True,
             )
             storage.delete(key)
+            deleted += 1
         except Exception as e:
-            logger.warning(f"[storage] delete {key} fallito (non-fatal): {e}")
-    return len(keys)
+            failures.append((key, e))
+            logger.warning(f"[storage] delete {key} fallito: {e}")
+    if failures:
+        failed_keys = ", ".join(key for key, _exc in failures)
+        raise RuntimeError(
+            f"Cleanup object storage incompleto: {len(failures)}/{len(keys)} "
+            f"delete falliti ({failed_keys})"
+        )
+    return deleted

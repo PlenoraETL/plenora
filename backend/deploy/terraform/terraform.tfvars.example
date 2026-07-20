@@ -4,6 +4,7 @@
 
 aws_region                    = "eu-south-1"
 backup_bucket_name            = "plenora-backup-112011134642-eu-south-1-an"
+runtime_bucket_name           = "plenora-runtime-112011134642-eu-south-1-an"
 db_backup_retention_days      = 365
 db_backup_ia_transition_days  = 30
 ephemeral_retention_days      = 7

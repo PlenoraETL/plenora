@@ -29,6 +29,50 @@ def ensure_bucket(client: Any, bucket: str) -> bool:
     return True
 
 
+def configure_runtime_lifecycle(
+    client: Any,
+    bucket: str,
+    *,
+    retention_days: int = 7,
+) -> None:
+    """Install the ephemeral safety net on the runtime artifact bucket."""
+    days = max(1, int(retention_days))
+    client.put_bucket_lifecycle_configuration(
+        Bucket=bucket,
+        LifecycleConfiguration={
+            "Rules": [
+                {
+                    "ID": "tagged-ephemeral-cleanup",
+                    "Status": "Enabled",
+                    "Filter": {
+                        "Tag": {
+                            "Key": "plenora-retention",
+                            "Value": "ephemeral",
+                        }
+                    },
+                    "Expiration": {"Days": days},
+                },
+                {
+                    "ID": "tenant-incomplete-multipart-cleanup",
+                    "Status": "Enabled",
+                    "Filter": {"Prefix": "tenants/"},
+                    "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 1},
+                },
+                *[
+                    {
+                        "ID": f"{prefix}-legacy-cleanup",
+                        "Status": "Enabled",
+                        "Filter": {"Prefix": f"{prefix}/"},
+                        "Expiration": {"Days": days},
+                        "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 1},
+                    }
+                    for prefix in ("eseguibili-outputs", "imdf-bundles")
+                ],
+            ]
+        },
+    )
+
+
 def _required_env(name: str) -> str:
     value = str(os.getenv(name) or "").strip()
     if not value:
@@ -48,10 +92,11 @@ def provision_configured_buckets() -> list[str]:
     endpoint_url = _required_env("S3_ENDPOINT_URL")
     access_key = _required_env("S3_ACCESS_KEY")
     secret_key = _required_env("S3_SECRET_KEY")
+    runtime_bucket = _required_env("OBJECT_STORAGE_BUCKET")
     buckets = tuple(
         dict.fromkeys(
             (
-                _required_env("OBJECT_STORAGE_BUCKET"),
+                runtime_bucket,
                 _required_env("BACKUP_BUCKET"),
             )
         )
@@ -70,6 +115,12 @@ def provision_configured_buckets() -> list[str]:
         if ensure_bucket(client, bucket):
             created.append(bucket)
         print(f"bucket ok: {bucket}")
+    configure_runtime_lifecycle(
+        client,
+        runtime_bucket,
+        retention_days=int(os.getenv("EPHEMERAL_RETENTION_DAYS", "7")),
+    )
+    print(f"lifecycle runtime ok: {runtime_bucket}")
     return created
 
 

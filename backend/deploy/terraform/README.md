@@ -7,7 +7,8 @@ configurazioni manuali in Console con codice versionato.
 
 | Risorsa | Definita in | Scope |
 |---|---|---|
-| Lifecycle rules S3 bucket backup | `lifecycle.tf` | 3 rule: `plenora_*` (30gg→IA→365gg delete), `eseguibili-outputs/` (7gg delete), `imdf-bundles/` (7gg delete) |
+| Lifecycle backup DB | `lifecycle.tf` | `plenora_*` (30gg→IA→365gg delete) |
+| Lifecycle artifact runtime | `lifecycle.tf` | tag `plenora-retention=ephemeral` (7gg delete), legacy prefix e multipart incompleti |
 
 ## Cosa NON c'e' (ancora)
 
@@ -21,7 +22,7 @@ Scope pieno IaC = lavoro successivo dopo che la baseline lifecycle e' stabile.
 
 - Terraform >= 1.5
 - AWS CLI configurata con credenziali che hanno:
-  - `s3:GetLifecycleConfiguration`, `s3:PutLifecycleConfiguration` sul bucket target
+  - `s3:GetLifecycleConfiguration`, `s3:PutLifecycleConfiguration` sui bucket backup e runtime
   - `s3:*` sul bucket state (creato dal bootstrap)
   - `dynamodb:*` sulla tabella lock
 - Git: questo repo clonato
@@ -48,13 +49,14 @@ cd deploy/terraform
 terraform init  # dopo il bootstrap
 terraform import aws_s3_bucket_lifecycle_configuration.backup \
     plenora-backup-112011134642-eu-south-1-an
+# Solo se il bucket runtime ha già una lifecycle gestita manualmente:
+terraform import aws_s3_bucket_lifecycle_configuration.runtime \
+    plenora-runtime-112011134642-eu-south-1-an
 ```
 
-Dopo l'import, `terraform plan` mostrera' i diff tra la config attuale
-(Console, solo `urby_*`) e il codice (3 rule). Tipicamente:
-- `urby_*` rule: invariata o rinomina id
-- `eseguibili-outputs/` rule: **da aggiungere**
-- `imdf-bundles/` rule: **da aggiungere**
+Dopo l'import, `terraform plan` mostra separatamente la retention backup e
+quella del bucket runtime. La seconda include tag effimeri, compatibilità con
+i prefissi legacy e cleanup dei multipart incompleti.
 
 ## Flusso standard
 

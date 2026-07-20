@@ -5,10 +5,10 @@ Endpoint:
 """
 
 import json as _json
+from uuid import uuid4
 
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, BackgroundTasks, Query
-from fastapi.responses import StreamingResponse
 from typing import Annotated, List, Mapping, Optional
 
 from app.core.auth.dependencies import (
@@ -31,11 +31,18 @@ from app.core.auth.visibility import visible_resource_ids
 from app.shared.error_sanitizer import sanitize_http_detail
 from app.core.security.upload_guards import enforce_upload_size_limit
 from app.core.io.bounded_streams import read_prefix
+from app.core.io.http_streaming import (
+    CloseableStreamingResponse,
+    CompletionTrackingIterator,
+    safe_download_filename,
+)
+from app.core.orchestrator.task_service import task_service as _task_service
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
 
 from . import db as eseguibili_db
 from . import output_store as _output_store
+from . import download_claim_store as _download_claim_store
 from . import service as eseguibili_service
 from .models import (
     EseguibileCreate, EseguibileUpdate, EseguibileSummary, EseguibileDetails,
@@ -531,12 +538,22 @@ def execute_eseguibile(
             detail="File upload appartiene a un altro utente"
         )
 
+    reserved_task_id = _task_service.reserve_task_id()
+    owner_saved = False
     try:
+        _save_task_owner(
+            reserved_task_id,
+            eseguibile_id,
+            current_user.user_id,
+            str(record.get("group_id") or current_user.group_id),
+        )
+        owner_saved = True
         execute_kwargs = {
             "eseguibile": record,
             "column_mapping": [m.model_dump() for m in payload.column_mapping],
             "output_format": payload.output_format,
             "output_name": payload.output_name,
+            "task_id": reserved_task_id,
         }
         if upload.get("file_source_id"):
             execute_kwargs["file_source_id"] = str(upload["file_source_id"])
@@ -551,24 +568,19 @@ def execute_eseguibile(
         result = eseguibili_service.execute(
             **execute_kwargs,
         )
-        # Persist ownership del task per il download endpoint: senza
-        # questo file un attacker che indovina un task_id valido puo'
-        # scaricare l'output di un'esecuzione non sua
-        try:
-            _task_id = None
-            _task_id = result.task_id
-            if _task_id:
-                _save_task_owner(
-                    _task_id,
-                    eseguibile_id,
-                    current_user.user_id,
-                    str(record.get("group_id") or current_user.group_id),
-                )
-        except Exception as _me:
-            logger.warning(f"save task owner meta failed: {_me}")
     except ValueError as e:
+        if owner_saved:
+            _output_store.delete_task_owner(
+                reserved_task_id,
+                group_id=str(record.get("group_id") or current_user.group_id),
+            )
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        if owner_saved:
+            _output_store.delete_task_owner(
+                reserved_task_id,
+                group_id=str(record.get("group_id") or current_user.group_id),
+            )
         logger.error(f"[CRASH] Errore execute eseguibile: {e}", exc_info=True)
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
     finally:
@@ -661,20 +673,29 @@ def create_eseguibile_run(
                 trusted_files if definition.multiple else trusted_files[0]
             )
 
-        result = eseguibili_service.execute_versioned(
-            eseguibile=record,
-            raw_inputs=trusted_inputs,
-            user_id=current_user.user_id,
-            version_id=version.id,
-            output_format=payload.output_format,
-            output_name=payload.output_name,
-        )
+        reserved_task_id = _task_service.reserve_task_id()
         _save_task_owner(
-            result.task_id,
+            reserved_task_id,
             eseguibile_id,
             current_user.user_id,
             record.group_id,
         )
+        try:
+            result = eseguibili_service.execute_versioned(
+                eseguibile=record,
+                raw_inputs=trusted_inputs,
+                user_id=current_user.user_id,
+                version_id=version.id,
+                output_format=payload.output_format,
+                output_name=payload.output_name,
+                task_id=reserved_task_id,
+            )
+        except Exception:
+            _output_store.delete_task_owner(
+                reserved_task_id,
+                group_id=record.group_id,
+            )
+            raise
         return result.to_api_dict()
     except HTTPException:
         raise
@@ -760,29 +781,106 @@ def download_eseguibile_output(
             detail="Output non trovato. Il file potrebbe essere scaduto o il task non ancora completato.",
         )
 
-    # Tipicamente 1 file per task (convention
-    key = keys[0]
-    filename = key.rsplit("/", 1)[-1]
+    try:
+        key = _output_store.select_output_key(keys)
+    except RuntimeError as exc:
+        logger.error(
+            "Selezione output ambigua task_id=%s: %s",
+            safe_task_id,
+            exc,
+        )
+        raise HTTPException(
+            status_code=409,
+            detail="Output ambiguo; cleanup manuale richiesto",
+        ) from exc
+    filename = safe_download_filename(key, fallback="output.bin")
+
+    claim_token = uuid4().hex
+    try:
+        claimed = _download_claim_store.try_acquire(
+            task_id=safe_task_id,
+            group_id=owner_group_id,
+            owner_token=claim_token,
+        )
+    except Exception as e:
+        logger.error(
+            "Claim download eseguibile fallito task_id=%s: %s",
+            safe_task_id,
+            e,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Download temporaneamente non disponibile",
+        ) from e
+    if not claimed:
+        raise HTTPException(status_code=409, detail="Output gia' in download")
 
     try:
         stream = _output_store.open_stream(
             key, expected_group_id=owner_group_id,
         )
     except Exception as e:
+        try:
+            _download_claim_store.release(
+                task_id=safe_task_id,
+                group_id=owner_group_id,
+                owner_token=claim_token,
+            )
+        except Exception:
+            logger.warning(
+                "Release claim dopo open_stream fallito task_id=%s",
+                safe_task_id,
+                exc_info=True,
+            )
         logger.error(f"[CRASH] open_stream eseguibile {key}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Errore apertura stream output")
 
+    size = int(stream.get("size") or 0)
+
+    def _refresh_download_claim(_bytes_yielded: int) -> None:
+        if not _download_claim_store.refresh(
+            task_id=safe_task_id,
+            group_id=owner_group_id,
+            owner_token=claim_token,
+        ):
+            raise RuntimeError("Lease download eseguibile persa")
+
+    tracked_body = CompletionTrackingIterator(
+        stream["body"],
+        expected_size=size or None,
+        on_progress=_refresh_download_claim,
+    )
+
     def _cleanup_after_send():
         try:
-            _output_store.delete_task_outputs(
-                safe_task_id, group_id=owner_group_id,
-            )
+            if tracked_body.completed:
+                _output_store.delete_task_outputs(
+                    safe_task_id,
+                    group_id=owner_group_id,
+                    retain_owner=True,
+                )
+            else:
+                logger.info(
+                    "Download incompleto: output conservato task_id=%s bytes=%s",
+                    safe_task_id,
+                    tracked_body.bytes_yielded,
+                )
         except Exception as e:
             logger.warning(f"Cleanup storage post-download fallito per {safe_task_id}: {e}")
-
-    background_tasks.add_task(_cleanup_after_send)
-
-    size = stream.get("size") or 0
+        finally:
+            try:
+                _download_claim_store.release(
+                    task_id=safe_task_id,
+                    group_id=owner_group_id,
+                    owner_token=claim_token,
+                )
+            except Exception:
+                logger.warning(
+                    "Release claim download fallito task_id=%s",
+                    safe_task_id,
+                    exc_info=True,
+                )
     headers = {
         "Cache-Control": "no-store, no-cache, must-revalidate",
         "Content-Disposition": f'attachment; filename="{filename}"',
@@ -790,10 +888,11 @@ def download_eseguibile_output(
     if size:
         headers["Content-Length"] = str(size)
 
-    return StreamingResponse(
-        stream["body"],
+    return CloseableStreamingResponse(
+        tracked_body,
         media_type="application/octet-stream",
         headers=headers,
+        on_close=_cleanup_after_send,
     )
 
 

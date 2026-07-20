@@ -7,6 +7,7 @@ from typing import Optional
 
 from fastapi import HTTPException
 
+from app.core.io.http_streaming import safe_download_filename
 from app.shared.contracts.payloads import HeadersMap
 from app.utils.mime_validator import MimeMismatchError, validate_upload
 
@@ -57,7 +58,7 @@ def download_headers(
     """Return media type and headers for attachment download."""
     mime = allowed_extensions.get(fmt) or "application/octet-stream"
     disposition = "inline" if mime.startswith("image/") else "attachment"
-    safe_name = filename.replace('"', "").replace("\r", "").replace("\n", "")
+    safe_name = safe_download_filename(filename, fallback="attachment")
     headers: HeadersMap = {
         "Content-Disposition": f'{disposition}; filename="{safe_name}"',
     }

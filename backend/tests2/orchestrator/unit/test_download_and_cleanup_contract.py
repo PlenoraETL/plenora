@@ -47,7 +47,10 @@ def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
          patch("app.core.eseguibili.storage.open_stream",
                return_value={"body": iter([b"col\nval\n"]), "size": 8,
                              "content_type": "text/csv"}) as mock_open, \
-         patch("app.core.eseguibili.storage.delete_by_task") as mock_delete:
+         patch("app.core.eseguibili.download_claim_store.try_acquire",
+               return_value=True), \
+         patch("app.core.eseguibili.download_claim_store.release") as mock_release, \
+         patch("app.core.eseguibili.output_store.delete_task_outputs") as mock_delete:
 
         response = download_task_result(
             task_id="t1",
@@ -60,12 +63,13 @@ def test_tasks_download_eseguibile_streams_from_storage_and_cleans_up():
         # Response deve essere StreamingResponse
         from fastapi.responses import StreamingResponse
         assert isinstance(response, StreamingResponse)
-        # Cleanup registrato nei background_tasks (ma non ancora eseguito)
-        assert len(bg.tasks) == 1
-        # Esegui cleanup DENTRO il with patch: MagicMock delete_by_task
-        # resta attivo e la chiamata viene registrata.
-        bg.tasks[0].func()
-        mock_delete.assert_called_once_with("t1", group_id="g1")
+        assert len(bg.tasks) == 0
+        assert b"".join(response.owned_content) == b"col\nval\n"
+        response.close()
+        mock_delete.assert_called_once_with(
+            "t1", group_id="g1", retain_owner=True,
+        )
+        mock_release.assert_called_once()
 
 
 def test_tasks_download_eseguibile_blocks_owner_mismatch():
@@ -141,8 +145,8 @@ def test_tasks_download_falls_back_to_db_blob_if_no_s3_key():
 # 2. Eseguibili download: stream + cleanup owner meta
 
 
-def test_eseguibili_download_streams_from_storage_cleans_owner_meta():
-    """Dopo stream OK: cleanup sia storage (delete_by_task) sia owner meta."""
+def test_eseguibili_download_streams_and_retains_owner_for_full_cleanup():
+    """Dopo lo stream elimina l'output ma conserva l'owner per full-cleanup."""
     from fastapi import BackgroundTasks
     from app.core.eseguibili.router import download_eseguibile_output
 
@@ -158,8 +162,10 @@ def test_eseguibili_download_streams_from_storage_cleans_owner_meta():
                return_value=["eseguibili-outputs/t1/out.csv"]), \
          patch("app.core.eseguibili.storage.open_stream",
                return_value={"body": iter([b"abc"]), "size": 3, "content_type": "text/csv"}), \
-         patch("app.core.eseguibili.storage.delete_by_task") as mock_delete, \
-         patch("app.core.eseguibili.output_store.delete_task_owner") as mock_del_owner:
+         patch("app.core.eseguibili.download_claim_store.try_acquire",
+               return_value=True), \
+         patch("app.core.eseguibili.download_claim_store.release") as mock_release, \
+         patch("app.core.eseguibili.output_store.delete_task_outputs") as mock_delete:
 
         response = download_eseguibile_output(
             eseguibile_id="exe-1", task_id="t1",
@@ -168,14 +174,13 @@ def test_eseguibili_download_streams_from_storage_cleans_owner_meta():
         from fastapi.responses import StreamingResponse
         assert isinstance(response, StreamingResponse)
 
-        from fastapi.responses import StreamingResponse
-        assert isinstance(response, StreamingResponse)
-        assert len(bg.tasks) == 1
-
-        # Cleanup post-send (dentro il with patch: mock attivo)
-        bg.tasks[0].func()
-        mock_delete.assert_called_once_with("t1", group_id="g1")
-        mock_del_owner.assert_called_once_with("t1", group_id="g1")
+        assert len(bg.tasks) == 0
+        assert b"".join(response.owned_content) == b"abc"
+        response.close()
+        mock_delete.assert_called_once_with(
+            "t1", group_id="g1", retain_owner=True,
+        )
+        mock_release.assert_called_once()
 
 
 def test_eseguibili_download_404_when_no_keys_on_storage():
@@ -200,9 +205,8 @@ def test_eseguibili_download_404_when_no_keys_on_storage():
         assert exc.value.status_code == 404
 
 
-def test_eseguibili_download_cleanup_runs_even_if_delete_by_task_raises():
-    """Se delete_by_task solleva, cleanup owner meta parte comunque
-    (best-effort indipendenti)."""
+def test_eseguibili_download_cleanup_swallows_storage_failure():
+    """Un failure S3 post-send non interrompe la risposta già completata."""
     from fastapi import BackgroundTasks
     from app.core.eseguibili.router import download_eseguibile_output
 
@@ -218,9 +222,11 @@ def test_eseguibili_download_cleanup_runs_even_if_delete_by_task_raises():
                return_value=["eseguibili-outputs/t1/out.csv"]), \
          patch("app.core.eseguibili.storage.open_stream",
                return_value={"body": iter([b"abc"]), "size": 3, "content_type": "text/csv"}), \
-         patch("app.core.eseguibili.storage.delete_by_task",
-               side_effect=RuntimeError("S3 temporaneamente down")), \
-         patch("app.core.eseguibili.output_store.delete_task_owner") as mock_del_owner:
+         patch("app.core.eseguibili.download_claim_store.try_acquire",
+               return_value=True), \
+         patch("app.core.eseguibili.download_claim_store.release") as mock_release, \
+         patch("app.core.eseguibili.output_store.delete_task_outputs",
+               side_effect=RuntimeError("S3 temporaneamente down")) as mock_delete:
 
         response = download_eseguibile_output(
             eseguibile_id="exe-1", task_id="t1",
@@ -229,9 +235,70 @@ def test_eseguibili_download_cleanup_runs_even_if_delete_by_task_raises():
         from fastapi.responses import StreamingResponse
         assert isinstance(response, StreamingResponse)
 
-        # Esegui cleanup: NON deve crashare, owner cleanup parte comunque
-        bg.tasks[0].func()
-        mock_del_owner.assert_called_once_with("t1", group_id="g1")
+        assert b"".join(response.owned_content) == b"abc"
+        response.close()
+        mock_delete.assert_called_once_with(
+            "t1", group_id="g1", retain_owner=True,
+        )
+        mock_release.assert_called_once()
+
+
+def test_eseguibili_partial_download_keeps_output_and_releases_claim():
+    from fastapi import BackgroundTasks
+    from app.core.eseguibili.router import download_eseguibile_output
+
+    fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
+    with patch("app.core.eseguibili.router.eseguibili_db.get_eseguibile",
+               return_value={"id": "exe-1", "group_id": "g1"}), \
+         patch("app.core.eseguibili.router._check_visible", return_value=None), \
+         patch("app.core.eseguibili.router._load_task_owner",
+               return_value={"eseguibile_id": "exe-1", "user_id": "u1"}), \
+         patch("app.core.eseguibili.storage.find_keys",
+               return_value=["eseguibili-outputs/t1/out.csv"]), \
+         patch("app.core.eseguibili.storage.open_stream",
+               return_value={"body": iter([b"abc", b"def"]), "size": 6}), \
+         patch("app.core.eseguibili.download_claim_store.try_acquire",
+               return_value=True), \
+         patch("app.core.eseguibili.download_claim_store.release") as mock_release, \
+         patch("app.core.eseguibili.output_store.delete_task_outputs") as mock_delete:
+        response = download_eseguibile_output(
+            eseguibile_id="exe-1",
+            task_id="t1",
+            background_tasks=BackgroundTasks(),
+            current_user=fake_user,
+        )
+        assert next(response.owned_content) == b"abc"
+        response.close()
+
+    mock_delete.assert_not_called()
+    mock_release.assert_called_once()
+
+
+def test_eseguibili_concurrent_download_returns_conflict():
+    from fastapi import BackgroundTasks, HTTPException
+    from app.core.eseguibili.router import download_eseguibile_output
+
+    fake_user = MagicMock(user_id="u1", role="superadmin", group_id="g1")
+    with patch("app.core.eseguibili.router.eseguibili_db.get_eseguibile",
+               return_value={"id": "exe-1", "group_id": "g1"}), \
+         patch("app.core.eseguibili.router._check_visible", return_value=None), \
+         patch("app.core.eseguibili.router._load_task_owner",
+               return_value={"eseguibile_id": "exe-1", "user_id": "u1"}), \
+         patch("app.core.eseguibili.storage.find_keys",
+               return_value=["eseguibili-outputs/t1/out.csv"]), \
+         patch("app.core.eseguibili.download_claim_store.try_acquire",
+               return_value=False), \
+         patch("app.core.eseguibili.storage.open_stream") as mock_open:
+        with pytest.raises(HTTPException) as exc:
+            download_eseguibile_output(
+                eseguibile_id="exe-1",
+                task_id="t1",
+                background_tasks=BackgroundTasks(),
+                current_user=fake_user,
+            )
+
+    assert exc.value.status_code == 409
+    mock_open.assert_not_called()
 
 
 # 3. Task result payload shape (post save_pipeline_result_outcome)

@@ -8,6 +8,7 @@ import time
 from collections.abc import Mapping
 from typing import Literal, Optional, List
 from typing_extensions import TypedDict
+from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query
 from fastapi.responses import JSONResponse, Response, StreamingResponse
@@ -54,7 +55,13 @@ from app.shared.execution.output_contract_types_enricher import (
     enrich_canvas_types_from_output_contract,
 )
 from app.core.eseguibili import output_store as _eseg_output_store
+from app.core.eseguibili import download_claim_store as _download_claim_store
 from app.core.eseguibili import db as eseguibili_db
+from app.core.io.http_streaming import (
+    CloseableStreamingResponse,
+    CompletionTrackingIterator,
+    safe_download_filename,
+)
 from app.core.results import output_file_cleanup
 
 def _mime_for_filename(filename: str) -> str:
@@ -508,7 +515,7 @@ def cancel_task(
                 "Cleanup parziale — almeno uno degli step ha fallito. "
                 "Body: {status: 'partial', failed_steps: [step_name, ...]} "
                 "dove step_name in {delete_result, unlink_output_file, "
-                "delete_log_runs, celery_forget}."
+                "delete_eseguibile_outputs, delete_log_runs, celery_forget}."
             )
         },
     },
@@ -532,8 +539,8 @@ def cleanup_task_completely(
       - Idempotente: ripetere su stesso task non è un errore.
 
     STATUS CODE:
-      - 204: tutti e 4 gli step cleanup (delete_result, unlink_output_file,
-        delete_log_runs, celery_forget) sono andati a buon fine.
+      - 204: tutti gli step applicabili, incluso l'object storage degli
+        eseguibili, sono andati a buon fine.
       - 207: almeno uno step ha sollevato. Body JSON con `failed_steps`
         list espone al caller quali step non sono stati completati.
         Gli step sono best-effort individualmente (uno che fallisce non
@@ -543,6 +550,7 @@ def cleanup_task_completely(
     """
     project_id = None
     task_result_payload: JsonObject = {}
+    task_info = None
     try:
         task_info = task_service_module.task_service.get_task_status(task_id)
         project_id = task_info.project_id
@@ -558,23 +566,43 @@ def cleanup_task_completely(
             status_code=404,
             detail="Task non trovato o senza progetto associato — cleanup non eseguibile",
         )
-    try:
-        _meta = _project_service().get_project_metadata(project_id)
-    except Exception as e:
-        logger.warning(
-            f"[GESTITO] full-cleanup tenant check: project lookup project_id={project_id} fallito: {e}",
-            exc_info=True,
-        )
-        _meta = None
-    if _meta is None:
-        # Progetto già eliminato: solo admin/superadmin possono fare cleanup residui
-        if current_user.role not in ("admin", "superadmin"):
+    is_eseguibile = bool(task_result_payload.get("is_eseguibile"))
+    eseguibile_group_id = ""
+    if is_eseguibile:
+        eseguibile_record = eseguibili_db.get_eseguibile(project_id)
+        if eseguibile_record is None:
             raise HTTPException(
                 status_code=404,
-                detail="Progetto associato al task non trovato",
+                detail="Eseguibile associato al task non trovato",
             )
-    else:
-        assert_group_access(_meta, current_user, f"Task '{task_id}'")
+        from app.core.eseguibili.router import _check_visible
+
+        _check_visible(eseguibile_record, current_user)
+        eseguibile_group_id = str(eseguibile_record.get("group_id") or "")
+        _assert_eseguibile_task_owner(
+            task_id,
+            current_user,
+            expected_eseguibile_id=project_id,
+            expected_group_id=eseguibile_group_id,
+        )
+    if not is_eseguibile:
+        try:
+            _meta = _project_service().get_project_metadata(project_id)
+        except Exception as e:
+            logger.warning(
+                f"[GESTITO] full-cleanup tenant check: project lookup project_id={project_id} fallito: {e}",
+                exc_info=True,
+            )
+            _meta = None
+        if _meta is None:
+            # Progetto già eliminato: solo admin/superadmin possono fare cleanup residui
+            if current_user.role not in ("admin", "superadmin"):
+                raise HTTPException(
+                    status_code=404,
+                    detail="Progetto associato al task non trovato",
+                )
+        else:
+            assert_group_access(_meta, current_user, f"Task '{task_id}'")
 
     # Cleanup scoped AL SINGOLO task_id (NON all'intero progetto!
     # Rimuoviamo
@@ -588,6 +616,22 @@ def cleanup_task_completely(
     # non blocca i successivi) ma l'esito aggregato finisce nel body 207 cosi'
     # che il caller sappia quali step non sono andati a buon fine
     failed_steps: List[str] = []
+
+    # Eseguibili persist outputs and the task-owner sidecar outside the generic
+    # results store. This step is required for the GDPR "remove every trace"
+    # contract and remains retryable when object storage is temporarily down.
+    if is_eseguibile:
+        try:
+            _eseg_output_store.delete_task_outputs(
+                task_id,
+                group_id=eseguibile_group_id,
+            )
+        except Exception as e:
+            logger.warning(
+                f"cleanup: errore delete output eseguibile: {e}",
+                exc_info=True,
+            )
+            failed_steps.append("delete_eseguibile_outputs")
 
     # intent: cascade step best-effort / outcome: fail-open con aggregazione
     # 3. Result row: solo il record di questo task, non tutti del progetto
@@ -724,28 +768,114 @@ def download_task_result(
                     expected_eseguibile_id=project_id,
                     expected_group_id=eseguibile_group_id,
                 )
-                # Tipicamente 1 file per task. Se multipli, primo e' OK
-                # convention: un solo output per task eseguibile
-                storage_key = storage_keys[0]
-                storage_filename = storage_key.rsplit("/", 1)[-1]
+                try:
+                    storage_key = _eseg_output_store.select_output_key(
+                        storage_keys,
+                        expected_filename=str(
+                            eseguibile_payload.get("output_file") or ""
+                        ) or None,
+                    )
+                except RuntimeError as selection_error:
+                    logger.error(
+                        "Selezione output eseguibile ambigua task_id=%s: %s",
+                        task_id,
+                        selection_error,
+                    )
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Output eseguibile ambiguo; cleanup manuale richiesto",
+                    ) from selection_error
+                storage_filename = safe_download_filename(
+                    storage_key, fallback="output.bin",
+                )
+                claim_token = uuid4().hex
+                try:
+                    claimed = _download_claim_store.try_acquire(
+                        task_id=safe_task_id,
+                        group_id=eseguibile_group_id,
+                        owner_token=claim_token,
+                    )
+                except Exception as claim_error:
+                    logger.error(
+                        "Claim download eseguibile fallito task_id=%s: %s",
+                        safe_task_id,
+                        claim_error,
+                        exc_info=True,
+                    )
+                    raise HTTPException(
+                        status_code=503,
+                        detail="Download temporaneamente non disponibile",
+                    ) from claim_error
+                if not claimed:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Output gia' in download",
+                    )
                 try:
                     storage_stream = _eseg_output_store.open_stream(
                         storage_key, expected_group_id=eseguibile_group_id,
                     )
                 except Exception as storage_error:
+                    try:
+                        _download_claim_store.release(
+                            task_id=safe_task_id,
+                            group_id=eseguibile_group_id,
+                            owner_token=claim_token,
+                        )
+                    except Exception:
+                        logger.warning(
+                            "Release claim dopo open_stream fallito task_id=%s",
+                            safe_task_id,
+                            exc_info=True,
+                        )
                     logger.error(f"[CRASH] open_stream eseguibile {storage_key}: {storage_error}", exc_info=True)
                     raise HTTPException(status_code=500, detail="Errore apertura stream output")
 
+                stream_size = int(storage_stream.get("size") or 0)
+
+                def _refresh_download_claim(_bytes_yielded: int) -> None:
+                    if not _download_claim_store.refresh(
+                        task_id=safe_task_id,
+                        group_id=eseguibile_group_id,
+                        owner_token=claim_token,
+                    ):
+                        raise RuntimeError("Lease download eseguibile persa")
+
+                tracked_body = CompletionTrackingIterator(
+                    storage_stream["body"],
+                    expected_size=stream_size or None,
+                    on_progress=_refresh_download_claim,
+                )
+
                 def _cleanup_after_send(task_id_to_delete: str = safe_task_id) -> None:
                     try:
-                        _eseg_output_store.delete_task_outputs(
-                            task_id_to_delete, group_id=eseguibile_group_id,
-                        )
+                        if tracked_body.completed:
+                            _eseg_output_store.delete_task_outputs(
+                                task_id_to_delete,
+                                group_id=eseguibile_group_id,
+                                retain_owner=True,
+                            )
+                        else:
+                            logger.info(
+                                "Download incompleto: output conservato task_id=%s bytes=%s",
+                                task_id_to_delete,
+                                tracked_body.bytes_yielded,
+                            )
                     except Exception as storage_error:
                         logger.warning(f"Cleanup post-download S3 fallito per {task_id_to_delete}: {storage_error}")
-
-                background_tasks.add_task(_cleanup_after_send)
-                stream_size = storage_stream.get("size") or 0
+                    finally:
+                        try:
+                            _download_claim_store.release(
+                                task_id=task_id_to_delete,
+                                group_id=eseguibile_group_id,
+                                owner_token=claim_token,
+                            )
+                        except Exception:
+                            logger.warning(
+                                "Release claim download fallito task_id=%s",
+                                task_id_to_delete,
+                                exc_info=True,
+                            )
                 logger.info(
                     f"download task {task_id}: fast-path eseguibile (S3 stream) "
                     f"celery={time_celery_loaded - time_started:.3f}s "
@@ -758,10 +888,11 @@ def download_task_result(
                 }
                 if stream_size:
                     response_headers["Content-Length"] = str(stream_size)
-                return StreamingResponse(
-                    storage_stream["body"],
+                return CloseableStreamingResponse(
+                    tracked_body,
                     media_type=_mime_for_filename(storage_filename),
                     headers=response_headers,
+                    on_close=_cleanup_after_send,
                 )
 
         # Ogni task_id ha il proprio result_id nel payload Celery. Usiamo
@@ -802,7 +933,9 @@ def download_task_result(
         time_blob_loaded = time.perf_counter()
 
         # Sanitizza filename per prevenire header injection (CRLF
-        safe_filename = str(stream["filename"]).replace("\r", "").replace("\n", "").replace('"', "'")
+        safe_filename = safe_download_filename(
+            stream["filename"], fallback="result.bin",
+        )
         total = int(stream["size"])
 
         time_prepared = time.perf_counter()
@@ -813,7 +946,7 @@ def download_task_result(
             f"size={total / (1024*1024):.2f}MB filename={safe_filename}"
         )
 
-        return StreamingResponse(
+        return CloseableStreamingResponse(
             stream["body"],
             media_type=_mime_for_filename(str(stream["filename"])),
             headers={

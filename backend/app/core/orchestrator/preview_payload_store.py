@@ -22,6 +22,7 @@ from app.core.io.tenant_namespace import (
     legacy_domain,
     tenant_domain_prefix,
 )
+from app.core.io.http_streaming import close_stream_body
 from app.shared.resources.storage_layout import PREVIEWS_PREFIX
 from app.utils.logger import get_logger
 from app.core.io.bounded_streams import spool_memory_limit, stream_size
@@ -133,6 +134,7 @@ def hydrate_preview_payload(
         stream = object_storage_module.get_runtime_object_storage().get_object_stream(key)
         declared_size = int(stream.get("size") or 0)
         if max_bytes > 0 and declared_size > max_bytes:
+            close_stream_body(stream)
             raise PreviewPayloadError(
                 f"Preview {declared_size} byte supera PREVIEW_PAYLOAD_MAX_BYTES={max_bytes}"
             )

@@ -21,9 +21,13 @@ class _FakeStorage:
         self.objects: dict[str, bytes] = {}
         self.deleted: list[str] = []
         self.list_response: list[dict[str, object]] = []
+        self.tags: dict[str, dict[str, str]] = {}
 
     def upload_bytes(self, data: bytes, key: str) -> None:
         self.objects[key] = data
+
+    def set_object_tags(self, key: str, tags: dict[str, str]) -> None:
+        self.tags[key] = dict(tags)
 
     def get_object_stream(self, key: str) -> dict:
         if key not in self.objects:
@@ -120,7 +124,7 @@ def test_find_output_keys_filters_owner_sidecar(fake_storage):
     ]
 
 
-def test_delete_task_outputs_cleans_owner_even_if_storage_delete_fails(
+def test_delete_task_outputs_preserves_owner_if_storage_delete_fails(
     monkeypatch,
     fake_storage,
 ):
@@ -128,10 +132,13 @@ def test_delete_task_outputs_cleans_owner_even_if_storage_delete_fails(
     from app.core.eseguibili import storage
 
     deleted_owner: list[str] = []
+    fake_storage.list_response = [
+        {"key": "tenants/g1/eseguibili-outputs/task-1/out.csv"},
+    ]
     monkeypatch.setattr(
         storage,
-        "delete_by_task",
-        lambda task_id, **kwargs: (_ for _ in ()).throw(RuntimeError("storage down")),
+        "delete_key",
+        lambda key, **kwargs: (_ for _ in ()).throw(RuntimeError("storage down")),
     )
     monkeypatch.setattr(
         output_store,
@@ -139,10 +146,47 @@ def test_delete_task_outputs_cleans_owner_even_if_storage_delete_fails(
         lambda task_id, **kwargs: deleted_owner.append(task_id),
     )
 
-    with pytest.raises(RuntimeError, match="storage down"):
+    with pytest.raises(RuntimeError, match="Cleanup output incompleto"):
         output_store.delete_task_outputs("task-1", group_id="g1")
 
-    assert deleted_owner == ["task-1"]
+    assert deleted_owner == []
+
+
+def test_select_output_key_uses_expected_filename_and_rejects_ambiguity():
+    from app.core.eseguibili import output_store
+
+    keys = [
+        "tenants/g1/eseguibili-outputs/task-1/stale.csv",
+        "tenants/g1/eseguibili-outputs/task-1/final.csv",
+    ]
+    assert output_store.select_output_key(
+        keys,
+        expected_filename="C:\\results\\final.csv",
+    ).endswith("/final.csv")
+    with pytest.raises(RuntimeError, match="ambiguo"):
+        output_store.select_output_key(keys)
+
+
+def test_delete_task_outputs_can_retain_owner_after_download(monkeypatch, fake_storage):
+    from app.core.eseguibili import output_store
+
+    fake_storage.list_response = [
+        {"key": "tenants/g1/eseguibili-outputs/task-1/out.csv"},
+        {"key": "tenants/g1/eseguibili-outputs/task-1/__owner.json"},
+    ]
+    deleted_owner: list[str] = []
+    monkeypatch.setattr(
+        output_store,
+        "delete_task_owner",
+        lambda task_id, **kwargs: deleted_owner.append(task_id),
+    )
+
+    assert output_store.delete_task_outputs(
+        "task-1",
+        group_id="g1",
+        retain_owner=True,
+    ) == 1
+    assert deleted_owner == []
 
 
 def test_invalid_remote_owner_metadata_fails_closed(fake_storage, tmp_path):

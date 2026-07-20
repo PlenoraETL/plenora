@@ -11,7 +11,6 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.config import settings as _settings_cfg
@@ -25,6 +24,7 @@ from app.core.tickets import service as svc
 from app.shared.contracts.payloads import JsonObject
 from app.utils.logger import get_logger
 from app.core.io.bounded_streams import read_prefix
+from app.core.io.http_streaming import CloseableStreamingResponse
 from app.core.security.upload_guards import enforce_upload_size_limit
 
 logger = get_logger(__name__)
@@ -377,17 +377,17 @@ def download_attachment_endpoint(
     if not attachment or attachment.ticket_id != ticket_id:
         raise HTTPException(404, "Allegato non trovato")
 
+    # Recupera metadata del file_source per filename + format
+    fs_row = files_db.get_file_source(attachment.file_source_id, include_data=False)
+    if not fs_row:
+        raise HTTPException(404, "File source non trovato")
+
     fs = file_service_module.FileSourceService()
     resource = fs.get_blob_stream(
         attachment.file_source_id, expected_group_id=ticket.group_id,
     )
     if resource is None or resource.stream is None:
         raise HTTPException(404, "Blob allegato non disponibile")
-
-    # Recupera metadata del file_source per filename + format
-    fs_row = files_db.get_file_source(attachment.file_source_id, include_data=False)
-    if not fs_row:
-        raise HTTPException(404, "File source non trovato")
 
     filename = fs_row.get("original_filename") or "attachment"
     fmt = (fs_row.get("format") or "").lower()
@@ -398,7 +398,7 @@ def download_attachment_endpoint(
         blob_size=int(fs_row.get("size_bytes") or resource.size_bytes or 0),
         allowed_extensions=_ALLOWED_EXTENSIONS,
     )
-    return StreamingResponse(
+    return CloseableStreamingResponse(
         resource.stream,
         media_type=mime,
         headers=headers,

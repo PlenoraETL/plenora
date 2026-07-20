@@ -387,3 +387,37 @@ def test_minio_object_storage_satisfies_protocol(cb):
         secret_key="sk",
     )
     assert isinstance(storage, cb.ObjectStorage)
+
+
+def test_owned_object_body_closes_provider_on_eof(cb):
+    raw = MagicMock()
+    raw.read.side_effect = [b"abc", b""]
+
+    body = cb.OwnedObjectBody(raw, chunk_size=3)
+
+    assert list(body) == [b"abc"]
+    raw.close.assert_called_once_with()
+    assert body.closed is True
+
+
+def test_owned_object_body_closes_provider_when_consumer_stops(cb):
+    raw = MagicMock()
+    raw.read.return_value = b"abc"
+    body = cb.OwnedObjectBody(raw, chunk_size=3)
+
+    assert next(body) == b"abc"
+    body.close()
+    body.close()
+
+    raw.close.assert_called_once_with()
+
+
+def test_owned_object_body_closes_provider_on_read_error(cb):
+    raw = MagicMock()
+    raw.read.side_effect = OSError("connection reset")
+    body = cb.OwnedObjectBody(raw)
+
+    with pytest.raises(OSError, match="connection reset"):
+        next(body)
+
+    raw.close.assert_called_once_with()

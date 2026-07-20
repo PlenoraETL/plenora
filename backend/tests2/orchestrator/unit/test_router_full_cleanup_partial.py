@@ -113,6 +113,48 @@ def test_full_cleanup_returns_204_when_all_steps_succeed(client, tmp_path):
     assert response.content == b""
 
 
+def test_full_cleanup_authorizes_and_deletes_eseguibile_artifacts(client, tmp_path):
+    task_info = SimpleNamespace(
+        project_id="exec_1",
+        result={
+            "project_id": "exec_1",
+            "is_eseguibile": True,
+            "result_id": "res-1",
+        },
+    )
+    with patch(
+        "app.core.orchestrator.task_service.task_service.get_task_status",
+        return_value=task_info,
+    ), patch(
+        "app.core.eseguibili.db.get_eseguibile",
+        return_value={"id": "exec_1", "group_id": "grp-1"},
+    ), patch(
+        "app.core.eseguibili.router._check_visible",
+    ), patch(
+        "app.core.orchestrator.router._assert_eseguibile_task_owner",
+    ) as owner_check, patch(
+        "app.core.eseguibili.output_store.delete_task_outputs",
+        return_value=1,
+    ) as delete_outputs, patch(
+        "app.core.results.cleanup.delete_result",
+        return_value=True,
+    ), patch(
+        "app.core.orchestrator.log_cleanup.delete_task_log_runs",
+        return_value=1,
+    ), patch(
+        "app.core.orchestrator.task_service.task_service.forget_task_result",
+        return_value=None,
+    ), patch(
+        "app.core.orchestrator.router.settings",
+        new=SimpleNamespace(RESULTS_DIR=tmp_path),
+    ):
+        response = client.delete("/api/tasks/task-exec/full-cleanup")
+
+    assert response.status_code == 204
+    owner_check.assert_called_once()
+    delete_outputs.assert_called_once_with("task-exec", group_id="grp-1")
+
+
 # PARTIAL PATH — singoli step che falliscono (207 Multi-Status)
 
 

@@ -18,6 +18,23 @@
             "Effect": "Allow",
             "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
             "Resource": "arn:aws:s3:::plenora-backup-112011134642-eu-south-1-an/file-sources/*"
+        },
+        {
+            "Sid": "ListRuntimeBucket",
+            "Effect": "Allow",
+            "Action": ["s3:ListBucket"],
+            "Resource": "arn:aws:s3:::plenora-runtime-112011134642-eu-south-1-an"
+        },
+        {
+            "Sid": "RuntimeArtifacts",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject",
+                "s3:PutObjectTagging",
+                "s3:GetObject",
+                "s3:DeleteObject"
+            ],
+            "Resource": "arn:aws:s3:::plenora-runtime-112011134642-eu-south-1-an/*"
         }
     ]
 }
