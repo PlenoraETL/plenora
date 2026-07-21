@@ -252,8 +252,11 @@ def test_xlsx_stream_writer_is_forward_only_and_roundtrips(
 
     raw = sink.getvalue()
     assert raw.startswith(b"PK")
-    assert len(sink.parts) > 1
-    assert max(map(len, sink.parts)) < len(raw)
+    assert sink.parts
+    # Il writer Python emette molti frammenti ZIP; l'acceleratore nativo copia
+    # il file gia' validato in blocchi limitati a 1 MiB (un solo blocco e'
+    # corretto per workbook piccoli).
+    assert max(map(len, sink.parts)) <= 1024 * 1024
 
     back = pd.read_excel(io.BytesIO(raw))
     assert list(back.columns) == list(tortured_tabular_df.columns)
@@ -274,6 +277,37 @@ def test_xlsx_stream_writer_normalizes_timezone_aware_datetimes_to_utc():
     value = workbook.active["A2"].value
     assert value == datetime(2026, 7, 13, 10, 0)
     assert value.tzinfo is None
+
+
+def test_xlsx_stream_writer_handles_nullable_native_dtypes():
+    from openpyxl import load_workbook
+
+    from app.core.dataframes.export_writer import write_dataframe_to_xlsx_stream
+
+    df = pd.DataFrame(
+        {
+            "integer": pd.Series([1, pd.NA], dtype="Int64"),
+            "floating": pd.Series([1.5, float("inf")], dtype="Float64"),
+            "flag": pd.Series([True, pd.NA], dtype="boolean"),
+            "text": pd.Series(["prima\r\nriga   ", pd.NA], dtype="string"),
+        }
+    )
+    sink = _ForwardOnlyXlsxSink()
+    write_dataframe_to_xlsx_stream(df, sink)
+
+    sheet = load_workbook(io.BytesIO(sink.getvalue()), data_only=True).active
+    assert [sheet.cell(2, column).value for column in range(1, 5)] == [
+        1,
+        1.5,
+        True,
+        "prima riga",
+    ]
+    assert [sheet.cell(3, column).value for column in range(1, 5)] == [
+        None,
+        "inf",
+        None,
+        None,
+    ]
 
 
 def test_xlsx_declared_dates_are_cells_and_pre_1900_values_are_preserved():

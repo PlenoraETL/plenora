@@ -100,5 +100,8 @@ dmypy.json
 # Node.js / Frontend
 node_modules/
 .npm/
+
+# Rust native helpers
+target/
 # Agent coordination scratchpad
 .agent-temp/

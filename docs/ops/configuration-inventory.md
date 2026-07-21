@@ -10,7 +10,7 @@ variabili d'ambiente; non esiste un `configuration.py` o un `config.json`.
 - Chiavi senza un effetto runtime rimosse: 18.
 - Default PostgreSQL prima duplicati in `pg_connection.py` centralizzati: 4.
 - Altri default sparsi centralizzati (`DB_SCHEMA`, broker, cloud provider): 3.
-- Default canonici dopo l'audit: 117.
+- Default canonici dopo l'audit e l'acceleratore XLSX: 120.
 - Alias legacy Celery/Redis conservati: 11, per non rompere installazioni
   esistenti. Devono essere rimossi solo con una migrazione di release.
 

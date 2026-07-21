@@ -1,0 +1,10 @@
+Plenora XLSX exporter third-party notices
+==========================================
+
+rust_xlsxwriter
+Copyright (c) John McNamara
+Licensed under either the MIT License or the Apache License, Version 2.0.
+https://github.com/jmcnamara/rust_xlsxwriter
+
+The complete dependency graph and exact versions are recorded in Cargo.lock.
+Each dependency remains subject to its own license terms.

@@ -37,7 +37,7 @@ import threading
 from contextlib import suppress
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Iterable, Iterator, Mapping, Sequence
+from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence
 
 import numpy as np
 import pandas as pd
@@ -52,12 +52,74 @@ _DEFAULT_CHUNKSIZE = 10_000
 _XLSX_MAX_ROWS = 1_048_576
 _XLSX_MAX_COLUMNS = 16_384
 _DIRTY_TEXT_CONTROLS = re.compile(r"[\x00-\x1f\u2028\u2029]+")
+_XLSX_WRITE_GENERIC = 0
+_XLSX_WRITE_INTEGER = 1
+_XLSX_WRITE_FLOAT = 2
+_XLSX_WRITE_BOOLEAN = 3
+_XLSX_WRITE_STRING = 4
+
+
+class NativeXlsxUnsupported(ValueError):
+    """The dataframe cannot retain its XLSX semantics through the native CLI."""
+
+
+def _native_xlsx_has_multiindex_columns(df: Any) -> bool:
+    return isinstance(df.columns, pd.MultiIndex)
+
+
+def _native_xlsx_object_column_type(series: Any) -> str:
+    inferred = pd.api.types.infer_dtype(series, skipna=True)
+    if inferred in {"empty", "string", "unicode", "bytes"}:
+        return "string"
+    if inferred == "boolean":
+        return "boolean"
+    if inferred == "integer":
+        return "integer"
+    if inferred in {"floating", "mixed-integer-float"}:
+        return "float"
+    if inferred == "decimal":
+        return "decimal"
+    if inferred == "date":
+        return "date"
+    if inferred in {"datetime", "datetime64", "datetime64tz"}:
+        return "datetime"
+    raise NativeXlsxUnsupported(
+        f"tipo object XLSX non supportato dal bridge nativo: {inferred}"
+    )
+
+
+def _native_xlsx_column_type(series: Any, declared_type: str) -> str:
+    if declared_type == "date":
+        return "date"
+    if declared_type in {"datetime", "timestamp"} or declared_type.startswith(
+        "datetime64"
+    ):
+        return "datetime"
+
+    dtype = series.dtype
+    if pd.api.types.is_bool_dtype(dtype):
+        return "boolean"
+    if pd.api.types.is_integer_dtype(dtype):
+        return "integer"
+    if pd.api.types.is_float_dtype(dtype):
+        return "float"
+    if pd.api.types.is_datetime64_any_dtype(dtype):
+        return "datetime"
+    if pd.api.types.is_timedelta64_dtype(dtype):
+        return "string"
+    if pd.api.types.is_object_dtype(dtype) or isinstance(dtype, pd.CategoricalDtype):
+        return _native_xlsx_object_column_type(series)
+    if pd.api.types.is_string_dtype(dtype):
+        return "string"
+    raise NativeXlsxUnsupported(f"dtype XLSX non supportato: {dtype}")
 
 
 def _clean_export_text(value: str) -> str:
     """Flatten control/newline noise and remove fixed-width right padding."""
 
-    return _DIRTY_TEXT_CONTROLS.sub(" ", value).rstrip()
+    if _DIRTY_TEXT_CONTROLS.search(value):
+        value = _DIRTY_TEXT_CONTROLS.sub(" ", value)
+    return value.rstrip()
 
 
 def _clean_export_text_chunk(df: Any) -> Any:
@@ -68,7 +130,10 @@ def _clean_export_text_chunk(df: Any) -> Any:
     result = df.copy(deep=False)
     changed = False
     for index, dtype in enumerate(df.dtypes):
-        if dtype != object and not pd.api.types.is_string_dtype(dtype):
+        if not (
+            pd.api.types.is_object_dtype(dtype)
+            or pd.api.types.is_string_dtype(dtype)
+        ):
             continue
         series = df.iloc[:, index]
         cleaned = series.map(
@@ -135,8 +200,8 @@ def _coerce_declared_excel_temporal(value: Any, raw_type: Any) -> Any:
     return parsed
 
 
-def _xlsx_cell_value(value: Any, declared_type: Any = None) -> Any:
-    """Normalize one pandas/numpy value for the XLSX writer."""
+def _xlsx_plain_cell_value(value: Any) -> Any:
+    """Normalize one pandas/numpy value without logical-type coercion."""
     if value is None or value is pd.NA or value is pd.NaT:
         return None
 
@@ -154,12 +219,7 @@ def _xlsx_cell_value(value: Any, declared_type: Any = None) -> Any:
             return "inf" if value > 0 else "-inf"
         return value
     if value_type is str:
-        value = _clean_export_text(value)
-        if not declared_type or not _is_declared_excel_temporal(declared_type):
-            return value
-        value = _coerce_declared_excel_temporal(value, declared_type)
-        if isinstance(value, str):
-            return value
+        return _clean_export_text(value)
 
     if isinstance(value, np.generic):
         value = value.item()
@@ -178,8 +238,6 @@ def _xlsx_cell_value(value: Any, declared_type: Any = None) -> Any:
         return text or "0"
     if isinstance(value, str):
         value = _clean_export_text(value)
-    if declared_type and _is_declared_excel_temporal(declared_type):
-        value = _coerce_declared_excel_temporal(value, declared_type)
     if isinstance(value, pd.Timestamp):
         value = value.to_pydatetime()
     elif isinstance(value, pd.Timedelta):
@@ -202,6 +260,100 @@ def _xlsx_cell_value(value: Any, declared_type: Any = None) -> Any:
     return str(value)
 
 
+def _xlsx_temporal_cell_converter(raw_type: Any) -> Callable[[Any], Any]:
+    """Compile temporal parsing once for a declared XLSX column."""
+
+    def convert(value: Any) -> Any:
+        if type(value) is str:
+            value = _clean_export_text(value)
+            value = _coerce_declared_excel_temporal(value, raw_type)
+        return _xlsx_plain_cell_value(value)
+
+    return convert
+
+
+def _compile_xlsx_cell_converter(
+    declared_type: Any = None,
+) -> Callable[[Any], Any]:
+    """Select one stable converter per column instead of branching per cell."""
+    if declared_type and _is_declared_excel_temporal(declared_type):
+        return _xlsx_temporal_cell_converter(declared_type)
+    return _xlsx_plain_cell_value
+
+
+def _xlsx_column_writer_kind(declared_type: Any = None, dtype: Any = None) -> int:
+    """Return the cheapest safe XlsxWriter method for a known dataframe dtype."""
+    if declared_type and _is_declared_excel_temporal(declared_type):
+        return _XLSX_WRITE_GENERIC
+    if dtype is None or pd.api.types.is_object_dtype(dtype):
+        return _XLSX_WRITE_GENERIC
+    if pd.api.types.is_bool_dtype(dtype):
+        return _XLSX_WRITE_BOOLEAN
+    if pd.api.types.is_integer_dtype(dtype):
+        return _XLSX_WRITE_INTEGER
+    if pd.api.types.is_float_dtype(dtype):
+        return _XLSX_WRITE_FLOAT
+    if pd.api.types.is_string_dtype(dtype):
+        return _XLSX_WRITE_STRING
+    return _XLSX_WRITE_GENERIC
+
+
+def _write_typed_xlsx_row(
+    worksheet: Any,
+    row_number: int,
+    row: Sequence[Any],
+    converters: Sequence[Callable[[Any], Any]],
+    writer_kinds: Sequence[int],
+) -> int:
+    """Write a dataframe row without repeating XlsxWriter type dispatch."""
+    write = worksheet.write
+    write_number = worksheet.write_number
+    write_boolean = worksheet.write_boolean
+    write_string = worksheet.write_string
+    for column_number, (raw_value, converter, writer_kind) in enumerate(
+        zip(row, converters, writer_kinds)
+    ):
+        if writer_kind == _XLSX_WRITE_INTEGER:
+            if raw_value is None or raw_value is pd.NA:
+                continue
+            value = raw_value if type(raw_value) is int else int(raw_value)
+            status = write_number(row_number, column_number, value)
+        elif writer_kind == _XLSX_WRITE_FLOAT:
+            if raw_value is None or raw_value is pd.NA:
+                continue
+            value = raw_value if type(raw_value) is float else float(raw_value)
+            if math.isnan(value):
+                continue
+            if math.isinf(value):
+                status = write_string(
+                    row_number,
+                    column_number,
+                    "inf" if value > 0 else "-inf",
+                )
+            else:
+                status = write_number(row_number, column_number, value)
+        elif writer_kind == _XLSX_WRITE_BOOLEAN:
+            if raw_value is None or raw_value is pd.NA:
+                continue
+            value = raw_value if type(raw_value) is bool else bool(raw_value)
+            status = write_boolean(row_number, column_number, value)
+        elif writer_kind == _XLSX_WRITE_STRING and type(raw_value) is str:
+            status = write_string(
+                row_number,
+                column_number,
+                _clean_export_text(raw_value),
+            )
+        else:
+            value = converter(raw_value)
+            # XlsxWriter's unformatted ``write(None)`` is a no-op as well.
+            if value is None:
+                continue
+            status = write(row_number, column_number, value)
+        if status != 0:
+            return status
+    return 0
+
+
 def write_rows_to_xlsx_stream(
     rows: Iterable[Sequence[Any]],
     columns: Sequence[Any],
@@ -209,6 +361,7 @@ def write_rows_to_xlsx_stream(
     *,
     sheet_name: str = "Sheet1",
     column_types: Mapping[str, Any] | None = None,
+    column_dtypes: Sequence[Any] | None = None,
     row_count_hint: int | None = None,
 ) -> int:
     """Write tabular rows incrementally to a forward-only XLSX sink.
@@ -236,6 +389,10 @@ def write_rows_to_xlsx_stream(
             f"XLSX supporta al massimo {_XLSX_MAX_COLUMNS} colonne; "
             f"ricevute {column_count}"
         )
+    if column_dtypes is not None and len(column_dtypes) != column_count:
+        raise ValueError(
+            "Il numero dei dtype XLSX non coincide con quello delle colonne"
+        )
 
     workbook = xlsxwriter.Workbook(
         sink,
@@ -253,7 +410,7 @@ def write_rows_to_xlsx_stream(
         status = worksheet.write_row(
             0,
             0,
-            [_xlsx_cell_value(column) for column in columns],
+            [_xlsx_plain_cell_value(column) for column in columns],
         )
         if status != 0:
             raise ValueError(f"Impossibile scrivere l'intestazione XLSX (codice {status})")
@@ -266,20 +423,43 @@ def write_rows_to_xlsx_stream(
             or declared_by_lower.get(str(column).lower())
             for column in columns
         ]
+        dtypes = (
+            column_dtypes
+            if column_dtypes is not None
+            else [None] * column_count
+        )
+        converters = [
+            _compile_xlsx_cell_converter(declared_type)
+            for declared_type in declared_types
+        ]
+        writer_kinds = [
+            _xlsx_column_writer_kind(declared_type, dtype)
+            for declared_type, dtype in zip(declared_types, dtypes)
+        ]
+        has_dataframe_dtypes = column_dtypes is not None
         row_count = 0
         for row_number, row in enumerate(rows, 1):
             if row_number >= _XLSX_MAX_ROWS:
                 raise ValueError(
                     f"XLSX supporta al massimo {_XLSX_MAX_ROWS - 1} righe dati"
                 )
-            status = worksheet.write_row(
-                row_number,
-                0,
-                [
-                    _xlsx_cell_value(value, declared_type)
-                    for value, declared_type in zip(row, declared_types)
-                ],
-            )
+            if has_dataframe_dtypes:
+                status = _write_typed_xlsx_row(
+                    worksheet,
+                    row_number,
+                    row,
+                    converters,
+                    writer_kinds,
+                )
+            else:
+                status = worksheet.write_row(
+                    row_number,
+                    0,
+                    [
+                        converter(value)
+                        for value, converter in zip(row, converters)
+                    ],
+                )
             if status != 0:
                 raise ValueError(
                     f"Impossibile scrivere la riga XLSX {row_number + 1} "
@@ -302,13 +482,25 @@ def write_dataframe_to_xlsx_stream(
     sheet_name: str = "Sheet1",
     column_types: Mapping[str, Any] | None = None,
 ) -> None:
-    """Write a DataFrame through the canonical forward-only XLSX writer."""
+    """Write a DataFrame through the native accelerator or Python fallback."""
+    from app.core.dataframes.native_xlsx import (
+        try_write_dataframe_to_xlsx_stream,
+    )
+
+    if try_write_dataframe_to_xlsx_stream(
+        df,
+        sink,
+        sheet_name=sheet_name,
+        column_types=column_types,
+    ):
+        return
     write_rows_to_xlsx_stream(
         df.itertuples(index=False, name=None),
         list(df.columns),
         sink,
         sheet_name=sheet_name,
         column_types=column_types,
+        column_dtypes=tuple(df.dtypes),
         row_count_hint=len(df),
     )
 

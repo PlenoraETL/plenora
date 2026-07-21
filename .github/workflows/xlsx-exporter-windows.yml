@@ -1,0 +1,130 @@
+name: XLSX Exporter Windows
+
+on:
+  pull_request:
+    paths:
+      - "backend/native/xlsx_exporter/**"
+      - ".github/workflows/xlsx-exporter-windows.yml"
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - "backend/native/xlsx_exporter/**"
+      - ".github/workflows/xlsx-exporter-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: xlsx-exporter-windows-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: "1.92.0"
+  RUSTFLAGS: "-C target-feature=+crt-static"
+
+jobs:
+  build-windows-x64:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: backend/native/xlsx_exporter
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install pinned Rust toolchain
+        shell: pwsh
+        run: |
+          rustup toolchain install $env:RUST_TOOLCHAIN --profile minimal --component rustfmt,clippy
+          rustup default $env:RUST_TOOLCHAIN
+          rustc --version
+          cargo --version
+
+      - name: Cache Cargo registry and build output
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            backend/native/xlsx_exporter/target
+          key: xlsx-exporter-windows-x64-${{ hashFiles('backend/native/xlsx_exporter/Cargo.lock') }}
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Run tests
+        run: cargo test --release --locked
+
+      - name: Build static Windows executable
+        run: cargo build --release --locked
+
+      - name: Run executable smoke test
+        shell: pwsh
+        run: |
+          $binary = Resolve-Path "target\release\plenora-xlsx-exporter.exe"
+          $smoke = Join-Path $env:RUNNER_TEMP "plenora-xlsx-smoke.xlsx"
+          & $binary --version
+          & $binary self-test --output $smoke
+          if ($LASTEXITCODE -ne 0) { throw "Exporter smoke test failed" }
+          python -c "import os,sys,zipfile; p=sys.argv[1]; assert zipfile.is_zipfile(p); print('valid_xlsx_bytes=', os.path.getsize(p))" $smoke
+
+      - name: Package ZIP and SHA-256
+        id: package
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $packageVersion = $env:GITHUB_REF_NAME
+          } else {
+            $packageVersion = "sha-$($env:GITHUB_SHA.Substring(0, 12))"
+          }
+          $archiveName = "plenora-xlsx-exporter-$packageVersion-windows-x64"
+          $dist = Join-Path $env:RUNNER_TEMP "xlsx-exporter-dist"
+          $stage = Join-Path $dist $archiveName
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          Copy-Item "target\release\plenora-xlsx-exporter.exe" $stage
+          Copy-Item "README.md" $stage
+          Copy-Item "THIRD_PARTY_NOTICES.txt" $stage
+          $archive = Join-Path $dist "$archiveName.zip"
+          Compress-Archive -Path "$stage\*" -DestinationPath $archive -CompressionLevel Optimal
+          $hash = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+          $checksum = Join-Path $dist "$archiveName.sha256"
+          "$hash *$archiveName.zip" | Set-Content -Encoding ascii -NoNewline $checksum
+          "package_version=$packageVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "archive=$archive" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "checksum=$checksum" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: plenora-xlsx-exporter-${{ steps.package.outputs.package_version }}-windows-x64
+          path: |
+            ${{ steps.package.outputs.archive }}
+            ${{ steps.package.outputs.checksum }}
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-release:
+    if: github.ref_type == 'tag'
+    needs: build-windows-x64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: plenora-xlsx-exporter-*-windows-x64
+          path: dist
+          merge-multiple: true
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --verify-tag --generate-notes
+          gh release upload "$TAG" dist/*.zip dist/*.sha256 --clobber

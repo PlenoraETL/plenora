@@ -220,6 +220,11 @@ class Settings:
         # in RAM fino a 8 MiB, poi spool automatico su storage temporaneo OS.
         # Il file e' sempre effimero e viene eliminato alla chiusura.
         "IO_SPOOL_MAX_MEMORY_BYTES": 8 * 1024 * 1024,
+        # Acceleratore XLSX nativo opzionale. ``auto`` lo usa soltanto quando
+        # il binario e' presente; qualunque errore degrada al writer Python.
+        "PLENORA_XLSX_ENGINE": "auto",
+        "PLENORA_XLSX_EXPORTER_PATH": None,
+        "PLENORA_XLSX_EXPORT_TIMEOUT_SECONDS": 900,
 
         # Canvas validation: se True l'esecuzione e' bloccata quando
         # la catena del progetto non valida (gate a esecuzione, re-valida live) e

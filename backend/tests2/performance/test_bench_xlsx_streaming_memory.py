@@ -91,7 +91,7 @@ def _make_frame() -> pd.DataFrame:
 
 
 def _measure_child(
-    variant: Literal["legacy", "streaming"],
+    variant: Literal["generic", "legacy", "streaming"],
     result_queue,
 ) -> None:
     import psutil
@@ -123,7 +123,19 @@ def _measure_child(
             max_write = output_size
         else:
             sink = _CountingSink()
-            write_dataframe_to_xlsx_stream(frame, sink)
+            if variant == "generic":
+                from app.core.dataframes.export_writer import (
+                    write_rows_to_xlsx_stream,
+                )
+
+                write_rows_to_xlsx_stream(
+                    frame.itertuples(index=False, name=None),
+                    list(frame.columns),
+                    sink,
+                    row_count_hint=len(frame),
+                )
+            else:
+                write_dataframe_to_xlsx_stream(frame, sink)
             output_size = sink.position
             max_write = sink.max_write
     finally:
@@ -145,7 +157,9 @@ def _measure_child(
     )
 
 
-def _run_isolated(variant: Literal["legacy", "streaming"]) -> _Measurement:
+def _run_isolated(
+    variant: Literal["generic", "legacy", "streaming"],
+) -> _Measurement:
     context = mp.get_context("spawn")
     result_queue = context.Queue()
     process = context.Process(
@@ -219,3 +233,23 @@ def test_xlsx_streaming_avoids_full_workbook_in_memory():
     )
     assert streaming.max_write <= _MAX_STREAM_WRITE_BYTES
     assert streaming.retained_delta < legacy.retained_delta
+
+
+@pytest.mark.perf_bench
+def test_xlsx_dataframe_dtype_dispatch_avoids_generic_cell_dispatch():
+    generic = _run_isolated("generic")
+    specialized = _run_isolated("streaming")
+
+    ratio = specialized.elapsed_seconds / max(generic.elapsed_seconds, 0.001)
+    output_ratio = specialized.output_size / max(generic.output_size, 1)
+    print(
+        "\n[bench XLSX dtype dispatch] "
+        f"shape={_ROWS:,}x{_COLUMNS} "
+        f"generic={generic.elapsed_seconds:.3f}s "
+        f"specialized={specialized.elapsed_seconds:.3f}s ratio={ratio:.2f}"
+    )
+
+    assert 0.99 <= output_ratio <= 1.01
+    # Timing smoke, deliberately tolerant to shared-runner jitter. The strict
+    # performance signal is reported above; this only catches major regressions.
+    assert ratio <= 1.10
