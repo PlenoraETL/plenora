@@ -129,22 +129,7 @@ def execute_carica_task(
         output_format = contract.output_format
         force_recalculate = contract.force_recalculate
         triggered_by = contract.triggered_by
-    if run_id is not None:
-        if is_already_completed(run_id):
-            logger.info(
-                f"[IDEMPOTENCY] Task CARICA {task_id}: run_id {run_id} "
-                f"gia' completato con successo, skip."
-            )
-            result: CaricaTaskResultPayload = {
-                "status": "skipped_idempotent",
-                "success": True,
-                "message": f"Run {run_id} gia' completato",
-                "run_id": run_id,
-                "rows_written": 0,
-            }
-            _close_worker_connections(stage="post-idempotency")
-            return result
-    else:
+    if run_id is None:
         run_id = str(_uuid.uuid4())
 
     _run_start = _time.time()
@@ -160,6 +145,24 @@ def execute_carica_task(
         _close_worker_connections(stage="post-permission-revoke")
         return cast(CaricaTaskResultPayload, _revoked)
 
+    # Il controllo autorizzativo deve precedere anche il fast-path
+    # idempotente: un utente revocato non puo' osservare l'esito di run
+    # precedenti semplicemente riusandone l'identificativo.
+    if is_already_completed(run_id):
+        logger.info(
+            f"[IDEMPOTENCY] Task CARICA {task_id}: run_id {run_id} "
+            f"gia' completato con successo, skip."
+        )
+        result: CaricaTaskResultPayload = {
+            "status": "skipped_idempotent",
+            "success": True,
+            "message": f"Run {run_id} gia' completato",
+            "run_id": run_id,
+            "rows_written": 0,
+        }
+        _close_worker_connections(stage="post-idempotency")
+        return result
+
     if contract is not None:
         _group_id = contract.group_id
     else:
@@ -170,6 +173,27 @@ def execute_carica_task(
         _group_id = str(getattr(_meta, "group_id", "") or "") if _meta else ""
         if not _group_id:
             raise RuntimeError("group_id progetto non determinabile per CARICA")
+
+    existing_intermediate_run = intermediate_runs_db.get_run(run_id)
+    if existing_intermediate_run is not None:
+        existing_status = str(existing_intermediate_run.get("status") or "")
+        if existing_status in {"running", "completion_uncertain"}:
+            message = (
+                "Esiste una scrittura CARICA non terminale o incerta; "
+                "verifica la destinazione prima di rilanciare."
+            )
+            _close_worker_connections(stage="pre-target-barrier")
+            return {
+                "status": "completion_uncertain",
+                "success": False,
+                "error": "carica_target_uncertain",
+                "message": message,
+                "error_message": message,
+                "run_id": run_id,
+                "project_id": project_id,
+                "rows_written": 0,
+                "total_rows": 0,
+            }
 
     log_run_opened = False
     intermediate_run_finalized = False
@@ -184,15 +208,6 @@ def execute_carica_task(
         )
         log_run_opened = True
         set_run_context(run_id=run_id, project_id=project_id)
-        # La riga intermediate e' la barriera idempotente del task CARICA.
-        # Un redelivery con lo stesso message/run id incontra la PK esistente
-        # e si ferma prima di qualunque side effect sulla destinazione.
-        intermediate_run_lifecycle.create_run(
-            run_id=run_id,
-            canvas_id=project_id,
-            group_id=_group_id,
-            user_id=user_id,
-        )
     except BaseException:
         if log_run_opened:
             try:
@@ -222,6 +237,7 @@ def execute_carica_task(
 
     target_lock_handle: CaricaTargetLockHandle | None = None
     target_lock_heartbeat: CaricaTargetLockHeartbeat | None = None
+    intermediate_run_persisted = existing_intermediate_run is not None
     write_started = False
     try:
         _update_progress(self, 0, "Inizializzazione CARICA...")
@@ -241,8 +257,6 @@ def execute_carica_task(
                 "riprova al termine della run corrente."
             )
             _update_progress(self, -1, message)
-            intermediate_runs_db.update_run(run_id, status="failed")
-            intermediate_run_finalized = True
             close_run(
                 run_id=run_id,
                 status="failure",
@@ -259,6 +273,25 @@ def execute_carica_task(
                 "rows_written": 0,
                 "total_rows": 0,
             }
+
+        if existing_intermediate_run is None:
+            intermediate_run_lifecycle.create_run(
+                run_id=run_id,
+                canvas_id=project_id,
+                group_id=_group_id,
+                user_id=user_id,
+                target_lock_key=target_lock_handle.target.key,
+            )
+            intermediate_run_persisted = True
+        else:
+            # ``allow_retry`` porta la run a failed; la stessa chiave viene
+            # riaperta senza una seconda INSERT sulla PK.
+            intermediate_runs_db.update_run(
+                run_id,
+                status="running",
+                target_lock_key=target_lock_handle.target.key,
+            )
+            intermediate_run_persisted = True
 
         target_lock_heartbeat = start_carica_target_lock_heartbeat(
             target_lock_handle,
@@ -507,7 +540,7 @@ def execute_carica_task(
         return result
 
     except TaskRevoked:
-        if not intermediate_run_finalized:
+        if intermediate_run_persisted and not intermediate_run_finalized:
             try:
                 intermediate_runs_db.update_run(
                     run_id,
@@ -558,7 +591,7 @@ def execute_carica_task(
         elapsed_ms = int((_time.time() - _run_start) * 1000)
         logger.error(f"[CRASH] {error_msg_internal}\n{error_trace}")
 
-        if not intermediate_run_finalized:
+        if intermediate_run_persisted and not intermediate_run_finalized:
             try:
                 intermediate_runs_db.update_run(
                     run_id,
@@ -665,7 +698,9 @@ def _acquire_target_lock_or_return_busy(
         write_branch=write_branch,
     )
     ttl_seconds = _carica_target_lock_ttl_seconds()
-    owner_token = f"task={task_id};run={run_id}"
+    # Il token coincide con la PK della run: lo store puo' distinguere la run
+    # corrente dalle barriere lasciate da esecuzioni precedenti sul target.
+    owner_token = run_id
     handle = acquire_carica_target_lock(
         target=target_lock,
         owner_token=owner_token,

@@ -18,8 +18,8 @@ from app.core.auth.dependencies import (
 from app.core.auth.owner_dependencies import require_schedule_owner
 from app.core.auth.ownership import assert_group_access
 from app.core.auth.resource_access import assert_project_access
-from app.core.io.http_streaming import safe_download_filename
-from app.core.results import store as _results_store
+from app.core.io.http_streaming import CloseableStreamingResponse, safe_download_filename
+from app.core.results import blob as _results_blob
 from app.core.scheduler import db as scheduler_db
 from app.core.scheduler.healthcheck_service import (
     _as_aware_datetime as _healthcheck_as_aware_datetime,
@@ -57,8 +57,12 @@ def _download_result_file(
     schedule_id: str,
     group_id: str | None,
 ) -> Response:
-    result_row = _results_store.get_result_row(result_id)
-    if result_row is None or result_row.project_id != project_id:
+    stream = _results_blob.open_result_stream(
+        result_id,
+        expected_project_id=project_id,
+        expected_group_id=group_id,
+    )
+    if stream is None:
         raise HTTPException(
             status_code=404,
             detail=(
@@ -66,20 +70,17 @@ def _download_result_file(
                 f"Esegui lo schedule almeno una volta per generare un output."
             ),
         )
-    result_bytes = _results_store.get_result_data(result_id, group_id=group_id)
-    if result_bytes is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Blob risultato '{result_id}' non disponibile",
-        )
     filename = safe_download_filename(
-        result_row.filename or f"{schedule_id}.bin",
+        stream["filename"] or f"{schedule_id}.bin",
         fallback="result.bin",
     )
-    return Response(
-        content=result_bytes,
+    return CloseableStreamingResponse(
+        stream["body"],
         media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(stream["size"]),
+        },
     )
 
 

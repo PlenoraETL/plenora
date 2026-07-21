@@ -29,8 +29,13 @@ def fake_logger():
 
 
 @pytest.fixture
-def collaborators(fake_logger):
+def collaborators(fake_logger, monkeypatch):
     """Collaborator RAM-only — niente piu' load_by_format / safe_extractall."""
+
+    monkeypatch.setattr(
+        "app.core.resources.blob_dispatch.reconciliation.is_storage_key_referenced",
+        lambda *_args, **_kwargs: False,
+    )
 
     def gen_id(name):
         return f"file_{name}"
@@ -49,7 +54,7 @@ def collaborators(fake_logger):
             return_value={"data": b"raw", "storage_key": None, "size_bytes": 3}
         ),
         "db_save_file_sources_batch": MagicMock(),
-        "delete_blob": MagicMock(),
+        "delete_blob": MagicMock(return_value="ok"),
         "build_file_source": MagicMock(side_effect=_build_fs),
         "default_group": "default_grp",
         "logger": fake_logger,

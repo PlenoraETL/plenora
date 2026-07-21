@@ -58,6 +58,15 @@ EXPECTED_DOMAIN_CODES: Set[str] = {
     "carica_arcgis_write_failed",
     "carica_datasource_write_failed",
     "carica_rest_write_failed",
+    "arcgis_connection_not_visible",
+    "carica_target_locked",
+    "carica_target_uncertain",
+    "carica_target_lock_lost",
+    "carica_completion_uncertain",
+    "carica_external_write_uncertain",
+    "carica_uncertain_resolution_conflict",
+    "carica_task_fatal",
+    "carica_unsafe_write_config",
     "datasource_not_visible",
     "datasource_visibility_check_failed",
     "schedule_execution_fatal",
@@ -201,8 +210,8 @@ def test_known_global_codes_matches_expected_lock():
     assert error_codes.KNOWN_GLOBAL_CODES == EXPECTED_GLOBAL_CODES
 
 
-def test_catalog_count_domain_sixty_three():
-    """63 codici domain (catalogo storico + task availability).
+def test_catalog_count_domain_seventy_two():
+    """72 codici domain (catalogo storico + task availability).
 
     Composizione storica: 5 pre-existing + 6 batch 006 + 10 batch 009
     not-found family + 1 batch 010 external-service +
@@ -212,8 +221,8 @@ def test_catalog_count_domain_sixty_three():
     27 BE-GO-READY-AUTH-DOMAIN-PROMOTION-001 auth family +
     1 compatibility domain conflict code + 1 task terminal conflict +
     5 dispatch carica #18/#20 write/visibility family +
-    1 task store availability code."""
-    assert len(EXPECTED_DOMAIN_CODES) == 63
+    1 task store availability code + 9 CARICA uncertainty/error codes."""
+    assert len(EXPECTED_DOMAIN_CODES) == 72
     assert len(error_codes.KNOWN_DOMAIN_CODES) == len(EXPECTED_DOMAIN_CODES)
 
 

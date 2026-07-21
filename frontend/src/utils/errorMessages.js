@@ -63,6 +63,16 @@ export const ERROR_MESSAGES = {
   datasource_not_visible: { title: 'Datasource non visibile', message: 'Il datasource non è visibile al tuo gruppo.' },
   datasource_visibility_check_failed: { title: 'Verifica fallita', message: 'Non è stato possibile verificare la visibilità del datasource. Riprova.' },
 
+  arcgis_connection_not_visible: { title: 'Connessione ArcGIS non visibile', message: 'La connessione ArcGIS non e disponibile per il gruppo del progetto.' },
+  carica_target_locked: { title: 'Destinazione occupata', message: 'Un altro caricamento sta scrivendo sulla stessa destinazione. Attendi e riprova.' },
+  carica_target_uncertain: { title: 'Verifica necessaria', message: 'Una scrittura precedente ha esito incerto. Verifica la destinazione prima di rilanciare.' },
+  carica_target_lock_lost: { title: 'Scrittura da verificare', message: 'Il controllo esclusivo sulla destinazione e stato perso durante la scrittura. Verifica i dati prima di rilanciare.' },
+  carica_completion_uncertain: { title: 'Conferma incompleta', message: 'La scrittura potrebbe essere riuscita, ma il sistema non ha salvato la conferma. Verifica la destinazione.' },
+  carica_external_write_uncertain: { title: 'Esito non determinabile', message: 'La destinazione esterna potrebbe aver ricevuto i dati. Verificala prima di ripetere il caricamento.' },
+  carica_uncertain_resolution_conflict: { title: 'Run non risolvibile', message: 'La run non e piu in uno stato incerto risolvibile. Aggiorna la pagina.' },
+  carica_task_fatal: { title: 'Caricamento fallito', message: 'Il caricamento non e riuscito. Consulta i log o contatta l’amministratore.' },
+  carica_unsafe_write_config: { title: 'Configurazione non sicura', message: 'La configurazione di scrittura e stata bloccata. Controlla destinazione e modalita di caricamento.' },
+
   // Auth
   auth_invalid_credentials: { title: 'Credenziali errate', message: 'Username o password non corretti.' },
   auth_mfa_invalid: { title: 'Codice MFA non valido', message: 'Il codice di verifica (MFA) non è corretto.' },

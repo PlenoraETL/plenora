@@ -46,6 +46,7 @@ from app.core.results.blob_writer import (
     close_failed_result_upload_intent,
     close_result_upload_intent,
     record_result_upload_intent,
+    recover_result_db_write_error,
     _runtime_storage_upload_error,
     _storage_key,
 )
@@ -119,6 +120,16 @@ class StreamingResultBlobWriter:
             self.resolved_group_id, self.project_id, self.result_id,
         )
 
+        # Fail-closed PRIMA di creare il multipart: senza intent persistente
+        # un crash del worker lascerebbe parts/oggetti non riconciliabili.
+        self._intent_id = record_result_upload_intent(
+            self._key,
+            project_id=self.project_id,
+            result_id=self.result_id,
+            filename=self.filename,
+            size_bytes=-1,
+        )
+
         try:
             extra = self._storage._extra_args()
         except Exception:
@@ -131,17 +142,6 @@ class StreamingResultBlobWriter:
         self._parts: list[dict] = []
         self._part_number = 0
         self._part_buf = bytearray()
-
-        # Intent registrato pre-finalize: size_bytes=-1 perche' non noto
-        # finche' lo stream non e' completo. La row finale aggiornera'
-        # il size reale.
-        self._intent_id = record_result_upload_intent(
-            self._key,
-            project_id=self.project_id,
-            result_id=self.result_id,
-            filename=self.filename,
-            size_bytes=-1,
-        )
 
     def _flush_full_parts(self) -> None:
         """Flush parts complete (>= PART_SIZE). Lascia il residuo in
@@ -199,8 +199,16 @@ class StreamingResultBlobWriter:
                     Bucket=self._bucket, Key=self._key, Body=b"",
                 )
             except Exception as exc:
+                cleanup_outcome = compensating_delete(
+                    self._key,
+                    domain="result",
+                    reason="empty_put_outcome_uncertain",
+                    storage=self._storage,
+                    extras={"project_id": self.project_id, "result_id": self.result_id},
+                    logger=logger,
+                )
                 close_failed_result_upload_intent(
-                    self._intent_id, cleanup_outcome="ok",
+                    self._intent_id, cleanup_outcome=cleanup_outcome,
                 )
                 raise _runtime_storage_upload_error(
                     exc, result_id=self.result_id, filename=self.filename,
@@ -216,8 +224,16 @@ class StreamingResultBlobWriter:
             except Exception as exc:
                 # Cleanup dei parts orfani (S3 conserva fino a lifecycle).
                 self._abort_s3_safe()
+                cleanup_outcome = compensating_delete(
+                    self._key,
+                    domain="result",
+                    reason="multipart_complete_outcome_uncertain",
+                    storage=self._storage,
+                    extras={"project_id": self.project_id, "result_id": self.result_id},
+                    logger=logger,
+                )
                 close_failed_result_upload_intent(
-                    self._intent_id, cleanup_outcome="ok",
+                    self._intent_id, cleanup_outcome=cleanup_outcome,
                 )
                 raise _runtime_storage_upload_error(
                     exc, result_id=self.result_id, filename=self.filename,
@@ -246,19 +262,15 @@ class StreamingResultBlobWriter:
             )
             close_result_upload_intent(self._intent_id)
         except Exception:
-            # DB write fallita post-upload: cleanup S3 + intent.
-            cleanup_outcome = compensating_delete(
-                self._key,
-                domain="result",
-                reason="db_save_failed_after_multipart_complete",
+            if not recover_result_db_write_error(
                 storage=self._storage,
-                extras={"project_id": self.project_id, "result_id": self.result_id},
-                logger=logger,
-            )
-            close_failed_result_upload_intent(
-                self._intent_id, cleanup_outcome=cleanup_outcome,
-            )
-            raise
+                storage_key=self._key,
+                upload_intent_id=self._intent_id,
+                project_id=self.project_id,
+                result_id=self.result_id,
+                reason="db_save_failed_after_multipart_complete",
+            ):
+                raise
         logger.info(
             f"Result {self.result_id} su object storage (streaming "
             f"multipart, {self._total_bytes // (1024 * 1024)} MB, "
@@ -266,7 +278,7 @@ class StreamingResultBlobWriter:
         )
         return self.result_id
 
-    def _abort_s3_safe(self) -> None:
+    def _abort_s3_safe(self) -> bool:
         """Best-effort abort del multipart upload. Idempotente: tollera
         upload gia' completato / abortito."""
         try:
@@ -275,10 +287,12 @@ class StreamingResultBlobWriter:
                 Key=self._key,
                 UploadId=self._upload_id,
             )
+            return True
         except Exception as exc:
             logger.debug(
                 f"abort_multipart_upload(result_id={self.result_id}): {exc}"
             )
+            return False
 
     def _verify_integrity_or_fail(self) -> None:
         """Verifica post-complete che S3 abbia ricevuto `self._total_bytes`.
@@ -313,17 +327,16 @@ class StreamingResultBlobWriter:
         )
         # Cleanup: delete dell'object parziale + intent failure (DB row
         # NON ancora scritta, evita reference dangling).
-        try:
-            self._client.delete_object(
-                Bucket=self._bucket, Key=self._key,
-            )
-        except Exception as _del_e:
-            logger.warning(
-                f"delete partial object failed "
-                f"(key={self._key}): {_del_e}"
-            )
+        cleanup_outcome = compensating_delete(
+            self._key,
+            domain="result",
+            reason="multipart_integrity_mismatch",
+            storage=self._storage,
+            extras={"project_id": self.project_id, "result_id": self.result_id},
+            logger=logger,
+        )
         close_failed_result_upload_intent(
-            self._intent_id, cleanup_outcome="ok",
+            self._intent_id, cleanup_outcome=cleanup_outcome,
         )
         raise _runtime_storage_upload_error(
             RuntimeError(
@@ -393,8 +406,8 @@ class StreamingResultBlobWriter:
                 f"StreamingResultBlobWriter result_id={self.result_id} "
                 f"gia' finalizzato"
             )
-        self._closed = True
         rid = self._finalize_s3()
+        self._closed = True
         apply_results_retention(self.project_id)
         return rid
 
@@ -404,9 +417,10 @@ class StreamingResultBlobWriter:
             return
         self._aborted = True
         self._closed = True
-        self._abort_s3_safe()
+        abort_ok = self._abort_s3_safe()
         close_failed_result_upload_intent(
-            self._intent_id, cleanup_outcome="ok",
+            self._intent_id,
+            cleanup_outcome="ok" if abort_ok else "failed",
         )
         logger.info(
             f"StreamingResultBlobWriter aborted result_id={self.result_id} "

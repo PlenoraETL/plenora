@@ -68,10 +68,7 @@ def domain_owned_handler(
         report: MutableMapping[str, int],
         log: CleanupLogger,
     ) -> None:
-        try:
-            report[report_key] = cleanup(group_id)
-        except Exception as exc:
-            log.warning(f"Cascade delete {report_key} fallito: {exc}")
+        report[report_key] = cleanup(group_id)
 
     return GroupCleanupHandler(
         name=name,
@@ -92,11 +89,7 @@ def reported_domain_owned_handler(
         report: MutableMapping[str, int],
         log: CleanupLogger,
     ) -> None:
-        try:
-            cleanup_report = cleanup(group_id, log)
-        except Exception as exc:
-            log.warning(f"Cascade delete {name} fallito: {exc}")
-            return
+        cleanup_report = cleanup(group_id, log)
 
         for report_key in report_keys:
             report[report_key] = cleanup_report.get(report_key, 0)
@@ -138,11 +131,11 @@ def run_group_cleanup_handlers(
     report: MutableMapping[str, int],
     log: CleanupLogger,
     handlers: Sequence[GroupCleanupHandler] | None = None,
-) -> None:
-    """Esegue gli handler in ordine con failure isolation: l'errore di
-    un handler viene loggato e non blocca i successivi."""
+) -> tuple[str, ...]:
+    """Run every handler and return the names of failed cleanup units."""
     ordered_handlers = tuple(handlers or get_group_cleanup_handlers())
     total = len(ordered_handlers)
+    failed_handlers: list[str] = []
 
     for index, handler in enumerate(ordered_handlers, start=1):
         started_at = time.perf_counter()
@@ -159,6 +152,7 @@ def run_group_cleanup_handlers(
                 total,
                 exc,
             )
+            failed_handlers.append(handler.name)
             continue
 
         elapsed_ms = (time.perf_counter() - started_at) * 1000
@@ -169,6 +163,7 @@ def run_group_cleanup_handlers(
             index,
             total,
         )
+    return tuple(failed_handlers)
 
 
 __all__ = [

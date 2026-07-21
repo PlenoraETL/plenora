@@ -20,6 +20,30 @@ def acquire_target_lock_row(
 ) -> bool:
     with unit_of_work() as conn:
         with conn.cursor() as cur:
+            # Un lease scaduto con run ancora ``running`` implica esito
+            # esterno incerto: promuovilo prima di valutare un nuovo acquire.
+            cur.execute(
+                f"""
+                UPDATE runs
+                SET status = 'completion_uncertain'
+                WHERE target_lock_key = %s
+                  AND status = 'running'
+                  AND run_id IN (
+                      SELECT owner_token FROM {table_name}
+                      WHERE lock_key = %s AND expires_at <= %s
+                  )
+                """,
+                (lock_key, lock_key, acquired_at),
+            )
+            cur.execute(
+                "SELECT 1 FROM runs "
+                "WHERE target_lock_key = %s "
+                "AND status IN ('running', 'completion_uncertain') "
+                "AND run_id <> %s LIMIT 1",
+                (lock_key, owner_token),
+            )
+            if cur.fetchone() is not None:
+                return False
             cur.execute(
                 f"""
                 INSERT INTO {table_name} (
@@ -45,8 +69,16 @@ def acquire_target_lock_row(
                     END,
                     expires_at = EXCLUDED.expires_at,
                     updated_at = EXCLUDED.updated_at
-                WHERE {table_name}.expires_at <= %s
-                   OR {table_name}.owner_token = EXCLUDED.owner_token
+                WHERE (
+                    {table_name}.expires_at <= %s
+                    OR {table_name}.owner_token = EXCLUDED.owner_token
+                )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM runs
+                      WHERE target_lock_key = EXCLUDED.lock_key
+                        AND status IN ('running', 'completion_uncertain')
+                        AND run_id <> EXCLUDED.owner_token
+                  )
                 RETURNING owner_token
                 """,
                 (

@@ -61,6 +61,18 @@ CARICA_DATASOURCE_WRITE_FAILED = "carica_datasource_write_failed"
 CARICA_REST_WRITE_FAILED = "carica_rest_write_failed"
 """500-state: scrittura su endpoint REST fallita nel dispatch carica."""
 
+ARCGIS_CONNECTION_NOT_VISIBLE = "arcgis_connection_not_visible"
+"""403-state: connessione ArcGIS non visibile al gruppo del progetto."""
+
+CARICA_TARGET_LOCKED = "carica_target_locked"
+CARICA_TARGET_UNCERTAIN = "carica_target_uncertain"
+CARICA_TARGET_LOCK_LOST = "carica_target_lock_lost"
+CARICA_COMPLETION_UNCERTAIN = "carica_completion_uncertain"
+CARICA_EXTERNAL_WRITE_UNCERTAIN = "carica_external_write_uncertain"
+CARICA_UNCERTAIN_RESOLUTION_CONFLICT = "carica_uncertain_resolution_conflict"
+CARICA_TASK_FATAL = "carica_task_fatal"
+CARICA_UNSAFE_WRITE_CONFIG = "carica_unsafe_write_config"
+
 SCHEDULE_EXECUTION_FATAL = "schedule_execution_fatal"
 """500-state: errore fatale schedule execution (execution_manager)."""
 
@@ -315,6 +327,15 @@ KNOWN_DOMAIN_CODES: frozenset[str] = frozenset({
     CARICA_ARCGIS_WRITE_FAILED,
     CARICA_DATASOURCE_WRITE_FAILED,
     CARICA_REST_WRITE_FAILED,
+    ARCGIS_CONNECTION_NOT_VISIBLE,
+    CARICA_TARGET_LOCKED,
+    CARICA_TARGET_UNCERTAIN,
+    CARICA_TARGET_LOCK_LOST,
+    CARICA_COMPLETION_UNCERTAIN,
+    CARICA_EXTERNAL_WRITE_UNCERTAIN,
+    CARICA_UNCERTAIN_RESOLUTION_CONFLICT,
+    CARICA_TASK_FATAL,
+    CARICA_UNSAFE_WRITE_CONFIG,
     DATASOURCE_NOT_VISIBLE,
     DATASOURCE_VISIBILITY_CHECK_FAILED,
     SCHEDULE_EXECUTION_FATAL,

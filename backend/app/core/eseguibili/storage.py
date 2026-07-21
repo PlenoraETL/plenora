@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Iterable, List
+from urllib.parse import urlencode
 
 from app.core.io.runtime_filesystem import upload_local_path
 from app.shared.contracts.payloads import ObjectMap
@@ -74,10 +75,7 @@ def _mark_ephemeral(storage: Any, key: str) -> None:
     try:
         storage.set_object_tags(key, EPHEMERAL_TAGS)
     except Exception:
-        try:
-            storage.delete(key)
-        except Exception:
-            logger.exception("Rollback output non taggato fallito key=%s", key)
+        storage.delete(key)
         raise
 
 
@@ -124,6 +122,10 @@ class ExecutableOutputWriter:
             self._extra = self._storage._extra_args()
         except Exception:
             self._extra = {}
+        self._extra = {
+            **self._extra,
+            "Tagging": urlencode(EPHEMERAL_TAGS),
+        }
         response = self._client.create_multipart_upload(
             Bucket=self._bucket,
             Key=self.key,
@@ -214,7 +216,6 @@ class ExecutableOutputWriter:
                     UploadId=self._upload_id,
                     MultipartUpload={"Parts": self._parts},
                 )
-            _mark_ephemeral(self._storage, self.key)
             self._closed = True
             logger.info(
                 "[storage] executable output uploaded streaming "

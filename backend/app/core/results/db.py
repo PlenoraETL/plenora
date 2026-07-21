@@ -137,7 +137,7 @@ def save_result_row(
                 "NON e' stata sovrascritta.",
                 result_id,
             )
-    return get_result_row(result_id)
+        return get_result_row(result_id, session=session)
 
 
 def get_result_row(

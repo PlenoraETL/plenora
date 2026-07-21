@@ -38,12 +38,14 @@ class _MemoryExecutableWriter:
 
 class _MultipartClient:
     def __init__(self):
+        self.created = []
         self.uploaded = []
         self.completed = []
         self.aborted = []
         self.put = []
 
     def create_multipart_upload(self, **kwargs):
+        self.created.append(kwargs)
         return {"UploadId": "upload-1"}
 
     def upload_part(self, **kwargs):
@@ -91,7 +93,8 @@ def test_executable_output_writer_streams_parts_and_marks_object(monkeypatch):
 
     assert [call["Body"] for call in storage.client.uploaded] == [b"abcd", b"ef"]
     assert len(storage.client.completed) == 1
-    assert storage.tags == [(key, executable_storage.EPHEMERAL_TAGS)]
+    assert storage.tags == []
+    assert storage.client.created[0]["Tagging"] == "plenora-retention=ephemeral"
     assert writer.closed is True
 
 

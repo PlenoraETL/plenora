@@ -9,7 +9,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, BinaryIO, Callable, Optional
 
-from app.core.resources.blob_dispatch import BlobDispatchResult
+from app.core.resources.blob_dispatch import (
+    BlobDispatchResult,
+    finalize_blob_dispatch,
+)
 from app.core.io.bounded_streams import read_prefix, stream_size
 from app.utils.mime_validator import MimeMismatchError, validate_no_executable
 
@@ -85,15 +88,25 @@ def create_raw_from_upload(
         group_id=resolved_group_id,
         size_bytes=size,
     )
-    db_save_file_source(
-        file_id=file_id,
-        group_id=resolved_group_id,
-        name=name,
-        original_filename=filename,
-        fmt=file_ext,
-        metadata=metadata,
-        **blob_kwargs,
-    )
+    persisted = False
+    try:
+        db_save_file_source(
+            file_id=file_id,
+            group_id=resolved_group_id,
+            name=name,
+            original_filename=filename,
+            fmt=file_ext,
+            metadata=metadata,
+            **blob_kwargs,
+        )
+        persisted = True
+    finally:
+        finalize_blob_dispatch(
+            blob_kwargs,
+            persisted=persisted,
+            file_id=file_id,
+            logger=logger,
+        )
 
     logger.info(
         f"FileSource raw creato: {file_id} format={file_ext} "

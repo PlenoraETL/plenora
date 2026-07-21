@@ -49,10 +49,20 @@ http.interceptors.response.use(
     }
     return response;
   },
-  (error) => {
+  async (error) => {
     // Precedenza: new envelope `message` → legacy FastAPI `detail` → JS Error.
     // Il BE dual-shape mantiene `detail` come mirror durante la transizione.
-    const data = error.response?.data;
+    let data = error.response?.data;
+    // Axios keeps JSON error responses as Blob when the request asked for a
+    // binary download. Decode the envelope before normalizing the message.
+    if (typeof Blob !== 'undefined' && data instanceof Blob) {
+      try {
+        data = JSON.parse(await data.text());
+        error.response.data = data;
+      } catch {
+        // A real binary or malformed response falls back to Axios' message.
+      }
+    }
     // Pre-fix: `data?.detail` veniva passato as-is anche quando era un
     // array (Pydantic v2 422 emette `detail: [{loc, msg, type}, ...]`).
     // Il toast finale mostrava `[object Object]` perche' React coerce

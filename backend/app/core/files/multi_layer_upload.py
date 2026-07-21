@@ -7,7 +7,11 @@ import zipfile
 from typing import Any, BinaryIO, Callable, Dict, List, Optional
 
 from app.core.files.db import FileSourceRow
-from app.core.resources.blob_dispatch import BlobDispatchResult
+from app.core.resources.blob_dispatch import (
+    BlobDispatchResult,
+    finalize_blob_dispatch,
+)
+from app.infrastructure.storage.compensation import CompensateOutcome
 from app.core.io.bounded_streams import read_prefix, stream_size
 from app.utils.mime_validator import MimeMismatchError, validate_no_executable
 from app.core.io.zip_guards import (
@@ -35,7 +39,7 @@ def create_multi_layer_from_upload(
     column_builder_from_df: Callable[..., List[Any]],
     dispatch_blob_storage: Callable[..., BlobDispatchResult],
     db_save_file_sources_batch: Callable[[List[FileSourceRow]], None],
-    delete_blob: Callable[[str], None],
+    delete_blob: Callable[[str], CompensateOutcome | None],
     build_file_source: Callable[..., Any],
     default_group: str,
     logger,
@@ -162,12 +166,18 @@ def create_multi_layer_from_upload(
             owned_stream.close()
         raise
 
-    def cleanup_shared_blob() -> None:
+    def cleanup_shared_blob() -> CompensateOutcome:
         shared_key = shared_blob_kwargs.get("storage_key")
         if not shared_key:
-            return
+            return "skipped"
         try:
-            delete_blob(shared_key)
+            return finalize_blob_dispatch(
+                shared_blob_kwargs,
+                persisted=False,
+                file_id=batch_id,
+                logger=logger,
+                cleanup_blob=delete_blob,
+            )
         except Exception as cleanup_err:
             logger.error(
                 f"event=orphan_blob_cleanup_failed "
@@ -175,6 +185,7 @@ def create_multi_layer_from_upload(
                 f"storage_key={shared_key!r} "
                 f"error={cleanup_err!r}"
             )
+            return "failed"
 
     # Loop di staging: parse + DTO build per ogni layer, ZERO side
     # effect DB. La persistenza avviene UNA volta sola dopo il loop
@@ -287,6 +298,13 @@ def create_multi_layer_from_upload(
     finally:
         if not committed:
             cleanup_shared_blob()
+        else:
+            finalize_blob_dispatch(
+                shared_blob_kwargs,
+                persisted=True,
+                file_id=batch_id,
+                logger=logger,
+            )
         if owned_stream is not None:
             owned_stream.close()
 

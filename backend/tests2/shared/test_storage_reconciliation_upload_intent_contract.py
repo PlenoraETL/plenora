@@ -429,14 +429,11 @@ def test_dispatch_ignores_legacy_db_policy_and_uses_object_storage(monkeypatch):
     assert out["storage_key"].startswith("tenants/g1/file-sources/file-3/")
 
 
-def test_dispatch_proceeds_when_record_upload_intent_returns_none(monkeypatch):
-    """Best-effort: record_upload_intent failure (returns None) does
-    NOT block the upload. The dispatch continues; intent_id stays None
-    and on upload exception mark_done is NOT called (no intent to close)."""
+def test_dispatch_blocks_when_record_upload_intent_returns_none(monkeypatch):
+    """Fail-closed: senza intent persistente l'upload non deve partire."""
     from app.core.resources import blob_dispatch as file_storage_dispatch
 
     upload_calls = []
-    mark_done_calls = []
 
     def _fake_record_upload_intent(**kwargs):
         return None  # simulate DB unreachable
@@ -446,17 +443,10 @@ def test_dispatch_proceeds_when_record_upload_intent_returns_none(monkeypatch):
         side_effect=lambda raw, key: upload_calls.append(key)
     )
 
-    def _fake_mark_done(intent_id):
-        mark_done_calls.append(intent_id)
-
     monkeypatch.setattr("app.config.settings", _settings_get_stub())
     monkeypatch.setattr(
         "app.core.resources.storage_reconciliation.record_upload_intent",
         _fake_record_upload_intent,
-    )
-    monkeypatch.setattr(
-        "app.core.resources.storage_reconciliation.mark_done",
-        _fake_mark_done,
     )
     monkeypatch.setattr(
         "app.core.resources.blob_dispatch.cloud_backends.get_runtime_object_storage",
@@ -464,13 +454,177 @@ def test_dispatch_proceeds_when_record_upload_intent_returns_none(monkeypatch):
     )
 
     log = MagicMock()
-    out = file_storage_dispatch.dispatch_blob_storage(
-        "file-4", b"x" * 2048, "f.csv", group_id="g1", logger=log,
+    with pytest.raises(
+        file_storage_dispatch.UploadIntentUnavailableError,
+        match="Upload annullato",
+    ):
+        file_storage_dispatch.dispatch_blob_storage(
+            "file-4", b"x" * 2048, "f.csv", group_id="g1", logger=log,
+        )
+
+    assert upload_calls == []
+    log.error.assert_called_once()
+
+
+def test_mark_upload_intents_for_storage_key_uses_scoped_pending_update(monkeypatch):
+    from app.core.resources import storage_reconciliation as recon
+
+    calls = []
+    monkeypatch.setattr(
+        recon._store,
+        "execute_reconciliation_update",
+        lambda sql, params: calls.append((sql, params)),
     )
 
-    assert len(upload_calls) == 1
-    assert mark_done_calls == []
-    assert out["storage_key"].startswith("tenants/g1/file-sources/file-4/")
+    recon.mark_upload_intents_done_for_storage_key(
+        domain="file_source", storage_key="tenants/g/file-sources/f/a.csv",
+    )
+    recon.mark_upload_intents_orphan_deleted_for_storage_key(
+        domain="file_source", storage_key="tenants/g/file-sources/x/b.csv",
+    )
+
+    assert len(calls) == 2
+    assert "operation = 'upload_intent'" in calls[0][0]
+    assert "state = 'pending'" in calls[0][0]
+    assert calls[0][1] == (
+        "done", "file_source", "tenants/g/file-sources/f/a.csv",
+    )
+    assert calls[1][1] == (
+        "orphan_deleted", "file_source", "tenants/g/file-sources/x/b.csv",
+    )
+
+
+def test_finalize_blob_dispatch_closes_intent_after_db_commit(monkeypatch):
+    from app.core.resources import blob_dispatch
+
+    done = MagicMock()
+    cleanup = MagicMock()
+    monkeypatch.setattr(
+        blob_dispatch.reconciliation,
+        "mark_upload_intents_done_for_storage_key",
+        done,
+    )
+
+    outcome = blob_dispatch.finalize_blob_dispatch(
+        {"storage_key": "tenants/g/file-sources/f/a.csv", "size_bytes": 7},
+        persisted=True,
+        file_id="f",
+        logger=MagicMock(),
+        cleanup_blob=cleanup,
+    )
+
+    assert outcome == "ok"
+    done.assert_called_once_with(
+        domain="file_source",
+        storage_key="tenants/g/file-sources/f/a.csv",
+    )
+    cleanup.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "cleanup_outcome,orphan_mark_count",
+    [("ok", 1), ("failed", 0), ("skipped", 0)],
+)
+def test_finalize_blob_dispatch_keeps_recovery_path_on_db_failure(
+    monkeypatch, cleanup_outcome, orphan_mark_count,
+):
+    from app.core.resources import blob_dispatch
+
+    mark_orphan = MagicMock()
+    monkeypatch.setattr(
+        blob_dispatch.reconciliation,
+        "mark_upload_intents_orphan_deleted_for_storage_key",
+        mark_orphan,
+    )
+    monkeypatch.setattr(
+        blob_dispatch.reconciliation,
+        "is_storage_key_referenced",
+        lambda *_args, **_kwargs: False,
+    )
+    cleanup = MagicMock(return_value=cleanup_outcome)
+
+    outcome = blob_dispatch.finalize_blob_dispatch(
+        {"storage_key": "tenants/g/file-sources/f/a.csv", "size_bytes": 7},
+        persisted=False,
+        file_id="f",
+        logger=MagicMock(),
+        cleanup_blob=cleanup,
+    )
+
+    assert outcome == cleanup_outcome
+    cleanup.assert_called_once_with("tenants/g/file-sources/f/a.csv")
+    assert mark_orphan.call_count == orphan_mark_count
+
+
+def test_finalize_blob_dispatch_uses_canonical_compensation_by_default(monkeypatch):
+    from app.core.files.service_deps import NullLogger
+    from app.core.resources import blob_dispatch
+
+    cleanup = MagicMock(return_value="ok")
+    mark_orphan = MagicMock()
+    monkeypatch.setattr(
+        blob_dispatch.compensation_module, "compensating_delete", cleanup,
+    )
+    monkeypatch.setattr(
+        blob_dispatch.reconciliation,
+        "mark_upload_intents_orphan_deleted_for_storage_key",
+        mark_orphan,
+    )
+    monkeypatch.setattr(
+        blob_dispatch.reconciliation,
+        "is_storage_key_referenced",
+        lambda *_args, **_kwargs: False,
+    )
+
+    outcome = blob_dispatch.finalize_blob_dispatch(
+        {"storage_key": "tenants/g/file-sources/f/a.csv", "size_bytes": 7},
+        persisted=False,
+        file_id="f",
+        logger=NullLogger(),
+    )
+
+    assert outcome == "ok"
+    assert cleanup.call_args.kwargs["domain"] == "file_source"
+    assert cleanup.call_args.kwargs["reason"] == (
+        "db_save_failed_after_object_upload"
+    )
+    mark_orphan.assert_called_once()
+
+
+@pytest.mark.parametrize("referenced", [True, None])
+def test_finalize_blob_dispatch_never_deletes_on_ambiguous_db_outcome(
+    monkeypatch, referenced,
+):
+    from app.core.resources import blob_dispatch
+
+    cleanup = MagicMock(return_value="ok")
+    mark_done = MagicMock()
+    monkeypatch.setattr(
+        blob_dispatch.reconciliation,
+        "is_storage_key_referenced",
+        lambda *_args, **_kwargs: referenced,
+    )
+    monkeypatch.setattr(
+        blob_dispatch.reconciliation,
+        "mark_upload_intents_done_for_storage_key",
+        mark_done,
+    )
+
+    outcome = blob_dispatch.finalize_blob_dispatch(
+        {"storage_key": "tenants/g/file-sources/f/a.csv", "size_bytes": 7},
+        persisted=False,
+        file_id="f",
+        logger=MagicMock(),
+        cleanup_blob=cleanup,
+    )
+
+    cleanup.assert_not_called()
+    if referenced is True:
+        assert outcome == "skipped"
+        mark_done.assert_called_once()
+    else:
+        assert outcome == "failed"
+        mark_done.assert_not_called()
 
 
 # Beat hook _reconcile_storage upload_intent branch

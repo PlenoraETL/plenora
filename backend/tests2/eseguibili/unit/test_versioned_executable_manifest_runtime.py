@@ -408,6 +408,53 @@ def test_runtime_preserves_geospatial_multi_file_inputs(monkeypatch) -> None:
     ]
 
 
+def test_runtime_rolls_back_temp_file_when_ttl_marker_fails(monkeypatch) -> None:
+    manifest = compile_manifest(
+        source_project_id="project-1",
+        project_type="manipola",
+        canvas=_multi_input_canvas(),
+    )
+    definition = next(item for item in manifest.inputs if item.key == "customers_file")
+    deleted: list[str] = []
+
+    monkeypatch.setattr(
+        executable_runtime.file_source_service,
+        "load_dataframe",
+        lambda *_args, **_kwargs: (pd.DataFrame({"id": [1], "name": ["Ada"]}), None),
+    )
+    monkeypatch.setattr(
+        executable_runtime.file_source_service,
+        "create_from_upload",
+        lambda **_kwargs: SimpleNamespace(id="temp-without-ttl"),
+    )
+    monkeypatch.setattr(
+        executable_runtime.file_source_service,
+        "delete_file_source",
+        lambda file_id: deleted.append(file_id),
+    )
+    monkeypatch.setattr(
+        eseguibili_db,
+        "mark_temp_file_source_ttl",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("db unavailable")),
+    )
+
+    with pytest.raises(RuntimeError, match="scadenza"):
+        executable_runtime._materialize_file_input(
+            eseguibile_id="exec-1",
+            definition=definition,
+            payload={
+                "file_id": "upload-a",
+                "_upload_group_id": "group-1",
+                "column_mapping": [
+                    {"chain_column": "customer_id", "file_column": "id"},
+                ],
+            },
+            group_id="group-1",
+        )
+
+    assert deleted == ["temp-without-ttl"]
+
+
 def test_runtime_cleans_materialized_files_when_later_binding_fails(monkeypatch) -> None:
     canvas = _multi_input_canvas()
     target = next(node for node in canvas["nodes"] if node["id"] == "filter")

@@ -11,7 +11,10 @@ from typing import Any, BinaryIO, Callable, List, Optional
 
 from app.core.dataframes import load_dispatch as load_dispatch_module
 from app.core.io import geospatial as geospatial_io_module
-from app.core.resources.blob_dispatch import BlobDispatchResult
+from app.core.resources.blob_dispatch import (
+    BlobDispatchResult,
+    finalize_blob_dispatch,
+)
 from app.core.io.bounded_streams import read_prefix, stream_size
 from app.utils.mime_validator import MimeMismatchError
 from app.core.io.zip_guards import (
@@ -223,15 +226,25 @@ def create_from_upload(
             size_bytes=source_size,
         )
 
-        db_save_file_source(
-            file_id=file_id,
-            group_id=resolved_group_id,
-            name=name,
-            original_filename=filename,
-            fmt=format_type,
-            metadata=metadata,
-            **blob_kwargs,
-        )
+        persisted = False
+        try:
+            db_save_file_source(
+                file_id=file_id,
+                group_id=resolved_group_id,
+                name=name,
+                original_filename=filename,
+                fmt=format_type,
+                metadata=metadata,
+                **blob_kwargs,
+            )
+            persisted = True
+        finally:
+            finalize_blob_dispatch(
+                blob_kwargs,
+                persisted=persisted,
+                file_id=file_id,
+                logger=logger,
+            )
 
         logger.info(f"FileSource creato: {file_id} ({source_size} bytes)")
         return file_source

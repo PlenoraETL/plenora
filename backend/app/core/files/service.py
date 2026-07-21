@@ -353,7 +353,7 @@ class FileSourceService:
         # Object-storage rollback cleanup is best-effort; BYTEA mode has no
         # storage_key and never calls this callback.
         def _delete_blob(storage_key: str) -> None:
-            storage_compensation.compensating_delete(
+            return storage_compensation.compensating_delete(
                 storage_key,
                 domain="file_source_multi_layer",
                 reason="batch_save_rollback",

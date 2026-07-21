@@ -267,7 +267,8 @@ def op_formula(
         local_vars = {}
         for col in cols_to_prepare:
             series = eval_df[col]
-            if series.dtype == 'object':
+            dtype_name = str(series.dtype).lower()
+            if series.dtype == 'object' or dtype_name in {'str', 'string'}:
                 # Prova conversione a numerico (gestisce formato IT: 1.234,56
                 converted = coerce_numeric_series(series)
                 nan_ratio = series_null_ratio(converted)
@@ -283,6 +284,9 @@ def op_formula(
                         .str.replace(',', '.', regex=False)  # decimale IT
                     )
                     converted = coerce_numeric_series(cleaned)
+                    # Decide usando l'esito del fallback italiano, non il
+                    # rapporto NaN della prima conversione.
+                    nan_ratio = series_null_ratio(converted)
                 # Se la conversione ha senso (pochi NaN aggiuntivi), usa numerica
                 if nan_ratio - original_na <= 0.3:
                     local_vars[col] = converted

@@ -735,6 +735,32 @@ def test_preview_router_uses_task_service_boundary(monkeypatch):
     }
 
 
+def test_preview_router_preserves_project_not_found(monkeypatch):
+    from fastapi import HTTPException
+    from app.core.orchestrator import router as router_mod
+
+    router_mod.init_orchestrator(object())
+    monkeypatch.setattr(router_mod, "_assert_project_group", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        router_mod,
+        "_project_service",
+        lambda: SimpleNamespace(
+            get_project_metadata=lambda _project_id: None,
+            get_project_canvas=lambda _project_id: None,
+            get_project_output_contract=lambda _project_id: None,
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        router_mod.preview_project(
+            project_id="missing-project",
+            limit=10,
+            current_user=SimpleNamespace(user_id="user-1"),
+        )
+
+    assert exc_info.value.status_code == 404
+
+
 @pytest.mark.parametrize(
     ("method_name", "call_kwargs", "expected_task_type", "expected_message", "expected_kwargs"),
     [

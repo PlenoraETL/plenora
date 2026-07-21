@@ -21,6 +21,7 @@ def create_run(
     group_id: str,
     total_nodes: int = 0,
     user_id: Optional[str] = None,
+    target_lock_key: Optional[str] = None,
 ):
     """Create an intermediate run row."""
     return runs_db.create_run(
@@ -29,6 +30,7 @@ def create_run(
         group_id=group_id,
         total_nodes=total_nodes,
         user_id=user_id,
+        target_lock_key=target_lock_key,
     )
 
 

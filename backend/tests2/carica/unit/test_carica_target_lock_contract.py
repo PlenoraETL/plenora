@@ -25,8 +25,14 @@ pytestmark = [pytest.mark.unit, pytest.mark.carica, pytest.mark.contract]
 
 
 class _FakeCursor:
-    def __init__(self, row: dict[str, object] | None = None, rowcount: int = 0):
+    def __init__(
+        self,
+        row: dict[str, object] | None = None,
+        rowcount: int = 0,
+        rows: list[dict[str, object] | None] | None = None,
+    ):
         self.row = row
+        self.rows = list(rows) if rows is not None else None
         self.rowcount = rowcount
         self.executed: list[tuple[str, tuple]] = []
 
@@ -40,6 +46,8 @@ class _FakeCursor:
         self.executed.append((sql, params))
 
     def fetchone(self):
+        if self.rows is not None:
+            return self.rows.pop(0)
         return self.row
 
 
@@ -172,7 +180,7 @@ def test_rest_and_arcgis_targets_are_canonicalized():
 
 
 def test_acquire_returns_handle_when_insert_or_expired_update_wins(monkeypatch):
-    cursor = _FakeCursor(row={"owner_token": "owner-1"})
+    cursor = _FakeCursor(rows=[None, {"owner_token": "owner-1"}])
     conn = _FakeConnection(cursor)
     monkeypatch.setattr(
         "app.core.carica.target_lock_store.unit_of_work",
@@ -195,7 +203,7 @@ def test_acquire_returns_handle_when_insert_or_expired_update_wins(monkeypatch):
     assert handle.owner_token == "owner-1"
     assert conn.commits == 1
     assert conn.rollbacks == 0
-    sql, params = cursor.executed[0]
+    sql, params = cursor.executed[-1]
     assert "ON CONFLICT (lock_key) DO UPDATE" in sql
     assert "owner_token = EXCLUDED.owner_token" in sql
     assert params[0] == "carica:db:hash"
@@ -203,7 +211,7 @@ def test_acquire_returns_handle_when_insert_or_expired_update_wins(monkeypatch):
 
 
 def test_acquire_returns_none_when_unexpired_other_owner_holds_lock(monkeypatch):
-    cursor = _FakeCursor(row=None)
+    cursor = _FakeCursor(rows=[None, None])
     conn = _FakeConnection(cursor)
     monkeypatch.setattr(
         "app.core.carica.target_lock_store.unit_of_work",
@@ -313,6 +321,7 @@ def test_task_uses_target_lock_before_loading_upstream_and_releases_in_finally(m
     events: list[str] = []
     lock_groups: list[str] = []
     monkeypatch.setattr(carica_task, "is_already_completed", lambda _run_id: False)
+    monkeypatch.setattr(carica_task.intermediate_runs_db, "get_run", lambda _run_id: None)
     monkeypatch.setattr(carica_task, "_update_progress", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         carica_task.DebugPayloadBuilder,
@@ -409,8 +418,8 @@ def test_task_uses_target_lock_before_loading_upstream_and_releases_in_finally(m
 
     assert result["success"] is False
     assert events == [
-        "create",
         "acquire",
+        "create",
         "load",
         "update:failed",
         "release",
@@ -423,6 +432,7 @@ def test_task_fails_fast_when_target_lock_is_busy(monkeypatch):
 
     events: list[str] = []
     monkeypatch.setattr(carica_task, "is_already_completed", lambda _run_id: False)
+    monkeypatch.setattr(carica_task.intermediate_runs_db, "get_run", lambda _run_id: None)
     monkeypatch.setattr(carica_task, "_update_progress", lambda *args, **kwargs: None)
     lock_target = SimpleNamespace(key="carica:db:hash", kind="db")
     close_calls: list[dict[str, object]] = []
@@ -495,5 +505,5 @@ def test_task_fails_fast_when_target_lock_is_busy(monkeypatch):
     assert result["success"] is False
     assert result["status"] == "conflict"
     assert result["error"] == "carica_target_locked"
-    assert events == ["create", "acquire", "update:failed"]
+    assert events == ["acquire"]
     assert close_calls[-1]["status"] == "failure"

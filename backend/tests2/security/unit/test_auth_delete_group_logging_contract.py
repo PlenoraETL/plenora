@@ -192,6 +192,37 @@ def test_group_cleanup_handlers_are_isolated_and_logged_in_order():
     assert completed_names == ["first", "last"]
 
 
+def test_delete_group_cascade_keeps_group_when_domain_cleanup_fails(monkeypatch):
+    from app.core.auth import cleanup_registry, group_cleanup
+
+    auth_deletes: list[str] = []
+
+    def _boom(_group_id, _report, _log):
+        raise RuntimeError("storage unavailable")
+
+    monkeypatch.setattr(
+        cleanup_registry,
+        "GROUP_CLEANUP_HANDLERS",
+        (
+            cleanup_registry.GroupCleanupHandler(
+                name="delete_files",
+                report_keys=("file_sources",),
+                cleanup=_boom,
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        group_cleanup.auth_db,
+        "delete_group",
+        lambda group_id: auth_deletes.append(group_id),
+    )
+
+    with pytest.raises(group_cleanup.GroupCleanupIncompleteError):
+        group_cleanup.delete_group_cascade("group-1")
+
+    assert auth_deletes == []
+
+
 def test_delete_group_cascade_runs_handlers_before_final_auth_delete_failure(monkeypatch):
     from app.core.auth import cleanup_registry, group_cleanup
 

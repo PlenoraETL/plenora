@@ -35,6 +35,8 @@
 .task-runtime th { color: var(--text-secondary, #667085); background: rgba(148, 163, 184, .08); }
 .task-runtime__mono { max-width: 230px; overflow: hidden; text-overflow: ellipsis; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .task-runtime__message { max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
+.task-runtime__actions { display: flex; gap: 8px; }
+.task-runtime__actions button:last-child { border-color: #f59e0b; color: #92400e; }
 .task-runtime__empty { padding: 28px !important; text-align: center !important; color: var(--text-secondary, #667085); }
 @media (max-width: 1050px) { .task-runtime__summary, .task-runtime__queue-grid { grid-template-columns: repeat(2, minmax(160px, 1fr)); } }
 @media (max-width: 700px) { .task-runtime__main { padding: 20px; } .task-runtime__header { align-items: flex-start; } .task-runtime__summary, .task-runtime__queue-grid { grid-template-columns: 1fr; } }

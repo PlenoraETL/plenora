@@ -255,7 +255,7 @@ def test_db_save_failure_propagates(collaborators):
     with patch(
         "app.core.dataframes.load_dispatch.load_by_format_stream",
         return_value=(pd.DataFrame({"id": [1]}), None),
-    ):
+    ), patch.object(upload_mod, "finalize_blob_dispatch") as finalize:
         with pytest.raises(RuntimeError, match="DB write fail"):
             upload_mod.create_from_upload(
                 io.BytesIO(b"data"), "data.csv", "X",
@@ -265,6 +265,32 @@ def test_db_save_failure_propagates(collaborators):
 
     # Dispatch chiamato PRIMA del fail
     collaborators["dispatch_blob_storage"].assert_called_once()
+    finalize.assert_called_once_with(
+        collaborators["dispatch_blob_storage"].return_value,
+        persisted=False,
+        file_id="file_abc",
+        logger=collaborators["logger"],
+    )
+
+
+def test_db_save_success_closes_upload_intent(collaborators):
+    from app.core.files import upload as upload_mod
+
+    with patch(
+        "app.core.dataframes.load_dispatch.load_by_format_stream",
+        return_value=(pd.DataFrame({"id": [1]}), None),
+    ), patch.object(upload_mod, "finalize_blob_dispatch") as finalize:
+        upload_mod.create_from_upload(
+            io.BytesIO(b"data"), "data.csv", "X",
+            group_id="g1", **collaborators,
+        )
+
+    finalize.assert_called_once_with(
+        collaborators["dispatch_blob_storage"].return_value,
+        persisted=True,
+        file_id="file_abc",
+        logger=collaborators["logger"],
+    )
 
 
 # 7. group_id None -> default_group propagato

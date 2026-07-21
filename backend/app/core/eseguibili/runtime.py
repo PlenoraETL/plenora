@@ -16,8 +16,6 @@ from app.shared.contracts.payloads import JsonObject
 
 from . import db as eseguibili_db
 from .models import ExecutableInputDefinition, ExecutableManifest
-
-
 def _coerce_scalar(definition: ExecutableInputDefinition, value: Any) -> Any:
     kind = definition.kind
     if value is None or value == "":
@@ -255,9 +253,11 @@ def _materialize_file_input(
     temp_id = created.id if hasattr(created, "id") else created["id"]
     try:
         eseguibili_db.mark_temp_file_source_ttl(temp_id)
-    except Exception:
-        # Il TTL è una safety net; il task riceve comunque l'elenco cleanup.
-        pass
+    except Exception as exc:
+        file_source_service.delete_file_source(temp_id)
+        raise RuntimeError(
+            "Impossibile impostare la scadenza dell'input temporaneo"
+        ) from exc
     return str(temp_id)
 
 

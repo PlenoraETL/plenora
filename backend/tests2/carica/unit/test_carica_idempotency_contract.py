@@ -115,6 +115,7 @@ def test_successful_write_with_unpersisted_completion_is_uncertain(monkeypatch):
     from workers.tasks import carica_task
 
     monkeypatch.setattr(carica_task, "is_already_completed", lambda _run: False)
+    monkeypatch.setattr(carica_task.intermediate_runs_db, "get_run", lambda _run: None)
     monkeypatch.setattr(carica_task, "_update_progress", lambda *a, **kw: None)
     monkeypatch.setattr(carica_task, "open_run", lambda **kw: None)
     monkeypatch.setattr(carica_task, "close_run", lambda **kw: None)
@@ -211,6 +212,7 @@ def test_external_write_failure_requires_operator_resolution(monkeypatch):
     from workers.tasks import carica_task
 
     monkeypatch.setattr(carica_task, "is_already_completed", lambda _run: False)
+    monkeypatch.setattr(carica_task.intermediate_runs_db, "get_run", lambda _run: None)
     monkeypatch.setattr(carica_task, "recheck_user_authorized", lambda **_kw: None)
     monkeypatch.setattr(carica_task, "_update_progress", lambda *a, **kw: None)
     monkeypatch.setattr(carica_task, "open_run", lambda **kw: None)

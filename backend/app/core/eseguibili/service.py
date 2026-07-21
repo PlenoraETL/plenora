@@ -16,6 +16,7 @@ from typing import BinaryIO, Mapping, Optional, Sequence, Union
 from app.utils.logger import get_logger
 from app.core.dataframes import frame_io as dataframe_frame_io
 from app.core.dataframes import tabular as dataframe_tabular
+from app.core.dataframes.export_writer import normalize_export_format
 from app.core.projects import access_context as project_access_context
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.files import db as files_db
@@ -469,18 +470,17 @@ def execute(
     # 4. Salva DataFrame rinominato come FileSource temporaneo nel DB
     # Riusiamo il sistema file_source esistente — marchiamo con un nome speciale.
     #
-    # Identifier deterministico = hash(df bytes + eseguibile.id) primi 8 char.
-    # Stesso payload -> stesso temp_name -> retry idempotente; payload diverso
-    # -> temp_name diverso. Il cleanup TTL 24h resta come safety net.
-    _df_signature = hashlib.sha256(
-        f"{eseguibile['id']}::{len(df)}::{','.join(df.columns)}".encode("utf-8")
-    ).hexdigest()[:8]
-    temp_name = f"__exec_temp_{eseguibile['id']}_{_df_signature}"
-    temp_filename = f"{temp_name}.csv"
-
+    # Il nome diagnostico include il fingerprint del CSV reale. Non e' una
+    # chiave d'idempotenza DB: la sicurezza dei retry resta nel task/run layer.
     # Serializziamo il DataFrame in memoria come CSV
     csv_buffer = io.BytesIO()
     df.to_csv(csv_buffer, index=False, encoding="utf-8")
+    csv_payload = csv_buffer.getvalue()
+    _df_signature = hashlib.sha256(
+        str(eseguibile["id"]).encode("utf-8") + b"\0" + csv_payload
+    ).hexdigest()[:12]
+    temp_name = f"__exec_temp_{eseguibile['id']}_{_df_signature}"
+    temp_filename = f"{temp_name}.csv"
     csv_buffer.seek(0)
 
     # Creiamo un FileSource nel DB usando il service esistente
@@ -496,17 +496,14 @@ def execute(
 
     # Marca la riga come temporanea con TTL 24h. Il task beat
     # `cleanup_temp_files_task` cancella le righe is_temp=true scadute.
-    # Update best-effort: un errore qui non blocca l'esecuzione.
+    # Fail closed: senza TTL un crash puo' lasciare il FileSource per sempre.
     try:
         eseguibili_db.mark_temp_file_source_ttl(temp_file_source_id)
     except Exception as ttl_err:
-        logger.warning(
-            "[GESTITO] eseguibili: TTL marking fallito per "
-            "temp_file_source_id=%s: %s: %s — file orfanizzabile, "
-            "cleanup richiede intervento manuale",
-            temp_file_source_id, type(ttl_err).__name__, ttl_err,
-            exc_info=True,
-        )
+        file_source_service.delete_file_source(temp_file_source_id)
+        raise RuntimeError(
+            "Impossibile impostare la scadenza del file temporaneo"
+        ) from ttl_err
 
     logger.info(
         f"FileSource temporaneo creato: {temp_file_source_id} "
@@ -547,8 +544,6 @@ def execute(
     )
 
     # 6. Lancia task enrichment
-    from app.core.dataframes.export_writer import normalize_export_format
-
     final_format = normalize_export_format(
         output_format or eseguibile.get("default_output_format") or "xlsx"
     )
@@ -663,7 +658,6 @@ def execute_versioned(
 ) -> ExecutableRunResult:
     """Valida una run v2 e la inoltra all'executor del tipo progetto."""
 
-    from app.core.dataframes.export_writer import normalize_export_format
     from app.core.orchestrator.task_service import task_service
 
     version = (

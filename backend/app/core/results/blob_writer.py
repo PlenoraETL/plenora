@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 import uuid
 
 from app.core.io import object_storage as object_storage_module
@@ -48,9 +48,9 @@ def record_result_upload_intent(
     result_id: str,
     filename: str,
     size_bytes: int,
-) -> Optional[str]:
+) -> str:
     """Record a pre-upload intent for result object-storage blobs."""
-    return reconciliation_module.record_upload_intent(
+    intent_id = reconciliation_module.record_upload_intent(
         domain="result",
         storage_key=storage_key,
         reason="result_upload_intent_pre_db_row",
@@ -61,6 +61,11 @@ def record_result_upload_intent(
             "size_bytes": size_bytes,
         },
     )
+    if intent_id is None:
+        raise ResultSaveError(
+            "Upload risultato annullato: protezione anti-orphan non disponibile"
+        )
+    return intent_id
 
 
 def close_result_upload_intent(intent_id: Optional[str]) -> None:
@@ -79,6 +84,57 @@ def close_failed_result_upload_intent(
         return
     if cleanup_outcome == "ok":
         reconciliation_module.mark_orphan_deleted(intent_id)
+
+
+def recover_result_db_write_error(
+    *,
+    storage: Any,
+    storage_key: str,
+    upload_intent_id: Optional[str],
+    project_id: str,
+    result_id: str,
+    reason: str,
+) -> bool:
+    """Gestisce un esito DB ambiguo senza cancellare dati referenziati.
+
+    Ritorna ``True`` quando la row risulta persistita e il caller puo'
+    considerare concluso il salvataggio. Se il check e' indisponibile lascia
+    l'intent pending: il reconciler decidera' senza una cancellazione cieca.
+    """
+    referenced = reconciliation_module.is_storage_key_referenced(
+        storage_key,
+        domain="result",
+    )
+    if referenced is True:
+        close_result_upload_intent(upload_intent_id)
+        logger.warning(
+            "event=result_db_outcome_recovered project_id=%s result_id=%s",
+            project_id,
+            result_id,
+        )
+        return True
+    if referenced is None:
+        logger.warning(
+            "event=result_db_outcome_deferred project_id=%s result_id=%s "
+            "storage_key=%s",
+            project_id,
+            result_id,
+            storage_key,
+        )
+        return False
+
+    cleanup_outcome = cleanup_uploaded_result_blob(
+        storage,
+        storage_key,
+        reason=reason,
+        project_id=project_id,
+        result_id=result_id,
+    )
+    close_failed_result_upload_intent(
+        upload_intent_id,
+        cleanup_outcome=cleanup_outcome,
+    )
+    return False
 
 
 def _storage_key(group_id: str, project_id: str, result_id: str) -> str:
@@ -148,18 +204,15 @@ def save_result_blob_from_bytes(
             )
             close_result_upload_intent(upload_intent_id)
         except Exception:
-            cleanup_outcome = cleanup_uploaded_result_blob(
-                storage,
-                storage_key,
-                reason="db_save_failed_after_object_upload",
+            if not recover_result_db_write_error(
+                storage=storage,
+                storage_key=storage_key,
+                upload_intent_id=upload_intent_id,
                 project_id=project_id,
                 result_id=result_id,
-            )
-            close_failed_result_upload_intent(
-                upload_intent_id,
-                cleanup_outcome=cleanup_outcome,
-            )
-            raise
+                reason="db_save_failed_after_object_upload",
+            ):
+                raise
         logger.info(
             f"[FS-4] Result {result_id} su object storage "
             f"({size // (1024 * 1024)} MB): {storage_key}"

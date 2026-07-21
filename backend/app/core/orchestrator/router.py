@@ -250,8 +250,12 @@ def preview_project(
                 project_id=project_id,
                 project_service=_project_service(),
             )
-        except LookupError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except LookupError:
+            raise_typed_http(
+                error_codes.PROJECT_NOT_FOUND,
+                status_code=404,
+                message="Progetto non trovato",
+            )
         task_info = task_service_module.task_service.create_preview_task(
             project_id=project_id,
             limit=limit,
@@ -261,6 +265,9 @@ def preview_project(
         result = dict(_task_info_to_dict(task_info))
         result["async"] = True
         return result
+    except HTTPException:
+        # Preserve typed 4xx outcomes instead of flattening them to 500.
+        raise
     except Exception as e:
         logger.error(
             f"[CRASH] Errore avvio task preview: {e}",

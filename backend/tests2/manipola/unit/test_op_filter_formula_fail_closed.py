@@ -85,3 +85,13 @@ def test_op_formula_happy_path_preserved():
 
     assert "somma" in result.columns
     assert list(result["somma"]) == [11, 22, 33]
+
+
+def test_op_formula_uses_successful_italian_numeric_fallback():
+    df = pd.DataFrame({"prezzo": ["1.234,56", "2.000,00", None]})
+
+    result = op_formula(df, new_column="iva", formula="prezzo * 0.22")
+
+    assert result["iva"].iloc[0] == pytest.approx(271.6032)
+    assert result["iva"].iloc[1] == pytest.approx(440.0)
+    assert pd.isna(result["iva"].iloc[2])

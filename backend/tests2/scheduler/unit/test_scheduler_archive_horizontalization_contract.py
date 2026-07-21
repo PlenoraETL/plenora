@@ -38,5 +38,6 @@ def test_scheduler_router_download_uses_result_blob_boundary():
     source = _ROUTER.read_text(encoding="utf-8")
 
     assert "_download_result_file" in all_identifiers(source)
-    assert uses_attribute(source, "_results_store", "get_result_data")
-    assert call_has_keyword(source, "get_result_data", "group_id")
+    assert uses_attribute(source, "_results_blob", "open_result_stream")
+    assert call_has_keyword(source, "open_result_stream", "expected_group_id")
+    assert "CloseableStreamingResponse" in all_identifiers(source)

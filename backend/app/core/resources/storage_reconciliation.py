@@ -32,6 +32,8 @@ __all__ = [
     "ReconciliationStateCount",
     "record_pending",
     "record_upload_intent",
+    "mark_upload_intents_done_for_storage_key",
+    "mark_upload_intents_orphan_deleted_for_storage_key",
     "mark_done",
     "mark_failed_attempt",
     "mark_orphan_deleted",
@@ -586,10 +588,12 @@ def prune_terminal_older_than(
 # autocommit BEFORE the upload. No caller-side transaction
 # coupling: callers are not in scope for this stream and are not
 # modified
-# 2. On upload exception, caller invokes `mark_done(intent_id)` —
-# no orphan exists because nothing was uploaded
-# 3. On upload success, the intent row stays `pending`. The
-# reconciler beat hook closes it after a grace window:
+# 2. On upload exception the intent resta pending: un errore di risposta
+# non prova che il provider non abbia materializzato l'oggetto.
+# 3. On upload success, il caller chiude subito l'intent dopo il commit
+# della business row (o dopo una compensating delete riuscita). Se il
+# processo muore nella finestra upload/DB-save, il reconciler beat hook
+# chiude l'intent dopo una grace window:
 # referenced `file_sources.storage_key` means caller DB save committed
 # → `mark_done`; otherwise → `compensating_delete` +
 # `mark_orphan_deleted`
@@ -664,9 +668,9 @@ def record_upload_intent(
       ancora alcuna transazione DB — la INSERT `file_sources`
       avviene dopo il return.
 
-    Best-effort: errore DB → warning strutturato + ritorno `None`.
-    Il caller procede comunque con l'upload (la W2 race per quel
-    singolo dispatch resta — comportamento attuale, non peggiora).
+    Best-effort a questo boundary: errore DB → warning strutturato +
+    ritorno `None`. Il caller decide la policy. Il dispatcher canonico dei
+    file source tratta ``None`` come errore fail-closed e non avvia l'upload.
 
     Args:
         domain: tag callsite (`"file_source"`, ...). Non interpretato.
@@ -700,6 +704,52 @@ def record_upload_intent(
             domain, storage_key, type(e).__name__, str(e),
         )
         return None
+
+
+def _mark_upload_intents_for_storage_key(
+    *,
+    domain: str,
+    storage_key: str,
+    state: Literal["done", "orphan_deleted"],
+) -> None:
+    """Chiude best-effort gli intent pending associati a una chiave.
+
+    Il dispatcher mantiene intenzionalmente ``BlobDispatchResult`` limitato
+    ai soli kwargs persistibili nella business row. La chiave storage e'
+    quindi l'identificatore stabile condiviso tra dispatcher e caller.
+    Eventuali tentativi precedenti sulla stessa chiave vengono chiusi insieme:
+    dopo il commit sono tutti referenziati, dopo una compensazione riuscita
+    sono tutti relativi a un oggetto ormai rimosso.
+    """
+    _autocommit_update(
+        "UPDATE storage_reconciliation_log "
+        "SET state = %s, updated_at = now() "
+        "WHERE domain = %s "
+        "AND storage_key = %s "
+        "AND operation = 'upload_intent' "
+        "AND state = 'pending'",
+        (state, domain, storage_key),
+        reconciliation_id=f"{domain}:{storage_key}",
+        transition=state,
+    )
+
+
+def mark_upload_intents_done_for_storage_key(
+    *, domain: str, storage_key: str,
+) -> None:
+    """Chiude gli upload intent dopo il commit della business row."""
+    _mark_upload_intents_for_storage_key(
+        domain=domain, storage_key=storage_key, state="done",
+    )
+
+
+def mark_upload_intents_orphan_deleted_for_storage_key(
+    *, domain: str, storage_key: str,
+) -> None:
+    """Chiude gli upload intent dopo una compensating delete riuscita."""
+    _mark_upload_intents_for_storage_key(
+        domain=domain, storage_key=storage_key, state="orphan_deleted",
+    )
 
 
 _FETCH_DUE_STALE_UPLOAD_INTENTS_SQL = (

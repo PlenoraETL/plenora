@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 
 from datetime import datetime, timezone
-from typing import Protocol
+from typing import Any, Protocol
 
 from app.core.dataframes.default_loader import (
     DataLoaderProtocol as DataLoaderProtocol,
@@ -28,10 +28,10 @@ __all__ = [
 
 class LoggerProtocol(Protocol):
     """Protocol per logger"""
-    def info(self, msg: str) -> None: ...
-    def error(self, msg: str) -> None: ...
-    def debug(self, msg: str) -> None: ...
-    def warning(self, msg: str) -> None: ...
+    def info(self, msg: str, *args: Any, **kwargs: Any) -> None: ...
+    def error(self, msg: str, *args: Any, **kwargs: Any) -> None: ...
+    def debug(self, msg: str, *args: Any, **kwargs: Any) -> None: ...
+    def warning(self, msg: str, *args: Any, **kwargs: Any) -> None: ...
 
 
 class TimeProviderProtocol(Protocol):
@@ -45,10 +45,10 @@ class TimeProviderProtocol(Protocol):
 
 class NullLogger:
     """Logger che non fa nulla - per test silenziosi"""
-    def info(self, msg: str) -> None: pass
-    def error(self, msg: str) -> None: pass
-    def debug(self, msg: str) -> None: pass
-    def warning(self, msg: str) -> None: pass
+    def info(self, msg: str, *args: Any, **kwargs: Any) -> None: pass
+    def error(self, msg: str, *args: Any, **kwargs: Any) -> None: pass
+    def debug(self, msg: str, *args: Any, **kwargs: Any) -> None: pass
+    def warning(self, msg: str, *args: Any, **kwargs: Any) -> None: pass
 
 
 class DefaultTimeProvider:

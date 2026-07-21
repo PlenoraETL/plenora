@@ -936,6 +936,7 @@ class ExecutionManager:
                             canvas_id=project_id,
                             group_id=group_id,
                             user_id=None,
+                            target_lock_key=target_lock.key,
                         )
                     else:
                         existing_status = str(existing_run.get("status") or "")
@@ -970,6 +971,7 @@ class ExecutionManager:
                         intermediate_runs_db.update_run(
                             carica_run_id,
                             status="running",
+                            target_lock_key=target_lock.key,
                         )
                 except Exception as _ie:
                     logger.error(

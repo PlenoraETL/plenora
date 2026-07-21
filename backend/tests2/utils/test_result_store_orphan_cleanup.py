@@ -14,11 +14,43 @@ import pytest
 
 from app.core.results.blob_writer import (
     ResultSaveError,
+    record_result_upload_intent,
     save_result_blob_from_bytes,
 )
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.shared, pytest.mark.contract]
+
+
+def test_result_upload_intent_returns_persisted_identifier(monkeypatch):
+    monkeypatch.setattr(
+        "app.core.results.blob_writer.reconciliation_module.record_upload_intent",
+        lambda **_kwargs: "intent-1",
+    )
+
+    assert record_result_upload_intent(
+        "tenants/g/results/p/r.bin",
+        project_id="p",
+        result_id="r",
+        filename="r.bin",
+        size_bytes=1,
+    ) == "intent-1"
+
+
+def test_result_upload_intent_fails_closed_when_not_persisted(monkeypatch):
+    monkeypatch.setattr(
+        "app.core.results.blob_writer.reconciliation_module.record_upload_intent",
+        lambda **_kwargs: None,
+    )
+
+    with pytest.raises(ResultSaveError, match="anti-orphan"):
+        record_result_upload_intent(
+            "tenants/g/results/p/r.bin",
+            project_id="p",
+            result_id="r",
+            filename="r.bin",
+            size_bytes=1,
+        )
 
 legacy_path_result_blob = pytest.mark.skip(
     reason="save_result_blob(path) tombstonato post QUERY-1; usare save_result_blob_from_bytes"
@@ -126,6 +158,11 @@ def mock_db_save_fails(monkeypatch):
         raise RuntimeError("DB save FK violation")
 
     monkeypatch.setattr(results_store, "save_result_row", _raise)
+    monkeypatch.setattr(
+        result_blob_writer.reconciliation_module,
+        "is_storage_key_referenced",
+        lambda *_args, **_kwargs: False,
+    )
     monkeypatch.setattr(
         result_blob_writer,
         "record_result_upload_intent",
@@ -374,6 +411,36 @@ def test_object_storage_db_save_failure_bytes_path_triggers_delete(
 
     assert len(storage.uploads) == 1
     assert storage.deletes == ["tenants/grp-1/results/p1/res-orph.bin"]
+
+
+@pytest.mark.usefixtures("mock_db_save_fails")
+def test_db_exception_after_commit_does_not_delete_referenced_blob(
+    stub_storage_factory, monkeypatch
+):
+    """Un'eccezione DB non prova il rollback: una reference confermata vince."""
+    import app.core.results.blob_writer as result_blob_writer
+
+    monkeypatch.setenv("STORAGE_POLICY", "object_storage")
+    storage = stub_storage_factory()
+    closed = []
+    monkeypatch.setattr(
+        result_blob_writer.reconciliation_module,
+        "is_storage_key_referenced",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        result_blob_writer,
+        "close_result_upload_intent",
+        lambda intent_id: closed.append(intent_id),
+    )
+
+    result_id = save_result_blob_from_bytes(
+        project_id="p1", data=b"payload", filename="out.bin", fmt="bin",
+    )
+
+    assert result_id == "res-orph"
+    assert storage.deletes == []
+    assert closed == ["intent-default"]
 
 
 # (c) upload OK + DB save fails + delete fails

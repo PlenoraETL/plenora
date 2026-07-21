@@ -310,6 +310,7 @@ def test_carica_revocation_closes_run_and_worker_connections(monkeypatch):
             return SimpleNamespace(group_id="group-1")
 
     monkeypatch.setattr(task, "is_already_completed", lambda _run_id: False)
+    monkeypatch.setattr(task.intermediate_runs_db, "get_run", lambda _run_id: None)
     monkeypatch.setattr(task, "recheck_user_authorized", lambda **_kwargs: None)
     monkeypatch.setattr(task, "ProjectService", _ProjectService)
     monkeypatch.setattr(task, "open_run", lambda **_kwargs: None)

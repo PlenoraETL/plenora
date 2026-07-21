@@ -72,8 +72,8 @@ def run_group_cleanup_handlers(
     report: MutableMapping[str, int],
     log: CleanupLogger,
     handlers: Sequence[GroupCleanupHandler] | None = None,
-) -> None:
-    _run_handlers(
+) -> tuple[str, ...]:
+    return _run_handlers(
         group_id,
         report,
         log,

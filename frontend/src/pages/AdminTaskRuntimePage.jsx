@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import AppSidebar from '../components/AppSidebar';
-import { getTaskRuntime } from '../api/adminTaskRuntime';
+import { getTaskRuntime, resolveUncertainCaricaRun } from '../api/adminTaskRuntime';
 import { humanizeErrorMessage } from '../utils/errorMessages';
 import '../styles/AdminTaskRuntimePage.css';
 
@@ -22,6 +22,7 @@ export default function AdminTaskRuntimePage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [resolvingRunId, setResolvingRunId] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -34,6 +35,28 @@ export default function AdminTaskRuntimePage() {
       setLoading(false);
     }
   }, []);
+
+  const resolveRun = useCallback(async (runId, resolution) => {
+    const note = window.prompt(
+      resolution === 'confirm_completed'
+        ? 'Conferma verifica della destinazione (nota obbligatoria):'
+        : 'Motivo per cui la retry è sicura (nota obbligatoria):',
+    );
+    if (note == null) return;
+    if (note.trim().length < 3) {
+      setError('La nota deve contenere almeno 3 caratteri.');
+      return;
+    }
+    setResolvingRunId(runId);
+    try {
+      await resolveUncertainCaricaRun(runId, resolution, note.trim());
+      await load();
+    } catch (err) {
+      setError(humanizeErrorMessage(err));
+    } finally {
+      setResolvingRunId('');
+    }
+  }, [load]);
 
   useEffect(() => {
     let stopped = false;
@@ -86,7 +109,41 @@ export default function AdminTaskRuntimePage() {
           <article className={totals.dead_letters > 0 ? 'task-runtime__summary-error' : ''}>
             <span>Dead letter</span><b>{totals.dead_letters ?? '—'}</b>
           </article>
+          <article className={totals.uncertain_carica_runs > 0 ? 'task-runtime__summary-error' : ''}>
+            <span>CARICA incerte</span><b>{totals.uncertain_carica_runs ?? '—'}</b>
+          </article>
         </section>
+
+        {!!(data?.uncertain_runs || []).length && (
+          <section className="task-runtime__panel">
+            <div className="task-runtime__panel-head">
+              <div>
+                <h2>Scritture CARICA da verificare</h2>
+                <p>Controlla la destinazione prima di confermare o autorizzare una retry.</p>
+              </div>
+            </div>
+            <div className="task-runtime__table-wrap">
+              <table>
+                <thead><tr><th>Run</th><th>Progetto</th><th>Gruppo</th><th>Avvio</th><th>Errore</th><th>Azioni</th></tr></thead>
+                <tbody>
+                  {data.uncertain_runs.map((run) => (
+                    <tr key={run.run_id}>
+                      <td className="task-runtime__mono" title={run.run_id}>{run.run_id}</td>
+                      <td className="task-runtime__mono">{run.project_id}</td>
+                      <td>{run.group_id}</td>
+                      <td>{new Date(run.timestamp).toLocaleString()}</td>
+                      <td className="task-runtime__message" title={run.error_message || ''}>{run.error_message || '—'}</td>
+                      <td className="task-runtime__actions">
+                        <button type="button" disabled={resolvingRunId === run.run_id} onClick={() => resolveRun(run.run_id, 'confirm_completed')}>Conferma completata</button>
+                        <button type="button" disabled={resolvingRunId === run.run_id} onClick={() => resolveRun(run.run_id, 'allow_retry')}>Autorizza retry</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
 
         <section className="task-runtime__panel">
           <div className="task-runtime__panel-head">

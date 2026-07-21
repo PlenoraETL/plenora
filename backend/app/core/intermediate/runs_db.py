@@ -33,6 +33,7 @@ class RunRow:
     input_hash: Optional[str] = None
     output_hash: Optional[str] = None
     user_id: Optional[str] = None
+    target_lock_key: Optional[str] = None
     _extra: Mapping[str, Any] = field(
         default_factory=dict,
         repr=False,
@@ -108,6 +109,7 @@ _RUN_ROW_FIELD_NAMES = (
     "input_hash",
     "output_hash",
     "user_id",
+    "target_lock_key",
 )
 
 RunRecord = Mapping[str, Any] | RunRow
@@ -121,6 +123,7 @@ _ALLOWED_RUN_UPDATE_FIELDS = {
     "total_exec_time",
     "total_rows_in", "total_rows_out", "total_rows_dropped",
     "total_nodes", "nodes_ok", "nodes_error", "nodes_skipped",
+    "target_lock_key",
 }
 
 
@@ -145,6 +148,7 @@ def create_run(
     group_id: str,
     total_nodes: int = 0,
     user_id: Optional[str] = None,
+    target_lock_key: Optional[str] = None,
     *,
     execute_func: Execute | None = None,
     get_run_func: GetRun | None = None,
@@ -155,9 +159,13 @@ def create_run(
     now = datetime.now(timezone.utc).isoformat()
     execute_boundary(
         """INSERT INTO runs
-           (run_id, canvas_id, group_id, timestamp, status, total_nodes, user_id)
-           VALUES (%s,%s,%s,%s,%s,%s,%s)""",
-        (run_id, canvas_id, group_id, now, "running", total_nodes, user_id),
+           (run_id, canvas_id, group_id, timestamp, status, total_nodes, user_id,
+            target_lock_key)
+           VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
+        (
+            run_id, canvas_id, group_id, now, "running", total_nodes, user_id,
+            target_lock_key,
+        ),
     )
     return _hydrate_run(get_run_boundary(run_id))
 

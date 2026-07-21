@@ -5,6 +5,7 @@ Locks backend contracts and regression boundaries for the current architecture.
 """
 
 from datetime import datetime, timezone
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -24,6 +25,16 @@ def _build_client(current_user):
     app.dependency_overrides[require_not_esecutore] = lambda: current_user
     app.include_router(router, prefix="/api")
     return TestClient(app, raise_server_exceptions=False)
+
+
+def _stream(data: bytes, filename: str):
+    return {
+        "body": BytesIO(data),
+        "size": len(data),
+        "filename": filename,
+        "format": "csv",
+        "backend": "object_storage",
+    }
 
 
 def test_scheduler_heartbeat_parser_accepts_native_pg_datetime():
@@ -62,7 +73,7 @@ def test_download_without_run_uses_latest_archived_schedule_run(current_user, tm
              {"timestamp_str": "20260401_060000", "execution_info": {"result_id": "res-old"}},
          ]), \
          patch("app.core.results.store.get_result_row", side_effect=lambda rid: result_rows.get(rid)), \
-         patch("app.core.results.store.get_result_data", side_effect=lambda rid, group_id=None: {"res-old": b"id\n1\n", "res-new": b"id\n2\n"}[rid]), \
+         patch("app.core.results.blob.open_result_stream", side_effect=lambda rid, **kwargs: _stream({"res-old": b"id\n1\n", "res-new": b"id\n2\n"}[rid], result_rows[rid].filename)), \
          patch("app.config.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)):
         response = client.get(f"/api/schedules/{schedule_id}/download")
 
@@ -102,7 +113,7 @@ def test_download_specific_run_returns_requested_file(current_user, tmp_path):
              {"timestamp_str": "20260402_060000", "execution_info": {"result_id": "res-7"}},
          ]), \
          patch("app.core.results.store.get_result_row", return_value=result_row), \
-         patch("app.core.results.store.get_result_data", return_value=b"id\n7\n"), \
+         patch("app.core.results.blob.open_result_stream", return_value=_stream(b"id\n7\n", "requested.csv")), \
          patch("app.config.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)):
         response = client.get(
             f"/api/schedules/{schedule_id}/download",
@@ -130,7 +141,7 @@ def test_download_blob_only_run_uses_schedule_result_id(current_user, tmp_path):
          patch("app.core.scheduler.db.get_schedule_row", return_value=SimpleNamespace(id=schedule_id, group_id="grp-1")), \
          patch("app.core.scheduler.db.list_schedule_logs", return_value=[{"execution_info": {"result_id": "res-1"}}]), \
          patch("app.core.results.store.get_result_row", return_value=result_row), \
-         patch("app.core.results.store.get_result_data", return_value=b"id\n9\n"), \
+         patch("app.core.results.blob.open_result_stream", return_value=_stream(b"id\n9\n", "blob.csv")), \
          patch("app.config.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)):
         response = client.get(f"/api/schedules/{schedule_id}/download")
 
@@ -165,9 +176,15 @@ def test_download_specific_blob_only_run_uses_requested_result_id(
     def fake_get_result_row(result_id):
         return result_rows.get(result_id)
 
-    def fake_get_result_data(result_id, group_id=None):
-        assert group_id == "grp-1"
-        return {"res-old": b"old\n", "res-new": b"new\n"}[result_id]
+    def fake_open_result_stream(
+        result_id, *, expected_project_id=None, expected_group_id=None,
+    ):
+        assert expected_project_id == project_id
+        assert expected_group_id == "grp-1"
+        return _stream(
+            {"res-old": b"old\n", "res-new": b"new\n"}[result_id],
+            result_rows[result_id].filename,
+        )
 
     logs = [
         {
@@ -184,7 +201,7 @@ def test_download_specific_blob_only_run_uses_requested_result_id(
          patch("app.core.scheduler.db.get_schedule_row", return_value=SimpleNamespace(id=schedule_id, group_id="grp-1")), \
          patch("app.core.scheduler.db.list_schedule_logs", return_value=logs), \
          patch("app.core.results.store.get_result_row", side_effect=fake_get_result_row), \
-         patch("app.core.results.store.get_result_data", side_effect=fake_get_result_data), \
+         patch("app.core.results.blob.open_result_stream", side_effect=fake_open_result_stream), \
          patch("app.config.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)):
         response = client.get(
             f"/api/schedules/{schedule_id}/download",
@@ -206,7 +223,7 @@ def test_download_blob_only_run_rejects_cross_project_result(current_user, tmp_p
     with patch("app.core.scheduler.schedule_service.ScheduleService.get_schedule", return_value=schedule_cfg), \
          patch("app.core.scheduler.db.get_schedule_row", return_value=SimpleNamespace(id=schedule_id, group_id="grp-1")), \
          patch("app.core.scheduler.db.list_schedule_logs", return_value=[{"execution_info": {"result_id": "res-1"}}]), \
-         patch("app.core.results.store.get_result_row", return_value=result_row), \
+         patch("app.core.results.blob.open_result_stream", return_value=None), \
          patch("app.config.settings", new=SimpleNamespace(RESULTS_DIR=tmp_path)):
         response = client.get(f"/api/schedules/{schedule_id}/download")
 

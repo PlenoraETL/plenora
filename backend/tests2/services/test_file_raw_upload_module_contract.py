@@ -183,19 +183,43 @@ def test_dispatch_exception_propagates_and_db_save_not_called(collaborators):
 
 
 def test_db_save_exception_propagates(collaborators):
-    from app.core.files.raw_upload import create_raw_from_upload
+    from app.core.files import raw_upload as raw_upload_mod
 
     collaborators["db_save_file_source"].side_effect = RuntimeError("DB write fail")
 
-    with pytest.raises(RuntimeError, match="DB write fail"):
-        create_raw_from_upload(
-            io.BytesIO(b"data"), "x.dxf", "Doc",
-            group_id="grp1",
-            **collaborators,
-        )
+    with patch.object(raw_upload_mod, "finalize_blob_dispatch") as finalize:
+        with pytest.raises(RuntimeError, match="DB write fail"):
+            raw_upload_mod.create_raw_from_upload(
+                io.BytesIO(b"data"), "x.dxf", "Doc",
+                group_id="grp1",
+                **collaborators,
+            )
 
     # dispatch chiamato PRIMA del fail
     collaborators["dispatch_blob_storage"].assert_called_once()
+    finalize.assert_called_once_with(
+        collaborators["dispatch_blob_storage"].return_value,
+        persisted=False,
+        file_id="file_abc123",
+        logger=collaborators["logger"],
+    )
+
+
+def test_db_save_success_closes_upload_intent(collaborators):
+    from app.core.files import raw_upload as raw_upload_mod
+
+    with patch.object(raw_upload_mod, "finalize_blob_dispatch") as finalize:
+        raw_upload_mod.create_raw_from_upload(
+            io.BytesIO(b"data"), "x.dxf", "Doc",
+            group_id="grp1", **collaborators,
+        )
+
+    finalize.assert_called_once_with(
+        collaborators["dispatch_blob_storage"].return_value,
+        persisted=True,
+        file_id="file_abc123",
+        logger=collaborators["logger"],
+    )
 
 
 # 6. group_id None -> default_group propagato coerente

@@ -73,6 +73,29 @@ describe('api/http error interceptor contract', () => {
     expect(error.code).toBeUndefined();
   });
 
+  it('decodes JSON envelopes returned as Blob by download requests', async () => {
+    const onRejected = await loadRejectedInterceptor();
+    const error = {
+      message: 'Request failed with status code 410',
+      config: { url: '/api/tasks/task-1/download', method: 'get' },
+      response: {
+        status: 410,
+        data: new Blob([
+          JSON.stringify({
+            error: 'http_410',
+            message: "Il risultato non e' piu' disponibile",
+          }),
+        ], { type: 'application/json' }),
+      },
+    };
+
+    await expect(onRejected(error)).rejects.toBe(error);
+
+    expect(error.message).toBe("Il risultato non e' piu' disponibile");
+    expect(error.code).toBe('http_410');
+    expect(error.response.data.error).toBe('http_410');
+  });
+
   it('normalizes legacy object detail to a scalar message', async () => {
     const onRejected = await loadRejectedInterceptor();
     const detail = {
