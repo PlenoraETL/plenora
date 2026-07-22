@@ -324,19 +324,18 @@ class Settings:
         # massimo (byte) per un singolo blob letto via Resource Engine
         # `ResultBlobLoader` mode='bytes'/'path' + future kinds
         # file_source_blob, intermediate_artifact, eseguibili_output
-        # Default 200 MB : allineato a
-        # `LOAD_FILE_MAX_BYTES` (200 MB) -- un singolo blob letto sotto
-        # cap non puo' eccedere quello che il path di upload sincrono
-        # gia' tollera. Sotto `WORKER_RSS_MAX_BYTES` (1.5 GB) di un
-        # ordine di grandezza, quindi N download concorrenti restano
-        # nel budget RSS del worker anche su host piccoli. Cap <= 0
+        # Default 400 MB: i project_source reali (estrazioni larghe con
+        # colonne CHAR padded, es. 300k righe x 30 colonne) superano i
+        # 200 MB del vecchio default. Resta sotto `WORKER_RSS_MAX_BYTES`
+        # (1.5 GB) con margine per download concorrenti; host piccoli
+        # possono ridurlo via env. Cap <= 0
         # disabilita il guard. Override via env `RESOURCE_MAX_BYTES`.
         # La wiring consumer-side (cap
         # pre-return in `get_result_data` / `_dispatch_by_id`) e'
         # deferita: il loader stesso non importa `app.config` per
         # anti-god-engine; il guard vivra' a livello caller (es
         # repository risultati o `cloud_backends`).
-        "RESOURCE_MAX_BYTES": 200 * 1024 * 1024,
+        "RESOURCE_MAX_BYTES": 400 * 1024 * 1024,
         # cap dedicato
         # per la preview HTTP di intermediate artifacts (Parquet) e
         # per qualunque preview-side path che oggi materializza bytes
