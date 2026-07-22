@@ -376,7 +376,13 @@ class EstraiExecutor:
             res = self._execute_database(
                 project_id, canvas, result_node, connection, metadata, run_id=run_id,
                 intermediate_mode_override=intermediate_mode_override,
-                update_contract=execution_context is None,
+                # persist_contract: policy dichiarata dal contract path (vedi
+                # PipelineExecutionContract.build_runtime_context). Default True
+                # per fail-safe: un context che non si pronuncia salva comunque.
+                update_contract=(
+                    execution_context is None
+                    or bool(execution_context.get("persist_contract", True))
+                ),
                 output_persistence=output_persistence,
             )
 
@@ -523,7 +529,10 @@ class EstraiExecutor:
                 **persistence_kwargs,
             )
 
-            if res.get("success") and execution_context is None:
+            if res.get("success") and (
+                execution_context is None
+                or bool(execution_context.get("persist_contract", True))
+            ):
                 # L'aggiornamento del contratto output e' best-effort anche
                 # per ArcGIS: errori transienti vengono loggati e marcati,
                 # senza ribaltare una persistenza blob gia' riuscita.

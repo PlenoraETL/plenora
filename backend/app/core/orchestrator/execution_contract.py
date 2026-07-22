@@ -149,6 +149,13 @@ class PipelineExecutionContract(BaseModel):
         context["group_id"] = self.group_id
         if output_task_id:
             context["output_task_id"] = output_task_id
+        # Policy esplicita di persistenza dell'output_contract: le run di
+        # progetto (UI /execute, scheduler, cascata) eseguono il canvas
+        # corrente e devono aggiornare il contratto. Le run degli eseguibili
+        # pubblicati (output_task_id presente) eseguono uno snapshot
+        # congelato: aggiornare il contratto sovrascriverebbe lo schema
+        # corrente con quello dello snapshot.
+        context["persist_contract"] = output_task_id is None
         return context
 
     @property

@@ -435,7 +435,12 @@ class ManipolaExecutor:
         )
 
         # Keep project_source reuse aligned with the actual persisted schema.
-        if save_result.get("success") and execution_context is None:
+        # persist_contract: policy dichiarata dal contract path (vedi
+        # PipelineExecutionContract.build_runtime_context).
+        if save_result.get("success") and (
+            execution_context is None
+            or bool(execution_context.get("persist_contract", True))
+        ):
             persisted_columns = save_result.get("output_columns")
             result_columns = [
                 {"name": c, "type": str(current_df[c].dtype)}
