@@ -25,6 +25,7 @@ from app.core.dataframes.tabular import (
     drop_duplicate_columns,
     empty_dataframe,
     is_numeric_series,
+    is_string_like_series,
     merge_dataframes,
     missing_scalar,
     set_values_where_mask,
@@ -214,8 +215,19 @@ def op_join(
 
         if left_dtype != right_dtype:
 
-            # Strategia: converti entrambi a stringa se uno è object, altrimenti a numerico
-            if left_dtype == 'object' or right_dtype == 'object':
+            # Strategia: se ALMENO un lato e' string-like converti entrambi
+            # a stringa; il ramo numerico resta solo per coppie davvero
+            # numeriche. Il vecchio check `== 'object'` era corretto con
+            # pandas 2 (stringhe sempre object): con pandas 3 due varianti
+            # stringa diverse (es. 'str' arrow da parquet vs 'string' da
+            # groupby) non sono 'object' e cadevano nel ramo numerico, dove
+            # to_numeric(errors='coerce') azzerava a NaN tutte le chiavi
+            # alfanumeriche su ENTRAMBI i lati: join "riuscito" con zero
+            # match e chiavi svuotate, senza alcun errore visibile.
+            if (
+                is_string_like_series(left_df[left_key])
+                or is_string_like_series(right_df[right_key])
+            ):
                 def clean_to_str(series):
                     null_mask = series.isna()
                     if is_numeric_series(series):

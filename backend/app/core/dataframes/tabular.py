@@ -1280,6 +1280,24 @@ def is_numeric_series(values: Any) -> bool:
     return bool(pd.api.types.is_numeric_dtype(values))
 
 
+def is_string_like_series(values: Any) -> bool:
+    """Return True when values have a string-like dtype.
+
+    Copre sia l'object dtype legacy (stringhe in pandas<3) sia le
+    varianti string-native ('str' arrow-backed default di pandas>=3,
+    StringDtype 'string'). Serve ai caller che devono decidere "e' una
+    colonna testo?" senza dipendere dall'uguaglianza esatta del dtype,
+    che tra provenienze diverse (parquet roundtrip vs groupby output)
+    puo' variare pur restando stringa.
+    """
+    try:
+        if pd.api.types.is_object_dtype(values):
+            return True
+        return bool(pd.api.types.is_string_dtype(values))
+    except (TypeError, ValueError):
+        return False
+
+
 def is_bool_series(values: Any) -> bool:
     """Return True when values have a pandas bool dtype."""
     return bool(pd.api.types.is_bool_dtype(values))
