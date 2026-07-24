@@ -860,6 +860,18 @@ def _to_details(record: eseguibili_db.EseguibileRow) -> Mapping[str, object]:
     """Converte un record DB in EseguibileDetails response."""
     canvas = record.canvas
     is_file_based, inferred_ext = _detect_file_based_output(canvas)
+    raw_manifest = record.manifest
+    if raw_manifest:
+        try:
+            manifest = ExecutableManifest.model_validate(raw_manifest)
+            raw_manifest = eseguibili_service.hydrate_manifest_connection_options(
+                manifest,
+                group_id=record.group_id,
+            ).model_dump(mode="json")
+        except ValueError:
+            # Un set eliminato/non valido non deve rendere il dettaglio
+            # dell'eseguibile illeggibile: la run produrrà un errore esplicito.
+            raw_manifest = record.manifest
     return {
         "id": record.id,
         "name": record.name,
@@ -876,7 +888,7 @@ def _to_details(record: eseguibili_db.EseguibileRow) -> Mapping[str, object]:
         "project_type": record.project_type,
         "active_version": record.active_version,
         "active_version_id": record.active_version_id,
-        "manifest": record.manifest,
+        "manifest": raw_manifest,
         "can_edit": None,
         "output_is_file_based": is_file_based,
         "inferred_output_extension": inferred_ext,

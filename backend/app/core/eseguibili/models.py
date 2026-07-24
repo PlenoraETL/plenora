@@ -21,6 +21,7 @@ ExecutableInputKind = Literal[
     "date",
     "datetime",
     "select",
+    "connection",
 ]
 ExecutableBindingMode = Literal["data_source", "node_field"]
 
@@ -61,6 +62,15 @@ class ExecutableInputValidation(BaseModel):
         return self
 
 
+class ConnectionInputOption(BaseModel):
+    """Etichetta pubblica di un membro del Connection Set."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str
+    label: str
+
+
 class ExecutableInputDefinition(BaseModel):
     """Un input pubblico dichiarato da un nodo ``project_input``."""
 
@@ -77,6 +87,8 @@ class ExecutableInputDefinition(BaseModel):
     validation: ExecutableInputValidation = Field(
         default_factory=ExecutableInputValidation
     )
+    connection_set_id: Optional[str] = Field(None, max_length=200)
+    connection_options: list[ConnectionInputOption] = Field(default_factory=list)
     order: int = Field(0, ge=0)
 
     @model_validator(mode="after")
@@ -85,6 +97,16 @@ class ExecutableInputDefinition(BaseModel):
             raise ValueError("multiple è supportato solo per input file")
         if self.kind == "select" and not self.validation.options:
             raise ValueError("un input select deve dichiarare almeno una opzione")
+        if self.kind == "connection" and not self.connection_set_id:
+            raise ValueError(
+                "un input connection deve dichiarare connection_set_id"
+            )
+        if self.kind != "connection" and (
+            self.connection_set_id or self.connection_options
+        ):
+            raise ValueError(
+                "connection_set_id/options sono validi solo per input connection"
+            )
         if self.kind != "file" and self.expected_columns:
             raise ValueError("expected_columns è valido solo per input file")
         return self

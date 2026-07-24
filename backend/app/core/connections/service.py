@@ -259,6 +259,16 @@ class ConnectionService:
         connection_db.delete_connection(connection_id)
         return True
 
+    def list_connection_sets_using_connection(
+        self,
+        connection_id: str,
+    ) -> list[str]:
+        from app.core.connections.connection_sets import (
+            connection_set_ids_using_connection,
+        )
+
+        return connection_set_ids_using_connection(connection_id)
+
     def test_connection(self, connection_id: str) -> ConnectionTestResult:
         connection = self.get_connection(connection_id)
         if not connection:

@@ -5,7 +5,7 @@
  * e, a completamento, le opzioni di download dell'output nei formati disponibili.
  * Usato da tutti e tre gli editor dopo il click su "Esegui".
  */
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { downloadProjectFile } from '../../api/projects';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
@@ -43,6 +43,7 @@ const INTERMEDIATE_MODE_OPTIONS = [
   { value: 'metadata_only',  label: 'metadata_only' },
   { value: 'full_artifact',  label: 'full_artifact' },
 ];
+const EMPTY_INPUT_DEFINITIONS = [];
 
 
 /**
@@ -71,11 +72,30 @@ function ExecutionModal({
   awaitingLaunch = false,
   onLaunch = null,
   user = null,
+  inputDefinitions = EMPTY_INPUT_DEFINITIONS,
 }) {
   const isAsync = projectType === 'arricchisci';
   const isSuper = role.isSuperadmin(user);
   const showConfig = awaitingLaunch && !isExecuting && !result && typeof onLaunch === 'function';
   const [intermediateMode, setIntermediateMode] = useState('');
+  const [runtimeInputs, setRuntimeInputs] = useState({});
+  useEffect(() => {
+    if (!showConfig) return;
+    setRuntimeInputs(Object.fromEntries(
+      inputDefinitions.map(definition => [
+        definition.input_key,
+        definition.default_value ?? '',
+      ]),
+    ));
+  }, [showConfig, inputDefinitions]);
+  const runtimeInputsValid = useMemo(
+    () => inputDefinitions.every(definition => (
+      definition.required === false
+      || (runtimeInputs[definition.input_key] !== ''
+        && runtimeInputs[definition.input_key] != null)
+    )),
+    [inputDefinitions, runtimeInputs],
+  );
   // Progress percepita fluida (Epic C): se il backend resta a 0% la barra
   // striscia comunque verso un tetto, così non sembra bloccata.
   const smoothProgress = useSmoothProgress(progress, isExecuting);
@@ -126,7 +146,11 @@ function ExecutionModal({
     if (typeof onLaunch !== 'function') return;
     // Stringa vuota = "default": passa null al hook che decide se
     // serializzare il query param a livello API.
-    onLaunch(intermediateMode || null);
+    if (inputDefinitions.length === 0) {
+      onLaunch(intermediateMode || null);
+      return;
+    }
+    onLaunch(intermediateMode || null, runtimeInputs);
   };
 
   const footer = showConfig ? (
@@ -134,7 +158,7 @@ function ExecutionModal({
       <ModalButton variant="secondary" onClick={onClose}>
         Annulla
       </ModalButton>
-      <ModalButton variant="primary" onClick={handleLaunchClick}>
+      <ModalButton variant="primary" onClick={handleLaunchClick} disabled={!runtimeInputsValid}>
         ▶ Avvia esecuzione
       </ModalButton>
     </div>
@@ -183,6 +207,80 @@ function ExecutionModal({
           <p className="execution-modal__config-msg">
             Pronto a lanciare l'esecuzione. Conferma con &quot;Avvia esecuzione&quot;.
           </p>
+          {inputDefinitions.map(definition => (
+            <div className="execution-modal__config-row" key={definition.input_key}>
+              <label
+                htmlFor={`execution-input-${definition.input_key}`}
+                className="execution-modal__config-label"
+              >
+                {definition.label}{definition.required !== false ? ' *' : ''}
+              </label>
+              {definition.input_kind === 'connection' ? (
+                <select
+                  id={`execution-input-${definition.input_key}`}
+                  className="execution-modal__config-select"
+                  value={runtimeInputs[definition.input_key] ?? ''}
+                  onChange={event => setRuntimeInputs(current => ({
+                    ...current,
+                    [definition.input_key]: event.target.value,
+                  }))}
+                >
+                  <option value="">Seleziona…</option>
+                  {(definition.connection_options || []).map(option => (
+                    <option key={option.key} value={option.key}>{option.label}</option>
+                  ))}
+                </select>
+              ) : definition.input_kind === 'select' ? (
+                <select
+                  id={`execution-input-${definition.input_key}`}
+                  className="execution-modal__config-select"
+                  value={runtimeInputs[definition.input_key] ?? ''}
+                  onChange={event => setRuntimeInputs(current => ({
+                    ...current,
+                    [definition.input_key]: event.target.value,
+                  }))}
+                >
+                  <option value="">Seleziona…</option>
+                  {(definition.validation?.options || []).map(option => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              ) : definition.input_kind === 'boolean' ? (
+                <select
+                  id={`execution-input-${definition.input_key}`}
+                  className="execution-modal__config-select"
+                  value={runtimeInputs[definition.input_key] ?? ''}
+                  onChange={event => setRuntimeInputs(current => ({
+                    ...current,
+                    [definition.input_key]: event.target.value,
+                  }))}
+                >
+                  <option value="">Seleziona…</option>
+                  <option value="true">Sì</option>
+                  <option value="false">No</option>
+                </select>
+              ) : (
+                <input
+                  id={`execution-input-${definition.input_key}`}
+                  className="execution-modal__config-select"
+                  type={definition.input_kind === 'integer' || definition.input_kind === 'number'
+                    ? 'number'
+                    : definition.input_kind === 'datetime' ? 'datetime-local'
+                    : definition.input_kind || 'text'}
+                  value={runtimeInputs[definition.input_key] ?? ''}
+                  onChange={event => setRuntimeInputs(current => ({
+                    ...current,
+                    [definition.input_key]: event.target.value,
+                  }))}
+                />
+              )}
+              {definition.description && (
+                <span className="execution-modal__config-hint">
+                  {definition.description}
+                </span>
+              )}
+            </div>
+          ))}
           {isSuper && (
             <div className="execution-modal__config-row">
               <label

@@ -33,7 +33,12 @@ from .models import (
     ConnectionUpdate,
     ConnectionList,
     ConnectionTestResult,
+    ConnectionSet,
+    ConnectionSetCreate,
+    ConnectionSetList,
+    ConnectionSetUpdate,
 )
+from . import connection_sets
 
 logger = get_logger(__name__)
 
@@ -129,6 +134,95 @@ def list_connections(
         c.can_edit = compute_can_edit(c, current_user)
 
     return all_resources
+
+
+@router.get("/connection-sets", response_model=ConnectionSetList)
+def list_connection_sets(
+    current_user: CurrentUser = Depends(require_not_esecutore),
+):
+    """Elenca i set del tenant usati per il routing cliente -> connessione."""
+
+    rows = connection_sets.list_connection_sets(
+        group_id=None if current_user.role == "superadmin" else current_user.group_id
+    )
+    for item in rows:
+        item.can_edit = compute_can_edit(item, current_user)
+    return ConnectionSetList(connection_sets=rows)
+
+
+@router.post("/connection-sets", response_model=ConnectionSet, status_code=201)
+@audit_action(action="connection_set.create")
+def create_connection_set(
+    data: ConnectionSetCreate,
+    current_user: CurrentUser = Depends(require_admin),
+):
+    try:
+        created = connection_sets.create_connection_set(
+            data,
+            group_id=current_user.group_id,
+            created_by=current_user.user_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    created.can_edit = compute_can_edit(created, current_user)
+    return created
+
+
+@router.get("/connection-sets/{connection_set_id}", response_model=ConnectionSet)
+def get_connection_set(
+    connection_set_id: str,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+):
+    item = connection_sets.get_connection_set(connection_set_id)
+    if item is None or (
+        current_user.role != "superadmin" and item.group_id != current_user.group_id
+    ):
+        raise HTTPException(status_code=404, detail="Connection Set non trovato")
+    item.can_edit = compute_can_edit(item, current_user)
+    return item
+
+
+@router.put("/connection-sets/{connection_set_id}", response_model=ConnectionSet)
+@audit_action(action="connection_set.update", target_param="connection_set_id")
+def update_connection_set(
+    connection_set_id: str,
+    data: ConnectionSetUpdate,
+    current_user: CurrentUser = Depends(require_admin),
+):
+    existing = connection_sets.get_connection_set(connection_set_id)
+    assert_can_modify(existing, current_user, "Connection Set")
+    try:
+        updated = connection_sets.update_connection_set(connection_set_id, data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Connection Set non trovato")
+    updated.can_edit = compute_can_edit(updated, current_user)
+    return updated
+
+
+@router.delete("/connection-sets/{connection_set_id}", status_code=204)
+@audit_action(action="connection_set.delete", target_param="connection_set_id")
+def delete_connection_set(
+    connection_set_id: str,
+    current_user: CurrentUser = Depends(require_admin),
+):
+    existing = connection_sets.get_connection_set(connection_set_id)
+    assert_can_modify(existing, current_user, "Connection Set")
+    dependencies = connection_sets.connection_set_dependencies(connection_set_id)
+    if dependencies:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": connection_errors.CONNECTION_IN_USE,
+                "message": (
+                    "Connection Set usato da progetti o eseguibili. "
+                    "Rimuovere prima le associazioni."
+                ),
+                "dependencies": dependencies,
+            },
+        )
+    connection_sets.delete_connection_set(connection_set_id)
 
 
 @router.put("/connections/{connection_id}", response_model=DatabaseConnection)
@@ -229,6 +323,35 @@ def delete_connection(
                     for p in visible
                 ],
                 "hidden_count": hidden_count,
+            },
+        )
+
+    set_usage_loader = getattr(
+        _connection_service,
+        "list_connection_sets_using_connection",
+        None,
+    )
+    raw_using_sets = (
+        set_usage_loader(connection_id) if callable(set_usage_loader) else []
+    )
+    using_sets = (
+        list(raw_using_sets)
+        if isinstance(raw_using_sets, (list, tuple, set))
+        else []
+    )
+    if using_sets:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": connection_errors.CONNECTION_IN_USE,
+                "message": (
+                    f"Connessione usata in {len(using_sets)} Connection Set. "
+                    "Rimuoverla dai set prima di cancellarla."
+                ),
+                "dependencies": [
+                    {"kind": "connection_set", "id": item_id, "name": item_id}
+                    for item_id in using_sets
+                ],
             },
         )
 

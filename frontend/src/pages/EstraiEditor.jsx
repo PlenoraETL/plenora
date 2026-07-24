@@ -2,7 +2,7 @@
  * EstraiEditor.jsx — Editor visuale per il modulo ESTRAI
  * Logica invariata — solo classi CSS aggiornate al design system Plenora
  */
-import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import 'reactflow/dist/style.css';
 import EditorShell from '../components/editor/EditorShell';
@@ -31,6 +31,7 @@ import '../components/nodes/DataSourceNode.css';
 import { calculateOutputColumnsRecursive } from '../utils/columnUtils';
 import { createEdgeFromData, deserializeNodes } from '../utils/nodeFactories';
 import { getLayerSchema } from '../api/features';
+import { listConnectionSets } from '../api/connections';
 import { usePreview, useExecution, useValidationHighlights, useEdgeHandlers, useCanvasCore, useCaricarica, useCanvasSave, useUnsavedChangesGuard } from '../hooks';
 import { useEditorData } from '../hooks/useEditorData';
 import { describeAccessDeniedNodes } from '../utils/canvasAccessControl';
@@ -64,6 +65,7 @@ function EstraiEditor() {
   const hexCanvasRef = useRef(null);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
   const canvasLoadedForRef = useRef(null);
+  const connectionSetsLoadedRef = useRef(false);
   const toast = useToast();
 
   useHexCanvas(hexCanvasRef);
@@ -87,11 +89,47 @@ function EstraiEditor() {
   const [showVersions, setShowVersions]           = useState(false);
   const [visibleTableCount, setVisibleTableCount] = useState(TABLES_PAGE_SIZE);
   const [visibleViewCount,  setVisibleViewCount]  = useState(TABLES_PAGE_SIZE);
+  const [connectionSets, setConnectionSets]       = useState([]);
   const { theme, setTheme: toggleTheme } = useTheme();
 
   // Reset visible count when search changes
   useEffect(() => { setVisibleTableCount(TABLES_PAGE_SIZE); }, [searchQuery]);
   useEffect(() => { setVisibleViewCount(TABLES_PAGE_SIZE);  }, [viewSearchQuery]);
+  useEffect(() => {
+    if (!nodes.some(node => (
+      node.type === 'project_input' && node.data?.input_kind === 'connection'
+    ))) return undefined;
+    if (connectionSetsLoadedRef.current) return undefined;
+    connectionSetsLoadedRef.current = true;
+    let active = true;
+    listConnectionSets()
+      .then(data => { if (active) setConnectionSets(data.connection_sets || []); })
+      .catch(() => {
+        connectionSetsLoadedRef.current = false;
+        if (active) setConnectionSets([]);
+      });
+    return () => { active = false; };
+  }, [nodes]);
+  const runtimeInputDefinitions = useMemo(
+    () => nodes
+      .filter(node => (
+        node.type === 'project_input' && node.data?.input_kind !== 'file'
+      ))
+      .map(node => {
+        const definition = { ...node.data };
+        if (definition.input_kind === 'connection') {
+          const set = connectionSets.find(item => (
+            item.id === definition.connection_set_id
+          ));
+          definition.connection_options = (set?.members || [])
+            .filter(member => member.active)
+            .map(member => ({ key: member.selector_key, label: member.label }));
+        }
+        return definition;
+      })
+      .sort((left, right) => (left.order || 0) - (right.order || 0)),
+    [nodes, connectionSets],
+  );
   const preview    = usePreview(projectId, handleSaveQuiet);
   const execution  = useExecution(projectId, { onBeforeExecute: handleSaveQuiet });
   const { saving, handleSaveCanvas } = useCanvasSave(handleSaveQuiet, {
@@ -673,6 +711,7 @@ function EstraiEditor() {
           title="▶ Esecuzione Query" projectType="estrai"
           caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling}
           awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user}
+          inputDefinitions={runtimeInputDefinitions}
         />
         <CaricaricaModal
           isOpen={caricarica.showModal} onClose={() => caricarica.closeModal()}

@@ -9,6 +9,11 @@
 import React, { useState, useEffect } from 'react';
 import { getColumnTypeIcon, getColumnTypeLabel } from '../../utils/columnUtils';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
+import useCanvasStore from '../../store/useCanvasStore';
+import {
+  createParameterBindingEdge,
+  isParameterBindingEdge,
+} from '../../utils/runtimeBindingEdges';
 import './FilterModal.css';
 
 /**
@@ -20,8 +25,17 @@ import './FilterModal.css';
  * - Rimosso: overlay/stopPropagation (ModalWrapper lo fa)
  * - Rimosso: if (!isOpen) return null (ModalWrapper lo fa)
  */
-function FilterModal({ isOpen, onClose, filters, columns, tableName, onSave }) {
+function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onSave }) {
   const [localFilters, setLocalFilters] = useState([]);
+  const [bindingSelections, setBindingSelections] = useState({});
+  const nodes = useCanvasStore(state => state.nodes);
+  const edges = useCanvasStore(state => state.edges);
+  const setEdges = useCanvasStore(state => state.setEdges);
+  const scalarInputs = nodes.filter(node => (
+    node.type === 'project_input'
+    && node.data?.input_kind !== 'file'
+    && node.data?.input_kind !== 'connection'
+  ));
 
   // Normalizza colonne per supportare sia vecchio formato (stringhe) che nuovo ({name, type})
   const normalizedColumns = columns.map(col => {
@@ -37,8 +51,18 @@ function FilterModal({ isOpen, onClose, filters, columns, tableName, onSave }) {
   useEffect(() => {
     if (isOpen) {
       setLocalFilters(filters.length > 0 ? [...filters] : [{ column: '', operator: '=', value: '' }]);
+      const nextSelections = {};
+      filters.forEach((_filter, index) => {
+        const binding = edges.find(edge => (
+          isParameterBindingEdge(edge)
+          && edge.target === nodeId
+          && edge.data?.target_field === `filters.${index}.value`
+        ));
+        if (binding) nextSelections[index] = binding.source;
+      });
+      setBindingSelections(nextSelections);
     }
-  }, [isOpen, filters]);
+  }, [isOpen, filters, edges, nodeId]);
 
   // RIMOSSO: useEffect per ESC - ModalWrapper lo gestisce automaticamente
 
@@ -123,8 +147,17 @@ function FilterModal({ isOpen, onClose, filters, columns, tableName, onSave }) {
   const removeFilter = (index) => {
     if (localFilters.length > 1) {
       setLocalFilters(localFilters.filter((_, i) => i !== index));
+      setBindingSelections(current => Object.fromEntries(
+        Object.entries(current)
+          .filter(([key]) => Number(key) !== index)
+          .map(([key, value]) => [
+            Number(key) > index ? Number(key) - 1 : Number(key),
+            value,
+          ]),
+      ));
     } else {
       setLocalFilters([{ column: '', operator: '=', value: '' }]);
+      setBindingSelections({});
     }
   };
 
@@ -146,8 +179,30 @@ function FilterModal({ isOpen, onClose, filters, columns, tableName, onSave }) {
   };
 
   const handleSave = () => {
-    const validFilters = localFilters.filter(f => f.column);
+    const validRows = localFilters
+      .map((filter, index) => ({ filter, inputNodeId: bindingSelections[index] }))
+      .filter(item => item.filter.column);
+    const validFilters = validRows.map(item => item.filter);
     onSave(validFilters);
+    if (nodeId) {
+      setEdges(current => {
+        const withoutFilterBindings = current.filter(edge => !(
+          isParameterBindingEdge(edge)
+          && edge.target === nodeId
+          && /^filters\.\d+\.value$/.test(edge.data?.target_field || '')
+        ));
+        const runtimeEdges = validRows.flatMap((item, index) => (
+          item.inputNodeId
+            ? [createParameterBindingEdge({
+                source: item.inputNodeId,
+                target: nodeId,
+                targetField: `filters.${index}.value`,
+              })]
+            : []
+        ));
+        return [...withoutFilterBindings, ...runtimeEdges];
+      });
+    }
     onClose();
   };
 
@@ -232,11 +287,34 @@ function FilterModal({ isOpen, onClose, filters, columns, tableName, onSave }) {
               {needsValue && (
                 <div className="form-group">
                   <label>Valore</label>
+                  {scalarInputs.length > 0 && (
+                    <select
+                      value={bindingSelections[index] || ''}
+                      onChange={event => {
+                        const inputNodeId = event.target.value;
+                        setBindingSelections(current => ({
+                          ...current,
+                          [index]: inputNodeId,
+                        }));
+                        if (inputNodeId) updateFilter(index, 'value', '');
+                      }}
+                    >
+                      <option value="">Valore fisso</option>
+                      {scalarInputs.map(inputNode => (
+                        <option key={inputNode.id} value={inputNode.id}>
+                          Input runtime: {inputNode.data?.label || inputNode.data?.input_key}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <input
                     type={getInputType(colType)}
                     value={filter.value}
+                    disabled={Boolean(bindingSelections[index])}
                     onChange={(e) => updateFilter(index, 'value', e.target.value)}
-                    placeholder={getValuePlaceholder(colType, filter.operator)}
+                    placeholder={bindingSelections[index]
+                      ? 'Valore fornito a runtime'
+                      : getValuePlaceholder(colType, filter.operator)}
                   />
                   {filter.operator === 'LIKE' && (
                     <div className="filter-modal__value-hint">
@@ -298,7 +376,10 @@ function FilterModal({ isOpen, onClose, filters, columns, tableName, onSave }) {
                   } else if (f.operator === 'BETWEEN') {
                     valueDisplay = f.value || '? AND ?';
                   } else {
-                    valueDisplay = f.value 
+                    const inputNode = nodes.find(node => node.id === bindingSelections[idx]);
+                    valueDisplay = inputNode
+                      ? `{{${inputNode.data?.input_key || 'input'}}}`
+                      : f.value
                       ? (isNumeric ? f.value : `'${f.value}'`)
                       : '?';
                   }

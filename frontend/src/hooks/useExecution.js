@@ -290,11 +290,14 @@ const handleExecute = useCallback(async (executeOptions = {}) => {
     setCaricaPolling(false);
   }, []);
 
-  const launch = useCallback((intermediateMode = null) => {
+  const launch = useCallback((intermediateMode = null, runtimeInputs = {}) => {
     const baseOpts = pendingOptsRef.current || {};
-    const merged = intermediateMode
-      ? { ...baseOpts, intermediate_mode: intermediateMode }
+    const withInputs = Object.keys(runtimeInputs || {}).length
+      ? { ...baseOpts, inputs: runtimeInputs }
       : baseOpts;
+    const merged = intermediateMode
+      ? { ...withInputs, intermediate_mode: intermediateMode }
+      : withInputs;
     pendingOptsRef.current = null;
     return handleExecute(merged);
   }, [handleExecute]);

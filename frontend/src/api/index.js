@@ -47,6 +47,10 @@ export {
   deleteConnection,
   testConnection,
   getConnectionTables,
+  listConnectionSets,
+  createConnectionSet,
+  updateConnectionSet,
+  deleteConnectionSet,
 } from './connections';
 
 export {

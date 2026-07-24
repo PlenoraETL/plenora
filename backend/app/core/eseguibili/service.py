@@ -21,6 +21,7 @@ from app.core.projects import access_context as project_access_context
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.files import db as files_db
 from app.core.files.service import file_source_service
+from app.core.connections import connection_sets
 from app.shared.contracts.payloads import JsonObject
 
 from . import db as eseguibili_db
@@ -31,6 +32,7 @@ from .models import (
     ExecutableManifest,
     ExecutableRunResult,
     EseguibileExecutionResult,
+    ConnectionInputOption,
 )
 from .runtime import resolve_runtime_inputs
 from .manifest import compile_manifest
@@ -39,6 +41,62 @@ from .storage import INTERNAL_ARTIFACT_PREFIX
 logger = get_logger(__name__)
 
 UPLOAD_METADATA_KEY = "eseguibili_upload"
+
+
+def hydrate_manifest_connection_options(
+    manifest: ExecutableManifest,
+    *,
+    group_id: str,
+) -> ExecutableManifest:
+    """Aggiorna le sole opzioni pubbliche usando lo stato corrente del set."""
+
+    hydrated = []
+    for definition in manifest.inputs:
+        if definition.kind != "connection" or not definition.connection_set_id:
+            hydrated.append(definition)
+            continue
+        options = connection_sets.connection_set_options(
+            definition.connection_set_id,
+            expected_group_id=group_id,
+        )
+        hydrated.append(
+            definition.model_copy(
+                update={
+                    "connection_options": [
+                        ConnectionInputOption(key=item.key, label=item.label)
+                        for item in options
+                    ]
+                }
+            )
+        )
+    return manifest.model_copy(update={"inputs": hydrated})
+
+
+def resolve_runtime_connection_id(
+    manifest: ExecutableManifest,
+    *,
+    raw_inputs: Mapping[str, object],
+    group_id: str,
+) -> str | None:
+    definitions = [
+        item for item in manifest.inputs if item.kind == "connection"
+    ]
+    if not definitions:
+        return manifest.default_connection_id
+    if len(definitions) > 1:
+        raise ValueError("Un progetto Estrai può dichiarare un solo input connessione")
+    definition = definitions[0]
+    raw_value = raw_inputs.get(definition.key, definition.default_value)
+    selector_key = str(raw_value or "").strip()
+    if not selector_key:
+        if definition.required:
+            raise ValueError(f"Input obbligatorio mancante: {definition.label}")
+        return manifest.default_connection_id
+    return connection_sets.resolve_connection(
+        str(definition.connection_set_id),
+        selector_key,
+        expected_group_id=group_id,
+    )
 
 
 def _sanitize_output_base_name(raw_name: str) -> str:
@@ -105,6 +163,7 @@ def create_from_project(
         canvas=cloned_canvas,
         default_connection_id=getattr(proj, "default_connection_id", None),
     )
+    manifest = hydrate_manifest_connection_options(manifest, group_id=group_id)
     first_file_input = next(
         (item for item in manifest.inputs if item.kind == "file"), None
     )
@@ -166,6 +225,10 @@ def publish_new_version(
         project_type=project_type,
         canvas=cloned_canvas,
         default_connection_id=getattr(proj, "default_connection_id", None),
+    )
+    manifest = hydrate_manifest_connection_options(
+        manifest,
+        group_id=eseguibile.group_id,
     )
     version = eseguibili_db.create_eseguibile_version(
         eseguibile_id=eseguibile.id,
@@ -704,6 +767,11 @@ def execute_versioned(
         values=raw_inputs,
         group_id=eseguibile.group_id,
     )
+    runtime_connection_id = resolve_runtime_connection_id(
+        manifest,
+        raw_inputs=raw_inputs,
+        group_id=eseguibile.group_id,
+    )
 
     final_format = normalize_export_format(
         output_format or eseguibile.default_output_format or "xlsx"
@@ -749,7 +817,7 @@ def execute_versioned(
                     "run_id": run_id,
                 },
                 runtime_context={
-                    "default_connection_id": manifest.default_connection_id,
+                    "default_connection_id": runtime_connection_id,
                     "cleanup_file_source_ids": cleanup_ids,
                     "output_format": final_format,
                     "output_name": base_name,
@@ -781,7 +849,7 @@ def execute_versioned(
                     "run_id": run_id,
                 },
                 runtime_context={
-                    "default_connection_id": manifest.default_connection_id,
+                    "default_connection_id": runtime_connection_id,
                     "cleanup_file_source_ids": cleanup_ids,
                     "output_format": final_format,
                     "output_name": base_name,

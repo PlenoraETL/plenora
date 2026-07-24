@@ -68,3 +68,22 @@ export const getConnectionTables = async (connectionId) => {
   const response = await http.get(`/connections/${connectionId}/tables`);
   return response.data;
 };
+
+export const listConnectionSets = async () => {
+  const response = await http.get('/connection-sets');
+  return response.data;
+};
+
+export const createConnectionSet = async (data) => {
+  const response = await http.post('/connection-sets', data);
+  return response.data;
+};
+
+export const updateConnectionSet = async (connectionSetId, data) => {
+  const response = await http.put(`/connection-sets/${connectionSetId}`, data);
+  return response.data;
+};
+
+export const deleteConnectionSet = async (connectionSetId) => {
+  await http.delete(`/connection-sets/${connectionSetId}`);
+};

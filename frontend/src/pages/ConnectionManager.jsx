@@ -21,6 +21,7 @@ import AppSidebar from '../components/AppSidebar';
 import ThemeToggle from '../components/common/ThemeToggle';
 import ModalWrapper, { ModalButton } from '../components/common/ModalWrapper';
 import ConfirmDialog from '../components/common/ConfirmDialog';
+import ConnectionSetsPanel from '../components/connections/ConnectionSetsPanel';
 import { useConfirmModal } from '../hooks/useConfirmModal';
 import { handleCascade409, formatCascadeDependencies } from '../api/errors';
 import { can, role } from '../utils/permissions';
@@ -201,8 +202,8 @@ function ConnectionManager() {
 
   const dbConns  = allConnections.filter(c => c._category === 'database');
   const arcConns = allConnections.filter(c => c._category === 'arcgis');
-  const visibleDb  = activeTab === 'arcgis'    ? [] : dbConns;
-  const visibleArc = activeTab === 'database'  ? [] : arcConns;
+  const visibleDb  = ['arcgis', 'sets'].includes(activeTab) ? [] : dbConns;
+  const visibleArc = ['database', 'sets'].includes(activeTab) ? [] : arcConns;
 
   if (loading) return (
     <div className="cm cm--loading">
@@ -234,14 +235,15 @@ function ConnectionManager() {
               { key: 'all',      label: 'Tutte',    count: allConnections.length },
               { key: 'database', label: 'Database', count: dbConns.length },
               { key: 'arcgis',   label: 'ArcGIS',   count: arcConns.length },
+              { key: 'sets',     label: 'Connection Set', count: null },
             ].map(t => (
               <button key={t.key} type="button" className={`cm__tab ${activeTab === t.key ? 'cm__tab--active' : ''}`} onClick={() => setActiveTab(t.key)}>
-                {t.label} <span className="cm__tab-count">{t.count}</span>
+                {t.label} {t.count != null && <span className="cm__tab-count">{t.count}</span>}
               </button>
             ))}
           </div>
 
-          {allConnections.length === 0 ? (
+          {allConnections.length === 0 && activeTab !== 'sets' ? (
             <EmptyState
               onNew={() => handleOpenModal()}
               canCreate={canCreateConnection}
@@ -276,6 +278,16 @@ function ConnectionManager() {
                   onShare={setSharingConnection}
                   isSuperadmin={isSuperadmin}
                   arcgis={true}
+                />
+              )}
+              {activeTab === 'sets' && (
+                <ConnectionSetsPanel
+                  connections={dbConns.filter(connection => (
+                    !isSuperadmin || connection.group_id === user?.group_id
+                  ))}
+                  canEdit={canCreateConnection}
+                  toast={toast}
+                  confirm={confirmModal.confirm}
                 />
               )}
               {/* Test errors */}

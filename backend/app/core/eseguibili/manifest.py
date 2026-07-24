@@ -104,6 +104,9 @@ def _compile_project_input(
         multiple=bool(data.get("multiple", False)),
         expected_columns=_as_expected_columns(data.get("expected_columns")),
         validation=ExecutableInputValidation.model_validate(dict(raw_validation)),
+        connection_set_id=(
+            str(data.get("connection_set_id") or "").strip() or None
+        ),
         order=int(data.get("order", order)),
     )
 
@@ -136,9 +139,14 @@ def _compile_project_input(
             )
         )
 
-    if definition.kind != "file" and not bindings:
+    if definition.kind not in {"file", "connection"} and not bindings:
         raise ValueError(
             f"L'input scalare '{definition.label}' non è collegato a nessun campo"
+        )
+    if definition.kind == "connection" and bindings:
+        raise ValueError(
+            f"L'input connessione '{definition.label}' è un parametro di progetto "
+            "e non può essere collegato a un nodo"
         )
     return definition, bindings
 
@@ -194,7 +202,16 @@ def compile_manifest(
             inferred_target_id=targets[0] if targets else None,
         )
         inputs.append(definition)
+        if definition.kind == "connection" and project_type != "estrai":
+            raise ValueError(
+                "Gli input Connection Set sono supportati solo nei progetti Estrai"
+            )
         bindings.extend(node_bindings)
+
+    if sum(item.kind == "connection" for item in inputs) > 1:
+        raise ValueError(
+            "Un progetto Estrai può dichiarare un solo input Connection Set"
+        )
 
     for binding in bindings:
         if binding.target_node_id not in node_ids:

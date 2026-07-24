@@ -669,7 +669,7 @@
       "Body_analyze_upload_api_eseguibili__eseguibile_id__analyze_upload_post": {
         "properties": {
           "file": {
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "type": "string"
           }
@@ -683,7 +683,7 @@
       "Body_preview_file_temp_api_files_preview_temp_post": {
         "properties": {
           "file": {
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "type": "string"
           },
@@ -719,7 +719,7 @@
       "Body_upload_attachment_endpoint_api_tickets__ticket_id__attachments_post": {
         "properties": {
           "file": {
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "type": "string"
           }
@@ -733,7 +733,7 @@
       "Body_upload_file_api_datasources__ds_id__files_upload_post": {
         "properties": {
           "file": {
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "type": "string"
           }
@@ -752,7 +752,7 @@
             "type": "string"
           },
           "file": {
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "type": "string"
           },
@@ -820,7 +820,7 @@
             "type": "string"
           },
           "file": {
-            "format": "binary",
+            "contentMediaType": "application/octet-stream",
             "title": "File",
             "type": "string"
           },
@@ -1340,6 +1340,26 @@
         "title": "ConnectionCreate",
         "type": "object"
       },
+      "ConnectionInputOption": {
+        "additionalProperties": false,
+        "description": "Etichetta pubblica di un membro del Connection Set.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "ConnectionInputOption",
+        "type": "object"
+      },
       "ConnectionList": {
         "description": "Wrapper per la lista di connessioni database.",
         "properties": {
@@ -1355,6 +1375,289 @@
           "connections"
         ],
         "title": "ConnectionList",
+        "type": "object"
+      },
+      "ConnectionSet": {
+        "properties": {
+          "can_edit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can Edit"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionSetMember"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "selector_label": {
+            "default": "Cliente",
+            "title": "Selector Label",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "group_id",
+          "name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ConnectionSet",
+        "type": "object"
+      },
+      "ConnectionSetCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionSetMemberInput"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "name": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "selector_label": {
+            "default": "Cliente",
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Selector Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ConnectionSetCreate",
+        "type": "object"
+      },
+      "ConnectionSetList": {
+        "properties": {
+          "connection_sets": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionSet"
+            },
+            "title": "Connection Sets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "connection_sets"
+        ],
+        "title": "ConnectionSetList",
+        "type": "object"
+      },
+      "ConnectionSetMember": {
+        "additionalProperties": false,
+        "description": "Membro restituito senza credenziali della connessione.",
+        "properties": {
+          "active": {
+            "default": true,
+            "title": "Active",
+            "type": "boolean"
+          },
+          "connection_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Connection Id",
+            "type": "string"
+          },
+          "connection_name": {
+            "default": "",
+            "title": "Connection Name",
+            "type": "string"
+          },
+          "connection_type": {
+            "default": "",
+            "title": "Connection Type",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "selector_key": {
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+            "title": "Selector Key",
+            "type": "string"
+          },
+          "sort_order": {
+            "default": 0,
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Sort Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "selector_key",
+          "label",
+          "connection_id"
+        ],
+        "title": "ConnectionSetMember",
+        "type": "object"
+      },
+      "ConnectionSetMemberInput": {
+        "additionalProperties": false,
+        "description": "Associazione pubblica selector -> connessione salvata.",
+        "properties": {
+          "active": {
+            "default": true,
+            "title": "Active",
+            "type": "boolean"
+          },
+          "connection_id": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Connection Id",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "selector_key": {
+            "maxLength": 120,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+            "title": "Selector Key",
+            "type": "string"
+          },
+          "sort_order": {
+            "default": 0,
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Sort Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "selector_key",
+          "label",
+          "connection_id"
+        ],
+        "title": "ConnectionSetMemberInput",
+        "type": "object"
+      },
+      "ConnectionSetUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "members": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConnectionSetMemberInput"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Members"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "selector_label": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selector Label"
+          }
+        },
+        "title": "ConnectionSetUpdate",
         "type": "object"
       },
       "ConnectionTestResult": {
@@ -3324,6 +3627,25 @@
         "additionalProperties": false,
         "description": "Un input pubblico dichiarato da un nodo ``project_input``.",
         "properties": {
+          "connection_options": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionInputOption"
+            },
+            "title": "Connection Options",
+            "type": "array"
+          },
+          "connection_set_id": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Set Id"
+          },
           "default_value": {
             "title": "Default Value"
           },
@@ -3355,7 +3677,8 @@
               "boolean",
               "date",
               "datetime",
-              "select"
+              "select",
+              "connection"
             ],
             "title": "Kind",
             "type": "string"
@@ -3586,29 +3909,6 @@
           }
         },
         "title": "ExecutableRunRequest",
-        "type": "object"
-      },
-      "ExecuteRequest": {
-        "description": "Richiesta di esecuzione di una pipeline.",
-        "properties": {
-          "connection_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Connection Id"
-          },
-          "force_recalculate": {
-            "default": false,
-            "title": "Force Recalculate",
-            "type": "boolean"
-          }
-        },
-        "title": "ExecuteRequest",
         "type": "object"
       },
       "ExpectedColumn": {
@@ -4891,6 +5191,17 @@
             ],
             "title": "Connection Name"
           },
+          "connection_set_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Set Id"
+          },
           "connection_type": {
             "anyOf": [
               {
@@ -5410,7 +5721,8 @@
                   "boolean",
                   "date",
                   "datetime",
-                  "select"
+                  "select",
+                  "connection"
                 ],
                 "type": "string"
               },
@@ -8872,6 +9184,13 @@
       },
       "ValidationError": {
         "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
           "loc": {
             "items": {
               "anyOf": [
@@ -9175,6 +9494,34 @@
           "file_id",
           "column_mapping"
         ],
+        "title": "ExecuteRequest",
+        "type": "object"
+      },
+      "app__core__projects__canvas_models__ExecuteRequest": {
+        "description": "Richiesta di esecuzione di una pipeline.",
+        "properties": {
+          "connection_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Id"
+          },
+          "force_recalculate": {
+            "default": false,
+            "title": "Force Recalculate",
+            "type": "boolean"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          }
+        },
         "title": "ExecuteRequest",
         "type": "object"
       }
@@ -11187,6 +11534,217 @@
         "summary": "Get Tables",
         "tags": [
           "carica"
+        ]
+      }
+    },
+    "/api/connection-sets": {
+      "get": {
+        "description": "Elenca i set del tenant usati per il routing cliente -> connessione.",
+        "operationId": "list_connection_sets_api_connection_sets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionSetList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Connection Sets",
+        "tags": [
+          "connections"
+        ]
+      },
+      "post": {
+        "operationId": "create_connection_set_api_connection_sets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionSetCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionSet"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Connection Set",
+        "tags": [
+          "connections"
+        ]
+      }
+    },
+    "/api/connection-sets/{connection_set_id}": {
+      "delete": {
+        "operationId": "delete_connection_set_api_connection_sets__connection_set_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_set_id",
+            "required": true,
+            "schema": {
+              "title": "Connection Set Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Connection Set",
+        "tags": [
+          "connections"
+        ]
+      },
+      "get": {
+        "operationId": "get_connection_set_api_connection_sets__connection_set_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_set_id",
+            "required": true,
+            "schema": {
+              "title": "Connection Set Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionSet"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Connection Set",
+        "tags": [
+          "connections"
+        ]
+      },
+      "put": {
+        "operationId": "update_connection_set_api_connection_sets__connection_set_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connection_set_id",
+            "required": true,
+            "schema": {
+              "title": "Connection Set Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionSetUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionSet"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Connection Set",
+        "tags": [
+          "connections"
         ]
       }
     },
@@ -15257,7 +15815,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ExecuteRequest"
+                "$ref": "#/components/schemas/app__core__projects__canvas_models__ExecuteRequest"
               }
             }
           }

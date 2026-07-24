@@ -389,6 +389,7 @@ const TableNode = memo(({ data, id }) => {
       <FilterModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        nodeId={id}
         filters={filters}
         columns={columns}
         tableName={tableName}

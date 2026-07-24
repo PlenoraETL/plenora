@@ -26,7 +26,7 @@ def _coerce_scalar(definition: ExecutableInputDefinition, value: Any) -> Any:
         return None
 
     try:
-        if kind == "text" or kind == "select":
+        if kind in {"text", "select", "connection"}:
             coerced: Any = str(value)
         elif kind == "integer":
             if isinstance(value, bool):

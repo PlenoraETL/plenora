@@ -200,6 +200,16 @@ function ExecutableDynamicRunForm({ eseguibile, onClose, onAfterDownload }) {
     if (definition.kind === 'select') {
       return <select {...common}><option value="">Seleziona…</option>{(definition.validation?.options || []).map(option => <option key={option} value={option}>{option}</option>)}</select>;
     }
+    if (definition.kind === 'connection') {
+      return (
+        <select {...common}>
+          <option value="">Seleziona…</option>
+          {(definition.connection_options || []).map(option => (
+            <option key={option.key} value={option.key}>{option.label}</option>
+          ))}
+        </select>
+      );
+    }
     const type = definition.kind === 'integer' || definition.kind === 'number'
       ? 'number'
       : definition.kind === 'datetime' ? 'datetime-local' : definition.kind;

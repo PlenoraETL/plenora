@@ -73,6 +73,7 @@ const serializers = {
     multiple:        nd(node, 'multiple', false),
     expected_columns: nd(node, 'expected_columns', []),
     validation:      nd(node, 'validation', {}),
+    connection_set_id: nd(node, 'connection_set_id', null),
     bindings:        serializedBindingsForInput(node, edges),
     order:           nd(node, 'order', 0),
   }),

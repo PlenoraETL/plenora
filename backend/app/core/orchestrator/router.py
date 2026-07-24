@@ -49,7 +49,6 @@ from app.core.auth.dependencies import get_current_user, require_not_esecutore
 from app.shared.contracts.auth import CurrentUser
 from app.shared.contracts.payloads import JsonObject
 from app.core.auth import resource_access as resource_access_module
-from app.core.auth.ownership import assert_group_access
 from app.shared.execution.canvas_graph import CanvasGraph
 from app.shared.execution.output_contract_types_enricher import (
     enrich_canvas_types_from_output_contract,
@@ -57,6 +56,9 @@ from app.shared.execution.output_contract_types_enricher import (
 from app.core.eseguibili import output_store as _eseg_output_store
 from app.core.eseguibili import db as eseguibili_db
 from app.core.eseguibili.download_response import build_consume_once_response
+from app.core.eseguibili.manifest import compile_manifest
+from app.core.eseguibili.runtime import resolve_runtime_inputs
+from app.core.eseguibili.service import resolve_runtime_connection_id
 from app.core.io.http_streaming import (
     CloseableStreamingResponse,
     safe_download_filename,
@@ -82,7 +84,8 @@ def _assert_project_group(project_id: str, current_user: CurrentUser) -> None:
 
     Helper centralizzato per gli endpoint orchestrator che operano su
     project_id. Solleva 404 se il progetto non esiste, 403 se appartiene
-    a un altro gruppo. Superadmin bypass (assert_group_access lo gestisce).
+    a un altro gruppo. Il controllo centralizzato gestisce anche il bypass
+    del superadmin.
     """
     _access_control.assert_project_group(project_id, current_user)
 
@@ -157,6 +160,61 @@ def _project_service() -> project_service_module.ProjectService:
     return project_service_module.ProjectService()
 
 
+def _apply_project_runtime_inputs(
+    execution_contract,
+    raw_inputs: Mapping[str, object],
+):
+    """Congela canvas e connessione risolti prima dell'invio al worker."""
+
+    nodes = execution_contract.canvas.get("nodes") or []
+    has_explicit_inputs = any(
+        isinstance(node, Mapping) and node.get("type") == "project_input"
+        for node in nodes
+    )
+    if not has_explicit_inputs:
+        if raw_inputs:
+            raise ValueError("Il progetto non dichiara input runtime")
+        return execution_contract
+
+    manifest = compile_manifest(
+        source_project_id=execution_contract.project_id,
+        project_type=execution_contract.project_type,
+        canvas=execution_contract.canvas,
+        default_connection_id=execution_contract.runtime_context.get(
+            "default_connection_id"
+        ),
+    )
+    resolved_canvas, cleanup_ids, input_summary = resolve_runtime_inputs(
+        eseguibile_id=execution_contract.project_id,
+        canvas=execution_contract.canvas,
+        manifest=manifest,
+        values=raw_inputs,
+        group_id=execution_contract.group_id,
+    )
+    if cleanup_ids:
+        # Il percorso progetto non espone ancora upload runtime: evitare file
+        # temporanei senza lifecycle di cleanup nel relativo task.
+        from app.core.files.service import file_source_service
+
+        for file_source_id in cleanup_ids:
+            file_source_service.delete_file_source(file_source_id)
+        raise ValueError(
+            "Gli input file runtime sono disponibili solo negli eseguibili"
+        )
+    runtime_connection_id = resolve_runtime_connection_id(
+        manifest,
+        raw_inputs=raw_inputs,
+        group_id=execution_contract.group_id,
+    )
+    context = dict(execution_contract.runtime_context)
+    if runtime_connection_id:
+        context["default_connection_id"] = runtime_connection_id
+    context["runtime_input_summary"] = input_summary
+    return execution_contract.model_copy(
+        update={"canvas": resolved_canvas, "runtime_context": context}
+    )
+
+
 @pipeline_router.post("/{project_id}/execute")
 def execute_project_pipeline(
     project_id: str,
@@ -202,8 +260,14 @@ def execute_project_pipeline(
                 project_id=project_id,
                 project_service=project_service,
             )
+            execution_contract = _apply_project_runtime_inputs(
+                execution_contract,
+                request.inputs if request else {},
+            )
         except LookupError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         task_info = task_service_module.task_service.create_pipeline_task(
             project_id=project_id,
             force_recalculate=force_recalculate,

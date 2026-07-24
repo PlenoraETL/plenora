@@ -2,6 +2,7 @@ import React, { memo, useEffect, useMemo, useState } from 'react';
 import { Handle, Position } from 'reactflow';
 import useCanvasStore from '../../store/useCanvasStore';
 import { getTransformRegistry } from '../../api/transforms';
+import { listConnectionSets } from '../../api';
 import {
   getNodeBindableTargets,
   isParameterBindingEdge,
@@ -17,6 +18,7 @@ const INPUT_TYPES = [
   ['date', 'Data'],
   ['datetime', 'Data e ora'],
   ['select', 'Scelta'],
+  ['connection', 'Connection Set'],
 ];
 
 const normalizeKey = value => String(value || '')
@@ -28,6 +30,8 @@ const normalizeKey = value => String(value || '')
 
 let registryCache = null;
 let registryPromise = null;
+let connectionSetsCache = null;
+let connectionSetsPromise = null;
 
 const loadRegistry = () => {
   if (registryCache) return Promise.resolve(registryCache);
@@ -38,6 +42,17 @@ const loadRegistry = () => {
     }).finally(() => { registryPromise = null; });
   }
   return registryPromise;
+};
+
+const loadConnectionSets = () => {
+  if (connectionSetsCache) return Promise.resolve(connectionSetsCache);
+  if (!connectionSetsPromise) {
+    connectionSetsPromise = listConnectionSets().then(value => {
+      connectionSetsCache = value.connection_sets || [];
+      return connectionSetsCache;
+    }).finally(() => { connectionSetsPromise = null; });
+  }
+  return connectionSetsPromise;
 };
 
 function ProjectInputNode({ id, data, selected }) {
@@ -52,6 +67,7 @@ function ProjectInputNode({ id, data, selected }) {
   const [registryStatus, setRegistryStatus] = useState(
     registryCache ? 'ready' : 'idle',
   );
+  const [connectionSets, setConnectionSets] = useState(connectionSetsCache || []);
   const kind = data.input_kind || 'file';
   const bindingEdges = useMemo(
     () => edges.filter(edge => isParameterBindingEdge(edge) && edge.source === id),
@@ -77,6 +93,15 @@ function ProjectInputNode({ id, data, selected }) {
       });
     return () => { active = false; };
   }, [kind, registry]);
+
+  useEffect(() => {
+    if (kind !== 'connection') return undefined;
+    let active = true;
+    loadConnectionSets()
+      .then(items => { if (active) setConnectionSets(items); })
+      .catch(() => { if (active) setConnectionSets([]); });
+    return () => { active = false; };
+  }, [kind]);
 
   const update = changes => updateNodeData(id, changes);
   const updateBinding = (edgeId, targetField) => {
@@ -133,7 +158,11 @@ function ProjectInputNode({ id, data, selected }) {
           if (isReadOnly) return;
           const nextKind = event.target.value;
           setEdges(current => current.filter(edge => edge.source !== id));
-          update({ input_kind: nextKind, bindings: [] });
+          update({
+            input_kind: nextKind,
+            bindings: [],
+            connection_set_id: nextKind === 'connection' ? (data.connection_set_id || '') : null,
+          });
         }}>
           {INPUT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
@@ -143,7 +172,50 @@ function ProjectInputNode({ id, data, selected }) {
         Obbligatorio
       </label>
 
-      {kind === 'file' ? (
+      {kind === 'connection' ? (
+        <>
+          <label className="pin__field">
+            <span>Set di connessioni</span>
+            <select
+              className="nodrag"
+              value={data.connection_set_id || ''}
+              disabled={isReadOnly}
+              onChange={event => update({
+                connection_set_id: event.target.value || null,
+                default_value: null,
+              })}
+            >
+              <option value="">Seleziona un set…</option>
+              {connectionSets.map(item => (
+                <option key={item.id} value={item.id}>
+                  {item.name} ({item.members?.filter(member => member.active).length || 0})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="pin__field">
+            <span>Valore predefinito (facoltativo)</span>
+            <select
+              className="nodrag"
+              value={data.default_value ?? ''}
+              disabled={isReadOnly || !data.connection_set_id}
+              onChange={event => update({ default_value: event.target.value || null })}
+            >
+              <option value="">Nessun valore predefinito</option>
+              {(connectionSets.find(item => item.id === data.connection_set_id)?.members || [])
+                .filter(member => member.active)
+                .map(member => (
+                  <option key={member.selector_key} value={member.selector_key}>
+                    {member.label}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <p className="pin__binding-hint">
+            Questo input seleziona la connessione dell’intero progetto Estrai.
+          </p>
+        </>
+      ) : kind === 'file' ? (
         <>
           <label className="pin__check nodrag">
             <input type="checkbox" checked={Boolean(data.multiple)} onChange={event => update({ multiple: event.target.checked })} />
@@ -294,13 +366,15 @@ function ProjectInputNode({ id, data, selected }) {
         </>
       )}
 
-      <Handle
-        type="source"
-        position={Position.Right}
-        id={kind === 'file' ? 'output' : 'parameter'}
-        className="pin__handle"
-        isConnectable={!isReadOnly}
-      />
+      {kind !== 'connection' && (
+        <Handle
+          type="source"
+          position={Position.Right}
+          id={kind === 'file' ? 'output' : 'parameter'}
+          className="pin__handle"
+          isConnectable={!isReadOnly}
+        />
+      )}
     </div>
   );
 }

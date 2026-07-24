@@ -4,7 +4,7 @@ Modelli Pydantic per il modulo Connections.
 CRUD connessioni database (PostgreSQL, MySQL, SQL Server, Oracle, SQLite).
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional, Literal
 from datetime import datetime
 
@@ -69,3 +69,69 @@ class ConnectionTestResult(BaseModel):
     success: bool
     message: str
     details: Optional[dict] = None
+
+
+class ConnectionSetMemberInput(BaseModel):
+    """Associazione pubblica selector -> connessione salvata."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    selector_key: str = Field(
+        ...,
+        min_length=1,
+        max_length=120,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+    )
+    label: str = Field(..., min_length=1, max_length=255)
+    connection_id: str = Field(..., min_length=1, max_length=200)
+    active: bool = True
+    sort_order: int = Field(0, ge=0, le=1_000_000)
+
+
+class ConnectionSetMember(ConnectionSetMemberInput):
+    """Membro restituito senza credenziali della connessione."""
+
+    connection_name: str = ""
+    connection_type: str = ""
+
+
+class ConnectionSetCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(..., min_length=1, max_length=255)
+    description: str = Field("", max_length=2000)
+    selector_label: str = Field("Cliente", min_length=1, max_length=120)
+    members: List[ConnectionSetMemberInput] = Field(default_factory=list)
+
+
+class ConnectionSetUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = Field(None, max_length=2000)
+    selector_label: Optional[str] = Field(None, min_length=1, max_length=120)
+    members: Optional[List[ConnectionSetMemberInput]] = None
+
+
+class ConnectionSet(BaseModel):
+    id: str
+    group_id: str
+    name: str
+    description: str = ""
+    selector_label: str = "Cliente"
+    members: List[ConnectionSetMember] = Field(default_factory=list)
+    created_by: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    can_edit: Optional[bool] = None
+
+
+class ConnectionSetList(BaseModel):
+    connection_sets: List[ConnectionSet]
+
+
+class ConnectionSetOption(BaseModel):
+    """Opzione runtime: non espone connection_id né dettagli sensibili."""
+
+    key: str
+    label: str

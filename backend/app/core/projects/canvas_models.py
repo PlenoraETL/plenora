@@ -160,13 +160,14 @@ class Node(BaseModel):
 
     file_source_id: Optional[str] = None
 
-    # Input pubblico di progetto. Questi campi sono inerti durante la normale
-    # esecuzione del progetto e vengono compilati dal publisher eseguibili.
+    # Input pubblico di progetto. Viene risolto prima del dispatch sia nella
+    # normale esecuzione sia nel publisher/runtime degli eseguibili.
     input_key: Optional[str] = None
     input_kind: Optional[Literal[
         "file", "text", "integer", "number", "boolean", "date",
-        "datetime", "select"
+        "datetime", "select", "connection"
     ]] = None
+    connection_set_id: Optional[str] = None
     required: Optional[bool] = True
     default_value: Optional[Any] = None
     multiple: Optional[bool] = False
@@ -431,3 +432,4 @@ class ExecuteRequest(BaseModel):
     """Richiesta di esecuzione di una pipeline."""
     connection_id: Optional[str] = None
     force_recalculate: bool = False
+    inputs: Dict[str, Any] = Field(default_factory=dict)

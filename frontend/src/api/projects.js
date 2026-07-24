@@ -181,9 +181,16 @@ export const executeProjectQuery = async (projectId, options = null) => {
   let intermediate_mode = null;
 
   if (options && typeof options === 'object') {
-    const { force_recalculate = false, intermediate_mode: im = null } = options;
-    payload = { force_recalculate };
-    intermediate_mode = im;
+      const {
+        force_recalculate = false,
+        intermediate_mode: im = null,
+        inputs = {},
+      } = options;
+      payload = { force_recalculate };
+      if (inputs && Object.keys(inputs).length > 0) {
+        payload.inputs = inputs;
+      }
+      intermediate_mode = im;
   }
 
   // Query param solo se valorizzato. Branch evita di passare un 3o arg
