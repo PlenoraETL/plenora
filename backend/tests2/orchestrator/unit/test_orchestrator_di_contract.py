@@ -139,6 +139,7 @@ def test_orchestrator_executes_control_plane_contract_without_project_lookup(
     assert kwargs["execution_context"] == {
         "input_bindings": {"source": "runtime-file-1"},
         "group_id": "group-contract",
+        "persist_contract": True,
     }
     project_service.get_project_metadata.assert_not_called()
     project_service.get_project_canvas.assert_not_called()

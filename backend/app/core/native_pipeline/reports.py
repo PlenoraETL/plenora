@@ -104,7 +104,7 @@ def strict_json_loads(text: str) -> Any:
     def reject_constant(value: str) -> None:
         raise ValueError(f"non-finite JSON number {value} is not allowed")
 
-    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> Mapping[str, Any]:
         document: dict[str, Any] = {}
         for key, value in pairs:
             if key in document:

@@ -18,11 +18,10 @@ import subprocess
 import tempfile
 import threading
 import zipfile
+from collections.abc import Callable, Mapping
 from contextlib import suppress
 from pathlib import Path
-from typing import Any, Mapping, TypedDict
-
-import pandas as pd
+from typing import Any
 
 from app.config import settings
 
@@ -35,76 +34,6 @@ _TIMEOUT_ENV = "PLENORA_XLSX_EXPORT_TIMEOUT_SECONDS"
 _DEFAULT_TIMEOUT_SECONDS = 900.0
 _COPY_CHUNK_BYTES = 1024 * 1024
 _SUPPORTED_ENGINES = {"auto", "python", "rust"}
-
-
-class NativeXlsxUnsupported(ValueError):
-    """The dataframe cannot retain its XLSX semantics through the native CLI."""
-
-
-def _native_xlsx_has_multiindex_columns(df: Any) -> bool:
-    return isinstance(df.columns, pd.MultiIndex)
-
-
-def _native_xlsx_object_column_type(series: Any) -> str:
-    inferred = pd.api.types.infer_dtype(series, skipna=True)
-    if inferred in {"empty", "string", "unicode", "bytes"}:
-        return "string"
-    if inferred == "boolean":
-        return "boolean"
-    if inferred == "integer":
-        return "integer"
-    if inferred in {"floating", "mixed-integer-float"}:
-        return "float"
-    if inferred == "decimal":
-        return "decimal"
-    if inferred == "date":
-        return "date"
-    if inferred in {"datetime", "datetime64", "datetime64tz"}:
-        return "datetime"
-    raise NativeXlsxUnsupported(
-        f"tipo object XLSX non supportato dal bridge nativo: {inferred}"
-    )
-
-
-def _native_xlsx_column_type(series: Any, declared_type: str) -> str:
-    if declared_type == "date":
-        return "date"
-    if declared_type in {"datetime", "timestamp"} or declared_type.startswith(
-        "datetime64"
-    ):
-        return "datetime"
-
-    dtype = series.dtype
-    if pd.api.types.is_bool_dtype(dtype):
-        return "boolean"
-    if pd.api.types.is_integer_dtype(dtype):
-        return "integer"
-    if pd.api.types.is_float_dtype(dtype):
-        return "float"
-    if pd.api.types.is_datetime64_any_dtype(dtype):
-        return "datetime"
-    if pd.api.types.is_timedelta64_dtype(dtype):
-        return "string"
-    if pd.api.types.is_object_dtype(dtype) or isinstance(dtype, pd.CategoricalDtype):
-        return _native_xlsx_object_column_type(series)
-    if pd.api.types.is_string_dtype(dtype):
-        return "string"
-    raise NativeXlsxUnsupported(f"dtype XLSX non supportato: {dtype}")
-
-
-class _NativeColumnSchema(TypedDict):
-    name: str
-    type: str
-
-
-class _NativeExportSchema(TypedDict):
-    schema_version: int
-    sheet_name: str
-    columns: list[_NativeColumnSchema]
-    delimiter: str
-    null_token: str
-    row_count_hint: int
-    temp_dir: str
 
 
 def _configured_engine() -> str:
@@ -150,65 +79,12 @@ def _configured_timeout_seconds() -> float:
     return min(max(value, 10.0), 7_200.0)
 
 
-def _declared_type_for_column(
-    column: Any,
-    column_types: Mapping[str, Any] | None,
-) -> str:
-    if not column_types:
-        return ""
-    name = str(column)
-    direct = column_types.get(name)
-    if direct is not None:
-        return str(direct).strip().lower()
-    lowered = name.lower()
-    for candidate, raw_type in column_types.items():
-        if str(candidate).lower() == lowered:
-            return str(raw_type or "").strip().lower()
-    return ""
-
-
-def _build_schema(
-    df: Any,
-    *,
-    sheet_name: str,
-    column_types: Mapping[str, Any] | None,
-    null_token: str,
-    temp_dir: Path,
-) -> _NativeExportSchema:
-    if _native_xlsx_has_multiindex_columns(df):
-        raise NativeXlsxUnsupported("le colonne MultiIndex richiedono il writer Python")
-    if any(not isinstance(column, str) for column in df.columns):
-        raise NativeXlsxUnsupported(
-            "le intestazioni non testuali richiedono il writer Python"
-        )
-
-    columns: list[_NativeColumnSchema] = []
-    for index, name in enumerate(df.columns):
-        series = df.iloc[:, index]
-        declared_type = _declared_type_for_column(name, column_types)
-        columns.append(
-            {
-                "name": name,
-                "type": _native_xlsx_column_type(series, declared_type),
-            }
-        )
-    return {
-        "schema_version": 1,
-        "sheet_name": sheet_name,
-        "columns": columns,
-        "delimiter": ",",
-        "null_token": null_token,
-        "row_count_hint": len(df),
-        "temp_dir": str(temp_dir),
-    }
-
-
 def _run_exporter(
-    df: Any,
     *,
     exporter: Path,
     schema_path: Path,
     output_path: Path,
+    write_csv: Callable[[io.TextIOBase, str], None],
     null_token: str,
     timeout_seconds: float,
 ) -> None:
@@ -250,12 +126,7 @@ def _run_exporter(
     try:
         try:
             try:
-                df.to_csv(
-                    text_stdin,
-                    index=False,
-                    na_rep=null_token,
-                    lineterminator="\n",
-                )
+                write_csv(text_stdin, null_token)
                 text_stdin.flush()
             except (BrokenPipeError, OSError, TypeError, ValueError) as exc:
                 write_error = exc
@@ -293,12 +164,11 @@ def _validate_xlsx(path: Path) -> None:
         raise RuntimeError("l'exporter ha prodotto un contenitore XLSX non valido")
 
 
-def try_write_dataframe_to_xlsx_stream(
-    df: Any,
+def try_write_native_xlsx_stream(
     sink: Any,
     *,
-    sheet_name: str = "Sheet1",
-    column_types: Mapping[str, Any] | None = None,
+    build_schema: Callable[[Path, str], Mapping[str, object]],
+    write_csv: Callable[[io.TextIOBase, str], None],
 ) -> bool:
     """Try the native exporter and return ``False`` for the Python fallback.
 
@@ -328,28 +198,21 @@ def try_write_dataframe_to_xlsx_stream(
         schema_path = temp_dir / "schema.json"
         output_path = temp_dir / "output.xlsx"
         try:
-            schema = _build_schema(
-                df,
-                sheet_name=sheet_name,
-                column_types=column_types,
-                null_token=null_token,
-                temp_dir=temp_dir,
-            )
+            schema = build_schema(temp_dir, null_token)
             schema_path.write_text(
                 json.dumps(schema, ensure_ascii=False, separators=(",", ":")),
                 encoding="utf-8",
             )
             _run_exporter(
-                df,
                 exporter=exporter,
                 schema_path=schema_path,
                 output_path=output_path,
+                write_csv=write_csv,
                 null_token=null_token,
                 timeout_seconds=_configured_timeout_seconds(),
             )
             _validate_xlsx(output_path)
         except (
-            NativeXlsxUnsupported,
             OSError,
             RuntimeError,
             TimeoutError,
@@ -374,6 +237,5 @@ def try_write_dataframe_to_xlsx_stream(
 
 
 __all__ = [
-    "NativeXlsxUnsupported",
-    "try_write_dataframe_to_xlsx_stream",
+    "try_write_native_xlsx_stream",
 ]

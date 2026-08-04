@@ -91,6 +91,7 @@ def test_executable_output_writer_streams_parts_and_marks_object(monkeypatch):
     assert writer.tell() == 6
     key = writer.finalize()
 
+    assert key == writer.key
     assert [call["Body"] for call in storage.client.uploaded] == [b"abcd", b"ef"]
     assert len(storage.client.completed) == 1
     assert storage.tags == []

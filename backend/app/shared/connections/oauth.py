@@ -11,13 +11,12 @@ import uuid
 import warnings as _warnings
 from typing import Any, Callable, MutableMapping, Optional
 
-import requests
 from urllib3.exceptions import InsecureRequestWarning
 
 from app import config as app_config
 from app.shared.security.outbound_url import validate_external_url
 from app.shared.security.tls_policy import resolve_tls_verify
-from app.infrastructure.http.session import get_shared_session, request_pinned
+from app.infrastructure.http.session import request_pinned
 from app.shared.contracts.payloads import HeadersMap, JsonObject, StringMap
 from app.utils.logger import get_logger
 
@@ -46,10 +45,6 @@ _TOKEN_CACHE_CLIENT_LOCK = threading.Lock()
 _TOKEN_CACHE_CLIENT: Optional[Any] = None
 _TOKEN_CACHE_CLIENT_EXPLICIT = False
 _TOKEN_CACHE_WARNED_FALLBACK = False
-
-
-def _get_shared_session() -> requests.Session:
-    return get_shared_session()
 
 
 def _setting_int(name: str, default: int) -> int:

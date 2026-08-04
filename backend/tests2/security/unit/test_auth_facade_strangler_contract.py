@@ -393,15 +393,15 @@ def test_authz_helpers_imports_models_and_ownership_leaves():
 # typed-context leaf-import presence assertions
 
 
-def test_phase2_orchestrator_imports_assert_group_access_from_ownership():
-    """`orchestrator/router.py` must import `assert_group_access` from
-    the ownership leaf."""
-    path = _APP / "core" / "orchestrator" / "router.py"
+def test_phase2_orchestrator_access_control_imports_group_guard_from_ownership():
+    """The extracted orchestrator access-control boundary imports the guard
+    from the ownership leaf rather than the auth facade."""
+    path = _APP / "core" / "orchestrator" / "access_control.py"
     text = path.read_text(encoding="utf-8")
     assert (
         "from app.core.auth.ownership import assert_group_access" in text
     ), (
-        "orchestrator/router.py must import assert_group_access from "
+        "orchestrator/access_control.py must import assert_group_access from "
         "app.core.auth.ownership."
     )
 

@@ -109,6 +109,13 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+artifacts[\\/]types\.py:\d+: unused method "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+dataframes[\\/](default_loader|ports)\.py:\d+: unused method 'load_(parquet|path)' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+dataframes[\\/]export_writer\.py:\d+: unused method '(readable|writable|seekable)' "),
+    # BinaryIO/TextIOBase hooks are consumed dynamically by stdlib/PyArrow.
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+eseguibili[\\/]storage\.py:\d+: unused method '(readable|writable|seekable)' "),
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+io[\\/]bounded_range_reader\.py:\d+: unused method '(readable|seekable|readinto)' "),
+    # Public task-scoped blob cleanup contract (source-bound contract coverage).
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+eseguibili[\\/]storage\.py:\d+: unused function 'delete_by_task' "),
+    # Pydantic validators are invoked from model metadata rather than by name.
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+orchestrator[\\/]execution_contract\.py:\d+: unused method '(_canonicalize_tenant|_required_text|_supported_schema_version)' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+dataframes[\\/]geodata\.py:\d+: unused function 'geoseries_first_value' "),
     re.compile(r"backend[\\/]+app[\\/]+core[\\/]+results[\\/]streaming_blob_writer\.py:\d+: unused method '(readable|writable|seekable)' "),
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+resources[\\/]metadata\.py:\d+: unused method "),
