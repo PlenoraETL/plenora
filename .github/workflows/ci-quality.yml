@@ -31,13 +31,25 @@ jobs:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements-dev.lock
-      - name: Install GDAL runtime for geospatial contract tests
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libgdal-dev
       - name: Install backend test dependencies
         working-directory: backend
         run: python -m pip install --require-hashes -r requirements-dev.lock
+      - name: Bind ctypes VSI adapter to pyogrio bundled GDAL
+        working-directory: backend
+        run: |
+          bundled_gdal="$(python - <<'PY'
+          from pathlib import Path
+          import pyogrio
+
+          site_packages = Path(pyogrio.__file__).resolve().parent.parent
+          matches = sorted(site_packages.glob("pyogrio.libs/libgdal-*.so*"))
+          if len(matches) != 1:
+              raise SystemExit(f"expected one bundled libgdal, found: {matches}")
+          print(matches[0])
+          PY
+          )"
+          sudo mkdir -p /opt/gdal/lib
+          sudo ln -s "$bundled_gdal" /opt/gdal/lib/libgdal.so
       - name: Run backend PR gate
         working-directory: backend
         run: >-
