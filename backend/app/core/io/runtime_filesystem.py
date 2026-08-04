@@ -7,9 +7,12 @@ from pathlib import Path
 from typing import Any
 
 
-def make_runtime_temp_dir(*, prefix: str) -> str:
+def make_runtime_temp_dir(*, prefix: str, parent: Path | None = None) -> str:
     """Create a private, process-owned temporary directory."""
-    return tempfile.mkdtemp(prefix=prefix)
+    return tempfile.mkdtemp(
+        prefix=prefix,
+        dir=str(parent) if parent is not None else None,
+    )
 
 
 def write_kernel_control(path: Path, value: int) -> None:

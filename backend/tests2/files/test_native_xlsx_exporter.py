@@ -58,7 +58,7 @@ def test_native_adapter_pipes_csv_to_stdin_and_copies_validated_xlsx(
     tmp_path,
     monkeypatch,
 ):
-    from app.core.dataframes import native_xlsx
+    from app.core.io import native_xlsx
 
     executable = tmp_path / "plenora-xlsx-exporter.exe"
     executable.touch()
@@ -109,7 +109,7 @@ def test_native_failure_falls_back_before_writing_to_sink(
     tmp_path,
     monkeypatch,
 ):
-    from app.core.dataframes import native_xlsx
+    from app.core.io import native_xlsx
     from app.core.dataframes.export_writer import write_dataframe_to_xlsx_stream
 
     executable = tmp_path / "plenora-xlsx-exporter.exe"
@@ -132,7 +132,7 @@ def test_mixed_object_column_uses_python_fallback_without_starting_process(
     tmp_path,
     monkeypatch,
 ):
-    from app.core.dataframes import native_xlsx
+    from app.core.io import native_xlsx
 
     executable = tmp_path / "plenora-xlsx-exporter.exe"
     executable.touch()

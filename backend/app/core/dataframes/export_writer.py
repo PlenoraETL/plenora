@@ -59,61 +59,6 @@ _XLSX_WRITE_BOOLEAN = 3
 _XLSX_WRITE_STRING = 4
 
 
-class NativeXlsxUnsupported(ValueError):
-    """The dataframe cannot retain its XLSX semantics through the native CLI."""
-
-
-def _native_xlsx_has_multiindex_columns(df: Any) -> bool:
-    return isinstance(df.columns, pd.MultiIndex)
-
-
-def _native_xlsx_object_column_type(series: Any) -> str:
-    inferred = pd.api.types.infer_dtype(series, skipna=True)
-    if inferred in {"empty", "string", "unicode", "bytes"}:
-        return "string"
-    if inferred == "boolean":
-        return "boolean"
-    if inferred == "integer":
-        return "integer"
-    if inferred in {"floating", "mixed-integer-float"}:
-        return "float"
-    if inferred == "decimal":
-        return "decimal"
-    if inferred == "date":
-        return "date"
-    if inferred in {"datetime", "datetime64", "datetime64tz"}:
-        return "datetime"
-    raise NativeXlsxUnsupported(
-        f"tipo object XLSX non supportato dal bridge nativo: {inferred}"
-    )
-
-
-def _native_xlsx_column_type(series: Any, declared_type: str) -> str:
-    if declared_type == "date":
-        return "date"
-    if declared_type in {"datetime", "timestamp"} or declared_type.startswith(
-        "datetime64"
-    ):
-        return "datetime"
-
-    dtype = series.dtype
-    if pd.api.types.is_bool_dtype(dtype):
-        return "boolean"
-    if pd.api.types.is_integer_dtype(dtype):
-        return "integer"
-    if pd.api.types.is_float_dtype(dtype):
-        return "float"
-    if pd.api.types.is_datetime64_any_dtype(dtype):
-        return "datetime"
-    if pd.api.types.is_timedelta64_dtype(dtype):
-        return "string"
-    if pd.api.types.is_object_dtype(dtype) or isinstance(dtype, pd.CategoricalDtype):
-        return _native_xlsx_object_column_type(series)
-    if pd.api.types.is_string_dtype(dtype):
-        return "string"
-    raise NativeXlsxUnsupported(f"dtype XLSX non supportato: {dtype}")
-
-
 def _clean_export_text(value: str) -> str:
     """Flatten control/newline noise and remove fixed-width right padding."""
 
@@ -483,7 +428,7 @@ def write_dataframe_to_xlsx_stream(
     column_types: Mapping[str, Any] | None = None,
 ) -> None:
     """Write a DataFrame through the native accelerator or Python fallback."""
-    from app.core.dataframes.native_xlsx import (
+    from app.core.io.native_xlsx import (
         try_write_dataframe_to_xlsx_stream,
     )
 

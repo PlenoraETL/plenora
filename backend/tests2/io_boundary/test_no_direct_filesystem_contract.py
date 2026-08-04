@@ -400,6 +400,11 @@ _BOUNDARY_FROZEN_SNAPSHOT: dict[str, int] = {
     # scrittura dei due pseudo-file cgroup v2 e upload streaming da path.
     # Nessun caller applicativo accede direttamente al filesystem.
     "app/core/io/runtime_filesystem.py": 3,
+    # Native XLSX path-only exporter (2026-08-04): il binario esterno richiede
+    # schema/output su path. Il boundary crea una directory privata, scrive il
+    # solo schema JSON e streamma il CSV su stdin; pubblica sul sink soltanto
+    # dopo validazione ZIP e cleanup deterministico.
+    "app/core/io/native_xlsx.py": 3,
     # Windows SHP fallback: pyogrio e ctypes GDAL possono avere namespace
     # /vsimem distinti. Un TemporaryDirectory privato nel boundary I/O crea
     # i sidecar DBF/SHP/SHX e viene eliminato deterministicamente.

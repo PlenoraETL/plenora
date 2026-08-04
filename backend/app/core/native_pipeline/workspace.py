@@ -12,11 +12,11 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 import shutil
-import tempfile
 from types import MappingProxyType
 from typing import Iterator, Mapping
 
 from app.config import settings
+from app.core.io.runtime_filesystem import make_runtime_temp_dir
 from app.core.native_pipeline.config import NativeToolchainConfig
 from app.core.native_pipeline.errors import WorkspaceCleanupFailed
 
@@ -42,9 +42,7 @@ def open_workspace(config: NativeToolchainConfig) -> Iterator[Workspace]:
     if parent is not None:
         parent.mkdir(parents=True, exist_ok=True)
     root = Path(
-        tempfile.mkdtemp(
-            prefix=_WORKSPACE_PREFIX, dir=str(parent) if parent is not None else None
-        )
+        make_runtime_temp_dir(prefix=_WORKSPACE_PREFIX, parent=parent)
     )
     scratch = root / "scratch"
     scratch.mkdir()
