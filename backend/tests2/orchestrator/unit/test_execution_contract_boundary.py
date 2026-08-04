@@ -258,6 +258,7 @@ def test_pipeline_contract_migrates_equal_legacy_runtime_tenant():
     assert contract.build_runtime_context() == {
         "group_id": "group-1",
         "output_format": "xlsx",
+        "persist_contract": True,
     }
 
 
