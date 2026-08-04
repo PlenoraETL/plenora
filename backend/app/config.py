@@ -619,6 +619,47 @@ class Settings:
         # non ancora separate. Configurazione canonica: OBJECT_STORAGE_BUCKET
         # per runtime, BACKUP_BUCKET per backup, LOG_ARCHIVE_BUCKET per log.
         "OBJECT_STORAGE_BUCKET": None,
+
+        # Percorso nativo sidecar (app/core/native_pipeline): catena esplicita
+        # PostgreSQL read -> Data plan -> IO convert sui binari Rust pinnati.
+        # Default disabled/fail-closed: il path legacy pandas non cambia e non
+        # esiste fallback tra i due. Gli argv sono array JSON con esattamente
+        # un path assoluto diretto (nessun wrapper/shell/PATH); vuoto
+        # significa "non configurato" e blocca il run prima di ogni spawn.
+        "NATIVE_PIPELINE_ENABLED": False,
+        "NATIVE_PIPELINE_DATABASE_ARGV": "",
+        "NATIVE_PIPELINE_DATA_ARGV": "",
+        "NATIVE_PIPELINE_IO_ARGV": "",
+        # Identita' release: tutti i binari sono SHA-256 fail-closed di
+        # default. Database v1.1.0 non espone `--version`; IO v1.0.1 non
+        # emette identity; Data supporta version mode solo come override.
+        "NATIVE_PIPELINE_DATABASE_IDENTITY": "plenora-database",
+        "NATIVE_PIPELINE_DATABASE_VERSION": "1.1.0",
+        "NATIVE_PIPELINE_DATABASE_IDENTITY_MODE": "sha256",
+        "NATIVE_PIPELINE_DATABASE_IDENTITY_PATH": "",
+        "NATIVE_PIPELINE_DATABASE_SHA256": "",
+        "NATIVE_PIPELINE_DATA_IDENTITY": "plenora-data-tools",
+        "NATIVE_PIPELINE_DATA_VERSION": "1.0.2",
+        "NATIVE_PIPELINE_DATA_IDENTITY_MODE": "sha256",
+        "NATIVE_PIPELINE_DATA_IDENTITY_PATH": "",
+        "NATIVE_PIPELINE_DATA_SHA256": "",
+        "NATIVE_PIPELINE_IO_IDENTITY": "plenora-io",
+        "NATIVE_PIPELINE_IO_VERSION": "1.0.1",
+        "NATIVE_PIPELINE_IO_IDENTITY_MODE": "sha256",
+        "NATIVE_PIPELINE_IO_IDENTITY_PATH": "",
+        "NATIVE_PIPELINE_IO_SHA256": "",
+        # Bound per stage: wall clock, stdout/stderr catturati e dimensione
+        # massima del documento JSON di report.
+        "NATIVE_PIPELINE_STAGE_TIMEOUT_MS": 300_000,
+        "NATIVE_PIPELINE_IDENTITY_TIMEOUT_MS": 10_000,
+        "NATIVE_PIPELINE_MAX_STDOUT_BYTES": 1_048_576,
+        "NATIVE_PIPELINE_MAX_STDERR_BYTES": 262_144,
+        "NATIVE_PIPELINE_MAX_REPORT_BYTES": 262_144,
+        "NATIVE_PIPELINE_MAX_BINARY_BYTES": 536_870_912,
+        "NATIVE_PIPELINE_MAX_STAGE_ARTIFACT_BYTES": 536_870_912,
+        "NATIVE_PIPELINE_MAX_PLAN_BYTES": 16_777_216,
+        # Radice dei workspace temporanei isolati. Vuoto = temp di processo.
+        "NATIVE_PIPELINE_WORKSPACE_DIR": "",
     }
 
     # Alias env legacy (Plenora 2.0): i deploy esistenti possono avere

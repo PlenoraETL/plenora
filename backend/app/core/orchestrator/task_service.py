@@ -24,6 +24,10 @@ from app.core.orchestrator.task_revocation_store import (
 from app.core.task_runtime import TaskRuntimePort
 from app.core.task_runtime.dispatch import dispatch_task_by_name
 from app.core.orchestrator.pg_task_runtime import PgResultTaskRuntime
+from app.core.orchestrator.preview_payload_store import (
+    delete_preview_payload,
+    is_preview_reference,
+)
 from app.core.orchestrator.execution_contract import CaricaExecutionContract
 from app.shared.execution import carica_dispatcher
 from app.utils.logger import get_logger
@@ -926,11 +930,6 @@ class TaskService:
             stored = self.runtime.get_result(task_id)
             payload = stored.result
             if isinstance(payload, Mapping):
-                from app.core.orchestrator.preview_payload_store import (
-                    delete_preview_payload,
-                    is_preview_reference,
-                )
-
                 if is_preview_reference(payload):
                     delete_preview_payload(payload)
         except Exception:

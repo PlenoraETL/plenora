@@ -1,6 +1,6 @@
 # Dependency Matrix — Domini Backend
 
-Data baseline: 2026-07-14 (branch `main`)
+Data baseline: 2026-08-04 (PR native pipeline adapter)
 Strumento: `backend/scripts/dependency_graph.py`
 Baseline versionata: `backend/tests2/shared/config/core_dependency_baseline.json`
 Guardia "non peggiorare": `backend/tests2/shared/test_core_dependency_matrix.py`
@@ -41,7 +41,7 @@ PR per consolidare il progresso.
 | Verticali | `arricchisci`, `carica`, `estrai`, `manipola`, `features`, `imdf` | step applicativi della pipeline ETL |
 | Engine orizzontali | `auth`, `connections`, `dataframes`, `orchestrator`, `resources`, `results`, `scheduler` | servizi trasversali consumati dai verticali |
 | Applicativi centrali | `projects`, `files`, `datasources`, `eseguibili`, `artifacts`, `intermediate`, `output_contract`, `query_execution` | modelli e storage condivisi del prodotto |
-| Foundation | `io`, `security`, `task_runtime`, `runtime`, `lifecycle` | infrastruttura pura, zero import verso altri domini core (verificato: out-degree 0/1). `lifecycle` ospita il registry del group cleanup (Epic E); la composizione dei default e' in `app/runtime/group_cleanup_wiring.py` |
+| Foundation | `io`, `native_pipeline`, `security`, `task_runtime`, `runtime`, `lifecycle` | infrastruttura pura. `native_pipeline` dipende solo dalla capability tempdir di `io`; `lifecycle` ospita il registry del group cleanup (Epic E), con composizione dei default in `app/runtime/group_cleanup_wiring.py` |
 | Admin & support | `admin_backups`, `admin_object_storage`, `admin_runtime_config`, `admin_system_status`, `logs`, `tickets` | superfici operative |
 
 `app.shared.*` non e' un dominio: e' la sede dei contratti strutturali
@@ -90,20 +90,22 @@ La mappa completa degli shim di compatibilita' (Fase 6) e' in
 | `datasources -> security` | upload datasource applica il limite centralizzato | Intenzionale: `security` e' una policy foundation |
 | `io -> resources` | bounded range reader usa l'errore canonico di limite memoria | Spostare l'eccezione in shared quando si separa il ciclo `io/resources` |
 | `projects -> manipola` | schema inference riusa l'ordinamento deterministico degli input transform | Estrarre l'helper di ordering in shared execution per spezzare il ciclo |
+| `eseguibili -> connections` | il servizio eseguibili espone i connection set selezionabili per gli input runtime | Intenzionale nel read model corrente; estrarre una porta shared se il catalogo cresce |
+| `orchestrator -> files` | cleanup fail-closed degli upload runtime rifiutati dal percorso progetto | Intenzionale e lazy: evita file orfani finche' il lifecycle upload non viene portato nel composition root |
+| `native_pipeline -> io` | workspace privato creato dalla capability filesystem dichiarata, senza accesso diretto fuori dal boundary I/O | Intenzionale, aciclico: `native_pipeline` e' foundation adapter e `io` non importa `native_pipeline` |
 
-## Stato misurato (baseline 2026-07-20)
+## Stato misurato (baseline 2026-08-04)
 
-- **SCC maggiore: 16 domini** — con B4 (`Column` in
-  `app.shared.execution.canvas_column` + schema inference iniettata dai
-  chiamanti projects) il 2-ciclo `projects <-> output_contract` e' spezzato
-  e **`output_contract` esce dal ciclo** (secondo dominio liberato dopo
-  `dataframes`). Guardia dedicata:
-  `test_canvas_column_shared_contract.py`.
-- **33 domini**, **149 edge cross-domain**. `admin_task_runtime` resta fuori
-  dalle SCC; `admin_object_storage` espone anche la read model progetti/risultati.
-  Il maggiore SCC sale a **17 domini** per `projects -> manipola`, mentre
-  `io -> resources` crea una SCC separata di 2 domini. Entrambi i percorsi di
-  rimozione sono registrati nella tabella sopra. `auth` resta a out-degree 5.
+- **34 domini**, **152 edge cross-domain**.
+- **SCC maggiore: 17 domini** — `arricchisci`, `artifacts`, `auth`, `carica`,
+  `connections`, `datasources`, `eseguibili`, `estrai`, `features`, `files`,
+  `intermediate`, `manipola`, `orchestrator`, `projects`, `query_execution`,
+  `results`, `scheduler`.
+- `io <-> resources` resta una SCC separata di 2 domini.
+- `native_pipeline` e' un singoletto aciclico con un solo edge uscente verso
+  `io`; il nuovo adapter non amplia alcuna SCC.
+- Il baseline consolida anche gli edge aciclici preesistenti
+  `eseguibili -> connections` e `orchestrator -> files`, motivati sopra.
 
 ### Snapshot precedente (post Epic E)
 

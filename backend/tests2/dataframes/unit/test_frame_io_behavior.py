@@ -30,7 +30,7 @@ from app.core.dataframes.frame_io import (
     _load_dataframe_from_bytes,
     _load_json_dataframe_from_text,
     _normalize_format_hint,
-    _prefer_nullable_int,
+
     find_latest_output_file,
     load_arcgis_feature_dataframe,
     load_dataframe_from_artifact,
@@ -62,51 +62,6 @@ def test_normalize_format_hint_none_and_empty_return_none():
     assert _normalize_format_hint("") is None
     assert _normalize_format_hint("   ") is None
 
-
-# ----------------------------------------------------------------------
-# _prefer_nullable_int
-# ----------------------------------------------------------------------
-
-
-def test_prefer_nullable_int_keeps_already_int_dtype():
-    original = pd.Series(["1", "2", "3"])
-    converted = pd.Series([1, 2, 3])  # int64, no null
-    out = _prefer_nullable_int(original, converted)
-    # già int → ritornato invariato (stesso oggetto)
-    assert out is converted
-
-
-def test_prefer_nullable_int_upgrades_float_with_nulls_to_int64():
-    original = pd.Series(["10", None, "20"])
-    converted = pd.to_numeric(original, errors="coerce")  # float64 con NaN
-    out = _prefer_nullable_int(original, converted)
-    assert str(out.dtype) == "Int64"
-    assert int(out.iloc[0]) == 10
-    assert pd.isna(out.iloc[1])
-
-
-def test_prefer_nullable_int_keeps_float_for_fractional_values():
-    original = pd.Series(["1.5", "2.0"])
-    converted = pd.to_numeric(original, errors="coerce")
-    out = _prefer_nullable_int(original, converted)
-    assert str(out.dtype).startswith("float")
-
-
-def test_prefer_nullable_int_all_null_stays_float():
-    original = pd.Series([None, None])
-    converted = pd.to_numeric(original, errors="coerce")  # tutto NaN
-    out = _prefer_nullable_int(original, converted)
-    # non_null vuoto → resta converted (float)
-    assert out is converted
-
-
-def test_prefer_nullable_int_fractional_string_astype_fallback():
-    # Stringa "42.0" è intera come valore ma l'astype("Int64") fallisce
-    # → fallback al converted float.
-    original = pd.Series(["42.0", None])
-    converted = pd.to_numeric(original, errors="coerce")
-    out = _prefer_nullable_int(original, converted)
-    assert str(out.dtype).startswith("float")
 
 
 # ----------------------------------------------------------------------

@@ -59,6 +59,7 @@ def test_native_adapter_pipes_csv_to_stdin_and_copies_validated_xlsx(
     monkeypatch,
 ):
     from app.core.dataframes import native_xlsx
+    from app.core.io import native_xlsx as native_xlsx_io
 
     executable = tmp_path / "plenora-xlsx-exporter.exe"
     executable.touch()
@@ -68,7 +69,7 @@ def test_native_adapter_pipes_csv_to_stdin_and_copies_validated_xlsx(
     def _popen(command, **_kwargs):
         return _SuccessfulExporterProcess(command, capture)
 
-    monkeypatch.setattr(native_xlsx.subprocess, "Popen", _popen)
+    monkeypatch.setattr(native_xlsx_io.subprocess, "Popen", _popen)
     frame = pd.DataFrame(
         {
             "id": pd.Series([1, pd.NA], dtype="Int64"),
@@ -109,7 +110,7 @@ def test_native_failure_falls_back_before_writing_to_sink(
     tmp_path,
     monkeypatch,
 ):
-    from app.core.dataframes import native_xlsx
+    from app.core.io import native_xlsx as native_xlsx_io
     from app.core.dataframes.export_writer import write_dataframe_to_xlsx_stream
 
     executable = tmp_path / "plenora-xlsx-exporter.exe"
@@ -119,7 +120,7 @@ def test_native_failure_falls_back_before_writing_to_sink(
     def _fail(*_args, **_kwargs):
         raise RuntimeError("errore exporter simulato")
 
-    monkeypatch.setattr(native_xlsx, "_run_exporter", _fail)
+    monkeypatch.setattr(native_xlsx_io, "_run_exporter", _fail)
     sink = io.BytesIO()
     write_dataframe_to_xlsx_stream(pd.DataFrame({"id": [1, 2]}), sink)
 
@@ -133,6 +134,7 @@ def test_mixed_object_column_uses_python_fallback_without_starting_process(
     monkeypatch,
 ):
     from app.core.dataframes import native_xlsx
+    from app.core.io import native_xlsx as native_xlsx_io
 
     executable = tmp_path / "plenora-xlsx-exporter.exe"
     executable.touch()
@@ -141,7 +143,7 @@ def test_mixed_object_column_uses_python_fallback_without_starting_process(
     def _forbidden(*_args, **_kwargs):
         raise AssertionError("l'exporter non deve partire per tipi misti")
 
-    monkeypatch.setattr(native_xlsx, "_run_exporter", _forbidden)
+    monkeypatch.setattr(native_xlsx_io, "_run_exporter", _forbidden)
     sink = io.BytesIO()
     frame = pd.DataFrame({"mixed": [1, "uno"]})
 

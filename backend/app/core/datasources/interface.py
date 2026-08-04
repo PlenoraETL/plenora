@@ -299,10 +299,6 @@ class DataSourceInterface(ABC):
             return True
         return fnmatch.fnmatch(filename, pattern)
 
-    def _compute_hash(self, content: bytes) -> str:
-        """md5 del contenuto, hex string."""
-        return hashlib.md5(content).hexdigest()
-
     def _compute_stream_hash(self, path: str) -> str:
         """Compute md5 incrementally without retaining the whole file."""
         digest = hashlib.md5()

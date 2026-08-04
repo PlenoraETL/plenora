@@ -19,7 +19,7 @@ import pyogrio
 from shapely.errors import GEOSException
 
 from app import config as app_config
-from app.core.dataframes.frame_copy import copy_frame_for_update
+
 from app.core.dataframes.export_writer import (
     dataframe_to_export_bytes,
     normalize_export_format,
@@ -228,27 +228,6 @@ def _normalize_format_hint(format_hint: Optional[str]) -> Optional[str]:
     if normalized == "geopackage":
         return "gpkg"
     return normalized or None
-
-
-def _prefer_nullable_int(original: pd.Series, converted: pd.Series) -> pd.Series:
-    """Evita la perdita di precisione su interi con null (Backend master Part II #4).
-
-    ``pd.to_numeric`` declassa a float64 una colonna di interi che contiene null
-    (int64 non ammette NaN) → i valori > 2^53 sono GIÀ arrotondati in ``converted``.
-    Se i valori sono interi, riconverti dalle STRINGHE originali a ``Int64``
-    (nullable): preserva sia la precisione sia i null (``pd.NA``). Stringhe con
-    parte frazionaria (es. "42.0") fanno fallire l'astype → fallback al float
-    ``converted`` (resta float, comportamento corretto).
-    """
-    if not pd.api.types.is_float_dtype(converted):
-        return converted  # già int (nessun null) → niente perdita
-    non_null = converted.dropna()
-    if non_null.empty or not ((non_null % 1) == 0).all():
-        return converted  # valori frazionari → resta float
-    try:
-        return original.astype("Int64")
-    except (TypeError, ValueError):
-        return converted
 
 
 def _coerce_json_dataframe_columns(df: pd.DataFrame) -> pd.DataFrame:

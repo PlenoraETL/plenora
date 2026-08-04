@@ -10,6 +10,7 @@ from typing import Optional
 
 from app.config import settings
 from app.core.connections import db as connection_db
+from app.core.connections.connection_sets import connection_set_ids_using_connection
 from app.core.connections.errors import ConnectionDuplicateNameError
 from app.infrastructure.security.crypto import CredentialUnavailableError, is_encrypted
 from app.infrastructure.security.crypto import decrypt as _decrypt_password
@@ -263,10 +264,6 @@ class ConnectionService:
         self,
         connection_id: str,
     ) -> list[str]:
-        from app.core.connections.connection_sets import (
-            connection_set_ids_using_connection,
-        )
-
         return connection_set_ids_using_connection(connection_id)
 
     def test_connection(self, connection_id: str) -> ConnectionTestResult:
