@@ -57,7 +57,11 @@ jobs:
       - name: Infrastructure smoke
         run: bash scripts/docker-api-smoke.sh --infrastructure-only
       - name: Seed smoke user
-        run: docker compose exec -T backend python -m app.core.auth.smoke_seed
+        run: >-
+          docker compose exec -T
+          -e PLENORA_SMOKE_USERNAME
+          -e PLENORA_SMOKE_PASSWORD
+          backend python -m app.core.auth.smoke_seed
       - name: Run full Docker API smoke
         run: bash scripts/docker-api-smoke.sh
       - name: Dump Compose diagnostics

@@ -117,7 +117,10 @@ def parse_parquet_preview(
             if isinstance(body_bytes, bytes)
             else body_bytes
         )
-        pf = pq.ParquetFile(reader)
+        # Disable PyArrow's cross-row-group prefetch. PyArrow 25 defaults
+        # ``pre_buffer`` to true and may coalesce every column chunk into one
+        # remote read, defeating the bounded range-preview contract.
+        pf = pq.ParquetFile(reader, pre_buffer=False)
         row_count = int(pf.metadata.num_rows)
         # Schema derivation uses an empty table materialized through
         # pyarrow's bridge, so dtype strings match the dataframe loader
