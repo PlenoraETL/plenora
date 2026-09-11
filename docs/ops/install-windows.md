@@ -42,6 +42,7 @@ sorgente canonico anche per il manuale PDF operativo.
 | Frontend (Caddy) | servizio `plenora-caddy` | latest | **80** (configurabile) |
 | Python + GDAL | env conda `plenora` (Miniforge) | 3.12 / GDAL 3.13 | — |
 | Microsoft ODBC Driver | connettore SQL Server/MSSQL | 18.x x64 | — |
+| XLSX exporter nativo | EXE statico opzionale (fallback Python automatico) | release Plenora | — |
 
 Stato, lock, blacklist JWT, rate-limit e metadati dei task vivono su
 PostgreSQL; upload, risultati, preview e intermedi persistenti vivono su
@@ -105,6 +106,7 @@ Ti verranno chiesti:
 
 Il flusso esegue nell'ordine: utente+DB PostgreSQL → verifica RabbitMQ
 → env conda (python 3.12 + GDAL 3.13 da conda-forge) → dipendenze pip →
+acceleratore XLSX (se ZIP e `.sha256` sono presenti in `C:\deploy`) →
 `.env` con secrets random → **hardening broker** (utente RabbitMQ
 dedicato `plenora`, rimozione di `guest`) → ACL sul `.env` → **SeaweedFS**
 (servizio S3 + bucket `plenora-runtime`) → **frontend**
@@ -145,6 +147,9 @@ anche dai client remoti.
 | `-InstallFrontend` | off | Build FE + servizio Caddy |
 | `-FrontendPort` | 80 | Porta pubblica di Caddy; frontend e API condividono lo stesso origin |
 | `-FrontendApiUrl` | vuoto | Override avanzato dell'API; lasciare vuoto nel deploy single-box per usare `/api` same-origin |
+| `-XlsxExporterArchive` / `-XlsxExporterChecksum` | auto | Pacchetto e checksum dell'acceleratore; senza path cerca il pacchetto piu' recente in `C:\deploy` e nella root del repo |
+| `-SkipXlsxExporter` | off | Salta installazione/verifica dell'acceleratore e conserva il fallback Python |
+| `-XlsxExporterOnly` | off | Deploy rapido del solo acceleratore, con stop/restart dei servizi gia' attivi |
 | `-Production` | off | `ENVIRONMENT=production` coi gates (richiede object storage) |
 | `-PgSuperPassword` | prompt | Password del superuser postgres |
 | `-StartProcesses` | off | Modalita' dev: 3 finestre cmd al posto dei servizi |
@@ -156,7 +161,9 @@ Non-interattivo (env): `PLENORA_BOOTSTRAP_ADMIN_USERNAME`,
 `PLENORA_INSTALL_DATA_WORKER_THREADS`,
 `PLENORA_INSTALL_CONTROL_WORKER_THREADS`,
 `PLENORA_INSTALL_WORKER_QUEUE_PREFETCH`,
-`PLENORA_INSTALL_WORKER_DELAY_QUEUE_PREFETCH`.
+`PLENORA_INSTALL_WORKER_DELAY_QUEUE_PREFETCH`,
+`PLENORA_INSTALL_XLSX_EXPORTER_ARCHIVE`,
+`PLENORA_INSTALL_XLSX_EXPORTER_CHECKSUM`.
 
 La modalita' split con data-plane a thread singolo e' il default per evitare
 pipeline pandas concorrenti nello stesso processo. RabbitMQ bilancia
@@ -308,6 +315,20 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1 `
 Idempotente: rigenera i servizi (stop/refresh config/start), riesegue
 le migrations al boot del backend, ricostruisce il FE. I dati (PG,
 SeaweedFS) non vengono toccati.
+
+Per aggiornare soltanto l'acceleratore XLSX, copiare nella directory
+`C:\deploy` lo ZIP e il relativo `.sha256`, quindi eseguire:
+
+```powershell
+cd C:\plenora
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -XlsxExporterOnly
+```
+
+Il pacchetto piu' recente viene rilevato automaticamente. L'installer verifica
+nome e SHA-256, esegue `--version` e un self-test XLSX prima della copia,
+mantiene una copia di ripristino durante la sostituzione e riavvia soltanto i
+servizi Plenora che erano gia' attivi. Per selezionare file diversi usare
+`-XlsxExporterArchive` e `-XlsxExporterChecksum`.
 
 Se l'installazione usa una porta frontend diversa da 80, ripassare la
 stessa porta usata in installazione:

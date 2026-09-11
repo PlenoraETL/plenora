@@ -57,6 +57,14 @@ param(
     [switch]$InstallFrontend,
     [int]$FrontendPort = 80,
     [string]$FrontendApiUrl = '',
+    # Acceleratore XLSX nativo. Se il path non e' specificato, l'installer
+    # cerca il pacchetto piu' recente in C:\deploy e nella root del repo.
+    [string]$XlsxExporterArchive = '',
+    [string]$XlsxExporterChecksum = '',
+    [switch]$SkipXlsxExporter,
+    # Deploy rapido: installa/aggiorna solo l'exporter e riavvia gli eventuali
+    # servizi applicativi, senza rieseguire PostgreSQL/conda/frontend.
+    [switch]$XlsxExporterOnly,
     # W5 — switch a ENVIRONMENT=production coi gates attivi (richiede
     # object storage configurato localmente o tramite endpoint S3 nel .env).
     [switch]$Production
@@ -74,6 +82,12 @@ if (-not $AdminUsername) { $AdminUsername = $env:PLENORA_BOOTSTRAP_ADMIN_USERNAM
 if (-not $AdminPassword) { $AdminPassword = $env:PLENORA_BOOTSTRAP_ADMIN_PASSWORD }
 if (-not $AdminGroupId) {
     $AdminGroupId = if ($env:PLENORA_BOOTSTRAP_ADMIN_GROUP_ID) { $env:PLENORA_BOOTSTRAP_ADMIN_GROUP_ID } else { 'root' }
+}
+if (-not $XlsxExporterArchive -and $env:PLENORA_INSTALL_XLSX_EXPORTER_ARCHIVE) {
+    $XlsxExporterArchive = $env:PLENORA_INSTALL_XLSX_EXPORTER_ARCHIVE
+}
+if (-not $XlsxExporterChecksum -and $env:PLENORA_INSTALL_XLSX_EXPORTER_CHECKSUM) {
+    $XlsxExporterChecksum = $env:PLENORA_INSTALL_XLSX_EXPORTER_CHECKSUM
 }
 if ($InstallMinio) {
     Write-Warning '-InstallMinio e'' deprecato: viene installato SeaweedFS tramite -InstallObjectStorage.'
@@ -229,6 +243,119 @@ function Remove-StalePipDirectories {
     }
 }
 
+function Resolve-XlsxExporterArchive {
+    param([string]$ExplicitArchive)
+
+    if ($ExplicitArchive) {
+        if (-not (Test-Path -LiteralPath $ExplicitArchive -PathType Leaf)) {
+            throw "Archivio XLSX exporter non trovato: $ExplicitArchive"
+        }
+        return (Resolve-Path -LiteralPath $ExplicitArchive).Path
+    }
+
+    $candidates = @()
+    foreach ($directory in @('C:\deploy', $RepoRoot)) {
+        if (-not (Test-Path -LiteralPath $directory -PathType Container)) { continue }
+        $candidates += @(Get-ChildItem -LiteralPath $directory -File `
+            -Filter 'plenora-xlsx-exporter-*-windows-x64.zip' `
+            -ErrorAction SilentlyContinue)
+    }
+    $selected = $candidates | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+    if ($selected) { return $selected.FullName }
+    return $null
+}
+
+function Install-XlsxExporter {
+    param(
+        [Parameter(Mandatory=$true)][string]$ArchivePath,
+        [string]$ChecksumPath
+    )
+
+    $archive = (Resolve-Path -LiteralPath $ArchivePath).Path
+    if (-not $ChecksumPath) {
+        $ChecksumPath = [IO.Path]::ChangeExtension($archive, '.sha256')
+    }
+    if (-not (Test-Path -LiteralPath $ChecksumPath -PathType Leaf)) {
+        throw "Checksum XLSX exporter non trovato: $ChecksumPath"
+    }
+    $checksum = (Resolve-Path -LiteralPath $ChecksumPath).Path
+    $checksumText = (Get-Content -LiteralPath $checksum -Raw).Trim()
+    $checksumMatch = [regex]::Match(
+        $checksumText,
+        '^(?i)([0-9a-f]{64})(?:\s+\*?(.+?))?$'
+    )
+    if (-not $checksumMatch.Success) {
+        throw "Formato checksum XLSX exporter non valido: $checksum"
+    }
+    $listedName = $checksumMatch.Groups[2].Value.Trim()
+    if ($listedName -and ([IO.Path]::GetFileName($listedName) -ne [IO.Path]::GetFileName($archive))) {
+        throw "Il checksum dichiara '$listedName', non '$([IO.Path]::GetFileName($archive))'"
+    }
+    $expectedHash = $checksumMatch.Groups[1].Value.ToLowerInvariant()
+    $actualHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($actualHash -ne $expectedHash) {
+        throw "Checksum XLSX exporter non valido: atteso $expectedHash, ottenuto $actualHash"
+    }
+
+    $extractDir = Join-Path $env:TEMP ("plenora-xlsx-exporter-" + [guid]::NewGuid().ToString('N'))
+    $selfTestFile = Join-Path $extractDir 'self-test.xlsx'
+    try {
+        New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+        Expand-Archive -LiteralPath $archive -DestinationPath $extractDir -Force
+        $executables = @(Get-ChildItem -LiteralPath $extractDir -Recurse -File `
+            -Filter 'plenora-xlsx-exporter.exe')
+        if ($executables.Count -ne 1) {
+            throw "Archivio XLSX exporter non valido: atteso un EXE, trovati $($executables.Count)"
+        }
+        $candidate = $executables[0].FullName
+        $version = (& $candidate --version 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $version -notmatch '^plenora-xlsx-exporter\s+\S+$') {
+            throw "Version check XLSX exporter fallito: $version"
+        }
+        $selfTestOutput = & $candidate self-test --output $selfTestFile 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "Self-test XLSX exporter fallito: $($selfTestOutput -join ' ')"
+        }
+        if (-not (Test-Path -LiteralPath $selfTestFile -PathType Leaf) -or
+            (Get-Item -LiteralPath $selfTestFile).Length -lt 22) {
+            throw 'Self-test XLSX exporter non ha prodotto un file XLSX valido'
+        }
+        $signature = Get-Content -LiteralPath $selfTestFile -Encoding Byte -TotalCount 2
+        if ($signature.Count -ne 2 -or $signature[0] -ne 0x50 -or $signature[1] -ne 0x4b) {
+            throw 'Self-test XLSX exporter ha prodotto un contenitore non valido'
+        }
+
+        $binDir = Join-Path $BackendDir 'bin'
+        $target = Join-Path $binDir 'plenora-xlsx-exporter.exe'
+        $backup = Join-Path $binDir 'plenora-xlsx-exporter.previous.exe'
+        New-Item -ItemType Directory -Path $binDir -Force | Out-Null
+        if (Test-Path -LiteralPath $target -PathType Leaf) {
+            Copy-Item -LiteralPath $target -Destination $backup -Force
+        }
+        try {
+            Copy-Item -LiteralPath $candidate -Destination $target -Force
+            $installedVersion = (& $target --version 2>&1 | Out-String).Trim()
+            if ($LASTEXITCODE -ne 0 -or $installedVersion -ne $version) {
+                throw "Verifica exporter installato fallita: $installedVersion"
+            }
+        } catch {
+            if (Test-Path -LiteralPath $backup -PathType Leaf) {
+                Copy-Item -LiteralPath $backup -Destination $target -Force
+            } else {
+                Remove-Item -LiteralPath $target -Force -ErrorAction SilentlyContinue
+            }
+            throw
+        } finally {
+            Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
+        }
+        Ok "XLSX exporter installato: $installedVersion (SHA-256 $actualHash)"
+    } finally {
+        if (Test-Path -LiteralPath $extractDir) {
+            Remove-Item -LiteralPath $extractDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Get-WinSWExe {
     # WinSW.exe condiviso (W1 servizi app + W3 object storage): scarica
     # una volta dalla release GitHub, fallback pinnato v2.12.0.
@@ -306,6 +433,31 @@ if ($DataWorkerThreads -lt 1) { Fail '-DataWorkerThreads deve essere >= 1' }
 if ($ControlWorkerThreads -lt 1) { Fail '-ControlWorkerThreads deve essere >= 1' }
 if ($WorkerQueuePrefetch -lt 1) { Fail '-WorkerQueuePrefetch deve essere >= 1' }
 if ($WorkerDelayQueuePrefetch -lt 1) { Fail '-WorkerDelayQueuePrefetch deve essere >= 1' }
+
+if ($XlsxExporterOnly) {
+    Step 'Deploy rapido acceleratore XLSX nativo'
+    if ($SkipXlsxExporter) { Fail '-XlsxExporterOnly non e'' compatibile con -SkipXlsxExporter' }
+    $isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
+               ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $isAdmin) { Fail 'Servono privilegi di Amministratore per riavviare i servizi Plenora.' }
+    try {
+        $resolvedXlsxArchive = Resolve-XlsxExporterArchive -ExplicitArchive $XlsxExporterArchive
+        if (-not $resolvedXlsxArchive) {
+            throw 'Pacchetto non trovato: mettere ZIP e .sha256 in C:\deploy oppure specificare -XlsxExporterArchive.'
+        }
+        $xlsxUpdateStoppedIds = @(Stop-PlenoraAppServicesForDependencyUpdate)
+        try {
+            Install-XlsxExporter -ArchivePath $resolvedXlsxArchive `
+                -ChecksumPath $XlsxExporterChecksum
+        } finally {
+            Start-PlenoraAppServicesAfterDependencyFailure -ServiceIds $xlsxUpdateStoppedIds
+        }
+    } catch {
+        Fail $_.Exception.Message
+    }
+    Ok 'Deploy rapido XLSX completato; servizi precedentemente attivi riavviati'
+    exit 0
+}
 
 # -----------------------------------------------------------------------------
 Step 'Verifica prerequisiti di base'
@@ -548,6 +700,49 @@ if ($LASTEXITCODE -ne 0) {
 $forgeRootForCleanup = Split-Path -Parent (Split-Path -Parent $condaBat)
 Remove-StalePipDirectories -CondaEnvRoot (Join-Path $forgeRootForCleanup "envs\$CondaEnv")
 Ok 'Dipendenze python complete'
+
+# -----------------------------------------------------------------------------
+Step 'Acceleratore XLSX nativo (opzionale, con verifica SHA-256)'
+# -----------------------------------------------------------------------------
+if ($SkipXlsxExporter) {
+    Write-Host '  Skip richiesto: resta disponibile il writer XLSX Python.' -ForegroundColor Yellow
+} else {
+    try {
+        $resolvedXlsxArchive = Resolve-XlsxExporterArchive -ExplicitArchive $XlsxExporterArchive
+    } catch {
+        Start-PlenoraAppServicesAfterDependencyFailure -ServiceIds $stoppedAppServiceIds
+        Fail $_.Exception.Message
+    }
+    if ($resolvedXlsxArchive) {
+        $xlsxUpdateStoppedIds = @()
+        if (-not $InstallServices) {
+            $xlsxUpdateStoppedIds = @(Stop-PlenoraAppServicesForDependencyUpdate)
+        }
+        try {
+            Install-XlsxExporter -ArchivePath $resolvedXlsxArchive `
+                -ChecksumPath $XlsxExporterChecksum
+        } catch {
+            Start-PlenoraAppServicesAfterDependencyFailure -ServiceIds $xlsxUpdateStoppedIds
+            Start-PlenoraAppServicesAfterDependencyFailure -ServiceIds $stoppedAppServiceIds
+            Fail $_.Exception.Message
+        }
+        if (-not $InstallServices) {
+            Start-PlenoraAppServicesAfterDependencyFailure -ServiceIds $xlsxUpdateStoppedIds
+        }
+    } else {
+        $installedXlsxExporter = Join-Path $BackendDir 'bin\plenora-xlsx-exporter.exe'
+        if (Test-Path -LiteralPath $installedXlsxExporter -PathType Leaf) {
+            $installedXlsxVersion = (& $installedXlsxExporter --version 2>&1 | Out-String).Trim()
+            if ($LASTEXITCODE -ne 0) {
+                Start-PlenoraAppServicesAfterDependencyFailure -ServiceIds $stoppedAppServiceIds
+                Fail "XLSX exporter esistente non eseguibile: $installedXlsxVersion"
+            }
+            Ok "XLSX exporter gia' installato: $installedXlsxVersion"
+        } else {
+            Write-Host '  Pacchetto non trovato: writer Python attivo. Mettere ZIP e .sha256 in C:\deploy e rilanciare.' -ForegroundColor Yellow
+        }
+    }
+}
 
 # -----------------------------------------------------------------------------
 Step "Configurazione .env + DATA_DIR ($DataDir)"
@@ -865,6 +1060,7 @@ Write-Host '=============================================================' -Fore
 Write-Host '  Servizi:    -InstallServices (backend/worker/beat come servizi Windows)'
 Write-Host '  Storage:    SeaweedFS S3 locale installato per default (-InstallObjectStorage:$false per endpoint esterno)'
 Write-Host '  Frontend:   -InstallFrontend (build Vite + Caddy su porta 80)'
+Write-Host '  XLSX:       ZIP + .sha256 in C:\deploy (rilevamento e verifica automatici)'
 Write-Host '  Production: -Production (gates attivi, richiede object storage)'
 Write-Host ''
 Write-Host '  Checkpoint: curl.exe -s http://127.0.0.1:5004/ready' -ForegroundColor Cyan

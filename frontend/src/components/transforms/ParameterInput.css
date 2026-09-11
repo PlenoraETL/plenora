@@ -753,6 +753,18 @@
   color: var(--color-datasource-dark);
 }
 
+/* Strip _L/_R suffixes button */
+.rename-list-input__add--strip-lr {
+  border-color: var(--color-warning);
+  color: #b45309;
+}
+
+.rename-list-input__add--strip-lr:hover {
+  border-color: #b45309;
+  color: #92400e;
+  background: rgba(245, 158, 11, 0.08);
+}
+
 /* CSV Paste Panel */
 .rename-list-input__csv-panel {
   margin-top: 6px;

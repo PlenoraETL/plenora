@@ -8,6 +8,10 @@
  */
 import React, { useState } from 'react';
 
+// Suffissi accumulati dai join a catena (es. "_L_L_L", "_R_L_L") — uno o
+// più gruppi consecutivi di _L/_R in coda al nome colonna.
+const TRAILING_LR_SUFFIX_RE = /(?:_[LR])+$/;
+
 const RenameListInput = ({ value, onChange, columns }) => {
   const renames = Array.isArray(value) ? value : [];
   const [showCsvPaste, setShowCsvPaste] = useState(false);
@@ -29,6 +33,45 @@ const RenameListInput = ({ value, onChange, columns }) => {
       .map(col => ({ old_name: col.name, old_name_id: columnKey(col), new_name: '' }));
     if (newEntries.length === 0) return;
     onChange([...renames.filter(r => r.old_name), ...newEntries]);
+  };
+
+  const stripLRSuffixes = () => {
+    // Propone una rinomina per ogni colonna il cui nome termina con uno o
+    // più suffissi _L/_R accumulati dai join a catena (es. "cd_id_L_L_L" →
+    // "cd_id"). Le colonne già pulite (nessun suffisso finale) sono
+    // ignorate. In caso di collisione (due colonne diverse che, tolti i
+    // suffissi, darebbero lo stesso nome — tipiche chiavi di join
+    // duplicate) la colonna non viene proposta: va gestita a mano o con
+    // "Elimina colonne", non rinominata alla cieca.
+    const stripped = columns
+      .map(col => ({ col, cleanName: col.name.replace(TRAILING_LR_SUFFIX_RE, '') }))
+      .filter(({ col, cleanName }) => cleanName && cleanName !== col.name);
+
+    const cleanNameCounts = stripped.reduce((acc, { cleanName }) => {
+      acc[cleanName] = (acc[cleanName] || 0) + 1;
+      return acc;
+    }, {});
+
+    const newEntries = stripped
+      .filter(({ cleanName }) => cleanNameCounts[cleanName] === 1)
+      .map(({ col, cleanName }) => ({ old_name: col.name, old_name_id: columnKey(col), new_name: cleanName }));
+
+    const skippedCollisions = stripped.length - newEntries.length;
+    if (skippedCollisions > 0) {
+      setCsvError(
+        `${skippedCollisions} colonne saltate: più colonne diverse darebbero lo stesso nome dopo la pulizia ` +
+        `(probabili chiavi di join duplicate — usa "Elimina colonne" per quelle).`
+      );
+    } else {
+      setCsvError('');
+    }
+
+    if (newEntries.length === 0) return;
+
+    // Merge: sostituisci quelle con stesso old_name, aggiungi nuove.
+    const existingMap = new Map(renames.filter(r => r.old_name).map(r => [r.old_name, r]));
+    newEntries.forEach(e => existingMap.set(e.old_name, e));
+    onChange(Array.from(existingMap.values()));
   };
 
   const parseCsv = () => {
@@ -156,7 +199,23 @@ const RenameListInput = ({ value, onChange, columns }) => {
         >
           📝 Incolla CSV
         </button>
+        {columns.length > 0 && (
+          <button
+            type="button"
+            onClick={stripLRSuffixes}
+            className="rename-list-input__add rename-list-input__add--strip-lr"
+            title="Propone un nuovo nome per ogni colonna togliendo i suffissi _L/_R accumulati dai join (es. cd_id_L_L_L → cd_id)"
+          >
+            🧹 Rimuovi suffissi _L/_R
+          </button>
+        )}
       </div>
+
+      {csvError && !showCsvPaste && (
+        <div className="rename-list-input__csv-error">
+          {csvError}
+        </div>
+      )}
 
       {showCsvPaste && (
         <div className="rename-list-input__csv-panel">
