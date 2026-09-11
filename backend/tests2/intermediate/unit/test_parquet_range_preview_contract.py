@@ -88,3 +88,27 @@ def test_artifact_preview_uses_ranges_without_opening_full_stream(monkeypatch):
         start == 0 and end == len(payload) - 1
         for start, end in storage.ranges
     )
+
+
+def test_parquet_preview_disables_cross_row_group_prebuffer(monkeypatch) -> None:
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from app.core.intermediate.preview_parser import parse_parquet_preview
+
+    sink = io.BytesIO()
+    pq.write_table(pa.table({"id": [1, 2]}), sink, row_group_size=1)
+
+    original = pq.ParquetFile
+    constructor_options: dict[str, object] = {}
+
+    def recording_parquet_file(source, *args, **kwargs):
+        constructor_options.update(kwargs)
+        return original(source, *args, **kwargs)
+
+    monkeypatch.setattr(pq, "ParquetFile", recording_parquet_file)
+
+    parsed = parse_parquet_preview(sink.getvalue(), limit=1)
+
+    assert parsed.rows == [{"id": 1}]
+    assert constructor_options.get("pre_buffer") is False

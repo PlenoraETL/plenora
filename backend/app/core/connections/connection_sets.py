@@ -10,8 +10,9 @@ from __future__ import annotations
 import uuid
 from collections.abc import Iterable, Mapping
 from datetime import datetime, timezone
+from typing import Literal, TypedDict
 
-from app.db.pg_connection import unit_of_work
+from app.db.pg_connection import PgSession, unit_of_work
 
 from .models import (
     ConnectionSet,
@@ -39,7 +40,15 @@ def _member_from_row(row: Mapping[str, object]) -> ConnectionSetMember:
     )
 
 
-def _load_members(session, set_ids: Iterable[str]) -> dict[str, list[ConnectionSetMember]]:
+class ConnectionSetDependency(TypedDict):
+    kind: Literal["project", "eseguibile"]
+    id: str
+    name: str
+
+
+def _load_members(
+    session: PgSession, set_ids: Iterable[str]
+) -> Mapping[str, list[ConnectionSetMember]]:
     ordered_ids = list(dict.fromkeys(str(value) for value in set_ids if value))
     if not ordered_ids:
         return {}
@@ -121,7 +130,7 @@ def get_connection_set(connection_set_id: str) -> ConnectionSet | None:
 
 
 def _validate_members(
-    session,
+    session: PgSession,
     *,
     group_id: str,
     members: list[ConnectionSetMemberInput],
@@ -161,7 +170,7 @@ def _validate_members(
 
 
 def _replace_members(
-    session,
+    session: PgSession,
     *,
     connection_set_id: str,
     group_id: str,
@@ -365,7 +374,9 @@ def connection_set_ids_using_connection(connection_id: str) -> list[str]:
     return [str(row["connection_set_id"]) for row in rows]
 
 
-def connection_set_dependencies(connection_set_id: str) -> list[dict[str, str]]:
+def connection_set_dependencies(
+    connection_set_id: str,
+) -> list[ConnectionSetDependency]:
     """Progetti/versioni attive che rendono distruttiva la cancellazione."""
 
     marker = f"%{connection_set_id}%"

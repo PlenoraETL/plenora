@@ -49,7 +49,9 @@ _connection_service = None
 _database_inspector = None
 
 
-def init_connections(connection_service, database_inspector):
+def init_connections(
+    connection_service: object, database_inspector: object
+) -> None:
     """Inizializza il modulo. Chiamare da main.py dopo setup."""
     global _connection_service, _database_inspector
     _connection_service = connection_service

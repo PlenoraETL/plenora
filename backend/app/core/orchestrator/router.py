@@ -27,6 +27,7 @@ from app.core.orchestrator.service import canvas_validation_gate_blocks
 from app.core.orchestrator import log_cleanup as orchestrator_log_cleanup
 from app.core.orchestrator.execution_contract import (
     CaricaExecutionContract,
+    PipelineExecutionContract,
     build_pipeline_execution_contract,
 )
 from app.core.orchestrator.router_mappers import (
@@ -124,7 +125,7 @@ def _assert_eseguibile_task_owner(
 def _task_eseguibile_record(
     project_id: object,
     task_result_payload: Mapping[str, object],
-):
+) -> Mapping[str, object] | None:
     """Resolve executable identity from explicit task-result metadata."""
     candidate = str(project_id or "")
     if not candidate:
@@ -161,9 +162,9 @@ def _project_service() -> project_service_module.ProjectService:
 
 
 def _apply_project_runtime_inputs(
-    execution_contract,
+    execution_contract: PipelineExecutionContract,
     raw_inputs: Mapping[str, object],
-):
+) -> PipelineExecutionContract:
     """Congela canvas e connessione risolti prima dell'invio al worker."""
 
     nodes = execution_contract.canvas.get("nodes") or []
@@ -399,7 +400,9 @@ class TaskStatusResponse(BaseModel):
 
     @field_validator("progress", mode="before")
     @classmethod
-    def coerce_progress_to_int(_cls, progress_value: object) -> int:
+    def coerce_progress_to_int(
+        _cls: type["TaskStatusResponse"], progress_value: object
+    ) -> int:
         """Pydantic v2 è strict: il worker Celery può salvare progress come float (es. 5.0)."""
         try:
             return int(progress_value) if progress_value is not None else 0

@@ -37,6 +37,10 @@ jobs:
           sed -i 's/^JWT_SECRET_KEY=.*/JWT_SECRET_KEY=ci-jwt-secret-ci-jwt-secret-ci-jwt-secret-ci-jwt-secret/' .env.docker
           sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-postgres-password/' .env.docker
           sed -i 's/^RABBITMQ_DEFAULT_PASS=.*/RABBITMQ_DEFAULT_PASS=ci-rabbit-password/' .env.docker
+          sed -i 's/^S3_ACCESS_KEY=.*/S3_ACCESS_KEY=ci-object-storage-access/' .env.docker
+          sed -i 's/^S3_SECRET_KEY=.*/S3_SECRET_KEY=ci-object-storage-secret/' .env.docker
+          sed -i 's/^AWS_ACCESS_KEY_ID=.*/AWS_ACCESS_KEY_ID=ci-object-storage-access/' .env.docker
+          sed -i 's/^AWS_SECRET_ACCESS_KEY=.*/AWS_SECRET_ACCESS_KEY=ci-object-storage-secret/' .env.docker
           sed -i 's|^DATABASE_URL=.*|DATABASE_URL=postgresql://plenora:ci-postgres-password@postgres:5432/plenora|' .env.docker
           sed -i 's|^DRAMATIQ_BROKER_URL=.*|DRAMATIQ_BROKER_URL=amqp://plenora:ci-rabbit-password@rabbitmq:5672/|' .env.docker
           docker network create plenora
@@ -46,19 +50,25 @@ jobs:
         run: docker compose build backend frontend
       - name: Start infrastructure
         run: docker compose up -d --wait postgres rabbitmq object-storage
-      - name: Start backend
-        run: docker compose up -d backend
+      - name: Start backend and complete database bootstrap
+        run: docker compose up -d --wait --wait-timeout 180 backend
+      - name: Start application control plane
+        run: docker compose up -d worker worker-control beat
       - name: Infrastructure smoke
         run: bash scripts/docker-api-smoke.sh --infrastructure-only
       - name: Seed smoke user
-        run: docker compose exec -T backend python -m app.core.auth.smoke_seed
+        run: >-
+          docker compose exec -T
+          -e PLENORA_SMOKE_USERNAME
+          -e PLENORA_SMOKE_PASSWORD
+          backend python -m app.core.auth.smoke_seed
       - name: Run full Docker API smoke
         run: bash scripts/docker-api-smoke.sh
       - name: Dump Compose diagnostics
         if: failure()
         run: |
           docker compose ps -a
-          docker compose logs --no-color --tail=300 backend postgres rabbitmq object-storage
+          docker compose logs --no-color --tail=300 backend worker worker-control beat postgres rabbitmq object-storage
       - name: Stop services
         if: always()
         run: |

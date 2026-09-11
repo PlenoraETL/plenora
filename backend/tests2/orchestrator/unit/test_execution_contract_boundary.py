@@ -258,6 +258,7 @@ def test_pipeline_contract_migrates_equal_legacy_runtime_tenant():
     assert contract.build_runtime_context() == {
         "group_id": "group-1",
         "output_format": "xlsx",
+        "persist_contract": True,
     }
 
 
@@ -370,6 +371,7 @@ def test_preview_contract_threads_canonical_tenant_without_project_lookup():
     assert result["success"] is True
     assert executor.calls[0][1]["execution_context"] == {
         "group_id": "group-1",
+        "persist_contract": True,
     }
     project_service.get_project_metadata.assert_not_called()
     project_service.get_project_canvas.assert_not_called()
@@ -435,6 +437,7 @@ def test_pipeline_contract_roundtrip_keeps_tenant_through_executor():
     assert result.success is True
     assert manipola_executor.calls[0][1]["execution_context"] == {
         "group_id": "group-1",
+        "persist_contract": True,
     }
     project_service.get_project_metadata.assert_not_called()
     project_service.get_project_canvas.assert_not_called()

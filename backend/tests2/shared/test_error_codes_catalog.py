@@ -848,7 +848,7 @@ def _scan_value_error_str_e_callsites() -> Dict[str, int]:
 
 
 # Lock per-file (BE-GO-READY-ERROR-CODES-015 closure).
-# 44 call site totali, classificati `KEEP_DYNAMIC_VALIDATION_COMPAT`
+# 47 call site totali, classificati `KEEP_DYNAMIC_VALIDATION_COMPAT`
 # (vedi rationale in `error_codes.py::ACCEPTED_HTTP_FALLBACK_PATTERNS`).
 # Aggiunte/rimozioni richiedono aggiornamento esplicito del lock e
 # classificazione del nuovo sito (KEEP_DYNAMIC_VALIDATION_COMPAT,
@@ -871,7 +871,10 @@ EXPECTED_VALUE_ERROR_STR_E_COUNTS: Dict[str, int] = {
     # Include l'update metadata file_source, ValueError di input utente.
     "backend/app/core/files/router.py": 8,
     "backend/app/core/files/upload_boundary.py": 2,
-    "backend/app/core/orchestrator/router.py": 2,
+    # REST carica + lookup/input runtime: messaggi dinamici validati al boundary.
+    "backend/app/core/orchestrator/router.py": 3,
+    # Create/update Connection Set: validazione dinamica di chiavi e ownership.
+    "backend/app/core/connections/router.py": 2,
     "backend/app/core/projects/router.py": 1,
     "backend/app/core/tickets/attachment_boundary.py": 1,
 }
@@ -908,10 +911,10 @@ def test_value_error_str_e_callsite_lock():
 
 
 def test_value_error_str_e_total_count_lock():
-    """Sanity check: somma per-file == 44. Lock indipendente che
+    """Sanity check: somma per-file == 47. Lock indipendente che
     cattura desync fra `EXPECTED_VALUE_ERROR_STR_E_COUNTS` e somma
     intesa nel commit message."""
-    assert sum(EXPECTED_VALUE_ERROR_STR_E_COUNTS.values()) == 44
+    assert sum(EXPECTED_VALUE_ERROR_STR_E_COUNTS.values()) == 47
 
 
 def test_value_error_str_e_pattern_in_accepted_fallback():

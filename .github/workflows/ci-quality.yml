@@ -34,13 +34,28 @@ jobs:
       - name: Install backend test dependencies
         working-directory: backend
         run: python -m pip install --require-hashes -r requirements-dev.lock
+      - name: Bind ctypes VSI adapter to pyogrio bundled GDAL
+        working-directory: backend
+        run: |
+          bundled_gdal="$(python - <<'PY'
+          from pathlib import Path
+          import pyogrio
+
+          site_packages = Path(pyogrio.__file__).resolve().parent.parent
+          matches = sorted(site_packages.glob("pyogrio.libs/libgdal-*.so*"))
+          if len(matches) != 1:
+              raise SystemExit(f"expected one bundled libgdal, found: {matches}")
+          print(matches[0])
+          PY
+          )"
+          sudo mkdir -p /opt/gdal/lib
+          sudo ln -s "$bundled_gdal" /opt/gdal/lib/libgdal.so
       - name: Run backend PR gate
         working-directory: backend
         run: >-
           python -m pytest tests2 -c tests2/pytest.ini
           -m "not perf_bench and not developer_nightly and not optional_provider
           and not requires_external_network and not requires_backend_http_service"
-          --maxfail=1
 
   frontend-tests:
     runs-on: ubuntu-latest
