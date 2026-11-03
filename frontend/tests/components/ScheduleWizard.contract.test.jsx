@@ -174,4 +174,45 @@ describe('ScheduleWizard', () => {
     expect(toastMock.success).toHaveBeenCalled();
     expect(onCreated).toHaveBeenCalled();
   });
+
+  // Audit R8.12: modificare uno schedule disattivato non deve riattivarlo.
+  it('keeps a disabled schedule disabled when saving an edit', async () => {
+    apiIndexMock.listProjects.mockResolvedValueOnce([
+      { id: 'proj-1', name: 'Project One', project_type: 'estrai' },
+    ]);
+    apiIndexMock.listConnections.mockResolvedValueOnce([]);
+    schedulesMock.getSchedule.mockResolvedValueOnce({
+      pipeline: { project_id: 'proj-1' },
+      schedule: { cron_expression: '0 3 * * *', description: 'Spento', timezone: 'Europe/Rome', enabled: false },
+      execution: {},
+      destination: null,
+      on_error: {},
+    });
+    schedulesMock.updateSchedule.mockResolvedValueOnce({ id: 'sch-2' });
+
+    render(<ScheduleWizard onClose={vi.fn()} onCreated={vi.fn()} editId="sch-2" />);
+    expect((await screen.findAllByText('Project One')).length).toBeGreaterThan(0);
+    for (let i = 0; i < 5; i += 1) {
+      await userEvent.click(screen.getByRole('button', { name: /avanti/i }));
+    }
+    await userEvent.click(screen.getByRole('button', { name: /salva modifiche|salva/i }));
+
+    await waitFor(() => expect(schedulesMock.updateSchedule).toHaveBeenCalledTimes(1));
+    expect(schedulesMock.updateSchedule.mock.calls[0][1].schedule.enabled).toBe(false);
+  });
+
+  // Audit M18: se il caricamento in modifica fallisce non si resta sul form
+  // di default (salvando si sovrascriverebbe lo schedule esistente).
+  it('closes the wizard when the edited schedule cannot be loaded', async () => {
+    apiIndexMock.listProjects.mockResolvedValueOnce([]);
+    apiIndexMock.listConnections.mockResolvedValueOnce([]);
+    schedulesMock.getSchedule.mockRejectedValueOnce(new Error('boom'));
+    const onClose = vi.fn();
+
+    render(<ScheduleWizard onClose={onClose} onCreated={vi.fn()} editId="sch-3" />);
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(toastMock.error).toHaveBeenCalled();
+    expect(schedulesMock.updateSchedule).not.toHaveBeenCalled();
+  });
 });

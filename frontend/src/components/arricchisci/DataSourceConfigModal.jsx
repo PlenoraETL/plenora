@@ -49,21 +49,10 @@ function DataSourceConfigModal({ onClose, onSave }) {
     credentials: {}, path_pattern: '',
     file_types: ['.csv','.xlsx'], recursive: false, schedule: null,
   });
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState(null);
 
   const upd = (k, v) => setFormData(prev => ({...prev, [k]:v}));
   const updCred = (k, v) => setFormData(prev => ({...prev, credentials:{...prev.credentials,[k]:v}}));
   const selectedSource = DATASOURCE_TYPES.find(s => s.id === formData.source_type);
-
-  const handleTestConnection = async () => {
-    setTesting(true); setTestResult(null);
-    try {
-      await new Promise(r => setTimeout(r, 1500));
-      setTestResult({ success:true, message:'Connessione riuscita!' });
-    } catch(e) { setTestResult({success:false, message:e.message}); }
-    finally { setTesting(false); }
-  };
 
   const handleSave = () => onSave({
     name: formData.name, description: formData.description,
@@ -90,7 +79,7 @@ function DataSourceConfigModal({ onClose, onSave }) {
                 {DATASOURCE_TYPES.map(src => (
                   <div key={src.id}
                     className={`dsm__type-tile${formData.source_type===src.id?' dsm__type-tile--on':''}${src.status==='future'?' dsm__type-tile--future':''}`}
-                    onClick={() => !src.status && upd('source_type', src.id) && upd('credentials',{})}>
+                    onClick={() => setFormData(prev => ((src.status || prev.source_type === src.id) ? prev : { ...prev, source_type: src.id, credentials: {} }))}>
                     <span className="dsm__type-icon">{src.icon}</span>
                     <span className="dsm__type-label">{src.label}</span>
                     <span className="dsm__type-auth">{src.authType}</span>
@@ -184,15 +173,12 @@ function DataSourceConfigModal({ onClose, onSave }) {
                 ))}
               </div>
 
-              <button type="button" className="dsm__test-btn" onClick={handleTestConnection} disabled={testing}>
-                {testing ? '⏳ Test in corso…' : '🔍 Testa Connessione'}
-              </button>
-
-              {testResult && (
-                <div className={`dsm__test-result${testResult.success?' dsm__test-result--ok':' dsm__test-result--err'}`}>
-                  {testResult.success ? '✅' : '❌'} {testResult.message}
-                </div>
-              )}
+              {/* Il backend testa solo Data Source gia' salvati
+                  (POST /datasources/{id}/test). Prima qui c'era un test
+                  simulato che rispondeva sempre "riuscita" (audit P2). */}
+              <div className="dsm__info-box">
+                🔍 Dopo il salvataggio puoi verificare la connessione con <strong>Test</strong> nella pagina <strong>Data Source</strong>.
+              </div>
 
               <div className="dsm__info-box">
                 💡 <strong>Nota:</strong> I Data Source funzionano come <em>Generatori</em>. Quando eseguiti, scaricano i file dal percorso specificato e li rendono disponibili come dataset.

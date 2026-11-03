@@ -27,7 +27,18 @@ import './AllowedGroupsSelector.css';
 
 const MAGIC_ALL = '*';
 
-function AllowedGroupsSelector({
+// Solo superadmin può gestire la condivisione cross-gruppo. Il controllo sta
+// in un wrapper SENZA altri hook: un `return null` prima degli hook del
+// pannello violava le Rules of Hooks; se lo stesso montaggio passava da
+// "senza permesso" a "con permesso" React lanciava "Rendered more hooks"
+// (audit R5.6).
+function AllowedGroupsSelector(props) {
+  const { user } = useAuth();
+  if (!can.shareResources(user)) return null;
+  return <AllowedGroupsSelectorPanel {...props} />;
+}
+
+function AllowedGroupsSelectorPanel({
   resourceType,
   resourceId,
   disabled = false,
@@ -36,11 +47,6 @@ function AllowedGroupsSelector({
 }) {
   const { user } = useAuth();
   const toast = useToast();
-
-  // Solo superadmin può gestire la condivisione cross-gruppo.
-  if (!can.shareResources(user)) {
-    return null;
-  }
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving]   = useState(false);
@@ -51,6 +57,10 @@ function AllowedGroupsSelector({
   const [selected, setSelected]               = useState([]);   // stato corrente editabile
   const [allChecked, setAllChecked]           = useState(false);
   const [search, setSearch]                   = useState('');
+  // Le condivisioni attuali devono essere note prima di poterle modificare:
+  // se getShares fallisce, una selezione vuota salvata sostituirebbe quelle
+  // esistenti (audit R10.6). Finche' false, il pannello e' in sola lettura.
+  const [sharesLoaded, setSharesLoaded]       = useState(false);
 
   const ownerGroupId = user?.group_id;
 
@@ -72,6 +82,7 @@ function AllowedGroupsSelector({
     if (!resourceType || !resourceId) return;
     setLoading(true);
     setError(null);
+    setSharesLoaded(false);
     try {
       // Promise.allSettled: gestiamo entrambi gli errori in modo coerente.
       // Prima il code path catch silenzioso su listGroups + throw su getShares
@@ -98,11 +109,15 @@ function AllowedGroupsSelector({
         setAllChecked(hasAll);
         setSelected(ids.filter(id => id !== MAGIC_ALL));
         setInitialSelected(ids);
-      } else if (/404/.test(sharesRes.reason?.message || '')) {
-        // Nessuna share registrata: stato pulito
+        setSharesLoaded(true);
+      } else if (sharesRes.reason?.response?.status === 404) {
+        // Nessuna share registrata: stato pulito. Lo status HTTP e' l'unico
+        // segnale affidabile: l'interceptor riscrive `message` con il testo
+        // del backend, quindi la vecchia regex /404/ non scattava mai.
         setAllChecked(false);
         setSelected([]);
         setInitialSelected([]);
+        setSharesLoaded(true);
       } else {
         console.error('[AllowedGroupsSelector] getShares fallita:', sharesRes.reason);
         setError(prev => prev || `Caricamento condivisioni fallito: ${humanizeError(sharesRes.reason).message}`);
@@ -114,15 +129,17 @@ function AllowedGroupsSelector({
 
   useEffect(() => { load(); }, [load]);
 
+  const locked = disabled || saving || !sharesLoaded;
+
   const toggleGroup = (groupId) => {
-    if (disabled || saving) return;
+    if (locked) return;
     setSelected(prev =>
       prev.includes(groupId) ? prev.filter(g => g !== groupId) : [...prev, groupId]
     );
   };
 
   const handleSelectAllVisible = () => {
-    if (disabled || saving) return;
+    if (locked) return;
     const visibleIds = filteredGroups.map(g => g.group_id);
     const allVisibleSelected = visibleIds.every(id => selected.includes(id));
     if (allVisibleSelected) {
@@ -133,7 +150,7 @@ function AllowedGroupsSelector({
   };
 
   const handleToggleAll = (checked) => {
-    if (disabled || saving) return;
+    if (locked) return;
     setAllChecked(checked);
   };
 
@@ -145,7 +162,7 @@ function AllowedGroupsSelector({
   };
 
   const handleSave = async () => {
-    if (disabled || saving) return;
+    if (locked) return;
     setSaving(true);
     setError(null);
     try {
@@ -206,7 +223,7 @@ function AllowedGroupsSelector({
             <input
               type="checkbox"
               checked={allChecked}
-              disabled={disabled || saving}
+              disabled={locked}
               onChange={(e) => handleToggleAll(e.target.checked)}
             />
             <div className="ags__all-toggle-text">
@@ -239,7 +256,7 @@ function AllowedGroupsSelector({
                   type="button"
                   className="ags__list-toggle-all"
                   onClick={handleSelectAllVisible}
-                  disabled={disabled || saving || allChecked || filteredGroups.length === 0}
+                  disabled={locked || allChecked || filteredGroups.length === 0}
                 >
                   {filteredGroups.length > 0 &&
                    filteredGroups.every(g => selected.includes(g.group_id))
@@ -257,7 +274,7 @@ function AllowedGroupsSelector({
                 placeholder="Cerca gruppo per nome…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                disabled={disabled || saving || allChecked}
+                disabled={locked || allChecked}
               />
             )}
 
@@ -283,7 +300,7 @@ function AllowedGroupsSelector({
                       <input
                         type="checkbox"
                         checked={checked}
-                        disabled={disabled || saving || allChecked}
+                        disabled={locked || allChecked}
                         onChange={() => toggleGroup(g.group_id)}
                       />
                       <div className="ags__item-body">
@@ -306,7 +323,7 @@ function AllowedGroupsSelector({
                 type="button"
                 className="ags__btn ags__btn--ghost"
                 onClick={handleCancel}
-                disabled={saving || !dirty}
+                disabled={locked || !dirty}
               >
                 Annulla
               </button>
@@ -314,7 +331,7 @@ function AllowedGroupsSelector({
                 type="button"
                 className="ags__btn ags__btn--primary"
                 onClick={handleSave}
-                disabled={saving || !dirty}
+                disabled={locked || !dirty}
               >
                 {saving ? 'Salvataggio…' : 'Salva condivisione'}
               </button>

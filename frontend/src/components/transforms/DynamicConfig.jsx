@@ -22,10 +22,11 @@ const DynamicConfig = ({
   geometryColumns = [],
   targetNodeId = null,
 }) => {
-  
-  // Ottieni configurazione trasformazione dal registry
+  // Il wrapper decide se c'e' una configurazione; tutti gli hook stanno nel
+  // corpo interno, montato solo con transformConfig valido. Prima il return
+  // anticipato precedeva useMemo/useEffect: scegliere un'operazione valida
+  // dopo una sconosciuta mandava in crash il canvas (audit R5.6).
   const transformConfig = registry?.[transformId];
-  
   if (!transformConfig) {
     return (
       <div className="dynamic-config dynamic-config--error">
@@ -34,7 +35,35 @@ const DynamicConfig = ({
       </div>
     );
   }
-  
+  return (
+    <DynamicConfigBody
+      key={transformId}
+      transformId={transformId}
+      transformConfig={transformConfig}
+      config={config}
+      updateConfig={updateConfig}
+      registry={registry}
+      inputColumns={inputColumns}
+      leftColumns={leftColumns}
+      rightColumns={rightColumns}
+      geometryColumns={geometryColumns}
+      targetNodeId={targetNodeId}
+    />
+  );
+};
+
+const DynamicConfigBody = ({
+  transformId,
+  transformConfig,
+  config = {},
+  updateConfig,
+  registry,
+  inputColumns = [],
+  leftColumns = [],
+  rightColumns = [],
+  geometryColumns = [],
+  targetNodeId = null,
+}) => {
   const { parameters = [], description } = transformConfig;
 
   const getParamValue = (param) => {

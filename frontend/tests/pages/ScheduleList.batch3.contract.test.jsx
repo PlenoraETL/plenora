@@ -150,6 +150,25 @@ describe('ScheduleList contract', () => {
       expect(schedulesMock.listSchedules).toHaveBeenCalledTimes(2),
     );
   });
+  // Audit R9.12: l'aggiornamento ottimistico agisce su schedule.enabled
+  // (il campo che la UI legge), quindi lo switch si sposta subito, prima
+  // della risposta del backend, e la lista non viene sostituita dallo spinner.
+  it('moves the toggle immediately (optimistic) without blanking the list', async () => {
+    schedulesMock.listSchedules.mockResolvedValue({ schedules: [sampleSchedule] });
+    let resolveToggle;
+    schedulesMock.toggleSchedule.mockReturnValueOnce(new Promise((r) => { resolveToggle = r; }));
+
+    render(<ScheduleList />);
+    await screen.findByText('Nightly Import');
+    const toggle = screen.getByRole('checkbox', { name: /disabilita schedule/i });
+    await userEvent.click(toggle);
+
+    expect(screen.getByRole('checkbox', { name: /abilita schedule/i }).checked).toBe(false);
+    resolveToggle({ ok: true });
+    await waitFor(() => expect(schedulesMock.listSchedules).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('Nightly Import')).toBeTruthy();
+  });
+
   it('clears runningManual and toasts when runScheduleNow rejects', async () => {
     schedulesMock.listSchedules.mockResolvedValueOnce({
       schedules: [sampleSchedule],

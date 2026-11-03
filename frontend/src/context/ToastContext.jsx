@@ -72,15 +72,15 @@ export function ToastProvider({ children }) {
   const warning = useCallback((msg, duration)        => addToast(msg, 'warning', duration),        [addToast]);
   const info    = useCallback((msg, duration)        => addToast(msg, 'info',    duration),        [addToast]);
 
-  // Memo del context value: senza memoization, ogni render del
-  // ToastProvider creava un nuovo oggetto `value` con stessa shape ma
-  // identita' diversa. I consumer che fanno `const toast = useToast();
-  // useCallback(..., [toast])` vedevano `toast` come dep cambiata ad
-  // ogni render del provider, invalidando i loro callback memoized.
-  // useCanvasSave era il caso piu' esposto (vedi P2-MED G3).
+  // Il context espone SOLO azioni stabili: l'identita' di `useToast()` non
+  // cambia mai dopo il mount. I consumer fanno `useCallback(..., [toast])`
+  // e `useEffect(load, [load])`: se `value` dipendesse da `toasts`, ogni
+  // toast mostrato/scaduto rigenererebbe i loader -> nuovo fetch -> nuovo
+  // toast (loop infinito su errore; audit 03/11/2026 R5.1). La lista dei
+  // toast resta interna al provider e arriva solo al ToastContainer.
   const value = useMemo(
-    () => ({ toasts, success, error, warning, info, dismiss }),
-    [toasts, success, error, warning, info, dismiss],
+    () => ({ success, error, warning, info, dismiss }),
+    [success, error, warning, info, dismiss],
   );
 
   return (

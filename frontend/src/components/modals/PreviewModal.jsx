@@ -316,14 +316,20 @@ const MapTab = memo(({ rows, columns, active }) => {
           weight: 1,
         }),
       onEachFeature: (feature, layer) => {
-        const p = feature.properties;
-        const rows_ = Object.entries(p).slice(0, 6)
-          .map(([k, v]) => `<tr><td class="pm-tip-k">${k}</td><td class="pm-tip-v">${v ?? 'NULL'}</td></tr>`)
-          .join('');
-        layer.bindTooltip(
-          `<table class="pm-tooltip">${rows_}</table>`,
-          { sticky: true, opacity: 1, className: 'pm-tooltip-wrap' }
-        );
+        // Tooltip costruito con nodi DOM e textContent: nomi e valori delle
+        // colonne arrivano dal DB e non vanno mai interpretati come HTML.
+        const table = document.createElement('table');
+        table.className = 'pm-tooltip';
+        for (const [k, v] of Object.entries(feature.properties).slice(0, 6)) {
+          const tr = table.insertRow();
+          const keyCell = tr.insertCell();
+          keyCell.className = 'pm-tip-k';
+          keyCell.textContent = k;
+          const valueCell = tr.insertCell();
+          valueCell.className = 'pm-tip-v';
+          valueCell.textContent = v ?? 'NULL';
+        }
+        layer.bindTooltip(table, { sticky: true, opacity: 1, className: 'pm-tooltip-wrap' });
         layer.on('mouseover', function () {
           this.setStyle?.({ fillOpacity: 0.85, weight: 1.5, color: 'rgba(255,255,255,0.3)' });
         });

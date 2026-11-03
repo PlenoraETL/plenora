@@ -4,6 +4,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { useToast } from '../../hooks/useToast';
+import { humanizeError } from '../../utils/errorMessages';
 import { listProjects, listConnections } from '../../api';
 import { createSchedule, updateSchedule, getSchedule } from '../../api/schedules';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
@@ -71,6 +72,10 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
     retry_backoff_seconds: '60, 300, 900',
     append_conflicts: 'skip',
     log_skipped_rows: true,
+    // Stato attivo: in modifica si conserva quello dello schedule esistente
+    // (prima il payload inviava sempre enabled:true e riattivava gli
+    // schedule disattivati; audit R8.12).
+    enabled: true,
   });
 
   useEffect(() => { loadFormData(); }, []);
@@ -105,12 +110,16 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
           retry_backoff_seconds: (existing.on_error?.retry_backoff_seconds || [60,300,900]).join(', '),
           append_conflicts: existing.on_error?.append_conflicts || 'skip',
           log_skipped_rows: existing.on_error?.log_skipped_rows ?? true,
+          enabled: existing.schedule?.enabled ?? true,
         });
         const isPreset = CRON_PRESETS.find(p => p.value === existing.schedule?.cron_expression);
         setCronPreset(isPreset ? existing.schedule.cron_expression : 'custom');
       }
     } catch (e) {
-      toast.error('Errore caricamento dati');
+      // In modifica non si puo' proseguire con il form di default: salvando
+      // si sovrascriverebbe lo schedule esistente con valori inventati.
+      toast.error(humanizeError(e).message || 'Errore caricamento dati');
+      if (editId) { onClose(); return; }
     } finally {
       setLoadingData(false);
     }
@@ -156,7 +165,7 @@ function ScheduleWizard({ onClose, onCreated, editId = null, defaultProjectId = 
       setSaving(true);
       const payload = {
         project_id: form.project_id,
-        schedule: { cron_expression: form.cron_expression, description: form.description, timezone: form.timezone, enabled: true },
+        schedule: { cron_expression: form.cron_expression, description: form.description, timezone: form.timezone, enabled: form.enabled },
         execution: { use_cache: form.use_cache, concurrency_max_queue: form.concurrency_max_queue },
         destination: form.enable_destination ? {
           connection_id: form.connection_id,

@@ -93,6 +93,7 @@ function ScheduleList() {
 
   const [schedules,      setSchedules]      = useState([]);
   const [loading,        setLoading]        = useState(true);
+  const loadedOnceRef = useRef(false);
   const [beatHealth,     setBeatHealth]     = useState(null);
   const [expandedLogs,   setExpandedLogs]   = useState({});
   const [expandedRuns,   setExpandedRuns]   = useState({});
@@ -180,7 +181,10 @@ function ScheduleList() {
   const loadData = async () => {
     const myGen = requestGenRef.current;
     try {
-      setLoading(true);
+      // Spinner a pagina intera solo al primo caricamento: i reload dopo
+      // toggle/delete/salvataggio aggiornano la lista senza farla sparire
+      // (prima la pagina lampeggiava e perdeva lo scroll; audit M1).
+      if (!loadedOnceRef.current) setLoading(true);
       const [sd, hd] = await Promise.all([
         listSchedules(projectFilter),
         getBeatHealthcheck().catch((err) => {
@@ -206,6 +210,7 @@ function ScheduleList() {
       const msg = err?.response?.data?.message || err?.message || 'Errore caricamento schedules';
       toast.error(msg);
     } finally {
+      loadedOnceRef.current = true;
       setLoading(false);
     }
   };
@@ -216,18 +221,18 @@ function ScheduleList() {
     // vecchio → reload completo del backend → nuovo state); con questo
     // pattern il visual feedback e' immediato e si annulla in caso di
     // errore prima del reload.
+    // Lo stato attivo vive in `schedule.enabled` (e' quello che la UI legge):
+    // prima l'ottimistico scriveva `s.enabled` e il toggle non si muoveva
+    // (audit R9.12).
+    const withEnabled = (s, value) => ({ ...s, schedule: { ...s.schedule, enabled: value } });
     const next = !current;
-    setSchedules(prev => prev.map(s =>
-      s.id === id ? { ...s, enabled: next } : s
-    ));
+    setSchedules(prev => prev.map(s => (s.id === id ? withEnabled(s, next) : s)));
     try {
       await toggleSchedule(id, next);
       loadData();
     } catch (e) {
       // Rollback: ripristina lo state precedente prima di mostrare l'errore.
-      setSchedules(prev => prev.map(s =>
-        s.id === id ? { ...s, enabled: current } : s
-      ));
+      setSchedules(prev => prev.map(s => (s.id === id ? withEnabled(s, current) : s)));
       toastApiError(toast, e, 'Errore toggle');
     }
   };
