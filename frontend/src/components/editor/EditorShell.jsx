@@ -55,9 +55,9 @@
  * Behavior preservato byte-per-byte rispetto al pattern legacy.
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ReactFlow, Background, Controls, MiniMap } from '@xyflow/react';
+import { ReactFlow, Background, Controls, ControlButton, MiniMap, useReactFlow } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 
 import { isValidProjectId } from '../../utils/validateRouteParam';
@@ -65,6 +65,10 @@ import { CanvasErrorBoundary } from '../common/ErrorBoundary';
 import { LoadingOverlay } from '../common/LoadingOverlay';
 import NodeInspector from '../canvas/NodeInspector';
 import { compactNodeTypes } from '../canvas/compactNodeTypes';
+import NodePalette from '../canvas/NodePalette';
+import StepPreview from '../canvas/StepPreview';
+import { autoLayout } from '../canvas/autoLayout';
+import { nodeTitle } from '../canvas/nodeDescriptors';
 
 const EMPTY_OBJ = {};
 
@@ -127,6 +131,8 @@ canvasConfig = EMPTY_OBJ,
     miniMapProps = { zoomable: true, pannable: true },
     isReadOnly = false,
     readOnlyProps,
+    // Nuova interfaccia (Fase 4, M2): { groups, onPick(item, afterNodeId) }
+    palette,
   } = canvasConfig;
 
   const {
@@ -154,6 +160,30 @@ canvasConfig = EMPTY_OBJ,
   // è no-op in sola lettura e dedup-safe.
   const takeSnapshot = useCanvasStore(s => s.takeSnapshot);
   const handleConnect = (conn) => { takeSnapshot(); onConnect?.(conn); };
+
+  // ── Nuova interfaccia (Fase 4, M2) ────────────────────────────────────
+  const editNodes = useCanvasStore(s => s.editNodes);
+  const setEditorActions = useCanvasStore(s => s.setEditorActions);
+  const reactFlow = useReactFlow();
+  const [paletteAfter, setPaletteAfter] = useState(null);
+
+  // "＋" sul nodo compatto: apre la palette per aggiungere il passo successivo.
+  const openPalette = useCallback((afterNodeId) => {
+    if (!palette || isReadOnly) return;
+    setPaletteAfter(afterNodeId);
+  }, [palette, isReadOnly]);
+  useEffect(() => {
+    setEditorActions({ openPalette: palette && !isReadOnly ? openPalette : null });
+  }, [setEditorActions, openPalette, palette, isReadOnly]);
+
+  // Riordina: layout automatico come azione utente (annullabile, salvata).
+  const handleAutoLayout = useCallback(() => {
+    if (isReadOnly) return;
+    editNodes(current => autoLayout(current, edges));
+    requestAnimationFrame(() => reactFlow.fitView({ padding: 0.15, duration: 300 }));
+  }, [isReadOnly, editNodes, edges, reactFlow]);
+
+  const paletteAfterNode = paletteAfter ? nodes.find(n => n.id === paletteAfter) : null;
 
   // Security guard: redirect a '/' se projectId non valido.
   useEffect(() => {
@@ -239,11 +269,18 @@ canvasConfig = EMPTY_OBJ,
               {...(readOnlyProps || {})}
             >
               <Background {...backgroundProps} />
-              <Controls />
+              <Controls>
+                {!isReadOnly && (
+                  <ControlButton onClick={handleAutoLayout} title="Riordina i nodi automaticamente" aria-label="Riordina i nodi">
+                    ⤢
+                  </ControlButton>
+                )}
+              </Controls>
               {showMiniMap && <MiniMap {...miniMapProps} />}
             </ReactFlow>
             {afterCanvas}
             {children}
+            <StepPreview projectId={projectId} />
           </div>
         </CanvasErrorBoundary>
         {/* Nuova interfaccia (Fase 4, M1): nodi compatti sul canvas, form
@@ -251,6 +288,15 @@ canvasConfig = EMPTY_OBJ,
         <NodeInspector fullNodeTypes={nodeTypes} prefix={prefix} />
       </div>
       {modals}
+      {palette && (
+        <NodePalette
+          open={Boolean(paletteAfter)}
+          context={paletteAfterNode ? nodeTitle(paletteAfterNode.type, paletteAfterNode.data) : null}
+          groups={palette.groups}
+          onPick={(item) => palette.onPick(item, paletteAfter)}
+          onClose={() => setPaletteAfter(null)}
+        />
+      )}
     </div>
   );
 }

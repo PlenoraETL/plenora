@@ -383,6 +383,22 @@ const ArricchisciEditorContent = () => {
 
   const getPos = () => getViewportCenter({ screenToFlowPosition });
 
+  // ── Palette "Cosa vuoi fare?" (Fase 4, M2) ────────────────────────────
+  // Il nodo API nasce dopo la scelta della connessione nel selettore: il
+  // nodo di partenza resta in sospeso qui e viene collegato a quel punto.
+  const paletteAfterRef = useRef(null);
+  const connectAfter = useCallback((afterId, newNodeId, targetHandle) => {
+    const after = nodesRef.current.find(n => n.id === afterId);
+    if (!after) return;
+    const sourceHandle = ['api_enrich', 'result', 'staticValues'].includes(after.type) ? 'output' : null;
+    editEdges(eds => addEdge({
+      ...defaultEdgeOptions,
+      id: `edge_${after.id}_${newNodeId}`,
+      source: after.id, sourceHandle, target: newNodeId, targetHandle,
+    }, eds));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editEdges]);
+
   const handleSelectConnection = useCallback((connection, category) => {
     const newNodeId = `api_enrich_${Date.now()}`;
     addNodes({ id: newNodeId,
@@ -411,7 +427,11 @@ const ArricchisciEditorContent = () => {
     if (category === 'openapi')    modals.close('openapi');
     if (category === 'rest_file')  modals.close('rest_file');
     if (category === 'datasource') modals.close('datasource');
-  }, [addNodes, screenToFlowPosition, modals]);
+    if (paletteAfterRef.current) {
+      connectAfter(paletteAfterRef.current, newNodeId, category === 'datasource' ? null : 'input');
+      paletteAfterRef.current = null;
+    }
+  }, [addNodes, screenToFlowPosition, modals, connectAfter]);
 
   const handleAddStaticValuesNode = useCallback(() => {
     addNodes({ id: `static_${Date.now()}`, type: 'staticValues',
@@ -468,6 +488,36 @@ const ArricchisciEditorContent = () => {
     addEdges({ id: `edge_result_carica_arcgis_${Date.now()}`, source: resultNode.id, target: newNode.id,
       label: 'Carica ArcGIS', animated: true, style: { stroke: '#2DD4BF', strokeWidth: 2 }, data: { join_type: 'carica_arcgis' } });
   }, [addNodes, addEdges]);
+
+  const palette = useMemo(() => ({
+    groups: [
+      { label: 'Arricchisci', items: [
+        { id: 'manual', kind: 'connector', label: 'API manuale', icon: '✏️', desc: 'connettore configurato a mano' },
+        { id: 'openapi', kind: 'connector', label: 'API OpenAPI', icon: '📋', desc: 'da uno schema importato' },
+        { id: 'rest_file', kind: 'connector', label: 'Processore File', icon: '📦', desc: 'REST file-in / file-out' },
+      ] },
+      { label: 'Uscite', items: [
+        { id: 'result', kind: 'result', label: 'Output', icon: '📁', desc: 'file finale' },
+        { id: 'carica', kind: 'carica', label: 'Carica su database', icon: '💾', desc: "dopo l'Output" },
+        { id: 'carica_arcgis', kind: 'carica_arcgis', label: 'Carica su ArcGIS', icon: '🌐', desc: "dopo l'Output" },
+      ] },
+    ],
+    onPick: (item, afterId) => {
+      if (item.kind === 'connector') { paletteAfterRef.current = afterId; modals.open(item.id); return; }
+      if (item.kind === 'carica') { handleAddCaricanNode(); return; }
+      if (item.kind === 'carica_arcgis') { handleAddCaricanArcGISNode(); return; }
+      if (nodesRef.current.some(n => n.type === 'result')) { toast.warning('Puoi avere solo un nodo risultato per progetto'); return; }
+      const after = nodesRef.current.find(n => n.id === afterId);
+      const newNodeId = `result_${Date.now()}`;
+      addNodes({ id: newNodeId, type: 'result',
+        position: after ? { x: after.position.x + 290, y: after.position.y } : { x: 600, y: 200 },
+        data: { isArricchisci: true, fileName: 'output', format: 'csv', availableColumns: [],
+          order_by_enabled: false, order_by_columns: [],
+          having_enabled: false, having_conditions: [] } });
+      if (after) connectAfter(after.id, newNodeId, 'input');
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [modals, handleAddCaricanNode, handleAddCaricanArcGISNode, addNodes, connectAfter, toast]);
 
   const onConnect = useCallback((params) => {
     // Normalizza handles: undefined → 'input'/'output'
@@ -653,6 +703,7 @@ const ArricchisciEditorContent = () => {
         miniMapProps: { className: 'arricchisci-minimap', nodeColor: nodeColorFn, zoomable: true, pannable: true },
         isReadOnly,
         readOnlyProps,
+        palette,
       }}
       canvasHandlers={{
         onNodesChange,

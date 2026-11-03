@@ -25,7 +25,7 @@ export function useInlinePreview(projectId) {
   const cancelledRef = useRef(false);
   const { mountedRef, stopPolling, startPolling } = useTaskPolling({ interval: POLL_INTERVAL });
 
-  const run = useCallback(async (limit = 10) => {
+  const run = useCallback(async (limit = 10, nodeId = null) => {
     if (!projectId) return;
     setStatus('loading');
     setError(null);
@@ -45,7 +45,7 @@ export function useInlinePreview(projectId) {
     };
 
     try {
-      const response = await previewProject(projectId, limit);
+      const response = await previewProject(projectId, limit, nodeId);
       if (!mountedRef.current) return;
 
       if (response.async && response.task_id) {

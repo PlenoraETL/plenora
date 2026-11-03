@@ -20,6 +20,7 @@ export function createReactFlowMock(options = {}) {
     ),
     Background: () => null,
     Controls: () => null,
+    ControlButton: () => null,
     MiniMap: () => null,
     NodeResizer: () => null,
     // I test montano i nodi come se fossero sul canvas: NodeHandle disegna gli handle.
@@ -35,6 +36,7 @@ export function createReactFlowMock(options = {}) {
       getEdges: () => readState().edges || [],
       getNodes: () => readState().nodes || [],
       setCenter: () => {},
+      fitView: () => {},
     }),
     useStore: (selector) => selector({
       edges: readState().edges || [],

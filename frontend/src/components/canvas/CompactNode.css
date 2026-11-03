@@ -68,3 +68,22 @@
   border: 2px solid var(--plen-border-hi, #9aa3b5);
 }
 .cnode__handle--param { border-color: var(--plen-text-sub, #5b6478); width: 7px; height: 7px; }
+
+/* "＋" per aggiungere il passo successivo (M2): visibile al passaggio. */
+.cnode__plus {
+  position: absolute; right: -13px; top: 50%;
+  transform: translateY(-50%);
+  width: 24px; height: 24px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--plen-border-hi, #cfd6e4);
+  background: var(--plen-surface, #fff);
+  color: var(--cnode-accent);
+  font-weight: 700; font-size: 13px; line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+  z-index: 2;
+}
+.cnode:hover .cnode__plus, .cnode--selected .cnode__plus { opacity: 1; }
+.cnode__plus:hover { background: var(--cnode-accent); color: #fff; border-color: var(--cnode-accent); }

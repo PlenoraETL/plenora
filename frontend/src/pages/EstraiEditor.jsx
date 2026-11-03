@@ -72,7 +72,7 @@ function EstraiEditor() {
   useHexCanvas(hexCanvasRef);
   const {
     nodes, edges, onNodesChange, onEdgesChange,
-    loadGraph, addNodes, addEdges, editEdges, applyDerivedNodes,
+    loadGraph, addNodes, addEdges, editNodes, editEdges, applyDerivedNodes,
     nodesRef, edgesRef, updateNodeData, deleteNode,
     handleSaveQuiet, dataNodes, getViewportCenter,
     isReadOnly, readOnlyProps
@@ -357,6 +357,40 @@ function EstraiEditor() {
         filters: [], calculated_columns: [], db_type: projectConnection?.type || 'postgres' },
     };
   }, [catalog, views, projectConnection]);
+
+  // ── Palette "Cosa vuoi fare?" (Fase 4, M2) ────────────────────────────
+  // Dopo una tabella: un'altra tabella/vista del catalogo, collegata con un
+  // join (si apre il JoinModal). Dall'Output: Carica DB / ArcGIS.
+  const palette = useMemo(() => ({
+    groups: [
+      { label: 'Tabelle', items: Object.keys(catalog || {}).sort().map(t => ({
+        id: `table:${t}`, kind: 'table', name: t, label: t, icon: '🗂️',
+        desc: `${(catalog[t] || []).length} col`,
+      })), limit: 40 },
+      { label: 'Viste', items: Object.keys(views || {}).sort().map(v => ({
+        id: `view:${v}`, kind: 'view', name: v, label: v, icon: '👁',
+        desc: `${(views[v] || []).length} col`,
+      })), limit: 40 },
+      { label: 'Uscite', items: [
+        { id: 'carica', kind: 'carica', label: 'Carica su database', icon: '💾', desc: "dopo l'Output" },
+        { id: 'carica_arcgis', kind: 'carica_arcgis', label: 'Carica su ArcGIS', icon: '🌐', desc: "dopo l'Output" },
+      ] },
+    ],
+    onPick: (item, afterId) => {
+      if (item.kind === 'carica') { handleAddCaricanNode(); return; }
+      if (item.kind === 'carica_arcgis') { handleAddCaricanArcGISNode(); return; }
+      const after = nodesRef.current.find(n => n.id === afterId);
+      const position = after ? { x: after.position.x - 290, y: after.position.y + 120 } : getViewportCenter(reactFlowInstance);
+      const newNode = buildTableNode(item.name, item.kind === 'view', position);
+      editNodes(nds => [...nds.map(n => (n.selected ? { ...n, selected: false } : n)), { ...newNode, selected: true }]);
+      // Tabella dopo tabella = join: la nuova e' la sorgente, quella di
+      // partenza il target (stesso verso del trascinamento manuale).
+      if (after && (after.type === 'tableNode' || after.type === 'featureLayerNode')) {
+        edgeHandlers.onConnect({ source: newNode.id, sourceHandle: null, target: after.id, targetHandle: null });
+      }
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [catalog, views, buildTableNode, editNodes, handleAddCaricanNode, handleAddCaricanArcGISNode]);
 
   // Click su una tabella/vista del catalogo → la aggiunge al CENTRO del canvas
   // (il drag resta per il posizionamento preciso).
@@ -792,6 +826,7 @@ function EstraiEditor() {
           fitViewOptions: { padding: 0.25, maxZoom: 0.8 },
           minZoom: 0.3,
           maxZoom: 2,
+          palette,
         }}
         canvasHandlers={{
           onNodesChange,

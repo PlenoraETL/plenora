@@ -62,6 +62,12 @@ vi.mock('../../src/utils/validateRouteParam', () => ({
   isValidProjectId: (value) => value === 'proj-1',
 }));
 
+// Registry delle trasformazioni (palette, Fase 4 M2): nessuna rete nei test.
+vi.mock('../../src/utils/transformRegistry', () => ({
+  fetchTransformRegistry: vi.fn(async () => ({ transforms: { filter: { name: 'Filtra', category: 'base' } } })),
+  getCachedTransformRegistry: () => ({ transforms: { filter: { name: 'Filtra', category: 'base' } } }),
+}));
+
 vi.mock('../../src/api', () => ({
   createTask: vi.fn(),
   getDownloadUrl: vi.fn(),

@@ -65,6 +65,11 @@ function CompactNode({ id, type, data = {}, selected }) {
     [descriptor, data, connectedKey],
   );
 
+  // La palette e' registrata da EditorShell (effetto, dopo il primo render
+  // dei nodi): l'azione si legge al clic, non al render.
+  const canAddAfter = !isReadOnly && handles.some(h => h.type === 'source' && h.position !== 'top');
+  const openPalette = (nodeId) => useCanvasStore.getState().getEditorAction('openPalette')?.(nodeId);
+
   const title = nodeTitle(type, data);
   const icon = typeof descriptor.icon === 'function' ? descriptor.icon(data) : descriptor.icon;
   const summary = descriptor.summary(data);
@@ -121,6 +126,17 @@ function CompactNode({ id, type, data = {}, selected }) {
       </div>
       <div className="cnode__summary" title={summary}>{summary || ' '}</div>
       <div className="cnode__kind">{descriptor.kind(data)}{problem ? <span className="cnode__problem"> · {problem}</span> : null}</div>
+      {canAddAfter && (
+        <button
+          type="button"
+          className="cnode__plus nodrag"
+          title="Aggiungi il passo successivo"
+          aria-label="Aggiungi il passo successivo"
+          onClick={(e) => { e.stopPropagation(); openPalette(id); }}
+        >
+          ＋
+        </button>
+      )}
     </div>
   );
 }

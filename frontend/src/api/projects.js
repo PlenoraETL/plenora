@@ -208,10 +208,14 @@ export const executeProjectQuery = async (projectId, options = null) => {
  * @param {number} limit      - Numero massimo di righe (default 100)
  * @returns {Promise<Object>} { task_id, ... }
  */
-export const previewProject = async (projectId, limit = 100) => {
-  const response = await http.get(`/projects/${projectId}/preview`, {
-    params: { limit },
-  });
+/**
+ * Anteprima del progetto. Con `nodeId` (B1/B6) il backend esegue solo il
+ * nodo e i suoi antenati e restituisce i dati DOPO quel passo.
+ */
+export const previewProject = async (projectId, limit = 100, nodeId = null) => {
+  const params = { limit };
+  if (nodeId) params.node_id = nodeId;
+  const response = await http.get(`/projects/${projectId}/preview`, { params });
   return response.data;
 };
 

@@ -1,0 +1,53 @@
+/* Anteprima dati del passo selezionato (Fase 4, M3). */
+.step-preview {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 240px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  background: var(--plen-surface, #fff);
+  border-top: 1px solid var(--plen-border, #e3e7f0);
+  box-shadow: 0 -4px 14px rgba(16, 24, 40, 0.06);
+  color: var(--plen-text, #18202f);
+}
+.step-preview--collapsed { height: 38px; }
+.step-preview__head {
+  display: flex; align-items: center; gap: 10px;
+  height: 38px; padding: 0 12px;
+  border-bottom: 1px solid var(--plen-border, #e3e7f0);
+  flex: none;
+}
+.step-preview__toggle {
+  border: 0; background: transparent; cursor: pointer;
+  color: var(--plen-text-sub, #5b6478); font-size: 13px; padding: 2px 4px;
+}
+.step-preview__title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.step-preview__meta { font-size: 12px; color: var(--plen-text-dim, #8a93a6); white-space: nowrap; }
+.step-preview__spacer { flex: 1; }
+.step-preview__run {
+  border: 1px solid var(--plen-border-hi, #cfd6e4);
+  background: var(--plen-surface, #fff);
+  color: inherit;
+  border-radius: 7px; padding: 4px 10px;
+  font: inherit; font-size: 12px; font-weight: 600;
+  cursor: pointer;
+}
+.step-preview__run:disabled { opacity: 0.6; cursor: default; }
+.step-preview__body { flex: 1; overflow: auto; }
+.step-preview__msg { padding: 14px 16px; font-size: 13px; color: var(--plen-text-sub, #5b6478); }
+.step-preview__msg--error { color: var(--plen-err, #dc2626); }
+.step-preview__table { border-collapse: collapse; font-size: 12px; width: max-content; min-width: 100%; }
+.step-preview__table th, .step-preview__table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--plen-border, #e3e7f0);
+  white-space: nowrap; text-align: left;
+  max-width: 320px; overflow: hidden; text-overflow: ellipsis;
+}
+.step-preview__table th {
+  position: sticky; top: 0;
+  background: var(--plen-surface-2, #f7f8fc);
+  color: var(--plen-text-sub, #5b6478);
+  font-weight: 600;
+}
+.step-preview__type { display: block; font-weight: 400; font-size: 10.5px; color: var(--plen-text-dim, #8a93a6); }

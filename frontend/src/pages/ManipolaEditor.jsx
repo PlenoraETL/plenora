@@ -14,7 +14,7 @@
  *
  * Route: /editor/manipola/:id
  */
-import React, { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { addEdge, useReactFlow, ReactFlowProvider, MarkerType } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -63,6 +63,8 @@ import '../components/nodes/DataSourceNode.css';
 import { useAuth } from '../context/AuthContext';
 import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
+import { buildManipolaPaletteGroups, MULTI_INPUT_OPS } from '../components/canvas/manipolaPalette';
+import { fetchTransformRegistry, getCachedTransformRegistry } from '../utils/transformRegistry';
 
 // Costante stabile — evita array literal nelle deps di useEditorData
 const MANIPOLA_SOURCE_TYPES = ['estrai', 'manipola', 'arricchisci'];
@@ -104,7 +106,7 @@ const ManipolaEditorContent = () => {
 
   const {
     nodes, edges, onNodesChange, onEdgesChange,
-    loadGraph, addNodes, addEdges, editEdges, applyDerivedNodes,
+    loadGraph, addNodes, addEdges, editNodes, editEdges, applyDerivedNodes,
     nodesRef, edgesRef, updateNodeData, deleteNode,
     handleSaveQuiet, getViewportCenter,
     isReadOnly, readOnlyProps
@@ -511,6 +513,57 @@ const ManipolaEditorContent = () => {
       markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: '#7c3aed' }, data: {} });
   }, [addNodes, addEdges]);
 
+  // ── Palette "Cosa vuoi fare?" (Fase 4, M2) ────────────────────────────
+  const [transformRegistry, setTransformRegistry] = useState(getCachedTransformRegistry());
+  useEffect(() => {
+    if (transformRegistry) return undefined;
+    let alive = true;
+    fetchTransformRegistry().then(r => { if (alive && r) setTransformRegistry(r); });
+    return () => { alive = false; };
+  }, [transformRegistry]);
+
+  // Il nuovo passo nasce a destra del nodo di partenza, gia' selezionato
+  // (pannello aperto) e collegato con onConnect (propagazione + autosave).
+  const handlePalettePick = useCallback((item, afterId) => {
+    if (item.kind === 'carica') { handleAddCaricanNode(); return; }
+    const current = nodesRef.current;
+    if (item.kind === 'result' && current.some(n => n.type === 'result')) {
+      toast.warning('Puoi avere solo un nodo risultato per progetto');
+      return;
+    }
+    const after = current.find(n => n.id === afterId);
+    const position = after ? { x: after.position.x + 290, y: after.position.y } : getPos();
+    const stamp = Date.now();
+    let newNode;
+    if (item.kind === 'multi_join') {
+      newNode = { id: `multi_join_${stamp}`, type: 'multi_join', position,
+        data: { config: { join_keys: [], join_type: 'inner' }, columns: [], inputColumns: [] } };
+    } else if (item.kind === 'result') {
+      newNode = { id: `result_${stamp}`, type: 'result', position,
+        data: { isManipulate: true, fileName: 'output', format: 'csv', availableColumns: [],
+          group_by_enabled: false, group_by_columns: [], aggregations: [],
+          order_by_enabled: false, order_by_columns: [],
+          having_enabled: false, having_conditions: [] } };
+    } else {
+      newNode = { id: `transform_${stamp}`, type: 'transform', position,
+        data: { transform_op: item.id, config: {}, columns: [] } };
+    }
+    editNodes(nds => [...nds.map(n => (n.selected ? { ...n, selected: false } : n)), { ...newNode, selected: true }]);
+    if (after) {
+      const targetHandle = item.kind === 'multi_join' || MULTI_INPUT_OPS.includes(item.id)
+        ? 'input-0'
+        : (item.kind === 'result' ? 'input' : null);
+      onConnect({ source: after.id, sourceHandle: null, target: newNode.id, targetHandle });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editNodes, onConnect, handleAddCaricanNode, toast]);
+
+  const palette = useMemo(() => ({
+    groups: buildManipolaPaletteGroups(transformRegistry),
+    onPick: handlePalettePick,
+  }), [transformRegistry, handlePalettePick]);
+
+
   const onDragStart = (event, type, data) => {
     event.dataTransfer.setData('application/reactflow', type);
     event.dataTransfer.setData('itemData', JSON.stringify(data));
@@ -661,9 +714,10 @@ const ManipolaEditorContent = () => {
         minZoom: 0.3,
         maxZoom: 2,
         backgroundProps: { color: '#aaa', gap: 20 },
-        showMiniMap: false,
+        showMiniMap: true,
         isReadOnly,
         readOnlyProps,
+        palette,
       }}
       canvasHandlers={{
         onNodesChange,
