@@ -34,6 +34,12 @@
   --plen-ok:   #34D399;
   --plen-warn: #FBBF24;
   --plen-err:  #F87171;
+  /* Sfondi tenui per avvisi e selezioni (pannelli della Fase 4). */
+  --plen-ok-bg:      rgba(52, 211, 153, 0.12);
+  --plen-warn-bg:    rgba(251, 191, 36, 0.14);
+  --plen-err-bg:     rgba(248, 113, 113, 0.14);
+  --plen-blue-bg:    rgba(75, 139, 255, 0.16);
+  --plen-blue-border: rgba(75, 139, 255, 0.45);
 
   /* Layout */
   --plen-topbar:  52px;
@@ -88,6 +94,12 @@
   --plen-ok:   #059669;
   --plen-warn: #D97706;
   --plen-err:  #DC2626;
+  /* Sfondi tenui per avvisi e selezioni (pannelli della Fase 4). */
+  --plen-ok-bg:      #E8F7EE;
+  --plen-warn-bg:    #FEF3C7;
+  --plen-err-bg:     #FDECEC;
+  --plen-blue-bg:    #EEF3FF;
+  --plen-blue-border: #C9D8FB;
 
   /* Focus ring tema light: piu' scuro per contrasto su sfondo chiaro. */
   --plen-focus-ring: #1D4ED8;

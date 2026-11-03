@@ -1,0 +1,40 @@
+/* Vista "Passi" (Fase 4, M6). */
+.steps-view {
+  position: absolute; inset: 0; z-index: 4;
+  overflow: auto;
+  padding: 56px 24px calc(var(--step-preview-h, 0px) + 24px);
+  background: var(--plen-bg, #f5f7fb);
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); align-content: start; gap: 16px;
+}
+.steps-view--empty { display: block; color: var(--plen-text-sub, #5b6478); font-size: 14px; }
+.steps-lane {
+  background: var(--plen-surface, #fff);
+  border: 1px solid var(--plen-border, #e3e7f0);
+  border-radius: 12px; padding: 12px;
+}
+.steps-lane--dangling { border-color: var(--plen-warn, #d97706); }
+.steps-lane__title { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; font-size: 13px; font-weight: 650; }
+.steps-lane__warn { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--plen-warn, #b45309); background: var(--plen-warn-bg, #fef3c7); border-radius: 6px; padding: 1px 7px; }
+.steps-lane__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.steps-step {
+  width: 100%; display: grid; grid-template-columns: 22px 22px minmax(0, auto) minmax(0, 1fr); align-items: center; gap: 6px;
+  text-align: left; font: inherit; font-size: 12.5px; color: inherit;
+  background: var(--plen-surface-2, #f7f8fc); border: 1px solid transparent; border-radius: 8px; padding: 6px 8px; cursor: pointer;
+}
+.steps-step:hover { border-color: var(--plen-border-hi, #cfd6e4); }
+.steps-step--selected { border-color: var(--plen-blue, #2563eb); background: var(--plen-blue-bg, #eef3ff); }
+.steps-step--focus { animation: steps-flash 1.4s ease-out 1; }
+@keyframes steps-flash { from { box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.35); } to { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); } }
+.steps-step__n { color: var(--plen-text-dim, #8a93a6); font-size: 11px; text-align: right; }
+.steps-step__title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.steps-step__summary { color: var(--plen-text-sub, #5b6478); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.steps-lane__add { margin-top: 8px; border: 0; background: transparent; color: var(--plen-blue, #2563eb); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 2px 0; }
+
+/* Interruttore Canvas | Passi */
+.canvas-view-toggle {
+  position: absolute; top: 12px; left: 12px; z-index: 7;
+  display: inline-flex; border: 1px solid var(--plen-border-hi, #cfd6e4); border-radius: 8px; overflow: hidden;
+  background: var(--plen-surface, #fff);
+}
+.canvas-view-toggle button { border: 0; background: transparent; font: inherit; font-size: 12.5px; padding: 5px 12px; cursor: pointer; color: var(--plen-text-sub, #5b6478); }
+.canvas-view-toggle button[aria-pressed="true"] { background: var(--plen-blue, #2563eb); color: #fff; font-weight: 600; }

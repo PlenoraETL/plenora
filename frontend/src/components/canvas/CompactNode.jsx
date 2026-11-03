@@ -7,11 +7,12 @@
  * usati dagli edge collegati: un canvas salvato con handle specifici
  * (binding `parameter:<id>`, `input-N` del Multi-Join, ...) resta collegato.
  */
-import React, { memo, useEffect, useMemo, useState } from 'react';
+import React, { memo, useContext, useEffect, useMemo, useState } from 'react';
 import { Handle, Position, useStore } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { fetchTransformRegistry, getCachedTransformRegistry } from '../../utils/transformRegistry';
 import { nodeDescriptor, nodeIcon, nodeTitle } from './nodeDescriptors';
+import { CanvasGraphContext } from './CanvasGraphContext';
 import './CompactNode.css';
 
 const POSITION = { left: Position.Left, right: Position.Right, top: Position.Top };
@@ -74,6 +75,8 @@ function CompactNode({ id, type, data = {}, selected }) {
   const icon = nodeIcon(type, data);
   const summary = descriptor.summary(data);
   const problem = data.access_denied ? (data.access_denied_reason || 'Accesso negato') : null;
+  // Fase 4, M6: i dati di questo nodo non arrivano all'Output.
+  const dangling = useContext(CanvasGraphContext).dangling.has(id);
 
   // Posizione verticale degli handle dello stesso lato, distribuiti.
   const sides = { left: [], right: [], top: [] };
@@ -123,9 +126,14 @@ function CompactNode({ id, type, data = {}, selected }) {
           </span>
         )}
         {problem && <span className="cnode__dot cnode__dot--error" title={problem} />}
+        {!problem && dangling && <span className="cnode__dot cnode__dot--warn" title="Non collegato all'Output: i suoi dati non finiscono nel risultato" />}
       </div>
       <div className="cnode__summary" title={summary}>{summary || ' '}</div>
-      <div className="cnode__kind">{descriptor.kind(data)}{problem ? <span className="cnode__problem"> · {problem}</span> : null}</div>
+      <div className="cnode__kind">
+        {descriptor.kind(data)}
+        {problem ? <span className="cnode__problem"> · {problem}</span> : null}
+        {!problem && dangling ? <span className="cnode__dangling"> · non collegato all&apos;Output</span> : null}
+      </div>
       {canAddAfter && (
         <button
           type="button"

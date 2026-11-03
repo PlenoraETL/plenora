@@ -34,6 +34,8 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
   const editNodes         = useCanvasStore(s => s.editNodes);
   const editEdges         = useCanvasStore(s => s.editEdges);
   const insertNode        = useCanvasStore(s => s.insertNode);
+  const insertBetween     = useCanvasStore(s => s.insertBetween);
+  const addSubgraph       = useCanvasStore(s => s.addSubgraph);
   const updateEdge        = useCanvasStore(s => s.updateEdge);
   const patchNodeConfig   = useCanvasStore(s => s.patchNodeConfig);
   const applyDerivedNodes = useCanvasStore(s => s.applyDerivedNodes);
@@ -175,6 +177,8 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
     editNodes,
     editEdges,
     insertNode,
+    insertBetween,
+    addSubgraph,
     updateEdge,
     patchNodeConfig,
     applyDerivedNodes,

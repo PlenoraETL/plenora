@@ -361,6 +361,15 @@ function EstraiEditor() {
   // ── Palette "Cosa vuoi fare?" (Fase 4, M2) ────────────────────────────
   // Dopo una tabella: un'altra tabella/vista del catalogo, collegata con un
   // join (si apre il JoinModal). Dall'Output: Carica DB / ArcGIS.
+  // Rami (Fase 4, M6): in Estrai "Collega" e' un join tra tabelle, con lo
+  // stesso gesto del collegamento manuale (la tabella scollegata e' la
+  // sorgente del join, come trascinandola).
+  const branchActions = useMemo(() => ({
+    connectBranch: (endId, targetId) => edgeHandlers.onConnect({ source: endId, sourceHandle: null, target: targetId, targetHandle: null }),
+    connectModes: [['join', 'Unisci con (Join)']],
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [edgeHandlers.onConnect]);
+
   const palette = useMemo(() => ({
     groups: [
       { label: 'Tabelle', items: Object.keys(catalog || {}).sort().map(t => ({
@@ -828,6 +837,7 @@ function EstraiEditor() {
           minZoom: 0.3,
           maxZoom: 2,
           palette,
+          branchActions,
         }}
         canvasHandlers={{
           onNodesChange,

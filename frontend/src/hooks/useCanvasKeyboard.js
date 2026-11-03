@@ -60,6 +60,7 @@ export function useCanvasKeyboard(options) {
     if (
       target.tagName === 'INPUT' ||
       target.tagName === 'TEXTAREA' ||
+      target.tagName === 'SELECT' ||
       target.isContentEditable
     ) {
       return;
@@ -80,8 +81,12 @@ export function useCanvasKeyboard(options) {
       }
     }
 
-    // Gestisci Delete/Backspace
-    if (event.key === 'Delete' || event.key === 'Backspace') {
+    // Gestisci Delete/Backspace: solo con il fuoco sul canvas (o su nessun
+    // controllo). Un tasto premuto su un pulsante del pannello o della vista
+    // Passi non deve cancellare il nodo selezionato (Fase 4, M6).
+    const onCanvas = target === document.body || target === document.documentElement
+      || Boolean(target.closest?.('.react-flow'));
+    if ((event.key === 'Delete' || event.key === 'Backspace') && onCanvas) {
       const selectedNodes = nodesRef.current.filter(n => n.selected);
       const selectedEdges0 = edgesRef.current.filter(e => e.selected);
       // Snapshot PRE-delete una sola volta se c'è qualcosa da eliminare, così

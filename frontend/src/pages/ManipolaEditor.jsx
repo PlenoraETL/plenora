@@ -44,10 +44,15 @@ import { useSchemaInference, usePreview, useExecution, useCanvasCore, useCanvasS
 import { useEditorData } from '../hooks/useEditorData';
 import useCanvasStore from '../store/useCanvasStore';
 import { withAvailableColumns } from '../utils/columnPlans';
+import { analyzeCanvas, branchSteps, nodeRole } from '../utils/canvasGraph';
+import { backendAccessFlags, persistedNodeData, persistenceValue } from '../utils/nodeTypeRegistry';
+import { nodeTitle } from '../components/canvas/nodeDescriptors';
+import { joinKeysPatch } from '../components/transforms/panels/panelConfig';
 import {
   createParameterBindingEdge,
   dataFlowEdges,
   hydrateParameterBindingEdges,
+  isParameterBindingEdge,
   isScalarProjectInputNode,
 } from '../utils/runtimeBindingEdges';
 import ValidationStatusBadge from '../components/editor/ValidationStatusBadge';
@@ -108,6 +113,7 @@ const ManipolaEditorContent = () => {
   const {
     nodes, edges, onNodesChange, onEdgesChange,
     loadGraph, addNodes, addEdges, editNodes, editEdges, insertNode, applyDerivedNodes,
+    insertBetween, addSubgraph,
     nodesRef, edgesRef, updateNodeData, deleteNode,
     handleSaveQuiet, getViewportCenter,
     isReadOnly, readOnlyProps
@@ -592,6 +598,106 @@ const ManipolaEditorContent = () => {
     onPick: handlePalettePick,
   }), [transformRegistry, handlePalettePick]);
 
+  // ── Rami (Fase 4, M6) ─────────────────────────────────────────────────
+  const branchEdge = useCallback((params) => ({
+    ...params, ...defaultEdgeOptions,
+    id: `xy-edge__${params.source}${params.sourceHandle || ''}-${params.target}${params.targetHandle || ''}`,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), []);
+
+  // "Collega": un Join (o Concatena) subito dopo il passo scelto, che ne
+  // riceve TUTTE le uscite; il ramo scollegato entra nel secondo ingresso.
+  // Un'unica azione (store.insertBetween). Chiave del Join proposta: una
+  // colonna visibile con lo stesso nome nei due rami (stesse regole del
+  // pannello Join: nomi e id).
+  const connectBranch = useCallback((endId, targetId, mode) => {
+    const current = nodesRef.current;
+    const end = current.find(n => n.id === endId);
+    const target = current.find(n => n.id === targetId);
+    if (!end || !target) return;
+    const op = mode === 'concat' ? 'concat' : 'join';
+    const visibleCols = (n) => (n.data?.columns || [])
+      .filter(c => c && typeof c === 'object' && c.visible !== false)
+      .map(c => ({ ...c, name: c.alias || c.name }));
+    const leftCols = visibleCols(target);
+    const rightCols = visibleCols(end);
+    const shared = leftCols.find(c => rightCols.some(r => r.name === c.name))?.name;
+    const config = op === 'join'
+      ? { how: 'left', name_conflict: 'keep_left', ...joinKeysPatch(shared ? [[shared, shared]] : [], leftCols, rightCols) }
+      : {};
+    // Il ramo si chiama come la sua corsia (vista Passi e pannello).
+    const headId = analyzeCanvas(current, edgesRef.current).laneOf.get(endId)?.headId;
+    const head = current.find(n => n.id === headId) || end;
+    const branchName = nodeTitle(head.type, head.data);
+    const newNode = {
+      id: `transform_${Date.now()}`, type: 'transform', position: getPos(),
+      data: { transform_op: op, config, columns: [], title: `${op === 'join' ? 'Unisci' : 'Accoda'} ${branchName}` },
+    };
+    const done = insertBetween({
+      node: newNode, targetId, inHandle: 'input-0', makeEdge: branchEdge,
+      extraEdges: [branchEdge({ source: endId, sourceHandle: null, target: newNode.id, targetHandle: 'input-1' })],
+    });
+    if (!done) return;
+    afterConnect(done.edges);
+    if (op === 'join' && !shared) toast.warning(`Ramo collegato: scegli le chiavi del Join nel pannello (nessuna colonna con lo stesso nome).`);
+    else toast.success(`Ramo "${branchName}" collegato dopo "${nodeTitle(target.type, target.data)}".`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [insertBetween, afterConnect, branchEdge, toast]);
+
+  // "Duplica ramo": i passi alimentati solo da questa sorgente, con gli
+  // STESSI collegamenti (maniglie e input runtime compresi), attaccati a
+  // un'altra sorgente come un blocco (store.addSubgraph, un solo Ctrl+Z).
+  // L'ultimo passo copiato resta selezionato: da li' si collega il ramo.
+  const duplicateBranch = useCallback((sourceId, otherId) => {
+    const current = nodesRef.current;
+    const source = current.find(n => n.id === sourceId);
+    const other = current.find(n => n.id === otherId);
+    const steps = branchSteps(current, edgesRef.current, sourceId);
+    if (!source || !other || steps.length === 0) return;
+    const stamp = Date.now();
+    const dx = other.position.x - source.position.x;
+    const dy = other.position.y - source.position.y;
+    const idMap = new Map([[sourceId, otherId], ...steps.map((n, i) => [n.id, `${n.type}_${stamp}_${i}`])]);
+    const otherName = nodeTitle(other.type, other.data);
+    const clones = steps.map((n) => {
+      // Senza colonne (le ricalcola la propagazione) ne' flag di accesso
+      // del nodo originale (stessa regola di backendAccessFlags); titolo
+      // sempre distinto dall'originale.
+      const accessKeys = Object.keys(backendAccessFlags(n));
+      const data = Object.fromEntries(Object.entries(persistenceValue(persistedNodeData(n)))
+        .filter(([k]) => k !== 'columns' && !accessKeys.includes(k)));
+      return {
+        id: idMap.get(n.id), type: n.type,
+        position: { x: n.position.x + dx, y: n.position.y + dy },
+        data: { ...data, columns: [], title: `${nodeTitle(n.type, n.data)} · ${otherName}` },
+      };
+    });
+    const stepIds = new Set(steps.map(n => n.id));
+    const copied = edgesRef.current
+      // Dal ramo, dagli input runtime (binding) e dai parametri (Valori statici).
+      .filter(e => stepIds.has(e.target) && (idMap.has(e.source) || isParameterBindingEdge(e)
+        || nodeRole(current.find(x => x.id === e.source)) === 'param'))
+      .map(e => ({
+        ...e,
+        id: `${e.id}__copy_${stamp}`,
+        source: idMap.get(e.source) || e.source, // i binding restano sullo stesso input runtime
+        target: idMap.get(e.target),
+        selected: false,
+      }));
+    const last = clones[clones.length - 1].id;
+    const done = addSubgraph({ nodes: clones, edges: copied, selectId: last });
+    if (!done) return;
+    afterConnect(done.edges);
+    toast.success(`Ramo duplicato su "${otherName}": ${clones.length} ${clones.length === 1 ? 'passo copiato' : 'passi copiati'}. Collegalo dal pannello a destra.`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addSubgraph, afterConnect, toast]);
+
+  const branchActions = useMemo(() => ({
+    connectBranch,
+    connectModes: [['join', 'Unisci con (Join)'], ['concat', 'Accoda a (Concatena)']],
+    duplicateBranch,
+  }), [connectBranch, duplicateBranch]);
+
 
   const onDragStart = (event, type, data) => {
     event.dataTransfer.setData('application/reactflow', type);
@@ -747,6 +853,7 @@ const ManipolaEditorContent = () => {
         isReadOnly,
         readOnlyProps,
         palette,
+        branchActions,
       }}
       canvasHandlers={{
         onNodesChange,

@@ -19,7 +19,7 @@ import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 import { updateCanvas } from '../api';
 import { serializeCanvas } from '../utils/canvasSerializer';
 import { COLUMN_STEP, findFreePosition, nodeSize, planInsertAfter, settleNodes } from '../utils/canvasPlacement';
-import { bindingListResolution } from '../utils/runtimeBindingEdges';
+import { bindingListResolution, isParameterBindingEdge } from '../utils/runtimeBindingEdges';
 
 // Undo/redo: profondità massima dello stack (oltre, si scarta il più vecchio).
 const HISTORY_LIMIT = 50;
@@ -196,6 +196,12 @@ const useCanvasStore = create(
 
       init: (projectId, mode) => set({ projectId, mode }, false, 'init'),
 
+      // Vista del canvas (Fase 4, M6): 'canvas' o 'steps' (vista Passi), e il
+      // passo da mostrare/evidenziare nell'altra vista ("Vedi in Passi").
+      canvasView: 'canvas',
+      focusNodeId: null,
+      setCanvasView: (view, focusNodeId = null) => set({ canvasView: view, focusNodeId }, false, 'setCanvasView'),
+
       /** Imposta la modalità sola lettura. Chiamata da useCanvasCore in base al ruolo. */
       setReadOnly: (value) => set({ isReadOnly: !!value }, false, 'setReadOnly'),
 
@@ -204,7 +210,7 @@ const useCanvasStore = create(
         get().editorActionsRef.current = {};
         // NOTA: non resettiamo isReadOnly perché viene impostato subito dopo da
         // useCanvasCore (dipende dal ruolo utente, non dal progetto).
-        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, pendingSync: false, validationHighlights: [], lastValidationSummary: null, past: [], future: [], lastTaskResult: null }, false, 'reset');
+        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, pendingSync: false, validationHighlights: [], lastValidationSummary: null, past: [], future: [], lastTaskResult: null, canvasView: 'canvas', focusNodeId: null }, false, 'reset');
       },
 
       // ── Undo/Redo (#24) ───────────────────────────────────────────────
@@ -405,6 +411,62 @@ const useCanvasStore = create(
           false,
           'editEdges',
         );
+      },
+
+      /**
+       * Inserisce `node` subito dopo `targetId` (Fase 4, M6, "Collega"): TUTTE
+       * le uscite di dati del target passano al nodo nuovo (con le loro
+       * maniglie), il target entra in `inHandle` e `extraEdges` si
+       * aggiungono. Un'unica azione utente (un solo Ctrl+Z).
+       * @returns {{ edges } | null} null in sola lettura o target assente.
+       */
+      insertBetween: ({ node, targetId, inHandle = 'input-0', extraEdges = [], makeEdge }) => {
+        if (get().isReadOnly) return null;
+        const { nodes, edges } = get();
+        const target = nodes.find(n => n.id === targetId);
+        if (!target) return null;
+        const isData = (e) => !isParameterBindingEdge(e);
+        const moved = edges.filter(e => e.source === targetId && isData(e));
+        const kept = edges.filter(e => !(e.source === targetId && isData(e)));
+        const rerouted = moved.map(e => makeEdge({ source: node.id, sourceHandle: null, target: e.target, targetHandle: e.targetHandle ?? null }));
+        const desired = { x: target.position.x + COLUMN_STEP, y: target.position.y };
+        // A valle si fa posto di una colonna, come "＋" (planInsertAfter).
+        // Con un'unica uscita si fa posto a valle (come "＋"); con un bivio
+        // basta settleNodes (nessuna sovrapposizione).
+        const shiftIds = moved.length === 1 ? planInsertAfter(nodes, edges, targetId, { passThrough: true }).shiftIds : new Set();
+        const nextNodes = settleNodes(nodes.map((n) => {
+          let m = n;
+          if (shiftIds.has(n.id)) m = { ...m, position: { x: m.position.x + COLUMN_STEP, y: m.position.y } };
+          if (m.selected) m = { ...m, selected: false };
+          return m;
+        }).concat({ ...node, position: desired, selected: true }), new Set([...shiftIds, node.id]));
+        const nextEdges = kept.concat(
+          makeEdge({ source: targetId, sourceHandle: moved[0]?.sourceHandle ?? null, target: node.id, targetHandle: inHandle }),
+          rerouted, extraEdges,
+        );
+        get().takeSnapshot();
+        set({ nodes: nextNodes, edges: nextEdges, ...dirtyAndClearHighlights() }, false, 'insertBetween');
+        return { edges: nextEdges };
+      },
+
+      /**
+       * Aggiunge un sottografo (Fase 4, M6, "Duplica ramo") come un blocco:
+       * posizioni relative conservate, il blocco intero scende finche' non
+       * si sovrappone a nulla. Un'unica azione utente; `selectId` resta
+       * selezionato (pannello aperto).
+       */
+      addSubgraph: ({ nodes: added, edges: addedEdges = [], selectId = null }) => {
+        if (get().isReadOnly || !added.length) return null;
+        const { nodes, edges } = get();
+        let dy = 0;
+        const clash = (off) => added.some(a => findFreePosition(nodes, { x: a.position.x, y: a.position.y + off }, nodeSize(a)).y !== Math.round(a.position.y + off));
+        for (let i = 0; i < 200 && clash(dy); i += 1) dy += 104;
+        const placed = added.map(a => ({ ...a, position: { x: a.position.x, y: a.position.y + dy }, selected: a.id === selectId }));
+        const nextNodes = nodes.map(n => (n.selected ? { ...n, selected: false } : n)).concat(placed);
+        const nextEdges = edges.map(e => (e.selected ? { ...e, selected: false } : e)).concat(addedEdges);
+        get().takeSnapshot();
+        set({ nodes: nextNodes, edges: nextEdges, ...dirtyAndClearHighlights() }, false, 'addSubgraph');
+        return { edges: nextEdges };
       },
 
       /**

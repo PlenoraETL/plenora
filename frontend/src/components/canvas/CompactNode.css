@@ -91,3 +91,6 @@
 .cnode__plus { pointer-events: none; }
 .cnode:hover .cnode__plus, .cnode--selected .cnode__plus { opacity: 1; pointer-events: auto; }
 .cnode__plus:hover { background: var(--cnode-accent); color: #fff; border-color: var(--cnode-accent); }
+/* Fase 4, M6: ramo che non arriva all'Output. */
+.cnode__dot--warn { background: var(--plen-warn, #d97706); }
+.cnode__dangling { color: var(--plen-warn, #b45309); }

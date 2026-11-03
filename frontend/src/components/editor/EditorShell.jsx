@@ -55,7 +55,7 @@
  * Behavior preservato byte-per-byte rispetto al pattern legacy.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ReactFlow, Background, Controls, ControlButton, MiniMap, useReactFlow } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
@@ -69,6 +69,9 @@ import NodePalette from '../canvas/NodePalette';
 import StepPreview from '../canvas/StepPreview';
 import { autoLayout } from '../canvas/autoLayout';
 import { nodeTitle } from '../canvas/nodeDescriptors';
+import StepsView from '../canvas/StepsView';
+import { CanvasGraphContext } from '../canvas/CanvasGraphContext';
+import { analyzeCanvas, structureKey } from '../../utils/canvasGraph';
 
 const EMPTY_OBJ = {};
 
@@ -133,6 +136,9 @@ canvasConfig = EMPTY_OBJ,
     readOnlyProps,
     // Nuova interfaccia (Fase 4, M2): { groups, onPick(item, afterNodeId) }
     palette,
+    // Fase 4, M6: { connectBranch?(endId, targetId, mode), connectModes?,
+    // duplicateBranch?(sourceId, otherSourceId) } dall'editor.
+    branchActions,
   } = canvasConfig;
 
   const {
@@ -212,6 +218,31 @@ canvasConfig = EMPTY_OBJ,
 
   const paletteAfterNode = paletteAfter ? nodes.find(n => n.id === paletteAfter) : null;
 
+  // Fase 4, M6: vista Passi e rami scollegati (utils/canvasGraph).
+  const canvasView = useCanvasStore(s => s.canvasView);
+  const setCanvasView = useCanvasStore(s => s.setCanvasView);
+  const focusNodeId = useCanvasStore(s => s.focusNodeId);
+  // Analisi del flusso solo quando cambia la struttura (non a ogni drag).
+  const graphKey = useCanvasStore(s => structureKey(s.nodes, s.edges));
+  const graph = useMemo(() => {
+    const st = useCanvasStore.getState();
+    return { key: graphKey, ...analyzeCanvas(st.nodes, st.edges) };
+  }, [graphKey]);
+  const selectedId = useCanvasStore(s => {
+    const sel = s.nodes.filter(n => n.selected);
+    return sel.length === 1 ? sel[0].id : null;
+  });
+  // "Vedi nel canvas": centra il passo scelto (con margine, sopra
+  // l'anteprima); l'evidenziazione si spegne da sola.
+  useEffect(() => {
+    if (!focusNodeId) return undefined;
+    if (canvasView === 'canvas') {
+      requestAnimationFrame(() => reactFlow.fitView?.({ nodes: [{ id: focusNodeId }], maxZoom: 1.2, padding: 0.6, duration: 300 }));
+    }
+    const t = setTimeout(() => useCanvasStore.getState().setCanvasView(useCanvasStore.getState().canvasView, null), 1600);
+    return () => clearTimeout(t);
+  }, [canvasView, focusNodeId, reactFlow]);
+
   // Security guard: redirect a '/' se projectId non valido.
   useEffect(() => {
     if (!isValidProjectId(projectId)) {
@@ -261,6 +292,7 @@ canvasConfig = EMPTY_OBJ,
     <div className={`${prefix}-editor`}>
       {topbar}
       {beforeCanvas}
+      <CanvasGraphContext.Provider value={graph}>
       <div className={`${prefix}-main`}>
         {sidebar}
         <CanvasErrorBoundary>
@@ -270,6 +302,15 @@ canvasConfig = EMPTY_OBJ,
             onDrop={onDrop}
             onDragOver={onDragOver}
           >
+            <div className="canvas-view-toggle" role="group" aria-label="Vista">
+              {/* Cambiando vista resta in primo piano il passo selezionato. */}
+              <button type="button" aria-pressed={canvasView === 'canvas'} onClick={() => setCanvasView('canvas', selectedId)}>
+                <span aria-hidden="true">◇ </span>Canvas
+              </button>
+              <button type="button" aria-pressed={canvasView === 'steps'} onClick={() => setCanvasView('steps', selectedId)}>
+                <span aria-hidden="true">☰ </span>Passi
+              </button>
+            </div>
             {hexCanvasRef && (
               <canvas
                 ref={hexCanvasRef}
@@ -310,6 +351,7 @@ canvasConfig = EMPTY_OBJ,
               </Controls>
               {showMiniMap && <MiniMap {...miniMapProps} />}
             </ReactFlow>
+            {canvasView === 'steps' && <StepsView onAddAfter={palette && !isReadOnly ? openPalette : null} />}
             {afterCanvas}
             {children}
             <StepPreview projectId={projectId} />
@@ -317,8 +359,9 @@ canvasConfig = EMPTY_OBJ,
         </CanvasErrorBoundary>
         {/* Nuova interfaccia (Fase 4, M1): nodi compatti sul canvas, form
             completo del nodo selezionato nel pannello a destra. */}
-        <NodeInspector fullNodeTypes={nodeTypes} prefix={prefix} />
+        <NodeInspector fullNodeTypes={nodeTypes} prefix={prefix} branchActions={branchActions} />
       </div>
+      </CanvasGraphContext.Provider>
       {modals}
       {palette && (
         <NodePalette

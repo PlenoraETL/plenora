@@ -12,6 +12,7 @@
 import React, { useCallback } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { nodeDescriptor, nodeIcon, nodeTitle } from './nodeDescriptors';
+import BranchSection from './BranchSection';
 import './NodeInspector.css';
 
 // Id del nodo da ispezionare: esattamente un nodo selezionato, note escluse.
@@ -25,12 +26,14 @@ const selectInspectedId = (s) => {
   return found;
 };
 
-export default function NodeInspector({ fullNodeTypes, prefix = 'canvas' }) {
+export default function NodeInspector({ fullNodeTypes, prefix = 'canvas', branchActions }) {
   const nodeId = useCanvasStore(selectInspectedId);
   const node = useCanvasStore(useCallback(s => (nodeId ? (s.nodes || []).find(n => n.id === nodeId) : null), [nodeId]));
   const onNodesChange = useCanvasStore(s => s.onNodesChange);
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
+  const canvasView = useCanvasStore(s => s.canvasView);
+  const setCanvasView = useCanvasStore(s => s.setCanvasView);
 
   if (!node) return null;
   const Full = fullNodeTypes[node.type];
@@ -45,6 +48,15 @@ export default function NodeInspector({ fullNodeTypes, prefix = 'canvas' }) {
           <span aria-hidden="true">{icon}</span> {descriptor.kind(node.data || {})}
         </div>
         <button type="button" className="node-inspector__close" onClick={close} aria-label="Chiudi pannello">×</button>
+        <button
+          type="button"
+          className="node-inspector__switch"
+          title="Mostra questo passo nell'altra vista"
+          onClick={() => setCanvasView(canvasView === 'canvas' ? 'steps' : 'canvas', node.id)}
+        >
+          <span aria-hidden="true">{canvasView === 'canvas' ? '☰ ' : '◇ '}</span>
+          {canvasView === 'canvas' ? 'Vedi in Passi' : 'Vedi nel canvas'}
+        </button>
         <input
           key={node.id}
           className="node-inspector__title"
@@ -60,6 +72,7 @@ export default function NodeInspector({ fullNodeTypes, prefix = 'canvas' }) {
         <div className="node-inspector__summary">{descriptor.summary(node.data || {})}</div>
       </header>
       <div className="node-inspector__body">
+        <BranchSection key={`branch-${node.id}`} node={node} branchActions={branchActions} />
         {/* key per nodo: bozze, ricerche e fuoco di un form non passano al
             nodo selezionato dopo. */}
         {Full
