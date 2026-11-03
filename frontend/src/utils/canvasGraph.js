@@ -58,7 +58,13 @@ function index(nodes, edges) {
     .filter(e => byId.has(e.source) && byId.has(e.target))
     .slice()
     .sort((a, b) => String(a.targetHandle || '').localeCompare(String(b.targetHandle || '')));
+  // Un collegamento ripetuto tra gli stessi nodi (dati salvati con edge
+  // doppi) e' un solo ingresso.
+  const seenPairs = new Set();
   for (const e of flow) {
+    const pair = `${e.source}>${e.target}`;
+    if (seenPairs.has(pair)) continue;
+    seenPairs.add(pair);
     if (!outs.has(e.source)) outs.set(e.source, []);
     outs.get(e.source).push(e.target);
     if (!ins.has(e.target)) ins.set(e.target, []);

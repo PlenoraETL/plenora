@@ -51,7 +51,7 @@ describe('BranchSection', () => {
     const connectBranch = vi.fn();
     render(withGraph(<BranchSection node={nodeById('g')} branchActions={{ connectBranch, connectModes: [['join', 'Unisci con (Join)'], ['concat', 'Accoda a (Concatena)']] }} />));
     const select = screen.getByLabelText('Passo a cui collegare');
-    expect([...select.options].map(o => o.textContent)).toEqual(expect.arrayContaining(['Escludi periodi · Canoni', 'Canoni · Canoni']));
+    expect([...select.options].map(o => o.textContent)).toEqual(expect.arrayContaining(['Escludi periodi · Canoni', 'Canoni']));
     fireEvent.change(select, { target: { value: 'f' } });
     fireEvent.change(screen.getByLabelText('Come collegare'), { target: { value: 'concat' } });
     fireEvent.click(screen.getByRole('button', { name: 'Collega' }));

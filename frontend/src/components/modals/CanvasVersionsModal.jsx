@@ -9,6 +9,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import { useToast } from '../../hooks/useToast';
+import useCanvasStore from '../../store/useCanvasStore';
 import { toastApiError } from '../../utils/toastApiError';
 import {
   createCanvasVersion, listCanvasVersions, restoreCanvasVersion,
@@ -67,7 +68,10 @@ export default function CanvasVersionsModal({ isOpen, onClose, projectId }) {
       await restoreCanvasVersion(projectId, versionId);
       toast.success('Versione ripristinata, ricarico l’editor…');
       // Ricarica l'editor per mostrare il canvas ripristinato attraverso il
-      // normale percorso di load (deserializzazione per-editor).
+      // normale percorso di load (deserializzazione per-editor). Le modifiche
+      // locali sono superate dal ripristino confermato: il canvas e' pulito,
+      // altrimenti l'avviso "modifiche non salvate" bloccava il ricaricamento.
+      useCanvasStore.setState({ isDirty: false, pendingSync: false });
       setTimeout(() => window.location.reload(), 600);
     } catch (err) {
       toastApiError(toast, err, 'Errore ripristino versione');

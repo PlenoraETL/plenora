@@ -105,4 +105,10 @@ describe('canvasGraph', () => {
     expect(g.isEnd('a')).toBe(true);
     expect(g.danglingEndsFrom('s')).toEqual(['a']);
   });
+
+  it('a repeated link between the same nodes (saved duplicate edges) is one input', () => {
+    const ns = [n('s', 'project_source'), n('a'), n('b'), n('o', 'result')];
+    const es = [e('s', 'a'), e('a', 'b', { id: 'd1' }), e('a', 'b', { id: 'd2' }), e('b', 'o')];
+    expect(stepLanes(ns, es).map(l => l.steps.map(x => x.id))).toEqual([['s', 'a', 'b', 'o']]);
+  });
 });

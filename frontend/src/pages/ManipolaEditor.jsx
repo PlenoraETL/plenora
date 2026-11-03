@@ -472,10 +472,13 @@ const ManipolaEditorContent = () => {
 
   const getPos = () => getViewportCenter({ screenToFlowPosition });
 
+  // "+ Transform": la palette, come il "＋" sui nodi (un solo modo di
+  // aggiungere un passo): dopo il nodo selezionato, altrimenti libero.
   const handleAddTransformNode = useCallback(() => {
-    addNodes({ id: `transform_${Date.now()}`, type: 'transform', position: getPos(),
-      data: { transform_op: 'join', config: {}, columns: [] } });
-  }, [addNodes]);
+    const st = useCanvasStore.getState();
+    const selected = st.nodes.filter(n => n.selected && n.type !== 'comment');
+    st.getEditorAction('openPalette')?.(selected.length === 1 ? selected[0].id : null);
+  }, []);
 
   const handleAddMultiJoinNode = useCallback(() => {
     addNodes({ id: `multi_join_${Date.now()}`, type: 'multi_join', position: getPos(),

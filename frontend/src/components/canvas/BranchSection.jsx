@@ -40,7 +40,13 @@ export default function BranchSection({ node, branchActions = {} }) {
         const upstream = graph.ancestorsOf(node.id);
         return nodes
           .filter(n => graph.reaching.has(n.id) && n.id !== node.id && !upstream.has(n.id) && ['source', 'step'].includes(nodeRole(n)))
-          .map(n => ({ id: n.id, label: `${titleOf(n)} · ${laneName(n.id)}` }));
+          // "passo · ramo", senza ripetere il nome quando il passo apre la corsia.
+          // (anche quando il titolo lo contiene gia', es. i passi copiati).
+          .map(n => {
+            const t = titleOf(n);
+            const lane = laneName(n.id);
+            return { id: n.id, label: lane && t !== lane && !t.endsWith(` · ${lane}`) ? `${t} · ${lane}` : t };
+          });
       })(),
       ends: graph.danglingEndsFrom(node.id).filter(id => id !== node.id).map(id => ({ id, label: titleOf(byId.get(id)) })),
       hasOutput: nodes.some(n => nodeRole(n) === 'output'),
@@ -92,9 +98,9 @@ export default function BranchSection({ node, branchActions = {} }) {
       );
     } else {
       action = (
-        <div className="ppanel__row" style={{ marginTop: 8, flexWrap: 'wrap' }}>
+        <div className="branch-connect">
           {connectModes.length > 1 && (
-            <select className="ppanel__input" style={{ flex: '0 0 150px' }} value={mode} onChange={e => setMode(e.target.value)} aria-label="Come collegare">
+            <select className="ppanel__input" value={mode} onChange={e => setMode(e.target.value)} aria-label="Come collegare">
               {connectModes.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           )}
