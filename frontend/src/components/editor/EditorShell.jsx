@@ -63,6 +63,8 @@ import useCanvasStore from '../../store/useCanvasStore';
 import { isValidProjectId } from '../../utils/validateRouteParam';
 import { CanvasErrorBoundary } from '../common/ErrorBoundary';
 import { LoadingOverlay } from '../common/LoadingOverlay';
+import NodeInspector from '../canvas/NodeInspector';
+import { compactNodeTypes } from '../canvas/compactNodeTypes';
 
 const EMPTY_OBJ = {};
 
@@ -227,7 +229,7 @@ canvasConfig = EMPTY_OBJ,
               onEdgeClick={onEdgeClick}
               onEdgeContextMenu={onEdgeContextMenu}
               onInit={onInit}
-              nodeTypes={nodeTypes}
+              nodeTypes={compactNodeTypes(nodeTypes)}
               edgeTypes={edgeTypes}
               defaultEdgeOptions={defaultEdgeOptions}
               fitView={fitView}
@@ -244,6 +246,9 @@ canvasConfig = EMPTY_OBJ,
             {children}
           </div>
         </CanvasErrorBoundary>
+        {/* Nuova interfaccia (Fase 4, M1): nodi compatti sul canvas, form
+            completo del nodo selezionato nel pannello a destra. */}
+        <NodeInspector fullNodeTypes={nodeTypes} prefix={prefix} />
       </div>
       {modals}
     </div>

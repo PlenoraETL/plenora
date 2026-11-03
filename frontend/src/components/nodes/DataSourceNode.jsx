@@ -8,12 +8,13 @@
  * Usato in: ArricchisciEditor (come alternativa ai nodi progetto/file)
  */
 import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { listDataSources, listFiles, getFileSchema } from '../../api/datasources';
 import useDialogFocus from '../../hooks/useDialogFocus';
 import ModalWrapper from '../common/ModalWrapper';
 import './DataSourceNode.css';
+import NodeHandle from '../canvas/NodeHandle';
 
 /**
  * DataSourceNode — nodo canvas ESTRAI
@@ -217,7 +218,7 @@ return (
 
       {/* Handle input (solo CARICA) */}
       {mode === 'carica' && (
-        <Handle key="handle-carica" type="target" position={Position.Left} className="dsn__handle dsn__handle--in" id="carica-in" />
+        <NodeHandle key="handle-carica" type="target" position={Position.Left} className="dsn__handle dsn__handle--in" id="carica-in" />
       )}
 <div className="dsn__header">
         <div className="dsn__header-left">
@@ -519,7 +520,7 @@ return (
 
       {/* Handle output (solo SORGENTE) */}
       {mode === 'source' && (
-        <Handle key="handle-source" type="source" position={Position.Right} className="dsn__handle dsn__handle--out" id="source-out" />
+        <NodeHandle key="handle-source" type="source" position={Position.Right} className="dsn__handle dsn__handle--out" id="source-out" />
       )}
     </div>
   );

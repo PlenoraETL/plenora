@@ -5,12 +5,13 @@
  * Legge data.inputColumns popolato da useColumnPropagation.
  */
 import React, { memo, useState, useMemo, useCallback } from 'react';
-import { Handle, Position, useReactFlow } from '@xyflow/react';
+import { Position, useReactFlow } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import './MultiJoinNode.css';
 import RunHistoryModal from '../modals/RunHistoryModal';
 import { useConfirm } from '../../context/ConfirmContext';
 import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
+import NodeHandle from '../canvas/NodeHandle';
 
 const MultiJoinNode = memo(({ data, id }) => {
   const { getEdges, getNodes } = useReactFlow();
@@ -160,7 +161,7 @@ const MultiJoinNode = memo(({ data, id }) => {
         const isVisible = idx < visibleHandleCount;
         
         return (
-          <Handle
+          <NodeHandle
             key={`input-${idx}`}
             type="target"
             position={Position.Left}
@@ -411,7 +412,7 @@ const MultiJoinNode = memo(({ data, id }) => {
       </div>
 
       {/* Handle output */}
-      <Handle
+      <NodeHandle
         type="source"
         position={Position.Right}
         className="multi-join-node__handle multi-join-node__handle--output"

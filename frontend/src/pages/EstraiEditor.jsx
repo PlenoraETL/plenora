@@ -2,6 +2,7 @@
  * EstraiEditor.jsx — Editor visuale per il modulo ESTRAI
  * Logica invariata — solo classi CSS aggiornate al design system Plenora
  */
+import { ReactFlowProvider } from '@xyflow/react';
 import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import '@xyflow/react/dist/style.css';
@@ -813,4 +814,15 @@ function EstraiEditor() {
   );
 }
 
-export default EstraiEditor;
+// Il pannello laterale della nuova interfaccia (NodeInspector) mostra i form
+// dei nodi fuori dal canvas: serve il provider React Flow sopra l'editor,
+// come in Manipola e Arricchisci.
+function EstraiEditorWithProvider() {
+  return (
+    <ReactFlowProvider>
+      <EstraiEditor />
+    </ReactFlowProvider>
+  );
+}
+
+export default EstraiEditorWithProvider;

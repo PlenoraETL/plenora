@@ -8,12 +8,13 @@
  * Usato in: ManipolaEditor, ArricchisciEditor
  */
 import React, { useState, useEffect, memo } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import { Position } from '@xyflow/react';
 import { getProject } from '../../api';
 import { getColumnTypeIcon, getColumnTypeLabel, isGeometryType, getColumnSRID, normalizeColumnType } from '../../utils/columnUtils';
 import { humanizeError } from '../../utils/errorMessages';
 import useCanvasStore from '../../store/useCanvasStore';
 import './ProjectSourceNode.css';
+import NodeHandle from '../canvas/NodeHandle';
 
 /**
  * ProjectSourceNode - Nodo sorgente per progetti SQL (tipo "estrai") o Manipola
@@ -296,7 +297,7 @@ const ProjectSourceNode = ({ id, data }) => {
       </div>
 
       {/* Handle output */}
-      <Handle 
+      <NodeHandle 
         type="source" 
         position={Position.Right}
         className="project-source-node__handle"

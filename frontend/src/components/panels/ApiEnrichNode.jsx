@@ -15,13 +15,14 @@
 import { uploadFile } from '../../api/files';
 import { getApiConnection } from '../../api/apiConnections';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Handle, Position, useReactFlow, useStore } from '@xyflow/react';
+import { Position, useReactFlow, useStore } from '@xyflow/react';
 import { getColumnTypeIcon, getColumnTypeLabel } from '../../utils/columnUtils';
 import { humanizeError } from '../../utils/errorMessages';
 import useCanvasStore from '../../store/useCanvasStore';
 import './ApiEnrichNode.css';
 import RunHistoryModal from '../modals/RunHistoryModal';
 import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
+import NodeHandle from '../canvas/NodeHandle';
 
 /**
  * ApiEnrichNode - Nodo per arricchire dati chiamando API esterne
@@ -513,8 +514,8 @@ const handleExecParamChange = (key, value) => {
           </div>
         </div>
 
-        <Handle type="target" id="input" position={Position.Left} className="api-enrich-node__handle--input" />
-        <Handle type="source" id="output" position={Position.Right} className="api-enrich-node__handle--output" />
+        <NodeHandle type="target" id="input" position={Position.Left} className="api-enrich-node__handle--input" />
+        <NodeHandle type="source" id="output" position={Position.Right} className="api-enrich-node__handle--output" />
       </div>
     );
   }
@@ -810,13 +811,13 @@ const handleExecParamChange = (key, value) => {
       />
 
       {/* Handles — sempre presenti, indipendentemente dal caricamento dei parametri */}
-      <Handle
+      <NodeHandle
         type="target"
         id="input"
         position={Position.Left}
         className="api-enrich-node__handle--input"
       />
-      <Handle
+      <NodeHandle
         type="source"
         id="output"
         position={Position.Right}

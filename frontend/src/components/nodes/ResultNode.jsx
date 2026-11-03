@@ -14,7 +14,7 @@
  *   - header + delete
  */
 import React, { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
-import { Handle, Position, useReactFlow, useStore } from '@xyflow/react';
+import { Position, useReactFlow, useStore } from '@xyflow/react';
 import ValidationModal from '../modals/ValidationModal';
 import { validateProjectCanvas } from '../../api/projects';
 import { backendReportToResult, validationRequestFailedResult } from '../../utils/backendValidationResult';
@@ -25,6 +25,7 @@ import useInlinePreview from '../../hooks/useInlinePreview';
 import { useConfirm } from '../../context/ConfirmContext';
 import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 import './ResultNode.css';
+import NodeHandle from '../canvas/NodeHandle';
 
 // #5: righe caricate nell'anteprima inline auto post-run (la modale completa
 // resta a 100). Volutamente piccolo: gira su cache subito dopo l'esecuzione.
@@ -236,14 +237,14 @@ const ResultNode = memo(({ data, id }) => {
 
   return (
     <div className={`result-node result-node--${nodeVariant}`}>
-      <Handle
+      <NodeHandle
         type="target"
         position={Position.Left}
         id="input"
         className="result-node__handle result-node__handle--input"
       />
 
-      <Handle
+      <NodeHandle
         type="source"
         position={Position.Right}
         id="output"

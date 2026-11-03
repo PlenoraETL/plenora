@@ -163,6 +163,8 @@ vi.mock('../../src/store/useCanvasStore', () => {
     setConnections: vi.fn(),
     takeSnapshot: vi.fn(),
     validationHighlights: [],
+    nodes: [],
+    onNodesChange: vi.fn(),
     lastValidationSummary: null,
     past: [],
     future: [],

@@ -11,11 +11,12 @@
  * Si aspetta un edge in ingresso da ResultNode (handle "output").
  */
 import React, { useState, memo } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import RestDestinationSection, { REST_METHODS } from './carica/RestDestinationSection';
 import DbDestinationSection, { WRITE_MODES } from './carica/DbDestinationSection';
 import './CaricanNode.css';
+import NodeHandle from '../canvas/NodeHandle';
 
 const CaricanNode = memo(({ data, id }) => {
   const [isExpanded, setIsExpanded] = useState(true);
@@ -86,7 +87,7 @@ const CaricanNode = memo(({ data, id }) => {
 
   return (
     <div className={`carica-node ${destType === 'rest' ? 'carica-node--rest' : ''} ${!isValid ? 'carica-node--invalid' : ''}`}>
-      <Handle
+      <NodeHandle
         type="target"
         position={Position.Left}
         className="carica-node__handle carica-node__handle--input"

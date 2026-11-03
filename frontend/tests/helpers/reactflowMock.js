@@ -22,6 +22,8 @@ export function createReactFlowMock(options = {}) {
     Controls: () => null,
     MiniMap: () => null,
     NodeResizer: () => null,
+    // I test montano i nodi come se fossero sul canvas: NodeHandle disegna gli handle.
+    useNodeId: () => 'test-node',
     applyNodeChanges: (changes, nodes) => nodes,
     applyEdgeChanges: (changes, edges) => edges,
     Handle: () => React.createElement('div', { 'data-testid': 'handle' }),

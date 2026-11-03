@@ -1,6 +1,7 @@
 import React from 'react';
-import { Handle, Position } from '@xyflow/react';
+import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
+import NodeHandle from '../canvas/NodeHandle';
 import {
   createParameterBindingEdge,
   isBindableTransformParameter,
@@ -114,7 +115,7 @@ export default function RuntimeInputBindingControl({
 
   return (
     <span className="runtime-binding nodrag" title="Collega questo parametro a un Input progetto">
-      <Handle
+      <NodeHandle
         type="target"
         position={Position.Left}
         id={`parameter:${param.id}`}

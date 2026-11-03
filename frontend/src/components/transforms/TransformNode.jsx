@@ -5,39 +5,21 @@
  * Legge data.inputColumns popolato da useColumnPropagation.
  */
 import React, { memo, useState, useEffect, useMemo } from 'react';
-import { Handle, Position, useReactFlow } from '@xyflow/react';
+import { Position, useReactFlow } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import './TransformNode.css';
 import DynamicConfig from './DynamicConfig';
 
 import { authBus } from '../../utils/authBus';
-import { getTransformRegistry } from '../../api/transforms';
 import RunHistoryModal from '../modals/RunHistoryModal';
 import { useConfirm } from '../../context/ConfirmContext';
 import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
+import NodeHandle from '../canvas/NodeHandle';
+import { fetchTransformRegistry, getCachedTransformRegistry } from '../../utils/transformRegistry';
 
-// Cache globale per il registry
-let registryCache = null;
-let registryCachePromise = null;
-
-const fetchRegistry = async () => {
-  if (registryCache) return registryCache;
-  if (registryCachePromise) return registryCachePromise;
-
-  registryCachePromise = getTransformRegistry()
-    .then(data => {
-      registryCache = data;
-      registryCachePromise = null;
-      return data;
-    })
-    .catch(err => {
-      console.error('[TransformNode] Errore caricamento registry:', err);
-      registryCachePromise = null;
-      return null;
-    });
-
-  return registryCachePromise;
-};
+// Cache del registry condivisa con i riassunti dei nodi compatti.
+const fetchRegistry = fetchTransformRegistry;
+const getRegistryCache = getCachedTransformRegistry;
 
 const TransformNode = memo(({ data, id }) => {
   const { getEdges, getNodes } = useReactFlow();
@@ -46,16 +28,15 @@ const TransformNode = memo(({ data, id }) => {
   const config = data.config || {};
 
   // Registry
-  const [registry, setRegistry] = useState(registryCache);
-  const [loading, setLoading] = useState(!registryCache);
+  const [registry, setRegistry] = useState(getRegistryCache());
+  const [loading, setLoading] = useState(!getRegistryCache());
   const [isRunHistoryOpen, setIsRunHistoryOpen] = useState(false);
   const projectId = useCanvasStore(s => s.projectId);
 
   // Invalida la cache al logout: evita che User B veda il registry di User A
   useEffect(() => {
+    // La cache condivisa si svuota da sola (utils/transformRegistry).
     return authBus.addLogoutListener(() => {
-      registryCache = null;
-      registryCachePromise = null;
       setRegistry(null);
       setLoading(true);
     });
@@ -244,13 +225,13 @@ const TransformNode = memo(({ data, id }) => {
       <div className="transform-node transform-node--loading">
         {showDualHandles ? (
           <>
-            <Handle type="target" position={Position.Left} id="input-0" 
+            <NodeHandle type="target" position={Position.Left} id="input-0" 
               className="transform-node__handle transform-node__handle--left" style={{ top: '30%' }} />
-            <Handle type="target" position={Position.Left} id="input-1" 
+            <NodeHandle type="target" position={Position.Left} id="input-1" 
               className="transform-node__handle transform-node__handle--right" style={{ top: '70%' }} />
           </>
         ) : (
-          <Handle type="target" position={Position.Left} className="transform-node__handle" />
+          <NodeHandle type="target" position={Position.Left} className="transform-node__handle" />
         )}
         <div className="transform-node__header">
           <span>⚙️ Trasformazione</span>
@@ -258,7 +239,7 @@ const TransformNode = memo(({ data, id }) => {
         <div className="transform-node__body">
           <div className="transform-node__loading">Caricamento...</div>
         </div>
-        <Handle type="source" position={Position.Right} className="transform-node__handle" />
+        <NodeHandle type="source" position={Position.Right} className="transform-node__handle" />
       </div>
     );
   }
@@ -269,7 +250,7 @@ const TransformNode = memo(({ data, id }) => {
       {isMultiInput ? (
         <>
           {/* Handle SINISTRA (input-0) - in alto */}
-          <Handle
+          <NodeHandle
             type="target"
             position={Position.Left}
             id="input-0"
@@ -282,7 +263,7 @@ const TransformNode = memo(({ data, id }) => {
           </div>
           
           {/* Handle DESTRA (input-1) - in basso */}
-          <Handle
+          <NodeHandle
             type="target"
             position={Position.Left}
             id="input-1"
@@ -295,7 +276,7 @@ const TransformNode = memo(({ data, id }) => {
           </div>
         </>
       ) : (
-        <Handle
+        <NodeHandle
           type="target"
           position={Position.Left}
           className="transform-node__handle"
@@ -393,7 +374,7 @@ const TransformNode = memo(({ data, id }) => {
       </div>
       )}
 
-      <Handle
+      <NodeHandle
         type="source"
         position={Position.Right}
         className="transform-node__handle"

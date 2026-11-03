@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useMemo, useState } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { getTransformRegistry } from '../../api/transforms';
 import { listConnectionSets } from '../../api';
@@ -8,6 +8,7 @@ import {
   isParameterBindingEdge,
 } from '../../utils/runtimeBindingEdges';
 import './ProjectInputNode.css';
+import NodeHandle from '../canvas/NodeHandle';
 
 const INPUT_TYPES = [
   ['file', 'File tabellare'],
@@ -369,7 +370,7 @@ function ProjectInputNode({ id, data, selected }) {
       )}
 
       {kind !== 'connection' && (
-        <Handle
+        <NodeHandle
           type="source"
           position={Position.Right}
           id={kind === 'file' ? 'output' : 'parameter'}

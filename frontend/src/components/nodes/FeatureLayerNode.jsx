@@ -12,11 +12,12 @@
  */
 
 import React, { useState, useEffect, memo } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import { Position } from '@xyflow/react';
 import { getLayerSchema } from '../../api/features';
 import useCanvasStore from '../../store/useCanvasStore';
 import { useConfirm } from '../../context/ConfirmContext';
 import './FeatureLayerNode.css';
+import NodeHandle from '../canvas/NodeHandle';
 
 const FIELD_ICONS = {
   'int': '🔢',
@@ -155,7 +156,7 @@ const FeatureLayerNode = memo(({ data, id }) => {
   return (
     <div className="fl-node">
       {/* Handle input (sinistra) */}
-      <Handle
+      <NodeHandle
         type="target"
         position={Position.Left}
         className="fl-node__handle"
@@ -367,7 +368,7 @@ const FeatureLayerNode = memo(({ data, id }) => {
       </div>
 
       {/* Handle output (destra) */}
-      <Handle
+      <NodeHandle
         type="source"
         position={Position.Right}
         className="fl-node__handle"

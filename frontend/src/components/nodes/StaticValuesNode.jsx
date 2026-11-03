@@ -5,7 +5,7 @@
 import React, { useState, useCallback, useMemo, useRef, memo } from 'react';
 import { useEffect } from 'react';
 import { useToast } from '../../hooks/useToast';
-import { Handle, Position } from '@xyflow/react';
+import { Position } from '@xyflow/react';
 import { 
   processTemplateVariables, 
   hasTemplateVariables, 
@@ -13,6 +13,7 @@ import {
 } from '../../utils/templateVariables';
 import useCanvasStore from '../../store/useCanvasStore';
 import './StaticValuesNode.css';
+import NodeHandle from '../canvas/NodeHandle';
 
 const FIELD_TYPES = [
   { value: 'string',  label: 'Testo',    icon: 'T' },
@@ -267,7 +268,7 @@ function StaticValuesNode({ id, data, selected }) {
         </div>
       )}
 
-      <Handle type="source" position={Position.Right} id="output" className="svn__handle" />
+      <NodeHandle type="source" position={Position.Right} id="output" className="svn__handle" />
       {/* `<ToastContainer>` legacy rimosso: il container vive nel
           provider globale (`ToastContext`). Senza la rimozione,
           ogni toast (es. "Progetto salvato!" dal ManipolaEditor)

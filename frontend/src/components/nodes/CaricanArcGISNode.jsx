@@ -10,7 +10,7 @@
  * Si aspetta un edge in ingresso da ResultNode (handle "output").
  */
 import React, { useState, useEffect, memo } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import {
   listFeatureConnections,
@@ -22,6 +22,7 @@ import {
 import { humanizeError } from '../../utils/errorMessages';
 import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 import './CaricanArcGISNode.css';
+import NodeHandle from '../canvas/NodeHandle';
 
 const CaricanArcGISNode = memo(({ data, id }) => {
   const [isExpanded, setIsExpanded] = useState(true);
@@ -316,7 +317,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
 
   return (
     <div className={`carica-arcgis-node ${!isValid ? 'carica-arcgis-node--invalid' : ''}`}>
-      <Handle
+      <NodeHandle
         type="target"
         position={Position.Left}
         className="carica-arcgis-node__handle carica-arcgis-node__handle--input"

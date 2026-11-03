@@ -8,13 +8,14 @@
  * Usato in: EstraiEditor (trascina dalla sidebar catalogo)
  */
 import React, { useState, memo } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import { Position } from '@xyflow/react';
 import FilterModal from '../modals/FilterModal';
 import ColumnBuilderModal from '../modals/ColumnBuilderModal';
 import { getColumnTypeIcon, getColumnTypeLabel, getColumnSRID, isGeometryType } from '../../utils/columnUtils';
 import useCanvasStore from '../../store/useCanvasStore';
 import { useConfirm } from '../../context/ConfirmContext';
 import './TableNode.css';
+import NodeHandle from '../canvas/NodeHandle';
 
 /**
  * Componente nodo tabella personalizzato
@@ -118,7 +119,7 @@ const TableNode = memo(({ data, id }) => {
   return (
     <div className="table-node">
       {/* Handle input (sinistra) */}
-      <Handle
+      <NodeHandle
         type="target"
         position={Position.Left}
         className="table-node__handle"
@@ -410,7 +411,7 @@ const TableNode = memo(({ data, id }) => {
 
 
       {/* Handle output (destra) */}
-      <Handle
+      <NodeHandle
         type="source"
         position={Position.Right}
         className="table-node__handle"

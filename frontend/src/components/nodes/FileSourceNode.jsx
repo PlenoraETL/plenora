@@ -8,12 +8,13 @@
  * Usato in: ManipolaEditor, ArricchisciEditor
  */
 import React, { useState, useEffect, memo } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import { Position } from '@xyflow/react';
 import { getFile } from '../../api/files';
 import { getColumnTypeIcon, getColumnTypeLabel, normalizeColumnType } from '../../utils/columnUtils';
 import { humanizeError } from '../../utils/errorMessages';
 import useCanvasStore from '../../store/useCanvasStore';
 import './FileSourceNode.css';
+import NodeHandle from '../canvas/NodeHandle';
 
 /**
  * FileSourceNode - Nodo sorgente per file esterni in MANIPOLA
@@ -237,7 +238,7 @@ const FileSourceNode = ({ id, data }) => {
       )}
 
       {/* Handle output */}
-      <Handle 
+      <NodeHandle 
         type="source" 
         position={Position.Right}
         className="file-source-node__handle"
