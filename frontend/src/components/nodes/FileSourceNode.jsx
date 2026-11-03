@@ -58,7 +58,8 @@ const FileSourceNode = ({ id, data }) => {
       
       // Usa updateNodeData dallo store direttamente
       if (columnsWithTypes.length > 0) {
-        useCanvasStore.getState().updateNodeData(id, { columns: columnsWithTypes });
+        // Schema letto dal file: dato DERIVATO (non rende il canvas modificato).
+        useCanvasStore.getState().updateNodeData(id, { columns: columnsWithTypes }, { derived: true });
       }
       
     } catch (err) {

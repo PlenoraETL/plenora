@@ -145,7 +145,9 @@ const fetchSchema = useCallback(async (filePath, opts = {}) => {
         if (layers.length > 1 && !po.layer && effLayer) newPo.layer = effLayer;
         updates.parse_options = newPo;
       }
-      upd(updates);
+      // Schema letto dalla sorgente: dato DERIVATO (pendingSync), non una
+      // modifica dell'utente; il salvataggio sotto lo invia comunque.
+      updateNodeData(id, updates, { derived: true });
       setTimeout(() => {
         const onSchemaUpdated = useCanvasStore.getState()
           .getEditorAction('onDataSourceSchemaUpdated');
@@ -159,7 +161,7 @@ const fetchSchema = useCallback(async (filePath, opts = {}) => {
     } finally {
       setLoadingSchema(false);
     }
-  }, [dsId, id, upd, data.format, data.parse_options, handleSaveQuiet]);
+  }, [dsId, id, updateNodeData, data.format, data.parse_options, handleSaveQuiet]);
 
   useEffect(() => {
     if (!dsId || !data.file_path) return;

@@ -314,7 +314,9 @@ const handleExecParamChange = (key, value) => {
     });
     
     if (Object.keys(newMapping).length > 0) {
-      useCanvasStore.getState().updateNodeData(id, { param_mapping: newMapping, _lastUpdate: Date.now() });
+      // Mapping proposto automaticamente: dato DERIVATO (salvato via
+      // pendingSync, non rende il canvas "modificato" all'apertura).
+      useCanvasStore.getState().updateNodeData(id, { param_mapping: newMapping }, { derived: true });
     }
   }, [inputColumns, apiParameters]);
   

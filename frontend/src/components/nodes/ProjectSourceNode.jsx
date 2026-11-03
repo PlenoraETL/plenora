@@ -89,7 +89,7 @@ const ProjectSourceNode = ({ id, data }) => {
           .filter(col => col.id && col.name);
       } else {
         setError('Contratto output mancante: esegui prima il progetto sorgente.');
-        updateNodeData(id, { columns: [] });
+        updateNodeData(id, { columns: [] }, { derived: true });
       }
       
       // Usa updateNodeData dallo store direttamente — funziona in tutti gli editor
@@ -120,7 +120,9 @@ const ProjectSourceNode = ({ id, data }) => {
           }));
         }
         
-        updateNodeData(id, { columns: columnsWithTypes });
+        // Schema caricato dal progetto sorgente: dato DERIVATO (salvato via
+        // pendingSync, niente avviso "modifiche non salvate" all'apertura).
+        updateNodeData(id, { columns: columnsWithTypes }, { derived: true });
       }
       
     } catch (err) {

@@ -42,7 +42,12 @@ function StaticValuesNode({ id, data, selected }) {
   const [activeFieldId, setActiveFieldId] = useState(null); // quale campo sta editando valore
   const nameRef = useRef(null);
 
-  useEffect(() => { updateNodeData(id, { fields }); }, [fields, id, updateNodeData]);
+  // Scrive nello store solo se i campi locali differiscono da quelli salvati:
+  // al montaggio coincidono, quindi aprire il canvas non lo rende modificato.
+  useEffect(() => {
+    const saved = useCanvasStore.getState().getNodeById(id)?.data?.fields || [];
+    if (JSON.stringify(saved) !== JSON.stringify(fields)) updateNodeData(id, { fields });
+  }, [fields, id, updateNodeData]);
 
   // Calcola schema output (usa field_type se definito, altrimenti auto-detect)
   const outputSchema = useMemo(() => fields.map(f => ({

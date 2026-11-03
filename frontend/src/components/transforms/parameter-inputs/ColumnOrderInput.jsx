@@ -7,7 +7,7 @@
  * Inizializza `value` con tutte le colonne se vuoto (effect su
  * `columns`).
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 const ColumnOrderInput = ({ value, onChange, columns }) => {
   const [dragIdx, setDragIdx] = useState(null);
@@ -20,13 +20,11 @@ const ColumnOrderInput = ({ value, onChange, columns }) => {
     return columns.map(c => c.name);
   })();
 
-  // Inizializza automaticamente se value è vuoto e ci sono colonne
-  useEffect(() => {
-    if ((!value || (Array.isArray(value) && value.length === 0)) && columns.length > 0) {
-      onChange(columns.map(c => c.name), columns);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columns]);
+  // Nessuna inizializzazione automatica della config: con value vuoto la
+  // lista mostra l'ordine corrente delle colonne (`order` sopra) e il
+  // backend accoda comunque le colonne non elencate. Prima un effect
+  // scriveva la config al montaggio e rendeva il canvas "modificato"
+  // appena aperto (collaudo Fase 3). Il primo trascinamento salva l'ordine.
 
   const handleDragStart = (idx) => {
     setDragIdx(idx);
