@@ -8,6 +8,7 @@ import time as _time
 from typing import Any, Mapping, Optional
 
 from app.core.projects.canvas_models import CanvasState
+from app.core.projects.canvas_preview_scope import preview_canvas
 from app.utils.logger import get_logger, append_step
 from app.core.arricchisci.api_connector import api_connection_service
 from app.core.arricchisci.execution_context import ArricchisciExecutionContext
@@ -272,6 +273,9 @@ class EnrichExecutor:
         ricodificati qui.
         """
         logger.info(f"Preview ARRICCHISCI: {project_id} (limit={limit})", op="preview", project_id=project_id)
+        node_id = (execution_context or {}).get("preview_node_id")
+        if node_id is not None:
+            canvas = preview_canvas(canvas, str(node_id), with_result=True)
         canvas_dict = canvas.model_dump()
 
         typed_context = None
@@ -310,6 +314,8 @@ class EnrichExecutor:
                 "success": False,
                 "message": "Preview non disponibile per output di tipo file",
             }
+        if node_id is not None:
+            result["approximate"] = True
         return result
 
     def _build_preview_response(self, result_df: Any, limit: int) -> JsonObject:

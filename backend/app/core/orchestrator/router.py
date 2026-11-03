@@ -325,8 +325,8 @@ def preview_project(
             )
         if node_id is not None:
             try:
-                if execution_contract.project_type.lower() != "manipola":
-                    raise ValueError("node_id e' supportato solo per preview Manipola.")
+                if execution_contract.project_type.lower() not in {"manipola", "estrai", "arricchisci"}:
+                    raise ValueError("node_id e' supportato solo per preview Manipola, Estrai e Arricchisci.")
                 preview_canvas(CanvasState.model_validate(execution_contract.canvas), node_id)
             except ValueError as exc:
                 raise_typed_http(
