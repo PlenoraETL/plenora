@@ -60,6 +60,7 @@ from .project_source_runtime import (
 )
 from .transform_ordering import sorted_incoming_edges
 from .types import ColumnMetadataRows, FrameMap, JsonObject, JsonRows, StringMap
+from app.core.projects.canvas_preview_scope import preview_canvas
 
 
 logger = get_logger(__name__)
@@ -514,9 +515,13 @@ class ManipolaExecutor:
         canvas: CanvasState,
         limit: int,
         execution_context: Optional[Mapping[str, Any]] = None,
+        node_id: str | None = None,
     ) -> JsonObject:
         """Preview: stessa pipeline dell'execute ma senza salvataggio."""
         logger.info(f"Preview MANIPOLA: {project_id}", op="preview", project_id=project_id)
+        node_id = node_id if node_id is not None else (execution_context or {}).get("preview_node_id")
+        if node_id is not None:
+            canvas = preview_canvas(canvas, node_id)
         try:
             # Stesso tenant binding di execute. `strict=False` perche'
             # preview non persiste output: se il lookup DB fallisce
@@ -575,6 +580,8 @@ class ManipolaExecutor:
             current_df = self._applica_trasformazioni(
                 canvas, dataframes, project_id=project_id, canvas_graph=canvas_graph
             )
+            if node_id is not None and node_id in dataframes:
+                current_df = dataframes[node_id]
             if current_df is None:
                 return {"success": False, "message": "Nessun dato prodotto dalla pipeline"}
 

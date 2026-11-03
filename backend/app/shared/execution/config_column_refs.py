@@ -58,7 +58,9 @@ LIST_COLUMN_CONFIG_KEYS = frozenset({
     "group_by_columns",
     "id_columns",
     "join_keys",
+    "left_columns",
     "left_keys",
+    "right_columns",
     "right_keys",
     "subset",
     "value_columns",
@@ -68,6 +70,8 @@ LIST_COLUMN_CONFIG_KEYS = frozenset({
 _NESTED_REF_KEYS = {
     "aggregations": ("column", "column_id"),
     "aggs": ("column", "column_id"),
+    # Filtro multi-condizione (redesign Manipola, B3).
+    "conditions": ("column", "column_id"),
     "renames": ("old_name", "old_name_id"),
     "maskings": ("column", "column_id"),
 }

@@ -32,6 +32,7 @@ from app.core.dataframes.tabular import (
 )
 from app.core.resources.exceptions import MemoryLimitExceededError
 from app.utils.logger import get_logger
+from app.shared.execution.column_selection import join_column_plan
 
 logger = get_logger(__name__)
 
@@ -124,6 +125,9 @@ def op_join(
     how: str = "inner",
     left_keys: Any = None,
     right_keys: Any = None,
+    left_columns: list[str] | None = None,
+    right_columns: list[str] | None = None,
+    name_conflict: str | None = None,
 ) -> DataFrame:
     """
     Join tra due DataFrame.
@@ -148,6 +152,16 @@ def op_join(
     right_df = copy_frame_for_update(inputs[1])
     left_key_cols = _normalize_join_keys(left_keys if left_keys is not None else left_on)
     right_key_cols = _normalize_join_keys(right_keys if right_keys is not None else right_on)
+
+    # Il percorso legacy resta identico quando i nuovi parametri sono assenti.
+    column_maps = None
+    if left_columns is not None or right_columns is not None or name_conflict is not None:
+        column_maps = join_column_plan(
+            list(left_df.columns), list(right_df.columns), left_key_cols, right_key_cols,
+            left_columns, right_columns, name_conflict,
+        )
+        left_df = left_df[list(column_maps[0])]
+        right_df = right_df[list(column_maps[1])]
 
     if not left_key_cols or not right_key_cols:
         raise ValueError("Join richiede almeno una coppia di chiavi SX/DX.")
@@ -277,8 +291,12 @@ def op_join(
         df.columns = new_cols
         return df
 
-    left_df = safe_rename(left_df, left_key_cols, 'L')
-    right_df = safe_rename(right_df, right_key_cols, 'R')
+    if column_maps is None:
+        left_df = safe_rename(left_df, left_key_cols, 'L')
+        right_df = safe_rename(right_df, right_key_cols, 'R')
+    else:
+        left_df = left_df.rename(columns=column_maps[0])
+        right_df = right_df.rename(columns=column_maps[1])
     logger.info(f"[JOIN] left cols: {list(left_df.columns)[:10]}, left_keys={left_key_cols}")
     logger.info(f"[JOIN] right cols: {list(right_df.columns)[:10]}, right_keys={right_key_cols}")
 
@@ -614,7 +632,7 @@ def op_join(
         for left_key, right_key in zip(left_key_cols, right_key_cols)
         if left_key != right_key and right_key not in left_key_cols and right_key in result.columns
     ]
-    if right_keys_to_drop:
+    if right_keys_to_drop and column_maps is None:
         result = result.drop(columns=[*dict.fromkeys(right_keys_to_drop)])
 
     logger.info(f"Join completato: {len(result)} righe, {len(result.columns)} colonne")

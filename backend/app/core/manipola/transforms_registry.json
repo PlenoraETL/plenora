@@ -4,6 +4,27 @@
   "description": "Registry trasformazioni MANIPOLA - PLENORA-ETL (Full DynamicConfig)",
   "last_updated": "2026-01-28",
   "transforms": {
+    "select_columns": {
+      "id": "select_columns",
+      "name": "Seleziona e rinomina",
+      "category": "base",
+      "icon": "columns",
+      "description": "Seleziona, rinomina e ordina; le colonne non elencate sono mantenute in coda.",
+      "function": "columns.op_select_columns",
+      "inputs": "single",
+      "parameters": [
+        {
+          "id": "columns",
+          "type": "aggregation_list",
+          "label": "Colonne",
+          "default": [],
+          "description": "Lista ordinata {name, keep (default true), label (opzionale)}."
+        }
+      ],
+      "output": {
+        "type": "modified"
+      }
+    },
     "join": {
       "id": "join",
       "name": "Join",
@@ -52,6 +73,40 @@
             }
           ],
           "default": "inner"
+        },
+        {
+          "id": "left_columns",
+          "type": "columns",
+          "label": "Colonne sinistre",
+          "source": "left",
+          "required": false
+        },
+        {
+          "id": "right_columns",
+          "type": "columns",
+          "label": "Colonne destre",
+          "source": "right",
+          "required": false
+        },
+        {
+          "id": "name_conflict",
+          "type": "select",
+          "label": "Nomi uguali",
+          "required": false,
+          "options": [
+            {
+              "value": "keep_left",
+              "label": "keep_left"
+            },
+            {
+              "value": "keep_right",
+              "label": "keep_right"
+            },
+            {
+              "value": "suffix",
+              "label": "suffix"
+            }
+          ]
         }
       ],
       "output": {
@@ -148,6 +203,14 @@
             {
               "value": "notnull",
               "label": "Non è nullo"
+            },
+            {
+              "value": "in",
+              "label": "In elenco"
+            },
+            {
+              "value": "not_in",
+              "label": "Non in elenco"
             }
           ],
           "default": "=="
@@ -157,6 +220,13 @@
           "type": "string",
           "label": "Valore",
           "description": "Valore da confrontare (ignorato per isnull/notnull)"
+        },
+        {
+          "id": "conditions",
+          "type": "aggregation_list",
+          "label": "Condizioni AND",
+          "required": false,
+          "description": "Lista {column, operator, value}; se presente sostituisce il filtro singolo. Lista vuota: passthrough."
         }
       ],
       "output": {
@@ -185,6 +255,13 @@
           "label": "Espressione",
           "description": "Es: colonna1 * 2, col1 + '_' + col2, prezzo * quantita",
           "required": true
+        },
+        {
+          "id": "items",
+          "type": "aggregation_list",
+          "label": "Formule in ordine",
+          "required": false,
+          "description": "Lista {new_column, formula}; se presente sostituisce la formula singola. Lista vuota: passthrough."
         }
       ],
       "output": {

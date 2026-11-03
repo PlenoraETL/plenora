@@ -11,6 +11,7 @@ from app.core.projects.schema_geo_handlers import GeoSchemaHandlers
 from app.core.projects.schema_join_handlers import JoinSchemaHandlers
 from app.core.projects.schema_reshape_handlers import ReshapeSchemaHandlers
 from app.core.projects.schema_table_handlers import TableSchemaHandlers
+from app.shared.execution.column_selection import select_column_plan
 
 if TYPE_CHECKING:
     from app.shared.execution.schema_types import ColumnSchema
@@ -105,6 +106,7 @@ class TransformSchemaHandlers:
             "distinct": lambda i, c, n: self._table_handlers._schema_distinct(i, c, n),
             "rename": lambda i, c, n: self._schema_rename(i, c, n),
             "drop": lambda i, c, n: self._schema_drop(i, c, n),
+            "select_columns": lambda i, c, n: self._schema_select_columns(i, c, n),
             "drop_columns": lambda i, c, n: self._schema_drop(i, c, n),
             "fill_na": pt,
             "replace": pt,
@@ -828,3 +830,10 @@ class TransformSchemaHandlers:
             return []
         
         return self._copy_schema(input_schemas[0], node_id)
+
+    def _schema_select_columns(self, input_schemas: List[List[ColumnSchema]], config: dict, node_id: str) -> List[ColumnSchema]:
+        if not input_schemas:
+            return []
+        by_name = {col.name: col for col in input_schemas[0]}
+        plan = select_column_plan(list(by_name), config.get("columns") or [])
+        return [self._copy_column(by_name[name], node_id, name=label) for name, label in plan]

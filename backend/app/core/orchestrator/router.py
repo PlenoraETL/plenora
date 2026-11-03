@@ -17,7 +17,7 @@ from app.config import settings
 from app.utils.logger import get_logger
 from app.shared import error_codes
 from app.shared.error_envelope import raise_typed_http
-from app.core.projects.canvas_models import ExecuteRequest
+from app.core.projects.canvas_models import CanvasState, ExecuteRequest
 from app.core.orchestrator.task_service import (
     TaskType,
 )
@@ -65,6 +65,7 @@ from app.core.io.http_streaming import (
     safe_download_filename,
 )
 from app.core.results import output_file_cleanup
+from app.core.projects.canvas_preview_scope import preview_canvas
 
 def _mime_for_filename(filename: str) -> str:
     """Ritorna il Content-Type corretto basandosi sull'estensione del file."""
@@ -305,6 +306,7 @@ def preview_project(
         description="Numero righe preview (cap 10k per evitare OOM worker)",
     ),
     current_user: CurrentUser = Depends(require_not_esecutore),
+    node_id: Optional[str] = None,
 ) -> Mapping[str, object]:
     """Avvia preview come task Celery asincrono."""
     require_service(_orchestrator, "OrchestratorService")
@@ -321,6 +323,18 @@ def preview_project(
                 status_code=404,
                 message="Progetto non trovato",
             )
+        if node_id is not None:
+            try:
+                if execution_contract.project_type.lower() != "manipola":
+                    raise ValueError("node_id e' supportato solo per preview Manipola.")
+                preview_canvas(CanvasState.model_validate(execution_contract.canvas), node_id)
+            except ValueError as exc:
+                raise_typed_http(
+                    error_codes.VALIDATION_ERROR, status_code=400, message=str(exc),
+                )
+            execution_contract = execution_contract.model_copy(update={
+                "runtime_context": {**execution_contract.runtime_context, "preview_node_id": node_id},
+            })
         task_info = task_service_module.task_service.create_preview_task(
             project_id=project_id,
             limit=limit,

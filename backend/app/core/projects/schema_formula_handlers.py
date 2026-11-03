@@ -32,6 +32,23 @@ class FormulaSchemaHandlers:
         if not input_schemas:
             return []
 
+        if config.get("items") is not None:
+            result = self._copy_schema(input_schemas[0], node_id)
+            for index, item in enumerate(config["items"]):
+                name = item["new_column"]
+                column = self._column_schema_cls(
+                    name=name, type=item.get("output_type", "real"),
+                    id=_stable_calculated_column_id(node_id, f"formula:{index}"),
+                    source_name=_stable_calculated_source_name(node_id, f"formula:{index}"),
+                    source_node=node_id, is_calculated=True,
+                )
+                existing = next((i for i, col in enumerate(result) if col.name == name), None)
+                if existing is None:
+                    result.append(column)
+                else:
+                    result[existing] = column
+            return result
+
         result = self._copy_schema(input_schemas[0], node_id)
 
         new_col = config.get("new_column", "calculated")

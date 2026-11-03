@@ -8,7 +8,7 @@ Nota: il PluginExecutor carica le funzioni direttamente dai sottomoduli
 from .aggregation import op_aggregate, op_distinct, op_sort
 from .analysis import op_statistics
 from .cleansing import op_fill_na, op_replace, op_type_cast
-from .columns import op_concat_columns, op_drop_columns, op_rename, op_split_column
+from .columns import op_concat_columns, op_drop_columns, op_rename, op_split_column, op_select_columns
 from .filtering import op_conditional, op_filter
 from .formula import op_formula
 from .geo import op_geo_from_coords
@@ -72,6 +72,7 @@ __all__ = [
     "op_replace",
     "op_rename",
     "op_sjoin",
+    "op_select_columns",
     "op_sort",
     "op_split_column",
     "op_statistics",

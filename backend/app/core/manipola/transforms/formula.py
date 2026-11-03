@@ -6,6 +6,7 @@ gate AST anti-RCE.
 
 import ast as _ast
 
+from app.core.manipola.types import JsonRows
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
@@ -191,8 +192,9 @@ def _extract_referenced_names(formula: str) -> set[str]:
 
 def op_formula(
     df: DataFrame,
-    formula: str,
-    new_column: str = "calculated"
+    formula: str = "",
+    new_column: str = "calculated",
+    items: JsonRows | None = None
 ) -> DataFrame:
     """
     Crea una nuova colonna calcolata con un'espressione.
@@ -211,6 +213,15 @@ def op_formula(
     Returns:
         DataFrame con nuova colonna aggiunta, o df invariato se la formula è invalida.
     """
+    if items is not None:
+        if not isinstance(items, list):
+            raise ValueError("Formula: items deve essere una lista.")
+        for item in items:
+            if not isinstance(item, dict) or not isinstance(item.get("new_column"), str) or not item["new_column"].strip() or not isinstance(item.get("formula"), str) or not item["formula"].strip():
+                raise ValueError("Formula: ogni elemento richiede new_column e formula non vuoti.")
+            df = op_formula(df, item["formula"], item["new_column"])
+        return df
+
     if not formula or not formula.strip():
         logger.warning("Formula vuota")
         return df

@@ -72,6 +72,8 @@ EXPECTED_DISPATCHER_BRANCHES: set[str] = {
     "geo_symmetric_difference", "geo_nearest", "lookup",
     "table_diff", "melt", "statistics", "window_function",
     "flatten_json", "transpose",
+    # Redesign Manipola (B5): seleziona/rinomina/ordina con handler schema.
+    "select_columns",
 }
 
 PASSTHROUGH_WRONG_GAP: set[str] = set()
@@ -161,7 +163,7 @@ def test_registry_loads_and_is_fully_classified():
     registry = _load_registry_ids()
     dispatcher = _parse_dispatcher_branches()
 
-    assert len(registry) == 70
+    assert len(registry) == 71
     assert dispatcher - registry == {"drop", "geo_to_crs"}
     assert registry - dispatcher == PASSTHROUGH_OK_GAP
     assert PASSTHROUGH_WRONG_GAP == set()

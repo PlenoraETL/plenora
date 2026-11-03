@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, List
+from app.shared.execution.column_selection import join_column_plan
 
 if TYPE_CHECKING:
     from app.shared.execution.schema_types import ColumnSchema
@@ -29,6 +30,18 @@ class JoinSchemaHandlers:
 
         left_keys = self._normalize_str_list(config.get("left_keys") or config.get("left_on"))
         right_keys = self._normalize_str_list(config.get("right_keys") or config.get("right_on"))
+        if any(config.get(key) is not None for key in ("left_columns", "right_columns", "name_conflict")):
+            left_map, right_map = join_column_plan(
+                [c.name for c in left_schema], [c.name for c in right_schema],
+                left_keys, right_keys, config.get("left_columns"), config.get("right_columns"),
+                config.get("name_conflict"),
+            )
+            shared_keys = set(left_keys) & set(right_keys)
+            return [self._copy_column(c, node_id, name=left_map[c.name]) for c in left_schema if c.name in left_map] + [
+                self._copy_column(c, node_id, name=right_map[c.name]) for c in right_schema
+                if c.name in right_map and c.name not in shared_keys
+            ]
+
         left_key_set = set(left_keys)
         right_key_set = set(right_keys)
         same_name_right_keys = {

@@ -28,9 +28,10 @@ DataFrame = FrameLike
 
 def op_filter(
     df: DataFrame,
-    column: str,
-    operator: str,
-    value: Any = None
+    column: str | None = None,
+    operator: str = "==",
+    value: Any = None,
+    conditions: JsonRows | None = None
 ) -> DataFrame:
     """
     Filtra righe in base a una condizione.
@@ -44,6 +45,17 @@ def op_filter(
     Returns:
         DataFrame filtrato
     """
+    if conditions is not None:
+        if not isinstance(conditions, list):
+            raise ValueError("Filter: conditions deve essere una lista.")
+        for condition in conditions:
+            if not isinstance(condition, dict) or not condition.get("column") or not condition.get("operator"):
+                raise ValueError("Filter: ogni condizione richiede column e operator.")
+            if condition["operator"] not in {"==", "!=", ">", ">=", "<", "<=", "contains", "startswith", "endswith", "isnull", "notnull", "in", "not_in"}:
+                raise ValueError(f"Filter: operatore '{condition['operator']}' non supportato.")
+            df = op_filter(df, condition["column"], condition["operator"], condition.get("value"))
+        return df
+
     if column not in df.columns:
         # Fail-fast: un filtro che non filtra e' un bug grave. Silent return
         # df invariato nascondeva l'errore e i conteggi a valle erano sballati
@@ -56,6 +68,19 @@ def op_filter(
     # Path read-only puro: niente modifiche column-level, leggi direttamente
     # da `df`.
     col = df[column]
+
+    if operator in {"in", "not_in"}:
+        if not isinstance(value, (str, list)):
+            raise ValueError("Filter: in/not_in richiede una lista o stringa separata da virgole.")
+        values = value.split(",") if isinstance(value, str) else value
+        values = [item.strip() if isinstance(item, str) else item for item in values]
+        if is_numeric_series(col):
+            try:
+                values = [float(item) if item is not None else None for item in values]
+            except (ValueError, TypeError) as exc:
+                raise ValueError(f"Filter: valori non numerici per colonna '{column}'.") from exc
+        mask = col.isin(values)
+        return df[~mask if operator == "not_in" else mask].reset_index(drop=True)
 
     # Se la colonna è numerica e il valore è stringa, converti
     if value is not None and is_numeric_series(col):

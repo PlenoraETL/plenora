@@ -40,6 +40,10 @@ def project_columns_dropped_immediately_after_join(
     if len(inputs) != 2 or getattr(join_node, "transform_op", None) != "join":
         return inputs
 
+    # La proiezione anticipata assume esclusivamente i nomi del join legacy.
+    if any(_node_config(join_node).get(key) is not None for key in ("left_columns", "right_columns", "name_conflict")):
+        return inputs
+
     outgoing = [edge for edge in canvas.edges if edge.source == join_node.id]
     if len(outgoing) != 1:
         return inputs

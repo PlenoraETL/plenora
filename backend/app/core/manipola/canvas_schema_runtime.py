@@ -5,10 +5,14 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from app.shared.execution.canvas_graph import CanvasGraph
-from app.core.projects.canvas_models import CanvasState
+from app.core.projects.canvas_models import CanvasState, Edge
 from app.shared.resources.metadata import ResourceMetadata
 from app.core.dataframes.tabular import non_null_head_values
 from app.core.manipola.types import ColumnMetadataRows, StringMap
+from app.core.projects.schema_transform_handlers import TransformSchemaHandlers
+from app.core.manipola.transform_ordering import incoming_edge_sort_key_for_nodes
+from app.shared.execution.graph import kahn_topological_order
+from app.shared.execution.schema_types import ColumnSchema
 
 
 def extract_srid_from_canvas(
@@ -70,6 +74,14 @@ def build_canvas_type_map(
                 )
                 if column_name:
                     type_map[column_name] = type_map[f"{column_name}_L"] = type_map[f"{column_name}_R"] = column_type
+    # Solo i nuovi contratti richiedono la propagazione per ramo; il percorso
+    # dei canvas legacy conserva la precedenza storica dei metadati.
+    if any(
+        node.get_field("transform_op") == "select_columns"
+        or any(key in (node.get_field("config") or {}) for key in ("items", "left_columns", "right_columns", "name_conflict"))
+        for node in graph.nodes
+    ):
+        type_map.update(_new_transform_types(graph))
     return type_map
 
 
@@ -83,7 +95,7 @@ def build_columns_with_types(
     columns = []
     lower_map = {k.lower(): v for k, v in canvas_type_map.items()}
     for col in df.columns:
-        column_type = canvas_type_map.get(col) or lower_map.get(col.lower())
+        column_type = canvas_type_map.get(col) or lower_map.get(col.lower()) or None
 
         if column_type is None and (col.endswith("_L") or col.endswith("_R")):
             base = col[:-2]
@@ -154,3 +166,48 @@ def detect_geometry_from_content(
                 f"colonna '{col_name}', fallback a 'str': {geo_probe_err}"
             )
         return "str"
+
+
+def _new_transform_types(graph: CanvasGraph) -> StringMap:
+    """Propaga nomi e tipi separatamente per ciascun ramo del canvas."""
+    nodes = {node.id: node for node in graph.nodes}
+    raw_nodes = {node_id: graph.raw(node_id) for node_id in nodes}
+    handlers = TransformSchemaHandlers(ColumnSchema).build_transform_handlers({})
+    schemas = {}
+    result: StringMap = {}
+    order = kahn_topological_order(list(nodes), [(e["source"], e["target"]) for e in graph.edges], on_cycle="raise")
+    for node_id in order:
+        node = nodes[node_id]
+        incoming = [edge for edge in graph.edges if edge["target"] == node_id]
+        # Stesso ordinamento dei lati adottato dal runtime dei transform.
+        incoming.sort(key=lambda edge: incoming_edge_sort_key_for_nodes(
+            Edge.model_validate(edge), raw_nodes
+        ))
+        inputs = [schemas.get(edge["source"], []) for edge in incoming]
+        config = node.get_field("config") or {}
+        op = node.get_field("transform_op")
+        if op in handlers and inputs and any(inputs):
+            try:
+                schema = handlers[op](inputs, config, node_id)
+            except (ValueError, KeyError):
+                # I metadati salvati possono essere parziali rispetto ai dati
+                # caricati. Il runtime ha gia' validato le colonne: usa i dtype.
+                schema = []
+        elif inputs:
+            schema = inputs[0]
+        else:
+            schema = [ColumnSchema(name=col.get("alias") or col["name"], type=col.get("type") or "str")
+                      for col in (node.get_field("columns") or node.get_field("fields") or [])
+                      if isinstance(col, dict) and col.get("name")]
+        if op == "formula":
+            # Il tipo convenzionale dell'inferenza (real) non descrive formule
+            # stringa/bool. Senza tipo esplicito lascia decidere al dtype reale.
+            items = config.get("items")
+            formulas = items if items is not None else [config]
+            output_types = {item.get("new_column", "calculated"): item.get("output_type") or "" for item in formulas}
+            for col in schema:
+                if col.name in output_types:
+                    col.type = output_types[col.name]
+        schemas[node_id] = schema
+        result.update({col.name: col.type for col in schema})
+    return result

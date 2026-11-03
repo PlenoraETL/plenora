@@ -14,6 +14,7 @@ from app.core.dataframes.tabular import empty_object_series, join_columns_as_str
 from app.core.dataframes.ports import FrameLike
 from app.core.manipola.types import JsonRows
 from app.utils.logger import get_logger
+from app.shared.execution.column_selection import select_column_plan
 
 logger = get_logger(__name__)
 
@@ -294,3 +295,9 @@ def op_split_column(
     except Exception as e:
         logger.error(f"[CRASH] Errore Split Column: {e}", exc_info=True)
         raise
+
+
+def op_select_columns(df: DataFrame, columns: JsonRows | None = None) -> DataFrame:
+    """Seleziona, ordina e rinomina preservando le colonne upstream nuove."""
+    plan = select_column_plan(list(df.columns), columns if columns is not None else [])
+    return df[[name for name, _ in plan]].rename(columns=dict(plan))

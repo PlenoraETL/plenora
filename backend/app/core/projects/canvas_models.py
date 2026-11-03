@@ -192,7 +192,7 @@ class Node(BaseModel):
     transform_op: Optional[Literal[
         # Base (registry: 35)
         "merge", "join", "concat", "filter", "aggregate", "formula",
-        "sort", "distinct", "rename", "drop_columns", "reorder_columns",
+        "sort", "distinct", "rename", "drop_columns", "reorder_columns", "select_columns",
         "fill_na", "replace", "split_column", "concat_columns",
         "pivot", "conditional", "type_cast", "text_normalize",
         "md5_hash", "mask_data",

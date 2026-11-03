@@ -134,7 +134,7 @@ def test_registry_size_unchanged_after_metadata_addition():
     """Lock di non-regressione: aggiungere metadata schema_contract
     non deve alterare il numero totale di transform IDs."""
     registry = _load_registry()
-    assert len(registry.get("transforms", {})) == 70
+    assert len(registry.get("transforms", {})) == 71
 
 
 def test_no_other_transform_uses_output_columns_id():

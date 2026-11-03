@@ -60,6 +60,10 @@ def _is_empty_param_value(val: Any) -> bool:
 
 
 def _param_value_for_required_check(transform_op: str, param_id: str, config: Mapping[str, Any]) -> Any:
+    if transform_op == "filter" and config.get("conditions") is not None and param_id in {"column", "operator", "value"}:
+        return True
+    if transform_op == "formula" and config.get("items") is not None and param_id in {"new_column", "formula"}:
+        return True
     val = config.get(param_id)
     if transform_op == "join" and _is_empty_param_value(val):
         if param_id == "left_keys":
@@ -108,10 +112,23 @@ class ManipolaNodeValidator:
             str(c["id"]): c["name"]
             for c in upstream_cols if c.get("id") and c.get("name")
         }
-        resolved = resolve_config_column_refs(config, id_to_name)
+        ref_config = dict(config)
+        if transform_op == "filter" and config.get("conditions") is not None:
+            for key in ("column", "column_column_id", "operator", "value"):
+                ref_config.pop(key, None)
+        resolved = resolve_config_column_refs(ref_config, id_to_name)
         # #A: upstream indeterminate → ref mancante = warning, non error.
         severity = "warning" if upstream.status == "indeterminate" else "error"
-        for missing in sorted(referenced_column_names(resolved) - names):
+        references = referenced_column_names(resolved)
+        nested = resolved.get("conditions") if transform_op == "filter" else resolved.get("columns") if transform_op == "select_columns" else []
+        if isinstance(nested, list):
+            field = "name" if transform_op == "select_columns" else "column"
+            references.update(item[field] for item in nested if isinstance(item, dict) and isinstance(item.get(field), str))
+        for key in ("left_columns", "right_columns"):
+            selected = resolved.get(key)
+            if isinstance(selected, list):
+                references.update(name for name in selected if isinstance(name, str))
+        for missing in sorted(references - names):
             issues.append(Issue(
                 node_id=node_id, severity=severity, code="column.missing",
                 message=f"Colonna '{missing}' referenziata dal transform ma assente a monte",
@@ -119,16 +136,18 @@ class ManipolaNodeValidator:
             ))
 
         # 2. safety della formula (riusa la gate AST del runtime).
-        formula = config.get("formula")
-        if isinstance(formula, str) and formula.strip():
-            try:
-                _validate_formula_ast(formula)
-            except ValueError as exc:
-                issues.append(Issue(
-                    node_id=node_id, severity="error", code="formula.invalid",
-                    message=f"Formula non valida: {exc}",
-                    suggestion=None,
-                ))
+        formulas = [config.get("formula")]
+        if transform_op == "formula" and config.get("items") is not None:
+            formulas = [item.get("formula") for item in config["items"] if isinstance(item, dict)]
+        for formula in formulas:
+            if isinstance(formula, str) and formula.strip():
+                try:
+                    _validate_formula_ast(formula)
+                except ValueError as exc:
+                    issues.append(Issue(
+                        node_id=node_id, severity="error", code="formula.invalid",
+                        message=f"Formula non valida: {exc}", suggestion=None,
+                    ))
 
         # 3. completezza/coerenza dei parametri rispetto al registry (porting
         #    fedele di TRANSFORM_PARAM_REQUIRED [T2] e TRANSFORM_GEOMETRY_TYPE_INVALID
