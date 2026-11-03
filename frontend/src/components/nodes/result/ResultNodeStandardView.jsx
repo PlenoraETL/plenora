@@ -118,7 +118,8 @@ const ResultNodeStandardView = memo(({
   // Auto-reset: se formato e' geo ma non ci sono piu' colonne geometry → CSV
   useEffect(() => {
     if (!hasGeometryColumns && isGeoFormat) {
-      updateNodeData(id, { format: 'csv' });
+      // Correzione automatica, non una scelta dell'utente: non dirty (R1.8).
+      updateNodeData(id, { format: 'csv' }, { derived: true });
     }
   }, [hasGeometryColumns, isGeoFormat, id]);
 

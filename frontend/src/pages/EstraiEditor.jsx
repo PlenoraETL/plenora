@@ -70,7 +70,8 @@ function EstraiEditor() {
 
   useHexCanvas(hexCanvasRef);
   const {
-    nodes, edges, setNodes, setEdges, onNodesChange, onEdgesChange,
+    nodes, edges, onNodesChange, onEdgesChange,
+    loadGraph, addNodes, addEdges, editEdges, applyDerivedNodes,
     nodesRef, edgesRef, updateNodeData, deleteNode,
     handleSaveQuiet, dataNodes, getViewportCenter,
     isReadOnly, readOnlyProps
@@ -143,8 +144,8 @@ function EstraiEditor() {
   // evidenziati dallo store (setValidationHighlights, popolato da Valida/Esegui
   // via ResultNode). Coerente con Manipola/Arricchisci. La validazione live
   // in-memory è stata rimossa: la validazione è on-demand (pulsante → backend).
-  useValidationHighlights(setNodes);
-  const edgeHandlers = useEdgeHandlers(nodes, setEdges, { resultNodeType: 'resultNode' });
+  useValidationHighlights(applyDerivedNodes);
+  const edgeHandlers = useEdgeHandlers(nodes, editEdges, { resultNodeType: 'resultNode' });
   useEffect(() => {
     // H-9 (2026-05-26): early-return su loading PRIMA del check
     // canvas.nodes. Pre-fix: `if (!project?.canvas?.nodes || loading) return`
@@ -162,14 +163,10 @@ function EstraiEditor() {
     canvasLoadedForRef.current = canvasKey;
     const loadedNodes = deserializeNodes(project.canvas.nodes, { connection: projectConnection });
     const loadedEdges = (project.canvas.edges || []).map(e => createEdgeFromData(e, loadedNodes));
-    setNodes(loadedNodes);
-    setEdges([...loadedEdges, ...hydrateParameterBindingEdges(loadedNodes)]);
-    // setNodes/setEdges marcano dirty=true se inseriscono nuovi ID (lo fanno
-    // sempre al load). Resettiamo il flag così handleSaveQuiet non farà PUT
-    // inutili finché l'utente non modifica davvero qualcosa nel canvas.
-    useCanvasStore.getState().markClean();
+    // loadGraph: grafo dal backend, stato pulito e cronologia azzerata.
+    loadGraph(loadedNodes, [...loadedEdges, ...hydrateParameterBindingEdges(loadedNodes)]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // setNodes/setEdges/deserializeNodes/createEdgeFromData omessi: stabili dal
+    // loadGraph/deserializeNodes/createEdgeFromData omessi: stabili dal
     // ciclo di vita store. Includerli rifirerebbe il load a ogni re-render.
   }, [project, projectConnection, loading]);
 
@@ -179,16 +176,30 @@ function EstraiEditor() {
     const resultNode = dataNodes.find(n => n.type === 'resultNode');
     if (!resultNode) return;
     const outputColumns = calculateOutputColumnsRecursive(dataNodes, edges, resultNode.id);
-    if (JSON.stringify(resultNode.data.columns || []) === JSON.stringify(outputColumns)) return;
-    setNodes(nds => nds.map(node => {
-      if (node.type === 'resultNode') return { ...node, data: { ...node.data, columns: outputColumns } };
-      if (node.type === 'carica' || node.type === 'carica_arcgis' || node.type === 'caricaArcgis') return { ...node, data: { ...node.data, availableColumns: outputColumns } };
-      return node;
-    }));
-  }, [dataNodes, edges, setNodes]);
+    const signature = JSON.stringify(outputColumns);
+    // Dato DERIVATO (non dirty). Confronto PER NODO: prima un early-return
+    // sulle sole colonne del result lasciava vuote le availableColumns dei
+    // Carica dopo il reload (audit R3.6).
+    applyDerivedNodes(nds => {
+      let changed = false;
+      const next = nds.map(node => {
+        if (node.type === 'resultNode' && JSON.stringify(node.data.columns || []) !== signature) {
+          changed = true;
+          return { ...node, data: { ...node.data, columns: outputColumns } };
+        }
+        if ((node.type === 'carica' || node.type === 'carica_arcgis' || node.type === 'caricaArcgis')
+          && JSON.stringify(node.data.availableColumns || []) !== signature) {
+          changed = true;
+          return { ...node, data: { ...node.data, availableColumns: outputColumns } };
+        }
+        return node;
+      });
+      return changed ? next : nds;
+    });
+  }, [dataNodes, edges, applyDerivedNodes]);
   const handleUpdateFeatureWhere  = useCallback((nodeId, v)      => updateNodeData(nodeId, { where: v }), [updateNodeData]);
   const handleFeatureSchemaLoaded = useCallback((nodeId, schema) => {
-    setNodes(nds => nds.map(node => {
+    applyDerivedNodes(nds => nds.map(node => {
       if (node.id !== nodeId) return node;
       const columns = schema.columns
         ? schema.columns.map(c => ({ name: c.name, type: c.type || 'str', alias: null, visible: true }))
@@ -197,7 +208,7 @@ function EstraiEditor() {
         geometry_type_urby: schema.geometry_type_urby || node.data.geometry_type_urby,
         feature_count: schema.feature_count ?? node.data.feature_count, relationships: schema.relationships || [] } };
     }));
-  }, [setNodes]);
+  }, [applyDerivedNodes]);
 
   const handleAddRelatedLayer = useCallback(async (originNodeId, relation) => {
     const originNode = nodesRef.current.find(n => n.id === originNodeId);
@@ -232,12 +243,12 @@ function EstraiEditor() {
         join_conditions: null, on_filters: null, is_spatial: false,
         spatial_predicate: null, source_geom_column: null, target_geom_column: null, spatial_distance: null }
     };
-    setNodes(nds => nds.concat(newNode));
-    setEdges(eds => eds.concat(newEdge));
+    addNodes(newNode);
+    addEdges(newEdge);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // useCallback intenzionalmente vincolato a setNodes/setEdges + handler
     // schema; le altre identità non cambiano la semantica dell'add layer.
-  }, [setNodes, setEdges, handleUpdateFeatureWhere, handleFeatureSchemaLoaded]);
+  }, [addNodes, addEdges, handleUpdateFeatureWhere, handleFeatureSchemaLoaded]);
 
   // Registra azioni editor nello store
   useEffect(() => {
@@ -270,14 +281,14 @@ function EstraiEditor() {
   // per il check di esistenza; allineiamo EstraiEditor.
   const handleAddResultNode = useCallback(() => {
     if (nodesRef.current.some(n => n.type === 'resultNode')) { toast.warning('Puoi avere solo un nodo risultato per progetto'); return; }
-    setNodes(nds => nds.concat({
+    addNodes({
       id: `result_${Date.now()}`, type: 'resultNode', position: getViewportCenter(reactFlowInstance),
       data: { fileName: 'output', format: 'csv', distinct: false, limit: null,
         group_by_enabled: false, group_by_columns: [], aggregations: [],
         order_by_enabled: false, order_by_columns: [],
         having_enabled: false, having_conditions: [] }
-    }));
-  }, [setNodes, getViewportCenter, reactFlowInstance, toast]);
+    });
+  }, [addNodes, getViewportCenter, reactFlowInstance, toast]);
 
   const handleAddCaricanNode = useCallback(() => {
     const currentNodes = nodesRef.current;
@@ -292,10 +303,10 @@ function EstraiEditor() {
         transaction_mode: 'all_or_nothing', create_spatial_index: true, conflict_policy: 'abort',
         availableColumns: resultNode.data.columns || [] }
     };
-    setNodes(nds => nds.concat(newNode));
-    setEdges(eds => eds.concat({ id: `edge_result_carica_${Date.now()}`, source: resultNode.id, target: newNode.id,
-      label: 'Carica DB', animated: true, style: { stroke: '#7c3aed', strokeWidth: 2 }, data: { join_type: 'carica' } }));
-  }, [setNodes, setEdges, toast]);
+    addNodes(newNode);
+    addEdges({ id: `edge_result_carica_${Date.now()}`, source: resultNode.id, target: newNode.id,
+      label: 'Carica DB', animated: true, style: { stroke: '#7c3aed', strokeWidth: 2 }, data: { join_type: 'carica' } });
+  }, [addNodes, addEdges, toast]);
 
   const handleAddCaricanArcGISNode = useCallback(() => {
     const currentNodes = nodesRef.current;
@@ -309,10 +320,10 @@ function EstraiEditor() {
         arcgis_operation: 'add', arcgis_new_service_name: '', arcgis_new_layer_name: 'Layer 0',
         column_mappings: [], availableColumns: resultNode.data.columns || [] }
     };
-    setNodes(nds => nds.concat(newNode));
-    setEdges(eds => eds.concat({ id: `edge_result_carica_arcgis_${Date.now()}`, source: resultNode.id, target: newNode.id,
-      label: 'Carica ArcGIS', animated: true, style: { stroke: '#2DD4BF', strokeWidth: 2 }, data: { join_type: 'carica_arcgis' } }));
-  }, [setNodes, setEdges, toast]);
+    addNodes(newNode);
+    addEdges({ id: `edge_result_carica_arcgis_${Date.now()}`, source: resultNode.id, target: newNode.id,
+      label: 'Carica ArcGIS', animated: true, style: { stroke: '#2DD4BF', strokeWidth: 2 }, data: { join_type: 'carica_arcgis' } });
+  }, [addNodes, addEdges, toast]);
 
   // ESTRAI accetta solo sorgenti SQL/ArcGIS; Data Source resta in MANIPOLA.
 
@@ -320,20 +331,20 @@ function EstraiEditor() {
 
   const handleAddProjectInputNode = useCallback(() => {
     const ordinal = nodesRef.current.filter(node => node.type === 'project_input').length + 1;
-    setNodes(nds => nds.concat({
+    addNodes({
       id: `project_input_${Date.now()}`,
       type: 'project_input',
       position: getViewportCenter(reactFlowInstance),
       data: { input_key: `input_${ordinal}`, label: `Input ${ordinal}`, input_kind: 'text', required: true, expected_columns: [], validation: {}, bindings: [], order: ordinal - 1 },
-    }));
-  }, [setNodes, nodesRef, getViewportCenter, reactFlowInstance]);
+    });
+  }, [addNodes, nodesRef, getViewportCenter, reactFlowInstance]);
 
   const handleAddCommentNode = useCallback(() => {
     const pos = getViewportCenter(reactFlowInstance);
-    setNodes(nds => nds.concat({ id: `comment_${Date.now()}`, type: 'comment', position: pos, zIndex: -1,
+    addNodes({ id: `comment_${Date.now()}`, type: 'comment', position: pos, zIndex: -1,
       style: { width: 250, height: 150 },
-      data: { level: '', label: '', title: '', color: '#fbbf24' } }));
-  }, [setNodes, getViewportCenter, reactFlowInstance]);
+      data: { level: '', label: '', title: '', color: '#fbbf24' } });
+  }, [addNodes, getViewportCenter, reactFlowInstance]);
   // Costruisce un nodo tabella/vista (condiviso da drop e click-to-add).
   const buildTableNode = useCallback((tableName, isView, position) => {
     const tableColumns = (isView ? views[tableName] : catalog[tableName]) || [];
@@ -349,8 +360,8 @@ function EstraiEditor() {
   // Click su una tabella/vista del catalogo → la aggiunge al CENTRO del canvas
   // (il drag resta per il posizionamento preciso).
   const addTableAtCenter = useCallback((tableName, isView = false) => {
-    setNodes(nds => nds.concat(buildTableNode(tableName, isView, getViewportCenter(reactFlowInstance))));
-  }, [setNodes, buildTableNode, getViewportCenter, reactFlowInstance]);
+    addNodes(buildTableNode(tableName, isView, getViewportCenter(reactFlowInstance)));
+  }, [addNodes, buildTableNode, getViewportCenter, reactFlowInstance]);
 
   const onDrop = useCallback((event) => {
     event.preventDefault();
@@ -361,10 +372,10 @@ function EstraiEditor() {
     if (featureLayerRaw) {
       try {
         const ld = JSON.parse(featureLayerRaw);
-        setNodes(nds => nds.concat({ id: `fl_${Date.now()}`, type: 'featureLayerNode', position,
+        addNodes({ id: `fl_${Date.now()}`, type: 'featureLayerNode', position,
           data: { type: 'feature_source', layer_name: ld.layerName, layer_url: ld.layerUrl,
             connection_id: ld.connectionId, connection_name: ld.connectionName, service_name: ld.serviceName,
-            geometry_type: ld.geometryType, feature_count: ld.featureCount, where: '', columns: [] } }));
+            geometry_type: ld.geometryType, feature_count: ld.featureCount, where: '', columns: [] } });
       } catch (err) { console.error('Errore parsing feature layer data:', err); }
       return;
     }
@@ -379,8 +390,8 @@ function EstraiEditor() {
     const tableName = event.dataTransfer.getData('tableName');
     if (!tableName) return;
     const isView = event.dataTransfer.getData('isView') === 'true';
-    setNodes(nds => nds.concat(buildTableNode(tableName, isView, position)));
-  }, [reactFlowInstance, setNodes, buildTableNode]);
+    addNodes(buildTableNode(tableName, isView, position));
+  }, [reactFlowInstance, addNodes, buildTableNode]);
 
   const onDragOver = useCallback((event) => {
     event.preventDefault();

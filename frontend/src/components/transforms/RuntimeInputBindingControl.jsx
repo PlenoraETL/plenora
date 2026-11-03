@@ -36,8 +36,8 @@ export default function RuntimeInputBindingControl({
 }) {
   const nodes = useCanvasStore(state => state.nodes);
   const edges = useCanvasStore(state => state.edges);
-  const setNodes = useCanvasStore(state => state.setNodes);
-  const setEdges = useCanvasStore(state => state.setEdges);
+  const addNodes = useCanvasStore(state => state.addNodes);
+  const editEdges = useCanvasStore(state => state.editEdges);
   const isReadOnly = useCanvasStore(state => state.isReadOnly);
 
   if (!targetNodeId || !isBindableTransformParameter(param, transformDefinition)) {
@@ -55,7 +55,7 @@ export default function RuntimeInputBindingControl({
   ));
 
   const connect = (sourceId) => {
-    setEdges(current => {
+    editEdges(current => {
       const withoutCurrent = current.filter(edge => !(
         isParameterBindingEdge(edge)
         && edge.target === targetNodeId
@@ -100,7 +100,7 @@ export default function RuntimeInputBindingControl({
         order: ordinal - 1,
       },
     };
-    setNodes(current => [...current, node]);
+    addNodes(node);
     connect(id);
   };
 

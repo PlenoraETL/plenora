@@ -3,7 +3,7 @@
  *
  * useCanvasKeyboard: Delete/Backspace per eliminare nodi/edges selezionati
  *
- * L'hook accetta { enabled, onDeleteNode, setEdges, nodes, edges }.
+ * L'hook accetta { enabled, onDeleteNode, onDeleteEdges, nodes, edges }.
  */
 import { useEffect, useCallback, useRef } from 'react';
 
@@ -15,7 +15,7 @@ import { useEffect, useCallback, useRef } from 'react';
  * @param {Array} options.nodes - Array dei nodi React Flow
  * @param {Array} options.edges - Array degli edges React Flow
  * @param {Function} options.onDeleteNode - Callback per eliminare un nodo
- * @param {Function} options.setEdges - Setter degli edges da React Flow
+ * @param {Function} options.onDeleteEdges - Rimuove gli edge per id (azione utente dello store)
  * @param {boolean} options.enabled - Se false, disabilita gli handler (default: true)
  * 
  * Uso:
@@ -24,7 +24,7 @@ import { useEffect, useCallback, useRef } from 'react';
  *   nodes,
  *   edges,
  *   onDeleteNode: handleDeleteNode,
- *   setEdges
+ *   onDeleteEdges
  * });
  * ```
  */
@@ -33,7 +33,7 @@ export function useCanvasKeyboard(options) {
     nodes,
     edges,
     onDeleteNode,
-    setEdges,
+    onDeleteEdges,
     enabled = true,
     onUndo,          // #24: Ctrl/Cmd+Z
     onRedo,          // #24: Ctrl/Cmd+Shift+Z o Ctrl/Cmd+Y
@@ -48,7 +48,7 @@ export function useCanvasKeyboard(options) {
   // canvas attivo. Post-fix: refs aggiornati via effect separato;
   // `handleKeyDown` legge lazy `nodesRef.current` / `edgesRef.current`
   // ed e' referenzialmente stabile per tutto il ciclo di vita
-  // (deps = [onDeleteNode, setEdges]).
+  // (deps = [onDeleteNode, onDeleteEdges]).
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
@@ -98,13 +98,11 @@ export function useCanvasKeyboard(options) {
 
       // Elimina edges selezionati
       const selectedEdges = edgesRef.current.filter(e => e.selected);
-      if (selectedEdges.length > 0 && setEdges) {
-        setEdges((eds) =>
-          eds.filter(edge => !selectedEdges.find(e => e.id === edge.id))
-        );
+      if (selectedEdges.length > 0 && onDeleteEdges) {
+        onDeleteEdges(selectedEdges.map(e => e.id));
       }
     }
-  }, [onDeleteNode, setEdges, onUndo, onRedo, onBeforeDelete]);
+  }, [onDeleteNode, onDeleteEdges, onUndo, onRedo, onBeforeDelete]);
 
   useEffect(() => {
     if (!enabled) return;

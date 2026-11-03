@@ -37,7 +37,7 @@ describe('useCanvasStore save-path contract', () => {
   it('serializes the current updated canvas state when handleSaveQuiet runs', async () => {
     const store = useCanvasStore.getState();
     store.init('proj-save-1', 'arricchisci');
-    store.setNodes([
+    store.addNodes([
       {
         id: 'api-1',
         type: 'api_enrich',
@@ -60,7 +60,7 @@ describe('useCanvasStore save-path contract', () => {
         },
       },
     ]);
-    store.setEdges([{ id: 'edge-1', source: 'api-1', target: 'result-1' }]);
+    store.addEdges([{ id: 'edge-1', source: 'api-1', target: 'result-1' }]);
     store.markClean();
 
     useCanvasStore.getState().updateNodeData('api-1', {
@@ -89,7 +89,7 @@ describe('useCanvasStore save-path contract', () => {
   it('persists column alias changes instead of only proving that save was called', async () => {
     const store = useCanvasStore.getState();
     store.init('proj-save-2', 'manipola');
-    store.setNodes([
+    store.addNodes([
       {
         id: 'result-1',
         type: 'result',
@@ -128,7 +128,7 @@ describe('useCanvasStore save-path contract', () => {
   it('marks parameter-edge edits dirty and persists the selected runtime field', async () => {
     const store = useCanvasStore.getState();
     store.init('proj-binding-1', 'manipola');
-    store.setNodes([
+    store.addNodes([
       {
         id: 'input-1',
         type: 'project_input',
@@ -147,7 +147,7 @@ describe('useCanvasStore save-path contract', () => {
         data: { transform_op: 'filter', config: { value: '' } },
       },
     ]);
-    store.setEdges([{
+    store.addEdges([{
       id: 'binding-1',
       source: 'input-1',
       target: 'filter-1',
@@ -180,7 +180,7 @@ describe('useCanvasStore save-path contract', () => {
   it('does not mark automatic React Flow dimension measurements as unsaved changes', async () => {
     const store = useCanvasStore.getState();
     store.init('proj-dim-auto', 'estrai');
-    store.setNodes([
+    store.addNodes([
       {
         id: 'result-1',
         type: 'result',
@@ -210,7 +210,7 @@ describe('useCanvasStore save-path contract', () => {
   it('marks explicit node resizes dirty and persists annotation size', async () => {
     const store = useCanvasStore.getState();
     store.init('proj-resize-1', 'estrai');
-    store.setNodes([
+    store.addNodes([
       {
         id: 'comment-1',
         type: 'comment',
@@ -262,7 +262,7 @@ describe('useCanvasStore save-path contract', () => {
 
     const store = useCanvasStore.getState();
     store.init('proj-save-race', 'manipola');
-    store.setNodes([{
+    store.addNodes([{
       id: 'node-1',
       type: 'transform',
       position: { x: 0, y: 0 },

@@ -87,7 +87,8 @@ const FeatureLayerNode = memo(({ data, id }) => {
           alias:   f.alias || null,
           visible: true,
         }));
-        updateNodeData(id, { columns });
+        // Schema caricato dal servizio: dato derivato, non dirty (audit R1.8).
+        updateNodeData(id, { columns }, { derived: true });
       }
     } catch (err) {
       console.error('Errore caricamento schema layer:', err);

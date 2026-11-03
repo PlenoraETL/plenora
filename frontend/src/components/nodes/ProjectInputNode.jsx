@@ -60,7 +60,7 @@ function ProjectInputNode({ id, data, selected }) {
   const deleteNode = useCanvasStore(s => s.deleteNode);
   const nodes = useCanvasStore(s => s.nodes);
   const edges = useCanvasStore(s => s.edges);
-  const setEdges = useCanvasStore(s => s.setEdges);
+  const removeEdges = useCanvasStore(s => s.removeEdges);
   const updateEdge = useCanvasStore(s => s.updateEdge);
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
   const [registry, setRegistry] = useState(registryCache);
@@ -124,7 +124,7 @@ function ProjectInputNode({ id, data, selected }) {
   };
   const removeBinding = edgeId => {
     if (isReadOnly) return;
-    setEdges(current => current.filter(edge => edge.id !== edgeId));
+    removeEdges(edgeId);
   };
   const updateValidation = changes => update({
     validation: { ...(data.validation || {}), ...changes },
@@ -157,7 +157,9 @@ function ProjectInputNode({ id, data, selected }) {
         <select className="nodrag" value={kind} disabled={isReadOnly} onChange={event => {
           if (isReadOnly) return;
           const nextKind = event.target.value;
-          setEdges(current => current.filter(edge => edge.source !== id));
+          // removeEdges fa lo snapshot PRIMA di togliere i binding: l'undo
+          // del cambio tipo li ripristina (audit R1.12).
+          removeEdges(edge => edge.source === id);
           update({
             input_kind: nextKind,
             bindings: [],

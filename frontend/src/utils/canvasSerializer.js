@@ -1,253 +1,36 @@
-import { nd } from './nodeHelpers';
+import { canonicalNodeType, persistedNodeData, persistenceValue } from './nodeTypeRegistry';
 import {
   dataFlowEdges,
   isParameterBindingEdge,
   serializedBindingsForInput,
 } from './runtimeBindingEdges';
 
-/**
- * canvasSerializer.js
- *
- * Unica fonte di verità per la serializzazione del canvas prima del salvataggio.
- *
- * FORMATO UNIFICATO (Fase 5):
- * Tutti e tre gli editor (estrai, manipola, arricchisci) serializzano al
- * medesimo formato flat — nessun wrapper "data: {}".
- * I campi vivono direttamente sul nodo, esattamente come il modello Pydantic
- * Node in shared/models.py.
- *
- * Il parametro { mode } è mantenuto per compatibilità ma ignorato.
- */
 
-const nodeSize = (node) => ({
-  width:  node.style?.width  || node.data?.width  || node.width  || 250,
-  height: node.style?.height || node.data?.height || node.height || 150,
-});
-
-const serializers = {
-
-  tableNode: (node) => ({
-    id: node.id, type: 'source', position: node.position,
-    connection_id:      nd(node, 'connection_id',      null),
-    table_name:         nd(node, 'table_name'),
-    alias:              nd(node, 'alias',              null),
-    columns:            nd(node, 'columns',            []),
-    filters:            nd(node, 'filters',            []),
-    calculated_columns: nd(node, 'calculated_columns', []),
-  }),
-
-  featureLayerNode: (node) => ({
-    id: node.id, type: 'feature_source', position: node.position,
-    layer_name:      node.data?.layer_name,
-    layer_url:       node.data?.layer_url,
-    connection_id:   node.data?.connection_id,
-    connection_name: node.data?.connection_name,
-    service_name:    node.data?.service_name,
-    geometry_type:   node.data?.geometry_type,
-    feature_count:   node.data?.feature_count  ?? null,
-    where:           node.data?.where          ?? '',
-    columns:         node.data?.columns        ?? [],
-    relationships:   node.data?.relationships  ?? [],
-  }),
-
-  projectSource: (node) => ({
-    id: node.id, type: 'project_source', position: node.position,
-    source_project_id: nd(node, 'source_project_id'),
-    columns:           nd(node, 'columns', []),
-  }),
-
-  fileSource: (node) => ({
-    id: node.id, type: 'file_source', position: node.position,
-    file_source_id: nd(node, 'file_source_id'),
-    columns:        nd(node, 'columns', []),
-  }),
-
-  project_input: (node, { edges = [] } = {}) => ({
-    id: node.id, type: 'project_input', position: node.position,
-    input_key:       nd(node, 'input_key', ''),
-    label:           nd(node, 'label', 'Input'),
-    input_kind:      nd(node, 'input_kind', 'file'),
-    description:     nd(node, 'description', ''),
-    required:        nd(node, 'required', true),
-    default_value:   nd(node, 'default_value', null),
-    multiple:        nd(node, 'multiple', false),
-    expected_columns: nd(node, 'expected_columns', []),
-    validation:      nd(node, 'validation', {}),
-    connection_set_id: nd(node, 'connection_set_id', null),
-    bindings:        serializedBindingsForInput(node, edges),
-    order:           nd(node, 'order', 0),
-  }),
-
-  datasourceNode: (node) => ({
-    id: node.id, type: 'datasource_node', position: node.position,
-    mode:            nd(node, 'mode', 'source'),
-    datasource_id:   nd(node, 'datasource_id', ''),
-    datasource_name: nd(node, 'datasource_name', ''),
-    // Sorgente
-    file_mode:       nd(node, 'file_mode', 'fixed'),
-    file_path:       nd(node, 'file_path', ''),
-    folder_path:     nd(node, 'folder_path', ''),
-    dynamic_rule:    nd(node, 'dynamic_rule', 'latest'),
-    pattern:         nd(node, 'pattern', ''),
-    format:          nd(node, 'format', ''),
-    columns:         nd(node, 'columns', []),
-    parse_options:   nd(node, 'parse_options', {}),
-    // Carica
-    dest_folder:     nd(node, 'dest_folder', ''),
-    dest_filename:   nd(node, 'dest_filename', ''),
-    dest_format:     nd(node, 'dest_format', 'csv'),
-  }),
-
-  transform: (node) => ({
-    id: node.id, type: 'transform', position: node.position,
-    transform_op: nd(node, 'transform_op'),
-    config:       nd(node, 'config', {}),
-    collapsed:    nd(node, 'collapsed', false),
-  }),
-
-  multi_join: (node) => {
-    const cfg = node.data?.config || {};
-    // Per 2 sorgenti la UI usa `join_pairs` (`{left, right}`),
-    // anche con nomi diversi. Per >2 usa `join_keys` comuni.
-    // Manteniamo `join_keys` per compatibilita' e inviamo anche
-    // `left_keys/right_keys` al runtime quando sono presenti coppie.
-    const rawPairs = Array.isArray(cfg.join_pairs) ? cfg.join_pairs : [];
-    const pairs = rawPairs
-      .filter(p => p && p.left && p.right)
+function serializeNode(node, edges, allNodes) {
+  const type = canonicalNodeType(node.type);
+  const data = persistedNodeData(node);
+  if (type === 'result') data.columns = _computeResultColumns(node, allNodes, edges);
+  if (type === 'project_input') {
+    data.bindings = serializedBindingsForInput({ ...node, data }, edges);
+  }
+  if (type === 'comment') {
+    data.width = node.style?.width ?? data.width;
+    data.height = node.style?.height ?? data.height;
+  }
+  if (type === 'multi_join' && node.data?.config) {
+    const cfg = node.data.config;
+    const pairs = (cfg.join_pairs ?? data.join_pairs).filter(p => p && p.left && p.right)
       .map(p => ({ left: p.left, right: p.right }));
-    const leftKeys = pairs.map(p => p.left);
-    const rightKeys = pairs.map(p => p.right);
-    const derivedKeys = pairs
-      .filter(p => p.left === p.right)
-      .map(p => p.left);
-    const explicitKeys = cfg.join_keys ?? node.data?.join_keys ?? [];
-    const explicitKeyIds = cfg.join_key_ids ?? node.data?.join_key_ids ?? [];
-    const mergedKeys = [
-      ...new Set([...(explicitKeys || []), ...derivedKeys]),
-    ];
-    return {
-      id: node.id, type: 'multi_join', position: node.position,
-      join_keys:       mergedKeys,
-      join_key_ids:    explicitKeyIds,
-      join_pairs:      pairs,
-      left_keys:       leftKeys,
-      right_keys:      rightKeys,
-      multi_join_type: cfg.join_type ?? node.data?.multi_join_type ?? 'inner',
-    };
-  },
-
-  api_enrich: (node) => ({
-    id: node.id, type: 'api_enrich', position: node.position,
-    api_id:            nd(node, 'api_id'),
-    api_name:          nd(node, 'api_name'),
-    param_mapping:     nd(node, 'param_mapping', {}),
-    columns:           nd(node, 'columns', []),
-    enrich_type:       nd(node, 'enrich_type'),
-    api_type:          nd(node, 'api_type'),
-    connection_type:   nd(node, 'connection_type'),
-    exec_params:       nd(node, 'exec_params', {}),
-    endpoint:          nd(node, 'endpoint'),
-    parameters:        nd(node, 'parameters'),
-    output_mapping:    nd(node, 'output_mapping'),
-    static_parameters: nd(node, 'static_parameters'),
-    batch:             nd(node, 'batch', {}),
-    continue_on_error: nd(node, 'continue_on_error', true),
-    skip_null_params:  nd(node, 'skip_null_params', true),
-    max_errors:        nd(node, 'max_errors', 0),
-    execute_if:        nd(node, 'execute_if', null),
-    // Processore File (rest_file): config multipart in/binary out
-    request:           nd(node, 'request',  null),
-    response:          nd(node, 'response', null),
-    // File aggiuntivi caricati inline sul nodo (per file_fields con
-    // source='extra_input'). Formato: {field_name: {file_source_id, ...}}
-    extra_files:       nd(node, 'extra_files', null),
-    // Tag opzionale che dice al canvas "lo zip prodotto da questo nodo
-    // ha questa struttura nota" (es. 'imdf'). Il nodo result downstream
-    // legge questo tag per specializzarsi.
-    output_kind:       nd(node, 'output_kind', null),
-  }),
-
-  result: (node, { edges = [], allNodes = [] } = {}) => {
-    const columns = _computeResultColumns(node, allNodes, edges);
-    return {
-      id: node.id, type: 'result', position: node.position,
-      fileName:         nd(node, 'fileName',         'output'),
-      format:           nd(node, 'format',            'csv'),
-      distinct:         nd(node, 'distinct',          false),
-      limit:            nd(node, 'limit',              null),
-      geomColumn:       nd(node, 'geomColumn',         null),
-      columns,
-      group_by_enabled:  nd(node, 'group_by_enabled',  false),
-      group_by_columns:  nd(node, 'group_by_columns',  []),
-      aggregations:      nd(node, 'aggregations',       []),
-      order_by_enabled:  nd(node, 'order_by_enabled',  false),
-      order_by_columns:  nd(node, 'order_by_columns',  []),
-      having_enabled:    nd(node, 'having_enabled',    false),
-      having_conditions: nd(node, 'having_conditions', []),
-    };
-  },
-
-  carica: (node) => ({
-    id: node.id, type: 'carica', position: node.position,
-    dest_type:               nd(node, 'dest_type', 'db'),
-    connection_id:           nd(node, 'connection_id'),
-    schema_name:             nd(node, 'schema_name'),
-    table_name:              nd(node, 'table_name'),
-    write_mode:              nd(node, 'write_mode',              'create'),
-    column_mappings:         nd(node, 'column_mappings',         []),
-    match_columns:           nd(node, 'match_columns',           []),
-    batch_size:              nd(node, 'batch_size',              1000),
-    transaction_mode:        nd(node, 'transaction_mode',        'all_or_nothing'),
-    create_spatial_index:    nd(node, 'create_spatial_index',    true),
-    conflict_policy:         nd(node, 'conflict_policy',         'abort'),
-    create_unique_index:     nd(node, 'create_unique_index',     false),
-    unique_key_column:       nd(node, 'unique_key_column',       ''),
-    rest_url:                nd(node, 'rest_url',                ''),
-    rest_method:             nd(node, 'rest_method',             'POST'),
-    rest_headers:            nd(node, 'rest_headers',            []),
-    rest_body_mapping:       nd(node, 'rest_body_mapping',       []),
-    rest_batch_mode:         nd(node, 'rest_batch_mode',         'batch'),
-    rest_batch_size:         nd(node, 'rest_batch_size',         1000),
-    rest_timeout_seconds:    nd(node, 'rest_timeout_seconds',    30),
-    rest_success_statuses:   nd(node, 'rest_success_statuses',   [200, 201, 202, 204]),
-  }),
-
-  caricaArcgis: (node) => ({
-    id: node.id, type: 'carica_arcgis', position: node.position,
-    dest_type:               'arcgis',
-    arcgis_connection_id:    nd(node, 'arcgis_connection_id'),
-    arcgis_service_url:      nd(node, 'arcgis_service_url'),
-    arcgis_layer_url:        nd(node, 'arcgis_layer_url'),
-    arcgis_operation:        nd(node, 'arcgis_operation',        'add'),
-    arcgis_folder_id:        nd(node, 'arcgis_folder_id',        ''),
-    arcgis_match_column:     nd(node, 'arcgis_match_column',     ''),
-    arcgis_new_service_name: nd(node, 'arcgis_new_service_name'),
-    arcgis_new_layer_name:   nd(node, 'arcgis_new_layer_name',   'Layer 0'),
-    source_srid:             nd(node, 'source_srid',             null),
-    column_mappings:         nd(node, 'column_mappings',         []),
-  }),
-
-  staticValues: (node) => ({
-    id: node.id, type: 'staticValues', position: node.position,
-    label:  nd(node, 'label',  'Valori Statici'),
-    fields: nd(node, 'fields', []),
-  }),
-
-  comment: (node) => ({
-    id: node.id, type: 'comment', position: node.position,
-    ...nodeSize(node),
-    level:      nd(node, 'level',       ''),
-    label:      nd(node, 'label',       ''),
-    title:      nd(node, 'title',       ''),
-    color:      nd(node, 'color',       '#fbbf24'),
-    arrowStyle: nd(node, 'arrowStyle',  null),
-  }),
-};
-
-// alias nomi ReactFlow → tipo serializzato
-serializers.resultNode     = serializers.result;
-serializers.project_source = serializers.projectSource;
-serializers.file_source    = serializers.fileSource;
+    data.join_keys = [...new Set([...(cfg.join_keys ?? data.join_keys),
+      ...pairs.filter(p => p.left === p.right).map(p => p.left)])];
+    data.join_key_ids = cfg.join_key_ids ?? data.join_key_ids;
+    data.join_pairs = pairs;
+    data.left_keys = pairs.length ? pairs.map(p => p.left) : (cfg.left_keys ?? data.left_keys);
+    data.right_keys = pairs.length ? pairs.map(p => p.right) : (cfg.right_keys ?? data.right_keys);
+    data.multi_join_type = cfg.join_type ?? data.multi_join_type;
+  }
+  return persistenceValue({ id: node.id, type, position: node.position, ...data });
+}
 
 export function serializeEdge(edge) {
   if (isParameterBindingEdge(edge)) return null;
@@ -263,18 +46,13 @@ export function serializeEdge(edge) {
     spatial_predicate:  edge.data.spatial_predicate  || null,
     source_geom_column: edge.data.source_geom_column || null,
     target_geom_column: edge.data.target_geom_column || null,
-    spatial_distance:   edge.data.spatial_distance   || null,
+    spatial_distance:   edge.data.spatial_distance   ?? null,
   };
 }
 
 export function serializeCanvas(nodes, edges, _options = {}) {
-  const ctx = { edges, allNodes: nodes };
-  const serializedNodes = nodes.map(node => {
-    const s = serializers[node.type];
-    return s ? s(node, ctx) : { id: node.id, type: node.type, position: node.position, ...(node.data || {}) };
-  });
   return {
-    nodes: serializedNodes,
+    nodes: nodes.map(node => serializeNode(node, edges, nodes)),
     edges: edges.map(serializeEdge).filter(Boolean),
   };
 }

@@ -26,8 +26,17 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
 
   const nodes          = useCanvasStore(s => s.nodes);
   const edges          = useCanvasStore(s => s.edges);
-  const setNodes       = useCanvasStore(s => s.setNodes);
-  const setEdges       = useCanvasStore(s => s.setEdges);
+  // Canali di mutazione espliciti (audit R1): load / utente / derivato.
+  const loadGraph         = useCanvasStore(s => s.loadGraph);
+  const addNodes          = useCanvasStore(s => s.addNodes);
+  const addEdges          = useCanvasStore(s => s.addEdges);
+  const removeEdges       = useCanvasStore(s => s.removeEdges);
+  const editNodes         = useCanvasStore(s => s.editNodes);
+  const editEdges         = useCanvasStore(s => s.editEdges);
+  const updateEdge        = useCanvasStore(s => s.updateEdge);
+  const patchNodeConfig   = useCanvasStore(s => s.patchNodeConfig);
+  const applyDerivedNodes = useCanvasStore(s => s.applyDerivedNodes);
+  const applyDerivedEdges = useCanvasStore(s => s.applyDerivedEdges);
   const onNodesChange  = useCanvasStore(s => s.onNodesChange);
   const onEdgesChange  = useCanvasStore(s => s.onEdgesChange);
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
@@ -92,7 +101,7 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
     nodes,
     edges,
     onDeleteNode: isReadOnly ? () => {} : deleteNode,
-    setEdges: isReadOnly ? () => {} : setEdges,
+    onDeleteEdges: isReadOnly ? () => {} : removeEdges,
     onUndo: isReadOnly ? () => {} : undo,
     onRedo: isReadOnly ? () => {} : redo,
     onBeforeDelete: isReadOnly ? () => {} : takeSnapshot,
@@ -105,7 +114,7 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
    * produceva una nuova array identity ad ogni render. EstraiEditor lo usa
    * come dep di un useEffect (`calculateOutputColumnsRecursive`); senza
    * memoization l'effect si rieseguiva ad ogni drag/hover/selection del
-   * canvas, chiamando setNodes inutile su ogni interazione utente.
+   * canvas, rieseguendo il calcolo colonne su ogni interazione utente.
    * Post-fix: useMemo + dep `nodes` → recompute solo quando `nodes`
    * cambia veramente (length o item identity).
    */
@@ -150,8 +159,6 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
     // Stato ReactFlow
     nodes,
     edges,
-    setNodes,
-    setEdges,
     onNodesChange,
     onEdgesChange,
 
@@ -159,7 +166,17 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
     nodesRef,
     edgesRef,
 
-    // Operazioni nodi
+    // Mutazioni (vedi canali in useCanvasStore)
+    loadGraph,
+    addNodes,
+    addEdges,
+    removeEdges,
+    editNodes,
+    editEdges,
+    updateEdge,
+    patchNodeConfig,
+    applyDerivedNodes,
+    applyDerivedEdges,
     updateNodeData,
     deleteNode,
 

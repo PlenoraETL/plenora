@@ -111,7 +111,8 @@ const useCanvasStore = create(
 
       /**
        * Modalità sola lettura. Quando true:
-       *  - tutte le azioni di mutazione del canvas (setNodes, setEdges,
+       *  - tutte le azioni di mutazione UTENTE del canvas (addNodes, addEdges,
+       *    removeEdges, editNodes, editEdges, updateEdge, patchNodeConfig,
        *    onNodesChange/onEdgesChange "rilevanti", updateNodeData, deleteNode,
        *    toggleColumn, toggleAllColumns, addCalculatedColumn,
        *    removeCalculatedColumn, updateColumnAlias, handleSaveQuiet)
@@ -137,10 +138,9 @@ const useCanvasStore = create(
        * - Settato a false da: markClean() (chiamato dopo load) e
        *   handleSaveQuiet dopo un save riuscito.
        *
-       * NOTA: setNodes/setEdges NON settano dirty perché vengono usati
-       * dagli editor per init programmatica (load canvas, propagazione
-       * colonne, schemi). Quei cambiamenti sono deterministici dal canvas
-       * caricato e verranno riderivati al prossimo load.
+       * I dati DERIVATI (applyDerivedNodes/Edges: colonne propagate, schemi,
+       * highlight) e il load (loadGraph) non settano mai dirty: sono
+       * deterministici dal canvas caricato e vengono riderivati al load.
        */
       isDirty: false,
 
@@ -189,7 +189,7 @@ const useCanvasStore = create(
         get().editorActionsRef.current = {};
         // NOTA: non resettiamo isReadOnly perché viene impostato subito dopo da
         // useCanvasCore (dipende dal ruolo utente, non dal progetto).
-        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, validationHighlights: [], lastValidationSummary: null, past: [], future: [] }, false, 'reset');
+        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, validationHighlights: [], lastValidationSummary: null, past: [], future: [], lastTaskResult: null }, false, 'reset');
       },
 
       // ── Undo/Redo (#24) ───────────────────────────────────────────────
@@ -336,55 +336,90 @@ const useCanvasStore = create(
         );
       },
 
-      // SETTERS (per caricamento canvas da API e operazioni bulk)
-      // Accettano valore diretto o funzione updater (come useState)
-      // setNodes / setEdges sono usate sia per init programmatico (load
-      // canvas, propagazione colonne, schemas, validation styles) sia per
-      // azioni utente (add nodo da pulsante, drag&drop). Distinguiamo le due
-      // via heuristica strutturale: se la lista risultante contiene ID che
-      // non esistevano prima OPPURE è più corta, è un cambiamento strutturale
-      // (add/remove) → marca dirty. Altrimenti è un update di contenuto
-      // (propagazione colonne, stili) e NON marca dirty. L'init iniziale
-      // (load) viene comunque ripulito da markClean() chiamata dall'editor.
+      // ── Mutazioni del grafo: TRE canali espliciti (audit R1) ─────────────
+      // Prima esistevano solo setNodes/setEdges e lo store indovinava se una
+      // modifica era dell'utente guardando gli id (strutturale = dirty). La
+      // regola sbagliava in entrambi i versi: modificare un join esistente
+      // (stessi id) non marcava dirty -> il salvataggio veniva saltato; gli
+      // effetti automatici all'apertura marcavano dirty. Ora ogni chiamante
+      // dichiara cosa sta facendo:
+      //
+      //  1. LOAD     loadGraph            -> grafo dal backend: pulito, history vuota
+      //  2. UTENTE   addNodes/addEdges/removeEdges/editNodes/editEdges
+      //              (+ updateEdge, updateNodeData, patchNodeConfig, deleteNode…)
+      //              -> snapshot undo + dirty; no-op in sola lettura
+      //  3. DERIVATO applyDerivedNodes/applyDerivedEdges
+      //              -> colonne propagate, schemi, highlight: MAI dirty ne'
+      //                 snapshot; ammesso anche in sola lettura
+      //
+      // setNodes/setEdges non esistono piu': un test di enumerazione vieta di
+      // reintrodurli (tests/shared/canvasMutationChannels.contract.test.js).
 
-      // NOTA: setNodes/setEdges NON sono bloccate in sola lettura: vengono
-      // usate dagli editor per il load del canvas e dalle effect di
-      // propagazione colonne/schemas/validation styles, che devono funzionare
-      // anche per i viewer. I path di mutazione utente (deleteNode,
-      // updateNodeData, toggle*, *CalculatedColumn, updateColumnAlias) sono
-      // bloccati a parte sotto.
-
-      setNodes: (nodes) =>
+      /** Carica il grafo dal backend: stato pulito e cronologia azzerata. */
+      loadGraph: (nodes, edges) => {
+        lastSnapshotTs = 0;
         set(
-          state => {
-            const newNodes = typeof nodes === 'function' ? nodes(state.nodes) : nodes;
-            const oldIds = new Set(state.nodes.map(n => n.id));
-            const structural = newNodes.length < state.nodes.length
-              || newNodes.some(n => !oldIds.has(n.id));
-            return {
-              nodes: newNodes,
-              ...(structural && !state.isReadOnly ? dirtyAndClearHighlights() : {})
-            };
-          },
+          { nodes, edges, isDirty: false, past: [], future: [], validationHighlights: [], lastValidationSummary: null },
           false,
-          'setNodes'
-        ),
+          'loadGraph',
+        );
+      },
 
-      setEdges: (edges) =>
+      /** Mutazione utente generica dei nodi (updater funzionale). */
+      editNodes: (updater) => {
+        if (get().isReadOnly) return;
+        get().takeSnapshot();
         set(
-          state => {
-            const newEdges = typeof edges === 'function' ? edges(state.edges) : edges;
-            const oldIds = new Set(state.edges.map(e => e.id));
-            const structural = newEdges.length < state.edges.length
-              || newEdges.some(e => !oldIds.has(e.id));
-            return {
-              edges: newEdges,
-              ...(structural && !state.isReadOnly ? dirtyAndClearHighlights() : {})
-            };
-          },
+          state => ({ nodes: updater(state.nodes), ...dirtyAndClearHighlights() }),
           false,
-          'setEdges'
-        ),
+          'editNodes',
+        );
+      },
+
+      /** Mutazione utente generica degli edge (updater funzionale). */
+      editEdges: (updater) => {
+        if (get().isReadOnly) return;
+        get().takeSnapshot();
+        set(
+          state => ({ edges: updater(state.edges), ...dirtyAndClearHighlights() }),
+          false,
+          'editEdges',
+        );
+      },
+
+      /** Aggiunge uno o piu' nodi (azione utente). */
+      addNodes: (nodeOrNodes) => {
+        const added = Array.isArray(nodeOrNodes) ? nodeOrNodes : [nodeOrNodes];
+        get().editNodes(nodes => nodes.concat(added));
+      },
+
+      /** Aggiunge uno o piu' edge (azione utente). */
+      addEdges: (edgeOrEdges) => {
+        const added = Array.isArray(edgeOrEdges) ? edgeOrEdges : [edgeOrEdges];
+        get().editEdges(edges => edges.concat(added));
+      },
+
+      /** Rimuove edge per id (stringa o lista) o per predicato (azione utente). */
+      removeEdges: (idsOrPredicate) => {
+        const shouldRemove = typeof idsOrPredicate === 'function'
+          ? idsOrPredicate
+          : (edge => [].concat(idsOrPredicate).includes(edge.id));
+        get().editEdges(edges => edges.filter(edge => !shouldRemove(edge)));
+      },
+
+      /** Aggiornamento DERIVATO dei nodi: mai dirty, mai snapshot. */
+      applyDerivedNodes: (updater) =>
+        set(state => {
+          const next = updater(state.nodes);
+          return next === state.nodes ? state : { nodes: next };
+        }, false, 'applyDerivedNodes'),
+
+      /** Aggiornamento DERIVATO degli edge: mai dirty, mai snapshot. */
+      applyDerivedEdges: (updater) =>
+        set(state => {
+          const next = updater(state.edges);
+          return next === state.edges ? state : { edges: next };
+        }, false, 'applyDerivedEdges'),
 
       /** Aggiorna un edge esistente come mutazione utente salvabile. */
       updateEdge: (edgeId, updater) => {
@@ -409,18 +444,53 @@ const useCanvasStore = create(
       // NODE OPERATIONS
       // Usate direttamente dai componenti nodo via useCanvasStore(s => s.xxx)
       /** Aggiorna i data di un nodo. Sostituisce onUpdate/onChange nei props. */
-      updateNodeData: (nodeId, updates) => {
-        if (get().isReadOnly) return;
-        get().takeSnapshot();
+      updateNodeData: (nodeId, updates, opts = {}) => {
+        // opts.derived = true: dato calcolato (schema caricato, default
+        // automatico, stato UI) -> niente dirty ne' snapshot (audit R1.8).
+        const derived = opts.derived === true;
+        if (!derived) {
+          if (get().isReadOnly) return;
+          get().takeSnapshot();
+        }
         set(
           state => ({
             nodes: state.nodes.map(n =>
               n.id === nodeId ? { ...n, data: { ...n.data, ...updates } } : n
             ),
-            ...dirtyAndClearHighlights()
+            ...(derived ? {} : dirtyAndClearHighlights())
           }),
           false,
-          'updateNodeData'
+          derived ? 'updateNodeData:derived' : 'updateNodeData'
+        );
+      },
+
+      /**
+       * Aggiorna `data.config` di un nodo fondendo la patch con la config
+       * CORRENTE dello store (non con quella del render): piu' patch nello
+       * stesso tick non si sovrascrivono (audit R1.5). `patch` puo' essere un
+       * oggetto o una funzione (config) => patch.
+       *
+       * opts.derived = true: patch automatica (es. auto-selezione di una
+       * colonna di default) -> niente dirty ne' snapshot.
+       */
+      patchNodeConfig: (nodeId, patch, opts = {}) => {
+        const derived = opts.derived === true;
+        if (!derived) {
+          if (get().isReadOnly) return;
+          get().takeSnapshot();
+        }
+        set(
+          state => ({
+            nodes: state.nodes.map(n => {
+              if (n.id !== nodeId) return n;
+              const current = n.data?.config || {};
+              const changes = typeof patch === 'function' ? patch(current) : patch;
+              return { ...n, data: { ...n.data, config: { ...current, ...(changes || {}) } } };
+            }),
+            ...(derived ? {} : dirtyAndClearHighlights()),
+          }),
+          false,
+          derived ? 'patchNodeConfig:derived' : 'patchNodeConfig',
         );
       },
 

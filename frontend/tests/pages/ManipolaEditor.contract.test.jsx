@@ -8,8 +8,8 @@ import ManipolaEditor from '../../src/pages/ManipolaEditor';
 const {
   navigateMock,
   handleSaveQuietMock,
-  setNodesMock,
-  setEdgesMock,
+  loadGraphMock,
+  addNodesMock,
   deserializeNodesMock,
   propagateColumnsMock,
   refreshSchemasMock,
@@ -20,8 +20,8 @@ const {
 } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   handleSaveQuietMock: vi.fn().mockResolvedValue(undefined),
-  setNodesMock: vi.fn(),
-  setEdgesMock: vi.fn(),
+  loadGraphMock: vi.fn(),
+  addNodesMock: vi.fn(),
   deserializeNodesMock: vi.fn((nodes) => nodes),
   propagateColumnsMock: vi.fn(),
   refreshSchemasMock: vi.fn(),
@@ -110,8 +110,16 @@ vi.mock('../../src/hooks', () => ({
   useCanvasCore: () => ({
     nodes: [],
     edges: [],
-    setNodes: setNodesMock,
-    setEdges: setEdgesMock,
+    loadGraph: loadGraphMock,
+    addNodes: addNodesMock,
+    addEdges: vi.fn(),
+    removeEdges: vi.fn(),
+    editNodes: vi.fn(),
+    editEdges: vi.fn(),
+    updateEdge: vi.fn(),
+    patchNodeConfig: vi.fn(),
+    applyDerivedNodes: vi.fn(),
+    applyDerivedEdges: vi.fn(),
     onNodesChange: vi.fn(),
     onEdgesChange: vi.fn(),
     nodesRef: { current: [] },
@@ -265,8 +273,7 @@ describe('ManipolaEditor', () => {
       expect(deserializeNodesMock).toHaveBeenCalledWith(storedNodes, {
         flags: { isManipulate: true },
       });
-      expect(setNodesMock).toHaveBeenCalledWith(loadedNodes);
-      expect(setEdgesMock).toHaveBeenCalledWith([
+      expect(loadGraphMock).toHaveBeenCalledWith(loadedNodes, [
         {
           ...storedEdges[0],
           targetHandle: 'input-2',

@@ -40,7 +40,7 @@ const fetchRegistry = async () => {
 };
 
 const TransformNode = memo(({ data, id }) => {
-  const { setNodes, getEdges, getNodes } = useReactFlow();
+  const { getEdges, getNodes } = useReactFlow();
   
   const transform_op = data.transform_op || 'filter';
   const config = data.config || {};
@@ -83,6 +83,7 @@ const TransformNode = memo(({ data, id }) => {
   const collapsed = data.collapsed || false;
 
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
+  const patchNodeConfig = useCanvasStore(s => s.patchNodeConfig);
   const deleteNode     = useCanvasStore(s => s.deleteNode);
   const confirm        = useConfirm();
 
@@ -191,16 +192,29 @@ const TransformNode = memo(({ data, id }) => {
     }
   };
 
-  const updateConfig = (field, value) => {
-    const patch = typeof field === 'object' && field !== null
-      ? field
-      : { [field]: value };
-    const nextConfig = { ...config, ...patch };
-    updateNodeData(id, { config: nextConfig });
+  // La patch si fonde con la config CORRENTE dello store (patchNodeConfig),
+  // non con quella di questo render: piu' patch nello stesso tick non si
+  // sovrascrivono piu' (audit R1.5). L'editor viene solo avvisato per
+  // ripropagare le colonne; non riscrive la config.
+  const notifyConfigChanged = () => {
     setTimeout(() => {
       const onUpdateTransform = useCanvasStore.getState().editorActionsRef?.current?.onUpdateTransform;
-      if (onUpdateTransform) onUpdateTransform(id, { config: nextConfig });
+      if (onUpdateTransform) onUpdateTransform(id);
     }, 0);
+  };
+  const toPatch = (field, value) => (
+    typeof field === 'object' && field !== null ? field : { [field]: value }
+  );
+  // Modifica dell'utente: dirty + undo.
+  const updateConfig = (field, value) => {
+    patchNodeConfig(id, toPatch(field, value));
+    notifyConfigChanged();
+  };
+  // Correzione automatica (default, id colonna, rinomine): dato derivato,
+  // non rende il canvas "modificato" all'apertura (audit R1.8).
+  const applyDerivedConfig = (field, value) => {
+    patchNodeConfig(id, toPatch(field, value), { derived: true });
+    notifyConfigChanged();
   };
 
   const onOpChange = (evt) => {
@@ -363,6 +377,7 @@ const TransformNode = memo(({ data, id }) => {
             transformId={transform_op}
             config={config}
             updateConfig={updateConfig}
+            applyDerivedConfig={applyDerivedConfig}
             registry={registry.transforms}
             inputColumns={inputColumns}
             leftColumns={leftColumns}

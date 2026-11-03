@@ -15,6 +15,7 @@ const DynamicConfig = ({
   transformId,
   config = {},
   updateConfig,
+  applyDerivedConfig,
   registry,
   inputColumns = [],
   leftColumns = [],
@@ -42,6 +43,7 @@ const DynamicConfig = ({
       transformConfig={transformConfig}
       config={config}
       updateConfig={updateConfig}
+      applyDerivedConfig={applyDerivedConfig}
       registry={registry}
       inputColumns={inputColumns}
       leftColumns={leftColumns}
@@ -57,6 +59,7 @@ const DynamicConfigBody = ({
   transformConfig,
   config = {},
   updateConfig,
+  applyDerivedConfig,
   registry,
   inputColumns = [],
   leftColumns = [],
@@ -65,6 +68,9 @@ const DynamicConfigBody = ({
   targetNodeId = null,
 }) => {
   const { parameters = [], description } = transformConfig;
+  // Le patch automatiche degli effetti sotto sono dati derivati: non devono
+  // rendere il canvas "modificato" all'apertura (audit R1.8).
+  const derivedConfig = applyDerivedConfig || updateConfig;
 
   const getParamValue = (param) => {
     if (config[param.id] !== undefined) return config[param.id];
@@ -211,7 +217,7 @@ const DynamicConfigBody = ({
       if (current) continue;
       const candidates = getColumnsForParam(param);
       if (candidates.length === 1) {
-        updateConfig({
+        derivedConfig({
           [param.id]: candidates[0].name,
           [`${param.id}_column_id`]: columnKey(candidates[0]),
         });
@@ -242,7 +248,7 @@ const DynamicConfigBody = ({
       }
     }
     if (Object.keys(patch).length > 0) {
-      updateConfig(patch);
+      derivedConfig(patch);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleParams, inputColumns, leftColumns, rightColumns, geometryColumns]);
@@ -314,7 +320,7 @@ const DynamicConfigBody = ({
     }
 
     if (Object.keys(patch).length > 0) {
-      updateConfig(patch);
+      derivedConfig(patch);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleParams, inputColumns, leftColumns, rightColumns, geometryColumns, config]);

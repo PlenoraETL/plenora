@@ -118,7 +118,8 @@ const ArricchisciEditorContent = () => {
   const toast = useToast();
 
   const {
-    nodes, edges, setNodes, setEdges, onNodesChange, onEdgesChange,
+    nodes, edges, onNodesChange, onEdgesChange,
+    loadGraph, addNodes, addEdges, editEdges, applyDerivedNodes,
     nodesRef, edgesRef, updateNodeData, deleteNode,
     handleSaveQuiet, getViewportCenter,
     isReadOnly, readOnlyProps
@@ -165,7 +166,6 @@ const ArricchisciEditorContent = () => {
       flags: { isArricchisci: true },
     });
 
-    setNodes(loadedNodes);
     // Corregge edges con targetHandle/sourceHandle "undefined" (salvati in canvas precedenti)
     // NON si elimina: si corregge al valore standard del nodo destinatario
     const sanitizedEdges = (project.canvas.edges || []).map(e => {
@@ -174,12 +174,10 @@ const ArricchisciEditorContent = () => {
       if (!clean.sourceHandle || clean.sourceHandle === 'undefined') clean.sourceHandle = 'output';
       return clean;
     });
-    setEdges([...sanitizedEdges, ...hydrateParameterBindingEdges(loadedNodes)]);
-    // Reset dirty: setNodes/setEdges hanno marcato dirty perché inseriscono
-    // nuovi ID, ma è un load programmatico, non una modifica utente.
-    useCanvasStore.getState().markClean();
+    // loadGraph: grafo dal backend, stato pulito e cronologia azzerata.
+    loadGraph(loadedNodes, [...sanitizedEdges, ...hydrateParameterBindingEdges(loadedNodes)]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // setNodes/setEdges/deserializeNodes omessi: load programmatico una sola
+    // loadGraph/deserializeNodes omessi: load programmatico una sola
     // volta per project, non ad ogni re-render dei setter store.
   }, [project, loading]);
 
@@ -187,7 +185,7 @@ const ArricchisciEditorContent = () => {
   // Aggiorna availableColumns in ResultNode e CaricanNode
   // Fingerprint stabile dei campi che devono triggerare il refresh di
   // `availableColumns` sui result/carica nodes. Pre-fix (P0 frontend-pages
-  // #1): deps = [setNodes] significava firing ONLY al mount; il cambio
+  // #1): deps = [addNodes] significava firing ONLY al mount; il cambio
   // di `output_mapping` su un nodo api_enrich (utente che configura il
   // mapping output) NON ri-firrava l'effect → ResultNode esponeva colonne
   // stale finche' l'utente non triggerava manualmente un re-render.
@@ -216,11 +214,12 @@ const ArricchisciEditorContent = () => {
 
   useEffect(() => {
     // NOTA: 'nodes' rimosso dalle dipendenze intenzionalmente per evitare loop React.
-    // Tutto il calcolo avviene dentro la callback di setNodes (snapshot aggiornato).
+    // Tutto il calcolo avviene dentro l'updater (snapshot aggiornato).
+    // Dato DERIVATO: non marca dirty.
     // La dep `availableColumnsFingerprint` triggera il refresh quando
     // input rilevanti cambiano (source cols / api_enrich output_mapping),
     // senza catturare modifiche a campi scritti dall'effect stesso.
-    setNodes(nds => {
+    applyDerivedNodes(nds => {
       const resultNode = nds.find(n => n.type === 'result');
       if (!resultNode) return nds;
 
@@ -256,7 +255,7 @@ const ArricchisciEditorContent = () => {
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setNodes, availableColumnsFingerprint]);
+  }, [applyDerivedNodes, availableColumnsFingerprint]);
 
   // NOTA: le colonne dei nodi source vengono aggiornate direttamente
   // dai nodi stessi tramite useCanvasStore.getState().updateNodeData
@@ -380,13 +379,13 @@ const ArricchisciEditorContent = () => {
 
   // Outline amber sui nodi con issue di validazione (popolati dallo store
   // da ResultNode.runValidation). Hook condiviso con ManipolaEditor.
-  useValidationHighlights(setNodes);
+  useValidationHighlights(applyDerivedNodes);
 
   const getPos = () => getViewportCenter({ screenToFlowPosition });
 
   const handleSelectConnection = useCallback((connection, category) => {
     const newNodeId = `api_enrich_${Date.now()}`;
-    setNodes(nds => nds.concat({ id: newNodeId,
+    addNodes({ id: newNodeId,
       type: category === 'datasource' ? 'project_source' : 'api_enrich',
       // Posizionamento deterministico al centro del viewport corrente,
       // allineato al pattern degli altri `handleAdd*Node` di questo file
@@ -394,7 +393,7 @@ const ArricchisciEditorContent = () => {
       // `Math.random()` produceva posizioni non riproducibili e potenzialmente
       // fuori dal viewport visibile su zoom alto.
       // Pre-fix (P2 frontend-pages): `getPos` veniva letta dalla
-      // closure ma `[setNodes]` era l'unica dep → se
+      // closure ma `[addNodes]` era l'unica dep → se
       // `screenToFlowPosition` cambiava (cambio viewport), la
       // versione catturata era stale. Post-fix: invochiamo
       // `getViewportCenter({ screenToFlowPosition })` direttamente
@@ -406,35 +405,35 @@ const ArricchisciEditorContent = () => {
         static_parameters: connection.static_parameters || {},
         ...(category === 'rest_file'  && { connection_type: 'rest_file',  request: connection.request, response: connection.response }),
         ...(category === 'datasource' && { source_type: 'datasource', datasource_config: connection.datasource }),
-        ...(category === 'openapi' && { openapi_spec: connection.openapi_spec }) } }));
+        ...(category === 'openapi' && { openapi_spec: connection.openapi_spec }) } });
     if (category === 'template')   modals.close('template');
     if (category === 'manual')     modals.close('manual');
     if (category === 'openapi')    modals.close('openapi');
     if (category === 'rest_file')  modals.close('rest_file');
     if (category === 'datasource') modals.close('datasource');
-  }, [setNodes, screenToFlowPosition, modals]);
+  }, [addNodes, screenToFlowPosition, modals]);
 
   const handleAddStaticValuesNode = useCallback(() => {
-    setNodes(nds => nds.concat({ id: `static_${Date.now()}`, type: 'staticValues',
+    addNodes({ id: `static_${Date.now()}`, type: 'staticValues',
       position: { x: 100, y: 200 },
-      data: { label: 'Valori Statici', fields: [] } }));
-  }, [setNodes]);
+      data: { label: 'Valori Statici', fields: [] } });
+  }, [addNodes]);
 
   const handleAddProjectInputNode = useCallback(() => {
     const ordinal = nodesRef.current.filter(node => node.type === 'project_input').length + 1;
-    setNodes(nds => nds.concat({ id: `project_input_${Date.now()}`, type: 'project_input',
+    addNodes({ id: `project_input_${Date.now()}`, type: 'project_input',
       position: { x: 100, y: 100 + ordinal * 80 },
-      data: { input_key: `input_${ordinal}`, label: `Input ${ordinal}`, input_kind: 'file', required: true, expected_columns: [], validation: {}, bindings: [], order: ordinal - 1 } }));
-  }, [setNodes, nodesRef]);
+      data: { input_key: `input_${ordinal}`, label: `Input ${ordinal}`, input_kind: 'file', required: true, expected_columns: [], validation: {}, bindings: [], order: ordinal - 1 } });
+  }, [addNodes, nodesRef]);
 
   const handleAddResultNode = useCallback(() => {
     if (nodesRef.current.some(n => n.type === 'result')) { toast.warning('Puoi avere solo un nodo risultato per progetto'); return; }
-    setNodes(nds => nds.concat({ id: `result_${Date.now()}`, type: 'result',
+    addNodes({ id: `result_${Date.now()}`, type: 'result',
       position: { x: 600, y: 200 },
       data: { isArricchisci: true, fileName: 'output', format: 'csv', availableColumns: [],
         order_by_enabled: false, order_by_columns: [],
-        having_enabled: false, having_conditions: [] } }));
-  }, [setNodes]);
+        having_enabled: false, having_conditions: [] } });
+  }, [addNodes]);
 
   const handleAddCaricanNode = useCallback(() => {
     const currentNodes = nodesRef.current;
@@ -447,11 +446,11 @@ const ArricchisciEditorContent = () => {
         column_mappings: [], match_columns: [], batch_size: 1000,
         transaction_mode: 'all_or_nothing', create_spatial_index: true, conflict_policy: 'abort',
         availableColumns: resultNode.data?.availableColumns || [] } };
-    setNodes(nds => nds.concat(newNode));
-    setEdges(eds => eds.concat({ id: `edge_result_carica_${Date.now()}`, source: resultNode.id, target: newNode.id,
+    addNodes(newNode);
+    addEdges({ id: `edge_result_carica_${Date.now()}`, source: resultNode.id, target: newNode.id,
       type: 'smoothstep', animated: true, style: { stroke: '#7c3aed', strokeWidth: 2 },
-      markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: '#7c3aed' }, data: {} }));
-  }, [setNodes, setEdges]);
+      markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: '#7c3aed' }, data: {} });
+  }, [addNodes, addEdges]);
 
   const handleAddCaricanArcGISNode = useCallback(() => {
     const currentNodes = nodesRef.current;
@@ -465,10 +464,10 @@ const ArricchisciEditorContent = () => {
         arcgis_operation: 'add', arcgis_new_service_name: '', arcgis_new_layer_name: 'Layer 0',
         column_mappings: [], availableColumns: resultNode.data?.availableColumns || [] }
     };
-    setNodes(nds => nds.concat(newNode));
-    setEdges(eds => eds.concat({ id: `edge_result_carica_arcgis_${Date.now()}`, source: resultNode.id, target: newNode.id,
-      label: 'Carica ArcGIS', animated: true, style: { stroke: '#2DD4BF', strokeWidth: 2 }, data: { join_type: 'carica_arcgis' } }));
-  }, [setNodes, setEdges]);
+    addNodes(newNode);
+    addEdges({ id: `edge_result_carica_arcgis_${Date.now()}`, source: resultNode.id, target: newNode.id,
+      label: 'Carica ArcGIS', animated: true, style: { stroke: '#2DD4BF', strokeWidth: 2 }, data: { join_type: 'carica_arcgis' } });
+  }, [addNodes, addEdges]);
 
   const onConnect = useCallback((params) => {
     // Normalizza handles: undefined → 'input'/'output'
@@ -482,9 +481,9 @@ const ArricchisciEditorContent = () => {
     const edge = scalarInput
       ? createParameterBindingEdge(cleanParams)
       : { ...cleanParams, ...defaultEdgeOptions };
-    setEdges(eds => addEdge(edge, eds));
-  }, [setEdges]);
-  const onEdgeContextMenu  = useCallback((event, edge) => { event.preventDefault(); setEdges(eds => eds.filter(e => e.id !== edge.id)); }, [setEdges]);
+    editEdges(eds => addEdge(edge, eds));
+  }, [editEdges]);
+  const onEdgeContextMenu  = useCallback((event, edge) => { event.preventDefault(); editEdges(eds => eds.filter(e => e.id !== edge.id)); }, [editEdges]);
   const onDragStart        = (event, nodeType, nodeData = {}) => { event.dataTransfer.setData('application/reactflow', nodeType); event.dataTransfer.setData('nodeData', JSON.stringify(nodeData)); event.dataTransfer.effectAllowed = 'move'; };
   const onDragOver         = useCallback((event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }, []);
 
@@ -505,8 +504,8 @@ const ArricchisciEditorContent = () => {
     else if (nodeType === 'api_enrich') newNode = { id: newNodeId, type: 'api_enrich', position,
       data: { api_id: '', param_mapping: {}, columns: [] } };
 
-    if (newNode) setNodes(nds => nds.concat(newNode));
-  }, [screenToFlowPosition, setNodes]);
+    if (newNode) addNodes(newNode);
+  }, [screenToFlowPosition, addNodes]);
 
   const { confirmNavigation } = useUnsavedChangesGuard();
   const handleBack     = () => { if (confirmNavigation()) navigate('/'); };

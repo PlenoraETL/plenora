@@ -4,7 +4,12 @@
  * Gestisce onConnect (creazione edge), onEdgesChange, e l'apertura
  * automatica di JoinModal quando si crea un edge tra due nodi.
  *
- * Ritorna: { edges, setEdges, onConnect, onEdgesChange, joinModalProps }
+ * Ritorna: { onConnect, onEdgeClick, onEdgeContextMenu, joinModalProps, ... }
+ *
+ * Ogni operazione qui e' un'azione UTENTE: passa da `editEdges` dello store
+ * (snapshot undo + dirty). Prima il setter generico + l'euristica strutturale
+ * non marcava dirty la modifica di un join esistente (stessi id): Esegui usava
+ * la config vecchia e Salva non salvava (audit R1.1).
  */
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { addEdge } from 'reactflow';
@@ -18,7 +23,7 @@ import {
  * useEdgeHandlers - Hook per gestione edges e modal join
  * 
  * @param {Array} nodes - Nodi React Flow
- * @param {Function} setEdges - Setter edges React Flow
+ * @param {Function} editEdges - Mutazione utente degli edge (useCanvasStore.editEdges)
  * @param {Object} options - Opzioni
  * @param {string} options.resultNodeType - Tipo nodo risultato (default: 'resultNode')
  * @param {Function} options.onEdgeCreated - Callback dopo creazione edge
@@ -26,7 +31,10 @@ import {
  * 
  * @returns {Object} Handlers e stato per gestione edges
  */
-export function useEdgeHandlers(nodes, setEdges, options = {}) {
+// Il nodo Carica ArcGIS esiste con due spellings (toolbar vs deserializer).
+const isCaricaArcgisType = (type) => type === 'caricaArcgis' || type === 'carica_arcgis';
+
+export function useEdgeHandlers(nodes, editEdges, options = {}) {
   const {
     resultNodeType = 'resultNode',
     onEdgeCreated,
@@ -114,7 +122,7 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
     const sourceNode = nodesRef.current.find(n => n.id === params.source);
     if (isScalarProjectInputNode(sourceNode)) {
       const newEdge = createParameterBindingEdge(params);
-      setEdges(eds => addEdge(newEdge, eds));
+      editEdges(eds => addEdge(newEdge, eds));
       if (onEdgeCreated) onEdgeCreated(newEdge);
       return;
     }
@@ -131,7 +139,7 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
         data: { join_type: 'output' }
       };
       
-      setEdges((eds) => addEdge(newEdge, eds));
+      editEdges((eds) => addEdge(newEdge, eds));
       
       if (onEdgeCreated) {
         onEdgeCreated(newEdge);
@@ -140,9 +148,9 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
     }
     
     // Se target e' nodo CARICA o Data Source in modalita' carica, crea edge diretto.
-    if (targetNode && (targetNode.type === 'carica' || targetNode.type === 'caricaArcgis' ||
+    if (targetNode && (targetNode.type === 'carica' || isCaricaArcgisType(targetNode.type) ||
         (['datasourceNode', 'datasource_node'].includes(targetNode.type) && targetNode.data?.mode === 'carica'))) {
-      const joinType = targetNode.type === 'caricaArcgis' ? 'carica_arcgis' : 'carica';
+      const joinType = isCaricaArcgisType(targetNode.type) ? 'carica_arcgis' : 'carica';
       const edgeStyle = getEdgeStyle({ join_type: joinType });
       const newEdge = {
         id: `edge_carica_${Date.now()}`,
@@ -152,7 +160,7 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
         data: { join_type: joinType }
       };
 
-      setEdges((eds) => addEdge(newEdge, eds));
+      editEdges((eds) => addEdge(newEdge, eds));
 
       if (onEdgeCreated) {
         onEdgeCreated(newEdge);
@@ -166,7 +174,7 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
       target: params.target
     });
     setShowJoinModal(true);
-  }, [setEdges, resultNodeType, getEdgeStyle, onEdgeCreated]);
+  }, [editEdges, resultNodeType, getEdgeStyle, onEdgeCreated]);
 
   /**
    * Handler click su edge (per editing)
@@ -183,7 +191,7 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
     const targetNode = nodesRef.current.find(n => n.id === edge.target);
     if (targetNode && (
       targetNode.type === 'carica' ||
-      targetNode.type === 'caricaArcgis' ||
+      isCaricaArcgisType(targetNode.type) ||
       targetNode.type === 'resultNode' ||
       targetNode.type === 'result' ||
       (['datasourceNode', 'datasource_node'].includes(targetNode.type) && targetNode.data?.mode === 'carica')
@@ -201,20 +209,20 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
   const onEdgeContextMenu = useCallback((event, edge) => {
     event.preventDefault();
     if (isParameterBindingEdge(edge)) {
-      setEdges((eds) => eds.filter((item) => item.id !== edge.id));
+      editEdges((eds) => eds.filter((item) => item.id !== edge.id));
       return;
     }
     
     // Edge output e carica: eliminazione diretta (context menu è già intenzionale)
     if (edge.data?.join_type === 'output' || edge.data?.join_type === 'carica' || edge.data?.join_type === 'carica_arcgis') {
-      setEdges((eds) => eds.filter((e) => e.id !== edge.id));
+      editEdges((eds) => eds.filter((e) => e.id !== edge.id));
       return;
     }
     
     // Per altri edge, apri modal per editing/delete
     setEditingEdge(edge);
     setShowJoinModal(true);
-  }, [setEdges]);
+  }, [editEdges]);
 
   /**
    * Salva configurazione join
@@ -229,30 +237,21 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
     const edgeStyle = getEdgeStyle(joinConfig);
 
     if (currentEditingEdge) {
-      // Aggiorna edge esistente
-      setEdges((eds) =>
-        eds.map((e) => {
-          if (e.id === currentEditingEdge.id) {
-            const updatedEdge = {
-              ...e,
-              ...edgeStyle,
-              data: {
-                ...e.data,
-                ...joinConfig,
-                source_table: sourceNode?.data?.table_name,
-                target_table: targetNode?.data?.table_name
-              }
-            };
-
-            if (onEdgeUpdated) {
-              onEdgeUpdated(updatedEdge);
-            }
-
-            return updatedEdge;
-          }
-          return e;
-        })
-      );
+      // Aggiorna edge esistente: azione utente (dirty + undo).
+      const updatedEdge = {
+        ...currentEditingEdge,
+        ...edgeStyle,
+        data: {
+          ...currentEditingEdge.data,
+          ...joinConfig,
+          source_table: sourceNode?.data?.table_name,
+          target_table: targetNode?.data?.table_name
+        }
+      };
+      editEdges((eds) => eds.map((e) => (
+        e.id === currentEditingEdge.id ? { ...e, ...edgeStyle, data: { ...e.data, ...updatedEdge.data } } : e
+      )));
+      if (onEdgeUpdated) onEdgeUpdated(updatedEdge);
     } else if (currentPendingEdge) {
       // Crea nuovo edge
       const newEdge = {
@@ -267,7 +266,7 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
         }
       };
 
-      setEdges((eds) => addEdge(newEdge, eds));
+      editEdges((eds) => addEdge(newEdge, eds));
 
       if (onEdgeCreated) {
         onEdgeCreated(newEdge);
@@ -278,7 +277,7 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
     setShowJoinModal(false);
     setPendingEdge(null);
     setEditingEdge(null);
-  }, [setEdges, getEdgeStyle, onEdgeCreated, onEdgeUpdated]);
+  }, [editEdges, getEdgeStyle, onEdgeCreated, onEdgeUpdated]);
 
   /**
    * Annulla operazione
@@ -294,11 +293,11 @@ export function useEdgeHandlers(nodes, setEdges, options = {}) {
    */
   const handleDeleteEdge = useCallback(() => {
     if (editingEdge) {
-      setEdges((eds) => eds.filter((e) => e.id !== editingEdge.id));
+      editEdges((eds) => eds.filter((e) => e.id !== editingEdge.id));
       setShowJoinModal(false);
       setEditingEdge(null);
     }
-  }, [editingEdge, setEdges]);
+  }, [editingEdge, editEdges]);
 
   // Nodi sorgente/target per modal
   const modalNodes = useMemo(() => {

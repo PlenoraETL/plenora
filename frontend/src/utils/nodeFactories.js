@@ -1,59 +1,19 @@
 import { nd, nodeTopLevelData } from './nodeHelpers';
+import { NODE_TYPES, canonicalNodeType, persistedNodeData } from './nodeTypeRegistry';
 
-/**
- * nodeFactories.js — Factory e deserializzatori per nodi ReactFlow
- *
- * Unica fonte di verità per ricostruire i nodi a partire dai dati
- * serializzati dal backend. Usato da tutti e tre gli editor
- * (EstraiEditor, ManipolaEditor, ArricchisciEditor).
- *
- * Struttura:
- *   - createEdgeFromData      → ricostruisce un edge
- *   - createTableNode         → nodo tabella DB (solo Estrai)
- *   - createFeatureLayerNode  → nodo layer ArcGIS (solo Estrai)
- *   - createResultNode        → nodo output (tutti e tre gli editor)
- *   - createCaricanNode       → nodo scrittura su DB/ArcGIS
- *   - createStaticValuesNode  → nodo valori statici
- *   - createCommentNode       → nodo annotazione
- *   - createDataSourceNode    → nodo datasource file/cartella
- *   - createProjectSourceNode → nodo sorgente progetto (Manipola + Arricchisci)
- *   - createFileSourceNode    → nodo sorgente file (Manipola + Arricchisci)
- *   - createTransformNode     → nodo trasformazione (solo Manipola)
- *   - createApiEnrichNode     → nodo arricchimento API (solo Arricchisci)
- *   - deserializeNodes        → dispatcher: mappa array nodi raw → ReactFlow nodes
- *
- * Convenzione callbacks:
- *   Le funzioni che accettano un parametro `callbacks` si aspettano un oggetto
- *   con le callback specifiche dell'editor. Tutte le callback sono opzionali —
- *   se assenti il nodo viene renderizzato in sola lettura.
- *
- * Uso:
- *   import { deserializeNodes, createEdgeFromData } from '../utils/nodeFactories';
- *
- *   const nodes = deserializeNodes(canvas.nodes, { connection, connections, callbacks });
- *   const edges = canvas.edges.map(e => createEdgeFromData(e, nodes));
- */
-
-/**
- * Ricostruisce un oggetto edge ReactFlow a partire dai dati serializzati.
- *
- * @param {Object} edge        - Dati edge dal backend (canvas.edges[i])
- * @param {Array}  loadedNodes - Nodi già caricati nel canvas
- * @returns {Object} Edge pronto per ReactFlow
- */
 export function createEdgeFromData(edge, loadedNodes) {
   const targetNode = loadedNodes.find(n => n.id === edge.target);
   const isSpatial  = edge.is_spatial || false;
 
   let label, strokeColor;
 
-  if (targetNode?.type === 'resultNode' || targetNode?.type === 'result') {
+  if (canonicalNodeType(targetNode?.type) === 'result') {
     label       = 'output';
     strokeColor = '#4CAF50';
   } else if (targetNode?.type === 'carica') {
     label       = 'Carica DB';
     strokeColor = '#7c3aed';
-  } else if (targetNode?.type === 'caricaArcgis') {
+  } else if (canonicalNodeType(targetNode?.type) === 'carica_arcgis') {
     label       = 'Carica ArcGIS';
     strokeColor = '#2DD4BF';
   } else if (isSpatial) {
@@ -81,472 +41,68 @@ export function createEdgeFromData(edge, loadedNodes) {
       spatial_predicate:  edge.spatial_predicate  || null,
       source_geom_column: edge.source_geom_column || null,
       target_geom_column: edge.target_geom_column || null,
-      spatial_distance:   edge.spatial_distance   || null,
+      spatial_distance:   edge.spatial_distance   ?? null,
     },
   };
 }
 
-/**
- * Crea un nodo tabella DB da dati backend.
- *
- * @param {Object} node       - Dati nodo dal backend
- * @param {Object} connection - Connessione DB attiva del progetto (può essere null)
- * @returns {Object} Nodo ReactFlow type='tableNode'
- */
-function createTableNode(node, connection = null) {
-  return {
-    id:       node.id,
-    type:     'tableNode',
-    position: node.position,
-    data: {
-      label:               nd(node, 'alias') || nd(node, 'table_name'),
-      table_name:          nd(node, 'table_name'),
-      alias:               nd(node, 'alias', null),
-      columns:             nd(node, 'columns', []),
-      filters:             nd(node, 'filters', []),
-      calculated_columns:  nd(node, 'calculated_columns', []),
-      db_type:             connection?.type || 'postgres',
-    },
-  };
-}
-
-/**
- * Crea un nodo Feature Layer ArcGIS da dati backend.
- *
- * onUpdateWhere e onAddRelatedLayer vengono ora dallo store Zustand.
- *
- * @param {Object} node - Dati nodo dal backend
- * @returns {Object} Nodo ReactFlow type='featureLayerNode'
- */
-function createFeatureLayerNode(node) {
-
-  const columns = nd(node, 'columns', []).map(col => ({
-    name:    col.name,
-    type:    col.type || 'str',
-    alias:   col.alias ?? null,
-    visible: col.visible !== false,
-  }));
-
-  return {
-    id:       node.id,
-    type:     'featureLayerNode',
-    position: node.position,
-    data: {
-      type:             'feature_source',
-      layer_name:       nd(node, 'layer_name') || nd(node, 'table_name') || 'Layer',
-      layer_url:        nd(node, 'layer_url', ''),
-      connection_id:    nd(node, 'connection_id', ''),
-      connection_name:  nd(node, 'connection_name', ''),
-      service_name:     nd(node, 'service_name', ''),
-      geometry_type:    nd(node, 'geometry_type', ''),
-      feature_count:    nd(node, 'feature_count', null),
-      where:            nd(node, 'where', ''),
-      relationships:    nd(node, 'relationships', []),
-      columns,
-    },
-  };
-}
-
-/**
- * Crea il nodo Output/Result da dati backend.
- * Tutti gli handler vivono nello store Zustand — non servono callback.
- *
- * @param {Object} node    - Dati nodo dal backend
- * @param {Object} options - { isManipulate, isArricchisci }
- * @returns {Object} Nodo ReactFlow type='resultNode'
- */
-function createResultNode(node, options = {}) {
-  const { isManipulate = false, isArricchisci = false } = options;
-  const nodeType = (isManipulate || isArricchisci) ? 'result' : 'resultNode';
-
-  return {
-    id:       node.id,
-    type:     nodeType,
-    position: node.position,
-    data: {
-      fileName:         nd(node, 'fileName', 'output'),
-      format:           nd(node, 'format', 'csv'),
-      distinct:         nd(node, 'distinct', false),
-      limit:            nd(node, 'limit', null),
-      geomColumn:       nd(node, 'geomColumn', null),
-      columns:          nd(node, 'columns', []),
-      group_by_enabled:  nd(node, 'group_by_enabled', false),
-      group_by_columns:  nd(node, 'group_by_columns', []),
-      aggregations:      nd(node, 'aggregations', []),
-      order_by_enabled:  nd(node, 'order_by_enabled', false),
-      order_by_columns:  nd(node, 'order_by_columns', []),
-      having_enabled:    nd(node, 'having_enabled', false),
-      having_conditions: nd(node, 'having_conditions', []),
-      availableColumns: [],
-      isManipulate,
-      isArricchisci,
-    },
-  };
-}
-
-/**
- * Crea il nodo CARICA DB (scrittura su Database) da dati backend.
- *
- * @param {Object} node - Dati nodo dal backend
- * @returns {Object} Nodo ReactFlow type='carica'
- */
-function createCaricanNode(node) {
-
-  return {
-    id:       node.id,
-    type:     'carica',
-    position: node.position,
-    data: {
-      connection_id:           nd(node, 'connection_id', ''),
-      dest_type:               nd(node, 'dest_type', 'db'),
-      schema_name:             nd(node, 'schema_name', ''),
-      table_name:              nd(node, 'table_name', ''),
-      write_mode:              nd(node, 'write_mode', 'create'),
-      column_mappings:         nd(node, 'column_mappings', []),
-      match_columns:           nd(node, 'match_columns', []),
-      batch_size:              nd(node, 'batch_size', 1000),
-      transaction_mode:        nd(node, 'transaction_mode', 'all_or_nothing'),
-      create_spatial_index:    nd(node, 'create_spatial_index') !== false,
-      conflict_policy:         nd(node, 'conflict_policy', 'abort'),
-      rest_url:                nd(node, 'rest_url', ''),
-      rest_method:             nd(node, 'rest_method', 'POST'),
-      rest_headers:            nd(node, 'rest_headers', []),
-      rest_body_mapping:       nd(node, 'rest_body_mapping', []),
-      rest_batch_mode:         nd(node, 'rest_batch_mode', 'batch'),
-      rest_batch_size:         nd(node, 'rest_batch_size', 1000),
-      rest_timeout_seconds:    nd(node, 'rest_timeout_seconds', 30),
-      rest_success_statuses:   nd(node, 'rest_success_statuses', [200, 201, 202, 204]),
-      availableColumns: [],
-    },
-  };
-}
-
-/**
- * Crea il nodo CARICA ArcGIS (scrittura su Feature Service) da dati backend.
- *
- * @param {Object} node - Dati nodo dal backend
- * @returns {Object} Nodo ReactFlow type='caricaArcgis'
- */
-function createCaricanArcGISNode(node) {
-
-  return {
-    id:       node.id,
-    type:     'caricaArcgis',
-    position: node.position,
-    data: {
-      // RB.#12/#13 (2026-04-27): spread `...node.data` come prima entry
-      // preserva i flag annotati dal backend RB.7.B (access_denied,
-      // access_denied_reason, inaccessible_resource_type) quando una
-      // connection ArcGIS riferita dal canvas non e' visibile al gruppo
-      // del progetto. Senza, la deserializzazione li scartava
-      // silenziosamente -> banner RB.7.C non visibile, useEffect
-      // chiamava listFolders 404, save canvas con id stantio 400.
-      // Pattern simmetrico a createProjectSourceNode / createFileSourceNode.
-      ...node.data,
-      arcgis_connection_id:    nd(node, 'arcgis_connection_id', ''),
-      arcgis_service_url:      nd(node, 'arcgis_service_url', ''),
-      arcgis_layer_url:        nd(node, 'arcgis_layer_url', ''),
-      arcgis_operation:        nd(node, 'arcgis_operation', 'add'),
-      arcgis_folder_id:        nd(node, 'arcgis_folder_id', ''),
-      arcgis_match_column:     nd(node, 'arcgis_match_column', ''),
-      arcgis_new_service_name: nd(node, 'arcgis_new_service_name', ''),
-      arcgis_new_layer_name:   nd(node, 'arcgis_new_layer_name', 'Layer 0'),
-      source_srid:             nd(node, 'source_srid', null),
-      column_mappings:         nd(node, 'column_mappings', []),
-      availableColumns: [],
-    },
-  };
-}
-
-/**
- * Crea un nodo Valori Statici da dati backend.
- *
- * @param {Object} node - Dati nodo dal backend
- * @returns {Object} Nodo ReactFlow type='staticValues'
- */
-function createStaticValuesNode(node) {
-  return {
-    id:       node.id,
-    type:     'staticValues',
-    position: node.position,
-    data: {
-      label:  nd(node, 'label', 'Valori Statici'),
-      fields: nd(node, 'fields', []),
-    },
-  };
-}
-
-/**
- * Crea un nodo Annotazione/Commento da dati backend.
- *
- * @param {Object} node - Dati nodo dal backend
- * @returns {Object} Nodo ReactFlow type='comment'
- */
-function createCommentNode(node) {
-  return {
-    id:       node.id,
-    type:     'comment',
-    position: node.position,
-    zIndex:   -1,
-    style: {
-      width:  nd(node, 'width', 250),
-      height: nd(node, 'height', 150),
-    },
-    data: {
-      level:      nd(node, 'level', ''),
-      label:      nd(node, 'label', ''),
-      title:      nd(node, 'title', ''),
-      color:      nd(node, 'color', '#fbbf24'),
-      arrowStyle: nd(node, 'arrowStyle', null),
-    },
-  };
-}
-
-/**
- * Crea un nodo Data Source (file o cartella, sorgente o destinazione) da dati backend.
- *
- * @param {Object} node - Dati nodo dal backend
- * @returns {Object} Nodo ReactFlow type='datasourceNode'
- */
-function createDataSourceNode(node) {
-  return {
-    id:       node.id,
-    type:     'datasourceNode',
-    position: node.position || { x: 100, y: 100 },
-    data: {
-      mode:            nd(node, 'mode', 'source'),
-      datasource_id:   nd(node, 'datasource_id', ''),
-      datasource_name: nd(node, 'datasource_name', ''),
-      file_mode:       nd(node, 'file_mode', 'fixed'),
-      file_path:       nd(node, 'file_path', ''),
-      folder_path:     nd(node, 'folder_path', ''),
-      dynamic_rule:    nd(node, 'dynamic_rule', 'latest'),
-      pattern:         nd(node, 'pattern', ''),
-      format:          nd(node, 'format', ''),
-      columns:         nd(node, 'columns', []),
-      parse_options:   nd(node, 'parse_options', {}),
-      dest_folder:     nd(node, 'dest_folder', ''),
-      dest_filename:   nd(node, 'dest_filename', ''),
-      dest_format:     nd(node, 'dest_format', 'csv'),
-    },
-  };
-}
-
-/**
- * Crea un nodo Project Source (sorgente da altro progetto URBY) da dati backend.
- *
- * @param {Object} node - Dati nodo dal backend
- * @returns {Object} Nodo ReactFlow type='projectSource'
- */
-function createProjectSourceNode(node) {
-  return {
-    ...node,
-    data: {
-      ...node.data,
-      source_project_id: nd(node, 'source_project_id', ''),
-      columns:           nd(node, 'columns', []),
-    },
-  };
-}
-
-/**
- * Crea un nodo File Source (sorgente da file precedentemente caricato) da dati backend.
- *
- * @param {Object} node - Dati nodo dal backend
- * @returns {Object} Nodo ReactFlow type='fileSource'
- */
-function createFileSourceNode(node) {
-  return {
-    ...node,
-    data: {
-      ...node.data,
-      file_source_id: nd(node, 'file_source_id', ''),
-      columns:        nd(node, 'columns', []),
-    },
-  };
-}
-
-/**
- * Crea un nodo Transform (operazione di trasformazione dati) da dati backend.
- *
- * @param {Object} node - Dati nodo dal backend
- * @returns {Object} Nodo ReactFlow type='transform'
- */
-function createTransformNode(node) {
-  return {
-    ...node,
-    data: {
-      ...node.data,
-      transform_op: nd(node, 'transform_op', 'join'),
-      config:       nd(node, 'config', {}),
-      collapsed:    nd(node, 'collapsed', false),
-      columns:      nd(node, 'columns', []),
-    },
-  };
-}
-
-function createProjectInputNode(node) {
-  return {
-    id: node.id,
-    type: 'project_input',
-    position: node.position,
-    data: {
-      ...nodeTopLevelData(node),
-      ...(node.data || {}),
-    },
-  };
-}
-
-/**
- * Crea un nodo Multi-Join da dati backend flat.
- *
- * @param {Object} node - Dati nodo dal backend
- * @returns {Object} Nodo ReactFlow type='multi_join'
- */
-function createMultiJoinNode(node) {
-  const top = nodeTopLevelData(node);
-  const existingConfig = node.data?.config || {};
-  return {
-    ...node,
-    data: {
-      ...top,
-      ...node.data,
-      config: {
-        join_keys: top.join_keys || [],
-        join_key_ids: top.join_key_ids || [],
-        join_pairs: top.join_pairs || [],
-        left_keys: top.left_keys || [],
-        right_keys: top.right_keys || [],
-        join_type: top.multi_join_type || 'inner',
-        ...existingConfig,
-      },
-      columns: nd(node, 'columns', []),
-      inputColumns: node.data?.inputColumns || [],
-    },
-  };
-}
-
-/**
- * Crea un nodo API Enrichment (chiamata a connettore esterno) da dati backend.
- *
- * @param {Object} node - Dati nodo dal backend
- * @returns {Object} Nodo ReactFlow type='api_enrich'
- */
-function createApiEnrichNode(node) {
-  // I default qui sono i fallback UI per quando il BE ritorna un canvas
-  // legacy in cui il campo non e` ancora dichiarato. Aggiornare se il
-  // Pydantic Node lato backend cambia il valore di default.
-  // I campi top-level del Node Pydantic vengono ribaltati automaticamente
-  // in `data` via `nodeTopLevelData(node)` — non serve enumerarli uno
-  // per uno con `nd(node, 'fieldname', ...)` come prima. Aggiungere un
-  // nuovo campo al Pydantic Node lato BE lo rende disponibile in
-  // `node.data.<field>` lato FE senza modificare questo factory ne'
-  // `canvasSerializer.js` (che gia` legge top-level via `nd()`).
-  const defaults = {
-    api_id: '',
-    api_name: '',
-    param_mapping: {},
-    parameters: [],
-    output_mapping: [],
-    enrich_type: 'manual',
-    connection_type: null,
-    exec_params: {},
-    endpoint: null,
-    columns: [],
-    batch: {},
-    continue_on_error: true,
-    skip_null_params: true,
-    max_errors: 0,
-    api_type: null,
-    static_parameters: {},
-    request: null,
-    response: null,
-    extra_files: null,
-    output_kind: null,
-    execute_if: null,
-    // `static_columns`: in sync con `static_parameters.keys()`. Backend
-    // FIX 5 (commit f9700d33) accetta entrambi, lo teniamo nei default
-    // per backward compat con canvas salvati prima del fix.
-    static_columns: [],
-  };
-  return {
-    ...node,
-    data: {
-      ...defaults,
-      // Top-level del raw node ribaltato (skip null/undefined cosi` i
-      // default sopra restano validi quando il BE non popola il campo).
-      ...nodeTopLevelData(node),
-      // Eventuali extra gia` in node.data hanno precedenza: rappresentano
-      // l'edit dell'utente non ancora salvato (es. cambio in form non
-      // ancora propagato a PUT canvas).
-      ...(node.data || {}),
-    },
-  };
-}
-
-/**
- * Converte un array di nodi raw dal backend in nodi ReactFlow pronti al render.
- *
- * Punto di ingresso principale usato dagli editor. Dopo la Fase 3 del refactoring,
- * tutte le callback e i runtime data (connections, projectId) vivono nello store
- * Zustand — i factory hanno bisogno solo dei dati statici del nodo.
- *
- * @param {Array}  rawNodes               - canvas.nodes dal backend
- * @param {Object} options
- * @param {Object} options.connection      - Connessione DB attiva (per tableNode)
- * @param {Object} options.flags          - Flag di contesto: { isManipulate, isArricchisci }
- *
- * @returns {Array} Nodi ReactFlow pronti per setNodes
- */
+/** Rehydrate registered fields, then attach editor-only presentation data. */
 export function deserializeNodes(rawNodes, options = {}) {
-  const {
-    connection = null,
-    flags      = {},
-  } = options;
-
-  const { isManipulate = false, isArricchisci = false } = flags;
-
+  const { connection = null, flags = {} } = options;
   return rawNodes.map(node => {
-    switch (node.type) {
+    const type = canonicalNodeType(node.type);
+    const entry = NODE_TYPES[type];
+    if (!entry) return { ...node, data: { ...node.data, ...persistedNodeData(node) } };
+    const data = persistedNodeData(node);
+    const result = { ...node, type: entry.reactFlowType, data };
+    switch (type) {
       case 'source':
-        return createTableNode(node, connection);
-
+        data.label = data.alias || data.table_name;
+        data.db_type = connection?.type || 'postgres';
+        break;
       case 'feature_source':
-        return createFeatureLayerNode(node);
+        data.type = type;
+        data.layer_name = nd(node, 'layer_name', nd(node, 'table_name', data.layer_name));
+        data.columns = data.columns.map(col => ({
+          ...col, type: col.type ?? 'str', alias: col.alias ?? null,
+          visible: col.visible !== false,
+        }));
+        break;
       case 'result':
-        return createResultNode(node, { isManipulate, isArricchisci });
-
+        data.isManipulate = flags.isManipulate || false;
+        data.isArricchisci = flags.isArricchisci || false;
+        if (data.isManipulate || data.isArricchisci) result.type = type;
+        data.availableColumns = [];
+        break;
       case 'carica':
-        return createCaricanNode(node);
-
       case 'carica_arcgis':
-        return createCaricanArcGISNode(node);
-
-      case 'staticValues':
-        return createStaticValuesNode(node);
-
+        data.availableColumns = [];
+        break;
       case 'comment':
-        return createCommentNode(node);
-
+        result.zIndex = -1;
+        result.style = { width: data.width, height: data.height };
+        break;
       case 'datasource_node':
-      case 'datasourceNode':
-        return createDataSourceNode(node);
-      case 'project_source':
-        return createProjectSourceNode(node);
-
-      case 'file_source':
-        return createFileSourceNode(node);
-      case 'project_input':
-        return createProjectInputNode(node);
-      case 'transform':
-        return createTransformNode(node);
+        result.position = node.position || { x: 100, y: 100 };
+        break;
       case 'multi_join':
-        return createMultiJoinNode(node);
+        data.config = {
+          join_keys: data.join_keys, join_key_ids: data.join_key_ids,
+          join_pairs: data.join_pairs, left_keys: data.left_keys,
+          right_keys: data.right_keys, join_type: data.multi_join_type,
+          ...node.data?.config,
+        };
+        data.columns = node.data?.columns || node.columns || [];
+        data.inputColumns = [];
+        break;
       case 'api_enrich':
-        return createApiEnrichNode(node);
-
+        // Preserve the public factory's forward-compatible UI extras, but only
+        // registered fields may cross the persistence boundary.
+        result.data = { ...nodeTopLevelData(node), ...node.data, ...data };
+        break;
       default:
-        return node;
+        break;
     }
+    return result;
   });
 }

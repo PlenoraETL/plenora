@@ -30,7 +30,7 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
   const [bindingSelections, setBindingSelections] = useState({});
   const nodes = useCanvasStore(state => state.nodes);
   const edges = useCanvasStore(state => state.edges);
-  const setEdges = useCanvasStore(state => state.setEdges);
+  const editEdges = useCanvasStore(state => state.editEdges);
   const scalarInputs = nodes.filter(node => (
     node.type === 'project_input'
     && node.data?.input_kind !== 'file'
@@ -50,7 +50,9 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
 
   useEffect(() => {
     if (isOpen) {
-      setLocalFilters(filters.length > 0 ? [...filters] : [{ column: '', operator: '=', value: '' }]);
+      // Copia PROFONDA: le righe vengono modificate localmente e "Annulla"
+      // non deve toccare gli oggetti in node.data (audit R1.3).
+      setLocalFilters(filters.length > 0 ? filters.map(f => ({ ...f })) : [{ column: '', operator: '=', value: '' }]);
       const nextSelections = {};
       filters.forEach((_filter, index) => {
         const binding = edges.find(edge => (
@@ -162,20 +164,14 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
   };
 
   const updateFilter = (index, field, value) => {
-    const updated = [...localFilters];
-    updated[index][field] = value;
-    
+    // Aggiornamento immutabile: prima `updated[index][field] = value`
+    // mutava l'oggetto condiviso con lo store (Annulla non annullava).
+    const row = { ...localFilters[index], [field]: value };
     if (field === 'column') {
-      const newColType = getColumnType(value);
-      const validOperators = getOperatorsForType(newColType);
-      const currentOp = updated[index].operator;
-      
-      if (!validOperators.find(op => op.value === currentOp)) {
-        updated[index].operator = '=';
-      }
+      const validOperators = getOperatorsForType(getColumnType(value));
+      if (!validOperators.find(op => op.value === row.operator)) row.operator = '=';
     }
-    
-    setLocalFilters(updated);
+    setLocalFilters(localFilters.map((f, i) => (i === index ? row : f)));
   };
 
   const handleSave = () => {
@@ -185,7 +181,7 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
     const validFilters = validRows.map(item => item.filter);
     onSave(validFilters);
     if (nodeId) {
-      setEdges(current => {
+      editEdges(current => {
         const withoutFilterBindings = current.filter(edge => !(
           isParameterBindingEdge(edge)
           && edge.target === nodeId

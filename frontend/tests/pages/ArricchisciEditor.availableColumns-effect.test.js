@@ -43,9 +43,9 @@ describe('ArricchisciEditor availableColumns deps lint (sessione 2 P0)', () => {
 
   it('useEffect availableColumns ha fingerprint nelle deps', () => {
     // Cerca il pattern di chiusura dell'effect target
-    // `}, [setNodes, availableColumnsFingerprint]);`
+    // `}, [applyDerivedNodes, availableColumnsFingerprint]);`
     expect(source).toMatch(
-      /\}\s*,\s*\[setNodes\s*,\s*availableColumnsFingerprint\]\)/,
+      /\}\s*,\s*\[applyDerivedNodes\s*,\s*availableColumnsFingerprint\]\)/,
     );
   });
 

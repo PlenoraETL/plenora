@@ -21,7 +21,9 @@ import { isParameterBindingEdge } from '../utils/runtimeBindingEdges';
  * I componenti TransformNode e MultiJoinNode NON devono fare calcoli,
  * leggono solo data.inputColumns e data.columns.
  */
-export const useColumnPropagation = (setNodes) => {
+// `applyDerivedNodes`: le colonne propagate sono dati DERIVATI dal grafo,
+// non modifiche dell'utente -> non marcano il canvas dirty (audit R1).
+export const useColumnPropagation = (applyDerivedNodes) => {
   
   const propagateColumns = useCallback((nodes, edges) => {
     if (!nodes || nodes.length === 0) return;
@@ -169,8 +171,19 @@ export const useColumnPropagation = (setNodes) => {
       
     });
     
-    // 4. Aggiorna i nodi con ENTRAMBI inputColumns e columns
-    setNodes(nds => nds.map(node => {
+    // 4. Aggiorna i nodi con ENTRAMBI inputColumns e columns. Se nessun
+    // nodo cambia si restituisce lo stesso array (niente re-render).
+    applyDerivedNodes(nds => {
+      let anyChanged = false;
+      const next = nds.map(node => {
+        const updated = propagateNode(node);
+        if (updated !== node) anyChanged = true;
+        return updated;
+      });
+      return anyChanged ? next : nds;
+    });
+
+    function propagateNode(node) {
       const newInputColumns = inputColumnsMap.get(node.id) || [];
       const newOutputColumns = outputColumnsMap.get(node.id) || [];
       
@@ -215,10 +228,8 @@ export const useColumnPropagation = (setNodes) => {
           ...(configChanged ? { config: syncedConfig } : {})
         }
       };
-    }));
-    
-    
-  }, [setNodes]);
+    }
+  }, [applyDerivedNodes]);
   
   return { propagateColumns };
 };

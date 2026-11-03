@@ -33,7 +33,12 @@ import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
  * Output: dati originali + colonne da API (con tipi)
  */
 function ApiEnrichNode({ id, data, selected }) {
-  const { setNodes, getNodes, getEdges } = useReactFlow();
+  const { getNodes, getEdges } = useReactFlow();
+  // Mutazioni SOLO dallo store (audit R1): il setter di React Flow in
+  // modalita' controllata diventa un change `reset` che lo store non
+  // considera una modifica -> i parametri non venivano mai salvati.
+  const applyDerivedNodes = useCanvasStore(s => s.applyDerivedNodes);
+  const patchExecParams = useCanvasStore(s => s.updateNodeData);
 // rest_file (servizio HTTP remoto) lavora file→file, non riga-per-riga.
   // Il nodo si comporta diversamente sotto il cofano (no auto-mapping colonne,
   // no calcolo output columns, ecc.).
@@ -101,7 +106,7 @@ function ApiEnrichNode({ id, data, selected }) {
         // Segna come fetchato SOLO dopo il successo: in caso di errore di rete
         // il prossimo render potrà riprovare (fetchedApiIdRef rimane null/precedente)
         fetchedApiIdRef.current = apiId;
-        // Solo setFetchedApi — NON setNodes, che causa loop ReactFlow↔Zustand
+        // Solo setFetchedApi — NON un update dei nodi, che causa loop ReactFlow↔Zustand
         // I dati sono disponibili via fetchedApi per tutta la vita del componente
         setFetchedApi(apiData);
       }
@@ -146,19 +151,9 @@ const connectedFileSource = useMemo(() => {
     };
   }, [id, getEdges, getNodes, incomingEdgeCount]);
 const handleExecParamChange = (key, value) => {
-    setNodes(nodes => nodes.map(n => {
-      if (n.id === id) {
-        return {
-          ...n,
-          data: {
-            ...n.data,
-            exec_params: { ...n.data.exec_params, [key]: value },
-            _lastUpdate: Date.now()
-          }
-        };
-      }
-      return n;
-    }));
+    // Azione utente: dirty + undo, quindi salvata e inviata all'esecuzione.
+    const current = getNodes().find(n => n.id === id);
+    patchExecParams(id, { exec_params: { ...(current?.data?.exec_params || {}), [key]: value } });
   };
 
   // REST FILE: aggiorna output_kind (tag che dice "lo zip prodotto da
@@ -277,7 +272,7 @@ const handleExecParamChange = (key, value) => {
   
   // Aggiorna data.columns quando cambiano le colonne output
   // IMPORTANTE: confronto per contenuto prima di aggiornare — evita loop infinito
-  // (outputColumns è un nuovo array ad ogni render, setNodes triggera re-render → loop)
+  // (outputColumns è un nuovo array ad ogni render, un update dei nodi triggera re-render → loop)
   // Normalizza i valori prima del confronto per evitare falsi positivi da undefined vs ''
   useEffect(() => {
     if (outputColumns.length === 0) return;
@@ -289,13 +284,14 @@ const handleExecParamChange = (key, value) => {
         fromApi: !!c.fromApi
       }))
     );
-    setNodes(nodes => nodes.map(n => {
-      if (n.id !== id) return n;
+    // Colonne di output = dato DERIVATO: non marca dirty.
+    applyDerivedNodes(nodes => {
+      const target = nodes.find(n => n.id === id);
       // Skip se il contenuto è identico — evita loop
-      if (normalize(n.data?.columns) === normalize(outputColumns)) return n;
-      return { ...n, data: { ...n.data, columns: outputColumns } };
-    }));
-  }, [outputColumns, id, setNodes]);
+      if (!target || normalize(target.data?.columns) === normalize(outputColumns)) return nodes;
+      return nodes.map(n => (n.id === id ? { ...n, data: { ...n.data, columns: outputColumns } } : n));
+    });
+  }, [outputColumns, id, applyDerivedNodes]);
 
   // Auto-mapping quando arrivano colonne input (skip per file-processor)
   useEffect(() => {
@@ -722,7 +718,7 @@ const handleExecParamChange = (key, value) => {
           <div className="api-enrich-node__section api-enrich-node__section--advanced">
             <div
               className="api-enrich-node__advanced-toggle"
-              onClick={() => useCanvasStore.getState().updateNodeData(id, { _advOpen: !data._advOpen, _lastUpdate: Date.now() })}
+              onClick={() => useCanvasStore.getState().updateNodeData(id, { _advOpen: !data._advOpen }, { derived: true })}
             >
               <span>⚙️ Opzioni avanzate</span>
               <span className="api-enrich-node__advanced-arrow">{data._advOpen ? '▲' : '▼'}</span>

@@ -8,8 +8,8 @@ import EstraiEditor from '../../src/pages/EstraiEditor';
 const {
   navigateMock,
   handleSaveQuietMock,
-  setNodesMock,
-  setEdgesMock,
+  loadGraphMock,
+  addNodesMock,
   deserializeNodesMock,
   createEdgeFromDataMock,
   updateNodeDataMock,
@@ -20,8 +20,8 @@ const {
 } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   handleSaveQuietMock: vi.fn().mockResolvedValue(undefined),
-  setNodesMock: vi.fn(),
-  setEdgesMock: vi.fn(),
+  loadGraphMock: vi.fn(),
+  addNodesMock: vi.fn(),
   deserializeNodesMock: vi.fn((nodes) => nodes),
   createEdgeFromDataMock: vi.fn((edge) => edge),
   updateNodeDataMock: vi.fn(),
@@ -115,8 +115,16 @@ vi.mock('../../src/hooks', () => ({
   useCanvasCore: () => ({
     nodes: [],
     edges: [],
-    setNodes: setNodesMock,
-    setEdges: setEdgesMock,
+    loadGraph: loadGraphMock,
+    addNodes: addNodesMock,
+    addEdges: vi.fn(),
+    removeEdges: vi.fn(),
+    editNodes: vi.fn(),
+    editEdges: vi.fn(),
+    updateEdge: vi.fn(),
+    patchNodeConfig: vi.fn(),
+    applyDerivedNodes: vi.fn(),
+    applyDerivedEdges: vi.fn(),
     onNodesChange: vi.fn(),
     onEdgesChange: vi.fn(),
     nodesRef: { current: [] },
@@ -288,8 +296,7 @@ describe('EstraiEditor', () => {
         connection: currentEditorData.projectConnection,
       });
       expect(createEdgeFromDataMock).toHaveBeenCalledWith(storedEdges[0], loadedNodes);
-      expect(setNodesMock).toHaveBeenCalledWith(loadedNodes);
-      expect(setEdgesMock).toHaveBeenCalledWith([builtEdge]);
+      expect(loadGraphMock).toHaveBeenCalledWith(loadedNodes, [builtEdge]);
     });
   });
 

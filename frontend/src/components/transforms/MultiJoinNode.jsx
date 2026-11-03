@@ -13,7 +13,7 @@ import { useConfirm } from '../../context/ConfirmContext';
 import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 
 const MultiJoinNode = memo(({ data, id }) => {
-  const { setNodes, getEdges, getNodes } = useReactFlow();
+  const { getEdges, getNodes } = useReactFlow();
   
   // Configurazione
   const config = data.config || {};

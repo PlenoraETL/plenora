@@ -5,11 +5,11 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 import ArricchisciEditor from '../../src/pages/ArricchisciEditor';
 
-const { navigateMock, handleSaveQuietMock, setNodesMock, setEdgesMock, updateNodeDataMock, deleteNodeMock, modalsMock, toastMock, reactFlowStateRef, deserializeNodesMock } = vi.hoisted(() => ({
+const { navigateMock, handleSaveQuietMock, loadGraphMock, addNodesMock, updateNodeDataMock, deleteNodeMock, modalsMock, toastMock, reactFlowStateRef, deserializeNodesMock } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
   handleSaveQuietMock: vi.fn().mockResolvedValue(undefined),
-  setNodesMock: vi.fn(),
-  setEdgesMock: vi.fn(),
+  loadGraphMock: vi.fn(),
+  addNodesMock: vi.fn(),
   updateNodeDataMock: vi.fn(),
   deleteNodeMock: vi.fn(),
   modalsMock: {
@@ -93,8 +93,16 @@ vi.mock('../../src/hooks', () => ({
   useCanvasCore: () => ({
     nodes: [],
     edges: [],
-    setNodes: setNodesMock,
-    setEdges: setEdgesMock,
+    loadGraph: loadGraphMock,
+    addNodes: addNodesMock,
+    addEdges: vi.fn(),
+    removeEdges: vi.fn(),
+    editNodes: vi.fn(),
+    editEdges: vi.fn(),
+    updateEdge: vi.fn(),
+    patchNodeConfig: vi.fn(),
+    applyDerivedNodes: vi.fn(),
+    applyDerivedEdges: vi.fn(),
     onNodesChange: vi.fn(),
     onEdgesChange: vi.fn(),
     nodesRef: { current: [] },
@@ -253,8 +261,7 @@ describe('ArricchisciEditor', () => {
         currentEditorData.project.canvas.nodes,
         { flags: { isArricchisci: true } },
       );
-      expect(setNodesMock).toHaveBeenCalledWith(loadedNodes);
-      expect(setEdgesMock).toHaveBeenCalledWith([
+      expect(loadGraphMock).toHaveBeenCalledWith(loadedNodes, [
         {
           id: 'e-1',
           source: 'raw-1',
@@ -286,11 +293,9 @@ describe('ArricchisciEditor', () => {
       clientY: 180,
     });
 
-    expect(setNodesMock).toHaveBeenCalled();
-    const addNodeUpdater = setNodesMock.mock.calls.at(-1)[0];
-    expect(typeof addNodeUpdater).toBe('function');
-
-    const nextNodes = addNodeUpdater([]);
+    // Azione utente esplicita: addNodes(nodo) (audit R1).
+    expect(addNodesMock).toHaveBeenCalled();
+    const nextNodes = [addNodesMock.mock.calls.at(-1)[0]];
     expect(nextNodes).toHaveLength(1);
     expect(nextNodes[0]).toMatchObject({
       type: 'project_source',
