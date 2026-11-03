@@ -18,6 +18,7 @@ import { devtools } from 'zustand/middleware';
 import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 import { updateCanvas } from '../api';
 import { serializeCanvas } from '../utils/canvasSerializer';
+import { COLUMN_STEP, findFreePosition, nodeSize, planInsertAfter, settleNodes } from '../utils/canvasPlacement';
 
 // Undo/redo: profondità massima dello stack (oltre, si scarta il più vecchio).
 const HISTORY_LIMIT = 50;
@@ -295,7 +296,10 @@ const useCanvasStore = create(
         // In sola lettura accettiamo solo i changes innocui (select) per
         // permettere all'utente di selezionare i nodi e ispezionarli.
         if (get().isReadOnly) {
-          const safeChanges = changes.filter(c => c.type === 'select');
+          // Anche le misure automatiche del DOM (dimensions senza
+          // setAttributes): non sono modifiche dell'utente.
+          const safeChanges = changes.filter(c => c.type === 'select'
+            || (c.type === 'dimensions' && !c.setAttributes && c.updateStyle !== true));
           if (safeChanges.length === 0) return;
           set(
             state => ({ nodes: applyNodeChanges(safeChanges, state.nodes) }),
@@ -402,10 +406,57 @@ const useCanvasStore = create(
         );
       },
 
-      /** Aggiunge uno o piu' nodi (azione utente). */
+      /** Aggiunge uno o piu' nodi (azione utente), mai sovrapposti agli esistenti. */
       addNodes: (nodeOrNodes) => {
         const added = Array.isArray(nodeOrNodes) ? nodeOrNodes : [nodeOrNodes];
-        get().editNodes(nodes => nodes.concat(added));
+        get().editNodes(nodes => added.reduce((acc, node) => acc.concat(
+          node.type === 'comment' || !node.position ? node : { ...node, position: findFreePosition(acc, node.position, nodeSize(node)) },
+        ), nodes));
+      },
+
+      /**
+       * Aggiunge un passo, opzionalmente "dopo" un nodo (palette, Fase 4).
+       * Un'unica azione utente (un solo Ctrl+Z):
+       *  - senza afterId: nodo in una posizione libera vicino a node.position;
+       *  - con afterId e passThrough, se il nodo di partenza ha un solo passo
+       *    successivo: il nodo entra nella catena (A -> nuovo -> B) e i nodi a
+       *    valle si spostano di una colonna;
+       *  - altrimenti: ramo nuovo A -> nuovo, in una posizione libera.
+       * `makeEdge(params)` costruisce l'edge nello stile dell'editor.
+       * Il nuovo nodo resta selezionato (pannello aperto).
+       * @returns {{ added: object[], edges: object[] } | null}
+       */
+      insertNode: ({ node, afterId = null, passThrough = false, inHandle = null, outHandle = null, afterHandle = null, makeEdge = null }) => {
+        if (get().isReadOnly) return null;
+        const { nodes, edges } = get();
+        const after = afterId ? nodes.find(n => n.id === afterId) : null;
+        const plan = after ? planInsertAfter(nodes, edges, afterId, { passThrough }) : null;
+        const position = plan?.position || findFreePosition(nodes, node.position);
+        const shiftIds = plan?.shiftIds || new Set();
+        // Nuovo nodo e nodi spostati a valle: nessuna sovrapposizione
+        // (settleNodes), ne' con i nodi fermi ne' tra loro.
+        const nextNodes = settleNodes(nodes.map((n) => {
+          let m = n;
+          if (shiftIds.has(n.id)) m = { ...m, position: { x: m.position.x + COLUMN_STEP, y: m.position.y } };
+          if (m.selected) m = { ...m, selected: false };
+          return m;
+        }).concat({ ...node, position, selected: true }), new Set([...shiftIds, node.id]));
+        const added = [];
+        let nextEdges = edges;
+        if (after && makeEdge) {
+          if (plan.reroute) {
+            const r = plan.reroute;
+            nextEdges = edges.filter(e => e.id !== r.id);
+            added.push(makeEdge({ source: after.id, sourceHandle: r.sourceHandle ?? null, target: node.id, targetHandle: inHandle }));
+            added.push(makeEdge({ source: node.id, sourceHandle: outHandle, target: r.target, targetHandle: r.targetHandle ?? null }));
+          } else {
+            added.push(makeEdge({ source: after.id, sourceHandle: afterHandle, target: node.id, targetHandle: inHandle }));
+          }
+          nextEdges = nextEdges.concat(added);
+        }
+        get().takeSnapshot();
+        set({ nodes: nextNodes, edges: nextEdges, ...dirtyAndClearHighlights() }, false, 'insertNode');
+        return { added, edges: nextEdges };
       },
 
       /** Aggiunge uno o piu' edge (azione utente). */

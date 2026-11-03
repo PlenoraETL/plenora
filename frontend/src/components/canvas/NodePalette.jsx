@@ -8,9 +8,51 @@
  * e' stata aperta la palette, gia' collegato.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { displayIcon } from './nodeDescriptors';
 import './NodePalette.css';
 
 const norm = (s) => String(s || '').toLowerCase();
+
+/**
+ * Quanto un elemento corrisponde alla ricerca (0 = no). Conta prima il
+ * NOME: "filtra" deve proporre "Filtra" prima di "Campiona", che sta nel
+ * gruppo Filtra solo per scopo.
+ */
+export function matchScore(item, groupLabel, q) {
+  const label = norm(item.label);
+  if (label === q) return 100;
+  if (label.startsWith(q)) return 90;
+  if (label.split(/[\s()/_-]+/).some(w => w.startsWith(q))) return 80;
+  if (label.includes(q)) return 70;
+  if (norm(item.id).includes(q)) return 50;
+  if (norm(item.desc).includes(q)) return 30;
+  if (norm(groupLabel).includes(q)) return 10;
+  return 0;
+}
+
+/**
+ * Gruppi da mostrare per una ricerca. Senza testo: i gruppi dell'editor.
+ * Con testo: un solo elenco "Risultati" ordinato per matchScore (a parita',
+ * l'ordine dell'editor), senza doppioni e senza il gruppo "Più usate".
+ */
+export function filterPalette(groups, query) {
+  const q = norm(query).trim();
+  if (!q) {
+    return groups
+      .map(g => ({ ...g, items: g.items.slice(0, g.limit || 60) }))
+      .filter(g => g.items.length > 0);
+  }
+  const seen = new Set();
+  const scored = [];
+  groups.filter(g => !g.onlyWhenEmpty).forEach((g, gi) => g.items.forEach((item, ii) => {
+    const key = `${item.kind || ''}:${item.id}`;
+    const score = matchScore(item, g.label, q);
+    if (score > 0 && !seen.has(key)) { seen.add(key); scored.push({ item, score, order: gi * 10000 + ii }); }
+  }));
+  scored.sort((a, b) => b.score - a.score || a.order - b.order);
+  const items = scored.slice(0, 60).map(x => x.item);
+  return items.length ? [{ label: 'Risultati', items }] : [];
+}
 
 export default function NodePalette({ open, context, groups = [], onPick, onClose }) {
   const [query, setQuery] = useState('');
@@ -22,17 +64,7 @@ export default function NodePalette({ open, context, groups = [], onPick, onClos
     if (open) { setQuery(''); setActive(0); setTimeout(() => inputRef.current?.focus(), 0); }
   }, [open]);
 
-  const filtered = useMemo(() => {
-    const q = norm(query).trim();
-    return groups
-      .map(g => ({
-        ...g,
-        items: (q
-          ? g.items.filter(i => `${norm(i.label)} ${norm(i.desc)} ${norm(i.id)} ${norm(g.label)}`.includes(q))
-          : g.items).slice(0, g.limit || 60),
-      }))
-      .filter(g => g.items.length > 0 && (!q || !g.onlyWhenEmpty));
-  }, [groups, query]);
+  const filtered = useMemo(() => filterPalette(groups, query), [groups, query]);
 
   const flat = useMemo(() => filtered.flatMap(g => g.items), [filtered]);
 
@@ -83,7 +115,7 @@ export default function NodePalette({ open, context, groups = [], onPick, onClos
                     role="option"
                     aria-selected={i === active}
                   >
-                    <span className="npal__icon" aria-hidden="true">{item.icon || '⚙️'}</span>
+                    <span className="npal__icon" aria-hidden="true">{displayIcon(item.icon)}</span>
                     <span className="npal__label">{item.label}</span>
                     {item.desc && <span className="npal__desc">{item.desc}</span>}
                   </div>

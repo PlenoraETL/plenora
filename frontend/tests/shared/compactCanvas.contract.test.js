@@ -5,6 +5,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('../../src/utils/transformRegistry', () => ({
   fetchTransformRegistry: vi.fn(async () => null),
   getCachedTransformRegistry: () => ({ transforms: { filter: { name: 'Filtra righe', icon: '🔍' } } }),
+  isMultiInputOp: (op) => op === 'join',
 }));
 
 import { hasNodeDescriptor, nodeDescriptor, nodeTitle, transformSummary } from '../../src/components/canvas/nodeDescriptors';

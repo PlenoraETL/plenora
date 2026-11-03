@@ -72,7 +72,7 @@ function EstraiEditor() {
   useHexCanvas(hexCanvasRef);
   const {
     nodes, edges, onNodesChange, onEdgesChange,
-    loadGraph, addNodes, addEdges, editNodes, editEdges, applyDerivedNodes,
+    loadGraph, addNodes, addEdges, editEdges, insertNode, applyDerivedNodes,
     nodesRef, edgesRef, updateNodeData, deleteNode,
     handleSaveQuiet, dataNodes, getViewportCenter,
     isReadOnly, readOnlyProps
@@ -382,7 +382,8 @@ function EstraiEditor() {
       const after = nodesRef.current.find(n => n.id === afterId);
       const position = after ? { x: after.position.x - 290, y: after.position.y + 120 } : getViewportCenter(reactFlowInstance);
       const newNode = buildTableNode(item.name, item.kind === 'view', position);
-      editNodes(nds => [...nds.map(n => (n.selected ? { ...n, selected: false } : n)), { ...newNode, selected: true }]);
+      // Posizione libera vicino al punto scelto, nodo selezionato (store.insertNode).
+      insertNode({ node: newNode });
       // Tabella dopo tabella = join: la nuova e' la sorgente, quella di
       // partenza il target (stesso verso del trascinamento manuale).
       if (after && (after.type === 'tableNode' || after.type === 'featureLayerNode')) {
@@ -390,7 +391,7 @@ function EstraiEditor() {
       }
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [catalog, views, buildTableNode, editNodes, handleAddCaricanNode, handleAddCaricanArcGISNode]);
+  }), [catalog, views, buildTableNode, insertNode, handleAddCaricanNode, handleAddCaricanArcGISNode]);
 
   // Click su una tabella/vista del catalogo → la aggiunge al CENTRO del canvas
   // (il drag resta per il posizionamento preciso).

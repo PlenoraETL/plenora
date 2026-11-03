@@ -7,7 +7,12 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { FRONTEND_ENV } from './config/runtimeEnv';
+import { installChunkReload } from './utils/chunkReload';
 import './styles/App.css';
+
+// Dopo un deploy: un editor della build vecchia non si trova piu' -> si
+// ricarica la pagina una volta invece della schermata di errore critico.
+installChunkReload();
 
 // #35: Sentry FE error tracking — attivo SOLO se VITE_SENTRY_DSN è configurato
 // a build-time. Senza DSN è un no-op totale: import dinamico, quindi il bundle

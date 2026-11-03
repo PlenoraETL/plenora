@@ -63,8 +63,8 @@ import '../components/nodes/DataSourceNode.css';
 import { useAuth } from '../context/AuthContext';
 import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
-import { buildManipolaPaletteGroups, MULTI_INPUT_OPS } from '../components/canvas/manipolaPalette';
-import { fetchTransformRegistry, getCachedTransformRegistry } from '../utils/transformRegistry';
+import { buildManipolaPaletteGroups } from '../components/canvas/manipolaPalette';
+import { fetchTransformRegistry, getCachedTransformRegistry, isMultiInputOp } from '../utils/transformRegistry';
 
 // Costante stabile — evita array literal nelle deps di useEditorData
 const MANIPOLA_SOURCE_TYPES = ['estrai', 'manipola', 'arricchisci'];
@@ -106,7 +106,7 @@ const ManipolaEditorContent = () => {
 
   const {
     nodes, edges, onNodesChange, onEdgesChange,
-    loadGraph, addNodes, addEdges, editNodes, editEdges, applyDerivedNodes,
+    loadGraph, addNodes, addEdges, editNodes, editEdges, insertNode, applyDerivedNodes,
     nodesRef, edgesRef, updateNodeData, deleteNode,
     handleSaveQuiet, getViewportCenter,
     isReadOnly, readOnlyProps
@@ -402,6 +402,22 @@ const ManipolaEditorContent = () => {
   // da ResultNode.runValidation). Hook condiviso con ArricchisciEditor.
   useValidationHighlights(applyDerivedNodes);
 
+  // Effetti di un nuovo collegamento: propagazione colonne, autosave, schemi.
+  // Condiviso da onConnect e dall'inserimento dalla palette.
+  const afterConnect = useCallback((newEdges, propagate = true) => {
+    setTimeout(() => {
+      if (propagate) {
+        propagateColumns(nodesRef.current, newEdges);
+      }
+      // triggerAutosave rispetta il single-flight semaphore.
+      // refreshSchemas non e' piu' chained al save: il semaphore
+      // potrebbe codarlo (re-fire) o saltarlo se gia' in flight.
+      // refreshSchemas locale e' safe ad essere chiamato comunque.
+      triggerAutosave();
+      refreshSchemas();
+    }, 50);
+  }, [propagateColumns, refreshSchemas, triggerAutosave]);
+
   // H-8 (2026-05-26): onConnect e onEdgeContextMenu DEVONO passare per
   // `triggerAutosave()` (semaphore single-flight + coda re-fire). Pre-fix:
   // chiamavano `handleSaveQuiet()` direttamente bypassando il semaphore
@@ -417,20 +433,11 @@ const ManipolaEditorContent = () => {
         ? createParameterBindingEdge(params)
         : { ...params, ...defaultEdgeOptions };
       const newEdges = addEdge(edge, eds);
-      setTimeout(() => {
-        if (!isScalarProjectInputNode(sourceNode)) {
-          propagateColumns(nodesRef.current, newEdges);
-        }
-        // triggerAutosave rispetta il single-flight semaphore.
-        // refreshSchemas non e' piu' chained al save: il semaphore
-        // potrebbe codarlo (re-fire) o saltarlo se gia' in flight.
-        // refreshSchemas locale e' safe ad essere chiamato comunque.
-        triggerAutosave();
-        refreshSchemas();
-      }, 50);
+      afterConnect(newEdges, !isScalarProjectInputNode(sourceNode));
       return newEdges;
     });
-  }, [editEdges, propagateColumns, refreshSchemas, triggerAutosave]);
+  }, [editEdges, afterConnect]);
+
 
   const onEdgeContextMenu = useCallback((event, edge) => {
     event.preventDefault();
@@ -522,8 +529,9 @@ const ManipolaEditorContent = () => {
     return () => { alive = false; };
   }, [transformRegistry]);
 
-  // Il nuovo passo nasce a destra del nodo di partenza, gia' selezionato
-  // (pannello aperto) e collegato con onConnect (propagazione + autosave).
+  // Il nuovo passo nasce dopo il nodo di partenza, gia' selezionato
+  // (pannello aperto). Se quel nodo ha un solo passo successivo e il nuovo
+  // lascia passare i dati, entra nella catena (store.insertNode).
   const handlePalettePick = useCallback((item, afterId) => {
     if (item.kind === 'carica') { handleAddCaricanNode(); return; }
     const current = nodesRef.current;
@@ -531,8 +539,7 @@ const ManipolaEditorContent = () => {
       toast.warning('Puoi avere solo un nodo risultato per progetto');
       return;
     }
-    const after = current.find(n => n.id === afterId);
-    const position = after ? { x: after.position.x + 290, y: after.position.y } : getPos();
+    const position = getPos();
     const stamp = Date.now();
     let newNode;
     if (item.kind === 'multi_join') {
@@ -548,15 +555,22 @@ const ManipolaEditorContent = () => {
       newNode = { id: `transform_${stamp}`, type: 'transform', position,
         data: { transform_op: item.id, config: {}, columns: [] } };
     }
-    editNodes(nds => [...nds.map(n => (n.selected ? { ...n, selected: false } : n)), { ...newNode, selected: true }]);
-    if (after) {
-      const targetHandle = item.kind === 'multi_join' || MULTI_INPUT_OPS.includes(item.id)
-        ? 'input-0'
-        : (item.kind === 'result' ? 'input' : null);
-      onConnect({ source: after.id, sourceHandle: null, target: newNode.id, targetHandle });
-    }
+    const inHandle = item.kind === 'multi_join' || isMultiInputOp(item.id)
+      ? 'input-0'
+      : (item.kind === 'result' ? 'input' : null);
+    const outcome = insertNode({
+      node: newNode,
+      afterId,
+      passThrough: item.kind !== 'result',
+      inHandle,
+      makeEdge: (params) => ({
+        ...params, ...defaultEdgeOptions,
+        id: `xy-edge__${params.source}${params.sourceHandle || ''}-${params.target}${params.targetHandle || ''}`,
+      }),
+    });
+    if (outcome?.added.length) afterConnect(outcome.edges);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editNodes, onConnect, handleAddCaricanNode, toast]);
+  }, [insertNode, afterConnect, handleAddCaricanNode, toast]);
 
   const palette = useMemo(() => ({
     groups: buildManipolaPaletteGroups(transformRegistry),

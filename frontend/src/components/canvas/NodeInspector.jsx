@@ -11,7 +11,7 @@
  */
 import React, { useCallback } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
-import { nodeDescriptor, nodeTitle } from './nodeDescriptors';
+import { nodeDescriptor, nodeIcon, nodeTitle } from './nodeDescriptors';
 import './NodeInspector.css';
 
 // Id del nodo da ispezionare: esattamente un nodo selezionato, note escluse.
@@ -35,7 +35,7 @@ export default function NodeInspector({ fullNodeTypes, prefix = 'canvas' }) {
   if (!node) return null;
   const Full = fullNodeTypes[node.type];
   const descriptor = nodeDescriptor(node.type);
-  const icon = typeof descriptor.icon === 'function' ? descriptor.icon(node.data || {}) : descriptor.icon;
+  const icon = nodeIcon(node.type, node.data);
   const close = () => onNodesChange([{ id: node.id, type: 'select', selected: false }]);
 
   return (

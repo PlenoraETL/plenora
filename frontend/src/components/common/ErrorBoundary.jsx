@@ -96,7 +96,7 @@ export class AppErrorBoundary extends React.Component {
         <div className="error-boundary error-boundary--app">
           <div className="error-boundary__card">
             <div className="error-boundary__icon">🔴</div>
-            <h2 className="error-boundary__title">URBY-ETL — Errore critico</h2>
+            <h2 className="error-boundary__title">Plenora — Errore critico</h2>
             <p className="error-boundary__message">
               L&apos;applicazione ha incontrato un errore imprevisto.
               Salva il tuo lavoro e ricarica la pagina.

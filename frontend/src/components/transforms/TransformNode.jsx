@@ -15,7 +15,7 @@ import RunHistoryModal from '../modals/RunHistoryModal';
 import { useConfirm } from '../../context/ConfirmContext';
 import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 import NodeHandle from '../canvas/NodeHandle';
-import { fetchTransformRegistry, getCachedTransformRegistry } from '../../utils/transformRegistry';
+import { fetchTransformRegistry, getCachedTransformRegistry, isMultiInputOp } from '../../utils/transformRegistry';
 
 // Cache del registry condivisa con i riassunti dei nodi compatti.
 const fetchRegistry = fetchTransformRegistry;
@@ -214,12 +214,11 @@ const TransformNode = memo(({ data, id }) => {
 
   // Determina se l'operazione richiede multi-input
   // Controlla sia dal registry (se caricato) che da lista nota di operazioni multi-input
-  const KNOWN_MULTI_INPUT_OPS = ['join', 'concat', 'sjoin', 'geo_clip', 'geo_intersection', 'geo_union', 'geo_difference', 'table_diff'];
-  const isMultiInput = transformConfig?.inputs === 'multi' || KNOWN_MULTI_INPUT_OPS.includes(transform_op);
+  const isMultiInput = transformConfig?.inputs === 'multi' || isMultiInputOp(transform_op);
 
   if (loading) {
     // Anche in loading, mostra dual handles se è operazione multi-input nota
-    const showDualHandles = KNOWN_MULTI_INPUT_OPS.includes(transform_op);
+    const showDualHandles = isMultiInputOp(transform_op);
     
     return (
       <div className="transform-node transform-node--loading">

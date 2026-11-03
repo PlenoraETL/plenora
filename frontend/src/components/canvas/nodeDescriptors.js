@@ -13,7 +13,10 @@
  * ogni handle gia' usato da un edge collegato (es. `parameter:<id>` dei
  * binding degli input runtime): nessun collegamento salvato resta orfano.
  */
-import { getCachedTransformRegistry } from '../../utils/transformRegistry';
+import { getCachedTransformRegistry, isMultiInputOp } from '../../utils/transformRegistry';
+import { displayIcon } from '../../utils/displayIcon';
+
+export { displayIcon };
 
 const count = (v) => (Array.isArray(v) ? v.length : 0);
 const visibleColumns = (cols) => (Array.isArray(cols) ? cols.filter(c => c && c.visible !== false).length : 0);
@@ -27,8 +30,6 @@ const joinNames = (list, max = 3) => {
 const IN = { type: 'target', position: 'left' };
 const OUT = { type: 'source', position: 'right' };
 
-// Operazioni a due input (stessa lista di TransformNode).
-const MULTI_INPUT_OPS = ['join', 'concat', 'sjoin', 'geo_clip', 'geo_intersection', 'geo_union', 'geo_difference', 'table_diff'];
 
 const OPERATOR_LABELS = {
   '==': '=', '!=': '≠', '>': '>', '>=': '≥', '<': '<', '<=': '≤',
@@ -83,7 +84,7 @@ export function transformSummary(op, config = {}) {
 function transformInfo(data) {
   const op = data?.transform_op;
   const def = getCachedTransformRegistry()?.transforms?.[op];
-  return { op, name: def?.name || op || 'Trasformazione', icon: def?.icon || '⚙️' };
+  return { op, name: def?.name || op || 'Trasformazione', icon: displayIcon(def?.icon) };
 }
 
 const D = {
@@ -138,7 +139,7 @@ const D = {
     category: 'step', icon: (d) => transformInfo(d).icon, kind: (d) => transformInfo(d).name,
     title: (d) => transformInfo(d).name,
     summary: (d) => transformSummary(d.transform_op, d.config),
-    defaultHandles: (d) => (MULTI_INPUT_OPS.includes(d.transform_op)
+    defaultHandles: (d) => (isMultiInputOp(d.transform_op)
       ? [{ ...IN, id: 'input-0' }, { ...IN, id: 'input-1' }, OUT]
       : [IN, OUT]),
   },
@@ -207,6 +208,12 @@ export function hasNodeDescriptor(type) {
 
 export function nodeDescriptor(type) {
   return D[ALIASES[type] || type] || FALLBACK;
+}
+
+/** Icona del nodo, sempre un glifo mostrabile. */
+export function nodeIcon(type, data = {}) {
+  const d = nodeDescriptor(type);
+  return displayIcon(typeof d.icon === 'function' ? d.icon(data || {}) : d.icon);
 }
 
 /** Titolo mostrato: quello scelto dall'utente (data.title) o quello del tipo. */

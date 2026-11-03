@@ -69,10 +69,13 @@
 }
 .cnode__handle--param { border-color: var(--plen-text-sub, #5b6478); width: 7px; height: 7px; }
 
-/* "＋" per aggiungere il passo successivo (M2): visibile al passaggio. */
+/* "＋" per aggiungere il passo successivo (M2): visibile al passaggio.
+   Sta a cavallo del bordo INFERIORE, lontano dagli handle laterali: sopra
+   l'handle d'uscita impediva di trascinare un collegamento. Invisibile non
+   intercetta il puntatore. */
 .cnode__plus {
-  position: absolute; right: -13px; top: 50%;
-  transform: translateY(-50%);
+  position: absolute; left: 50%; bottom: -12px;
+  transform: translateX(-50%);
   width: 24px; height: 24px;
   display: grid; place-items: center;
   border-radius: 50%;
@@ -85,5 +88,6 @@
   transition: opacity 0.12s;
   z-index: 2;
 }
-.cnode:hover .cnode__plus, .cnode--selected .cnode__plus { opacity: 1; }
+.cnode__plus { pointer-events: none; }
+.cnode:hover .cnode__plus, .cnode--selected .cnode__plus { opacity: 1; pointer-events: auto; }
 .cnode__plus:hover { background: var(--cnode-accent); color: #fff; border-color: var(--cnode-accent); }

@@ -33,6 +33,7 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
   const removeEdges       = useCanvasStore(s => s.removeEdges);
   const editNodes         = useCanvasStore(s => s.editNodes);
   const editEdges         = useCanvasStore(s => s.editEdges);
+  const insertNode        = useCanvasStore(s => s.insertNode);
   const updateEdge        = useCanvasStore(s => s.updateEdge);
   const patchNodeConfig   = useCanvasStore(s => s.patchNodeConfig);
   const applyDerivedNodes = useCanvasStore(s => s.applyDerivedNodes);
@@ -72,10 +73,10 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
           edgesFocusable: false,
           elementsSelectable: true,
           deleteKeyCode: null,
-          // Sovrascrive i callback di mutazione del canvas con no-op
-          // così anche se React Flow li chiama internamente non succede nulla.
-          onNodesChange: () => {},
-          onEdgesChange: () => {},
+          // onNodesChange/onEdgesChange NON vanno sovrascritti: lo store in
+          // sola lettura lascia passare solo selezione e misure. Con un no-op
+          // la selezione non arrivava allo store e il viewer non poteva
+          // aprire il pannello del nodo ne' l'anteprima.
           onConnect: () => {},
           onDrop: (e) => { e.preventDefault(); },
           onDragOver: (e) => { e.preventDefault(); },
@@ -173,6 +174,7 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
     removeEdges,
     editNodes,
     editEdges,
+    insertNode,
     updateEdge,
     patchNodeConfig,
     applyDerivedNodes,

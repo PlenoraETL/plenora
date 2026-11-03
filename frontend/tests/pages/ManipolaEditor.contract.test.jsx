@@ -66,6 +66,7 @@ vi.mock('../../src/utils/validateRouteParam', () => ({
 vi.mock('../../src/utils/transformRegistry', () => ({
   fetchTransformRegistry: vi.fn(async () => ({ transforms: { filter: { name: 'Filtra', category: 'base' } } })),
   getCachedTransformRegistry: () => ({ transforms: { filter: { name: 'Filtra', category: 'base' } } }),
+  isMultiInputOp: () => false,
 }));
 
 vi.mock('../../src/api', () => ({

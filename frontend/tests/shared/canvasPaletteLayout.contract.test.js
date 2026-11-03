@@ -54,7 +54,7 @@ describe('auto layout', () => {
     const nodes = [n('src'), n('step'), n('input', 'project_input')];
     const edges = [
       { id: 'e1', source: 'src', target: 'step' },
-      { id: 'b1', source: 'input', target: 'step', targetHandle: 'parameter:value', data: { binding_kind: 'parameter' } },
+      { id: 'b1', source: 'input', target: 'step', targetHandle: 'parameter:value', data: { edge_kind: 'parameter_binding' } },
     ];
     expect(() => autoLayout(nodes, edges)).not.toThrow();
   });

@@ -165,13 +165,40 @@ canvasConfig = EMPTY_OBJ,
   const editNodes = useCanvasStore(s => s.editNodes);
   const setEditorActions = useCanvasStore(s => s.setEditorActions);
   const reactFlow = useReactFlow();
-  const [paletteAfter, setPaletteAfter] = useState(null);
+  // Palette: { afterId } quando aperta (afterId null = canvas vuoto o
+  // nessun nodo selezionato), null quando chiusa.
+  const [paletteState, setPaletteState] = useState(null);
+  const paletteAfter = paletteState?.afterId || null;
 
   // "＋" sul nodo compatto: apre la palette per aggiungere il passo successivo.
-  const openPalette = useCallback((afterNodeId) => {
+  const openPalette = useCallback((afterNodeId = null) => {
     if (!palette || isReadOnly) return;
-    setPaletteAfter(afterNodeId);
+    setPaletteState({ afterId: afterNodeId });
   }, [palette, isReadOnly]);
+
+  // Dal pulsante dei controlli o da tastiera ("/" o "A"): dopo il nodo
+  // selezionato se ce n'e' uno solo, altrimenti un passo libero.
+  const openPaletteFromSelection = useCallback(() => {
+    const selected = useCanvasStore.getState().nodes.filter(n => n.selected && n.type !== 'comment');
+    openPalette(selected.length === 1 ? selected[0].id : null);
+  }, [openPalette]);
+  useEffect(() => {
+    if (!palette || isReadOnly) return undefined;
+    // Solo con il fuoco sul canvas (o su nessun controllo): un tasto premuto
+    // nel pannello, in una modale o su un pulsante non apre la palette.
+    const onKey = (e) => {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key !== '/' && e.key !== 'a' && e.key !== 'A') return;
+      const t = e.target;
+      const onCanvas = t === document.body || t === document.documentElement || Boolean(t?.closest?.('.react-flow'));
+      if (!onCanvas || t?.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t?.tagName || '')) return;
+      if (document.querySelector('[role="dialog"]')) return;
+      e.preventDefault();
+      openPaletteFromSelection();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [palette, isReadOnly, openPaletteFromSelection]);
   useEffect(() => {
     setEditorActions({ openPalette: palette && !isReadOnly ? openPalette : null });
   }, [setEditorActions, openPalette, palette, isReadOnly]);
@@ -270,6 +297,11 @@ canvasConfig = EMPTY_OBJ,
             >
               <Background {...backgroundProps} />
               <Controls>
+                {palette && !isReadOnly && (
+                  <ControlButton onClick={openPaletteFromSelection} title="Aggiungi un passo (/ o A)" aria-label="Aggiungi un passo">
+                    ＋
+                  </ControlButton>
+                )}
                 {!isReadOnly && (
                   <ControlButton onClick={handleAutoLayout} title="Riordina i nodi automaticamente" aria-label="Riordina i nodi">
                     ⤢
@@ -290,11 +322,11 @@ canvasConfig = EMPTY_OBJ,
       {modals}
       {palette && (
         <NodePalette
-          open={Boolean(paletteAfter)}
+          open={Boolean(paletteState)}
           context={paletteAfterNode ? nodeTitle(paletteAfterNode.type, paletteAfterNode.data) : null}
           groups={palette.groups}
           onPick={(item) => palette.onPick(item, paletteAfter)}
-          onClose={() => setPaletteAfter(null)}
+          onClose={() => setPaletteState(null)}
         />
       )}
     </div>

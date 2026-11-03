@@ -11,6 +11,7 @@
  */
 import React from 'react';
 import { isGeometryType } from '../../../utils/columnUtils';
+import { formatNumber } from '../../../utils/previewFormat';
 
 const MAX_ROWS = 5;
 const MAX_COLS = 6;
@@ -24,7 +25,7 @@ function formatCell(value, type) {
     return j.length > CELL_MAX ? `${j.slice(0, CELL_MAX - 1)}…` : j;
   }
   if (type === 'bool') return value ? '✔' : '✗';
-  const s = String(value);
+  const s = formatNumber(value);
   return s.length > CELL_MAX ? `${s.slice(0, CELL_MAX - 1)}…` : s;
 }
 

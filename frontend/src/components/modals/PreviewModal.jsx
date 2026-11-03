@@ -13,7 +13,9 @@ import 'leaflet/dist/leaflet.css';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import PreviewTable from './PreviewTable';
 import PermissionRevokedBanner from '../common/PermissionRevokedBanner';
+import { formatNumber } from '../../utils/previewFormat';
 import './PreviewModal.css';
+
 const parseWKB = (hex) => {
   // EWKB/WKB hex string (PostGIS default output)
   try {
@@ -620,7 +622,7 @@ const PreviewModal = memo(({
     if (type === 'date' || type === 'datetime')
       return <span className="preview-modal__date">{String(value)}</span>;
     if (type === 'int' || type === 'real')
-      return <span className="preview-modal__number">{value}</span>;
+      return <span className="preview-modal__number">{formatNumber(value)}</span>;
     const str = String(value);
     return str.length > 100 ? <span title={str}>{str.substring(0, 97)}…</span> : str;
   };

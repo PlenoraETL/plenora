@@ -7,6 +7,8 @@
  * non sparisce mai dalla palette.
  */
 
+import { displayIcon } from './nodeDescriptors';
+
 export const PURPOSES = ['Pulisci', 'Filtra', 'Calcola', 'Combina', 'Riorganizza', 'Geometria', 'Privacy'];
 
 const PURPOSE_OF = {
@@ -45,7 +47,7 @@ export function buildManipolaPaletteGroups(registry) {
   const toItem = (opId) => {
     const def = transforms[opId];
     return {
-      id: opId, kind: 'transform', label: def?.name || opId, icon: def?.icon || '⚙️',
+      id: opId, kind: 'transform', label: def?.name || opId, icon: displayIcon(def?.icon),
       desc: def?.description ? String(def.description).slice(0, 60) : '',
     };
   };
@@ -68,5 +70,3 @@ export function buildManipolaPaletteGroups(registry) {
   });
   return groups;
 }
-
-export const MULTI_INPUT_OPS = ['join', 'concat', 'sjoin', 'geo_clip', 'geo_intersection', 'geo_union', 'geo_difference', 'table_diff'];

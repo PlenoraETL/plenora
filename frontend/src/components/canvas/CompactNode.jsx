@@ -11,7 +11,7 @@ import React, { memo, useEffect, useMemo, useState } from 'react';
 import { Handle, Position, useStore } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { fetchTransformRegistry, getCachedTransformRegistry } from '../../utils/transformRegistry';
-import { nodeDescriptor, nodeTitle } from './nodeDescriptors';
+import { nodeDescriptor, nodeIcon, nodeTitle } from './nodeDescriptors';
 import './CompactNode.css';
 
 const POSITION = { left: Position.Left, right: Position.Right, top: Position.Top };
@@ -71,7 +71,7 @@ function CompactNode({ id, type, data = {}, selected }) {
   const openPalette = (nodeId) => useCanvasStore.getState().getEditorAction('openPalette')?.(nodeId);
 
   const title = nodeTitle(type, data);
-  const icon = typeof descriptor.icon === 'function' ? descriptor.icon(data) : descriptor.icon;
+  const icon = nodeIcon(type, data);
   const summary = descriptor.summary(data);
   const problem = data.access_denied ? (data.access_denied_reason || 'Accesso negato') : null;
 

@@ -6,7 +6,8 @@
 /* ── Container ─────────────────────────────────────────────────── */
 .query-preview {
   position: absolute;
-  bottom: 16px;
+  /* sopra l'anteprima del passo, se aperta (StepPreview) */
+  bottom: calc(var(--step-preview-h, 0px) + 16px);
   left: 50%;
   transform: translateX(-50%);
   width: 1100px;

@@ -982,6 +982,9 @@ if ($InstallFrontend) {
 
     # Caddyfile: statici SPA (fallback index.html) + reverse proxy delle
     # rotte backend. /health e /ready proxati per comodita' operatore.
+    # Cache: i file in /assets hanno l'hash nel nome (immutabili, e se
+    # mancano 404, non index.html); index.html va sempre riconvalidato,
+    # altrimenti dopo un deploy il browser chiede i file della build vecchia.
     $caddyfile = Join-Path $caddySvcDir 'Caddyfile'
     @"
 :$FrontendPort {
@@ -990,8 +993,14 @@ if ($InstallFrontend) {
     handle @backend {
         reverse_proxy 127.0.0.1:5004
     }
+    handle /assets/* {
+        root * $distDir
+        header Cache-Control "public, max-age=31536000, immutable"
+        file_server
+    }
     handle {
         root * $distDir
+        header Cache-Control "no-cache"
         try_files {path} /index.html
         file_server
     }

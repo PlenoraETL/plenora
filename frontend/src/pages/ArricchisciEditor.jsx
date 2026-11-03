@@ -119,7 +119,7 @@ const ArricchisciEditorContent = () => {
 
   const {
     nodes, edges, onNodesChange, onEdgesChange,
-    loadGraph, addNodes, addEdges, editEdges, applyDerivedNodes,
+    loadGraph, addNodes, addEdges, editEdges, insertNode, applyDerivedNodes,
     nodesRef, edgesRef, updateNodeData, deleteNode,
     handleSaveQuiet, getViewportCenter,
     isReadOnly, readOnlyProps
@@ -385,23 +385,23 @@ const ArricchisciEditorContent = () => {
 
   // ── Palette "Cosa vuoi fare?" (Fase 4, M2) ────────────────────────────
   // Il nodo API nasce dopo la scelta della connessione nel selettore: il
-  // nodo di partenza resta in sospeso qui e viene collegato a quel punto.
+  // nodo di partenza resta in sospeso qui e il nodo entra nel flusso a quel
+  // punto (store.insertNode: catena se c'e' un solo passo successivo).
   const paletteAfterRef = useRef(null);
-  const connectAfter = useCallback((afterId, newNodeId, targetHandle) => {
-    const after = nodesRef.current.find(n => n.id === afterId);
-    if (!after) return;
-    const sourceHandle = ['api_enrich', 'result', 'staticValues'].includes(after.type) ? 'output' : null;
-    editEdges(eds => addEdge({
-      ...defaultEdgeOptions,
-      id: `edge_${after.id}_${newNodeId}`,
-      source: after.id, sourceHandle, target: newNodeId, targetHandle,
-    }, eds));
+  // Stessa normalizzazione degli handle di onConnect ('output' -> 'input').
+  const makeEdge = useCallback((p) => {
+    const params = { ...p, sourceHandle: p.sourceHandle || 'output', targetHandle: p.targetHandle || 'input' };
+    return { ...params, ...defaultEdgeOptions, id: `edge_${params.source}_${params.target}_${params.targetHandle}` };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editEdges]);
+  }, []);
+  const placeAfter = useCallback((node, afterId, passThrough) => {
+    if (afterId) insertNode({ node, afterId, passThrough, inHandle: 'input', outHandle: 'output', makeEdge });
+    else addNodes(node);
+  }, [insertNode, addNodes, makeEdge]);
 
   const handleSelectConnection = useCallback((connection, category) => {
     const newNodeId = `api_enrich_${Date.now()}`;
-    addNodes({ id: newNodeId,
+    const newNode = ({ id: newNodeId,
       type: category === 'datasource' ? 'project_source' : 'api_enrich',
       // Posizionamento deterministico al centro del viewport corrente,
       // allineato al pattern degli altri `handleAdd*Node` di questo file
@@ -422,16 +422,16 @@ const ArricchisciEditorContent = () => {
         ...(category === 'rest_file'  && { connection_type: 'rest_file',  request: connection.request, response: connection.response }),
         ...(category === 'datasource' && { source_type: 'datasource', datasource_config: connection.datasource }),
         ...(category === 'openapi' && { openapi_spec: connection.openapi_spec }) } });
+    // Un progetto sorgente non ha ingresso: dopo la palette nasce solo vicino.
+    const afterId = paletteAfterRef.current;
+    paletteAfterRef.current = null;
+    placeAfter(newNode, category === 'datasource' ? null : afterId, true);
     if (category === 'template')   modals.close('template');
     if (category === 'manual')     modals.close('manual');
     if (category === 'openapi')    modals.close('openapi');
     if (category === 'rest_file')  modals.close('rest_file');
     if (category === 'datasource') modals.close('datasource');
-    if (paletteAfterRef.current) {
-      connectAfter(paletteAfterRef.current, newNodeId, category === 'datasource' ? null : 'input');
-      paletteAfterRef.current = null;
-    }
-  }, [addNodes, screenToFlowPosition, modals, connectAfter]);
+  }, [placeAfter, screenToFlowPosition, modals]);
 
   const handleAddStaticValuesNode = useCallback(() => {
     addNodes({ id: `static_${Date.now()}`, type: 'staticValues',
@@ -507,17 +507,14 @@ const ArricchisciEditorContent = () => {
       if (item.kind === 'carica') { handleAddCaricanNode(); return; }
       if (item.kind === 'carica_arcgis') { handleAddCaricanArcGISNode(); return; }
       if (nodesRef.current.some(n => n.type === 'result')) { toast.warning('Puoi avere solo un nodo risultato per progetto'); return; }
-      const after = nodesRef.current.find(n => n.id === afterId);
-      const newNodeId = `result_${Date.now()}`;
-      addNodes({ id: newNodeId, type: 'result',
-        position: after ? { x: after.position.x + 290, y: after.position.y } : { x: 600, y: 200 },
+      placeAfter({ id: `result_${Date.now()}`, type: 'result',
+        position: { x: 600, y: 200 },
         data: { isArricchisci: true, fileName: 'output', format: 'csv', availableColumns: [],
           order_by_enabled: false, order_by_columns: [],
-          having_enabled: false, having_conditions: [] } });
-      if (after) connectAfter(after.id, newNodeId, 'input');
+          having_enabled: false, having_conditions: [] } }, afterId, false);
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [modals, handleAddCaricanNode, handleAddCaricanArcGISNode, addNodes, connectAfter, toast]);
+  }), [modals, handleAddCaricanNode, handleAddCaricanArcGISNode, placeAfter, toast]);
 
   const onConnect = useCallback((params) => {
     // Normalizza handles: undefined → 'input'/'output'

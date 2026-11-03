@@ -25,6 +25,12 @@
 .step-preview__title { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .step-preview__meta { font-size: 12px; color: var(--plen-text-dim, #8a93a6); white-space: nowrap; }
 .step-preview__spacer { flex: 1; }
+.step-preview__stale {
+  font-size: 12px; white-space: nowrap;
+  color: var(--plen-warn, #b45309);
+  background: var(--plen-warn-bg, #fef3c7);
+  border-radius: 6px; padding: 2px 8px;
+}
 .step-preview__run {
   border: 1px solid var(--plen-border-hi, #cfd6e4);
   background: var(--plen-surface, #fff);
@@ -51,3 +57,7 @@
   font-weight: 600;
 }
 .step-preview__type { display: block; font-weight: 400; font-size: 10.5px; color: var(--plen-text-dim, #8a93a6); }
+
+/* Il fondo del canvas e' dell'anteprima: controlli e minimappa di React Flow
+   salgono della sua altezza (variabile impostata da StepPreview). */
+.react-flow__panel.bottom { margin-bottom: calc(var(--step-preview-h, 0px) + 15px); }

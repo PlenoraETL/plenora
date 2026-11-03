@@ -10,6 +10,7 @@ import { useState, useCallback, useRef } from 'react';
 import { previewProject } from '../api';
 import { humanizeError } from '../utils/errorMessages';
 import { useTaskPolling } from './useTaskPolling';
+import { PREVIEW_ROW_LIMIT } from '../utils/previewFormat';
 
 const POLL_INTERVAL = 1000;
 
@@ -34,7 +35,7 @@ export function usePreview(projectId, onBeforePreview = null) {
   const cancelledRef = useRef(false);
   const { mountedRef, stopPolling, startPolling } = useTaskPolling({ interval: POLL_INTERVAL });
 
-  const handlePreview = useCallback(async (limit = 100) => {
+  const handlePreview = useCallback(async (limit = PREVIEW_ROW_LIMIT) => {
     setShowModal(true);
     setLoading(true);
     setError(null);
