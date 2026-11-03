@@ -5,7 +5,7 @@
  * Legge data.inputColumns popolato da useColumnPropagation.
  */
 import React, { memo, useState, useEffect, useMemo } from 'react';
-import { Handle, Position, useReactFlow } from 'reactflow';
+import { Handle, Position, useReactFlow } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import './TransformNode.css';
 import DynamicConfig from './DynamicConfig';

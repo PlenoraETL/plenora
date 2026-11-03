@@ -53,8 +53,7 @@ export default defineConfig(({ mode }) => {
               return 'vendor-react';
             }
             // ReactFlow — libreria pesante, bundle separato
-            if (/[\\/]node_modules[\\/]reactflow[\\/]/.test(id) ||
-                /[\\/]node_modules[\\/]@reactflow[\\/]/.test(id)) {
+            if (/[\\/]node_modules[\\/]@xyflow[\\/]/.test(id)) {
               return 'vendor-reactflow';
             }
             // Grafo geospatial — usato SOLO dalle pagine lazy-loaded che

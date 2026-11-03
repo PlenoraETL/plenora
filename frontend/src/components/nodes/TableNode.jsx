@@ -8,7 +8,7 @@
  * Usato in: EstraiEditor (trascina dalla sidebar catalogo)
  */
 import React, { useState, memo } from 'react';
-import { Handle, Position } from 'reactflow';
+import { Handle, Position } from '@xyflow/react';
 import FilterModal from '../modals/FilterModal';
 import ColumnBuilderModal from '../modals/ColumnBuilderModal';
 import { getColumnTypeIcon, getColumnTypeLabel, getColumnSRID, isGeometryType } from '../../utils/columnUtils';

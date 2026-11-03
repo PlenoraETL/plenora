@@ -12,7 +12,7 @@
  * la config vecchia e Salva non salvava (audit R1.1).
  */
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { addEdge } from 'reactflow';
+import { addEdge } from '@xyflow/react';
 import {
   createParameterBindingEdge,
   isParameterBindingEdge,

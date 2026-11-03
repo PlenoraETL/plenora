@@ -57,7 +57,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import ReactFlow, { Background, Controls, MiniMap } from 'reactflow';
+import { ReactFlow, Background, Controls, MiniMap } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 
 import { isValidProjectId } from '../../utils/validateRouteParam';

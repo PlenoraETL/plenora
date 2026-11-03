@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 
 export function createReactFlowMock(options = {}) {
   const {
@@ -11,12 +11,19 @@ export function createReactFlowMock(options = {}) {
 
   return {
     __esModule: true,
+    // React Flow v12 (@xyflow/react): ReactFlow e' un export con nome.
+    ReactFlow: ({ children }) => (
+      showRoot ? React.createElement('div', { 'data-testid': 'reactflow' }, children) : children
+    ),
     default: ({ children }) => (
       showRoot ? React.createElement('div', { 'data-testid': 'reactflow' }, children) : children
     ),
     Background: () => null,
     Controls: () => null,
     MiniMap: () => null,
+    NodeResizer: () => null,
+    applyNodeChanges: (changes, nodes) => nodes,
+    applyEdgeChanges: (changes, edges) => edges,
     Handle: () => React.createElement('div', { 'data-testid': 'handle' }),
     Position: { Left: 'left', Right: 'right' },
     MarkerType: { ArrowClosed: 'ArrowClosed' },

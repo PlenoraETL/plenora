@@ -10,7 +10,7 @@
  * Si aspetta un edge in ingresso da ResultNode (handle "output").
  */
 import React, { useState, useEffect, memo } from 'react';
-import { Handle, Position } from 'reactflow';
+import { Handle, Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import {
   listFeatureConnections,

@@ -60,7 +60,7 @@ const {
   setLastValidationSummaryMock: vi.fn(),
 }));
 
-vi.mock('reactflow', () =>
+vi.mock('@xyflow/react', () =>
   globalThis.__frontendTestHelpers.createReactFlowMock({ canvasStateRef, showRoot: false })
 );
 

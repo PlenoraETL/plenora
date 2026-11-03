@@ -15,8 +15,8 @@
  * Route: /editor/manipola/:id
  */
 import React, { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
-import { addEdge, useReactFlow, ReactFlowProvider, MarkerType } from 'reactflow';
-import 'reactflow/dist/style.css';
+import { addEdge, useReactFlow, ReactFlowProvider, MarkerType } from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import EditorShell from '../components/editor/EditorShell';
 import { ConfirmProvider } from '../context/ConfirmContext';

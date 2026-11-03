@@ -4,7 +4,7 @@
  */
 import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import 'reactflow/dist/style.css';
+import '@xyflow/react/dist/style.css';
 import EditorShell from '../components/editor/EditorShell';
 import TableNode from '../components/nodes/TableNode';
 import FeatureLayerNode from '../components/nodes/FeatureLayerNode';

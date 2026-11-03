@@ -1,6 +1,6 @@
 # Piano: correzioni frontend e redesign di Manipola
 
-**Data:** 03/11/2026. **Branch:** `feat/frontend-audit-manipola-redesign`.
+**Data:** 03/11/2026 (aggiornato con l'estensione a tutti i canvas). **Branch:** `feat/frontend-audit-manipola-redesign`.
 
 **Fonti:**
 - audit: `docs/audits/frontend-audit-2026-11-03.md` (le sigle R*, P*, D* rimandano lì);
@@ -59,20 +59,38 @@ Ogni aggiunta deve avere:
 
 ⛳ **Checkpoint 3:** regressione su Estrai, Manipola e Arricchisci.
 
-## Fase 4 — Redesign Manipola (Claude, con Codex in parallelo sulle fette indipendenti)
+## Fase 4 — Nuova interfaccia per TUTTI i canvas (Estrai, Manipola, Arricchisci)
+
+**Decisioni dell'utente (03/11/2026):**
+- migrazione a React Flow v12 (`@xyflow/react`);
+- **sostituzione diretta**, senza interruttore vecchia/nuova interfaccia;
+- la nuova interfaccia del mockup vale per **tutti e tre gli editor**, per uniformità.
+
+**Architettura.** Una sola "shell" di canvas condivisa e, per ogni editor, solo la tabella dei suoi tipi di nodo. Questo chiude anche Q-04 (editor copiati e già divergenti). La shell comprende:
+- nodo compatto (titolo, riassunto, stato);
+- pannello laterale (inspector);
+- palette;
+- anteprima per passo;
+- vista Passi;
+- layout automatico, minimappa, rami scollegati;
+- toolbar, salvataggio ed esecuzione.
 
 | Fetta | Contenuto | Dipende da |
 |---|---|---|
-| M0 | Decisione su React Flow v12 (`@xyflow/react`): se si fa, migrazione qui, prima delle altre fette | F3 |
-| M1 | Nodi compatti (titolo modificabile e riassunto) e pannello laterale che ospita il `DynamicConfig` esistente | F3 |
-| M2 | Palette per scopo, "＋" sull'uscita di un nodo, layout automatico (dagre/elk), minimappa | M1 |
-| M3 | Pannello di anteprima per passo | B1, M1 |
-| M4 | Pannelli Join, Filtro multiplo e Formula multipla; suggerimento Lookup | B2–B4, M1 |
-| M5 | Griglia "Seleziona e rinomina" nell'Output e come passo | B5, M1 |
-| M6 | Vista Passi, "Vedi in Passi/nel canvas", rami scollegati con "Collega", duplica ramo | M1 |
-| M7 | Autosave uniforme con debounce, un solo Esegui, avviso per rami scollegati, input runtime (R9.1) | M1 |
+| M0 | Migrazione a `@xyflow/react` v12 dei tre editor, a interfaccia invariata | F3 |
+| M1 | Shell condivisa: nodo compatto e inspector laterale; i form esistenti (DynamicConfig, pannelli di tabella/result/carica, ApiEnrich) spostati nell'inspector | M0 |
+| M2 | Palette per editor (operazioni Manipola, tabelle/viste Estrai, connettori Arricchisci), "＋" sul nodo, layout automatico, minimappa | M1 |
+| M3 | Anteprima per passo nei tre editor. Il backend B1 copre Manipola; per Estrai e Arricchisci serve l'estensione **B6** | M1, B1, B6 |
+| M4 | Pannelli Join/Filtro/Formula multipli e suggerimento Lookup (Manipola); join tra tabelle (Estrai) | M1, B2–B4 |
+| M5 | Griglia "Seleziona e rinomina" (Output di Manipola e Arricchisci, Result di Estrai) | M1, B5 |
+| M6 | Vista Passi, "Vedi in Passi", rami scollegati con "Collega", duplica ramo (tre editor) | M1 |
+| M7 | Toolbar uniforme, autosave con debounce, un solo Esegui, input runtime (R9.1) nei tre editor | M1 |
 
-⛳ Checkpoint dopo **M2**, **M5** e **M7**.
+**Backend aggiuntivo B6:** anteprima per nodo anche per Estrai (SQL fino al nodo) e Arricchisci (pipeline fino al nodo), con lo stesso contratto di B1 (`?node_id=`).
+
+⛳ Checkpoint dopo **M0**, **M2**, **M5** e **M7**.
+
+**Stima:** circa 4 giornate (era circa 2 per il solo Manipola).
 
 ## Fase 5 — Resto dell'audit
 

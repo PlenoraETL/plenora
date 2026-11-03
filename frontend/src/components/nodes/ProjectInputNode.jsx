@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useMemo, useState } from 'react';
-import { Handle, Position } from 'reactflow';
+import { Handle, Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { getTransformRegistry } from '../../api/transforms';
 import { listConnectionSets } from '../../api';

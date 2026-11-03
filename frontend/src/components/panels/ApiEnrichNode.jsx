@@ -15,7 +15,7 @@
 import { uploadFile } from '../../api/files';
 import { getApiConnection } from '../../api/apiConnections';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Handle, Position, useReactFlow, useStore } from 'reactflow';
+import { Handle, Position, useReactFlow, useStore } from '@xyflow/react';
 import { getColumnTypeIcon, getColumnTypeLabel } from '../../utils/columnUtils';
 import { humanizeError } from '../../utils/errorMessages';
 import useCanvasStore from '../../store/useCanvasStore';

@@ -25,17 +25,16 @@ const { navigateMock, reactFlowStateRef, reactFlowPropsRef } = vi.hoisted(() => 
   reactFlowPropsRef: { current: null },
 }));
 
-vi.mock('reactflow', () => {
+vi.mock('@xyflow/react', () => {
   const React = require('react');
   const base = globalThis.__frontendTestHelpers.createReactFlowMock({ canvasStateRef: reactFlowStateRef });
-  // Wrappiamo il default mock per catturare le props passate (test edgeTypes).
-  return {
-    ...base,
-    default: (props) => {
-      reactFlowPropsRef.current = props;
-      return base.default(props);
-    },
+  // Wrappiamo il componente ReactFlow (export con nome in v12) per catturare
+  // le props passate (test edgeTypes).
+  const capture = (props) => {
+    reactFlowPropsRef.current = props;
+    return base.ReactFlow(props);
   };
+  return { ...base, ReactFlow: capture, default: capture };
 });
 
 vi.mock('react-router-dom', async () => {

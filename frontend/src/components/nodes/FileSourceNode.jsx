@@ -8,7 +8,7 @@
  * Usato in: ManipolaEditor, ArricchisciEditor
  */
 import React, { useState, useEffect, memo } from 'react';
-import { Handle, Position } from 'reactflow';
+import { Handle, Position } from '@xyflow/react';
 import { getFile } from '../../api/files';
 import { getColumnTypeIcon, getColumnTypeLabel, normalizeColumnType } from '../../utils/columnUtils';
 import { humanizeError } from '../../utils/errorMessages';

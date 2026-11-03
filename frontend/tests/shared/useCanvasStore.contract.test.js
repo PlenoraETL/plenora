@@ -198,8 +198,8 @@ describe('useCanvasStore save-path contract', () => {
       },
     ]);
 
-    expect(useCanvasStore.getState().nodes[0].width).toBe(290);
-    expect(useCanvasStore.getState().nodes[0].height).toBe(420);
+    // React Flow v12: le misure automatiche finiscono in node.measured.
+    expect(useCanvasStore.getState().nodes[0].measured).toEqual({ width: 290, height: 420 });
     expect(useCanvasStore.getState().isDirty).toBe(false);
 
     await useCanvasStore.getState().handleSaveQuiet();
@@ -225,14 +225,15 @@ describe('useCanvasStore save-path contract', () => {
       {
         id: 'comment-1',
         type: 'dimensions',
-        updateStyle: true,
+        // React Flow v12: il NodeResizer emette setAttributes (updateStyle in v11)
+        setAttributes: true,
         resizing: true,
         dimensions: { width: 360, height: 220 },
       },
     ]);
 
     expect(useCanvasStore.getState().isDirty).toBe(true);
-    expect(useCanvasStore.getState().nodes[0].style).toEqual(
+    expect(useCanvasStore.getState().nodes[0]).toEqual(
       expect.objectContaining({ width: 360, height: 220 }),
     );
 

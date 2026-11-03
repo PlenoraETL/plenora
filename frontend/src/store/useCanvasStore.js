@@ -15,7 +15,7 @@
 
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import { applyNodeChanges, applyEdgeChanges } from 'reactflow';
+import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 import { updateCanvas } from '../api';
 import { serializeCanvas } from '../utils/canvasSerializer';
 
@@ -311,9 +311,10 @@ const useCanvasStore = create(
           || c.type === 'add'
           || c.type === 'remove'
           // React Flow emette `dimensions` anche per misure automatiche del DOM
-          // (es. preview inline post-run). Solo NodeResizer imposta updateStyle,
-          // cioe' una dimensione scelta dall'utente e quindi salvabile.
-          || (c.type === 'dimensions' && c.updateStyle === true)
+          // (es. preview inline post-run). Solo NodeResizer imposta
+          // setAttributes (v12; updateStyle in v11), cioe' una dimensione
+          // scelta dall'utente e quindi salvabile.
+          || (c.type === 'dimensions' && (c.setAttributes || c.updateStyle === true))
         );
         set(
           state => ({
@@ -337,7 +338,8 @@ const useCanvasStore = create(
           return;
         }
         const relevant = changes.some(c =>
-          c.type === 'add' || c.type === 'remove' || c.type === 'reset'
+          // 'replace' in React Flow v12 ('reset' in v11)
+          c.type === 'add' || c.type === 'remove' || c.type === 'reset' || c.type === 'replace'
         );
         set(
           state => ({

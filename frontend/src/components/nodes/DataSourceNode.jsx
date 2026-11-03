@@ -8,7 +8,7 @@
  * Usato in: ArricchisciEditor (come alternativa ai nodi progetto/file)
  */
 import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
-import { Handle, Position } from 'reactflow';
+import { Handle, Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { listDataSources, listFiles, getFileSchema } from '../../api/datasources';
 import useDialogFocus from '../../hooks/useDialogFocus';

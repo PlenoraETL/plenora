@@ -6,7 +6,7 @@
  * Ridimensionabile, titolo e nota editabili con doppio click.
  */
 import { memo, useState, useCallback } from 'react';
-import { NodeResizer } from 'reactflow';
+import { NodeResizer } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import './AnnotationNode.css';
 

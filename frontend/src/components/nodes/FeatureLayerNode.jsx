@@ -12,7 +12,7 @@
  */
 
 import React, { useState, useEffect, memo } from 'react';
-import { Handle, Position } from 'reactflow';
+import { Handle, Position } from '@xyflow/react';
 import { getLayerSchema } from '../../api/features';
 import useCanvasStore from '../../store/useCanvasStore';
 import { useConfirm } from '../../context/ConfirmContext';

@@ -81,6 +81,9 @@ export function deserializeNodes(rawNodes, options = {}) {
       case 'comment':
         result.zIndex = -1;
         result.style = { width: data.width, height: data.height };
+        // React Flow v12: dimensioni esplicite sul nodo (il NodeResizer aggiorna queste).
+        if (data.width != null) result.width = data.width;
+        if (data.height != null) result.height = data.height;
         break;
       case 'datasource_node':
         result.position = node.position || { x: 100, y: 100 };

@@ -5,7 +5,7 @@
  * Legge data.inputColumns popolato da useColumnPropagation.
  */
 import React, { memo, useState, useMemo, useCallback } from 'react';
-import { Handle, Position, useReactFlow } from 'reactflow';
+import { Handle, Position, useReactFlow } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import './MultiJoinNode.css';
 import RunHistoryModal from '../modals/RunHistoryModal';

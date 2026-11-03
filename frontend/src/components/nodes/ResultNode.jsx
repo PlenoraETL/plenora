@@ -14,7 +14,7 @@
  *   - header + delete
  */
 import React, { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
-import { Handle, Position, useReactFlow, useStore } from 'reactflow';
+import { Handle, Position, useReactFlow, useStore } from '@xyflow/react';
 import ValidationModal from '../modals/ValidationModal';
 import { validateProjectCanvas } from '../../api/projects';
 import { backendReportToResult, validationRequestFailedResult } from '../../utils/backendValidationResult';
@@ -217,8 +217,9 @@ const ResultNode = memo(({ data, id }) => {
     if (!node) return;
     setShowValidation(false);
     setCenter(
-      node.position.x + (node.width || 200) / 2,
-      node.position.y + (node.height || 80) / 2,
+      // React Flow v12: le dimensioni misurate stanno in node.measured.
+      node.position.x + (node.measured?.width ?? node.width ?? 200) / 2,
+      node.position.y + (node.measured?.height ?? node.height ?? 80) / 2,
       { zoom: 1.2, duration: 400 },
     );
   }, [getNodes, setCenter]);

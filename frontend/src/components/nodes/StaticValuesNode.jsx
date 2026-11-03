@@ -5,7 +5,7 @@
 import React, { useState, useCallback, useMemo, useRef, memo } from 'react';
 import { useEffect } from 'react';
 import { useToast } from '../../hooks/useToast';
-import { Handle, Position } from 'reactflow';
+import { Handle, Position } from '@xyflow/react';
 import { 
   processTemplateVariables, 
   hasTemplateVariables, 

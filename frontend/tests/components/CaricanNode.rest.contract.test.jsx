@@ -22,7 +22,7 @@ const {
   canvasStateRef: { current: { nodes: [], edges: [] } },
 }));
 
-vi.mock('reactflow', () => globalThis.__frontendTestHelpers.createReactFlowMock({ canvasStateRef, showRoot: false }));
+vi.mock('@xyflow/react', () => globalThis.__frontendTestHelpers.createReactFlowMock({ canvasStateRef, showRoot: false }));
 
 vi.mock('../../src/store/useCanvasStore', () => ({
   default: useCanvasStoreMock,

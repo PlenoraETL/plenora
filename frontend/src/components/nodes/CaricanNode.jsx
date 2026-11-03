@@ -11,7 +11,7 @@
  * Si aspetta un edge in ingresso da ResultNode (handle "output").
  */
 import React, { useState, memo } from 'react';
-import { Handle, Position } from 'reactflow';
+import { Handle, Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import RestDestinationSection, { REST_METHODS } from './carica/RestDestinationSection';
 import DbDestinationSection, { WRITE_MODES } from './carica/DbDestinationSection';

@@ -14,8 +14,9 @@ function serializeNode(node, edges, allNodes) {
     data.bindings = serializedBindingsForInput({ ...node, data }, edges);
   }
   if (type === 'comment') {
-    data.width = node.style?.width ?? data.width;
-    data.height = node.style?.height ?? data.height;
+    // React Flow v12: il NodeResizer scrive node.width/height (non piu' lo style).
+    data.width = node.width ?? node.style?.width ?? data.width;
+    data.height = node.height ?? node.style?.height ?? data.height;
   }
   if (type === 'multi_join' && node.data?.config) {
     const cfg = node.data.config;
