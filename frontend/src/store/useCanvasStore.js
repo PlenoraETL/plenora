@@ -55,7 +55,9 @@ const useCanvasStore = create(
           while (saveRequested) {
             saveRequested = false;
             const snapshot = get();
-            if (snapshot.isReadOnly || !snapshot.isDirty || !snapshot.projectId) continue;
+            // Si salva per modifiche utente (isDirty) E per correzioni
+            // automatiche da persistere (pendingSync).
+            if (snapshot.isReadOnly || (!snapshot.isDirty && !snapshot.pendingSync) || !snapshot.projectId) continue;
 
             const payload = serializeCanvas(snapshot.nodes, snapshot.edges, {
               mode: snapshot.mode,
@@ -67,8 +69,8 @@ const useCanvasStore = create(
               && current.nodes === snapshot.nodes
               && current.edges === snapshot.edges;
             if (sameSnapshot) {
-              set({ isDirty: false }, false, 'handleSaveQuiet:saved');
-            } else if (current.isDirty && !current.isReadOnly) {
+              set({ isDirty: false, pendingSync: false }, false, 'handleSaveQuiet:saved');
+            } else if ((current.isDirty || current.pendingSync) && !current.isReadOnly) {
               // Un edit e' arrivato mentre il PUT era in volo.
               saveRequested = true;
             }
@@ -145,6 +147,17 @@ const useCanvasStore = create(
       isDirty: false,
 
       /**
+       * Correzioni AUTOMATICHE da salvare (opzione {derived:true} di
+       * updateNodeData/patchNodeConfig): es. formato riportato a CSV senza
+       * geometria, colonna geometrica auto-selezionata, espressione
+       * riscritta dopo una rinomina a monte. Sono dati persistiti, quindi
+       * handleSaveQuiet li invia (Esegui/Valida/autosave), ma NON sono
+       * modifiche dell'utente: niente avviso "modifiche non salvate" ne'
+       * voce di undo. Distinto da isDirty (revisione Fase 3).
+       */
+      pendingSync: false,
+
+      /**
        * ID dei nodi con issue di validazione. Popolato da ResultNode dopo
        * ogni `runValidation()` (manuale, execute, preview). Consumato dagli
        * editor (Manipola/Arricchisci) per applicare un outline amber sui
@@ -189,7 +202,7 @@ const useCanvasStore = create(
         get().editorActionsRef.current = {};
         // NOTA: non resettiamo isReadOnly perché viene impostato subito dopo da
         // useCanvasCore (dipende dal ruolo utente, non dal progetto).
-        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, validationHighlights: [], lastValidationSummary: null, past: [], future: [], lastTaskResult: null }, false, 'reset');
+        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, pendingSync: false, validationHighlights: [], lastValidationSummary: null, past: [], future: [], lastTaskResult: null }, false, 'reset');
       },
 
       // ── Undo/Redo (#24) ───────────────────────────────────────────────
@@ -359,7 +372,7 @@ const useCanvasStore = create(
       loadGraph: (nodes, edges) => {
         lastSnapshotTs = 0;
         set(
-          { nodes, edges, isDirty: false, past: [], future: [], validationHighlights: [], lastValidationSummary: null },
+          { nodes, edges, isDirty: false, pendingSync: false, past: [], future: [], validationHighlights: [], lastValidationSummary: null },
           false,
           'loadGraph',
         );
@@ -457,7 +470,7 @@ const useCanvasStore = create(
             nodes: state.nodes.map(n =>
               n.id === nodeId ? { ...n, data: { ...n.data, ...updates } } : n
             ),
-            ...(derived ? {} : dirtyAndClearHighlights())
+            ...(derived ? { pendingSync: true } : dirtyAndClearHighlights())
           }),
           false,
           derived ? 'updateNodeData:derived' : 'updateNodeData'
@@ -487,7 +500,7 @@ const useCanvasStore = create(
               const changes = typeof patch === 'function' ? patch(current) : patch;
               return { ...n, data: { ...n.data, config: { ...current, ...(changes || {}) } } };
             }),
-            ...(derived ? {} : dirtyAndClearHighlights()),
+            ...(derived ? { pendingSync: true } : dirtyAndClearHighlights()),
           }),
           false,
           derived ? 'patchNodeConfig:derived' : 'patchNodeConfig',
@@ -641,7 +654,7 @@ const useCanvasStore = create(
        * caricati dal backend. In questo modo handleSaveQuiet non farà PUT
        * inutili finché l'utente non modifica davvero qualcosa.
        */
-      markClean: () => set({ isDirty: false }, false, 'markClean'),
+      markClean: () => set({ isDirty: false, pendingSync: false }, false, 'markClean'),
 
       /** Restituisce il nodo corrente per ID (lettura sincrona, non reattiva) */
       getNodeById: (nodeId) => get().nodes.find(n => n.id === nodeId),

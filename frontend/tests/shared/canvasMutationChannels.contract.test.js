@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../src/api', () => ({ updateCanvas: vi.fn() }));
+const { updateCanvasMock } = vi.hoisted(() => ({ updateCanvasMock: vi.fn() }));
+vi.mock('../../src/api', () => ({ updateCanvas: updateCanvasMock }));
 
 import useCanvasStore from '../../src/store/useCanvasStore';
 
@@ -14,8 +15,10 @@ import useCanvasStore from '../../src/store/useCanvasStore';
  *  - UTENTE   addNodes/addEdges/removeEdges/editNodes/editEdges/updateEdge/
  *             patchNodeConfig/updateNodeData -> snapshot undo + dirty,
  *             no-op in sola lettura
- *  - DERIVATO applyDerivedNodes/applyDerivedEdges, opzione {derived:true}
- *             -> mai dirty ne' snapshot
+ *  - DERIVATO applyDerivedNodes/applyDerivedEdges -> mai dirty ne' snapshot
+ *             opzione {derived:true} -> correzione automatica da SALVARE:
+ *             pendingSync (salvata da handleSaveQuiet), ma non isDirty
+ *             (niente avviso "modifiche non salvate") ne' undo
  *
  * Prima esistevano solo setNodes/setEdges con un'euristica sugli id: la
  * modifica di un join esistente non marcava dirty (salvataggio saltato) e
@@ -95,6 +98,32 @@ describe('canvas mutation channels contract', () => {
     expect(after.isDirty).toBe(false);
     expect(after.past).toEqual([]);
     expect(after.nodes[1].data.config).toEqual({ x: 1, auto: true });
+  });
+
+  // Revisione Fase 3 (Codex): una correzione automatica che cambia dati
+  // persistiti (formato -> CSV, colonna geometrica, espressione riscritta)
+  // deve arrivare al backend prima di Esegui, senza far apparire l'avviso
+  // di modifiche non salvate.
+  it('derived corrections set pendingSync (not isDirty) and are saved by handleSaveQuiet', async () => {
+    updateCanvasMock.mockResolvedValue({});
+    freshStore();
+    useCanvasStore.getState().init('proj-1', 'manipola');
+    useCanvasStore.getState().patchNodeConfig('b', { format: 'csv' }, { derived: true });
+    let s = useCanvasStore.getState();
+    expect(s.isDirty).toBe(false);
+    expect(s.pendingSync).toBe(true);
+    await s.handleSaveQuiet();
+    expect(updateCanvasMock).toHaveBeenCalledTimes(1);
+    s = useCanvasStore.getState();
+    expect(s.pendingSync).toBe(false);
+  });
+
+  it('nothing to save after load: handleSaveQuiet skips the PUT', async () => {
+    updateCanvasMock.mockClear();
+    freshStore();
+    useCanvasStore.getState().init('proj-1', 'manipola');
+    await useCanvasStore.getState().handleSaveQuiet();
+    expect(updateCanvasMock).not.toHaveBeenCalled();
   });
 
   it('a derived updater that returns the same array changes nothing', () => {
