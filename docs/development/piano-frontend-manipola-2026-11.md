@@ -114,6 +114,19 @@ Rimandati al blocco successivo (ognuno con raccolta, correzione e conferma):
    Arricchisci con dati vecchi o importati (l'esecuzione di Arricchisci non
    raggruppa e l'interfaccia non lo mostra).
 
+Emersi dal collaudo dal vivo di M4+M5 (03/11/2026, copia di SC_scheda_manipola:
+295.782 righe come prima, Filtra unito e Mappa valori convertita con
+risultato identico, Colonne in uscita persistite e applicate al file):
+5. **Lo schema previsto non coincide con l'esecuzione sui Join vecchi.** La
+   griglia dell'Output elenca 8 colonne che il file non ha (catene di suffissi
+   come `pcv_cd_id_L_L_L_L_L_L`): l'esecuzione rinomina o scarta i duplicati,
+   l'inferenza dello schema no. Stessa radice del punto 1: le colonne a valle
+   devono venire da cio' che l'esecuzione produce davvero.
+6. Dopo "Trasforma in Mappa valori" il titolo salvato del passo resta
+   "Condizionale (Case When)".
+7. L'Output nel pannello laterale ha ancora la vecchia intestazione a scheda
+   ("Output Manipola ×"); in M4 e' stata tolta solo ai passi di trasformazione.
+
 **Stima:** circa 4 giornate (era circa 2 per il solo Manipola).
 
 ## Fase 5 — Resto dell'audit
