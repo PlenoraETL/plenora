@@ -7,6 +7,9 @@ Keeps transformation behavior isolated from orchestration callers.
 import time as _time
 from typing import Any, List, Mapping, MutableMapping, Optional
 
+from app.shared.execution.node_fields import node_field
+from app.shared.execution.result_grouping import result_group_plan
+from app.core.dataframes.output_columns import apply_output_columns
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     dataframe_preview_records,
@@ -162,12 +165,7 @@ def _failure_step(message: str, step_start: float) -> JsonObject:
 
 def _nf(node: Node, key: str, default: Any = None) -> Any:
     """Legge un campo flat dal nodo Pydantic o dal wrapper ``node.data``."""
-    field_value = getattr(node, key, None)
-    if field_value is not None and field_value != [] and field_value != {}:
-        return field_value
-    if node.data and isinstance(node.data, dict):
-        return node.data.get(key, default)
-    return default
+    return node_field(node, key, default)
 
 
 def _applica_crs_da_colonne(
@@ -387,7 +385,9 @@ class ManipolaExecutor:
             return _failure_step("Nodo risultato non trovato", _step_start)
 
         try:
-            current_df = self._applica_group_by(current_df, result_node)
+            current_df = self._applica_group_by(
+                apply_output_columns(current_df, _nf(result_node, "output_columns"), _nf(result_node, "inputColumns")), result_node
+            )
         except MemoryLimitExceededError as mem_err:
             stage = getattr(mem_err, "stage", "group_by")
             return _failure_step(
@@ -591,7 +591,9 @@ class ManipolaExecutor:
 
             result_node = next((n for n in canvas.nodes if n.type == "result"), None)
             if result_node:
-                current_df = self._applica_group_by(current_df, result_node)
+                current_df = self._applica_group_by(
+                    apply_output_columns(current_df, _nf(result_node, "output_columns"), _nf(result_node, "inputColumns")), result_node
+                )
 
             total_count = len(current_df)
             truncated = source_truncated or total_count > limit
@@ -1296,64 +1298,16 @@ class ManipolaExecutor:
         Gli errori propagano: non persistere dati raw come output ufficiale
         quando il group_by e' configurato ma fallisce.
         """
-        if not _nf(result_node, 'group_by_enabled', False):
+        group_cols, aggregations = result_group_plan(result_node, list(df.columns))
+        if not group_cols and not aggregations:
             return df
-        group_cols_cfg = _nf(result_node, 'group_by_columns', [])
-        aggregations = _nf(result_node, 'aggregations', [])
-        if not group_cols_cfg and not aggregations:
-            return df
-
-        # User-config: colonne richieste che non esistono nel df.
-        # Failure visibile invece di silent fallback al df non aggregato.
-        missing = [c for c in group_cols_cfg if c not in df.columns]
-        group_cols = [c for c in group_cols_cfg if c in df.columns]
-        if not group_cols:
-            raise ValueError(
-                "GROUP BY: nessuna delle colonne configurate esiste nel "
-                f"DataFrame ({missing!r}). Verifica i nomi nel nodo Output."
-            )
-
-        # Separa aggregazioni count da quelle su colonne specifiche.
-        count_aliases = []
-        agg_dict, rename_dict = {}, {}
-        invalid_aggs: list[str] = []
-
-        for agg in aggregations:
-            col  = agg.get('column')
-            func = agg.get('function', 'count')
-            alias = agg.get('alias', f"{col}_{func}")
-
-            if func == 'count':
-                # COUNT(*) via groupby.size — non dipende da una colonna
-                # specifica, non perde righe sul gruppo.
-                count_aliases.append(alias)
-            elif func in ['sum', 'mean', 'min', 'max', 'std']:
-                if col in df.columns:
-                    agg_dict[col] = func
-                    rename_dict[col] = alias
-                else:
-                    invalid_aggs.append(f"{func}({col!r})")
+        result = group_keys_dataframe(df, group_cols)
+        for col, func, alias in aggregations:
+            if func == "count":
+                result[alias] = group_size_values(df, group_cols)
             else:
-                invalid_aggs.append(f"{func!r} (funzione non supportata)")
-
-        if not agg_dict and not count_aliases:
-            # User-config: tutte le aggregazioni sono invalide. Failure
-            # visibile invece di produrre output non aggregato.
-            raise ValueError(
-                "GROUP BY: nessuna aggregazione valida — verifica colonne "
-                f"e funzioni nel nodo Output. Invalide: {invalid_aggs!r}"
-            )
-
-        if agg_dict:
-            result = group_aggregate_as_columns(df, group_cols, agg_dict)
-            result = result.rename(columns=rename_dict)
-        else:
-            # Solo COUNT(*) richiesti — parti da una base con i gruppi.
-            result = group_keys_dataframe(df, group_cols)
-
-        for alias in count_aliases:
-            result[alias] = group_size_values(df, group_cols)
-
+                aggregated = group_aggregate_as_columns(df, group_cols, {col: func})
+                result[alias] = aggregated[col].values
         return result
 
     # SALVATAGGIO

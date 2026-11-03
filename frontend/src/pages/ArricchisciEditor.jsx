@@ -25,6 +25,7 @@ import { useEditorData } from '../hooks/useEditorData';
 import { describeAccessDeniedNodes } from '../utils/canvasAccessControl';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
 import useCanvasStore from '../store/useCanvasStore';
+import { withAvailableColumns } from '../utils/columnPlans';
 import {
   createParameterBindingEdge,
   dataFlowEdges,
@@ -207,6 +208,11 @@ const ArricchisciEditorContent = () => {
       if (n.type === 'api_enrich') {
         return { id: n.id, type: n.type, output_mapping: n.data?.output_mapping };
       }
+      if (n.type === 'result') {
+        // Selezione e GROUP BY decidono le colonne dei Carica (resultOutputColumns).
+        const d = n.data || {};
+        return { id: n.id, type: n.type, out: [d.output_columns, d.group_by_enabled, d.group_by_columns, d.aggregations] };
+      }
       return null;
     }).filter(Boolean);
     return JSON.stringify(relevant);
@@ -223,8 +229,21 @@ const ArricchisciEditorContent = () => {
       const resultNode = nds.find(n => n.type === 'result');
       if (!resultNode) return nds;
 
+      // Solo i nodi a monte dell'Output (un ramo scollegato non arriva nel
+      // file), con le colonne come escono davvero: nascoste tolte, alias
+      // applicato (backend: filter_visible_columns). Nomi senza doppioni.
+      const flow = dataFlowEdges(edgesRef.current);
+      const upstream = new Set();
+      const visit = (nodeId) => {
+        if (upstream.has(nodeId)) return;
+        upstream.add(nodeId);
+        flow.filter(e => e.target === nodeId).forEach(e => visit(e.source));
+      };
+      visit(resultNode.id);
       const availableColumns = [];
+      const push = (col) => { if (col.name && !availableColumns.some(c => c.name === col.name)) availableColumns.push(col); };
       for (const node of nds) {
+        if (!upstream.has(node.id)) continue;
         const cols = node.data?.columns;
         if (!cols) continue;
         const source = node.data?.source_project_id || node.data?.file_source_id || node.type;
@@ -236,26 +255,23 @@ const ArricchisciEditorContent = () => {
           || node.type === 'datasource_node'
         ) {
           cols.forEach(col => {
-            if (typeof col === 'object' && col !== null)
-              availableColumns.push({ name: col.name || col.alias || 'unknown', type: col.type || col.dtype || 'str', source });
-            else if (typeof col === 'string')
-              availableColumns.push({ name: col, type: 'str', source });
+            if (typeof col === 'object' && col !== null) {
+              if (col.visible === false) return;
+              push({ name: col.alias || col.name || 'unknown', type: col.type || col.dtype || 'str', source });
+            } else if (typeof col === 'string') push({ name: col, type: 'str', source });
           });
         } else if (node.type === 'api_enrich' && node.data?.output_mapping) {
           node.data.output_mapping.forEach(mapping =>
-            availableColumns.push({ name: mapping.column || mapping.target_column || mapping.name, type: mapping.type || 'str', source: 'api_enrich' })
+            push({ name: mapping.column || mapping.target_column || mapping.name, type: mapping.type || 'str', source: 'api_enrich' })
           );
         }
       }
 
-      if (JSON.stringify(availableColumns) === JSON.stringify(resultNode.data?.availableColumns || [])) return nds;
-      return nds.map(node => {
-        if (node.type === 'result' || node.type === 'carica' || node.type === 'carica_arcgis' || node.type === 'caricaArcgis') return { ...node, data: { ...node.data, availableColumns } };
-        return node;
-      });
+      // Carica: colonne dopo "Colonne in uscita" dell'Output (utils/columnPlans).
+      return withAvailableColumns(nds, availableColumns);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [applyDerivedNodes, availableColumnsFingerprint]);
+  }, [applyDerivedNodes, availableColumnsFingerprint, edges]);
 
   // NOTA: le colonne dei nodi source vengono aggiornate direttamente
   // dai nodi stessi tramite useCanvasStore.getState().updateNodeData

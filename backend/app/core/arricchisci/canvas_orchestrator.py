@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, List, MutableMapping, Optional, TYPE_CHECKING
 
+from app.core.dataframes.output_columns import apply_output_columns
 from app.core.dataframes.values import is_dataframe
 from app.core.arricchisci.execution_context import (
     ArricchisciExecutionContext,
@@ -305,7 +306,10 @@ def run_enrichment_canvas(
                 if input_edge:
                     input_df = node_results.get(input_edge["source"])
                     if input_df is not None:
-                        node_results[node_id] = input_df
+                        node_results[node_id] = (
+                            apply_output_columns(input_df, graph.get(node_id).get_field("output_columns"), graph.get(node_id).get_field("inputColumns"))
+                            if is_dataframe(input_df) else input_df
+                        )
 
             elif node_type == "api_enrich":
                 # api_enrich emesso come step "single" quando

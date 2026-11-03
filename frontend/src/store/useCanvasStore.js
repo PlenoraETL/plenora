@@ -19,6 +19,7 @@ import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 import { updateCanvas } from '../api';
 import { serializeCanvas } from '../utils/canvasSerializer';
 import { COLUMN_STEP, findFreePosition, nodeSize, planInsertAfter, settleNodes } from '../utils/canvasPlacement';
+import { bindingListResolution } from '../utils/runtimeBindingEdges';
 
 // Undo/redo: profondità massima dello stack (oltre, si scarta il più vecchio).
 const HISTORY_LIMIT = 50;
@@ -406,6 +407,20 @@ const useCanvasStore = create(
         );
       },
 
+      /**
+       * Prima di collegare un input runtime al parametro `paramId` di un nodo
+       * (TUTTI i percorsi: trascinamento, menu del parametro, "crea input"):
+       * se una lista sostituisce quel parametro, torna al formato singolo o
+       * rifiuta. Restituisce { ok, message }. Regola: runtimeBindingEdges.
+       */
+      prepareParameterBinding: (nodeId, paramId) => {
+        const node = get().nodes.find(n => n.id === nodeId);
+        const resolution = bindingListResolution(node, paramId);
+        if (resolution?.refuse) return { ok: false, message: resolution.refuse };
+        if (resolution?.patch) get().patchNodeConfig(nodeId, resolution.patch);
+        return { ok: true, message: null };
+      },
+
       /** Aggiunge uno o piu' nodi (azione utente), mai sovrapposti agli esistenti. */
       addNodes: (nodeOrNodes) => {
         const added = Array.isArray(nodeOrNodes) ? nodeOrNodes : [nodeOrNodes];
@@ -587,7 +602,7 @@ const useCanvasStore = create(
             nodes: state.nodes.map(n => {
               if (n.id !== nodeId) return n;
               const cols = [...n.data.columns];
-              cols[columnIndex] = { ...cols[columnIndex], visible: !cols[columnIndex].visible };
+              cols[columnIndex] = { ...cols[columnIndex], visible: cols[columnIndex].visible === false };
               return { ...n, data: { ...n.data, columns: cols } };
             }),
             ...dirtyAndClearHighlights()

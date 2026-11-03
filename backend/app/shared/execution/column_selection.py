@@ -5,36 +5,46 @@ Stanno in shared/execution perche' li usano sia il runtime Manipola
 deve dipendere dall'altro per questo.
 """
 
+import logging
+
 from typing import Any
 
 JsonRows = list[dict[str, Any]]
 StringMap = dict[str, str]
 
 
-def select_column_plan(names: list[str], columns: JsonRows) -> list[tuple[str, str]]:
+def select_column_plan(names: list[str], columns: JsonRows, *, skip_missing: bool = False) -> list[tuple[str, str]]:
     if not isinstance(columns, list):
         raise ValueError("Select columns: columns deve essere una lista.")
     plan: list[tuple[str, str]] = []
     seen: set[str] = set()
     for item in columns:
-        if not isinstance(item, dict) or item.get("name") not in names:
-            raise ValueError(f"Select columns: colonna non trovata: {item}.")
+        if not isinstance(item, dict) or not isinstance(item.get("name"), str) or not item["name"].strip():
+            raise ValueError("Select columns: name deve essere un nome non vuoto.")
         name = item["name"]
+        if skip_missing and name not in names:
+            logging.getLogger(__name__).warning("Select columns: colonna non trovata, ignorata: %s", name)
+            continue
         if name in seen:
             raise ValueError(f"Select columns: colonna duplicata '{name}'.")
         seen.add(name)
         if not isinstance(item.get("keep", True), bool):
             raise ValueError("Select columns: keep deve essere booleano.")
+        label = item.get("label")
+        if label is None or label == "":
+            label = name
+        if not isinstance(label, str) or (item.get("keep", True) and not label.strip()):
+            raise ValueError("Select columns: label deve essere un nome non vuoto.")
         if item.get("keep", True):
-            label = item.get("label") or name
-            if not isinstance(label, str) or not label.strip():
-                raise ValueError("Select columns: label deve essere un nome non vuoto.")
             plan.append((name, label))
     plan.extend((name, name) for name in names if name not in seen)
     outputs = [label for _, label in plan]
     if len(outputs) != len(set(outputs)):
         raise ValueError("Select columns: i nomi di output devono essere univoci.")
-    return plan
+    missing = [item["name"] for item in columns if item["name"] not in names]
+    if missing and not skip_missing:
+        raise ValueError(f"Select columns: colonna non trovata: {missing}.")
+    return [(name, label) for name, label in plan if name in names]
 
 
 def join_column_plan(

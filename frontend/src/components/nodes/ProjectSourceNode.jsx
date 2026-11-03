@@ -137,7 +137,7 @@ const ProjectSourceNode = ({ id, data }) => {
   const handleToggleColumn = (columnId) => {
     if (!data.columns) return;
     const updatedColumns = data.columns.map(col =>
-      (col.id || col.column_id) === columnId ? { ...col, visible: !col.visible } : col
+      (col.id || col.column_id) === columnId ? { ...col, visible: col.visible === false } : col
     );
     useCanvasStore.getState().updateNodeData(id, { columns: updatedColumns });
   };

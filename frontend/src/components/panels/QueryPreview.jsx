@@ -7,6 +7,7 @@
  */
 import React, { useState } from 'react';
 import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
+import { isColumnVisible } from '../../utils/columnUtils';
 import './QueryPreview.css';
 
 /**
@@ -89,7 +90,7 @@ function QueryPreview({ nodes, edges, validationErrors = [] }) {
           : (node.data.alias || node.data.table_name);
         
         // Colonne normali visibili
-        const visibleColumns = node.data.columns?.filter(col => col.visible) || [];
+        const visibleColumns = node.data.columns?.filter(isColumnVisible) || [];
         visibleColumns.forEach(col => {
           const columnExpr = col.alias 
             ? `  ${tableName}.${col.name} AS ${col.alias}`

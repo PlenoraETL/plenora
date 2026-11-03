@@ -49,7 +49,12 @@ export function createEdgeFromData(edge, loadedNodes) {
 /** Rehydrate registered fields, then attach editor-only presentation data. */
 export function deserializeNodes(rawNodes, options = {}) {
   const { connection = null, flags = {} } = options;
-  return rawNodes.map(node => {
+  return rawNodes.map(raw => {
+    // Il serializer appiattisce node.data al primo livello del nodo salvato:
+    // qui si fa l'inverso per TUTTI i campi (nodeTopLevelData), non solo per
+    // quelli registrati. Prima un campo non registrato (es. output_columns
+    // dell'Output) si perdeva a ogni riapertura.
+    const node = { ...raw, data: { ...nodeTopLevelData(raw), ...(raw.data || {}) } };
     const type = canonicalNodeType(node.type);
     const entry = NODE_TYPES[type];
     if (!entry) return { ...node, data: { ...node.data, ...persistedNodeData(node) } };

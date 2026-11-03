@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import NodeHandle from '../canvas/NodeHandle';
@@ -40,6 +40,8 @@ export default function RuntimeInputBindingControl({
   const addNodes = useCanvasStore(state => state.addNodes);
   const editEdges = useCanvasStore(state => state.editEdges);
   const isReadOnly = useCanvasStore(state => state.isReadOnly);
+  const prepareParameterBinding = useCanvasStore(state => state.prepareParameterBinding);
+  const [refusal, setRefusal] = useState(null);
 
   if (!targetNodeId || !isBindableTransformParameter(param, transformDefinition)) {
     return null;
@@ -55,7 +57,15 @@ export default function RuntimeInputBindingControl({
     node.type === 'project_input' && node.data?.input_kind !== 'file'
   ));
 
+  // Stessa regola del trascinamento sul canvas (store.prepareParameterBinding).
+  const allowed = () => {
+    const check = prepareParameterBinding(targetNodeId, param.id);
+    setRefusal(check.ok ? null : check.message);
+    return check.ok;
+  };
+
   const connect = (sourceId) => {
+    if (sourceId && !allowed()) return;
     editEdges(current => {
       const withoutCurrent = current.filter(edge => !(
         isParameterBindingEdge(edge)
@@ -73,6 +83,7 @@ export default function RuntimeInputBindingControl({
   };
 
   const createAndConnect = () => {
+    if (!allowed()) return;
     const ordinal = nodes.filter(node => node.type === 'project_input').length + 1;
     const target = nodes.find(node => node.id === targetNodeId);
     const id = `project_input_${Date.now()}`;
@@ -137,6 +148,7 @@ export default function RuntimeInputBindingControl({
         ))}
         <option value="__create__">＋ Crea nuovo input</option>
       </select>
+      {refusal && <span className="runtime-binding__refusal" role="alert">{refusal}</span>}
     </span>
   );
 }

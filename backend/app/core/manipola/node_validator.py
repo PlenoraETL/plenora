@@ -27,11 +27,15 @@ from app.shared.execution.config_column_refs import (
     referenced_column_names,
     resolve_config_column_refs,
 )
+from app.shared.execution.column_selection import select_column_plan
+from app.shared.execution.node_fields import node_field
+from app.shared.execution.registry_types import require_known_param_type, parameter_value
 from app.shared.execution.schema_types import InferredSchema
 from app.shared.execution.validation_protocol import register_node_validator
 from app.shared.execution.validation_types import Issue
 
-_MANIPOLA_NODE_TYPES = ("transform", "multi_join")
+_MANIPOLA_NODE_TYPES = ("transform", "multi_join", "result")
+_SELECTION_FIELDS = {("transform", "select_columns"): "columns", ("result", None): "output_columns"}
 
 _REGISTRY_PATH = Path(__file__).resolve().parent / "transforms_registry.json"
 
@@ -64,13 +68,7 @@ def _param_value_for_required_check(transform_op: str, param_id: str, config: Ma
         return True
     if transform_op == "formula" and config.get("items") is not None and param_id in {"new_column", "formula"}:
         return True
-    val = config.get(param_id)
-    if transform_op == "join" and _is_empty_param_value(val):
-        if param_id == "left_keys":
-            return config.get("left_on")
-        if param_id == "right_keys":
-            return config.get("right_on")
-    return val
+    return parameter_value(config, param_id)
 
 
 class ManipolaNodeValidator:
@@ -87,6 +85,35 @@ class ManipolaNodeValidator:
 
         # 0. Operazione selezionata? (porting fedele TRANSFORM_OP_MISSING)
         transform_op = getattr(node, "transform_op", None) or data.get("transform_op")
+        node_type = getattr(node, "type", "transform")
+        selection_field = _SELECTION_FIELDS.get((node_type, transform_op if node_type != "result" else None))
+        if selection_field:
+            columns = (node_field(node, selection_field) if node_type == "result" else config.get(selection_field))
+            if columns is None and node_type == "result":
+                return issues
+            upstream_cols = [c for c in upstream.columns if isinstance(c, dict)]
+            names = {c["name"] for c in upstream_cols if c.get("name")}
+            id_to_name = {
+                str(c.get("id") or c.get("column_id")): c["name"]
+                for c in upstream_cols if (c.get("id") or c.get("column_id")) and c.get("name")
+            }
+            resolved = resolve_config_column_refs({"columns": columns}, id_to_name)
+            try:
+                select_column_plan(list(names), resolved["columns"], skip_missing=True)
+            except ValueError as exc:
+                issues.append(Issue(
+                    node_id=node_id, severity="error", code="columns.invalid",
+                    message=str(exc), suggestion=None,
+                ))
+            else:
+                for missing in sorted(referenced_column_names(resolved) - names):
+                    issues.append(Issue(
+                        node_id=node_id, severity="warning", code="column.missing",
+                        message=f"Colonna '{missing}' assente a monte, ignorata",
+                        suggestion={"column": missing},
+                    ))
+            if node_type == "result":
+                return issues
         if not transform_op:
             issues.append(Issue(
                 node_id=node_id, severity="error", code="TRANSFORM_OP_MISSING",
@@ -119,8 +146,9 @@ class ManipolaNodeValidator:
         resolved = resolve_config_column_refs(ref_config, id_to_name)
         # #A: upstream indeterminate → ref mancante = warning, non error.
         severity = "warning" if upstream.status == "indeterminate" else "error"
-        references = referenced_column_names(resolved)
-        nested = resolved.get("conditions") if transform_op == "filter" else resolved.get("columns") if transform_op == "select_columns" else []
+        # Selection references were already checked above with skip-missing semantics.
+        references = set() if transform_op == "select_columns" else referenced_column_names(resolved)
+        nested = resolved.get("conditions") if transform_op == "filter" else []
         if isinstance(nested, list):
             field = "name" if transform_op == "select_columns" else "column"
             references.update(item[field] for item in nested if isinstance(item, dict) and isinstance(item.get(field), str))
@@ -157,6 +185,7 @@ class ManipolaNodeValidator:
         if op_def:
             col_type = {c["name"]: (c.get("type") or "") for c in upstream_cols if c.get("name")}
             for param in (op_def.get("parameters") or []):
+                require_known_param_type(param.get("type"))
                 pid = param.get("id")
                 if not pid:
                     continue

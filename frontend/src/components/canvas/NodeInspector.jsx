@@ -60,8 +60,10 @@ export default function NodeInspector({ fullNodeTypes, prefix = 'canvas' }) {
         <div className="node-inspector__summary">{descriptor.summary(node.data || {})}</div>
       </header>
       <div className="node-inspector__body">
+        {/* key per nodo: bozze, ricerche e fuoco di un form non passano al
+            nodo selezionato dopo. */}
         {Full
-          ? <Full id={node.id} type={node.type} data={node.data || {}} selected inInspector />
+          ? <Full key={node.id} id={node.id} type={node.type} data={node.data || {}} selected inInspector />
           : <div className="node-inspector__empty">Nessuna configurazione per questo nodo.</div>}
       </div>
     </aside>

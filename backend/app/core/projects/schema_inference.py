@@ -1,8 +1,12 @@
 """Schema inference across project canvas graphs."""
-from dataclasses import dataclass
+from app.shared.execution.node_fields import node_field
+from app.shared.execution.result_grouping import result_group_plan
+from app.shared.execution.schema_column_plans import aggregation_output_type
+from dataclasses import dataclass, replace
 from typing import Dict, List, Optional, Any, Tuple, Mapping
 import uuid
 
+from app.shared.execution.column_selection import select_column_plan
 from app.core.projects.project_context_loader import (
     load_project_source_schema_context,
 )
@@ -23,20 +27,7 @@ logger = get_logger(__name__)
 
 
 def _node_config(node: Any, keys: tuple[str, ...]) -> Mapping[str, Any]:
-    data = getattr(node, "data", None) or {}
-    config: dict[str, Any] = dict(data) if isinstance(data, Mapping) else {}
-    extra = getattr(node, "model_extra", None) or getattr(node, "__pydantic_extra__", None) or {}
-    if isinstance(extra, Mapping):
-        config.update({k: v for k, v in extra.items() if v is not None})
-    for key in keys:
-        attrs = getattr(node, "__dict__", {})
-        if isinstance(attrs, Mapping) and key in attrs:
-            value = attrs[key]
-        else:
-            continue
-        if value is not None:
-            config[key] = value
-    return config
+    return {key: node_field(node, key) for key in keys}
 
 
 def _stable_column_id(*parts: str) -> str:
@@ -162,7 +153,15 @@ class SchemaInferenceService:
         )
         node_type_handler = self._build_node_type_handlers().get(node.type)
         if node_type_handler is not None:
-            schema = node_type_handler(context)
+            try:
+                schema = node_type_handler(context)
+            except Exception as exc:
+                # Node boundary: arbitrary handler failures must not abort the project.
+                # Log the issue and retain the first input as an indeterminate schema.
+                logger.warning("Schema issue for node %s: %s", node.id, exc)
+                inputs = self._get_input_schemas(node.id, nodes_by_id, edges_by_target, project_id)
+                schema = inputs[0] if inputs else []
+                self._status_cache[node.id] = ("indeterminate", str(exc))
 
         self._record_node_status(node, context)
         self._schema_cache[node.id] = schema
@@ -313,7 +312,22 @@ class SchemaInferenceService:
             context.project_id,
         )
         if input_schemas:
-            return input_schemas[0]
+            columns = _node_config(context.node, ("output_columns",)).get("output_columns")
+            schema = input_schemas[0]
+            if columns is not None and columns != []:
+                by_name = {col.name: col for col in schema}
+                columns = resolve_config_column_refs(
+                    {"columns": columns}, {str(col.id): col.name for col in schema if col.id},
+                )["columns"]
+                plan = select_column_plan(list(by_name), columns, skip_missing=True)
+                schema = [replace(by_name[name], name=label) for name, label in plan]
+            groups, aggregations = result_group_plan(context.node, [col.name for col in schema])
+            if groups or aggregations:
+                by_name = {col.name: col for col in schema}
+                schema = [by_name[name] for name in groups if name in by_name]
+                for col, func, alias in aggregations:
+                    schema.append(ColumnSchema(alias, aggregation_output_type(func, by_name[col].type if col in by_name else "str"), source_node=context.node.id, is_calculated=True))
+            return schema
         self._status_cache[context.node.id] = (
             "indeterminate",
             "result senza input risolvibile a monte",

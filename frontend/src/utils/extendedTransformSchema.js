@@ -5,6 +5,7 @@
  *
  * `null` means "not handled here"; an empty array is a valid output schema.
  */
+import { isPythonFloat, readValueMapping } from './lookupMapping';
 
 const clone = columns => (columns || []).map(col => ({ ...col }));
 const names = columns => new Set((columns || []).map(col => col.name));
@@ -272,11 +273,23 @@ export function applyExtendedTransformSchema(
     }
 
     case 'lookup': {
+      // Come lo schema del backend (schema_join_handlers._schema_lookup):
+      // con `unmatched` null/value e valori tutti numerici la colonna e' real.
       const column = config.column || '';
-      if (!column || !config.mapping || !names(result).has(column)) return result;
+      const unmatched = config.unmatched || null;
+      const mapping = readValueMapping(config.mapping);
+      // Mappa vuota e righe non trovate "mantenute": il backend restituisce
+      // la tabella invariata (analysis.py), senza colonna nuova.
+      if (!column || (mapping.length === 0 && (!unmatched || unmatched === 'keep')) || !names(result).has(column)) return result;
       const target = config.output_column || column;
+      const values = [...mapping.map(m => m.to), ...(unmatched === 'value' ? [config.default] : [])];
+      const numeric = (unmatched === 'null' || unmatched === 'value')
+        && values.every(v => v == null || String(v).trim() === '' || isPythonFloat(String(v).replace(',', '.')));
+      if (names(result).has(target)) {
+        return numeric ? result.map(col => (col.name === target ? { ...col, type: 'real' } : col)) : result;
+      }
       const source = result.find(col => col.name === column);
-      return target === column ? result : addColumn(result, target, source?.type || 'str');
+      return addColumn(result, target, numeric ? 'real' : (source?.type || 'str'));
     }
 
     case 'statistics': {

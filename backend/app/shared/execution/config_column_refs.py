@@ -67,11 +67,13 @@ LIST_COLUMN_CONFIG_KEYS = frozenset({
 })
 
 # Chiavi-lista di dict con un campo nome-colonna + un campo id-colonna.
+# items (formule) non contiene id-colonna: non va riscritto.
 _NESTED_REF_KEYS = {
     "aggregations": ("column", "column_id"),
     "aggs": ("column", "column_id"),
     # Filtro multi-condizione (redesign Manipola, B3).
     "conditions": ("column", "column_id"),
+    "columns": ("name", "name_column_id"),
     "renames": ("old_name", "old_name_id"),
     "maskings": ("column", "column_id"),
 }
@@ -97,7 +99,7 @@ def resolve_config_column_refs(
     Per le chiavi ``<base>_column_id``/``<base>_column_ids`` riscrive ``<base>``
     col nome risolto dall'id (fallback al valore stale se l'id non risolve — è il
     drift che il validatore poi cattura). Riscrive anche i nested
-    aggregations/renames/maskings. Senza id risolvibili ritorna il config invariato.
+    della tabella _NESTED_REF_KEYS. Senza id risolvibili ritorna il config invariato.
     """
     if not isinstance(config, dict) or not id_to_name:
         return config

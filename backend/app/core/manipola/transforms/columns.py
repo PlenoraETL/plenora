@@ -299,5 +299,5 @@ def op_split_column(
 
 def op_select_columns(df: DataFrame, columns: JsonRows | None = None) -> DataFrame:
     """Seleziona, ordina e rinomina preservando le colonne upstream nuove."""
-    plan = select_column_plan(list(df.columns), columns if columns is not None else [])
+    plan = select_column_plan(list(df.columns), columns if columns is not None else [], skip_missing=True)
     return df[[name for name, _ in plan]].rename(columns=dict(plan))

@@ -122,3 +122,19 @@ describe('declarative node persistence contract', () => {
     expect(save(loaded).access_denied).toBe(true);
   });
 });
+
+// Fase 4 M5: un campo NON registrato (es. output_columns dell'Output) deve
+// sopravvivere a salvataggio e riapertura per ogni tipo di nodo.
+describe('unregistered fields survive save and reload', () => {
+  for (const entry of Object.values(NODE_TYPES)) {
+    it(`${entry.type} keeps an unregistered field`, () => {
+      const extra = [{ name: 'a', keep: false }, { name: 'b', label: 'B' }];
+      const data = { ...(entry.type === 'project_input' ? { input_kind: 'file' } : {}), zz_unregistered: extra };
+      expect(reload(node(entry.type, data)).data.zz_unregistered).toEqual(extra);
+    });
+  }
+  it('result keeps output_columns', () => {
+    const output = [{ name: 'a', keep: false }];
+    expect(reload(node('result', { output_columns: output })).data.output_columns).toEqual(output);
+  });
+});

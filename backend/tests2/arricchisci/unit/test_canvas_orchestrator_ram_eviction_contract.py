@@ -119,3 +119,18 @@ def test_fan_out_node_evicted_only_after_all_consumers():
     assert "a" in node_results  # terminale
     # src consumato da entrambi -> evictato a fine run
     assert "src" not in node_results
+
+
+def test_result_applies_output_columns():
+    nodes = {
+        "src": ("staticValues", {"id": "src"}),
+        "res": ("result", {"id": "res", "output_columns": [
+            {"name": "v", "label": "value"}, {"name": "missing"},
+        ]}),
+    }
+    graph = _FakeGraph(nodes, [{"source": "src", "target": "res"}])
+    result = run_enrichment_canvas(
+        _FakeSvc(), "p", graph=graph, ctx=object(), api_connections={},
+        execution_order=["src", "res"], groups=[("single", ["src"]), ("single", ["res"])],
+    )
+    assert result["res"].to_dict("list") == {"value": [1, 2, 3]}

@@ -37,15 +37,16 @@ describe('ArricchisciEditor availableColumns deps lint (sessione 2 P0)', () => {
     const memoIdx = source.indexOf('availableColumnsFingerprint = useMemo');
     expect(memoIdx).toBeGreaterThan(-1);
     // Verifica che la chiusura del useMemo abbia [nodes] come dep
-    const window = source.slice(memoIdx, memoIdx + 800);
+    const window = source.slice(memoIdx, memoIdx + 1400);
     expect(window).toMatch(/\}\s*,\s*\[nodes\]\)/);
   });
 
   it('useEffect availableColumns ha fingerprint nelle deps', () => {
     // Cerca il pattern di chiusura dell'effect target
-    // `}, [applyDerivedNodes, availableColumnsFingerprint]);`
+    // `}, [applyDerivedNodes, availableColumnsFingerprint, edges]);` (Fase 4
+    // M5: anche i collegamenti, le colonne vengono solo dai nodi a monte).
     expect(source).toMatch(
-      /\}\s*,\s*\[applyDerivedNodes\s*,\s*availableColumnsFingerprint\]\)/,
+      /\}\s*,\s*\[applyDerivedNodes\s*,\s*availableColumnsFingerprint\s*,\s*edges\]\)/,
     );
   });
 

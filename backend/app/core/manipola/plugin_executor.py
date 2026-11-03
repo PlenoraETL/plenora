@@ -12,6 +12,9 @@ import re
 from pathlib import Path
 from typing import Any, Callable, List, Optional
 
+from app.shared.execution.registry_types import LIST_PARAM_TYPES, require_known_param_type, parameter_value
+from app.shared.execution.lookup_mapping import normalize_lookup_mapping
+from app.shared.execution.config_column_refs import resolve_config_column_refs
 from app.core.dataframes.ports import FrameLike
 from app.core.manipola.types import (
     JsonObject,
@@ -274,6 +277,11 @@ class PluginExecutor:
 
         Tutti i valori vengono convertiti al tipo corretto tramite _converti_valore.
         """
+        node_config = dict(node_config)
+        for key in ("left_keys", "right_keys"):
+            value = parameter_value(node_config, key)
+            if value is not None:
+                node_config[key] = value
         kwargs = {}
         parameters = transform_config.get('parameters', [])
 
@@ -339,44 +347,8 @@ class PluginExecutor:
         if not id_to_name:
             return resolved
 
-        def by_id(column_id: Any, fallback: Any = None) -> Any:
-            if not column_id:
-                return fallback
-            return id_to_name.get(str(column_id), fallback)
-
-        for key, value in list(resolved.items()):
-            if key.endswith("_column_id"):
-                base = key[:-10]
-                if base in resolved:
-                    resolved[base] = by_id(value, resolved[base])
-            elif key.endswith("_column_ids"):
-                base = key[:-11]
-                if base in resolved and isinstance(value, list) and value:
-                    current_values = resolved.get(base)
-                    if not isinstance(current_values, list):
-                        current_values = []
-                    resolved[base] = [
-                        by_id(column_id, current_values[idx] if idx < len(current_values) else None)
-                        for idx, column_id in enumerate(value)
-                    ]
-
-        for key, value in list(resolved.items()):
-            if isinstance(value, list):
-                if key in {"aggregations", "aggs"}:
-                    resolved[key] = [
-                        self._resolve_dict_column_ref(item, id_to_name, "column")
-                        for item in value
-                    ]
-                elif key == "renames":
-                    resolved[key] = [
-                        self._resolve_dict_column_ref(item, id_to_name, "old_name", "old_name_id")
-                        for item in value
-                    ]
-                elif key == "maskings":
-                    resolved[key] = [
-                        self._resolve_dict_column_ref(item, id_to_name, "column")
-                        for item in value
-                    ]
+        # Stessa tabella e risoluzione del validatore e dell'inferenza schema.
+        resolved = resolve_config_column_refs(resolved, id_to_name)
 
         for key, value in list(resolved.items()):
             if not key.endswith("_column_refs") or not isinstance(value, list):
@@ -395,7 +367,7 @@ class PluginExecutor:
     def _column_reference_maps(self, node: Node) -> StringMap:
         data = node.data if isinstance(node.data, dict) else {}
         raw_columns = []
-        for field in ("inputColumns", "columns"):
+        for field in ("inputColumns",):
             value = data.get(field)
             if isinstance(value, list):
                 raw_columns.extend(value)
@@ -409,21 +381,6 @@ class PluginExecutor:
             if col_id and name:
                 id_to_name[str(col_id)] = str(name)
         return id_to_name
-
-    def _resolve_dict_column_ref(
-        self,
-        item: Any,
-        id_to_name: StringMap,
-        name_field: str,
-        id_field: str = "column_id",
-    ) -> Any:
-        if not isinstance(item, dict):
-            return item
-        out = dict(item)
-        column_id = out.get(id_field)
-        if column_id and str(column_id) in id_to_name:
-            out[name_field] = id_to_name[str(column_id)]
-        return out
 
     def _rewrite_expression_refs(
         self,
@@ -459,6 +416,16 @@ class PluginExecutor:
         - boolean: "true"/"1"/"yes"/"si" → True (case-insensitive)
         - columns/string_list: stringa con virgole → lista di stringhe pulite
         """
+        require_known_param_type(param_type)
+        json_types = LIST_PARAM_TYPES | {"pivot_mapping", "value_mapping"}
+        if param_type in json_types and (value is None or value == ""):
+            return None
+        if param_type == "value_mapping":
+            try:
+                parsed = _json.loads(value) if isinstance(value, str) else value
+            except json.JSONDecodeError as exc:
+                raise ValueError("Mappa valori: formato non valido") from exc
+            return normalize_lookup_mapping(parsed)
         if value is None or param_type is None:
             return value
 
@@ -478,7 +445,7 @@ class PluginExecutor:
                     return [v.strip() for v in value.split(',') if v.strip()]
                 return value if isinstance(value, list) else [value]
 
-            elif param_type == 'aggregation_list':
+            elif param_type in LIST_PARAM_TYPES:
                 # Aggregazioni: deve essere una lista di dict {column, function, ...}
                 if isinstance(value, str):
                     try:

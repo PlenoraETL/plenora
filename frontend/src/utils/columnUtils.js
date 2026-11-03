@@ -80,6 +80,13 @@ export function mapApiTypeToStandard(apiType) {
  * Traversa il grafo ricorsivamente per trovare tutte le colonne
  * che contribuiscono al risultato finale
  */
+/**
+ * Una colonna e' nella SELECT se non e' esplicitamente nascosta: stessa
+ * regola del backend (canvas_column: visible di default True). Unica fonte
+ * per conteggi, anteprima della query, colonne dell'Output e griglia.
+ */
+export const isColumnVisible = (col) => col?.visible !== false;
+
 export function calculateOutputColumnsRecursive(nodes, edges, resultNodeId) {
   const visitedNodes = new Set();
   const allColumns = [];
@@ -97,7 +104,7 @@ export function calculateOutputColumnsRecursive(nodes, edges, resultNodeId) {
       
       // Colonne normali visibili - NORMALIZZA NOMI A LOWERCASE PER CONSISTENZA
       const visibleColumns = (node.data.columns || [])
-        .filter(col => col.visible)
+        .filter(isColumnVisible)
         .map(col => {
           const normalizedName = col.name.toLowerCase();
           return {
@@ -133,7 +140,7 @@ export function calculateOutputColumnsRecursive(nodes, edges, resultNodeId) {
       const layerName = node.data.layer_name || 'feature';
       
       const visibleColumns = (node.data.columns || [])
-        .filter(col => col.visible)
+        .filter(isColumnVisible)
         .map(col => ({
           name: col.name,
           alias: col.alias,

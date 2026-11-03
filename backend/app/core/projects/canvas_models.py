@@ -268,6 +268,8 @@ class Node(BaseModel):
     limit: Optional[int] = None
     geomColumn: Optional[str] = None
 
+    output_columns: Optional[List[dict]] = None
+
     group_by_enabled: Optional[bool] = False
     group_by_columns: Optional[List[str]] = []
     aggregations: Optional[List[AggregationConfig]] = []

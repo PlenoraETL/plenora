@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from app.shared.contracts.payloads import JsonObject
+from app.shared.execution.node_fields import node_field
 
 
 class CanvasNode:
@@ -45,7 +46,4 @@ class CanvasNode:
         Equivalent to ``node.get(key)`` with a fallback to
         ``node['data'].get(key, default)`` when the top-level value is None.
         """
-        val = self._node.get(key)
-        if val is not None:
-            return val
-        return self.data.get(key, default)
+        return node_field(self._node, key, default)

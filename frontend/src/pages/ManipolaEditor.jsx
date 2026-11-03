@@ -43,6 +43,7 @@ import DataSourceNode from '../components/nodes/DataSourceNode';
 import { useSchemaInference, usePreview, useExecution, useCanvasCore, useCanvasSave, useUnsavedChangesGuard, useValidationHighlights } from '../hooks';
 import { useEditorData } from '../hooks/useEditorData';
 import useCanvasStore from '../store/useCanvasStore';
+import { withAvailableColumns } from '../utils/columnPlans';
 import {
   createParameterBindingEdge,
   dataFlowEdges,
@@ -229,7 +230,14 @@ const ManipolaEditorContent = () => {
     });
   }, [schemas, applyDerivedNodes]);
 
-  // Aggiorna availableColumns in ResultNode e CaricanNode
+  // Aggiorna availableColumns in ResultNode e CaricanNode (anche quando
+  // cambiano le "Colonne in uscita" dell'Output).
+  // Tutto cio' che decide le colonne in uscita dall'Output (selezione e
+  // GROUP BY, columnPlans.resultOutputColumns): se cambia, i Carica seguono.
+  const resultOutputColumnsKey = useCanvasStore(s => {
+    const d = (s.nodes || []).find(n => n.type === 'result')?.data || {};
+    return JSON.stringify([d.output_columns, d.group_by_enabled, d.group_by_columns, d.aggregations]);
+  });
   useEffect(() => {
     // NOTA: 'nodes' rimosso dalle dipendenze intenzionalmente per evitare loop React.
     // nodes e edges vengono letti dentro l'updater (snapshot aggiornato)
@@ -259,16 +267,13 @@ const ManipolaEditorContent = () => {
         (sourceNode?.data?.columns || []).forEach(col => availableColumns.push({ name: col.name || col, type: col.type || 'str', source: sourceNodeId }));
       }
 
-      if (JSON.stringify(availableColumns) === JSON.stringify(resultNode.data?.availableColumns || [])) return nds;
-      return nds.map(node => {
-        if (node.type === 'result' || node.type === 'carica' || node.type === 'carica_arcgis' || node.type === 'caricaArcgis') return { ...node, data: { ...node.data, availableColumns } };
-        return node;
-      });
+      // Carica: colonne dopo "Colonne in uscita" dell'Output (utils/columnPlans).
+      return withAvailableColumns(nds, availableColumns);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // 'nodes' volutamente assente: viene letto nell'updater
     // (snapshot aggiornato) per evitare il loop nodes->effect->update.
-  }, [edges, schemas, applyDerivedNodes, edgesRef]);
+  }, [edges, schemas, applyDerivedNodes, edgesRef, resultOutputColumnsKey]);
 
   const handleAutosaveError = useCallback((err) => {
     console.warn('[ManipolaEditor] Autosave non completato:', err?.message || err);
@@ -427,6 +432,15 @@ const ManipolaEditorContent = () => {
   // con snapshot finale, sovrascrivendo i dati corretti.
   // refreshSchemas resta accoppiato a connect (non a edge-remove).
   const onConnect = useCallback((params) => {
+    // Input runtime su un parametro singolo che una lista sostituisce
+    // (Filtra con condizioni, Formula con piu' colonne): la lista torna al
+    // formato singolo, oppure il collegamento e' rifiutato con il motivo.
+    const bindingSource = nodesRef.current.find(node => node.id === params.source);
+    if (isScalarProjectInputNode(bindingSource)) {
+      const paramId = String(params.targetHandle || '').match(/^parameter:(.+)$/)?.[1];
+      const check = paramId ? useCanvasStore.getState().prepareParameterBinding(params.target, paramId) : { ok: true };
+      if (!check.ok) { toast.warning(check.message); return; }
+    }
     editEdges(eds => {
       const sourceNode = nodesRef.current.find(node => node.id === params.source);
       const edge = isScalarProjectInputNode(sourceNode)
@@ -436,6 +450,7 @@ const ManipolaEditorContent = () => {
       afterConnect(newEdges, !isScalarProjectInputNode(sourceNode));
       return newEdges;
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editEdges, afterConnect]);
 
 

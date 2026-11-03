@@ -6,8 +6,8 @@
  *
  * Owna:
  *   - dispatch a `OutputSettingsPanel` (filename + format + geo + distinct + limit);
- *   - preview colonne output con expand (columnsExpanded), passata come children
- *     al panel per preservare l'ordine visivo;
+ *   - "Colonne in uscita" (OutputColumnsSection, Fase 4 M5), passata come
+ *     children al panel per preservare l'ordine visivo;
  *   - dispatch a `GroupOrderHavingPanel` (GROUP BY + aggregazioni + ORDER BY + HAVING);
  *   - dispatch a `ExecuteActionsPanel` (execution mode + bottoni Valida/Preview/
  *     Esegui + footer cronologia + RunHistoryModal);
@@ -40,19 +40,14 @@
  * Il default di onExecute senza options e' gestito dal parent (force_recalculate=false),
  * cosi' ImdfView puo' continuare a chiamare onExecute() senza conoscere executionMode.
  */
-import React, { useState, useEffect, memo } from 'react';
+import React, { useEffect, memo } from 'react';
 import useCanvasStore from '../../../store/useCanvasStore';
-import {
-  getColumnTypeIcon,
-  getColumnTypeLabel,
-  getColumnSRID,
-  isGeometryType,
-} from '../../../utils/columnUtils';
+import { isGeometryType } from '../../../utils/columnUtils';
 import OutputSettingsPanel from './standard/OutputSettingsPanel';
 import GroupOrderHavingPanel from './standard/GroupOrderHavingPanel';
 import ExecuteActionsPanel from './standard/ExecuteActionsPanel';
-
-const COLUMNS_PREVIEW = 5;
+import { EstraiOutputColumns, PipelineOutputColumns } from './standard/OutputColumnsSection';
+import { applySelectColumns } from '../../../utils/columnPlans';
 
 const ResultNodeStandardView = memo(({
   data,
@@ -65,8 +60,6 @@ const ResultNodeStandardView = memo(({
   onPreview,
 }) => {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
-
-  const [columnsExpanded, setColumnsExpanded] = useState(false);
 
   // Tipi progetto (derivati da data)
   const isManipulate = data.isManipulate || false;
@@ -93,9 +86,10 @@ const ResultNodeStandardView = memo(({
   // (sotto) scattava su un transient e azzerava la scelta utente di geojson.
   const geomSourceColumns = (() => {
     if (isManipulate || isArricchisci) {
-      if (upstreamColumns.length > 0) return upstreamColumns;
-      if ((data.columns || []).length > 0) return data.columns;
-      return data.availableColumns || [];
+      // Dopo "Colonne in uscita": la geometria esce col nome nuovo, o non esce.
+      const base = upstreamColumns.length > 0 ? upstreamColumns
+        : ((data.columns || []).length > 0 ? data.columns : (data.availableColumns || []));
+      return applySelectColumns(base, data.output_columns, { skipMissing: true });
     }
     const cols = data.columns || [];
     if (upstreamColumns.length > 0) {
@@ -138,7 +132,12 @@ const ResultNodeStandardView = memo(({
     type: col.type || 'str',
     fullName: col.name || col,
   }));
-  const manipolaColumns = [...new Map(manipolaColumnsRaw.map(col => [col.name, col])).values()];
+  const manipolaUpstream = [...new Map(manipolaColumnsRaw.map(col => [col.name, col])).values()];
+  // GROUP BY / ORDER BY lavorano sulle colonne DOPO "Colonne in uscita"
+  // (il backend applica output_columns prima del GROUP BY).
+  const manipolaColumns = applySelectColumns(manipolaUpstream, data.output_columns, { skipMissing: true })
+    .map(col => ({ ...col, fullName: col.name }));
+  const isReadOnly = useCanvasStore(s => s.isReadOnly);
 
   // `groupByAvailableColumns` ora derivato dentro `GroupOrderHavingPanel`
   // dai props `availableColumns` / `manipolaColumns` / `isManipulate`.
@@ -164,54 +163,12 @@ const ResultNodeStandardView = memo(({
         hasGeometryColumns={hasGeometryColumns}
         isGeoFormat={isGeoFormat}
       >
-        {/* Colonne Output (solo SQL/Estrai, senza GROUP BY attivo) — preview
-            non output-setting; renderizzata come children del panel per
-            preservare l'ordine visivo originale (filename → format →
-            colonne preview → DISTINCT/LIMIT). */}
-        {isEstrai && data.columns && data.columns.length > 0 && !groupByEnabled && (
-          <div className="result-node__section result-node__section--bordered">
-            <div className="result-node__label result-node__label--with-badge"
-              style={{ cursor: 'pointer' }}
-              onClick={() => setColumnsExpanded(v => !v)}
-            >
-              <span>📋 Colonne output:</span>
-              <span className="result-node__columns-badge">{data.columns.length}</span>
-              <span style={{ marginLeft: 'auto', fontSize: '9px', color: 'var(--plen-text-dim)' }}>
-                {columnsExpanded ? '▲' : '▼'}
-              </span>
-            </div>
-            <div className="result-node__columns-list">
-              {(columnsExpanded ? data.columns : data.columns.slice(0, COLUMNS_PREVIEW)).map((col, idx) => (
-                <div key={idx} className="result-node__column-item">
-                  <span
-                    className={`result-node__column-type-icon ${isGeometryType(col.type) ? 'result-node__column-type-icon--geo' : ''}`}
-                    title={getColumnTypeLabel(col.type)}
-                  >
-                    {getColumnTypeIcon(col.type)}
-                  </span>
-                  <span className="result-node__column-table">{col.source_table}</span>
-                  <span className="result-node__column-separator">.</span>
-                  <span className="result-node__column-name">{col.alias || col.name}</span>
-                  {isGeometryType(col.type) && getColumnSRID(col.type) && (
-                    <span className="result-node__column-srid-badge" title={`EPSG:${getColumnSRID(col.type)}`}>
-                      {getColumnSRID(col.type)}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-            {data.columns.length > COLUMNS_PREVIEW && (
-              <button
-                type="button"
-                className="result-node__columns-expand-btn"
-                onClick={() => setColumnsExpanded(v => !v)}
-              >
-                {columnsExpanded
-                  ? '▲ Comprimi'
-                  : `▼ Mostra tutte (${data.columns.length - COLUMNS_PREVIEW} nascoste)`}
-              </button>
-            )}
-          </div>
+        {/* Colonne in uscita (Fase 4, M5): griglia "Seleziona e rinomina".
+            Estrai: sulle colonne delle tabelle (senza GROUP BY attivo);
+            Manipola/Arricchisci: output_columns, applicate prima del GROUP BY. */}
+        {isEstrai && !groupByEnabled && <EstraiOutputColumns id={id} disabled={isReadOnly} />}
+        {!isEstrai && (
+          <PipelineOutputColumns id={id} data={data} upstreamColumns={manipolaUpstream} disabled={isReadOnly} />
         )}
       </OutputSettingsPanel>
 

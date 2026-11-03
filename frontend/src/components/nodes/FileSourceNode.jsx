@@ -74,7 +74,7 @@ const FileSourceNode = ({ id, data }) => {
   const handleToggleColumn = (colName) => {
     if (!data.columns) return;
     const updatedColumns = data.columns.map(col => 
-      col.name === colName ? { ...col, visible: !col.visible } : col
+      col.name === colName ? { ...col, visible: col.visible === false } : col
     );
     useCanvasStore.getState().updateNodeData(id, { columns: updatedColumns });
   };

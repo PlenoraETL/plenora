@@ -835,5 +835,5 @@ class TransformSchemaHandlers:
         if not input_schemas:
             return []
         by_name = {col.name: col for col in input_schemas[0]}
-        plan = select_column_plan(list(by_name), config.get("columns") or [])
+        plan = select_column_plan(list(by_name), config.get("columns") or [], skip_missing=True)
         return [self._copy_column(by_name[name], node_id, name=label) for name, label in plan]

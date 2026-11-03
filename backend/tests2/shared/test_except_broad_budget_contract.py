@@ -95,7 +95,9 @@ pytestmark = [pytest.mark.unit, pytest.mark.contract]
 # 775 -> 783 (2026-07-20): correzione del conteggio della baseline precedente.
 # HEAD contiene gia' 783 occorrenze e il worktree non ne introduce di nuove;
 # resta invariato il vincolo shrink-only per le modifiche successive.
-_EXPECT_BROAD_BUDGET = 783
+# +1: per-node schema inference safety-net. Arbitrary handler failures are
+# logged and fall back to the first input; other project nodes remain available.
+_EXPECT_BROAD_BUDGET = 784
 
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _APP_ROOT = _BACKEND_ROOT / "app"

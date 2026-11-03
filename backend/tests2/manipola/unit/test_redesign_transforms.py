@@ -68,8 +68,7 @@ def test_select_columns_runtime():
     result = op_select_columns(df, [{"name": "b", "label": "B"}, {"name": "a", "keep": False}])
     assert result.to_dict("records") == [{"B": 2, "new": 3}]
     pd.testing.assert_frame_equal(op_select_columns(df, []), df)
-    with pytest.raises(ValueError, match="non trovata"):
-        op_select_columns(df, [{"name": "missing"}])
+    pd.testing.assert_frame_equal(op_select_columns(df, [{"name": "missing"}]), df)
 
 
 def test_registry_executes_new_formats_and_keeps_legacy_defaults():

@@ -13,7 +13,8 @@ import DynamicConfig from './DynamicConfig';
 import { authBus } from '../../utils/authBus';
 import RunHistoryModal from '../modals/RunHistoryModal';
 import { useConfirm } from '../../context/ConfirmContext';
-import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
+import { dataFlowEdges, isParameterBindingEdge } from '../../utils/runtimeBindingEdges';
+import { OPERATION_PANELS, LookupSuggestion } from './panels';
 import NodeHandle from '../canvas/NodeHandle';
 import { fetchTransformRegistry, getCachedTransformRegistry, isMultiInputOp } from '../../utils/transformRegistry';
 
@@ -21,7 +22,7 @@ import { fetchTransformRegistry, getCachedTransformRegistry, isMultiInputOp } fr
 const fetchRegistry = fetchTransformRegistry;
 const getRegistryCache = getCachedTransformRegistry;
 
-const TransformNode = memo(({ data, id }) => {
+const TransformNode = memo(({ data, id, inInspector = false }) => {
   const { getEdges, getNodes } = useReactFlow();
   
   const transform_op = data.transform_op || 'filter';
@@ -140,10 +141,14 @@ const TransformNode = memo(({ data, id }) => {
 
     const left = getNodeInfo(leftEdge);
     const right = getNodeInfo(rightEdge);
+    // Colonne per lato: quelle gia' propagate (con alias e visibilita'
+    // applicati, marcate left/right) sono i nomi che il backend vede; le
+    // colonne grezze del nodo a monte solo se la propagazione non le marca.
+    const marked = inputColumns.some(c => c.source === 'left' || c.source === 'right');
 
     return { 
-      leftColumns: left.columns, 
-      rightColumns: right.columns,
+      leftColumns: marked ? inputColumns.filter(c => c.source === 'left') : left.columns,
+      rightColumns: marked ? inputColumns.filter(c => c.source === 'right') : right.columns,
       leftSourceName: left.name,
       rightSourceName: right.name
     };
@@ -200,6 +205,16 @@ const TransformNode = memo(({ data, id }) => {
 
   const onOpChange = (evt) => {
     updateNodeData(id, { transform_op: evt.target.value, config: {} });
+    notifyConfigChanged();
+  };
+
+  // Pannello laterale (Fase 4, M4): input runtime collegati a un parametro
+  // singolo -> resta il form generico (i pannelli usano le liste).
+  const isReadOnly = useCanvasStore(s => s.isReadOnly);
+  const hasParameterBindings = useCanvasStore(s => (s.edges || []).some(e => e.target === id && isParameterBindingEdge(e)));
+  const convertToLookup = (lookupConfig) => {
+    updateNodeData(id, { transform_op: 'lookup', config: lookupConfig });
+    notifyConfigChanged();
   };
 
   const handleDelete = async () => {
@@ -239,6 +254,74 @@ const TransformNode = memo(({ data, id }) => {
           <div className="transform-node__loading">Caricamento...</div>
         </div>
         <NodeHandle type="source" position={Position.Right} className="transform-node__handle" />
+      </div>
+    );
+  }
+
+  if (inInspector) {
+    const Panel = hasParameterBindings ? null : OPERATION_PANELS[transform_op];
+    const opsByCategory = Object.entries(categories).map(([catId, cat]) => ({
+      catId, cat,
+      ops: Object.entries(registry?.transforms || {}).filter(([, cfg]) => cfg.category === catId),
+    })).filter(g => g.ops.length > 0);
+    return (
+      <div className="transform-inspector ppanel">
+        <div className="ppanel__field">
+          <label className="ppanel__label" htmlFor={`op-${id}`}>Operazione</label>
+          <select id={`op-${id}`} value={transform_op} onChange={onOpChange} className="ppanel__input" disabled={isReadOnly || !registry}>
+            {!registry && <option value={transform_op}>Caricamento operazioni…</option>}
+            {opsByCategory.map(({ catId, cat, ops }) => (
+              <optgroup key={catId} label={`${cat.icon || ''} ${cat.name}`}>
+                {ops.map(([opId, cfg]) => <option key={opId} value={opId}>{cfg.icon} {cfg.name}</option>)}
+              </optgroup>
+            ))}
+          </select>
+          {Panel && transformConfig?.description && <div className="ppanel__note">{transformConfig.description}</div>}
+        </div>
+        {transform_op === 'conditional' && !hasParameterBindings && (
+          <LookupSuggestion config={config} columns={inputColumns} onConvert={convertToLookup} disabled={isReadOnly} />
+        )}
+        {Panel ? (
+          <Panel
+            config={config}
+            updateConfig={updateConfig}
+            inputColumns={inputColumns}
+            leftColumns={leftColumns}
+            rightColumns={rightColumns}
+            leftSourceName={leftSourceName}
+            rightSourceName={rightSourceName}
+            disabled={isReadOnly}
+          />
+        ) : registry?.transforms ? (
+          <DynamicConfig
+            transformId={transform_op}
+            config={config}
+            updateConfig={updateConfig}
+            applyDerivedConfig={applyDerivedConfig}
+            registry={registry.transforms}
+            inputColumns={inputColumns}
+            leftColumns={leftColumns}
+            rightColumns={rightColumns}
+            geometryColumns={geometryColumns}
+            targetNodeId={id}
+          />
+        ) : (
+          <div className="ppanel__note">Caricamento configurazione…</div>
+        )}
+        {hasParameterBindings && OPERATION_PANELS[transform_op] && (
+          <div className="ppanel__hint">Questo passo ha input runtime collegati ai parametri: si usa il modulo completo.</div>
+        )}
+        <div className="transform-inspector__foot">
+          <button type="button" className="ppanel__btn" onClick={() => setIsRunHistoryOpen(true)}>🕐 Cronologia run</button>
+          {!isReadOnly && <button type="button" className="ppanel__btn transform-inspector__delete" onClick={handleDelete}>Elimina passo</button>}
+        </div>
+        <RunHistoryModal
+          isOpen={isRunHistoryOpen}
+          onClose={() => setIsRunHistoryOpen(false)}
+          canvasId={projectId}
+          nodeId={id}
+          nodeLabel={data.label || transform_op}
+        />
       </div>
     );
   }

@@ -90,6 +90,30 @@ Ogni aggiunta deve avere:
 
 ⛳ Checkpoint dopo **M0**, **M2**, **M5** e **M7**.
 
+### Stato M4+M5 (03/11/2026)
+
+Fatti, con backend B7 (Colonne in uscita dell'Output), B8 (Lookup: mappatura
+in ogni formato, righe non trovate), B9 (riferimenti alle colonne annidati).
+Raccolta difetti con due lettori, correzione per regole, sei giri di lettura
+(il tetto). Al quarto giro cambio di approccio: le regole del backend copiate
+nel frontend (selezione, Join nuovo e vecchio, GROUP BY, tipi delle
+aggregazioni) sono verificate su casi GENERATI dal Python
+(`backend/tests2/contracts/column_plans_cases.json`), eseguiti da pytest e da
+vitest.
+
+Rimandati al blocco successivo (ognuno con raccolta, correzione e conferma):
+1. **Id delle colonne nell'Output fino all'esecuzione.** Oggi l'Output lavora
+   per nome (scelta voluta, coerente in anteprima, schema ed esecuzione): il
+   nodo Output in esecuzione non riceve la mappa degli id, quindi una colonna
+   configurata e poi rinominata a monte risulta "non trovata" e viene saltata.
+   Approccio proposto: il frontend smette di ricalcolare le colonne a valle e
+   usa lo schema del backend.
+2. Join tra tabelle di Estrai nel pannello laterale (oggi resta la finestra).
+3. Lookup: "Riempi con i valori presenti" (serve leggere i valori distinti).
+4. Nota: schema e previsione applicano il GROUP BY anche a un Output di
+   Arricchisci con dati vecchi o importati (l'esecuzione di Arricchisci non
+   raggruppa e l'interfaccia non lo mostra).
+
 **Stima:** circa 4 giornate (era circa 2 per il solo Manipola).
 
 ## Fase 5 — Resto dell'audit

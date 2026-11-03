@@ -1,0 +1,84 @@
+/* Pannelli dedicati del pannello laterale (Fase 4, M4/M5). */
+.ppanel { display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: var(--plen-text, #18202f); }
+.ppanel__field { display: flex; flex-direction: column; gap: 6px; }
+.ppanel__label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--plen-text-sub, #5b6478); }
+.ppanel__row { display: flex; align-items: center; gap: 6px; }
+.ppanel__row--between > .ppanel__label { flex: 1; }
+.ppanel__input {
+  flex: 1; min-width: 0;
+  font: inherit; font-size: 13px; color: inherit;
+  background: var(--plen-surface, #fff);
+  border: 1px solid var(--plen-border-hi, #cfd6e4);
+  border-radius: 7px; padding: 5px 8px;
+}
+.ppanel__input:focus { outline: none; border-color: var(--plen-blue, #2563eb); }
+.ppanel__input:disabled { opacity: 0.6; }
+.ppanel__input--op { flex: 0 0 150px; }
+.ppanel__mono { font-family: var(--plen-font-mono, ui-monospace, monospace); font-size: 12px; resize: vertical; width: 100%; box-sizing: border-box; }
+.ppanel__card {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px; border-radius: 9px;
+  border: 1px solid var(--plen-border, #e3e7f0);
+  background: var(--plen-surface-2, #f7f8fc);
+}
+.ppanel__card--draft { border-style: dashed; }
+.ppanel__x, .ppanel__mini {
+  border: 0; background: transparent; cursor: pointer; color: var(--plen-text-dim, #8a93a6);
+  border-radius: 6px; padding: 2px 6px; font-size: 14px; line-height: 1;
+}
+.ppanel__mini { font-size: 12px; }
+.ppanel__x:hover:not(:disabled), .ppanel__mini:hover:not(:disabled) { background: var(--plen-surface-2, #f3f5fa); color: var(--plen-text, #18202f); }
+.ppanel__link {
+  align-self: flex-start; border: 0; background: transparent; cursor: pointer;
+  color: var(--plen-blue, #2563eb); font: inherit; font-size: 13px; font-weight: 600; padding: 2px 0;
+}
+.ppanel__btn {
+  border: 1px solid var(--plen-border-hi, #cfd6e4); background: var(--plen-surface, #fff); color: inherit;
+  border-radius: 7px; padding: 4px 9px; font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap;
+}
+.ppanel__btn--primary { background: var(--plen-blue, #2563eb); border-color: var(--plen-blue, #2563eb); color: #fff; font-weight: 600; }
+.ppanel__btn:disabled, .ppanel__link:disabled { opacity: 0.5; cursor: default; }
+.ppanel__note { font-size: 12px; color: var(--plen-text-sub, #5b6478); line-height: 1.45; }
+.ppanel__hint { font-size: 11.5px; color: var(--plen-text-dim, #8a93a6); }
+.ppanel__error { font-size: 12px; color: var(--plen-err, #dc2626); background: var(--plen-err-bg, #fdecec); border-radius: 7px; padding: 6px 9px; }
+.ppanel__ok { font-size: 12px; color: var(--plen-ok, #15803d); background: var(--plen-ok-bg, #e8f7ee); border-radius: 7px; padding: 6px 9px; }
+.ppanel__suggest {
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-start;
+  font-size: 12.5px; line-height: 1.45;
+  padding: 10px; border-radius: 9px; margin-bottom: 10px;
+  background: var(--plen-blue-bg, #eef3ff); border: 1px solid var(--plen-blue-border, #c9d8fb);
+}
+.ppanel__checks { display: flex; flex-direction: column; gap: 2px; max-height: 180px; overflow: auto; padding: 2px 0; }
+.ppanel__radios { display: flex; flex-direction: column; gap: 4px; }
+.ppanel__check { display: flex; align-items: center; gap: 7px; font-size: 13px; cursor: pointer; }
+.ppanel__tag { font-size: 10.5px; padding: 1px 6px; border-radius: 5px; color: var(--plen-text-dim, #8a93a6); background: var(--plen-surface-2, #f3f5fa); }
+.ppanel__tag--warn { color: var(--plen-warn, #b45309); background: var(--plen-warn-bg, #fef3c7); }
+.ppanel__chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.ppanel__chip {
+  border: 1px solid var(--plen-border, #e3e7f0); background: var(--plen-surface, #fff); color: inherit;
+  border-radius: 999px; padding: 2px 9px; font: inherit; font-size: 12px; cursor: pointer;
+}
+.ppanel__chip:hover:not(:disabled) { border-color: var(--plen-blue, #2563eb); }
+
+/* Griglia "Seleziona e rinomina" */
+.pgrid { display: flex; flex-direction: column; gap: 7px; }
+.pgrid__tools { display: flex; flex-wrap: wrap; gap: 5px; }
+.pgrid__search { flex: 1 1 140px; }
+.pgrid__rows { display: flex; flex-direction: column; border: 1px solid var(--plen-border, #e3e7f0); border-radius: 9px; max-height: 380px; overflow: auto; }
+.pgrid__row {
+  display: grid; grid-template-columns: auto auto minmax(0, 1fr) minmax(0, 1.2fr) auto;
+  align-items: center; gap: 6px; padding: 4px 6px;
+  border-bottom: 1px solid var(--plen-border, #eef1f6);
+}
+.pgrid__row:last-child { border-bottom: 0; }
+.pgrid__row--off .pgrid__src { color: var(--plen-text-dim, #8a93a6); text-decoration: line-through; }
+.pgrid__row--missing { background: var(--plen-warn-bg, #fef3c7); }
+.pgrid__grip { cursor: grab; color: var(--plen-text-dim, #8a93a6); font-size: 11px; user-select: none; }
+.pgrid__src { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pgrid__label { padding: 3px 6px; font-size: 12.5px; }
+.pgrid__move { display: inline-flex; }
+.pgrid--fixed .pgrid__row { grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.2fr) auto; }
+
+/* TransformNode nel pannello laterale */
+.transform-inspector__foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--plen-border, #e3e7f0); }
+.transform-inspector__delete { color: var(--plen-err, #dc2626); }

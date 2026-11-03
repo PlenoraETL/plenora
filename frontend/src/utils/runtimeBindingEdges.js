@@ -182,3 +182,42 @@ export function suggestedInputKind(paramType) {
   if (paramType === 'select') return 'select';
   return 'text';
 }
+
+/**
+ * Parametri singoli che una lista sostituisce: con la lista presente (anche
+ * vuota) il backend ignora i singoli, quindi un input runtime collegato a
+ * uno di loro non avrebbe effetto.
+ */
+export const LIST_SUPERSEDES = {
+  filter: { list: 'conditions', params: ['column', 'operator', 'value'] },
+  formula: { list: 'items', params: ['new_column', 'formula'] },
+};
+
+/**
+ * Cosa fare collegando un input runtime al parametro `paramId` di `node`:
+ *  - null: nessun conflitto;
+ *  - { patch }: la lista ha 0 o 1 voci -> torna al formato singolo (patch
+ *    della config) e il collegamento funziona;
+ *  - { refuse }: la lista ha piu' voci -> collegamento rifiutato, con il motivo.
+ */
+export function bindingListResolution(node, paramId) {
+  const rule = LIST_SUPERSEDES[node?.data?.transform_op];
+  const config = node?.data?.config || {};
+  if (!rule || !rule.params.includes(paramId) || !Array.isArray(config[rule.list])) return null;
+  const list = config[rule.list];
+  if (list.length > 1) {
+    return {
+      refuse: `Questo passo ha ${list.length} ${rule.list === 'items' ? 'formule' : 'condizioni'}: `
+        + "un input runtime può sostituire un parametro solo quando ce n'è una. Riducile a una, poi collega.",
+    };
+  }
+  const item = list[0] || {};
+  const patch = { [rule.list]: undefined };
+  if (rule.list === 'conditions' && list.length === 1) {
+    Object.assign(patch, { column: item.column, operator: item.operator || '==', value: item.value ?? '', column_column_id: item.column_id });
+  }
+  if (rule.list === 'items' && list.length === 1) {
+    Object.assign(patch, { new_column: item.new_column, formula: item.formula });
+  }
+  return { patch };
+}

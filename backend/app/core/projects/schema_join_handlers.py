@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, List
-from app.shared.execution.column_selection import join_column_plan
+from app.shared.execution.lookup_mapping import normalize_lookup_mapping, lookup_is_numeric, normalize_unmatched
+from app.shared.execution.schema_column_plans import legacy_join_plan, join_output_plan
 
 if TYPE_CHECKING:
     from app.shared.execution.schema_types import ColumnSchema
@@ -30,39 +31,21 @@ class JoinSchemaHandlers:
 
         left_keys = self._normalize_str_list(config.get("left_keys") or config.get("left_on"))
         right_keys = self._normalize_str_list(config.get("right_keys") or config.get("right_on"))
+        left_names = [c.name for c in left_schema]
+        right_names = [c.name for c in right_schema]
         if any(config.get(key) is not None for key in ("left_columns", "right_columns", "name_conflict")):
-            left_map, right_map = join_column_plan(
-                [c.name for c in left_schema], [c.name for c in right_schema],
-                left_keys, right_keys, config.get("left_columns"), config.get("right_columns"),
-                config.get("name_conflict"),
+            plan = join_output_plan(
+                left_names, right_names, left_keys, right_keys,
+                config.get("left_columns"), config.get("right_columns"), config.get("name_conflict"),
             )
-            shared_keys = set(left_keys) & set(right_keys)
-            return [self._copy_column(c, node_id, name=left_map[c.name]) for c in left_schema if c.name in left_map] + [
-                self._copy_column(c, node_id, name=right_map[c.name]) for c in right_schema
-                if c.name in right_map and c.name not in shared_keys
-            ]
-
-        left_key_set = set(left_keys)
-        right_key_set = set(right_keys)
-        same_name_right_keys = {
-            right_key
-            for left_key, right_key in zip(left_keys, right_keys)
-            if left_key == right_key
-        }
-
-        result = []
-
-        for col in left_schema:
-            new_name = col.name if col.name in left_key_set else f"{col.name}_L"
-            result.append(self._copy_column(col, node_id, name=new_name))
-
-        for col in right_schema:
-            if col.name in same_name_right_keys:
-                continue
-            new_name = col.name if col.name in right_key_set else f"{col.name}_R"
-            result.append(self._copy_column(col, node_id, name=new_name))
-
-        return result
+        else:
+            plan = legacy_join_plan(left_names, right_names, left_keys, right_keys)
+        # Consume each occurrence in source order, retaining duplicate-column metadata.
+        sources = {"left": iter(left_schema), "right": iter(right_schema)}
+        return [
+            self._copy_column(next(c for c in sources[side] if c.name == source), node_id, name=output)
+            for side, source, output in plan
+        ]
 
     def _schema_cross_join(
         self,
@@ -99,8 +82,9 @@ class JoinSchemaHandlers:
             return []
         result = self._copy_schema(input_schemas[0], node_id)
         column = config.get("column") or ""
+        unmatched = normalize_unmatched(config.get("unmatched"))
         mapping = config.get("mapping")
-        if not column or not mapping:
+        if not column or (not mapping and unmatched in (None, "keep")):
             return result
         existing = {c.name for c in result}
         if column not in existing:
@@ -108,15 +92,18 @@ class JoinSchemaHandlers:
 
         out_col_cfg = config.get("output_column")
         target = out_col_cfg if out_col_cfg else column
-        if target == column:
-            return result
+        numeric = lookup_is_numeric(
+            normalize_lookup_mapping(mapping), config.get("unmatched"), config.get("default")
+        )
         if target in existing:
+            if numeric:
+                result = [self._copy_column(c, node_id, type_="real") if c.name == target else c for c in result]
             return result
 
         src_col = next(c for c in result if c.name == column)
         result.append(self._column_schema_cls(
             name=target,
-            type=src_col.type,
+            type="real" if numeric else src_col.type,
             source_node=node_id,
             is_calculated=True,
         ))

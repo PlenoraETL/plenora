@@ -34,6 +34,23 @@ import RenameListInput from './parameter-inputs/RenameListInput';
 import MaskingListInput from './parameter-inputs/MaskingListInput';
 import ConditionListInput from './parameter-inputs/ConditionListInput';
 import RuntimeInputBindingControl from './RuntimeInputBindingControl';
+import ValueMappingInput from './parameter-inputs/ValueMappingInput';
+import FilterPanel from './panels/FilterPanel';
+import FormulaPanel from './panels/FormulaPanel';
+import SelectColumnsPanel from './panels/SelectColumnsPanel';
+
+/**
+ * Tipi di parametro del registry con un editor dedicato. Un test confronta
+ * questo elenco con il registry vero: un tipo nuovo nel backend non puo'
+ * finire nel campo di testo generico (che scriverebbe il formato sbagliato).
+ * Le liste di Filtra, Formula e Seleziona e rinomina usano gli stessi
+ * pannelli del pannello laterale: un solo editor, un solo formato.
+ */
+export const HANDLED_PARAM_TYPES = [
+  'string', 'number', 'boolean', 'select', 'column', 'geometry_column', 'columns', 'expression',
+  'string_list', 'aggregation_list', 'rename_list', 'masking_list', 'condition_list', 'pivot_mapping',
+  'column_order', 'filter_conditions', 'formula_items', 'select_columns_list', 'value_mapping',
+];
 
 const ParameterInput = ({
   param,
@@ -115,7 +132,9 @@ const ParameterInput = ({
         return (
           <select
             value={value ?? defaultValue ?? ''}
-            onChange={(e) => onChange(e.target.value)}
+            // "-- Seleziona --" = parametro assente, mai la stringa vuota
+            // (il backend la rifiuterebbe come valore della scelta).
+            onChange={(e) => onChange(e.target.value === '' ? undefined : e.target.value)}
             className="parameter-input__field"
           >
             {!required && <option value="">-- Seleziona --</option>}
@@ -215,6 +234,36 @@ const ParameterInput = ({
             onChange={onChange}
           />
         );
+
+      case 'filter_conditions':
+        return (
+          <FilterPanel
+            config={{ conditions: Array.isArray(value) ? value : [] }}
+            updateConfig={(patch) => onChange(patch.conditions)}
+            inputColumns={columns}
+          />
+        );
+
+      case 'formula_items':
+        return (
+          <FormulaPanel
+            config={{ items: Array.isArray(value) ? value : [] }}
+            updateConfig={(patch) => onChange(patch.items)}
+            inputColumns={columns}
+          />
+        );
+
+      case 'select_columns_list':
+        return (
+          <SelectColumnsPanel
+            config={{ columns: value }}
+            updateConfig={(patch) => onChange(patch.columns)}
+            inputColumns={columns}
+          />
+        );
+
+      case 'value_mapping':
+        return <ValueMappingInput value={value} onChange={onChange} />;
 
       case 'pivot_mapping':
         return (

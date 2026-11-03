@@ -15,7 +15,7 @@
       "parameters": [
         {
           "id": "columns",
-          "type": "aggregation_list",
+          "type": "select_columns_list",
           "label": "Colonne",
           "default": [],
           "description": "Lista ordinata {name, keep (default true), label (opzionale)}."
@@ -223,7 +223,7 @@
         },
         {
           "id": "conditions",
-          "type": "aggregation_list",
+          "type": "filter_conditions",
           "label": "Condizioni AND",
           "required": false,
           "description": "Lista {column, operator, value}; se presente sostituisce il filtro singolo. Lista vuota: passthrough."
@@ -258,7 +258,7 @@
         },
         {
           "id": "items",
-          "type": "aggregation_list",
+          "type": "formula_items",
           "label": "Formule in ordine",
           "required": false,
           "description": "Lista {new_column, formula}; se presente sostituisce la formula singola. Lista vuota: passthrough."
@@ -2206,11 +2206,31 @@
         },
         {
           "id": "mapping",
-          "type": "rename_list",
+          "type": "value_mapping",
           "label": "Mappatura valori",
-          "description": "Associa ogni valore originale al nuovo valore",
-          "required": true,
+          "description": "Dizionario {da: a} o lista di {old_name, new_name} (anche {from, to})",
+          "required": false,
           "default": []
+        },
+        {
+          "id": "unmatched",
+          "type": "select",
+          "label": "Valori non mappati",
+          "description": "Mantieni originale, null oppure valore default",
+          "options": [
+            {
+              "value": "keep",
+              "label": "Mantieni originale"
+            },
+            {
+              "value": "null",
+              "label": "Null"
+            },
+            {
+              "value": "value",
+              "label": "Valore default"
+            }
+          ]
         },
         {
           "id": "default",

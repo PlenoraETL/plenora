@@ -11,7 +11,7 @@ import React, { useState, memo } from 'react';
 import { Position } from '@xyflow/react';
 import FilterModal from '../modals/FilterModal';
 import ColumnBuilderModal from '../modals/ColumnBuilderModal';
-import { getColumnTypeIcon, getColumnTypeLabel, getColumnSRID, isGeometryType } from '../../utils/columnUtils';
+import { getColumnTypeIcon, getColumnTypeLabel, getColumnSRID, isColumnVisible, isGeometryType } from '../../utils/columnUtils';
 import useCanvasStore from '../../store/useCanvasStore';
 import { useConfirm } from '../../context/ConfirmContext';
 import './TableNode.css';
@@ -63,7 +63,7 @@ const TableNode = memo(({ data, id }) => {
   const hasMoreColumns = !searchTerm && columns.length > 5;
   
   // Conteggio colonne visibili
-  const visibleCount = columns.filter(c => c.visible).length;
+  const visibleCount = columns.filter(isColumnVisible).length;
   const allVisible = visibleCount === columns.length;
   const noneVisible = visibleCount === 0;
 
@@ -241,12 +241,12 @@ const TableNode = memo(({ data, id }) => {
           displayColumns.map((column) => (
             <div
               key={column._origIndex}
-              className={`table-node__column ${!column.visible ? 'table-node__column--hidden' : ''}`}
+              className={`table-node__column ${!isColumnVisible(column) ? 'table-node__column--hidden' : ''}`}
             >
               {/* Checkbox visibilità */}
               <input
                 type="checkbox"
-                checked={column.visible}
+                checked={isColumnVisible(column)}
                 onChange={() => handleToggleColumn(column._origIndex)}
                 className="table-node__column-checkbox"
               />
@@ -260,7 +260,7 @@ const TableNode = memo(({ data, id }) => {
               </span>
               
               {/* Nome colonna */}
-              <span className={`table-node__column-name ${!column.visible ? 'table-node__column-name--hidden' : ''}`}>
+              <span className={`table-node__column-name ${!isColumnVisible(column) ? 'table-node__column-name--hidden' : ''}`}>
                 {column.name}
               </span>
               

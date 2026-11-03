@@ -9,6 +9,8 @@
 
 import React, { useMemo, useEffect } from 'react';
 import ParameterInput from './ParameterInput';
+import useCanvasStore from '../../store/useCanvasStore';
+import { LIST_SUPERSEDES, isParameterBindingEdge } from '../../utils/runtimeBindingEdges';
 import './DynamicConfig.css';
 
 const DynamicConfig = ({
@@ -84,8 +86,23 @@ const DynamicConfigBody = ({
   };
   
   // Filtra parametri visibili (gestisce depends_on)
+  // Parametri collegati a un input runtime (stringa stabile: niente
+  // re-render a ogni cambio del canvas).
+  const boundKey = useCanvasStore(s => (s.edges || [])
+    .filter(e => e.target === targetNodeId && isParameterBindingEdge(e))
+    .map(e => e.data?.target_parameter || String(e.targetHandle || '').replace(/^parameter:/, ''))
+    .sort().join(','));
+  // Con un parametro singolo collegato, la lista che lo sostituirebbe non si
+  // mostra: aggiungerla annullerebbe il collegamento (runtimeBindingEdges).
+  const hiddenList = useMemo(() => {
+    const rule = LIST_SUPERSEDES[transformId];
+    const bound = new Set(boundKey ? boundKey.split(',') : []);
+    return rule && rule.params.some(p => bound.has(p)) ? rule.list : null;
+  }, [transformId, boundKey]);
+
   const visibleParams = useMemo(() => {
     return parameters.filter(param => {
+      if (param.id === hiddenList) return false;
       if (!param.depends_on) return true;
       
       const { param: depParam, value: depValue } = param.depends_on;
@@ -104,7 +121,7 @@ const DynamicConfigBody = ({
       
       return currentValue === depValue;
     });
-  }, [parameters, config]);
+  }, [parameters, config, hiddenList]);
   
   // Determina colonne disponibili per ogni parametro
   const getColumnsForParam = (param) => {

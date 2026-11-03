@@ -10,6 +10,7 @@
 import { useCallback } from 'react';
 import { applyExtendedTransformSchema } from '../utils/extendedTransformSchema';
 import { isParameterBindingEdge } from '../utils/runtimeBindingEdges';
+import { applySelectColumns, joinOutputPlan, legacyJoinPlan, usesJoinColumnPlan } from '../utils/columnPlans';
 
 /**
  * useColumnPropagation - UNICA FONTE DI VERITÀ per le colonne
@@ -153,8 +154,11 @@ export const useColumnPropagation = (applyDerivedNodes) => {
           ...rightCols.map(c => ({ ...c, source: 'right' }))
         ];
         
-        // outputColumns con suffissi _L e _R
-        outputColumns = computeJoinOutput(leftCols, rightCols, leftKeys, rightKeys);
+        // Nuovo percorso (colonne per lato, nomi uguali): stesso piano del
+        // backend (utils/columnPlans). Altrimenti suffissi _L e _R ovunque.
+        outputColumns = usesJoinColumnPlan(config)
+          ? computeJoinPlanOutput(leftCols, rightCols, leftKeys, rightKeys, config)
+          : computeJoinOutput(leftCols, rightCols, leftKeys, rightKeys);
       } else {
         // Nodo normale - unisci tutte le colonne input
         const sourcesColumns = incomingEdges.map(
@@ -351,12 +355,17 @@ function applyTransformation(node, inputColumns, sourcesColumns = []) {
       break;
     }
     
-    case 'select':
-    case 'select_columns': {
+    case 'select': {
       const selectCols = resolveColumnNameList(inputColumns, config.columns_column_ids, config.columns || []);
       if (selectCols.length > 0) {
         result = result.filter(c => selectCols.includes(c.name));
       }
+      break;
+    }
+
+    // Lista {name, keep, label}: le non elencate restano in coda (backend).
+    case 'select_columns': {
+      result = applySelectColumns(result, config.columns, { skipMissing: true });
       break;
     }
     
@@ -392,9 +401,16 @@ function applyTransformation(node, inputColumns, sourcesColumns = []) {
     }
 
     case 'formula': {
-      const newCol = config.new_column || config.column || config.output_column || 'calculated';
-      if (newCol && !result.find(c => c.name === newCol)) {
-        result.push({ name: newCol, type: config.output_type || 'real' });
+      // Con `items` (anche vuoto) la formula singola e' ignorata (backend).
+      const newCols = Array.isArray(config.items)
+        ? config.items.map(i => i?.new_column).filter(Boolean)
+        : [config.new_column || config.column || config.output_column || 'calculated'];
+      // Una formula che riusa un nome esistente lo sostituisce (backend).
+      for (const newCol of newCols) {
+        const col = { name: newCol, type: config.output_type || 'real', is_calculated: true };
+        const at = result.findIndex(c => c.name === newCol);
+        if (at >= 0) result = result.map((c, i) => (i === at ? col : c));
+        else result.push(col);
       }
       break;
     }
@@ -784,35 +800,36 @@ function computeConcatOutput(sourcesColumns, joinMode = 'outer') {
  * @returns {Array} Colonne output dopo il join
  */
 function computeJoinOutput(leftCols, rightCols, leftOn, rightOn) {
+  // Percorso di prima (_L/_R): stessa funzione verificata sui casi Python.
   const leftKeys = Array.isArray(leftOn) ? leftOn.filter(Boolean) : (leftOn ? [leftOn] : []);
   const rightKeys = Array.isArray(rightOn) ? rightOn.filter(Boolean) : (rightOn ? [rightOn] : []);
-  const leftKeySet = new Set(leftKeys);
-  const rightKeySet = new Set(rightKeys);
-  const result = [];
-  
-  // Aggiungi colonne LEFT con suffisso _L (tranne la chiave)
-  leftCols.forEach(col => {
-    if (leftKeySet.has(col.name)) {
-      // La chiave di join mantiene il nome originale
-      result.push({ ...col, name: col.name, type: col.type || 'str', source: 'left' });
-    } else {
-      // Tutte le altre colonne ricevono suffisso _L
-      result.push({ ...col, name: `${col.name}_L`, type: col.type || 'str', source: 'left' });
-    }
+  const plan = legacyJoinPlan(leftCols.map(c => c.name), rightCols.map(c => c.name), leftKeys, rightKeys);
+  return plan.error ? [] : fromJoinColumns(leftCols, rightCols, plan.columns);
+}
+
+// [lato, sorgente, uscita] -> colonne con i metadati della colonna sorgente.
+function fromJoinColumns(leftCols, rightCols, columns) {
+  const used = { left: 0, right: 0 };
+  const pools = { left: leftCols, right: rightCols };
+  return columns.map(([side, source, name]) => {
+    const pool = pools[side];
+    const col = pool.find((c, i) => c.name === source && i >= used[side]) || pool.find(c => c.name === source) || {};
+    used[side] = Math.max(used[side], pool.indexOf(col) + 1);
+    return { ...col, name, type: col.type || 'str', source: side };
   });
-  
-  // Aggiungi colonne RIGHT con suffisso _R (tranne la chiave)
-  rightCols.forEach(col => {
-    if (rightKeySet.has(col.name)) {
-      // La chiave di join destra viene ignorata se diversa da leftOn (backend la droppa)
-      // Se uguale a leftOn, è già stata aggiunta
-      return;
-    }
-    // Tutte le altre colonne ricevono suffisso _R
-    result.push({ ...col, name: `${col.name}_R`, type: col.type || 'str', source: 'right' });
-  });
-  
-  return result;
+}
+
+function computeJoinPlanOutput(leftCols, rightCols, leftKeys, rightKeys, config) {
+  const kept = (side, cols) => (config[`${side}_columns`] == null ? null
+    : resolveColumnNameList(cols, config[`${side}_columns_column_ids`], config[`${side}_columns`]));
+  const plan = joinOutputPlan(
+    leftCols.map(c => c.name), rightCols.map(c => c.name), leftKeys, rightKeys,
+    kept('left', leftCols), kept('right', rightCols), config.name_conflict ?? null,
+  );
+  // Configurazione che il backend rifiuta: nessuna colonna prevista (il
+  // pannello del Join mostra l'errore), non quelle del percorso di prima.
+  if (plan.error) return [];
+  return fromJoinColumns(leftCols, rightCols, plan.columns);
 }
 
 function columnKey(col) {

@@ -29,6 +29,7 @@
  */
 import React, { useState } from 'react';
 import { getColumnTypeIcon } from '../../../../utils/columnUtils';
+import { resultGroupPlan } from '../../../../utils/columnPlans';
 
 const AGGREGATE_FUNCTIONS = [
   { value: 'COUNT', label: 'COUNT', desc: 'Conta' },
@@ -297,14 +298,18 @@ export default function GroupOrderHavingPanel({
                     <div className="result-node__groupby-preview">
                       <div className="result-node__label">📋 Output previsto:</div>
                       <div className="result-node__groupby-preview-list">
-                        {groupByColumns.map((col, idx) => (
-                          <span key={`g-${idx}`} className="result-node__preview-col result-node__preview-col--group">
-                            {col}
-                          </span>
-                        ))}
-                        {aggregations.map((agg, idx) => (
-                          <span key={`a-${idx}`} className="result-node__preview-col result-node__preview-col--agg">
-                            {agg.alias || `${agg.function}(${agg.column})`}
+                        {/* Manipola: i nomi veri del file (stessa regola del
+                            backend, resultGroupPlan: x_mean, non avg(x)). */}
+                        {(isManipulate
+                          ? (() => {
+                            const plan = resultGroupPlan({ ...data, group_by_enabled: true }, manipolaColumns.map(c => c.name));
+                            return [...plan.groups.map(g => ['group', g]), ...plan.aggregations.map(([, , alias]) => ['agg', String(alias)])];
+                          })()
+                          : [...groupByColumns.map(g => ['group', g]),
+                            ...aggregations.map(agg => ['agg', agg.alias || `${agg.function}(${agg.column})`])]
+                        ).map(([kind, label], idx) => (
+                          <span key={`${kind}-${idx}`} className={`result-node__preview-col result-node__preview-col--${kind === 'group' ? 'group' : 'agg'}`}>
+                            {label}
                           </span>
                         ))}
                       </div>

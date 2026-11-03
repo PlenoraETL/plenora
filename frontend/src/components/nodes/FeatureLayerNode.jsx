@@ -15,6 +15,7 @@ import React, { useState, useEffect, memo } from 'react';
 import { Position } from '@xyflow/react';
 import { getLayerSchema } from '../../api/features';
 import useCanvasStore from '../../store/useCanvasStore';
+import { isColumnVisible } from '../../utils/columnUtils';
 import { useConfirm } from '../../context/ConfirmContext';
 import './FeatureLayerNode.css';
 import NodeHandle from '../canvas/NodeHandle';
@@ -149,7 +150,7 @@ const FeatureLayerNode = memo(({ data, id }) => {
   const displayColumns = (isExpanded || searchTerm) ? filteredColumns : filteredColumns.slice(0, 5);
   const hasMoreColumns = !searchTerm && columns.length > 5;
 
-  const visibleCount = columns.filter(c => c.visible).length;
+  const visibleCount = columns.filter(isColumnVisible).length;
   const allVisible = visibleCount === columns.length;
   const noneVisible = visibleCount === 0;
 
@@ -260,18 +261,18 @@ const FeatureLayerNode = memo(({ data, id }) => {
               displayColumns.map((column) => (
                 <div
                   key={column._origIndex}
-                  className={`fl-node__field ${!column.visible ? 'fl-node__field--hidden' : ''}`}
+                  className={`fl-node__field ${!isColumnVisible(column) ? 'fl-node__field--hidden' : ''}`}
                 >
                   <input
                     type="checkbox"
-                    checked={column.visible}
+                    checked={isColumnVisible(column)}
                     onChange={() => handleToggleColumn(column._origIndex)}
                     className="fl-node__field-checkbox"
                   />
                   <span className="fl-node__field-icon" title={column.type}>
                     {getFieldIcon(column.type)}
                   </span>
-                  <span className={`fl-node__field-name ${!column.visible ? 'fl-node__field-name--hidden' : ''}`}>
+                  <span className={`fl-node__field-name ${!isColumnVisible(column) ? 'fl-node__field-name--hidden' : ''}`}>
                     {column.name}
                   </span>
                 </div>

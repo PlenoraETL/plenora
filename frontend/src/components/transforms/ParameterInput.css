@@ -1010,3 +1010,10 @@
   font-size: 12px;
   width: 70px;
 }
+
+/* Collegamento rifiutato (una lista sostituisce il parametro): il motivo, sul posto. */
+.runtime-binding__refusal {
+  display: block; flex-basis: 100%;
+  margin-top: 4px; font-size: 11.5px; line-height: 1.4;
+  color: var(--plen-warn, #b45309);
+}

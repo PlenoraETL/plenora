@@ -12,6 +12,7 @@ from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
 from app.core.dataframes.tabular import (
     concat_dataframes,
+    coerce_numeric_series,
     cut_numeric_series,
     dataframe_from_mapping,
     group_named_aggregate_merge,
@@ -20,7 +21,8 @@ from app.core.dataframes.tabular import (
     sample_dataframe,
     sample_rows_reset_index,
 )
-from app.core.manipola.types import FrameMap, JsonObject
+from app.core.manipola.types import FrameMap, JsonObject, JsonRows
+from app.shared.execution.lookup_mapping import normalize_lookup_mapping, lookup_is_numeric, normalize_unmatched
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -102,9 +104,10 @@ def op_sample(
 def op_lookup(
     df: DataFrame,
     column: str,
-    mapping: JsonObject,
+    mapping: JsonObject | JsonRows,
     default: Any = None,
-    output_column: Optional[str] = None
+    output_column: Optional[str] = None,
+    unmatched: Optional[str] = None,
 ) -> DataFrame:
     """
     Mappa valori di una colonna tramite dizionario.
@@ -113,7 +116,8 @@ def op_lookup(
         df: DataFrame input
         column: Colonna da mappare
         mapping: Dizionario chiave→valore per la sostituzione
-        default: Valore per chiavi non trovate (None = mantieni originale)
+        default: Valore per chiavi non trovate (legacy: None = mantieni originale)
+        unmatched: keep/null/value; se assente conserva comportamento e tipi legacy
         output_column: Colonna di output (None = sovrascrive la colonna sorgente)
 
     Returns:
@@ -123,9 +127,12 @@ def op_lookup(
         logger.warning(f"Lookup: colonna '{column}' non trovata")
         return df
 
-    if not mapping:
+    unmatched = normalize_unmatched(unmatched)
+    if not mapping and unmatched in (None, "keep"):
         logger.warning("Lookup: mapping vuoto, nessuna modifica")
         return df
+    mapping = normalize_lookup_mapping(mapping)
+    numeric = lookup_is_numeric(mapping, unmatched, default)
 
     try:
         result = copy_frame_for_update(df)
@@ -133,12 +140,23 @@ def op_lookup(
 
         mapped = result[column].map(mapping)
 
-        if default is not None:
+        if unmatched is not None:
+            # Distingue chiavi assenti da valori mappati esplicitamente a null.
+            matched = result[column].isin(mapping.keys())
+            fallback = result[column] if unmatched == "keep" else (default if unmatched == "value" else None)
+            result[target] = mapped.where(matched, fallback)
+        elif default is not None:
             # Dove la mappa non ha trovato corrispondenza, usa default
             result[target] = mapped.fillna(default)
         else:
             # Dove la mappa non ha trovato corrispondenza, mantieni originale
             result[target] = mapped.fillna(result[column])
+
+        if numeric:
+            # Solo null/value: normalizza anche la virgola decimale.
+            result[target] = coerce_numeric_series(result[target].map(
+                lambda value: str(value).replace(",", ".") if value is not None else None
+            ))
 
         mapped_count = result[column].isin(mapping.keys()).sum()
         logger.info(f"Lookup: {mapped_count}/{len(result)} valori mappati nella colonna '{target}'")
