@@ -149,18 +149,6 @@ vi.mock('../../src/hooks', () => ({
     },
   }),
   useUnsavedChangesGuard: () => ({ confirmNavigation: () => true }),
-  useCaricarica: () => ({
-    showModal: false,
-    closeModal: vi.fn(),
-    isExecuting: false,
-    result: null,
-    progress: 0,
-    progressMessage: '',
-    taskStatus: null,
-    caricaricaInfo: {},
-    cancelTask: vi.fn(),
-    handleExecute: vi.fn(),
-  }),
 }));
 
 vi.mock('../../src/hooks/useToast', () => ({

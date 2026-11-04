@@ -70,7 +70,6 @@ vi.mock('../../src/utils/transformRegistry', () => ({
 }));
 
 vi.mock('../../src/api', () => ({
-  createTask: vi.fn(),
   getDownloadUrl: vi.fn(),
 }));
 

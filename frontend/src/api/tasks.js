@@ -41,51 +41,6 @@ export const cancelTask = async (taskId) => {
 };
 
 /**
- * Crea un nuovo task asincrono con payload personalizzato.
- * Usato per task di tipo 'carica' con mappatura colonne esplicita.
- *
- * Pre-fix (P0 contracts-schemas): il JSDoc non documentava
- * `payload.canvas` che e' REQUIRED nel modello BE `CreateTaskRequest`
- * (no default). Caller che ometteva canvas → 422 Unprocessable Entity.
- * Post-fix: doc esplicita + assert client-side per fallire fast.
- *
- * @param {Object} payload
- * @param {string}   payload.task_type            - Tipo task ('carica', 'enrichment', ...)
- * @param {string}   payload.project_id           - ID progetto
- * @param {Object}   payload.canvas               - **REQUIRED** Canvas serializzato {nodes, edges}
- * @param {string}   [payload.output_format]      - 'csv' | 'parquet' | ... default 'csv'
- * @param {Object}   [payload.carica_node_data]   - **REQUIRED se task_type==='carica'**
- *                                                  Config nodo CARICA (mapping colonne, mode, target).
- *                                                  Il BE risponde 400 se task_type='carica' e questo
- *                                                  campo manca (vedi orchestrator/router.py:324-325).
- * @param {Object}   [payload.options]            - Opzioni runtime
- * @returns {Promise<{task_id: string}>}
- */
-export const createTask = async (payload) => {
-  if (!payload || !payload.canvas) {
-    // Fail-fast client-side: senza canvas il BE risponde 422.
-    // Meglio sollevare qui con un messaggio chiaro che aspettare
-    // l'errore HTTP poco specifico dell'interceptor.
-    throw new Error(
-      'createTask: payload.canvas e\' required (shape {nodes, edges}). ' +
-      'Il caller deve fornire il canvas serializzato del progetto.'
-    );
-  }
-  // Pre-fix (P1 contracts-schemas): `carica_node_data` Optional BE
-  // ma il router risponde 400 condizionale quando task_type='carica'.
-  // Caller che ometteva il campo per task carica facevano roundtrip
-  // inutile. Fail-fast client-side allineato al check BE.
-  if (payload.task_type === 'carica' && !payload.carica_node_data) {
-    throw new Error(
-      'createTask: payload.carica_node_data e\' required quando ' +
-      'task_type === "carica" (mapping colonne + target DB).'
-    );
-  }
-  const response = await http.post('/tasks', payload);
-  return response.data;
-};
-
-/**
  * Scarica il risultato di un task autenticato tramite axios (non navigazione diretta).
  * Necessario perché il token JWT è in sessionStorage e non viene allegato
  * automaticamente dal browser nelle navigazioni dirette.

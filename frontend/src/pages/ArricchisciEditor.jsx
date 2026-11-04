@@ -48,13 +48,12 @@ import '../components/nodes/CaricanArcGISNode.css';
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
 
 // Modali lazy-loaded
-const CaricaricaModal = lazy(() => import('../components/modals/CaricaricaModal'));
 const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'));
 const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
 const ConnectionSelectorModal = lazy(() => import('../components/arricchisci/ConnectionSelectorModal'));
 const EnrichmentConfirmModal = lazy(() => import('../components/modals/EnrichmentConfirmModal'));
 const CanvasVersionsModal = lazy(() => import('../components/modals/CanvasVersionsModal'));
-import { usePreview, useExecution, useCanvasCore, useMultiModal, useEnrichmentValidation, useCaricarica, useCanvasSave, useUnsavedChangesGuard, useValidationHighlights } from '../hooks';
+import { usePreview, useExecution, useCanvasCore, useMultiModal, useEnrichmentValidation, useCanvasSave, useUnsavedChangesGuard, useValidationHighlights } from '../hooks';
 import { useToast } from '../hooks/useToast';
 import { useTheme } from '../hooks/useTheme';
 import '../styles/ArricchisciEditor.css';
@@ -160,10 +159,6 @@ const ArricchisciEditorContent = () => {
     // onBeforeExecute raggiunto solo a validation-passed.
     onBeforeExecute: saveForRun,
     tracksRunState: true,
-  });
-  const caricarica = useCaricarica(projectId, {
-    onBeforeExecute: saveForRun,
-    getCanvas: () => ({ nodes: nodesRef.current, edges: dataFlowEdges(edgesRef.current) })
   });
 
   useEffect(() => {
@@ -377,12 +372,11 @@ const ArricchisciEditorContent = () => {
     useCanvasStore.getState().setEditorActions({
       onPreview:        () => preview.handlePreview(),
       onExecute:        handleShowConfirmModal,
-      onCaricanExecute: (nodeId, cfg) => caricarica.handleExecute(nodeId, cfg),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // re-bind solo al cambio degli handler hook delle azioni canvas; setStore
     // letto via getState() volutamente non in deps.
-  }, [preview.handlePreview, handleShowConfirmModal, caricarica.handleExecute]);
+  }, [preview.handlePreview, handleShowConfirmModal]);
 
   // Sincronizza connections nello store
   useEffect(() => {
@@ -628,7 +622,6 @@ const ArricchisciEditorContent = () => {
         <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
       )}
       <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title="🔗 Esegui Arricchimento" projectType="arricchisci" progress={execution.progress} progressMessage={execution.progressMessage} taskStatus={execution.taskStatus} onCancel={execution.cancelTask} caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user} inputDefinitions={runtimeInputDefinitions} />
-      <CaricaricaModal isOpen={caricarica.showModal} onClose={() => caricarica.closeModal()} isExecuting={caricarica.isExecuting} result={caricarica.result} progress={caricarica.progress} progressMessage={caricarica.progressMessage} taskStatus={caricarica.taskStatus} caricaricaInfo={caricarica.caricaricaInfo} onCancel={caricarica.cancelTask} />
       <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
         data={(() => {
           if (!preview.data?.columns) return preview.data;

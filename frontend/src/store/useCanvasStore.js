@@ -20,6 +20,7 @@ import { updateCanvas } from '../api';
 import { serializeCanvas } from '../utils/canvasSerializer';
 import { COLUMN_STEP, findFreePosition, nodeSize, planInsertAfter, settleNodes } from '../utils/canvasPlacement';
 import { bindingListResolution, isParameterBindingEdge } from '../utils/runtimeBindingEdges';
+import { EDITOR_ACTION_NAMES } from '../components/editor/editorActions';
 
 // Undo/redo: profondità massima dello stack (oltre, si scarta il più vecchio).
 const HISTORY_LIMIT = 50;
@@ -332,7 +333,12 @@ const useCanvasStore = create(
        */
       setEditorActions: (actions) => {
         const ref = get().editorActionsRef;
-        ref.current = { ...ref.current, ...actions };
+        // Solo azioni dichiarate in editor/editorActions (chi registra, chi
+        // usa): un nome sconosciuto e' un refuso o codice morto.
+        const unknown = Object.keys(actions || {}).filter(name => !EDITOR_ACTION_NAMES.has(name));
+        if (unknown.length) console.error(`[setEditorActions] azioni non dichiarate: ${unknown.join(', ')}`);
+        const known = Object.fromEntries(Object.entries(actions || {}).filter(([name]) => EDITOR_ACTION_NAMES.has(name)));
+        ref.current = { ...ref.current, ...known };
       },
 
       /** Shortcut per leggere un'azione specifica (utile nei nodi) */

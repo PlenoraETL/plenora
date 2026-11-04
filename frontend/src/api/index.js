@@ -116,7 +116,7 @@ export {
   validateAllProjectSources,
 } from './projects';
 
-export { createTask, downloadTaskOutput, cleanupTaskCompletely } from './tasks';
+export { downloadTaskOutput, cleanupTaskCompletely } from './tasks';
 
 export {
   listEseguibili,

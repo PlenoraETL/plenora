@@ -20,7 +20,6 @@ import '../components/nodes/CaricanArcGISNode.css';
 const JoinModal = lazy(() => import('../components/modals/JoinModal'));
 const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
 const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'));
-const CaricaricaModal = lazy(() => import('../components/modals/CaricaricaModal'));
 const CanvasVersionsModal = lazy(() => import('../components/modals/CanvasVersionsModal'));
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
 import ProjectInputNode from '../components/nodes/ProjectInputNode';
@@ -33,7 +32,7 @@ import { createEdgeFromData, deserializeNodes } from '../utils/nodeFactories';
 import { getLayerSchema } from '../api/features';
 import useRuntimeInputDefinitions from '../hooks/useRuntimeInputDefinitions';
 import { executionNeedsConfig } from '../utils/executionConfig';
-import { usePreview, useExecution, useValidationHighlights, useEdgeHandlers, useCanvasCore, useCaricarica, useCanvasSave, useUnsavedChangesGuard } from '../hooks';
+import { usePreview, useExecution, useValidationHighlights, useEdgeHandlers, useCanvasCore, useCanvasSave, useUnsavedChangesGuard } from '../hooks';
 import { useEditorData } from '../hooks/useEditorData';
 import { beforePreview, saveForRun, saveNow } from '../utils/serverActions';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
@@ -104,10 +103,6 @@ function EstraiEditor() {
   const execution  = useExecution(projectId, { onBeforeExecute: saveForRun, tracksRunState: true });
   const { saving, handleSaveCanvas } = useCanvasSave(saveNow, {
     logPrefix: '[EstraiEditor]',
-  });
-  const caricarica = useCaricarica(projectId, {
-    onBeforeExecute: saveForRun,
-    getCanvas: () => ({ nodes: nodesRef.current, edges: dataFlowEdges(edgesRef.current) })
   });
   // Highlight backend-driven (Epic CanvasVal §12): i nodi con issue sono
   // evidenziati dallo store (setValidationHighlights, popolato da Valida/Esegui
@@ -228,13 +223,12 @@ function EstraiEditor() {
         // percorso unico di ResultNode (Fase 4, M7).
         return execution.prepareExecute(opts, { needsConfig: needsRunConfigRef.current });
       },
-      onCaricanExecute:   (nodeId, cfg) => caricarica.handleExecute(nodeId, cfg),
       onAddRelatedLayer:  handleAddRelatedLayer,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // toast/nodesRef letti via closure stabile;
     // re-bind solo quando cambiano gli handler hook delle azioni canvas.
-  }, [preview.handlePreview, execution.prepareExecute, caricarica.handleExecute, handleAddRelatedLayer]);
+  }, [preview.handlePreview, execution.prepareExecute, handleAddRelatedLayer]);
 
   useEffect(() => { useCanvasStore.getState().setConnections(connections); }, [connections]);
   // Pre-fix (P2 frontend-pages): le 3 handleAdd* callback avevano
@@ -657,13 +651,6 @@ function EstraiEditor() {
           caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling}
           awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user}
           inputDefinitions={runtimeInputDefinitions}
-        />
-        <CaricaricaModal
-          isOpen={caricarica.showModal} onClose={() => caricarica.closeModal()}
-          isExecuting={caricarica.isExecuting} result={caricarica.result}
-          progress={caricarica.progress} progressMessage={caricarica.progressMessage}
-          taskStatus={caricarica.taskStatus} caricaricaInfo={caricarica.caricaricaInfo}
-          onCancel={caricarica.cancelTask}
         />
         <PreviewModal
         isOpen={preview.showModal} onClose={preview.closeModal}

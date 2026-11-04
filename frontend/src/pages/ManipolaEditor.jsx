@@ -10,7 +10,7 @@
  *
  * Hooks usati: useEditorData, useCanvasCore, useEdgeHandlers,
  *              useColumnPropagation, useExecution, usePreview,
- *              useCaricarica, useToast
+ *              useToast
  *
  * Route: /editor/manipola/:id
  */
@@ -20,7 +20,6 @@ import '@xyflow/react/dist/style.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import EditorShell from '../components/editor/EditorShell';
 import { ConfirmProvider } from '../context/ConfirmContext';
-import { createTask } from '../api';
 import ProjectSourceNode from '../components/nodes/ProjectSourceNode';
 import FileSourceNode from '../components/nodes/FileSourceNode';
 import ProjectInputNode from '../components/nodes/ProjectInputNode';
@@ -153,32 +152,6 @@ const ManipolaEditorContent = () => {
     tracksRunState: true,
   });
 
-  // CARICA asincrono via task worker
-  // Deps `[]`: `nodesRef`/`edgesRef` sono ref Zustand stabili lifetime-bound
-  // al componente (non subiscono re-render churn). `createTask` e' import
-  // module-level, costante. Il polling generato dall'execute viene gestito
-  // da `useExecution` che ha cleanup esplicito su unmount
-  // (`useExecution.js:50-53`: `clearInterval` su tutti `caricaRefs.current`).
-  // Anti-regression P0 frontend-pages: se in futuro qualcuno aggiunge
-  // dipendenze closure (non-ref state), la deps `[]` diventa un bug di
-  // stale-closure — aggiornare la lista deps + verificare cleanup polling.
-  const executeCaricanTask = useCallback(async (projId, options) => {
-    const res = await createTask({
-      task_type: 'carica', project_id: projId,
-      canvas: { nodes: nodesRef.current, edges: dataFlowEdges(edgesRef.current) },
-      carica_node_data: options.carica_node_data
-    });
-    const result = res;
-    if (result.task_id) return { async: true, task_id: result.task_id, message: result.message };
-    throw new Error(result.detail || result.error || 'Errore creazione task CARICA');
-  }, []);
-
-  const caricaExecution = useExecution(projectId, {
-    onBeforeExecute: saveForRun,
-    executeFunction: executeCaricanTask,
-    pollInterval: 1500
-  });
-
   useEffect(() => {
     if (!project?.canvas?.nodes || loading) return;
 
@@ -299,27 +272,6 @@ const ManipolaEditorContent = () => {
   }, [refreshSchemas]);
   useEffect(() => () => clearTimeout(schemaTimerRef.current), []);
 
-  const handleUpdateProjectSource = useCallback((nodeId, projectSourceId) => {
-    updateNodeData(nodeId, { source_project_id: projectSourceId });
-    setTimeout(scheduleSchemaRefresh, 100);
-  }, [updateNodeData, scheduleSchemaRefresh]);
-
-  const handleUpdateProjectSourceColumns = useCallback((nodeId, columns) => {
-    updateNodeData(nodeId, { columns });
-    setTimeout(() => { propagateColumns(nodesRef.current, edgesRef.current); }, 50);
-  }, [updateNodeData, propagateColumns]);
-
-  const handleUpdateFileSourceColumns = useCallback((nodeId, columns) => {
-    updateNodeData(nodeId, { columns });
-    setTimeout(() => {
-      const updatedNodes = nodesRef.current.map(n =>
-        n.id === nodeId ? { ...n, data: { ...n.data, columns } } : n
-      );
-      propagateColumns(updatedNodes, edgesRef.current);
-      scheduleSchemaRefresh();
-    }, 100);
-  }, [updateNodeData, propagateColumns, scheduleSchemaRefresh]);
-
   const handleUpdateTransform = useCallback((nodeId, newData) => {
     // TransformNode scrive gia' la config nello store (patchNodeConfig) e
     // chiama questo handler SENZA dati solo per ripropagare le colonne:
@@ -349,9 +301,6 @@ const ManipolaEditorContent = () => {
     scheduleSchemaRefresh();
   }, [nodesRef, edgesRef, propagateColumns, scheduleSchemaRefresh]);
 
-  // handleUpdateProjectSource/Columns/FileSource/Transform rimangono perché
-  // fanno side-effect (refreshSchemas, propagateColumns) registrati in setEditorActions
-
   // Registra azioni editor nello store — DEVE stare dopo tutti gli hook e useCallback
   useEffect(() => {
     useCanvasStore.getState().setEditorActions({
@@ -361,10 +310,6 @@ const ManipolaEditorContent = () => {
         // percorso unico di ResultNode (Fase 4, M7).
         return execution.prepareExecute(opts, { needsConfig: needsRunConfigRef.current });
       },
-      onCaricanExecute:             (nodeId, cfg) => caricaExecution.handleExecute({ carica_node_data: cfg }),
-      onUpdateProjectSource:        handleUpdateProjectSource,
-      onUpdateProjectSourceColumns: handleUpdateProjectSourceColumns,
-      onUpdateFileSourceColumns:    handleUpdateFileSourceColumns,
       onUpdateTransform:            handleUpdateTransform,
       onDataSourceSchemaUpdated:    handleDataSourceSchemaUpdated,
       // Copia di sicurezza ripristinata: stesso ricalcolo del caricamento.
@@ -376,9 +321,7 @@ const ManipolaEditorContent = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // toast/nodesRef letti via closure stabile;
     // re-bind solo al cambio degli handler hook delle azioni canvas.
-  }, [preview, execution, caricaExecution,
-      handleUpdateProjectSource, handleUpdateProjectSourceColumns,
-      handleUpdateFileSourceColumns, handleUpdateTransform,
+  }, [preview, execution, handleUpdateTransform,
       handleDataSourceSchemaUpdated, scheduleSchemaRefresh]);
 
   // Sincronizza connections nello store
@@ -677,14 +620,11 @@ const ManipolaEditorContent = () => {
     if (type === 'project_source') {
       const newNodeId = `source_${Date.now()}`;
       newNode = { id: newNodeId, type: 'project_source', position,
-        data: { source_project_id: itemData.id, columns: [],
-          onChange: (val) => handleUpdateProjectSource(newNodeId, val),
-          onUpdateColumns: handleUpdateProjectSourceColumns } };
+        data: { source_project_id: itemData.id, columns: [] } };
     } else if (type === 'file_source') {
       const newNodeId = `file_${Date.now()}`;
       newNode = { id: newNodeId, type: 'file_source', position,
-        data: { file_source_id: itemData.id, columns: [],
-          onUpdateColumns: handleUpdateFileSourceColumns } };
+        data: { file_source_id: itemData.id, columns: [] } };
     }
 
     if (newNode) {
@@ -693,7 +633,7 @@ const ManipolaEditorContent = () => {
         scheduleSchemaRefresh();
       }, 100);
     }
-  }, [screenToFlowPosition, addNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns, scheduleSchemaRefresh]);
+  }, [screenToFlowPosition, addNodes, scheduleSchemaRefresh]);
 
   const { confirmNavigation } = useUnsavedChangesGuard();
   const handleBack = () => { if (confirmNavigation()) navigate('/'); };
@@ -769,7 +709,6 @@ const ManipolaEditorContent = () => {
           <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
         )}
         <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title="🔄 Esecuzione Pipeline Manipola" projectType="manipola" caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user} inputDefinitions={runtimeInputDefinitions} />
-        <ExecutionModal isOpen={caricaExecution.showModal} onClose={() => caricaExecution.closeModal()} isExecuting={caricaExecution.isExecuting} result={caricaExecution.result} title="📤 Caricamento Dati" projectType="arricchisci" progress={caricaExecution.progress} progressMessage={caricaExecution.progressMessage} taskStatus={caricaExecution.taskStatus} onCancel={caricaExecution.cancelTask} />
         <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
           data={preview.data} loading={preview.loading} error={preview.error}
           permissionRevoked={preview.permissionRevoked}

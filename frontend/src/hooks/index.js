@@ -6,7 +6,6 @@
  * Hook disponibili:
  *   usePreview            → gestione anteprima dati (polling task)
  *   useExecution          → gestione esecuzione pipeline (polling task)
- *   useCaricarica         → gestione scrittura su DB/ArcGIS
  *   useCanvasCore         → stato nodi/edges condiviso (wrapper Zustand)
  *   useCanvasSave         → salvataggio draft uniforme tra editor
  *   useCanvasKeyboard     → shortcut tastiera (Delete, Ctrl+S, ...)
@@ -21,7 +20,6 @@
 
 export { usePreview }                               from './usePreview';
 export { useExecution }                             from './useExecution';
-export { useCaricarica }                            from './useCaricarica';
 export { useCanvasCore }                            from './useCanvasCore';
 export { useCanvasSave }                            from './useCanvasSave';
 export { useCanvasKeyboard }                        from './useCanvasKeyboard';
