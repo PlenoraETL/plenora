@@ -21,18 +21,24 @@ import { serializeCanvas } from '../utils/canvasSerializer';
 import { COLUMN_STEP, findFreePosition, nodeSize, planInsertAfter, settleNodes } from '../utils/canvasPlacement';
 import { bindingListResolution, isParameterBindingEdge, uniqueDataEdges } from '../utils/runtimeBindingEdges';
 import { EDITOR_ACTION_NAMES } from '../components/editor/editorActions';
+import { hasUnsavedChanges } from './saveState';
 
 // Undo/redo: profondità massima dello stack (oltre, si scarta il più vecchio).
 const HISTORY_LIMIT = 50;
 // Coalesce leading-edge: edit rapidi entro questa finestra (es. digitazione in
 // un campo del nodo) producono UNA sola snapshot (pre-burst), non una per
-// keystroke. lastSnapshotTs è module-level: lo store è singleton.
+// keystroke. lastSnapshotTs vive dentro lo store (uno per istanza).
 const SNAPSHOT_COALESCE_MS = 350;
-let lastSnapshotTs = 0;
 
-const useCanvasStore = create(
+/**
+ * Crea un'istanza dello store. L'app ne usa una sola (default export); i
+ * test della copia di sicurezza ne creano due per simulare due schede
+ * (tests/components/DraftTabs.contract.test.jsx).
+ */
+export const createCanvasStore = () => create(
   devtools(
     (set, get) => {
+      let lastSnapshotTs = 0;
 
       // Helper privato: user-edit marca dirty E svuota gli highlight
       // di validazione post-validation (amber borders). Evita churn
@@ -71,13 +77,24 @@ const useCanvasStore = create(
             // (un salvataggio in volo non tocca il progetto aperto dopo).
             const sameProject = () => get().projectId === snapshot.projectId;
             set({ saveStatus: 'saving', saveError: null }, false, 'save:start');
+            let response;
             try {
-              await updateCanvas(snapshot.projectId, payload);
+              response = await updateCanvas(snapshot.projectId, payload);
             } catch (err) {
               if (sameProject()) set({ saveStatus: 'error', saveError: err?.message || 'Salvataggio non riuscito' }, false, 'save:error');
               throw err;
             }
 
+            // Il server ora ha QUESTO grafo: e' il punto a cui "Annulla" dopo
+            // un ripristino della copia di sicurezza riporta. La versione del
+            // server (updated_at) arriva solo se il backend la restituisce
+            // (aggancio per il salvataggio condizionato, Blocco A regola 8).
+            if (sameProject()) {
+              set({
+                savedGraph: { nodes: snapshot.nodes, edges: snapshot.edges },
+                lastSavedServerAt: response?.updated_at || null,
+              }, false, 'save:server');
+            }
             const current = get();
             const sameSnapshot = sameProject()
               && current.nodes === snapshot.nodes
@@ -237,6 +254,11 @@ const useCanvasStore = create(
       saveStatus: 'idle',
       saveError: null,
       lastSavedAt: null,
+      // updated_at del server dopo l'ultimo salvataggio riuscito, se la
+      // risposta del PUT lo porta (oggi no: null).
+      lastSavedServerAt: null,
+      // Ultimo grafo noto del server (caricato o salvato da questa scheda).
+      savedGraph: null,
       setRunState: (runState) => set({ runState }, false, 'setRunState'),
 
       canvasView: 'canvas',
@@ -251,7 +273,7 @@ const useCanvasStore = create(
         get().editorActionsRef.current = {};
         // NOTA: non resettiamo isReadOnly perché viene impostato subito dopo da
         // useCanvasCore (dipende dal ruolo utente, non dal progetto).
-        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, pendingSync: false, validationHighlights: [], lastValidationSummary: null, past: [], future: [], lastTaskResult: null, canvasView: 'canvas', focusNodeId: null, saveStatus: 'idle', saveError: null, lastSavedAt: null, runState: 'idle', runOptions: { force_recalculate: false }, runReady: false, graphLoaded: false }, false, 'reset');
+        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, pendingSync: false, validationHighlights: [], lastValidationSummary: null, past: [], future: [], lastTaskResult: null, canvasView: 'canvas', focusNodeId: null, saveStatus: 'idle', saveError: null, lastSavedAt: null, lastSavedServerAt: null, savedGraph: null, runState: 'idle', runOptions: { force_recalculate: false }, runReady: false, graphLoaded: false }, false, 'reset');
       },
 
       // ── Undo/Redo (#24) ───────────────────────────────────────────────
@@ -434,7 +456,7 @@ const useCanvasStore = create(
         // correzione parte col prossimo salvataggio (pendingSync).
         const unique = uniqueDataEdges(edges);
         set(
-          { nodes, edges: unique, graphLoaded: true, isDirty: false, pendingSync: unique !== edges, past: [], future: [], validationHighlights: [], lastValidationSummary: null },
+          { nodes, edges: unique, savedGraph: { nodes, edges: unique }, graphLoaded: true, isDirty: false, pendingSync: unique !== edges, past: [], future: [], validationHighlights: [], lastValidationSummary: null },
           false,
           'loadGraph',
         );
@@ -855,12 +877,23 @@ const useCanvasStore = create(
       /**
        * Carica un canvas che NON e' sul server (copia di sicurezza del
        * browser): stesso caricamento di loadGraph, ma resta "da salvare".
+       * Cronologia: "Annulla" torna alle modifiche fatte prima del
+       * ripristino (se c'erano) e poi alla versione del server; niente si
+       * perde in silenzio.
        */
       loadUnsavedGraph: (nodes, edges) => {
-        const server = { nodes: get().nodes, edges: get().edges };
-        get().loadGraph(nodes, edges);
-        // "Annulla" riporta alla versione del server.
-        set({ isDirty: true, past: [server] }, false, 'loadUnsavedGraph');
+        const st = get();
+        const current = { nodes: st.nodes, edges: st.edges };
+        const server = st.savedGraph || current;
+        const past = hasUnsavedChanges(st) && server !== current
+          ? [server, current]
+          : [current];
+        lastSnapshotTs = 0;
+        set(
+          { nodes, edges, graphLoaded: true, isDirty: true, past, future: [], validationHighlights: [], lastValidationSummary: null },
+          false,
+          'loadUnsavedGraph',
+        );
       },
 
       /** Restituisce il nodo corrente per ID (lettura sincrona, non reattiva) */
@@ -874,6 +907,8 @@ const useCanvasStore = create(
     { name: 'UrbyETL-Canvas' }
   )
 );
+
+const useCanvasStore = createCanvasStore();
 
 export { hasUnsavedChanges } from './saveState';
 

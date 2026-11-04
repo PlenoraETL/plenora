@@ -23,6 +23,9 @@
  * con cache in-memory (es. TransformNode.registryCache) di invalidarsi.
  */
 const logoutListeners = new Set();
+// Prima di togliere l'utente (uscita o 401): chi ha lavoro in sospeso lo
+// mette al sicuro finche' l'utente e' ancora noto (copia di sicurezza).
+const beforeLogoutListeners = new Set();
 
 export const authBus = {
   onUnauthorized: null,
@@ -31,6 +34,17 @@ export const authBus = {
   addLogoutListener(fn) {
     logoutListeners.add(fn);
     return () => logoutListeners.delete(fn);
+  },
+
+  /** Registra un listener chiamato PRIMA di togliere l'utente. */
+  addBeforeLogoutListener(fn) {
+    beforeLogoutListeners.add(fn);
+    return () => beforeLogoutListeners.delete(fn);
+  },
+
+  /** Chiamato da AuthContext.logout() come prima cosa. */
+  emitBeforeLogout() {
+    beforeLogoutListeners.forEach(fn => { try { fn(); } catch { /* non blocca l'uscita */ } });
   },
 
   /** Chiamato da AuthContext.logout() — notifica tutti i listener registrati. */

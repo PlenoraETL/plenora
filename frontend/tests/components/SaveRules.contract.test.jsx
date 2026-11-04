@@ -13,8 +13,6 @@ vi.mock('../../src/api/projects', async (orig) => ({
 import useCanvasStore, { hasUnsavedChanges } from '../../src/store/useCanvasStore';
 import { updateCanvas } from '../../src/api/projects';
 import { saveBeforeServerRead, saveForRun } from '../../src/utils/serverActions';
-import { clearProjectDrafts, draftKey, readDraft, writeDraft } from '../../src/utils/localDrafts';
-import useLocalDraft from '../../src/hooks/useLocalDraft';
 import EditorToolbar from '../../src/components/editor/EditorToolbar';
 import ExecuteActionsPanel from '../../src/components/nodes/result/standard/ExecuteActionsPanel';
 import PipelineRunner from '../../src/components/editor/PipelineRunner';
@@ -22,7 +20,8 @@ import { ReactFlowProvider } from '@xyflow/react';
 
 /**
  * Contract Fase 4 M7, correzione unica della raccolta difetti:
- * le regole del salvataggio esplicito valgono per costruzione.
+ * le regole del salvataggio esplicito valgono per costruzione. La copia di
+ * sicurezza ha il suo contract in due schede: DraftTabs.contract.test.jsx.
  */
 const SRC = path.resolve(__dirname, '../../src');
 const files = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap(d => {
@@ -36,11 +35,11 @@ const rel = (p) => path.relative(SRC, p).split(path.sep).join('/');
 const usersOf = (re) => files(SRC).filter(p => re.test(code(p))).map(rel).sort();
 
 const n = (id, type = 'transform', data = {}) => ({ id, type, position: { x: 0, y: 0 }, data });
-const USER = 'mario';
 
 beforeEach(() => {
   localStorage.clear();
-  sessionStorage.setItem('urby_user', JSON.stringify({ id: USER, username: USER }));
+  // Forma reale dell'utente salvata dal login (AuthContext.login).
+  sessionStorage.setItem('urby_user', JSON.stringify({ user_id: 7, username: 'mario', group_id: 3, role: 'user' }));
   useCanvasStore.getState().reset();
   useCanvasStore.getState().setReadOnly(false);
   useCanvasStore.getState().init('p1', 'manipola');
@@ -109,69 +108,6 @@ describe('server reads ask before saving', () => {
     await p;
     expect(useCanvasStore.getState().lastSavedAt).toBe(null);
     expect(useCanvasStore.getState().saveStatus).toBe('idle');
-  });
-});
-
-function DraftProbe({ projectId = 'p1', serverUpdatedAt = null, onApi }) {
-  const api = useLocalDraft(projectId, false, { serverUpdatedAt });
-  onApi(api);
-  return api.offer ? <div>offerta{api.offer.serverNewer ? ' (server piu recente)' : ''}</div> : null;
-}
-
-describe('local draft', () => {
-  it('written after a pause, removed by a successful save', async () => {
-    vi.useFakeTimers();
-    let api;
-    render(<DraftProbe onApi={a => { api = a; }} />);
-    act(() => useCanvasStore.getState().updateNodeData('s', { label: 'x' }));
-    act(() => { vi.advanceTimersByTime(1600); });
-    expect(readDraft(USER, 'p1')).toBeTruthy();
-    await act(async () => { await saveForRun(); });
-    expect(readDraft(USER, 'p1')).toBe(null);
-    expect(api).toBeTruthy();
-  });
-
-  it('offer is frozen until the user decides; restore keeps it unsaved and undo goes back', () => {
-    vi.useFakeTimers();
-    writeDraft(USER, 'p1', { savedAt: Date.now(), nodes: [n('s', 'project_source', { label: 'copia' })], edges: [] });
-    let api;
-    render(<DraftProbe onApi={a => { api = a; }} />);
-    expect(screen.getByText(/offerta/)).toBeTruthy();
-    act(() => useCanvasStore.getState().updateNodeData('s', { label: 'nuovo' }));
-    act(() => { vi.advanceTimersByTime(2000); });
-    expect(readDraft(USER, 'p1').nodes[0].data.label).toBe('copia');
-    act(() => api.restore());
-    const st = useCanvasStore.getState();
-    expect(st.nodes[0].data.label).toBe('copia');
-    expect(hasUnsavedChanges(st)).toBe(true);
-    act(() => useCanvasStore.getState().undo());
-    expect(useCanvasStore.getState().nodes.map(x => x.id)).toEqual(['s', 'o']);
-  });
-
-  it('says when the project was saved after the copy', () => {
-    writeDraft(USER, 'p1', { savedAt: Date.parse('2026-11-01T10:00:00Z'), nodes: [], edges: [] });
-    render(<DraftProbe serverUpdatedAt="2026-11-02T10:00:00Z" onApi={() => {}} />);
-    expect(screen.getByText(/server piu recente/)).toBeTruthy();
-  });
-
-  it('per user and project; cleared on project delete; expired copies dropped', () => {
-    writeDraft(USER, 'p1', { savedAt: Date.now(), nodes: [], edges: [] });
-    writeDraft('anna', 'p1', { savedAt: Date.now(), nodes: [], edges: [] });
-    expect(readDraft('anna', 'p1')).toBeTruthy();
-    expect(localStorage.getItem(draftKey(USER, 'p1'))).toBeTruthy();
-    clearProjectDrafts('p1');
-    expect(readDraft(USER, 'p1')).toBe(null);
-    expect(readDraft('anna', 'p1')).toBe(null);
-    writeDraft(USER, 'p2', { savedAt: Date.now() - 30 * 86400000, nodes: [], edges: [] });
-    expect(readDraft(USER, 'p2')).toBe(null);
-  });
-
-  it('a failed write removes the older copy (never offered as the latest)', () => {
-    writeDraft(USER, 'p1', { savedAt: Date.now(), nodes: [], edges: [] });
-    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('quota'); });
-    expect(writeDraft(USER, 'p1', { savedAt: Date.now(), nodes: [], edges: [] })).toBe(false);
-    spy.mockRestore();
-    expect(readDraft(USER, 'p1')).toBe(null);
   });
 });
 
@@ -244,18 +180,6 @@ describe('every exit from the editor asks first', () => {
       .filter(l => /\blogout\(\)/.test(l) && !/confirm(LeaveWithUnsaved|Navigation)\(\)/.test(l))
       .map(l => `${f}: ${l.trim()}`));
     expect(offenders).toEqual([]);
-  });
-});
-
-describe('local draft: save while the offer is open', () => {
-  it('the copy stays (the user decides) but is now flagged as older than the server', async () => {
-    writeDraft(USER, 'p1', { savedAt: Date.now(), nodes: [], edges: [] });
-    render(<DraftProbe onApi={() => {}} />);
-    expect(screen.queryByText(/server piu recente/)).toBeNull();
-    act(() => useCanvasStore.getState().updateNodeData('s', { label: 'x' }));
-    await act(async () => { await saveForRun(); });
-    expect(screen.getByText(/server piu recente/)).toBeTruthy();
-    expect(readDraft(USER, 'p1')).toBeTruthy();
   });
 });
 

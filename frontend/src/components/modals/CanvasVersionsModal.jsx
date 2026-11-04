@@ -11,7 +11,7 @@ import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import { useToast } from '../../hooks/useToast';
 import useCanvasStore from '../../store/useCanvasStore';
 import { hasUnsavedChanges } from '../../store/saveState';
-import { clearDraft } from '../../utils/localDrafts';
+import { serverCanvasReplaced } from '../../utils/localDrafts';
 import { toastApiError } from '../../utils/toastApiError';
 import {
   createCanvasVersion, listCanvasVersions, restoreCanvasVersion,
@@ -79,9 +79,10 @@ export default function CanvasVersionsModal({ isOpen, onClose, projectId }) {
       // normale percorso di load (deserializzazione per-editor). Le modifiche
       // locali sono superate dal ripristino confermato: il canvas e' pulito,
       // altrimenti l'avviso "modifiche non salvate" bloccava il ricaricamento.
-      // Il canvas del server e' cambiato: la copia di sicurezza non vale piu'.
+      // Il canvas del server e' cambiato: la copia di sicurezza di QUESTA
+      // scheda non vale piu'; le altre schede restano e vengono avvisate.
       useCanvasStore.getState().markClean();
-      clearDraft(projectId);
+      serverCanvasReplaced(projectId);
       setTimeout(() => window.location.reload(), 600);
     } catch (err) {
       toastApiError(toast, err, 'Errore ripristino versione');

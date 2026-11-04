@@ -35,6 +35,9 @@ export function AuthProvider({ children }) {
   const navigate = useNavigate();
 
   const logout = useCallback(() => {
+    // Prima di tutto (anche sul 401): la copia di sicurezza in sospeso si
+    // scrive mentre l'utente e' ancora in sessione. La copia resta.
+    authBus.emitBeforeLogout();
     // Best-effort: notifica il backend per blacklistare il jti del
     // token. La chiamata e' fire-and-forget perche':
     //   - L'UX deve essere immediata (no spinner su logout).

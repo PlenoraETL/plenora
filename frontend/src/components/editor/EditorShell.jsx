@@ -74,7 +74,7 @@ import { nodeTitle } from '../canvas/nodeDescriptors';
 import StepsView from '../canvas/StepsView';
 import EditorToolbar from './EditorToolbar';
 import PipelineRunner from './PipelineRunner';
-import useLocalDraft from '../../hooks/useLocalDraft';
+import useLocalDraft, { DRAFT_ORIGIN_LABEL } from '../../hooks/useLocalDraft';
 import { useOptionalConfirm } from '../../context/ConfirmContext';
 import { CanvasGraphContext } from '../canvas/CanvasGraphContext';
 import { analyzeCanvas, structureKey } from '../../utils/canvasGraph';
@@ -222,14 +222,16 @@ canvasConfig = EMPTY_OBJ,
     setEditorActions({ openPalette: palette && !isReadOnly ? openPalette : null });
   }, [setEditorActions, openPalette, palette, isReadOnly]);
 
-  // Copia di sicurezza delle modifiche non salvate (Fase 4, M7).
+  const confirm = useOptionalConfirm();
+  // Copia di sicurezza delle modifiche non salvate (Fase 4, M7; Blocco A
+  // regola 8: per utente, progetto e scheda).
   const draft = useLocalDraft(toolbar ? projectId : null, loading || Boolean(loadError) || !project, {
     serverUpdatedAt: project?.metadata?.updated_at || null,
+    confirm,
   });
 
   // Letture dal server (Valida, Anteprima, ...) con modifiche non salvate:
   // l'editor chiede (utils/serverActions.saveBeforeServerRead).
-  const confirm = useOptionalConfirm();
   useEffect(() => {
     if (!confirm) return undefined;
     setEditorActions({
@@ -353,16 +355,33 @@ canvasConfig = EMPTY_OBJ,
         : topbar}
       {draft.offer && !isReadOnly && (
         <div className="draft-offer" role="alert">
-          <span>
-            Ci sono modifiche non salvate del {new Date(draft.offer.savedAt).toLocaleString('it-IT')} rimaste in questo browser.
-            {draft.offer.serverNewer && (
-              <strong> Il progetto è stato salvato dopo: ripristinandole e salvando sostituiresti quella versione.</strong>
-            )}
-          </span>
-          <button type="button" className="etb-btn etb-btn--primary" onClick={draft.restore}>Ripristina</button>
-          <button type="button" className="etb-btn" onClick={draft.discard}>Scarta</button>
+          <span>Ci sono modifiche non salvate rimaste in questo browser:</span>
+          <ul className="draft-offer__list">
+            {draft.offer.map(copy => (
+              <li key={copy.id} className="draft-offer__item">
+                <span>
+                  {DRAFT_ORIGIN_LABEL[copy.origin]}, {new Date(copy.savedAt).toLocaleString('it-IT')}.
+                  {copy.stale && (
+                    <strong> Il progetto è stato salvato dopo: ripristinandole e salvando sostituiresti quella versione.</strong>
+                  )}
+                </span>
+                <button type="button" className="etb-btn etb-btn--primary" onClick={() => draft.restore(copy.id)}>Ripristina</button>
+                <button type="button" className="etb-btn" onClick={() => draft.discard(copy.id)}>
+                  {copy.origin === 'open' ? 'Nascondi' : 'Scarta'}
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
+      {draft.notices.map(notice => (
+        <div key={notice.id} className="draft-offer draft-offer--notice" role="status">
+          <span>{notice.text}</span>
+          {notice.id !== 'deleted' && (
+            <button type="button" className="etb-btn" onClick={() => draft.dismissNotice(notice.id)}>Chiudi</button>
+          )}
+        </div>
+      ))}
       {beforeCanvas}
       <CanvasGraphContext.Provider value={graph}>
       <div className={`${prefix}-main`}>

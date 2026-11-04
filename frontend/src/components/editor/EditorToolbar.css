@@ -78,8 +78,12 @@
 
 /* Copia di sicurezza: offerta di ripristino all'apertura */
 .draft-offer {
-  display: flex; align-items: center; gap: 10px; flex: none;
+  display: flex; align-items: center; gap: 10px; flex: none; flex-wrap: wrap;
   padding: 8px 14px; font-size: 13px;
   background: var(--plen-warn-bg, #fef3c7); color: var(--plen-text, #18202f);
   border-bottom: 1px solid var(--plen-warn, #d97706);
 }
+.draft-offer__list { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; flex: 1 1 100%; min-width: 0; }
+.draft-offer__item { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.draft-offer__item > span { flex: 1; min-width: 0; }
+.draft-offer--notice > span { flex: 1; min-width: 0; }

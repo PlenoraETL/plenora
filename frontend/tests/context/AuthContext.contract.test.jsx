@@ -27,6 +27,7 @@ vi.mock('../../src/utils/authBus', () => ({
   authBus: {
     onUnauthorized: null,
     emitLogout: emitLogoutMock,
+    emitBeforeLogout: vi.fn(),
     addLogoutListener: vi.fn(() => () => {}),
   },
 }));
