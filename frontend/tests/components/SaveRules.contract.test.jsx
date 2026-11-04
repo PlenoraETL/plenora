@@ -258,3 +258,20 @@ describe('local draft: save while the offer is open', () => {
     expect(readDraft(USER, 'p1')).toBeTruthy();
   });
 });
+
+describe('editor start-up order', () => {
+  it('the store reset at editor start does not wipe actions registered by child components', async () => {
+    vi.resetModules();
+    vi.doMock('../../src/context/AuthContext', () => ({ useAuth: () => ({ user: { role: 'admin' } }) }));
+    const { useCanvasCore } = await import('../../src/hooks/useCanvasCore');
+    const store = (await import('../../src/store/useCanvasStore')).default;
+    const Child = () => {
+      React.useEffect(() => { store.getState().setEditorActions({ confirmSaveBeforeRead: () => true }); }, []);
+      return null;
+    };
+    const Page = () => { useCanvasCore('p9', 'manipola'); return <Child />; };
+    render(<Page />);
+    expect(typeof store.getState().getEditorAction('confirmSaveBeforeRead')).toBe('function');
+    vi.doUnmock('../../src/context/AuthContext');
+  });
+});

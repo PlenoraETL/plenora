@@ -11,7 +11,7 @@
  * - Espone dataNodes e getViewportCenter come helpers
  */
 
-import { useRef, useEffect, useCallback, useMemo } from 'react';
+import { useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import useCanvasStore from '../store/useCanvasStore';
 import { useCanvasKeyboard } from './useCanvasKeyboard';
 import { useAuth } from '../context/AuthContext';
@@ -87,7 +87,12 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
 
   const reset = useCanvasStore(s => s.reset);
 
-  useEffect(() => {
+  // Azzeramento PRIMA che qualunque componente registri le sue azioni:
+  // gli effetti di layout girano prima di tutti gli effetti normali, anche
+  // dei figli (EditorShell, PipelineRunner registrano in useEffect). Con un
+  // useEffect qui il reset del genitore cancellava le azioni appena
+  // registrate dai figli (es. "Salva e continua", collaudo M7).
+  useLayoutEffect(() => {
     reset();                    // pulisce nodi/edges del progetto precedente
     init(projectId, mode);
   }, [projectId, mode, init, reset]);
