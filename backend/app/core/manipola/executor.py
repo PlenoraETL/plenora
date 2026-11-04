@@ -53,6 +53,7 @@ from app.core.manipola.types import JsonRows
 from .source_loading import load_file_sources
 from .datasource_node_loading import load_datasource_nodes
 from .canvas_schema_runtime import (
+    build_canvas_type_map,
     build_columns_with_types,
     detect_geometry_from_content,
     extract_srid_from_canvas,
@@ -1405,6 +1406,17 @@ class ManipolaExecutor:
         Manipola-specific logic added to it.
         """
         return extract_srid_from_canvas(canvas, canvas_graph=canvas_graph)
+
+    # MAPPA TIPI CANVAS (solo salvataggio dell'output, identica a prima)
+
+    def _costruisci_mappa_tipi_canvas(
+        self,
+        canvas: CanvasState,
+        *,
+        canvas_graph: Optional[CanvasGraph] = None,
+    ) -> StringMap:
+        """Costruisce mappa colonna->tipo dal canvas. Include suffissi _L/_R per JOIN."""
+        return build_canvas_type_map(canvas, canvas_graph=canvas_graph)
 
     def _costruisci_colonne_con_tipi(
         self,

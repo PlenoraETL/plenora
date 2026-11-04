@@ -242,6 +242,39 @@ def test_manipola_executable_save_never_calls_generic_result_store(monkeypatch):
     assert captured["filename_stem"] == "report"
 
 
+def test_manipola_save_with_canvas_builds_declared_types():
+    """Il salvataggio con il canvas (percorso reale delle esecuzioni) passa i
+    tipi dichiarati all'output (regressione del collaudo dal vivo, Blocco A)."""
+    from app.core.projects.canvas_models import CanvasState
+
+    captured = {}
+
+    class DirectPersistence:
+        def persist_dataframe_output(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(output_filename="report.csv", storage_key="k/report.csv", output_columns=None)
+
+    canvas = CanvasState.model_validate({
+        "nodes": [
+            {"id": "s", "type": "file_source", "position": {"x": 0, "y": 0},
+             "columns": [{"name": "id", "type": "int"}]},
+            {"id": "r", "type": "result", "position": {"x": 1, "y": 0}},
+        ],
+        "edges": [{"id": "e", "source": "s", "target": "r"}],
+    })
+    executor = ManipolaExecutor(project_service=object())
+    result = executor._salva_risultato(
+        "exec_123",
+        SimpleNamespace(fileName="report", format="csv", geomColumn=None, data={}),
+        pd.DataFrame({"id": [1]}),
+        canvas=canvas,
+        group_id_override="group-1",
+        output_persistence=DirectPersistence(),
+    )
+    assert result["success"] is True
+    assert isinstance(captured["column_types"], dict)
+
+
 def test_arcgis_executable_save_never_calls_generic_result_store(monkeypatch):
     def forbidden_result_save(**kwargs):
         raise AssertionError("results table must not be used for exec_* owners")
