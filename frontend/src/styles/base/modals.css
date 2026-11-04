@@ -4,7 +4,7 @@
  * Questi stili erano duplicati in App.css, EstraiEditor.css,
  * ManipolaEditor.css, ArricchisciEditor.css e ProjectList.css.
  *
- * Ogni modal specifica usa classi proprie (.execution-modal, .join-modal ecc.)
+ * Ogni modal specifica usa classi proprie (.execution-modal, .preview-modal ecc.)
  * per override puntuali. Questi sono solo i fondamentali condivisi.
  */
 

@@ -5,7 +5,7 @@
  *
  * Motivazione (PR-B UX Tier 1):
  *   I nodi canvas (TransformNode, MultiJoinNode, FeatureLayerNode,
- *   TableNode, ResultNode) e JoinModal sono renderizzati internamente
+ *   TableNode, ResultNode) e il pannello laterale sono renderizzati internamente
  *   da ReactFlow via `nodeTypes` config, quindi non possono ricevere
  *   props direttamente dall'editor. Il pattern Context risolve senza
  *   forking di ReactFlow.

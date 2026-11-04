@@ -28,6 +28,18 @@
 .steps-step__n { color: var(--plen-text-dim, #8a93a6); font-size: 11px; text-align: right; }
 .steps-step__title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .steps-step__summary { color: var(--plen-text-sub, #5b6478); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Archi di un passo (Estrai: i join verso la tabella), apribili nel pannello. */
+.steps-step__edges { list-style: none; margin: 3px 0 2px 28px; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.steps-edge {
+  width: 100%; display: flex; gap: 6px; align-items: baseline; text-align: left;
+  font: inherit; font-size: 12px; color: inherit; cursor: pointer;
+  background: transparent; border: 1px dashed var(--plen-border-hi, #cfd6e4); border-radius: 7px; padding: 4px 8px;
+}
+.steps-edge:hover { border-color: var(--plen-blue, #2563eb); }
+.steps-edge--selected { border-style: solid; border-color: var(--plen-blue, #2563eb); background: var(--plen-blue-bg, #eef3ff); }
+.steps-edge--incomplete, .steps-edge--missing { border-color: var(--plen-warn, #d97706); background: var(--plen-warn-bg, #fef3c7); }
+.steps-edge__title { font-weight: 600; white-space: nowrap; }
+.steps-edge__summary { color: var(--plen-text-sub, #5b6478); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .steps-lane__add { margin-top: 8px; border: 0; background: transparent; color: var(--plen-blue, #2563eb); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 2px 0; }
 
 /* Interruttore Canvas | Passi */

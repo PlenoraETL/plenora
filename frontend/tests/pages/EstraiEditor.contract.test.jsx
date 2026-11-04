@@ -99,18 +99,13 @@ vi.mock('../../src/hooks', () => ({
     downloadTaskResult: vi.fn(),
   }),
   useValidationHighlights: () => {},
+  // Blocco A, raccolta b: niente piu' finestra del join; il join si
+  // configura nel pannello dalla selezione dell'arco (JoinEdge.contract).
   useEdgeHandlers: () => ({
     onConnect: vi.fn(),
-    onEdgeClick: vi.fn(),
-    showJoinModal: false,
-    editingEdge: null,
-    pendingEdge: null,
-    sourceNode: null,
-    targetNode: null,
-    handleSaveJoin: vi.fn(),
-    handleCancelJoin: vi.fn(),
-    handleDeleteEdge: vi.fn(),
-    isEditing: false,
+    connectBranch: vi.fn(),
+    connectJoin: vi.fn(),
+    onEdgeContextMenu: vi.fn(),
   }),
   useCanvasCore: () => ({
     nodes: [],

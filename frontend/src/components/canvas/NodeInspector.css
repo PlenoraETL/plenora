@@ -87,3 +87,21 @@
 /* "Collega": controlli uno sotto l'altro, larghi quanto il pannello. */
 .branch-connect { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .branch-connect > * { width: 100%; box-sizing: border-box; }
+
+/* Archi nel pannello (Blocco A, raccolta b): titolo non modificabile del
+   join e, nel pannello di una tabella, l'elenco dei suoi join. */
+.node-inspector__title--static { cursor: default; }
+.node-inspector__edges { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.node-inspector__edges-title {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--plen-text-sub, #5b6478);
+}
+.node-inspector__edge {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; text-align: left;
+  border: 1px solid var(--plen-border, #e3e7f0); background: var(--plen-surface, #fff); color: inherit;
+  border-radius: 8px; padding: 6px 9px; font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.node-inspector__edge:hover { border-color: var(--plen-blue, #2563eb); }
+.node-inspector__edge--incomplete,
+.node-inspector__edge--missing { border-color: var(--plen-warn, #d97706); background: var(--plen-warn-bg, #fef3c7); }
+.node-inspector__edge-summary { flex-basis: 100%; font-size: 11.5px; color: var(--plen-text-sub, #5b6478); }

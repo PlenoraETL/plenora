@@ -9,7 +9,7 @@
  *   useCanvasCore         → stato nodi/edges condiviso (wrapper Zustand)
  *   useCanvasSave         → salvataggio draft uniforme tra editor
  *   useCanvasKeyboard     → shortcut tastiera (Delete, Ctrl+S, ...)
- *   useEdgeHandlers       → gestione connessioni tra nodi e modal join
+ *   useEdgeHandlers       → creazione ed eliminazione degli archi di Estrai (join nel pannello)
  *   useColumnPropagation  → calcolo colonne lungo il grafo
  *   useSchemaInference    → inferenza schema colonne via backend
  *   useEnrichmentValidation → validazione/stima prima di arricchire

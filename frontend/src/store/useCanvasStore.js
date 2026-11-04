@@ -498,21 +498,36 @@ const useCanvasStore = create(
       /**
        * Aggiunge un sottografo (Fase 4, M6, "Duplica ramo") come un blocco:
        * posizioni relative conservate, il blocco intero scende finche' non
-       * si sovrappone a nulla. Un'unica azione utente; `selectId` resta
-       * selezionato (pannello aperto).
+       * si sovrappone a nulla. Un'unica azione utente; `selectId` (nodo) o
+       * `selectEdgeId` (arco, es. un join nuovo di Estrai) resta selezionato:
+       * il pannello si apre li'. Senza nodi aggiunge solo gli archi.
        */
-      addSubgraph: ({ nodes: added, edges: addedEdges = [], selectId = null }) => {
-        if (get().isReadOnly || !added.length) return null;
+      addSubgraph: ({ nodes: added = [], edges: addedEdges = [], selectId = null, selectEdgeId = null }) => {
+        if (get().isReadOnly || (!added.length && !addedEdges.length)) return null;
         const { nodes, edges } = get();
         let dy = 0;
         const clash = (off) => added.some(a => findFreePosition(nodes, { x: a.position.x, y: a.position.y + off }, nodeSize(a)).y !== Math.round(a.position.y + off));
         for (let i = 0; i < 200 && clash(dy); i += 1) dy += 104;
         const placed = added.map(a => ({ ...a, position: { x: a.position.x, y: a.position.y + dy }, selected: a.id === selectId }));
         const nextNodes = nodes.map(n => (n.selected ? { ...n, selected: false } : n)).concat(placed);
-        const nextEdges = edges.map(e => (e.selected ? { ...e, selected: false } : e)).concat(addedEdges);
+        const nextEdges = edges.map(e => (e.selected ? { ...e, selected: false } : e))
+          .concat(addedEdges.map(e => ({ ...e, selected: e.id === selectEdgeId })));
         get().takeSnapshot();
         set({ nodes: nextNodes, edges: nextEdges, ...dirtyAndClearHighlights() }, false, 'addSubgraph');
         return { edges: nextEdges };
+      },
+
+      /**
+       * Seleziona solo l'arco `edgeId` (nessun nodo): il pannello laterale
+       * mostra l'arco. Solo selezione (mai dirty), anche in sola lettura.
+       */
+      selectEdge: (edgeId) => {
+        const { nodes, edges } = get();
+        const nodeChanges = nodes.filter(n => n.selected).map(n => ({ id: n.id, type: 'select', selected: false }));
+        if (nodeChanges.length) get().onNodesChange(nodeChanges);
+        const edgeChanges = edges.filter(e => Boolean(e.selected) !== (e.id === edgeId))
+          .map(e => ({ id: e.id, type: 'select', selected: e.id === edgeId }));
+        if (edgeChanges.length) get().onEdgesChange(edgeChanges);
       },
 
       /**

@@ -5,6 +5,9 @@
  * (sorgente, unione, o dopo un bivio), nell'ordine del flusso.
  * Un clic seleziona il passo (stesso pannello laterale del canvas);
  * "＋ Aggiungi passo" apre la palette dopo l'ultimo passo prima dell'Output.
+ * Con `edgeInspector` (Estrai: i join) sotto ogni passo compaiono gli archi
+ * che arrivano a lui, una volta sola ciascuno: un clic li seleziona e li
+ * apre nello stesso pannello.
  */
 import React, { useContext, useEffect, useMemo, useRef } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
@@ -14,14 +17,27 @@ import './StepsView.css';
 
 const LANE_TITLE = { source: 'Ramo da', join: 'Da più ingressi:', fork: 'Dopo il bivio:' };
 
-export default function StepsView({ onAddAfter }) {
+export default function StepsView({ onAddAfter, edgeInspector = null }) {
   const graph = useContext(CanvasGraphContext);
   const nodes = useCanvasStore(s => s.nodes);
+  const edges = useCanvasStore(s => s.edges);
+  const selectEdge = useCanvasStore(s => s.selectEdge);
   const focusNodeId = useCanvasStore(s => s.focusNodeId);
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
   const onNodesChange = useCanvasStore(s => s.onNodesChange);
   const onEdgesChange = useCanvasStore(s => s.onEdgesChange);
   const byId = useMemo(() => new Map(nodes.map(n => [n.id, n])), [nodes]);
+  // Archi da mostrare per passo: quelli che arrivano al passo.
+  const edgesByTarget = useMemo(() => {
+    const out = new Map();
+    if (!edgeInspector) return out;
+    for (const e of edges) {
+      if (!edgeInspector.matches(e, byId)) continue;
+      if (!out.has(e.target)) out.set(e.target, []);
+      out.get(e.target).push({ ...edgeInspector.entry(e, byId, e.target), selected: Boolean(e.selected) });
+    }
+    return out;
+  }, [edgeInspector, edges, byId]);
   const ref = useRef(null);
 
   // "Vedi in Passi": porta in vista il passo scelto nel canvas.
@@ -80,6 +96,25 @@ export default function StepsView({ onAddAfter }) {
                       <span className="steps-step__title">{nodeTitle(n.type, n.data)}</span>
                       <span className="steps-step__summary">{nodeDescriptor(n.type).summary(n.data || {})}</span>
                     </button>
+                    {edgesByTarget.has(id) && (
+                      <ul className="steps-step__edges" aria-label={`${edgeInspector.kind} di ${nodeTitle(n.type, n.data)}`}>
+                        {edgesByTarget.get(id).map(entry => (
+                          <li key={entry.id}>
+                            <button
+                              type="button"
+                              data-edge-id={entry.id}
+                              aria-current={entry.selected ? 'step' : undefined}
+                              className={`steps-edge steps-edge--${entry.status}${entry.selected ? ' steps-edge--selected' : ''}`}
+                              onClick={() => selectEdge(entry.id)}
+                            >
+                              <span aria-hidden="true">{entry.icon}</span>
+                              <span className="steps-edge__title">{entry.title}</span>
+                              <span className="steps-edge__summary">{entry.summary}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </li>
                 );
               })}

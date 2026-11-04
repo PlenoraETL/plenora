@@ -16,6 +16,13 @@
  * Gli <Handle> dei form sono NodeHandle: fuori dal canvas non disegnano
  * nulla. Il pannello vive dentro il ReactFlowProvider dell'editor, quindi
  * i form possono continuare a usare useReactFlow/useStore.
+ *
+ * Archi (Blocco A, raccolta b): ogni configurazione si modifica qui a
+ * partire da una SELEZIONE, nodo o arco. Con `edgeInspector` (Estrai: i
+ * join, { kind, icon, matches, entry, Panel }) un arco selezionato da solo
+ * apre lo stesso guscio (intestazione, chiusura, "Elimina join" con
+ * conferma, niente in sola lettura) con `Panel` come corpo; il pannello di
+ * un nodo elenca i suoi archi con un link per aprirli.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
@@ -34,6 +41,101 @@ const selectInspectedId = (s) => {
   }
   return found;
 };
+
+// Id dell'arco da ispezionare: esattamente un arco selezionato e nessun nodo.
+const selectInspectedEdgeId = (s) => {
+  if ((s.nodes || []).some(n => n.selected && n.type !== 'comment')) return null;
+  let found = null;
+  for (const e of s.edges || []) {
+    if (!e.selected) continue;
+    if (found) return null;
+    found = e.id;
+  }
+  return found;
+};
+
+/** Guscio comune a nodi e archi: intestazione, chiusura, corpo, eliminazione. */
+function InspectorFrame({ prefix, label, icon, kind, title, summary, onClose, switchButton, body, deleteLabel, onDelete }) {
+  return (
+    <aside className={`node-inspector ${prefix}-inspector`} aria-label={label}>
+      <header className="node-inspector__head">
+        <div className="node-inspector__kind">
+          <span aria-hidden="true">{icon}</span> {kind}
+        </div>
+        <button type="button" className="node-inspector__close" onClick={onClose} aria-label="Chiudi pannello">×</button>
+        {switchButton}
+        {title}
+        <div className="node-inspector__summary">{summary}</div>
+      </header>
+      <div className="node-inspector__body">{body}</div>
+      {onDelete && (
+        <footer className="node-inspector__foot">
+          <button type="button" className="node-inspector__delete" onClick={onDelete}>{deleteLabel}</button>
+        </footer>
+      )}
+    </aside>
+  );
+}
+
+/** Archi di un nodo (es. i join di una tabella), ognuno apribile nel pannello. */
+function EdgeLinks({ nodeId, edgeInspector }) {
+  const nodes = useCanvasStore(s => s.nodes);
+  const edges = useCanvasStore(s => s.edges);
+  const selectEdge = useCanvasStore(s => s.selectEdge);
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const entries = edges
+    .filter(e => (e.source === nodeId || e.target === nodeId) && edgeInspector.matches(e, byId))
+    .map(e => edgeInspector.entry(e, byId, nodeId));
+  if (entries.length === 0) return null;
+  return (
+    <section className="node-inspector__edges" aria-label={`${edgeInspector.kind} del passo`}>
+      <div className="node-inspector__edges-title">{edgeInspector.kind}</div>
+      {entries.map(entry => (
+        <button key={entry.id} type="button" className={`node-inspector__edge node-inspector__edge--${entry.status}`}
+          onClick={() => selectEdge(entry.id)}>
+          <span aria-hidden="true">{entry.icon}</span> <strong>{entry.title}</strong>
+          <span className="node-inspector__edge-summary">{entry.summary}</span>
+        </button>
+      ))}
+    </section>
+  );
+}
+
+function EdgeInspector({ edgeId, edgeInspector, prefix }) {
+  const edge = useCanvasStore(useCallback(s => (s.edges || []).find(e => e.id === edgeId) || null, [edgeId]));
+  const nodes = useCanvasStore(s => s.nodes);
+  const onEdgesChange = useCanvasStore(s => s.onEdgesChange);
+  const isReadOnly = useCanvasStore(s => s.isReadOnly);
+  const confirm = useConfirmOrNative();
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  if (!edge || !edgeInspector.matches(edge, byId)) return null;
+  const entry = edgeInspector.entry(edge, byId);
+  const { Panel } = edgeInspector;
+  const what = edgeInspector.kind.toLowerCase();
+  const deleteEdge = async () => {
+    const ok = await confirm({
+      title: `Elimina ${what}`,
+      message: `Eliminare «${entry.title}»? Le tabelle restano nel canvas.`,
+      confirmText: 'Elimina',
+      variant: 'danger',
+    });
+    if (ok) useCanvasStore.getState().removeEdges(edge.id);
+  };
+  return (
+    <InspectorFrame
+      prefix={prefix}
+      label={`Configurazione: ${edgeInspector.kind}`}
+      icon={edgeInspector.icon}
+      kind={edgeInspector.kind}
+      title={<div className="node-inspector__title node-inspector__title--static">{entry.title}</div>}
+      summary={entry.summary}
+      onClose={() => onEdgesChange([{ id: edge.id, type: 'select', selected: false }])}
+      body={<Panel key={edge.id} edge={edge} sourceNode={byId.get(edge.source)} targetNode={byId.get(edge.target)} disabled={isReadOnly} />}
+      deleteLabel={`Elimina ${what}`}
+      onDelete={isReadOnly ? null : deleteEdge}
+    />
+  );
+}
 
 /**
  * Campo titolo controllato: la bozza segue `data.title` (undo, ripristino,
@@ -69,8 +171,9 @@ function InspectorTitle({ node, disabled }) {
   );
 }
 
-export default function NodeInspector({ fullNodeTypes, prefix = 'canvas', branchActions }) {
+export default function NodeInspector({ fullNodeTypes, prefix = 'canvas', branchActions, edgeInspector = null }) {
   const nodeId = useCanvasStore(selectInspectedId);
+  const edgeId = useCanvasStore(selectInspectedEdgeId);
   const node = useCanvasStore(useCallback(s => (nodeId ? (s.nodes || []).find(n => n.id === nodeId) : null), [nodeId]));
   const onNodesChange = useCanvasStore(s => s.onNodesChange);
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
@@ -78,7 +181,9 @@ export default function NodeInspector({ fullNodeTypes, prefix = 'canvas', branch
   const setCanvasView = useCanvasStore(s => s.setCanvasView);
   const confirm = useConfirmOrNative();
 
-  if (!node) return null;
+  if (!node) {
+    return edgeInspector && edgeId ? <EdgeInspector edgeId={edgeId} edgeInspector={edgeInspector} prefix={prefix} /> : null;
+  }
   const Full = fullNodeTypes[node.type];
   const descriptor = nodeDescriptor(node.type);
   const icon = nodeIcon(node.type, node.data);
@@ -96,12 +201,13 @@ export default function NodeInspector({ fullNodeTypes, prefix = 'canvas', branch
   };
 
   return (
-    <aside className={`node-inspector ${prefix}-inspector`} aria-label="Configurazione del passo">
-      <header className="node-inspector__head">
-        <div className="node-inspector__kind">
-          <span aria-hidden="true">{icon}</span> {descriptor.kind(node.data || {})}
-        </div>
-        <button type="button" className="node-inspector__close" onClick={close} aria-label="Chiudi pannello">×</button>
+    <InspectorFrame
+      prefix={prefix}
+      label="Configurazione del passo"
+      icon={icon}
+      kind={descriptor.kind(node.data || {})}
+      onClose={close}
+      switchButton={(
         <button
           type="button"
           className="node-inspector__switch"
@@ -111,22 +217,22 @@ export default function NodeInspector({ fullNodeTypes, prefix = 'canvas', branch
           <span aria-hidden="true">{canvasView === 'canvas' ? '☰ ' : '◇ '}</span>
           {canvasView === 'canvas' ? 'Vedi in Passi' : 'Vedi nel canvas'}
         </button>
-        <InspectorTitle node={node} disabled={isReadOnly} />
-        <div className="node-inspector__summary">{descriptor.summary(node.data || {})}</div>
-      </header>
-      <div className="node-inspector__body">
-        <BranchSection key={`branch-${node.id}`} node={node} branchActions={branchActions} />
-        {/* key per nodo: bozze, ricerche e fuoco di un form non passano al
-            nodo selezionato dopo. */}
-        {Full
-          ? <Full key={node.id} id={node.id} type={node.type} data={node.data || {}} />
-          : <div className="node-inspector__empty">Nessuna configurazione per questo nodo.</div>}
-      </div>
-      {!isReadOnly && (
-        <footer className="node-inspector__foot">
-          <button type="button" className="node-inspector__delete" onClick={deleteStep}>Elimina passo</button>
-        </footer>
       )}
-    </aside>
+      title={<InspectorTitle node={node} disabled={isReadOnly} />}
+      summary={descriptor.summary(node.data || {})}
+      body={(
+        <>
+          <BranchSection key={`branch-${node.id}`} node={node} branchActions={branchActions} />
+          {edgeInspector && <EdgeLinks nodeId={node.id} edgeInspector={edgeInspector} />}
+          {/* key per nodo: bozze, ricerche e fuoco di un form non passano al
+              nodo selezionato dopo. */}
+          {Full
+            ? <Full key={node.id} id={node.id} type={node.type} data={node.data || {}} />
+            : <div className="node-inspector__empty">Nessuna configurazione per questo nodo.</div>}
+        </>
+      )}
+      deleteLabel="Elimina passo"
+      onDelete={isReadOnly ? null : deleteStep}
+    />
   );
 }

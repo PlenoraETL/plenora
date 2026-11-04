@@ -8,7 +8,7 @@
  *   - click "Annulla" risolve false
  *
  * Pattern usato dai 6 nodi canvas (TransformNode, MultiJoinNode,
- * FeatureLayerNode, TableNode, ResultNode, JoinModal).
+ * FeatureLayerNode, TableNode, ResultNode, pannello laterale).
  */
 
 import React, { useState } from 'react';

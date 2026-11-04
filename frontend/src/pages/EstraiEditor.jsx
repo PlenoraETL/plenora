@@ -15,9 +15,10 @@ import ResultNode from '../components/nodes/ResultNode';
 import CaricanNode from '../components/nodes/CaricanNode';
 import CaricanArcGISNode from '../components/nodes/CaricanArcGISNode';
 import '../components/nodes/CaricanArcGISNode.css';
+import JoinEdgePanel from '../components/canvas/JoinEdgePanel';
+import { estraiJoinEdges, paletteJoinEnds, presentJoinEdges, relationJoinEnds } from '../utils/estraiJoins';
 
 // Modali lazy-loaded — caricati solo quando l'utente li apre
-const JoinModal = lazy(() => import('../components/modals/JoinModal'));
 const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
 const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'));
 const CanvasVersionsModal = lazy(() => import('../components/modals/CanvasVersionsModal'));
@@ -58,6 +59,10 @@ const nodeTypes = {
   datasourceNode: DataSourceNode
 };
 
+// I join stanno sull'arco e si configurano nel pannello laterale a partire
+// dalla selezione dell'arco (Blocco A, raccolta b).
+const edgeInspector = { ...estraiJoinEdges, Panel: JoinEdgePanel };
+
 function EstraiEditor() {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -70,8 +75,8 @@ function EstraiEditor() {
   useHexCanvas(hexCanvasRef);
   const {
     nodes, edges, onNodesChange, onEdgesChange,
-    loadGraph, addNodes, addEdges, editEdges, insertNode, applyDerivedNodes,
-    nodesRef, edgesRef, updateNodeData, deleteNode,
+    loadGraph, addNodes, addEdges, insertNode, applyDerivedNodes,
+    nodesRef,
     dataNodes, getViewportCenter,
     isReadOnly, readOnlyProps
   } = useCanvasCore(projectId, { mode: 'estrai' });
@@ -109,7 +114,9 @@ function EstraiEditor() {
   // via ResultNode). Coerente con Manipola/Arricchisci. La validazione live
   // in-memory è stata rimossa: la validazione è on-demand (pulsante → backend).
   useValidationHighlights(applyDerivedNodes);
-  const edgeHandlers = useEdgeHandlers(nodes, editEdges, { resultNodeType: 'resultNode' });
+  const edgeHandlers = useEdgeHandlers({ resultNodeType: 'resultNode' });
+  // Aspetto dei join dal loro stato (da completare, colonna non trovata).
+  const shownEdges = useMemo(() => presentJoinEdges(edges, nodes), [edges, nodes]);
   useEffect(() => {
     // H-9 (2026-05-26): early-return su loading PRIMA del check
     // canvas.nodes. Pre-fix: `if (!project?.canvas?.nodes || loading) return`
@@ -161,19 +168,6 @@ function EstraiEditor() {
       return changed ? next : nds;
     });
   }, [dataNodes, edges, applyDerivedNodes]);
-  const handleUpdateFeatureWhere  = useCallback((nodeId, v)      => updateNodeData(nodeId, { where: v }), [updateNodeData]);
-  const handleFeatureSchemaLoaded = useCallback((nodeId, schema) => {
-    applyDerivedNodes(nds => nds.map(node => {
-      if (node.id !== nodeId) return node;
-      const columns = schema.columns
-        ? schema.columns.map(c => ({ name: c.name, type: c.type || 'str', alias: null, visible: true }))
-        : (schema.fields || []).map(f => ({ name: f.name, type: f.urby_type || f.field_type || f.type || 'str', alias: null, visible: true }));
-      return { ...node, data: { ...node.data, columns, geometry_type: schema.geometry_type || node.data.geometry_type,
-        geometry_type_urby: schema.geometry_type_urby || node.data.geometry_type_urby,
-        feature_count: schema.feature_count ?? node.data.feature_count, relationships: schema.relationships || [] } };
-    }));
-  }, [applyDerivedNodes]);
-
   const handleAddRelatedLayer = useCallback(async (originNodeId, relation) => {
     const originNode = nodesRef.current.find(n => n.id === originNodeId);
     if (!originNode) return;
@@ -194,25 +188,13 @@ function EstraiEditor() {
         geometry_type: schema.geometry_type_urby || schema.geometry_type || '',
         feature_count: schema.feature_count, where: '', columns, relationships: schema.relationships || [] }
     };
-    const isOrigin = relation.role === 'origin';
-    const joinType = relation.cardinality === '1:1' ? 'inner' : 'left';
-    const newEdge  = {
-      id: `edge_rel_${Date.now()}`,
-      source: isOrigin ? originNodeId : newNodeId, target: isOrigin ? newNodeId : originNodeId,
-      label: `🔗 ${joinType} join (${relation.cardinality})`, animated: true,
-      style: { stroke: '#4B8BFF', strokeWidth: 2 },
-      data: { join_type: joinType,
-        source_column: isOrigin ? relation.key_field : (relation.key_field_in_relationship_table || relation.key_field),
-        target_column: isOrigin ? (relation.key_field_in_relationship_table || relation.key_field) : relation.key_field,
-        join_conditions: null, on_filters: null, is_spatial: false,
-        spatial_predicate: null, source_geom_column: null, target_geom_column: null, spatial_distance: null }
-    };
-    addNodes(newNode);
-    addEdges(newEdge);
+    // Layer e join in un solo passo di annullamento; il join nasce da
+    // completare (le chiavi della relazione sono solo un suggerimento nel
+    // pannello, che si apre sull'arco).
+    edgeHandlers.connectJoin({ node: newNode, ...relationJoinEnds(originNodeId, newNodeId, relation) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // useCallback intenzionalmente vincolato a setNodes/setEdges + handler
-    // schema; le altre identità non cambiano la semantica dell'add layer.
-  }, [addNodes, addEdges, handleUpdateFeatureWhere, handleFeatureSchemaLoaded]);
+    // nodesRef/toast stabili; connectJoin e' stabile (legge lo store).
+  }, [edgeHandlers.connectJoin]);
 
   // Registra azioni editor nello store
   useEffect(() => {
@@ -318,15 +300,14 @@ function EstraiEditor() {
 
   // ── Palette "Cosa vuoi fare?" (Fase 4, M2) ────────────────────────────
   // Dopo una tabella: un'altra tabella/vista del catalogo, collegata con un
-  // join (si apre il JoinModal). Dall'Output: Carica DB / ArcGIS.
+  // join da completare nel pannello. Dall'Output: Carica DB / ArcGIS.
   // Rami (Fase 4, M6): in Estrai "Collega" e' un join tra tabelle, con lo
   // stesso gesto del collegamento manuale (la tabella scollegata e' la
   // sorgente del join, come trascinandola).
   const branchActions = useMemo(() => ({
-    connectBranch: (endId, targetId) => edgeHandlers.onConnect({ source: endId, sourceHandle: null, target: targetId, targetHandle: null }),
+    connectBranch: edgeHandlers.connectBranch,
     connectModes: [['join', 'Unisci con (Join)']],
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [edgeHandlers.onConnect]);
+  }), [edgeHandlers.connectBranch]);
 
   const palette = useMemo(() => ({
     groups: [
@@ -349,16 +330,18 @@ function EstraiEditor() {
       const after = nodesRef.current.find(n => n.id === afterId);
       const position = after ? { x: after.position.x - 290, y: after.position.y + 120 } : getViewportCenter(reactFlowInstance);
       const newNode = buildTableNode(item.name, item.kind === 'view', position);
+      // Tabella dopo tabella = join: la nuova e' la sorgente, quella di
+      // partenza il target (stesso verso del trascinamento manuale). Tabella
+      // e join in un solo passo di annullamento, pannello sul join.
+      if (after && (after.type === 'tableNode' || after.type === 'featureLayerNode')) {
+        edgeHandlers.connectJoin({ node: newNode, ...paletteJoinEnds(newNode.id, after.id) });
+        return;
+      }
       // Posizione libera vicino al punto scelto, nodo selezionato (store.insertNode).
       insertNode({ node: newNode });
-      // Tabella dopo tabella = join: la nuova e' la sorgente, quella di
-      // partenza il target (stesso verso del trascinamento manuale).
-      if (after && (after.type === 'tableNode' || after.type === 'featureLayerNode')) {
-        edgeHandlers.onConnect({ source: newNode.id, sourceHandle: null, target: after.id, targetHandle: null });
-      }
     },
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [catalog, views, buildTableNode, insertNode, handleAddCaricanNode, handleAddCaricanArcGISNode]);
+  }), [catalog, views, buildTableNode, insertNode, handleAddCaricanNode, handleAddCaricanArcGISNode, edgeHandlers.connectJoin]);
 
   // Click su una tabella/vista del catalogo → la aggiunge al CENTRO del canvas
   // (il drag resta per il posizionamento preciso).
@@ -637,14 +620,6 @@ function EstraiEditor() {
             isOpen onClose={() => setShowVersions(false)} projectId={projectId}
           />
         )}
-        {edgeHandlers.showJoinModal && (
-          <JoinModal
-            edge={edgeHandlers.editingEdge || edgeHandlers.pendingEdge}
-            sourceNode={edgeHandlers.sourceNode} targetNode={edgeHandlers.targetNode}
-            onSave={edgeHandlers.handleSaveJoin} onCancel={edgeHandlers.handleCancelJoin}
-            onDelete={edgeHandlers.handleDeleteEdge} isEditing={edgeHandlers.isEditing}
-          />
-        )}
         <ExecutionModal
           isOpen={execution.showModal} onClose={execution.closeModal}
           isExecuting={execution.isExecuting} result={execution.result}
@@ -702,7 +677,7 @@ function EstraiEditor() {
         reload={reloadData}
         onBack={handleBack}
         nodes={nodes}
-        edges={edges}
+        edges={shownEdges}
         hexCanvasRef={hexCanvasRef}
         canvasConfig={{
           nodeTypes,
@@ -716,12 +691,14 @@ function EstraiEditor() {
           maxZoom: 2,
           palette,
           branchActions,
+          edgeInspector,
         }}
         canvasHandlers={{
           onNodesChange,
           onEdgesChange,
+          // Clic sull'arco = selezione (pannello); tasto destro = elimina.
           onConnect: edgeHandlers.onConnect,
-          onEdgeClick: edgeHandlers.onEdgeClick,
+          onEdgeContextMenu: edgeHandlers.onEdgeContextMenu,
           onInit: setReactFlowInstance,
           onDrop,
           onDragOver,

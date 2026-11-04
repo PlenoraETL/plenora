@@ -17,7 +17,7 @@
  *   - Hook applicativi (useEditorData / useCanvasCore / usePreview / ...).
  *   - JSX della topbar (logo, back, connection badge, save, theme, ...).
  *   - JSX della sidebar (search, catalog tree, ...).
- *   - JSX dei modal (JoinModal, ExecutionModal, ...).
+ *   - JSX dei modal (ExecutionModal, PreviewModal, ...).
  *
  * API semantica:
  *
@@ -27,7 +27,9 @@
  *   `canvasConfig` (oggetto) — configurazione/stato del canvas, statica
  *   per render. Contiene: nodeTypes, edgeTypes, defaultEdgeOptions,
  *   fitView, fitViewOptions, minZoom, maxZoom, backgroundProps,
- *   showMiniMap, miniMapProps, isReadOnly, readOnlyProps.
+ *   showMiniMap, miniMapProps, isReadOnly, readOnlyProps, palette,
+ *   branchActions, edgeInspector (archi configurabili nel pannello
+ *   laterale e nella vista Passi: in Estrai i join, vedi NodeInspector).
  *
  *   `canvasHandlers` (oggetto) — callback canvas, bindabili runtime.
  *   Contiene: onNodesChange, onEdgesChange, onConnect, onEdgeClick,
@@ -143,6 +145,9 @@ canvasConfig = EMPTY_OBJ,
     // Fase 4, M6: { connectBranch?(endId, targetId, mode), connectModes?,
     // duplicateBranch?(sourceId, otherSourceId) } dall'editor.
     branchActions,
+    // Blocco A, raccolta b: { kind, icon, matches, entry, Panel } degli archi
+    // che si configurano nel pannello laterale (Estrai: i join).
+    edgeInspector = null,
   } = canvasConfig;
 
   const {
@@ -405,7 +410,7 @@ canvasConfig = EMPTY_OBJ,
               </Controls>
               {showMiniMap && <MiniMap {...miniMapProps} />}
             </ReactFlow>
-            {canvasView === 'steps' && <StepsView onAddAfter={palette && !isReadOnly ? openPalette : null} />}
+            {canvasView === 'steps' && <StepsView onAddAfter={palette && !isReadOnly ? openPalette : null} edgeInspector={edgeInspector} />}
             {afterCanvas}
             {children}
             <StepPreview projectId={projectId} />
@@ -413,7 +418,7 @@ canvasConfig = EMPTY_OBJ,
         </CanvasErrorBoundary>
         {/* Nuova interfaccia (Fase 4, M1): nodi compatti sul canvas, form
             completo del nodo selezionato nel pannello a destra. */}
-        <NodeInspector fullNodeTypes={nodeTypes} prefix={prefix} branchActions={branchActions} />
+        <NodeInspector fullNodeTypes={nodeTypes} prefix={prefix} branchActions={branchActions} edgeInspector={edgeInspector} />
       </div>
       </CanvasGraphContext.Provider>
       {/* Valida / Anteprima / Esegui: percorso unico, sempre montato (M7). */}
