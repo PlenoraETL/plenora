@@ -115,6 +115,9 @@ class EnrichmentExecutor(
             options: Opzioni esecuzione
             progress_callback: Callback per aggiornare progress (percent, message)
         """
+        # Nessuna validazione statica qui (come HEAD): metodo, body e dialetto
+        # CSV non supportati sono RowError per riga a runtime. Valida/preflight
+        # li segnalano chiamando ``prepare_api_request``, la stessa funzione.
         self.api_config = api_config
         # API parameter defaults are used unless the node overrides them.
         derived_mapping: JsonObject = {}

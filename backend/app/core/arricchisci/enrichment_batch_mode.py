@@ -52,6 +52,17 @@ from app.core.arricchisci.types import JsonObject, JsonRows
 logger = get_logger("app.core.arricchisci.enrichment_service")
 
 
+def prepare_batch_rows(executor: Any, df: Any) -> list[tuple[Any, JsonObject]]:
+    """The exact rows sent by native batch mode (no deduplication)."""
+    rows = []
+    for idx, row in iter_dataframe_indexed_rows(df):
+        params = executor._build_params(row)
+        if executor.options.skip_null_params and executor._has_null_params(params):
+            continue
+        rows.append((idx, params))
+    return rows
+
+
 class EnrichmentBatchModeMixin:
     """Mixin per `EnrichmentExecutor`: batch native API path.
 
@@ -91,15 +102,8 @@ class EnrichmentBatchModeMixin:
         )
 
         # Costruisci lista di (idx, params) per tutte le righe valide
-        rows_to_process = []
-        for idx, row in iter_dataframe_indexed_rows(df):
-            params = self._build_params(row)
-
-            if self.options.skip_null_params and self._has_null_params(params):
-                stats.skipped += 1
-                continue
-
-            rows_to_process.append((idx, params))
+        rows_to_process = prepare_batch_rows(self, df)
+        stats.skipped += len(df) - len(rows_to_process)
 
         # Processa in batch
         processed = 0

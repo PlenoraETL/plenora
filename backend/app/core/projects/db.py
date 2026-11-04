@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from app.db.pg_connection import unit_of_work
 from app.db.sql_safety import safe_set_clause
 from app.utils.logger import get_logger
+from app.core.projects.canvas_revision import CanvasRevisionConflict, canvas_version
 
 logger = get_logger(__name__)
 
@@ -482,6 +483,8 @@ class ProjectRepository:
     def update_project_row(
         self,
         project_id: str,
+        base_canvas_version: str | None = None,
+        revision_out: dict | None = None,
         **fields: object,
     ) -> ProjectDetailRow | None:
         if "canvas" in fields and isinstance(fields["canvas"], dict):
@@ -494,7 +497,26 @@ class ProjectRepository:
         # Datetime nativo per coerenza con create_project_row.
         fields["updated_at"] = datetime.now(timezone.utc)
         set_clause, vals = safe_set_clause("projects", fields)
-        _execute(f"UPDATE projects SET {set_clause} WHERE id = %s", vals + (project_id,))
+        if base_canvas_version is None:
+            _execute(f"UPDATE projects SET {set_clause} WHERE id = %s", vals + (project_id,))
+            if revision_out is not None:
+                revision_out["updated_at"] = fields["updated_at"]
+                written = get_project_raw_canvas_row(project_id)
+                revision_out["canvas_version"] = canvas_version(written.canvas) if written is not None else None
+            return get_project_row(project_id)
+        # Versione del canvas: confronto per uguaglianza del token, nella
+        # stessa transazione dell'UPDATE con la riga bloccata.
+        with unit_of_work() as session:
+            locked = session.fetchone("SELECT canvas, updated_at FROM projects WHERE id = %s FOR UPDATE", (project_id,))
+            if locked is None:
+                return None
+            if base_canvas_version is not None and canvas_version(locked.get("canvas")) != base_canvas_version:
+                raise CanvasRevisionConflict(canvas_version(locked.get("canvas")), locked.get("updated_at"))
+            session.execute(f"UPDATE projects SET {set_clause} WHERE id = %s", vals + (project_id,))
+            written = session.fetchone("SELECT canvas FROM projects WHERE id = %s", (project_id,))
+        if revision_out is not None:
+            revision_out["updated_at"] = fields["updated_at"]
+            revision_out["canvas_version"] = canvas_version((written or {}).get("canvas"))
         return get_project_row(project_id)
 
     def update_project_output_contract_row(

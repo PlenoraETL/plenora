@@ -3,6 +3,14 @@ Router API per il modulo Projects.
 
 Endpoint CRUD progetti, gestione canvas, e inferenza schema.
 """
+from app.core.eseguibili.manifest import compile_manifest
+from app.core.manipola.canvas_data_preparation import CanvasDataPreparation, PREPARATION_ERRORS, classify_preparation_error
+from app.core.manipola.preparation import is_null_scalar
+from app.core.orchestrator.execution_contract import PipelineExecutionContract
+from app.core.orchestrator.runtime_inputs import apply_project_runtime_inputs
+from app.core.projects.canvas_validation import _StaticCanvasService
+from app.core.projects.canvas_validation import validate_project_chain
+from app.shared.execution.lookup_mapping import lookup_value_text
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, field_validator
@@ -14,6 +22,7 @@ from app.shared.error_envelope import raise_typed_http
 from app.shared.execution.canvas_column import Column
 from app.observability.audit_action import audit_action
 from app.core.projects.canvas_models import CanvasState, Node, Edge
+from app.core.projects.canvas_revision import CanvasRevisionConflict, canvas_version
 from app.core.projects.exceptions import (
     CanvasCorruptedError,
     ProjectCleanupPartialError,
@@ -42,7 +51,6 @@ from app.core.results import orphan_cleanup as orphan_cleanup_module
 from app.core.projects.types import (
     CanvasResourceRefs,
     JsonObject,
-    StringMap,
 )
 from app.shared.execution import canvas_columns as canvas_columns_module
 from .models import ProjectCreate
@@ -287,18 +295,29 @@ def list_canvas_versions(
     return {"versions": [v.model_dump() for v in _project_service.list_canvas_versions(project_id)]}
 
 
+class CanvasRestoreRequest(BaseModel):
+    # Token opaco ``canvas_version`` ricevuto da GET/PUT/ripristino, rimandato
+    # tale e quale (F3). Assente = scrittura compatibile senza controllo.
+    base_canvas_version: str | None = None
+
+
 @router.post("/{project_id}/versions/{version_id}/restore")
 @audit_action(action="project.version_restore", target_param="project_id")
 def restore_canvas_version(
     project_id: str,
     version_id: str,
     current_user: CurrentUser = Depends(require_user_or_above),
+    body: CanvasRestoreRequest | None = None,
 ) -> JsonObject:
     """Ripristina il canvas del progetto a una versione salvata."""
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
     try:
-        canvas = _project_service.restore_canvas_version(project_id, version_id)
+        revision = {}
+        base = body.base_canvas_version if body else None
+        canvas = _project_service.restore_canvas_version(project_id, version_id, revision_out=revision, **({"base_canvas_version": base} if base is not None else {}))
+    except CanvasRevisionConflict as exc:
+        raise HTTPException(409, detail=exc.to_dict()) from exc
     except ProjectLineageCycleError as e:
         raise HTTPException(
             status_code=400,
@@ -306,7 +325,9 @@ def restore_canvas_version(
         )
     if canvas is None:
         raise_typed_http(error_codes.RUN_NOT_FOUND, status_code=404, message="Versione non trovata")
-    return {"canvas": canvas.model_dump()}
+    updated = _project_service.get_project_metadata(project_id)
+    return {"canvas": canvas.model_dump(), "canvas_version": revision.get("canvas_version"),
+            "updated_at": revision.get("updated_at") or (getattr(updated, "updated_at", None) if updated else None)}
 
 
 @router.get("")
@@ -505,7 +526,16 @@ def get_project(
         "canvas": canvas_dict,
         "output_contract": output_contract,
         "applied_migrations": applied_migrations,
+        # Token della versione del canvas persistito (base per PUT/ripristino, F3).
+        "canvas_version": _canvas_version_of(project_id) if canvas is not None else None,
     }
+
+
+def _canvas_version_of(project_id: str) -> str | None:
+    """Token ``canvas_version`` del canvas persistito, se leggibile."""
+    raw = _project_service.get_project_raw_canvas(project_id)
+    canvas = getattr(raw, "canvas", None) if raw is not None else None
+    return canvas_version(canvas) if isinstance(canvas, (dict, str, list)) else None
 
 
 @router.get("/{project_id}/canvas/raw")
@@ -622,6 +652,8 @@ class CanvasWithPlugins(BaseModel):
     nodes: List[Node] = []
     edges: List[Edge] = []
     plugins: Optional[dict] = None
+    # Solo PUT /canvas: token ``canvas_version`` della versione di base.
+    base_canvas_version: str | None = None
 
 
 def _collect_canvas_resource_refs(canvas: CanvasState) -> CanvasResourceRefs:
@@ -753,7 +785,7 @@ def update_project_canvas(
     project_id: str,
     body: CanvasWithPlugins,
     current_user: CurrentUser = Depends(require_user_or_above),
-) -> StringMap:
+) -> JsonObject:
     """Aggiorna canvas di un progetto. Qualsiasi user/admin/superadmin del
     gruppo proprietario (non solo l'owner): in un team i membri lavorano
     sui progetti dei colleghi. L'eliminazione del progetto resta invece
@@ -766,7 +798,8 @@ def update_project_canvas(
     canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user, for_save=True)
 
     try:
-        if not _project_service.update_canvas(project_id, canvas):
+        revision = {}
+        if not _project_service.update_canvas(project_id, canvas, revision_out=revision, **({"base_canvas_version": body.base_canvas_version} if body.base_canvas_version is not None else {})):
             raise HTTPException(
                 status_code=404,
                 detail={
@@ -774,12 +807,16 @@ def update_project_canvas(
                     "message": f"Progetto '{project_id}' non trovato",
                 },
             )
+    except CanvasRevisionConflict as exc:
+        raise HTTPException(409, detail=exc.to_dict()) from exc
     except HTTPException:
         raise
     except ProjectLineageCycleError as e:
         raise HTTPException(400, str(e)) from e
 
-    return {"status": "ok", "project_id": project_id}
+    updated = _project_service.get_project_metadata(project_id)
+    return {"status": "ok", "project_id": project_id, "canvas_version": revision.get("canvas_version"),
+            "updated_at": revision.get("updated_at") or (getattr(updated, "updated_at", None) if updated else None)}
 
 
 class ValidationRequest(BaseModel):
@@ -865,6 +902,73 @@ def _infer_project_schemas(
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
+class DistinctRequest(BaseModel):
+    canvas: CanvasWithPlugins
+    column: str | None = None
+    column_id: str | None = None
+    limit: int = 100
+
+    @field_validator("limit")
+    @classmethod
+    def bounded_limit(cls, value: int) -> int:
+        if not 1 <= value <= 1000:
+            raise ValueError("limit deve essere compreso fra 1 e 1000")
+        return value
+
+
+def raise_preparation_failure(error: BaseException) -> None:
+    """Unico mappatore HTTP degli errori della preparazione in memoria
+    (distinct, preflight Arricchisci e validate/estimate per nodo): 4xx con
+    ``details.reason`` esplicito, mai 500 per le famiglie note."""
+    failure = classify_preparation_error(error)
+    logger.warning("[GESTITO] Preparazione dati fallita (%s): %s", failure.reason, type(error).__name__)
+    raise_typed_http(error_codes.VALIDATION_ERROR, status_code=failure.status_code, message=failure.message,
+                     details={"reason": failure.reason})
+
+
+@router.post("/{project_id}/nodes/{node_id}/distinct")
+def distinct_node_values(project_id: str, node_id: str, body: DistinctRequest,
+                         current_user: CurrentUser = Depends(require_not_esecutore)) -> JsonObject:
+    metadata = _project_service.get_project_metadata(project_id)
+    assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
+    canvas = _prepare_canvas_for_owner(project_id, CanvasState(nodes=body.canvas.nodes, edges=body.canvas.edges), metadata, current_user, for_save=False)
+    preparation = CanvasDataPreparation(canvas, metadata.group_id)
+    if node_id not in preparation.nodes:
+        raise HTTPException(404, "Nodo non trovato")
+    try:
+        source_ids = preparation.input_ids(node_id)
+        name = body.column
+        if body.column_id and source_ids:
+            service = schema_inference_module.SchemaInferenceService(_StaticCanvasService(canvas))
+            columns = service.infer_node_schema_typed(project_id, source_ids[0]).columns
+            name = next((col["name"] for col in columns if col.get("id") == body.column_id), None)
+            if name is None:
+                raise HTTPException(422, "column_id non presente nell'ingresso del nodo")
+        frame, sampled, reason = preparation.input(node_id)
+    except PREPARATION_ERRORS as exc:
+        raise_preparation_failure(exc)
+    if frame is None:
+        return {"values": [], "truncated": False, "sampled": False, "sampled_rows": 0, "reason": reason}
+    if not name or name not in frame.columns:
+        raise HTTPException(422, f"Colonna '{name}' assente nell'ingresso del nodo")
+    if list(frame.columns).count(name) != 1:
+        raise HTTPException(422, f"Colonna '{name}' non univoca nell'ingresso del nodo")
+    counts = {}
+    truncated = False
+    for value in frame[name]:
+        text_value = lookup_value_text(value)
+        key = (is_null_scalar(value), text_value)
+        if key in counts:
+            counts[key] += 1
+        elif len(counts) < body.limit:
+            counts[key] = 1
+        else:
+            truncated = True
+    return {"values": [{"value": value, "is_null": null, "count": count} for (null, value), count in counts.items()],
+            "column": name, "column_id": body.column_id, "truncated": truncated or sampled,
+            "sampled": sampled, "sampled_rows": len(frame), "reason": None}
+
+
 @router.get("/{project_id}/schemas/{node_id}")
 def get_node_schema(
     project_id: str,
@@ -935,10 +1039,16 @@ def validate_all_connections(
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
+class CanvasValidationRequest(BaseModel):
+    canvas: CanvasWithPlugins | None = None
+    inputs: dict | None = None
+
+
 @router.post("/{project_id}/validate")
 def validate_project_canvas(
     project_id: str,
     current_user: CurrentUser = Depends(require_not_esecutore),
+    body: CanvasValidationRequest | None = None,
 ) -> JsonObject:
     """Valida l'intero canvas del progetto.
 
@@ -951,7 +1061,23 @@ def validate_project_canvas(
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
     try:
-        from app.core.projects.canvas_validation import validate_project_chain
+
+        selected_canvas = (CanvasState(nodes=body.canvas.nodes, edges=body.canvas.edges)
+                           if body and body.canvas else _project_service.get_project_canvas(project_id))
+        if body and body.canvas:
+            selected_canvas = _prepare_canvas_for_owner(project_id, selected_canvas, metadata, current_user, for_save=False)
+        manifest = None
+        input_error = None
+        try:
+            manifest = compile_manifest(for_project=True, source_project_id=project_id, project_type=metadata.project_type,
+                                        canvas=selected_canvas.model_dump(), default_connection_id=getattr(metadata, "default_connection_id", None) if isinstance(getattr(metadata, "default_connection_id", None), str) else None)
+            if body and body.inputs is not None:
+                contract = apply_project_runtime_inputs(PipelineExecutionContract(
+                    project_id=project_id, project_type=metadata.project_type, group_id=metadata.group_id,
+                    canvas=selected_canvas.model_dump(), runtime_context={"default_connection_id": getattr(metadata, "default_connection_id", None)}), body.inputs)
+                selected_canvas = CanvasState(**contract.canvas)
+        except ValueError as exc:
+            input_error = str(exc)
 
         def _load(pid: str):
             # I ref project_source sono già autorizzati al PUT
@@ -959,7 +1085,7 @@ def validate_project_canvas(
             md = _project_service.get_project_metadata(pid)
             if not md:
                 return None
-            return (_project_service.get_project_canvas(pid), getattr(md, "project_type", None))
+            return (selected_canvas if pid == project_id else _project_service.get_project_canvas(pid), getattr(md, "project_type", None))
 
         # ARRICCHISCI_API_CONNECTION_STALE è DB-dependent: l'endpoint (boundary
         # DB-aware) fornisce gli id delle connessioni API esistenti; il gate
@@ -980,10 +1106,23 @@ def validate_project_canvas(
 
         report = validate_project_chain(
             project_id, _load, available_api_connection_ids=available_api_ids,
+            load_execution_context=lambda pid: {"default_connection_id": (
+                contract.runtime_context.get("default_connection_id")
+                if pid == project_id and body and body.inputs is not None and input_error is None
+                else getattr(_project_service.get_project_metadata(pid), "default_connection_id", None))},
         )
         result = report.to_dict()
-        result["valid"] = not report.has_errors
-        _project_service.set_canvas_validated(project_id, not report.has_errors)
+        if input_error:
+            result["issues"].append({"node_id": "", "severity": "error", "code": "runtime_inputs.invalid", "message": input_error})
+        result["valid"] = not report.has_errors and input_error is None
+        result["has_errors"] = not result["valid"]
+        result["manifest"] = manifest.model_dump() if manifest else None
+        result["checks"] = {"configuration": "verified" if result["valid"] else "invalid",
+                            "runtime_inputs": "verified" if body and body.inputs is not None and not input_error else "not_provided",
+                            "data": "not_checked", "external_dependencies": "not_guaranteed",
+                            "resources": "not_guaranteed"}
+        if not body or body.canvas is None:
+            _project_service.set_canvas_validated(project_id, result["valid"])
         return result
     except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")

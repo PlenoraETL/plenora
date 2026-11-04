@@ -19,6 +19,8 @@ from app.core.artifacts.types import (
 )
 from app.core.artifacts.static_parameters import process_static_fields
 from app.core.auth.visibility import is_resource_visible
+from app.core.resources import ResourceRef, default_registry
+from app.core.files.service import file_source_service
 from app.core.dataframes.frame_io import load_dataframe_from_artifact
 from app.shared.resources.metadata import LoadedResource, ResourceMetadata
 
@@ -64,6 +66,33 @@ class SourceLoader:
 
     def __init__(self, artifact_resolver: Optional[ArtifactResolver] = None) -> None:
         self._resolver = artifact_resolver or ArtifactResolver()
+
+    def load_in_memory(self, ref: SourceRef, *, expected_group_id: str) -> tuple[Any, str | None]:
+        """Read preflight input without a spool, temporary file or recomputation."""
+        if not expected_group_id:
+            raise ValueError("SourceLoader.load: expected_group_id obbligatorio")
+        if ref.kind() == "static":
+            return self._load_static(ref.static_fields), None
+        if ref.kind() == "project":
+            artifact = self._resolver.materialize_latest(ref.project, expected_group_id=expected_group_id, mode="bytes")
+            if artifact is None:
+                return None, "Progetto sorgente senza risultato disponibile; ricalcolo escluso"
+            data, fmt, sheet, layer = artifact.data, artifact.format, None, None
+        else:
+            if not is_resource_visible("file_sources", ref.file_source_id, expected_group_id):
+                raise SourceLoadingError("Accesso negato al file sorgente")
+            metadata = file_source_service.get_file_source(ref.file_source_id)
+            if metadata is None:
+                return None, "File sorgente non disponibile"
+            fmt, sheet, layer = metadata.format, metadata.sheet, metadata.layer
+            resource = default_registry().get(ResourceRef(kind="file_source_blob", file_source_id=ref.file_source_id,
+                expected_group_id=metadata.group_id), mode="bytes")
+            data = resource.data
+        if str(fmt).lower() not in {"csv", "json", "xlsx", "xls", "parquet"}:
+            return None, f"Formato {fmt}: lettura non garantita senza file temporanei"
+        if data is None:
+            return None, "Sorgente non disponibile in memoria"
+        return load_dataframe_from_artifact(data=data, format_hint=fmt, sheet=sheet, layer=layer), None
 
     def load(
         self,

@@ -102,7 +102,7 @@ class TypeInferrer:
     @classmethod
     def _looks_like_date_column(cls, series: pd.Series) -> bool:
         """Conservative date detection using explicit formats only."""
-        sample = series.dropna().head(10)
+        sample = pd.Series(non_null_head_values(series, 10))
         if sample.empty:
             return False
         n = len(sample)
@@ -116,17 +116,18 @@ class TypeInferrer:
     @classmethod
     def _infer_from_values(cls, series: pd.Series) -> str:
         """Inferisce tipo da valori."""
-        if series.dropna().empty:
+        values = non_null_head_values(series, 10)
+        if not values:
             return "str"
 
-        sample = str(series.dropna().iloc[0])
+        sample = str(values[0])
 
         sample_upper = sample.strip().upper()
         if any(sample_upper.startswith(prefix) for prefix in cls.WKT_PREFIXES):
             return "geometry"
 
         if len(sample) >= 8 and any(c in sample for c in ["-", "/"]):
-            if cls._looks_like_date_column(series):
+            if cls._looks_like_date_column(pd.Series(values)):
                 return "date"
 
         return "str"
@@ -225,6 +226,10 @@ def canvas_type_to_pandas_dtype(canvas_type: Optional[str]) -> str:
         return "bool"
     if canonical == "date":
         return "datetime64[ns]"
+    if canonical == "str":
+        # Dtype stringa predefinito del motore (pandas 3: "str"), lo stesso
+        # che build_columns_with_types riporta come "str" (A3, esecuzione a vuoto).
+        return "str"
     return "object"
 
 

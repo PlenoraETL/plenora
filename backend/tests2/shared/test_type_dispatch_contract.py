@@ -152,7 +152,7 @@ def _extract_auto_mapping_body_source() -> str:
     # Geometry (con/senza suffisso) e fallback su object
     ("geometry",             "object"),
     ("geometry:Point:4326",  "object"),
-    ("str",                  "object"),
+    ("str",                  "str"),
     ("",                     "object"),
     ("unknown",              "object"),
 ])
@@ -219,7 +219,7 @@ def test_empty_dataframe_from_column_metadata_preserves_declared_dtypes():
     assert str(df["enabled"].dtype) == "bool"
     assert str(df["created_at"].dtype) == "datetime64[ns]"
     assert str(df["geom"].dtype) == "object"
-    assert str(df["label"].dtype) == "object"
+    assert str(df["label"].dtype) == "str"
 
 
 # Geometry vocabulary (alias set condiviso fra ColumnMapper)

@@ -119,6 +119,54 @@ def _estimate_join_output_rows_by_keys(
 # JOIN — Unione tabelle per colonna chiave
 # Supporta: inner, left, right, outer, cross. Gestisce suffissi per colonne omonime
 
+def prepare_join(left_df: Any, right_df: Any, left_on: Any = None, right_on: Any = None, left_keys: Any = None, right_keys: Any = None, left_columns: Any = None, right_columns: Any = None, name_conflict: Any = None) -> tuple:
+    """Prepare bilateral keys and column plan without reading any rows."""
+    left_key_cols = _normalize_join_keys(left_keys if left_keys is not None else left_on)
+    right_key_cols = _normalize_join_keys(right_keys if right_keys is not None else right_on)
+
+    # Il percorso legacy resta identico quando i nuovi parametri sono assenti.
+    column_maps = None
+    if left_columns is not None or right_columns is not None or name_conflict is not None:
+        column_maps = join_column_plan(
+            list(left_df.columns), list(right_df.columns), left_key_cols, right_key_cols,
+            left_columns, right_columns, name_conflict,
+        )
+        left_df = type("Columns", (), {"columns": list(column_maps[0])})()
+        right_df = type("Columns", (), {"columns": list(column_maps[1])})()
+
+    if not left_key_cols or not right_key_cols:
+        raise ValueError("Join richiede almeno una coppia di chiavi SX/DX.")
+    if len(left_key_cols) != len(right_key_cols):
+        raise ValueError(
+            "Join con chiavi multiple non valido: il numero di chiavi sinistre "
+            f"({len(left_key_cols)}) deve coincidere con quello delle chiavi destre "
+            f"({len(right_key_cols)})."
+        )
+
+    # La chiave deve esistere PRIMA di qualsiasi manipolazione (dedup
+    # conversione tipi, rename suffissi). Senza questo, la KeyError
+    # arriverebbe post-safe_rename con colonne _L / _R fuorvianti
+    # l'utente vedrebbe nomi suffissati che non esistevano nel config
+    # e interpreterebbe il problema come bug del rename, mentre la
+    # chiave non era presente nemmeno nel DataFrame originale
+    missing_left = [key for key in left_key_cols if key not in left_df.columns]
+    if missing_left:
+        raise KeyError(
+            f"Colonne join sinistre mancanti {missing_left}. "
+            f"Verifica il config del nodo join o lo schema del nodo upstream. "
+            f"Colonne disponibili nel left (prime 20): {list(left_df.columns)[:20]}"
+        )
+    missing_right = [key for key in right_key_cols if key not in right_df.columns]
+    if missing_right:
+        raise KeyError(
+            f"Colonne join destre mancanti {missing_right}. "
+            f"Verifica il config del nodo join o lo schema del nodo upstream. "
+            f"Colonne disponibili nel right (prime 20): {list(right_df.columns)[:20]}"
+        )
+
+    return left_key_cols, right_key_cols, column_maps
+
+
 def op_join(
     inputs: List[DataFrame],
     left_on: Any = None,
@@ -151,48 +199,13 @@ def op_join(
 
     left_df = copy_frame_for_update(inputs[0])
     right_df = copy_frame_for_update(inputs[1])
-    left_key_cols = _normalize_join_keys(left_keys if left_keys is not None else left_on)
-    right_key_cols = _normalize_join_keys(right_keys if right_keys is not None else right_on)
-
-    # Il percorso legacy resta identico quando i nuovi parametri sono assenti.
-    column_maps = None
-    if left_columns is not None or right_columns is not None or name_conflict is not None:
-        column_maps = join_column_plan(
-            list(left_df.columns), list(right_df.columns), left_key_cols, right_key_cols,
-            left_columns, right_columns, name_conflict,
-        )
+    left_key_cols, right_key_cols, column_maps = prepare_join(
+        left_df, right_df, left_on, right_on, left_keys, right_keys,
+        left_columns, right_columns, name_conflict,
+    )
+    if column_maps is not None:
         left_df = left_df[list(column_maps[0])]
         right_df = right_df[list(column_maps[1])]
-
-    if not left_key_cols or not right_key_cols:
-        raise ValueError("Join richiede almeno una coppia di chiavi SX/DX.")
-    if len(left_key_cols) != len(right_key_cols):
-        raise ValueError(
-            "Join con chiavi multiple non valido: il numero di chiavi sinistre "
-            f"({len(left_key_cols)}) deve coincidere con quello delle chiavi destre "
-            f"({len(right_key_cols)})."
-        )
-
-    # La chiave deve esistere PRIMA di qualsiasi manipolazione (dedup
-    # conversione tipi, rename suffissi). Senza questo, la KeyError
-    # arriverebbe post-safe_rename con colonne _L / _R fuorvianti
-    # l'utente vedrebbe nomi suffissati che non esistevano nel config
-    # e interpreterebbe il problema come bug del rename, mentre la
-    # chiave non era presente nemmeno nel DataFrame originale
-    missing_left = [key for key in left_key_cols if key not in left_df.columns]
-    if missing_left:
-        raise KeyError(
-            f"Colonne join sinistre mancanti {missing_left}. "
-            f"Verifica il config del nodo join o lo schema del nodo upstream. "
-            f"Colonne disponibili nel left (prime 20): {list(left_df.columns)[:20]}"
-        )
-    missing_right = [key for key in right_key_cols if key not in right_df.columns]
-    if missing_right:
-        raise KeyError(
-            f"Colonne join destre mancanti {missing_right}. "
-            f"Verifica il config del nodo join o lo schema del nodo upstream. "
-            f"Colonne disponibili nel right (prime 20): {list(right_df.columns)[:20]}"
-        )
 
     # Se ci sono colonne duplicate, pandas merge fallisce con KeyError
     # Strategia: se la chiave è duplicata tieni solo la prima occorrenza

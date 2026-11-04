@@ -48,12 +48,13 @@ def _edge(source, target):
 
 def _canvas(nodes, edges):
     c = MagicMock(); c.nodes = nodes; c.edges = edges
+    c.model_dump.return_value = {"nodes": [{"id": n.id, "type": n.type, "data": n.data} for n in nodes], "edges": [{"source": e.source, "target": e.target} for e in edges]}
     return c
 
 
 def _client(canvas, monkeypatch) -> TestClient:
     svc = MagicMock()
-    svc.get_project_metadata.return_value = MagicMock(id="p", group_id="g")
+    svc.get_project_metadata.return_value = MagicMock(id="p", group_id="g", project_type="manipola", default_connection_id=None)
     svc.get_project_canvas.return_value = canvas
     monkeypatch.setattr(projects_router_module, "_project_service", svc)
     monkeypatch.setattr(projects_router_module, "assert_group_access", lambda *a, **k: None)

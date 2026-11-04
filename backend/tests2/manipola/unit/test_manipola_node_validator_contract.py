@@ -51,12 +51,21 @@ def test_filter_on_existing_column_ok():
     assert _v().validate_node(node, upstream=_upstream(["a", "b"])) == []
 
 
-def test_filter_on_missing_column_is_error():
+def test_missing_reference_tolerated_by_runtime_is_error():
+    # A3 (correzione dopo la conferma): il runtime ignora in silenzio il
+    # riferimento assente; Valida resta più severa, come HEAD: errore.
     node = _node(config={"column": "nope"})
     issues = _v().validate_node(node, upstream=_upstream(["a"]))
     assert [i.code for i in issues] == ["column.missing"]
     assert issues[0].severity == "error"
     assert issues[0].node_id == "t1"
+
+
+def test_filter_on_missing_column_is_runtime_error():
+    node = _node(config={"column": "nope"}, transform_op="filter")
+    issues = _v().validate_node(node, upstream=_upstream(["a"]))
+    assert [(i.code, i.severity) for i in issues] == [("preparation.invalid", "error")]
+    assert issues[0].message == "Filter: colonna 'nope' non trovata. Colonne disponibili: ['a']"
 
 
 def test_join_keys_list_checked():
@@ -101,9 +110,15 @@ def test_output_column_key_not_flagged():
 
 
 def test_invalid_formula_is_error():
-    node = _node(config={"formula": "__import__('os')"})
+    node = _node(config={"new_column": "z", "formula": "__import__('os')"}, transform_op="formula")
     issues = _v().validate_node(node, upstream=_upstream(["a"]))
-    assert "formula.invalid" in _codes(issues)
+    assert [(i.code, i.severity) for i in issues] == [("preparation.invalid", "error")]
+
+
+def test_formula_field_on_other_operation_is_ignored_like_runtime():
+    # A3: distinct non legge "formula" (parametro sconosciuto, mai valutato).
+    node = _node(config={"formula": "__import__('os')"})
+    assert _v().validate_node(node, upstream=_upstream(["a"])) == []
 
 
 def test_valid_formula_no_issue_and_refs_not_checked():
@@ -132,13 +147,13 @@ def test_known_op_not_flagged_unknown():
 
 
 def test_required_param_missing_is_error():
-    # 'filter' richiede il param 'column'; config vuoto → TRANSFORM_PARAM_REQUIRED.
+    # La preparazione dell'esecutore produce lo stesso errore di Filter.
     node = _node(config={}, transform_op="filter")
     issues = _v().validate_node(node, upstream=_upstream(["a"]))
-    assert "TRANSFORM_PARAM_REQUIRED" in _codes(issues)
-    req = [i for i in issues if i.code == "TRANSFORM_PARAM_REQUIRED"][0]
+    assert "preparation.invalid" in _codes(issues)
+    req = [i for i in issues if i.code == "preparation.invalid"][0]
     assert req.severity == "error"
-    assert req.suggestion == {"param": "column"}
+    assert req.message == "Filter: colonna 'None' non trovata. Colonne disponibili: ['a']"
 
 
 def test_required_param_present_not_flagged():
@@ -147,13 +162,22 @@ def test_required_param_present_not_flagged():
     assert "TRANSFORM_PARAM_REQUIRED" not in _codes(issues)
 
 
-def test_geometry_column_param_on_non_geometry_is_error():
-    # geo_buffer.geom_column punta a 'plain' (tipo str, non geometry) → invalido.
+def test_geometry_column_param_without_geometry_is_runtime_error():
+    # Senza geometria a monte l'esecuzione a vuoto rifiuta come il runtime.
     node = _node(config={"geom_column": "plain", "distance": 10}, transform_op="geo_buffer")
     up = InferredSchema(columns=[{"name": "plain", "type": "str"}], status="certain")
     issues = _v().validate_node(node, upstream=up)
-    assert "TRANSFORM_GEOMETRY_TYPE_INVALID" in _codes(issues)
-    geo = [i for i in issues if i.code == "TRANSFORM_GEOMETRY_TYPE_INVALID"][0]
+    assert [(i.code, i.severity) for i in issues] == [("preparation.invalid", "error")]
+    assert issues[0].message == "Nessuna geometria valida nella colonna 'plain'"
+
+
+def test_geometry_column_param_on_non_geometry_is_error():
+    # Con un'altra geometria attiva il runtime non rifiuta: resta la regola di schema.
+    node = _node(config={"geom_column": "plain", "distance": 10}, transform_op="geo_buffer")
+    up = InferredSchema(columns=[{"name": "plain", "type": "str"}, {"name": "geometry", "type": "geometry:point:3857"}], status="certain")
+    issues = _v().validate_node(node, upstream=up)
+    assert _codes(issues) == ["TRANSFORM_GEOMETRY_TYPE_INVALID"]
+    geo = issues[0]
     assert geo.severity == "error"
     assert geo.suggestion == {"param": "geom_column", "column": "plain"}
 
@@ -168,10 +192,11 @@ def test_geometry_column_param_on_geometry_ok():
 def test_geometry_type_invalid_is_warning_when_indeterminate():
     # #A: upstream indeterminate → mai falso blocco (warning, non error).
     node = _node(config={"geom_column": "plain", "distance": 10}, transform_op="geo_buffer")
-    up = InferredSchema(columns=[{"name": "plain", "type": "str"}], status="indeterminate")
+    up = InferredSchema(columns=[{"name": "plain", "type": "str"}, {"name": "geometry", "type": "geometry"}], status="indeterminate")
     issues = _v().validate_node(node, upstream=up)
     geo = [i for i in issues if i.code == "TRANSFORM_GEOMETRY_TYPE_INVALID"]
     assert geo and geo[0].severity == "warning"
+    assert not any(i.severity == "error" for i in issues)
 
 
 def test_register_manipola_validator():

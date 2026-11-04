@@ -1,14 +1,24 @@
 """Piani di schema ottenuti dalle proiezioni effettive di Estrai e Arricchisci."""
 
 from types import SimpleNamespace
+from typing import Any
 
 from app.core.arricchisci import db as api_db
 from app.core.connections import db as connection_db
 from app.core.estrai.query_generator import QueryGenerator
+from app.core.estrai.sql_preparation import sql_connection_options, SqlConnectionOptions
 from app.core.estrai.query_projection import QueryProjectionRenderer
 from app.core.query_execution.query_session import normalize_result_columns
 from app.core.projects.canvas_models import Node, Edge
 from app.shared.contracts.payloads import JsonObject, JsonRows
+
+
+def prepare_canvas_data(canvas: Any, group_id: str) -> Any:
+    """Read-only canvas inputs provided by the tabular execution domain."""
+    # The evaluator uses SchemaInferenceService for IDs, which imports this
+    # projection module: construct it lazily to avoid the initialization cycle.
+    from app.core.manipola.canvas_data_preparation import CanvasDataPreparation
+    return CanvasDataPreparation(canvas, group_id)
 
 
 def sql_projection(nodes: list[Node], edges: list[Edge], result_node: Node,
@@ -37,7 +47,11 @@ def load_api_schema_config(api_id: str) -> JsonObject | None:
 
 def load_sql_provider(connection_id: str) -> str:
     """Il provider serve alla stessa normalizzazione usata dal cursore SQL."""
+    return load_sql_options(connection_id)["db_type"]
+
+
+def load_sql_options(connection_id: str) -> SqlConnectionOptions:
     connection = connection_db.get_connection_config(connection_id)
     if connection is None:
         raise ValueError("Connessione SQL non disponibile per l'inferenza")
-    return connection.db_type
+    return sql_connection_options(connection)

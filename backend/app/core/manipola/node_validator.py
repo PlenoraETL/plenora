@@ -1,63 +1,59 @@
-"""Validatore PUT-time per i nodi transform (manipola).
+"""Validatore PUT-time per i nodi Manipola (transform, multi_join, result).
 
-Due check, entrambi zero-drift (riusano la logica del runtime):
-1. **ref-colonna del config risolvono** contro lo schema upstream — via
-   ``config_column_refs`` (la STESSA risoluzione id→nome che usa
-   ``schema_inference`` a runtime → PUT e runtime non divergono). È il deliverable
-   ("colonna referenziata che non esiste -> 422") per filter/select/
-   group_by/join-keys/aggregations.
-2. **safety della formula** — via ``_validate_formula_ast`` (la stessa gate usata
-   prima di ``eval`` a runtime). I *ref dentro la formula* NON sono validati qui:
-   i Name mescolano colonne e funzioni pandas-eval e flaggarli darebbe falsi
-   positivi.
+Regola unica per i vincoli di esecuzione (A3, P1+P2): Valida di un passo =
+**esecuzione a vuoto** della stessa operazione (``app.core.manipola.dry_run``).
+Ingressi con zero righe e lo schema inferito di ciascuna maniglia, stesso
+percorso dell'esecuzione (risoluzione dei riferimenti per ID, normalizzazione,
+preparazione, funzione). Un'eccezione è un errore con lo stesso messaggio del
+runtime; nessuna regola di configurazione duplicata qui.
 
-Onora lo status: con upstream ``indeterminate`` un ref mancante è ``warning``
-(può esistere a runtime), non ``error``.
+Restano soltanto regole che NON sono vincoli di esecuzione:
+
+- strutturali: operazione assente o fuori registry (l'esecuzione a vuoto non
+  è definita);
+- di schema a monte, su informazioni che zero righe non portano: tipo
+  geometrico del parametro geometria, tabella tipi/aggregazioni generata
+  dall'esecuzione (``aggregation_output_type``), collisioni della rinomina;
+- regole di Valida più severe dell'esecuzione (come HEAD 3c8609fe, senza
+  cambiare l'esecuzione): colonna configurata assente (``column.missing``) e
+  parametro obbligatorio non configurato (``TRANSFORM_PARAM_REQUIRED``) sono
+  ERRORI, perché l'esecuzione li tollera producendo in silenzio un no-op o un
+  risultato diverso dall'intenzione (md5/mask non applicati, rinomina o cast
+  ignorati...). Restano avvisi soltanto dove il runtime dà davvero il
+  risultato voluto (``_runtime_default``): parametro obbligatorio ASSENTE con un
+  default non vuoto nel registry, che il runtime applica (un valore presente ma
+  vuoto resta errore); la selezione delle
+  colonne (Select), che ignora per contratto le colonne assenti; nomi a monte
+  incerti. La guardia ``test_a3_dry_run_parity`` verifica sul runtime con
+  righe che ogni no-op o rifiuto sia un errore e che ogni avviso dia lo stesso
+  risultato del default.
+
+Con nomi a monte ``indeterminate`` un rifiuto è ``warning``; con tipi incerti
+o CRS ignoto lo è solo se dipende da essi (``DryRunOutcome.data_dependent``).
 """
 
 from __future__ import annotations
 
-from app.shared.execution.schema_column_plans import aggregation_output_type
+from typing import Any, List
 
-import json
-from functools import lru_cache
-from pathlib import Path
-from typing import Any, List, Mapping
-
-from app.core.manipola.transforms.formula import _validate_formula_ast
+from app.core.manipola.dry_run import dry_run_multi_join, dry_run_transform
+from app.core.manipola.plugin_executor import get_executor
+from app.core.manipola.preparation import rename_collisions
+from app.core.manipola.types import JsonObject
+from app.shared.execution.column_selection import select_column_plan
 from app.shared.execution.config_column_refs import (
     referenced_column_names,
     resolve_config_column_refs,
 )
-from app.shared.execution.column_selection import select_column_plan
 from app.shared.execution.node_fields import node_field
-from app.shared.execution.registry_types import require_known_param_type, parameter_value
+from app.shared.execution.registry_types import parameter_value, require_known_param_type
+from app.shared.execution.result_grouping import result_group_plan
+from app.shared.execution.schema_column_plans import aggregation_output_type
 from app.shared.execution.schema_types import InferredSchema
 from app.shared.execution.validation_protocol import register_node_validator
 from app.shared.execution.validation_types import Issue
 
 _MANIPOLA_NODE_TYPES = ("transform", "multi_join", "result")
-_SELECTION_FIELDS = {("transform", "select_columns"): "columns", ("result", None): "output_columns"}
-
-_REGISTRY_PATH = Path(__file__).resolve().parent / "transforms_registry.json"
-
-
-@lru_cache(maxsize=1)
-def _transforms_registry() -> Mapping[str, Any]:
-    """Mappa op-id -> definizione del registry (`data['transforms']`).
-
-    STESSA fonte di ``PluginExecutor._carica_registry`` → no-drift. Se il registry
-    non è leggibile ritorna vuoto → i check basati su di esso vengono saltati."""
-    try:
-        data = json.loads(_REGISTRY_PATH.read_text(encoding="utf-8"))
-        return data.get("transforms") or {}
-    except Exception:
-        return {}
-
-
-def _valid_transform_ops() -> frozenset:
-    """Op-id che il runtime sa eseguire (chiavi di ``transforms``)."""
-    return frozenset(_transforms_registry().keys())
 
 
 def _is_empty_param_value(val: Any) -> bool:
@@ -65,7 +61,7 @@ def _is_empty_param_value(val: Any) -> bool:
     return val is None or val == "" or (isinstance(val, (list, dict)) and len(val) == 0)
 
 
-def _param_value_for_required_check(transform_op: str, param_id: str, config: Mapping[str, Any]) -> Any:
+def _param_value_for_required_check(transform_op: str, param_id: str, config: JsonObject) -> Any:
     if transform_op == "filter" and config.get("conditions") is not None and param_id in {"column", "operator", "value"}:
         return True
     if transform_op == "formula" and config.get("items") is not None and param_id in {"new_column", "formula"}:
@@ -73,163 +69,176 @@ def _param_value_for_required_check(transform_op: str, param_id: str, config: Ma
     return parameter_value(config, param_id)
 
 
-class ManipolaNodeValidator:
-    """``validate_node`` per i nodi transform."""
+def _runtime_default(param: JsonObject, config: JsonObject) -> bool:
+    """Parametro obbligatorio che il runtime completa con il default del registry.
 
-    def validate_node(self, node: Any, *, upstream: InferredSchema) -> List[Issue]:
+    Il runtime applica il default solo se la chiave MANCA: un valore presente
+    ma vuoto ("" o null, come lo manda l'interfaccia svuotando un campo) arriva
+    tale e quale all'operazione, quindi resta un errore di Valida.
+    """
+    return param.get("id") not in config and not _is_empty_param_value(param.get("default"))
+
+
+def _uncertain(schemas: list[InferredSchema]) -> bool:
+    """Nomi a monte incerti: i tipi incerti non degradano gli errori sui nomi."""
+    return any(item.names_status == "indeterminate" for item in schemas)
+
+
+def _node_config(node: Any) -> JsonObject:
+    data = getattr(node, "data", None) or {}
+    config = getattr(node, "config", None) or (data.get("config") if isinstance(data, dict) else None) or {}
+    return config if isinstance(config, dict) else {}
+
+
+class ManipolaNodeValidator:
+    """``validate_node`` per i nodi Manipola."""
+
+    def validate_node(self, node: Any, *, upstream: InferredSchema, inputs: list[InferredSchema] | None = None) -> List[Issue]:
+        node_type = getattr(node, "type", "transform")
+        schemas = list(inputs or [upstream])
+        if node_type == "result":
+            return self._validate_result(node, upstream)
+        if node_type == "multi_join":
+            return self._dry_run_issues(node, dry_run_multi_join(node, schemas), schemas + [upstream])
+        return self._validate_transform(node, upstream, schemas)
+
+    # Esecuzione a vuoto ------------------------------------------------------
+
+    def _dry_run_issues(self, node: Any, outcome: Any, schemas: list[InferredSchema]) -> List[Issue]:
+        if outcome.verdict != "rejected":
+            return []
+        warning = outcome.data_dependent or _uncertain(schemas)
+        return [Issue(node_id=getattr(node, "id", ""), severity="warning" if warning else "error",
+                      code="preparation.invalid", message=outcome.message, suggestion=None)]
+
+    def _validate_transform(self, node: Any, upstream: InferredSchema, schemas: list[InferredSchema]) -> List[Issue]:
         node_id = getattr(node, "id", "")
         data = getattr(node, "data", None) or {}
-        config = getattr(node, "config", None) or data.get("config") or {}
-        if not isinstance(config, dict):
-            config = {}
-
-        issues: List[Issue] = []
-
-        # 0. Operazione selezionata? (porting fedele TRANSFORM_OP_MISSING)
-        transform_op = getattr(node, "transform_op", None) or data.get("transform_op")
-        node_type = getattr(node, "type", "transform")
-        selection_field = _SELECTION_FIELDS.get((node_type, transform_op if node_type != "result" else None))
-        if selection_field:
-            columns = (node_field(node, selection_field) if node_type == "result" else config.get(selection_field))
-            if columns is None and node_type == "result":
-                return issues
-            upstream_cols = [c for c in upstream.columns if isinstance(c, dict)]
-            names = {c["name"] for c in upstream_cols if c.get("name")}
-            id_to_name = {
-                str(c.get("id") or c.get("column_id")): c["name"]
-                for c in upstream_cols if (c.get("id") or c.get("column_id")) and c.get("name")
-            }
-            resolved = resolve_config_column_refs({"columns": columns}, id_to_name)
-            try:
-                select_column_plan(list(names), resolved["columns"], skip_missing=True)
-            except ValueError as exc:
-                issues.append(Issue(
-                    node_id=node_id, severity="error", code="columns.invalid",
-                    message=str(exc), suggestion=None,
-                ))
-            else:
-                for missing in sorted(referenced_column_names(resolved) - names):
-                    issues.append(Issue(
-                        node_id=node_id, severity="warning", code="column.missing",
-                        message=f"Colonna '{missing}' assente a monte, ignorata",
-                        suggestion={"column": missing},
-                    ))
-            if node_type == "result":
-                return issues
+        transform_op = getattr(node, "transform_op", None) or (data.get("transform_op") if isinstance(data, dict) else None)
+        registry = get_executor().registry
         if not transform_op:
-            issues.append(Issue(
-                node_id=node_id, severity="error", code="TRANSFORM_OP_MISSING",
-                message="Nodo trasformazione senza operazione selezionata.",
-                suggestion=None,
-            ))
-        else:
-            # #B: op orfana — presente nel Literal ma assente dal registry eseguibile
-            # (es. legacy merge/query_db) → passerebbe il PUT ma fallirebbe a runtime.
-            valid_ops = _valid_transform_ops()
-            if valid_ops and transform_op not in valid_ops:
-                issues.append(Issue(
-                    node_id=node_id, severity="error", code="TRANSFORM_OP_UNKNOWN",
-                    message=f"Operazione '{transform_op}' non riconosciuta dal motore di trasformazione.",
-                    suggestion={"op": transform_op},
-                ))
+            return [Issue(node_id=node_id, severity="error", code="TRANSFORM_OP_MISSING",
+                          message="Nodo trasformazione senza operazione selezionata.", suggestion=None)]
+        if transform_op not in registry:
+            return [Issue(node_id=node_id, severity="error", code="TRANSFORM_OP_UNKNOWN",
+                          message=f"Operazione '{transform_op}' non riconosciuta dal motore di trasformazione.",
+                          suggestion={"op": transform_op})]
 
-        upstream_cols = [c for c in upstream.columns if isinstance(c, dict)]
-        names = {c["name"] for c in upstream_cols if c.get("name")}
+        issues = self._dry_run_issues(node, dry_run_transform(node, schemas, transform_op), schemas + [upstream])
+        if issues:
+            return issues
 
-        # 1. ref-colonna del config → risolvi id→nome (come il runtime) e verifica.
-        id_to_name = {
-            str(c["id"]): c["name"]
-            for c in upstream_cols if c.get("id") and c.get("name")
-        }
+        config = _node_config(node)
+        # Le regole di schema leggono ciò che l'operazione riceve: il primo
+        # ingresso per le operazioni 'single', tutti per le 'multi'.
+        if registry[transform_op].get("inputs") != "multi" and schemas:
+            upstream = schemas[0]
+        upstream_cols = [c for c in upstream.columns if isinstance(c, dict) and c.get("name")]
+        names = {c["name"] for c in upstream_cols}
+        id_to_name = {str(c.get("id") or c.get("column_id")): c["name"]
+                      for c in upstream_cols if c.get("id") or c.get("column_id")}
         ref_config = dict(config)
         if transform_op == "filter" and config.get("conditions") is not None:
             for key in ("column", "column_column_id", "operator", "value"):
                 ref_config.pop(key, None)
         resolved = resolve_config_column_refs(ref_config, id_to_name)
-        # #A: upstream indeterminate → ref mancante = warning, non error.
-        severity = "warning" if upstream.names_status == "indeterminate" else "error"
-        # Selection references were already checked above with skip-missing semantics.
-        references = set() if transform_op == "select_columns" else referenced_column_names(resolved)
-        nested = resolved.get("conditions") if transform_op == "filter" else []
-        if isinstance(nested, list):
-            field = "name" if transform_op == "select_columns" else "column"
-            references.update(item[field] for item in nested if isinstance(item, dict) and isinstance(item.get(field), str))
-        for key in ("left_columns", "right_columns"):
-            selected = resolved.get(key)
-            if isinstance(selected, list):
-                references.update(name for name in selected if isinstance(name, str))
-        for missing in sorted(references - names):
-            issues.append(Issue(
-                node_id=node_id, severity=severity, code="column.missing",
-                message=f"Colonna '{missing}' referenziata dal transform ma assente a monte",
-                suggestion={"column": missing},
-            ))
 
+        # Schema a monte: collisioni della rinomina (il runtime le accetta, il
+        # salvataggio le rinominerebbe; P5 le rende un errore di Valida).
+        if transform_op == "rename":
+            params = get_executor().prepare_params("rename", resolved)
+            duplicates = rename_collisions([c["name"] for c in upstream_cols], params)
+            if duplicates:
+                issues.append(Issue(node_id=node_id, severity="warning" if _uncertain([upstream]) else "error",
+                                    code="rename.duplicate", suggestion=None,
+                                    message="Rinomina produce colonne duplicate: " + "; ".join(
+                                        f"{name}: {', '.join(origins)}" for name, origins in duplicates.items())))
+
+        # Schema a monte: tabella tipi/aggregazioni generata dall'esecuzione
+        # con righe (zero righe non portano l'errore di tipo).
         if transform_op == "aggregate":
-            by_name = {c["name"]: c for c in upstream_cols if c.get("name")}
+            by_name = {c["name"]: c for c in upstream_cols}
             for aggregation in resolved.get("aggregations") or []:
-                column = by_name.get(aggregation.get("column"))
+                column = by_name.get(aggregation.get("column")) if isinstance(aggregation, dict) else None
                 if column is None:
                     continue
                 try:
                     aggregation_output_type(aggregation.get("function", "count"), column.get("type", "str"))
                 except TypeError as exc:
-                    issues.append(Issue(
-                        node_id=node_id, severity="warning" if column.get("optional") else "error",
-                        code="aggregation.unsupported", message=str(exc), suggestion=None,
-                    ))
+                    issues.append(Issue(node_id=node_id, severity="warning" if column.get("optional") else "error",
+                                        code="aggregation.unsupported", message=str(exc), suggestion=None))
 
-        # 2. safety della formula (riusa la gate AST del runtime).
-        formulas = [config.get("formula")]
-        if transform_op == "formula" and config.get("items") is not None:
-            formulas = [item.get("formula") for item in config["items"] if isinstance(item, dict)]
-        for formula in formulas:
-            if isinstance(formula, str) and formula.strip():
-                try:
-                    _validate_formula_ast(formula)
-                except ValueError as exc:
-                    issues.append(Issue(
-                        node_id=node_id, severity="error", code="formula.invalid",
-                        message=f"Formula non valida: {exc}", suggestion=None,
-                    ))
+        # Riferimenti assenti a monte: errore di Valida (come HEAD), perché il
+        # runtime li ignora in silenzio; avviso con nomi incerti e per la
+        # selezione, che per contratto salta le colonne assenti.
+        selection = {"columns": resolved.get("columns")} if transform_op == "select_columns" else resolved
+        references = referenced_column_names(selection)
+        nested = resolved.get("conditions") if transform_op == "filter" else []
+        if isinstance(nested, list):
+            references.update(item["column"] for item in nested if isinstance(item, dict) and isinstance(item.get("column"), str))
+        for key in ("left_columns", "right_columns"):
+            selected = resolved.get(key)
+            if isinstance(selected, list):
+                references.update(name for name in selected if isinstance(name, str))
+        is_selection = transform_op == "select_columns"
+        missing_severity = "warning" if is_selection or _uncertain([upstream]) else "error"
+        for missing in sorted(references - names):
+            message = (f"Colonna '{missing}' assente a monte, ignorata" if is_selection
+                       else f"Colonna '{missing}' referenziata dal transform ma assente a monte")
+            issues.append(Issue(node_id=node_id, severity=missing_severity, code="column.missing",
+                                message=message, suggestion={"column": missing}))
 
-        # 3. completezza/coerenza dei parametri rispetto al registry (porting
-        #    fedele di TRANSFORM_PARAM_REQUIRED [T2] e TRANSFORM_GEOMETRY_TYPE_INVALID
-        #    [T4] dal validatore FE). Le definizioni param vengono dalla STESSA
-        #    fonte del runtime (transforms_registry.json) → no-drift.
-        op_def = _transforms_registry().get(transform_op) if transform_op else None
-        if op_def:
-            col_type = {c["name"]: (c.get("type") or "") for c in upstream_cols if c.get("name")}
-            for param in (op_def.get("parameters") or []):
-                require_known_param_type(param.get("type"))
-                pid = param.get("id")
-                if not pid:
-                    continue
-                val = _param_value_for_required_check(transform_op, pid, config)
-                # T2: parametro obbligatorio non configurato → errore deterministico
-                # (completezza di config, non dipende dai dati a monte).
-                if param.get("required") and _is_empty_param_value(val):
-                    label = param.get("label") or pid
+        col_type = {c["name"]: (c.get("type") or "") for c in upstream_cols}
+        for param in registry[transform_op].get("parameters") or []:
+            require_known_param_type(param.get("type"))
+            pid = param.get("id")
+            if not pid:
+                continue
+            val = _param_value_for_required_check(transform_op, pid, config)
+            # Errore di Valida (come HEAD): senza il parametro il runtime fa un
+            # no-op o altro dall'intenzione. Avviso solo se applica il default.
+            if param.get("required") and _is_empty_param_value(val):
+                issues.append(Issue(node_id=node_id, severity="warning" if _runtime_default(param, config) else "error",
+                                    code="TRANSFORM_PARAM_REQUIRED",
+                                    message=f"Parametro obbligatorio '{param.get('label') or pid}' non configurato.",
+                                    suggestion={"param": pid}))
+                continue
+            # Schema a monte: parametro geometria su colonna nota non geometrica.
+            if param.get("type") == "geometry_column" and not _is_empty_param_value(val):
+                resolved_name = id_to_name.get(str(val), val)
+                if resolved_name in col_type and not str(col_type[resolved_name]).startswith("geometry"):
                     issues.append(Issue(
-                        node_id=node_id, severity="error", code="TRANSFORM_PARAM_REQUIRED",
-                        message=f"Parametro obbligatorio '{label}' non configurato.",
-                        suggestion={"param": pid},
+                        node_id=node_id, severity="warning" if upstream.types_status == "indeterminate" else "error",
+                        code="TRANSFORM_GEOMETRY_TYPE_INVALID",
+                        message=f"La colonna '{resolved_name}' non è di tipo geometry.",
+                        suggestion={"param": pid, "column": resolved_name},
                     ))
-                    continue
-                # T4: param geometry_column che punta a una colonna nota NON di tipo
-                # geometry → errore. #A: con upstream indeterminate i tipi possono
-                # essere parziali → warning (mai falso blocco).
-                if param.get("type") == "geometry_column" and not _is_empty_param_value(val):
-                    resolved_name = id_to_name.get(str(val), val)
-                    if resolved_name in col_type and not str(col_type[resolved_name]).startswith("geometry"):
-                        geom_sev = "warning" if upstream.types_status == "indeterminate" else "error"
-                        issues.append(Issue(
-                            node_id=node_id, severity=geom_sev, code="TRANSFORM_GEOMETRY_TYPE_INVALID",
-                            message=f"La colonna '{resolved_name}' non è di tipo geometry.",
-                            suggestion={"param": pid, "column": resolved_name},
-                        ))
-
         return issues
+
+    # Output --------------------------------------------------------------------
+
+    def _validate_result(self, node: Any, upstream: InferredSchema) -> List[Issue]:
+        node_id = getattr(node, "id", "")
+        try:
+            result_group_plan(node, [c["name"] for c in upstream.columns])
+        except (ValueError, TypeError, KeyError) as exc:
+            return [Issue(node_id=node_id, severity="warning" if upstream.names_status == "indeterminate" else "error",
+                          code="preparation.invalid", message=str(exc), suggestion=None)]
+        columns = node_field(node, "output_columns")
+        if columns is None:
+            return []
+        upstream_cols = [c for c in upstream.columns if isinstance(c, dict) and c.get("name")]
+        names = {c["name"] for c in upstream_cols}
+        id_to_name = {str(c.get("id") or c.get("column_id")): c["name"]
+                      for c in upstream_cols if c.get("id") or c.get("column_id")}
+        resolved = resolve_config_column_refs({"columns": columns}, id_to_name)
+        try:
+            select_column_plan(list(names), resolved["columns"], skip_missing=True)
+        except ValueError as exc:
+            return [Issue(node_id=node_id, severity="error", code="columns.invalid", message=str(exc), suggestion=None)]
+        return [Issue(node_id=node_id, severity="warning", code="column.missing",
+                      message=f"Colonna '{missing}' assente a monte, ignorata", suggestion={"column": missing})
+                for missing in sorted(referenced_column_names(resolved) - names)]
 
 
 def register_manipola_validator() -> None:

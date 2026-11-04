@@ -1,7 +1,5 @@
 """Regressioni del giro indipendente A1: identità, aspetti e varianti runtime."""
 
-from types import SimpleNamespace
-
 import pandas as pd
 import pytest
 
@@ -195,11 +193,15 @@ def test_runtime_node_types_have_executable_cases():
     import ast
     from pathlib import Path
     from tests2.contracts import test_inference_runtime_parity as cases
+    from tests2.contracts.test_a3_preparation import test_static_source_distinct_preparation
+    from tests2.contracts.test_a3_completion import test_api_geometry_overrides_absent_and_stale_saved_columns
     coverage = {
         "file_source": cases.test_source_nodes,
         "datasource_node": cases.test_source_nodes,
         "staticValues": cases.test_static_node_duplicates_and_casts,
         "project_source": cases.test_project_source_projection,
+        "project_input": test_static_source_distinct_preparation,
+        "api_enrich": test_api_geometry_overrides_absent_and_stale_saved_columns,
         "transform": test_variants_names_and_unique_ids,
         "multi_join": cases.test_multi_join_node,
         "result": cases.test_result_group_alias_collision,

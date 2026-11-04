@@ -969,39 +969,7 @@ class ManipolaExecutor:
             logger.warning("Multi-join richiede almeno 2 input")
             return inputs[0] if inputs else empty_dataframe()
 
-        data_config = (node.data or {}).get('config', {}) if isinstance(node.data, dict) else {}
-        join_keys = _nf(node, 'join_keys') or data_config.get('join_keys', [])
-        join_key_ids = _nf(node, 'join_key_ids') or data_config.get('join_key_ids', [])
-        if join_key_ids and isinstance(node.data, dict):
-            id_to_name = {
-                str(col.get("id") or col.get("column_id")): str(col.get("name"))
-                for col in (node.data.get("inputColumns") or [])
-                if isinstance(col, dict) and (col.get("id") or col.get("column_id")) and col.get("name")
-            }
-            resolved_keys = [
-                id_to_name.get(str(column_id), join_keys[idx] if idx < len(join_keys) else None)
-                for idx, column_id in enumerate(join_key_ids)
-            ]
-            join_keys = [key for key in resolved_keys if key]
-        join_keys = _normalize_key_list(join_keys)
-        join_type = _nf(node, 'multi_join_type') or data_config.get('join_type', 'inner')
-
-        left_keys = _normalize_key_list(_nf(node, 'left_keys') or data_config.get('left_keys'))
-        right_keys = _normalize_key_list(_nf(node, 'right_keys') or data_config.get('right_keys'))
-        pair_left_keys, pair_right_keys = _normalize_join_pairs(
-            _nf(node, 'join_pairs') or data_config.get('join_pairs')
-        )
-        if (not left_keys or not right_keys) and pair_left_keys and pair_right_keys:
-            left_keys = pair_left_keys
-            right_keys = pair_right_keys
-
-        use_pair_keys = len(inputs) == 2 and bool(left_keys or right_keys)
-        if use_pair_keys:
-            if not left_keys or not right_keys or len(left_keys) != len(right_keys):
-                raise ValueError(
-                    "Multi-join con coppie di chiavi non valido: il numero di "
-                    "chiavi sinistre deve coincidere con quello delle chiavi destre."
-                )
+        join_keys, join_type, left_keys, right_keys, use_pair_keys = prepare_multi_join(node, inputs)
 
         if not join_keys and not use_pair_keys:
             logger.warning("Multi-join senza chiavi specificate, cerco colonne comuni")
@@ -1421,3 +1389,42 @@ class ManipolaExecutor:
     def _rileva_geometria_da_contenuto(self, df: FrameLike, col_name: str) -> str:
         """Rileva geometria WKT o oggetti Shapely dal contenuto di una colonna."""
         return detect_geometry_from_content(df, col_name, logger=logger)
+
+
+def prepare_multi_join(node: Node, inputs: list) -> tuple:
+    """Resolve keys and pair constraints using the execution configuration."""
+    data_config = (node.data or {}).get('config', {}) if isinstance(node.data, dict) else {}
+    join_keys = _nf(node, 'join_keys') or data_config.get('join_keys', [])
+    join_key_ids = _nf(node, 'join_key_ids') or data_config.get('join_key_ids', [])
+    if join_key_ids and isinstance(node.data, dict):
+        id_to_name = {
+            str(col.get("id") or col.get("column_id")): str(col.get("name"))
+            for col in (node.data.get("inputColumns") or [])
+            if isinstance(col, dict) and (col.get("id") or col.get("column_id")) and col.get("name")
+        }
+        resolved_keys = [
+            id_to_name.get(str(column_id), join_keys[idx] if idx < len(join_keys) else None)
+            for idx, column_id in enumerate(join_key_ids)
+        ]
+        join_keys = [key for key in resolved_keys if key]
+    join_keys = _normalize_key_list(join_keys)
+    join_type = _nf(node, 'multi_join_type') or data_config.get('join_type', 'inner')
+
+    left_keys = _normalize_key_list(_nf(node, 'left_keys') or data_config.get('left_keys'))
+    right_keys = _normalize_key_list(_nf(node, 'right_keys') or data_config.get('right_keys'))
+    pair_left_keys, pair_right_keys = _normalize_join_pairs(
+        _nf(node, 'join_pairs') or data_config.get('join_pairs')
+    )
+    if (not left_keys or not right_keys) and pair_left_keys and pair_right_keys:
+        left_keys = pair_left_keys
+        right_keys = pair_right_keys
+
+    use_pair_keys = len(inputs) == 2 and bool(left_keys or right_keys)
+    if use_pair_keys:
+        if not left_keys or not right_keys or len(left_keys) != len(right_keys):
+            raise ValueError(
+                "Multi-join con coppie di chiavi non valido: il numero di "
+                "chiavi sinistre deve coincidere con quello delle chiavi destre."
+            )
+
+    return join_keys, join_type, left_keys, right_keys, use_pair_keys

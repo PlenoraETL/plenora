@@ -7,6 +7,7 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 import json
 
 import uuid
+from app.core.projects.canvas_revision import canvas_version
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Optional
@@ -226,10 +227,10 @@ class ProjectService:
         return self.canvas.list_canvas_versions(project_id)
 
     def restore_canvas_version(
-        self, project_id: str, version_id: str
+        self, project_id: str, version_id: str, *, base_canvas_version: str | None = None, revision_out: dict | None = None
     ) -> Optional[CanvasState]:
         """Ripristina una versione del canvas."""
-        return self.canvas.restore_canvas_version(project_id, version_id)
+        return self.canvas.restore_canvas_version(project_id, version_id, **({"base_canvas_version": base_canvas_version} if base_canvas_version is not None else {}), **({"revision_out": revision_out} if revision_out is not None else {}))
 
     def rollback_created_project(
         self,
@@ -263,6 +264,11 @@ class ProjectService:
         """Carica il canvas del progetto."""
         return self.canvas.get_project_canvas(project_id)
 
+    def get_canvas_version(self, project_id: str) -> Optional[str]:
+        """Token della versione del canvas persistito (None se il progetto non esiste)."""
+        raw = self.canvas.get_project_raw_canvas(project_id)
+        return canvas_version(raw.canvas) if raw is not None else None
+
     def get_project_raw_canvas(
         self,
         project_id: str,
@@ -293,7 +299,7 @@ class ProjectService:
             "id": project_id,
         }
 
-    def update_canvas(self, project_id: str, canvas: CanvasState) -> bool:
+    def update_canvas(self, project_id: str, canvas: CanvasState, *, base_canvas_version: str | None = None, revision_out: dict | None = None) -> bool:
         """Aggiorna il canvas mantenendo la semantica della facade:
         lineage guard, reset canvas_validated, cascade ai progetti a valle.
 
@@ -302,7 +308,7 @@ class ProjectService:
                 le dipendenze transitive degli altri progetti formano un
                 ciclo. Il router traduce in HTTP 400.
         """
-        return self.canvas.update_canvas(project_id, canvas)
+        return self.canvas.update_canvas(project_id, canvas, **({"base_canvas_version": base_canvas_version} if base_canvas_version is not None else {}), **({"revision_out": revision_out} if revision_out is not None else {}))
 
     def set_canvas_validated(self, project_id: str, value: bool) -> bool:
         """Persisti lo stato di validazione canvas."""

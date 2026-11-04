@@ -91,17 +91,20 @@ def test_empty_lookup_nonkeep_treats_every_row_as_unmatched(mapping, mode):
 
 
 @pytest.mark.parametrize("columns,invalid", [([], False), ([{"name": "a", "keep": "false"}], True)])
-def test_selection_accumulates_registry_and_operation_checks(monkeypatch, columns, invalid):
-    monkeypatch.setattr(node_validator, "_valid_transform_ops", lambda: {"filter"})
-    monkeypatch.setattr(node_validator, "_transforms_registry", lambda: {
-        "select_columns": {"parameters": [{"id": "required_param", "type": "string", "required": True}]}
-    })
+def test_selection_rejection_comes_from_execution(columns, invalid):
+    # A3: il piano di selezione invalido lo rifiuta l'esecuzione a vuoto, con
+    # lo stesso messaggio dell'esecuzione reale con righe.
+    import pandas as pd
+    from app.core.manipola.plugin_executor import get_executor
     node = SimpleNamespace(id="t", type="transform", transform_op="select_columns", config={"columns": columns})
-    issues = node_validator.ManipolaNodeValidator().validate_node(node, upstream=InferredSchema([{"name": "a"}]))
-    codes = [issue.code for issue in issues]
-    assert "TRANSFORM_OP_UNKNOWN" in codes
-    assert "TRANSFORM_PARAM_REQUIRED" in codes
-    assert ("columns.invalid" in codes) is invalid
+    issues = node_validator.ManipolaNodeValidator().validate_node(node, upstream=InferredSchema([{"name": "a", "type": "int"}]))
+    errors = [issue for issue in issues if issue.severity == "error"]
+    if not invalid:
+        assert errors == []
+        return
+    with pytest.raises(ValueError) as runtime:
+        get_executor().execute_with_params("select_columns", [pd.DataFrame({"a": [1]})], {"columns": columns})
+    assert [(issue.code, issue.message) for issue in errors] == [("preparation.invalid", str(runtime.value))]
 
 
 @pytest.mark.parametrize("data", [{}, {"output_columns": None}, {"output_columns": []}])

@@ -157,6 +157,7 @@ def compile_manifest(
     project_type: ProjectType,
     canvas: Mapping[str, Any],
     default_connection_id: str | None = None,
+    for_project: bool = False,
 ) -> ExecutableManifest:
     """Compila e valida il manifest v2 da un canvas persistito."""
 
@@ -241,7 +242,7 @@ def compile_manifest(
 
     # Adapter di pubblicazione per gli eseguibili già supportati: un canvas
     # Arricchisci senza project_input conserva il contratto single-file.
-    if not project_inputs and project_type == "arricchisci":
+    if not project_inputs and project_type == "arricchisci" and not for_project:
         source_nodes = [
             node
             for node in nodes
@@ -273,7 +274,7 @@ def compile_manifest(
             )
         )
 
-    if project_type == "estrai" and not default_connection_id:
+    if project_type == "estrai" and not default_connection_id and not for_project:
         raise ValueError("Il progetto Estrai non ha una connessione predefinita")
 
     return ExecutableManifest(

@@ -409,7 +409,11 @@ def test_pivot_mapping_outputs_index_and_declared_columns():
         ("omi", "real"),
         ("perizia", "real"),
         ("acquisto", "real"),
+        ("valuation_type", "str"),
+        ("amount_valuation", "real"),
     ]
+    assert not out[0].optional
+    assert all(column.optional for column in out[1:])
 
 
 def test_reorder_columns_explicit_order_ignores_unknown_names():

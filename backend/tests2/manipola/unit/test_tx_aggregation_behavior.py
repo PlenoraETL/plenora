@@ -294,9 +294,11 @@ def test_distinct_invalid_subset_falls_back_to_all_columns():
 # ---------------------------------------------------------------------------
 
 
-def test_dedup_advanced_empty_returns_input():
+def test_dedup_advanced_empty_keeps_schema():
+    # A3: niente scorciatoia sul vuoto, l'esecuzione a vuoto esercita i parametri.
     df = pd.DataFrame({"a": []})
-    assert op_dedup_advanced(df) is df
+    result = op_dedup_advanced(df)
+    assert result.empty and list(result.columns) == ["a"]
 
 
 def test_dedup_advanced_order_column_picks_kept_row():

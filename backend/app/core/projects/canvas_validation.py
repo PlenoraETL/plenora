@@ -11,6 +11,13 @@ ref cross-tenant (``find_inaccessible_canvas_refs``) resta al boundary del route
 """
 
 from __future__ import annotations
+from app.core.arricchisci.canvas_orchestrator import _merge_node_data
+from app.core.arricchisci.enrichment_service import build_enrichment_executor
+from app.core.arricchisci.request_preparation import prepare_api_request
+from app.core.eseguibili.manifest import compile_manifest
+from app.core.estrai.query_generator import QueryGenerator
+from app.core.manipola.node_validator import ManipolaNodeValidator
+from app.core.manipola.preparation import empty_dataframe_from_column_metadata
 
 from sqlalchemy.exc import SQLAlchemyError
 from psycopg import Error as PsycopgError
@@ -21,6 +28,8 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from app.core.projects.canvas_access import find_orphan_processing_nodes
 from app.core.projects.schema_inference import SchemaInferenceService
+from app.core.projects.canvas_schema_preparation import infer_canvas_columns
+from app.core.projects.canvas_models import CanvasState
 from app.core.projects import schema_execution_sources
 from app.shared.execution.api_mapping import mapping_destination
 from app.core.arricchisci.enrichment_service import resolve_enrichment_output_mapping
@@ -64,6 +73,7 @@ class _StaticCanvasService:
 def validate_canvas(
     canvas: Any, *, project_id: str = "", project_type: str | None = None,
     available_api_connection_ids: set | None = None,
+    execution_context: Mapping | None = None,
 ) -> ValidationReport:
     """Valida un canvas. Ritorna un ``ValidationReport``.
 
@@ -86,6 +96,29 @@ def validate_canvas(
     nodes = list(getattr(canvas, "nodes", None) or [])
     edges = list(getattr(canvas, "edges", None) or [])
     node_ids = {n.id for n in nodes}
+    if project_type in {"estrai", "manipola", "arricchisci"} and nodes:
+        try:
+            compile_manifest(for_project=True, source_project_id=project_id, project_type=project_type,
+                             canvas=canvas.model_dump() if hasattr(canvas, "model_dump") else {"nodes": [vars(n) for n in nodes], "edges": [vars(e) for e in edges]})
+        except ValueError as exc:
+            issues.append(Issue(node_id="", severity="error", code="runtime_inputs.invalid", message=str(exc)))
+    if project_type == "estrai" and any(getattr(n, "table_name", None) for n in nodes):
+        try:
+            connection_id = (execution_context or {}).get("default_connection_id")
+            if not connection_id:
+                raise ValueError("Connessione SQL non risolta")
+            sql_options = schema_execution_sources.load_sql_options(connection_id)
+        except (SQLAlchemyError, PsycopgError, OSError, ValueError, RuntimeError, TypeError):
+            sql_options = None
+            issues.append(Issue(node_id="", severity="warning", code="sql.not_guaranteed",
+                                message="Compilazione SQL non garantibile: connessione/provider non leggibile"))
+        for result in (n for n in nodes if n.type == "result"):
+            if sql_options is None:
+                continue
+            try:
+                QueryGenerator().generate_sql(nodes, edges, result.id, **sql_options)
+            except (ValueError, TypeError, KeyError) as exc:
+                issues.append(Issue(node_id=result.id, severity="error", code="sql.invalid", message=str(exc)))
 
     # 1. Edge danglanti: source/target che non corrispondono a un nodo.
     for edge in edges:
@@ -126,7 +159,7 @@ def validate_canvas(
     issues.extend(_type_specific_issues(nodes, edges, project_type, available_api_connection_ids))
     issues.extend(_source_node_issues(nodes, edges))
     issues.extend(_column_name_conflict_issues(nodes))
-    issues.extend(_result_geo_issue(nodes, edges))
+    issues.extend(_result_geo_issue(nodes, edges, canvas=canvas, project_id=project_id, project_type=project_type))
 
     # 5. Join sugli edge (config + risoluzione colonne di join).
     issues.extend(_edge_join_issues(canvas, nodes, edges, node_ids, project_id, project_type))
@@ -224,10 +257,14 @@ def _column_name_conflict_issues(nodes: list) -> List[Issue]:
     return out
 
 
-def _result_geo_issue(nodes: list, edges: list) -> List[Issue]:
+def _result_geo_issue(nodes: list, edges: list, *, canvas: Any = None, project_id: str = "", project_type: str | None = None) -> List[Issue]:
     """RESULT_GEO_NO_GEOMETRY: format geo ma nessuna colonna geometry nel percorso."""
     nodes_by_id = {n.id: n for n in nodes}
     results = [n for n in nodes if getattr(n, "type", None) == "result"]
+    inferred = infer_canvas_columns(canvas or CanvasState(nodes=nodes, edges=edges),
+                                    project_id=project_id, project_type=project_type) if any(
+        str((getattr(r, "data", None) or {}).get("format") or "").lower() in _GEO_OUTPUT_FORMATS for r in results
+    ) else {}
     out: List[Issue] = []
     for r in results:
         fmt = str(((getattr(r, "data", None) or {}).get("format") or "")).lower()
@@ -237,7 +274,9 @@ def _result_geo_issue(nodes: list, edges: list) -> List[Issue]:
         has_geom = any(
             str(t).lower().startswith("geometry")
             for nid in seen
-            for _name, t in _visible_columns(nodes_by_id.get(nid))
+            for _name, t in ([(c["name"], c.get("type", "")) for c in inferred.get(nid, [])]
+                             if getattr(nodes_by_id.get(nid), "type", None) not in _SOURCE_NODE_TYPES
+                             else _visible_columns(nodes_by_id.get(nid)))
             if nodes_by_id.get(nid) is not None
         )
         if not has_geom:
@@ -529,7 +568,13 @@ def _validate_nodes(
         upstream = _upstream_for_node(
             inputs_by_target.get(node.id, []), service, project_id,
         )
-        out.extend(validator_for(node.type).validate_node(node, upstream=upstream))
+        validator = validator_for(node.type)
+        if isinstance(validator, ManipolaNodeValidator):
+            incoming = sorted([e for e in edges if e.target == node.id], key=lambda e: incoming_edge_sort_key_for_nodes(e, {n.id: n for n in nodes}))
+            typed_inputs = [service.infer_node_schema_typed(project_id, e.source) for e in incoming]
+            out.extend(validator.validate_node(node, upstream=upstream, inputs=typed_inputs))
+        else:
+            out.extend(validator.validate_node(node, upstream=upstream))
         if node.type == "api_enrich":
             data = _node_config(node, ("api_id", "label", "api_name", "output_mapping"))
             try:
@@ -540,6 +585,19 @@ def _validate_nodes(
                     node.id, type(exc).__name__, exc_info=True,
                 )
                 continue
+            if api:
+                try:
+                    current_data = _merge_node_data(node.model_dump() if hasattr(node, "model_dump") else vars(node))
+                    # Stessa funzione dei controlli per riga del runtime (che
+                    # produce RowError): qui la configurazione è un errore.
+                    prepare_api_request(api)
+                    executor = build_enrichment_executor(current_data, api)
+                    validation = executor.validate_input(empty_dataframe_from_column_metadata(upstream.columns))
+                    for message in validation.warnings if not validation.valid else []:
+                        out.append(Issue(node_id=node.id, severity="warning" if upstream.names_status == "indeterminate" else "error",
+                                         code="api.preparation.invalid", message=message))
+                except (ValueError, TypeError, KeyError) as exc:
+                    out.append(Issue(node_id=node.id, severity="error", code="api.preparation.invalid", message=str(exc)))
             generator = api.get("api_type") == "generator" or not inputs_by_target.get(node.id)
             mapping = (api.get("output_mapping") or data.get("output_mapping") or []) if generator else resolve_enrichment_output_mapping(data, api)
             for item in mapping:
@@ -587,6 +645,7 @@ CanvasLoader = Callable[[str], Optional[Tuple[Any, Optional[str]]]]
 def validate_project_chain(
     project_id: str, load: CanvasLoader, *, _seen: Optional[set] = None,
     available_api_connection_ids: set | None = None,
+    load_execution_context: Callable | None = None,
 ) -> ValidationReport:
     """Valida un progetto + ricorsivamente i progetti a monte (project_source).
 
@@ -612,6 +671,7 @@ def validate_project_chain(
     issues = list(validate_canvas(
         canvas, project_id=project_id, project_type=project_type,
         available_api_connection_ids=available_api_connection_ids,
+        execution_context=load_execution_context(project_id) if load_execution_context else None,
     ).issues)
 
     for node in (getattr(canvas, "nodes", None) or []):
@@ -623,6 +683,7 @@ def validate_project_chain(
             issues.extend(validate_project_chain(
                 src_pid, load, _seen=seen,
                 available_api_connection_ids=available_api_connection_ids,
+                load_execution_context=load_execution_context,
             ).issues)
 
     return ValidationReport(issues=tuple(issues))

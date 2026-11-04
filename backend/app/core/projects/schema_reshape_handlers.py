@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from app.shared.execution.reshape_column_plan import melt_output_name
 from typing import TYPE_CHECKING, List
 
@@ -26,15 +28,12 @@ class ReshapeSchemaHandlers:
         input_schema = input_schemas[0]
         by_name = {c.name: c for c in input_schema}
 
-        index_cols = [
-            name for name in self._normalize_str_list(config.get("index_col"))
-            if name in by_name
-        ]
+        index_cols = self._normalize_str_list(config.get("index_col"))
         pivot_col = config.get("pivot_col") or ""
         value_col = config.get("value_col") or ""
         # Runtime op_pivot e' no-op se uno dei parametri obbligatori e'
         # assente o punta a una colonna inesistente.
-        if not index_cols or pivot_col not in by_name or value_col not in by_name:
+        if not index_cols or any(name not in by_name for name in index_cols) or pivot_col not in by_name or value_col not in by_name:
             return self._copy_schema(input_schema, node_id)
         value_type = getattr(by_name.get(value_col), "type", None) or "str"
         aggr_func = str(config.get("aggr_func") or "").strip().lower()
@@ -71,8 +70,16 @@ class ReshapeSchemaHandlers:
                 type=output_type,
                 source_node=node_id,
                 is_calculated=True,
+                optional=True,
             ))
             seen.add(name)
+
+        # No matching value returns the original input. Only index columns are
+        # mandatory in both branches; the other input columns remain possible.
+        for col in input_schema:
+            if col.name not in seen:
+                result.append(replace(self._copy_column(col, node_id), optional=True))
+                seen.add(col.name)
 
         return result if result else self._copy_schema(input_schema, node_id)
 

@@ -5,6 +5,7 @@ gate AST anti-RCE.
 """
 
 import ast as _ast
+from typing import Any
 
 from app.core.manipola.types import JsonRows
 from app.core.dataframes.frame_copy import copy_frame_for_update
@@ -190,6 +191,35 @@ def _extract_referenced_names(formula: str) -> set[str]:
 # COLONNA CALCOLATA (FORMULA
 # Aggiunge colonna con espressione Python/Pandas valutata per riga
 
+def prepare_formula(columns: Any, formula: str = "", new_column: str = "calculated", items: JsonRows | None = None) -> None:
+    """Forma degli elementi e gate AST, senza valutare righe né risolvere nomi."""
+    if items is not None:
+        if not isinstance(items, list):
+            raise ValueError("Formula: items deve essere una lista.")
+        names = list(columns)
+        for item in items:
+            if not isinstance(item, dict) or not isinstance(item.get("new_column"), str) or not item["new_column"].strip() or not isinstance(item.get("formula"), str) or not item["formula"].strip():
+                raise ValueError("Formula: ogni elemento richiede new_column e formula non vuoti.")
+            prepare_formula(names, item["formula"], item["new_column"])
+            names.append(item["new_column"])
+        return
+    if not formula or not formula.strip():
+        return
+    formula = formula.strip()
+    try:
+        # Solo forma e gate AST, come HEAD prima di qualunque eval. I nomi NON
+        # si risolvono qui: lo spazio dei nomi è esattamente quello dei
+        # risolutori reali di pandas.eval (colonne, indice e suo nome, inf/Inf,
+        # funzioni matematiche...) e del fallback eval. Un nome irrisolto lo
+        # rifiuta la valutazione stessa (anche quella a vuoto di Valida).
+        _validate_formula_ast(formula)
+    except (ValueError, TypeError, SyntaxError) as exc:
+        raise ValueError(
+            f"Formula '{formula}' non valida o non consentita. "
+            f"Verificare sintassi e operatori ammessi."
+        ) from exc
+
+
 def op_formula(
     df: DataFrame,
     formula: str = "",
@@ -213,12 +243,9 @@ def op_formula(
     Returns:
         DataFrame con nuova colonna aggiunta, o df invariato se la formula è invalida.
     """
+    prepare_formula(df.columns, formula, new_column, items)
     if items is not None:
-        if not isinstance(items, list):
-            raise ValueError("Formula: items deve essere una lista.")
         for item in items:
-            if not isinstance(item, dict) or not isinstance(item.get("new_column"), str) or not item["new_column"].strip() or not isinstance(item.get("formula"), str) or not item["formula"].strip():
-                raise ValueError("Formula: ogni elemento richiede new_column e formula non vuoti.")
             df = op_formula(df, item["formula"], item["new_column"])
         return df
 
@@ -308,11 +335,23 @@ def op_formula(
 
         # SECURITY: validazione AST gia' eseguita all'inizio del try (sopra
         # prima di qualsiasi engine eval. Niente da rifare qui
-        result[new_column] = eval(
-            formula,
-            {"__builtins__": {}, **dataframe_eval_namespace()},
-            local_vars,
-        )
+        attempts = [local_vars]
+        if len(eval_df) == 0:
+            # Zero righe: la conversione numerica delle colonne testo decide
+            # sui valori, che mancano. Vale la prima lettura (numerica, poi
+            # testo) che l'espressione accetta; con righe nulla cambia.
+            attempts.append({col: eval_df[col] for col in cols_to_prepare})
+        for position, variables in enumerate(attempts):
+            try:
+                result[new_column] = eval(
+                    formula,
+                    {"__builtins__": {}, **dataframe_eval_namespace()},
+                    variables,
+                )
+                break
+            except (TypeError, ValueError, ArithmeticError):
+                if position == len(attempts) - 1:
+                    raise
         logger.info(f"Formula (eval namespace) ok: '{new_column}'")
         return result
 

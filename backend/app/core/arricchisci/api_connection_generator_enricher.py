@@ -16,6 +16,7 @@ from urllib.parse import urljoin
 import requests
 
 from app.core.arricchisci.async_poller import AsyncPoller
+from app.core.arricchisci.request_preparation import prepare_generator_request, prepare_generator_pagination
 from app.core.dataframes.tabular import (
     dataframe_first_row_dict,
     dataframe_from_records,
@@ -147,8 +148,7 @@ class ApiConnectionGeneratorEnricherMixin:
                     if page_retry_backoff > 0:
                         time.sleep(page_retry_backoff ** attempt)
 
-        page_size = int(pagination.get('page_size', 100))
-        max_rows = int(pagination.get('max_rows', 10000))
+        page_size, max_rows = prepare_generator_pagination(pagination)
         all_rows: JsonRows = []
         page_num = 0
         MAX_PAGES = max(1, max_rows // max(1, page_size)) + 1
@@ -486,12 +486,7 @@ class ApiConnectionGeneratorEnricherMixin:
         async_config = api_config.get('async', {}) or {}
         success_config = success_config_from_api_config(api_config)
 
-        if not url:
-            raise ValueError("URL API non configurato")
-        if async_config.get("enabled") and pagination.get("type"):
-            raise ValueError(
-                "API generator: async e pagination non sono supportati insieme"
-            )
+        prepare_generator_request(api_config)
 
         headers = self._prepare_headers(auth, custom_headers)
         base_params = self._build_generator_base_params(api_config, input_df)

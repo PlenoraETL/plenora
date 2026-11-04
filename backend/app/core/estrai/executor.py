@@ -5,6 +5,8 @@ Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
 from app.core.projects.schema_inference import SchemaInferenceService
+from app.core.estrai.sql_preparation import sql_connection_options
+from app.core.projects.canvas_schema_preparation import infer_canvas_columns
 import time as _time
 import re
 from dataclasses import dataclass
@@ -411,8 +413,7 @@ class EstraiExecutor:
         try:
             query_info = self.generator.generate_sql(
                 canvas.nodes, canvas.edges, result_node.id,
-                db_type=connection.type,
-                db_schema=connection.db_schema
+                **sql_connection_options(connection)
             )
         except Exception as e:
             # Anche gli errori non-SQL devono entrare nel log aggregato con
@@ -641,8 +642,7 @@ class EstraiExecutor:
         try:
             query_info = self.generator.generate_sql(
                 canvas.nodes, canvas.edges, result_node.id,
-                db_type=connection.type,
-                db_schema=connection.db_schema
+                **sql_connection_options(connection)
             )
 
             base_sql = query_info['sql']
@@ -925,6 +925,7 @@ class EstraiExecutor:
         e nell'esecuzione, evitando di inferirli dal DataFrame.
         """
         canvas_type_map = {}
+        inferred = infer_canvas_columns(canvas, project_type="estrai") if isinstance(canvas, CanvasState) else {}
 
         for node in canvas.nodes:
             if node.type == "feature_source":
@@ -940,6 +941,8 @@ class EstraiExecutor:
             columns = None
             if hasattr(node, 'columns') and node.columns:
                 columns = node.columns
+            if node.type in {"transform", "api_enrich", "multi_join", "result"}:
+                columns = inferred.get(node.id, [])
 
             if columns:
                 for col in columns:

@@ -13,6 +13,8 @@ import shapely
 from shapely.geometry import shape as _shapely_shape
 
 from app.core.dataframes.frame_copy import copy_frame_for_update
+from app.core.dataframes.schema import canvas_type_to_pandas_dtype
+from app.core.resources.column_types import normalize_canvas_type
 from app.core.dataframes.geometry_parsing import (
     GEOMETRY_COLUMN_NAMES,
     WKT_PREFIXES,
@@ -106,6 +108,50 @@ def geoseries_from_geometry_values(
 def empty_geodataframe(columns: list[str]) -> Any:
     """Build an empty GeoDataFrame with explicit columns."""
     return gpd.GeoDataFrame(columns=columns)
+
+
+def schema_crs(canvas_type: Any) -> Optional[str]:
+    """CRS dichiarato da un tipo ``geometry:<sub>:<srid>``, se presente."""
+    srid = extract_srid_from_column_type(canvas_type) if isinstance(canvas_type, str) else None
+    return f"EPSG:{srid}" if srid else None
+
+
+def empty_frame_from_schema(
+    columns: Any,
+    *,
+    relax_types: bool = False,
+    assumed_crs: Optional[str] = None,
+) -> Any:
+    """Frame con zero righe, nomi (anche duplicati), ordine e dtype dello schema.
+
+    Mappatura unica tipo logico -> dtype: ``canvas_type_to_pandas_dtype``; le
+    geometrie diventano ``GeoSeries`` vuote con il CRS dello schema (o
+    ``assumed_crs`` se ignoto) e il frame e' un GeoDataFrame con geometria
+    attiva ``geometry`` se presente, altrimenti la prima. ``relax_types``:
+    colonne non geometriche ``object``.
+    """
+    rows = [col for col in (columns or []) if hasattr(col, "get") and col.get("name") is not None]
+    names = [str(col["name"]) for col in rows]
+    values = []
+    geometry_names = []
+    crs = None
+    for col in rows:
+        kind = col.get("type") or "str"
+        if normalize_canvas_type(kind if isinstance(kind, str) else None) == "geometry":
+            column_crs = schema_crs(kind) or assumed_crs
+            crs = crs or column_crs
+            values.append(gpd.GeoSeries([], crs=column_crs))
+            geometry_names.append(str(col["name"]))
+        else:
+            values.append(pd.Series(dtype="object" if relax_types else canvas_type_to_pandas_dtype(kind)))
+    frame = pd.DataFrame(dict(enumerate(values)))
+    frame.columns = names
+    if not geometry_names:
+        return frame
+    active = "geometry" if "geometry" in geometry_names else geometry_names[0]
+    if names.count(active) != 1:
+        return frame
+    return gpd.GeoDataFrame(frame, geometry=active, crs=crs)
 
 
 def geodataframe_sjoin(

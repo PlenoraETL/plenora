@@ -166,7 +166,8 @@ def test_registry_pivot_requires_runtime_columns_and_explicit_mapping(handlers):
         },
         NODE,
     )
-    assert names(out) == ["azienda", "anno", "valore_a", "valore_b"]
+    assert names(out) == ["azienda", "anno", "valore_a", "valore_b", "tipo", "valore"]
+    assert [c.name for c in out if not c.optional] == ["azienda", "anno"]
     assert by_name(out, "valore_a").type == "real"
 
 

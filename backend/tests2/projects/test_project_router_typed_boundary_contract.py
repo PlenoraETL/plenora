@@ -81,9 +81,10 @@ def test_project_router_list_get_and_update_stay_off_legacy_get_project(
     assert listed["projects"][0]["id"] == "proj-1"
     # `applied_migrations` aggiunto dal #2 (trasparenza rename auto-applicati):
     # il GET espone i rename di colonna applicati in fase di sync canvas.
-    assert set(detail) == {"metadata", "canvas", "output_contract", "applied_migrations"}
+    # `canvas_version` (A3, punto 7): token della versione del canvas persistito.
+    assert set(detail) == {"metadata", "canvas", "output_contract", "applied_migrations", "canvas_version"}
     assert detail["metadata"]["id"] == "proj-1"
-    assert updated == {"status": "ok", "project_id": "proj-1"}
+    assert updated == {"status": "ok", "project_id": "proj-1", "canvas_version": None, "updated_at": _metadata().updated_at}
     service.get_project.assert_not_called()
 
 

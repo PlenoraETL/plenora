@@ -78,7 +78,10 @@ def test_invalid_aggregation_is_reported(function, kind):
     from app.shared.execution.schema_types import InferredSchema
     upstream = InferredSchema(columns=[{'name': 'v', 'type': kind}, {'name': 'g', 'type': 'int'}])
     node = SimpleNamespace(id='t', type='transform', transform_op='aggregate', data={}, config={'group_by': ['g'], 'aggregations': [{'column': 'v', 'function': function}]})
-    assert any(i.code == 'aggregation.unsupported' and i.severity == 'error' for i in ManipolaNodeValidator().validate_node(node, upstream=upstream))
+    # A3: lo riporta l'esecuzione a vuoto (stesso messaggio del runtime) oppure,
+    # quando zero righe non portano l'errore di tipo, la tabella generata.
+    issues = ManipolaNodeValidator().validate_node(node, upstream=upstream)
+    assert any(i.code in {'aggregation.unsupported', 'preparation.invalid'} and i.severity == 'error' for i in issues)
     with pytest.raises(TypeError):
         aggregation_output_type(function, kind)
 

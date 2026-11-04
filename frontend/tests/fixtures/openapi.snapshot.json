@@ -907,9 +907,65 @@
         "title": "CancelTaskResponse",
         "type": "object"
       },
+      "CanvasRestoreRequest": {
+        "properties": {
+          "base_canvas_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Canvas Version"
+          }
+        },
+        "title": "CanvasRestoreRequest",
+        "type": "object"
+      },
+      "CanvasValidationRequest": {
+        "properties": {
+          "canvas": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CanvasWithPlugins"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "inputs": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inputs"
+          }
+        },
+        "title": "CanvasValidationRequest",
+        "type": "object"
+      },
       "CanvasWithPlugins": {
         "description": "Body del PUT /projects/{id}/canvas.\n\n`List[Node]` e `List[Edge]` fanno fallire il binding Pydantic con 422\nquando il payload non ha la struttura attesa.",
         "properties": {
+          "base_canvas_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Canvas Version"
+          },
           "edges": {
             "default": [],
             "items": {
@@ -2825,6 +2881,45 @@
         "title": "DatabaseConnection",
         "type": "object"
       },
+      "DistinctRequest": {
+        "properties": {
+          "canvas": {
+            "$ref": "#/components/schemas/CanvasWithPlugins"
+          },
+          "column": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column"
+          },
+          "column_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Id"
+          },
+          "limit": {
+            "default": 100,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "canvas"
+        ],
+        "title": "DistinctRequest",
+        "type": "object"
+      },
       "Edge": {
         "description": "Arco (connessione) tra due nodi nel canvas.\n\nRappresenta una relazione JOIN tra tabelle o il collegamento verso\nil nodo di output.\n\nid/source/target sono obbligatori e stringhe non-vuote.\nsourceHandle/targetHandle sono metadata ReactFlow opzionali\ntollerati (il frontend li invia a volte con l'edge grezzo).\n\nManteniamo deliberatamente il default Pydantic `extra=\"ignore\"`\ninvece di `extra=\"forbid\"`. Motivo: il serializer frontend al\n`frontend/src/utils/canvasSerializer.js:227` ritorna il raw edge\nReactFlow quando `data.join_type` manca (es. edge verso result /\ncarica). Quel raw edge porta con se' campi ReactFlow variabili\n(`type`, `animated`, `label`, `style`, `markerStart`, ...) che\ncambiano tra versioni di ReactFlow. Forbid spezzerebbe canvas\nlegittimi ad ogni upgrade library. Trade-off: accettiamo il rischio\nminore di tollerare typo/field ignorati; la validazione strutturale\n(id/source/target/join_type tipizzati) copre la superficie critica.",
         "properties": {
@@ -3040,9 +3135,48 @@
             "additionalProperties": true,
             "title": "Inputs",
             "type": "object"
+          },
+          "preparation_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preparation Fingerprint"
           }
         },
         "title": "EnrichAsyncRequest",
+        "type": "object"
+      },
+      "EnrichPreflightRequest": {
+        "properties": {
+          "canvas": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canvas"
+          },
+          "force_recalculate": {
+            "default": false,
+            "title": "Force Recalculate",
+            "type": "boolean"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          }
+        },
+        "title": "EnrichPreflightRequest",
         "type": "object"
       },
       "EseguibileCreate": {
@@ -3514,6 +3648,18 @@
             "title": "Api Id",
             "type": "string"
           },
+          "canvas": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canvas"
+          },
           "file_source_id": {
             "anyOf": [
               {
@@ -3524,6 +3670,22 @@
               }
             ],
             "title": "File Source Id"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
           },
           "param_mapping": {
             "additionalProperties": {
@@ -3552,24 +3714,67 @@
             "type": "number"
           },
           "estimated_api_calls": {
-            "title": "Estimated Api Calls",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Api Calls"
           },
           "estimated_time_formatted": {
             "title": "Estimated Time Formatted",
             "type": "string"
           },
           "estimated_time_seconds": {
-            "title": "Estimated Time Seconds",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Time Seconds"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
           },
           "total_rows": {
             "title": "Total Rows",
             "type": "integer"
           },
           "unique_combinations": {
-            "title": "Unique Combinations",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unique Combinations"
           }
         },
         "required": [
@@ -9235,6 +9440,18 @@
             "title": "Api Id",
             "type": "string"
           },
+          "canvas": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canvas"
+          },
           "file_source_id": {
             "anyOf": [
               {
@@ -9245,6 +9462,22 @@
               }
             ],
             "title": "File Source Id"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "node_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Node Id"
           },
           "param_mapping": {
             "additionalProperties": {
@@ -9310,6 +9543,17 @@
           "null_param_rows_count": {
             "title": "Null Param Rows Count",
             "type": "integer"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
           },
           "total_rows": {
             "title": "Total Rows",
@@ -15654,9 +15898,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
+                  "additionalProperties": true,
                   "title": "Response Update Project Canvas Api Projects  Project Id  Canvas Put",
                   "type": "object"
                 }
@@ -16016,6 +16258,133 @@
         ]
       }
     },
+    "/api/projects/{project_id}/nodes/{node_id}/distinct": {
+      "post": {
+        "operationId": "distinct_node_values_api_projects__project_id__nodes__node_id__distinct_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "node_id",
+            "required": true,
+            "schema": {
+              "title": "Node Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DistinctRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Distinct Node Values Api Projects  Project Id  Nodes  Node Id  Distinct Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Distinct Node Values",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/preflight": {
+      "post": {
+        "operationId": "preflight_enrichment_api_projects__project_id__preflight_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrichPreflightRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Preflight Enrichment Api Projects  Project Id  Preflight Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Preflight Enrichment",
+        "tags": [
+          "arricchisci"
+        ]
+      }
+    },
     "/api/projects/{project_id}/preview": {
       "get": {
         "description": "Avvia preview come task Celery asincrono.",
@@ -16274,6 +16643,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CanvasValidationRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -16551,6 +16937,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CanvasRestoreRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

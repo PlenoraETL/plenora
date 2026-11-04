@@ -32,6 +32,7 @@ from app.core.projects.types import (
 )
 from app.core.manipola.transform_ordering import incoming_edge_sort_key_for_nodes
 from app.shared.execution.config_column_refs import resolve_config_column_refs
+from app.shared.execution.output_names import make_unique_column_names
 from app.shared.execution.output_column_refs import resolve_output_column_refs, unique_column_names
 from app.shared.execution.schema_types import ColumnSchema, InferredSchema
 from app.core.projects import schema_execution_sources
@@ -564,7 +565,7 @@ class SchemaInferenceService:
             schema = input_schemas[0]
             if columns is not None and columns != []:
                 by_name = {col.name: col for col in schema}
-                references = (node_field(context.node, "inputColumns") or []) if kind == "arricchisci" else [col.to_dict() for col in schema]
+                references = [col.to_dict() for col in schema]
                 columns = resolve_output_column_refs(columns, unique_column_names(references))
                 plan = select_column_plan([col.name for col in schema], columns, skip_missing=True)
                 schema = [replace(by_name[name], name=label) for name, label in plan]
@@ -575,6 +576,9 @@ class SchemaInferenceService:
                 for col, func, alias in aggregations:
                     grouped[alias] = ColumnSchema(alias, aggregation_output_type(func, by_name[col].type if col in by_name else "str"), source_node=context.node.id, is_calculated=True)
                 schema = list(grouped.values())
+            if kind == "manipola":
+                names, _ = make_unique_column_names([col.name for col in schema])
+                schema = [replace(col, name=name) for col, name in zip(schema, names)]
             return schema
         self._status_cache[context.node.id] = (
             "indeterminate",
@@ -779,6 +783,9 @@ class SchemaInferenceService:
         if transform_op in {"pivot", "transpose", "flatten_json", "table_diff",
                             "geo_count_points_in_polygons"}:
             self._status_cache[node.id] = ("indeterminate", "Nomi o ordine dipendenti dai valori o dal vuoto")
+        if transform_op == "pivot" and config.get("mapping"):
+            self._status_cache.pop(node.id, None)
+            self._order_status_cache[node.id] = "indeterminate"
         if transform_op == "split_column" and not config.get("new_columns"):
             self._status_cache[node.id] = ("indeterminate", "Nomi delle parti generati dai valori")
         if transform_op in {"split_column", "string_pad", "string_length", "uuid_generator", "window_function", "geo_nearest"} and input_schemas:

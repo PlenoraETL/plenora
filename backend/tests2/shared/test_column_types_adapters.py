@@ -212,7 +212,7 @@ def test_type_aliases_map_coherent_with_canonical():
     ("real", "float64"),
     ("bool", "bool"),
     ("date", "datetime64[ns]"),
-    ("str", "object"),
+    ("str", "str"),
     ("geometry", "object"),
     # Alias -> stesso dtype
     ("integer", "int64"),

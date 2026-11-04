@@ -19,7 +19,7 @@ def _plain_dict(value: Any) -> Optional[JsonObject]:
     if isinstance(value, dict):
         return value
     if hasattr(value, "model_dump"):
-        dumped = value.model_dump()
+        dumped = value.model_dump(exclude_unset=True) if hasattr(value, "model_fields_set") else value.model_dump()
         if isinstance(dumped, dict):
             return dumped
     return None

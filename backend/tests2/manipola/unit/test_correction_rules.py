@@ -137,7 +137,7 @@ def test_join_legacy_dispatch():
     executor = PluginExecutor()
     spy = Mock(return_value="joined")
     executor.functions["join"] = spy
-    assert executor.execute_with_params("join", [pd.DataFrame(), pd.DataFrame()], {"left_on": "a", "right_on": "b", "join_type": "left"}) == "joined"
+    assert executor.execute_with_params("join", [pd.DataFrame(columns=["a"]), pd.DataFrame(columns=["b"])], {"left_on": "a", "right_on": "b", "join_type": "left"}) == "joined"
     assert spy.call_args.kwargs["left_keys"] == ["a"]
     assert spy.call_args.kwargs["right_keys"] == ["b"]
 

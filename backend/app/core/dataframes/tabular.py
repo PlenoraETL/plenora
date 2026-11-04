@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.shared.execution.source_column_plan import source_column_plan
+from app.shared.execution.output_names import make_unique_column_names as output_name_plan
 from decimal import Decimal, InvalidOperation
 from datetime import date, datetime
 import io
@@ -264,41 +265,8 @@ def _compact_whole_number_floats(df: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
-def make_unique_column_names(
-    columns: Iterable[Any],
-) -> tuple[list[str], list[tuple[str, str]]]:
-    """Return stable, public-safe column names.
-
-    Duplicate names are suffixed with ``_2``, ``_3``, ... while preserving
-    order. Existing names are reserved up front, so ``["id", "id", "id_2"]``
-    becomes ``["id", "id_3", "id_2"]`` instead of reintroducing a collision.
-    """
-    original = [str(col) for col in columns]
-    reserved = set(original)
-    used: set[str] = set()
-    counters: IntMap = {}
-    unique: list[str] = []
-    renames: list[tuple[str, str]] = []
-
-    for name in original:
-        if name not in used:
-            used.add(name)
-            counters.setdefault(name, 1)
-            unique.append(name)
-            continue
-
-        suffix = counters.get(name, 1)
-        while True:
-            suffix += 1
-            candidate = f"{name}_{suffix}"
-            if candidate not in used and candidate not in reserved:
-                break
-        counters[name] = suffix
-        used.add(candidate)
-        unique.append(candidate)
-        renames.append((name, candidate))
-
-    return unique, renames
+def make_unique_column_names(columns: Iterable[Any]) -> tuple[list[str], list[tuple[str, str]]]:
+    return output_name_plan(columns)
 
 
 def rename_duplicate_columns(
@@ -823,7 +791,16 @@ def matching_row_indices(
 
 def non_null_head_values(values: Any, limit: int) -> List[Any]:
     """Return the first non-null values from a series-like object."""
-    return list(values.dropna().head(limit))
+    if limit <= 0:
+        return []
+    # Preserve the exact first non-null sample, including long null prefixes,
+    # without allocating a mask/copy of the complete column on every call.
+    found = []
+    for start in range(0, len(values), 1024):
+        found.extend(values.iloc[start:start + 1024].dropna().head(limit - len(found)))
+        if len(found) >= limit:
+            break
+    return found
 
 
 def mixed_numeric_string_object_columns(
@@ -1079,6 +1056,12 @@ def cut_numeric_series(
 ) -> Any:
     """Coerce values to numeric and bin them using the current dataframe engine."""
     numeric_values = pd.to_numeric(values, errors="coerce")
+    if len(numeric_values) == 0:
+        # Zero righe: pandas rifiuta di tagliare un array vuoto anche con
+        # parametri validi. bins/labels si verificano su un valore neutro e
+        # l'uscita resta categoriale vuota, come con i dati (esecuzione a vuoto).
+        probe = pd.cut(pd.Series([0], dtype=numeric_values.dtype), bins=bins, labels=labels, include_lowest=include_lowest)
+        return pd.Series(probe.iloc[:0].array, index=numeric_values.index, name=getattr(numeric_values, "name", None))
     return pd.cut(
         numeric_values,
         bins=bins,
@@ -1325,7 +1308,13 @@ def iter_dataframe_rows(df: pd.DataFrame) -> Iterator[Any]:
         yield row
 
 
+# Errori di lettura/parsing dei dati del motore dataframe (sottoclassi di
+# ValueError): chi classifica gli errori li distingue dalla configurazione.
+DATAFRAME_PARSE_ERRORS: tuple[type[BaseException], ...] = (pd.errors.ParserError, pd.errors.EmptyDataError)
+
+
 __all__ = [
+    "DATAFRAME_PARSE_ERRORS",
     "append_record_rows",
     "_compact_whole_number_floats",
     "normalize_object_decimals",

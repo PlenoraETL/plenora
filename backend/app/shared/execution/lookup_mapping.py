@@ -2,6 +2,11 @@
 from typing import Any
 
 
+def lookup_value_text(value: Any) -> str:
+    """Text representation used by lookup configuration values."""
+    return str(value)
+
+
 def normalize_lookup_mapping(mapping: dict | list | None) -> dict:
     if mapping is None:
         return {}
@@ -28,10 +33,10 @@ def lookup_is_numeric(mapping: dict, unmatched: str | None, default: Any) -> boo
         return False
     values = list(mapping.values()) + ([default] if unmatched == "value" else [])
     for value in values:
-        if value is None or str(value).strip() == "":
+        if value is None or lookup_value_text(value).strip() == "":
             continue
         try:
-            float(str(value).replace(",", "."))
+            float(lookup_value_text(value).replace(",", "."))
         except (ValueError, TypeError):
             return False
     return True

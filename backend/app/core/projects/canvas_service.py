@@ -152,7 +152,7 @@ class ProjectCanvasService:
             return None
         return RawProjectCanvas(project_id=row.id, canvas=row.canvas)
 
-    def update_canvas(self, project_id: str, canvas: CanvasState) -> bool:
+    def update_canvas(self, project_id: str, canvas: CanvasState, *, base_canvas_version: str | None = None, revision_out: dict | None = None) -> bool:
         """Salva canvas e aggiorna updated_at. False se il progetto non esiste.
 
         Invalida lo stato di validazione: salvare il canvas
@@ -172,7 +172,8 @@ class ProjectCanvasService:
         self._owner._assert_no_lineage_cycle(project_id, canvas)
 
         updated_row = project_db.update_project_row(
-            project_id, canvas=canvas.model_dump(), canvas_validated=False
+            project_id, canvas=canvas.model_dump(), canvas_validated=False,
+            **({"base_canvas_version": base_canvas_version} if base_canvas_version is not None else {}), **({"revision_out": revision_out} if revision_out is not None else {}),
         )
         if updated_row is None:
             return False
@@ -233,7 +234,7 @@ class ProjectCanvasService:
         ]
 
     def restore_canvas_version(
-        self, project_id: str, version_id: str
+        self, project_id: str, version_id: str, *, base_canvas_version: str | None = None, revision_out: dict | None = None
     ) -> Optional[CanvasState]:
         """Ripristina il canvas del progetto a una versione salvata. None se la
         versione non esiste. Passa per update_canvas → resetta canvas_validated
@@ -245,7 +246,7 @@ class ProjectCanvasService:
         canvas_dict = raw if isinstance(raw, dict) else json.loads(raw)
         canvas_dict = {k: v for k, v in canvas_dict.items() if not str(k).startswith("_")}
         canvas = CanvasState(**canvas_dict)
-        self._owner.update_canvas(project_id, canvas)
+        self._owner.update_canvas(project_id, canvas, **({"base_canvas_version": base_canvas_version} if base_canvas_version is not None else {}), **({"revision_out": revision_out} if revision_out is not None else {}))
         return canvas
 
 

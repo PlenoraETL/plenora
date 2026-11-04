@@ -3,6 +3,10 @@ Router API per il modulo ARRICCHISCI.
 
 Unisce tutti gli endpoint relativi all'arricchimento dati:
 """
+from app.core.arricchisci.canvas_preflight import prepare_contract, estimate_canvas, preparation_fingerprint
+from app.core.projects.canvas_models import CanvasState
+from app.core.projects.router import PREPARATION_ERRORS, _prepare_canvas_for_owner, raise_preparation_failure
+from app.shared.execution.node_fields import node_field
 
 import json
 from pathlib import Path
@@ -209,6 +213,9 @@ class ValidateRequest(BaseModel):
     # static_columns. Evita di dover passare due liste in sync (lato FE) per
     # ogni nodo api_enrich.
     static_parameters: Optional[StringMap] = None
+    inputs: JsonObject = Field(default_factory=dict)
+    canvas: JsonObject | None = None
+    node_id: str | None = None
 
 
 class EstimateRequest(BaseModel):
@@ -216,6 +223,9 @@ class EstimateRequest(BaseModel):
     api_id: str
     param_mapping: StringMap
     file_source_id: Optional[str] = None
+    inputs: JsonObject = Field(default_factory=dict)
+    canvas: JsonObject | None = None
+    node_id: str | None = None
 
 
 class ValidateResponse(BaseModel):
@@ -226,20 +236,26 @@ class ValidateResponse(BaseModel):
     missing_columns: List[str]
     null_param_rows_count: int
     warnings: List[str]
+    # Solo nel percorso per nodo (node_id/canvas). Il percorso legacy risponde
+    # come HEAD: il campo non viene emesso (response_model_exclude_unset).
+    status: str | None = None
 
 
 class EstimateResponse(BaseModel):
     total_rows: int
-    unique_combinations: int
-    estimated_api_calls: int
-    estimated_time_seconds: float
+    unique_combinations: int | None
+    estimated_api_calls: int | None
+    estimated_time_seconds: float | None
     estimated_time_formatted: str
     deduplication_savings_percent: float
+    # Solo nel percorso per nodo; nel legacy non emessi (exclude_unset).
+    status: str | None = None
+    reason: str | None = None
 
 
 # ENDPOINT: ENRICHMENT PREVIEW/VALIDATE/ESTIMATE
 
-@enrichment_router.post("/validate", response_model=ValidateResponse)
+@enrichment_router.post("/validate", response_model=ValidateResponse, response_model_exclude_unset=True)
 def validate_enrichment(
     request: ValidateRequest,
     current_user: CurrentUser = Depends(require_not_esecutore),
@@ -267,6 +283,21 @@ def validate_enrichment(
         if required_error is not None:
             return required_error
 
+        if _is_node_request(request):
+            # Percorso per nodo: preflight sul nodo richiesto e i suoi antenati.
+            estimate = _compatibility_node_preflight(request, current_user)
+            if (api_conn.get("api_type") or "enricher") == "generator":
+                return {**_enrichment_preflight.generator_validate_response(), "valid": estimate["valid"],
+                        "status": "configuration_verified"}
+            validation = estimate.get("validation") or {}
+            rows = estimate.get("input_rows") or 0
+            return {"valid": estimate["valid"], "total_rows": rows,
+                    "valid_rows": validation.get("valid_rows", rows), "invalid_rows": validation.get("invalid_rows", 0),
+                    "missing_columns": validation.get("missing_columns", []),
+                    "null_param_rows_count": len(validation.get("null_param_rows", [])),
+                    "warnings": validation.get("warnings", []) + ([estimate["reason"]] if estimate.get("reason") else []),
+                    "status": "configuration_verified" if estimate["status"] == "unknown" else "verified_with_data"}
+
         if (api_conn.get("api_type") or "enricher") == "generator":
             return _enrichment_preflight.generator_validate_response()
 
@@ -284,7 +315,7 @@ def validate_enrichment(
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 
 
-@enrichment_router.post("/estimate", response_model=EstimateResponse)
+@enrichment_router.post("/estimate", response_model=EstimateResponse, response_model_exclude_unset=True)
 def estimate_enrichment(
     request: EstimateRequest,
     current_user: CurrentUser = Depends(require_not_esecutore),
@@ -302,6 +333,15 @@ def estimate_enrichment(
             assert_project_visible(request.project_id, current_user)
         if request.file_source_id:
             assert_file_source_access(request.file_source_id, current_user)
+
+        if _is_node_request(request):
+            estimate = _compatibility_node_preflight(request, current_user)
+            count = estimate.get("api_calls")
+            rate = (api_config.get("options") or {}).get("rate_limit") or 5
+            return {"total_rows": estimate.get("input_rows") or 0, "unique_combinations": count,
+                    "estimated_api_calls": count, "estimated_time_seconds": count / rate if count is not None else None,
+                    "estimated_time_formatted": _format_time(count / rate) if count is not None else "non conoscibile", "deduplication_savings_percent": 0,
+                    "status": estimate["status"], "reason": estimate.get("reason")}
 
         try:
             df = _load_request_data(request, current_user)
@@ -714,6 +754,99 @@ class EnrichAsyncRequest(BaseModel):
     inputs: JsonObject = Field(default_factory=dict)
     format: str = "csv"
     force_recalculate: bool = False
+    preparation_fingerprint: str | None = None
+
+
+class EnrichPreflightRequest(BaseModel):
+    inputs: JsonObject = Field(default_factory=dict)
+    canvas: JsonObject | None = None
+    force_recalculate: bool = False
+
+
+def _is_node_request(request: ValidateRequest | EstimateRequest) -> bool:
+    """Regola di compatibilità: senza ``node_id`` né ``canvas`` (il frontend
+    attuale non li manda) validate/estimate rispondono esattamente come HEAD;
+    con uno dei due passano dal preflight del nodo."""
+    return request.node_id is not None or request.canvas is not None
+
+
+def _ancestor_subcanvas(canvas: JsonObject, node_id: str) -> JsonObject:
+    """Il nodo richiesto e i suoi antenati: gli errori di altri rami non contano."""
+    edges = [edge for edge in canvas.get("edges", []) if isinstance(edge, dict)]
+    keep, frontier = {node_id}, [node_id]
+    while frontier:
+        target = frontier.pop()
+        for edge in edges:
+            if edge.get("target") == target and edge.get("source") not in keep:
+                keep.add(edge.get("source"))
+                frontier.append(edge.get("source"))
+    return {**canvas, "nodes": [node for node in canvas.get("nodes", []) if node.get("id") in keep],
+            "edges": [edge for edge in edges if edge.get("source") in keep and edge.get("target") in keep]}
+
+
+def _compatibility_node_preflight(request: ValidateRequest | EstimateRequest, current_user: CurrentUser) -> JsonObject:
+    if not request.project_id:
+        raise_typed_http(error_codes.VALIDATION_ERROR, status_code=422,
+                         message="node_id/canvas richiedono project_id", details={"reason": "project_required"})
+    canvas = request.canvas
+    if canvas is None:
+        saved = _project_service.get_project_canvas(request.project_id)
+        if saved is None:
+            raise HTTPException(404, "Canvas non trovato")
+        canvas = saved.model_dump()
+    canvas = json.loads(json.dumps(canvas, default=str))
+    selected = [raw for raw in canvas.get("nodes", []) if isinstance(raw, dict) and raw.get("type") == "api_enrich"
+                and (raw.get("id") == request.node_id if request.node_id else node_field(raw, "api_id") == request.api_id)]
+    if len(selected) != 1:
+        raise_typed_http(error_codes.VALIDATION_ERROR, status_code=422,
+                         message="Indicare node_id: il nodo API da preparare non è univoco nel canvas",
+                         details={"reason": "node_not_unique"})
+    node_id = selected[0]["id"]
+    selected[0]["data"] = {**(selected[0].get("data") or {}), "param_mapping": request.param_mapping}
+    selected[0]["param_mapping"] = request.param_mapping
+    response = preflight_enrichment(request.project_id,
+                                    EnrichPreflightRequest(canvas=_ancestor_subcanvas(canvas, node_id), inputs=request.inputs),
+                                    current_user)
+    estimate = next((value for value in response["nodes"] if value["node_id"] == node_id), None)
+    if estimate is None:
+        raise_typed_http(error_codes.VALIDATION_ERROR, status_code=422, message="Nodo API non preparabile",
+                         details={"reason": "node_not_prepared"})
+    return estimate
+
+
+def _preflight_connections(canvas: JsonObject, current_user: CurrentUser) -> JsonObject:
+    connections = {}
+    for node in canvas.get("nodes", []):
+        if node.get("type") == "api_enrich":
+            api_id = node_field(node, "api_id")
+            if api_id not in connections:
+                api = api_connection_service.get_api_connection(api_id, include_token=True)
+                assert_resource_visible(api, "api_connections", current_user, f"API {api_id}")
+                connections[api_id] = api
+    return connections
+
+
+@enrich_router.post("/{project_id}/preflight")
+def preflight_enrichment(project_id: str, request: EnrichPreflightRequest,
+                         current_user: CurrentUser = Depends(require_not_esecutore)) -> JsonObject:
+    metadata = _project_service.get_project_metadata(project_id)
+    assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
+    if metadata.project_type != "arricchisci":
+        raise HTTPException(400, "Preflight disponibile per Arricchisci")
+    try:
+        canvas = CanvasState(**request.canvas) if request.canvas is not None else _project_service.get_project_canvas(project_id)
+        if canvas is None:
+            raise HTTPException(404, "Canvas non trovato")
+        canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user, for_save=False)
+        contract, manifest = prepare_contract(PipelineExecutionContract(project_id=project_id,
+            project_type=metadata.project_type, group_id=metadata.group_id, canvas=canvas.model_dump()), request.inputs)
+        connections = _preflight_connections(contract.canvas, current_user)
+        nodes = estimate_canvas(contract, connections)
+    except PREPARATION_ERRORS as exc:
+        raise_preparation_failure(exc)
+    return {"valid": all(node["valid"] for node in nodes), "manifest": manifest.model_dump(), "nodes": nodes,
+            "preparation_fingerprint": preparation_fingerprint(contract, connections, revision=_project_service.get_canvas_version(project_id), force_recalculate=request.force_recalculate),
+            "checks": {"runtime_inputs": "verified", "external_dependencies": "not_guaranteed", "resources": "not_guaranteed"}}
 
 
 @enrich_router.post("/{project_id}/enrich-async")
@@ -817,6 +950,8 @@ def execute_enrichment_async(
             )
 
         try:
+            if request.preparation_fingerprint is not None:
+                canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user, for_save=False)
             execution_contract = apply_project_runtime_inputs(
                 PipelineExecutionContract(
                     project_id=project_id,
@@ -828,6 +963,14 @@ def execute_enrichment_async(
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        if request.preparation_fingerprint is not None:
+            connections = _preflight_connections(execution_contract.canvas, current_user)
+            fingerprint = preparation_fingerprint(execution_contract, connections, revision=_project_service.get_canvas_version(project_id),
+                                                 force_recalculate=request.force_recalculate)
+            if fingerprint != request.preparation_fingerprint:
+                raise HTTPException(409, detail={"error": error_codes.VALIDATION_ERROR, "reason": "preparation_changed",
+                    "message": "Preparazione cambiata: canvas, input, connessioni o opzioni diversi dal preflight"})
 
         task_info = task_service.create_enrichment_task(
             project_id=project_id,

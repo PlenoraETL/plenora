@@ -10,6 +10,7 @@ from typing import Any, Callable, List, MutableMapping, Optional, TYPE_CHECKING
 
 from app.core.dataframes.output_columns import apply_output_columns
 from app.core.dataframes.values import is_dataframe
+from app.core.projects.canvas_schema_preparation import infer_canvas_columns
 from app.core.arricchisci.execution_context import (
     ArricchisciExecutionContext,
     build_execution_context,
@@ -244,6 +245,14 @@ def run_enrichment_canvas(
     edges = graph.edges
     nodes = graph.raw_nodes
     node_results: JsonObject = {}
+    needs_output_ids = any(
+        isinstance(col, dict) and any(col.get(key) for key in ("name_column_id", "id", "column_id"))
+        for raw in nodes for col in (CanvasNode(raw).get_field("output_columns") or [])
+    )
+    inferred_columns = infer_canvas_columns(
+        {"nodes": nodes, "edges": edges}, project_id=project_id,
+        project_type="arricchisci", api_configs=api_connections,
+    ) if needs_output_ids else {}
 
     # #37 — reference-counting per liberare la RAM dei nodi intermedi appena
     # TUTTI i loro consumatori topologici hanno girato: il picco scende da
@@ -307,7 +316,7 @@ def run_enrichment_canvas(
                     input_df = node_results.get(input_edge["source"])
                     if input_df is not None:
                         node_results[node_id] = (
-                            apply_output_columns(input_df, graph.get(node_id).get_field("output_columns"), graph.get(node_id).get_field("inputColumns"))
+                            apply_output_columns(input_df, graph.get(node_id).get_field("output_columns"), inferred_columns.get(input_edge["source"], []))
                             if is_dataframe(input_df) else input_df
                         )
 

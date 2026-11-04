@@ -14,6 +14,7 @@ from typing import Any, Callable, List, Optional
 
 from app.shared.execution.registry_types import LIST_PARAM_TYPES, require_known_param_type, parameter_value
 from app.shared.execution.lookup_mapping import normalize_lookup_mapping
+from app.core.manipola.preparation import prepare_operation
 from app.shared.execution.config_column_refs import resolve_config_column_refs
 from app.core.dataframes.ports import FrameLike
 from app.core.manipola.types import (
@@ -197,6 +198,19 @@ class PluginExecutor:
         Raises:
             ValueError: se trasformazione non trovata o parametri invalidi
         """
+        try:
+            return self.execute_node(transform_id, inputs, node)
+        except Exception as e:
+            logger.error(f"[CRASH] Errore esecuzione '{transform_id}': {e}", exc_info=True)
+            raise
+
+    def execute_node(
+        self,
+        transform_id: str,
+        inputs: List[FrameLike],
+        node: Node
+    ) -> FrameLike:
+        """Percorso unico di ``execute`` senza log: lo usa anche Valida a vuoto."""
         config = self.registry.get(transform_id)
         if not config:
             raise ValueError(f"Trasformazione '{transform_id}' non trovata nel registry")
@@ -209,20 +223,15 @@ class PluginExecutor:
         node_config = node.config or (node.data.get('config', {}) if node.data else {})
         node_config = self._resolve_column_references(node_config, node, config)
         kwargs = self.prepare_params(transform_id, node_config)
+        kwargs = self.prepare(transform_id, inputs, kwargs, normalized=True)
 
-
-        try:
-            # Le trasformazioni 'multi' ricevono la lista completa di input
-            # es. join tra due tabelle). Le 'single' ricevono solo il primo DataFrame
-            if config.get('inputs') == 'multi':
-                return func(inputs, **kwargs)
-            else:
-                if not inputs:
-                    raise ValueError("Nessun input fornito")
-                return func(inputs[0], **kwargs)
-        except Exception as e:
-            logger.error(f"[CRASH] Errore esecuzione '{transform_id}': {e}", exc_info=True)
-            raise
+        # Le trasformazioni 'multi' ricevono la lista completa di input
+        # es. join tra due tabelle). Le 'single' ricevono solo il primo DataFrame
+        if config.get('inputs') == 'multi':
+            return func(inputs, **kwargs)
+        if not inputs:
+            raise ValueError("Nessun input fornito")
+        return func(inputs[0], **kwargs)
 
     def execute_with_params(
         self,
@@ -252,6 +261,7 @@ class PluginExecutor:
             raise ValueError(f"Funzione per '{transform_id}' non caricata")
 
         kwargs = self.prepare_params(transform_id, params)
+        kwargs = self.prepare(transform_id, inputs, kwargs, normalized=True)
 
         if config.get('inputs') == 'multi':
             return func(inputs, **kwargs)
@@ -259,6 +269,12 @@ class PluginExecutor:
             return func(inputs[0], **kwargs)
 
     # PREPARAZIONE PARAMETRI
+
+    def prepare(self, transform_id: str, inputs: list, params: JsonObject, *, normalized: bool = False) -> JsonObject:
+        """Prepare a registered operation without executing rows or side effects."""
+        kwargs = params if normalized else self.prepare_params(transform_id, params)
+        return prepare_operation(self.functions[transform_id], transform_id, inputs, kwargs,
+                                 multi=self.registry[transform_id].get("inputs") == "multi")
 
     def prepare_params(self, transform_id: str, params: JsonObject) -> JsonObject:
         """Normalizzazione comune a esecuzione e inferenza, senza eseguire dati."""

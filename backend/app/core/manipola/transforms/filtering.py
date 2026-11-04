@@ -26,25 +26,8 @@ DataFrame = FrameLike
 # FILTRO RIGHE
 # Applica condizioni su colonne con operatori: =, !=, >, <, >=, <=, LIKE, IN, IS NULL
 
-def op_filter(
-    df: DataFrame,
-    column: str | None = None,
-    operator: str = "==",
-    value: Any = None,
-    conditions: JsonRows | None = None
-) -> DataFrame:
-    """
-    Filtra righe in base a una condizione.
-
-    Args:
-        df: DataFrame input
-        column: Colonna da filtrare
-        operator: Operatore (==, !=, >, >=, <, <=, contains, startswith, endswith, isnull, notnull)
-        value: Valore da confrontare
-
-    Returns:
-        DataFrame filtrato
-    """
+def prepare_filter(df: DataFrame, column: str | None = None, operator: str = "==", value: Any = None, conditions: JsonRows | None = None) -> list | None:
+    """Validate filter configuration against columns and dtypes, without filtering."""
     if conditions is not None:
         if not isinstance(conditions, list):
             raise ValueError("Filter: conditions deve essere una lista.")
@@ -53,8 +36,8 @@ def op_filter(
                 raise ValueError("Filter: ogni condizione richiede column e operator.")
             if condition["operator"] not in {"==", "!=", ">", ">=", "<", "<=", "contains", "startswith", "endswith", "isnull", "notnull", "in", "not_in"}:
                 raise ValueError(f"Filter: operatore '{condition['operator']}' non supportato.")
-            df = op_filter(df, condition["column"], condition["operator"], condition.get("value"))
-        return df
+            prepare_filter(df, condition["column"], condition["operator"], condition.get("value"))
+        return
 
     if column not in df.columns:
         # Fail-fast: un filtro che non filtra e' un bug grave. Silent return
@@ -79,7 +62,41 @@ def op_filter(
                 values = [float(item) if item is not None else None for item in values]
             except (ValueError, TypeError) as exc:
                 raise ValueError(f"Filter: valori non numerici per colonna '{column}'.") from exc
-        mask = col.isin(values)
+        return values
+
+
+
+def op_filter(
+    df: DataFrame,
+    column: str | None = None,
+    operator: str = "==",
+    value: Any = None,
+    conditions: JsonRows | None = None
+) -> DataFrame:
+    """
+    Filtra righe in base a una condizione.
+
+    Args:
+        df: DataFrame input
+        column: Colonna da filtrare
+        operator: Operatore (==, !=, >, >=, <, <=, contains, startswith, endswith, isnull, notnull)
+        value: Valore da confrontare
+
+    Returns:
+        DataFrame filtrato
+    """
+    prepared_values = prepare_filter(df, column, operator, value, conditions)
+    if conditions is not None:
+        for condition in conditions:
+            df = op_filter(df, condition["column"], condition["operator"], condition.get("value"))
+        return df
+
+    # Path read-only puro: niente modifiche column-level, leggi direttamente
+    # da `df`.
+    col = df[column]
+
+    if operator in {"in", "not_in"}:
+        mask = col.isin(prepared_values)
         return df[~mask if operator == "not_in" else mask].reset_index(drop=True)
 
     # Se la colonna è numerica e il valore è stringa, converti

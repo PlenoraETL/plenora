@@ -28,11 +28,12 @@ pytestmark = [pytest.mark.unit, pytest.mark.manipola]
 # op_sample
 
 
-def test_sample_empty_df_returned_unchanged():
+def test_sample_empty_df_keeps_schema():
+    # A3: niente scorciatoia sul vuoto, l'esecuzione a vuoto esercita i parametri.
     df = pd.DataFrame({"a": []})
     result = op_sample(df, n=10)
     assert len(result) == 0
-    assert result is df  # short-circuit returns the same object
+    assert list(result.columns) == ["a"]
 
 
 def test_sample_by_n_caps_to_len():

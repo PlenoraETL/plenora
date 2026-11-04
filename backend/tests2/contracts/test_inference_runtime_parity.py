@@ -47,10 +47,6 @@ def test_runtime_parity(op, empty):
     completed = infer_canvas(canvas_frames(op, inputs, config), "t")
     identities = [col["id"] for col in completed.columns]
     assert len(identities) == len(set(identities))
-    if op == "bin" and empty:
-        with pytest.raises(ValueError, match="Cannot cut empty array"):
-            get_executor().execute_with_params(op, inputs, config)
-        return
     result = get_executor().execute_with_params(op, inputs, config)
     actual = [(col["name"], col["type"]) for col in build_columns_with_types(result, {})]
     status = service._status_cache.get("t", ("certain", ""))[0]

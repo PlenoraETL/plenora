@@ -76,7 +76,7 @@ class EnrichExecutor:
         logger.info(f"Esecuzione ARRICCHISCI: {project_id}", op="execute", project_id=project_id)
         _step_start = _time.time()
 
-        canvas_dict = canvas.model_dump()
+        canvas_dict = canvas.model_dump(exclude_unset=True)
 
         typed_context = None
         if execution_context is not None:
