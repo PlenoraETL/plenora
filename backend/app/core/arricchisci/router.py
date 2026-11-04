@@ -18,7 +18,7 @@ from app.core.auth.ownership import (
     assert_can_modify,
     compute_can_edit,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Annotated, List, Literal, Optional
 
 from app.utils.logger import get_logger
@@ -33,6 +33,8 @@ from app.core.arricchisci.enrichment_service import EnrichmentExecutor
 from app.core.arricchisci.models import EnrichmentOptions
 from app.core.arricchisci.types import StringMap
 from app.core.projects.exceptions import CanvasCorruptedError
+from app.core.orchestrator.execution_contract import PipelineExecutionContract
+from app.core.orchestrator.runtime_inputs import apply_project_runtime_inputs
 from app.core.artifacts import (
     LatestProjectArtifactRef,
     SourceLoader,
@@ -709,6 +711,7 @@ enrich_router = APIRouter(prefix="/projects", tags=["arricchisci"])
 
 
 class EnrichAsyncRequest(BaseModel):
+    inputs: JsonObject = Field(default_factory=dict)
     format: str = "csv"
     force_recalculate: bool = False
 
@@ -734,6 +737,7 @@ def execute_enrichment_async(
     Esegue l'arricchimento in modo ASINCRONO con Celery.
 
     Parametri body (opzionali):
+        inputs: valori runtime indicizzati per input_key
         format: formato output ('csv', 'xlsx', 'geojson', ...) — default 'csv'
         force_recalculate: ignora cache e ricalcola tutto — default False
 
@@ -806,9 +810,29 @@ def execute_enrichment_async(
                     op="execute",
                 )
 
+        if not str(metadata.group_id or "").strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Il progetto non ha un gruppo proprietario: assegna un gruppo prima di eseguire.",
+            )
+
+        try:
+            execution_contract = apply_project_runtime_inputs(
+                PipelineExecutionContract(
+                    project_id=project_id,
+                    project_type=metadata.project_type,
+                    group_id=metadata.group_id,
+                    canvas=canvas.model_dump(),
+                ),
+                request.inputs,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
         task_info = task_service.create_enrichment_task(
             project_id=project_id,
-            canvas=canvas.model_dump(),
+            canvas=execution_contract.canvas,
+            execution_contract=execution_contract.to_payload(),
             output_format=output_format,
             force_recalculate=request.force_recalculate,
             user_id=current_user.user_id,

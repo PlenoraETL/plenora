@@ -64,17 +64,35 @@ const useCanvasStore = create(
             const payload = serializeCanvas(snapshot.nodes, snapshot.edges, {
               mode: snapshot.mode,
             });
-            await updateCanvas(snapshot.projectId, payload);
+            // Stato per l'indicatore della barra (Fase 4, M7): tutti i
+            // salvataggi passano da qui, quindi l'indicatore li vede tutti.
+            // Lo stato si scrive solo se l'editor mostra ancora QUESTO progetto
+            // (un salvataggio in volo non tocca il progetto aperto dopo).
+            const sameProject = () => get().projectId === snapshot.projectId;
+            set({ saveStatus: 'saving', saveError: null }, false, 'save:start');
+            try {
+              await updateCanvas(snapshot.projectId, payload);
+            } catch (err) {
+              if (sameProject()) set({ saveStatus: 'error', saveError: err?.message || 'Salvataggio non riuscito' }, false, 'save:error');
+              throw err;
+            }
 
             const current = get();
-            const sameSnapshot = current.projectId === snapshot.projectId
+            const sameSnapshot = sameProject()
               && current.nodes === snapshot.nodes
               && current.edges === snapshot.edges;
             if (sameSnapshot) {
-              set({ isDirty: false, pendingSync: false }, false, 'handleSaveQuiet:saved');
+              // "Pulito" e "salvato alle ..." nello STESSO aggiornamento: chi
+              // ascolta (copia di sicurezza) vede un solo evento coerente.
+              set({ isDirty: false, pendingSync: false, saveStatus: 'idle', lastSavedAt: Date.now() }, false, 'handleSaveQuiet:saved');
+            } else if (!sameProject()) {
+              // progetto cambiato: niente da aggiornare
             } else if ((current.isDirty || current.pendingSync) && !current.isReadOnly) {
-              // Un edit e' arrivato mentre il PUT era in volo.
+              // Un edit e' arrivato mentre il PUT era in volo: si risalva.
+              set({ saveStatus: 'idle' }, false, 'save:again');
               saveRequested = true;
+            } else {
+              set({ saveStatus: 'idle' }, false, 'save:done');
             }
           }
         })();
@@ -93,6 +111,9 @@ const useCanvasStore = create(
 
       nodes:     [],
       edges:     [],
+      // true dopo loadGraph: il canvas nello store e' quello del progetto
+      // (anche vuoto) e non va sostituito da quello salvato.
+      graphLoaded: false,
       projectId: null,
       mode:      'manipola',   // 'estrai' | 'manipola' | 'arricchisci'
 
@@ -153,9 +174,10 @@ const useCanvasStore = create(
        * updateNodeData/patchNodeConfig): es. formato riportato a CSV senza
        * geometria, colonna geometrica auto-selezionata, espressione
        * riscritta dopo una rinomina a monte. Sono dati persistiti, quindi
-       * handleSaveQuiet li invia (Esegui/Valida/autosave), ma NON sono
-       * modifiche dell'utente: niente avviso "modifiche non salvate" ne'
-       * voce di undo. Distinto da isDirty (revisione Fase 3).
+       * partono col prossimo salvataggio chiesto dall'utente (Salva, Esegui,
+       * "Salva e continua": utils/serverActions), ma NON sono modifiche
+       * dell'utente: niente avviso "modifiche non salvate" (hasUnsavedChanges)
+       * ne' voce di undo. Distinto da isDirty (revisione Fase 3).
        */
       pendingSync: false,
 
@@ -198,6 +220,24 @@ const useCanvasStore = create(
 
       // Vista del canvas (Fase 4, M6): 'canvas' o 'steps' (vista Passi), e il
       // passo da mostrare/evidenziare nell'altra vista ("Vedi in Passi").
+      // Fase 4, M7: un solo stato di esecuzione per barra e pannello.
+      // 'idle' | 'starting' (salva e valida) | 'running' (task in corso):
+      // fuori da 'idle' nessun "Esegui" parte (niente doppie esecuzioni).
+      runState: 'idle',
+      // Opzioni di esecuzione condivise (pannello dell'Output e barra):
+      // "Ricalcola tutto" vale per entrambi i pulsanti.
+      runOptions: { force_recalculate: false },
+      setRunOptions: (patch) => set(s => ({ runOptions: { ...s.runOptions, ...(patch || {}) } }), false, 'setRunOptions'),
+      // true quando l'Output ha registrato il percorso di esecuzione.
+      runReady: false,
+      setRunReady: (runReady) => set({ runReady: !!runReady }, false, 'setRunReady'),
+
+      // Indicatore del salvataggio (Fase 4, M7): 'idle' | 'saving' | 'error'.
+      saveStatus: 'idle',
+      saveError: null,
+      lastSavedAt: null,
+      setRunState: (runState) => set({ runState }, false, 'setRunState'),
+
       canvasView: 'canvas',
       focusNodeId: null,
       setCanvasView: (view, focusNodeId = null) => set({ canvasView: view, focusNodeId }, false, 'setCanvasView'),
@@ -210,7 +250,7 @@ const useCanvasStore = create(
         get().editorActionsRef.current = {};
         // NOTA: non resettiamo isReadOnly perché viene impostato subito dopo da
         // useCanvasCore (dipende dal ruolo utente, non dal progetto).
-        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, pendingSync: false, validationHighlights: [], lastValidationSummary: null, past: [], future: [], lastTaskResult: null, canvasView: 'canvas', focusNodeId: null }, false, 'reset');
+        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, pendingSync: false, validationHighlights: [], lastValidationSummary: null, past: [], future: [], lastTaskResult: null, canvasView: 'canvas', focusNodeId: null, saveStatus: 'idle', saveError: null, lastSavedAt: null, runState: 'idle', runOptions: { force_recalculate: false }, runReady: false, graphLoaded: false }, false, 'reset');
       },
 
       // ── Undo/Redo (#24) ───────────────────────────────────────────────
@@ -385,7 +425,7 @@ const useCanvasStore = create(
       loadGraph: (nodes, edges) => {
         lastSnapshotTs = 0;
         set(
-          { nodes, edges, isDirty: false, pendingSync: false, past: [], future: [], validationHighlights: [], lastValidationSummary: null },
+          { nodes, edges, graphLoaded: true, isDirty: false, pendingSync: false, past: [], future: [], validationHighlights: [], lastValidationSummary: null },
           false,
           'loadGraph',
         );
@@ -763,7 +803,9 @@ const useCanvasStore = create(
       },
 
       /**
-       * Salvataggio silenzioso — serializza il canvas e lo invia al backend.
+       * Salvataggio — serializza il canvas e lo invia al backend. Chiamato
+       * SOLO da utils/serverActions (Salva, Esegui, "Salva e continua"):
+       * nessun salvataggio nascosto (Fase 4, M7; test di enumerazione).
        * Usa il mode corrente per determinare il formato di serializzazione.
        *
        * Skip intelligente: se `isDirty` è false, l'utente non ha modificato
@@ -786,6 +828,17 @@ const useCanvasStore = create(
        */
       markClean: () => set({ isDirty: false, pendingSync: false }, false, 'markClean'),
 
+      /**
+       * Carica un canvas che NON e' sul server (copia di sicurezza del
+       * browser): stesso caricamento di loadGraph, ma resta "da salvare".
+       */
+      loadUnsavedGraph: (nodes, edges) => {
+        const server = { nodes: get().nodes, edges: get().edges };
+        get().loadGraph(nodes, edges);
+        // "Annulla" riporta alla versione del server.
+        set({ isDirty: true, past: [server] }, false, 'loadUnsavedGraph');
+      },
+
       /** Restituisce il nodo corrente per ID (lettura sincrona, non reattiva) */
       getNodeById: (nodeId) => get().nodes.find(n => n.id === nodeId),
 
@@ -797,5 +850,8 @@ const useCanvasStore = create(
     { name: 'UrbyETL-Canvas' }
   )
 );
+
+export { hasUnsavedChanges } from './saveState';
+
 
 export default useCanvasStore;

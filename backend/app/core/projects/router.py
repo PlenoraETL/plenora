@@ -5,7 +5,7 @@ Endpoint CRUD progetti, gestione canvas, e inferenza schema.
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Annotated, Any, List, Optional
 
 from app.utils.logger import get_logger
@@ -670,6 +670,83 @@ def _assert_canvas_refs_visible_for_owner(
     )
 
 
+def _prepare_canvas_for_owner(
+    project_id: str, canvas: CanvasState, metadata: Any, current_user: CurrentUser,
+    *, for_save: bool,
+) -> CanvasState:
+    """Prepara e verifica il canvas senza persistere modifiche al progetto.
+
+    Stessa preparazione per il salvataggio (PUT /canvas) e per gli schemi di
+    un canvas non salvato (POST /schemas): controllo dei riferimenti tra
+    gruppi e sincronizzazione con i contratti. Il rifiuto dei nodi orfani e'
+    una regola del SALVATAGGIO (for_save): mentre l'utente ricollega i nodi
+    gli schemi del resto del canvas devono continuare ad aggiornarsi.
+    """
+    # Verifica i riferimenti prima di leggere gli schemi dei progetti sorgente.
+    _assert_canvas_refs_visible_for_owner(
+        canvas,
+        owner_group_id=_metadata_group_id(metadata) or "",
+        is_superadmin=current_user.role == "superadmin",
+    )
+
+    try:
+        output_contract_module.sync_canvas_with_output_contracts(
+            canvas=canvas,
+            project_id=project_id,
+            project_service=_project_service,
+            schema_inference_factory=schema_inference_module.SchemaInferenceService,
+        )
+    except Exception as exc:
+        logger.warning(
+            f"sync output_contract canvas fallito per {project_id}: {exc}",
+            exc_info=True,
+        )
+
+    orphans = _canvas_access.find_orphan_processing_nodes(canvas) if for_save else []
+    if orphans:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Canvas contiene nodi orfani (nessun edge incoming): "
+                f"{', '.join(orphans)}. Aggiungi almeno una relazione "
+                f"verso ciascuno di questi nodi, oppure rimuovili dal "
+                f"canvas prima di salvare."
+            ),
+        )
+
+    # Ricalcola le colonne senza modificare il contratto del risultato materializzato.
+    try:
+        result_node = canvas_columns_module.find_result_node(canvas)
+        if result_node is not None:
+            computed = canvas_columns_module.compute_result_columns(
+                canvas=canvas,
+                result_id=result_node.id,
+                project_id=project_id,
+                project_service=_project_service,
+                schema_inference_service_factory=(
+                    schema_inference_module.SchemaInferenceService
+                ),
+            )
+            if computed:
+                result_node.columns = [Column(**c) for c in computed]
+    except Exception as _ccerr:
+        # Il ricalcolo diagnostico non blocca la normale validazione del canvas.
+        logger.warning(
+            f"C9 compute_result_columns fallito (non bloccante): {_ccerr}",
+            exc_info=True,
+        )
+
+    try:
+        source_freshness_module.clear_canvas_project_source_freshness(canvas)
+    except Exception as exc:
+        logger.warning(
+            f"clear freshness project_source fallito per {project_id}: {exc}",
+            exc_info=True,
+        )
+
+    return canvas
+
+
 @router.put("/{project_id}/canvas")
 @audit_action(action="project.update_canvas", target_param="project_id")
 def update_project_canvas(
@@ -686,73 +763,7 @@ def update_project_canvas(
 
     canvas = CanvasState(nodes=body.nodes, edges=body.edges)
 
-    try:
-        output_contract_module.sync_canvas_with_output_contracts(
-            canvas=canvas,
-            project_id=project_id,
-            project_service=_project_service,
-            schema_inference_factory=schema_inference_module.SchemaInferenceService,
-        )
-    except Exception as exc:
-        logger.warning(
-            f"sync output_contract canvas fallito per {project_id}: {exc}",
-            exc_info=True,
-        )
-
-    orphans = _canvas_access.find_orphan_processing_nodes(canvas)
-    if orphans:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Canvas contiene nodi orfani (nessun edge incoming): "
-                f"{', '.join(orphans)}. Aggiungi almeno una relazione "
-                f"verso ciascuno di questi nodi, oppure rimuovili dal "
-                f"canvas prima di salvare."
-            ),
-        )
-
-    # Save-time cross-tenant validation gives a clear error before runtime.
-    _assert_canvas_refs_visible_for_owner(
-        canvas,
-        owner_group_id=_metadata_group_id(metadata) or "",
-        is_superadmin=current_user.role == "superadmin",
-    )
-
-    # Backend recomputes result columns before persisting to avoid stale
-    # frontend-provided canvas columns.
-    # Do not update output_contract here: it describes the materialized
-    # artifact produced by an execution, while this endpoint only persists
-    # editor state. Updating it from canvas inference can make downstream
-    # projects consume a schema that does not match the latest saved result.
-    try:
-        result_node = canvas_columns_module.find_result_node(canvas)
-        if result_node is not None:
-            computed = canvas_columns_module.compute_result_columns(
-                canvas=canvas,
-                result_id=result_node.id,
-                project_id=project_id,
-                project_service=_project_service,
-                schema_inference_service_factory=(
-                    schema_inference_module.SchemaInferenceService
-                ),
-            )
-            if computed:
-                result_node.columns = [Column(**c) for c in computed]
-    except Exception as _ccerr:
-        # Column recompute is diagnostic; malformed canvases continue through
-        # the normal validation/persistence path.
-        logger.warning(
-            f"C9 compute_result_columns fallito (non bloccante): {_ccerr}",
-            exc_info=True,
-        )
-
-    try:
-        source_freshness_module.clear_canvas_project_source_freshness(canvas)
-    except Exception as exc:
-        logger.warning(
-            f"clear freshness project_source fallito per {project_id}: {exc}",
-            exc_info=True,
-        )
+    canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user, for_save=True)
 
     try:
         if not _project_service.update_canvas(project_id, canvas):
@@ -778,12 +789,43 @@ class ValidationRequest(BaseModel):
     config: Optional[dict] = None
 
 
+class SchemaInferenceRequest(BaseModel):
+    canvas: CanvasWithPlugins
+
+    @field_validator("canvas")
+    @classmethod
+    def validate_canvas_size(cls, canvas: CanvasWithPlugins) -> CanvasWithPlugins:
+        """Limita il lavoro sincrono richiesto dall'inferenza non persistita."""
+        if len(canvas.nodes) > 500 or len(canvas.edges) > 2000:
+            raise ValueError("Il canvas supera il limite di 500 nodi o 2000 collegamenti")
+        return canvas
+
+
+@router.post("/{project_id}/schemas")
+def infer_project_schemas(
+    project_id: str,
+    body: SchemaInferenceRequest,
+    current_user: CurrentUser = Depends(require_not_esecutore),
+) -> JsonObject:
+    """Inferisce gli schemi del canvas non salvato senza modificare il progetto."""
+    canvas = CanvasState(nodes=body.canvas.nodes, edges=body.canvas.edges)
+    return _infer_project_schemas(project_id, current_user, canvas=canvas)
+
+
 @router.get("/{project_id}/schemas")
 def get_all_schemas(
     project_id: str,
     current_user: CurrentUser = Depends(require_not_esecutore),
 ) -> JsonObject:
     """Ottiene lo schema (colonne + tipi) per tutti i nodi del progetto."""
+    return _infer_project_schemas(project_id, current_user)
+
+
+def _infer_project_schemas(
+    project_id: str,
+    current_user: CurrentUser,
+    canvas: CanvasState | None = None,
+) -> JsonObject:
     if not _schema_service:
         raise_typed_http(
             error_codes.SERVICE_NOT_INITIALIZED,
@@ -792,8 +834,14 @@ def get_all_schemas(
         )
     metadata = _project_service.get_project_metadata(project_id)
     assert_group_access(metadata, current_user, f"Progetto '{project_id}'")
+    if canvas is not None:
+        canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user, for_save=False)
     try:
-        schemas = _schema_service.infer_all_schemas(project_id)
+        schemas = (
+            _schema_service.infer_all_schemas(project_id)
+            if canvas is None
+            else _schema_service.infer_all_schemas(project_id, canvas=canvas)
+        )
         return {"schemas": schemas}
     except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")

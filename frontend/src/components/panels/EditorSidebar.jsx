@@ -7,6 +7,7 @@ import React from 'react';
 import ProjectsSidebar from './ProjectsSidebar';
 import FilesSidebar from './FilesSidebar';
 import { useAuth } from '../../context/AuthContext';
+import { confirmLeaveWithUnsaved } from '../../hooks/useUnsavedChangesGuard';
 import { useNavigate } from 'react-router-dom';
 
 function EditorSidebar({
@@ -63,7 +64,7 @@ function EditorSidebar({
         <button
           type="button"
           className="editor-sidebar__logout"
-          onClick={() => { logout(); navigate('/login'); }}
+          onClick={() => { if (confirmLeaveWithUnsaved()) { logout(); navigate('/login'); } }}
           title="Logout"
         >⏻</button>
       </div>

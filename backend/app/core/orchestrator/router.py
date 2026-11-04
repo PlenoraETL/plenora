@@ -27,7 +27,6 @@ from app.core.orchestrator.service import canvas_validation_gate_blocks
 from app.core.orchestrator import log_cleanup as orchestrator_log_cleanup
 from app.core.orchestrator.execution_contract import (
     CaricaExecutionContract,
-    PipelineExecutionContract,
     build_pipeline_execution_contract,
 )
 from app.core.orchestrator.router_mappers import (
@@ -57,15 +56,13 @@ from app.shared.execution.output_contract_types_enricher import (
 from app.core.eseguibili import output_store as _eseg_output_store
 from app.core.eseguibili import db as eseguibili_db
 from app.core.eseguibili.download_response import build_consume_once_response
-from app.core.eseguibili.manifest import compile_manifest
-from app.core.eseguibili.runtime import resolve_runtime_inputs
-from app.core.eseguibili.service import resolve_runtime_connection_id
 from app.core.io.http_streaming import (
     CloseableStreamingResponse,
     safe_download_filename,
 )
 from app.core.results import output_file_cleanup
 from app.core.projects.canvas_preview_scope import preview_canvas
+from app.core.orchestrator.runtime_inputs import apply_project_runtime_inputs
 
 def _mime_for_filename(filename: str) -> str:
     """Ritorna il Content-Type corretto basandosi sull'estensione del file."""
@@ -162,61 +159,6 @@ def _project_service() -> project_service_module.ProjectService:
     return project_service_module.ProjectService()
 
 
-def _apply_project_runtime_inputs(
-    execution_contract: PipelineExecutionContract,
-    raw_inputs: Mapping[str, object],
-) -> PipelineExecutionContract:
-    """Congela canvas e connessione risolti prima dell'invio al worker."""
-
-    nodes = execution_contract.canvas.get("nodes") or []
-    has_explicit_inputs = any(
-        isinstance(node, Mapping) and node.get("type") == "project_input"
-        for node in nodes
-    )
-    if not has_explicit_inputs:
-        if raw_inputs:
-            raise ValueError("Il progetto non dichiara input runtime")
-        return execution_contract
-
-    manifest = compile_manifest(
-        source_project_id=execution_contract.project_id,
-        project_type=execution_contract.project_type,
-        canvas=execution_contract.canvas,
-        default_connection_id=execution_contract.runtime_context.get(
-            "default_connection_id"
-        ),
-    )
-    resolved_canvas, cleanup_ids, input_summary = resolve_runtime_inputs(
-        eseguibile_id=execution_contract.project_id,
-        canvas=execution_contract.canvas,
-        manifest=manifest,
-        values=raw_inputs,
-        group_id=execution_contract.group_id,
-    )
-    if cleanup_ids:
-        # Il percorso progetto non espone ancora upload runtime: evitare file
-        # temporanei senza lifecycle di cleanup nel relativo task.
-        from app.core.files.service import file_source_service
-
-        for file_source_id in cleanup_ids:
-            file_source_service.delete_file_source(file_source_id)
-        raise ValueError(
-            "Gli input file runtime sono disponibili solo negli eseguibili"
-        )
-    runtime_connection_id = resolve_runtime_connection_id(
-        manifest,
-        raw_inputs=raw_inputs,
-        group_id=execution_contract.group_id,
-    )
-    context = dict(execution_contract.runtime_context)
-    if runtime_connection_id:
-        context["default_connection_id"] = runtime_connection_id
-    context["runtime_input_summary"] = input_summary
-    return execution_contract.model_copy(
-        update={"canvas": resolved_canvas, "runtime_context": context}
-    )
-
-
 @pipeline_router.post("/{project_id}/execute")
 def execute_project_pipeline(
     project_id: str,
@@ -262,7 +204,7 @@ def execute_project_pipeline(
                 project_id=project_id,
                 project_service=project_service,
             )
-            execution_contract = _apply_project_runtime_inputs(
+            execution_contract = apply_project_runtime_inputs(
                 execution_contract,
                 request.inputs if request else {},
             )

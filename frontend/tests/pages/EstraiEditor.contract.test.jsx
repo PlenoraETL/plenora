@@ -172,6 +172,10 @@ vi.mock('../../src/store/useCanvasStore', () => {
   // `useCanvasStore(s => s.takeSnapshot)` per l'undo/redo #24), non solo
   // un oggetto con getState: il mock deve supportare entrambe le forme.
   const storeState = {
+    // Fase 4, M7: Salva passa da utils/serverActions -> store.handleSaveQuiet,
+    // e solo con modifiche non salvate.
+    handleSaveQuiet: handleSaveQuietMock,
+    isDirty: true,
     markClean: vi.fn(),
     setEditorActions: vi.fn(),
     setConnections: vi.fn(),

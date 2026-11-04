@@ -9,15 +9,14 @@
  * Owna:
  *   - subscriptions canvas (edges, upstream node, hasOnPreview/Execute)
  *   - calcolo upstreamColumns (richiede useReactFlow)
- *   - logica validazione: validateViaBackend + handleValidate/Execute/Preview
- *   - ValidationModal
+ *   - pulsanti Valida/Esegui/Anteprima: delegano al percorso unico
+ *     dell'editor (editor/PipelineRunner, Fase 4 M7)
  *   - header + delete
  */
-import React, { useState, useCallback, useEffect, useRef, memo, useMemo } from 'react';
+import React, { useEffect, useRef, memo, useMemo } from 'react';
 import { Position, useReactFlow, useStore } from '@xyflow/react';
-import ValidationModal from '../modals/ValidationModal';
-import { validateProjectCanvas } from '../../api/projects';
-import { backendReportToResult, validationRequestFailedResult } from '../../utils/backendValidationResult';
+import { saveFailedResult } from '../../utils/backendValidationResult';
+import { saveBeforeServerRead } from '../../utils/serverActions';
 import useCanvasStore from '../../store/useCanvasStore';
 import ResultNodeStandardView from './result/ResultNodeStandardView';
 import ResultInlinePreview from './result/ResultInlinePreview';
@@ -42,7 +41,7 @@ const INLINE_PREVIEW_LIMIT = 10;
  * Tutti gli aggiornamenti avvengono tramite useCanvasStore (updateNodeData, deleteNode).
  */
 const ResultNode = memo(({ data, id }) => {
-  const { getEdges, getNodes, setCenter } = useReactFlow();
+  const { getEdges, getNodes } = useReactFlow();
 
   // Sottoscrizioni reattive per i bottoni Preview/Esegui (propagate alle view)
   const hasOnPreview = useCanvasStore(s => !!s.editorActionsRef?.current?.onPreview);
@@ -129,10 +128,6 @@ const ResultNode = memo(({ data, id }) => {
   };
   const { icon, title } = config[nodeVariant];
 
-  // Stato validazione (condiviso: ValidationModal aperta sia da standard sia da IMDF)
-  const [showValidation, setShowValidation] = useState(false);
-  const [validationResult, setValidationResult] = useState({ isValid: true, issues: [] });
-
   const confirm = useConfirm();
 
   const handleDelete = async () => {
@@ -147,93 +142,24 @@ const ResultNode = memo(({ data, id }) => {
     }
   };
 
-  // Validazione orizzontale via backend (Epic CanvasVal §12): salva-poi-valida,
-  // così il backend valida ESATTAMENTE il canvas che vedi (update_canvas azzera
-  // canvas_validated, POST /validate lo risetta in base all'esito). Single source
-  // of truth: niente più validazione JS per-famiglia.
-  const validateViaBackend = async () => {
-    const store = useCanvasStore.getState();
+  // Valida, Esegui e Anteprima: percorso unico dell'editor (Fase 4, M7,
+  // editor/PipelineRunner, sempre montato). Il nodo li chiama soltanto.
+  const action = (name) => (...args) => Promise.resolve(useCanvasStore.getState().getEditorAction(name)?.(...args))
+    .catch(err => console.error(`[ResultNode] ${name}:`, err));
+  const handleValidate = action('onValidate');
+  const handleExecute = action('runPipeline');
+  const handlePreview = () => action('previewWithValidation')(id);
+
+  // "Aggiorna" dell'anteprima nel nodo: legge la versione salvata come le altre.
+  const handleInlineRefresh = async () => {
     try {
-      await store.handleSaveQuiet();
-      const data = await validateProjectCanvas(store.projectId);
-      return backendReportToResult(data);
+      if (!(await saveBeforeServerRead("L'anteprima"))) return;
     } catch (e) {
-      console.error('Validazione backend fallita:', e);
-      return validationRequestFailedResult();
-    }
-  };
-
-  // Broadcast post-validation: aggiorna lo store con i nodeId delle issue
-  // (highlight amber) e il sommario severity (badge toolbar).
-  const broadcastHighlights = (result) => {
-    const store = useCanvasStore.getState();
-    const nodeIds = result.issues
-      .filter(i => i.nodeId)
-      .map(i => i.nodeId);
-    store.setValidationHighlights(nodeIds);
-    const issues = result.issues || [];
-    store.setLastValidationSummary({
-      errorCount: result.bySeverity?.error?.length ?? issues.filter(i => i.severity === 'error').length,
-      warningCount: result.bySeverity?.warning?.length ?? issues.filter(i => i.severity === 'warning').length,
-      infoCount: result.bySeverity?.info?.length ?? issues.filter(i => i.severity === 'info').length,
-    });
-  };
-
-  const handleValidate = async () => {
-    const result = await validateViaBackend();
-    broadcastHighlights(result);
-    setValidationResult(result);
-    setShowValidation(true);
-  };
-
-  // options={ force_recalculate } dal chiamante. StandardView passa valore reale;
-  // ImdfView chiama onExecute() senza args → default force_recalculate=false
-  // (equivalente al comportamento pre-split, executionMode='cache' iniziale).
-  const handleExecuteWithValidation = async (options = { force_recalculate: false }) => {
-    const result = await validateViaBackend();
-    broadcastHighlights(result);
-    if (!result.isValid) {
-      setValidationResult(result);
-      setShowValidation(true);
+      useCanvasStore.getState().getEditorAction('showValidationResult')?.(saveFailedResult(e));
       return;
     }
-    const onExecute = useCanvasStore.getState().editorActionsRef.current.onExecute;
-    if (onExecute) onExecute(id, options);
+    inlinePreview.run(INLINE_PREVIEW_LIMIT);
   };
-
-  const handlePreviewWithValidation = async () => {
-    const result = await validateViaBackend();
-    broadcastHighlights(result);
-    if (!result.isValid) {
-      setValidationResult(result);
-      setShowValidation(true);
-      return;
-    }
-    useCanvasStore.getState().editorActionsRef.current.onPreview?.(id);
-  };
-
-  // Click-to-focus: chiude il modal e centra il canvas sul nodo problematico.
-  const handleFocusNode = useCallback((nodeId) => {
-    const node = getNodes().find(n => n.id === nodeId);
-    if (!node) return;
-    setShowValidation(false);
-    setCenter(
-      // React Flow v12: le dimensioni misurate stanno in node.measured.
-      node.position.x + (node.measured?.width ?? node.width ?? 200) / 2,
-      node.position.y + (node.measured?.height ?? node.height ?? 80) / 2,
-      { zoom: 1.2, duration: 400 },
-    );
-  }, [getNodes, setCenter]);
-
-  // Registra onValidate nello store per il badge toolbar.
-  // Usa ref stabile per evitare re-register churn (handleValidate cambia ogni render).
-  const handleValidateRef = useRef(handleValidate);
-  handleValidateRef.current = handleValidate;
-  useEffect(() => {
-    useCanvasStore.getState().setEditorActions({
-      onValidate: (...args) => handleValidateRef.current(...args),
-    });
-  }, []);
 
   return (
     <div className={`result-node result-node--${nodeVariant}`}>
@@ -273,22 +199,16 @@ const ResultNode = memo(({ data, id }) => {
           hasOnPreview={hasOnPreview}
           hasOnExecute={hasOnExecute}
           onValidate={handleValidate}
-          onExecute={handleExecuteWithValidation}
-          onPreview={handlePreviewWithValidation}
+          onExecute={handleExecute}
+          onPreview={handlePreview}
         />
 
         <ResultInlinePreview
           state={inlinePreview}
-          onExpand={handlePreviewWithValidation}
-          onRefresh={() => inlinePreview.run(INLINE_PREVIEW_LIMIT)}
+          onExpand={handlePreview}
+          onRefresh={handleInlineRefresh}
         />
 
-        <ValidationModal
-          isOpen={showValidation}
-          onClose={() => setShowValidation(false)}
-          result={validationResult}
-          onFocusNode={handleFocusNode}
-        />
       </div>
     </div>
   );

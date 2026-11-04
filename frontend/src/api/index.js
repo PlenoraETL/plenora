@@ -110,6 +110,7 @@ export {
 
 export {
   getProjectSchemas,
+  inferProjectSchemas,
   getNodeSchema,
   validateProjectConnection,
   validateAllProjectSources,

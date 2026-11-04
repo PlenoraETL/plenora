@@ -44,7 +44,6 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
   const onEdgesChange  = useCanvasStore(s => s.onEdgesChange);
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
   const deleteNode     = useCanvasStore(s => s.deleteNode);
-  const handleSaveQuiet = useCanvasStore(s => s.handleSaveQuiet);
   const init           = useCanvasStore(s => s.init);
   const setReadOnly    = useCanvasStore(s => s.setReadOnly);
   // Undo/redo (#24)
@@ -56,7 +55,7 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
 
   // Per i viewer (sola lettura) tutte le mutazioni del canvas (deleteNode,
   // updateNodeData, toggle*, *CalculatedColumn, updateColumnAlias,
-  // handleSaveQuiet, drag/keyboard delete) sono già no-op grazie al flag
+  // drag/keyboard delete) sono già no-op grazie al flag
   // isReadOnly nello store. Qui ci limitiamo a settare il flag.
   const { user } = useAuth();
   const isReadOnly = !can.editCanvas(user);
@@ -192,9 +191,6 @@ export function useCanvasCore(projectId, { mode = 'manipola' } = {}) {
     canUndo,
     canRedo,
     takeSnapshot,
-
-    // Salvataggio
-    handleSaveQuiet,
 
     // Sola lettura (viewer)
     isReadOnly,

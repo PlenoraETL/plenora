@@ -856,7 +856,9 @@ def _scan_value_error_str_e_callsites() -> Dict[str, int]:
 # espansione silente del pattern fra release.
 EXPECTED_VALUE_ERROR_STR_E_COUNTS: Dict[str, int] = {
     "backend/app/shared/error_envelope.py": 1,
-    "backend/app/core/arricchisci/router.py": 2,
+    # +1 (Fase 4 M7, audit R9.1): input runtime non validi in enrich-async,
+    # stesso messaggio di validazione 400 di Estrai (orchestrator/runtime_inputs).
+    "backend/app/core/arricchisci/router.py": 3,
     # Scope/group/limit non validi: messaggio dinamico di validazione admin.
     "backend/app/core/admin_object_storage/router.py": 1,
     "backend/app/core/carica/conflict_request_loader.py": 1,
@@ -911,10 +913,10 @@ def test_value_error_str_e_callsite_lock():
 
 
 def test_value_error_str_e_total_count_lock():
-    """Sanity check: somma per-file == 47. Lock indipendente che
-    cattura desync fra `EXPECTED_VALUE_ERROR_STR_E_COUNTS` e somma
-    intesa nel commit message."""
-    assert sum(EXPECTED_VALUE_ERROR_STR_E_COUNTS.values()) == 47
+    """Sanity check: somma per-file == 48 (47 + input runtime di
+    Arricchisci, Fase 4 M7). Lock indipendente che cattura desync fra
+    `EXPECTED_VALUE_ERROR_STR_E_COUNTS` e somma intesa nel commit message."""
+    assert sum(EXPECTED_VALUE_ERROR_STR_E_COUNTS.values()) == 48
 
 
 def test_value_error_str_e_pattern_in_accepted_fallback():

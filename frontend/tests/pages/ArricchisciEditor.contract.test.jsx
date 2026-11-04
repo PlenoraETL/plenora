@@ -157,6 +157,10 @@ vi.mock('../../src/hooks/useToast', () => ({
 
 vi.mock('../../src/store/useCanvasStore', () => {
   const storeState = {
+    // Fase 4, M7: Salva passa da utils/serverActions -> store.handleSaveQuiet,
+    // e solo con modifiche non salvate.
+    handleSaveQuiet: handleSaveQuietMock,
+    isDirty: true,
     markClean: vi.fn(),
     setEditorActions: vi.fn(),
     setConnections: vi.fn(),

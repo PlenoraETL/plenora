@@ -49,7 +49,6 @@ import NodeHandle from '../canvas/NodeHandle';
 const DataSourceNode = memo(({ id, data }) => {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
   const deleteNode     = useCanvasStore(s => s.deleteNode);
-  const handleSaveQuiet = useCanvasStore(s => s.handleSaveQuiet);
 const [datasources, setDatasources]         = useState([]);
   const [loadingDs, setLoadingDs]             = useState(false);
   const [browserFiles, setBrowserFiles]       = useState([]);
@@ -147,22 +146,21 @@ const fetchSchema = useCallback(async (filePath, opts = {}) => {
         updates.parse_options = newPo;
       }
       // Schema letto dalla sorgente: dato DERIVATO (pendingSync), non una
-      // modifica dell'utente; il salvataggio sotto lo invia comunque.
+      // modifica dell'utente; arriva al server col prossimo Salva/Esegui
+      // (Fase 4, M7: niente salvataggi automatici). L'editor puo' reagire
+      // (Manipola ricalcola gli schemi a valle).
       updateNodeData(id, updates, { derived: true });
       setTimeout(() => {
         const onSchemaUpdated = useCanvasStore.getState()
           .getEditorAction('onDataSourceSchemaUpdated');
-        const save = onSchemaUpdated
-          ? onSchemaUpdated(id, updates)
-          : handleSaveQuiet();
-        Promise.resolve(save).catch(() => {});
+        if (onSchemaUpdated) Promise.resolve(onSchemaUpdated(id, updates)).catch(() => {});
       }, 100);
     } catch {
       setSchemaError(true);
     } finally {
       setLoadingSchema(false);
     }
-  }, [dsId, id, updateNodeData, data.format, data.parse_options, handleSaveQuiet]);
+  }, [dsId, id, updateNodeData, data.format, data.parse_options]);
 
   useEffect(() => {
     if (!dsId || !data.file_path) return;

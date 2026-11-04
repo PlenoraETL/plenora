@@ -82,8 +82,9 @@ def test_schema_errors_are_node_local_passthrough(bad, caplog, monkeypatch):
     result = svc.infer_all_schemas("p")
     assert [c["name"] for c in result["n"]] == ["a"]
     assert result["other"] == result["source"]
-    assert svc._status_cache["n"][0] == "indeterminate"
-    assert svc._status_cache["other"][0] == "certain"
+    # Lo stato appartiene alla singola chiamata, non al servizio condiviso.
+    assert svc.infer_node_schema_typed("p", "n").status == "indeterminate"
+    assert svc.infer_node_schema_typed("p", "other").status == "certain"
     assert "Schema issue for node n" in caplog.text
     from fastapi import FastAPI
     from fastapi.testclient import TestClient

@@ -1,6 +1,7 @@
 import React, { memo, useEffect, useMemo, useState } from 'react';
 import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
+import { acceptsInputKind } from '../../utils/runtimeInputKinds';
 import { getTransformRegistry } from '../../api/transforms';
 import { listConnectionSets } from '../../api';
 import {
@@ -64,6 +65,7 @@ function ProjectInputNode({ id, data, selected }) {
   const removeEdges = useCanvasStore(s => s.removeEdges);
   const updateEdge = useCanvasStore(s => s.updateEdge);
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
+  const mode = useCanvasStore(s => s.mode);
   const [registry, setRegistry] = useState(registryCache);
   const [registryStatus, setRegistryStatus] = useState(
     registryCache ? 'ready' : 'idle',
@@ -167,7 +169,10 @@ function ProjectInputNode({ id, data, selected }) {
             connection_set_id: nextKind === 'connection' ? (data.connection_set_id || '') : null,
           });
         }}>
-          {INPUT_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          {/* Solo i tipi che questa modalita' esegue (utils/runtimeInputKinds);
+              un tipo gia' scelto resta visibile per poterlo cambiare. */}
+          {INPUT_TYPES.filter(([value]) => value === kind || acceptsInputKind(mode, value))
+            .map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
       </label>
       <label className="pin__check nodrag">

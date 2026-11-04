@@ -15,6 +15,8 @@
  */
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
+import { hasUnsavedChanges } from '../../store/saveState';
+import { saveBeforeServerRead } from '../../utils/serverActions';
 import { useInlinePreview } from '../../hooks/useInlinePreview';
 import { humanizeError } from '../../utils/errorMessages';
 import { PREVIEW_ROW_LIMIT, formatPreviewValue } from '../../utils/previewFormat';
@@ -43,8 +45,7 @@ const selectSelectedId = (s) => {
 export default function StepPreview({ projectId }) {
   const nodeId = useCanvasStore(selectSelectedId);
   const node = useCanvasStore(s => (nodeId ? (s.nodes || []).find(n => n.id === nodeId) : null));
-  const handleSaveQuiet = useCanvasStore(s => s.handleSaveQuiet);
-  const unsaved = useCanvasStore(s => (s.isDirty || s.pendingSync) && !s.isReadOnly);
+  const unsaved = useCanvasStore(hasUnsavedChanges);
   const { status, data, error, run, clear } = useInlinePreview(projectId);
   const [shownFor, setShownFor] = useState(null);
   const [shownKey, setShownKey] = useState(null);
@@ -85,7 +86,8 @@ export default function StepPreview({ projectId }) {
   const start = async () => {
     setSaveError(null);
     try {
-      await handleSaveQuiet();
+      // Il pulsante dice gia' "Salva e …": niente seconda domanda.
+      await saveBeforeServerRead("L'anteprima del passo", { explicit: true });
     } catch (err) {
       setSaveError(humanizeError(err).message || 'Salvataggio non riuscito');
       return;

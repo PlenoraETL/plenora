@@ -84,7 +84,7 @@ Ogni aggiunta deve avere:
 | M4 | Pannelli Join/Filtro/Formula multipli e suggerimento Lookup (Manipola); join tra tabelle (Estrai) | M1, B2–B4 |
 | M5 | Griglia "Seleziona e rinomina" (Output di Manipola e Arricchisci, Result di Estrai) | M1, B5 |
 | M6 | Vista Passi, "Vedi in Passi", rami scollegati con "Collega", duplica ramo (tre editor) | M1 |
-| M7 | Toolbar uniforme, autosave con debounce, un solo Esegui, input runtime (R9.1) nei tre editor | M1 |
+| M7 | Toolbar uniforme, salvataggio esplicito (scelta dell'utente: niente autosave), un solo Esegui, input runtime (R9.1) nei tre editor | M1 |
 
 **Backend aggiuntivo B6:** anteprima per nodo anche per Estrai (SQL fino al nodo) e Arricchisci (pipeline fino al nodo), con lo stesso contratto di B1 (`?node_id=`).
 
@@ -126,6 +126,51 @@ risultato identico, Colonne in uscita persistite e applicate al file):
    "Condizionale (Case When)".
 7. L'Output nel pannello laterale ha ancora la vecchia intestazione a scheda
    ("Output Manipola ×"); in M4 e' stata tolta solo ai passi di trasformazione.
+
+### Stato M7 (03/11/2026)
+
+Scelta dell'utente: **salvataggio esplicito** ("B"). Quello che gira
+(Scheduler, Eseguibili) e' sempre l'ultima versione salvata. Raccolta difetti
+(38 punti, un lettore), correzione unica per regole:
+
+- **Chi salva:** solo `utils/serverActions` (Salva/Ctrl+S, Esegui, "Salva e
+  continua"). Valida, Anteprima, "Dati dopo…" e "Aggiorna" leggono la
+  versione salvata e, con modifiche non salvate, chiedono prima. Test di
+  enumerazione: `handleSaveQuiet` esiste solo nello store e in serverActions.
+- **Cosa e' "non salvato":** una sola definizione (`store/saveState.hasUnsavedChanges`,
+  modifiche dell'utente) per indicatore, avviso di uscita, copia di
+  sicurezza, anteprime e versioni. Le correzioni automatiche (formato,
+  colonne sincronizzate) partono col prossimo salvataggio e non danno avviso:
+  fino ad allora lo Scheduler esegue la versione salvata, che il backend
+  corregge comunque al caricamento.
+- **Copia di sicurezza** (`utils/localDrafts`): per utente e progetto, scade
+  dopo 14 giorni, cancellata a ogni salvataggio, al ripristino di una
+  versione e all'eliminazione del progetto (all'uscita dall'account resta:
+  ogni uscita dall'editor, logout compreso, chiede conferma); l'offerta
+  resta ferma finche' l'utente sceglie e avvisa se il progetto e' stato
+  salvato dopo la copia. "Annulla" dopo il ripristino torna alla versione del
+  server.
+- **Esegui:** un solo percorso (`editor/PipelineRunner`, montato
+  dall'editor: funziona anche con l'Output chiuso), opzioni ("Ricalcola
+  tutto") e stato di esecuzione nello store: barra e pannello sono lo stesso
+  pulsante. Risorse non accessibili e input di tipo non eseguibile in quella
+  modalita' bloccati prima di salvare.
+- **Input runtime:** stesso default del backend (senza tipo = file). Nel
+  percorso progetto i file usano quello gia' nel canvas (backend).
+- **Schemi senza salvare:** POST /schemas prepara il canvas con la stessa
+  funzione del salvataggio (controllo gruppi, contratti) (backend); i nodi
+  scollegati bloccano solo il salvataggio, non gli schemi.
+
+Rimandati:
+8. Arricchisci con input runtime: prima la finestra di conferma (stima delle
+   chiamate, che non vede gli input), poi quella degli input. Da unire in una.
+9. Nomi di prodotto rimasti in inglese nel menu ("Data Source", "Multi-Join",
+   "Output"): restano come nel resto dell'applicazione finche' non si decide
+   un glossario.
+10. Codice morto `onCaricanExecute` / `caricaExecution` (registrato, nessun
+    chiamante): il Carica parte dentro l'esecuzione. Va tolto in Fase 5.
+11. Copia di sicurezza aperta in due schede dello stesso progetto: vince
+    l'ultima scrittura (l'avviso "salvato dopo" copre il caso del salvataggio).
 
 **Stima:** circa 4 giornate (era circa 2 per il solo Manipola).
 

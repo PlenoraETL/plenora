@@ -70,6 +70,10 @@ import StepPreview from '../canvas/StepPreview';
 import { autoLayout } from '../canvas/autoLayout';
 import { nodeTitle } from '../canvas/nodeDescriptors';
 import StepsView from '../canvas/StepsView';
+import EditorToolbar from './EditorToolbar';
+import PipelineRunner from './PipelineRunner';
+import useLocalDraft from '../../hooks/useLocalDraft';
+import { useOptionalConfirm } from '../../context/ConfirmContext';
 import { CanvasGraphContext } from '../canvas/CanvasGraphContext';
 import { analyzeCanvas, structureKey } from '../../utils/canvasGraph';
 
@@ -154,6 +158,9 @@ canvasConfig = EMPTY_OBJ,
 
   const {
     topbar,
+    // Fase 4, M7: configurazione della barra unica (EditorToolbar). Se c'e',
+    // sostituisce `topbar`.
+    toolbar,
     sidebar,
     beforeCanvas,
     afterCanvas,
@@ -208,6 +215,48 @@ canvasConfig = EMPTY_OBJ,
   useEffect(() => {
     setEditorActions({ openPalette: palette && !isReadOnly ? openPalette : null });
   }, [setEditorActions, openPalette, palette, isReadOnly]);
+
+  // Copia di sicurezza delle modifiche non salvate (Fase 4, M7).
+  const draft = useLocalDraft(toolbar ? projectId : null, loading || Boolean(loadError) || !project, {
+    serverUpdatedAt: project?.metadata?.updated_at || null,
+  });
+
+  // Letture dal server (Valida, Anteprima, ...) con modifiche non salvate:
+  // l'editor chiede (utils/serverActions.saveBeforeServerRead).
+  const confirm = useOptionalConfirm();
+  useEffect(() => {
+    if (!confirm) return undefined;
+    setEditorActions({
+      confirmSaveBeforeRead: (action) => confirm({
+        title: 'Modifiche non salvate',
+        message: `${action} usa la versione salvata del progetto. Salvo prima le modifiche?`,
+        confirmText: 'Salva e continua',
+        cancelText: 'Annulla',
+      }),
+    });
+    return () => setEditorActions({ confirmSaveBeforeRead: null });
+  }, [confirm, setEditorActions]);
+
+  // Ctrl+S (Fase 4, M7): salva come il pulsante della barra, solo con
+  // l'editor pronto e nessuna finestra aperta (i campi di una finestra non
+  // sono ancora nel canvas: salvarli a meta' confonderebbe).
+  const onSaveRef = useRef(null);
+  onSaveRef.current = toolbar && !loading && !loadError && project ? (toolbar.onSave || null) : null;
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 's') return;
+      e.preventDefault();
+      if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
+      if (useCanvasStore.getState().isReadOnly || !onSaveRef.current) return;
+      // Un campo che conferma all'uscita (titolo, valori) va confermato
+      // prima: si esce dal campo e si salva al giro successivo.
+      const el = document.activeElement;
+      if (el && el !== document.body && typeof el.blur === 'function') el.blur();
+      setTimeout(() => onSaveRef.current?.(), 0);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   // Riordina: layout automatico come azione utente (annullabile, salvata).
   const handleAutoLayout = useCallback(() => {
@@ -290,7 +339,21 @@ canvasConfig = EMPTY_OBJ,
 
   return (
     <div className={`${prefix}-editor`}>
-      {topbar}
+      {toolbar
+        ? <EditorToolbar {...toolbar} onAddStep={palette && !isReadOnly ? openPaletteFromSelection : null} />
+        : topbar}
+      {draft.offer && !isReadOnly && (
+        <div className="draft-offer" role="alert">
+          <span>
+            Ci sono modifiche non salvate del {new Date(draft.offer.savedAt).toLocaleString('it-IT')} rimaste in questo browser.
+            {draft.offer.serverNewer && (
+              <strong> Il progetto è stato salvato dopo: ripristinandole e salvando sostituiresti quella versione.</strong>
+            )}
+          </span>
+          <button type="button" className="etb-btn etb-btn--primary" onClick={draft.restore}>Ripristina</button>
+          <button type="button" className="etb-btn" onClick={draft.discard}>Scarta</button>
+        </div>
+      )}
       {beforeCanvas}
       <CanvasGraphContext.Provider value={graph}>
       <div className={`${prefix}-main`}>
@@ -302,15 +365,6 @@ canvasConfig = EMPTY_OBJ,
             onDrop={onDrop}
             onDragOver={onDragOver}
           >
-            <div className="canvas-view-toggle" role="group" aria-label="Vista">
-              {/* Cambiando vista resta in primo piano il passo selezionato. */}
-              <button type="button" aria-pressed={canvasView === 'canvas'} onClick={() => setCanvasView('canvas', selectedId)}>
-                <span aria-hidden="true">◇ </span>Canvas
-              </button>
-              <button type="button" aria-pressed={canvasView === 'steps'} onClick={() => setCanvasView('steps', selectedId)}>
-                <span aria-hidden="true">☰ </span>Passi
-              </button>
-            </div>
             {hexCanvasRef && (
               <canvas
                 ref={hexCanvasRef}
@@ -362,6 +416,8 @@ canvasConfig = EMPTY_OBJ,
         <NodeInspector fullNodeTypes={nodeTypes} prefix={prefix} branchActions={branchActions} />
       </div>
       </CanvasGraphContext.Provider>
+      {/* Valida / Anteprima / Esegui: percorso unico, sempre montato (M7). */}
+      {toolbar && <PipelineRunner />}
       {modals}
       {palette && (
         <NodePalette

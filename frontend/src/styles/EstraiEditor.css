@@ -52,263 +52,24 @@
 /* ═══════════════════════════════════════════════════════════════
    TOPBAR
    ═══════════════════════════════════════════════════════════════ */
-.estrai-toolbar {
-  height: var(--ee-topbar);
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 14px;
-  background: var(--ee-surface);
-  border-bottom: 1px solid var(--ee-border-hi);
-  position: relative;
-  z-index: 20;
-}
 
 /* Accent line — Estrai green */
-.estrai-toolbar::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 3px;
-  background: var(--ee-estrai);
-  border-radius: 0 2px 2px 0;
-}
 
 /* Logo */
-.estrai-toolbar__logo {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-.estrai-toolbar__logo-svg-text { fill: var(--ee-text); }
 
 /* Separator */
-.estrai-toolbar__sep {
-  width: 1px;
-  height: 22px;
-  background: var(--ee-border-hi);
-  flex-shrink: 0;
-  margin: 0 2px;
-}
 
 /* Left group */
-.estrai-toolbar__left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
 
 /* Center */
-.estrai-toolbar__center {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.estrai-toolbar__title {
-  font-family: var(--plen-font-display);
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--ee-text);
-  margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 280px;
-}
-
-.estrai-toolbar__subtitle {
-  font-family: var(--plen-font-mono);
-  font-size: 10px;
-  color: var(--ee-text-dim);
-  white-space: nowrap;
-}
 
 /* Connection badge */
-.estrai-toolbar__connection-badge {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 11px;
-  background: rgba(52,193,122,0.08);
-  border: 1px solid rgba(52,193,122,0.25);
-  border-radius: var(--ee-radius);
-  cursor: default;
-  flex-shrink: 0;
-}
-.estrai-toolbar__conn-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--ee-estrai);
-  box-shadow: 0 0 6px var(--ee-estrai);
-  flex-shrink: 0;
-}
-.estrai-toolbar__connection-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ee-estrai);
-}
-.estrai-toolbar__connection-type {
-  font-family: var(--plen-font-mono);
-  font-size: 9.5px;
-  color: var(--ee-text-dim);
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
 
 /* Right group */
-.estrai-toolbar__right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.estrai-toolbar__stats {
-  font-family: var(--plen-font-mono);
-  font-size: 11px;
-  color: var(--ee-text-dim);
-  white-space: nowrap;
-  padding: 0 4px;
-}
-
-.estrai-toolbar__user {
-  font-family: var(--plen-font-mono);
-  font-size: 11.5px;
-  color: var(--ee-text-dim);
-  white-space: nowrap;
-  padding: 0 4px;
-}
 
 /* Toolbar buttons */
-.estrai-toolbar__btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
-  border: none;
-  border-radius: var(--ee-radius);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: var(--plen-font-body);
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: all 0.12s;
-}
-
-.estrai-toolbar__btn--back {
-  background: var(--ee-surface-2);
-  border: 1px solid var(--ee-border-hi);
-  color: var(--ee-text-sub);
-}
-.estrai-toolbar__btn--back:hover { color: var(--ee-text); background: var(--ee-surface-3); }
-
-.estrai-toolbar__btn--connections {
-  background: rgba(75,139,255,0.1);
-  border: 1px solid rgba(75,139,255,0.25);
-  color: var(--ee-blue);
-}
-.estrai-toolbar__btn--connections:hover { background: rgba(75,139,255,0.18); }
-
-.estrai-toolbar__btn--annotation,
-.estrai-toolbar__btn--static {
-  background: var(--ee-surface-2);
-  border: 1px solid var(--ee-border-hi);
-  color: var(--ee-text-sub);
-}
-.estrai-toolbar__btn--annotation:hover,
-.estrai-toolbar__btn--static:hover { color: var(--ee-text); background: var(--ee-surface-3); }
-
-.estrai-toolbar__btn--output {
-  background: rgba(52,193,122,0.1);
-  border: 1px solid rgba(52,193,122,0.25);
-  color: var(--ee-estrai);
-}
-.estrai-toolbar__btn--output:hover { background: rgba(52,193,122,0.18); }
-.estrai-toolbar__btn--output:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.estrai-toolbar__btn--carica {
-  background: rgba(251,191,36,0.1);
-  border: 1px solid rgba(251,191,36,0.25);
-  color: var(--ee-warn);
-}
-.estrai-toolbar__btn--carica:hover:not(:disabled) { background: rgba(251,191,36,0.18); }
-.estrai-toolbar__btn--carica:disabled { opacity: 0.35; cursor: not-allowed; }
-
-.estrai-toolbar__btn--carica-arcgis {
-  background: rgba(45,212,191,0.10);
-  border: 1px solid rgba(45,212,191,0.25);
-  color: #2DD4BF;
-}
-.estrai-toolbar__btn--carica-arcgis:hover:not(:disabled) { background: rgba(45,212,191,0.18); }
-
-.estrai-toolbar__btn--datasource {
-  background: rgba(245,166,35,0.1);
-  border: 1px solid rgba(245,166,35,0.25);
-  color: var(--ee-warn);
-}
-.estrai-toolbar__btn--datasource:hover { background: rgba(245,166,35,0.18); }
-
-.estrai-toolbar__btn--versions {
-  background: rgba(75,139,255,0.10);
-  border: 1px solid rgba(75,139,255,0.25);
-  color: var(--ee-blue);
-}
-.estrai-toolbar__btn--versions:hover:not(:disabled) { background: rgba(75,139,255,0.18); }
-
-.estrai-toolbar__btn--save {
-  background: var(--ee-blue);
-  color: white;
-  border: none;
-}
-.estrai-toolbar__btn--save:hover:not(:disabled) { background: #2563EB; }
-.estrai-toolbar__btn--save:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.estrai-toolbar__btn--logout {
-  background: var(--ee-surface-2);
-  border: 1px solid var(--ee-border-hi);
-  color: var(--ee-text-sub);
-  padding: 6px 10px;
-}
-.estrai-toolbar__btn--logout:hover {
-  color: var(--ee-err);
-  background: rgba(248,113,113,0.08);
-  border-color: rgba(248,113,113,0.2);
-}
 
 /* Theme toggle (segmented) */
-.estrai-toolbar__theme {
-  display: flex;
-  background: var(--ee-surface-2);
-  border: 1px solid var(--ee-border-hi);
-  border-radius: 20px;
-  padding: 3px;
-  flex-shrink: 0;
-}
-.estrai-toolbar__theme-opt {
-  padding: 4px 11px;
-  border-radius: 16px;
-  font-size: 11px;
-  font-family: var(--plen-font-mono);
-  color: var(--ee-text-dim);
-  cursor: pointer;
-  user-select: none;
-  transition: all 0.12s;
-}
-.estrai-toolbar__theme-opt--active {
-  background: var(--ee-surface);
-  color: var(--ee-text);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-}
 
 /* ═══════════════════════════════════════════════════════════════
    MAIN LAYOUT
@@ -689,5 +450,5 @@
 @media (max-width: 768px) {
   .estrai-editor { --ee-sidebar: 0px; }
   .estrai-sidebar { display: none; }
-  .estrai-toolbar__connection-badge { display: none; }
+  
 }

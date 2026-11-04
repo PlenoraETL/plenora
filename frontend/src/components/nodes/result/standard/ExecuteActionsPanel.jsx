@@ -2,17 +2,16 @@
  * ExecuteActionsPanel.jsx — Coda finale del Result node:
  * execution mode + bottoni Valida/Preview/Esegui + footer cronologia
  * + `RunHistoryModal`.
- * Componente presentational locale: niente fetch, niente API,
- * niente global state. Le callback `onValidate`/`onPreview`/`onExecute`
- * sono ricevute dal parent (che le inoltra a sua volta dal grandparent
- * `ResultNode`).
+ * Le callback `onValidate`/`onPreview`/`onExecute` arrivano dal
+ * `ResultNode` (unico percorso di esecuzione).
  *
- * State locale:
- *   - `executionMode` ('cache' | 'recalculate'): UI radio, scope-locale
- *     a questo panel. Solo MANIPOLA/ARRICCHISCI lo mostrano (gated
- *     `hasExecutionOptions`); su ESTRAI il radio non viene renderizzato
- *     ma il default 'cache' rimane usato per la firma `force_recalculate`
- *     (false su ESTRAI).
+ * Stato:
+ *   - "Usa cache" / "Ricalcola tutto": nello STORE (`runOptions`), cosi'
+ *     vale anche per "▶ Esegui" della barra (Fase 4, M7). Solo
+ *     MANIPOLA/ARRICCHISCI mostrano la scelta (`hasExecutionOptions`); su
+ *     ESTRAI resta false.
+ *   - `runState`: fuori da 'idle' (avvio o esecuzione) "Esegui" e' spento,
+ *     come in barra.
  *   - `isRunHistoryOpen`: open/close del `RunHistoryModal`.
  *
  * `RunHistoryModal` co-localizzato qui: il trigger (footer button) e
@@ -23,6 +22,7 @@
  */
 import React, { useState } from 'react';
 import RunHistoryModal from '../../../modals/RunHistoryModal';
+import useCanvasStore from '../../../../store/useCanvasStore';
 
 export default function ExecuteActionsPanel({
   data,
@@ -37,7 +37,10 @@ export default function ExecuteActionsPanel({
   onPreview,
   onExecute,
 }) {
-  const [executionMode, setExecutionMode] = useState('cache');
+  const executionMode = useCanvasStore(s => (s.runOptions?.force_recalculate ? 'recalculate' : 'cache'));
+  const setRunOptions = useCanvasStore(s => s.setRunOptions);
+  const setExecutionMode = (mode) => setRunOptions({ force_recalculate: mode === 'recalculate' });
+  const busy = useCanvasStore(s => s.runState === 'starting' || s.runState === 'running');
   const [isRunHistoryOpen, setIsRunHistoryOpen] = useState(false);
 
   return (
@@ -114,11 +117,12 @@ export default function ExecuteActionsPanel({
 
         {hasOnExecute && (
           <button type="button"
-            onClick={() => onExecute({ force_recalculate: executionMode === 'recalculate' })}
+            onClick={() => onExecute()}
+            disabled={busy}
             className={`result-node__execute-btn result-node__execute-btn--${nodeVariant}`}
           >
-            <span className="result-node__execute-icon">▶️</span>
-            <span>{executeLabel}</span>
+            <span className="result-node__execute-icon" aria-hidden="true">{busy ? '⏳' : '▶️'}</span>
+            <span>{busy ? 'In esecuzione…' : executeLabel}</span>
           </button>
         )}
       </div>

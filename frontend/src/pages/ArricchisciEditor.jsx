@@ -22,9 +22,11 @@ import { ConfirmProvider } from '../context/ConfirmContext';
 import { executeEnrichmentAsync } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useEditorData } from '../hooks/useEditorData';
-import { describeAccessDeniedNodes } from '../utils/canvasAccessControl';
+import { beforePreview, saveForRun, saveNow } from '../utils/serverActions';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
 import useCanvasStore from '../store/useCanvasStore';
+import useRuntimeInputDefinitions from '../hooks/useRuntimeInputDefinitions';
+import { executionNeedsConfig } from '../utils/executionConfig';
 import { withAvailableColumns } from '../utils/columnPlans';
 import {
   createParameterBindingEdge,
@@ -43,7 +45,6 @@ import ResultNode from '../components/nodes/ResultNode';
 import CaricanNode from '../components/nodes/CaricanNode';
 import CaricanArcGISNode from '../components/nodes/CaricanArcGISNode';
 import '../components/nodes/CaricanArcGISNode.css';
-import PlenoraLogo from '../components/common/PlenoraLogo';
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
 
 // Modali lazy-loaded
@@ -122,7 +123,7 @@ const ArricchisciEditorContent = () => {
     nodes, edges, onNodesChange, onEdgesChange,
     loadGraph, addNodes, addEdges, editEdges, insertNode, applyDerivedNodes,
     nodesRef, edgesRef, updateNodeData, deleteNode,
-    handleSaveQuiet, getViewportCenter,
+    getViewportCenter,
     isReadOnly, readOnlyProps
   } = useCanvasCore(projectId, { mode: 'arricchisci' });
 
@@ -137,26 +138,31 @@ const ArricchisciEditorContent = () => {
 
   const [exportFormat, setExportFormat]         = useState('csv');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [showEnrichDropdown, setShowEnrichDropdown] = useState(false);
 
   const modals = useMultiModal(['template', 'openapi', 'manual', 'datasource']);
   const [showVersions, setShowVersions] = useState(false);
 
   const enrichmentValidation = useEnrichmentValidation();
-  const preview   = usePreview(projectId, handleSaveQuiet);
-  const { saving, handleSaveCanvas } = useCanvasSave(handleSaveQuiet, {
+  const preview   = usePreview(projectId, beforePreview);
+  const { saving, handleSaveCanvas } = useCanvasSave(saveNow, {
     logPrefix: '[ArricchisciEditor]',
   });
+  // Input runtime chiesti all'esecuzione, come in Estrai (audit R9.1).
+  const runtimeInputDefinitions = useRuntimeInputDefinitions(nodes);
+  // Letto al clic su Esegui (le azioni registrate non vedono i render nuovi).
+  const needsRunConfigRef = useRef(false);
+  needsRunConfigRef.current = executionNeedsConfig(runtimeInputDefinitions, user);
   const execution = useExecution(projectId, {
     executeFunction: executeEnrichmentAsync,
     // Tutti i guard (CANVAS_EMPTY, ARRICCHISCI_NO_SOURCES, ARRICCHISCI_NO_ENRICHER)
     // sono coperti dalla validazione backend (POST /validate), chiamata da
     // `ResultNode.handleExecuteWithValidation` prima di `onExecute`.
     // onBeforeExecute raggiunto solo a validation-passed.
-    onBeforeExecute: () => handleSaveQuiet(),
+    onBeforeExecute: saveForRun,
+    tracksRunState: true,
   });
   const caricarica = useCaricarica(projectId, {
-    onBeforeExecute: handleSaveQuiet,
+    onBeforeExecute: saveForRun,
     getCanvas: () => ({ nodes: nodesRef.current, edges: dataFlowEdges(edgesRef.current) })
   });
 
@@ -327,18 +333,8 @@ const ArricchisciEditorContent = () => {
   const handleShowConfirmModal = useCallback(async (_id, options = {}) => {
     setPendingExecuteOptions(options);
     const currentNodes = nodesRef.current;
-    // Pre-flight access_denied: backend (RB.4.B/RB.7.B) marca i nodi che
-    // riferiscono risorse non visibili al gruppo del progetto. Blocca il
-    // run prima di chiamare il backend (che fallirebbe a runtime con
-    // _assert_file_source_group_access — rete di sicurezza preservata).
-    // NB: access_denied NON e' nel validator — resta come unico guard pre-confirm.
-    const denied = describeAccessDeniedNodes(currentNodes);
-    if (denied) {
-      toast.error('Esecuzione bloccata: rimuovi o sostituisci i nodi con risorse non accessibili.');
-      console.warn('[run-blocked] access_denied nodes:\n' + denied.summary);
-      return;
-    }
-    await handleSaveQuiet();
+    // Risorse non accessibili e salvataggio: gia' fatti dal percorso unico di
+    // ResultNode (Fase 4, M7) prima di arrivare qui.
     // I nodi file-processor (rest_file) lavorano
     // file->file, non riga-per-riga su un DataFrame. Il validate/estimate
     // dell'enrichment classico (che carica il file come DataFrame e controlla
@@ -350,7 +346,7 @@ const ArricchisciEditorContent = () => {
     if (hasFileProcessor) {
       const resultNode = currentNodes.find(n => n.type === 'result');
       const format = resultNode?.data?.format || exportFormat || 'csv';
-      execution.prepareExecute({ format, ...options });
+      execution.prepareExecute({ format, ...options }, { needsConfig: needsRunConfigRef.current });
       setPendingExecuteOptions({});
       return;
     }
@@ -364,14 +360,14 @@ const ArricchisciEditorContent = () => {
       config.staticColumns,
       config.staticParameters,
     );
-  }, [handleSaveQuiet, getEnrichmentConfig, projectId, enrichmentValidation, execution, exportFormat]);
+  }, [getEnrichmentConfig, projectId, enrichmentValidation, execution, exportFormat]);
 
   const handleConfirmExecution  = useCallback(() => {
     setShowConfirmModal(false);
     // Leggi il formato dal nodo Result al momento dell'esecuzione
     const resultNode = nodesRef.current.find(n => n.type === 'result');
     const format = resultNode?.data?.format || exportFormat || 'csv';
-    execution.prepareExecute({ format, ...pendingExecuteOptions });
+    execution.prepareExecute({ format, ...pendingExecuteOptions }, { needsConfig: needsRunConfigRef.current });
     setPendingExecuteOptions({});
   }, [execution, exportFormat, pendingExecuteOptions]);
   const handleCloseConfirmModal = useCallback(() => { setShowConfirmModal(false); enrichmentValidation.reset(); }, [enrichmentValidation]);
@@ -580,53 +576,36 @@ const ArricchisciEditorContent = () => {
   const accessDeniedBanner = <AccessDeniedBanner nodes={nodes} />;
 
   // topbar slot
-  const topbar = (
-    <div className="arricchisci-toolbar">
-        <div className="arricchisci-toolbar__left">
-          <div className="arricchisci-toolbar__logo">
-            <PlenoraLogo gridLines="left" plenClassName="arricchisci-toolbar__logo-text" />
-          </div>
-          <div className="arricchisci-toolbar__sep" />
-          <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--back" onClick={handleBack}>← Indietro</button>
-        </div>
-        <div className="arricchisci-toolbar__center">
-          <h2 className="arricchisci-toolbar__title">{project?.metadata?.name}</h2>
-          <span className="arricchisci-toolbar__badge">ARRICCHISCI</span>
-        </div>
-        <div className="arricchisci-toolbar__right">
-          {!isReadOnly && (
-            <>
-              <div className="arricchisci-toolbar__dropdown" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setShowEnrichDropdown(false); }}>
-                <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--api" onClick={() => setShowEnrichDropdown(v => !v)}>🔗 + Enrichment ▼</button>
-                {showEnrichDropdown && (
-                <div className="arricchisci-toolbar__dropdown-content">
-                  <button type="button" onClick={() => { modals.open('template');   setShowEnrichDropdown(false); }}>🍪 Da Template</button>
-                  <button type="button" onClick={() => { modals.open('manual');     setShowEnrichDropdown(false); }}>✏️ API Manuale</button>
-                  <button type="button" onClick={() => { modals.open('openapi');    setShowEnrichDropdown(false); }}>📋 OpenAPI</button>
-                  <button type="button" onClick={() => { modals.open('rest_file');  setShowEnrichDropdown(false); }}>📦 Processore File</button>
-                  <button type="button" onClick={() => { modals.open('datasource'); setShowEnrichDropdown(false); }}>📁 Data Source</button>
-                </div>
-                )}
-              </div>
-              <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--versions" onClick={() => setShowVersions(true)} title="Versioni del canvas (snapshot / ripristino)">🕘 Versioni</button>
-              <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--static" onClick={handleAddStaticValuesNode} title="Aggiungi valori statici con variabili template">📝 Valori Statici</button>
-              <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--static" onClick={handleAddProjectInputNode} title="Aggiungi un input valorizzato quando il progetto viene eseguito">⌨ Input</button>
-              <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--output" onClick={handleAddResultNode}>📁 Output</button>
-              <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--carica" onClick={handleAddCaricanNode} disabled={!hasResultNode || hasCaricanNode} title="Aggiungi nodo per caricare su database">💾 Carica DB</button>
-              <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--carica" onClick={handleAddCaricanArcGISNode} disabled={!hasResultNode || hasCaricanArcGISNode} title="Aggiungi nodo Carica ArcGIS" style={{ borderColor: 'rgba(45,212,191,0.4)', color: '#2DD4BF' }}>🌐 Carica ArcGIS</button>
-            </>
-          )}
-          <ValidationStatusBadge />
-          <div className="arricchisci-theme-toggle">
-            <div className={`arricchisci-theme-opt${theme==='dark'?' arricchisci-theme-opt--on':''}`} onClick={() => setTheme('dark')}>🌙 Scuro</div>
-            <div className={`arricchisci-theme-opt${theme==='light'?' arricchisci-theme-opt--on':''}`} onClick={() => setTheme('light')}>☀️ Chiaro</div>
-          </div>
-          {!isReadOnly && (
-            <button type="button" className="arricchisci-toolbar__btn arricchisci-toolbar__btn--save" onClick={handleSaveCanvas} disabled={saving}>{saving ? 'Salvataggio...' : '💾 Salva'}</button>
-          )}
-        </div>
-      </div>
-  );
+  // Barra unica (Fase 4, M7): le fonti di arricchimento e le altre azioni
+  // nel menu "⋯", un solo "▶ Esegui".
+  const toolbar = {
+    mode: 'arricchisci',
+    title: project?.metadata?.name,
+    onBack: handleBack,
+    onSave: handleSaveCanvas,
+    saving,
+    executing: execution.isExecuting,
+    theme,
+    setTheme,
+    statusExtra: <ValidationStatusBadge />,
+    // Sola lettura: nessuna azione che modifica (Versioni crea e ripristina).
+    menuItems: isReadOnly ? [] : [
+      { key: 'template', icon: '🍪', label: 'Arricchimento da template', onClick: () => modals.open('template') },
+      { key: 'manual', icon: '✏️', label: 'API manuale', onClick: () => modals.open('manual') },
+      { key: 'openapi', icon: '📋', label: 'API OpenAPI', onClick: () => modals.open('openapi') },
+      { key: 'rest_file', icon: '📦', label: 'Processore file', onClick: () => modals.open('rest_file') },
+      { key: 'datasource', icon: '📁', label: 'Data Source', onClick: () => modals.open('datasource') },
+      { key: 'div1', divider: true },
+      { key: 'input', icon: '⌨', label: 'Aggiungi input runtime', onClick: handleAddProjectInputNode, title: 'Un valore chiesto quando il progetto viene eseguito' },
+      { key: 'static', icon: '📝', label: 'Valori statici', onClick: handleAddStaticValuesNode },
+      { key: 'div2', divider: true },
+      { key: 'output', icon: '📁', label: 'Output', onClick: handleAddResultNode, disabled: hasResultNode },
+      { key: 'carica', icon: '⬆', label: 'Carica su database', onClick: handleAddCaricanNode, disabled: !hasResultNode || hasCaricanNode },
+      { key: 'carica-arcgis', icon: '🌐', label: 'Carica su ArcGIS', onClick: handleAddCaricanArcGISNode, disabled: !hasResultNode || hasCaricanArcGISNode },
+      { key: 'div3', divider: true },
+      { key: 'versions', icon: '🕘', label: 'Versioni', onClick: () => setShowVersions(true) },
+    ],
+  };
 
   // sidebar slot
   const sidebar = !isReadOnly ? (
@@ -648,7 +627,7 @@ const ArricchisciEditorContent = () => {
       {showVersions && (
         <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
       )}
-      <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title="🔗 Esegui Arricchimento" projectType="arricchisci" progress={execution.progress} progressMessage={execution.progressMessage} taskStatus={execution.taskStatus} onCancel={execution.cancelTask} caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user} />
+      <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title="🔗 Esegui Arricchimento" projectType="arricchisci" progress={execution.progress} progressMessage={execution.progressMessage} taskStatus={execution.taskStatus} onCancel={execution.cancelTask} caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user} inputDefinitions={runtimeInputDefinitions} />
       <CaricaricaModal isOpen={caricarica.showModal} onClose={() => caricarica.closeModal()} isExecuting={caricarica.isExecuting} result={caricarica.result} progress={caricarica.progress} progressMessage={caricarica.progressMessage} taskStatus={caricarica.taskStatus} caricaricaInfo={caricarica.caricaricaInfo} onCancel={caricarica.cancelTask} />
       <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
         data={(() => {
@@ -727,7 +706,7 @@ const ArricchisciEditorContent = () => {
         onDragOver,
       }}
       slots={{
-        topbar,
+        toolbar,
         sidebar,
         beforeCanvas: accessDeniedBanner,
         modals: modalsSlot,

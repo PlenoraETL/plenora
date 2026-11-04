@@ -274,6 +274,12 @@ export const getProjectSchemas = async (projectId) => {
   return response.data;
 };
 
+/** Infer schemas for a serialized, unsaved canvas without persisting it. */
+export const inferProjectSchemas = async (projectId, canvas) => {
+  const response = await http.post(`/projects/${projectId}/schemas`, { canvas });
+  return response.data;
+};
+
 /**
  * Restituisce lo schema inferito per un singolo nodo.
  * @param {string} projectId

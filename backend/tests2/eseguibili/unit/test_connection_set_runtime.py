@@ -10,7 +10,7 @@ from app.core.eseguibili.service import (
     resolve_runtime_connection_id,
 )
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
-from app.core.orchestrator.router import _apply_project_runtime_inputs
+from app.core.orchestrator.runtime_inputs import apply_project_runtime_inputs
 
 
 def _canvas() -> dict:
@@ -158,11 +158,11 @@ def test_project_execution_contract_freezes_resolved_connection(monkeypatch):
         runtime_context={"default_connection_id": "reference_connection"},
     )
     monkeypatch.setattr(
-        "app.core.orchestrator.router.resolve_runtime_connection_id",
+        "app.core.orchestrator.runtime_inputs.resolve_runtime_connection_id",
         lambda manifest, *, raw_inputs, group_id: "connection_cliente_b",
     )
 
-    resolved = _apply_project_runtime_inputs(
+    resolved = apply_project_runtime_inputs(
         contract,
         {"cliente": "cliente_b", "stato": "OPEN"},
     )

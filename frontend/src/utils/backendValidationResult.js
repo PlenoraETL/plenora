@@ -49,3 +49,40 @@ export function validationRequestFailedResult(message) {
     source: 'backend',
   })]);
 }
+
+/**
+ * Esecuzione bloccata prima di salvare: nodi con risorse non accessibili al
+ * gruppo (access_denied). Un issue per nodo, cosi' l'evidenziazione e il
+ * "vai al nodo" del modal funzionano come per la validazione.
+ * @param {{nodeIds: string[]}} denied da describeAccessDeniedNodes
+ */
+export function accessDeniedResult(denied) {
+  return buildResult((denied?.nodeIds || []).map(nodeId => createIssue({
+    id: 'ACCESS_DENIED',
+    severity: 'error',
+    message: 'Esecuzione bloccata: questo nodo usa una risorsa non accessibile al gruppo. Rimuovilo o sostituiscilo.',
+    nodeId,
+    source: 'frontend',
+  })));
+}
+
+/** Il salvataggio prima di validare/eseguire non e' riuscito. */
+export function saveFailedResult(err) {
+  return buildResult([createIssue({
+    id: 'SAVE_FAILED',
+    severity: 'error',
+    message: `Salvataggio non riuscito: ${err?.message || 'errore di comunicazione col server'}. Niente è stato validato o eseguito.`,
+    source: 'frontend',
+  })]);
+}
+
+/** Input runtime di un tipo che questa modalita' non esegue (utils/runtimeInputKinds). */
+export function unsupportedInputsResult(nodes) {
+  return buildResult((nodes || []).map(n => createIssue({
+    id: 'RUNTIME_INPUT_KIND_UNSUPPORTED',
+    severity: 'error',
+    message: `L'input «${n.data?.label || n.data?.input_key || n.id}» è di tipo connessione: questo tipo è disponibile solo nei progetti Estrai. Cambialo o rimuovilo.`,
+    nodeId: n.id,
+    source: 'frontend',
+  })));
+}

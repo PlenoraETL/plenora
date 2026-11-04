@@ -161,8 +161,21 @@ describe('useExecution prepareExecute / launch', () => {
     await act(async () => { await result.current.launch(null); });
     expect(executeProjectQueryMock).toHaveBeenLastCalledWith('proj-1', { force_recalculate: true });
 
-    // Senza un nuovo prepareExecute, la 2a launch non deve riusare gli opts
+    // Fase 4, M7: un'esecuzione alla volta. Con il task ancora in corso una
+    // seconda launch non parte (niente doppie esecuzioni).
     await act(async () => { await result.current.launch(null); });
+    expect(executeProjectQueryMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('launch consuma opts: finita la prima esecuzione, la seconda launch parte da zero', async () => {
+    // Risposta sincrona: l'esecuzione finisce subito, la seconda puo' partire.
+    executeProjectQueryMock.mockResolvedValue({ success: true });
+    const { result } = renderHook(() => useExecution('proj-1'));
+    act(() => { result.current.prepareExecute({ force_recalculate: true }); });
+    await act(async () => { await result.current.launch(null); });
+    expect(executeProjectQueryMock).toHaveBeenLastCalledWith('proj-1', { force_recalculate: true });
+    await act(async () => { await result.current.launch(null); });
+    expect(executeProjectQueryMock).toHaveBeenCalledTimes(2);
     expect(executeProjectQueryMock).toHaveBeenLastCalledWith('proj-1', {});
   });
 });

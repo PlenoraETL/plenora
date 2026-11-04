@@ -36,6 +36,19 @@ export function usePreview(projectId, onBeforePreview = null) {
   const { mountedRef, stopPolling, startPolling } = useTaskPolling({ interval: POLL_INTERVAL });
 
   const handlePreview = useCallback(async (limit = PREVIEW_ROW_LIMIT) => {
+    // Fase 4, M7: l'anteprima legge la versione salvata; onBeforePreview
+    // (serverActions.beforePreview) chiede se salvare. false = annullato.
+    if (onBeforePreview) {
+      try {
+        if ((await onBeforePreview()) === false) return;
+      } catch (err) {
+        setShowModal(true);
+        setLoading(false);
+        setData(null);
+        setError(`Salvataggio non riuscito: ${humanizeError(err).message || err?.message || 'errore'}`);
+        return;
+      }
+    }
     setShowModal(true);
     setLoading(true);
     setError(null);
@@ -46,8 +59,6 @@ export function usePreview(projectId, onBeforePreview = null) {
     cancelledRef.current = false;
 
     try {
-      if (onBeforePreview) await onBeforePreview();
-
       const response = await previewProject(projectId, limit);
       if (!mountedRef.current) return;
 

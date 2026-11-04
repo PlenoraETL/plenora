@@ -17,7 +17,11 @@ export function useExecution(projectId, options = {}) {
   const {
     onBeforeExecute = null,
     executeFunction = null,
-    pollInterval = 1000
+    pollInterval = 1000,
+    // Fase 4, M7: l'esecuzione PRINCIPALE dell'editor tiene lo stato
+    // condiviso `runState` ('running') che spegne "Esegui" in barra e nel
+    // pannello finche' il task gira (anche a finestra chiusa).
+    tracksRunState = false,
   } = options;
 
   // Stati base pipeline
@@ -38,6 +42,24 @@ export function useExecution(projectId, options = {}) {
   // la pipeline parta davvero. Se nessuno chiama prepareExecute, il flow
   // resta quello classico (handleExecute parte subito).
   const [awaitingLaunch, setAwaitingLaunch] = useState(false);
+
+  const executingRef = useRef(false);
+  // Fine (o azzeramento) dell'esecuzione: il blocco si toglie SUBITO, anche
+  // se React accorpa "inizia" e "finisce" in un solo render.
+  const stopExecuting = useCallback(() => {
+    executingRef.current = false;
+    setIsExecuting(false);
+  }, []);
+  useEffect(() => {
+    executingRef.current = isExecuting;
+    if (!tracksRunState) return;
+    const st = useCanvasStore.getState();
+    if (isExecuting) st.setRunState?.('running');
+    else if (st.runState === 'running') st.setRunState?.('idle');
+  }, [isExecuting, tracksRunState]);
+  useEffect(() => () => {
+    if (tracksRunState && useCanvasStore.getState().runState === 'running') useCanvasStore.getState().setRunState?.('idle');
+  }, [tracksRunState]);
   const pendingOptsRef = useRef(null);
 
   const caricaRefs    = useRef({});
@@ -172,7 +194,7 @@ const startMainPolling = useCallback((taskIdToWatch) => {
       setProgressMessage(data.message || '');
 
       if (data.status === 'success') {
-        setIsExecuting(false);
+        stopExecuting();
         const r = { success: true, ...data.result, task_id: taskIdToWatch };
         setResult(r);
         // Salva l'ultimo task result completo nel canvas store, cosi' i nodi
@@ -182,14 +204,14 @@ const startMainPolling = useCallback((taskIdToWatch) => {
         startCaricaTasksPolling(data.result);
         return true;
       } else if (data.status === 'failure') {
-        setIsExecuting(false);
+        stopExecuting();
         // `code: data.error` → se il backend ha propagato un codice strutturato
         // (es. memory_limit_exceeded) il modal lo traduce; altrimenti resta il
         // messaggio originale (es. errore SQL, già informativo). Epic A.
         setResult({ success: false, message: data.error || 'Errore durante l\'esecuzione', code: data.error });
         return true;
       } else if (data.status === 'revoked') {
-        setIsExecuting(false);
+        stopExecuting();
         setResult({ success: false, message: 'Task annullato dall\'utente' });
         return true;
       }
@@ -197,6 +219,9 @@ const startMainPolling = useCallback((taskIdToWatch) => {
     });
   }, [startPolling, startCaricaTasksPolling]);
 const handleExecute = useCallback(async (executeOptions = {}) => {
+    // Un'esecuzione alla volta (es. pannello cliccato a finestra chiusa).
+    if (executingRef.current) return;
+    executingRef.current = true;
     setShowModal(true);
     setIsExecuting(true);
     setAwaitingLaunch(false);   // exit dal config-step se proveniamo da launch()
@@ -221,7 +246,7 @@ const handleExecute = useCallback(async (executeOptions = {}) => {
         setProgressMessage(response.message || 'Task avviato...');
         startMainPolling(response.task_id);
       } else {
-        setIsExecuting(false);
+        stopExecuting();
         setProgress(100);
         setTaskStatus('success');
         setResult(response);
@@ -234,7 +259,7 @@ const handleExecute = useCallback(async (executeOptions = {}) => {
       // (React warning + leak di reference allo state). Simmetrico al check
       // nel success path (riga sopra).
       if (!mountedRef.current) return;
-      setIsExecuting(false);
+      stopExecuting();
       setProgress(0);
       setTaskStatus('failure');
       setResult({ success: false, message: error.message || 'Errore' });
@@ -265,7 +290,7 @@ const handleExecute = useCallback(async (executeOptions = {}) => {
 
   const reset = useCallback(() => {
     stopPolling(); stopAllCaricaPolling();
-    setShowModal(false); setResult(null); setIsExecuting(false);
+    setShowModal(false); setResult(null); stopExecuting();
     setTaskId(null); setProgress(0); setProgressMessage('');
     setTaskStatus(null); setCaricaTasks([]); setCaricaPolling(false);
     setAwaitingLaunch(false); pendingOptsRef.current = null;
@@ -276,11 +301,27 @@ const handleExecute = useCallback(async (executeOptions = {}) => {
   // superadmin e il bottone "Avvia"; chiamare launch() per partire.
   // Per chiamanti che non passano per il modal config, handleExecute()
   // resta invariato (back-compat).
-  const prepareExecute = useCallback((executeOptions = {}) => {
+  // Fase 4, M7: `needsConfig` false (nessun input runtime da chiedere, nessuna
+  // opzione staff) -> parte subito, la finestra mostra solo l'avanzamento.
+  // Un solo clic su "Esegui" (utils/executionConfig.executionNeedsConfig).
+  const prepareExecute = useCallback((executeOptions = {}, { needsConfig = true } = {}) => {
+    if (!needsConfig) {
+      pendingOptsRef.current = null;
+      setAwaitingLaunch(false);
+      setResult(null);
+      setTaskId(null);
+      setProgress(0);
+      setProgressMessage('');
+      setTaskStatus(null);
+      setCaricaTasks([]);
+      setCaricaPolling(false);
+      setShowModal(true);
+      return handleExecute(executeOptions || {});
+    }
     pendingOptsRef.current = executeOptions || {};
     setShowModal(true);
     setAwaitingLaunch(true);
-    setIsExecuting(false);
+    stopExecuting();
     setResult(null);
     setTaskId(null);
     setProgress(0);
@@ -288,7 +329,7 @@ const handleExecute = useCallback(async (executeOptions = {}) => {
     setTaskStatus(null);
     setCaricaTasks([]);
     setCaricaPolling(false);
-  }, []);
+  }, [handleExecute]);
 
   const launch = useCallback((intermediateMode = null, runtimeInputs = {}) => {
     const baseOpts = pendingOptsRef.current || {};

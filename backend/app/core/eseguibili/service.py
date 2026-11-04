@@ -84,7 +84,7 @@ def resolve_runtime_connection_id(
     if not definitions:
         return manifest.default_connection_id
     if len(definitions) > 1:
-        raise ValueError("Un progetto Estrai può dichiarare un solo input connessione")
+        raise ValueError("Un progetto può dichiarare un solo input connessione")
     definition = definitions[0]
     raw_value = raw_inputs.get(definition.key, definition.default_value)
     selector_key = str(raw_value or "").strip()

@@ -31,7 +31,6 @@ import CaricanNode from '../components/nodes/CaricanNode';
 import CaricanArcGISNode from '../components/nodes/CaricanArcGISNode';
 import '../components/nodes/CaricanArcGISNode.css';
 import EditorSidebar from '../components/panels/EditorSidebar';
-import PlenoraLogo from '../components/common/PlenoraLogo';
 
 // Modali lazy-loaded
 const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
@@ -43,6 +42,8 @@ import DataSourceNode from '../components/nodes/DataSourceNode';
 import { useSchemaInference, usePreview, useExecution, useCanvasCore, useCanvasSave, useUnsavedChangesGuard, useValidationHighlights } from '../hooks';
 import { useEditorData } from '../hooks/useEditorData';
 import useCanvasStore from '../store/useCanvasStore';
+import useRuntimeInputDefinitions from '../hooks/useRuntimeInputDefinitions';
+import { executionNeedsConfig } from '../utils/executionConfig';
 import { withAvailableColumns } from '../utils/columnPlans';
 import { analyzeCanvas, branchSteps, nodeRole } from '../utils/canvasGraph';
 import { backendAccessFlags, persistedNodeData, persistenceValue } from '../utils/nodeTypeRegistry';
@@ -60,7 +61,7 @@ import { useToast } from '../hooks/useToast';
 import { useTheme } from '../hooks/useTheme';
 import useColumnPropagation from '../hooks/useColumnPropagation';
 import { deserializeNodes } from '../utils/nodeFactories';
-import { describeAccessDeniedNodes } from '../utils/canvasAccessControl';
+import { beforePreview, saveForRun, saveNow } from '../utils/serverActions';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
 import '../styles/ManipolaEditor.css';
 import '../components/nodes/StaticValuesNode.css';
@@ -115,7 +116,7 @@ const ManipolaEditorContent = () => {
     loadGraph, addNodes, addEdges, editNodes, editEdges, insertNode, applyDerivedNodes,
     insertBetween, addSubgraph,
     nodesRef, edgesRef, updateNodeData, deleteNode,
-    handleSaveQuiet, getViewportCenter,
+    getViewportCenter,
     isReadOnly, readOnlyProps
   } = useCanvasCore(projectId, { mode: 'manipola' });
 
@@ -132,8 +133,8 @@ const ManipolaEditorContent = () => {
 
   const { schemas, loading: schemasLoading, error: schemasError, refreshSchemas } = useSchemaInference(projectId);
 
-  const preview   = usePreview(projectId, handleSaveQuiet);
-  const { saving, handleSaveCanvas } = useCanvasSave(handleSaveQuiet, {
+  const preview   = usePreview(projectId, beforePreview);
+  const { saving, handleSaveCanvas } = useCanvasSave(saveNow, {
     logPrefix: '[ManipolaEditor]',
   });
   // I 3 throws fail-fast (canvas vuoto / Output mancante / sorgente mancante)
@@ -142,8 +143,14 @@ const ManipolaEditorContent = () => {
   // `ResultNode.handleExecuteWithValidation` valida (POST /validate) PRIMA di
   // chiamare `onExecute`: se fallisce apre il modal e ritorna; quindi questo
   // `onBeforeExecute` viene raggiunto solo a validation-passed.
+  // Input runtime chiesti all'esecuzione, come in Estrai (audit R9.1).
+  const runtimeInputDefinitions = useRuntimeInputDefinitions(nodes);
+  // Letto al clic su Esegui (le azioni registrate non vedono i render nuovi).
+  const needsRunConfigRef = useRef(false);
+  needsRunConfigRef.current = executionNeedsConfig(runtimeInputDefinitions, user);
   const execution = useExecution(projectId, {
-    onBeforeExecute: handleSaveQuiet,
+    onBeforeExecute: saveForRun,
+    tracksRunState: true,
   });
 
   // CARICA asincrono via task worker
@@ -167,7 +174,7 @@ const ManipolaEditorContent = () => {
   }, []);
 
   const caricaExecution = useExecution(projectId, {
-    onBeforeExecute: handleSaveQuiet,
+    onBeforeExecute: saveForRun,
     executeFunction: executeCaricanTask,
     pollInterval: 1500
   });
@@ -281,50 +288,21 @@ const ManipolaEditorContent = () => {
     // (snapshot aggiornato) per evitare il loop nodes->effect->update.
   }, [edges, schemas, applyDerivedNodes, edgesRef, resultOutputColumnsKey]);
 
-  const handleAutosaveError = useCallback((err) => {
-    console.warn('[ManipolaEditor] Autosave non completato:', err?.message || err);
-  }, []);
-
-  // Pre-fix (P1 frontend-pages): `handleUpdateProjectSource` /
-  // `handleUpdateFileSourceColumns` / `onConnect` chiamavano
-  // `handleSaveQuiet()` dentro `setTimeout` senza mutex. Due
-  // interazioni rapide (es. cambio sorgente + connessione edge)
-  // serializzavano due `handleSaveQuiet` concorrenti su snapshot
-  // di canvas diversi — il piu' lento (snapshot intermedio) poteva
-  // sovrascrivere il piu' veloce (snapshot finale) sul backend.
-  //
-  // Post-fix: `autosaveInFlightRef` single-flight semaphore.
-  // Se un autosave e' in volo, l'invocazione successiva imposta
-  // `autosavePendingRef=true` e re-triggera al completamento del
-  // precedente. Coalesce: due update rapidi → 1 save in volo + 1
-  // pending finale (no piu' di 2 save totali per N update).
-  const autosaveInFlightRef = useRef(false);
-  const autosavePendingRef  = useRef(false);
-
-  const triggerAutosave = useCallback(() => {
-    if (autosaveInFlightRef.current) {
-      autosavePendingRef.current = true;
-      return;
-    }
-    autosaveInFlightRef.current = true;
-    handleSaveQuiet()
-      .then(() => refreshSchemas())
-      .catch(handleAutosaveError)
-      .finally(() => {
-        autosaveInFlightRef.current = false;
-        // Se durante l'in-flight e' arrivato almeno un nuovo trigger,
-        // re-lancia ora (coalesce in 1 save finale).
-        if (autosavePendingRef.current) {
-          autosavePendingRef.current = false;
-          triggerAutosave();
-        }
-      });
-  }, [handleSaveQuiet, refreshSchemas, handleAutosaveError]);
+  // Fase 4, M7 (salvataggio esplicito, scelta dell'utente): niente
+  // salvataggi nascosti. Dopo una modifica che cambia gli schemi si
+  // ricalcolano sul canvas dell'editor (useSchemaInference, POST /schemas)
+  // senza salvarlo; piu' modifiche ravvicinate = una sola richiesta.
+  const schemaTimerRef = useRef(null);
+  const scheduleSchemaRefresh = useCallback(() => {
+    clearTimeout(schemaTimerRef.current);
+    schemaTimerRef.current = setTimeout(() => { refreshSchemas(); }, 150);
+  }, [refreshSchemas]);
+  useEffect(() => () => clearTimeout(schemaTimerRef.current), []);
 
   const handleUpdateProjectSource = useCallback((nodeId, projectSourceId) => {
     updateNodeData(nodeId, { source_project_id: projectSourceId });
-    setTimeout(triggerAutosave, 100);
-  }, [updateNodeData, triggerAutosave]);
+    setTimeout(scheduleSchemaRefresh, 100);
+  }, [updateNodeData, scheduleSchemaRefresh]);
 
   const handleUpdateProjectSourceColumns = useCallback((nodeId, columns) => {
     updateNodeData(nodeId, { columns });
@@ -338,9 +316,9 @@ const ManipolaEditorContent = () => {
         n.id === nodeId ? { ...n, data: { ...n.data, columns } } : n
       );
       propagateColumns(updatedNodes, edgesRef.current);
-      triggerAutosave();
+      scheduleSchemaRefresh();
     }, 100);
-  }, [updateNodeData, propagateColumns, triggerAutosave]);
+  }, [updateNodeData, propagateColumns, scheduleSchemaRefresh]);
 
   const handleUpdateTransform = useCallback((nodeId, newData) => {
     // TransformNode scrive gia' la config nello store (patchNodeConfig) e
@@ -368,8 +346,8 @@ const ManipolaEditorContent = () => {
         : node
     ));
     propagateColumns(updatedNodes, edgesRef.current);
-    triggerAutosave();
-  }, [nodesRef, edgesRef, propagateColumns, triggerAutosave]);
+    scheduleSchemaRefresh();
+  }, [nodesRef, edgesRef, propagateColumns, scheduleSchemaRefresh]);
 
   // handleUpdateProjectSource/Columns/FileSource/Transform rimangono perché
   // fanno side-effect (refreshSchemas, propagateColumns) registrati in setEditorActions
@@ -379,15 +357,9 @@ const ManipolaEditorContent = () => {
     useCanvasStore.getState().setEditorActions({
       onPreview:                    () => preview.handlePreview(),
       onExecute:                    (nodeId, opts) => {
-        // Pre-flight access_denied (RB.4.B/RB.7.B): blocca run se il
-        // canvas contiene nodi con risorse non visibili al gruppo.
-        const denied = describeAccessDeniedNodes(nodesRef.current);
-        if (denied) {
-          toast.error('Esecuzione bloccata: rimuovi o sostituisci i nodi con risorse non accessibili.');
-          console.warn('[run-blocked] access_denied nodes:\n' + denied.summary);
-          return;
-        }
-        return execution.prepareExecute(opts);
+        // Risorse non accessibili: bloccate prima del salvataggio nel
+        // percorso unico di ResultNode (Fase 4, M7).
+        return execution.prepareExecute(opts, { needsConfig: needsRunConfigRef.current });
       },
       onCaricanExecute:             (nodeId, cfg) => caricaExecution.handleExecute({ carica_node_data: cfg }),
       onUpdateProjectSource:        handleUpdateProjectSource,
@@ -395,14 +367,19 @@ const ManipolaEditorContent = () => {
       onUpdateFileSourceColumns:    handleUpdateFileSourceColumns,
       onUpdateTransform:            handleUpdateTransform,
       onDataSourceSchemaUpdated:    handleDataSourceSchemaUpdated,
+      // Copia di sicurezza ripristinata: stesso ricalcolo del caricamento.
+      onCanvasRestored:             () => {
+        propagateColumns(nodesRef.current, edgesRef.current);
+        scheduleSchemaRefresh();
+      },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // toast/nodesRef/describeAccessDeniedNodes letti via closure stabile;
+    // toast/nodesRef letti via closure stabile;
     // re-bind solo al cambio degli handler hook delle azioni canvas.
   }, [preview, execution, caricaExecution,
       handleUpdateProjectSource, handleUpdateProjectSourceColumns,
       handleUpdateFileSourceColumns, handleUpdateTransform,
-      handleDataSourceSchemaUpdated]);
+      handleDataSourceSchemaUpdated, scheduleSchemaRefresh]);
 
   // Sincronizza connections nello store
   useEffect(() => {
@@ -413,30 +390,17 @@ const ManipolaEditorContent = () => {
   // da ResultNode.runValidation). Hook condiviso con ArricchisciEditor.
   useValidationHighlights(applyDerivedNodes);
 
-  // Effetti di un nuovo collegamento: propagazione colonne, autosave, schemi.
+  // Effetti di un nuovo collegamento: propagazione colonne e schemi.
   // Condiviso da onConnect e dall'inserimento dalla palette.
   const afterConnect = useCallback((newEdges, propagate = true) => {
     setTimeout(() => {
       if (propagate) {
         propagateColumns(nodesRef.current, newEdges);
       }
-      // triggerAutosave rispetta il single-flight semaphore.
-      // refreshSchemas non e' piu' chained al save: il semaphore
-      // potrebbe codarlo (re-fire) o saltarlo se gia' in flight.
-      // refreshSchemas locale e' safe ad essere chiamato comunque.
-      triggerAutosave();
-      refreshSchemas();
+      scheduleSchemaRefresh();
     }, 50);
-  }, [propagateColumns, refreshSchemas, triggerAutosave]);
+  }, [propagateColumns, scheduleSchemaRefresh]);
 
-  // H-8 (2026-05-26): onConnect e onEdgeContextMenu DEVONO passare per
-  // `triggerAutosave()` (semaphore single-flight + coda re-fire). Pre-fix:
-  // chiamavano `handleSaveQuiet()` direttamente bypassando il semaphore
-  // `autosaveInFlightRef`. Risultato: due interazioni veloci (es. drop
-  // edge + change source) generavano due PUT /canvas concorrenti — il
-  // PUT con snapshot intermedio poteva arrivare al server DOPO il PUT
-  // con snapshot finale, sovrascrivendo i dati corretti.
-  // refreshSchemas resta accoppiato a connect (non a edge-remove).
   const onConnect = useCallback((params) => {
     // Input runtime su un parametro singolo che una lista sostituisce
     // (Filtra con condizioni, Formula con piu' colonne): la lista torna al
@@ -465,20 +429,11 @@ const ManipolaEditorContent = () => {
     editEdges(eds => eds.filter(e => e.id !== edge.id));
     setTimeout(() => {
       propagateColumns(nodesRef.current, edgesRef.current);
-      // H-8: triggerAutosave invece di handleSaveQuiet diretto.
-      triggerAutosave();
+      scheduleSchemaRefresh();
     }, 50);
-  }, [editEdges, propagateColumns, triggerAutosave]);
+  }, [editEdges, propagateColumns, scheduleSchemaRefresh]);
 
   const getPos = () => getViewportCenter({ screenToFlowPosition });
-
-  // "+ Transform": la palette, come il "＋" sui nodi (un solo modo di
-  // aggiungere un passo): dopo il nodo selezionato, altrimenti libero.
-  const handleAddTransformNode = useCallback(() => {
-    const st = useCanvasStore.getState();
-    const selected = st.nodes.filter(n => n.selected && n.type !== 'comment');
-    st.getEditorAction('openPalette')?.(selected.length === 1 ? selected[0].id : null);
-  }, []);
 
   const handleAddMultiJoinNode = useCallback(() => {
     addNodes({ id: `multi_join_${Date.now()}`, type: 'multi_join', position: getPos(),
@@ -735,10 +690,10 @@ const ManipolaEditorContent = () => {
     if (newNode) {
       addNodes(newNode);
       setTimeout(() => {
-        triggerAutosave();
+        scheduleSchemaRefresh();
       }, 100);
     }
-  }, [screenToFlowPosition, addNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns, triggerAutosave]);
+  }, [screenToFlowPosition, addNodes, handleUpdateProjectSource, handleUpdateProjectSourceColumns, handleUpdateFileSourceColumns, scheduleSchemaRefresh]);
 
   const { confirmNavigation } = useUnsavedChangesGuard();
   const handleBack = () => { if (confirmNavigation()) navigate('/'); };
@@ -749,59 +704,50 @@ const ManipolaEditorContent = () => {
   const accessDeniedBanner = <AccessDeniedBanner nodes={nodes} />;
 
   // topbar slot
-  const topbar = (
-    <div className="manipola-toolbar">
-        <div className="manipola-toolbar__left">
-          <div className="manipola-toolbar__logo">
-            <PlenoraLogo gridLines="left" plenClassName="manipola-toolbar__logo-text" />
-          </div>
-          <div className="manipola-toolbar__sep" />
-          <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--back" onClick={handleBack}>← Indietro</button>
-        </div>
-        <div className="manipola-toolbar__center">
-          <h2 className="manipola-toolbar__title">{project?.metadata?.name}</h2>
-          <span className="manipola-toolbar__badge">MANIPOLA</span>
-          {schemasLoading && <span className="manipola-toolbar__badge" style={{background: '#FF9800'}}>⏳ Aggiornamento schemi...</span>}
-          {schemasError && !schemasLoading && (
-            <span
-              className="manipola-toolbar__badge"
-              style={{ background: '#D32F2F', cursor: 'pointer' }}
-              title={`Errore inferenza schema: ${schemasError}. Clicca per ritentare.`}
-              onClick={refreshSchemas}
-              role="button"
-              tabIndex={0}
-            >
-              ⚠️ Schemi non caricati
-            </span>
-          )}
-        </div>
-        <div className="manipola-toolbar__right">
-          {!isReadOnly && (
-            <>
-              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--static" onClick={handleAddStaticValuesNode} title="Aggiungi valori statici con variabili template">📝 Valori Statici</button>
-              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--static" onClick={handleAddProjectInputNode} title="Aggiungi un input valorizzato quando il progetto viene eseguito">⌨ Input</button>
-              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--versions" onClick={() => setShowVersions(true)} title="Versioni del canvas (snapshot / ripristino)">🕘 Versioni</button>
-              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--annotation" onClick={handleAddCommentNode} title="Aggiungi annotazione al canvas">💬 Nota</button>
-              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--transform" onClick={handleAddTransformNode}>+ Transform</button>
-              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--join" onClick={handleAddMultiJoinNode} title="Unisci più sorgenti dati">🔗 Multi-Join</button>
-              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--output" onClick={handleAddResultNode}>📁 Output</button>
-              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--datasource" onClick={() => handleAddDataSourceNode('source')} title="Aggiungi sorgente DataSource (SharePoint/FTP/Local)">🗄️ Data Source</button>
-            </>
-          )}
-          <ValidationStatusBadge />
-          <div className="manipola-theme-toggle">
-            <div className={`manipola-theme-opt${theme==='dark'?' manipola-theme-opt--on':''}`} onClick={() => setTheme('dark')}>🌙 Scuro</div>
-            <div className={`manipola-theme-opt${theme==='light'?' manipola-theme-opt--on':''}`} onClick={() => setTheme('light')}>☀️ Chiaro</div>
-          </div>
-          {!isReadOnly && (
-            <>
-              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--carica" onClick={handleAddCaricanNode} disabled={!hasResultNode || hasCaricanNode} title="Aggiungi nodo per caricare su database">💾 Carica DB</button>
-              <button type="button" className="manipola-toolbar__btn manipola-toolbar__btn--save" onClick={handleSaveCanvas} disabled={saving}>{saving ? 'Salvataggio...' : '💾 Salva'}</button>
-            </>
-          )}
-        </div>
-      </div>
-  );
+  // Barra unica (Fase 4, M7): le azioni dell'editor nel menu "⋯", i passi
+  // dalla palette ("＋ Passo"), un solo "▶ Esegui".
+  const toolbar = {
+    mode: 'manipola',
+    title: project?.metadata?.name,
+    onBack: handleBack,
+    onSave: handleSaveCanvas,
+    saving,
+    executing: execution.isExecuting,
+    theme,
+    setTheme,
+    statusExtra: (
+      <>
+        {schemasLoading && <span className="manipola-toolbar__badge" style={{ background: '#FF9800' }}>⏳ Aggiornamento schemi…</span>}
+        {schemasError && !schemasLoading && (
+          <span
+            className="manipola-toolbar__badge"
+            style={{ background: '#D32F2F', cursor: 'pointer' }}
+            title={`Errore inferenza schema: ${schemasError}. Clicca per ritentare.`}
+            onClick={refreshSchemas}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); refreshSchemas(); } }}
+            role="button"
+            tabIndex={0}
+          >
+            ⚠️ Schemi non caricati
+          </span>
+        )}
+        <ValidationStatusBadge />
+      </>
+    ),
+    // Sola lettura: nessuna azione che modifica (Versioni crea e ripristina).
+    menuItems: isReadOnly ? [] : [
+      { key: 'input', icon: '⌨', label: 'Aggiungi input runtime', onClick: handleAddProjectInputNode, title: 'Un valore chiesto quando il progetto viene eseguito' },
+      { key: 'static', icon: '📝', label: 'Valori statici', onClick: handleAddStaticValuesNode },
+      { key: 'note', icon: '💬', label: 'Nota', onClick: handleAddCommentNode },
+      { key: 'div1', divider: true },
+      { key: 'output', icon: '📁', label: 'Output', onClick: handleAddResultNode, disabled: hasResultNode },
+      { key: 'multijoin', icon: '🔗', label: 'Multi-Join', onClick: handleAddMultiJoinNode },
+      { key: 'datasource', icon: '🗄️', label: 'Data Source', onClick: () => handleAddDataSourceNode('source'), title: 'Sorgente SharePoint/FTP/Local' },
+      { key: 'carica', icon: '⬆', label: 'Carica su database', onClick: handleAddCaricanNode, disabled: !hasResultNode || hasCaricanNode },
+      { key: 'div2', divider: true },
+      { key: 'versions', icon: '🕘', label: 'Versioni', onClick: () => setShowVersions(true) },
+    ],
+  };
 
   // sidebar slot
   const sidebar = !isReadOnly ? (
@@ -822,7 +768,7 @@ const ManipolaEditorContent = () => {
         {showVersions && (
           <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
         )}
-        <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title="🔄 Esecuzione Pipeline Manipola" projectType="manipola" caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user} />
+        <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title="🔄 Esecuzione Pipeline Manipola" projectType="manipola" caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user} inputDefinitions={runtimeInputDefinitions} />
         <ExecutionModal isOpen={caricaExecution.showModal} onClose={() => caricaExecution.closeModal()} isExecuting={caricaExecution.isExecuting} result={caricaExecution.result} title="📤 Caricamento Dati" projectType="arricchisci" progress={caricaExecution.progress} progressMessage={caricaExecution.progressMessage} taskStatus={caricaExecution.taskStatus} onCancel={caricaExecution.cancelTask} />
         <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
           data={preview.data} loading={preview.loading} error={preview.error}
@@ -867,7 +813,7 @@ const ManipolaEditorContent = () => {
         onDragOver,
       }}
       slots={{
-        topbar,
+        toolbar,
         sidebar,
         beforeCanvas: accessDeniedBanner,
         modals,

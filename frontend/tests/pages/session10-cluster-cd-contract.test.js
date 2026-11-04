@@ -6,7 +6,7 @@
  * - carica.js postCaricaAutoMapping: JSDoc allineato a connection_id/schema_name/table_name
  * - ScheduleList.jsx: requestGenRef per scartare response stale su projectFilter change
  * - useProjectListData.js: Promise.allSettled + toast.warning partial-failure
- * - ManipolaEditor.jsx: triggerAutosave single-flight mutex
+ * - ManipolaEditor.jsx: nessun salvataggio automatico (era il mutex triggerAutosave)
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -104,11 +104,12 @@ describe('Sessione 10 cluster CD', () => {
     expect(src).toContain('failedServices');
   });
 
-  it('ManipolaEditor ha autosave mutex (triggerAutosave + inFlightRef)', () => {
+  it('ManipolaEditor non salva da solo (Fase 4, M7): niente PUT concorrenti da sincronizzare', () => {
+    // Il mutex dell'autosave non serve piu': l'editor non salva, aggiorna solo
+    // gli schemi (una richiesta per piu' modifiche ravvicinate).
     const src = readSrc('pages/ManipolaEditor.jsx');
-    expect(src).toContain('autosaveInFlightRef');
-    expect(src).toContain('triggerAutosave');
-    // Coalesce: il pending si re-triggera al completamento
-    expect(src).toContain('autosavePendingRef');
+    expect(src).not.toContain('handleSaveQuiet');
+    expect(src).not.toContain('triggerAutosave');
+    expect(src).toContain('scheduleSchemaRefresh');
   });
 });

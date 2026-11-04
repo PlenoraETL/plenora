@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCanvasSave } from '../../src/hooks/useCanvasSave';
+import useCanvasStore from '../../src/store/useCanvasStore';
 
 const toastMock = vi.hoisted(() => globalThis.__frontendTestHelpers.createToastMock(vi));
 
@@ -11,6 +12,17 @@ vi.mock('../../src/hooks/useToast', () => ({
 describe('useCanvasSave', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Salva parte solo con modifiche non salvate (Fase 4, M7).
+    useCanvasStore.setState({ isDirty: true, isReadOnly: false, pendingSync: false });
+  });
+
+  it('niente da salvare: nessuna chiamata, lo dice (niente finto "salvato!")', async () => {
+    useCanvasStore.setState({ isDirty: false });
+    const save = vi.fn();
+    const { result } = renderHook(() => useCanvasSave(save));
+    await act(async () => { await result.current.handleSaveCanvas(); });
+    expect(save).not.toHaveBeenCalled();
+    expect(toastMock.success).not.toHaveBeenCalled();
   });
 
   it('salva il draft e mostra il toast di successo', async () => {

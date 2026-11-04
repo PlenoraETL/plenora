@@ -15,64 +15,8 @@
 }
 
 /* ── Toolbar ──────────────────────────────────────────────────── */
-.manipola-toolbar {
-  height: 52px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 14px;
-  flex-shrink: 0;
-  background: var(--plen-surface, #0C0F18);
-  border-bottom: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
-  position: relative;
-  z-index: 10;
-}
 
 /* accent bar — manipola purple */
-.manipola-toolbar::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 3px;
-  background: var(--plen-manipola, #9B6DFF);
-  border-radius: 0 2px 2px 0;
-}
-
-[data-theme='light'] .manipola-toolbar {
-  background: #FFFFFF;
-  border-bottom-color: rgba(0,0,0,0.11);
-}
-
-.manipola-toolbar__left,
-.manipola-toolbar__right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.manipola-toolbar__center {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 0 6px;
-}
-
-.manipola-toolbar__title {
-  font-family: var(--plen-font-display);
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--plen-text, #DDE4F2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 240px;
-  letter-spacing: -0.01em;
-  margin: 0;
-}
-[data-theme='light'] .manipola-toolbar__title { color: #0F1729; }
 
 .manipola-toolbar__badge {
   font-family: var(--plen-font-mono);
@@ -89,126 +33,24 @@
 }
 
 /* ── Toolbar buttons base ─────────────────────────────────────── */
-.manipola-toolbar__btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 11px;
-  border-radius: 6px;
-  font-size: 11.5px;
-  font-weight: 600;
-  font-family: var(--plen-font-body);
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition: all 0.12s;
-  white-space: nowrap;
-  flex-shrink: 0;
-  line-height: 1;
-}
-.manipola-toolbar__btn:disabled {
-  opacity: 0.38;
-  cursor: not-allowed;
-}
 
 /* back */
-.manipola-toolbar__btn--back {
-  background: transparent;
-  border-color: var(--plen-border-hi, rgba(255,255,255,0.11));
-  color: var(--plen-text-sub, #7D8BA8);
-}
-.manipola-toolbar__btn--back:hover:not(:disabled) {
-  border-color: var(--plen-text-dim, #3F4D68);
-  color: var(--plen-text, #DDE4F2);
-}
 
 /* transform */
-.manipola-toolbar__btn--transform {
-  background: rgba(155,109,255,0.10);
-  border-color: rgba(155,109,255,0.28);
-  color: var(--plen-manipola, #9B6DFF);
-}
-.manipola-toolbar__btn--transform:hover:not(:disabled) {
-  background: rgba(155,109,255,0.18);
-}
 
 /* join */
-.manipola-toolbar__btn--join {
-  background: rgba(75,139,255,0.10);
-  border-color: rgba(75,139,255,0.25);
-  color: var(--plen-blue, #4B8BFF);
-}
-.manipola-toolbar__btn--join:hover:not(:disabled) {
-  background: rgba(75,139,255,0.18);
-}
 
 /* output */
-.manipola-toolbar__btn--output {
-  background: rgba(52,193,122,0.10);
-  border-color: rgba(52,193,122,0.25);
-  color: var(--plen-estrai, #34C17A);
-}
-.manipola-toolbar__btn--output:hover:not(:disabled) {
-  background: rgba(52,193,122,0.18);
-}
 
 /* static values */
-.manipola-toolbar__btn--static {
-  background: rgba(155,109,255,0.08);
-  border-color: rgba(155,109,255,0.2);
-  color: var(--plen-manipola, #9B6DFF);
-}
-.manipola-toolbar__btn--static:hover:not(:disabled) {
-  background: rgba(155,109,255,0.15);
-}
 
 /* annotation */
-.manipola-toolbar__btn--annotation {
-  background: rgba(251,191,36,0.08);
-  border-color: rgba(251,191,36,0.2);
-  color: var(--plen-warn, #FBBF24);
-}
-.manipola-toolbar__btn--annotation:hover:not(:disabled) {
-  background: rgba(251,191,36,0.14);
-}
 
 /* datasource */
-.manipola-toolbar__btn--datasource {
-  background: rgba(45,212,191,0.08);
-  border-color: rgba(45,212,191,0.2);
-  color: #2DD4BF;
-}
-.manipola-toolbar__btn--datasource:hover:not(:disabled) {
-  background: rgba(45,212,191,0.14);
-}
 
 /* carica DB */
-.manipola-toolbar__btn--carica {
-  background: rgba(155,109,255,0.10);
-  border-color: rgba(155,109,255,0.28);
-  color: var(--plen-manipola, #9B6DFF);
-}
-.manipola-toolbar__btn--carica:hover:not(:disabled) {
-  background: rgba(155,109,255,0.18);
-}
 
 /* save */
-.manipola-toolbar__btn--save {
-  background: var(--plen-manipola, #9B6DFF);
-  border-color: var(--plen-manipola, #9B6DFF);
-  color: white;
-}
-.manipola-toolbar__btn--save:hover:not(:disabled) {
-  opacity: 0.88;
-}
-
-.manipola-toolbar__btn--versions {
-  background: rgba(75,139,255,0.10);
-  border-color: rgba(75,139,255,0.25);
-  color: var(--plen-blue, #4B8BFF);
-}
-.manipola-toolbar__btn--versions:hover:not(:disabled) {
-  background: rgba(75,139,255,0.18);
-}
 
 /* ── Main layout ──────────────────────────────────────────────── */
 .manipola-main {
@@ -302,12 +144,6 @@
 .manipola-error button:hover { border-color: var(--plen-manipola, #9B6DFF); color: var(--plen-manipola, #9B6DFF); }
 
 /* ── Responsive ───────────────────────────────────────────────── */
-@media (max-width: 1024px) {
-  .manipola-toolbar__btn { padding: 5px 8px; font-size: 11px; }
-}
-@media (max-width: 768px) {
-  .manipola-toolbar__center { display: none; }
-}
 
 /* ── Hex background canvas ────────────────────────────────────── */
 .manipola-hex-canvas,
@@ -321,61 +157,6 @@
 }
 
 /* ── Theme toggle pill ────────────────────────────────────────── */
-.manipola-theme-toggle {
-  display: flex;
-  background: var(--plen-surface-2, #111525);
-  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
-  border-radius: 20px;
-  padding: 3px;
-  gap: 2px;
-  flex-shrink: 0;
-}
-[data-theme='light'] .manipola-theme-toggle {
-  background: #E8EDF8;
-}
-
-.manipola-theme-opt {
-  padding: 4px 11px;
-  border-radius: 16px;
-  font-size: 11px;
-  font-family: var(--plen-font-mono);
-  color: var(--plen-text-dim, #3F4D68);
-  cursor: pointer;
-  user-select: none;
-  transition: all 0.15s;
-  white-space: nowrap;
-}
-.manipola-theme-opt--on {
-  background: var(--plen-surface, #0C0F18);
-  color: var(--plen-text, #DDE4F2);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.3);
-}
-[data-theme='light'] .manipola-theme-opt--on {
-  background: #FFFFFF;
-  color: #0F1729;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
-}
 
 /* ── Logo ─────────────────────────────────────────────────────── */
-.manipola-toolbar__logo {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-.manipola-toolbar__logo-text {
-  fill: var(--plen-text, #DDE4F2);
-}
-[data-theme='light'] .manipola-toolbar__logo-text {
-  fill: #0F1729;
-}
 
-.manipola-toolbar__sep {
-  width: 1px;
-  height: 22px;
-  background: var(--plen-border-hi, rgba(255,255,255,0.11));
-  flex-shrink: 0;
-  margin: 0 2px;
-}
-[data-theme='light'] .manipola-toolbar__sep {
-  background: rgba(0,0,0,0.11);
-}

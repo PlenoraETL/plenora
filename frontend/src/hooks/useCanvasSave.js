@@ -1,7 +1,13 @@
 import { useCallback, useRef, useState } from 'react';
 import { useToast } from './useToast';
+import useCanvasStore from '../store/useCanvasStore';
+import { hasUnsavedChanges } from '../store/saveState';
 
-export function useCanvasSave(handleSaveQuiet, options = {}) {
+/**
+ * "💾 Salva" e Ctrl+S. `save` e' serverActions.saveNow. Con niente da
+ * salvare non chiama il server e lo dice (niente finto "salvato!").
+ */
+export function useCanvasSave(save, options = {}) {
   const {
     successMessage = 'Progetto salvato!',
     errorMessage = 'Errore durante il salvataggio',
@@ -13,10 +19,14 @@ export function useCanvasSave(handleSaveQuiet, options = {}) {
 
   const handleSaveCanvas = useCallback(async () => {
     if (savingRef.current) return;
+    if (!hasUnsavedChanges(useCanvasStore.getState()) && !useCanvasStore.getState().pendingSync) {
+      toast.info?.('Tutto già salvato');
+      return;
+    }
     savingRef.current = true;
     setSaving(true);
     try {
-      await handleSaveQuiet();
+      await save();
       toast.success(successMessage);
     } catch (err) {
       console.error(`${logPrefix} Errore salvataggio:`, err);
@@ -56,7 +66,7 @@ export function useCanvasSave(handleSaveQuiet, options = {}) {
       savingRef.current = false;
       setSaving(false);
     }
-  }, [errorMessage, handleSaveQuiet, logPrefix, successMessage, toast]);
+  }, [errorMessage, save, logPrefix, successMessage, toast]);
 
   return { saving, handleSaveCanvas };
 }

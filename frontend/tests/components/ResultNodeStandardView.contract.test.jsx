@@ -10,9 +10,10 @@
  *   5. hasOnPreview=false → bottone Preview NON renderizzato.
  *      hasOnPreview=true + click → invoca onPreview.
  *   6. hasOnExecute=false → bottone Esegui NON renderizzato.
- *      hasOnExecute=true + click → invoca onExecute({force_recalculate:false}) di default.
- *   7. Modalita' esecuzione: MANIPOLA con radio 'recalculate' selezionato →
- *      click Esegui invoca onExecute({force_recalculate:true}).
+ *      hasOnExecute=true + click → invoca onExecute() (le opzioni le legge
+ *      il percorso unico dallo store, Fase 4 M7).
+ *   7. Modalita' esecuzione: MANIPOLA con radio 'recalculate' → runOptions
+ *      condivise nello store ({force_recalculate:true}).
  *   8. Click Valida → invoca onValidate.
  *   9. Variante CSS: data.isManipulate=true → bottone execute class contiene 'manipola'.
  *  10. Execute label deriva da variante: ESTRAI→'Esegui Query',
@@ -57,7 +58,13 @@ import ResultNodeStandardView from '../../src/components/nodes/result/ResultNode
 
 beforeEach(() => {
   updateNodeDataMock.mockReset();
-  storeRef.current = { updateNodeData: updateNodeDataMock };
+  storeRef.current = {
+    updateNodeData: updateNodeDataMock,
+    runState: 'idle',
+    runOptions: { force_recalculate: false },
+    // "Ricalcola tutto" e' stato condiviso con "▶ Esegui" della barra (M7).
+    setRunOptions: vi.fn((patch) => { storeRef.current.runOptions = { ...storeRef.current.runOptions, ...patch }; }),
+  };
   useCanvasStoreMock.mockImplementation((selector) => selector(storeRef.current));
   useCanvasStoreMock.getState = () => storeRef.current;
   globalThis.__frontendConsolePolicy.allowError = true;
@@ -140,15 +147,15 @@ describe('ResultNodeStandardView — contract', () => {
     expect(screen.queryByRole('button', { name: /esegui/i })).toBeNull();
   });
 
-  it('hasOnExecute=true ESTRAI: click Esegui → onExecute({force_recalculate:false}) default', async () => {
+  it('hasOnExecute=true ESTRAI: click Esegui → onExecute() (opzioni dallo store)', async () => {
     const user = userEvent.setup();
     const { onExecute } = renderView();
     await user.click(screen.getByRole('button', { name: /esegui query/i }));
     expect(onExecute).toHaveBeenCalledTimes(1);
-    expect(onExecute).toHaveBeenCalledWith({ force_recalculate: false });
+    expect(onExecute).toHaveBeenCalledWith();
   });
 
-  it('MANIPOLA con radio "recalculate" → onExecute({force_recalculate:true})', async () => {
+  it('MANIPOLA con radio "recalculate" → runOptions condivise {force_recalculate:true}', async () => {
     const user = userEvent.setup();
     const { onExecute } = renderView({
       data: { fileName: 'output', format: 'csv', columns: [], isManipulate: true },
@@ -157,8 +164,9 @@ describe('ResultNodeStandardView — contract', () => {
     const recalcRadio = screen.getByRole('radio', { name: /ricalcola tutto/i });
     await user.click(recalcRadio);
 
+    expect(storeRef.current.setRunOptions).toHaveBeenCalledWith({ force_recalculate: true });
     await user.click(screen.getByRole('button', { name: /esegui pipeline/i }));
-    expect(onExecute).toHaveBeenCalledWith({ force_recalculate: true });
+    expect(onExecute).toHaveBeenCalledWith();
   });
 
   it('click Valida → onValidate invocato', async () => {

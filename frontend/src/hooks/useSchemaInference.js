@@ -6,7 +6,9 @@
  * nelle configurazioni delle trasformazioni.
  */
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { getProjectSchemas, getNodeSchema, validateProjectConnection, validateAllProjectSources } from '../api';
+import { getProjectSchemas, inferProjectSchemas, getNodeSchema, validateProjectConnection, validateAllProjectSources } from '../api';
+import useCanvasStore from '../store/useCanvasStore';
+import { serializeCanvas } from '../utils/canvasSerializer';
 import { humanizeError } from '../utils/errorMessages';
 import { useMountedRef } from './useMountedRef';
 
@@ -59,7 +61,13 @@ export function useSchemaInference(projectId) {
     setError(null);
 
     try {
-      const data = await getProjectSchemas(projectId);
+      // Fase 4, M7 (salvataggio esplicito): gli schemi si calcolano sul
+      // canvas DELL'EDITOR, anche non salvato (POST), senza salvarlo, anche
+      // se vuoto. Prima del caricamento (graphLoaded) si usa quello salvato.
+      const st = useCanvasStore.getState();
+      const data = st.projectId === projectId && st.graphLoaded
+        ? await inferProjectSchemas(projectId, serializeCanvas(st.nodes, st.edges, { mode: st.mode }))
+        : await getProjectSchemas(projectId);
       if (!mountedRef.current) return;
       // Se nel frattempo e' stata avviata una fetch piu' recente
       // (myRequestId obsoleto), scartiamo questa response per non

@@ -1,8 +1,9 @@
-"""Schema inference across project canvas graphs."""
+"""Inferenza degli schemi sul grafo del canvas progetto."""
 from app.shared.execution.node_fields import node_field
 from app.shared.execution.result_grouping import result_group_plan
 from app.shared.execution.schema_column_plans import aggregation_output_type
 from dataclasses import dataclass, replace
+from copy import copy
 from typing import Dict, List, Optional, Any, Tuple, Mapping
 import uuid
 
@@ -11,6 +12,7 @@ from app.core.projects.project_context_loader import (
     load_project_source_schema_context,
 )
 from app.core.projects.schema_transform_handlers import TransformSchemaHandlers
+from app.core.projects.canvas_models import CanvasState
 from app.core.projects.types import (
     EdgesByTarget,
     JsonObject,
@@ -43,7 +45,7 @@ class _NodeSchemaContext:
 
 
 class SchemaInferenceService:
-    """Infers column schemas through a canvas node graph."""
+    """Inferisce gli schemi delle colonne attraverso il grafo dei nodi."""
     
     def __init__(self, project_service):
         self.project_service = project_service
@@ -53,19 +55,35 @@ class SchemaInferenceService:
         # node_id -> (status, reason). Popolato in parallelo a _schema_cache.
         self._status_cache: Dict[str, Tuple[str, str]] = {}
     
-    def infer_all_schemas(self, project_id: str) -> SchemaMap:
+    def _new_call(self) -> "SchemaInferenceService":
+        """Isola le cache per chiamata, conservando servizi e configurazione."""
+        call = copy(self)
+        call._schema_cache = {}
+        call._status_cache = {}
+        return call
+
+    def infer_all_schemas(
+        self, project_id: str, canvas: Optional[CanvasState] = None,
+    ) -> SchemaMap:
+        """Inferisce il canvas fornito o quello salvato con cache dedicate."""
+        return self._new_call()._infer_all_schemas(project_id, canvas)
+
+    def infer_node_schema(self, project_id: str, node_id: str) -> SchemaRows:
+        """Inferisce un nodo con cache dedicate alla chiamata."""
+        return self._new_call()._infer_single_node_schema(project_id, node_id)
+
+    def _infer_all_schemas(
+        self, project_id: str, canvas: Optional[CanvasState] = None,
+    ) -> SchemaMap:
         """
-        Calcola lo schema per tutti i nodi di un progetto.
-        
-        Returns:
-            Dict mapping node_id -> lista di colonne con tipo
+        Inferisce tutti i nodi del canvas fornito, oppure carica quello salvato.
+        Il canvas fornito non viene mai persistito.
+        Restituisce una mappa da identificativo nodo a colonne con tipo.
         """
         logger.info(f"Inferenza schema per progetto: {project_id}")
 
-        self._schema_cache = {}
-        self._status_cache = {}
-
-        canvas = self.project_service.get_project_canvas(project_id)
+        if canvas is None:
+            canvas = self.project_service.get_project_canvas(project_id)
         if not canvas:
             logger.warning(f"Canvas non trovato per {project_id}")
             return {}
@@ -86,14 +104,11 @@ class SchemaInferenceService:
         logger.info(f"Schema inferito per {len(result)} nodi")
         return result
     
-    def infer_node_schema(self, project_id: str, node_id: str) -> SchemaRows:
+    def _infer_single_node_schema(self, project_id: str, node_id: str) -> SchemaRows:
         """
         Calcola lo schema per un singolo nodo.
         Utile per aggiornamenti incrementali.
         """
-        self._schema_cache = {}
-        self._status_cache = {}
-
         canvas = self.project_service.get_project_canvas(project_id)
         if not canvas:
             return []
@@ -122,11 +137,12 @@ class SchemaInferenceService:
         ``infer_node_schema(...)``) e vi aggiunge lo ``status``. Nessuna
         duplicazione di logica → niente drift.
         """
-        rows = self.infer_node_schema(project_id, node_id)
-        # `infer_node_schema` popola `_status_cache` per il nodo (e i suoi
-        # antenati) durante il calcolo. Canvas/nodo assente (134/142) → il nodo
+        call = self._new_call()
+        rows = call._infer_single_node_schema(project_id, node_id)
+        # La chiamata isolata popola lo stato del nodo e dei suoi antenati.
+        # Canvas o nodo assente → il nodo
         # non è calcolato → default `certain` (problema strutturale, preso altrove).
-        status, reason = self._status_cache.get(node_id, ("certain", ""))
+        status, reason = call._status_cache.get(node_id, ("certain", ""))
         return InferredSchema(columns=rows, status=status, reason=reason)
 
     def _infer_node_schema(

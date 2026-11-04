@@ -79,6 +79,9 @@ function ExecutionModal({
   const showConfig = awaitingLaunch && !isExecuting && !result && typeof onLaunch === 'function';
   const [intermediateMode, setIntermediateMode] = useState('');
   const [runtimeInputs, setRuntimeInputs] = useState({});
+  // Valori azzerati all'apertura o se cambiano GLI INPUT (chiavi e
+  // default), non a ogni nuova identita' della lista.
+  const definitionsKey = JSON.stringify(inputDefinitions.map(d => [d.input_key, d.default_value ?? '']));
   useEffect(() => {
     if (!showConfig) return;
     setRuntimeInputs(Object.fromEntries(
@@ -87,7 +90,8 @@ function ExecutionModal({
         definition.default_value ?? '',
       ]),
     ));
-  }, [showConfig, inputDefinitions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showConfig, definitionsKey]);
   const runtimeInputsValid = useMemo(
     () => inputDefinitions.every(definition => (
       definition.required === false

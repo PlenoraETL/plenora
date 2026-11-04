@@ -65,3 +65,11 @@ export function useConfirm() {
   }
   return confirmFn;
 }
+
+/**
+ * Come useConfirm, ma senza provider ritorna null invece di lanciare
+ * (EditorShell: nei test montato da solo).
+ */
+export function useOptionalConfirm() {
+  return useContext(ConfirmContext);
+}

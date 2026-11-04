@@ -121,6 +121,10 @@ ALLOWED_VULTURE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+resources[\\/]metadata\.py:\d+: unused method "),
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]+resources[\\/]storage_layout\.py:\d+: unused function 'is_valid_prefix' "),
 
+    # Il limite del canvas e' applicato da Pydantic tramite field_validator;
+    # la chiamata indiretta e' coperta dai test HTTP di POST /schemas.
+    re.compile(r"backend[\\/]+app[\\/]+core[\\/]+projects[\\/]router\.py:\d+: unused method 'validate_canvas_size' "),
+
     # Pydantic validators are invoked by the model, not referenced by name.
     re.compile(r"backend[\\/]+app[\\/]+shared[\\/]contracts[\\/]auth\.py:\d+: unused method '_(reject_password|email_format|role_allowed|group_id_nonempty)' "),
 

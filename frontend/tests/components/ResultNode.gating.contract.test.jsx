@@ -14,7 +14,8 @@
  *   3. Validation gate su Preview: idem per onPreview.
  *   4. Delete cancellato dal confirm → deleteNode NON chiamato.
  *   5. handleValidate/Execute/Preview validano via BACKEND (Epic CanvasVal §12):
- *      salva-poi-valida (handleSaveQuiet poi POST /validate). Niente più
+ *      valida la versione salvata (Esegui salva prima; Valida chiede se ci
+ *      sono modifiche non salvate, Fase 4 M7). Niente più
  *      validazione JS per-famiglia: il backend è la single source of truth.
  *
  * Nota: la validazione e' invocata dal parent (handleExecuteWithValidation /
@@ -42,6 +43,7 @@ const {
   deleteImdfBundleMock,
   setValidationHighlightsMock,
   setLastValidationSummaryMock,
+  setCanvasViewMock,
 } = vi.hoisted(() => ({
   onPreviewMock: vi.fn(),
   onExecuteMock: vi.fn(),
@@ -58,6 +60,7 @@ const {
   deleteImdfBundleMock: vi.fn(),
   setValidationHighlightsMock: vi.fn(),
   setLastValidationSummaryMock: vi.fn(),
+  setCanvasViewMock: vi.fn(),
 }));
 
 vi.mock('@xyflow/react', () =>
@@ -135,6 +138,7 @@ vi.mock('../../src/components/modals/ImdfBundlesManagerModal', () => ({ default:
 vi.mock('../../src/components/imdf/BundleSlotCard', () => ({ default: () => null }));
 
 import ResultNode from '../../src/components/nodes/ResultNode';
+import PipelineRunner from '../../src/components/editor/PipelineRunner';
 
 // Helper: risposta backend POST /validate ({valid, has_errors, issues:[{node_id,severity,code,message}]}).
 const backendReport = (issues = []) => ({
@@ -143,22 +147,32 @@ const backendReport = (issues = []) => ({
   issues,
 });
 
-const buildCanvasState = (overrides = {}) => ({
+// Le azioni registrate (PipelineRunner, editor) vivono nel ref come nello
+// store vero: setEditorActions le fonde, getEditorAction le legge.
+const buildCanvasState = ({ extraActions = {}, ...overrides } = {}) => {
+  const editorActionsRef = { current: { onPreview: onPreviewMock, onExecute: onExecuteMock, ...extraActions } };
+  return {
+  setEditorActions: (actions) => Object.assign(editorActionsRef.current, actions),
+  getEditorAction: (name) => editorActionsRef.current[name],
+  editorActionsRef,
   updateNodeData: updateNodeDataMock,
   deleteNode: deleteNodeMock,
   lastTaskResult: null,
   setLastTaskResult: setLastTaskResultMock,
   setValidationHighlights: setValidationHighlightsMock,
   setLastValidationSummary: setLastValidationSummaryMock,
-  setEditorActions: vi.fn(),
   handleSaveQuiet: handleSaveQuietMock,
+  // Fase 4, M7: stato di esecuzione condiviso e opzioni nello store.
+  runState: 'idle',
+  // "Vai al nodo" usa la messa a fuoco della vista aperta (canvas o Passi).
+  canvasView: 'steps',
+  setCanvasView: setCanvasViewMock,
+  setRunState: vi.fn(),
+  runOptions: { force_recalculate: false },
+  setRunReady: vi.fn(),
+  isDirty: false,
+  isReadOnly: false,
   projectId: 'proj-1',
-  editorActionsRef: {
-    current: {
-      onPreview: onPreviewMock,
-      onExecute: onExecuteMock,
-    },
-  },
   getState: vi.fn(),
   nodes: [
     { id: 'src-1', type: 'tableNode', data: { columns: [] } },
@@ -167,7 +181,8 @@ const buildCanvasState = (overrides = {}) => ({
   edges: [{ id: 'e1', source: 'src-1', target: 'result-1' }],
   transformsRegistry: null,
   ...overrides,
-});
+  };
+};
 
 const setCanvasState = (state) => {
   canvasStateRef.current = state;
@@ -186,8 +201,12 @@ beforeEach(() => {
   setCanvasState(buildCanvasState());
 });
 
+// Il percorso unico (Valida/Esegui/Anteprima) e' PipelineRunner, montato
+// dall'editor accanto al canvas (Fase 4, M7): qui come nell'editor.
 const renderResultNode = (data = {}) =>
   render(
+    <>
+    <PipelineRunner />
     <ResultNode
       id="result-1"
       data={{
@@ -199,6 +218,7 @@ const renderResultNode = (data = {}) =>
         ...data,
       }}
     />
+    </>
   );
 
 describe('ResultNode (parent) — branch & gating contract', () => {
@@ -259,7 +279,7 @@ describe('ResultNode (parent) — branch & gating contract', () => {
     expect(deleteNodeMock).not.toHaveBeenCalled();
   });
 
-  it('handleValidate: salva-poi-valida via backend (POST /validate sul progetto)', async () => {
+  it('handleValidate: valida la versione salvata via backend, senza salvare di nascosto (M7)', async () => {
     const user = userEvent.setup();
     renderResultNode();
 
@@ -268,8 +288,43 @@ describe('ResultNode (parent) — branch & gating contract', () => {
     await waitFor(() => {
       expect(validateProjectCanvasMock).toHaveBeenCalledWith('proj-1');
     });
-    // salva-poi-valida: handleSaveQuiet prima della richiesta di validazione
-    expect(handleSaveQuietMock).toHaveBeenCalled();
+    // Canvas pulito: nessun salvataggio (utils/serverActions).
+    expect(handleSaveQuietMock).not.toHaveBeenCalled();
+  });
+
+  it('handleValidate con modifiche non salvate: chiede, "Salva e continua" salva poi valida', async () => {
+    const ask = vi.fn().mockResolvedValue(true);
+    setCanvasState(buildCanvasState({ isDirty: true, extraActions: { confirmSaveBeforeRead: ask } }));
+    const user = userEvent.setup();
+    renderResultNode();
+    await user.click(screen.getByRole('button', { name: /valida/i }));
+    await waitFor(() => expect(validateProjectCanvasMock).toHaveBeenCalledWith('proj-1'));
+    expect(ask).toHaveBeenCalledWith('La validazione');
+    expect(handleSaveQuietMock.mock.invocationCallOrder[0]).toBeLessThan(validateProjectCanvasMock.mock.invocationCallOrder[0]);
+  });
+
+  it('handleValidate: "Annulla" non salva e non valida', async () => {
+    setCanvasState(buildCanvasState({ isDirty: true, extraActions: { confirmSaveBeforeRead: vi.fn().mockResolvedValue(false) } }));
+    const user = userEvent.setup();
+    renderResultNode();
+    await user.click(screen.getByRole('button', { name: /valida/i }));
+    await new Promise(r => setTimeout(r, 20));
+    expect(handleSaveQuietMock).not.toHaveBeenCalled();
+    expect(validateProjectCanvasMock).not.toHaveBeenCalled();
+  });
+
+  it('Esegui con risorse non accessibili: bloccato PRIMA di salvare, nodi evidenziati', async () => {
+    setCanvasState(buildCanvasState({
+      nodes: [{ id: 'src-1', type: 'tableNode', data: { columns: [], access_denied: true } }, { id: 'result-1', type: 'result', data: {} }],
+    }));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const user = userEvent.setup();
+    renderResultNode();
+    await user.click(screen.getByRole('button', { name: /esegui/i }));
+    expect(await screen.findByTestId('validation-modal')).toBeTruthy();
+    expect(handleSaveQuietMock).not.toHaveBeenCalled();
+    expect(onExecuteMock).not.toHaveBeenCalled();
+    expect(setValidationHighlightsMock).toHaveBeenCalledWith(['src-1']);
   });
 
   it('handleValidate: variante MANIPOLA usa lo stesso backend (niente dispatch JS)', async () => {
@@ -318,6 +373,7 @@ describe('ResultNode (parent) — branch & gating contract', () => {
 
     await waitFor(() => {
       expect(screen.queryByTestId('validation-modal')).not.toBeInTheDocument();
+    expect(setCanvasViewMock).toHaveBeenCalledWith('steps', expect.any(String));
     });
   });
 

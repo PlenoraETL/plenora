@@ -37,18 +37,31 @@ describe('StepPreview', () => {
     expect(container.innerHTML).toBe('');
   });
 
-  it('saves first, then asks the preview for the selected node only', async () => {
+  it('clean canvas: no save, the preview reads the saved version', async () => {
+    state.nodes = [{ id: 'step-1', type: 'transform', selected: true, data: { title: 'Escludi periodi', transform_op: 'filter' } }];
+    previewProjectMock.mockResolvedValueOnce({ success: true, columns: [], rows: [], total_count: 0 });
+    render(<StepPreview projectId="p1" />);
+    fireEvent.click(screen.getByRole('button', { name: '▶ Anteprima' }));
+    await waitFor(() => expect(previewProjectMock).toHaveBeenCalledWith('p1', 100, 'step-1'));
+    expect(saveMock).not.toHaveBeenCalled();
+  });
+
+  it('unsaved ("Salva e mostra anteprima"): saves first, then asks the preview for the selected node only', async () => {
+    state.isDirty = true;
+    saveMock.mockClear();
+    previewProjectMock.mockClear();
     state.nodes = [{ id: 'step-1', type: 'transform', selected: true, data: { title: 'Escludi periodi', transform_op: 'filter' } }];
     previewProjectMock.mockResolvedValueOnce({
       success: true, columns: [{ name: 'ctr_period', type: 'str' }], rows: [{ ctr_period: 'MONTH' }], total_count: 1,
     });
     render(<StepPreview projectId="p1" />);
     expect(screen.getByText(/Dati dopo/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '▶ Anteprima' }));
+    fireEvent.click(screen.getByRole('button', { name: /Salva e mostra anteprima/ }));
     await waitFor(() => expect(previewProjectMock).toHaveBeenCalledWith('p1', 100, 'step-1'));
     expect(saveMock).toHaveBeenCalled();
     expect(saveMock.mock.invocationCallOrder[0]).toBeLessThan(previewProjectMock.mock.invocationCallOrder[0]);
     expect(await screen.findByText('MONTH')).toBeTruthy();
+    state.isDirty = false;
   });
 
   it('says it will save when there are unsaved changes', () => {

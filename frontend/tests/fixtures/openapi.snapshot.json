@@ -3035,6 +3035,11 @@
             "default": "csv",
             "title": "Format",
             "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
           }
         },
         "title": "EnrichAsyncRequest",
@@ -5990,6 +5995,21 @@
             "default": false,
             "title": "Order By Enabled"
           },
+          "output_columns": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Columns"
+          },
           "output_kind": {
             "anyOf": [
               {
@@ -6394,6 +6414,7 @@
                   "rename",
                   "drop_columns",
                   "reorder_columns",
+                  "select_columns",
                   "fill_na",
                   "replace",
                   "split_column",
@@ -8077,6 +8098,18 @@
           }
         },
         "title": "ScheduleUpdate",
+        "type": "object"
+      },
+      "SchemaInferenceRequest": {
+        "properties": {
+          "canvas": {
+            "$ref": "#/components/schemas/CanvasWithPlugins"
+          }
+        },
+        "required": [
+          "canvas"
+        ],
+        "title": "SchemaInferenceRequest",
         "type": "object"
       },
       "SetSharesRequest": {
@@ -15699,7 +15732,7 @@
     },
     "/api/projects/{project_id}/enrich-async": {
       "post": {
-        "description": "Esegue l'arricchimento in modo ASINCRONO con Celery.\n\nParametri body (opzionali):\n    format: formato output ('csv', 'xlsx', 'geojson', ...) — default 'csv'\n    force_recalculate: ignora cache e ricalcola tutto — default False\n\nR-25 PR-B3: il param `intermediate_mode` e' opt-in superadmin per\naudit run-specific. Dual-auth: require_not_esecutore PER il base-flow\n+ check superadmin SOLO se override richiesto.",
+        "description": "Esegue l'arricchimento in modo ASINCRONO con Celery.\n\nParametri body (opzionali):\n    inputs: valori runtime indicizzati per input_key\n    format: formato output ('csv', 'xlsx', 'geojson', ...) — default 'csv'\n    force_recalculate: ignora cache e ricalcola tutto — default False\n\nR-25 PR-B3: il param `intermediate_mode` e' opt-in superadmin per\naudit run-specific. Dual-auth: require_not_esecutore PER il base-flow\n+ check superadmin SOLO se override richiesto.",
         "operationId": "execute_enrichment_async_api_projects__project_id__enrich_async_post",
         "parameters": [
           {
@@ -15882,6 +15915,22 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "node_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Node Id"
+            }
           }
         ],
         "responses": {
@@ -15964,6 +16013,64 @@
           }
         ],
         "summary": "Get All Schemas",
+        "tags": [
+          "projects"
+        ]
+      },
+      "post": {
+        "description": "Inferisce gli schemi del canvas non salvato senza modificare il progetto.",
+        "operationId": "infer_project_schemas_api_projects__project_id__schemas_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchemaInferenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Infer Project Schemas Api Projects  Project Id  Schemas Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Infer Project Schemas",
         "tags": [
           "projects"
         ]

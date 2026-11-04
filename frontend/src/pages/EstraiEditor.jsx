@@ -15,7 +15,6 @@ import ResultNode from '../components/nodes/ResultNode';
 import CaricanNode from '../components/nodes/CaricanNode';
 import CaricanArcGISNode from '../components/nodes/CaricanArcGISNode';
 import '../components/nodes/CaricanArcGISNode.css';
-import PlenoraLogo from '../components/common/PlenoraLogo';
 
 // Modali lazy-loaded — caricati solo quando l'utente li apre
 const JoinModal = lazy(() => import('../components/modals/JoinModal'));
@@ -32,10 +31,11 @@ import '../components/nodes/DataSourceNode.css';
 import { calculateOutputColumnsRecursive } from '../utils/columnUtils';
 import { createEdgeFromData, deserializeNodes } from '../utils/nodeFactories';
 import { getLayerSchema } from '../api/features';
-import { listConnectionSets } from '../api/connections';
+import useRuntimeInputDefinitions from '../hooks/useRuntimeInputDefinitions';
+import { executionNeedsConfig } from '../utils/executionConfig';
 import { usePreview, useExecution, useValidationHighlights, useEdgeHandlers, useCanvasCore, useCaricarica, useCanvasSave, useUnsavedChangesGuard } from '../hooks';
 import { useEditorData } from '../hooks/useEditorData';
-import { describeAccessDeniedNodes } from '../utils/canvasAccessControl';
+import { beforePreview, saveForRun, saveNow } from '../utils/serverActions';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
 import useCanvasStore from '../store/useCanvasStore';
 import { dataFlowEdges, hydrateParameterBindingEdges } from '../utils/runtimeBindingEdges';
@@ -66,7 +66,6 @@ function EstraiEditor() {
   const hexCanvasRef = useRef(null);
   const [reactFlowInstance, setReactFlowInstance] = useState(null);
   const canvasLoadedForRef = useRef(null);
-  const connectionSetsLoadedRef = useRef(false);
   const toast = useToast();
 
   useHexCanvas(hexCanvasRef);
@@ -74,7 +73,7 @@ function EstraiEditor() {
     nodes, edges, onNodesChange, onEdgesChange,
     loadGraph, addNodes, addEdges, editEdges, insertNode, applyDerivedNodes,
     nodesRef, edgesRef, updateNodeData, deleteNode,
-    handleSaveQuiet, dataNodes, getViewportCenter,
+    dataNodes, getViewportCenter,
     isReadOnly, readOnlyProps
   } = useCanvasCore(projectId, { mode: 'estrai' });
   const {
@@ -91,54 +90,23 @@ function EstraiEditor() {
   const [showVersions, setShowVersions]           = useState(false);
   const [visibleTableCount, setVisibleTableCount] = useState(TABLES_PAGE_SIZE);
   const [visibleViewCount,  setVisibleViewCount]  = useState(TABLES_PAGE_SIZE);
-  const [connectionSets, setConnectionSets]       = useState([]);
   const { theme, setTheme: toggleTheme } = useTheme();
 
   // Reset visible count when search changes
   useEffect(() => { setVisibleTableCount(TABLES_PAGE_SIZE); }, [searchQuery]);
   useEffect(() => { setVisibleViewCount(TABLES_PAGE_SIZE);  }, [viewSearchQuery]);
-  useEffect(() => {
-    if (!nodes.some(node => (
-      node.type === 'project_input' && node.data?.input_kind === 'connection'
-    ))) return undefined;
-    if (connectionSetsLoadedRef.current) return undefined;
-    connectionSetsLoadedRef.current = true;
-    let active = true;
-    listConnectionSets()
-      .then(data => { if (active) setConnectionSets(data.connection_sets || []); })
-      .catch(() => {
-        connectionSetsLoadedRef.current = false;
-        if (active) setConnectionSets([]);
-      });
-    return () => { active = false; };
-  }, [nodes]);
-  const runtimeInputDefinitions = useMemo(
-    () => nodes
-      .filter(node => (
-        node.type === 'project_input' && node.data?.input_kind !== 'file'
-      ))
-      .map(node => {
-        const definition = { ...node.data };
-        if (definition.input_kind === 'connection') {
-          const set = connectionSets.find(item => (
-            item.id === definition.connection_set_id
-          ));
-          definition.connection_options = (set?.members || [])
-            .filter(member => member.active)
-            .map(member => ({ key: member.selector_key, label: member.label }));
-        }
-        return definition;
-      })
-      .sort((left, right) => (left.order || 0) - (right.order || 0)),
-    [nodes, connectionSets],
-  );
-  const preview    = usePreview(projectId, handleSaveQuiet);
-  const execution  = useExecution(projectId, { onBeforeExecute: handleSaveQuiet });
-  const { saving, handleSaveCanvas } = useCanvasSave(handleSaveQuiet, {
+  // Input runtime chiesti all'esecuzione: stesso hook dei tre editor (R9.1).
+  const runtimeInputDefinitions = useRuntimeInputDefinitions(nodes);
+  // Letto al clic su Esegui (le azioni registrate non vedono i render nuovi).
+  const needsRunConfigRef = useRef(false);
+  needsRunConfigRef.current = executionNeedsConfig(runtimeInputDefinitions, user);
+  const preview    = usePreview(projectId, beforePreview);
+  const execution  = useExecution(projectId, { onBeforeExecute: saveForRun, tracksRunState: true });
+  const { saving, handleSaveCanvas } = useCanvasSave(saveNow, {
     logPrefix: '[EstraiEditor]',
   });
   const caricarica = useCaricarica(projectId, {
-    onBeforeExecute: handleSaveQuiet,
+    onBeforeExecute: saveForRun,
     getCanvas: () => ({ nodes: nodesRef.current, edges: dataFlowEdges(edgesRef.current) })
   });
   // Highlight backend-driven (Epic CanvasVal §12): i nodi con issue sono
@@ -256,21 +224,15 @@ function EstraiEditor() {
     useCanvasStore.getState().setEditorActions({
       onPreview:          () => preview.handlePreview(),
       onExecute:          (nodeId, opts) => {
-        // Pre-flight access_denied (RB.4.B/RB.7.B): blocca run se il
-        // canvas contiene nodi con risorse non visibili al gruppo.
-        const denied = describeAccessDeniedNodes(nodesRef.current);
-        if (denied) {
-          toast.error('Esecuzione bloccata: rimuovi o sostituisci i nodi con risorse non accessibili.');
-          console.warn('[run-blocked] access_denied nodes:\n' + denied.summary);
-          return;
-        }
-        return execution.prepareExecute(opts);
+        // Risorse non accessibili: bloccate prima del salvataggio nel
+        // percorso unico di ResultNode (Fase 4, M7).
+        return execution.prepareExecute(opts, { needsConfig: needsRunConfigRef.current });
       },
       onCaricanExecute:   (nodeId, cfg) => caricarica.handleExecute(nodeId, cfg),
       onAddRelatedLayer:  handleAddRelatedLayer,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    // toast/nodesRef/describeAccessDeniedNodes letti via closure stabile;
+    // toast/nodesRef letti via closure stabile;
     // re-bind solo quando cambiano gli handler hook delle azioni canvas.
   }, [preview.handlePreview, execution.prepareExecute, caricarica.handleExecute, handleAddRelatedLayer]);
 
@@ -467,112 +429,39 @@ function EstraiEditor() {
   const accessDeniedBanner = <AccessDeniedBanner nodes={nodes} />;
 
   // topbar slot
-  const topbar = (
-    <>
-<div className="estrai-toolbar">
-
-        {/* Logo */}
-        <div className="estrai-toolbar__logo">
-          <PlenoraLogo gridLines="left" plenClassName="estrai-toolbar__logo-svg-text" />
-        </div>
-
-        <div className="estrai-toolbar__sep" />
-
-        {/* Left */}
-        <div className="estrai-toolbar__left">
-          <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--back" onClick={handleBack}>
-            ← Indietro
-          </button>
-          <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--connections" onClick={() => { if (confirmNavigation()) navigate('/connections'); }}>
-            🔌 Connessioni
-          </button>
-        </div>
-
-        <div className="estrai-toolbar__sep" />
-
-        {/* Center */}
-        <div className="estrai-toolbar__center">
-          <h2 className="estrai-toolbar__title">{project?.metadata?.name}</h2>
-          {projectConnection && (
-            <div className="estrai-toolbar__connection-badge">
-              <div className="estrai-toolbar__conn-dot" />
-              <div>
-                <div className="estrai-toolbar__connection-name">{projectConnection.name}</div>
-                <div className="estrai-toolbar__connection-type">
-                  {sourceType === 'featureService' ? 'ArcGIS' : (projectConnection.type || 'DB').toUpperCase()}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Right */}
-        <div className="estrai-toolbar__right">
-          <span className="estrai-toolbar__stats">
-            {nodes.length} nodi · {edges.length} edge
-          </span>
-
-          <div className="estrai-toolbar__sep" />
-
-          {!isReadOnly && (
-            <>
-              <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--versions"
-                onClick={() => setShowVersions(true)} title="Versioni del canvas (snapshot / ripristino)">
-                🕘 Versioni
-              </button>
-              <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--annotation"
-                onClick={handleAddCommentNode} title="Aggiungi annotazione">
-                💬 Nota
-              </button>
-              {/* Valori Statici non sono sorgenti SQL ESTRAI. */}
-              <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--annotation" onClick={handleAddProjectInputNode} title="Aggiungi un parametro runtime per filtri e condizioni">⌨ Input</button>
-              <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--output"
-                onClick={handleAddResultNode} disabled={hasResultNode}>
-                📁 Output
-              </button>
-              <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--carica"
-                onClick={handleAddCaricanNode} disabled={!hasResultNode || hasCaricanNode}
-                title="Aggiungi nodo Carica DB">
-                ⬆ Carica DB
-              </button>
-              <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--carica-arcgis"
-                onClick={handleAddCaricanArcGISNode} disabled={!hasResultNode || hasCaricanArcGISNode}
-                title="Aggiungi nodo Carica ArcGIS"
-                style={{ borderColor: 'rgba(45,212,191,0.4)', color: '#2DD4BF' }}>
-                🌐 Carica ArcGIS
-              </button>
-              {/* Data Source file-based vive in MANIPOLA. */}
-
-              <div className="estrai-toolbar__sep" />
-            </>
-          )}
-
-          {/* Theme toggle */}
-          <div className="estrai-toolbar__theme">
-            <span
-              className={`estrai-toolbar__theme-opt${theme === 'dark' ? ' estrai-toolbar__theme-opt--active' : ''}`}
-              onClick={() => theme !== 'dark' && toggleTheme('dark')}
-            >🌙 Scuro</span>
-            <span
-              className={`estrai-toolbar__theme-opt${theme === 'light' ? ' estrai-toolbar__theme-opt--active' : ''}`}
-              onClick={() => theme !== 'light' && toggleTheme('light')}
-            >☀️ Chiaro</span>
-          </div>
-
-          {!isReadOnly && (
-            <>
-              <div className="estrai-toolbar__sep" />
-
-              <button type="button" className="estrai-toolbar__btn estrai-toolbar__btn--save"
-                onClick={handleSaveCanvas} disabled={saving}>
-                {saving ? 'Salvataggio…' : '💾 Salva'}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </>
-  );
+  // Barra unica (Fase 4, M7): connessione accanto al titolo, azioni nel
+  // menu "⋯", tabelle dalla palette ("＋ Passo"), un solo "▶ Esegui".
+  const toolbar = {
+    mode: 'estrai',
+    title: project?.metadata?.name,
+    onBack: handleBack,
+    onSave: handleSaveCanvas,
+    saving,
+    executing: execution.isExecuting,
+    theme,
+    setTheme: toggleTheme,
+    statusExtra: <span className="etb__stats">{nodes.length} nodi · {edges.length} collegamenti</span>,
+    leftExtra: projectConnection ? (
+      <span className="etb__conn" title={projectConnection.name}>
+        <i aria-hidden="true" />{projectConnection.name}
+        <small>{sourceType === 'featureService' ? 'ArcGIS' : (projectConnection.type || 'DB').toUpperCase()}</small>
+      </span>
+    ) : null,
+    menuItems: [
+      { key: 'connections', icon: '🔌', label: 'Connessioni', onClick: () => { if (confirmNavigation()) navigate('/connections'); } },
+      ...(isReadOnly ? [] : [
+        { key: 'div0', divider: true },
+        { key: 'input', icon: '⌨', label: 'Aggiungi input runtime', onClick: handleAddProjectInputNode, title: 'Un parametro chiesto quando il progetto viene eseguito' },
+        { key: 'note', icon: '💬', label: 'Nota', onClick: handleAddCommentNode },
+        { key: 'div1', divider: true },
+        { key: 'output', icon: '📁', label: 'Output', onClick: handleAddResultNode, disabled: hasResultNode },
+        { key: 'carica', icon: '⬆', label: 'Carica su database', onClick: handleAddCaricanNode, disabled: !hasResultNode || hasCaricanNode },
+        { key: 'carica-arcgis', icon: '🌐', label: 'Carica su ArcGIS', onClick: handleAddCaricanArcGISNode, disabled: !hasResultNode || hasCaricanArcGISNode },
+        { key: 'div2', divider: true },
+        { key: 'versions', icon: '🕘', label: 'Versioni', onClick: () => setShowVersions(true) },
+      ]),
+    ],
+  };
 
   // sidebar slot (nascosta per viewer: niente drag&drop di tabelle)
   const sidebar = !isReadOnly ? (
@@ -849,7 +738,7 @@ function EstraiEditor() {
           onDragOver,
         }}
         slots={{
-          topbar,
+          toolbar,
           sidebar,
           beforeCanvas: accessDeniedBanner,
           afterCanvas,

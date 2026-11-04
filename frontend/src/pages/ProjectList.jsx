@@ -8,6 +8,7 @@ import { useToast } from '../hooks/useToast';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { deleteProject, deleteEseguibile, cloneProject, updateProject } from '../api';
+import { clearProjectDrafts } from '../utils/localDrafts';
 import NewProjectModal from '../components/projects/NewProjectModal';
 import EsegSelectorModal from '../components/projects/EsegSelectorModal';
 import ProjectSection from '../components/projects/ProjectSection';
@@ -101,6 +102,7 @@ function ProjectList() {
     removeProjectLocal(id);
     try {
       await deleteProject(id);
+      clearProjectDrafts(id);
       toast.success(`"${name}" eliminato`);
       return;
     } catch (err) {
