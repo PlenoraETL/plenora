@@ -45,7 +45,7 @@ import useRuntimeInputDefinitions from '../hooks/useRuntimeInputDefinitions';
 import { executionNeedsConfig } from '../utils/executionConfig';
 import { withAvailableColumns } from '../utils/columnPlans';
 import { analyzeCanvas, branchSteps, nodeRole } from '../utils/canvasGraph';
-import { backendAccessFlags, persistedNodeData, persistenceValue } from '../utils/nodeTypeRegistry';
+import { connectStepData, cloneStepData } from '../utils/branchNodes';
 import { nodeTitle } from '../components/canvas/nodeDescriptors';
 import { joinKeysPatch } from '../components/transforms/panels/panelConfig';
 import {
@@ -532,7 +532,8 @@ const ManipolaEditorContent = () => {
     const branchName = nodeTitle(head.type, head.data);
     const newNode = {
       id: `transform_${Date.now()}`, type: 'transform', position: getPos(),
-      data: { transform_op: op, config, columns: [], title: `${op === 'join' ? 'Unisci' : 'Accoda'} ${branchName}` },
+      // Titolo derivato (operazione · ramo): niente data.title (regola 7).
+      data: connectStepData(op, config, branchName),
     };
     const done = insertBetween({
       node: newNode, targetId, inHandle: 'input-0', makeEdge: branchEdge,
@@ -560,19 +561,13 @@ const ManipolaEditorContent = () => {
     const dy = other.position.y - source.position.y;
     const idMap = new Map([[sourceId, otherId], ...steps.map((n, i) => [n.id, `${n.type}_${stamp}_${i}`])]);
     const otherName = nodeTitle(other.type, other.data);
-    const clones = steps.map((n) => {
-      // Senza colonne (le ricalcola la propagazione) ne' flag di accesso
-      // del nodo originale (stessa regola di backendAccessFlags); titolo
-      // sempre distinto dall'originale.
-      const accessKeys = Object.keys(backendAccessFlags(n));
-      const data = Object.fromEntries(Object.entries(persistenceValue(persistedNodeData(n)))
-        .filter(([k]) => k !== 'columns' && !accessKeys.includes(k)));
-      return {
-        id: idMap.get(n.id), type: n.type,
-        position: { x: n.position.x + dx, y: n.position.y + dy },
-        data: { ...data, columns: [], title: `${nodeTitle(n.type, n.data)} · ${otherName}` },
-      };
-    });
+    // Titolo derivato col suffisso del ramo (utils/branchNodes): sempre
+    // distinto dall'originale, senza titoli congelati.
+    const clones = steps.map((n) => ({
+      id: idMap.get(n.id), type: n.type,
+      position: { x: n.position.x + dx, y: n.position.y + dy },
+      data: cloneStepData(n, otherName),
+    }));
     const stepIds = new Set(steps.map(n => n.id));
     const copied = edgesRef.current
       // Dal ramo, dagli input runtime (binding) e dai parametri (Valori statici).

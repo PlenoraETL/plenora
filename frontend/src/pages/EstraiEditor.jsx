@@ -307,7 +307,9 @@ function EstraiEditor() {
     const tableColumns = (isView ? views[tableName] : catalog[tableName]) || [];
     return {
       id: `node_${Date.now()}`, type: 'tableNode', position,
-      data: { label: tableName, table_name: tableName, alias: null, type: 'source',
+      // Niente `label`: il titolo della tabella e' derivato da alias e nome
+      // (nodeDescriptors), non una copia congelata (Blocco A, regola 7).
+      data: { table_name: tableName, alias: null, type: 'source',
         columns: tableColumns.map(col => ({ name: typeof col === 'object' ? col.name : col,
           type: typeof col === 'object' ? col.type || 'str' : 'str', alias: null, visible: true })),
         filters: [], calculated_columns: [], db_type: projectConnection?.type || 'postgres' },

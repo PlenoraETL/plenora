@@ -73,3 +73,18 @@ export function useConfirm() {
 export function useOptionalConfirm() {
   return useContext(ConfirmContext);
 }
+
+// Senza provider: window.confirm (assente o rifiutato = non confermato).
+const nativeConfirm = (config = {}) => Promise.resolve(
+  typeof window !== 'undefined' && typeof window.confirm === 'function'
+    && window.confirm(config.message || config.title || 'Confermi?'),
+);
+
+/**
+ * Conferma sempre disponibile: il ConfirmDialog del provider o, senza
+ * provider (test, componenti montati da soli), window.confirm.
+ * @returns {(config: object) => Promise<boolean>}
+ */
+export function useConfirmOrNative() {
+  return useContext(ConfirmContext) || nativeConfirm;
+}

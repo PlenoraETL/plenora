@@ -80,7 +80,8 @@ describe('CaricanNode REST destination controls', () => {
       rest_body_mapping: [{ source: 'city', target: 'payload.city', required: true }],
     });
 
-    expect(screen.getByText('CARICA su REST')).toBeInTheDocument();
+    // Titolo nel pannello (NodeInspector): qui la destinazione scelta.
+    expect(screen.getByRole('button', { name: 'REST' }).className).toMatch(/active/);
     expect(screen.getByDisplayValue('https://api.example.com/items')).toBeInTheDocument();
     expect(screen.getByDisplayValue('PATCH')).toBeInTheDocument();
     expect(screen.queryByText(/Connessione Database/i)).not.toBeInTheDocument();

@@ -13,7 +13,6 @@ import FilterModal from '../modals/FilterModal';
 import ColumnBuilderModal from '../modals/ColumnBuilderModal';
 import { getColumnTypeIcon, getColumnTypeLabel, getColumnSRID, isColumnVisible, isGeometryType } from '../../utils/columnUtils';
 import useCanvasStore from '../../store/useCanvasStore';
-import { useConfirm } from '../../context/ConfirmContext';
 import './TableNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 
@@ -70,8 +69,6 @@ const TableNode = memo(({ data, id }) => {
   // Selective subscription avoids re-renders when unrelated store state changes.
   const projectId            = useCanvasStore(s => s.projectId);
   const updateNodeData       = useCanvasStore(s => s.updateNodeData);
-  const deleteNode           = useCanvasStore(s => s.deleteNode);
-  const confirm              = useConfirm();
   const toggleColumn         = useCanvasStore(s => s.toggleColumn);
   const toggleAllColumns     = useCanvasStore(s => s.toggleAllColumns);
   const updateColumnAlias    = useCanvasStore(s => s.updateColumnAlias);
@@ -79,21 +76,13 @@ const TableNode = memo(({ data, id }) => {
   const removeCalculatedColumn = useCanvasStore(s => s.removeCalculatedColumn);
 
   const handleSaveAlias = () => {
-    updateNodeData(id, { alias: tempAlias.trim() || null, label: tempAlias.trim() || data.table_name });
+    // Solo l'alias SQL: il titolo del passo ne e' derivato (nodeDescriptors).
+    updateNodeData(id, { alias: tempAlias.trim() || null });
     setIsEditingAlias(false);
   };
 
   const handleToggleColumn    = (columnIndex) => toggleColumn(id, columnIndex);
   const handleToggleAll       = (makeVisible) => toggleAllColumns(id, makeVisible);
-  const handleDelete          = async () => {
-    const ok = await confirm({
-      title: 'Elimina nodo',
-      message: 'Eliminare questo nodo?',
-      confirmText: 'Elimina',
-      variant: 'danger',
-    });
-    if (ok) deleteNode(id);
-  };
 
   const handleStartEditColumnAlias = (columnIndex) => {
     setEditingColumnIndex(columnIndex);
@@ -125,11 +114,12 @@ const TableNode = memo(({ data, id }) => {
         className="table-node__handle"
       />
 
-      {/* Header */}
-      <div className="table-node__header">
-        <div className="table-node__header-content">
+      {/* Tabella e alias SQL. Titolo, chiusura ed eliminazione sono del
+          pannello (NodeInspector, regola 6 del Blocco A). */}
+      <div className="table-node__info">
+        <div className="table-node__info-content">
           <div className={`table-node__title ${alias ? 'table-node__title--with-alias' : ''}`}>
-            <span className="table-node__title-icon">📊</span>
+            <span className="table-node__title-icon" aria-hidden="true">📊</span>
             {tableName}
           </div>
           
@@ -174,16 +164,6 @@ const TableNode = memo(({ data, id }) => {
             </button>
           )}
         </div>
-
-        {/* Bottone elimina */}
-        <button
-          type="button"
-          onClick={handleDelete}
-          className="table-node__delete-btn"
-          title="Elimina nodo"
-        >
-          ×
-        </button>
       </div>
 
       {/* Body - Lista colonne */}

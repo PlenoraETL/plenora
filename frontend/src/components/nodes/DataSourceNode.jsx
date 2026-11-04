@@ -10,6 +10,7 @@
 import React, { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
+import { useConfirmOrNative } from '../../context/ConfirmContext';
 import { listDataSources, listFiles, getFileSchema } from '../../api/datasources';
 import useDialogFocus from '../../hooks/useDialogFocus';
 import ModalWrapper from '../common/ModalWrapper';
@@ -48,7 +49,8 @@ import NodeHandle from '../canvas/NodeHandle';
  */
 const DataSourceNode = memo(({ id, data }) => {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
-  const deleteNode     = useCanvasStore(s => s.deleteNode);
+  const isReadOnly     = useCanvasStore(s => s.isReadOnly);
+  const confirm        = useConfirmOrNative();
 const [datasources, setDatasources]         = useState([]);
   const [loadingDs, setLoadingDs]             = useState(false);
   const [browserFiles, setBrowserFiles]       = useState([]);
@@ -63,7 +65,6 @@ const [datasources, setDatasources]         = useState([]);
   // Sheet/layer disponibili per file multi-tabella.
   const [availableSheets, setAvailableSheets] = useState([]);
   const [availableLayers, setAvailableLayers] = useState([]);
-  const [isExpanded, setIsExpanded]           = useState(true);
 
   const mode         = data.mode || 'source';
   const dsId         = data.datasource_id || '';
@@ -81,6 +82,23 @@ useEffect(() => {
     load();
   }, []);
 const upd = useCallback((fields) => updateNodeData(id, fields), [id, updateNodeData]);
+
+  // Cambio di modalita' (sorgente <-> scrittura): toglie le colonne lette,
+  // quindi con colonne presenti chiede conferma (Blocco A, e.8).
+  const switchMode = useCallback(async (next) => {
+    if (next === mode) return;
+    const count = (data.columns || []).length;
+    if (count > 0) {
+      const ok = await confirm({
+        title: 'Cambia modalità',
+        message: `Passando a «${next === 'carica' ? 'Scrittura' : 'Sorgente'}» le ${count} colonne lette dal file vengono tolte. Continuare?`,
+        confirmText: 'Cambia modalità',
+        variant: 'warning',
+      });
+      if (!ok) return;
+    }
+    upd({ mode: next, columns: [] });
+  }, [mode, data.columns, confirm, upd]);
 const openBrowser = useCallback(async (path = '') => {
     if (!dsId) return;
     setShowBrowser(true);
@@ -218,27 +236,8 @@ return (
       {mode === 'carica' && (
         <NodeHandle key="handle-carica" type="target" position={Position.Left} className="dsn__handle dsn__handle--in" id="carica-in" />
       )}
-<div className="dsn__header">
-        <div className="dsn__header-left">
-          <span className="dsn__icon">{mode === 'source' ? '🗄️' : '💾'}</span>
-          <span className="dsn__title">{mode === 'source' ? 'Data Source' : 'Carica → DS'}</span>
-        </div>
-        <div className="dsn__header-right">
-          {/* Toggle modalità */}
-          <button type="button"
-            className="dsn__mode-toggle"
-            title={`Passa a ${mode === 'source' ? 'modalità Carica' : 'modalità Sorgente'}`}
-            onClick={() => upd({ mode: mode === 'source' ? 'carica' : 'source', columns: [] })}
-          >
-            {mode === 'source' ? '→ Carica' : '← Sorgente'}
-          </button>
-          <button type="button" className="dsn__expand-btn" onClick={() => setIsExpanded(v => !v)}>
-            {isExpanded ? '▲' : '▼'}
-          </button>
-          <button type="button" className="dsn__delete-btn" onClick={() => deleteNode(id)}>×</button>
-        </div>
-      </div>
-
+{/* Titolo, chiusura ed eliminazione sono del pannello (NodeInspector,
+          regola 6 del Blocco A); qui resta il modulo, sempre aperto. */}
       {/* Badge DS selezionato */}
       {selectedDs && (
         <div className="dsn__ds-badge">
@@ -248,8 +247,29 @@ return (
         </div>
       )}
 
-      {isExpanded && (
-        <div className="dsn__body">
+      <div className="dsn__body">
+          <div className="dsn__field">
+            <label className="dsn__label">Uso</label>
+            <div className="dsn__mode-tabs" role="group" aria-label="Uso del Data Source">
+              <button type="button"
+                className={`dsn__mode-tab ${mode === 'source' ? 'dsn__mode-tab--active' : ''}`}
+                aria-pressed={mode === 'source'}
+                disabled={isReadOnly}
+                onClick={() => switchMode('source')}
+              >
+                🗄️ Sorgente
+              </button>
+              <button type="button"
+                className={`dsn__mode-tab ${mode === 'carica' ? 'dsn__mode-tab--active' : ''}`}
+                aria-pressed={mode === 'carica'}
+                disabled={isReadOnly}
+                onClick={() => switchMode('carica')}
+              >
+                💾 Scrittura
+              </button>
+            </div>
+          </div>
+
           <DsSelector />
 
           {mode === 'source' && dsId && (
@@ -476,8 +496,7 @@ return (
               ⚠️ Seleziona un connettore Data Source per continuare
             </div>
           )}
-        </div>
-      )}
+      </div>
 {showBrowser && (
         <ModalWrapper
           isOpen={showBrowser}

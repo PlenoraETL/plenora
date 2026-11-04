@@ -11,7 +11,9 @@
  *   - calcolo upstreamColumns (richiede useReactFlow)
  *   - pulsanti Valida/Esegui/Anteprima: delegano al percorso unico
  *     dell'editor (editor/PipelineRunner, Fase 4 M7)
- *   - header + delete
+ *
+ * Intestazione, chiusura ed eliminazione sono del pannello (NodeInspector,
+ * regola 6 del Blocco A).
  */
 import React, { useEffect, useRef, memo, useMemo } from 'react';
 import { Position, useReactFlow, useStore } from '@xyflow/react';
@@ -21,7 +23,6 @@ import useCanvasStore from '../../store/useCanvasStore';
 import ResultNodeStandardView from './result/ResultNodeStandardView';
 import ResultInlinePreview from './result/ResultInlinePreview';
 import useInlinePreview from '../../hooks/useInlinePreview';
-import { useConfirm } from '../../context/ConfirmContext';
 import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 import './ResultNode.css';
 import NodeHandle from '../canvas/NodeHandle';
@@ -115,32 +116,10 @@ const ResultNode = memo(({ data, id }) => {
     }));
   }, [id, getEdges, getNodes, incomingEdgeCount, sourceColumnsSignature]);
 
-  // Tipi progetto (per header icon/title + variante view)
+  // Variante della vista (stili per editor)
   const isManipulate = data.isManipulate || false;
   const isArricchisci = data.isArricchisci || false;
-
-  // Header icon/title/variant (comuni a IMDF + standard; executeLabel passato a IMDF)
   const nodeVariant = isArricchisci ? 'arricchisci' : (isManipulate ? 'manipola' : 'estrai');
-  const config = {
-    estrai: { icon: '📁', title: 'Output', executeLabel: 'Esegui Query' },
-    manipola: { icon: '🔧', title: 'Output Manipola', executeLabel: 'Esegui Pipeline' },
-    arricchisci: { icon: '🔗', title: 'Output Arricchisci', executeLabel: 'Esegui Arricchimento' },
-  };
-  const { icon, title } = config[nodeVariant];
-
-  const confirm = useConfirm();
-
-  const handleDelete = async () => {
-    const ok = await confirm({
-      title: 'Elimina nodo risultato',
-      message: 'Eliminare il nodo risultato?',
-      confirmText: 'Elimina',
-      variant: 'danger',
-    });
-    if (ok) {
-      useCanvasStore.getState().deleteNode(id);
-    }
-  };
 
   // Valida, Esegui e Anteprima: percorso unico dell'editor (Fase 4, M7,
   // editor/PipelineRunner, sempre montato). Il nodo li chiama soltanto.
@@ -176,20 +155,6 @@ const ResultNode = memo(({ data, id }) => {
         id="output"
         className="result-node__handle result-node__handle--output"
       />
-
-      <div className="result-node__header">
-        <div className="result-node__title">
-          <span className="result-node__title-icon">{icon}</span>
-          <span>{title}</span>
-        </div>
-        <button type="button"
-          onClick={handleDelete}
-          className="result-node__delete-btn"
-          title="Elimina nodo"
-        >
-          ×
-        </button>
-      </div>
 
       <div className="result-node__body">
         <ResultNodeStandardView

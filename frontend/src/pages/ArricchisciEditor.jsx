@@ -46,6 +46,7 @@ import CaricanNode from '../components/nodes/CaricanNode';
 import CaricanArcGISNode from '../components/nodes/CaricanArcGISNode';
 import '../components/nodes/CaricanArcGISNode.css';
 import StaticValuesNode from '../components/nodes/StaticValuesNode';
+import { nodeTitle } from '../components/canvas/nodeDescriptors';
 
 // Modali lazy-loaded
 const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'));
@@ -64,24 +65,13 @@ import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
 
 /**
- * Costruisce una mappa nodeId → label leggibile per il raggruppamento colonne in PreviewModal.
+ * Costruisce una mappa nodeId → titolo per il raggruppamento colonne in
+ * PreviewModal: lo stesso titolo del canvas e del pannello (nodeDescriptors,
+ * titolo dell'utente compreso), non un secondo calcolo (Blocco A, d.9).
  */
-const buildNodeLabelMap = (nodes) => {
-  const map = {};
-  nodes.forEach(node => {
-    const d = node.data || {};
-    let label;
-    switch (node.type) {
-      case 'project_source':  label = d.project_name || d.source_project_id?.slice(0, 6) || 'Progetto'; break;
-      case 'file_source':     label = d.file_name    || d.file_source_id?.slice(0, 6)    || 'File';     break;
-      case 'api_enrich':      label = d.api_name     || 'API';    break;
-      case 'featureLayerNode':label = d.layer_name   || 'Layer';  break;
-      default:                label = d.label        || node.type; break;
-    }
-    map[node.id] = label;
-  });
-  return map;
-};
+const buildNodeLabelMap = (nodes) => Object.fromEntries(
+  nodes.map(node => [node.id, nodeTitle(node.type, node.data)]),
+);
 
 // Costante stabile — evita array literal nelle deps di useEditorData
 const ARRICCHISCI_SOURCE_TYPES = ['estrai', 'manipola', 'arricchisci'];

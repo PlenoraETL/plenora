@@ -16,7 +16,6 @@ import { Position } from '@xyflow/react';
 import { getLayerSchema } from '../../api/features';
 import useCanvasStore from '../../store/useCanvasStore';
 import { isColumnVisible } from '../../utils/columnUtils';
-import { useConfirm } from '../../context/ConfirmContext';
 import './FeatureLayerNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 
@@ -63,7 +62,6 @@ const FeatureLayerNode = memo(({ data, id }) => {
   const [loadingSchema, setLoadingSchema] = useState(false);
 
   // Props dal nodo
-  const layerName = data.layer_name || 'Layer';
   const serviceName = data.service_name || '';
   const connectionName = data.connection_name || '';
   const geometryType = data.geometry_type || '';
@@ -101,21 +99,10 @@ const FeatureLayerNode = memo(({ data, id }) => {
 
   const toggleColumn     = useCanvasStore(s => s.toggleColumn);
   const toggleAllColumns = useCanvasStore(s => s.toggleAllColumns);
-  const deleteNode       = useCanvasStore(s => s.deleteNode);
   const updateNodeData   = useCanvasStore(s => s.updateNodeData);
-  const confirm          = useConfirm();
 
   const handleToggleColumn = (columnIndex) => toggleColumn(id, columnIndex);
   const handleToggleAll    = (makeVisible)  => toggleAllColumns(id, makeVisible);
-  const handleDelete       = async () => {
-    const ok = await confirm({
-      title: 'Elimina nodo',
-      message: 'Eliminare questo nodo?',
-      confirmText: 'Elimina',
-      variant: 'danger',
-    });
-    if (ok) deleteNode(id);
-  };
 
   const handleSaveWhere = () => {
     const trimmed = tempWhere.trim();
@@ -163,15 +150,14 @@ const FeatureLayerNode = memo(({ data, id }) => {
         className="fl-node__handle"
       />
 
-      <div className="fl-node__header">
-        <div className="fl-node__header-content">
-          <div className="fl-node__title">
-            <span className="fl-node__title-icon">
+      {/* Servizio, geometria e numero di elementi. Titolo, chiusura ed
+          eliminazione sono del pannello (NodeInspector, regola 6). */}
+      <div className="fl-node__info">
+        <div className="fl-node__info-content">
+          <div className="fl-node__subtitle">
+            <span className="fl-node__title-icon" aria-hidden="true">
               {GEOM_ICONS[getGeomShortLabel(geometryType)] || '🌐'}
             </span>
-            {layerName}
-          </div>
-          <div className="fl-node__subtitle">
             {serviceName && <span className="fl-node__service-name">{serviceName}</span>}
             {geometryType && (
               <span className="fl-node__geom-badge">
@@ -185,16 +171,6 @@ const FeatureLayerNode = memo(({ data, id }) => {
             )}
           </div>
         </div>
-
-        {/* Bottone elimina */}
-        <button
-          type="button"
-          onClick={handleDelete}
-          className="fl-node__delete-btn"
-          title="Elimina nodo"
-        >
-          ×
-        </button>
       </div>
 
       {/* Badge connessione */}

@@ -37,14 +37,14 @@
 }
 
 /* ============================================================
-   HEADER
+   INFO DEL LAYER (l'intestazione e' del pannello)
    ============================================================ */
-.fl-node__header {
-  background: var(--gradient-header-geo);
+.fl-node__info {
+  padding: 6px 10px;
   color: var(--color-text-primary);
 }
 
-.fl-node__header-content {
+.fl-node__info-content {
   flex: 1;
 }
 
@@ -85,25 +85,11 @@
   border-radius: 3px;
 }
 
-.fl-node__delete-btn {
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  color: white;
-  width: 20px;
-  height: 20px;
-  border-radius: 3px;
-  cursor: pointer;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: 6px;
-  transition: background 0.2s;
-  flex-shrink: 0;
-}
-
-.fl-node__delete-btn:hover {
-  background: rgba(255, 255, 255, 0.35);
+/* Nel pannello i badge non stanno piu' su un fondo colorato. */
+.fl-node__info .fl-node__geom-badge,
+.fl-node__info .fl-node__count-badge {
+  background: var(--plen-surface-2, #f3f5fa);
+  border: 1px solid var(--plen-border, #e3e7f0);
 }
 
 /* ============================================================

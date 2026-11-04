@@ -7,7 +7,7 @@
  *      con chiave 'fileName' (trim applicato).
  *   3. Format button click → updateNodeData con chiave 'format'.
  *   4. DISTINCT toggle (ESTRAI) → updateNodeData con chiave 'distinct'.
- *   5. hasOnPreview=false → bottone Preview NON renderizzato.
+ *   5. hasOnPreview=false → bottone Anteprima NON renderizzato.
  *      hasOnPreview=true + click → invoca onPreview.
  *   6. hasOnExecute=false → bottone Esegui NON renderizzato.
  *      hasOnExecute=true + click → invoca onExecute() (le opzioni le legge
@@ -16,8 +16,8 @@
  *      condivise nello store ({force_recalculate:true}).
  *   8. Click Valida → invoca onValidate.
  *   9. Variante CSS: data.isManipulate=true → bottone execute class contiene 'manipola'.
- *  10. Execute label deriva da variante: ESTRAI→'Esegui Query',
- *      MANIPOLA→'Esegui Pipeline', ARRICCHISCI→'Esegui Arricchimento'.
+ *  10. Etichette uguali alla barra in ogni editor (Blocco A, e.5):
+ *      'Valida', 'Anteprima', 'Esegui'.
  *
  * Mock di RunHistoryModal per evitare render pesante; useCanvasStore mockato
  * come in altri contract test (storeRef + vi.hoisted).
@@ -130,15 +130,15 @@ describe('ResultNodeStandardView — contract', () => {
     expect(updateNodeDataMock).toHaveBeenCalledWith('n1', { distinct: true });
   });
 
-  it('hasOnPreview=false: bottone Preview NON renderizzato', () => {
+  it('hasOnPreview=false: bottone Anteprima NON renderizzato', () => {
     renderView({ hasOnPreview: false });
-    expect(screen.queryByRole('button', { name: /preview/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Anteprima' })).toBeNull();
   });
 
-  it('hasOnPreview=true: click Preview → onPreview invocato', async () => {
+  it('hasOnPreview=true: click Anteprima → onPreview invocato', async () => {
     const user = userEvent.setup();
     const { onPreview } = renderView({ hasOnPreview: true });
-    await user.click(screen.getByRole('button', { name: /preview/i }));
+    await user.click(screen.getByRole('button', { name: 'Anteprima' }));
     expect(onPreview).toHaveBeenCalledTimes(1);
   });
 
@@ -150,7 +150,7 @@ describe('ResultNodeStandardView — contract', () => {
   it('hasOnExecute=true ESTRAI: click Esegui → onExecute() (opzioni dallo store)', async () => {
     const user = userEvent.setup();
     const { onExecute } = renderView();
-    await user.click(screen.getByRole('button', { name: /esegui query/i }));
+    await user.click(screen.getByRole('button', { name: 'Esegui' }));
     expect(onExecute).toHaveBeenCalledTimes(1);
     expect(onExecute).toHaveBeenCalledWith();
   });
@@ -165,7 +165,7 @@ describe('ResultNodeStandardView — contract', () => {
     await user.click(recalcRadio);
 
     expect(storeRef.current.setRunOptions).toHaveBeenCalledWith({ force_recalculate: true });
-    await user.click(screen.getByRole('button', { name: /esegui pipeline/i }));
+    await user.click(screen.getByRole('button', { name: 'Esegui' }));
     expect(onExecute).toHaveBeenCalledWith();
   });
 
@@ -176,9 +176,9 @@ describe('ResultNodeStandardView — contract', () => {
     expect(onValidate).toHaveBeenCalledTimes(1);
   });
 
-  it('executeLabel deriva da variante: ESTRAI→Esegui Query, MANIPOLA→Esegui Pipeline, ARRICCHISCI→Esegui Arricchimento', () => {
+  it('in ogni editor le etichette sono quelle della barra: Valida, Anteprima, Esegui', () => {
     const { rerender } = renderView();
-    expect(screen.getByRole('button', { name: /esegui query/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Esegui' })).toBeInTheDocument();
 
     rerender(
       <ResultNodeStandardView
@@ -192,7 +192,7 @@ describe('ResultNodeStandardView — contract', () => {
         onPreview={vi.fn()}
       />
     );
-    expect(screen.getByRole('button', { name: /esegui pipeline/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Esegui' })).toBeInTheDocument();
 
     rerender(
       <ResultNodeStandardView
@@ -206,14 +206,14 @@ describe('ResultNodeStandardView — contract', () => {
         onPreview={vi.fn()}
       />
     );
-    expect(screen.getByRole('button', { name: /esegui arricchimento/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Esegui' })).toBeInTheDocument();
   });
 
   it('variante CSS manipola: bottone execute ha classe contenente "manipola"', () => {
     renderView({
       data: { fileName: 'output', format: 'csv', columns: [], isManipulate: true },
     });
-    const execBtn = screen.getByRole('button', { name: /esegui pipeline/i });
+    const execBtn = screen.getByRole('button', { name: 'Esegui' });
     expect(execBtn.className).toMatch(/manipola/);
   });
 

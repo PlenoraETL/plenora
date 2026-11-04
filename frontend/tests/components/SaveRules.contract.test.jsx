@@ -187,11 +187,11 @@ describe('one Esegui: shared options and busy state', () => {
 
   it('"Ricalcola tutto" is shared state; the panel button is off while a run is in progress', () => {
     const onExecute = vi.fn();
-    render(<ExecuteActionsPanel data={{}} id="o" nodeVariant="manipola" executeLabel="Esegui Pipeline"
+    render(<ExecuteActionsPanel data={{}} id="o" nodeVariant="manipola"
       hasExecutionOptions hasOnExecute onExecute={onExecute} onValidate={() => {}} />);
     fireEvent.click(screen.getByLabelText(/Ricalcola tutto/));
     expect(useCanvasStore.getState().runOptions.force_recalculate).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: /Esegui Pipeline/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Esegui' }));
     expect(onExecute).toHaveBeenCalledWith();
     act(() => useCanvasStore.getState().setRunState('running'));
     expect(screen.getByRole('button', { name: /In esecuzione/ }).disabled).toBe(true);

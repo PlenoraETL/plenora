@@ -10,6 +10,7 @@ import {
 } from '../../utils/runtimeBindingEdges';
 import './ProjectInputNode.css';
 import NodeHandle from '../canvas/NodeHandle';
+import { nodeTitle } from '../canvas/nodeDescriptors';
 
 const INPUT_TYPES = [
   ['file', 'File tabellare'],
@@ -57,9 +58,8 @@ const loadConnectionSets = () => {
   return connectionSetsPromise;
 };
 
-function ProjectInputNode({ id, data, selected }) {
+function ProjectInputNode({ id, data }) {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
-  const deleteNode = useCanvasStore(s => s.deleteNode);
   const nodes = useCanvasStore(s => s.nodes);
   const edges = useCanvasStore(s => s.edges);
   const removeEdges = useCanvasStore(s => s.removeEdges);
@@ -135,12 +135,9 @@ function ProjectInputNode({ id, data, selected }) {
   const optionalNumber = value => (value === '' ? null : Number(value));
 
   return (
-    <div className={`pin ${selected ? 'pin--selected' : ''}`}>
-      <div className="pin__header">
-        <span>⌨</span>
-        <strong>Input progetto</strong>
-        <button type="button" className="pin__delete nodrag" onClick={() => deleteNode(id)}>×</button>
-      </div>
+    <div className="pin">
+      {/* Titolo, chiusura ed eliminazione sono del pannello (NodeInspector,
+          regola 6 del Blocco A). */}
 
       <label className="pin__field">
         <span>Etichetta</span>
@@ -315,11 +312,8 @@ function ProjectInputNode({ id, data, selected }) {
             {bindingEdges.map(edge => {
               const targetNode = nodes.find(node => node.id === edge.target);
               const options = getNodeBindableTargets(targetNode, registry);
-              const targetLabel = targetNode?.data?.label
-                || targetNode?.data?.name
-                || targetNode?.data?.transform_op
-                || targetNode?.type
-                || edge.target;
+              // Nome del passo come nel resto dell'interfaccia (nodeDescriptors).
+              const targetLabel = targetNode ? nodeTitle(targetNode.type, targetNode.data) : edge.target;
               const currentField = edge.data?.target_field || '';
               const awaitingRegistry = targetNode?.type === 'transform'
                 && registryStatus !== 'ready';

@@ -15,11 +15,11 @@ import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import RestDestinationSection, { REST_METHODS } from './carica/RestDestinationSection';
 import DbDestinationSection, { WRITE_MODES } from './carica/DbDestinationSection';
+import AutoRunNote from './carica/autoRunNote';
 import './CaricanNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 
 const CaricanNode = memo(({ data, id }) => {
-  const [isExpanded, setIsExpanded] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showMapping, setShowMapping] = useState(false);
 
@@ -93,27 +93,9 @@ const CaricanNode = memo(({ data, id }) => {
         className="carica-node__handle carica-node__handle--input"
       />
 
-      <div className="carica-node__header" role="button" tabIndex={0} onClick={() => setIsExpanded(!isExpanded)} onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setIsExpanded(v => !v)}>
-        <div className="carica-node__header-left">
-          <span className="carica-node__icon">💾</span>
-          <span className="carica-node__title">{destType === 'rest' ? 'CARICA su REST' : 'CARICA su DB'}</span>
-        </div>
-        <div className="carica-node__header-right">
-          <span className="carica-node__expand-icon">
-            {isExpanded ? '▼' : '▶'}
-          </span>
-          <button type="button"
-            onClick={(e) => { e.stopPropagation(); useCanvasStore.getState().deleteNode(id); }}
-            className="carica-node__delete-btn"
-            title="Elimina nodo"
-          >
-            ×
-          </button>
-        </div>
-      </div>
-
-      {isExpanded && (
-        <div className="carica-node__body">
+      {/* Titolo, chiusura ed eliminazione sono del pannello (NodeInspector,
+          regola 6 del Blocco A); il modulo resta sempre aperto. */}
+      <div className="carica-node__body">
 
           <div className="carica-node__dest-selector" role="group" aria-label="Tipo destinazione Carica">
             <button
@@ -202,11 +184,8 @@ const CaricanNode = memo(({ data, id }) => {
             </div>
           )}
 
-          <div className="carica-node__auto-info">
-            ⚡ Eseguito automaticamente con <strong>Esegui Query</strong>
-          </div>
-        </div>
-      )}
+          <AutoRunNote className="carica-node__auto-info" />
+      </div>
 
     </div>
   );

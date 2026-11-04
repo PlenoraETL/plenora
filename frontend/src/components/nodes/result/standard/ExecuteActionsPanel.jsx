@@ -1,7 +1,8 @@
 /**
  * ExecuteActionsPanel.jsx — Coda finale del Result node:
- * execution mode + bottoni Valida/Preview/Esegui + footer cronologia
- * + `RunHistoryModal`.
+ * execution mode + bottoni Valida/Anteprima/Esegui + footer cronologia
+ * + `RunHistoryModal`. Le etichette sono le stesse della barra dell'editor
+ * (Blocco A, e.5): stesse azioni, stessi nomi.
  * Le callback `onValidate`/`onPreview`/`onExecute` arrivano dal
  * `ResultNode` (unico percorso di esecuzione).
  *
@@ -28,7 +29,6 @@ export default function ExecuteActionsPanel({
   data,
   id,
   nodeVariant,
-  executeLabel,
   hasExecutionOptions,
   isArricchisci,
   hasOnPreview,
@@ -101,7 +101,7 @@ export default function ExecuteActionsPanel({
           className="result-node__validate-btn"
           title="Valida il canvas prima di eseguire"
         >
-          <span>🔍</span>
+          <span aria-hidden="true">🔍</span>
           <span>Valida</span>
         </button>
 
@@ -110,8 +110,8 @@ export default function ExecuteActionsPanel({
             onClick={onPreview}
             className={`result-node__preview-btn result-node__preview-btn--${nodeVariant}`}
           >
-            <span className="result-node__preview-icon">👁️</span>
-            <span>Preview</span>
+            <span className="result-node__preview-icon" aria-hidden="true">👁️</span>
+            <span>Anteprima</span>
           </button>
         )}
 
@@ -122,7 +122,7 @@ export default function ExecuteActionsPanel({
             className={`result-node__execute-btn result-node__execute-btn--${nodeVariant}`}
           >
             <span className="result-node__execute-icon" aria-hidden="true">{busy ? '⏳' : '▶️'}</span>
-            <span>{busy ? 'In esecuzione…' : executeLabel}</span>
+            <span>{busy ? 'In esecuzione…' : 'Esegui'}</span>
           </button>
         )}
       </div>

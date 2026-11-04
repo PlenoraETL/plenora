@@ -23,6 +23,7 @@ import './ApiEnrichNode.css';
 import RunHistoryModal from '../modals/RunHistoryModal';
 import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 import NodeHandle from '../canvas/NodeHandle';
+import { nodeTitle } from '../canvas/nodeDescriptors';
 
 /**
  * ApiEnrichNode - Nodo per arricchire dati chiamando API esterne
@@ -33,7 +34,7 @@ import NodeHandle from '../canvas/NodeHandle';
  * Input: dati da nodo precedente (ProjectSource, FileSource, StaticValues, altro ApiEnrich)
  * Output: dati originali + colonne da API (con tipi)
  */
-function ApiEnrichNode({ id, data, selected }) {
+function ApiEnrichNode({ id, data }) {
   const { getNodes, getEdges } = useReactFlow();
   // Mutazioni SOLO dallo store (audit R1): il setter di React Flow in
   // modalita' controllata diventa un change `reset` che lo store non
@@ -82,7 +83,6 @@ function ApiEnrichNode({ id, data, selected }) {
   const apiOutputMapping = rawOutputMapping.length > 0
     ? rawOutputMapping
     : rawSchemaFields.map(f => ({ column: f.name || f.path, path: f.path, type: f.type }));
-  const apiName = data.api_name || fetchedApi?.name || 'API Enrichment';
   const apiEndpoint = data.endpoint || fetchedApi?.endpoint || null;
   const staticParameters = data.static_parameters || fetchedApi?.static_parameters || {};
   
@@ -328,9 +328,6 @@ const handleExecParamChange = (key, value) => {
     });
   };
   
-  const handleDelete = () => {
-    useCanvasStore.getState().deleteNode(id);
-  };
 
   
   // Validazione
@@ -401,13 +398,9 @@ const handleExecParamChange = (key, value) => {
     const execParameters = apiParameters.filter(p => p.name);
 
     return (
-      <div className={`api-enrich-node api-enrich-node--file-processor${selected ? ' api-enrich-node--selected' : ''}`}>
-        {/* Header viola */}
-        <div className="api-enrich-node__header api-enrich-node__header--file-processor">
-          <span className="api-enrich-node__header-icon">⚙️</span>
-          <span className="api-enrich-node__header-name">{apiName}</span>
-          <button type="button" onClick={handleDelete} className="api-enrich-node__delete-btn" title="Elimina nodo">×</button>
-        </div>
+      <div className="api-enrich-node api-enrich-node--file-processor">
+        {/* Titolo, chiusura ed eliminazione sono del pannello (NodeInspector,
+            regola 6 del Blocco A). */}
 
         <div className="api-enrich-node__body">
           {/* Badge tipo */}
@@ -524,7 +517,7 @@ const handleExecParamChange = (key, value) => {
   // RENDER: STANDARD API MODE
   // ════════════════════════════════════════════════
 
-  const nodeClassName = `api-enrich-node${selected ? ' api-enrich-node--selected' : ''}`;
+  const nodeClassName = 'api-enrich-node';
 
   // Parametri mappabili (non fissi)
   const mappableParams = apiParameters.filter(p => p.mode !== 'fixed' && !(p.name in staticParameters));
@@ -532,18 +525,8 @@ const handleExecParamChange = (key, value) => {
 
   return (
     <div className={nodeClassName}>
-      {/* Header - mostra nome API direttamente */}
-      <div className="api-enrich-node__header">
-        <span className="api-enrich-node__header-icon">🔗</span>
-        <span className="api-enrich-node__header-name">{apiName}</span>
-        <button type="button"
-          onClick={handleDelete}
-          className="api-enrich-node__delete-btn"
-          title="Elimina nodo"
-        >
-          ×
-        </button>
-      </div>
+      {/* Titolo (nome dell'API), chiusura ed eliminazione sono del pannello
+          (NodeInspector e nodeDescriptors, regola 6 del Blocco A). */}
 
       {/* Body */}
       <div className="api-enrich-node__body">
@@ -807,7 +790,7 @@ const handleExecParamChange = (key, value) => {
         onClose={() => setIsRunHistoryOpen(false)}
         canvasId={projectId}
         nodeId={id}
-        nodeLabel={data.label || data.api_name || 'Arricchisci'}
+        nodeLabel={nodeTitle('api_enrich', data)}
       />
 
       {/* Handles — sempre presenti, indipendentemente dal caricamento dei parametri */}

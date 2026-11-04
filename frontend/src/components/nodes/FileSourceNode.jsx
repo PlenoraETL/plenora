@@ -79,10 +79,6 @@ const FileSourceNode = ({ id, data }) => {
     useCanvasStore.getState().updateNodeData(id, { columns: updatedColumns });
   };
 
-  const handleDelete = () => {
-    useCanvasStore.getState().deleteNode(id);
-  };
-
   // Conta colonne visibili
   const visibleCount = data.columns?.filter(c => c.visible !== false).length || 0;
   const totalCount = data.columns?.length || 0;
@@ -103,21 +99,9 @@ const FileSourceNode = ({ id, data }) => {
 
   return (
     <div className="file-source-node">
-      {/* Header */}
-      <div className="file-source-node__header">
-        <div className="file-source-node__title">
-          📁 File Esterno
-        </div>
-        <button type="button"
-          onClick={handleDelete}
-          className="file-source-node__delete-btn"
-          title="Elimina nodo"
-        >
-          ×
-        </button>
-      </div>
       
-      {/* Nome file */}
+      {/* Nome file. Titolo, chiusura ed eliminazione sono del pannello
+          (NodeInspector, regola 6 del Blocco A). */}
       <div className="file-source-node__name">
         {fileInfo ? (
           <>

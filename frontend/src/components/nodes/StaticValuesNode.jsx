@@ -29,10 +29,9 @@ const TYPE_COLORS = {
   boolean: { bg: 'rgba(155,109,255,0.1)', color: '#9B6DFF' },
 };
 
-function StaticValuesNode({ id, data, selected }) {
+function StaticValuesNode({ id, data }) {
   const toast = useToast();
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
-  const deleteNode     = useCanvasStore(s => s.deleteNode);
 
   const [fields, setFields] = useState(data.fields || []);
   const [showAddRow, setShowAddRow] = useState(false);
@@ -99,20 +98,9 @@ function StaticValuesNode({ id, data, selected }) {
   };
 
   return (
-    <div className={`svn ${selected ? 'svn--selected' : ''}`}>
-      {/* Header */}
-      <div className="svn__header">
-        <span className="svn__icon">📝</span>
-        <span className="svn__title">{data.label || 'Valori Statici'}</span>
-        <span className="svn__count">{fields.length} {fields.length === 1 ? 'campo' : 'campi'}</span>
-        <button
-          type="button"
-          className="svn__node-del"
-          onClick={e => { e.stopPropagation(); deleteNode(id); }}
-          onMouseDown={e => e.stopPropagation()}
-          title="Elimina nodo"
-        >×</button>
-      </div>
+    <div className="svn">
+      {/* Titolo, numero di campi, chiusura ed eliminazione sono del pannello
+          (NodeInspector e nodeDescriptors, regola 6 del Blocco A). */}
 
       {/* Column headers (solo se ci sono campi o si sta aggiungendo) */}
       {(fields.length > 0 || showAddRow) && (

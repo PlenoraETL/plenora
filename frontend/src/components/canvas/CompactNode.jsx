@@ -7,11 +7,11 @@
  * usati dagli edge collegati: un canvas salvato con handle specifici
  * (binding `parameter:<id>`, `input-N` del Multi-Join, ...) resta collegato.
  */
-import React, { memo, useContext, useEffect, useMemo, useState } from 'react';
+import React, { memo, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useStore } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { fetchTransformRegistry, getCachedTransformRegistry } from '../../utils/transformRegistry';
-import { nodeDescriptor, nodeIcon, nodeTitle } from './nodeDescriptors';
+import { derivedTitle, nodeDescriptor, nodeIcon, nodeTitle, titlePatch, userTitle } from './nodeDescriptors';
 import { CanvasGraphContext } from './CanvasGraphContext';
 import './CompactNode.css';
 
@@ -52,6 +52,8 @@ function CompactNode({ id, type, data = {}, selected }) {
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
   const [, forceRegistry] = useState(getCachedTransformRegistry());
   const [editing, setEditing] = useState(false);
+  // Esc annulla: il blur che segue la chiusura del campo non scrive.
+  const cancelledRef = useRef(false);
 
   // Il nome leggibile dell'operazione arriva dal registry (caricato una volta).
   useEffect(() => {
@@ -82,11 +84,13 @@ function CompactNode({ id, type, data = {}, selected }) {
   const sides = { left: [], right: [], top: [] };
   handles.forEach(h => sides[h.position || 'left'].push(h));
 
+  // Stessa regola del pannello (nodeDescriptors.titlePatch): si scrive solo
+  // un testo diverso dal titolo dell'utente e dal derivato; vuoto = derivato.
   const commitTitle = (value) => {
     setEditing(false);
-    const next = value.trim();
-    if (next === (data.title || '')) return;
-    updateNodeData(id, { title: next || undefined });
+    if (cancelledRef.current) return;
+    const patch = titlePatch(type, data, value);
+    if (patch) updateNodeData(id, patch);
   };
 
   return (
@@ -108,19 +112,21 @@ function CompactNode({ id, type, data = {}, selected }) {
         {editing ? (
           <input
             className="cnode__title-input nodrag"
-            defaultValue={title}
+            defaultValue={userTitle(type, data)}
+            placeholder={derivedTitle(type, data)}
+            aria-label="Titolo del passo"
             autoFocus
             onBlur={e => commitTitle(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter') e.currentTarget.blur();
-              if (e.key === 'Escape') setEditing(false);
+              if (e.key === 'Escape') { cancelledRef.current = true; setEditing(false); }
             }}
           />
         ) : (
           <span
             className="cnode__title"
             title={isReadOnly ? title : `${title} — doppio clic per rinominare`}
-            onDoubleClick={() => { if (!isReadOnly) setEditing(true); }}
+            onDoubleClick={() => { if (!isReadOnly) { cancelledRef.current = false; setEditing(true); } }}
           >
             {title}
           </span>

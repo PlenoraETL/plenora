@@ -9,7 +9,7 @@ import { Position, useReactFlow } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import './MultiJoinNode.css';
 import RunHistoryModal from '../modals/RunHistoryModal';
-import { useConfirm } from '../../context/ConfirmContext';
+import { nodeTitle } from '../canvas/nodeDescriptors';
 import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 import NodeHandle from '../canvas/NodeHandle';
 
@@ -48,11 +48,8 @@ const MultiJoinNode = memo(({ data, id }) => {
           : { ...c, name: c.alias || c.name, id: c.id || c.column_id || null }
       ));
       
-      // Nome sorgente
-      let name = sourceNode.data?.source_project_id || 
-                 sourceNode.data?.file_name || 
-                 sourceNode.data?.label ||
-                 `Sorgente ${idx + 1}`;
+      // Nome sorgente: lo stesso titolo del resto dell'interfaccia (nodeDescriptors)
+      let name = nodeTitle(sourceNode.type, sourceNode.data) || `Sorgente ${idx + 1}`;
       
       if (name.length > 25) {
         name = name.substring(0, 22) + '...';
@@ -78,8 +75,6 @@ const MultiJoinNode = memo(({ data, id }) => {
   }, [sources]);
 
   const updateNodeData = useCanvasStore(s => s.updateNodeData);
-  const deleteNode     = useCanvasStore(s => s.deleteNode);
-  const confirm        = useConfirm();
 
   const updateConfig = useCallback((field, value) => {
     const patch = typeof field === 'object' && field !== null
@@ -99,19 +94,6 @@ const MultiJoinNode = memo(({ data, id }) => {
       : [...joinKeyIds, colId].filter(Boolean);
     updateConfig({ join_keys: newKeys, join_key_ids: newIds });
   }, [joinKeys, joinKeyIds, updateConfig]);
-
-  const handleDelete = useCallback(async (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    const ok = await confirm({
-      title: 'Elimina nodo',
-      message: 'Eliminare questo nodo?',
-      confirmText: 'Elimina',
-      variant: 'danger',
-    });
-    if (!ok) return;
-    deleteNode(id);
-  }, [id, deleteNode, confirm]);
 
   // Mostra preview delle colonne che usciranno (per info utente)
   const outputPreview = useMemo(() => {
@@ -172,23 +154,8 @@ const MultiJoinNode = memo(({ data, id }) => {
         );
       })}
 
-      {/* Header */}
-      <div className="multi-join-node__header">
-        <div className="multi-join-node__title">
-          <span className="multi-join-node__icon">🔗</span>
-          <span>Multi-Join</span>
-          <span className="multi-join-node__count">({sources.length} sorgenti)</span>
-        </div>
-        <button type="button"
-          onClick={handleDelete}
-          onMouseDown={(e) => e.stopPropagation()}
-          className="multi-join-node__delete-btn nodrag nopan"
-          title="Elimina nodo"
-        >
-          ×
-        </button>
-      </div>
-
+      {/* Titolo, chiusura ed eliminazione sono del pannello (NodeInspector,
+          regola 6 del Blocco A); il numero di sorgenti e' nell'elenco qui sotto. */}
       {/* Body */}
       <div className="multi-join-node__body nodrag">
         {/* Sorgenti collegate */}
@@ -435,7 +402,7 @@ const MultiJoinNode = memo(({ data, id }) => {
         onClose={() => setIsRunHistoryOpen(false)}
         canvasId={projectId}
         nodeId={id}
-        nodeLabel={data.label || 'Multi Join'}
+        nodeLabel={nodeTitle('multi_join', data)}
       />
     </div>
   );

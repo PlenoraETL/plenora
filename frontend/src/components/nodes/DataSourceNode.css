@@ -71,64 +71,6 @@
 .dsn__handle--out { background: var(--dsn-source) !important; }
 .dsn__handle--in  { background: var(--dsn-carica) !important; }
 
-/* ── Header ─────────────────────────────────────────────────────── */
-.dsn__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 11px;
-  background: var(--dsn-accent-tint);
-  border-bottom: 1px solid var(--dsn-accent-border);
-}
-
-.dsn__header-left { display: flex; align-items: center; gap: 7px; }
-.dsn__header-right { display: flex; align-items: center; gap: 5px; }
-
-.dsn__icon { font-size: 15px; flex-shrink: 0; }
-
-.dsn__title {
-  font-family: var(--plen-font-display);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--plen-text, #DDE4F2);
-}
-[data-theme='light'] .dsn__title { color: #0F1729; }
-
-.dsn__mode-toggle {
-  padding: 2px 8px;
-  background: var(--plen-surface-2, #111525);
-  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
-  border-radius: 10px;
-  font-family: var(--plen-font-mono);
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--dsn-accent);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.12s;
-}
-.dsn__mode-toggle:hover { background: var(--plen-surface-3, #171C2E); }
-[data-theme='light'] .dsn__mode-toggle { background: #EFF2F9; border-color: rgba(0,0,0,0.1); }
-[data-theme='light'] .dsn__mode-toggle:hover { background: #E2E8F4; }
-
-.dsn__expand-btn,
-.dsn__delete-btn {
-  background: transparent;
-  border: none;
-  color: var(--plen-text-dim, #3F4D68);
-  cursor: pointer;
-  font-size: 14px;
-  padding: 1px 3px;
-  border-radius: 4px;
-  line-height: 1;
-  transition: all 0.12s;
-}
-.dsn__expand-btn:hover { color: var(--plen-text, #DDE4F2); }
-.dsn__delete-btn:hover {
-  color: #F87171;
-  background: rgba(248,113,113,0.1);
-}
-
 /* ── DS badge ─────────────────────────────────────────────────────── */
 .dsn__ds-badge {
   padding: 4px 11px;

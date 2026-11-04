@@ -81,4 +81,3 @@
 
 /* TransformNode nel pannello laterale */
 .transform-inspector__foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--plen-border, #e3e7f0); }
-.transform-inspector__delete { color: var(--plen-err, #dc2626); }

@@ -142,10 +142,6 @@ const ProjectSourceNode = ({ id, data }) => {
     useCanvasStore.getState().updateNodeData(id, { columns: updatedColumns });
   };
 
-  const handleDelete = () => {
-    useCanvasStore.getState().deleteNode(id);
-  };
-
   // Colonne e conteggi
   const columns = data.columns || [];
   const visibleCount = columns.filter(c => c.visible !== false).length;
@@ -153,34 +149,24 @@ const ProjectSourceNode = ({ id, data }) => {
   const visibleColumns = isExpanded ? columns : columns.slice(0, 5);
   const hasMoreColumns = columns.length > 5;
 
-  const projectName = selectedProject?.metadata?.name || selectedProject?.name || data.source_project_id?.split('_')[0] || 'Caricamento...';
+  const projectName = selectedProject?.metadata?.name || selectedProject?.name;
   const projectType = selectedProject?.metadata?.project_type;
   const sourceFreshness = data.source_freshness;
 
   return (
     <div className="project-source-node">
-      {/* Header */}
-      <div className="project-source-node__header">
-        <div className="project-source-node__header-content">
-          <div className="project-source-node__title">
-            <span className="project-source-node__title-icon">📥</span>
-            {projectName}
-          </div>
+      {/* Progetto letto e suo tipo. Titolo, chiusura ed eliminazione sono
+          del pannello (NodeInspector, regola 6 del Blocco A). */}
+      {(projectName || projectType) && (
+        <div className="project-source-node__info">
+          {projectName && <span className="project-source-node__info-name">📥 {projectName}</span>}
           {projectType && (
             <span className={`project-source-node__type-badge project-source-node__type-badge--${projectType}`}>
               {projectType}
             </span>
           )}
         </div>
-        <button
-          type="button"
-          onClick={handleDelete}
-          className="project-source-node__delete-btn"
-          title="Elimina nodo"
-        >
-          ×
-        </button>
-      </div>
+      )}
 
       {/* Body */}
       <div className="project-source-node__body">

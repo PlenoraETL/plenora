@@ -5,13 +5,22 @@
  * ResultNode, ...), cosi' la configurazione resta identica. Sul canvas il
  * nodo e' compatto (CompactNode).
  *
+ * Regola 6 del Blocco A: il guscio possiede intestazione, chiusura ed
+ * eliminazione. Titolo e icona vengono solo da nodeDescriptors; i form
+ * completi non disegnano un'intestazione propria ne' un × di eliminazione.
+ * C'e' un solo "Elimina passo", con conferma, e non in sola lettura.
+ *
+ * Regola 7: il campo titolo e' controllato e mostra solo il testo
+ * dell'utente; il titolo derivato e' il segnaposto (nodeDescriptors.titlePatch).
+ *
  * Gli <Handle> dei form sono NodeHandle: fuori dal canvas non disegnano
  * nulla. Il pannello vive dentro il ReactFlowProvider dell'editor, quindi
  * i form possono continuare a usare useReactFlow/useStore.
  */
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
-import { nodeDescriptor, nodeIcon, nodeTitle } from './nodeDescriptors';
+import { useConfirmOrNative } from '../../context/ConfirmContext';
+import { derivedTitle, nodeDescriptor, nodeIcon, nodeTitle, titlePatch, userTitle } from './nodeDescriptors';
 import BranchSection from './BranchSection';
 import './NodeInspector.css';
 
@@ -26,20 +35,65 @@ const selectInspectedId = (s) => {
   return found;
 };
 
+/**
+ * Campo titolo controllato: la bozza segue `data.title` (undo, ripristino,
+ * conversioni) finche' l'utente non scrive; al blur o con Invio si scrive
+ * solo un testo diverso dal titolo dell'utente e dal derivato.
+ */
+function InspectorTitle({ node, disabled }) {
+  const updateNodeData = useCanvasStore(s => s.updateNodeData);
+  const stored = userTitle(node.type, node.data);
+  const [draft, setDraft] = useState(stored);
+  useEffect(() => { setDraft(stored); }, [stored, node.id]);
+
+  const commit = () => {
+    const patch = titlePatch(node.type, node.data, draft);
+    if (patch) updateNodeData(node.id, patch);
+    else setDraft(stored);
+  };
+
+  return (
+    <input
+      className="node-inspector__title"
+      value={draft}
+      placeholder={derivedTitle(node.type, node.data)}
+      aria-label="Titolo del passo"
+      disabled={disabled}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+        if (e.key === 'Escape') { setDraft(stored); e.currentTarget.blur(); }
+      }}
+    />
+  );
+}
+
 export default function NodeInspector({ fullNodeTypes, prefix = 'canvas', branchActions }) {
   const nodeId = useCanvasStore(selectInspectedId);
   const node = useCanvasStore(useCallback(s => (nodeId ? (s.nodes || []).find(n => n.id === nodeId) : null), [nodeId]));
   const onNodesChange = useCanvasStore(s => s.onNodesChange);
-  const updateNodeData = useCanvasStore(s => s.updateNodeData);
   const isReadOnly = useCanvasStore(s => s.isReadOnly);
   const canvasView = useCanvasStore(s => s.canvasView);
   const setCanvasView = useCanvasStore(s => s.setCanvasView);
+  const confirm = useConfirmOrNative();
 
   if (!node) return null;
   const Full = fullNodeTypes[node.type];
   const descriptor = nodeDescriptor(node.type);
   const icon = nodeIcon(node.type, node.data);
   const close = () => onNodesChange([{ id: node.id, type: 'select', selected: false }]);
+
+  // L'unica eliminazione del pannello, per ogni tipo (Output compreso).
+  const deleteStep = async () => {
+    const ok = await confirm({
+      title: 'Elimina passo',
+      message: `Eliminare «${nodeTitle(node.type, node.data)}»? I collegamenti del passo vengono rimossi.`,
+      confirmText: 'Elimina',
+      variant: 'danger',
+    });
+    if (ok) useCanvasStore.getState().deleteNode(node.id);
+  };
 
   return (
     <aside className={`node-inspector ${prefix}-inspector`} aria-label="Configurazione del passo">
@@ -57,18 +111,7 @@ export default function NodeInspector({ fullNodeTypes, prefix = 'canvas', branch
           <span aria-hidden="true">{canvasView === 'canvas' ? '☰ ' : '◇ '}</span>
           {canvasView === 'canvas' ? 'Vedi in Passi' : 'Vedi nel canvas'}
         </button>
-        <input
-          key={node.id}
-          className="node-inspector__title"
-          defaultValue={nodeTitle(node.type, node.data)}
-          aria-label="Titolo del passo"
-          disabled={isReadOnly}
-          onBlur={e => {
-            const next = e.target.value.trim();
-            if (next !== (node.data?.title || '')) updateNodeData(node.id, { title: next || undefined });
-          }}
-          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-        />
+        <InspectorTitle node={node} disabled={isReadOnly} />
         <div className="node-inspector__summary">{descriptor.summary(node.data || {})}</div>
       </header>
       <div className="node-inspector__body">
@@ -76,9 +119,14 @@ export default function NodeInspector({ fullNodeTypes, prefix = 'canvas', branch
         {/* key per nodo: bozze, ricerche e fuoco di un form non passano al
             nodo selezionato dopo. */}
         {Full
-          ? <Full key={node.id} id={node.id} type={node.type} data={node.data || {}} selected inInspector />
+          ? <Full key={node.id} id={node.id} type={node.type} data={node.data || {}} />
           : <div className="node-inspector__empty">Nessuna configurazione per questo nodo.</div>}
       </div>
+      {!isReadOnly && (
+        <footer className="node-inspector__foot">
+          <button type="button" className="node-inspector__delete" onClick={deleteStep}>Elimina passo</button>
+        </footer>
+      )}
     </aside>
   );
 }

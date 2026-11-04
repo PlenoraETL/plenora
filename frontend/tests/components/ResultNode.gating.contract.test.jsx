@@ -12,7 +12,9 @@
  *   2. Validation gate su Execute: validazione fallita → onExecute NON chiamato
  *      + ValidationModal aperta.
  *   3. Validation gate su Preview: idem per onPreview.
- *   4. Delete cancellato dal confirm → deleteNode NON chiamato.
+ *   4. Nessuna eliminazione propria: intestazione, × ed "Elimina passo"
+ *      sono del pannello (NodeInspector, regola 6 del Blocco A; vedi
+ *      InspectorShell.contract.test.jsx).
  *   5. handleValidate/Execute/Preview validano via BACKEND (Epic CanvasVal §12):
  *      valida la versione salvata (Esegui salva prima; Valida chiede se ci
  *      sono modifiche non salvate, Fase 4 M7). Niente più
@@ -222,11 +224,11 @@ const renderResultNode = (data = {}) =>
   );
 
 describe('ResultNode (parent) — branch & gating contract', () => {
-  it('upstream non-IMDF: monta StandardView (filename + Esegui Query), non IMDF', () => {
+  it('upstream non-IMDF: monta StandardView (filename + Esegui, come la barra), non IMDF', () => {
     renderResultNode();
 
     expect(screen.getByText('output.csv')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /esegui query/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Esegui' })).toBeInTheDocument();
 
     expect(screen.queryByRole('button', { name: /visualizza imdf/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /visualizza manifest/i })).toBeNull();
@@ -240,7 +242,7 @@ describe('ResultNode (parent) — branch & gating contract', () => {
     const user = userEvent.setup();
     renderResultNode();
 
-    await user.click(screen.getByRole('button', { name: /esegui query/i }));
+    await user.click(screen.getByRole('button', { name: 'Esegui' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('validation-modal')).toBeInTheDocument();
@@ -257,7 +259,7 @@ describe('ResultNode (parent) — branch & gating contract', () => {
     const user = userEvent.setup();
     renderResultNode();
 
-    await user.click(screen.getByRole('button', { name: /preview/i }));
+    await user.click(screen.getByRole('button', { name: 'Anteprima' }));
 
     await waitFor(() => {
       expect(screen.getByTestId('validation-modal')).toBeInTheDocument();
@@ -265,17 +267,11 @@ describe('ResultNode (parent) — branch & gating contract', () => {
     expect(onPreviewMock).not.toHaveBeenCalled();
   });
 
-  it('Delete cancellato dal confirm: deleteNode NON chiamato', async () => {
-    useConfirmMock.mockResolvedValue(false);
-
-    const user = userEvent.setup();
-    renderResultNode();
-
-    await user.click(screen.getByTitle('Elimina nodo'));
-
-    await waitFor(() => {
-      expect(useConfirmMock).toHaveBeenCalledTimes(1);
-    });
+  it('nessuna intestazione ne\' eliminazione propria: le possiede il pannello', () => {
+    const { container } = renderResultNode();
+    expect(container.querySelector('[class$="__header"]')).toBeNull();
+    expect(screen.queryByTitle('Elimina nodo')).toBeNull();
+    expect(screen.queryByRole('button', { name: '×' })).toBeNull();
     expect(deleteNodeMock).not.toHaveBeenCalled();
   });
 
@@ -364,7 +360,7 @@ describe('ResultNode (parent) — branch & gating contract', () => {
     const user = userEvent.setup();
     renderResultNode();
 
-    await user.click(screen.getByRole('button', { name: /esegui query/i }));
+    await user.click(screen.getByRole('button', { name: 'Esegui' }));
     await waitFor(() => {
       expect(screen.getByTestId('validation-modal')).toBeInTheDocument();
     });
@@ -385,7 +381,7 @@ describe('ResultNode (parent) — branch & gating contract', () => {
     const user = userEvent.setup();
     renderResultNode();
 
-    await user.click(screen.getByRole('button', { name: /esegui query/i }));
+    await user.click(screen.getByRole('button', { name: 'Esegui' }));
     await waitFor(() => {
       expect(screen.getByTestId('validation-modal')).toBeInTheDocument();
     });
@@ -406,7 +402,7 @@ describe('ResultNode (parent) — branch & gating contract', () => {
     const user = userEvent.setup();
     renderResultNode();
 
-    await user.click(screen.getByRole('button', { name: /esegui query/i }));
+    await user.click(screen.getByRole('button', { name: 'Esegui' }));
 
     await waitFor(() => {
       expect(setValidationHighlightsMock).toHaveBeenCalledWith(['src-1']);
@@ -419,7 +415,7 @@ describe('ResultNode (parent) — branch & gating contract', () => {
     const user = userEvent.setup();
     renderResultNode();
 
-    await user.click(screen.getByRole('button', { name: /esegui query/i }));
+    await user.click(screen.getByRole('button', { name: 'Esegui' }));
 
     await waitFor(() => {
       expect(setValidationHighlightsMock).toHaveBeenCalledWith([]);
@@ -436,7 +432,7 @@ describe('ResultNode (parent) — branch & gating contract', () => {
     const user = userEvent.setup();
     renderResultNode();
 
-    await user.click(screen.getByRole('button', { name: /esegui query/i }));
+    await user.click(screen.getByRole('button', { name: 'Esegui' }));
 
     await waitFor(() => {
       expect(setLastValidationSummaryMock).toHaveBeenCalledWith({

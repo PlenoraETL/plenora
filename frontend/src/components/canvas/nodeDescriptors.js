@@ -122,8 +122,10 @@ const D = {
     defaultHandles: () => [{ ...IN, id: 'carica-in' }, { ...OUT, id: 'source-out' }],
   },
   staticValues: {
+    // `label` dei Valori statici non e' testo dell'utente (nessun campo lo
+    // modifica): e' il vecchio nome scritto alla creazione.
     category: 'source', icon: '📝', kind: () => 'Valori statici',
-    title: (d) => d.label || 'Valori statici',
+    title: () => 'Valori statici',
     summary: (d) => plural(count(d.fields), 'campo', 'campi'),
     defaultHandles: () => [{ ...OUT, id: 'output' }],
   },
@@ -166,7 +168,7 @@ const D = {
   },
   resultNode: {
     category: 'output', icon: '📁', kind: () => 'Output',
-    title: (d) => d.title || 'Output',
+    title: () => 'Output',
     summary: (d) => `${String(d.format || 'csv').toUpperCase()} · ${d.fileName || d.file_name || 'output'}`,
     defaultHandles: () => [{ ...IN, id: 'input' }, { ...OUT, id: 'output' }],
   },
@@ -196,7 +198,7 @@ const ALIASES = {
 
 const FALLBACK = {
   category: 'step', icon: '⚙️', kind: () => 'Nodo',
-  title: (d) => d.title || d.label || 'Nodo',
+  title: (d) => d.label || 'Nodo',
   summary: () => '',
   defaultHandles: () => [IN, OUT],
 };
@@ -216,9 +218,66 @@ export function nodeIcon(type, data = {}) {
   return displayIcon(typeof d.icon === 'function' ? d.icon(data || {}) : d.icon);
 }
 
-/** Titolo mostrato: quello scelto dall'utente (data.title) o quello del tipo. */
+/*
+ * Titoli (regola 7 del Blocco A): `data.title` contiene SOLO testo scritto
+ * dall'utente. Il titolo derivato (dal tipo e dai metadati del nodo) e' il
+ * segnaposto del campo titolo e segue da solo i cambi di operazione, le
+ * conversioni e i metadati. Tutti i lettori e tutti gli scrittori passano
+ * da queste funzioni.
+ *
+ * `data.branch_of`: metadato di Collega e Duplica ramo (nome del ramo a cui
+ * il passo si riferisce), mostrato come suffisso del titolo derivato.
+ */
+
+/** Titolo del tipo senza `data.title` e senza suffisso del ramo. */
+function baseTitle(type, data) {
+  return nodeDescriptor(type).title({ ...(data || {}), title: undefined });
+}
+
+/** Titolo derivato: il segnaposto del campo titolo. */
+export function derivedTitle(type, data = {}) {
+  const d = data || {};
+  const base = baseTitle(type, d);
+  return d.branch_of ? `${base} · ${d.branch_of}` : base;
+}
+
+// Un `data.title` uguale a un titolo generato e' un titolo congelato dalle
+// versioni precedenti (il campo veniva precompilato e salvato al blur):
+// non e' testo dell'utente, quindi non nasconde il derivato. Per i passi
+// vale anche il nome di qualsiasi operazione (titolo congelato prima di un
+// cambio di operazione o di una conversione).
+function isGeneratedTitle(type, data, text) {
+  if (text === derivedTitle(type, data) || text === baseTitle(type, data)) return true;
+  if (nodeDescriptor(type) !== D.transform) return false;
+  const transforms = getCachedTransformRegistry()?.transforms || {};
+  return Object.entries(transforms).some(([op, def]) => text === (def?.name || op));
+}
+
+/** Testo scelto dall'utente; '' se manca o e' un titolo generato. */
+export function userTitle(type, data = {}) {
+  const text = typeof data?.title === 'string' ? data.title.trim() : '';
+  return text && !isGeneratedTitle(type, data, text) ? text : '';
+}
+
+/** Titolo mostrato: quello scelto dall'utente o quello derivato. */
 export function nodeTitle(type, data = {}) {
-  return (data && data.title) || nodeDescriptor(type).title(data || {});
+  return userTitle(type, data) || derivedTitle(type, data);
+}
+
+/**
+ * Scrittura del titolo dal campo (pannello o doppio clic sul nodo).
+ * Ritorna la patch di `data` o null se non c'e' niente da scrivere:
+ *  - testo uguale al titolo dell'utente attuale: nessuna scrittura (fuoco
+ *    e uscita senza modifiche non rendono il canvas "non salvato");
+ *  - testo vuoto o uguale al derivato: si torna al derivato (title tolto);
+ *  - altrimenti il testo diventa il titolo dell'utente.
+ */
+export function titlePatch(type, data, text) {
+  const next = String(text ?? '').trim();
+  const current = userTitle(type, data);
+  if (next === current) return null;
+  if (!next || next === derivedTitle(type, data)) return current ? { title: undefined } : null;
+  return { title: next };
 }
 
 export const DESCRIBED_NODE_TYPES = [...Object.keys(D), ...Object.keys(ALIASES)];

@@ -87,6 +87,17 @@
 
 .project-source-node__title-icon { font-size: 13px; flex-shrink: 0; }
 
+/* Progetto letto e tipo (l'intestazione e' del pannello). */
+.project-source-node__info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  min-width: 0;
+}
+.project-source-node__info-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* Type badge */
 .project-source-node__type-badge {
   font-family: var(--plen-font-mono);

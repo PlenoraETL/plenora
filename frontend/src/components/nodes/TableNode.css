@@ -52,8 +52,8 @@
   border-color: #EFF2F9 !important;
 }
 
-/* ── Header ─────────────────────────────────────────────────────── */
-.table-node__header {
+/* ── Tabella e alias (l'intestazione e' del pannello) ──────────── */
+.table-node__info {
   background: rgba(52,193,122,0.07);
   border-bottom: 1px solid rgba(52,193,122,0.12);
   padding: 8px 11px;
@@ -63,12 +63,12 @@
   gap: 6px;
 }
 
-[data-theme='light'] .table-node__header {
+[data-theme='light'] .table-node__info {
   background: rgba(52,193,122,0.05);
   border-bottom-color: rgba(52,193,122,0.15);
 }
 
-.table-node__header-content { flex: 1; min-width: 0; }
+.table-node__info-content { flex: 1; min-width: 0; }
 
 .table-node__title {
   font-family: var(--plen-font-display);
@@ -125,24 +125,6 @@
   font-family: var(--plen-font-body);
 }
 .table-node__add-alias-btn:hover { color: #34C17A; }
-
-/* Delete button */
-.table-node__delete-btn {
-  background: transparent;
-  border: none;
-  color: var(--plen-text-dim, #3F4D68);
-  font-size: 16px;
-  cursor: pointer;
-  padding: 0 3px;
-  line-height: 1;
-  border-radius: 4px;
-  flex-shrink: 0;
-  transition: all 0.12s;
-}
-.table-node__delete-btn:hover {
-  color: #F87171;
-  background: rgba(248,113,113,0.1);
-}
 
 /* ── Body ───────────────────────────────────────────────────────── */
 .table-node__body {

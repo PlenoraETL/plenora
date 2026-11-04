@@ -23,9 +23,9 @@ import { humanizeError } from '../../utils/errorMessages';
 import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 import './CaricanArcGISNode.css';
 import NodeHandle from '../canvas/NodeHandle';
+import AutoRunNote from './carica/autoRunNote';
 
 const CaricanArcGISNode = memo(({ data, id }) => {
-  const [isExpanded, setIsExpanded] = useState(true);
   const [showMapping, setShowMapping] = useState(false);
 
   // State ArcGIS
@@ -323,29 +323,9 @@ const CaricanArcGISNode = memo(({ data, id }) => {
         className="carica-arcgis-node__handle carica-arcgis-node__handle--input"
       />
 
-      <div className="carica-arcgis-node__header" role="button" tabIndex={0}
-        onClick={() => setIsExpanded(!isExpanded)}
-        onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setIsExpanded(v => !v)}>
-        <div className="carica-arcgis-node__header-left">
-          <span className="carica-arcgis-node__icon">🌐</span>
-          <span className="carica-arcgis-node__title">CARICA su ArcGIS</span>
-        </div>
-        <div className="carica-arcgis-node__header-right">
-          <span className="carica-arcgis-node__expand-icon">
-            {isExpanded ? '▼' : '▶'}
-          </span>
-          <button type="button"
-            onClick={(e) => { e.stopPropagation(); useCanvasStore.getState().deleteNode(id); }}
-            className="carica-arcgis-node__delete-btn"
-            title="Elimina nodo">
-            ×
-          </button>
-        </div>
-      </div>
-
-      {/* Body */}
-      {isExpanded && (
-        <div className="carica-arcgis-node__body">
+      {/* Titolo, chiusura ed eliminazione sono del pannello (NodeInspector,
+          regola 6 del Blocco A); il modulo resta sempre aperto. */}
+      <div className="carica-arcgis-node__body">
 
           {/* RB.7.C: connessione ArcGIS non accessibile al gruppo del progetto.
               Banner visibile, no rimozione automatica del nodo. */}
@@ -707,11 +687,8 @@ const CaricanArcGISNode = memo(({ data, id }) => {
             </div>
           )}
 
-          <div className="carica-arcgis-node__auto-info">
-            Eseguito automaticamente con <strong>Esegui Query</strong>
-          </div>
-        </div>
-      )}
+          <AutoRunNote className="carica-arcgis-node__auto-info" />
+      </div>
     </div>
   );
 });

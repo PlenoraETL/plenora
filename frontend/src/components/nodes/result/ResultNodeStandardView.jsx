@@ -11,7 +11,7 @@
  *   - dispatch a `GroupOrderHavingPanel` (GROUP BY + aggregazioni + ORDER BY + HAVING);
  *   - dispatch a `ExecuteActionsPanel` (execution mode + bottoni Valida/Preview/
  *     Esegui + footer cronologia + RunHistoryModal);
- *   - deriva localmente nodeVariant/executeLabel da data.isManipulate/isArricchisci.
+ *   - deriva localmente nodeVariant da data.isManipulate/isArricchisci.
  *
  * NON owna:
  *   - editor filename + scelta formato + DISTINCT + LIMIT: gestiti da
@@ -23,7 +23,7 @@
  *     come props;
  *   - executionMode + isRunHistoryOpen useState + RunHistoryModal: gestiti da
  *     `ExecuteActionsPanel`; il parent passa `nodeVariant`,
- *     `executeLabel`, `hasExecutionOptions`, `isArricchisci` + le 3 callback;
+ *     `hasExecutionOptions`, `isArricchisci` + le 3 callback;
  *   - ValidationModal: stato del parent, triggerata sia da qui sia da IMDF view;
  *   - logica runValidation/onExecute/onPreview: ricevute come callback;
  *   - upstreamColumns: computata dal parent (serve useReactFlow).
@@ -142,14 +142,8 @@ const ResultNodeStandardView = memo(({
   // `groupByAvailableColumns` ora derivato dentro `GroupOrderHavingPanel`
   // dai props `availableColumns` / `manipolaColumns` / `isManipulate`.
 
-  // Variante/label derivate localmente
+  // Variante derivata localmente (solo stili: le etichette sono quelle della barra)
   const nodeVariant = isArricchisci ? 'arricchisci' : (isManipulate ? 'manipola' : 'estrai');
-  const config = {
-    estrai: { executeLabel: 'Esegui Query' },
-    manipola: { executeLabel: 'Esegui Pipeline' },
-    arricchisci: { executeLabel: 'Esegui Arricchimento' },
-  };
-  const { executeLabel } = config[nodeVariant];
 
   return (
     <>
@@ -186,7 +180,6 @@ const ResultNodeStandardView = memo(({
         data={data}
         id={id}
         nodeVariant={nodeVariant}
-        executeLabel={executeLabel}
         hasExecutionOptions={hasExecutionOptions}
         isArricchisci={isArricchisci}
         hasOnPreview={hasOnPreview}

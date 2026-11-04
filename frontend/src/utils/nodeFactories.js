@@ -62,7 +62,6 @@ export function deserializeNodes(rawNodes, options = {}) {
     const result = { ...node, type: entry.reactFlowType, data };
     switch (type) {
       case 'source':
-        data.label = data.alias || data.table_name;
         data.db_type = connection?.type || 'postgres';
         break;
       case 'feature_source':
