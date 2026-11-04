@@ -163,16 +163,32 @@ def test_join_spatial_no_geom_is_error():
     assert "JOIN_SPATIAL_NO_GEOM" in _codes(report)
 
 
-def test_join_column_not_found_is_warning():
-    s = _node("s", "file_source")
-    s.columns = []
-    s.data = {"columns": [{"name": "a", "visible": True}]}
-    t = _node("t", "transform")
+def _table(node_id, columns):
+    n = _node(node_id, "source")
+    n.columns = [{"name": name, "visible": visible} for name, visible in columns]
+    return n
+
+
+# Regola: il controllo usa le colonne che l'esecuzione usa. Il SQL di Estrai
+# unisce su alias.colonna fisica (estrai/query_joins.py), anche se la colonna
+# non e' scelta per l'uscita; negli altri progetti l'esecuzione non legge i
+# campi di join dell'arco (residui): nessun avviso.
+@pytest.mark.parametrize("project_type,source_column,expected", [
+    ("estrai", "a", False),        # visibile
+    ("estrai", "k", False),        # fisica ma non scelta per l'uscita
+    ("estrai", "ghost", True),     # inesistente
+    ("manipola", "ghost", False),  # campo residuo, l'esecuzione non lo legge
+    ("arricchisci", "ghost", False),
+    (None, "ghost", False),
+])
+def test_join_column_check_uses_the_columns_the_execution_uses(project_type, source_column, expected):
+    s = _table("s", [("a", True), ("k", False)])
+    t = _table("t", [("b", True)])
     r = _node("r", "result")
-    edges = [_edge("s", "t", source_column="ghost", target_column="a"), _edge("t", "r")]
-    report = _validate(_canvas([s, t, r], edges))
-    codes = [(i.code, i.severity) for i in report.issues]
-    assert ("JOIN_COLUMN_NOT_FOUND", "warning") in codes
+    edges = [_edge("s", "t", source_column=source_column, target_column="b"), _edge("t", "r")]
+    report = _validate(_canvas([s, t, r], edges), project_type=project_type)
+    found = [(i.code, i.severity) for i in report.issues if i.code == "JOIN_COLUMN_NOT_FOUND"]
+    assert found == ([("JOIN_COLUMN_NOT_FOUND", "warning")] if expected else [])
 
 
 # --- regole estrai-specific (gated dal project_type) ---

@@ -420,6 +420,10 @@ def _type_specific_issues(
     return out
 
 
+def _field(item: Any, key: str) -> Any:
+    return item.get(key) if isinstance(item, dict) else getattr(item, key, None)
+
+
 def _edge_join_issues(
     canvas: Any, nodes: list, edges: list, node_ids: set, project_id: str,
     project_type: str | None = None,
@@ -453,12 +457,21 @@ def _edge_join_issues(
     service = SchemaInferenceService(_StaticCanvasService(canvas))
     cache: Dict[str, tuple] = {}
 
-    def _cols(node_id: str) -> tuple:
+    def _join_columns(node_id: str) -> tuple:
+        """Colonne che il SQL puo' usare nel join: per una tabella TUTTE le
+        colonne fisiche del nodo (anche quelle non scelte per l'uscita, come
+        l'esecuzione); per gli altri nodi lo schema inferito."""
         if node_id not in cache:
-            typed = service.infer_node_schema_typed(project_id, node_id)
-            names = {str(value) for c in typed.columns if isinstance(c, dict)
-                     for value in (c.get("name"), c.get("id")) if value}
-            cache[node_id] = (names, typed.names_status)
+            node = nodes_by_id.get(node_id)
+            if getattr(node, "type", None) in _SOURCE_NODE_TYPES and getattr(node, "columns", None):
+                names = {str(value) for c in node.columns
+                         for value in (_field(c, "name"), _field(c, "id")) if value}
+                cache[node_id] = (names, "certain")
+            else:
+                typed = service.infer_node_schema_typed(project_id, node_id)
+                names = {str(value) for c in typed.columns if isinstance(c, dict)
+                         for value in (c.get("name"), c.get("id")) if value}
+                cache[node_id] = (names, typed.names_status)
         return cache[node_id]
 
     out: List[Issue] = []
@@ -485,32 +498,19 @@ def _edge_join_issues(
                     suggestion={"edge_id": eid},
                 ))
             continue
-        source_id, target_id = e.source, e.target
-        target = nodes_by_id[e.target]
-        if getattr(target, "type", None) in {"transform", "multi_join"}:
-
-            incoming = sorted([edge for edge in edges if edge.target == e.target],
-                              key=lambda edge: incoming_edge_sort_key_for_nodes(edge, nodes_by_id))
-            if len(incoming) < 2:
-                target_id = None
-            else:
-                source_id, target_id = incoming[0].source, incoming[1].source
-        s_names, s_status = _cols(source_id)
-        if s_status != "indeterminate" and sc not in s_names:
-            out.append(Issue(
-                node_id=str(e.source), severity="warning", code="JOIN_COLUMN_NOT_FOUND",
-                message=f"Join: colonna '{sc}' non trovata nel nodo sorgente.",
-                suggestion={"column": sc, "edge_id": eid},
-            ))
-        if target_id is None:
+        # Le colonne di collegamento sull'arco le legge SOLO il SQL di Estrai
+        # (estrai/query_joins.py: alias.colonna fisica). Negli altri progetti
+        # l'esecuzione non le usa: nessun controllo (erano campi residui).
+        if project_type != "estrai":
             continue
-        t_names, t_status = _cols(target_id)
-        if t_status != "indeterminate" and tc not in t_names:
-            out.append(Issue(
-                node_id=str(e.target), severity="warning", code="JOIN_COLUMN_NOT_FOUND",
-                message=f"Join: colonna '{tc}' non trovata nel nodo target.",
-                suggestion={"column": tc, "edge_id": eid},
-            ))
+        for node_id, column, side in ((e.source, sc, "sorgente"), (e.target, tc, "target")):
+            names, status = _join_columns(node_id)
+            if status != "indeterminate" and column not in names:
+                out.append(Issue(
+                    node_id=str(node_id), severity="warning", code="JOIN_COLUMN_NOT_FOUND",
+                    message=f"Join: colonna '{column}' non trovata nel nodo {side}.",
+                    suggestion={"column": column, "edge_id": eid},
+                ))
     return out
 
 
