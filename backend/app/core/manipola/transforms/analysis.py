@@ -22,7 +22,10 @@ from app.core.dataframes.tabular import (
     sample_rows_reset_index,
 )
 from app.core.manipola.types import FrameMap, JsonObject, JsonRows
-from app.shared.execution.lookup_mapping import normalize_lookup_mapping, lookup_is_numeric, normalize_unmatched
+from app.shared.execution.lookup_mapping import (
+    lookup_is_numeric, lookup_match_as_text, lookup_text_mapping, lookup_value_text, normalize_lookup_mapping,
+    normalize_unmatched,
+)
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -138,11 +141,25 @@ def op_lookup(
         result = copy_frame_for_update(df)
         target = output_column or column
 
-        mapped = result[column].map(mapping)
+        # Confronto scelto dal tipo della colonna, con UNA regola
+        # (lookup_match_as_text in shared/execution/lookup_mapping.py):
+        # - colonna di testo: percorso storico, chiavi originali, nessuna
+        #   conversione (identico a HEAD 1c654091);
+        # - colonna numerica/booleana/data/durata: chiavi e valori passano
+        #   dalla STESSA forma di testo, cosi' 5 (o 5.0) corrisponde a "5" e
+        #   una data a "2024-01-05"; il null non corrisponde a nessuna chiave.
+        # Il valore non mappato resta quello originale, col suo tipo.
+        if lookup_match_as_text(result[column].dtype):
+            keys = lookup_text_mapping(mapping)
+            compared = result[column].map(lookup_value_text)
+        else:
+            keys = mapping
+            compared = result[column]
+        mapped = compared.map(keys)
+        matched = compared.isin(keys.keys())
 
         if unmatched is not None:
             # Distingue chiavi assenti da valori mappati esplicitamente a null.
-            matched = result[column].isin(mapping.keys())
             fallback = result[column] if unmatched == "keep" else (default if unmatched == "value" else None)
             result[target] = mapped.where(matched, fallback)
         elif default is not None:
@@ -154,11 +171,13 @@ def op_lookup(
 
         if numeric:
             # Solo null/value: normalizza anche la virgola decimale.
+            # Conversione dell'USCITA (non e' un confronto): resta quella
+            # storica, cosi' i dtype del risultato non cambiano.
             result[target] = coerce_numeric_series(result[target].map(
                 lambda value: str(value).replace(",", ".") if value is not None else None
             ))
 
-        mapped_count = result[column].isin(mapping.keys()).sum()
+        mapped_count = matched.sum()
         logger.info(f"Lookup: {mapped_count}/{len(result)} valori mappati nella colonna '{target}'")
         return result
 

@@ -305,6 +305,7 @@ const DynamicConfigBody = ({
                 columns={getColumnsForParam(param)}
                 targetNodeId={targetNodeId}
                 transformDefinition={transformConfig}
+                config={config}
               />
             );
           })}

@@ -6,13 +6,17 @@
  *
  * Ritorna: { executing, taskId, progress, result, error, execute, cancel }
  *
- * Usato da: EstraiEditor, ManipolaEditor, ArricchisciEditor (via ResultNode)
+ * Usato da: EstraiEditor, ManipolaEditor, ArricchisciEditor (onExecute,
+ * chiamato dal percorso unico editor/PipelineRunner dopo la finestra
+ * «Prima di avviare»: input, opzioni e conferme arrivano gia' in executeOptions).
+ * Un rifiuto 409 `preparation_changed` (Arricchisci) torna a chi ha avviato.
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { executeProjectQuery, getTaskStatus, cancelTask as cancelTaskApi, downloadTaskOutput, downloadProjectOutput } from '../api';
 import { useTaskPolling } from './useTaskPolling';
 import useCanvasStore from '../store/useCanvasStore';
 import { taskFailureMessage } from '../utils/taskFailureMessage';
+import { isPreparationChanged } from '../utils/beforeRun';
 
 export function useExecution(projectId, options = {}) {
   const {
@@ -38,12 +42,6 @@ export function useExecution(projectId, options = {}) {
   const [caricaTasks, setCaricaTasks]       = useState([]);
   const [caricaPolling, setCaricaPolling]   = useState(false);
 
-  // R-25 PR-B5: stato "config pre-launch" usato dal modal per mostrare
-  // il toggle intermediate_mode (visibile solo a superadmin) prima che
-  // la pipeline parta davvero. Se nessuno chiama prepareExecute, il flow
-  // resta quello classico (handleExecute parte subito).
-  const [awaitingLaunch, setAwaitingLaunch] = useState(false);
-
   const executingRef = useRef(false);
   // Fine (o azzeramento) dell'esecuzione: il blocco si toglie SUBITO, anche
   // se React accorpa "inizia" e "finisce" in un solo render.
@@ -61,7 +59,6 @@ export function useExecution(projectId, options = {}) {
   useEffect(() => () => {
     if (tracksRunState && useCanvasStore.getState().runState === 'running') useCanvasStore.getState().setRunState?.('idle');
   }, [tracksRunState]);
-  const pendingOptsRef = useRef(null);
 
   const caricaRefs    = useRef({});
   const caricaGenerationsRef = useRef({});
@@ -223,7 +220,6 @@ const handleExecute = useCallback(async (executeOptions = {}) => {
     executingRef.current = true;
     setShowModal(true);
     setIsExecuting(true);
-    setAwaitingLaunch(false);   // exit dal config-step se proveniamo da launch()
     setResult(null);
     setTaskId(null);
     setProgress(0);
@@ -259,6 +255,16 @@ const handleExecute = useCallback(async (executeOptions = {}) => {
       // nel success path (riga sopra).
       if (!mountedRef.current) return;
       stopExecuting();
+      if (isPreparationChanged(error)) {
+        // Arricchisci: la preparazione e' cambiata dalla stima confermata.
+        // Niente esito qui: la finestra «Prima di avviare» rifa' la stima e
+        // mostra il motivo (editor/PipelineRunner).
+        setShowModal(false);
+        setProgress(0);
+        setProgressMessage('');
+        setTaskStatus(null);
+        throw error;
+      }
       setProgress(0);
       setTaskStatus('failure');
       setResult({ success: false, message: error.message || 'Errore' });
@@ -278,8 +284,6 @@ const handleExecute = useCallback(async (executeOptions = {}) => {
 
   const closeModal = useCallback((resetResult = false) => {
     setShowModal(false);
-    setAwaitingLaunch(false);
-    pendingOptsRef.current = null;
     if (resetResult) {
       setResult(null); setProgress(0); setProgressMessage('');
       setTaskId(null); setTaskStatus(null);
@@ -292,55 +296,7 @@ const handleExecute = useCallback(async (executeOptions = {}) => {
     setShowModal(false); setResult(null); stopExecuting();
     setTaskId(null); setProgress(0); setProgressMessage('');
     setTaskStatus(null); setCaricaTasks([]); setCaricaPolling(false);
-    setAwaitingLaunch(false); pendingOptsRef.current = null;
   }, [stopPolling, stopAllCaricaPolling]);
-
-  // R-25 PR-B5: apre il modal in stato "config" (awaitingLaunch=true)
-  // SENZA partire. Il modal mostra il toggle intermediate_mode ai
-  // superadmin e il bottone "Avvia"; chiamare launch() per partire.
-  // Per chiamanti che non passano per il modal config, handleExecute()
-  // resta invariato (back-compat).
-  // Fase 4, M7: `needsConfig` false (nessun input runtime da chiedere, nessuna
-  // opzione staff) -> parte subito, la finestra mostra solo l'avanzamento.
-  // Un solo clic su "Esegui" (utils/executionConfig.executionNeedsConfig).
-  const prepareExecute = useCallback((executeOptions = {}, { needsConfig = true } = {}) => {
-    if (!needsConfig) {
-      pendingOptsRef.current = null;
-      setAwaitingLaunch(false);
-      setResult(null);
-      setTaskId(null);
-      setProgress(0);
-      setProgressMessage('');
-      setTaskStatus(null);
-      setCaricaTasks([]);
-      setCaricaPolling(false);
-      setShowModal(true);
-      return handleExecute(executeOptions || {});
-    }
-    pendingOptsRef.current = executeOptions || {};
-    setShowModal(true);
-    setAwaitingLaunch(true);
-    stopExecuting();
-    setResult(null);
-    setTaskId(null);
-    setProgress(0);
-    setProgressMessage('');
-    setTaskStatus(null);
-    setCaricaTasks([]);
-    setCaricaPolling(false);
-  }, [handleExecute]);
-
-  const launch = useCallback((intermediateMode = null, runtimeInputs = {}) => {
-    const baseOpts = pendingOptsRef.current || {};
-    const withInputs = Object.keys(runtimeInputs || {}).length
-      ? { ...baseOpts, inputs: runtimeInputs }
-      : baseOpts;
-    const merged = intermediateMode
-      ? { ...withInputs, intermediate_mode: intermediateMode }
-      : withInputs;
-    pendingOptsRef.current = null;
-    return handleExecute(merged);
-  }, [handleExecute]);
 
   const downloadTaskResult = useCallback(async () => {
     // P1 (2026-05-26): `output_path` non e' piu' emesso dal pipeline
@@ -377,8 +333,6 @@ const handleExecute = useCallback(async (executeOptions = {}) => {
     caricaTasks, caricaPolling,
     handleExecute, closeModal, reset, cancelTask, downloadTaskResult,
     setShowModal, setResult,
-    // R-25 PR-B5
-    awaitingLaunch, prepareExecute, launch,
   };
 }
 

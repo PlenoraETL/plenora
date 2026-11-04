@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useToast } from './useToast';
 import useCanvasStore from '../store/useCanvasStore';
 import { hasUnsavedChanges } from '../store/saveState';
+import { isCanvasVersionConflict } from '../utils/canvasVersion';
 
 /**
  * "💾 Salva" e Ctrl+S. `save` e' serverActions.saveNow. Con niente da
@@ -30,6 +31,12 @@ export function useCanvasSave(save, options = {}) {
       toast.success(successMessage);
     } catch (err) {
       console.error(`${logPrefix} Errore salvataggio:`, err);
+      // Versione superata: le scelte sono nell'avviso dell'editor
+      // (SaveConflictNotice), qui solo che non e' stato salvato.
+      if (err?.name === 'CanvasVersionConflictError' || isCanvasVersionConflict(err)) {
+        toast.error('Non salvato: il progetto è stato salvato altrove dopo che l’hai aperto. Scegli come procedere nell’avviso in alto.');
+        return;
+      }
       // H-7 (2026-05-26): estrai dettaglio FastAPI/server per 422/409
       // invece di mostrare solo il generic errorMessage. Backend post
       // RAM refactor irrigidito alcuni contracts; senza detail l'utente

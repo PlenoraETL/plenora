@@ -11,7 +11,6 @@
  *   useCanvasKeyboard     → shortcut tastiera (Delete, Ctrl+S, ...)
  *   useEdgeHandlers       → creazione ed eliminazione degli archi di Estrai (join nel pannello)
  *   useColumnsOf          → colonne di un nodo dalla fonte unica (useColumns)
- *   useEnrichmentValidation → validazione/stima prima di arricchire
  *   useMultiModal         → gestione multiple modali con un unico stato
  *   useConfirmModal       → dialog di conferma promise-based
  *   useToast              → notifiche toast non bloccanti
@@ -24,7 +23,6 @@ export { useCanvasSave }                            from './useCanvasSave';
 export { useCanvasKeyboard }                        from './useCanvasKeyboard';
 export { useEdgeHandlers }                          from './useEdgeHandlers';
 export { useColumnsOf, useColumnSync }             from './useColumns';
-export { useEnrichmentValidation }                  from './useEnrichmentValidation';
 export { useMultiModal }                            from './useMultiModal';
 export { useConfirmModal }                          from './useConfirmModal';
 export { useToast }                                 from './useToast';

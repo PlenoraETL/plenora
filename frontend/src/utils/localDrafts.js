@@ -53,9 +53,11 @@
  * | ripristino versione        | cancella la propria copia; annuncia il salvato             | restano; ricevono "salvato in un'altra scheda" |
  * | storage: salvato altrove   | resta; avviso; l'offerta aperta segna "salvato dopo"       | -                                              |
  * | storage: progetto eliminato| niente piu' scritture; offerta chiusa; avviso              | -                                              |
+ * | conflitto: ricarica        | le modifiche diventano la copia propria (keepTabCopy),     | nessuno                                        |
+ * |                            | poi si ricarica: all'apertura e' offerta "salvato dopo"    |                                                |
  *
- * Il salvataggio condizionato alla versione (PUT con baseUpdatedAt, rifiuto
- * se superata) richiede il backend: baseUpdatedAt e' gia' registrato qui.
+ * Salvataggio condizionato alla versione (token canvas_version, 409 se
+ * superata): utils/canvasVersion.js.
  */
 const PREFIX = 'plenora:draft:';
 const TAB_PREFIX = 'plenora:tab:';
@@ -251,6 +253,22 @@ export const announceSaved = (projectId, { tabId, updatedAt = null } = {}) => {
 export const serverCanvasReplaced = (projectId, user = currentDraftUser(), tabId = currentTabId()) => {
   removeDraft(user, projectId, tabId);
   announceSaved(projectId, { tabId });
+};
+
+/**
+ * Conflitto di versione, scelta "ricarica la versione del server": le
+ * modifiche di questa scheda diventano la sua copia di sicurezza (stessa
+ * chiave utente:progetto:scheda, base = versione del server da cui
+ * partivano). Al ricaricamento la scheda la ritrova nell'offerta ("Questa
+ * scheda, prima di ricaricare", segnata "salvato dopo").
+ */
+export const keepTabCopy = (projectId, { nodes, edges, baseUpdatedAt = null }, user = currentDraftUser(), tabId = currentTabId()) => {
+  // Solo il contenuto: selezione e misure non contano (come useLocalDraft).
+  // eslint-disable-next-line no-unused-vars
+  const cleanNodes = (nodes || []).map(({ selected, dragging, measured, ...n }) => n);
+  // eslint-disable-next-line no-unused-vars
+  const cleanEdges = (edges || []).map(({ selected, ...e }) => e);
+  return writeDraft(user, projectId, tabId, { savedAt: Date.now(), baseUpdatedAt, nodes: cleanNodes, edges: cleanEdges });
 };
 
 /** Progetto eliminato: nessuna copia per nessun utente, e una lapide. */

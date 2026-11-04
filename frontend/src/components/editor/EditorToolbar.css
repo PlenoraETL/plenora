@@ -87,3 +87,6 @@
 .draft-offer__item { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .draft-offer__item > span { flex: 1; min-width: 0; }
 .draft-offer--notice > span { flex: 1; min-width: 0; }
+/* Salvataggio superato da un'altra scheda (Blocco A, regola 8) */
+.draft-offer--conflict { background: var(--plen-err-bg, #fee2e2); border-bottom-color: var(--plen-err, #dc2626); }
+.draft-offer--conflict > span { flex: 1; min-width: 0; }

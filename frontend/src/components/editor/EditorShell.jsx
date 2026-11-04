@@ -74,6 +74,7 @@ import { nodeTitle } from '../canvas/nodeDescriptors';
 import StepsView from '../canvas/StepsView';
 import EditorToolbar from './EditorToolbar';
 import PipelineRunner from './PipelineRunner';
+import SaveConflictNotice from './SaveConflictNotice';
 import useLocalDraft, { DRAFT_ORIGIN_LABEL } from '../../hooks/useLocalDraft';
 import { useColumnSync } from '../../hooks/useColumns';
 import { useOptionalConfirm } from '../../context/ConfirmContext';
@@ -114,6 +115,8 @@ function ErrorBanner({ prefix, message, children }) {
 
 function EditorShell({
 projectId,
+  // Utente dell'editor: le opzioni dello staff nella finestra «Prima di avviare».
+  user = null,
   prefix,
   loading = false,
   loadError = null,
@@ -378,6 +381,8 @@ canvasConfig = EMPTY_OBJ,
           </ul>
         </div>
       )}
+      {/* Salvataggio superato da un'altra scheda (Blocco A, regola 8). */}
+      {toolbar && <SaveConflictNotice />}
       {draft.notices.map(notice => (
         <div key={notice.id} className="draft-offer draft-offer--notice" role="status">
           <span>{notice.text}</span>
@@ -454,7 +459,7 @@ canvasConfig = EMPTY_OBJ,
       </div>
       </CanvasGraphContext.Provider>
       {/* Valida / Anteprima / Esegui: percorso unico, sempre montato (M7). */}
-      {toolbar && <PipelineRunner />}
+      {toolbar && <PipelineRunner user={user} />}
       {modals}
       {palette && (
         <NodePalette

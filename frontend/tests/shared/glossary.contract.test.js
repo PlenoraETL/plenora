@@ -51,7 +51,7 @@ const PERIMETER = [
   'components/panels/FilesSidebar.jsx', 'components/panels/ProjectsSidebar.jsx',
   'components/panels/FeatureServicePanel.jsx', 'components/panels/QueryPreview.jsx',
   'components/modals/CanvasVersionsModal.jsx', 'components/modals/ColumnBuilderModal.jsx',
-  'components/modals/EnrichmentConfirmModal.jsx', 'components/modals/ExecutionModal.jsx',
+  'components/modals/ExecutionModal.jsx',
   'components/modals/FilterModal.jsx', 'components/modals/PreviewModal.jsx',
   'components/modals/PreviewTable.jsx', 'components/modals/RunHistoryModal.jsx',
   'components/modals/ValidationModal.jsx', 'components/arricchisci/ConnectionSelectorModal.jsx',

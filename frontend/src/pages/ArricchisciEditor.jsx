@@ -8,7 +8,7 @@
  *  - Nodo Output con mapping risposta JSON
  *
  * Hooks usati: useEditorData, useCanvasCore, useEdgeHandlers,
- *              useEnrichmentValidation, useExecution, usePreview,
+ *              useExecution, usePreview,
  *              useMultiModal, useToast
  *
  * Route: /arricchisci/:projectId
@@ -25,10 +25,9 @@ import { useEditorData } from '../hooks/useEditorData';
 import { beforePreview, saveForRun, saveNow } from '../utils/serverActions';
 import AccessDeniedBanner from '../components/editor/AccessDeniedBanner';
 import useCanvasStore from '../store/useCanvasStore';
-import useRuntimeInputDefinitions from '../hooks/useRuntimeInputDefinitions';
-import { executionNeedsConfig } from '../utils/executionConfig';
+import { serverVersionOf } from '../utils/canvasVersion';
 import { columnSnapshot } from '../hooks/useColumns';
-import { addedColumns, columnOrigin, columnsOf } from '../utils/columnSource';
+import { columnOrigin, columnsOf } from '../utils/columnSource';
 import {
   createParameterBindingEdge,
   dataFlowEdges,
@@ -53,15 +52,13 @@ import { nodeTitle } from '../components/canvas/nodeDescriptors';
 const ExecutionModal = lazy(() => import('../components/modals/ExecutionModal'));
 const PreviewModal = lazy(() => import('../components/modals/PreviewModal'));
 const ConnectionSelectorModal = lazy(() => import('../components/arricchisci/ConnectionSelectorModal'));
-const EnrichmentConfirmModal = lazy(() => import('../components/modals/EnrichmentConfirmModal'));
 const CanvasVersionsModal = lazy(() => import('../components/modals/CanvasVersionsModal'));
-import { usePreview, useExecution, useCanvasCore, useMultiModal, useEnrichmentValidation, useCanvasSave, useUnsavedChangesGuard, useValidationHighlights } from '../hooks';
+import { usePreview, useExecution, useCanvasCore, useMultiModal, useCanvasSave, useUnsavedChangesGuard, useValidationHighlights } from '../hooks';
 import { useToast } from '../hooks/useToast';
 import { useTheme } from '../hooks/useTheme';
 import '../styles/ArricchisciEditor.css';
 import '../components/arricchisci/ConnectionSelectorModal.css';
 import '../components/nodes/StaticValuesNode.css';
-import '../components/modals/EnrichmentConfirmModal.css';
 import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
 import { addFirstMessage, flowEdgeLabel, menuEntry, onlyOneMessage, paletteEntry, term, termName } from '../utils/glossary';
@@ -128,22 +125,14 @@ const ArricchisciEditorContent = () => {
     sourceTypes: ARRICCHISCI_SOURCE_TYPES,
   });
 
-  const [exportFormat, setExportFormat]         = useState('csv');
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   const modals = useMultiModal(['template', 'openapi', 'manual', 'datasource']);
   const [showVersions, setShowVersions] = useState(false);
 
-  const enrichmentValidation = useEnrichmentValidation();
   const preview   = usePreview(projectId, beforePreview);
   const { saving, handleSaveCanvas } = useCanvasSave(saveNow, {
     logPrefix: '[ArricchisciEditor]',
   });
-  // Input runtime chiesti all'esecuzione, come in Estrai (audit R9.1).
-  const runtimeInputDefinitions = useRuntimeInputDefinitions(nodes);
-  // Letto al clic su Esegui (le azioni registrate non vedono i render nuovi).
-  const needsRunConfigRef = useRef(false);
-  needsRunConfigRef.current = executionNeedsConfig(runtimeInputDefinitions, user);
   const execution = useExecution(projectId, {
     executeFunction: executeEnrichmentAsync,
     // Tutti i guard (CANVAS_EMPTY, ARRICCHISCI_NO_SOURCES, ARRICCHISCI_NO_ENRICHER)
@@ -170,7 +159,7 @@ const ArricchisciEditorContent = () => {
       return clean;
     });
     // loadGraph: grafo dal backend, stato pulito e cronologia azzerata.
-    loadGraph(loadedNodes, [...sanitizedEdges, ...hydrateParameterBindingEdges(loadedNodes)]);
+    loadGraph(loadedNodes, [...sanitizedEdges, ...hydrateParameterBindingEdges(loadedNodes)], serverVersionOf(project));
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // loadGraph/deserializeNodes omessi: load programmatico una sola
     // volta per project, non ad ogni re-render dei setter store.
@@ -185,103 +174,20 @@ const ArricchisciEditorContent = () => {
   // dai nodi stessi tramite useCanvasStore.getState().updateNodeData
   // Non servono handler passati come prop.
 
-  const getEnrichmentConfig = useCallback(() => {
-    const currentNodes  = nodesRef.current;
-    const apiNode       = currentNodes.find(n => n.type === 'api_enrich');
-    if (!apiNode) return null;
-    const staticValuesNodes = currentNodes.filter(n => n.type === 'staticValues');
-    const staticColumns = staticValuesNodes
-      .flatMap(node => (node.data?.fields || []).map(f => f.name));
-    // B-FE-68: includi le colonne prodotte da enricher upstream nelle
-    // staticColumns così il backend le skippa nel check missing_columns durante la validazione.
-    // Colonne prodotte = in uscita dall'arricchimento ma non nel suo ingresso (fonte unica).
-    const snapshot = columnSnapshot();
-    const upstreamApiColumns = currentNodes
-      .filter(n => n.type === 'api_enrich')
-      .flatMap(n => addedColumns(snapshot, n.id).map(c => c.name).filter(Boolean));
-    const allStaticColumns = [...new Set([...staticColumns, ...upstreamApiColumns])];
-    // staticParameters: mappa {param_name: value} dai nodi StaticValues.
-    // Pre-fix il FE non inviava questo campo al BE → validate produceva
-    // falsi `missing_columns` per parametri soddisfatti da static values
-    // (drift contracts-schemas P1 plenora-bug-contracts-schemas).
-    const staticParameters = {};
-    staticValuesNodes.forEach(node => {
-      (node.data?.fields || []).forEach(f => {
-        if (f.name && f.value !== undefined && f.value !== null && f.value !== '') {
-          staticParameters[f.name] = f.value;
-        }
-      });
-    });
-    // B-FE-41: leggi file_source_id dal nodo file_source nel canvas
-    const fileSourceNode    = currentNodes.find(n => n.type === 'file_source');
-    const fileSourceId      = fileSourceNode?.data?.file_source_id || null;
-    // B-FE-52: leggi source_project_id dal nodo project_source per validate/estimate
-    const projectSourceNode = currentNodes.find(n => n.type === 'project_source');
-    const sourceProjectId   = projectSourceNode?.data?.source_project_id || null;
-    return {
-      apiId: apiNode.data?.api_id,
-      paramMapping: apiNode.data?.param_mapping || {},
-      staticColumns: allStaticColumns,
-      staticParameters,
-      fileSourceId,
-      sourceProjectId,
-    };
-  }, []);
-
-  // Persistiamo le options ricevute da ResultNode (es. force_recalculate) tra
-  // l'apertura del modal di conferma e il click su "Conferma" — altrimenti
-  // la flag dal radio "Ricalcola tutto" andava persa nel passaggio
-  // handleShowConfirmModal -> setShowConfirmModal -> handleConfirmExecution.
-  const [pendingExecuteOptions, setPendingExecuteOptions] = useState({});
-
-  const handleShowConfirmModal = useCallback(async (_id, options = {}) => {
-    setPendingExecuteOptions(options);
-    const currentNodes = nodesRef.current;
-    // Risorse non accessibili e salvataggio: gia' fatti dal percorso unico di
-    // ResultNode (Fase 4, M7) prima di arrivare qui.
-    // I nodi file-processor (rest_file) lavorano
-    // file->file, non riga-per-riga su un DataFrame. Il validate/estimate
-    // dell'enrichment classico (che carica il file come DataFrame e controlla
-    // le colonne mappate) non si applica: skippa il modal di conferma e
-    // esegui direttamente.
-    const hasFileProcessor = currentNodes.filter(n => n.type === 'api_enrich').some(n =>
-      n.data?.connection_type === 'rest_file'
-    );
-    if (hasFileProcessor) {
-      const resultNode = currentNodes.find(n => n.type === 'result');
-      const format = resultNode?.data?.format || exportFormat || 'csv';
-      execution.prepareExecute({ format, ...options }, { needsConfig: needsRunConfigRef.current });
-      setPendingExecuteOptions({});
-      return;
-    }
-    setShowConfirmModal(true);
-    const config = getEnrichmentConfig();
-    if (config?.apiId) enrichmentValidation.validateAndEstimate(
-      config.sourceProjectId || projectId,
-      config.apiId,
-      config.paramMapping,
-      config.fileSourceId,
-      config.staticColumns,
-      config.staticParameters,
-    );
-  }, [getEnrichmentConfig, projectId, enrichmentValidation, execution, exportFormat]);
-
-  const handleConfirmExecution  = useCallback(() => {
-    setShowConfirmModal(false);
-    // Leggi il formato dal nodo Result al momento dell'esecuzione
+  // Avvio: input, stima e conferma sono gia' passati dalla finestra unica
+  // «Prima di avviare» del percorso unico (editor/PipelineRunner, Blocco A
+  // regola 5); qui si aggiunge solo il formato dell'Output.
+  const handleExecute = useCallback((_id, options = {}) => {
     const resultNode = nodesRef.current.find(n => n.type === 'result');
-    const format = resultNode?.data?.format || exportFormat || 'csv';
-    execution.prepareExecute({ format, ...pendingExecuteOptions }, { needsConfig: needsRunConfigRef.current });
-    setPendingExecuteOptions({});
-  }, [execution, exportFormat, pendingExecuteOptions]);
-  const handleCloseConfirmModal = useCallback(() => { setShowConfirmModal(false); enrichmentValidation.reset(); }, [enrichmentValidation]);
+    return execution.handleExecute({ format: resultNode?.data?.format || 'csv', ...options });
+  }, [execution, nodesRef]);
 
   // Registra azioni editor nello store — dopo tutti gli hook e useCallback
   // Azioni dell'editor: registrate una volta, chiamano sempre l'ultima
   // versione (components/editor/useEditorActions, regola 9 Blocco A).
   useEditorActions({
     onPreview:        () => preview.handlePreview(),
-    onExecute:        handleShowConfirmModal,
+    onExecute:        handleExecute,
   });
 
   // Sincronizza connections nello store
@@ -528,7 +434,7 @@ const ArricchisciEditorContent = () => {
       {showVersions && (
         <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
       )}
-      <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title={`${term('run').icon} Esecuzione dell'arricchimento`} projectType="arricchisci" progress={execution.progress} progressMessage={execution.progressMessage} taskStatus={execution.taskStatus} onCancel={execution.cancelTask} caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user} inputDefinitions={runtimeInputDefinitions} />
+      <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title={`${term('run').icon} Esecuzione dell'arricchimento`} projectType="arricchisci" progress={execution.progress} progressMessage={execution.progressMessage} taskStatus={execution.taskStatus} onCancel={execution.cancelTask} caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} />
       <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
         data={(() => {
           if (!preview.data?.columns) return preview.data;
@@ -567,7 +473,6 @@ const ArricchisciEditorContent = () => {
       <ConnectionSelectorModal isOpen={modals.isOpen('openapi')} onClose={() => modals.close('openapi')} onSelect={conn => handleSelectConnection(conn, 'openapi')} category="openapi" title="Seleziona un'API OpenAPI" icon={term('connector_openapi').icon} emptyMessage="Nessuna API OpenAPI importata" emptyHint="Importa uno schema OpenAPI nella pagina API Esterne" createLink="/external-connectors" />
       <ConnectionSelectorModal isOpen={modals.isOpen('rest_file')} onClose={() => modals.close('rest_file')} onSelect={conn => handleSelectConnection(conn, 'rest_file')} category="rest_file" title="Seleziona un processore file" icon={term('connector_rest_file').icon} emptyMessage="Nessun processore file configurato" emptyHint="Configura un servizio REST che riceve e restituisce file nella pagina API Esterne" createLink="/external-connectors" />
       <ConnectionSelectorModal isOpen={modals.isOpen('datasource')} onClose={() => modals.close('datasource')} onSelect={conn => handleSelectConnection(conn, 'datasource')} category="datasource" title="Seleziona un Data Source" icon={term('datasource').icon} emptyMessage="Nessun Data Source configurato" emptyHint="Configura un Data Source nella pagina Data Source" createLink="/datasources" />
-      <EnrichmentConfirmModal isOpen={showConfirmModal} onClose={handleCloseConfirmModal} onConfirm={handleConfirmExecution} validation={enrichmentValidation.validation} estimation={enrichmentValidation.estimation} isValidating={enrichmentValidation.isValidating} isEstimating={enrichmentValidation.isEstimating} formatTime={enrichmentValidation.formatTime} />
       </Suspense>
     </ModalErrorBoundary>
   );
@@ -575,6 +480,7 @@ const ArricchisciEditorContent = () => {
   return (
     <EditorShell
       projectId={projectId}
+      user={user}
       prefix="arricchisci"
       loading={loading}
       loadError={loadError}

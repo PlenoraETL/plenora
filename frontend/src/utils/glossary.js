@@ -81,6 +81,8 @@ const T = {
 
   // ── Azioni dell'editor ──────────────────────────────────────────────────
   run: { name: 'Esegui', icon: '▶', description: 'Salva, controlla ed esegui', busyName: 'In esecuzione…' },
+  before_run: { name: 'Prima di avviare', icon: '🧭', description: 'Input, stima e conferma prima di eseguire' },
+  fill_values: { name: 'Riempi con i valori presenti', icon: '⤓', description: "Propone come righe da tradurre i valori che la colonna ha nei dati in ingresso" },
   preview: { name: 'Anteprima', icon: '👁️', description: 'Mostra le prime righe del risultato' },
   validate: { name: 'Valida', icon: '🔍', description: 'Controlla il canvas prima di eseguire' },
   save: { name: 'Salva', icon: '💾', description: 'Salva (Ctrl+S)', busyName: 'Salvataggio…' },

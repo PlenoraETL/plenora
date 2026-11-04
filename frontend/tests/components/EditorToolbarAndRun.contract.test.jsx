@@ -3,7 +3,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import useCanvasStore from '../../src/store/useCanvasStore';
 import EditorToolbar, { SaveIndicator } from '../../src/components/editor/EditorToolbar';
-import { executionNeedsConfig } from '../../src/utils/executionConfig';
+import { beforeRunReasons } from '../../src/utils/beforeRun';
 import { buildRuntimeInputDefinitions } from '../../src/hooks/useRuntimeInputDefinitions';
 
 /** Contract Fase 4 M7: barra unica, stato del salvataggio, un solo Esegui, input runtime. */
@@ -73,10 +73,10 @@ describe('EditorToolbar', () => {
 });
 
 describe('run and runtime inputs', () => {
-  it('the window opens only for runtime inputs or staff options', () => {
-    expect(executionNeedsConfig([], { role: 'editor' })).toBe(false);
-    expect(executionNeedsConfig([{ input_key: 'anno' }], { role: 'editor' })).toBe(true);
-    expect(executionNeedsConfig([], { role: 'superadmin' })).toBe(true);
+  it('the window opens only for runtime inputs, staff options or an estimate to confirm', () => {
+    expect(beforeRunReasons({ inputDefinitions: [], user: { role: 'editor' } })).toEqual([]);
+    expect(beforeRunReasons({ inputDefinitions: [{ input_key: 'anno' }], user: { role: 'editor' } })).toEqual(['inputs']);
+    expect(beforeRunReasons({ inputDefinitions: [], user: { role: 'superadmin' } })).toEqual(['staff']);
   });
 
   it('runtime inputs: non-file inputs, ordered, connection options resolved (same for the three editors)', () => {

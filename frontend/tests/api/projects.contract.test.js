@@ -119,4 +119,22 @@ describe('projects api contract', () => {
     expect(r).toBe(axiosResp);
     expect(r.headers['content-type']).toBe('text/csv');
   });
+  it('restoreCanvasVersion: conditioned on the tab version when given, compatible without it', async () => {
+    httpMock.post.mockResolvedValue({ data: { canvas: {}, canvas_version: 'c1:v2' } });
+    const { restoreCanvasVersion } = await import('../../src/api/projects');
+    await restoreCanvasVersion('p1', 'v9', 'c1:v1');
+    expect(httpMock.post).toHaveBeenLastCalledWith('/projects/p1/versions/v9/restore', { base_canvas_version: 'c1:v1' });
+    await restoreCanvasVersion('p1', 'v9');
+    expect(httpMock.post).toHaveBeenLastCalledWith('/projects/p1/versions/v9/restore');
+  });
+
+  it('distinctNodeValues: POST /projects/:id/nodes/:node/distinct with canvas, column, column_id, limit', async () => {
+    httpMock.post.mockResolvedValueOnce({ data: { values: [], truncated: false } });
+    const { distinctNodeValues } = await import('../../src/api/projects');
+    const canvas = { nodes: [], edges: [] };
+    await distinctNodeValues('p1', 'lk', { canvas, column: 'zona', columnId: 'col-zona', limit: 200 });
+    expect(httpMock.post).toHaveBeenCalledWith('/projects/p1/nodes/lk/distinct', {
+      canvas, column: 'zona', column_id: 'col-zona', limit: 200,
+    });
+  });
 });

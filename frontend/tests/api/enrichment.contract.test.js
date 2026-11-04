@@ -18,44 +18,37 @@ describe('enrichment api contract', () => {
     vi.clearAllMocks();
   });
 
-  it('validateEnrichment forwards file source and static columns explicitly', async () => {
-    httpMock.post.mockResolvedValueOnce({ data: { valid: true } });
+  it('preflightEnrichment: POST /projects/{id}/preflight with the run inputs, no canvas (the saved one)', async () => {
+    httpMock.post.mockResolvedValueOnce({ data: { valid: true, preparation_fingerprint: 'f1', nodes: [] } });
 
-    const { validateEnrichment } = await import('../../src/api/enrichment');
-    const result = await validateEnrichment(
-      'proj-1',
-      'api-1',
-      { city: 'city_name' },
-      'file-7',
-      [{ name: 'country', value: 'IT' }],
-    );
+    const { preflightEnrichment } = await import('../../src/api/enrichment');
+    const result = await preflightEnrichment('proj-1', { inputs: { anno: 2026 }, force_recalculate: true });
 
-    expect(httpMock.post).toHaveBeenCalledWith('/enrichment/validate', {
-      project_id: 'proj-1',
-      api_id: 'api-1',
-      param_mapping: { city: 'city_name' },
-      file_source_id: 'file-7',
-      static_columns: [{ name: 'country', value: 'IT' }],
-      // Post-fix sessione 9: il body include sempre `static_parameters`
-      // (default null se omesso). Pre-fix non era inviato.
-      static_parameters: null,
+    expect(httpMock.post).toHaveBeenCalledWith('/projects/proj-1/preflight', {
+      inputs: { anno: 2026 },
+      force_recalculate: true,
     });
-    expect(result).toEqual({ valid: true });
+    expect(result.preparation_fingerprint).toBe('f1');
   });
 
-  it('estimateEnrichment preserves a null file source when omitted', async () => {
-    httpMock.post.mockResolvedValueOnce({ data: { estimated_api_calls: 10 } });
+  it('executeEnrichmentAsync sends the preflight fingerprint when given', async () => {
+    httpMock.post.mockResolvedValueOnce({ data: { task_id: 'task-1' } });
 
-    const { estimateEnrichment } = await import('../../src/api/enrichment');
-    const result = await estimateEnrichment('proj-2', 'api-2', { cap: 'zip_code' });
+    const { executeEnrichmentAsync } = await import('../../src/api/enrichment');
+    await executeEnrichmentAsync('proj-1', { inputs: { anno: 2026 }, preparation_fingerprint: 'f1' });
 
-    expect(httpMock.post).toHaveBeenCalledWith('/enrichment/estimate', {
-      project_id: 'proj-2',
-      api_id: 'api-2',
-      param_mapping: { cap: 'zip_code' },
-      file_source_id: null,
+    expect(httpMock.post).toHaveBeenCalledWith('/projects/proj-1/enrich-async', {
+      force_recalculate: false,
+      format: 'csv',
+      inputs: { anno: 2026 },
+      preparation_fingerprint: 'f1',
     });
-    expect(result).toEqual({ estimated_api_calls: 10 });
+  });
+
+  it('the old validate/estimate calls are gone (one preparation: the preflight)', async () => {
+    const api = await import('../../src/api/enrichment');
+    expect(api.validateEnrichment).toBeUndefined();
+    expect(api.estimateEnrichment).toBeUndefined();
   });
 
   it('executeEnrichmentAsync keeps force_recalculate and format defaults aligned', async () => {

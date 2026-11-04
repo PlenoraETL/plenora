@@ -285,7 +285,7 @@ describe('ManipolaEditor', () => {
           ...storedEdges[0],
           targetHandle: 'input-2',
         },
-      ]);
+      ], { canvasVersion: null, updatedAt: null });
     });
   });
 

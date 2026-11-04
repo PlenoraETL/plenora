@@ -16,7 +16,8 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
-import { updateCanvas } from '../api';
+import { getProject, restoreCanvasVersion, updateCanvas } from '../api';
+import { CanvasVersionConflictError, isCanvasVersionConflict, tokenAfterWrite } from '../utils/canvasVersion';
 import { serializeCanvas } from '../utils/canvasSerializer';
 import { COLUMN_STEP, findFreePosition, nodeSize, planInsertAfter, settleNodes } from '../utils/canvasPlacement';
 import { bindingListResolution, isParameterBindingEdge, uniqueDataEdges } from '../utils/runtimeBindingEdges';
@@ -52,11 +53,48 @@ export const createCanvasStore = () => create(
           : { isDirty: true };
       };
 
+      // Scrittura condizionata alla versione (Blocco A, regola 8): UNICO
+      // punto che manda al server la versione di base e legge quella nuova.
+      // La usano il salvataggio (saveCanvasSerialized: Salva, Esegui, Valida
+      // e Anteprima che salvano prima) e il ripristino di una versione.
+      //  - `projectId` e `base` arrivano dallo SNAPSHOT del chiamante, presi
+      //    nello stesso istante del canvas da scrivere: qui non si rilegge
+      //    lo store (un cambio di progetto durante un'attesa non mescola il
+      //    progetto A con il token di B). Base assente = scrittura compatibile;
+      //  - `force` (scelta esplicita dell'utente dopo un conflitto): senza base;
+      //  - 409 canvas_version_conflict: niente sovrascrittura; `saveConflict`
+      //    porta l'avviso con le scelte (editor/SaveConflictNotice);
+      //  - token nuovo: utils/canvasVersion.tokenAfterWrite (risposta senza
+      //    token -> GET del progetto, regola sicura documentata li').
+      const writeConditioned = async ({ kind, projectId, base = null, send, force = false, versionId = null }) => {
+        const sent = force ? null : (base || null);
+        let response;
+        try {
+          response = await send(sent);
+        } catch (err) {
+          if (!isCanvasVersionConflict(err)) throw err;
+          const conflict = new CanvasVersionConflictError(err);
+          if (get().projectId === projectId) {
+            set({ saveConflict: { kind, versionId, at: Date.now(), serverVersion: conflict.serverVersion, serverUpdatedAt: conflict.serverUpdatedAt } }, false, 'save:conflict');
+          }
+          throw conflict;
+        }
+        const token = await tokenAfterWrite({
+          response, previous: base || null, readProject: () => getProject(projectId),
+        });
+        if (get().projectId === projectId) {
+          set({ canvasVersion: token, saveConflict: null }, false, 'save:version');
+        }
+        return response;
+      };
+
       // Un solo writer per il canvas. Qualsiasi chiamante (editor, nodo,
       // pre-flight execute) passa da qui: se arriva una modifica durante un
       // PUT, il loop salva lo snapshot piu' recente prima di dichiarare clean.
       let saveInFlight = null;
       let saveRequested = false;
+      // Prossimo salvataggio senza base: "Sovrascrivi" dopo un conflitto.
+      let forceNext = false;
       const saveCanvasSerialized = async () => {
         saveRequested = true;
         if (saveInFlight) return saveInFlight;
@@ -85,16 +123,25 @@ export const createCanvasStore = () => create(
               });
               if (derivedColumns && typeof derivedColumns.then === 'function') derivedColumns = await derivedColumns;
               const payload = serializeCanvas(snapshot.nodes, snapshot.edges, { mode: snapshot.mode, derivedColumns });
-              response = await updateCanvas(snapshot.projectId, payload);
+              const force = forceNext;
+              forceNext = false;
+              response = await writeConditioned({
+                kind: 'save',
+                projectId: snapshot.projectId,
+                // Base dello snapshot iniziale, non dello store dopo l'attesa.
+                base: snapshot.canvasVersion,
+                force,
+                send: (base) => updateCanvas(snapshot.projectId, base ? { ...payload, base_canvas_version: base } : payload),
+              });
             } catch (err) {
+              // Dopo un errore niente risalvataggi automatici: decide l'utente.
+              saveRequested = false;
               if (sameProject()) set({ saveStatus: 'error', saveError: err?.message || 'Salvataggio non riuscito' }, false, 'save:error');
               throw err;
             }
 
             // Il server ora ha QUESTO grafo: e' il punto a cui "Annulla" dopo
-            // un ripristino della copia di sicurezza riporta. La versione del
-            // server (updated_at) arriva solo se il backend la restituisce
-            // (aggancio per il salvataggio condizionato, Blocco A regola 8).
+            // un ripristino della copia di sicurezza riporta.
             if (sameProject()) {
               set({
                 savedGraph: { nodes: snapshot.nodes, edges: snapshot.edges },
@@ -129,6 +176,27 @@ export const createCanvasStore = () => create(
           // risoluzione del runner e questo finally.
           if (saveRequested) await saveCanvasSerialized();
         }
+      };
+
+      /** Ripristino di una versione: stessa scrittura condizionata del salvataggio. */
+      // Lo snapshot (progetto + base) si prende DOPO l'attesa del salvataggio
+      // in volo, tutto nello stesso istante: il salvataggio cambia il token
+      // legittimamente; se nel frattempo il progetto e' cambiato non si scrive.
+      const restoreVersionConditioned = async (versionId, { force = false } = {}) => {
+        const requested = get().projectId;
+        if (get().isReadOnly || !requested) return null;
+        if (saveInFlight) { try { await saveInFlight; } catch { /* esito gia' visibile */ } }
+        const snapshot = get();
+        if (snapshot.isReadOnly || snapshot.projectId !== requested) return null;
+        const { projectId } = snapshot;
+        return writeConditioned({
+          kind: 'restore',
+          projectId,
+          base: snapshot.canvasVersion,
+          force,
+          versionId,
+          send: (base) => restoreCanvasVersion(projectId, versionId, base),
+        });
       };
 
       return {
@@ -260,9 +328,18 @@ export const createCanvasStore = () => create(
       saveStatus: 'idle',
       saveError: null,
       lastSavedAt: null,
-      // updated_at del server dopo l'ultimo salvataggio riuscito, se la
-      // risposta del PUT lo porta (oggi no: null).
+      // updated_at del server della versione su cui lavora la scheda
+      // (apertura, poi ogni salvataggio riuscito): orario del server, base
+      // della copia di sicurezza (utils/localDrafts).
       lastSavedServerAt: null,
+      // Versione del canvas su cui lavora la scheda (token `canvas_version`
+      // del GET del progetto, poi della risposta di ogni scrittura): base del
+      // salvataggio condizionato (Blocco A, regola 8). null = server senza
+      // versione: scrittura compatibile.
+      canvasVersion: null,
+      // Ultima scrittura rifiutata perche' il server e' andato oltre:
+      // { kind: 'save'|'restore', versionId, at, serverVersion, serverUpdatedAt }.
+      saveConflict: null,
       // Ultimo grafo noto del server (caricato o salvato da questa scheda).
       savedGraph: null,
       setRunState: (runState) => set({ runState }, false, 'setRunState'),
@@ -279,7 +356,7 @@ export const createCanvasStore = () => create(
         get().editorActionsRef.current = {};
         // NOTA: non resettiamo isReadOnly perché viene impostato subito dopo da
         // useCanvasCore (dipende dal ruolo utente, non dal progetto).
-        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, pendingSync: false, validationHighlights: [], lastValidationSummary: null, past: [], future: [], lastTaskResult: null, canvasView: 'canvas', focusNodeId: null, saveStatus: 'idle', saveError: null, lastSavedAt: null, lastSavedServerAt: null, savedGraph: null, runState: 'idle', runOptions: { force_recalculate: false }, runReady: false, graphLoaded: false }, false, 'reset');
+        set({ nodes: [], edges: [], projectId: null, mode: null, connections: [], isDirty: false, pendingSync: false, validationHighlights: [], lastValidationSummary: null, past: [], future: [], lastTaskResult: null, canvasView: 'canvas', focusNodeId: null, saveStatus: 'idle', saveError: null, lastSavedAt: null, lastSavedServerAt: null, canvasVersion: null, saveConflict: null, savedGraph: null, runState: 'idle', runOptions: { force_recalculate: false }, runReady: false, graphLoaded: false }, false, 'reset');
       },
 
       // ── Undo/Redo (#24) ───────────────────────────────────────────────
@@ -455,14 +532,20 @@ export const createCanvasStore = () => create(
       // setNodes/setEdges non esistono piu': un test di enumerazione vieta di
       // reintrodurli (tests/shared/canvasMutationChannels.contract.test.js).
 
-      /** Carica il grafo dal backend: stato pulito e cronologia azzerata. */
-      loadGraph: (nodes, edges) => {
+      /**
+       * Carica il grafo dal backend: stato pulito e cronologia azzerata.
+       * Terzo argomento: la versione del server da cui parte la scheda
+       * (utils/canvasVersion.serverVersionOf(project)): `canvasVersion`, base
+       * del salvataggio condizionato (assente = scrittura compatibile), e
+       * `updatedAt`, orario del server per la copia di sicurezza.
+       */
+      loadGraph: (nodes, edges, { canvasVersion = null, updatedAt = null } = {}) => {
         lastSnapshotTs = 0;
         // Collegamenti doppi dei canvas vecchi: tolti al caricamento; la
         // correzione parte col prossimo salvataggio (pendingSync).
         const unique = uniqueDataEdges(edges);
         set(
-          { nodes, edges: unique, savedGraph: { nodes, edges: unique }, graphLoaded: true, isDirty: false, pendingSync: unique !== edges, past: [], future: [], validationHighlights: [], lastValidationSummary: null },
+          { nodes, edges: unique, savedGraph: { nodes, edges: unique }, graphLoaded: true, isDirty: false, pendingSync: unique !== edges, past: [], future: [], validationHighlights: [], lastValidationSummary: null, canvasVersion: canvasVersion || null, lastSavedServerAt: updatedAt || null, saveConflict: null },
           false,
           'loadGraph',
         );
@@ -871,6 +954,28 @@ export const createCanvasStore = () => create(
        * può bloccare l'esecuzione se il salvataggio fallisce.
        */
       handleSaveQuiet: saveCanvasSerialized,
+
+      /**
+       * Dopo un conflitto di versione, scelta esplicita "Sovrascrivi": la
+       * scrittura rifiutata (salvataggio o ripristino) riparte senza base.
+       * Solo utils/serverActions la chiama.
+       */
+      overwriteAfterConflict: async () => {
+        const conflict = get().saveConflict;
+        if (!conflict || get().isReadOnly) return null;
+        if (conflict.kind === 'restore') {
+          return { kind: 'restore', response: await restoreVersionConditioned(conflict.versionId, { force: true }) };
+        }
+        forceNext = true;
+        try {
+          return { kind: 'save', response: await saveCanvasSerialized() };
+        } finally {
+          forceNext = false;
+        }
+      },
+
+      /** Ripristino di una versione (condizionato). Solo utils/serverActions. */
+      restoreVersionQuiet: (versionId) => restoreVersionConditioned(versionId),
 
       /**
        * Marca il canvas come "in sync con il backend" (isDirty = false).

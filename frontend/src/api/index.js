@@ -11,7 +11,7 @@
  *   projects.js       → CRUD progetti, canvas, esecuzione, preview, download
  *   connections.js    → CRUD connessioni DB, test, schema tabelle
  *   tasks.js          → polling task asincroni, cancel, download
- *   enrichment.js     → validate, estimate, execute arricchimento
+ *   enrichment.js     → preflight (stima con gli input), avvio arricchimento
  *   apiConnections.js → CRUD connettori esterni (API, eseguibili, datasource)
  *   files.js          → upload/gestione file caricati
  *   features.js       → Feature Service ArcGIS
@@ -59,8 +59,7 @@ export {
 } from './tasks';
 
 export {
-  validateEnrichment,
-  estimateEnrichment,
+  preflightEnrichment,
   executeEnrichmentAsync,
 } from './enrichment';
 
@@ -110,6 +109,8 @@ export {
 
 export {
   inferProjectSchemas,
+  distinctNodeValues,
+  restoreCanvasVersion,
 } from './projects';
 
 export { downloadTaskOutput, cleanupTaskCompletely } from './tasks';

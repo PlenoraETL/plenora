@@ -60,6 +60,9 @@ const ParameterInput = ({
   sourceLabel = null,
   targetNodeId = null,
   transformDefinition = null,
+  // Configurazione dell'operazione: altri parametri che un editor legge
+  // (Mappa valori: la colonna da mappare).
+  config = null,
 }) => {
   const {
     type,
@@ -262,8 +265,20 @@ const ParameterInput = ({
           />
         );
 
-      case 'value_mapping':
-        return <ValueMappingInput value={value} onChange={onChange} />;
+      case 'value_mapping': {
+        // «Riempi con i valori presenti»: la colonna e' il parametro colonna
+        // della stessa operazione (Lookup: `column`, con il suo id).
+        const columnParam = (transformDefinition?.parameters || []).find(p => p.type === 'column');
+        return (
+          <ValueMappingInput
+            value={value}
+            onChange={onChange}
+            nodeId={targetNodeId}
+            column={columnParam ? config?.[columnParam.id] : null}
+            columnId={columnParam ? config?.[`${columnParam.id}_column_id`] : null}
+          />
+        );
+      }
 
       case 'pivot_mapping':
         return (

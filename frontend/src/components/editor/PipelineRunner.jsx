@@ -12,14 +12,31 @@
  *   showValidationResult(result) mostra un esito (es. salvataggio fallito)
  *
  * Ordine di Esegui: risorse accessibili e tipi di input eseguibili in questa
- * modalita' -> salva (utils/serverActions) -> valida -> lancia. Con runState
- * 'starting' o 'running' non parte niente (un'esecuzione alla volta).
+ * modalita' -> salva (utils/serverActions) -> valida -> prepara -> lancia.
+ * "Prepara" e' la finestra UNICA «Prima di avviare» (BeforeRunModal, Blocco
+ * A regola 5), aperta solo se serve (utils/beforeRun.beforeRunReasons):
+ * input runtime, opzioni dello staff, stima di Arricchisci da confermare
+ * (POST /preflight con gli stessi input dell'avvio), avvisi che bloccano.
+ * Altrimenti Esegui parte con un clic. L'avvio di Arricchisci porta
+ * l'impronta della stima; se il server risponde 409 preparation_changed la
+ * stima si rifa' e la finestra mostra il motivo.
+ * Con runState 'starting' (anche a finestra aperta) o 'running' non parte
+ * niente (un'esecuzione alla volta). REGOLA: runState e' 'starting' dall'inizio
+ * di OGNI preparazione dell'avvio fino all'apertura della finestra (che lo
+ * tiene) o all'avvio vero ('running', useExecution). Le preparazioni sono:
+ * Esegui (salva, valida, stima) e la stima rifatta dopo un 409
+ * preparation_changed (avvio diretto o dalla finestra: l'esecuzione rifiutata
+ * ha gia' riportato lo stato a 'idle'). L'UNICO punto che mette 'starting' e'
+ * `beginPreparation`; `openWindow` (UNICO punto che apre la finestra) la
+ * chiama. Gli errori mostrati (stima, avvio) passano da requestErrorMessage.
  * Valida e Anteprima leggono la versione salvata: con modifiche non salvate
  * chiedono prima "Salva e continua".
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ValidationModal from '../modals/ValidationModal';
+import BeforeRunModal from './BeforeRunModal';
 import { validateProjectCanvas } from '../../api/projects';
+import { preflightEnrichment } from '../../api/enrichment';
 import {
   accessDeniedResult, backendReportToResult, saveFailedResult,
   unsupportedInputsResult, validationRequestFailedResult,
@@ -27,7 +44,13 @@ import {
 import { describeAccessDeniedNodes } from '../../utils/canvasAccessControl';
 import { unsupportedInputNodes } from '../../utils/runtimeInputKinds';
 import { saveBeforeServerRead, saveForRun } from '../../utils/serverActions';
+import {
+  beforeRunReasons, initialInputValues, inputsKey, isPreparationChanged, needsPreflight, runInputs,
+} from '../../utils/beforeRun';
+import useRuntimeInputDefinitions from '../../hooks/useRuntimeInputDefinitions';
+import { nodeTitle } from '../canvas/nodeDescriptors';
 import useCanvasStore from '../../store/useCanvasStore';
+import { requestErrorMessage } from '../../utils/errorMessages';
 
 const OUTPUT_TYPES = new Set(['result', 'resultNode']);
 const outputId = (nodes) => (nodes || []).find(n => OUTPUT_TYPES.has(n.type))?.id || null;
@@ -72,12 +95,56 @@ export function runBlockedResult(nodes, mode) {
   return unsupported.length ? unsupportedInputsResult(unsupported) : null;
 }
 
-export default function PipelineRunner() {
+// Input runtime del canvas: si ricalcolano solo quando cambiano i nodi di input.
+const inputNodesKey = (s) => JSON.stringify((s.nodes || []).filter(n => n.type === 'project_input').map(n => [n.id, n.data]));
+
+// UNICO punto che mette 'starting': inizio di una preparazione dell'avvio.
+const beginPreparation = () => useCanvasStore.getState().setRunState('starting');
+
+const setIdleIfStarting = () => {
+  if (useCanvasStore.getState().runState === 'starting') useCanvasStore.getState().setRunState('idle');
+};
+
+const nodeLabel = (id) => {
+  const node = useCanvasStore.getState().nodes.find(n => n.id === id);
+  return node ? nodeTitle(node.type, node.data) : id;
+};
+
+/** Stima di Arricchisci con gli input dell'avvio: { preflight, preflightError }. */
+async function preflightFor(inputs, runOptions) {
+  try {
+    const preflight = await preflightEnrichment(useCanvasStore.getState().projectId, {
+      inputs, force_recalculate: Boolean(runOptions?.force_recalculate),
+    });
+    return { preflight, preflightError: null };
+  } catch (e) {
+    console.error('Stima prima di avviare non riuscita:', e);
+    return { preflight: null, preflightError: requestErrorMessage(e) };
+  }
+}
+
+export default function PipelineRunner({ user = null }) {
   const [shown, setShown] = useState(null);
+  // Finestra «Prima di avviare»: null = chiusa.
+  const [request, setRequest] = useState(null);
+  const inputsSignature = useCanvasStore(inputNodesKey);
+  const inputNodes = useMemo(
+    () => JSON.parse(inputsSignature).map(([id, data]) => ({ id, type: 'project_input', data })),
+    [inputsSignature],
+  );
+  const inputDefinitions = useRuntimeInputDefinitions(inputNodes);
+  const definitionsRef = useRef(inputDefinitions);
+  definitionsRef.current = inputDefinitions;
 
   const showResult = useCallback((result) => {
     broadcastHighlights(result);
     setShown(result);
+  }, []);
+
+  // UNICO punto che apre «Prima di avviare»: finestra aperta = 'starting'.
+  const openWindow = useCallback((next) => {
+    beginPreparation();
+    setRequest(next);
   }, []);
 
   const validate = useCallback(async () => {
@@ -85,28 +152,95 @@ export default function PipelineRunner() {
     if (result) showResult(result);
   }, [showResult]);
 
+  // Avvio vero: le scelte della finestra (o nessuna) vanno a onExecute.
+  // 409 preparation_changed: stima rifatta e finestra riaperta col motivo.
+  const launch = useCallback(async ({ inputs = {}, intermediateMode = null, fingerprint = null } = {}, runOptions) => {
+    const opts = { ...runOptions };
+    if (inputs && Object.keys(inputs).length) opts.inputs = inputs;
+    if (intermediateMode) opts.intermediate_mode = intermediateMode;
+    if (fingerprint) opts.preparation_fingerprint = fingerprint;
+    const onExecute = useCanvasStore.getState().getEditorAction('onExecute');
+    if (!onExecute) return false;
+    try {
+      await onExecute(outputId(useCanvasStore.getState().nodes), opts);
+      return false;
+    } catch (e) {
+      if (!isPreparationChanged(e)) throw e;
+      // Nuova preparazione: 'starting' anche durante la stima rifatta.
+      beginPreparation();
+      const st = useCanvasStore.getState();
+      const definitions = definitionsRef.current;
+      const estimate = await preflightFor(inputs || {}, runOptions);
+      openWindow({
+        id: Date.now(), mode: st.mode, inputDefinitions: definitions, user, runOptions,
+        values: { ...initialInputValues(definitions), ...(inputs || {}) },
+        preflightKey: inputsKey(runInputs(definitions, { ...initialInputValues(definitions), ...(inputs || {}) })),
+        ...estimate,
+        changedMessage: e?.message || 'La preparazione è cambiata dalla stima.',
+      });
+      return true;
+    }
+  }, [user, openWindow]);
+
   const run = useCallback(async (options) => {
     const store = useCanvasStore.getState();
     if (store.runState === 'starting' || store.runState === 'running') return;
     const blocked = runBlockedResult(store.nodes, store.mode);
     if (blocked) { showResult(blocked); return; }
     const runOptions = options || store.runOptions || { force_recalculate: false };
-    store.setRunState('starting');
+    beginPreparation();
+    // true = la finestra «Prima di avviare» resta aperta: lo stato resta
+    // 'starting' finche' l'utente avvia o annulla.
+    let windowOpen = false;
     try {
       const result = await validateViaBackend(saveForRun);
       if (!result) return;
       broadcastHighlights(result);
       if (!result.isValid) { setShown(result); return; }
-      const onExecute = useCanvasStore.getState().getEditorAction('onExecute');
-      if (onExecute) await onExecute(outputId(useCanvasStore.getState().nodes), runOptions);
+      const st = useCanvasStore.getState();
+      const definitions = definitionsRef.current;
+      const values = initialInputValues(definitions);
+      // Senza input da chiedere la stima si fa subito (con input, la fa la
+      // finestra con i valori scelti).
+      const estimate = needsPreflight(st.mode) && definitions.length === 0
+        ? { ...(await preflightFor({}, runOptions)), preflightKey: inputsKey({}) }
+        : { preflight: null, preflightError: null, preflightKey: null };
+      const reasons = beforeRunReasons({ inputDefinitions: definitions, user, ...estimate });
+      if (!reasons.length) {
+        windowOpen = await launch({ fingerprint: estimate.preflight?.preparation_fingerprint || null }, runOptions);
+        return;
+      }
+      windowOpen = true;
+      openWindow({ id: Date.now(), mode: st.mode, inputDefinitions: definitions, user, runOptions, values, ...estimate, changedMessage: null });
     } catch (e) {
       console.error('Avvio esecuzione fallito:', e);
-      showResult(validationRequestFailedResult(`Avvio non riuscito: ${e?.message || 'errore inatteso'}.`));
+      showResult(validationRequestFailedResult(`Avvio non riuscito: ${requestErrorMessage(e)}`));
     } finally {
       // L'esecuzione vera tiene runState 'running' (useExecution).
-      if (useCanvasStore.getState().runState === 'starting') useCanvasStore.getState().setRunState('idle');
+      if (!windowOpen) setIdleIfStarting();
     }
-  }, [showResult]);
+  }, [showResult, launch, user, openWindow]);
+
+  // Dalla finestra: avvia con le scelte fatte, o annulla.
+  const launchFromWindow = useCallback(async (choice) => {
+    const runOptions = request?.runOptions || useCanvasStore.getState().runOptions || { force_recalculate: false };
+    setRequest(null);
+    let windowOpen = false;
+    try {
+      windowOpen = await launch(choice, runOptions);
+    } catch (e) {
+      console.error('Avvio esecuzione fallito:', e);
+      showResult(validationRequestFailedResult(`Avvio non riuscito: ${requestErrorMessage(e)}`));
+    } finally {
+      if (!windowOpen) setIdleIfStarting();
+    }
+  }, [request, launch, showResult]);
+  const cancelWindow = useCallback(() => { setRequest(null); setIdleIfStarting(); }, []);
+  const preflightFromWindow = useCallback(async (inputs) => {
+    const res = await preflightFor(inputs, request?.runOptions);
+    if (res.preflightError) throw new Error(res.preflightError);
+    return res.preflight;
+  }, [request]);
 
   const preview = useCallback(async (id) => {
     const result = await validateViaBackend(() => saveBeforeServerRead("L'anteprima"));
@@ -145,11 +279,20 @@ export default function PipelineRunner() {
   }, []);
 
   return (
-    <ValidationModal
-      isOpen={Boolean(shown)}
-      onClose={() => setShown(null)}
-      result={shown || { isValid: true, issues: [] }}
-      onFocusNode={focusNode}
-    />
+    <>
+      <ValidationModal
+        isOpen={Boolean(shown)}
+        onClose={() => setShown(null)}
+        result={shown || { isValid: true, issues: [] }}
+        onFocusNode={focusNode}
+      />
+      <BeforeRunModal
+        request={request}
+        onPreflight={preflightFromWindow}
+        onLaunch={launchFromWindow}
+        onCancel={cancelWindow}
+        nodeLabel={nodeLabel}
+      />
+    </>
   );
 }

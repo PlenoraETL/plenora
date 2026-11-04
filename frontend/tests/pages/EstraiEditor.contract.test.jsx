@@ -292,7 +292,7 @@ describe('EstraiEditor', () => {
         connection: currentEditorData.projectConnection,
       });
       expect(createEdgeFromDataMock).toHaveBeenCalledWith(storedEdges[0], loadedNodes);
-      expect(loadGraphMock).toHaveBeenCalledWith(loadedNodes, [builtEdge]);
+      expect(loadGraphMock).toHaveBeenCalledWith(loadedNodes, [builtEdge], { canvasVersion: null, updatedAt: null });
     });
   });
 

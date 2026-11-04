@@ -4,17 +4,18 @@
  * Lista le versioni salvate di un progetto, permette di salvarne una nuova
  * (snapshot del canvas corrente) e di ripristinarne una. Il ripristino
  * sovrascrive il canvas lato server (passa per update_canvas → reset
- * canvas_validated + cascata) e ricarica l'editor per mostrarlo.
+ * canvas_validated + cascata), condizionato alla versione della scheda, e
+ * ricarica l'editor per mostrarlo.
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import { useToast } from '../../hooks/useToast';
 import useCanvasStore from '../../store/useCanvasStore';
 import { hasUnsavedChanges } from '../../store/saveState';
-import { serverCanvasReplaced } from '../../utils/localDrafts';
+import { restoreVersion } from '../../utils/serverActions';
 import { toastApiError } from '../../utils/toastApiError';
 import {
-  createCanvasVersion, listCanvasVersions, restoreCanvasVersion,
+  createCanvasVersion, listCanvasVersions,
 } from '../../api/projects';
 import './CanvasVersionsModal.css';
 
@@ -73,17 +74,14 @@ export default function CanvasVersionsModal({ isOpen, onClose, projectId }) {
     if (isReadOnly) return;
     if (confirmId !== versionId) { setConfirmId(versionId); return; }
     try {
-      await restoreCanvasVersion(projectId, versionId);
+      // Scrittura condizionata alla versione della scheda (Blocco A, regola
+      // 8): se il server e' andato oltre, niente ripristino e l'avviso
+      // dell'editor offre le scelte. Riuscito: la copia di sicurezza di
+      // QUESTA scheda non vale piu' (le altre restano e vengono avvisate) e
+      // l'editor si ricarica dal percorso normale di apertura
+      // (utils/serverActions.restoreVersion).
+      await restoreVersion(versionId);
       toast.success('Versione ripristinata, ricarico l’editor…');
-      // Ricarica l'editor per mostrare il canvas ripristinato attraverso il
-      // normale percorso di load (deserializzazione per-editor). Le modifiche
-      // locali sono superate dal ripristino confermato: il canvas e' pulito,
-      // altrimenti l'avviso "modifiche non salvate" bloccava il ricaricamento.
-      // Il canvas del server e' cambiato: la copia di sicurezza di QUESTA
-      // scheda non vale piu'; le altre schede restano e vengono avvisate.
-      useCanvasStore.getState().markClean();
-      serverCanvasReplaced(projectId);
-      setTimeout(() => window.location.reload(), 600);
     } catch (err) {
       toastApiError(toast, err, 'Errore ripristino versione');
       setConfirmId(null);

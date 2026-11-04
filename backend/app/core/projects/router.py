@@ -5,7 +5,6 @@ Endpoint CRUD progetti, gestione canvas, e inferenza schema.
 """
 from app.core.eseguibili.manifest import compile_manifest
 from app.core.manipola.canvas_data_preparation import CanvasDataPreparation, PREPARATION_ERRORS, classify_preparation_error
-from app.core.manipola.preparation import is_null_scalar
 from app.core.orchestrator.execution_contract import PipelineExecutionContract
 from app.core.orchestrator.runtime_inputs import apply_project_runtime_inputs
 from app.core.projects.canvas_validation import _StaticCanvasService
@@ -956,8 +955,10 @@ def distinct_node_values(project_id: str, node_id: str, body: DistinctRequest,
     counts = {}
     truncated = False
     for value in frame[name]:
+        # Stessa forma di testo dell'esecuzione del Lookup (lookup_mapping.py):
+        # il null resta null (value None, is_null True), mai "None"/"nan".
         text_value = lookup_value_text(value)
-        key = (is_null_scalar(value), text_value)
+        key = (text_value is None, text_value)
         if key in counts:
             counts[key] += 1
         elif len(counts) < body.limit:

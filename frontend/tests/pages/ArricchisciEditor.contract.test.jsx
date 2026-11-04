@@ -138,15 +138,6 @@ vi.mock('../../src/hooks', () => ({
   useUnsavedChangesGuard: () => ({ confirmNavigation: () => true }),
   useValidationHighlights: () => undefined,
   useMultiModal: () => modalsMock,
-  useEnrichmentValidation: () => ({
-    validation: null,
-    estimation: null,
-    isValidating: false,
-    isEstimating: false,
-    formatTime: vi.fn(),
-    validateAndEstimate: vi.fn(),
-    reset: vi.fn(),
-  }),
 }));
 
 vi.mock('../../src/hooks/useToast', () => ({
@@ -248,7 +239,9 @@ describe('ArricchisciEditor', () => {
     currentEditorData = {
       ...currentEditorData,
       project: {
-        metadata: { name: 'Arricchisci Orders' },
+        metadata: { name: 'Arricchisci Orders', updated_at: '2026-11-04T10:00:00Z' },
+        // Versione del canvas del GET: base del salvataggio condizionato.
+        canvas_version: 'c1:abc',
         canvas: {
           nodes: [{ id: 'raw-1', type: 'project_source' }],
           edges: [
@@ -273,7 +266,7 @@ describe('ArricchisciEditor', () => {
           sourceHandle: 'output',
           targetHandle: 'input',
         },
-      ]);
+      ], { canvasVersion: 'c1:abc', updatedAt: '2026-11-04T10:00:00Z' });
     });
   });
 

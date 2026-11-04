@@ -1,7 +1,7 @@
 /**
  * useMountedRef — hook utility per evitare setState post-unmount.
  *
- * Pattern condiviso tra gli hook async (useEnrichmentValidation,
+ * Pattern condiviso tra gli hook async (
  * useProjectListData, ecc.): ogni callback
  * `async` che fa setState dopo `await` deve verificare che il
  * componente sia ancora montato per evitare leak di reference + warning

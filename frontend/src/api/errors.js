@@ -94,3 +94,28 @@ export function formatCascadeDependencies(dependencies, hiddenCount = 0) {
   }
   return parts.join(' e ');
 }
+
+/**
+ * Motivo tipizzato di un errore del backend (`reason`), in qualunque forma
+ * arrivi: envelope nuovo (`details.reason`), `detail` legacy di FastAPI
+ * (`detail.reason`) o in cima al corpo. Esempi: canvas_version_conflict
+ * (salvataggio superato), preparation_changed (avvio di Arricchisci dopo il
+ * preflight), source_unavailable/data_unreadable (letture dei dati).
+ * @returns {string|null}
+ */
+export function errorReason(err) {
+  const data = err?.response?.data;
+  if (!data || typeof data !== 'object') return null;
+  const pick = (o) => (o && typeof o === 'object' && typeof o.reason === 'string' ? o.reason : null);
+  return pick(data.details) || pick(data.detail) || pick(data);
+}
+
+/** Campo del corpo dell'errore (envelope nuovo o `detail` legacy). */
+export function errorField(err, name) {
+  const data = err?.response?.data;
+  if (!data || typeof data !== 'object') return undefined;
+  for (const o of [data.details, data.detail, data]) {
+    if (o && typeof o === 'object' && o[name] !== undefined) return o[name];
+  }
+  return undefined;
+}

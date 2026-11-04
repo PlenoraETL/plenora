@@ -41,8 +41,7 @@ import DataSourceNode from '../components/nodes/DataSourceNode';
 import { usePreview, useExecution, useCanvasCore, useCanvasSave, useUnsavedChangesGuard, useValidationHighlights } from '../hooks';
 import { useEditorData } from '../hooks/useEditorData';
 import useCanvasStore from '../store/useCanvasStore';
-import useRuntimeInputDefinitions from '../hooks/useRuntimeInputDefinitions';
-import { executionNeedsConfig } from '../utils/executionConfig';
+import { serverVersionOf } from '../utils/canvasVersion';
 import { analyzeCanvas, branchSteps, nodeRole } from '../utils/canvasGraph';
 import { connectStepData, cloneStepData } from '../utils/branchNodes';
 import { nodeTitle } from '../components/canvas/nodeDescriptors';
@@ -139,11 +138,6 @@ const ManipolaEditorContent = () => {
   // `ResultNode.handleExecuteWithValidation` valida (POST /validate) PRIMA di
   // chiamare `onExecute`: se fallisce apre il modal e ritorna; quindi questo
   // `onBeforeExecute` viene raggiunto solo a validation-passed.
-  // Input runtime chiesti all'esecuzione, come in Estrai (audit R9.1).
-  const runtimeInputDefinitions = useRuntimeInputDefinitions(nodes);
-  // Letto al clic su Esegui (le azioni registrate non vedono i render nuovi).
-  const needsRunConfigRef = useRef(false);
-  needsRunConfigRef.current = executionNeedsConfig(runtimeInputDefinitions, user);
   const execution = useExecution(projectId, {
     onBeforeExecute: saveForRun,
     tracksRunState: true,
@@ -165,7 +159,7 @@ const ManipolaEditorContent = () => {
     const loadedEdges = [...rawEdges, ...hydrateParameterBindingEdges(loadedNodes)];
     // loadGraph: grafo dal backend, stato pulito e cronologia azzerata. Le
     // colonne le ricalcola la sottoscrizione unica (hooks/useColumns).
-    loadGraph(loadedNodes, loadedEdges);
+    loadGraph(loadedNodes, loadedEdges, serverVersionOf(project));
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // loadGraph/deserializeNodes omessi: load programmatico una sola volta
     // per project, non ad ogni re-bind degli handler.
@@ -176,11 +170,9 @@ const ManipolaEditorContent = () => {
   // versione (components/editor/useEditorActions, regola 9 Blocco A).
   useEditorActions({
     onPreview:                    () => preview.handlePreview(),
-    onExecute:                    (nodeId, opts) => {
-      // Risorse non accessibili: bloccate prima del salvataggio nel
-      // percorso unico di ResultNode (Fase 4, M7).
-      return execution.prepareExecute(opts, { needsConfig: needsRunConfigRef.current });
-    },
+    // Input e conferme: gia' nella finestra unica «Prima di avviare»
+    // (editor/PipelineRunner, Blocco A regola 5).
+    onExecute:                    (nodeId, opts) => execution.handleExecute(opts),
   });
 
   // Sincronizza connections nello store
@@ -518,7 +510,7 @@ const ManipolaEditorContent = () => {
         {showVersions && (
           <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
         )}
-        <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title={`${term('run').icon} Esecuzione del flusso Manipola`} projectType="manipola" caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user} inputDefinitions={runtimeInputDefinitions} />
+        <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title={`${term('run').icon} Esecuzione del flusso Manipola`} projectType="manipola" caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} />
         <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
           data={preview.data} loading={preview.loading} error={preview.error}
           permissionRevoked={preview.permissionRevoked}
@@ -530,6 +522,7 @@ const ManipolaEditorContent = () => {
   return (
     <EditorShell
       projectId={projectId}
+      user={user}
       prefix="manipola"
       loading={loading}
       loadError={loadError}

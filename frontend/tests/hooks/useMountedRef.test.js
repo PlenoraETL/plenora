@@ -2,7 +2,7 @@
  * Contract test per `useMountedRef`.
  *
  * Helper estratto come single-source del pattern "guard async callback
- * contro setState post-unmount" (vedi useEnrichmentValidation,
+ * contro setState post-unmount" (vedi
  * useProjectListData).
  */
 

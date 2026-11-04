@@ -97,9 +97,19 @@ export const listCanvasVersions = async (projectId) => {
   return response.data;
 };
 
-/** Ripristina il canvas a una versione. @returns {Promise<{canvas}>} */
-export const restoreCanvasVersion = async (projectId, versionId) => {
-  const response = await http.post(`/projects/${projectId}/versions/${versionId}/restore`);
+/**
+ * Ripristina il canvas a una versione. `baseCanvasVersion` (token
+ * `canvas_version` della versione da cui parte la scheda) rende il
+ * ripristino condizionato: se il server e' andato oltre risponde 409
+ * `canvas_version_conflict` (Blocco A, regola 8). Senza base: ripristino
+ * senza controllo. L'unico chiamante e' lo store (scrittura condizionata).
+ * @returns {Promise<{canvas, canvas_version, updated_at}>}
+ */
+export const restoreCanvasVersion = async (projectId, versionId, baseCanvasVersion = null) => {
+  const url = `/projects/${projectId}/versions/${versionId}/restore`;
+  const response = baseCanvasVersion
+    ? await http.post(url, { base_canvas_version: baseCanvasVersion })
+    : await http.post(url);
   return response.data;
 };
 
@@ -125,10 +135,12 @@ export const getProject = async (projectId) => {
 };
 
 /**
- * Salva il canvas di un progetto (nodi + edges).
+ * Salva il canvas di un progetto (nodi + edges). Con `base_canvas_version`
+ * nel corpo il salvataggio e' condizionato alla versione (409
+ * `canvas_version_conflict` se superata). L'unico chiamante e' lo store.
  * @param {string} projectId
- * @param {Object} canvas     - { nodes, edges }
- * @returns {Promise<Object>}
+ * @param {Object} canvas     - { nodes, edges, base_canvas_version? }
+ * @returns {Promise<{status, project_id, canvas_version, updated_at}>}
  */
 export const updateCanvas = async (projectId, canvas) => {
   const response = await http.put(`/projects/${projectId}/canvas`, canvas);
@@ -271,5 +283,22 @@ export const downloadProjectFile = async (projectId, filename) => {
  */
 export const inferProjectSchemas = async (projectId, canvas) => {
   const response = await http.post(`/projects/${projectId}/schemas`, { canvas });
+  return response.data;
+};
+
+/**
+ * Valori distinti di una colonna nell'INGRESSO di un nodo (Lookup, «Riempi
+ * con i valori presenti»), letti dal server sul canvas dell'editor anche non
+ * salvato, con la stessa preparazione dell'esecuzione. Testo dei valori nella
+ * forma UNICA che usa il Lookup in esecuzione (backend
+ * shared/execution/lookup_mapping.lookup_value_text: 5.0 -> "5", date
+ * "2024-01-05"); il null resta distinto (`is_null: true`, `value: null`).
+ * @returns {Promise<{values: Array<{value, is_null, count}>, column, column_id,
+ *   truncated, sampled, sampled_rows, reason}>}
+ */
+export const distinctNodeValues = async (projectId, nodeId, { canvas, column = null, columnId = null, limit = 200 }) => {
+  const response = await http.post(`/projects/${projectId}/nodes/${nodeId}/distinct`, {
+    canvas, column, column_id: columnId, limit,
+  });
   return response.data;
 };

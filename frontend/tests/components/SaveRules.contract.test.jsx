@@ -7,6 +7,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('../../src/api/projects', async (orig) => ({
   ...(await orig()),
   updateCanvas: vi.fn(async () => ({ status: 'ok' })),
+  // Server che non versiona: PUT e GET senza canvas_version (utils/canvasVersion.tokenAfterWrite).
+  getProject: vi.fn(async () => ({ metadata: {}, canvas_version: null })),
   validateProjectCanvas: vi.fn(async () => ({ valid: true, has_errors: false, issues: [] })),
 }));
 

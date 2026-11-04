@@ -1,10 +1,10 @@
 /**
  * Contract test — useExecution (FE-NEXT-1, FE-T2).
  *
- * Hook con due flow paralleli:
- *   1) Legacy: handleExecute(opts) parte subito, apre modal in isExecuting.
- *   2) prepareExecute(opts) -> awaitingLaunch=true (config step
- *      del modal) -> launch(intermediateMode) parte mergiando opts.
+ * handleExecute(opts) parte subito e apre la finestra in isExecuting: input,
+ * opzioni e conferme arrivano gia' in opts dalla finestra unica «Prima di
+ * avviare» (editor/PipelineRunner, Blocco A regola 5). Un 409
+ * preparation_changed torna a chi ha avviato (niente esito di errore).
  *
  * Strategia mock:
  *  - useTaskPolling: stub via vi.mock -> espone startPolling spy che NON
@@ -71,7 +71,6 @@ describe('useExecution — initial state + return shape', () => {
     const { result } = renderHook(() => useExecution('proj-1'));
     expect(result.current.showModal).toBe(false);
     expect(result.current.isExecuting).toBe(false);
-    expect(result.current.awaitingLaunch).toBe(false);
     expect(result.current.result).toBeNull();
     expect(result.current.taskId).toBeNull();
     expect(result.current.progress).toBe(0);
@@ -83,100 +82,12 @@ describe('useExecution — initial state + return shape', () => {
   it('espone metodi pubblici di ciclo vita', () => {
     const { result } = renderHook(() => useExecution('proj-1'));
     expect(typeof result.current.handleExecute).toBe('function');
-    expect(typeof result.current.prepareExecute).toBe('function');
-    expect(typeof result.current.launch).toBe('function');
+    expect(result.current.prepareExecute).toBeUndefined();
+    expect(result.current.launch).toBeUndefined();
     expect(typeof result.current.closeModal).toBe('function');
     expect(typeof result.current.reset).toBe('function');
     expect(typeof result.current.cancelTask).toBe('function');
     expect(typeof result.current.downloadTaskResult).toBe('function');
-  });
-});
-
-
-describe('useExecution prepareExecute / launch', () => {
-  it('prepareExecute apre il modal in stato config (awaitingLaunch=true, isExecuting=false)', () => {
-    const { result } = renderHook(() => useExecution('proj-1'));
-    act(() => { result.current.prepareExecute({ force_recalculate: true }); });
-
-    expect(result.current.showModal).toBe(true);
-    expect(result.current.awaitingLaunch).toBe(true);
-    expect(result.current.isExecuting).toBe(false);
-    expect(result.current.result).toBeNull();
-    // executeFn NON invocata
-    expect(executeProjectQueryMock).not.toHaveBeenCalled();
-    expect(startPollingMock).not.toHaveBeenCalled();
-  });
-
-  it('launch(null) eredita opts da prepareExecute, NON aggiunge intermediate_mode', async () => {
-    executeProjectQueryMock.mockResolvedValue({ async: true, task_id: 't1', message: 'queued' });
-    const { result } = renderHook(() => useExecution('proj-1'));
-
-    act(() => { result.current.prepareExecute({ force_recalculate: true }); });
-    await act(async () => { await result.current.launch(null); });
-
-    expect(executeProjectQueryMock).toHaveBeenCalledTimes(1);
-    expect(executeProjectQueryMock).toHaveBeenCalledWith('proj-1', { force_recalculate: true });
-    // Stato post-launch: awaitingLaunch chiuso, polling avviato
-    expect(result.current.awaitingLaunch).toBe(false);
-    expect(result.current.isExecuting).toBe(true);
-    expect(startPollingMock).toHaveBeenCalledTimes(1);
-    expect(startPollingMock.mock.calls[0][0]).toBe('t1');
-  });
-
-  it('launch("full_artifact") merge intermediate_mode negli opts della prepareExecute', async () => {
-    executeProjectQueryMock.mockResolvedValue({ async: true, task_id: 't2', message: 'queued' });
-    const { result } = renderHook(() => useExecution('proj-1'));
-
-    act(() => { result.current.prepareExecute({ force_recalculate: false }); });
-    await act(async () => { await result.current.launch('full_artifact'); });
-
-    expect(executeProjectQueryMock).toHaveBeenCalledWith('proj-1', {
-      force_recalculate: false,
-      intermediate_mode: 'full_artifact',
-    });
-  });
-
-  it('launch senza prepareExecute (opts ref vuoto) -> POST con opts vuoti', async () => {
-    executeProjectQueryMock.mockResolvedValue({ async: true, task_id: 't3' });
-    const { result } = renderHook(() => useExecution('proj-1'));
-
-    await act(async () => { await result.current.launch(null); });
-    expect(executeProjectQueryMock).toHaveBeenCalledWith('proj-1', {});
-  });
-
-  it('launch con intermediate_mode falsy ("" / null) -> NON serializza il param', async () => {
-    executeProjectQueryMock.mockResolvedValue({ async: true, task_id: 't4' });
-    const { result } = renderHook(() => useExecution('proj-1'));
-
-    act(() => { result.current.prepareExecute({ force_recalculate: true }); });
-    await act(async () => { await result.current.launch(''); }); // empty string falsy
-    expect(executeProjectQueryMock).toHaveBeenCalledWith('proj-1', { force_recalculate: true });
-  });
-
-  it('launch consuma opts (clear pendingOptsRef): seconda launch parte da zero', async () => {
-    executeProjectQueryMock.mockResolvedValue({ async: true, task_id: 't5' });
-    const { result } = renderHook(() => useExecution('proj-1'));
-
-    act(() => { result.current.prepareExecute({ force_recalculate: true }); });
-    await act(async () => { await result.current.launch(null); });
-    expect(executeProjectQueryMock).toHaveBeenLastCalledWith('proj-1', { force_recalculate: true });
-
-    // Fase 4, M7: un'esecuzione alla volta. Con il task ancora in corso una
-    // seconda launch non parte (niente doppie esecuzioni).
-    await act(async () => { await result.current.launch(null); });
-    expect(executeProjectQueryMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('launch consuma opts: finita la prima esecuzione, la seconda launch parte da zero', async () => {
-    // Risposta sincrona: l'esecuzione finisce subito, la seconda puo' partire.
-    executeProjectQueryMock.mockResolvedValue({ success: true });
-    const { result } = renderHook(() => useExecution('proj-1'));
-    act(() => { result.current.prepareExecute({ force_recalculate: true }); });
-    await act(async () => { await result.current.launch(null); });
-    expect(executeProjectQueryMock).toHaveBeenLastCalledWith('proj-1', { force_recalculate: true });
-    await act(async () => { await result.current.launch(null); });
-    expect(executeProjectQueryMock).toHaveBeenCalledTimes(2);
-    expect(executeProjectQueryMock).toHaveBeenLastCalledWith('proj-1', {});
   });
 });
 
@@ -190,7 +101,6 @@ describe('useExecution — handleExecute (legacy back-compat)', () => {
 
     expect(result.current.showModal).toBe(true);
     expect(result.current.isExecuting).toBe(true);
-    expect(result.current.awaitingLaunch).toBe(false); // mai entrato in config
     expect(executeProjectQueryMock).toHaveBeenCalledWith('proj-1', { format: 'csv' });
     expect(startPollingMock).toHaveBeenCalledTimes(1);
     expect(result.current.taskId).toBe('t10');
@@ -253,6 +163,23 @@ describe('useExecution — handleExecute (legacy back-compat)', () => {
     expect(result.current.taskStatus).toBe('failure');
     expect(result.current.result?.success).toBe(false);
     expect(result.current.result?.message).toMatch(/connection refused/);
+  });
+
+  it('409 preparation_changed: niente esito, finestra chiusa, errore a chi ha avviato', async () => {
+    globalThis.__frontendConsolePolicy.allowError = true;
+    const err = Object.assign(new Error('Preparazione cambiata'), {
+      response: { status: 409, data: { detail: { error: 'validation_error', reason: 'preparation_changed', message: 'Preparazione cambiata' } } },
+    });
+    executeProjectQueryMock.mockRejectedValue(err);
+    const { result } = renderHook(() => useExecution('proj-1'));
+
+    let thrown = null;
+    await act(async () => { try { await result.current.handleExecute({ preparation_fingerprint: 'f1' }); } catch (e) { thrown = e; } });
+
+    expect(thrown).toBe(err);
+    expect(result.current.showModal).toBe(false);
+    expect(result.current.isExecuting).toBe(false);
+    expect(result.current.result).toBeNull();
   });
 });
 
@@ -332,19 +259,14 @@ describe('useExecution — polling callback effects', () => {
 
 
 describe('useExecution — closeModal / reset / cancelTask', () => {
-  it('closeModal chiude il modal + resetta awaitingLaunch e pendingOpts', async () => {
+  it('closeModal chiude il modal', async () => {
     executeProjectQueryMock.mockResolvedValue({ async: true, task_id: 'tc1' });
     const { result } = renderHook(() => useExecution('proj-1'));
-    act(() => { result.current.prepareExecute({ force_recalculate: true }); });
-    expect(result.current.awaitingLaunch).toBe(true);
+    await act(async () => { await result.current.handleExecute({ force_recalculate: true }); });
+    expect(result.current.showModal).toBe(true);
 
     act(() => { result.current.closeModal(); });
     expect(result.current.showModal).toBe(false);
-    expect(result.current.awaitingLaunch).toBe(false);
-
-    // Una launch successiva senza prepareExecute non deve riusare gli opts vecchi
-    await act(async () => { await result.current.launch(null); });
-    expect(executeProjectQueryMock).toHaveBeenCalledWith('proj-1', {});
   });
 
   it('reset riporta tutto a zero', async () => {
@@ -355,7 +277,6 @@ describe('useExecution — closeModal / reset / cancelTask', () => {
     act(() => { result.current.reset(); });
     expect(result.current.showModal).toBe(false);
     expect(result.current.isExecuting).toBe(false);
-    expect(result.current.awaitingLaunch).toBe(false);
     expect(result.current.result).toBeNull();
     expect(result.current.progress).toBe(0);
     expect(result.current.taskStatus).toBeNull();

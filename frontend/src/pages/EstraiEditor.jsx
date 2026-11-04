@@ -32,8 +32,7 @@ import { columnSnapshot } from '../hooks/useColumns';
 import { columnsOf, estraiSourceLabel } from '../utils/columnSource';
 import { createEdgeFromData, deserializeNodes } from '../utils/nodeFactories';
 import { getLayerSchema } from '../api/features';
-import useRuntimeInputDefinitions from '../hooks/useRuntimeInputDefinitions';
-import { executionNeedsConfig } from '../utils/executionConfig';
+import { serverVersionOf } from '../utils/canvasVersion';
 import { usePreview, useExecution, useValidationHighlights, useEdgeHandlers, useCanvasCore, useCanvasSave, useUnsavedChangesGuard } from '../hooks';
 import { useEditorData } from '../hooks/useEditorData';
 import { beforePreview, saveForRun, saveNow } from '../utils/serverActions';
@@ -102,11 +101,6 @@ function EstraiEditor() {
   // Reset visible count when search changes
   useEffect(() => { setVisibleTableCount(TABLES_PAGE_SIZE); }, [searchQuery]);
   useEffect(() => { setVisibleViewCount(TABLES_PAGE_SIZE);  }, [viewSearchQuery]);
-  // Input runtime chiesti all'esecuzione: stesso hook dei tre editor (R9.1).
-  const runtimeInputDefinitions = useRuntimeInputDefinitions(nodes);
-  // Letto al clic su Esegui (le azioni registrate non vedono i render nuovi).
-  const needsRunConfigRef = useRef(false);
-  needsRunConfigRef.current = executionNeedsConfig(runtimeInputDefinitions, user);
   const preview    = usePreview(projectId, beforePreview);
   const execution  = useExecution(projectId, { onBeforeExecute: saveForRun, tracksRunState: true });
   const { saving, handleSaveCanvas } = useCanvasSave(saveNow, {
@@ -138,7 +132,7 @@ function EstraiEditor() {
     const loadedNodes = deserializeNodes(project.canvas.nodes, { connection: projectConnection });
     const loadedEdges = (project.canvas.edges || []).map(e => createEdgeFromData(e, loadedNodes));
     // loadGraph: grafo dal backend, stato pulito e cronologia azzerata.
-    loadGraph(loadedNodes, [...loadedEdges, ...hydrateParameterBindingEdges(loadedNodes)]);
+    loadGraph(loadedNodes, [...loadedEdges, ...hydrateParameterBindingEdges(loadedNodes)], serverVersionOf(project));
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // loadGraph/deserializeNodes/createEdgeFromData omessi: stabili dal
     // ciclo di vita store. Includerli rifirerebbe il load a ogni re-render.
@@ -180,11 +174,9 @@ function EstraiEditor() {
   // versione (components/editor/useEditorActions, regola 9 Blocco A).
   useEditorActions({
     onPreview:          () => preview.handlePreview(),
-    onExecute:          (nodeId, opts) => {
-      // Risorse non accessibili: bloccate prima del salvataggio nel
-      // percorso unico di ResultNode (Fase 4, M7).
-      return execution.prepareExecute(opts, { needsConfig: needsRunConfigRef.current });
-    },
+    // Input e conferme: gia' nella finestra unica «Prima di avviare»
+    // (editor/PipelineRunner, Blocco A regola 5).
+    onExecute:          (nodeId, opts) => execution.handleExecute(opts),
     onAddRelatedLayer:  handleAddRelatedLayer,
   });
 
@@ -595,8 +587,6 @@ function EstraiEditor() {
           onDownload={execution.downloadTaskResult}
           title={`${term('run').icon} Esecuzione della query`} projectType="estrai"
           caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling}
-          awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user}
-          inputDefinitions={runtimeInputDefinitions}
         />
         <PreviewModal
         isOpen={preview.showModal} onClose={preview.closeModal}
@@ -642,6 +632,7 @@ function EstraiEditor() {
     <ConfirmProvider>
       <EditorShell
         projectId={projectId}
+        user={user}
         prefix="estrai"
         loading={loading}
         loadError={loadError}

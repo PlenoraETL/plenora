@@ -191,4 +191,15 @@ export function humanizeErrorMessage(err) {
   return humanizeError(err).message;
 }
 
+/**
+ * Messaggio di un errore di una richiesta il cui esito specifico conta
+ * (stima prima di avviare, valori della colonna, avvio): il messaggio umano
+ * del backend se c'e' (anche con un codice generico come validation_error),
+ * altrimenti humanizeError (rete, timeout, famiglia HTTP). Mai il testo
+ * grezzo di axios ("Network Error", "Request failed with status code ...").
+ */
+export function requestErrorMessage(err) {
+  return pickBackendMessage(err?.response?.data) || humanizeError(err).message;
+}
+
 export default humanizeError;

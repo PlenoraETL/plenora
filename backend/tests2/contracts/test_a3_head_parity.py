@@ -11,7 +11,9 @@ riferimento da ``generate_a3_head_outcomes.py``, mai dal working tree):
   ``index``, nome dell'indice, funzioni matematiche...);
 - con righe e su ZERO righe: HEAD riuscita ⇒ WT riuscita con stesse colonne,
   dtype, numero di righe e valori; HEAD rifiuto ⇒ WT rifiuto con lo stesso
-  messaggio, salvo le correzioni volute dichiarate in ``CORREZIONI_VOLUTE``;
+  messaggio, salvo le correzioni volute dichiarate in ``CORREZIONI_VOLUTE``
+  (rifiuti di HEAD che ora riescono) e ``CORREZIONE_VOLUTA`` (esiti di HEAD
+  che ora danno un risultato diverso per una decisione esplicita, con motivo);
 - Valida: un errore di HEAD non diventa avviso, salvo il parametro
   obbligatorio che il runtime completa con il default del registry.
 """
@@ -40,6 +42,17 @@ CORREZIONI_VOLUTE = {
 }
 
 
+# (chiave del corpus, modalità) → motivo. Esiti RIUSCITI su HEAD che ora
+# riescono con un risultato diverso, per una decisione esplicita. La guardia
+# controlla che la differenza ci sia davvero (una dichiarazione superata fallisce).
+CORREZIONE_VOLUTA = {
+    ('valid:lookup|{"column": "a", "mapping": {"1": "uno"}}|plain', "rows"):
+        "Lookup «confronta come testo» (decisione utente, F3 correzione dopo la conferma): "
+        "su HEAD la chiave \"1\" non trovava mai il numero 1 della colonna intera; ora la riga si "
+        "applica (shared/execution/lookup_mapping.lookup_value_text, tests2/manipola/unit/test_lookup_compare_as_text.py)",
+}
+
+
 def _allowed_correction(op: str, mode: str, head: dict) -> bool:
     return any(op == c_op and mode == c_mode and fragment in head.get("err", "")
                for c_op, c_mode, fragment in CORREZIONI_VOLUTE)
@@ -48,6 +61,7 @@ def _allowed_correction(op: str, mode: str, head: dict) -> bool:
 def test_corpus_is_the_recorded_one():
     assert set(HEAD) == {key for key, *_ in CORPUS}
     assert {op for _, op, *_ in CORPUS} == set(REGISTRY), "ogni operazione del registry è nel corpus"
+    assert {key for key, _ in CORREZIONE_VOLUTA} <= set(HEAD), "ogni correzione voluta è una voce del corpus"
 
 
 @pytest.mark.parametrize("key,op,config,kind", CORPUS, ids=[key[:90] for key, *_ in CORPUS])
@@ -55,7 +69,11 @@ def test_corpus_is_the_recorded_one():
 def test_execution_equals_head(mode, key, op, config, kind):
     head = HEAD[key][mode]
     actual = run_outcome(op, config, frames(op, mode == "empty", kind))
-    if head["ok"]:
+    if head["ok"] and (key, mode) in CORREZIONE_VOLUTA:
+        assert actual["ok"], f"HEAD eseguiva, ora rifiuta: {actual.get('err')}"
+        assert {k: actual[k] for k in ("cols", "rows")} == {k: head[k] for k in ("cols", "rows")}
+        assert actual["digest"] != head["digest"], "correzione dichiarata ma il risultato è quello di HEAD"
+    elif head["ok"]:
         assert actual["ok"], f"HEAD eseguiva, ora rifiuta: {actual.get('err')}"
         assert {k: actual[k] for k in ("cols", "dtypes", "rows", "digest")} == \
                {k: head[k] for k in ("cols", "dtypes", "rows", "digest")}

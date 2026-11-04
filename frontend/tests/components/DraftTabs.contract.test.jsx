@@ -8,6 +8,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('../../src/api/projects', async (orig) => ({
   ...(await orig()),
   updateCanvas: vi.fn(async () => ({ status: 'ok' })),
+  // Server che non versiona: PUT e GET senza canvas_version (utils/canvasVersion.tokenAfterWrite).
+  getProject: vi.fn(async () => ({ metadata: {}, canvas_version: null })),
 }));
 
 import { createCanvasStore, hasUnsavedChanges } from '../../src/store/useCanvasStore';
@@ -17,7 +19,7 @@ import { AuthProvider } from '../../src/context/AuthContext';
 import { authBus } from '../../src/utils/authBus';
 import {
   MAX_AGE_MS, currentDraftUser, draftKey, listDrafts, markProjectDeleted, pruneDrafts,
-  readDraft, serverCanvasReplaced, writeDraft,
+  keepTabCopy, readDraft, serverCanvasReplaced, writeDraft,
 } from '../../src/utils/localDrafts';
 
 /**
@@ -323,6 +325,24 @@ const DRAFT_TRANSITIONS = {
     expect(copyOf('A')).toBe(null);
     expect(label(copyOf('B'))).toBe('b1');
     expect(B.notice('savedElsewhere')).toBeTruthy();
+  },
+
+  'conflitto: ricarica': async () => {
+    // B ha salvato dopo che A ha aperto: il salvataggio di A e' rifiutato
+    // (409) e A sceglie "Ricarica la versione del server" (serverActions).
+    const A = openTab('A');
+    const B = openTab('B');
+    B.edit('b1'); B.pause();
+    A.edit('a1'); // in sospeso: non ancora nella copia
+    const st = A.store.getState();
+    expect(keepTabCopy(P, { nodes: st.nodes, edges: st.edges, baseUpdatedAt: SERVER_AT }, U, 'A')).toEqual({ ok: true });
+    expect(label(copyOf('A'))).toBe('a1');
+    expect(label(copyOf('B'))).toBe('b1');
+    // Ricaricamento: la copia e' offerta come "questa scheda", superata dal server.
+    act(() => A.store.getState().markClean());
+    A.unmount();
+    const A2 = openTab('A', { serverUpdatedAt: '2026-11-04T09:45:00Z' });
+    expect(A2.offer().find(x => x.startsWith('A~'))).toMatch(/=this\|a1\|true$/);
   },
 
   'storage: salvato altrove': async () => {
