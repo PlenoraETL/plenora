@@ -67,63 +67,6 @@
 .carica-node__handle--input { left: -5px; }
 
 /* ── Header ─────────────────────────────────────────────────────── */
-.carica-node__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 10px;
-  background: var(--cn-accent-dim);
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.12s;
-}
-.carica-node__header:hover { background: var(--cn-accent-bdr); }
-
-.carica-node__header-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.carica-node__icon { font-size: 15px; flex-shrink: 0; }
-
-.carica-node__title {
-  font-family: var(--plen-font-display);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--cn-accent);
-}
-
-.carica-node__header-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.carica-node__expand-icon {
-  font-size: 9px;
-  color: var(--cn-accent);
-  opacity: 0.7;
-}
-
-.carica-node__delete-btn {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  color: var(--plen-text-dim, #3F4D68);
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.12s;
-  opacity: 0;
-}
-.carica-node:hover .carica-node__delete-btn { opacity: 1; }
-.carica-node__delete-btn:hover { background: rgba(248,113,113,0.12); color: #F87171; }
 
 /* ── Body ───────────────────────────────────────────────────────── */
 .carica-node__body {
@@ -270,17 +213,6 @@
 .carica-node__input--small { width: auto; min-width: 100px; }
 
 /* ── ArcGIS schema info ─────────────────────────────────────────── */
-.carica-node__arcgis-schema-info {
-  display: flex;
-  gap: 10px;
-  padding: 6px 9px;
-  background: var(--cn-accent-dim);
-  border: 1px solid var(--cn-accent-bdr);
-  border-radius: 6px;
-  font-family: var(--plen-font-mono);
-  font-size: 11px;
-  color: var(--cn-accent);
-}
 
 /* ── Match columns ──────────────────────────────────────────────── */
 .carica-node__match-columns {
@@ -483,28 +415,6 @@
 [data-theme='light'] .carica-node__preview-value { color: #0F1729; }
 
 /* ── ArcGIS result ──────────────────────────────────────────────── */
-.carica-node__arcgis-result {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 7px 10px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-family: var(--plen-font-body);
-}
-.carica-node__arcgis-result--success {
-  background: rgba(52,211,153,0.08);
-  border: 1px solid rgba(52,211,153,0.2);
-  color: #34D399;
-}
-.carica-node__arcgis-result--error {
-  background: rgba(248,113,113,0.08);
-  border: 1px solid rgba(248,113,113,0.2);
-  color: #F87171;
-}
-.carica-node__arcgis-result-count { font-weight: 700; }
-.carica-node__arcgis-result-url   { font-size: 10.5px; font-family: var(--plen-font-mono); opacity: 0.75; }
 
 /* ── Auto-info ──────────────────────────────────────────────────── */
 .carica-node__auto-info {

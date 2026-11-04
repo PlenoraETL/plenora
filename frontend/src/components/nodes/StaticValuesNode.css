@@ -30,64 +30,9 @@
   flex-shrink: 0;
 }
 
-.svn--selected {
-  border-color: #9B6DFF;
-  box-shadow: 0 0 0 2px rgba(155,109,255,0.25), 0 4px 20px rgba(0,0,0,0.35);
-}
-
 /* ── Header ─────────────────────────────────────────────────────── */
-.svn__header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  background: rgba(155,109,255,0.07);
-  border-bottom: 1px solid rgba(155,109,255,0.15);
-}
-[data-theme='light'] .svn__header { background: rgba(155,109,255,0.05); }
-
-.svn__icon { font-size: 13px; flex-shrink: 0; }
-
-.svn__title {
-  font-family: var(--plen-font-display);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--plen-text, #DDE4F2);
-  flex: 1;
-}
-[data-theme='light'] .svn__title { color: #0F1729; }
-
-.svn__count {
-  font-family: var(--plen-font-mono);
-  font-size: 10px;
-  background: rgba(155,109,255,0.1);
-  border: 1px solid rgba(155,109,255,0.2);
-  color: #9B6DFF;
-  padding: 2px 8px;
-  border-radius: 99px;
-  flex-shrink: 0;
-}
 
 /* Delete node button */
-.svn__node-del {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  color: var(--plen-text-dim, #3F4D68);
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.12s;
-  opacity: 0;
-}
-.svn:hover .svn__node-del { opacity: 1; }
-.svn__node-del:hover { background: rgba(248,113,113,0.12); color: #F87171; }
 
 /* ── Column headers ─────────────────────────────────────────────── */
 .svn__col-headers {
@@ -100,14 +45,6 @@
 }
 [data-theme='light'] .svn__col-headers { background: #F4F7FD; }
 
-.svn__col-lbl {
-  font-family: var(--plen-font-mono);
-  font-size: 9px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--plen-text-dim, #3F4D68);
-}
 .svn__col-name  { width: 88px; flex-shrink: 0; }
 .svn__col-value { flex: 1; }
 .svn__col-type  { width: 80px; flex-shrink: 0; }

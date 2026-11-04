@@ -13,7 +13,6 @@
 import React, { memo, useState, useEffect, useMemo } from 'react';
 import { useReactFlow } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
-import './TransformNode.css';
 import DynamicConfig from './DynamicConfig';
 
 import { authBus } from '../../utils/authBus';

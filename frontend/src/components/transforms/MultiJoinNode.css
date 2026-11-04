@@ -29,54 +29,6 @@
 }
 
 /* ── Header ───────────────────────────────────────────────────── */
-.multi-join-node__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 9px 11px 8px;
-  background: rgba(155,109,255,0.08);
-  border-bottom: 1px solid rgba(155,109,255,0.12);
-}
-[data-theme='light'] .multi-join-node__header {
-  background: rgba(155,109,255,0.05);
-  border-bottom-color: rgba(155,109,255,0.15);
-}
-
-.multi-join-node__title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--plen-font-display);
-  font-size: 12.5px;
-  font-weight: 700;
-  color: #9B6DFF;
-}
-[data-theme='light'] .multi-join-node__title { color: #7C4DFF; }
-
-.multi-join-node__icon { font-size: 14px; }
-
-.multi-join-node__count {
-  font-family: var(--plen-font-mono);
-  font-size: 10.5px;
-  font-weight: 400;
-  color: var(--plen-text-dim, #3F4D68);
-}
-
-.multi-join-node__delete-btn {
-  background: transparent;
-  border: none;
-  color: var(--plen-text-dim, #3F4D68);
-  font-size: 15px;
-  cursor: pointer;
-  padding: 0 3px;
-  line-height: 1;
-  border-radius: 4px;
-  transition: all 0.12s;
-}
-.multi-join-node__delete-btn:hover {
-  color: var(--plen-err, #F87171);
-  background: rgba(248,113,113,0.1);
-}
 
 /* ── Body ─────────────────────────────────────────────────────── */
 .multi-join-node__body {

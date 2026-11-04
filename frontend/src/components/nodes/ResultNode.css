@@ -64,44 +64,6 @@
 }
 
 /* ── Header ─────────────────────────────────────────────────────── */
-.result-node__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 11px;
-  border-bottom: 1px solid;
-}
-.result-node--estrai    .result-node__header { background: rgba(75,139,255,0.07);  border-color: rgba(75,139,255,0.12); }
-.result-node--manipola  .result-node__header { background: rgba(155,109,255,0.07); border-color: rgba(155,109,255,0.12); }
-.result-node--arricchisci .result-node__header { background: rgba(245,166,35,0.07); border-color: rgba(245,166,35,0.12); }
-
-.result-node__title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--plen-font-display);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--plen-text, #DDE4F2);
-}
-[data-theme='light'] .result-node__title { color: #0F1729; }
-.result-node__title-icon { font-size: 14px; }
-
-.result-node__delete-btn {
-  background: transparent;
-  border: none;
-  color: var(--plen-text-dim, #3F4D68);
-  font-size: 16px;
-  cursor: pointer;
-  padding: 0 3px;
-  line-height: 1;
-  border-radius: 4px;
-  transition: all 0.12s;
-}
-.result-node__delete-btn:hover {
-  color: #F87171;
-  background: rgba(248,113,113,0.1);
-}
 
 /* ── Body ───────────────────────────────────────────────────────── */
 .result-node__body {
@@ -129,11 +91,7 @@
   margin-bottom: 6px;
   display: block;
 }
-.result-node__label--with-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
+
 .result-node__label--geo {
   color: var(--rn-estrai);
   margin-top: 6px;
@@ -254,94 +212,10 @@
 }
 
 /* ── Columns expand button ──────────────────────────────────────── */
-.result-node__columns-expand-btn {
-  width: 100%;
-  margin-top: 4px;
-  padding: 5px 8px;
-  background: transparent;
-  border: 1px dashed rgba(75,139,255,0.25);
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 11px;
-  font-family: var(--plen-font-body);
-  color: var(--rn-blue);
-  transition: all 0.12s;
-}
-.result-node__columns-expand-btn:hover {
-  background: rgba(75,139,255,0.07);
-  border-style: solid;
-}
 
 /* ── Columns badge ──────────────────────────────────────────────── */
-.result-node__columns-badge {
-  font-family: var(--plen-font-mono);
-  font-size: 9.5px;
-  background: var(--plen-surface-3, #171C2E);
-  border: 1px solid var(--plen-border-hi, rgba(255,255,255,0.11));
-  border-radius: 99px;
-  padding: 1px 7px;
-  color: var(--plen-text-sub, #7D8BA8);
-}
-[data-theme='light'] .result-node__columns-badge { background: #DDE4F2; border-color: rgba(0,0,0,0.08); }
 
 /* ── Columns list ───────────────────────────────────────────────── */
-.result-node__columns-list {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.result-node__column-item {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 7px;
-  background: var(--plen-surface-2, #111525);
-  border: 1px solid rgba(75,139,255,0.1);
-  border-radius: 5px;
-  font-size: 11.5px;
-}
-[data-theme='light'] .result-node__column-item { background: #EFF2F9; border-color: rgba(75,139,255,0.12); }
-
-.result-node__column-type-icon {
-  font-size: 11px;
-  flex-shrink: 0;
-  opacity: 0.75;
-  cursor: help;
-}
-.result-node__column-type-icon--geo { opacity: 1; }
-
-.result-node__column-table {
-  font-family: var(--plen-font-mono);
-  font-size: 10px;
-  color: var(--plen-text-dim, #3F4D68);
-  flex-shrink: 0;
-}
-.result-node__column-separator {
-  color: var(--plen-text-dim, #3F4D68);
-  font-size: 10px;
-  opacity: 0.4;
-}
-.result-node__column-name {
-  flex: 1;
-  font-size: 11.5px;
-  color: var(--plen-text-sub, #7D8BA8);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-[data-theme='light'] .result-node__column-name { color: #4A5568; }
-
-.result-node__column-srid-badge {
-  font-family: var(--plen-font-mono);
-  font-size: 8.5px;
-  background: rgba(245,166,35,0.12);
-  color: #F5A623;
-  border-radius: 3px;
-  padding: 1px 4px;
-  flex-shrink: 0;
-  margin-left: auto;
-}
 
 /* ── Checkbox / options ─────────────────────────────────────────── */
 .result-node__checkbox-label {
@@ -769,41 +643,10 @@
 /* ── Inline-style migration (FE-PHASE2-INLINE-STYLES-005) ──────────────
    Variant IMDF (brand viola #7C3AED). Sostituisce inline ricorrenti
    in `result/ResultNodeImdfView.jsx`. */
-.result-node__section--imdf {
-  background: rgba(124,58,237,0.08);
-  border-left: 3px solid #7C3AED;
-  padding: 14px 14px;
-  border-radius: 6px;
-}
-.result-node__label--imdf {
-  font-weight: 700;
-  color: #7C3AED;
-  margin-bottom: 10px;
-}
-.result-node__label-hint {
-  margin-left: 8px;
-  font-size: 11px;
-  opacity: 0.6;
-  font-weight: 400;
-}
-.result-node__imdf-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+
 /* Bottoni IMDF lazy-modal: stesso layout, opacita' guidata da
    `disabled` (default browser style) invece di inline opacity. */
-.result-node__imdf-btn {
-  width: 100%;
-  text-align: left;
-  padding: 10px 14px;
-  font-size: 14px;
-  cursor: pointer;
-}
-.result-node__imdf-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
+
 .result-node__execute-btn--full {
   margin-top: 6px;
   width: 100%;

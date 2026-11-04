@@ -127,7 +127,6 @@ export const NODE_TYPES = {
   transform: define('transform', [], 'transform', {
     transform_op: 'join',
     config: {},
-    collapsed: false,
     columns: [],
   }),
   project_input: define('project_input', [], 'project_input', {

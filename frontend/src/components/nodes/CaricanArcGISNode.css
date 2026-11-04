@@ -55,60 +55,6 @@
 .carica-arcgis-node__handle--input { left: -5px; }
 
 /* ── Header ─────────────────────────────────────────────────────── */
-.carica-arcgis-node__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 10px;
-  background: var(--cn-accent-dim);
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.12s;
-}
-.carica-arcgis-node__header:hover { background: var(--cn-accent-bdr); }
-
-.carica-arcgis-node__header-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.carica-arcgis-node__icon { font-size: 15px; flex-shrink: 0; }
-
-.carica-arcgis-node__title {
-  font-family: var(--plen-font-display);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--cn-accent);
-}
-
-.carica-arcgis-node__header-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.carica-arcgis-node__expand-icon {
-  font-size: 9px;
-  color: var(--cn-accent);
-  opacity: 0.7;
-}
-
-.carica-arcgis-node__delete-btn {
-  background: none;
-  border: none;
-  color: var(--plen-text-dim, #7A849A);
-  font-size: 16px;
-  cursor: pointer;
-  padding: 0 2px;
-  line-height: 1;
-  opacity: 0.6;
-  transition: opacity 0.12s, color 0.12s;
-}
-.carica-arcgis-node__delete-btn:hover {
-  opacity: 1;
-  color: #f87171;
-}
 
 /* ── Body ──────────────────────────────────────────────────────── */
 .carica-arcgis-node__body {
