@@ -11,6 +11,7 @@ import { useState, useCallback } from 'react';
 import { executeProjectQuery, cancelTask as cancelTaskApi, createTask } from '../api';
 import { getTaskStatus } from '../api/tasks';
 import { useTaskPolling } from './useTaskPolling';
+import { taskFailureMessage } from '../utils/taskFailureMessage';
 
 /**
  * Polling sincrono di un task fino a stato terminale (success/failure).
@@ -171,7 +172,7 @@ export function useCaricarica(projectId, options = {}) {
         if (executeStatus !== 'success') {
           throw new Error(
             `Esecuzione query fallita (status=${executeStatus}): `
-            + (executeFinal?.error || executeFinal?.result?.message || 'errore sconosciuto')
+            + taskFailureMessage(executeFinal, 'errore non specificato')
           );
         }
       }
@@ -246,7 +247,7 @@ export function useCaricarica(projectId, options = {}) {
             setResult({
               success: false,
               permissionRevoked: isPermissionRevoked,
-              message: data.error || data.result?.error_message || data.result?.message || 'Errore durante il caricamento',
+              message: taskFailureMessage(data, 'Errore durante il caricamento'),
               ...data.result
             });
             return true;

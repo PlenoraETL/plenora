@@ -12,6 +12,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { executeProjectQuery, getTaskStatus, cancelTask as cancelTaskApi, downloadTaskOutput, downloadProjectOutput } from '../api';
 import { useTaskPolling } from './useTaskPolling';
 import useCanvasStore from '../store/useCanvasStore';
+import { taskFailureMessage } from '../utils/taskFailureMessage';
 
 export function useExecution(projectId, options = {}) {
   const {
@@ -111,10 +112,8 @@ const startCaricaPolling = useCallback((caricaTask) => {
           : data.status === 'revoked' ? 'revoked'
           : isBusinessError ? 'failure'
           : data.status;
-        const effectiveError = data.status === 'failure'
-          ? (data.error || 'Errore')
-          : isBusinessError
-          ? (data.result?.error_message || data.result?.message || businessStatus)
+        const effectiveError = (data.status === 'failure' || isBusinessError)
+          ? taskFailureMessage(data, businessStatus || 'Errore')
           : null;
         // Codice strutturato (es. carica_arcgis_write_failed) propagato dal
         // backend: lo conserviamo così il modal lo traduce in un messaggio
@@ -127,7 +126,7 @@ const startCaricaPolling = useCallback((caricaTask) => {
             ? {
                 ...t,
                 status: effectiveStatus,
-                message: data.result?.message || data.error || data.message || '',
+                message: effectiveError || data.result?.message || data.message || '',
                 rows_written: data.result?.rows_written || 0,
                 error: effectiveStatus === 'failure' ? effectiveCode : null,
                 error_message: effectiveError,
@@ -208,7 +207,7 @@ const startMainPolling = useCallback((taskIdToWatch) => {
         // `code: data.error` → se il backend ha propagato un codice strutturato
         // (es. memory_limit_exceeded) il modal lo traduce; altrimenti resta il
         // messaggio originale (es. errore SQL, già informativo). Epic A.
-        setResult({ success: false, message: data.error || 'Errore durante l\'esecuzione', code: data.error });
+        setResult({ success: false, message: taskFailureMessage(data), code: data.error });
         return true;
       } else if (data.status === 'revoked') {
         stopExecuting();

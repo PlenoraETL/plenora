@@ -14,6 +14,7 @@ import { useState, useCallback, useRef } from 'react';
 import { previewProject } from '../api';
 import { humanizeError } from '../utils/errorMessages';
 import { useTaskPolling } from './useTaskPolling';
+import { taskFailureMessage } from '../utils/taskFailureMessage';
 
 const POLL_INTERVAL = 1000;
 
@@ -60,7 +61,7 @@ export function useInlinePreview(projectId) {
             const inner = task.result?.status;
             setError(inner === 'permission_revoked'
               ? (task.result?.message || 'Permessi revocati durante l\'anteprima')
-              : (task.error || 'Errore durante l\'anteprima'));
+              : taskFailureMessage(task, 'Errore durante l\'anteprima'));
             setStatus('error');
             return true;
           }

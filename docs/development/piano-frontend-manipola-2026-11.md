@@ -169,6 +169,9 @@ Rimandati:
    un glossario.
 10. Codice morto `onCaricanExecute` / `caricaExecution` (registrato, nessun
     chiamante): il Carica parte dentro l'esecuzione. Va tolto in Fase 5.
+12. Dal collaudo dal vivo di M7: "Valida" non segnala una Formula non
+    valida ne' un input runtime scalare non collegato; l'errore arriva solo
+    all'esecuzione (ora con il motivo vero, non "Errore sconosciuto").
 11. Copia di sicurezza aperta in due schede dello stesso progetto: vince
     l'ultima scrittura (l'avviso "salvato dopo" copre il caso del salvataggio).
 

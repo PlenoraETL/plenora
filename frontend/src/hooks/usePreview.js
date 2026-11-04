@@ -11,6 +11,7 @@ import { previewProject } from '../api';
 import { humanizeError } from '../utils/errorMessages';
 import { useTaskPolling } from './useTaskPolling';
 import { PREVIEW_ROW_LIMIT } from '../utils/previewFormat';
+import { taskFailureMessage } from '../utils/taskFailureMessage';
 
 const POLL_INTERVAL = 1000;
 
@@ -92,7 +93,7 @@ export function usePreview(projectId, onBeforePreview = null) {
               setPermissionRevoked(true);
               setError(task.result?.message || 'Permessi revocati durante la preview');
             } else {
-              setError(task.error || 'Errore durante la preview');
+              setError(taskFailureMessage(task, 'Errore durante la preview'));
             }
             return true;
           }
