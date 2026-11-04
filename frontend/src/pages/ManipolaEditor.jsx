@@ -72,6 +72,7 @@ import { useHexCanvas } from '../utils/hexCanvas';
 import { addFirstMessage, menuEntry, onlyOneMessage, term, termName } from '../utils/glossary';
 import { buildManipolaPaletteGroups } from '../components/canvas/manipolaPalette';
 import { fetchTransformRegistry, getCachedTransformRegistry, isMultiInputOp } from '../utils/transformRegistry';
+import useEditorActions from '../components/editor/useEditorActions';
 
 // Costante stabile — evita array literal nelle deps di useEditorData
 const MANIPOLA_SOURCE_TYPES = ['estrai', 'manipola', 'arricchisci'];
@@ -303,27 +304,23 @@ const ManipolaEditorContent = () => {
   }, [nodesRef, edgesRef, propagateColumns, scheduleSchemaRefresh]);
 
   // Registra azioni editor nello store — DEVE stare dopo tutti gli hook e useCallback
-  useEffect(() => {
-    useCanvasStore.getState().setEditorActions({
-      onPreview:                    () => preview.handlePreview(),
-      onExecute:                    (nodeId, opts) => {
-        // Risorse non accessibili: bloccate prima del salvataggio nel
-        // percorso unico di ResultNode (Fase 4, M7).
-        return execution.prepareExecute(opts, { needsConfig: needsRunConfigRef.current });
-      },
-      onUpdateTransform:            handleUpdateTransform,
-      onDataSourceSchemaUpdated:    handleDataSourceSchemaUpdated,
-      // Copia di sicurezza ripristinata: stesso ricalcolo del caricamento.
-      onCanvasRestored:             () => {
-        propagateColumns(nodesRef.current, edgesRef.current);
-        scheduleSchemaRefresh();
-      },
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    // toast/nodesRef letti via closure stabile;
-    // re-bind solo al cambio degli handler hook delle azioni canvas.
-  }, [preview, execution, handleUpdateTransform,
-      handleDataSourceSchemaUpdated, scheduleSchemaRefresh]);
+  // Azioni dell'editor: registrate una volta, chiamano sempre l'ultima
+  // versione (components/editor/useEditorActions, regola 9 Blocco A).
+  useEditorActions({
+    onPreview:                    () => preview.handlePreview(),
+    onExecute:                    (nodeId, opts) => {
+      // Risorse non accessibili: bloccate prima del salvataggio nel
+      // percorso unico di ResultNode (Fase 4, M7).
+      return execution.prepareExecute(opts, { needsConfig: needsRunConfigRef.current });
+    },
+    onUpdateTransform:            handleUpdateTransform,
+    onDataSourceSchemaUpdated:    handleDataSourceSchemaUpdated,
+    // Copia di sicurezza ripristinata: stesso ricalcolo del caricamento.
+    onCanvasRestored:             () => {
+      propagateColumns(nodesRef.current, edgesRef.current);
+      scheduleSchemaRefresh();
+    },
+  });
 
   // Sincronizza connections nello store
   useEffect(() => {

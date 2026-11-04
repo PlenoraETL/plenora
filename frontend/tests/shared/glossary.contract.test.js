@@ -342,11 +342,12 @@ describe('glossario: il catalogo delle operazioni Manipola in italiano', () => {
     [`${op}.name`, def.name], [`${op}.description`, def.description],
     ...(def.parameters || []).flatMap(p => [
       [`${op}.${p.id}.label`, p.label],
+      [`${op}.${p.id}.description`, p.description],
       ...(Array.isArray(p.options) ? p.options : []).filter(o => o && typeof o === 'object').map(o => [`${op}.${p.id}=${o.value}`, o.label]),
     ]),
   ].filter(([, t]) => typeof t === 'string' && t);
 
-  it('nomi, descrizioni ed etichette dei parametri senza termini vietati', () => {
+  it('nomi, descrizioni, etichette e descrizioni dei parametri senza termini vietati', () => {
     const offenders = Object.entries(registry.transforms)
       .flatMap(([op, def]) => texts(op, applyTransformTerms(op, def)))
       .filter(([, t]) => !CATALOG_TECHNICAL.some(re => re.test(t)))

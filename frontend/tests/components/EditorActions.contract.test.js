@@ -21,7 +21,7 @@ const moduleName = (p) => path.basename(p).replace(/\.jsx?$/, '');
 // Chiavi di primo livello di ogni oggetto passato a setEditorActions({...}).
 function registeredKeys(src) {
   const out = [];
-  for (const m of src.matchAll(/setEditorActions\(\{/g)) {
+  for (const m of src.matchAll(/(?:setEditorActions|useEditorActions)\(\{/g)) {
     let depth = 1; let j = m.index + m[0].length; const start = j;
     while (depth && j < src.length) { if (src[j] === '{') depth += 1; else if (src[j] === '}') depth -= 1; j += 1; }
     const body = src.slice(start, j - 1);
@@ -77,6 +77,14 @@ describe('editor actions are declared', () => {
     expect(useCanvasStore.getState().getEditorAction('nonDichiarata')).toBeUndefined();
     expect(err).toHaveBeenCalled();
     err.mockRestore();
+  });
+
+  it('the editors register through useEditorActions (once, stable), never directly every render', () => {
+    const pages = files(path.join(SRC, 'pages')).filter(f => /Editor\.jsx$/.test(f));
+    for (const f of pages) {
+      const src = stripComments(fs.readFileSync(f, 'utf-8'));
+      expect({ page: moduleName(f), direct: /setEditorActions\(/.test(src) }).toEqual({ page: moduleName(f), direct: false });
+    }
   });
 
   it('no functions are stored inside node data (they end up in history and drafts)', () => {

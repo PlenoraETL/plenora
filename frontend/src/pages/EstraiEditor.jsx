@@ -51,6 +51,7 @@ import { useAuth } from '../context/AuthContext';
 import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
 import { addFirstMessage, flowEdgeLabel, menuEntry, onlyOneMessage, paletteEntry, term } from '../utils/glossary';
+import useEditorActions from '../components/editor/useEditorActions';
 
 const nodeTypes = {
   tableNode: TableNode, resultNode: ResultNode, staticValues: StaticValuesNode,
@@ -198,20 +199,17 @@ function EstraiEditor() {
   }, [edgeHandlers.connectJoin]);
 
   // Registra azioni editor nello store
-  useEffect(() => {
-    useCanvasStore.getState().setEditorActions({
-      onPreview:          () => preview.handlePreview(),
-      onExecute:          (nodeId, opts) => {
-        // Risorse non accessibili: bloccate prima del salvataggio nel
-        // percorso unico di ResultNode (Fase 4, M7).
-        return execution.prepareExecute(opts, { needsConfig: needsRunConfigRef.current });
-      },
-      onAddRelatedLayer:  handleAddRelatedLayer,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    // toast/nodesRef letti via closure stabile;
-    // re-bind solo quando cambiano gli handler hook delle azioni canvas.
-  }, [preview.handlePreview, execution.prepareExecute, handleAddRelatedLayer]);
+  // Azioni dell'editor: registrate una volta, chiamano sempre l'ultima
+  // versione (components/editor/useEditorActions, regola 9 Blocco A).
+  useEditorActions({
+    onPreview:          () => preview.handlePreview(),
+    onExecute:          (nodeId, opts) => {
+      // Risorse non accessibili: bloccate prima del salvataggio nel
+      // percorso unico di ResultNode (Fase 4, M7).
+      return execution.prepareExecute(opts, { needsConfig: needsRunConfigRef.current });
+    },
+    onAddRelatedLayer:  handleAddRelatedLayer,
+  });
 
   useEffect(() => { useCanvasStore.getState().setConnections(connections); }, [connections]);
   // Pre-fix (P2 frontend-pages): le 3 handleAdd* callback avevano
@@ -364,13 +362,6 @@ function EstraiEditor() {
             connection_id: ld.connectionId, connection_name: ld.connectionName, service_name: ld.serviceName,
             geometry_type: ld.geometryType, feature_count: ld.featureCount, where: '', columns: [] } });
       } catch (err) { console.error('Errore parsing feature layer data:', err); }
-      return;
-    }
-
-    // Data Source come sorgente e' supportato in MANIPOLA, non in ESTRAI.
-    const datasourceRaw = event.dataTransfer.getData('datasourceData');
-    if (datasourceRaw) {
-      try { JSON.parse(datasourceRaw); } catch { /* noop */ }
       return;
     }
 

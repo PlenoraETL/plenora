@@ -12,19 +12,9 @@ import {
 import './ProjectInputNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 import { nodeTitle } from '../canvas/nodeDescriptors';
-import { termName } from '../../utils/glossary';
+import { INPUT_KIND_LABELS, termName } from '../../utils/glossary';
 
-const INPUT_TYPES = [
-  ['file', 'File tabellare'],
-  ['text', 'Testo'],
-  ['integer', 'Intero'],
-  ['number', 'Numero'],
-  ['boolean', 'Sì / No'],
-  ['date', 'Data'],
-  ['datetime', 'Data e ora'],
-  ['select', 'Scelta'],
-  ['connection', 'Set di connessioni'],
-];
+const INPUT_TYPES = Object.entries(INPUT_KIND_LABELS);
 
 const normalizeKey = value => String(value || '')
   .toLowerCase()

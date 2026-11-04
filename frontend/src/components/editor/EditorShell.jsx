@@ -397,6 +397,11 @@ canvasConfig = EMPTY_OBJ,
               fitViewOptions={fitViewOptions}
               minZoom={minZoom}
               maxZoom={maxZoom}
+              // Cancellazione SOLO dal nostro useCanvasKeyboard (fuoco sul
+              // canvas, annullabile) e da "Elimina passo" (con conferma): la
+              // scorciatoia nativa di React Flow cancellava anche con il fuoco
+              // su un pulsante del pannello (giro di conferma Blocco A F1).
+              deleteKeyCode={null}
               {...(readOnlyProps || {})}
             >
               <Background {...backgroundProps} />

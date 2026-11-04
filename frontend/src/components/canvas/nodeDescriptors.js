@@ -15,7 +15,7 @@
  */
 import { getCachedTransformRegistry, isMultiInputOp } from '../../utils/transformRegistry';
 import { displayIcon } from '../../utils/displayIcon';
-import { TERMS, term } from '../../utils/glossary';
+import { TERMS, inputKindLabel, term } from '../../utils/glossary';
 
 export { displayIcon };
 
@@ -154,7 +154,7 @@ const D = {
   project_input: {
     category: 'input', ...named('runtime_input'),
     title: (d) => d.label || d.input_key || term('runtime_input').name,
-    summary: (d) => `${d.input_key || '?'} · ${d.input_kind || 'file'}`,
+    summary: (d) => `${d.input_key || '?'} · ${inputKindLabel(d.input_kind)}`,
     defaultHandles: (d) => (d.input_kind === 'connection'
       ? []
       : [{ ...OUT, id: (d.input_kind || 'file') === 'file' ? 'output' : 'parameter' }]),
@@ -263,27 +263,43 @@ export function derivedTitle(type, data = {}) {
   return d.branch_of ? `${base} · ${d.branch_of}` : base;
 }
 
-// Un `data.title` uguale a un titolo generato e' un titolo congelato dalle
-// versioni precedenti (il campo veniva precompilato e salvato al blur):
-// non e' testo dell'utente, quindi non nasconde il derivato. Valgono anche
-// i nomi delle versioni precedenti (`formerNames` del glossario, es.
-// "Unione" per il Multi-Join) e, per i passi, il nome di qualsiasi
-// operazione, sia del glossario sia del catalogo del backend (titolo
-// congelato prima di un cambio di operazione o di una conversione).
+// Titoli scritti dall'utente da qui in avanti: `data.title_source === 'user'`
+// (lo mette titlePatch) e il testo vale COSI' COM'E', anche se coincide con
+// il nome di un'operazione o con un nome vecchio.
+//
+// Titoli SENZA marcatore (salvati dalle versioni precedenti, quando il campo
+// veniva precompilato e salvato al blur): un testo uguale a un titolo che il
+// sistema generava e' congelato, non dell'utente, e non nasconde il derivato.
+// Generati erano: il derivato attuale, i nomi vecchi del glossario
+// (`formerNames`), per i passi il nome di qualsiasi operazione (glossario o
+// catalogo), per le tabelle il loro nome, e i titoli di Collega ("Unisci X",
+// "Accoda X") e Duplica ramo ("<titolo generato> · X").
 const FORMER_NAMES = new Set(Object.values(TERMS).flatMap(t => t.formerNames || []));
+const LEGACY_BRANCH_TITLE = /^(Unisci|Accoda) \S/;
 
-function isGeneratedTitle(type, data, text) {
+function isGeneratedName(type, data, text) {
   if (text === derivedTitle(type, data) || text === baseTitle(type, data)) return true;
   if (FORMER_NAMES.has(text)) return true;
+  const d = data || {};
+  if (text === d.table_name || (d.schema_name && text === `${d.schema_name}.${d.table_name}`)) return true;
   if (nodeDescriptor(type) !== D.transform) return false;
   const transforms = getCachedTransformRegistry()?.transforms || {};
   return Object.entries(transforms).some(([op, def]) => text === (def?.name || op) || text === def?.catalog_name);
 }
 
-/** Testo scelto dall'utente; '' se manca o e' un titolo generato. */
+function isLegacyGeneratedTitle(type, data, text) {
+  if (isGeneratedName(type, data, text)) return true;
+  if (LEGACY_BRANCH_TITLE.test(text)) return true;
+  const dot = text.lastIndexOf(' · ');
+  return dot > 0 && isGeneratedName(type, data, text.slice(0, dot));
+}
+
+/** Testo scelto dall'utente; '' se manca o e' un titolo generato (vecchio). */
 export function userTitle(type, data = {}) {
   const text = typeof data?.title === 'string' ? data.title.trim() : '';
-  return text && !isGeneratedTitle(type, data, text) ? text : '';
+  if (!text) return '';
+  if (data.title_source === 'user') return text;
+  return isLegacyGeneratedTitle(type, data, text) ? '' : text;
 }
 
 /** Titolo mostrato: quello scelto dall'utente o quello derivato. */
@@ -297,14 +313,17 @@ export function nodeTitle(type, data = {}) {
  *  - testo uguale al titolo dell'utente attuale: nessuna scrittura (fuoco
  *    e uscita senza modifiche non rendono il canvas "non salvato");
  *  - testo vuoto o uguale al derivato: si torna al derivato (title tolto);
- *  - altrimenti il testo diventa il titolo dell'utente.
+ *  - altrimenti il testo diventa il titolo dell'utente (title_source:
+ *    'user': da quel momento vale cosi' com'e').
  */
 export function titlePatch(type, data, text) {
   const next = String(text ?? '').trim();
   const current = userTitle(type, data);
   if (next === current) return null;
-  if (!next || next === derivedTitle(type, data)) return current ? { title: undefined } : null;
-  return { title: next };
+  if (!next || next === derivedTitle(type, data)) {
+    return current ? { title: undefined, title_source: undefined } : null;
+  }
+  return { title: next, title_source: 'user' };
 }
 
 export const DESCRIBED_NODE_TYPES = [...Object.keys(D), ...Object.keys(ALIASES)];

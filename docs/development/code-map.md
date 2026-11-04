@@ -653,7 +653,7 @@ Responsabilita: schermate route-level del canvas ETL builder e gestione risorse 
 
 File principali:
 - editor canvas (i tre entry-point del builder ETL):
-  - `EstraiEditor.jsx` -> componente `EstraiEditor`, registra `nodeTypes` ReactFlow (`tableNode: TableNode`, `resultNode: ResultNode`, `staticValues: StaticValuesNode`, `carica: CaricanNode`, `carica_arcgis: CaricanArcGISNode`, `featureLayerNode: FeatureLayerNode`, `comment: AnnotationNode`, `datasourceNode: DataSourceNode`); apre `PreviewModal`/`ExecutionModal`/`CaricaricaModal` lazy; i join si configurano nel pannello laterale dalla selezione dell'arco (`components/canvas/JoinEdgePanel.jsx`, regole in `utils/estraiJoins.js`)
+  - `EstraiEditor.jsx` -> componente `EstraiEditor`, registra `nodeTypes` ReactFlow (`tableNode: TableNode`, `resultNode: ResultNode`, `staticValues: StaticValuesNode`, `carica: CaricanNode`, `carica_arcgis: CaricanArcGISNode`, `featureLayerNode: FeatureLayerNode`, `comment: AnnotationNode`, `datasourceNode: DataSourceNode`); apre `PreviewModal`/`ExecutionModal` lazy; i join si configurano nel pannello laterale dalla selezione dell'arco (`components/canvas/JoinEdgePanel.jsx`, regole in `utils/estraiJoins.js`)
   - `ManipolaEditor.jsx` -> componente `ManipolaEditor`, canvas trasformazioni (consuma `transforms_registry` da backend manipola)
   - `ArricchisciEditor.jsx` -> componente `ArricchisciEditor`, canvas enrichment con nodi API
 - gestione risorse: `ProjectList.jsx`, `ConnectionManager.jsx`, `ApiConnectionManager.jsx`, `DataSourceManager.jsx`, `FileManager.jsx` + subcomponents in `pages/FileManager/` (`FileCard`, `UploadModal`, `LayerModal`, `PreviewModal`, helpers)
@@ -713,7 +713,7 @@ Responsabilita: componenti UI riusabili - nodi ReactFlow, modali, panel, layout 
 Sotto-cartelle e file principali:
 - `nodes/` - nodi ReactFlow per il canvas. File reali: `TableNode.jsx`, `ResultNode.jsx` (+ `ResultNodeConfig.js`), `StaticValuesNode.jsx`, `DataSourceNode.jsx`, `FileSourceNode.jsx`, `ProjectSourceNode.jsx`, `CaricanNode.jsx`, `CaricanArcGISNode.jsx`, `FeatureLayerNode.jsx`, `ImdfPublisherNode.jsx`, `AnnotationNode.jsx`. Registrazione: ciascun editor (`EstraiEditor.jsx`, `ManipolaEditor.jsx`, `ArricchisciEditor.jsx`) dichiara la propria mappa `nodeTypes` ReactFlow scegliendo quali nodi esporre. Consumo dello stato: i nodi leggono/scrivono `nodes`/`edges` via hook `useCanvasStore`.
 - `panels/` - pannelli laterali (`EditorSidebar.jsx`, `FilesSidebar.jsx`, `ProjectsSidebar.jsx`, `FeatureServicePanel.jsx`, `QueryPreview.jsx`, `QuickActions.jsx`, `ApiEnrichNode.jsx`)
-- `modals/` - modali editor (`CaricaricaModal.jsx`, `ColumnBuilderModal.jsx`, `EnrichmentConfirmModal.jsx`, `ExecutionModal.jsx`, `FilterModal.jsx`, `PreviewModal.jsx`)
+- `modals/` - modali editor (`ColumnBuilderModal.jsx`, `EnrichmentConfirmModal.jsx`, `ExecutionModal.jsx`, `FilterModal.jsx`, `PreviewModal.jsx`)
 - `editor/` - shell editor shared (`EditorShell.jsx`, `AccessDeniedBanner.jsx`)
 - `transforms/`, `arricchisci/`, `imdf/`, `eseguibili/`, `logviewer/`, `shared/`, `common/` - blocchi specifici di flusso
 - root: `AppSidebar.jsx`, `ChangePasswordModal.jsx`, `TicketCreateModal.jsx`

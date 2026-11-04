@@ -343,6 +343,12 @@ class Node(BaseModel):
 
     text: Optional[str] = None
     title: Optional[str] = None
+    # Titoli dei passi (Blocco A, regola 7): 'user' quando il titolo e' scritto
+    # dall'utente; senza marcatore e' un titolo salvato dalle versioni
+    # precedenti. branch_of: nome del ramo di Collega/Duplica ramo, mostrato
+    # nel titolo derivato. Solo interfaccia: nessun effetto sull'esecuzione.
+    title_source: Optional[Literal["user"]] = None
+    branch_of: Optional[str] = None
     color: Optional[str] = None
     width: Optional[float] = None
     height: Optional[float] = None

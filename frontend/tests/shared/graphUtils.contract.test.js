@@ -3,11 +3,10 @@
  *
  * Pure functions estratte dalla duplicazione in validate{Estrai,Manipola}Canvas:
  *  - detectCycle(nodes, edges) — DFS bianco/grigio/nero
- *  - getNodeName(node, registry?) — switch su node.type per messaggi UI
  */
 
 import { describe, it, expect } from 'vitest';
-import { detectCycle, getNodeName } from '../../src/utils/graphUtils';
+import { detectCycle } from '../../src/utils/graphUtils';
 
 
 describe('detectCycle', () => {
@@ -70,63 +69,3 @@ describe('detectCycle', () => {
 });
 
 
-describe('getNodeName', () => {
-  it('null -> "?"', () => {
-    expect(getNodeName(null)).toBe('?');
-  });
-
-  it.each([
-    ['tableNode', { table_name: 'Customers' }, 'Customers'],
-    ['tableNode', { alias: 'C', table_name: 'Customers' }, 'C'],
-    ['datasourceNode', { name: 'CSV1' }, 'CSV1'],
-    ['featureLayerNode', { name: 'Roads' }, 'Roads'],
-    ['resultNode', {}, 'Output'],
-    ['project_source', { table_name: 'orders' }, 'orders'],
-    ['file_source', { fileName: 'data.csv' }, 'data.csv'],
-    ['staticValues', { alias: 'Costanti' }, 'Costanti'],
-    ['result', {}, 'Output'],
-    ['multi_join', {}, 'Multi-Join'],
-  ])('%s -> %s', (type, data, expected) => {
-    expect(getNodeName({ type, data })).toBe(expected);
-  });
-
-  it('carica con dest_type=arcgis -> "Carica ArcGIS"', () => {
-    expect(getNodeName({ type: 'carica', data: { dest_type: 'arcgis' } })).toBe('Carica ArcGIS');
-  });
-
-  it('carica con dest_type=rest -> "Carica REST"', () => {
-    expect(getNodeName({ type: 'carica', data: { dest_type: 'rest' } })).toBe('Carica REST');
-  });
-
-  it('carica senza dest_type -> "Carica DB"', () => {
-    expect(getNodeName({ type: 'carica', data: {} })).toBe('Carica DB');
-  });
-
-  it('transform: senza registry -> opId', () => {
-    expect(getNodeName({ type: 'transform', data: { transform_op: 'filter' } })).toBe('filter');
-  });
-
-  it('transform: con registry -> nome leggibile', () => {
-    const registry = { filter: { name: 'Filtra righe' } };
-    expect(getNodeName({ type: 'transform', data: { transform_op: 'filter' } }, registry))
-      .toBe('Filtra righe');
-  });
-
-  it('transform: opId in registry senza name -> opId fallback', () => {
-    const registry = { filter: {} };
-    expect(getNodeName({ type: 'transform', data: { transform_op: 'filter' } }, registry))
-      .toBe('filter');
-  });
-
-  it('transform senza transform_op -> "Trasformazione"', () => {
-    expect(getNodeName({ type: 'transform', data: {} })).toBe('Trasformazione');
-  });
-
-  it('tipo sconosciuto -> ritorna il type stesso', () => {
-    expect(getNodeName({ type: 'mystery_node', id: 'x', data: {} })).toBe('mystery_node');
-  });
-
-  it('tipo sconosciuto + senza type -> id', () => {
-    expect(getNodeName({ id: 'x', data: {} })).toBe('x');
-  });
-});

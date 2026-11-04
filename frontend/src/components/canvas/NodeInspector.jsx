@@ -24,7 +24,7 @@
  * conferma, niente in sola lettura) con `Panel` come corpo; il pannello di
  * un nodo elenca i suoi archi con un link per aprirli.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { useConfirmOrNative } from '../../context/ConfirmContext';
 import { derivedTitle, nodeDescriptor, nodeIcon, nodeTitle, titlePatch, userTitle } from './nodeDescriptors';
@@ -149,7 +149,10 @@ function InspectorTitle({ node, disabled }) {
   const [draft, setDraft] = useState(stored);
   useEffect(() => { setDraft(stored); }, [stored, node.id]);
 
+  // Esc: si esce dal campo SENZA scrivere (il blur legge la bozza vecchia).
+  const cancelledRef = useRef(false);
   const commit = () => {
+    if (cancelledRef.current) { cancelledRef.current = false; setDraft(stored); return; }
     const patch = titlePatch(node.type, node.data, draft);
     if (patch) updateNodeData(node.id, patch);
     else setDraft(stored);
@@ -166,7 +169,7 @@ function InspectorTitle({ node, disabled }) {
       onBlur={commit}
       onKeyDown={e => {
         if (e.key === 'Enter') e.currentTarget.blur();
-        if (e.key === 'Escape') { setDraft(stored); e.currentTarget.blur(); }
+        if (e.key === 'Escape') { cancelledRef.current = true; e.currentTarget.blur(); }
       }}
     />
   );

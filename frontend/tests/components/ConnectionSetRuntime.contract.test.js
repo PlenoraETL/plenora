@@ -10,7 +10,9 @@ const read = relative => readFileSync(
 describe('Connection Set runtime contract', () => {
   it('authors a project-level connection selector without a node handle', () => {
     const source = read('src/components/nodes/ProjectInputNode.jsx');
-    expect(source).toContain("['connection', 'Set di connessioni']");
+    // Il tipo "connessione" e il suo nome vengono dal glossario (INPUT_KIND_LABELS).
+    expect(source).toContain('INPUT_KIND_LABELS');
+    expect(read('src/utils/glossary.js')).toContain("connection: 'Set di connessioni'");
     expect(source).toContain('connection_set_id');
     expect(source).toContain("kind !== 'connection'");
     expect(source).toContain('seleziona la connessione dell’intero progetto Estrai');

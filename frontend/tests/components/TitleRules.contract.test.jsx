@@ -160,8 +160,8 @@ describe('campo titolo del pannello (controllato)', () => {
     expect(titlePatch('transform', frozen, '')).toBeNull();
     expect(titlePatch('transform', frozen, 'Filtra righe')).toBeNull();
     expect(titlePatch('transform', { transform_op: 'filter', title: 'Mio' }, 'Mio ')).toBeNull();
-    expect(titlePatch('transform', { transform_op: 'filter', title: 'Mio' }, '')).toEqual({ title: undefined });
-    expect(titlePatch('transform', { transform_op: 'filter' }, 'Nuovo')).toEqual({ title: 'Nuovo' });
+    expect(titlePatch('transform', { transform_op: 'filter', title: 'Mio' }, '')).toEqual({ title: undefined, title_source: undefined });
+    expect(titlePatch('transform', { transform_op: 'filter' }, 'Nuovo')).toEqual({ title: 'Nuovo', title_source: 'user' });
   });
 });
 
@@ -192,5 +192,40 @@ describe('doppio clic sul nodo compatto (stessa regola)', () => {
     fireEvent.change(input, { target: { value: 'Solo attivi' } });
     fireEvent.blur(input);
     expect(current().data.title).toBe('Solo attivi');
+  });
+});
+
+// Giro di conferma F1/G: titolo dell'utente marcato, titoli vecchi riconosciuti, Esc.
+describe('titoli: testo dell\'utente marcato, titoli vecchi solo per euristica', () => {
+  it('un titolo scritto dall\'utente vale cosi\' com\'e\', anche se coincide con un nome generato', () => {
+    const patch = titlePatch('transform', { transform_op: 'filter' }, 'Mappa valori');
+    expect(patch).toEqual({ title: 'Mappa valori', title_source: 'user' });
+    expect(nodeTitle('transform', { transform_op: 'filter', ...patch })).toBe('Mappa valori');
+    expect(nodeTitle('tableNode', { table_name: 'clienti', title: 'Multi Join', title_source: 'user' })).toBe('Multi Join');
+  });
+
+  it('titoli vecchi senza marcatore: Collega, Duplica e nome della tabella non nascondono il derivato', () => {
+    expect(userTitle('transform', { transform_op: 'join', title: 'Unisci Canoni' })).toBe('');
+    expect(userTitle('transform', { transform_op: 'join', title: 'Accoda Canoni' })).toBe('');
+    expect(userTitle('transform', { transform_op: 'filter', title: 'Filtra righe · Canoni' })).toBe('');
+    expect(nodeTitle('tableNode', { table_name: 'clienti', alias: 'c', title: 'clienti' })).toBe('c');
+    expect(userTitle('transform', { transform_op: 'filter', title: 'Solo attivi' })).toBe('Solo attivi');
+  });
+
+  it('svuotare il campo toglie anche il marcatore', () => {
+    expect(titlePatch('transform', { transform_op: 'filter', title: 'X', title_source: 'user' }, ''))
+      .toEqual({ title: undefined, title_source: undefined });
+  });
+
+  it('Esc nel pannello annulla senza scrivere', () => {
+    load([node({ transform_op: 'filter', config: {} })]);
+    render(<NodeInspector fullNodeTypes={{}} />);
+    const spy = vi.spyOn(useCanvasStore.getState(), 'updateNodeData');
+    fireEvent.change(field(), { target: { value: 'Da annullare' } });
+    fireEvent.keyDown(field(), { key: 'Escape' });
+    fireEvent.blur(field());
+    expect(current().data.title).toBeUndefined();
+    expect(useCanvasStore.getState().isDirty).toBe(false);
+    spy.mockRestore();
   });
 });

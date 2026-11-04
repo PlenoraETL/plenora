@@ -64,6 +64,7 @@ import '../components/modals/EnrichmentConfirmModal.css';
 import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
 import { addFirstMessage, flowEdgeLabel, menuEntry, onlyOneMessage, paletteEntry, term, termName } from '../utils/glossary';
+import useEditorActions from '../components/editor/useEditorActions';
 
 /**
  * Costruisce una mappa nodeId → titolo per il raggruppamento colonne in
@@ -359,15 +360,12 @@ const ArricchisciEditorContent = () => {
   const handleCloseConfirmModal = useCallback(() => { setShowConfirmModal(false); enrichmentValidation.reset(); }, [enrichmentValidation]);
 
   // Registra azioni editor nello store — dopo tutti gli hook e useCallback
-  useEffect(() => {
-    useCanvasStore.getState().setEditorActions({
-      onPreview:        () => preview.handlePreview(),
-      onExecute:        handleShowConfirmModal,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    // re-bind solo al cambio degli handler hook delle azioni canvas; setStore
-    // letto via getState() volutamente non in deps.
-  }, [preview.handlePreview, handleShowConfirmModal]);
+  // Azioni dell'editor: registrate una volta, chiamano sempre l'ultima
+  // versione (components/editor/useEditorActions, regola 9 Blocco A).
+  useEditorActions({
+    onPreview:        () => preview.handlePreview(),
+    onExecute:        handleShowConfirmModal,
+  });
 
   // Sincronizza connections nello store
   useEffect(() => {

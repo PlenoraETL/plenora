@@ -127,6 +127,20 @@ export function term(key) {
 /** Nome dell'entita'. */
 export const termName = (key) => term(key).name;
 
+/** Tipi di input runtime (pannello dell'input e riepiloghi): un solo nome. */
+export const INPUT_KIND_LABELS = Object.freeze({
+  file: 'File tabellare',
+  text: 'Testo',
+  integer: 'Intero',
+  number: 'Numero',
+  boolean: 'Sì / No',
+  date: 'Data',
+  datetime: 'Data e ora',
+  select: 'Scelta',
+  connection: 'Set di connessioni',
+});
+export const inputKindLabel = (kind) => INPUT_KIND_LABELS[String(kind || 'file').toLowerCase()] || String(kind);
+
 /** Entita' di un tipo di nodo (null se il tipo non e' nel glossario). */
 export function nodeTerm(type) {
   const key = NODE_TYPE_TERMS[type];
@@ -246,7 +260,30 @@ export const CATALOG_PHRASES = Object.freeze([
   [/\bTipo join\b/g, 'Tipo di Join'],
   [/\bdal dataset\b/g, 'dalla tabella'],
   [/\bnel dataset\b/g, 'nella tabella'],
+  // Descrizioni dei parametri CRS delle operazioni geografiche.
+  [/Override del CRS per calcolo (\w+)\. Vuoto = auto-UTM\./g, 'CRS metrico da usare per il calcolo ($1). Vuoto = UTM scelto in automatico.'],
+  [/'same' mantiene il CRS input \(default\), 'metric' lascia il CRS metrico( usato per il calcolo)?( \(no roundtrip\))?\./g,
+    "'same' mantiene il CRS di ingresso (predefinito), 'metric' lascia il CRS metrico usato per il calcolo."],
 ]);
+
+/*
+ * Descrizioni dei parametri del catalogo riscritte per intero (testi di
+ * aiuto mostrati sotto il campo), dove le frasi comuni non bastano.
+ */
+export const PARAM_DESCRIPTIONS = Object.freeze({
+  select_columns: { columns: 'Lista ordinata di colonne: nome, se tenerla (predefinito sì), etichetta facoltativa.' },
+  filter: { conditions: 'Lista di condizioni (colonna, operatore, valore); se presente sostituisce il filtro singolo. Lista vuota: nessun filtro.' },
+  geo_buffer: { metric_crs: 'CRS metrico da usare per il calcolo. Vuoto = UTM scelto in automatico. Utile per tabelle su più zone (es. EPSG:3035 per LAEA Europa).' },
+  md5_hash: { normalize: 'Toglie gli spazi ai bordi e porta in minuscolo prima del calcolo (consigliato per rilevare le modifiche).' },
+  lookup: { unmatched: "Mantieni l'originale, null oppure un valore predefinito." },
+  flatten_json: { output_columns: "Chiavi JSON attese, usate per prevedere lo schema nel canvas. Se vuota, lo schema previsto resta uguale all'ingresso. L'esecuzione estrae comunque tutte le chiavi presenti nei dati." },
+  geo_overlay: { keep_geom_type: 'Rimuovi frammenti di tipo diverso (es. linee generate dalla sovrapposizione di poligoni).' },
+  string_extract: {
+    pattern: 'Espressione regolare con gruppo di cattura, es: (\\d{5}) per CAP, (?P<via>.+),\\s*(?P<civico>\\d+)',
+    output_column: "Vuoto = colonna_extracted (ignorato se l'espressione regolare ha gruppi con nome).",
+  },
+  transpose: { output_columns: "Nomi delle nuove colonne attese dopo la trasposizione (i valori della colonna identificativa), usati per prevedere lo schema nel canvas. Se vuota, lo schema previsto resta uguale all'ingresso. L'esecuzione traspone comunque i dati effettivi." },
+});
 
 const rephrase = (text) => (typeof text === 'string'
   ? CATALOG_PHRASES.reduce((t, [re, to]) => t.replace(re, to), text)
@@ -269,7 +306,7 @@ export function applyTransformTerms(op, def) {
     out.parameters = def.parameters.map(p => {
       if (!p || typeof p !== 'object') return p;
       const po = (over.params || {})[p.id] || {};
-      const next = { ...p, label: po.label || rephrase(p.label), description: rephrase(p.description) };
+      const next = { ...p, label: po.label || rephrase(p.label), description: po.description || PARAM_DESCRIPTIONS[op]?.[p.id] || rephrase(p.description) };
       if (Array.isArray(p.options)) {
         next.options = p.options.map(o => (o && typeof o === 'object'
           ? { ...o, label: (po.options || {})[o.value] || rephrase(o.label) } : o));
