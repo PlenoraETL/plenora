@@ -70,13 +70,16 @@ def test_multi_join_inconsistent_pairs_same_reason():
     assert [issue.message for issue in issues] == [str(error.value)]
 
 
-def test_rename_duplicate_keeps_runtime_but_rejects_validation():
+def test_rename_duplicate_keeps_runtime_and_warns():
     frame = pd.DataFrame({"name": ["Roma"], "city_id": [1]})
     config = {"renames": [{"old_name": name, "new_name": "Comune"} for name in frame.columns]}
     actual = get_executor().execute_with_params("rename", [frame], config)
     assert list(actual.columns) == ["Comune", "Comune"]
     issues = ManipolaNodeValidator().validate_node(node(transform_op="rename", config=config), upstream=InferredSchema(columns=[{"name": c, "type": "str"} for c in frame.columns]))
-    assert any(all(name in issue.message for name in ["name", "city_id", "Comune"]) for issue in issues)
+    duplicate = [issue for issue in issues if issue.code == "rename.duplicate"]
+    assert duplicate and all(name in duplicate[0].message for name in ["name", "city_id", "Comune", "_2"])
+    # Avviso, non errore: l'esecuzione scrive un file valido, Esegui non si blocca.
+    assert all(issue.severity == "warning" for issue in duplicate)
 
 
 def test_pivot_both_branches_have_certain_names():

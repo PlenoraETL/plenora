@@ -11,7 +11,7 @@ from app.core.projects.schema_geo_handlers import GeoSchemaHandlers
 from app.core.projects.schema_join_handlers import JoinSchemaHandlers
 from app.core.projects.schema_reshape_handlers import ReshapeSchemaHandlers
 from app.core.projects.schema_table_handlers import TableSchemaHandlers
-from app.shared.execution.column_selection import select_column_plan
+from app.shared.execution.column_selection import expand_column_plan, select_column_plan
 
 if TYPE_CHECKING:
     from app.shared.execution.schema_types import ColumnSchema
@@ -845,7 +845,6 @@ class TransformSchemaHandlers:
     def _schema_select_columns(self, input_schemas: List[List[ColumnSchema]], config: dict, node_id: str) -> List[ColumnSchema]:
         if not input_schemas:
             return []
-        by_name = {col.name: col for col in input_schemas[0]}
         plan = select_column_plan([col.name for col in input_schemas[0]], config.get("columns") or [], skip_missing=True)
         return [self._copy_column(col, node_id, name=label)
-                for name, label in plan for col in input_schemas[0] if col.name == name]
+                for col, label in expand_column_plan(input_schemas[0], plan, lambda col: col.name)]

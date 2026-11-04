@@ -149,10 +149,14 @@ class ManipolaNodeValidator:
             params = get_executor().prepare_params("rename", resolved)
             duplicates = rename_collisions([c["name"] for c in upstream_cols], params)
             if duplicates:
-                issues.append(Issue(node_id=node_id, severity="warning" if _uncertain([upstream]) else "error",
+                # Avviso, non errore (decisione utente 04/11/2026): l'esecuzione
+                # scrive comunque un file valido (Comune, Comune_2) e la
+                # previsione coincide; un progetto esistente non si blocca.
+                issues.append(Issue(node_id=node_id, severity="warning",
                                     code="rename.duplicate", suggestion=None,
                                     message="Rinomina produce colonne duplicate: " + "; ".join(
-                                        f"{name}: {', '.join(origins)}" for name, origins in duplicates.items())))
+                                        f"{name}: {', '.join(origins)}" for name, origins in duplicates.items())
+                                    + ". Nel file la seconda uscira' con il suffisso _2 (e cosi' via)."))
 
         # Schema a monte: tabella tipi/aggregazioni generata dall'esecuzione
         # con righe (zero righe non portano l'errore di tipo).

@@ -16,6 +16,7 @@ from app.core.dataframes.tabular import (
     non_null_head_values,
 )
 from app.shared.execution.column_info import ColumnInfo
+from app.shared.execution.schema_column_plans import type_family
 
 _logger = logging.getLogger(__name__)
 
@@ -216,21 +217,29 @@ def empty_dataframe_from_column_metadata(
 
 
 def canvas_type_to_pandas_dtype(canvas_type: Optional[str]) -> str:
-    """Return a pandas dtype string for a canvas column type."""
-    canonical = normalize_canvas_type(canvas_type)
-    if canonical == "int":
-        return "int64"
-    if canonical == "real":
-        return "float64"
-    if canonical == "bool":
-        return "bool"
-    if canonical == "date":
-        return "datetime64[ns]"
-    if canonical == "str":
-        # Dtype stringa predefinito del motore (pandas 3: "str"), lo stesso
-        # che build_columns_with_types riporta come "str" (A3, esecuzione a vuoto).
-        return "str"
-    return "object"
+    """Return a pandas dtype string for a canvas column type.
+
+    Regola unica: il tipo si riconduce alla sua FAMIGLIA con la stessa tabella
+    usata dall'inferenza (``type_families.json``: integer, number, string,
+    datetime, timestamp, alias dei database...), poi famiglia -> dtype. Prima
+    i tipi del contratto e dell'inferenza fuori dal vocabolario minimo
+    (``datetime``, ``number``, ``string``...) diventavano ``object`` e
+    l'esecuzione a vuoto di Valida rifiutava configurazioni valide (es. una
+    Formula con ``.dt`` su una colonna datetime).
+    """
+    return _FAMILY_DTYPES.get(type_family(canvas_type), "object")
+
+
+# Famiglia -> dtype pandas. "str": dtype stringa predefinito del motore
+# (pandas 3), lo stesso che build_columns_with_types riporta come "str".
+_FAMILY_DTYPES = {
+    "int": "int64",
+    "real": "float64",
+    "bool": "bool",
+    "date": "datetime64[ns]",
+    "datetime": "datetime64[ns]",
+    "str": "str",
+}
 
 
 def series_to_canvas_type(series: Any) -> str:

@@ -122,7 +122,6 @@ COLUMN_PARAM_TYPES = {"column", "columns", "geometry_column"}
 # Regole del validatore che NON sono vincoli di esecuzione (schema a monte):
 # possono rifiutare ciò che il runtime accetta, per scelta dichiarata.
 DECLARATIVE_ERROR_CODES = {
-    "rename.duplicate": "P5: la rinomina non deve produrre nomi duplicati (il salvataggio li suffisserebbe)",
     "aggregation.unsupported": "Tabella tipi/aggregazioni generata dall'esecuzione con righe",
     "TRANSFORM_GEOMETRY_TYPE_INVALID": "Parametro geometria su colonna nota non geometrica",
     "TRANSFORM_PARAM_REQUIRED": "Parametro obbligatorio mancante: il runtime fa un no-op o altro dall'intenzione (HEAD)",

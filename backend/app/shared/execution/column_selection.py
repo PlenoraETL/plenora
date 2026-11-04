@@ -47,6 +47,18 @@ def select_column_plan(names: list[str], columns: JsonRows, *, skip_missing: boo
     return [(name, label) for name, label in plan if name in names]
 
 
+def expand_column_plan(items: list[Any], plan: list[tuple[str, str]], name_of: Any) -> list[tuple[Any, str]]:
+    """Applica un piano (nome, etichetta) a colonne che possono avere nomi doppi.
+
+    Regola unica, la stessa di pandas ``df[[nomi]]`` usato dall'esecuzione:
+    un nome del piano seleziona TUTTE le colonne con quel nome, nell'ordine
+    d'ingresso, e ciascuna riceve l'etichetta. Usata dall'inferenza (Output e
+    Seleziona) perche' la previsione coincida con l'esecuzione anche dopo una
+    Rinomina che produce due colonne con lo stesso nome.
+    """
+    return [(item, label) for name, label in plan for item in items if name_of(item) == name]
+
+
 def join_column_plan(
     left: list[str], right: list[str], left_keys: list[str], right_keys: list[str],
     left_columns: list[str] | None, right_columns: list[str] | None,

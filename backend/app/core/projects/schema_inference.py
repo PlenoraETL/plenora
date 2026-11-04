@@ -17,7 +17,7 @@ from app.shared.execution.join_preparation import multi_join_renames, normalize_
 from typing import Dict, List, Optional, Any, Tuple, Mapping
 import uuid
 
-from app.shared.execution.column_selection import select_column_plan
+from app.shared.execution.column_selection import expand_column_plan, select_column_plan
 from app.core.projects.project_context_loader import (
     load_project_source_schema_context,
 )
@@ -564,11 +564,10 @@ class SchemaInferenceService:
             columns = _node_config(context.node, ("output_columns",)).get("output_columns")
             schema = input_schemas[0]
             if columns is not None and columns != []:
-                by_name = {col.name: col for col in schema}
                 references = [col.to_dict() for col in schema]
                 columns = resolve_output_column_refs(columns, unique_column_names(references))
                 plan = select_column_plan([col.name for col in schema], columns, skip_missing=True)
-                schema = [replace(by_name[name], name=label) for name, label in plan]
+                schema = [replace(col, name=label) for col, label in expand_column_plan(schema, plan, lambda col: col.name)]
             groups, aggregations = result_group_plan(context.node, [col.name for col in schema]) if kind == "manipola" else ([], [])
             if groups or aggregations:
                 by_name = {col.name: col for col in schema}

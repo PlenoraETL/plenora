@@ -1,0 +1,81 @@
+"""A3, controllo dal vivo (SC_scheda_manipola sul server): due difetti trovati
+sul canvas reale e chiusi per costruzione.
+
+1. Tipi dello schema -> dtype dell'esecuzione a vuoto: ``datetime`` (e gli
+   altri tipi dell'inferenza fuori dal vocabolario minimo) diventava
+   ``object``, e Valida rifiutava una Formula ``ct_date_due.dt.year * 10000
+   + ...`` che l'esecuzione esegue. Regola: famiglia del tipo con la stessa
+   tabella dell'inferenza (``type_families.json``) -> dtype.
+2. Selezione dell'Output per nome con due colonne omonime (dopo una Rinomina
+   ``name``/``city_id`` -> ``Comune``): l'esecuzione (``df[[nomi]]``) le
+   prende entrambe e il salvataggio le scrive ``Comune``/``Comune_2``; la
+   previsione ne teneva una. Regola: ``expand_column_plan``.
+"""
+from types import SimpleNamespace
+
+import pandas as pd
+import pytest
+
+from app.core.dataframes.output_columns import apply_output_columns
+from app.core.dataframes.schema import canvas_type_to_pandas_dtype, series_to_canvas_type
+from app.core.dataframes.tabular import make_unique_column_names
+from app.core.manipola.node_validator import ManipolaNodeValidator
+from app.core.manipola.plugin_executor import get_executor
+from app.core.projects.canvas_models import CanvasState, Node
+from app.core.projects.schema_inference import SchemaInferenceService
+from app.shared.execution.schema_column_plans import TYPE_FAMILIES, type_family
+from app.shared.execution.schema_types import InferredSchema
+
+pytestmark = [pytest.mark.unit, pytest.mark.contract]
+
+# date e datetime sono la stessa famiglia per pandas (datetime64).
+_SAME = {"date": "datetime"}
+
+
+@pytest.mark.parametrize("canvas_type", sorted(TYPE_FAMILIES["aliases"]))
+def test_every_inference_type_maps_to_a_dtype_of_its_family(canvas_type):
+    dtype = canvas_type_to_pandas_dtype(canvas_type)
+    assert dtype != "object", f"{canvas_type}: nessun dtype (diventerebbe object)"
+    produced = type_family(series_to_canvas_type(pd.Series([], dtype=dtype)))
+    expected = type_family(canvas_type)
+    assert _SAME.get(produced, produced) == _SAME.get(expected, expected), (canvas_type, dtype, produced)
+
+
+@pytest.mark.parametrize("kind", ["datetime", "timestamp", "date"])
+def test_formula_dt_accessor_on_datetime_schema_is_valid(kind):
+    formula = "ct_date_due.dt.year * 10000 + ct_date_due.dt.month * 100 + ct_date_due.dt.day"
+    config = {"formula": formula, "new_column": "chiave_data"}
+    rows = pd.DataFrame({"ct_date_due": pd.to_datetime(["2024-01-02", None])})
+    get_executor().execute_with_params("formula", [rows], config)  # l'esecuzione la accetta
+    upstream = InferredSchema(columns=[{"name": "ct_date_due", "type": kind}])
+    node = Node.model_validate({"id": "f", "type": "transform", "position": {"x": 0, "y": 0},
+                                "transform_op": "formula", "config": config})
+    issues = ManipolaNodeValidator().validate_node(node, upstream=upstream, inputs=[upstream])
+    assert [i.message for i in issues if i.severity == "error"] == []
+
+
+@pytest.mark.parametrize("selection", [
+    [{"name": "Comune", "keep": True}],
+    [{"name": "id", "keep": True}, {"name": "Comune", "keep": True, "label": "Città"}],
+    [{"name": "Comune", "keep": False}],
+])
+def test_output_selection_with_duplicate_names_predicts_the_saved_file(selection):
+    frame = pd.DataFrame({"id": [1], "name": ["Roma"], "city_id": [7]})
+    rename = {"renames": [{"old_name": "name", "new_name": "Comune"}, {"old_name": "city_id", "new_name": "Comune"}]}
+    renamed = get_executor().execute_with_params("rename", [frame], rename)
+    selected = apply_output_columns(renamed, selection)
+    saved, _ = make_unique_column_names(list(selected.columns))
+
+    canvas = CanvasState.model_validate({"nodes": [
+        {"id": "s", "type": "file_source", "position": {"x": 0, "y": 0}, "data": {"columns": [
+            {"name": "id", "type": "int", "id": "c-id"}, {"name": "name", "type": "str", "id": "c-name"},
+            {"name": "city_id", "type": "int", "id": "c-city"}]}},
+        {"id": "t", "type": "transform", "position": {"x": 0, "y": 1}, "transform_op": "rename", "config": rename},
+        {"id": "r", "type": "result", "position": {"x": 0, "y": 2}, "output_columns": selection},
+    ], "edges": [{"id": "e1", "source": "s", "target": "t"}, {"id": "e2", "source": "t", "target": "r"}]})
+    service = SchemaInferenceService(SimpleNamespace(
+        get_project_canvas=lambda _: canvas,
+        get_project_metadata=lambda _: SimpleNamespace(project_type="manipola", default_connection_id=None),
+    ))
+    predicted = [col["name"] for col in service.infer_node_schema_typed("p", "r").columns]
+    assert predicted == saved

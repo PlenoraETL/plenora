@@ -414,3 +414,14 @@ Snapshot rigenerato con `UPDATE_OPENAPI_SNAPSHOT=1 pytest tests2/contract/test_o
 ## Conferma finale
 
 Giro di conferma unico sulla correzione: punti 1-8 chiusi, dati di esecuzione identici a HEAD, fixture `a3_head_outcomes.json` rigenerata da un `git archive 3c8609fe` nuovo identica byte per byte, token `canvas_version` coerente fra GET, PUT e ripristino, frontend committato compatibile. Un difetto residuo, corretto: `_runtime_default` declassava ad avviso anche un parametro obbligatorio **presente ma vuoto** (`""`/`null`, come lo manda l'interfaccia svuotando un campo), mentre il runtime applica il default solo con la chiave assente (`string_pad.width`, `formula.new_column`, `concat_columns.output_column`). Regola: avviso solo con la chiave assente e default non vuoto; la guardia (b) enumera ora anche i valori vuoti di ogni parametro obbligatorio (prova di sensibilità: con la regola precedente falliscono 8 casi). Suite completa: **17.808 passati, 45 saltati, 0 falliti**.
+
+## Controllo dal vivo (server, 406655be)
+
+Sul canvas reale di SC_scheda_manipola (copia e originale) Valida dava due errori bloccanti:
+
+1. **Falso errore sulla Formula** `ct_date_due.dt.year * 10000 + ...`: `canvas_type_to_pandas_dtype` riconosceva solo il vocabolario minimo, quindi `datetime` (tipo dell'inferenza) diventava `object` e `.dt` falliva nell'esecuzione a vuoto. Regola: tipo -> famiglia con la stessa tabella dell'inferenza (`type_families.json`) -> dtype. Test di enumerazione su tutti i tipi della tabella (`test_a3_live_findings.py`).
+2. **Rinomina con nomi duplicati**: per decisione dell'utente diventa un **avviso** (Esegui non si blocca; il messaggio dice che la seconda colonna esce con il suffisso `_2`).
+
+E una differenza previsione/file: con la selezione dell'Output salvata per nome ("Comune" una volta) e due colonne "Comune" a monte, l'esecuzione (`df[[nomi]]`) le prende entrambe e salva `Comune`/`Comune_2`, la previsione ne teneva una. Regola unica `expand_column_plan` (shared/execution/column_selection.py), usata dall'Output e da Seleziona. Test: previsione == file salvato su tre selezioni. Prova di sensibilita': con il codice precedente 21 casi falliscono. Suite completa: **17.840 passati, 45 saltati, 0 falliti**.
+
+Fuori perimetro (Fase 5): 49 avvisi `JOIN_COLUMN_NOT_FOUND` preesistenti, da campi `source_column`/`target_column` rimasti su archi del canvas.
