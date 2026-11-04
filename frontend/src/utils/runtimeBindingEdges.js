@@ -221,3 +221,35 @@ export function bindingListResolution(node, paramId) {
   }
   return { patch };
 }
+
+/**
+ * Collegamenti di dati unici (regola dello store: tutti i percorsi che
+ * scrivono gli archi passano da qui). Tra due nodi un collegamento di dati
+ * esiste una volta per aggancio: uno uguale (stessa sorgente, stesso
+ * aggancio di uscita, stessa destinazione e stesso aggancio di ingresso) e'
+ * un doppione; uno SENZA aggancio di ingresso e' un doppione se tra gli
+ * stessi due nodi esiste gia' quello con l'aggancio esplicito (canvas
+ * salvati dalle versioni precedenti: due frecce per un solo ingresso).
+ * Agganci diversi restano (es. Join di una tabella con se stessa: input-0 e
+ * input-1). I collegamenti dei parametri non si toccano.
+ * @returns gli archi; lo STESSO array se non c'e' niente da togliere.
+ */
+export function uniqueDataEdges(edges) {
+  const list = edges || [];
+  const handle = (h) => (h == null || h === '' ? null : String(h));
+  const pairKey = (e) => `${e.source}\u0000${handle(e.sourceHandle) ?? ''}\u0000${e.target}`;
+  const withHandle = new Set(list
+    .filter(e => !isParameterBindingEdge(e) && handle(e.targetHandle) !== null)
+    .map(pairKey));
+  const seen = new Set();
+  const out = list.filter((e) => {
+    if (isParameterBindingEdge(e)) return true;
+    const th = handle(e.targetHandle);
+    if (th === null && withHandle.has(pairKey(e))) return false;
+    const key = `${pairKey(e)}\u0000${th ?? ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return out.length === list.length ? list : out;
+}

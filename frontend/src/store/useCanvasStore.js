@@ -19,7 +19,7 @@ import { applyNodeChanges, applyEdgeChanges } from '@xyflow/react';
 import { updateCanvas } from '../api';
 import { serializeCanvas } from '../utils/canvasSerializer';
 import { COLUMN_STEP, findFreePosition, nodeSize, planInsertAfter, settleNodes } from '../utils/canvasPlacement';
-import { bindingListResolution, isParameterBindingEdge } from '../utils/runtimeBindingEdges';
+import { bindingListResolution, isParameterBindingEdge, uniqueDataEdges } from '../utils/runtimeBindingEdges';
 import { EDITOR_ACTION_NAMES } from '../components/editor/editorActions';
 
 // Undo/redo: profondità massima dello stack (oltre, si scarta il più vecchio).
@@ -388,7 +388,7 @@ const useCanvasStore = create(
           const safeChanges = changes.filter(c => c.type === 'select');
           if (safeChanges.length === 0) return;
           set(
-            state => ({ edges: applyEdgeChanges(safeChanges, state.edges) }),
+            state => ({ edges: uniqueDataEdges(applyEdgeChanges(safeChanges, state.edges)) }),
             false,
             'onEdgesChange:readonly'
           );
@@ -400,7 +400,7 @@ const useCanvasStore = create(
         );
         set(
           state => ({
-            edges: applyEdgeChanges(changes, state.edges),
+            edges: uniqueDataEdges(applyEdgeChanges(changes, state.edges)),
             ...(relevant ? dirtyAndClearHighlights() : {})
           }),
           false,
@@ -430,8 +430,11 @@ const useCanvasStore = create(
       /** Carica il grafo dal backend: stato pulito e cronologia azzerata. */
       loadGraph: (nodes, edges) => {
         lastSnapshotTs = 0;
+        // Collegamenti doppi dei canvas vecchi: tolti al caricamento; la
+        // correzione parte col prossimo salvataggio (pendingSync).
+        const unique = uniqueDataEdges(edges);
         set(
-          { nodes, edges, graphLoaded: true, isDirty: false, pendingSync: false, past: [], future: [], validationHighlights: [], lastValidationSummary: null },
+          { nodes, edges: unique, graphLoaded: true, isDirty: false, pendingSync: unique !== edges, past: [], future: [], validationHighlights: [], lastValidationSummary: null },
           false,
           'loadGraph',
         );
@@ -453,7 +456,7 @@ const useCanvasStore = create(
         if (get().isReadOnly) return;
         get().takeSnapshot();
         set(
-          state => ({ edges: updater(state.edges), ...dirtyAndClearHighlights() }),
+          state => ({ edges: uniqueDataEdges(updater(state.edges)), ...dirtyAndClearHighlights() }),
           false,
           'editEdges',
         );
@@ -491,7 +494,7 @@ const useCanvasStore = create(
           rerouted, extraEdges,
         );
         get().takeSnapshot();
-        set({ nodes: nextNodes, edges: nextEdges, ...dirtyAndClearHighlights() }, false, 'insertBetween');
+        set({ nodes: nextNodes, edges: uniqueDataEdges(nextEdges), ...dirtyAndClearHighlights() }, false, 'insertBetween');
         return { edges: nextEdges };
       },
 
@@ -513,7 +516,7 @@ const useCanvasStore = create(
         const nextEdges = edges.map(e => (e.selected ? { ...e, selected: false } : e))
           .concat(addedEdges.map(e => ({ ...e, selected: e.id === selectEdgeId })));
         get().takeSnapshot();
-        set({ nodes: nextNodes, edges: nextEdges, ...dirtyAndClearHighlights() }, false, 'addSubgraph');
+        set({ nodes: nextNodes, edges: uniqueDataEdges(nextEdges), ...dirtyAndClearHighlights() }, false, 'addSubgraph');
         return { edges: nextEdges };
       },
 
@@ -593,7 +596,7 @@ const useCanvasStore = create(
           nextEdges = nextEdges.concat(added);
         }
         get().takeSnapshot();
-        set({ nodes: nextNodes, edges: nextEdges, ...dirtyAndClearHighlights() }, false, 'insertNode');
+        set({ nodes: nextNodes, edges: uniqueDataEdges(nextEdges), ...dirtyAndClearHighlights() }, false, 'insertNode');
         return { added, edges: nextEdges };
       },
 
@@ -621,7 +624,7 @@ const useCanvasStore = create(
       /** Aggiornamento DERIVATO degli edge: mai dirty, mai snapshot. */
       applyDerivedEdges: (updater) =>
         set(state => {
-          const next = updater(state.edges);
+          const next = uniqueDataEdges(updater(state.edges));
           return next === state.edges ? state : { edges: next };
         }, false, 'applyDerivedEdges'),
 
@@ -631,13 +634,13 @@ const useCanvasStore = create(
         get().takeSnapshot();
         set(
           state => ({
-            edges: state.edges.map(edge => {
+            edges: uniqueDataEdges(state.edges.map(edge => {
               if (edge.id !== edgeId) return edge;
               const changes = typeof updater === 'function'
                 ? updater(edge)
                 : updater;
               return { ...edge, ...(changes || {}) };
-            }),
+            })),
             ...dirtyAndClearHighlights(),
           }),
           false,
