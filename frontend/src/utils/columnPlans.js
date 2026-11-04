@@ -12,6 +12,8 @@
  * Regola unica per le colonne sparite a monte: select_columns e Output le
  * saltano (skipMissing), nel backend come qui.
  */
+import AGGREGATION_TYPES from './aggregationTypes.json';
+import TYPE_FAMILIES from './typeFamilies.json';
 
 const SUFFIX = { left: '_L', right: '_R' };
 
@@ -92,50 +94,120 @@ export function joinColumnPlan(left, right, leftKeys, rightKeys, leftColumns, ri
   return { left: maps[0], right: maps[1], outputs, error: null };
 }
 
+// ── Preparazione dei nomi del Join: copia di
+// backend/app/shared/execution/join_preparation.py (la STESSA usata da
+// esecuzione e inferenza, Blocco A A1). Le colonne in uscita sono triple
+// [lato 0/1, posizione nella sorgente, nome finale].
+
+function deduplicateJoinNames(names, keys) {
+  const seen = new Map();
+  const keySeen = new Map();
+  return names.map((name) => {
+    if (keys.includes(name)) {
+      const n = (keySeen.get(name) || 0) + 1;
+      keySeen.set(name, n);
+      return n === 1 ? name : `${name}_dup${n}`;
+    }
+    const n = (seen.has(name) ? seen.get(name) : -1) + 1;
+    seen.set(name, n);
+    return n === 0 ? name : `${name}_${n}`;
+  });
+}
+
+function suffixJoinNames(names, keys, suffix) {
+  const done = new Map();
+  return names.map((name) => {
+    if (keys.includes(name)) {
+      const n = (done.get(name) || 0) + 1;
+      done.set(name, n);
+      return n === 1 ? name : `${name}_${suffix}_dup${n}`;
+    }
+    return `${name}_${suffix}`;
+  });
+}
+
 /**
- * Colonne in uscita dal Join, nel percorso nuovo: [lato, sorgente, uscita]
- * nell'ordine del backend (shared/execution/schema_column_plans.join_output_plan).
- * @returns {{ columns: Array<[string,string,string]>, error: string|null }}
+ * prepared_join_plan del backend. `maps` (percorso nuovo) e' la coppia di
+ * Map nome sorgente -> nome in uscita di joinColumnPlan; senza `maps` e' il
+ * percorso di prima (_L/_R).
+ * @returns {Array<[number, number, string]>}
+ */
+export function preparedJoinPlan(left, right, leftKeys, rightKeys, maps = null) {
+  const sides = [[left, leftKeys, 'L'], [right, rightKeys, 'R']].map(([names, keys, suffix], side) => {
+    const indices = maps == null
+      ? names.map((_, i) => i)
+      : [...maps[side].keys()].flatMap(selected => names.flatMap((n, i) => (n === selected ? [i] : [])));
+    const deduped = deduplicateJoinNames(indices.map(i => names[i]), keys);
+    const renamed = maps == null
+      ? suffixJoinNames(deduped, keys, suffix)
+      : deduped.map(n => (maps[side].has(n) ? maps[side].get(n) : n));
+    const unique = new Map();
+    indices.forEach((index, k) => { if (!unique.has(renamed[k])) unique.set(renamed[k], index); });
+    return unique;
+  });
+  const common = new Set([...sides[0].keys()].filter(n => sides[1].has(n)));
+  const pairs = leftKeys.map((lk, i) => [lk, rightKeys[i]]).filter(([, rk]) => rk !== undefined);
+  const sharedKeys = new Set(pairs.filter(([lk, rk]) => lk === rk).map(([lk]) => lk));
+  const dropRight = new Set(pairs.filter(([lk, rk]) => lk !== rk && !leftKeys.includes(rk)).map(([, rk]) => rk));
+  const result = [...sides[0].entries()].map(([name, index]) => [0, index, name]);
+  for (const [name, index] of sides[1].entries()) {
+    if (sharedKeys.has(name)) continue;
+    const output = common.has(name) ? `${name}_dup` : name;
+    if (maps == null && dropRight.has(output)) continue;
+    result.push([1, index, output]);
+  }
+  return result;
+}
+
+// Come in Python: liste obbligatorie; i NOMI delle colonne diventano chiavi
+// di dizionario, quindi niente liste o oggetti (le chiavi del join si
+// confrontano soltanto).
+const invalidLists = ([left, right, leftKeys, rightKeys]) => [left, right, leftKeys, rightKeys].some(l => !Array.isArray(l))
+  || [left, right].some(l => l.some(v => v !== null && typeof v === 'object'));
+
+/**
+ * Colonne in uscita dal Join, nel percorso nuovo (scelta delle colonne e
+ * gestione dei nomi uguali).
+ * @returns {{ columns: Array<[number,number,string]>, error: string|null }}
  */
 export function joinOutputPlan(left, right, leftKeys, rightKeys, leftColumns, rightColumns, nameConflict) {
   const plan = joinColumnPlan(left, right, leftKeys, rightKeys, leftColumns, rightColumns, nameConflict);
   if (plan.error) return { columns: [], error: plan.error };
-  const shared = new Set(leftKeys.filter(k => rightKeys.includes(k)));
-  return {
-    columns: [
-      ...left.filter(n => plan.left.has(n)).map(n => ['left', n, plan.left.get(n)]),
-      ...right.filter(n => plan.right.has(n) && !shared.has(n)).map(n => ['right', n, plan.right.get(n)]),
-    ],
-    error: null,
-  };
+  return { columns: preparedJoinPlan(left, right, leftKeys, rightKeys, [plan.left, plan.right]), error: null };
+}
+
+/** Join nel percorso di prima (_L/_R). */
+export function legacyJoinPlan(left, right, leftKeys, rightKeys) {
+  if (invalidLists([left, right, leftKeys, rightKeys])) {
+    return { columns: [], error: 'Join: colonne o chiavi non valide' };
+  }
+  return { columns: preparedJoinPlan(left, right, leftKeys, rightKeys), error: null };
+}
+
+/** Famiglia di un tipo (copia di schema_column_plans.type_family, stessa tabella typeFamilies.json). */
+export function typeFamily(sourceType) {
+  const value = String(sourceType ?? '').trim().toLowerCase();
+  const prefix = TYPE_FAMILIES.geometry_prefix;
+  if (value.startsWith(prefix)) return prefix;
+  return TYPE_FAMILIES.aliases[value] ?? value;
 }
 
 /**
- * Join nel percorso di prima (_L/_R ovunque): copia di
- * schema_column_plans.legacy_join_plan. La chiave destra si scarta solo se
- * accoppiata a una chiave sinistra con lo stesso nome.
+ * Tipo di una colonna aggregata: la tabella e' GENERATA dal backend eseguendo
+ * op_aggregate (backend/app/shared/execution/aggregation_types.json, Blocco A
+ * A1); questa e' una copia identica, verificata da un test. Se la famiglia non
+ * cambia resta il tipo d'ingresso (sottotipo della geometria compreso).
+ * null = la coppia funzione/tipo non e' eseguibile.
  */
-export function legacyJoinPlan(left, right, leftKeys, rightKeys) {
-  // Come in Python: liste obbligatorie, elementi hashable (niente liste o oggetti).
-  const lists = [left, right, leftKeys, rightKeys];
-  if (lists.some(l => !Array.isArray(l)) || lists.some(l => l.some(v => v !== null && typeof v === 'object'))) {
-    return { columns: [], error: 'Join: colonne o chiavi non valide' };
-  }
-  const shared = new Set(leftKeys.filter((k, i) => i < rightKeys.length && rightKeys[i] === k));
-  return {
-    columns: [
-      ...left.map(n => ['left', n, leftKeys.includes(n) ? n : `${n}_L`]),
-      ...right.filter(n => !shared.has(n)).map(n => ['right', n, rightKeys.includes(n) ? n : `${n}_R`]),
-    ],
-    error: null,
-  };
-}
-
-/** Tipo di una colonna aggregata: copia di schema_column_plans.aggregation_output_type. */
 export function aggregationOutputType(func, sourceType) {
-  if (func === 'count') return 'int';
-  if (func === 'mean' || func === 'std') return 'real';
-  return sourceType;
+  const family = typeFamily(sourceType);
+  const fn = String(func).toLowerCase();
+  const table = AGGREGATION_TYPES[fn];
+  // Famiglia sconosciuta alla tabella (json, uuid, ...): regola di prima.
+  if (table && !(family in table)) return ['count', 'size', 'nunique'].includes(fn) ? 'int' : sourceType;
+  const outcome = table?.[family] ?? 'error';
+  if (outcome === 'error') return null;
+  return outcome === family ? sourceType : outcome;
 }
 
 /** Il join usa il nuovo percorso (stessa regola del backend). */
@@ -230,7 +302,8 @@ export function resultOutputColumns(available, data = {}) {
   const out = plan.groups.map(n => selected.find(c => c.name === n));
   for (const [col, fn, alias] of plan.aggregations) {
     const source = selected.find(c => c.name === col);
-    out.push({ name: String(alias), type: aggregationOutputType(fn, source?.type || 'real') });
+    // Coppia non eseguibile: Valida la segnala; qui solo un tipo da mostrare.
+    out.push({ name: String(alias), type: aggregationOutputType(fn, source?.type || 'real') || 'str' });
   }
   return out;
 }

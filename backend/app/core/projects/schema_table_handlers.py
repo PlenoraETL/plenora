@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.core.manipola.transforms.aggregation import prepare_aggregation_dict, aggregation_aliases
+from app.shared.execution.schema_column_plans import aggregation_output_type
 from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
@@ -27,83 +29,24 @@ class TableSchemaHandlers:
         input_by_name = {col.name: col for col in input_schema}
 
         group_by = self._normalize_str_list(config.get("group_by"))
-        aggs = config.get("aggs", {})
-        aggregations = config.get("aggregations")
 
-        valid_group_by = [name for name in group_by if name in input_by_name]
-        # Runtime op_aggregate e' intenzionalmente no-op senza almeno una
-        # chiave valida: lo schema deve quindi restare quello di input.
-        if not valid_group_by:
+        aggregations = config.get("aggregations") or []
+        group_by = [name for name in group_by if name in input_by_name]
+        if not group_by:
             return self._copy_schema(input_schema, node_id)
-
-        result = [
-            self._copy_column(input_by_name[name], node_id, is_calculated=False)
-            for name in valid_group_by
-        ]
-
-        agg_items = []
-        if isinstance(aggregations, list):
-            for agg in aggregations:
-                if not isinstance(agg, dict):
-                    continue
-                col_name = agg.get("column")
-                agg_func = agg.get("function", "count")
-                raw_alias = agg.get("alias")
-                alias = raw_alias.strip() if isinstance(raw_alias, str) else raw_alias
-                if col_name in input_by_name:
-                    agg_items.append((col_name, agg_func, alias))
-        elif isinstance(aggs, dict):
-            agg_items = [
-                (col_name, agg_func, None)
-                for col_name, agg_func in aggs.items()
-                if col_name in input_by_name
-            ]
-
-        # Runtime: group_by valido + aggregazioni assenti/tutte invalide
-        # produce una colonna count tramite group_size_reset.
-        if not agg_items:
-            result.append(self._column_schema_cls(
-                name="count",
-                type="int",
-                source_node=node_id,
-                is_calculated=True,
-            ))
-            return result
-
-        occurrences = {}
-        for col_name, _agg_func, _alias in agg_items:
-            occurrences[col_name] = occurrences.get(col_name, 0) + 1
-
-        for col_name, agg_func, alias in agg_items:
-            orig_col = input_by_name.get(col_name)
-            agg_func = str(agg_func or "count").lower()
-
-            if agg_func in ("count", "nunique", "size"):
-                out_type = "int"
-            elif agg_func in ("sum", "mean", "avg", "std", "var", "min", "max"):
-                out_type = orig_col.type if orig_col else "real"
-                if agg_func in ("mean", "avg", "std", "var"):
-                    out_type = "real"
-            elif agg_func in ("first", "last"):
-                out_type = orig_col.type if orig_col else "str"
-            elif agg_func == "concat":
-                out_type = "str"
-            else:
-                out_type = "str"
-
-            output_name = alias or (
-                f"{col_name}_{agg_func}"
-                if occurrences[col_name] > 1
-                else col_name
-            )
-            result.append(self._column_schema_cls(
-                name=output_name,
-                type=out_type,
-                source_node=node_id,
-                is_calculated=True,
-            ))
-
-        return result
+        result = [self._copy_column(input_by_name[name], node_id) for name in group_by]
+        functions = prepare_aggregation_dict(list(input_by_name), aggregations)
+        multiple = any(isinstance(value, list) for value in functions.values())
+        if not functions:
+            result.append(self._column_schema_cls(name="count", type="int", source_node=node_id, is_calculated=True))
+        for name, funcs in functions.items():
+            for func in (funcs if isinstance(funcs, list) else [funcs]):
+                label = func.__name__ if callable(func) else func
+                output = f"{name}_{label}".strip("_") if multiple else name
+                type_ = aggregation_output_type("concat" if callable(func) else func, input_by_name[name].type)
+                result.append(self._column_schema_cls(name=output, type=type_, source_node=node_id, is_calculated=True))
+        aliases = aggregation_aliases([col.name for col in result], group_by, aggregations)
+        return [self._copy_column(col, node_id, name=aliases.get(col.name, col.name)) for col in result]
 
     def _schema_concat(
         self,
@@ -116,26 +59,6 @@ class TableSchemaHandlers:
         """
         if not input_schemas:
             return []
-
-        join_mode = config.get("join", "outer")
-
-        if join_mode == "inner":
-            common_cols = None
-            for schema in input_schemas:
-                col_names = {col.name for col in schema}
-                if common_cols is None:
-                    common_cols = col_names
-                else:
-                    common_cols &= col_names
-
-            if not common_cols:
-                return []
-
-            result = []
-            for col in input_schemas[0]:
-                if col.name in common_cols:
-                    result.append(self._copy_column(col, node_id))
-            return result
 
         seen = {}
         for schema in input_schemas:
@@ -216,21 +139,26 @@ class TableSchemaHandlers:
             "std", "var", "q25", "q75",
         }
         prefix = config.get("output_prefix") or f"{column}_"
-
+        source_type = next(col.type for col in result if col.name == column)
+        derived = {}
         for stat in stats:
             if stat not in valid_stats:
                 continue
             col_name = f"{prefix}{stat}"
-            if col_name in existing:
-                continue
-            stat_type = "int" if stat == "count" else "real"
-            result.append(self._column_schema_cls(
+            stat_type = "int" if stat == "count" else source_type if stat in {"min", "max", "sum"} else "real"
+            derived[col_name] = self._column_schema_cls(
                 name=col_name,
                 type=stat_type,
                 source_node=node_id,
                 is_calculated=True,
-            ))
-            existing.add(col_name)
+            )
+        if config.get("group_by") in existing:
+            collisions = existing & derived.keys()
+            result = [self._copy_column(col, node_id, name=f"{col.name}_x" if col.name in collisions else col.name) for col in result]
+            result += [self._copy_column(col, node_id, name=f"{col.name}_y" if col.name in collisions else col.name) for col in derived.values()]
+        else:
+            for col in derived.values():
+                self._assign_column(result, col)
         return result
 
     def _schema_window_function(
@@ -259,8 +187,6 @@ class TableSchemaHandlers:
             return result
 
         output_col = config.get("output_column") or f"{column}_{function}"
-        if output_col in by_name:
-            return result
 
         if function in ("rank", "dense_rank", "pct_change", "running_mean"):
             out_type = "real"
@@ -269,7 +195,7 @@ class TableSchemaHandlers:
         else:
             out_type = by_name[column].type
 
-        result.append(self._column_schema_cls(
+        self._assign_column(result, self._column_schema_cls(
             name=output_col,
             type=out_type,
             source_node=node_id,

@@ -1,9 +1,14 @@
 """Inferenza degli schemi sul grafo del canvas progetto."""
 from app.shared.execution.node_fields import node_field
 from app.shared.execution.result_grouping import result_group_plan
-from app.shared.execution.schema_column_plans import aggregation_output_type
+from app.shared.execution.schema_column_plans import aggregation_output_type, type_family
 from dataclasses import dataclass, replace
 from copy import copy
+from types import SimpleNamespace
+from app.core.manipola.plugin_executor import get_executor
+from app.core.manipola.schema_source_plans import static_columns, unique_source_names
+from app.shared.execution.source_column_plan import source_column_plan
+from app.shared.execution.join_preparation import multi_join_renames, normalize_key_list as _normalize_key_list, normalize_join_pairs as _normalize_join_pairs
 from typing import Dict, List, Optional, Any, Tuple, Mapping
 import uuid
 
@@ -22,6 +27,7 @@ from app.core.projects.types import (
 )
 from app.core.manipola.transform_ordering import incoming_edge_sort_key_for_nodes
 from app.shared.execution.config_column_refs import resolve_config_column_refs
+from app.shared.execution.output_column_refs import resolve_output_column_refs, unique_column_names
 from app.shared.execution.schema_types import ColumnSchema, InferredSchema
 from app.utils.logger import get_logger
 
@@ -33,7 +39,7 @@ def _node_config(node: Any, keys: tuple[str, ...]) -> Mapping[str, Any]:
 
 
 def _stable_column_id(*parts: str) -> str:
-    return f"col_{uuid.uuid5(uuid.NAMESPACE_URL, ':'.join(parts)).hex}"
+    return f"col_{uuid.uuid5(uuid.NAMESPACE_URL, ':'.join(str(part) for part in parts)).hex}"
 
 
 @dataclass(frozen=True)
@@ -52,14 +58,18 @@ class SchemaInferenceService:
         self._transform_handlers = TransformSchemaHandlers(ColumnSchema)
 
         self._schema_cache: Dict[str, List[ColumnSchema]] = {}
-        # node_id -> (status, reason). Popolato in parallelo a _schema_cache.
+        # node_id -> (stato dei nomi, motivo), separato da tipi e ordine.
         self._status_cache: Dict[str, Tuple[str, str]] = {}
+        self._types_status_cache: Dict[str, Tuple[str, str]] = {}
+        self._order_status_cache: Dict[str, str] = {}
     
     def _new_call(self) -> "SchemaInferenceService":
         """Isola le cache per chiamata, conservando servizi e configurazione."""
         call = copy(self)
         call._schema_cache = {}
         call._status_cache = {}
+        call._types_status_cache = {}
+        call._order_status_cache = {}
         return call
 
     def infer_all_schemas(
@@ -143,7 +153,11 @@ class SchemaInferenceService:
         # Canvas o nodo assente → il nodo
         # non è calcolato → default `certain` (problema strutturale, preso altrove).
         status, reason = call._status_cache.get(node_id, ("certain", ""))
-        return InferredSchema(columns=rows, status=status, reason=reason)
+        types_status, types_reason = call._types_status_cache.get(node_id, (status, reason))
+        order_status = call._order_status_cache.get(node_id, status)
+        combined = "indeterminate" if "indeterminate" in (status, types_status, order_status) else "certain"
+        return InferredSchema(columns=rows, status=combined, reason=reason or types_reason,
+                              names_status=status, types_status=types_status, order_status=order_status)
 
     def _infer_node_schema(
         self,
@@ -178,26 +192,50 @@ class SchemaInferenceService:
                 inputs = self._get_input_schemas(node.id, nodes_by_id, edges_by_target, project_id)
                 schema = inputs[0] if inputs else []
                 self._status_cache[node.id] = ("indeterminate", str(exc))
+        else:
+            self._status_cache[node.id] = ("indeterminate", f"Tipo nodo non gestito: {node.type}")
 
         self._record_node_status(node, context)
+        if any(self._order_status_cache.get(edge.source) == "indeterminate"
+               for edge in context.edges_by_target.get(node.id, [])):
+            self._order_status_cache[node.id] = "indeterminate"
+        inherited_types = [self._types_status_cache.get(edge.source, self._status_cache.get(edge.source, ("certain", "")))
+                           for edge in context.edges_by_target.get(node.id, [])]
+        if any(state[0] == "indeterminate" for state in inherited_types):
+            self._types_status_cache[node.id] = ("indeterminate", "Tipi a monte incerti")
+        schema = [replace(col, id=col.id or _stable_column_id(node.id, col.name),
+                          source_name=col.source_name if col.source_name is not None else col.name)
+                  for col in schema]
+        counts = {}
+        for col in schema:
+            counts[col.id] = counts.get(col.id, 0) + 1
+        occurrences = {}
+        unique = []
+        for col in schema:
+            identity = col.id
+            if counts[identity] > 1:
+                key = (identity, col.name)
+                occurrence = occurrences.get(key, 0)
+                occurrences[key] = occurrence + 1
+                identity = _stable_column_id(identity, col.name, str(occurrence))
+            unique.append(replace(col, id=identity))
+        schema = unique
         self._schema_cache[node.id] = schema
         return schema
 
-    def _record_node_status(self, node, context: _NodeSchemaContext) -> None:
-        """Determina (status, reason) per il nodo, dopo il calcolo dello schema.
+    @staticmethod
+    def _merge_schema_identities(schema: List[ColumnSchema], inputs: List[List[ColumnSchema]]) -> List[ColumnSchema]:
+        """Le copie suffissate dipendono dall'identit? sorgente e dal nome finale."""
+        origins = {}
+        for input_schema in inputs:
+            for col in input_schema:
+                origins.setdefault(col.id, set()).add(col.name)
+        return [replace(col, id=_stable_column_id(col.id, col.name))
+                if col.id and col.id in origins and col.name not in origins[col.id] else col
+                for col in schema]
 
-        Precedenza:
-        1. reason specifica già registrata da un handler critico
-           (project_source 307/312/321, result 260) → vince;
-        2. **un qualsiasi upstream indeterminate → indeterminate**, anche con
-           schema NON-vuoto: i combinatori multi-input (join/cross_join/
-           table_diff/concat/sjoin/geo_overlay/geo_nearest) producono uno schema
-           *parziale* quando un input è indeterminate (mancano le sue colonne);
-           marcarlo ``certain`` causerebbe un FALSO BLOCCO sui ref a valle. Il
-           check va PRIMA di guardare ``schema`` (regola centrale: copre tutti i
-           combinatori presenti e futuri, senza eccezioni per-handler);
-        3. altrimenti ``certain`` (colonne presenti, o vuoto dichiarato/edge).
-        """
+    def _record_node_status(self, node, context: _NodeSchemaContext) -> None:
+        """Propaga soltanto l'incertezza dei nomi, indipendente dai tipi."""
         if node.id in self._status_cache:
             return  # reason specifica già fissata dall'handler critico
         inherited = self._inherited_indeterminate(node, context.edges_by_target)
@@ -232,6 +270,9 @@ class SchemaInferenceService:
         handlers = {
             "source": self._infer_source_node_schema,
             "file_source": self._infer_file_source_node_schema,
+            "datasource_node": self._infer_file_source_node_schema,
+            "staticValues": self._infer_static_node_schema,
+            "multi_join": self._infer_multi_join_node_schema,
             "feature_source": self._infer_feature_source_node_schema,
             "project_source": self._infer_project_source_node_schema,
             "project_input": self._infer_project_input_node_schema,
@@ -241,6 +282,67 @@ class SchemaInferenceService:
         }
         # NODE-DISPATCH-REGISTRY:end
         return handlers
+
+    def _infer_static_node_schema(self, context: _NodeSchemaContext) -> List[ColumnSchema]:
+        """I valori statici sono configurazione: usa il caricatore effettivo."""
+
+        fields = node_field(context.node, "fields") or []
+        return [ColumnSchema(
+            name=col["name"], type=col["type"],
+            id=_stable_column_id(context.node.id, col["name"]),
+            source_name=col["name"], source_node=context.node.id,
+        ) for col in static_columns(fields)]
+
+    def _infer_multi_join_node_schema(self, context: _NodeSchemaContext) -> List[ColumnSchema]:
+        """Propaga i passi del multi-join con la preparazione dei nomi runtime."""
+
+        inputs = self._get_input_schemas(context.node.id, context.nodes_by_id,
+                                        context.edges_by_target, context.project_id)
+        if not inputs:
+            self._status_cache[context.node.id] = ("indeterminate", "Multi-join senza ingressi")
+            return []
+        node = context.node
+        config = (node.data or {}).get("config", {})
+        keys = _normalize_key_list(node_field(node, "join_keys") or config.get("join_keys"))
+        ids = node_field(node, "join_key_ids") or config.get("join_key_ids") or []
+        by_id = {col.id: col.name for schema in inputs for col in schema if col.id}
+        if ids:
+            keys = [by_id.get(id_, keys[i] if i < len(keys) else None) for i, id_ in enumerate(ids)]
+            keys = [key for key in keys if key]
+        left = _normalize_key_list(node_field(node, "left_keys") or config.get("left_keys"))
+        right = _normalize_key_list(node_field(node, "right_keys") or config.get("right_keys"))
+        if not left or not right:
+            pair_left, pair_right = _normalize_join_pairs(node_field(node, "join_pairs") or config.get("join_pairs"))
+            if pair_left and pair_right:
+                left, right = pair_left, pair_right
+        paired = len(inputs) == 2 and bool(left or right)
+        if paired and (not left or not right or len(left) != len(right)):
+            raise ValueError("Multi-join: coppie di chiavi non valide")
+        if not paired:
+            if not keys:
+                common = set(col.name for col in inputs[0])
+                for schema in inputs[1:]:
+                    common &= {col.name for col in schema}
+                keys = list(common)
+            left = right = keys
+        result = inputs[0]
+        if not left or not right:
+            return result
+        for index, schema in enumerate(inputs[1:], start=2):
+            if not set(left) <= {col.name for col in result} or not set(right) <= {col.name for col in schema}:
+                return inputs[0]
+            renames = multi_join_renames([col.name for col in result], [col.name for col in schema],
+                                        left, right, index, paired=paired)
+            shared = {lk for lk, rk in zip(left, right) if lk == rk}
+            dropped = {rk for lk, rk in zip(left, right) if lk != rk and rk not in left}
+            renamed = [replace(col, name=renames.get(col.name, col.name)) for col in schema]
+            collisions = ({col.name for col in result} & {col.name for col in renamed}) - shared
+            result = [replace(col, name=f"{col.name}_x" if col.name in collisions else col.name) for col in result]
+            result += [replace(col, name=f"{col.name}_y" if col.name in collisions else col.name)
+                       for col in renamed if col.name not in shared]
+            result = [col for col in result if col.name not in dropped]
+        self._types_status_cache[node.id] = ("indeterminate", "I merge possono promuovere i tipi in presenza di righe non abbinate")
+        return self._merge_schema_identities(result, inputs)
 
     def _infer_source_node_schema(
         self,
@@ -274,6 +376,9 @@ class SchemaInferenceService:
     ) -> List[ColumnSchema]:
         if getattr(context.node, "input_kind", None) != "file":
             return []
+        self._status_cache[context.node.id] = (
+            "indeterminate", "Il file runtime può contenere colonne aggiuntive e tipi diversi dal contratto atteso",
+        )
         columns = []
         for col in getattr(context.node, "expected_columns", None) or []:
             if not isinstance(col, dict) or not col.get("name"):
@@ -332,17 +437,16 @@ class SchemaInferenceService:
             schema = input_schemas[0]
             if columns is not None and columns != []:
                 by_name = {col.name: col for col in schema}
-                columns = resolve_config_column_refs(
-                    {"columns": columns}, {str(col.id): col.name for col in schema if col.id},
-                )["columns"]
-                plan = select_column_plan(list(by_name), columns, skip_missing=True)
+                columns = resolve_output_column_refs(columns, unique_column_names([col.to_dict() for col in schema]))
+                plan = select_column_plan([col.name for col in schema], columns, skip_missing=True)
                 schema = [replace(by_name[name], name=label) for name, label in plan]
             groups, aggregations = result_group_plan(context.node, [col.name for col in schema])
             if groups or aggregations:
                 by_name = {col.name: col for col in schema}
-                schema = [by_name[name] for name in groups if name in by_name]
+                grouped = {name: by_name[name] for name in groups if name in by_name}
                 for col, func, alias in aggregations:
-                    schema.append(ColumnSchema(alias, aggregation_output_type(func, by_name[col].type if col in by_name else "str"), source_node=context.node.id, is_calculated=True))
+                    grouped[alias] = ColumnSchema(alias, aggregation_output_type(func, by_name[col].type if col in by_name else "str"), source_node=context.node.id, is_calculated=True)
+                schema = list(grouped.values())
             return schema
         self._status_cache[context.node.id] = (
             "indeterminate",
@@ -428,45 +532,10 @@ class SchemaInferenceService:
                 if isinstance(c, dict) and c.get("status", "active") == "active"
             ]
             node_columns = node.columns or (node.data.get("columns") if node.data else None) or []
-            visible_ids = set()
-            visible_names = set()
-            if node_columns:
-                for raw_col in node_columns:
-                    col = raw_col
-                    if not isinstance(col, dict):
-                        col = {
-                            "id": getattr(raw_col, "id", None),
-                            "column_id": getattr(raw_col, "column_id", None),
-                            "name": getattr(raw_col, "name", None),
-                            "source_name": getattr(raw_col, "source_name", None),
-                            "display_name": getattr(raw_col, "display_name", None),
-                            "visible": getattr(raw_col, "visible", True),
-                        }
-                    if not col.get("visible", True):
-                        continue
-                    col_id = col.get("id") or col.get("column_id")
-                    if col_id:
-                        visible_ids.add(str(col_id))
-                    for name_key in ("source_name", "name", "display_name"):
-                        name = col.get(name_key)
-                        if name:
-                            visible_names.add(str(name))
-
             columns = []
             for col in contract_columns:
                 col_id = col.get("id")
                 col_name = col.get("physical_name") or col.get("display_name") or col.get("source_name") or ""
-
-                if visible_ids and str(col_id) not in visible_ids:
-                    continue
-                if (
-                    not visible_ids
-                    and visible_names
-                    and str(col.get("source_name") or "") not in visible_names
-                    and str(col_name) not in visible_names
-                    and str(col.get("display_name") or "") not in visible_names
-                ):
-                    continue
 
                 columns.append(ColumnSchema(
                     name=col_name,
@@ -477,10 +546,11 @@ class SchemaInferenceService:
                     is_calculated=False
                 ))
 
-            return columns
+            return self._project_source_columns(columns, node_columns, deduplicate=True)
             
         except Exception as e:
             logger.error(f"[CRASH] Errore lettura metadata {source_project_id}: {e}", exc_info=True)
+            self._status_cache[node.id] = ("indeterminate", str(e))
             return []
     
     def _infer_file_source_schema(self, node) -> List[ColumnSchema]:
@@ -493,17 +563,38 @@ class SchemaInferenceService:
         node_columns = node.columns or (node.data.get("columns") if node.data else None) or []
         if node_columns:
             for col in node_columns:
-                if col.get("visible", True):
+                if not isinstance(col, dict):
+                    col = col.model_dump()
+                if col.get("name"):
                     columns.append(ColumnSchema(
                         name=col.get("name", ""),
                         type=col.get("type", "str"),
-                        id=col.get("id") or col.get("column_id"),
+                        id=col.get("id") or col.get("column_id") or _stable_column_id(node.id, col.get("name", "")),
                         source_name=col.get("source_name") or col.get("name", ""),
                         source_node=node.id,
                         is_calculated=False
                     ))
         
-        return columns
+        if not columns:
+            self._status_cache[node.id] = ("indeterminate", "Schema fisico della sorgente non disponibile")
+        elif node_field(node, "file_source_id") or node_field(node, "datasource_id"):
+            self._status_cache[node.id] = ("metadata", "Nomi da metadati salvati")
+            self._types_status_cache[node.id] = (
+                "indeterminate", "Metadati salvati: lo schema fisico del file esterno non è verificato in inferenza",
+            )
+        return self._project_source_columns(columns, node_columns)
+
+    def _project_source_columns(self, schema: List[ColumnSchema], columns: list[Any], *, deduplicate: bool = False) -> List[ColumnSchema]:
+        """Applica lo stesso piano del caricamento, mantenendo identità e ordine."""
+
+        raw = [col if isinstance(col, dict) else col.model_dump() for col in columns]
+        plan = source_column_plan([col.name for col in schema], raw)
+        projected = ([replace(col, name=alias) for name, alias in plan for col in schema if col.name == name]
+                     if plan else list(schema))
+        if deduplicate:
+            names = unique_source_names([col.name for col in projected])
+            projected = [replace(col, name=name) for col, name in zip(projected, names)]
+        return projected
     
     def _infer_transform_schema(
         self, 
@@ -519,16 +610,73 @@ class SchemaInferenceService:
         transform_op = node.transform_op or (node.data.get("transform_op") if node.data else None)
         config = self._resolve_schema_config_column_refs(config, input_schemas)
 
+
+        executor = get_executor()
+        if transform_op in executor.registry:
+
+            schema_node = SimpleNamespace(data={"inputColumns": [col.to_dict() for schema in input_schemas for col in schema]})
+            config = executor._resolve_column_references(config, schema_node, executor.registry[transform_op])
+            config = executor.prepare_params(transform_op, config)
+        else:
+            self._status_cache[node.id] = ("indeterminate", "Operazione assente dal registry di esecuzione")
+
         if not transform_op:
+            self._status_cache[node.id] = ("indeterminate", "Operazione non specificata")
             logger.warning(f"Transform {node.id} senza transform_op")
             return input_schemas[0] if input_schemas else []
 
         handlers = self._build_transform_handlers(edges_by_target)
         handler = handlers.get(transform_op)
         if handler is None:
+            self._status_cache[node.id] = ("indeterminate", f"Operazione non gestita: {transform_op}")
             logger.warning(f"Operazione {transform_op} non gestita - passthrough")
             return self._transform_handlers.schema_passthrough(input_schemas, node.id)
-        return handler(input_schemas, config, node.id)
+        schema = handler(input_schemas, config, node.id)
+        if transform_op in {"cross_join", "sjoin", "geo_nearest", "geo_overlay", "geo_union",
+                            "geo_intersection", "geo_symmetric_difference"}:
+            schema = self._merge_schema_identities(schema, input_schemas)
+        self._types_status_cache.setdefault(node.id, ("certain", ""))
+        if transform_op in {
+            "pivot", "flatten_json", "table_diff",
+            "formula", "conditional", "fill_na", "replace", "type_cast",
+            "lookup", "date_extract", "geo_nearest", "geo_count_points_in_polygons",
+            "string_pad", "string_length", "string_extract",
+            "window_function", "geo_distance", "geo_line_builder",
+            "geo_polygon_builder", "statistics",
+            "geo_union", "geo_symmetric_difference", "geo_to_wkt",
+        }:
+            self._types_status_cache[node.id] = (
+                "indeterminate", "Tipi dipendenti dai valori effettivi dell'ingresso",
+            )
+        if transform_op in {"pivot", "transpose", "flatten_json", "table_diff",
+                            "geo_count_points_in_polygons"}:
+            self._status_cache[node.id] = ("indeterminate", "Nomi o ordine dipendenti dai valori o dal vuoto")
+        if transform_op == "split_column" and not config.get("new_columns"):
+            self._status_cache[node.id] = ("indeterminate", "Nomi delle parti generati dai valori")
+        if transform_op in {"split_column", "string_pad", "string_length", "uuid_generator", "window_function", "geo_nearest"} and input_schemas:
+            before = [col.name for col in input_schemas[0]]
+            after = [col.name for col in schema]
+            if set(before) != set(after):
+                schema = [replace(col, optional=True) if col.name not in before else col for col in schema]
+            elif before != after:
+                self._order_status_cache[node.id] = "indeterminate"
+        if transform_op == "table_diff" and len(input_schemas) == 2:
+            left_names = {col.name for col in input_schemas[0]}
+            right_names = {col.name for col in input_schemas[1]}
+            if left_names == right_names:
+                self._status_cache.pop(node.id, None)
+        if transform_op == "geo_count_points_in_polygons" and not config.get("aggregate_column"):
+            self._status_cache.pop(node.id, None)
+            self._types_status_cache[node.id] = ("certain", "")
+        if transform_op == "reorder_columns":
+            self._order_status_cache[node.id] = "indeterminate"
+        if transform_op in {"join", "sjoin", "geo_overlay", "geo_union", "geo_symmetric_difference"} and config.get("how", "inner") != "inner":
+            self._types_status_cache[node.id] = ("indeterminate", "Le righe non abbinate possono promuovere i tipi numerici")
+        if transform_op == "concat" and input_schemas:
+            signatures = {tuple((col.name, type_family(col.type)) for col in schema) for schema in input_schemas}
+            if len(signatures) > 1:
+                self._types_status_cache[node.id] = ("indeterminate", "Promozione dei tipi dipendente dai valori e dagli ingressi vuoti")
+        return schema
 
     def _resolve_schema_config_column_refs(
         self,
@@ -573,7 +721,8 @@ class SchemaInferenceService:
             id=col.id,
             source_name=col.source_name,
             source_node=node.id,
-            is_calculated=col.is_calculated
+            is_calculated=col.is_calculated,
+            optional=col.optional,
         ) for col in base_schema]
 
         # output_mapping is canonical; tolerate historical frontend aliases and

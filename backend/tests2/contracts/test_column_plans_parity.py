@@ -24,8 +24,8 @@ def test_fixture_matches_regenerated_python_rules():
 
 
 @pytest.mark.parametrize("rule", [
-    "select_column_plan", "join_column_plan", "join_output_plan",
-    "legacy_join_plan", "aggregation_output_type", "result_group_plan",
+    "select_column_plan", "join_column_plan", "prepared_join_plan",
+    "aggregation_output_type", "result_group_plan",
 ])
 def test_freshness_check_detects_changed_python_rule(monkeypatch, rule):
     def changed_rule(*args, **kwargs):

@@ -39,6 +39,7 @@ class TransformSchemaHandlers:
     def _configure_handler(self, handler: object) -> None:
         """Give composed handlers the shared schema-construction helpers."""
         handler._column_schema_cls = self._column_schema_cls
+        handler._assign_column = self._assign_column
         handler._copy_column = self._copy_column
         handler._copy_schema = self._copy_schema
         handler._normalize_str_list = self._normalize_str_list
@@ -110,6 +111,11 @@ class TransformSchemaHandlers:
             "drop_columns": lambda i, c, n: self._schema_drop(i, c, n),
             "fill_na": pt,
             "replace": pt,
+            "sample": pt,
+            "dedup_advanced": pt,
+            "geo_explode": pt,
+            "geo_make_valid": pt,
+            "geo_clean_topology": pt,
             "split_column": lambda i, c, n: self._schema_split_column(i, c, n),
             # geo
             "geo_buffer": lambda i, c, n: self._geo_handlers._schema_geo_buffer(i, c, n),
@@ -119,7 +125,7 @@ class TransformSchemaHandlers:
             "geo_dissolve": lambda i, c, n: self._geo_handlers._schema_geo_dissolve(i, c, n),
             "geo_simplify": pt,
             "geo_convex_hull": lambda i, c, n: self._geo_handlers._schema_geo_convex_hull(i, c, n),
-            "geo_reproject": pt,
+            "geo_reproject": lambda i, c, n: self._geo_handlers._schema_geo_reproject(i, c, n),
             "geo_intersection": lambda i, c, n: self._geo_handlers._schema_geo_overlay(i, c, n, "intersection"),
             "geo_union": lambda i, c, n: self._geo_handlers._schema_geo_overlay(i, c, n, "union"),
             "geo_difference": lambda i, c, n: self._geo_handlers._schema_geo_overlay(i, c, n, "difference"),
@@ -289,7 +295,7 @@ class TransformSchemaHandlers:
         new_columns = config.get("new_columns", [])
         for col_name in new_columns:
             if col_name and col_name not in {c.name for c in result}:
-                result.append(self._column_schema_cls(
+                self._assign_column(result, self._column_schema_cls(
                     name=col_name,
                     type="str",
                     source_node=node_id,
@@ -316,7 +322,10 @@ class TransformSchemaHandlers:
         
         result = self._copy_schema(input_schemas[0], node_id)
         
-        result.append(self._column_schema_cls(
+        if not any(name in {col.name for col in result} for name in config.get("columns") or []):
+            return result
+
+        self._assign_column(result, self._column_schema_cls(
             name=output_col,
             type="str",
             source_node=node_id,
@@ -340,18 +349,15 @@ class TransformSchemaHandlers:
         
         result = self._copy_schema(input_schemas[0], node_id)
         
-        if not overwrite:
-            existing_names = {col.name for col in result}
-            for mask in maskings:
-                masked_name = f"{mask.get('column', '')}_masked"
-                if masked_name and masked_name not in existing_names:
-                    result.append(self._column_schema_cls(
-                        name=masked_name,
-                        type="str",
-                        source_node=node_id,
-                        is_calculated=True
-                    ))
-        
+        by_name = {col.name: col for col in result}
+        for mask in maskings or []:
+            name = mask.get("column")
+            if name not in by_name or mask.get("mask_type", "custom") not in {"cf", "email", "phone", "iban", "custom"}:
+                continue
+            self._assign_column(result, self._column_schema_cls(
+                name=name if overwrite else f"{name}_masked", type="str",
+                source_node=node_id, is_calculated=True))
+
         return result
     
     # TRASFORMAZIONI BASE AGGIUNTIVE
@@ -406,17 +412,11 @@ class TransformSchemaHandlers:
         
         result = self._copy_schema(input_schemas[0], node_id)
         
-        if not overwrite:
-            existing_names = {col.name for col in result}
-            for col_name in columns:
-                norm_name = f"{col_name}_norm"
-                if norm_name not in existing_names:
-                    result.append(self._column_schema_cls(
-                        name=norm_name,
-                        type="str",
-                        source_node=node_id,
-                        is_calculated=True
-                    ))
+        by_name = {col.name: col for col in result}
+        for name in columns or []:
+            if name in by_name:
+                self._assign_column(result, self._copy_column(
+                    by_name[name], node_id, name=name if overwrite else f"{name}_norm"))
 
         return result
 
@@ -437,8 +437,10 @@ class TransformSchemaHandlers:
 
         result = self._copy_schema(input_schemas[0], node_id)
         output_col = config.get("output_column") or "concatenated"
-        if output_col and output_col not in {c.name for c in result}:
-            result.append(self._column_schema_cls(
+        if not any(name in {col.name for col in result} for name in config.get("columns") or []):
+            return result
+        if output_col:
+            self._assign_column(result, self._column_schema_cls(
                 name=output_col,
                 type="str",
                 source_node=node_id,
@@ -465,8 +467,8 @@ class TransformSchemaHandlers:
 
         result = self._copy_schema(input_schemas[0], node_id)
         output_col = config.get("output_column") or "row_number"
-        if output_col and output_col not in {c.name for c in result}:
-            result.append(self._column_schema_cls(
+        if output_col:
+            self._assign_column(result, self._column_schema_cls(
                 name=output_col,
                 type="int",
                 source_node=node_id,
@@ -490,8 +492,8 @@ class TransformSchemaHandlers:
 
         result = self._copy_schema(input_schemas[0], node_id)
         output_col = config.get("output_column") or "uuid"
-        if output_col and output_col not in {c.name for c in result}:
-            result.append(self._column_schema_cls(
+        if output_col:
+            self._assign_column(result, self._column_schema_cls(
                 name=output_col,
                 type="str",
                 source_node=node_id,
@@ -528,8 +530,8 @@ class TransformSchemaHandlers:
         else:
             return result  # senza column ne' output_column — schema invariato
 
-        if output_col not in {c.name for c in result}:
-            result.append(self._column_schema_cls(
+        if output_col:
+            self._assign_column(result, self._column_schema_cls(
                 name=output_col,
                 type="int",
                 source_node=node_id,
@@ -564,14 +566,14 @@ class TransformSchemaHandlers:
         result = self._copy_schema(input_schemas[0], node_id)
 
         column = config.get("column") or ""
-        if not column:
+        if not column or column not in {col.name for col in result}:
             return result  # no source col -> no schema delta
 
         raw_parts = config.get("parts")
         if raw_parts is None:
             parts: List[str] = ["year"]
         elif isinstance(raw_parts, str):
-            parts = [raw_parts]
+            parts = list(raw_parts)
         elif isinstance(raw_parts, list):
             parts = [str(p) for p in raw_parts if p]
         else:
@@ -591,9 +593,7 @@ class TransformSchemaHandlers:
             if part_lower not in valid_parts:
                 continue
             col_name = f"{col_prefix}{part_lower}"
-            if col_name in existing:
-                continue
-            result.append(self._column_schema_cls(
+            self._assign_column(result, self._column_schema_cls(
                 name=col_name,
                 type="int",
                 source_node=node_id,
@@ -624,9 +624,7 @@ class TransformSchemaHandlers:
         `column` non esiste in input, o se il pattern e' regex non
         valida (allineato al runtime: warning + return df).
 
-        Caveat: pattern con misto named/unnamed groups → schema
-        annunciato copre solo i named groups (allineato al subset
-        deterministico). Casi rari nei flussi FE.
+        I gruppi anonimi mantengono gli indici numerici prodotti da Pandas.
         """
         if not input_schemas:
             return []
@@ -646,10 +644,11 @@ class TransformSchemaHandlers:
         named_groups = compiled.groupindex
         if named_groups:
             # Ordine pattern: ordina per indice di gruppo (1-based
-            ordered_names = sorted(named_groups, key=named_groups.get)
+            names_by_index = {index: name for name, index in named_groups.items()}
+            ordered_names = [names_by_index.get(index, index - 1) for index in range(1, compiled.groups + 1)]
             for name in ordered_names:
-                if name and name not in existing:
-                    result.append(self._column_schema_cls(
+                if name is not None:
+                    self._assign_column(result, self._column_schema_cls(
                         name=name,
                         type="str",
                         source_node=node_id,
@@ -658,8 +657,8 @@ class TransformSchemaHandlers:
                     existing.add(name)
         else:
             out_col = config.get("output_column") or f"{column}_extracted"
-            if out_col and out_col not in existing:
-                result.append(self._column_schema_cls(
+            if out_col:
+                self._assign_column(result, self._column_schema_cls(
                     name=out_col,
                     type="str",
                     source_node=node_id,
@@ -693,8 +692,8 @@ class TransformSchemaHandlers:
         if column not in existing:
             return result
         out_col = config.get("output_column") or f"{column}_bin"
-        if out_col and out_col not in existing:
-            result.append(self._column_schema_cls(
+        if out_col:
+            self._assign_column(result, self._column_schema_cls(
                 name=out_col,
                 type="str",
                 source_node=node_id,
@@ -750,7 +749,7 @@ class TransformSchemaHandlers:
                     result[i] = self._copy_column(col, node_id, type_="str", is_calculated=True)
                     break
         else:
-            result.append(self._column_schema_cls(
+            self._assign_column(result, self._column_schema_cls(
                 name=target,
                 type="str",
                 source_node=node_id,
@@ -790,6 +789,16 @@ class TransformSchemaHandlers:
             node_id,
         ) for col in schema]
 
+    def _assign_column(self, result: List[ColumnSchema], column: ColumnSchema) -> None:
+        """Un'assegnazione sostituisce tipo e nome in posizione, senza duplicati."""
+        for index, existing in enumerate(result):
+            if existing.name == column.name:
+                column.id = column.id or existing.id
+                column.source_name = column.source_name or existing.source_name or existing.name
+                result[index] = column
+                return
+        result.append(column)
+
     def _copy_column(
         self,
         col: ColumnSchema,
@@ -807,6 +816,7 @@ class TransformSchemaHandlers:
             source_name=getattr(col, "source_name", None) or col.name,
             source_node=node_id,
             is_calculated=col.is_calculated if is_calculated is None else is_calculated,
+            optional=col.optional,
         ) if name is None else self._column_schema_cls(
             name=name,
             type=type_ or col.type,
@@ -814,6 +824,7 @@ class TransformSchemaHandlers:
             source_name=getattr(col, "source_name", None) or col.name,
             source_node=node_id,
             is_calculated=col.is_calculated if is_calculated is None else is_calculated,
+            optional=col.optional,
         )
 
     # METODI DI SUPPORTO
@@ -835,5 +846,6 @@ class TransformSchemaHandlers:
         if not input_schemas:
             return []
         by_name = {col.name: col for col in input_schemas[0]}
-        plan = select_column_plan(list(by_name), config.get("columns") or [], skip_missing=True)
-        return [self._copy_column(by_name[name], node_id, name=label) for name, label in plan]
+        plan = select_column_plan([col.name for col in input_schemas[0]], config.get("columns") or [], skip_missing=True)
+        return [self._copy_column(col, node_id, name=label)
+                for name, label in plan for col in input_schemas[0] if col.name == name]

@@ -17,6 +17,8 @@ Onora lo status: con upstream ``indeterminate`` un ref mancante è ``warning``
 
 from __future__ import annotations
 
+from app.shared.execution.schema_column_plans import aggregation_output_type
+
 import json
 from functools import lru_cache
 from pathlib import Path
@@ -145,7 +147,7 @@ class ManipolaNodeValidator:
                 ref_config.pop(key, None)
         resolved = resolve_config_column_refs(ref_config, id_to_name)
         # #A: upstream indeterminate → ref mancante = warning, non error.
-        severity = "warning" if upstream.status == "indeterminate" else "error"
+        severity = "warning" if upstream.names_status == "indeterminate" else "error"
         # Selection references were already checked above with skip-missing semantics.
         references = set() if transform_op == "select_columns" else referenced_column_names(resolved)
         nested = resolved.get("conditions") if transform_op == "filter" else []
@@ -162,6 +164,20 @@ class ManipolaNodeValidator:
                 message=f"Colonna '{missing}' referenziata dal transform ma assente a monte",
                 suggestion={"column": missing},
             ))
+
+        if transform_op == "aggregate":
+            by_name = {c["name"]: c for c in upstream_cols if c.get("name")}
+            for aggregation in resolved.get("aggregations") or []:
+                column = by_name.get(aggregation.get("column"))
+                if column is None:
+                    continue
+                try:
+                    aggregation_output_type(aggregation.get("function", "count"), column.get("type", "str"))
+                except TypeError as exc:
+                    issues.append(Issue(
+                        node_id=node_id, severity="warning" if column.get("optional") else "error",
+                        code="aggregation.unsupported", message=str(exc), suggestion=None,
+                    ))
 
         # 2. safety della formula (riusa la gate AST del runtime).
         formulas = [config.get("formula")]
@@ -206,7 +222,7 @@ class ManipolaNodeValidator:
                 if param.get("type") == "geometry_column" and not _is_empty_param_value(val):
                     resolved_name = id_to_name.get(str(val), val)
                     if resolved_name in col_type and not str(col_type[resolved_name]).startswith("geometry"):
-                        geom_sev = "warning" if upstream.status == "indeterminate" else "error"
+                        geom_sev = "warning" if upstream.types_status == "indeterminate" else "error"
                         issues.append(Issue(
                             node_id=node_id, severity=geom_sev, code="TRANSFORM_GEOMETRY_TYPE_INVALID",
                             message=f"La colonna '{resolved_name}' non è di tipo geometry.",

@@ -50,6 +50,28 @@ describe('legacy_join_plan parity', () => {
 
 describe('aggregation_output_type parity', () => {
   it.each(cases.aggregation_types.map(c => [c.id, c]))('%s', (_, c) => {
-    expect({ type: aggregationOutputType(c.input.func, c.input.source_type) }).toEqual(c.expected);
+    const type = aggregationOutputType(c.input.func, c.input.source_type);
+    expect(type === null ? { error: true } : { type }).toEqual(c.expected);
+  });
+
+  it('le famiglie dei tipi coincidono con quelle del backend; sottotipi e tipi del contratto', () => {
+    const backend = JSON.parse(fs.readFileSync(
+      path.resolve(import.meta.dirname, '../../../backend/app/shared/execution/type_families.json'), 'utf-8'));
+    const frontend = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../../src/utils/typeFamilies.json'), 'utf-8'));
+    expect(frontend).toEqual(backend);
+    expect(aggregationOutputType('sum', 'number')).toBe('number');
+    expect(aggregationOutputType('first', 'geometry:point:4326')).toBe('geometry:point:4326');
+    expect(aggregationOutputType('mean', 'integer')).toBe('real');
+    expect(aggregationOutputType('mean', 'string')).toBeNull();
+    expect(aggregationOutputType('count', 'json')).toBe('int');
+    expect(aggregationOutputType('first', 'uuid')).toBe('uuid');
+    expect(aggregationOutputType('first', 'geometry(Point,4326)')).toBe('geometry(Point,4326)');
+  });
+
+  it('la tabella del frontend coincide con quella generata dal backend', () => {
+    const backend = JSON.parse(fs.readFileSync(
+      path.resolve(import.meta.dirname, '../../../backend/app/shared/execution/aggregation_types.json'), 'utf-8'));
+    const frontend = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../../src/utils/aggregationTypes.json'), 'utf-8'));
+    expect(frontend).toEqual(backend);
   });
 });

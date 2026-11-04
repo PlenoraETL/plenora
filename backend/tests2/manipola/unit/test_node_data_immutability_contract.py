@@ -158,7 +158,7 @@ def test_applica_trasformazioni_inputcolumns_path_does_not_mutate_node_data():
     fake_schema_service._infer_node_schema.return_value = [fake_col]
 
     with patch(
-        "app.core.projects.schema_inference.SchemaInferenceService",
+        "app.core.manipola.executor.SchemaInferenceService",
         return_value=fake_schema_service,
     ), patch.object(
         ManipolaExecutor,

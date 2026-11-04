@@ -164,7 +164,7 @@ class CaricaNodeValidator:
         issues = issues_cfg + check_mapping(columns, active, node_id=node_id)
 
         # #A: con upstream indeterminate, "source mancante" è un warning, non error.
-        if upstream.status == "indeterminate":
+        if upstream.names_status == "indeterminate":
             issues = [
                 replace(i, severity="warning") if i.code == "mapping.source_missing" else i
                 for i in issues

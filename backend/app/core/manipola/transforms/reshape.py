@@ -4,6 +4,7 @@ Cluster RESHAPE — operazioni di trasformazione struttura tabella.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
+from app.shared.execution.reshape_column_plan import melt_output_name
 from typing import List, Optional, Union
 
 from app.core.dataframes.frame_copy import copy_frame_for_update
@@ -366,21 +367,9 @@ def op_melt(
         # configurati con default su sorgenti che contengono "value".
         df_cols = set(df.columns)
 
-        def _avoid_collision(name: str) -> str:
-            if name not in df_cols:
-                return name
-            for i in range(1, 100):
-                cand = f"{name}_{i}"
-                if cand not in df_cols:
-                    logger.warning(
-                        f"Melt: '{name}' collide con una colonna sorgente, "
-                        f"rinominato in '{cand}'"
-                    )
-                    return cand
-            return name  # fallback (improbabile)
 
-        var_name = _avoid_collision(var_name)
-        value_name = _avoid_collision(value_name)
+        var_name = melt_output_name(var_name, df_cols)
+        value_name = melt_output_name(value_name, df_cols)
 
         effective_value_columns = (
             list(value_columns)

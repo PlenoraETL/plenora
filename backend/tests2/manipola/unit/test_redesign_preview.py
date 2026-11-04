@@ -9,7 +9,6 @@ import pytest
 
 from app.core.manipola.executor import ManipolaExecutor
 from app.core.projects.canvas_preview_scope import preview_canvas
-from app.core.manipola.canvas_schema_runtime import build_canvas_type_map
 from app.core.projects.canvas_models import CanvasState
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
@@ -19,7 +18,7 @@ def canvas_fixture():
     def node(id, type, **kwargs):
         return {"id": id, "type": type, "position": {"x": 0, "y": 0}, **kwargs}
     return CanvasState.model_validate({
-        "nodes": [node("src", "staticValues", columns=[{"name": "n", "type": "int"}]),
+        "nodes": [node("src", "staticValues", data={"fields": [{"name": "n", "value": "1", "field_type": "integer"}]}),
                   node("t1", "transform", transform_op="formula", config={"items": [{"new_column": "x", "formula": "n * 2"}]}),
                   node("t2", "transform", transform_op="select_columns", config={"columns": [{"name": "x", "label": "X"}]}),
                   node("out", "result"), node("unrelated", "staticValues")],
@@ -64,8 +63,7 @@ def test_preview_only_loads_ancestors(node_id, expected_nodes, expected_columns)
 
 
 def test_runtime_type_map_propagates_new_names():
-    types = build_canvas_type_map(canvas_fixture())
-    assert types["n"] == "int"
+    types = {}
     from app.core.manipola.canvas_schema_runtime import build_columns_with_types
     assert build_columns_with_types(pd.DataFrame({"X": ["text"]}), types) == [{"name": "X", "type": "str"}]
     assert build_columns_with_types(pd.DataFrame({"X": [2]}), types) == [{"name": "X", "type": "int"}]

@@ -26,9 +26,10 @@ _SCAN_ROOTS = (
 # 2026-07-20 measured audit: HEAD and the current working tree both contain
 # this debt after recent runtime growth. Keep the observed values exact so the
 # ratchet catches any further increase while cleanup can only lower them.
-MAX_MISSING_ARG_ANNOTATIONS = 326
-MAX_MISSING_RETURN_ANNOTATIONS = 356
-MAX_WEAK_NAME_REFERENCES = 272
+# A1: annotazioni dei piani estratti e rimozione della propagazione duplicata.
+MAX_MISSING_ARG_ANNOTATIONS = 319
+MAX_MISSING_RETURN_ANNOTATIONS = 354
+MAX_WEAK_NAME_REFERENCES = 245
 
 WEAK_NAMES = {
     "df2",

@@ -165,6 +165,7 @@ def test_join_spatial_no_geom_is_error():
 
 def test_join_column_not_found_is_warning():
     s = _node("s", "file_source")
+    s.columns = []
     s.data = {"columns": [{"name": "a", "visible": True}]}
     t = _node("t", "transform")
     r = _node("r", "result")

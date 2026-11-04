@@ -4,7 +4,9 @@ Cluster AGGREGATION — operazioni analytics: group-by, sort, dedup, window.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
-from typing import List
+from typing import List, Callable, Any
+
+AggregationFunctions = dict[str, str | Callable | list[str | Callable]]
 
 from app.core.dataframes.frame_copy import copy_frame_for_update
 from app.core.dataframes.ports import FrameLike
@@ -67,55 +69,7 @@ def op_aggregate(
             logger.info(f"Aggregate (count): {len(df)} -> {len(result)} righe")
             return result
 
-        # Funzione concat personalizzata
-        def make_concat_agg(separator=", ", distinct=False, skip_null=True):
-            def concat_agg(values):
-                vals = list(values)
-                if skip_null:
-                    vals = [v for v in vals if v is not None and not is_null_scalar(v)]
-                if distinct:
-                    vals = list(dict.fromkeys(vals))  # preserva ordine
-                return separator.join(str(v) for v in vals)
-            return concat_agg
-
-        # Costruisci dizionario aggregazioni
-        agg_dict = {}
-        func_map = {
-            'count': 'count',
-            'sum': 'sum',
-            'avg': 'mean',
-            'mean': 'mean',
-            'min': 'min',
-            'max': 'max',
-            'first': 'first',
-            'last': 'last'
-        }
-
-        for agg in aggregations:
-            col = agg.get('column')
-            func = agg.get('function', 'count').lower()
-            logger.info(f"  Aggregazione: col='{col}', func='{func}', col_in_df={col in df.columns if col else False}")
-
-            if col not in df.columns:
-                logger.warning(f"  Colonna '{col}' non trovata! Colonne disponibili: {list(df.columns)}")
-                continue
-
-            # Gestione speciale per concat
-            if func == 'concat':
-                separator = agg.get('separator', ', ')
-                distinct = agg.get('distinct', False)
-                skip_null = agg.get('skip_null', True)
-                pandas_func = make_concat_agg(separator, distinct, skip_null)
-            else:
-                pandas_func = func_map.get(func, func)
-
-            if col in agg_dict:
-                if isinstance(agg_dict[col], list):
-                    agg_dict[col].append(pandas_func)
-                else:
-                    agg_dict[col] = [agg_dict[col], pandas_func]
-            else:
-                agg_dict[col] = pandas_func
+        agg_dict = prepare_aggregation_dict(list(df.columns), aggregations)
 
         if not agg_dict:
             logger.warning("agg_dict vuoto dopo parsing aggregazioni! Fallback a count")
@@ -132,21 +86,7 @@ def op_aggregate(
         # COUNT(id)) o `<col>_<func>` (MultiIndex flat), entrambi
         # poco leggibili. Il FE permette di specificare `alias`
         # nell'AggregationListInput; lo applichiamo qui post-agg.
-        renames: StringMap = {}
-        for agg in aggregations:
-            alias = (agg.get("alias") or "").strip()
-            if not alias:
-                continue
-            col = agg.get("column")
-            func = (agg.get("function") or "").lower()
-            # Caso single agg per colonna → output col == col originale
-            if col in result.columns and col not in group_by:
-                renames[col] = alias
-                continue
-            # Caso multi-agg → MultiIndex flat `<col>_<func>`
-            flat_name = f"{col}_{func}"
-            if flat_name in result.columns:
-                renames[flat_name] = alias
+        renames = aggregation_aliases(list(result.columns), group_by, aggregations)
         if renames:
             result = result.rename(columns=renames)
 
@@ -423,3 +363,78 @@ def op_window_function(
     except Exception as e:
         logger.error(f"[CRASH] Errore WindowFunction: {e}", exc_info=True)
         raise
+
+
+def prepare_aggregation_dict(columns: list[str], aggregations: JsonRows) -> AggregationFunctions:
+    """Piano comune delle funzioni e del loro ordine per runtime e inferenza."""
+    # Funzione concat personalizzata
+    def make_concat_agg(separator: str = ", ", distinct: bool = False, skip_null: bool = True) -> Callable:
+        def concat_agg(values: Any) -> str:
+            vals = list(values)
+            if skip_null:
+                vals = [v for v in vals if v is not None and not is_null_scalar(v)]
+            if distinct:
+                vals = list(dict.fromkeys(vals))  # preserva ordine
+            return separator.join(str(v) for v in vals)
+        return concat_agg
+
+    # Costruisci dizionario aggregazioni
+    agg_dict = {}
+    func_map = {
+        'count': 'count',
+        'sum': 'sum',
+        'avg': 'mean',
+        'mean': 'mean',
+        'min': 'min',
+        'max': 'max',
+        'first': 'first',
+        'last': 'last'
+    }
+
+    for agg in aggregations:
+        col = agg.get('column')
+        func = agg.get('function', 'count').lower()
+        logger.info(f"  Aggregazione: col='{col}', func='{func}', col_in_df={col in columns if col else False}")
+
+        if col not in columns:
+            logger.warning(f"  Colonna '{col}' non trovata! Colonne disponibili: {list(columns)}")
+            continue
+
+        # Gestione speciale per concat
+        if func == 'concat':
+            separator = agg.get('separator', ', ')
+            distinct = agg.get('distinct', False)
+            skip_null = agg.get('skip_null', True)
+            pandas_func = make_concat_agg(separator, distinct, skip_null)
+        else:
+            pandas_func = func_map.get(func, func)
+
+        if col in agg_dict:
+            if isinstance(agg_dict[col], list):
+                agg_dict[col].append(pandas_func)
+            else:
+                agg_dict[col] = [agg_dict[col], pandas_func]
+        else:
+            agg_dict[col] = pandas_func
+
+    return agg_dict
+
+
+def aggregation_aliases(columns: list[str], group_by: list[str], aggregations: JsonRows) -> StringMap:
+    """Alias post-aggregazione: stesso criterio e stessa precedenza del runtime."""
+    renames: StringMap = {}
+    for agg in aggregations:
+        alias = (agg.get("alias") or "").strip()
+        if not alias:
+            continue
+        col = agg.get("column")
+        func = (agg.get("function") or "").lower()
+        # Caso single agg per colonna → output col == col originale
+        if col in columns and col not in group_by:
+            renames[col] = alias
+            continue
+        # Caso multi-agg → MultiIndex flat `<col>_<func>`
+        flat_name = f"{col}_{func}"
+        if flat_name in columns:
+            renames[flat_name] = alias
+    return renames

@@ -62,20 +62,16 @@ def test_sjoin_combines_both_inputs_and_adds_index_right(geo):
     left = [col("id", "int"), col("geometry", "geometry:point")]
     right = [col("region", "str"), col("pop", "int")]
     out = geo._schema_sjoin([left, right], {}, NODE)
-    assert names(out) == ["id", "geometry", "region", "pop", "index_right"]
-    idx = by_name(out)["index_right"]
-    assert idx.type == "int"
-    assert idx.is_calculated is True
-    assert idx.source_node == NODE
+    assert names(out) == ["id", "geometry", "region", "pop"]
 
 
 def test_sjoin_suffixes_colliding_right_columns(geo):
     left = [col("id", "int"), col("name", "str")]
     right = [col("name", "str"), col("extra", "real")]
     out = geo._schema_sjoin([left, right], {}, NODE)
-    assert "name" in names(out)
+    assert "name_left" in names(out)
     assert "name_right" in names(out)
-    assert names(out) == ["id", "name", "name_right", "extra", "index_right"]
+    assert names(out) == ["id", "name_left", "name_right", "extra"]
 
 
 def test_sjoin_single_input_returns_first(geo):
@@ -113,7 +109,7 @@ def test_buffer_does_not_duplicate_existing_output_column(geo):
     out = geo._schema_geo_buffer([layer], {}, NODE)
     # buffer_geom already exists -> not appended again
     assert names(out) == ["id", "geometry", "buffer_geom"]
-    assert by_name(out)["buffer_geom"].type == "str"  # unchanged
+    assert by_name(out)["buffer_geom"].type == "geometry:polygon"  # A1: assegnazione runtime
 
 
 def test_buffer_empty_inputs(geo):
@@ -160,7 +156,7 @@ def test_area_skips_when_column_exists(geo):
     layer = [col("region", "str"), col("area_m2", "int")]
     out = geo._schema_geo_area([layer], {}, NODE)
     assert names(out) == ["region", "area_m2"]
-    assert by_name(out)["area_m2"].type == "int"  # unchanged
+    assert by_name(out)["area_m2"].type == "real"  # A1: assegnazione runtime
 
 
 def test_area_empty_inputs(geo):
@@ -188,16 +184,16 @@ def test_clip_empty_inputs(geo):
 def test_dissolve_with_group_by_keeps_group_and_geometry(geo):
     layer = [col("region", "str"), col("pop", "int"), col("geometry", "geometry:polygon")]
     out = geo._schema_geo_dissolve([layer], {"by_column": "region"}, NODE)
-    assert names(out) == ["region", "geometry"]
+    assert names(out) == ["region", "geometry", "pop"]
     assert by_name(out)["region"].is_calculated is False
     g = by_name(out)["geometry"]
-    assert g.type == "geometry"
-    assert g.is_calculated is True
+    assert g.type.startswith("geometry")
+    assert g.is_calculated is False
 
 
 def test_dissolve_without_group_by_only_geometry(geo):
     out = geo._schema_geo_dissolve([_polygon_layer()], {}, NODE)
-    assert names(out) == ["geometry"]
+    assert names(out) == ["index", "geometry", "region"]
 
 
 def test_dissolve_custom_geom_column(geo):
@@ -209,7 +205,7 @@ def test_dissolve_custom_geom_column(geo):
 def test_dissolve_group_column_missing_from_input(geo):
     # by_column points at a non-existent column -> only geometry produced
     out = geo._schema_geo_dissolve([_polygon_layer()], {"by_column": "missing"}, NODE)
-    assert names(out) == ["geometry"]
+    assert names(out) == ["index", "geometry", "region"]
 
 
 def test_dissolve_empty_inputs(geo):
@@ -264,7 +260,7 @@ def test_overlay_skips_right_geometry_and_suffixes_collisions(geo):
     right = [col("id", "int"), col("zone", "str"), col("geometry", "geometry:polygon")]
     out = geo._schema_geo_overlay([left, right], {}, NODE, "intersection")
     # right geometry skipped; colliding 'id' -> 'id_2'
-    assert names(out) == ["id", "geometry", "id_2", "zone"]
+    assert names(out) == ["id_1", "id_2", "zone", "geometry"]
 
 
 def test_overlay_single_input_returns_first(geo):
@@ -368,7 +364,7 @@ def test_to_wkt_no_duplicate_existing(geo):
     layer = [col("id", "int"), col("geometry_wkt", "int")]
     out = geo._schema_geo_to_wkt([layer], {}, NODE)
     assert names(out) == ["id", "geometry_wkt"]
-    assert by_name(out)["geometry_wkt"].type == "int"  # not overwritten
+    assert by_name(out)["geometry_wkt"].type == "str"  # A1: assegnazione runtime
 
 
 def test_to_wkt_empty_inputs(geo):
@@ -445,7 +441,7 @@ def test_bounds_extractor_prefix(geo):
 def test_bounds_extractor_skips_existing(geo):
     layer = [col("region", "str"), col("min_x", "str")]
     out = geo._schema_geo_bounds_extractor([layer], {}, NODE)
-    assert by_name(out)["min_x"].type == "str"  # unchanged
+    assert by_name(out)["min_x"].type == "real"  # A1: assegnazione runtime
     # the other three still appended
     assert {"min_y", "max_x", "max_y"}.issubset(set(names(out)))
 
@@ -642,7 +638,7 @@ def test_nearest_suffixes_colliding_right_columns(geo):
     out = geo._schema_geo_nearest([left, right], {}, NODE)
     assert "id_right" in names(out)
     # right geometry collides with left geometry too -> but geometry is skipped
-    assert names(out) == ["id", "geometry", "id_right", "distance_m"]
+    assert names(out) == ["id_left", "geometry", "id_right", "distance_m"]
 
 
 def test_nearest_custom_distance_column_no_duplicate(geo):

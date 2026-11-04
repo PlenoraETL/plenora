@@ -1,43 +1,46 @@
-"""Pure ordered column and type rules shared by schema inference and parity fixtures."""
+"""Tipi generati da op_aggregate; rigenerazione verificata dai contratti."""
+import json
+from pathlib import Path
 
-from app.shared.execution.column_selection import join_column_plan
-
-
-def legacy_join_plan(
-    left: list[str], right: list[str], left_keys: list[str], right_keys: list[str],
-) -> list[list[str]]:
-    """Keep legacy suffixing, including duplicate names and positional key pairing."""
-    left_key_set, right_key_set = set(left_keys), set(right_keys)
-    shared = {rk for lk, rk in zip(left_keys, right_keys) if lk == rk}
-    return [
-        ["left", name, name if name in left_key_set else f"{name}_L"]
-        for name in left
-    ] + [
-        ["right", name, name if name in right_key_set else f"{name}_R"]
-        for name in right if name not in shared
-    ]
+_HERE = Path(__file__).parent
+AGGREGATION_TYPES = json.loads((_HERE / "aggregation_types.json").read_text(encoding="utf-8"))
+TYPE_FAMILIES = json.loads((_HERE / "type_families.json").read_text(encoding="utf-8"))
 
 
-def join_output_plan(
-    left: list[str], right: list[str], left_keys: list[str], right_keys: list[str],
-    left_columns: list[str] | None, right_columns: list[str] | None,
-    name_conflict: str | None,
-) -> list[list[str]]:
-    """Apply join maps in source order, preserving duplicate source occurrences."""
-    left_map, right_map = join_column_plan(
-        left, right, left_keys, right_keys, left_columns, right_columns, name_conflict,
-    )
-    shared = set(left_keys) & set(right_keys)
-    return [["left", name, left_map[name]] for name in left if name in left_map] + [
-        ["right", name, right_map[name]] for name in right
-        if name in right_map and name not in shared
-    ]
+def type_family(source_type: object) -> str:
+    """Famiglia di un tipo di colonna, nel vocabolario della tabella delle aggregazioni.
+
+    Regola unica, condivisa con il frontend (copia identica di
+    type_families.json): i tipi logici del contratto (integer, number,
+    string, boolean, datetime), gli alias dei database e i sottotipi delle
+    geometrie (geometry:point:4326) si riconducono a int/real/str/bool/date/
+    datetime/geometry. Un tipo sconosciuto resta com'e' (e non e' in tabella:
+    aggregation_output_type applica allora la regola di prima).
+    """
+    value = str(source_type or "").strip().lower()
+    prefix = TYPE_FAMILIES["geometry_prefix"]
+    # Come output_contract._logical_type: ogni variante "geometry..." (anche
+    # "geometry(Point,4326)") e' una geometria.
+    if value.startswith(prefix):
+        return prefix
+    return TYPE_FAMILIES["aliases"].get(value, value)
 
 
 def aggregation_output_type(func: str, source_type: str) -> str:
-    """Return the grouped schema type without normalizing functions or source types."""
-    if func == "count":
-        return "int"
-    if func in {"mean", "std"}:
-        return "real"
-    return source_type
+    """Restituisce il tipo osservato o rifiuta una coppia non eseguibile.
+
+    Se l'aggregazione non cambia la famiglia (somma di numeri, primo valore
+    di una geometria) il tipo resta quello d'ingresso, con il suo vocabolario
+    e il sottotipo della geometria.
+    """
+    family = type_family(source_type)
+    table = AGGREGATION_TYPES.get(str(func).lower())
+    if table is not None and family not in table:
+        # Famiglia che la tabella non conosce (json, uuid, time, ...): nessun
+        # falso errore; regola di prima: conteggi interi, il resto mantiene
+        # il tipo d'ingresso.
+        return "int" if str(func).lower() in {"count", "size", "nunique"} else source_type
+    outcome = (table or {}).get(family, "error")
+    if outcome == "error":
+        raise TypeError(f"Aggregazione {func} non supportata per {source_type}")
+    return source_type if outcome == family else outcome

@@ -12,6 +12,7 @@ ref cross-tenant (``find_inaccessible_canvas_refs``) resta al boundary del route
 
 from __future__ import annotations
 
+from app.core.manipola.transform_ordering import incoming_edge_sort_key_for_nodes
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from app.core.projects.canvas_access import find_orphan_processing_nodes
@@ -409,8 +410,9 @@ def _edge_join_issues(
     def _cols(node_id: str) -> tuple:
         if node_id not in cache:
             typed = service.infer_node_schema_typed(project_id, node_id)
-            names = {c["name"] for c in typed.columns if isinstance(c, dict) and c.get("name")}
-            cache[node_id] = (names, typed.status)
+            names = {str(value) for c in typed.columns if isinstance(c, dict)
+                     for value in (c.get("name"), c.get("id")) if value}
+            cache[node_id] = (names, typed.names_status)
         return cache[node_id]
 
     out: List[Issue] = []
@@ -437,14 +439,26 @@ def _edge_join_issues(
                     suggestion={"edge_id": eid},
                 ))
             continue
-        s_names, s_status = _cols(e.source)
+        source_id, target_id = e.source, e.target
+        target = nodes_by_id[e.target]
+        if getattr(target, "type", None) in {"transform", "multi_join"}:
+
+            incoming = sorted([edge for edge in edges if edge.target == e.target],
+                              key=lambda edge: incoming_edge_sort_key_for_nodes(edge, nodes_by_id))
+            if len(incoming) < 2:
+                target_id = None
+            else:
+                source_id, target_id = incoming[0].source, incoming[1].source
+        s_names, s_status = _cols(source_id)
         if s_status != "indeterminate" and sc not in s_names:
             out.append(Issue(
                 node_id=str(e.source), severity="warning", code="JOIN_COLUMN_NOT_FOUND",
                 message=f"Join: colonna '{sc}' non trovata nel nodo sorgente.",
                 suggestion={"column": sc, "edge_id": eid},
             ))
-        t_names, t_status = _cols(e.target)
+        if target_id is None:
+            continue
+        t_names, t_status = _cols(target_id)
         if t_status != "indeterminate" and tc not in t_names:
             out.append(Issue(
                 node_id=str(e.target), severity="warning", code="JOIN_COLUMN_NOT_FOUND",
@@ -530,9 +544,13 @@ def _upstream_for_node(
     status = "certain"
     for t in typed:
         merged_cols.extend(t.columns)
-        if t.status == "indeterminate":
+        if t.names_status == "indeterminate":
             status = "indeterminate"
-    return InferredSchema(columns=merged_cols, status=status)
+    types_status = "indeterminate" if any(t.types_status == "indeterminate" for t in typed) else "certain"
+    order_status = "indeterminate" if any(t.order_status == "indeterminate" for t in typed) else "certain"
+    combined = "indeterminate" if "indeterminate" in (status, types_status, order_status) else "certain"
+    return InferredSchema(columns=merged_cols, status=combined, names_status=status,
+                          types_status=types_status, order_status=order_status)
 
 
 # (canvas, project_type) | None se non accessibile/inesistente.

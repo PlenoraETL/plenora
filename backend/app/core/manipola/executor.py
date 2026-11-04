@@ -47,10 +47,12 @@ from app.core.resources.exceptions import MemoryLimitExceededError
 from app.core.output_contract import persist_output_contract
 from app.shared.resources.metadata import ResourceMetadata
 from .plugin_executor import get_executor
+from app.core.projects.schema_inference import SchemaInferenceService
+from app.shared.execution.join_preparation import normalize_key_list as _normalize_key_list, normalize_join_pairs as _normalize_join_pairs, multi_join_renames
+from app.core.manipola.types import JsonRows
 from .source_loading import load_file_sources
 from .datasource_node_loading import load_datasource_nodes
 from .canvas_schema_runtime import (
-    build_canvas_type_map,
     build_columns_with_types,
     detect_geometry_from_content,
     extract_srid_from_canvas,
@@ -92,32 +94,6 @@ def _estimate_merge_output_rows(
     """
     return estimate_merge_output_rows(left, right, join_keys, how)
 
-
-def _normalize_key_list(value: Any) -> List[str]:
-    if value is None:
-        return []
-    if isinstance(value, str):
-        return [item.strip() for item in value.split(",") if item.strip()]
-    if isinstance(value, (list, tuple)):
-        return [str(item).strip() for item in value if str(item).strip()]
-    text = str(value).strip()
-    return [text] if text else []
-
-
-def _normalize_join_pairs(value: Any) -> tuple[List[str], List[str]]:
-    if not isinstance(value, list):
-        return [], []
-    left_keys: List[str] = []
-    right_keys: List[str] = []
-    for pair in value:
-        if not isinstance(pair, dict):
-            continue
-        left_key = str(pair.get("left") or "").strip()
-        right_key = str(pair.get("right") or "").strip()
-        if left_key and right_key:
-            left_keys.append(left_key)
-            right_keys.append(right_key)
-    return left_keys, right_keys
 
 
 def _estimate_merge_output_rows_by_keys(
@@ -386,7 +362,7 @@ class ManipolaExecutor:
 
         try:
             current_df = self._applica_group_by(
-                apply_output_columns(current_df, _nf(result_node, "output_columns"), _nf(result_node, "inputColumns")), result_node
+                apply_output_columns(current_df, _nf(result_node, "output_columns"), self._result_input_columns(canvas, result_node, project_id)), result_node
             )
         except MemoryLimitExceededError as mem_err:
             stage = getattr(mem_err, "stage", "group_by")
@@ -448,7 +424,6 @@ class ManipolaExecutor:
                 for c in current_df.columns
             ]
             try:
-                from app.core.projects.schema_inference import SchemaInferenceService
 
                 schema_service = SchemaInferenceService(self.project_service)
                 nodes_by_id = {n.id: n for n in canvas.nodes}
@@ -592,17 +567,14 @@ class ManipolaExecutor:
             result_node = next((n for n in canvas.nodes if n.type == "result"), None)
             if result_node:
                 current_df = self._applica_group_by(
-                    apply_output_columns(current_df, _nf(result_node, "output_columns"), _nf(result_node, "inputColumns")), result_node
+                    apply_output_columns(current_df, _nf(result_node, "output_columns"), self._result_input_columns(canvas, result_node, project_id)), result_node
                 )
 
             total_count = len(current_df)
             truncated = source_truncated or total_count > limit
             preview_df = current_df.head(limit)
 
-            canvas_type_map = self._costruisci_mappa_tipi_canvas(
-                canvas, canvas_graph=canvas_graph
-            )
-            columns = self._costruisci_colonne_con_tipi(preview_df, canvas_type_map)
+            columns = self._costruisci_colonne_con_tipi(preview_df, {})
             rows = dataframe_preview_records(current_df, limit)
 
             return {
@@ -815,7 +787,6 @@ class ManipolaExecutor:
         schema_edges_by_target = None
         if project_id:
             try:
-                from app.core.projects.schema_inference import SchemaInferenceService
 
                 schema_service = SchemaInferenceService(self.project_service)
                 schema_service._schema_cache = {}
@@ -1112,6 +1083,7 @@ class ManipolaExecutor:
                 stage=MULTI_JOIN_STAGE,
             )
 
+
         if use_pair_keys:
             df_copy = inputs[1]
             result_cols = set(result.columns)
@@ -1119,7 +1091,7 @@ class ManipolaExecutor:
             duplicates = result_cols & df_cols
 
             if duplicates:
-                rename_map = {col: f"{col}_2" for col in duplicates}
+                rename_map = multi_join_renames(result.columns, df_copy.columns, left_keys, right_keys, 2, paired=True)
                 df_copy = df_copy.rename(columns=rename_map)
                 logger.info(f"Rinominate colonne: {list(rename_map.keys())}")
 
@@ -1194,7 +1166,7 @@ class ManipolaExecutor:
 
             if duplicates:
                 # Rinomina nel df corrente
-                rename_map = {col: f"{col}_{idx}" for col in duplicates}
+                rename_map = multi_join_renames(result.columns, df_copy.columns, join_keys, join_keys, idx)
                 df_copy = df_copy.rename(columns=rename_map)
                 logger.info(f"Rinominate colonne: {list(rename_map.keys())}")
 
@@ -1278,6 +1250,18 @@ class ManipolaExecutor:
         return get_executor().execute(transform_op, inputs, node)
 
     # GROUP BY
+
+    def _result_input_columns(self, canvas: CanvasState, result_node: Node, project_id: str) -> JsonRows:
+        """Ricava le identità dall'ingresso dell'Output nel canvas della chiamata."""
+
+        if not _nf(result_node, "output_columns"):
+            return []
+        service = SchemaInferenceService(self.project_service)
+        inputs = service._get_input_schemas(
+            result_node.id, {node.id: node for node in canvas.nodes},
+            service._group_edges_by_target(canvas.edges), project_id,
+        )
+        return [col.to_dict() for col in inputs[0]] if inputs else []
 
     def _applica_group_by(self, df: FrameLike, result_node: Node) -> FrameLike:
         """Applica GROUP BY dal nodo risultato (count, sum, mean, min, max, std).
@@ -1421,17 +1405,6 @@ class ManipolaExecutor:
         Manipola-specific logic added to it.
         """
         return extract_srid_from_canvas(canvas, canvas_graph=canvas_graph)
-
-    # MAPPA TIPI CANVAS
-
-    def _costruisci_mappa_tipi_canvas(
-        self,
-        canvas: CanvasState,
-        *,
-        canvas_graph: Optional[CanvasGraph] = None,
-    ) -> StringMap:
-        """Costruisce mappa colonna->tipo dal canvas. Include suffissi _L/_R per JOIN."""
-        return build_canvas_type_map(canvas, canvas_graph=canvas_graph)
 
     def _costruisci_colonne_con_tipi(
         self,

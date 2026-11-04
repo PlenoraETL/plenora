@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pyproj import CRS
+from app.shared.execution.schema_column_plans import aggregation_output_type, type_family
 from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
@@ -10,6 +12,16 @@ if TYPE_CHECKING:
 
 class GeoSchemaHandlers:
     """Mixin for geospatial transform schema implementations."""
+
+    def _schema_geo_reproject(self, input_schemas: List[List[ColumnSchema]], config: dict, node_id: str) -> List[ColumnSchema]:
+        """Aggiorna il CRS dichiarato della geometria usando il parser del runtime."""
+
+        result = self._schema_passthrough(input_schemas, node_id)
+        target = CRS.from_user_input(config.get("target_crs") or "EPSG:4326").to_epsg()
+        geom = config.get("geom_column")
+        return [self._copy_column(col, node_id, type_=(
+            ":".join(col.type.split(":")[:2]) + f":{target}" if target and ":" in col.type else "geometry"
+        )) if col.name == geom and col.type.startswith("geometry") else col for col in result]
 
     def _schema_sjoin(
         self, 
@@ -23,31 +35,17 @@ class GeoSchemaHandlers:
         if len(input_schemas) < 2:
             return input_schemas[0] if input_schemas else []
         
-        left_schema = input_schemas[0]
-        right_schema = input_schemas[1]
-        
-        result = []
-        
-        # Tutte le colonne da sinistra
-        for col in left_schema:
-            result.append(self._copy_column(col, node_id))
-        
-        # Colonne da destra (con suffisso per evitare conflitti
-        left_names = {col.name for col in left_schema}
-        for col in right_schema:
-            new_name = col.name
-            if new_name in left_names:
-                new_name = f"{col.name}_right"
-            result.append(self._copy_column(col, node_id, name=new_name))
-        
-        # GeoPandas aggiunge index_right
-        result.append(self._column_schema_cls(
-            name="index_right",
-            type="int",
-            source_node=node_id,
-            is_calculated=True
-        ))
-        
+        left, right = input_schemas[:2]
+        right_join = config.get("how") == "right"
+        left_geom = config.get("left_geom") or next((c.name for c in left if c.type.startswith("geometry")), "geometry")
+        right_geom = config.get("right_geom") or next((c.name for c in right if c.type.startswith("geometry")), "geometry")
+        left = [c for c in left if not right_join or c.name != left_geom]
+        right = [c for c in right if right_join or c.name != right_geom]
+        collisions = {c.name for c in left} & {c.name for c in right}
+        result = [self._copy_column(c, node_id, name=f"{c.name}_left" if c.name in collisions else c.name) for c in left]
+        if right_join:
+            self._assign_column(result, self._column_schema_cls(name="index_left", type="int", source_node=node_id, is_calculated=True))
+        result += [self._copy_column(c, node_id, name=f"{c.name}_right" if c.name in collisions else c.name) for c in right]
         return result
 
     def _schema_geo_buffer(
@@ -75,8 +73,8 @@ class GeoSchemaHandlers:
         if output_col and output_col != geom_col:
             # Verifica che non esista già
             existing_names = {col.name for col in result}
-            if output_col not in existing_names:
-                result.append(self._column_schema_cls(
+            if output_col:
+                self._assign_column(result, self._column_schema_cls(
                     name=output_col,
                     type="geometry:polygon",
                     source_node=node_id,
@@ -116,8 +114,8 @@ class GeoSchemaHandlers:
         # Se output_column è diverso, aggiungi nuova colonna
         if output_col and output_col != geom_col:
             existing_names = {col.name for col in result}
-            if output_col not in existing_names:
-                result.append(self._column_schema_cls(
+            if output_col:
+                self._assign_column(result, self._column_schema_cls(
                     name=output_col,
                     type="geometry:point",
                     source_node=node_id,
@@ -152,8 +150,8 @@ class GeoSchemaHandlers:
         
         # Verifica che non esista già
         existing_names = {col.name for col in result}
-        if area_col not in existing_names:
-            result.append(self._column_schema_cls(
+        if area_col:
+            self._assign_column(result, self._column_schema_cls(
                 name=area_col,
                 type="real",
                 source_node=node_id,
@@ -189,25 +187,19 @@ class GeoSchemaHandlers:
             return []
         
         by_column = config.get("by_column")
-        geom_col = config.get("geom_column", "geometry")
-        
-        result = []
-        
-        # Se c'è group by, includi quella colonna
-        if by_column:
-            for col in input_schemas[0]:
-                if col.name == by_column:
-                    result.append(self._copy_column(col, node_id, is_calculated=False))
-                    break
-        
-        # Aggiungi colonna geometria
-        result.append(self._column_schema_cls(
-            name=geom_col,
-            type="geometry",
-            source_node=node_id,
-            is_calculated=True
-        ))
-        
+        geom_col = config.get("geom_column") or "geometry"
+        schema = input_schemas[0]
+        by_name = {col.name: col for col in schema}
+        result = [self._copy_column(by_name[by_column], node_id)] if by_column in by_name else [
+            self._column_schema_cls(name="index", type="int", source_node=node_id, is_calculated=True)]
+        if geom_col in by_name:
+            result.append(self._copy_column(by_name[geom_col], node_id))
+
+        func = config.get("aggfunc", "first")
+        numeric_only = func in {"mean", "sum", "std", "var", "median"}
+        result += [self._copy_column(col, node_id, type_=aggregation_output_type(
+            "first" if numeric_only and type_family(col.type) not in {"int", "real"} else func, col.type))
+            for col in schema if col.name not in {by_column, geom_col}]
         return result
 
     def _schema_geo_convex_hull(
@@ -230,8 +222,8 @@ class GeoSchemaHandlers:
         # Aggiungi nuova colonna se diversa
         if output_col and output_col != geom_col:
             existing_names = {col.name for col in result}
-            if output_col not in existing_names:
-                result.append(self._column_schema_cls(
+            if output_col:
+                self._assign_column(result, self._column_schema_cls(
                     name=output_col,
                     type="geometry:polygon",
                     source_node=node_id,
@@ -265,8 +257,8 @@ class GeoSchemaHandlers:
         result = self._copy_schema(input_schemas[0], node_id)
 
         if output_col != geom_col:
-            if output_col not in {col.name for col in result}:
-                result.append(self._column_schema_cls(
+            if output_col:
+                self._assign_column(result, self._column_schema_cls(
                     name=output_col,
                     type="geometry:polygon",
                     source_node=node_id,
@@ -296,30 +288,17 @@ class GeoSchemaHandlers:
         Overlay operations (intersection, union, difference): 
         Combina colonne da entrambi gli input + geometria risultante
         """
-        _ = overlay_type
         if len(input_schemas) < 2:
             return input_schemas[0] if input_schemas else []
-        
-        left_schema = input_schemas[0]
-        right_schema = input_schemas[1]
-        
-        result = []
-        
-        # Colonne da sinistra
-        for col in left_schema:
-            result.append(self._copy_column(col, node_id))
-        
-        # Colonne da destra (con suffisso per evitare conflitti
-        left_names = {col.name for col in left_schema}
-        for col in right_schema:
-            # Skip geometry columns from right (result uses combined geometry
-            if col.type.startswith("geometry"):
-                continue
-            new_name = col.name
-            if new_name in left_names:
-                new_name = f"{col.name}_2"
-            result.append(self._copy_column(col, node_id, name=new_name))
-        
+        left, right = input_schemas[:2]
+        if overlay_type == "difference":
+            return self._copy_schema(left, node_id)
+        left_attrs = [c for c in left if not c.type.startswith("geometry")]
+        right_attrs = [c for c in right if not c.type.startswith("geometry")]
+        collisions = {c.name for c in left_attrs} & {c.name for c in right_attrs}
+        result = [self._copy_column(c, node_id, name=f"{c.name}_1" if c.name in collisions else c.name) for c in left_attrs]
+        result += [self._copy_column(c, node_id, name=f"{c.name}_2" if c.name in collisions else c.name) for c in right_attrs]
+        self._assign_column(result, self._column_schema_cls(name="geometry", type="geometry", source_node=node_id, is_calculated=True))
         return result
 
     def _schema_geo_from_coords(
@@ -338,8 +317,8 @@ class GeoSchemaHandlers:
         result = self._copy_schema(input_schemas[0], node_id)
         
         existing_names = {col.name for col in result}
-        if output_col not in existing_names:
-            result.append(self._column_schema_cls(
+        if output_col:
+            self._assign_column(result, self._column_schema_cls(
                 name=output_col,
                 type=f"geometry:point:{crs.replace('EPSG:', '')}",
                 source_node=node_id,
@@ -373,8 +352,8 @@ class GeoSchemaHandlers:
         # comunque coerente col success-path canonico (left + distance
         result = self._copy_schema(input_schemas[0], node_id)
         output_col = config.get("output_column") or "distance_m"
-        if output_col and output_col not in {c.name for c in result}:
-            result.append(self._column_schema_cls(
+        if output_col:
+            self._assign_column(result, self._column_schema_cls(
                 name=output_col,
                 type="real",
                 source_node=node_id,
@@ -410,8 +389,8 @@ class GeoSchemaHandlers:
 
         if mode in ("wkt", "both"):
             wkt_col = config.get("wkt_column") or "geometry_wkt"
-            if wkt_col and wkt_col not in existing:
-                result.append(self._column_schema_cls(
+            if wkt_col:
+                self._assign_column(result, self._column_schema_cls(
                     name=wkt_col, type="str",
                     source_node=node_id, is_calculated=True,
                 ))
@@ -420,14 +399,14 @@ class GeoSchemaHandlers:
         if mode in ("latlon", "both"):
             lat_col = config.get("lat_column") or "latitude"
             lon_col = config.get("lon_column") or "longitude"
-            if lat_col and lat_col not in existing:
-                result.append(self._column_schema_cls(
+            if lat_col:
+                self._assign_column(result, self._column_schema_cls(
                     name=lat_col, type="real",
                     source_node=node_id, is_calculated=True,
                 ))
                 existing.add(lat_col)
-            if lon_col and lon_col not in existing:
-                result.append(self._column_schema_cls(
+            if lon_col:
+                self._assign_column(result, self._column_schema_cls(
                     name=lon_col, type="real",
                     source_node=node_id, is_calculated=True,
                 ))
@@ -452,8 +431,8 @@ class GeoSchemaHandlers:
             return []
         result = self._copy_schema(input_schemas[0], node_id)
         output_col = config.get("output_column") or "length_m"
-        if output_col and output_col not in {c.name for c in result}:
-            result.append(self._column_schema_cls(
+        if output_col:
+            self._assign_column(result, self._column_schema_cls(
                 name=output_col,
                 type="real",
                 source_node=node_id,
@@ -477,8 +456,8 @@ class GeoSchemaHandlers:
             return []
         result = self._copy_schema(input_schemas[0], node_id)
         output_col = config.get("output_column") or "perimeter_m"
-        if output_col and output_col not in {c.name for c in result}:
-            result.append(self._column_schema_cls(
+        if output_col:
+            self._assign_column(result, self._column_schema_cls(
                 name=output_col,
                 type="real",
                 source_node=node_id,
@@ -501,8 +480,8 @@ class GeoSchemaHandlers:
             return []
         result = self._copy_schema(input_schemas[0], node_id)
         output_col = config.get("output_column") or "vertex_count"
-        if output_col and output_col not in {c.name for c in result}:
-            result.append(self._column_schema_cls(
+        if output_col:
+            self._assign_column(result, self._column_schema_cls(
                 name=output_col,
                 type="int",
                 source_node=node_id,
@@ -531,8 +510,8 @@ class GeoSchemaHandlers:
         existing = {c.name for c in result}
         for suffix in ("min_x", "min_y", "max_x", "max_y"):
             col_name = f"{prefix}{suffix}"
-            if col_name and col_name not in existing:
-                result.append(self._column_schema_cls(
+            if col_name:
+                self._assign_column(result, self._column_schema_cls(
                     name=col_name,
                     type="real",
                     source_node=node_id,
@@ -568,8 +547,8 @@ class GeoSchemaHandlers:
         existing = {c.name for c in result}
 
         count_col = config.get("count_column") or "point_count"
-        if count_col and count_col not in existing:
-            result.append(self._column_schema_cls(
+        if count_col:
+            self._assign_column(result, self._column_schema_cls(
                 name=count_col,
                 type="int",
                 source_node=node_id,
@@ -582,8 +561,8 @@ class GeoSchemaHandlers:
             raw_func = config.get("aggregate_func") or "sum"
             func = raw_func if raw_func in ("sum", "mean", "min", "max") else "sum"
             agg_name = f"{agg_col}_{func}"
-            if agg_name not in existing:
-                result.append(self._column_schema_cls(
+            if agg_name:
+                self._assign_column(result, self._column_schema_cls(
                     name=agg_name,
                     type="real",
                     source_node=node_id,
@@ -669,7 +648,7 @@ class GeoSchemaHandlers:
             ),
         ]
         if output_col and output_col != group_col:
-            result.append(self._column_schema_cls(
+            self._assign_column(result, self._column_schema_cls(
                 name=output_col,
                 type=f"geometry:{geom_subtype}",
                 source_node=node_id,
@@ -700,8 +679,8 @@ class GeoSchemaHandlers:
 
         if output_col and output_col != geom_col:
             existing = {c.name for c in result}
-            if output_col not in existing:
-                result.append(self._column_schema_cls(
+            if output_col:
+                self._assign_column(result, self._column_schema_cls(
                     name=output_col,
                     type="geometry:point",
                     source_node=node_id,
@@ -743,8 +722,8 @@ class GeoSchemaHandlers:
 
         if output_col and output_col != geom_col:
             existing = {c.name for c in result}
-            if output_col not in existing:
-                result.append(self._column_schema_cls(
+            if output_col:
+                self._assign_column(result, self._column_schema_cls(
                     name=output_col,
                     type="geometry",
                     source_node=node_id,
@@ -805,7 +784,8 @@ class GeoSchemaHandlers:
         """
         if not input_schemas:
             return []
-        return self._copy_schema(input_schemas[0], node_id)
+        right = {c.name for c in input_schemas[1] if not c.type.startswith("geometry")} if len(input_schemas) > 1 else set()
+        return [self._copy_column(c, node_id) for c in input_schemas[0] if c.name not in right]
 
     def _schema_geo_nearest(
         self,
@@ -832,19 +812,19 @@ class GeoSchemaHandlers:
         left_schema = input_schemas[0]
         right_schema = input_schemas[1]
         result = self._copy_schema(left_schema, node_id)
-        left_names = {c.name for c in result}
-
+        left_names = {c.name for c in left_schema}
+        right_names = {c.name for c in right_schema if not c.type.startswith("geometry")}
+        collisions = left_names & right_names
+        result = [self._copy_column(c, node_id, name=f"{c.name}_left" if c.name in collisions else c.name)
+                  for c in left_schema]
         for col in right_schema:
-            if col.type.startswith("geometry"):
-                continue
-            new_name = (
-                f"{col.name}_right" if col.name in left_names else col.name
-            )
-            result.append(self._copy_column(col, node_id, name=new_name))
+            if not col.type.startswith("geometry"):
+                result.append(self._copy_column(col, node_id,
+                    name=f"{col.name}_right" if col.name in collisions else col.name))
 
         output_col = config.get("output_column") or "distance_m"
-        if output_col and output_col not in {c.name for c in result}:
-            result.append(self._column_schema_cls(
+        if output_col:
+            self._assign_column(result, self._column_schema_cls(
                 name=output_col,
                 type="real",
                 source_node=node_id,

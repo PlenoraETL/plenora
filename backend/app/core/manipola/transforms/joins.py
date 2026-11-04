@@ -4,6 +4,7 @@ Cluster JOINS — operazioni di join tra DataFrame.
 Keeps transformation behavior isolated from orchestration callers.
 """
 
+from app.shared.execution.join_preparation import deduplicate_join_names, suffix_join_names
 import math
 import uuid
 from typing import Any, List
@@ -196,27 +197,9 @@ def op_join(
     # Se ci sono colonne duplicate, pandas merge fallisce con KeyError
     # Strategia: se la chiave è duplicata tieni solo la prima occorrenza
     # per le altre colonne aggiungi suffisso progressivo
+
     def dedup_columns(df, key_cols):
-        key_set = set(key_cols)
-        seen = {}
-        new_cols = []
-        key_seen = {}
-        for col in df.columns:
-            if col in key_set:
-                key_seen[col] = key_seen.get(col, 0) + 1
-                if key_seen[col] == 1:
-                    new_cols.append(col)
-                else:
-                    # Chiave duplicata: rinomina la seconda occorrenza
-                    new_cols.append(f"{col}_dup{key_seen[col]}")
-                continue
-            if col in seen:
-                seen[col] += 1
-                new_cols.append(f"{col}_{seen[col]}")
-            else:
-                seen[col] = 0
-                new_cols.append(col)
-        df.columns = new_cols
+        df.columns = deduplicate_join_names(list(df.columns), key_cols)
         return df
 
     left_df = dedup_columns(left_df, left_key_cols)
@@ -275,20 +258,7 @@ def op_join(
     # Rinomina colonne con suffissi (tranne chiavi join
     # NOTA: usiamo enumerate per gestire colonne duplicate in modo sicuro
     def safe_rename(df, key_cols, suffix):
-        key_set = set(key_cols)
-        cols = list(df.columns)
-        new_cols = []
-        key_done = {}
-        for col in cols:
-            if col in key_set:
-                key_done[col] = key_done.get(col, 0) + 1
-                if key_done[col] == 1:
-                    new_cols.append(col)
-                else:
-                    new_cols.append(f"{col}_{suffix}_dup{key_done[col]}")
-            else:
-                new_cols.append(f"{col}_{suffix}")
-        df.columns = new_cols
+        df.columns = suffix_join_names(list(df.columns), key_cols, suffix)
         return df
 
     if column_maps is None:

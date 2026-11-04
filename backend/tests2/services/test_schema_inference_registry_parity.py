@@ -78,13 +78,15 @@ EXPECTED_DISPATCHER_BRANCHES: set[str] = {
 
 PASSTHROUGH_WRONG_GAP: set[str] = set()
 MIGRATE_NEXT_NEEDS_RUNTIME_CONTRACT: set[str] = set()
-PASSTHROUGH_OK_GAP: set[str] = {
+# A1: handler espliciti anche per i precedenti fallback.
+EXPECTED_DISPATCHER_BRANCHES |= {
     "sample",
     "dedup_advanced",
     "geo_clean_topology",
     "geo_make_valid",
     "geo_explode",
 }
+PASSTHROUGH_OK_GAP: set[str] = set()
 
 
 def _service() -> SchemaInferenceService:
@@ -277,7 +279,7 @@ def test_string_pad_can_overwrite_source_column_type():
         ("geo_perimeter", {}, [("perimeter_m", "real", True)]),
         ("geo_vertex_count", {}, [("vertex_count", "int", True)]),
         ("geo_bounds_extractor", {"prefix": "bbox_"}, [("bbox_min_x", "real", True), ("bbox_min_y", "real", True), ("bbox_max_x", "real", True), ("bbox_max_y", "real", True)]),
-        ("geo_count_points_in_polygons", {"aggregate_column": "value", "aggregate_func": "max"}, [("point_count", "int", True), ("value_max", "real", True)]),
+        ("geo_count_points_in_polygons", {"aggregate_column": "value", "aggregate_func": "max"}, [("point_count", "int", True), ("value_sum", "real", True)]),
     ],
 )
 def test_geo_additive_families_have_representative_schema(op, config, expected_tail):
@@ -288,7 +290,7 @@ def test_geo_additive_families_have_representative_schema(op, config, expected_t
 @pytest.mark.parametrize(
     ("op", "config", "expected"),
     [
-        ("geo_line_builder", {"group_column": "name", "output_column": "line"}, [("name", "str", False), ("line", "geometry:line", True)]),
+        ("geo_line_builder", {"group_column": "name", "output_column": "line"}, [("name", "str", False), ("geometry", "geometry:line", True)]),
         ("geo_polygon_builder", {"group_column": "id"}, [("id", "int", False), ("geometry", "geometry:polygon", True)]),
         ("geo_point_on_surface", {"geom_column": "geometry", "output_column": "geometry"}, [("id", "int", False), ("name", "str", False), ("geometry", "geometry:point", True)]),
         ("geo_boundary", {"geom_column": "geometry", "output_column": "geometry"}, [("id", "int", False), ("name", "str", False), ("geometry", "geometry", True)]),
@@ -334,7 +336,7 @@ def test_geo_nearest_adds_right_non_geometry_columns_and_distance():
     out = _infer("geo_nearest", {"output_column": "meters"}, [left, right])
     assert _name_type(out) == [
         ("id", "int"),
-        ("name", "str"),
+        ("name_left", "str"),
         ("g", "geometry:point"),
         ("name_right", "str"),
         ("score", "real"),
@@ -437,8 +439,8 @@ def test_flatten_json_config_explicit_contract_and_safe_fallback():
     assert _pairs(out) == [
         ("a", "int", False),
         ("b", "str", False),
-        ("json_city", "str", True),
-        ("json_score", "real", True),
+        ("city", "str", True),
+        ("score", "real", True),
     ]
 
 

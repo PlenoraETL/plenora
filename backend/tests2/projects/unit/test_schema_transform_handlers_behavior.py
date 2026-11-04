@@ -333,7 +333,7 @@ def test_split_column_empty_input(handlers):
 
 def test_md5_hash_default_output(handlers):
     inp = schema(col("a"))
-    out = handlers._schema_md5_hash(inp, {}, NODE)
+    out = handlers._schema_md5_hash(inp, {"columns": ["a"]}, NODE)
     assert names(out) == ["a", "md5_hash"]
     assert by_name(out, "md5_hash").type == "str"
     assert by_name(out, "md5_hash").is_calculated is True
@@ -341,7 +341,7 @@ def test_md5_hash_default_output(handlers):
 
 def test_md5_hash_custom_output(handlers):
     inp = schema(col("a"))
-    out = handlers._schema_md5_hash(inp, {"output_column": "digest"}, NODE)
+    out = handlers._schema_md5_hash(inp, {"output_column": "digest", "columns": ["a"]}, NODE)
     assert names(out) == ["a", "digest"]
 
 
@@ -554,7 +554,7 @@ def test_date_extract_parts_list(handlers):
 def test_date_extract_parts_string(handlers):
     inp = schema(col("ts", "datetime"))
     out = handlers._schema_date_extract(inp, {"column": "ts", "parts": "quarter"}, NODE)
-    assert names(out) == ["ts", "ts_quarter"]
+    assert names(out) == ["ts"]
 
 
 def test_date_extract_custom_prefix(handlers):

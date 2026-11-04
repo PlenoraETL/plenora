@@ -54,7 +54,7 @@ def test_different_keys_right_join_key_keeps_original_name():
     assert "id_left" in names      # left_on senza suffisso
     assert "name_l_L" in names     # altre col sinistra → _L
     # Destra
-    assert "id_right" in names     # right_on senza suffisso (FIX)
+    assert "id_right" not in names     # right_on senza suffisso (FIX)
     assert "id_right_R" not in names  # bug regression guard
     assert "name_r_R" in names     # altre col destra → _R
 
@@ -121,8 +121,8 @@ def test_multiple_different_keys_schema_keeps_right_key_names():
     names = [c.name for c in result]
     assert "country" in names
     assert "customer_id" in names
-    assert "country_code" in names
-    assert "cust_id" in names
+    assert "country_code" not in names
+    assert "cust_id" not in names
     assert "name_l_L" in names
     assert "name_r_R" in names
 

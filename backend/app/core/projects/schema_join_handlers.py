@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from app.shared.execution.join_preparation import prepared_join_plan
+from app.shared.execution.column_selection import join_column_plan
 from typing import TYPE_CHECKING, List
+from dataclasses import replace
+import uuid
 from app.shared.execution.lookup_mapping import normalize_lookup_mapping, lookup_is_numeric, normalize_unmatched
-from app.shared.execution.schema_column_plans import legacy_join_plan, join_output_plan
 
 if TYPE_CHECKING:
     from app.shared.execution.schema_types import ColumnSchema
@@ -33,19 +36,24 @@ class JoinSchemaHandlers:
         right_keys = self._normalize_str_list(config.get("right_keys") or config.get("right_on"))
         left_names = [c.name for c in left_schema]
         right_names = [c.name for c in right_schema]
+
+        maps = None
         if any(config.get(key) is not None for key in ("left_columns", "right_columns", "name_conflict")):
-            plan = join_output_plan(
-                left_names, right_names, left_keys, right_keys,
-                config.get("left_columns"), config.get("right_columns"), config.get("name_conflict"),
-            )
-        else:
-            plan = legacy_join_plan(left_names, right_names, left_keys, right_keys)
-        # Consume each occurrence in source order, retaining duplicate-column metadata.
-        sources = {"left": iter(left_schema), "right": iter(right_schema)}
-        return [
-            self._copy_column(next(c for c in sources[side] if c.name == source), node_id, name=output)
-            for side, source, output in plan
-        ]
+            maps = join_column_plan(left_names, right_names, left_keys, right_keys,
+                                    config.get("left_columns"), config.get("right_columns"), config.get("name_conflict"))
+        plan = prepared_join_plan(left_names, right_names, left_keys, right_keys, maps)
+        schemas = [left_schema, right_schema]
+        key_types = {}
+        for lk, rk in zip(left_keys, right_keys):
+            lt = next(col.type for col in left_schema if col.name == lk)
+            rt = next(col.type for col in right_schema if col.name == rk)
+            if lt != rt and ({lt, rt} & {"str", "string", "text"}):
+                key_types[(0, lk)] = key_types[(1, rk)] = "str"
+        return [replace(self._copy_column(schemas[side][index], node_id, name=name,
+                                 type_=key_types.get((side, schemas[side][index].name))),
+                        id=(f"col_{uuid.uuid5(uuid.NAMESPACE_URL, str(schemas[side][index].id) + ':' + str(side) + ':' + name).hex}"
+                            if name != schemas[side][index].name else schemas[side][index].id))
+                for side, index, name in plan]
 
     def _schema_cross_join(
         self,

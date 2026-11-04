@@ -103,6 +103,9 @@ def test_node_dispatch_registry_contains_incrementally_migrated_types():
     assert _parse_node_dispatch_registry() == {
         "source",
         "file_source",
+        "datasource_node",
+        "staticValues",
+        "multi_join",
         "feature_source",
         "project_source",
         "project_input",

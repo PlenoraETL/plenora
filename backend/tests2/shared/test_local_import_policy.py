@@ -62,8 +62,10 @@ _SCAN_ROOTS = (
 # exact state so subsequent changes remain shrink-only. The pipeline worker
 # boundary cleanup in this pass removed six local DB imports, and the same
 # cleanup in the enrichment worker removed two more.
-MAX_LOCAL_IMPORTS = 343
-MAX_LATE_MODULE_IMPORTS = 8
+# A1: piani condivisi importati a livello modulo; rimane differito il solo ciclo
+# canvas_schema_runtime -> schema_inference. Riconteggio dopo l'estrazione.
+MAX_LOCAL_IMPORTS = 341
+MAX_LATE_MODULE_IMPORTS = 6
 
 
 def _iter_py_files() -> Iterable[Path]:

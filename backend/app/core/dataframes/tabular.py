@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.shared.execution.source_column_plan import source_column_plan
 from decimal import Decimal, InvalidOperation
 from datetime import date, datetime
 import io
@@ -324,14 +325,8 @@ def filter_visible_columns(
     if not visibili:
         return df
 
-    seen_names = set()
-    colonne_da_selezionare = []
-    for col in visibili:
-        raw_name = col.get("name", "")
-        alias = col.get("alias") or raw_name
-        if raw_name in df.columns and raw_name not in seen_names:
-            colonne_da_selezionare.append((raw_name, alias))
-            seen_names.add(raw_name)
+
+    colonne_da_selezionare = source_column_plan(list(df.columns), node_columns)
 
     if not colonne_da_selezionare:
         logger.warning("Nessuna colonna visibile trovata nel DataFrame")

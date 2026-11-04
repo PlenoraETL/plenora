@@ -807,15 +807,13 @@ function computeJoinOutput(leftCols, rightCols, leftOn, rightOn) {
   return plan.error ? [] : fromJoinColumns(leftCols, rightCols, plan.columns);
 }
 
-// [lato, sorgente, uscita] -> colonne con i metadati della colonna sorgente.
+// [lato 0/1, posizione nella sorgente, uscita] -> colonne con i metadati
+// della colonna sorgente (stessa preparazione del backend).
 function fromJoinColumns(leftCols, rightCols, columns) {
-  const used = { left: 0, right: 0 };
-  const pools = { left: leftCols, right: rightCols };
-  return columns.map(([side, source, name]) => {
-    const pool = pools[side];
-    const col = pool.find((c, i) => c.name === source && i >= used[side]) || pool.find(c => c.name === source) || {};
-    used[side] = Math.max(used[side], pool.indexOf(col) + 1);
-    return { ...col, name, type: col.type || 'str', source: side };
+  const pools = [leftCols, rightCols];
+  return columns.map(([side, index, name]) => {
+    const col = pools[side][index] || {};
+    return { ...col, name, type: col.type || 'str', source: side === 0 ? 'left' : 'right' };
   });
 }
 

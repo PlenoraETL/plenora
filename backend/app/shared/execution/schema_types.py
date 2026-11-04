@@ -14,22 +14,30 @@ from app.shared.contracts.payloads import JsonRows, ObjectMap
 
 @dataclass(frozen=True)
 class InferredSchema:
-    """Schema inferito per un nodo, con esito esplicito.
+    """Schema e certezze indipendenti per nomi, tipi e ordine.
 
-    Disambigua i tre significati che collassavano su ``[]``: colonne note
-    (``certain``), vuoto-ma-certo (sorgente dichiarata senza colonne), e
-    **non inferibile** (``indeterminate``: upstream non risolto / output non
-    dichiarato → l'engine emette un *warning*, mai un blocco).
-
-    ``status`` è preciso e propagato a valle (un nodo indeterminate a monte rende
-    indeterminate i discendenti). Vive in ``shared`` (non in ``projects``) così che
-    sia il protocol di validazione sia i motori che implementano ``validate_node``
-    possano riceverlo senza dipendere da ``projects/``.
+    ``names_status`` governa la validazione dei riferimenti: ``metadata``
+    vale quanto ``certain`` per i nomi salvati. ``types_status`` non degrada
+    gli errori sui nomi. ``order_status`` rappresenta, fra gli altri, il
+    riordino saltato sui frame vuoti. ``status`` riassume tutti gli aspetti
+    per i chiamanti storici; non va usato per validare un singolo aspetto.
     """
 
     columns: JsonRows
     status: str = "certain"  # "certain" | "indeterminate"
     reason: str = ""
+    names_status: Optional[str] = None
+    types_status: Optional[str] = None
+    order_status: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        """I chiamanti storici dichiarano entrambi gli aspetti con status."""
+        if self.names_status is None:
+            object.__setattr__(self, "names_status", self.status)
+        if self.types_status is None:
+            object.__setattr__(self, "types_status", self.status)
+        if self.order_status is None:
+            object.__setattr__(self, "order_status", self.status)
 
 
 @dataclass
@@ -42,6 +50,7 @@ class ColumnSchema:
     source_name: Optional[str] = None
     source_node: Optional[str] = None
     is_calculated: bool = False
+    optional: bool = False
 
     def to_dict(self) -> ObjectMap:
         payload: ObjectMap = {
@@ -50,6 +59,8 @@ class ColumnSchema:
             "source_node": self.source_node,
             "is_calculated": self.is_calculated,
         }
+        if self.optional:
+            payload["optional"] = True
         if self.id:
             payload["id"] = self.id
         if self.source_name:

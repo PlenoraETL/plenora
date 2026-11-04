@@ -137,7 +137,7 @@ def test_multi_input_schema_uses_handles_not_edge_array_order():
     rows = _svc_with_canvas(canvas).infer_node_schema("proj", "nearest")
 
     assert [row["name"] for row in rows] == [
-        "id", "geometry", "id_right", "label", "distance",
+        "id_left", "geometry", "id_right", "label", "distance",
     ]
 
 
@@ -191,12 +191,12 @@ def test_typed_indeterminate_for_result_without_input():
 
 
 def test_typed_certain_for_empty_declared_file_source():
-    # file_source dichiarato senza colonne = vuoto CERTO, non indeterminate
+    # A1: selezione vuota mantiene il file fisico, qui sconosciuto.
     file_node = _node("f1", "file_source", data={"columns": []})
     svc = _svc_with_canvas(_canvas([file_node], []))
     typed = svc.infer_node_schema_typed("proj", "f1")
     assert typed.columns == []
-    assert typed.status == "certain"
+    assert typed.status == "indeterminate"
 
 
 def test_typed_certain_when_node_missing():

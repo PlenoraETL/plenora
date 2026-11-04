@@ -7,6 +7,7 @@ Motivazione
 from __future__ import annotations
 
 from collections.abc import Callable
+from app.shared.execution.output_column_refs import unique_column_names
 
 from app.shared.contracts.payloads import JsonObjectById, JsonRows
 from app.utils.logger import get_logger
@@ -16,11 +17,7 @@ logger = get_logger(__name__)
 
 
 def _existing_by_name(result_node: object) -> JsonObjectById:
-    """Estrae le customizzazioni utente (alias, visible) dal
-    result_node corrente, indicizzate per nome colonna originale.
-
-    Il match avviene su `name` (NON `alias`) cosi' una colonna rinominata
-    dall'utente resta mappata all'originale anche dopo rename upstream."""
+    """Estrae le personalizzazioni salvate, mantenendo nome e identità."""
     columns = []
     if hasattr(result_node, "columns") and result_node.columns:
         columns = result_node.columns
@@ -76,7 +73,7 @@ def compute_result_columns(
         Lista di dict {name, type, alias, visible} compatibile con
         `canvas.nodes[result].columns` (Column model di app.core.projects.canvas_models).
         Le customizzazioni utente (alias, visible) presenti nel
-        result_node corrente sono preservate per nome.
+        result_node corrente sono preservate per identità.
     """
     service = schema_inference_service_factory(project_service)
     service._schema_cache = {}
@@ -107,12 +104,16 @@ def compute_result_columns(
         )
         return []
 
-    # Preserva alias + visible dell'utente per nome
+    # L'identità ha precedenza sul nome storico salvato nel canvas.
     user_overrides = _existing_by_name(result_node)
+    valid_ids = unique_column_names([{"id": getattr(col, "id", None), "name": col.name} for col in schema])
+    saved_ids = unique_column_names([dict(value, name=name) for name, value in user_overrides.items()])
+    overrides_by_id = {identity: user_overrides[name] for identity, name in saved_ids.items()
+                       if identity in valid_ids}
 
     out: JsonRows = []
     for col in schema:
-        override = user_overrides.get(col.name, {})
+        override = overrides_by_id.get(str(getattr(col, "id", None)), user_overrides.get(col.name, {}))
         item = {
             "name": col.name,
             "type": col.type or "str",

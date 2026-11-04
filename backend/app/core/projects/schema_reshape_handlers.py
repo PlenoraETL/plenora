@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.shared.execution.reshape_column_plan import melt_output_name
 from typing import TYPE_CHECKING, List
 
 from app.core.projects.types import ColumnMetadataRows
@@ -108,9 +109,14 @@ class ReshapeSchemaHandlers:
         var_name = config.get("var_name") or "variable"
         value_name = config.get("value_name") or "value"
 
+        var_name = melt_output_name(var_name, by_name)
+        value_name = melt_output_name(value_name, by_name)
+
         types = {by_name[c].type for c in value_cols_names if c in by_name}
         if len(types) == 1:
             val_type = next(iter(types))
+        elif types <= {"int", "real"}:
+            val_type = "real"
         else:
             val_type = "str"
 
@@ -151,8 +157,8 @@ class ReshapeSchemaHandlers:
         prefix = config.get("prefix") or (f"{column}_" if column else "")
         for entry in output_cols:
             name = entry["name"]
-            full_name = f"{prefix}{name}" if prefix else name
-            if not full_name or full_name in existing:
+            full_name = name
+            if not full_name:
                 continue
             result.append(self._column_schema_cls(
                 name=full_name,

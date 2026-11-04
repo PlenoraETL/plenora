@@ -106,7 +106,7 @@ def _missing_required_param_mappings(data: Mapping[str, Any], upstream: Inferred
     # #A: schema a monte non risolvibile → non possiamo confermare l'esistenza
     # della colonna mappata; saltiamo quel ramo (mai falso blocco), ma il ramo
     # "nessun mapping" resta deterministico.
-    can_check_columns = upstream.status != "indeterminate" and bool(upstream_names)
+    can_check_columns = upstream.names_status != "indeterminate"
 
     missing: List[str] = []
     for p in parameters:

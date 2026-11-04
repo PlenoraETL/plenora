@@ -15,8 +15,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from app.shared.execution.column_selection import join_column_plan, select_column_plan
 from app.shared.execution.result_grouping import result_group_plan
 from app.shared.execution.schema_column_plans import (
-    legacy_join_plan, join_output_plan, aggregation_output_type,
+    aggregation_output_type,
 )
+
+from app.shared.execution.join_preparation import prepared_join_plan
 
 FIXTURE_PATH = Path(__file__).with_name("column_plans_cases.json")
 
@@ -27,9 +29,11 @@ def evaluate(kind, inputs):
         if kind == "select":
             result = {"plan": select_column_plan(**inputs)}
         elif kind == "join":
-            result = {"plan": join_column_plan(**inputs), "columns": join_output_plan(**inputs)}
+            maps = join_column_plan(**inputs)
+            result = {"plan": maps, "columns": prepared_join_plan(
+                inputs["left"], inputs["right"], inputs["left_keys"], inputs["right_keys"], maps)}
         elif kind == "join_legacy":
-            result = {"columns": legacy_join_plan(**inputs)}
+            result = {"columns": prepared_join_plan(**inputs)}
         elif kind == "aggregation_types":
             result = {"type": aggregation_output_type(**inputs)}
         elif kind == "grouping":
@@ -138,7 +142,7 @@ def build_cases():
             dict(left=["a"], right=["b"], left_keys=[], right_keys=[]) | overrides)
     for idx, (func, source_type) in enumerate(product(
         ["count", "mean", "std", "sum", "min", "max", "first", "last", "median",
-         "nunique", "avg", "COUNT", "MEAN", "STD", "unknown", "", None],
+         "nunique", "size", "var", "concat", "avg", "COUNT", "MEAN", "STD", "unknown", "", None],
         ["int", "real", "str", "bool", "date", "datetime", "geometry", "unknown", ""],
     )):
         add("aggregation_types", f"matrix-{idx:03}", dict(func=func, source_type=source_type))

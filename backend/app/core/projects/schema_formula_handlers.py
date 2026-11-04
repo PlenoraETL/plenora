@@ -34,12 +34,12 @@ class FormulaSchemaHandlers:
 
         if config.get("items") is not None:
             result = self._copy_schema(input_schemas[0], node_id)
-            for index, item in enumerate(config["items"]):
+            for item in config["items"]:
                 name = item["new_column"]
                 column = self._column_schema_cls(
                     name=name, type=item.get("output_type", "real"),
-                    id=_stable_calculated_column_id(node_id, f"formula:{index}"),
-                    source_name=_stable_calculated_source_name(node_id, f"formula:{index}"),
+                    id=_stable_calculated_column_id(node_id, f"formula:{name}"),
+                    source_name=_stable_calculated_source_name(node_id, f"formula:{name}"),
                     source_node=node_id, is_calculated=True,
                 )
                 existing = next((i for i, col in enumerate(result) if col.name == name), None)
@@ -55,11 +55,11 @@ class FormulaSchemaHandlers:
         output_type = config.get("output_type", "real")
 
         existing_names = {col.name for col in result}
-        if new_col and new_col not in existing_names:
-            result.append(self._column_schema_cls(
+        if new_col:
+            self._assign_column(result, self._column_schema_cls(
                 name=new_col,
                 type=output_type,
-                id=_stable_calculated_column_id(node_id, "formula"),
+                id=_stable_calculated_column_id(node_id, f"formula:{new_col}"),
                 source_name=_stable_calculated_source_name(node_id, "formula"),
                 source_node=node_id,
                 is_calculated=True,
@@ -81,12 +81,15 @@ class FormulaSchemaHandlers:
 
         result = self._copy_schema(input_schemas[0], node_id)
 
+        if not config.get("conditions") or config.get("column") not in {col.name for col in result}:
+            return result
+
         existing_names = {col.name for col in result}
-        if output_col not in existing_names:
-            result.append(self._column_schema_cls(
+        if output_col:
+            self._assign_column(result, self._column_schema_cls(
                 name=output_col,
                 type="str",
-                id=_stable_calculated_column_id(node_id, "conditional"),
+                id=_stable_calculated_column_id(node_id, f"conditional:{output_col}"),
                 source_name=_stable_calculated_source_name(node_id, "conditional"),
                 source_node=node_id,
                 is_calculated=True,
