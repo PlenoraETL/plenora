@@ -15,6 +15,7 @@
  */
 import { getCachedTransformRegistry, isMultiInputOp } from '../../utils/transformRegistry';
 import { displayIcon } from '../../utils/displayIcon';
+import { TERMS, term } from '../../utils/glossary';
 
 export { displayIcon };
 
@@ -26,6 +27,9 @@ const joinNames = (list, max = 3) => {
   if (names.length <= max) return names.join(', ');
   return `${names.slice(0, max).join(', ')} +${names.length - max}`;
 };
+
+// Il tipo di join come clausola SQL ("LEFT JOIN"), non come chiave ("left").
+const sqlJoin = (how) => `${String(how || 'inner').toUpperCase()} JOIN`;
 
 const IN = { type: 'target', position: 'left' };
 const OUT = { type: 'source', position: 'right' };
@@ -67,30 +71,47 @@ export function transformSummary(op, config = {}) {
       return `${plural(cols.length - dropped, 'colonna tenuta', 'colonne tenute')}${dropped ? ` · ${dropped} scartate` : ''}`;
     }
     case 'aggregate': return `per ${joinNames(c.group_by || c.by) || '?'}`;
-    case 'join': return `${c.how || 'inner'} su ${joinNames(c.left_keys) || '?'}`;
+    case 'join': return `${sqlJoin(c.how)} su ${joinNames(c.left_keys) || '?'}`;
     case 'lookup': return `${c.column || '?'} → ${c.output_column || c.column || '?'}`;
     case 'type_cast': return `${c.column || joinNames(c.columns) || '?'} → ${c.target_type || c.dtype || '?'}`;
     case 'sort': return `ordina per ${joinNames(c.columns || c.by) || '?'}`;
     case 'distinct': return c.columns ? `distinti su ${joinNames(c.columns)}` : 'righe distinte';
-    default: {
-      const entries = Object.entries(c)
-        .filter(([k, v]) => !k.endsWith('_column_id') && !k.endsWith('_column_ids') && !k.endsWith('_refs')
-          && v !== null && v !== undefined && v !== '' && typeof v !== 'object');
-      return entries.slice(0, 2).map(([k, v]) => `${k}: ${v}`).join(' · ');
-    }
+    default: return fallbackSummary(op, c);
   }
+}
+
+/*
+ * Riepilogo di riserva (operazioni senza un caso dedicato): i primi due
+ * parametri valorizzati con l'ETICHETTA del registry e, per le scelte,
+ * l'etichetta dell'opzione. Mai le chiavi tecniche della config
+ * ("how: inner"); un parametro che il registry non descrive non si mostra.
+ */
+function fallbackSummary(op, config) {
+  const params = getCachedTransformRegistry()?.transforms?.[op]?.parameters || [];
+  const parts = [];
+  for (const p of params) {
+    const v = config[p?.id];
+    if (v === null || v === undefined || v === '' || typeof v === 'object') continue;
+    const option = (Array.isArray(p.options) ? p.options : []).find(o => o && typeof o === 'object' && o.value === v);
+    parts.push(`${p.label || p.id}: ${option?.label || v}`);
+    if (parts.length === 2) break;
+  }
+  return parts.join(' · ');
 }
 
 function transformInfo(data) {
   const op = data?.transform_op;
   const def = getCachedTransformRegistry()?.transforms?.[op];
-  return { op, name: def?.name || op || 'Trasformazione', icon: displayIcon(def?.icon) };
+  return { op, name: def?.name || op || term('transform').name, icon: displayIcon(def?.icon) };
 }
+
+// Nome e icona di un tipo dal glossario (regola 10 del Blocco A).
+const named = (key) => ({ icon: term(key).icon, kind: () => term(key).name });
 
 const D = {
   tableNode: {
-    category: 'source', icon: '🗂️', kind: () => 'Tabella',
-    title: (d) => d.alias || d.table_name || 'Tabella',
+    category: 'source', ...named('table'),
+    title: (d) => d.alias || d.table_name || term('table').name,
     summary: (d) => {
       const filters = count(d.filters);
       return `${visibleColumns(d.columns)}/${count(d.columns)} colonne${filters ? ` · ${plural(filters, 'filtro', 'filtri')}` : ''}`;
@@ -98,40 +119,41 @@ const D = {
     defaultHandles: () => [IN, OUT],
   },
   featureLayerNode: {
-    category: 'source', icon: '🗺️', kind: () => 'Layer ArcGIS',
-    title: (d) => d.layer_name || 'Layer',
+    category: 'source', ...named('feature_layer'),
+    title: (d) => d.layer_name || term('feature_layer').name,
     summary: (d) => `${plural(count(d.columns), 'campo', 'campi')}${d.where ? ' · filtrato' : ''}`,
     defaultHandles: () => [IN, OUT],
   },
   project_source: {
-    category: 'source', icon: '🗂️', kind: () => 'Progetto sorgente',
-    title: (d) => d.project_name || d.label || d.name || d.source_project_id || 'Progetto',
+    category: 'source', ...named('project_source'),
+    title: (d) => d.project_name || d.label || d.name || d.source_project_id || term('project_source').name,
     summary: (d) => plural(visibleColumns(d.columns), 'colonna', 'colonne'),
     defaultHandles: () => [OUT],
   },
   file_source: {
-    category: 'source', icon: '📄', kind: () => 'File',
-    title: (d) => d.file_name || d.fileName || d.label || 'File',
+    category: 'source', ...named('file_source'),
+    title: (d) => d.file_name || d.fileName || d.label || term('file_source').name,
     summary: (d) => plural(visibleColumns(d.columns), 'colonna', 'colonne'),
     defaultHandles: () => [OUT],
   },
   datasourceNode: {
-    category: 'source', icon: '🗄️', kind: (d) => (d.mode === 'carica' ? 'Scrittura Data Source' : 'Data Source'),
-    title: (d) => d.datasource_name || 'Data Source',
+    category: 'source', icon: term('datasource').icon,
+    kind: (d) => term(d.mode === 'carica' ? 'datasource_write' : 'datasource').name,
+    title: (d) => d.datasource_name || term('datasource').name,
     summary: (d) => d.file_path || d.folder_path || 'percorso da scegliere',
     defaultHandles: () => [{ ...IN, id: 'carica-in' }, { ...OUT, id: 'source-out' }],
   },
   staticValues: {
     // `label` dei Valori statici non e' testo dell'utente (nessun campo lo
     // modifica): e' il vecchio nome scritto alla creazione.
-    category: 'source', icon: '📝', kind: () => 'Valori statici',
-    title: () => 'Valori statici',
+    category: 'source', ...named('static_values'),
+    title: () => term('static_values').name,
     summary: (d) => plural(count(d.fields), 'campo', 'campi'),
     defaultHandles: () => [{ ...OUT, id: 'output' }],
   },
   project_input: {
-    category: 'input', icon: '⌨', kind: () => 'Input runtime',
-    title: (d) => d.label || d.input_key || 'Input',
+    category: 'input', ...named('runtime_input'),
+    title: (d) => d.label || d.input_key || term('runtime_input').name,
     summary: (d) => `${d.input_key || '?'} · ${d.input_kind || 'file'}`,
     defaultHandles: (d) => (d.input_kind === 'connection'
       ? []
@@ -146,19 +168,19 @@ const D = {
       : [IN, OUT]),
   },
   multi_join: {
-    category: 'join', icon: '🔗', kind: () => 'Multi-Join',
-    title: () => 'Unione',
+    category: 'join', ...named('multi_join'),
+    title: () => term('multi_join').name,
     summary: (d) => {
       const c = d.config || {};
-      return `${c.join_type || d.multi_join_type || 'inner'} su ${joinNames(c.join_keys || d.join_keys) || '?'}`;
+      return `${sqlJoin(c.join_type || d.multi_join_type)} su ${joinNames(c.join_keys || d.join_keys) || '?'}`;
     },
     // Almeno 2 ingressi; quelli effettivamente collegati arrivano dagli edge.
     defaultHandles: () => [{ ...IN, id: 'input-0' }, { ...IN, id: 'input-1' }, OUT],
     nextFreeInput: true,
   },
   api_enrich: {
-    category: 'step', icon: '🔌', kind: () => 'Arricchimento API',
-    title: (d) => d.api_name || d.name || 'API',
+    category: 'step', ...named('api_enrich'),
+    title: (d) => d.api_name || d.name || term('api_enrich').name,
     summary: (d) => {
       const params = count(d.parameters);
       const mapped = Object.values(d.param_mapping || {}).filter(Boolean).length;
@@ -167,22 +189,22 @@ const D = {
     defaultHandles: () => [{ ...IN, id: 'input' }, { ...OUT, id: 'output' }],
   },
   resultNode: {
-    category: 'output', icon: '📁', kind: () => 'Output',
-    title: () => 'Output',
-    summary: (d) => `${String(d.format || 'csv').toUpperCase()} · ${d.fileName || d.file_name || 'output'}`,
+    category: 'output', ...named('output'),
+    title: () => term('output').name,
+    summary: (d) => `${String(d.format || 'csv').toUpperCase()} · ${d.fileName || d.file_name || 'nome del file da scegliere'}`,
     defaultHandles: () => [{ ...IN, id: 'input' }, { ...OUT, id: 'output' }],
   },
   carica: {
-    category: 'load', icon: '💾', kind: () => 'Carica su database',
-    title: () => 'Carica DB',
+    category: 'load', ...named('load_db'),
+    title: () => term('load_db').name,
     summary: (d) => (d.dest_type === 'rest'
       ? `REST → ${d.rest_url || '?'}`
       : `→ ${d.schema_name ? `${d.schema_name}.` : ''}${d.table_name || '?'}${d.write_mode ? ` · ${d.write_mode}` : ''}`),
     defaultHandles: () => [IN],
   },
   carica_arcgis: {
-    category: 'load', icon: '🌐', kind: () => 'Carica su ArcGIS',
-    title: () => 'Carica ArcGIS',
+    category: 'load', ...named('load_arcgis'),
+    title: () => term('load_arcgis').name,
     summary: (d) => `${d.arcgis_operation || 'add'} · ${d.arcgis_new_layer_name || d.arcgis_layer_url || '?'}`,
     defaultHandles: () => [IN],
   },
@@ -197,8 +219,8 @@ const ALIASES = {
 };
 
 const FALLBACK = {
-  category: 'step', icon: '⚙️', kind: () => 'Nodo',
-  title: (d) => d.label || 'Nodo',
+  category: 'step', ...named('transform'),
+  title: (d) => d.label || term('transform').name,
   summary: () => '',
   defaultHandles: () => [IN, OUT],
 };
@@ -243,14 +265,19 @@ export function derivedTitle(type, data = {}) {
 
 // Un `data.title` uguale a un titolo generato e' un titolo congelato dalle
 // versioni precedenti (il campo veniva precompilato e salvato al blur):
-// non e' testo dell'utente, quindi non nasconde il derivato. Per i passi
-// vale anche il nome di qualsiasi operazione (titolo congelato prima di un
-// cambio di operazione o di una conversione).
+// non e' testo dell'utente, quindi non nasconde il derivato. Valgono anche
+// i nomi delle versioni precedenti (`formerNames` del glossario, es.
+// "Unione" per il Multi-Join) e, per i passi, il nome di qualsiasi
+// operazione, sia del glossario sia del catalogo del backend (titolo
+// congelato prima di un cambio di operazione o di una conversione).
+const FORMER_NAMES = new Set(Object.values(TERMS).flatMap(t => t.formerNames || []));
+
 function isGeneratedTitle(type, data, text) {
   if (text === derivedTitle(type, data) || text === baseTitle(type, data)) return true;
+  if (FORMER_NAMES.has(text)) return true;
   if (nodeDescriptor(type) !== D.transform) return false;
   const transforms = getCachedTransformRegistry()?.transforms || {};
-  return Object.entries(transforms).some(([op, def]) => text === (def?.name || op));
+  return Object.entries(transforms).some(([op, def]) => text === (def?.name || op) || text === def?.catalog_name);
 }
 
 /** Testo scelto dall'utente; '' se manca o e' un titolo generato. */

@@ -60,7 +60,7 @@ const RenameListInput = ({ value, onChange, columns }) => {
     if (skippedCollisions > 0) {
       setCsvError(
         `${skippedCollisions} colonne saltate: più colonne diverse darebbero lo stesso nome dopo la pulizia ` +
-        `(probabili chiavi di join duplicate — usa "Elimina colonne" per quelle).`
+        `(probabili chiavi del Join duplicate — usa "Elimina colonne" per quelle).`
       );
     } else {
       setCsvError('');
@@ -204,7 +204,7 @@ const RenameListInput = ({ value, onChange, columns }) => {
             type="button"
             onClick={stripLRSuffixes}
             className="rename-list-input__add rename-list-input__add--strip-lr"
-            title="Propone un nuovo nome per ogni colonna togliendo i suffissi _L/_R accumulati dai join (es. cd_id_L_L_L → cd_id)"
+            title="Propone un nuovo nome per ogni colonna togliendo i suffissi _L/_R accumulati dai Join (es. cd_id_L_L_L → cd_id)"
           >
             🧹 Rimuovi suffissi _L/_R
           </button>

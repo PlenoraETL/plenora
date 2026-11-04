@@ -175,7 +175,7 @@ const FileSourceNode = ({ id, data }) => {
           <div className="file-source-node__columns-header">
             <span>Colonne ({visibleCount}/{totalCount}):</span>
             <span className="file-source-node__columns-hint">
-              click per escludere
+              clic per escludere
             </span>
           </div>
           
@@ -217,7 +217,7 @@ const FileSourceNode = ({ id, data }) => {
       {fileInfo && (fileInfo.layer || fileInfo.sheet) && (
         <div className="file-source-node__layer-info">
           {fileInfo.layer && <span>Layer: {fileInfo.layer}</span>}
-          {fileInfo.sheet && <span>Sheet: {fileInfo.sheet}</span>}
+          {fileInfo.sheet && <span>Foglio: {fileInfo.sheet}</span>}
         </div>
       )}
 

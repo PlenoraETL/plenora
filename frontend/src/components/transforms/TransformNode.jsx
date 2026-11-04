@@ -21,6 +21,7 @@ import { dataFlowEdges, isParameterBindingEdge } from '../../utils/runtimeBindin
 import { OPERATION_PANELS, LookupSuggestion } from './panels';
 import { fetchTransformRegistry, getCachedTransformRegistry } from '../../utils/transformRegistry';
 import { nodeTitle } from '../canvas/nodeDescriptors';
+import { term } from '../../utils/glossary';
 
 // Cache del registry condivisa con i riassunti dei nodi compatti.
 const fetchRegistry = fetchTransformRegistry;
@@ -216,7 +217,7 @@ const TransformNode = memo(({ data, id }) => {
         <div className="ppanel__hint">Questo passo ha input runtime collegati ai parametri: si usa il modulo completo.</div>
       )}
       <div className="transform-inspector__foot">
-        <button type="button" className="ppanel__btn" onClick={() => setIsRunHistoryOpen(true)}>🕐 Cronologia run</button>
+        <button type="button" className="ppanel__btn" onClick={() => setIsRunHistoryOpen(true)} title={term('run_history').description}>{term('run_history').icon} {term('run_history').name}</button>
       </div>
       <RunHistoryModal
         isOpen={isRunHistoryOpen}

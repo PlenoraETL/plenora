@@ -21,11 +21,12 @@
 import { isParameterBindingEdge } from './runtimeBindingEdges';
 import { nodeRole } from './canvasGraph';
 import { nodeTitle } from '../components/canvas/nodeDescriptors';
+import { term } from './glossary';
 
 export const JOIN_TYPES = [
-  { value: 'inner', label: 'INNER', description: 'Solo righe con match in entrambe' },
-  { value: 'left', label: 'LEFT', description: 'Tutte da sinistra + match da destra' },
-  { value: 'right', label: 'RIGHT', description: 'Tutte da destra + match da sinistra' },
+  { value: 'inner', label: 'INNER', description: 'Solo le righe con corrispondenza in entrambe' },
+  { value: 'left', label: 'LEFT', description: 'Tutte da sinistra + le corrispondenze da destra' },
+  { value: 'right', label: 'RIGHT', description: 'Tutte da destra + le corrispondenze da sinistra' },
   { value: 'full', label: 'FULL', description: 'Tutte le righe da entrambe' },
 ];
 
@@ -76,10 +77,10 @@ const DEFAULT_DISTANCE = 100;
  */
 export const JOIN_COLUMN_FIELDS = Object.freeze([
   { id: 'condition.source_column', mode: 'standard', list: 'conditions', key: 'source_column', side: 'source', kind: 'column', label: 'Colonna sorgente' },
-  { id: 'condition.target_column', mode: 'standard', list: 'conditions', key: 'target_column', side: 'target', kind: 'column', label: 'Colonna target' },
+  { id: 'condition.target_column', mode: 'standard', list: 'conditions', key: 'target_column', side: 'target', kind: 'column', label: 'Colonna di destinazione' },
   { id: 'on_filter.column', mode: 'standard', list: 'on_filters', key: 'column', side: 'target', kind: 'column', label: 'Colonna del filtro ON' },
   { id: 'source_geom_column', mode: 'spatial', list: null, key: 'source_geom_column', side: 'source', kind: 'geom', label: 'Geometria sorgente' },
-  { id: 'target_geom_column', mode: 'spatial', list: null, key: 'target_geom_column', side: 'target', kind: 'geom', label: 'Geometria target' },
+  { id: 'target_geom_column', mode: 'spatial', list: null, key: 'target_geom_column', side: 'target', kind: 'geom', label: 'Geometria di destinazione' },
 ]);
 
 const OUTPUT_LIKE_JOIN_TYPES = new Set(['output', 'carica', 'carica_arcgis']);
@@ -228,7 +229,7 @@ export function joinProblems(draft, sourceNode, targetNode) {
     return problems;
   }
   if (!draft.conditions.some(isComplete)) {
-    problems.unshift({ code: 'incomplete', message: 'Scegli le colonne da collegare (sorgente = target).' });
+    problems.unshift({ code: 'incomplete', message: 'Scegli le colonne da collegare (sorgente = destinazione).' });
   }
   draft.conditions.forEach((c, i) => {
     if (!isComplete(c) && !isEmptyCondition(c) && draft.conditions.some(isComplete)) {
@@ -246,16 +247,22 @@ export function joinStatus(data, sourceNode, targetNode) {
   return 'ok';
 }
 
+// Nomi mostrati: la clausola SQL ("LEFT JOIN") e il predicato spaziale in
+// italiano ("Interseca"), mai la chiave tecnica.
+const sqlJoinLabel = (joinType) => `${String(joinType || 'left').toUpperCase()} JOIN`;
+const spatialPredicateLabel = (value) => SPATIAL_PREDICATES.find(p => p.value === value)?.label
+  || `${term('join').name} spaziale`;
+
 const WARN_STYLE = { stroke: '#D97706', strokeWidth: 2, strokeDasharray: '6 4' };
 
 /** Aspetto dell'arco sul canvas, derivato solo da dati e stato. */
 export function joinEdgeLook(data, status) {
-  if (status === 'incomplete') return { label: '⚠ join da completare', style: WARN_STYLE, animated: false };
+  if (status === 'incomplete') return { label: `⚠ ${term('join').name} da completare`, style: WARN_STYLE, animated: false };
   if (status === 'missing') return { label: '⚠ colonna non trovata', style: WARN_STYLE, animated: false };
   if (data?.is_spatial) {
-    return { label: `🌐 ${data.spatial_predicate?.replace('ST_', '') || 'spatial'}`, style: { stroke: '#E91E63', strokeWidth: 2 }, animated: true };
+    return { label: `🌐 ${spatialPredicateLabel(data.spatial_predicate)}`, style: { stroke: '#E91E63', strokeWidth: 2 }, animated: true };
   }
-  return { label: `${data?.join_type || 'left'} join`, style: { stroke: '#2196F3', strokeWidth: 2 }, animated: true };
+  return { label: sqlJoinLabel(data?.join_type), style: { stroke: '#2196F3', strokeWidth: 2 }, animated: true };
 }
 
 const lookCache = new WeakMap();
@@ -355,23 +362,23 @@ export function joinEntry(edge, nodesById, fromId = edge.target) {
   const status = joinStatus(edge.data, source, target);
   const draft = joinDraftFromData(edge.data);
   const kind = draft.mode === 'spatial'
-    ? `join spaziale (${SPATIAL_PREDICATES.find(p => p.value === draft.spatial_predicate)?.label || draft.spatial_predicate})`
-    : `${draft.join_type} join`;
+    ? `${term('join').name} spaziale (${spatialPredicateLabel(draft.spatial_predicate)})`
+    : sqlJoinLabel(draft.join_type);
   const otherTitle = other ? nodeTitle(other.type, other.data) : '?';
-  const on = status === 'incomplete' ? '' : joinOnText(draft, joinTableName(source, 'sorgente'), joinTableName(target, 'target'));
+  const on = status === 'incomplete' ? '' : joinOnText(draft, joinTableName(source, 'sorgente'), joinTableName(target, 'destinazione'));
   return {
     id: edge.id,
     status,
     icon: status === 'ok' ? '🔗' : '⚠',
-    title: `Join con ${otherTitle}`,
+    title: `${term('join').name} con ${otherTitle}`,
     summary: STATUS_TEXT[status] ? `${kind} · ${STATUS_TEXT[status]}` : `${kind}${on ? ` · ${on}` : ''}`,
   };
 }
 
 /** Descrittore degli archi di Estrai per il guscio (NodeInspector, StepsView). */
 export const estraiJoinEdges = Object.freeze({
-  kind: 'Join',
-  icon: '🔗',
+  kind: term('join').name,
+  icon: term('join').icon,
   matches: isJoinEdge,
   entry: joinEntry,
 });

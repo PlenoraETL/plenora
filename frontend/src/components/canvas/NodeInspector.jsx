@@ -30,6 +30,7 @@ import { useConfirmOrNative } from '../../context/ConfirmContext';
 import { derivedTitle, nodeDescriptor, nodeIcon, nodeTitle, titlePatch, userTitle } from './nodeDescriptors';
 import BranchSection from './BranchSection';
 import './NodeInspector.css';
+import { term } from '../../utils/glossary';
 
 // Id del nodo da ispezionare: esattamente un nodo selezionato, note escluse.
 const selectInspectedId = (s) => {
@@ -111,7 +112,7 @@ function EdgeInspector({ edgeId, edgeInspector, prefix }) {
   if (!edge || !edgeInspector.matches(edge, byId)) return null;
   const entry = edgeInspector.entry(edge, byId);
   const { Panel } = edgeInspector;
-  const what = edgeInspector.kind.toLowerCase();
+  const what = edgeInspector.kind;
   const deleteEdge = async () => {
     const ok = await confirm({
       title: `Elimina ${what}`,
@@ -192,7 +193,7 @@ export default function NodeInspector({ fullNodeTypes, prefix = 'canvas', branch
   // L'unica eliminazione del pannello, per ogni tipo (Output compreso).
   const deleteStep = async () => {
     const ok = await confirm({
-      title: 'Elimina passo',
+      title: term('delete_step').name,
       message: `Eliminare «${nodeTitle(node.type, node.data)}»? I collegamenti del passo vengono rimossi.`,
       confirmText: 'Elimina',
       variant: 'danger',
@@ -231,7 +232,7 @@ export default function NodeInspector({ fullNodeTypes, prefix = 'canvas', branch
             : <div className="node-inspector__empty">Nessuna configurazione per questo nodo.</div>}
         </>
       )}
-      deleteLabel="Elimina passo"
+      deleteLabel={term('delete_step').name}
       onDelete={isReadOnly ? null : deleteStep}
     />
   );

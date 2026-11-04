@@ -9,15 +9,20 @@
 import { getTransformRegistry } from '../api/transforms';
 import { authBus } from './authBus';
 import { displayIcon } from './displayIcon';
+import { applyTransformTerms } from './glossary';
 
 let registryCache = null;
 let registryCachePromise = null;
 
-// Icone sempre glifi per tutti i consumatori (vedi utils/displayIcon).
-function normalizeIcons(data) {
+// Una sola normalizzazione per tutti i consumatori: icone sempre glifi
+// (utils/displayIcon) e nomi del glossario (utils/glossary, regola 10 del
+// Blocco A) al posto dei termini inglesi del catalogo.
+export function normalizeRegistry(data) {
   if (!data?.transforms) return data;
   const transforms = Object.fromEntries(Object.entries(data.transforms)
-    .map(([op, def]) => [op, def && typeof def === 'object' ? { ...def, icon: displayIcon(def.icon) } : def]));
+    .map(([op, def]) => [op, def && typeof def === 'object'
+      ? applyTransformTerms(op, { ...def, icon: displayIcon(def.icon) })
+      : def]));
   return { ...data, transforms };
 }
 
@@ -27,7 +32,7 @@ export const fetchTransformRegistry = async () => {
 
   registryCachePromise = getTransformRegistry()
     .then(data => {
-      registryCache = normalizeIcons(data);
+      registryCache = normalizeRegistry(data);
       registryCachePromise = null;
       return registryCache;
     })

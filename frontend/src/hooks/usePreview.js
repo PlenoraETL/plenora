@@ -64,7 +64,7 @@ export function usePreview(projectId, onBeforePreview = null) {
       if (!mountedRef.current) return;
 
       if (response.async && response.task_id) {
-        setProgressMessage(response.message || 'Preview in coda...');
+        setProgressMessage(response.message || 'Anteprima in coda...');
         // Il callback ritorna true quando il task è completato → stopPolling automatico
         startPolling(response.task_id, (task) => {
           if (cancelledRef.current) return true;
@@ -79,9 +79,9 @@ export function usePreview(projectId, onBeforePreview = null) {
             // generic failure -> banner inline dedicato lato consumer.
             if (result.status === 'permission_revoked') {
               setPermissionRevoked(true);
-              setError(result.message || 'Permessi revocati durante la preview');
+              setError(result.message || "Permessi revocati durante l'anteprima");
             } else if (result.success === false) {
-              setError(result.message || 'Errore preview');
+              setError(result.message || "Errore nell'anteprima");
             } else {
               setData(result);
             }
@@ -91,9 +91,9 @@ export function usePreview(projectId, onBeforePreview = null) {
             const innerStatus = task.result?.status;
             if (innerStatus === 'permission_revoked') {
               setPermissionRevoked(true);
-              setError(task.result?.message || 'Permessi revocati durante la preview');
+              setError(task.result?.message || "Permessi revocati durante l'anteprima");
             } else {
-              setError(taskFailureMessage(task, 'Errore durante la preview'));
+              setError(taskFailureMessage(task, "Errore durante l'anteprima"));
             }
             return true;
           }
@@ -106,7 +106,7 @@ export function usePreview(projectId, onBeforePreview = null) {
         if (response.success) {
           setData(response);
         } else {
-          setError(response.message || 'Errore preview');
+          setError(response.message || "Errore nell'anteprima");
         }
       }
     } catch (err) {

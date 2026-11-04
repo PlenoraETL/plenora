@@ -98,7 +98,7 @@ function ConnectionSelectorModal({
   const footer = (
     <>
       <div className="connection-selector__footer-hint">
-        💡 Doppio click per selezionare rapidamente
+        💡 Doppio clic per selezionare rapidamente
       </div>
       <div className="connection-selector__footer-actions">
         <ModalButton variant="secondary" onClick={onClose}>
@@ -227,7 +227,7 @@ function ConnectionSelectorModal({
                     )}
                     {connection.output_mapping?.length > 0 && (
                       <span className="connection-selector__meta-item">
-                        📤 {connection.output_mapping.length} output
+                        📤 {connection.output_mapping.length} campi in uscita
                       </span>
                     )}
                     {connection.auth?.type !== 'none' && (

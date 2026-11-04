@@ -304,7 +304,7 @@ const ParameterInput = ({
           {label}
           {required && <span className="parameter-input__required">*</span>}
           {param.schema_contract && (
-            <span className="parameter-input__schema-badge" title="Contratto schema canvas-time; non modifica direttamente il runtime.">
+            <span className="parameter-input__schema-badge" title="Schema previsto nel canvas: non cambia l'esecuzione.">
               Schema
             </span>
           )}

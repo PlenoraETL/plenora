@@ -9,6 +9,7 @@ import React, { useState } from 'react';
 import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 import { isColumnVisible } from '../../utils/columnUtils';
 import './QueryPreview.css';
+import { term } from '../../utils/glossary';
 
 /**
  * Componente per visualizzare preview SQL della query
@@ -148,7 +149,7 @@ function QueryPreview({ nodes, edges, validationErrors = [] }) {
       const targetNode = nodes.find(n => n.id === edge.target);
       
       if (!sourceNode || !targetNode) {
-        errors.push(`⚠️ Nodo non trovato per join`);
+        errors.push(`⚠️ Tabella del Join non trovata`);
         return;
       }
 
@@ -326,9 +327,9 @@ function QueryPreview({ nodes, edges, validationErrors = [] }) {
           <span className="query-preview__toggle-icon">
             {isCollapsed ? '▲' : '▼'}
           </span>
-          <span className="query-preview__title">🔍 Query Preview</span>
+          <span className="query-preview__title">🔍 {term('preview').name} della query</span>
           <span className="query-preview__stats">
-            {nodes.length} tabelle, {edges.length} join
+            {nodes.length} tabelle, {edges.length} Join
           </span>
         </div>
 

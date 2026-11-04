@@ -24,6 +24,7 @@ import RunHistoryModal from '../modals/RunHistoryModal';
 import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 import NodeHandle from '../canvas/NodeHandle';
 import { nodeTitle } from '../canvas/nodeDescriptors';
+import { term } from '../../utils/glossary';
 
 /**
  * ApiEnrichNode - Nodo per arricchire dati chiamando API esterne
@@ -350,7 +351,7 @@ const handleExecParamChange = (key, value) => {
     // Executable: valido se ha api_id e file source collegato
     if (isExecutable) {
       if (!connectedFileSource) {
-        return { valid: false, message: 'Collega un File Source' };
+        return { valid: false, message: 'Collega un file in ingresso' };
       }
       if (connectedFileSource.access_denied) {
         return {
@@ -382,7 +383,7 @@ const handleExecParamChange = (key, value) => {
     // Warning se output_mapping è vuoto (spec OpenAPI senza schema response)
     // Il backend farà auto-flatten ma l'utente deve saperlo
     if (apiOutputMapping.length === 0 && data.api_id) {
-      return { valid: true, warning: true, message: 'Pronto – output mappato auto (nessun schema)' };
+      return { valid: true, warning: true, message: 'Pronto: campi in uscita mappati in automatico (nessuno schema)' };
     }
 
     return { valid: true, message: 'Pronto' };
@@ -408,20 +409,20 @@ const handleExecParamChange = (key, value) => {
             📦 Processore File (REST)
           </div>
 
-          {/* Tipo output strutturato — solo per Processore File REST.
+          {/* Tipo di uscita strutturato — solo per Processore File REST.
               Tag esplicito che dice al canvas "questo zip ha struttura nota"
               cosi' il nodo result downstream puo' specializzarsi. */}
           {data.connection_type === 'rest_file' && (
             <div className="api-enrich-node__section">
-              <label className="api-enrich-node__label">📦 Tipo output:</label>
+              <label className="api-enrich-node__label">📦 Tipo di uscita:</label>
               <select
                 className="api-enrich-node__exec-param-input"
                 value={data.output_kind || ''}
                 onChange={e => handleOutputKindChange(e.target.value)}
                 title="Definisce come il nodo Output si comportera' col file restituito"
               >
-                <option value="">Generico (download zip)</option>
-                <option value="imdf">IMDF (Indoor Mapping)</option>
+                <option value="">Generico (archivio zip da scaricare)</option>
+                <option value="imdf">IMDF (mappe di interni)</option>
               </select>
             </div>
           )}
@@ -437,7 +438,7 @@ const handleExecParamChange = (key, value) => {
             if (extraFields.length === 0) return null;
             return (
               <div className="api-enrich-node__section">
-                <label className="api-enrich-node__label">📎 File extra:</label>
+                <label className="api-enrich-node__label">📎 File aggiuntivi:</label>
                 {extraFields.map(ff => {
                   const current = (data.extra_files || {})[ff.name];
                   const label = ff.label || ff.name;
@@ -469,7 +470,7 @@ const handleExecParamChange = (key, value) => {
             {connectedFileSource ? (
               <>📄 {connectedFileSource.name}</>
             ) : (
-              <>← Collega un File Source</>
+              <>← Collega un file in ingresso</>
             )}
           </div>
 
@@ -565,11 +566,11 @@ const handleExecParamChange = (key, value) => {
           </div>
         )}
 
-        {/* Mapping parametri */}
+        {/* Mappatura dei parametri */}
         {mappableParams.length > 0 && !loadingApi && (
           <div className="api-enrich-node__section">
             <label className="api-enrich-node__label api-enrich-node__label--spacing">
-              📥 Mapping parametri:
+              📥 Mappatura dei parametri:
             </label>
 
             {/* Datalist condivisa per autocompletamento dei nomi colonna */}
@@ -602,11 +603,11 @@ const handleExecParamChange = (key, value) => {
                     list={`api-enrich-cols-${id}`}
                     value={value}
                     onChange={(e) => handleMappingChange(param.name, e.target.value)}
-                    placeholder="-- colonna o template --"
+                    placeholder="-- colonna o modello --"
                     title={
                       isTemplate
-                        ? "Template: i placeholder {nome_colonna} verranno sostituiti coi valori della riga"
-                        : "Seleziona una colonna del df oppure scrivi un template tipo \"{X},{Y}\""
+                        ? "Modello: i segnaposto {nome_colonna} verranno sostituiti coi valori della riga"
+                        : "Seleziona una colonna dei dati oppure scrivi un modello come \"{X},{Y}\""
                     }
                     className={`api-enrich-node__mapping-select ${
                       value ? 'api-enrich-node__mapping-select--mapped' : ''
@@ -618,8 +619,8 @@ const handleExecParamChange = (key, value) => {
             })}
 
             <div className="api-enrich-node__params-hint">
-              💡 Per parametri composti puoi usare un template come <code>{'{X},{Y}'}</code> o <code>{'{via} {civico}, {comune}'}</code>.
-              I placeholder verranno sostituiti coi valori della riga.
+              💡 Per parametri composti puoi usare un modello come <code>{'{X},{Y}'}</code> o <code>{'{via} {civico}, {comune}'}</code>.
+              I segnaposto verranno sostituiti coi valori della riga.
             </div>
           </div>
         )}
@@ -714,7 +715,7 @@ const handleExecParamChange = (key, value) => {
                 {/* Batch info (read-only, configurato nella connessione) */}
                 {data.batch?.enabled && (
                   <div className="api-enrich-node__adv-row api-enrich-node__adv-row--mb-sm">
-                    <span className="api-enrich-node__adv-key">⚡ Batch mode</span>
+                    <span className="api-enrich-node__adv-key">⚡ Chiamate a lotti</span>
                     <span className="api-enrich-node__adv-badge">attivo — {data.batch?.max_size||100} righe/chiamata</span>
                   </div>
                 )}
@@ -727,7 +728,7 @@ const handleExecParamChange = (key, value) => {
                   />
                   <span>Continua su errore</span>
                   {data.continue_on_error === false && (
-                    <span className="api-enrich-node__adv-badge api-enrich-node__adv-badge--warn">stop su errore</span>
+                    <span className="api-enrich-node__adv-badge api-enrich-node__adv-badge--warn">fermati al primo errore</span>
                   )}
                 </label>
                 {data.continue_on_error !== false && (
@@ -774,15 +775,15 @@ const handleExecParamChange = (key, value) => {
         </div>
       </div>
 
-      {/* Cronologia run */}
+      {/* Cronologia esecuzioni */}
       <div className="api-enrich-node__footer">
         <button
           type="button"
           className="api-enrich-node__history-btn"
           onClick={(e) => { e.stopPropagation(); setIsRunHistoryOpen(true); }} onMouseDown={(e) => e.stopPropagation()}
-          title="Cronologia esecuzioni"
+          title={term('run_history').description}
         >
-          🕐 Cronologia run
+          {term('run_history').icon} {term('run_history').name}
         </button>
       </div>
       <RunHistoryModal
@@ -831,7 +832,7 @@ function ExtraFileSlot({ field, label, current, onUploaded, onRemoved }) {
       const fs = await uploadFile(
         file,
         `extra_${field.name}_${file.name}`,
-        `Extra input "${field.name}" per nodo api_enrich`,
+        `Input aggiuntivo "${field.name}" per il passo ${term('api_enrich').name}`,
       );
       onUploaded({
         file_source_id:   fs.id,

@@ -125,7 +125,7 @@ export default function RuntimeInputBindingControl({
   };
 
   return (
-    <span className="runtime-binding nodrag" title="Collega questo parametro a un Input progetto">
+    <span className="runtime-binding nodrag" title="Collega questo parametro a un input runtime">
       <NodeHandle
         type="target"
         position={Position.Left}

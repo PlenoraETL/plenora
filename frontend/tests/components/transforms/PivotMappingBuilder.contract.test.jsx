@@ -9,9 +9,9 @@ import PivotMappingBuilder from '../../../src/components/transforms/PivotMapping
  * Contract test per PivotMappingBuilder (132 LOC, 0 prior coverage).
  *
  * Aree:
- *   1. empty state: hint "Nessun mapping" + niente header + niente rows
+ *   1. empty state: hint "Nessuna mappatura" + niente header + niente rows
  *   2. render con dict iniziale: header + 1 row con key/val precompilati
- *   3. addRow: "+ Aggiungi mapping" emette onChange({}) (key vuoto -> dict
+ *   3. addRow: "+ Aggiungi mappatura" emette onChange({}) (key vuoto -> dict
  *      vuoto)
  *   4. updateRow auto-prefill: typing key in row vuota popola anche val
  *      con lo stesso valore (branch del source `if !updated[idx].val`)
@@ -24,16 +24,16 @@ describe('PivotMappingBuilder — contract', () => {
     render(<PivotMappingBuilder value={{}} onChange={vi.fn()} />);
 
     expect(
-      screen.getByText(/Nessun mapping: verrà creata una colonna/i),
+      screen.getByText(/Nessuna mappatura: verrà creata una colonna/i),
     ).toBeInTheDocument();
     // Niente header nei mode empty.
     expect(screen.queryByText(/Valore sorgente/)).not.toBeInTheDocument();
     expect(
-      screen.queryByText(/Nome colonna output/),
+      screen.queryByText(/Nome della colonna in uscita/),
     ).not.toBeInTheDocument();
-    // Solo il bottone Aggiungi mapping presente.
+    // Solo il bottone Aggiungi mappatura presente.
     expect(
-      screen.getByRole('button', { name: /Aggiungi mapping/i }),
+      screen.getByRole('button', { name: /Aggiungi mappatura/i }),
     ).toBeInTheDocument();
   });
 
@@ -48,7 +48,7 @@ describe('PivotMappingBuilder — contract', () => {
 
     // Header visibile (almeno 1 riga presente).
     expect(screen.getByText(/Valore sorgente/)).toBeInTheDocument();
-    expect(screen.getByText(/Nome colonna output/)).toBeInTheDocument();
+    expect(screen.getByText(/Nome della colonna in uscita/)).toBeInTheDocument();
     // Input precompilati con la entry del dict.
     expect(screen.getByDisplayValue('canone')).toBeInTheDocument();
     expect(screen.getByDisplayValue('val_canone')).toBeInTheDocument();
@@ -59,13 +59,13 @@ describe('PivotMappingBuilder — contract', () => {
   });
 
 
-  it('adds a new empty row on "+ Aggiungi mapping" click and emits empty dict', async () => {
+  it('adds a new empty row on "+ Aggiungi mappatura" click and emits empty dict', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(<PivotMappingBuilder value={{}} onChange={onChange} />);
 
     await user.click(
-      screen.getByRole('button', { name: /Aggiungi mapping/i }),
+      screen.getByRole('button', { name: /Aggiungi mappatura/i }),
     );
 
     // Header ora visibile (la riga e' stata aggiunta).
@@ -82,7 +82,7 @@ describe('PivotMappingBuilder — contract', () => {
 
     // Crea una riga vuota.
     await user.click(
-      screen.getByRole('button', { name: /Aggiungi mapping/i }),
+      screen.getByRole('button', { name: /Aggiungi mappatura/i }),
     );
 
     // fireEvent.change con value='canone' completo: emette UN solo

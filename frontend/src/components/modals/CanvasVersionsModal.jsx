@@ -126,7 +126,7 @@ export default function CanvasVersionsModal({ isOpen, onClose, projectId }) {
           <div className="cv-versions__empty">Caricamento…</div>
         ) : versions.length === 0 ? (
           <div className="cv-versions__empty">
-            Nessuna versione salvata. Salva uno snapshot del canvas corrente per
+            Nessuna versione salvata. Salva una copia del canvas corrente per
             poterci tornare in seguito.
           </div>
         ) : (

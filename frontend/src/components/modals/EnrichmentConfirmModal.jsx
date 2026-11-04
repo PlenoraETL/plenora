@@ -8,6 +8,7 @@
 import React from 'react';
 import ModalWrapper, { ModalButton } from '../common/ModalWrapper';
 import './EnrichmentConfirmModal.css';
+import { term } from '../../utils/glossary';
 
 /**
  * Modal di conferma pre-esecuzione enrichment
@@ -62,7 +63,7 @@ const EnrichmentConfirmModal = ({
         <>
           <ModalButton variant="secondary" onClick={onClose}>Annulla</ModalButton>
           <ModalButton variant="primary" onClick={onConfirm} loading={isLoading} disabled={!isValid}>
-            🚀 Esegui
+            {term('run').icon} {term('run').name}
           </ModalButton>
         </>
       }
@@ -169,7 +170,7 @@ const EnrichmentConfirmModal = ({
               ) && (
                 <div className="enrichment-confirm-section enrichment-confirm-section--info">
                   <h3>ℹ️ Nessun dato</h3>
-                  <p>Il progetto non contiene ancora dati di output.
+                  <p>Il progetto non contiene ancora dati in uscita.
                      Assicurati di aver eseguito il progetto sorgente.</p>
                 </div>
               )}

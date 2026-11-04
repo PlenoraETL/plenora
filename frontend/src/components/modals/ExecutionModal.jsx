@@ -39,9 +39,9 @@ function caricaTaskErrorText(t) {
 // L'opzione "" (default) significa "non inviare il param" -> il BE
 // usa la INTERMEDIATE_PERSISTENCE_MODE delle settings globali.
 const INTERMEDIATE_MODE_OPTIONS = [
-  { value: '',               label: 'Default (settings globali)' },
-  { value: 'metadata_only',  label: 'metadata_only' },
-  { value: 'full_artifact',  label: 'full_artifact' },
+  { value: '',               label: 'Predefinita (impostazioni globali)' },
+  { value: 'metadata_only',  label: 'Solo metadati' },
+  { value: 'full_artifact',  label: 'Risultati completi' },
 ];
 const EMPTY_INPUT_DEFINITIONS = [];
 
@@ -179,7 +179,7 @@ function ExecutionModal({
         onClick={onClose}
         disabled={isExecuting && !isAsync}
       >
-        {isStillWorking ? 'Esegui in Background' : 'Chiudi'}
+        {isStillWorking ? 'Continua in secondo piano' : 'Chiudi'}
       </ModalButton>
     </div>
   );
@@ -306,8 +306,8 @@ function ExecutionModal({
                 ))}
               </select>
               <span className="execution-modal__config-hint">
-                Override per-call della modalita&apos; di persistenza intermedi.
-                &quot;Default&quot; non invia il param.
+                Come conservare i risultati intermedi di questa esecuzione.
+                &quot;Predefinita&quot; usa le impostazioni globali.
               </span>
             </div>
           )}
@@ -384,7 +384,7 @@ function ExecutionModal({
                   </div>
                 </div>
                 <div className="execution-modal__stat">
-                  <div className="execution-modal__stat-label">Colonne output</div>
+                  <div className="execution-modal__stat-label">Colonne in uscita</div>
                   <div className="execution-modal__stat-value">{getColumnsCount()}</div>
                 </div>
                 {result.elapsed_time && (
@@ -440,15 +440,15 @@ function ExecutionModal({
                   <div className="execution-modal__error-report-header">
                     <span className="execution-modal__error-report-icon">⚠️</span>
                     <span className="execution-modal__error-report-title">
-                      Report Errori Disponibile
+                      Rapporto degli errori disponibile
                     </span>
                   </div>
                   <p className="execution-modal__error-report-desc">
                     {totalErrors} righe hanno generato errori durante l'arricchimento.
-                    Scarica il report CSV per vedere i dettagli di ogni errore.
+                    Scarica il rapporto CSV per vedere i dettagli di ogni errore.
                   </p>
                   <button type="button" className="execution-modal__error-report-btn" onClick={handleDownloadErrorReport}>
-                    📋 Scarica Report Errori
+                    📋 Scarica il rapporto degli errori
                   </button>
                 </div>
               )}
@@ -514,7 +514,7 @@ function ExecutionModal({
               {result.columns && result.columns.length > 0 && (
                 <div className="execution-modal__columns">
                   <div className="execution-modal__columns-label">
-                    Colonne output ({result.columns.length}):
+                    Colonne in uscita ({result.columns.length}):
                   </div>
                   <div className="execution-modal__columns-list">
                     {result.columns.map((col, idx) => (
@@ -533,11 +533,11 @@ function ExecutionModal({
                 {taskStatus === 'revoked' ? '🛑' : '❌'}
               </div>
               <h4 className="execution-modal__error-title">
-                {taskStatus === 'revoked' ? 'Task annullato' : 'Errore esecuzione'}
+                {taskStatus === 'revoked' ? 'Esecuzione annullata' : "Errore nell'esecuzione"}
               </h4>
               <p className="execution-modal__error-message">
                 {taskStatus === 'revoked'
-                  ? (result.message || 'Task annullato')
+                  ? (result.message || 'Esecuzione annullata')
                   : humanizeError(result).message}
               </p>
             </div>

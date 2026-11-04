@@ -329,12 +329,12 @@ return (
                       onChange={e => upd({ dynamic_rule: e.target.value })}
                     >
                       <option value="latest">📅 Più recente (per data modifica)</option>
-                      <option value="latest_pattern">🔍 Più recente per pattern</option>
+                      <option value="latest_pattern">🔍 Più recente per modello del nome</option>
                     </select>
                   </div>
                   {(dynamicRule === 'latest_pattern') && (
                     <div className="dsn__field">
-                      <label className="dsn__label">Pattern</label>
+                      <label className="dsn__label">Modello del nome</label>
                       <input
                         className="dsn__input"
                         value={data.pattern || ''}
@@ -344,7 +344,7 @@ return (
                     </div>
                   )}
                   <div className="dsn__field">
-                    <label className="dsn__label">Offset (file precedenti)</label>
+                    <label className="dsn__label">File precedenti da saltare</label>
                     <input
                       className="dsn__input"
                       type="number"
@@ -360,7 +360,7 @@ return (
 
               {fileMode === 'fixed' && availableSheets.length > 1 && (
                 <div className="dsn__field">
-                  <label className="dsn__label">Foglio (sheet)</label>
+                  <label className="dsn__label">Foglio</label>
                   <select
                     className="dsn__select"
                     value={data.parse_options?.sheet || availableSheets[0]}
@@ -452,7 +452,7 @@ return (
                     className="dsn__input"
                     value={data.dest_folder || ''}
                     onChange={e => upd({ dest_folder: e.target.value })}
-                    placeholder="/output/"
+                    placeholder="/esportazioni/"
                   />
                   <button type="button" className="dsn__browse-btn" onClick={() => openBrowser(data.dest_folder || '')}>
                     📂

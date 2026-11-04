@@ -98,7 +98,7 @@ export default function OutputSettingsPanel({
               setTempFileName(fileName);
             }}
             className="result-node__filename-display"
-            title="Click per modificare"
+            title="Clic per modificare"
           >
             {fileName}.{format}
           </div>

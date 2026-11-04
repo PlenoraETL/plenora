@@ -154,7 +154,7 @@ function DbDestinationSection({
       setConflictReport(result);
       setShowConflictModal(true);
     } catch (err) {
-      setConflictError(err?.message || 'Errore durante il check conflitti');
+      setConflictError(err?.message || 'Errore durante il controllo dei conflitti');
       setShowConflictModal(true);
     } finally {
       setIsCheckingConflicts(false);
@@ -254,7 +254,7 @@ function DbDestinationSection({
       {/* Match Columns (per UPDATE/UPSERT DB) */}
       {needsMatchColumns && (
         <div className="carica-node__section">
-          <label className="carica-node__label">🔑 Colonne Match (PK)</label>
+          <label className="carica-node__label">🔑 Colonne di corrispondenza (chiave primaria)</label>
           <div className="carica-node__match-columns">
             {availableColumns.map((col, idx) => {
               const colName = col.name || col;
@@ -273,7 +273,7 @@ function DbDestinationSection({
           </div>
           {!matchColumnsValid && (
             <div className="carica-node__warning">
-              ⚠️ Seleziona almeno una colonna per il match
+              ⚠️ Seleziona almeno una colonna di corrispondenza
             </div>
           )}
         </div>
@@ -284,13 +284,13 @@ function DbDestinationSection({
         <div className="carica-node__section">
           {writeMode === 'append' && (
             <>
-              <label className="carica-node__label">🔍 Colonna check duplicati</label>
+              <label className="carica-node__label">🔍 Colonna per il controllo dei duplicati</label>
               <select
                 className="carica-node__select"
                 value={conflictCheckColumn}
                 onChange={e => setConflictCheckColumn(e.target.value)}
               >
-                <option value="">— nessun check —</option>
+                <option value="">— nessun controllo —</option>
                 {availableColumns.map((col, i) => {
                   const name = col.name || col;
                   return <option key={i} value={name}>{name}</option>;

@@ -65,7 +65,7 @@ function EditorSidebar({
           type="button"
           className="editor-sidebar__logout"
           onClick={() => { if (confirmLeaveWithUnsaved()) { logout(); navigate('/login'); } }}
-          title="Logout"
+          title="Esci"
         >⏻</button>
       </div>
 

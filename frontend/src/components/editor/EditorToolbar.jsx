@@ -13,6 +13,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { hasUnsavedChanges } from '../../store/saveState';
 import PlenoraLogo from '../common/PlenoraLogo';
+import { term } from '../../utils/glossary';
 import './EditorToolbar.css';
 
 const MODE_LABEL = { estrai: 'ESTRAI', manipola: 'MANIPOLA', arricchisci: 'ARRICCHISCI' };
@@ -144,7 +145,9 @@ export default function EditorToolbar({
           </button>
         </div>
         {onAddStep && !isReadOnly && (
-          <button type="button" className="etb-btn" onClick={onAddStep} title="Aggiungi un passo (/ o A)">＋ Passo</button>
+          <button type="button" className="etb-btn" onClick={onAddStep} title={term('add_step').description}>
+            {term('add_step').icon} {term('add_step').name}
+          </button>
         )}
         {statusExtra}
         <button
@@ -152,13 +155,13 @@ export default function EditorToolbar({
           className="etb-btn etb-btn--primary"
           onClick={run}
           disabled={!hasOutput || !runReady || busy}
-          title={hasOutput ? 'Salva, controlla ed esegui' : "Aggiungi un Output per poter eseguire"}
+          title={hasOutput ? term('run').description : `Aggiungi un ${term('output').name} per poter eseguire`}
         >
-          <span aria-hidden="true">{busy ? '⏳ ' : '▶ '}</span>{busy ? 'In esecuzione…' : 'Esegui'}
+          <span aria-hidden="true">{busy ? '⏳ ' : `${term('run').icon} `}</span>{busy ? term('run').busyName : term('run').name}
         </button>
         {!isReadOnly && onSave && (
-          <button type="button" className="etb-btn" onClick={onSave} disabled={saving} title="Salva (Ctrl+S)">
-            {saving ? 'Salvataggio…' : <><span aria-hidden="true">💾 </span>Salva</>}
+          <button type="button" className="etb-btn" onClick={onSave} disabled={saving} title={term('save').description}>
+            {saving ? term('save').busyName : <><span aria-hidden="true">{term('save').icon} </span>{term('save').name}</>}
           </button>
         )}
         <OverflowMenu items={[...menuItems, ...themeItems]} />

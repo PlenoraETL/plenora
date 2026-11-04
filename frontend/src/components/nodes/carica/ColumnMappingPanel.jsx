@@ -60,7 +60,7 @@ function ColumnMappingPanel({
         className="carica-node__section-header"
         onClick={onToggleMapping}
       >
-        <span>🔀 Mapping Colonne</span>
+        <span>🔀 Mappatura delle colonne</span>
         <span className="carica-node__toggle">{showMapping ? '▼' : '▶'}</span>
       </div>
 
@@ -71,7 +71,7 @@ function ColumnMappingPanel({
               onClick={loadAutoMapping}
               className="carica-node__btn carica-node__btn--secondary"
             >
-              🪄 Auto-mapping
+              🪄 Mappatura automatica
             </button>
             <button type="button"
               onClick={handleAddMapping}
@@ -83,7 +83,7 @@ function ColumnMappingPanel({
 
           {columnMappings.length === 0 ? (
             <div className="carica-node__hint">
-              Nessun mapping definito. Usa "Auto-mapping" o aggiungi manualmente.
+              Nessuna mappatura definita. Usa «Mappatura automatica» o aggiungi a mano.
             </div>
           ) : (
             <div className="carica-node__mapping-list">

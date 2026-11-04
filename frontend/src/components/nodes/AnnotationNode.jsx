@@ -87,7 +87,7 @@ function AnnotationNode({ id, data, selected }) {
             <span
               className="ann-group__title"
               onDoubleClick={e => { e.stopPropagation(); setEditingTitle(true); }}
-              title="Doppio click per modificare"
+              title="Doppio clic per modificare"
             >
               {title || 'Gruppo'}
             </span>
@@ -148,9 +148,9 @@ function AnnotationNode({ id, data, selected }) {
             <div
               className={`ann-group__note ${!label ? 'ann-group__note--empty' : ''}`}
               onDoubleClick={e => { e.stopPropagation(); setEditingNote(true); }}
-              title="Doppio click per aggiungere una nota"
+              title="Doppio clic per aggiungere una nota"
             >
-              {label || 'Doppio click per aggiungere una nota...'}
+              {label || 'Doppio clic per aggiungere una nota...'}
             </div>
           )}
         </div>

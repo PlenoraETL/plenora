@@ -78,6 +78,7 @@ import useLocalDraft from '../../hooks/useLocalDraft';
 import { useOptionalConfirm } from '../../context/ConfirmContext';
 import { CanvasGraphContext } from '../canvas/CanvasGraphContext';
 import { analyzeCanvas, structureKey } from '../../utils/canvasGraph';
+import { withFlowEdgeLabels } from '../../utils/glossary';
 
 const EMPTY_OBJ = {};
 
@@ -277,6 +278,9 @@ canvasConfig = EMPTY_OBJ,
   const setCanvasView = useCanvasStore(s => s.setCanvasView);
   const focusNodeId = useCanvasStore(s => s.focusNodeId);
   // Analisi del flusso solo quando cambia la struttura (non a ogni drag).
+  // Etichette degli archi verso Output e caricamenti dal glossario, anche
+  // per gli archi salvati con un nome vecchio (regola 10 del Blocco A).
+  const shownEdges = useMemo(() => withFlowEdgeLabels(edges), [edges]);
   const graphKey = useCanvasStore(s => structureKey(s.nodes, s.edges));
   const graph = useMemo(() => {
     const st = useCanvasStore.getState();
@@ -378,7 +382,7 @@ canvasConfig = EMPTY_OBJ,
             )}
             <ReactFlow
               nodes={nodes}
-              edges={edges}
+              edges={shownEdges}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={handleConnect}

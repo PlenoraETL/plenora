@@ -55,7 +55,7 @@ export default function ValidationModal({ isOpen, onClose, result, onFocusNode, 
           {ok && totalIssues === 0 && (
             <div className="validation-modal__ok">
               <span className="validation-modal__ok-icon">✅</span>
-              <p>Nessun problema trovato. La pipeline è pronta per l'esecuzione.</p>
+              <p>Nessun problema trovato. Il flusso è pronto per l&apos;esecuzione.</p>
             </div>
           )}
 

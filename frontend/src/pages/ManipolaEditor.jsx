@@ -69,6 +69,7 @@ import '../components/nodes/DataSourceNode.css';
 import { useAuth } from '../context/AuthContext';
 import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
+import { addFirstMessage, menuEntry, onlyOneMessage, term, termName } from '../utils/glossary';
 import { buildManipolaPaletteGroups } from '../components/canvas/manipolaPalette';
 import { fetchTransformRegistry, getCachedTransformRegistry, isMultiInputOp } from '../utils/transformRegistry';
 
@@ -385,7 +386,7 @@ const ManipolaEditorContent = () => {
 
   const handleAddStaticValuesNode = useCallback(() => {
     addNodes({ id: `static_${Date.now()}`, type: 'staticValues', position: getPos(),
-      data: { label: 'Valori Statici', fields: [] } });
+      data: { label: termName('static_values'), fields: [] } });
   }, [addNodes]);
 
   const handleAddProjectInputNode = useCallback(() => {
@@ -405,7 +406,7 @@ const ManipolaEditorContent = () => {
   }, [addNodes]);
 
   const handleAddResultNode = useCallback(() => {
-    if (nodesRef.current.some(n => n.type === 'result')) { toast.warning('Puoi avere solo un nodo risultato per progetto'); return; }
+    if (nodesRef.current.some(n => n.type === 'result')) { toast.warning(onlyOneMessage('output')); return; }
     addNodes({ id: `result_${Date.now()}`, type: 'result', position: getPos(),
       data: { isManipulate: true, fileName: 'output', format: 'csv', availableColumns: [],
         group_by_enabled: false, group_by_columns: [], aggregations: [],
@@ -425,8 +426,8 @@ const ManipolaEditorContent = () => {
 
   const handleAddCaricanNode = useCallback(() => {
     const currentNodes = nodesRef.current;
-    if (!currentNodes.some(n => n.type === 'result')) { toast.warning('Aggiungi prima un nodo Output'); return; }
-    if (currentNodes.some(n => n.type === 'carica'))  { toast.warning('Puoi avere solo un nodo CARICA per progetto'); return; }
+    if (!currentNodes.some(n => n.type === 'result')) { toast.warning(addFirstMessage('output')); return; }
+    if (currentNodes.some(n => n.type === 'carica'))  { toast.warning(onlyOneMessage('load_db')); return; }
     const resultNode = currentNodes.find(n => n.type === 'result');
     const newNode = { id: `carica_${Date.now()}`, type: 'carica',
       position: { x: resultNode.position.x + 400, y: resultNode.position.y },
@@ -458,7 +459,7 @@ const ManipolaEditorContent = () => {
     if (item.kind === 'carica') { handleAddCaricanNode(); return; }
     const current = nodesRef.current;
     if (item.kind === 'result' && current.some(n => n.type === 'result')) {
-      toast.warning('Puoi avere solo un nodo risultato per progetto');
+      toast.warning(onlyOneMessage('output'));
       return;
     }
     const position = getPos();
@@ -671,16 +672,17 @@ const ManipolaEditorContent = () => {
     ),
     // Sola lettura: nessuna azione che modifica (Versioni crea e ripristina).
     menuItems: isReadOnly ? [] : [
-      { key: 'input', icon: '⌨', label: 'Aggiungi input runtime', onClick: handleAddProjectInputNode, title: 'Un valore chiesto quando il progetto viene eseguito' },
-      { key: 'static', icon: '📝', label: 'Valori statici', onClick: handleAddStaticValuesNode },
-      { key: 'note', icon: '💬', label: 'Nota', onClick: handleAddCommentNode },
+      // Nome, icona e descrizione di ogni voce dal glossario (regola 10).
+      menuEntry('runtime_input', { onClick: handleAddProjectInputNode }),
+      menuEntry('static_values', { onClick: handleAddStaticValuesNode }),
+      menuEntry('note', { onClick: handleAddCommentNode }),
       { key: 'div1', divider: true },
-      { key: 'output', icon: '📁', label: 'Output', onClick: handleAddResultNode, disabled: hasResultNode },
-      { key: 'multijoin', icon: '🔗', label: 'Multi-Join', onClick: handleAddMultiJoinNode },
-      { key: 'datasource', icon: '🗄️', label: 'Data Source', onClick: () => handleAddDataSourceNode('source'), title: 'Sorgente SharePoint/FTP/Local' },
-      { key: 'carica', icon: '⬆', label: 'Carica su database', onClick: handleAddCaricanNode, disabled: !hasResultNode || hasCaricanNode },
+      menuEntry('output', { onClick: handleAddResultNode, disabled: hasResultNode }),
+      menuEntry('multi_join', { onClick: handleAddMultiJoinNode }),
+      menuEntry('datasource', { onClick: () => handleAddDataSourceNode('source') }),
+      menuEntry('load_db', { onClick: handleAddCaricanNode, disabled: !hasResultNode || hasCaricanNode }),
       { key: 'div2', divider: true },
-      { key: 'versions', icon: '🕘', label: 'Versioni', onClick: () => setShowVersions(true) },
+      menuEntry('versions', { onClick: () => setShowVersions(true) }),
     ],
   };
 
@@ -703,11 +705,11 @@ const ManipolaEditorContent = () => {
         {showVersions && (
           <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
         )}
-        <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title="🔄 Esecuzione Pipeline Manipola" projectType="manipola" caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user} inputDefinitions={runtimeInputDefinitions} />
+        <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title={`${term('run').icon} Esecuzione del flusso Manipola`} projectType="manipola" caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user} inputDefinitions={runtimeInputDefinitions} />
         <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
           data={preview.data} loading={preview.loading} error={preview.error}
           permissionRevoked={preview.permissionRevoked}
-          title="Anteprima Pipeline Manipola" projectType="manipola" disableGrouping />
+          title={`${term('preview').name} del flusso Manipola`} projectType="manipola" disableGrouping />
       </Suspense>
     </ModalErrorBoundary>
   );

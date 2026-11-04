@@ -8,6 +8,7 @@
  */
 
 import { displayIcon } from './nodeDescriptors';
+import { paletteEntry } from '../../utils/glossary';
 
 export const PURPOSES = ['Pulisci', 'Filtra', 'Calcola', 'Combina', 'Riorganizza', 'Geometria', 'Privacy'];
 
@@ -48,6 +49,9 @@ export function buildManipolaPaletteGroups(registry) {
     const def = transforms[opId];
     return {
       id: opId, kind: 'transform', label: def?.name || opId, icon: displayIcon(def?.icon),
+      // Nome del catalogo del backend, se il glossario lo ha tradotto: la
+      // ricerca lo trova ancora ("group by", "buffer").
+      aka: def?.catalog_name || '',
       desc: def?.description ? String(def.description).slice(0, 60) : '',
     };
   };
@@ -62,10 +66,12 @@ export function buildManipolaPaletteGroups(registry) {
   }
   groups.push({
     label: 'Unisci e uscite',
+    // Nomi, icone e descrizioni dal glossario; `kind` e' quello che
+    // l'editor riconosce in onPick.
     items: [
-      { id: 'multi_join', kind: 'multi_join', label: 'Multi-Join', icon: '🔗', desc: 'unisci più sorgenti' },
-      { id: 'result', kind: 'result', label: 'Output', icon: '📁', desc: 'file finale della pipeline' },
-      { id: 'carica', kind: 'carica', label: 'Carica su database', icon: '💾', desc: "dopo l'Output" },
+      paletteEntry('multi_join', { id: 'multi_join', kind: 'multi_join' }),
+      paletteEntry('output', { id: 'result', kind: 'result' }),
+      paletteEntry('load_db', { id: 'carica', kind: 'carica' }),
     ],
   });
   return groups;

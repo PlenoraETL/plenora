@@ -14,6 +14,7 @@ import {
 import useCanvasStore from '../../store/useCanvasStore';
 import './StaticValuesNode.css';
 import NodeHandle from '../canvas/NodeHandle';
+import { termName } from '../../utils/glossary';
 
 const FIELD_TYPES = [
   { value: 'string',  label: 'Testo',    icon: 'T' },
@@ -215,7 +216,7 @@ function StaticValuesNode({ id, data }) {
         ) : (
           <div className="svn__footer-actions">
             <button type="button" className="svn__footer-btn svn__footer-btn--var"
-              onClick={() => setShowVariables(v => !v)} title="Inserisci variabile template">
+              onClick={() => setShowVariables(v => !v)} title="Inserisci una variabile dinamica">
               ƒ Variabili
             </button>
             <button type="button" className="svn__footer-btn"
@@ -229,7 +230,7 @@ function StaticValuesNode({ id, data }) {
       {/* Pannello variabili */}
       {showVariables && (
         <div className="svn__variables">
-          <div className="svn__variables-header">📅 Variabili Template</div>
+          <div className="svn__variables-header">📅 Variabili dinamiche</div>
           <div className="svn__variables-list">
             {AVAILABLE_VARIABLES.map(v => (
               <button type="button" key={v.name} className="svn__var-btn"
@@ -245,7 +246,7 @@ function StaticValuesNode({ id, data }) {
       {/* Output schema */}
       {fields.length > 0 && (
         <div className="svn__schema">
-          <span className="svn__schema-label">OUTPUT:</span>
+          <span className="svn__schema-label">In uscita:</span>
           <div className="svn__schema-tags">
             {outputSchema.map((col, i) => (
               <span key={i} className={`svn__schema-tag svn__schema-tag--${col.type}`}>
@@ -270,7 +271,7 @@ export const createStaticValuesNode = (position = { x: 100, y: 100 }) => ({
   id: `static_${Date.now()}`,
   type: 'staticValues',
   position,
-  data: { label: 'Valori Statici', fields: [] }
+  data: { label: termName('static_values'), fields: [] }
 });
 
 export default memo(StaticValuesNode);

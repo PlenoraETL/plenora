@@ -73,7 +73,7 @@ describe('ParameterInput — contract', () => {
     expect(badge).toHaveClass('parameter-input__schema-badge');
     expect(badge).toHaveAttribute(
       'title',
-      'Contratto schema canvas-time; non modifica direttamente il runtime.',
+      "Schema previsto nel canvas: non cambia l'esecuzione.",
     );
   });
 

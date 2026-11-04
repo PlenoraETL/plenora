@@ -8,8 +8,8 @@ import {
 // usano "force", canvas Pydantic accetta "update"). Il valore qui
 // e' il canonico FE (single source via canvasTypes).
 const TRANSACTION_MODES = [
-  { value: TRANSACTION_MODE_VALUES[0], label: 'Atomica', desc: 'Rollback totale su errore' },
-  { value: TRANSACTION_MODE_VALUES[1], label: 'Per batch', desc: 'Commit ogni batch (parziale ok)' },
+  { value: TRANSACTION_MODE_VALUES[0], label: 'Atomica', desc: 'Annulla tutto in caso di errore' },
+  { value: TRANSACTION_MODE_VALUES[1], label: 'Per lotto', desc: 'Conferma ogni lotto (ammesso il caricamento parziale)' },
 ];
 
 const CONFLICT_POLICIES = [
@@ -44,7 +44,7 @@ function DbAdvancedOptions({
       {showAdvanced && (
         <div className="carica-node__advanced">
           <div className="carica-node__advanced-row">
-            <label>Batch size:</label>
+            <label>Righe per lotto:</label>
             <input
               type="number"
               value={batchSize}

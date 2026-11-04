@@ -192,7 +192,7 @@ describe('ogni campo colonna: valore sparito = "(non trovata)" e scrittura blocc
     expect(joinStatus(data, A(), B())).toBe('missing');
 
     // Un'altra modifica non si scrive finche' la colonna non e' corretta.
-    fireEvent.change(screen.getByLabelText('Tipo join'), { target: { value: 'inner' } });
+    fireEvent.change(screen.getByLabelText('Tipo di Join'), { target: { value: 'inner' } });
     expect(edgeById('j1').data).toEqual(data);
     expect(st().isDirty).toBe(false);
 
@@ -210,7 +210,7 @@ describe('JoinEdgePanel', () => {
   it('b.5: aprire, guardare e rimettere lo stesso valore non scrive e non rende "non salvato"', () => {
     load([A(), B()], [joinEdge(VALID, { selected: true })]);
     inspector();
-    const type = screen.getByLabelText('Tipo join');
+    const type = screen.getByLabelText('Tipo di Join');
     fireEvent.focus(type);
     fireEvent.change(type, { target: { value: 'left' } });
     fireEvent.blur(type);
@@ -229,7 +229,7 @@ describe('JoinEdgePanel', () => {
     // Spaziale senza geometrie: non si scrive.
     expect(edgeById('j1').data).toBe(VALID);
     fireEvent.change(screen.getByLabelText('Geometria sorgente'), { target: { value: 'geom' } });
-    fireEvent.change(screen.getByLabelText('Geometria target'), { target: { value: 'area' } });
+    fireEvent.change(screen.getByLabelText('Geometria di destinazione'), { target: { value: 'area' } });
     expect(serializeEdge(edgeById('j1'))).toMatchObject({
       is_spatial: true, source_column: '', target_column: '', join_conditions: null, on_filters: null,
       source_geom_column: 'geom', target_geom_column: 'area', spatial_distance: null,
@@ -245,39 +245,39 @@ describe('JoinEdgePanel', () => {
   it('b.9: dopo annulla e ripeti il pannello mostra lo stato corrente dell\'arco', () => {
     load([A(), B()], [joinEdge(VALID, { selected: true })]);
     inspector();
-    fireEvent.change(screen.getByLabelText('Tipo join'), { target: { value: 'inner' } });
+    fireEvent.change(screen.getByLabelText('Tipo di Join'), { target: { value: 'inner' } });
     expect(edgeById('j1').data.join_type).toBe('inner');
     act(() => { st().undo(); });
-    expect(screen.getByLabelText('Tipo join').value).toBe('left');
+    expect(screen.getByLabelText('Tipo di Join').value).toBe('left');
     act(() => { st().redo(); });
-    expect(screen.getByLabelText('Tipo join').value).toBe('inner');
+    expect(screen.getByLabelText('Tipo di Join').value).toBe('inner');
     // Nessuna istantanea: una modifica dopo l'annulla parte dallo stato corrente.
     act(() => { st().undo(); });
-    fireEvent.change(screen.getByLabelText('Colonna target 1'), { target: { value: 'stato' } });
+    fireEvent.change(screen.getByLabelText('Colonna di destinazione 1'), { target: { value: 'stato' } });
     expect(edgeById('j1').data).toMatchObject({ join_type: 'left', target_column: 'stato' });
   });
 
-  it('b.6: in sola lettura tutto disabilitato, niente "Elimina join"', () => {
+  it('b.6: in sola lettura tutto disabilitato, niente "Elimina Join"', () => {
     load([A(), B()], [joinEdge(VALID, { selected: true })], { readOnly: true });
     const { container } = inspector();
     const body = container.querySelector('.node-inspector__body');
     const controls = [...body.querySelectorAll('select, input, button, textarea')];
     expect(controls.length).toBeGreaterThan(5);
     expect(controls.filter(c => !c.disabled).map(c => c.outerHTML)).toEqual([]);
-    expect(screen.queryByRole('button', { name: 'Elimina join' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Elimina Join' })).toBeNull();
   });
 
-  it('guscio: intestazione "Join", chiusura, "Elimina join" con conferma', async () => {
+  it('guscio: intestazione "Join", chiusura, "Elimina Join" con conferma', async () => {
     load([A(), B()], [joinEdge(VALID, { selected: true })]);
     inspector();
     expect(screen.getByText(/Join/, { selector: '.node-inspector__kind' })).toBeTruthy();
     expect(screen.getByText('Join con clienti')).toBeTruthy();
     expect(screen.getAllByRole('button', { name: 'Chiudi pannello' })).toHaveLength(1);
     window.confirm.mockReturnValueOnce(false);
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Elimina join' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Elimina Join' })); });
     expect(window.confirm).toHaveBeenCalledTimes(1);
     expect(edgeById('j1')).toBeTruthy();
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Elimina join' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Elimina Join' })); });
     expect(edgeById('j1')).toBeUndefined();
     act(() => { st().undo(); });
     expect(edgeById('j1')).toBeTruthy();

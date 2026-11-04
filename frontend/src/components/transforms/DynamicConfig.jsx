@@ -34,7 +34,7 @@ const DynamicConfig = ({
     return (
       <div className="dynamic-config dynamic-config--error">
         <span className="dynamic-config__error-icon">⚠️</span>
-        <span>Trasformazione "{transformId}" non trovata</span>
+        <span>Operazione «{transformId}» non trovata</span>
       </div>
     );
   }

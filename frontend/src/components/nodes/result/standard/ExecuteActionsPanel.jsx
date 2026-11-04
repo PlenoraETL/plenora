@@ -24,6 +24,7 @@
 import React, { useState } from 'react';
 import RunHistoryModal from '../../../modals/RunHistoryModal';
 import useCanvasStore from '../../../../store/useCanvasStore';
+import { term } from '../../../../utils/glossary';
 
 export default function ExecuteActionsPanel({
   data,
@@ -99,10 +100,10 @@ export default function ExecuteActionsPanel({
         <button type="button"
           onClick={onValidate}
           className="result-node__validate-btn"
-          title="Valida il canvas prima di eseguire"
+          title={term('validate').description}
         >
-          <span aria-hidden="true">🔍</span>
-          <span>Valida</span>
+          <span aria-hidden="true">{term('validate').icon}</span>
+          <span>{term('validate').name}</span>
         </button>
 
         {hasOnPreview && (
@@ -110,8 +111,8 @@ export default function ExecuteActionsPanel({
             onClick={onPreview}
             className={`result-node__preview-btn result-node__preview-btn--${nodeVariant}`}
           >
-            <span className="result-node__preview-icon" aria-hidden="true">👁️</span>
-            <span>Anteprima</span>
+            <span className="result-node__preview-icon" aria-hidden="true">{term('preview').icon}</span>
+            <span>{term('preview').name}</span>
           </button>
         )}
 
@@ -121,8 +122,8 @@ export default function ExecuteActionsPanel({
             disabled={busy}
             className={`result-node__execute-btn result-node__execute-btn--${nodeVariant}`}
           >
-            <span className="result-node__execute-icon" aria-hidden="true">{busy ? '⏳' : '▶️'}</span>
-            <span>{busy ? 'In esecuzione…' : 'Esegui'}</span>
+            <span className="result-node__execute-icon" aria-hidden="true">{busy ? '⏳' : term('run').icon}</span>
+            <span>{busy ? term('run').busyName : term('run').name}</span>
           </button>
         )}
       </div>
@@ -132,10 +133,10 @@ export default function ExecuteActionsPanel({
           onClick={(e) => { e.stopPropagation(); setIsRunHistoryOpen(true); }}
           onMouseDown={(e) => e.stopPropagation()}
           className="result-node__history-btn"
-          title="Cronologia esecuzioni"
+          title={term('run_history').description}
         >
-          <span>🕐</span>
-          <span>Cronologia run</span>
+          <span aria-hidden="true">{term('run_history').icon}</span>
+          <span>{term('run_history').name}</span>
         </button>
       </div>
 
@@ -144,7 +145,7 @@ export default function ExecuteActionsPanel({
         onClose={() => setIsRunHistoryOpen(false)}
         canvasId={data.project_id || data.canvas_id}
         nodeId={id}
-        nodeLabel="Output"
+        nodeLabel={term('output').name}
       />
     </>
   );

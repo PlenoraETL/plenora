@@ -146,7 +146,7 @@ const TableNode = memo(({ data, id }) => {
               <div 
                 className="table-node__alias-display"
                 onClick={() => setIsEditingAlias(true)}
-                title="Click per modificare alias"
+                title="Clic per modificare l'alias"
               >
                 → {alias}
               </div>
@@ -273,7 +273,7 @@ const TableNode = memo(({ data, id }) => {
                 <span 
                   className="table-node__column-alias"
                   onClick={() => handleStartEditColumnAlias(column._origIndex)}
-                  title="Click per modificare alias"
+                  title="Clic per modificare l'alias"
                 >
                   → {column.alias}
                 </span>
@@ -281,7 +281,7 @@ const TableNode = memo(({ data, id }) => {
                 <span
                   className="table-node__column-add-alias"
                   onClick={() => handleStartEditColumnAlias(column._origIndex)}
-                  title="Click per aggiungere alias"
+                  title="Clic per aggiungere un alias"
                 >
                   + alias
                 </span>

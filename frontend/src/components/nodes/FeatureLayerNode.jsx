@@ -331,7 +331,7 @@ const FeatureLayerNode = memo(({ data, id }) => {
                         className="fl-node__relation-add-btn"
                         onClick={() => handleAddRelated(rel)}
                         disabled={addingRelation === rel.id}
-                        title="Aggiungi tabella relata con join automatico"
+                        title="Aggiungi la tabella correlata con un Join automatico"
                       >
                         {addingRelation === rel.id ? '⏳' : '+ Join'}
                       </button>

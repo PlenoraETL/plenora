@@ -149,7 +149,7 @@ export default function JoinPanel({
 
       {legacy && (
         <div className="ppanel__note">
-          Questo join usa il comportamento di prima: tutte le colonne non chiave prendono _L o _R.
+          Questo Join usa il comportamento di prima: tutte le colonne non chiave prendono _L o _R.
           Scegli qui sopra cosa fare dei nomi uguali (o le colonne da tenere) per passare al nuovo.
         </div>
       )}

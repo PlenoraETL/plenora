@@ -76,7 +76,7 @@ const PivotMappingBuilder = ({ value, onChange }) => {
         <div className="pivot-mapping-builder__header">
           <span className="pivot-mapping-builder__header-col">Valore sorgente</span>
           <span className="pivot-mapping-builder__header-arrow"></span>
-          <span className="pivot-mapping-builder__header-col">Nome colonna output</span>
+          <span className="pivot-mapping-builder__header-col">Nome della colonna in uscita</span>
           <span className="pivot-mapping-builder__header-action"></span>
         </div>
       )}
@@ -116,13 +116,13 @@ const PivotMappingBuilder = ({ value, onChange }) => {
         onClick={addRow}
         className="pivot-mapping-builder__add"
       >
-        + Aggiungi mapping
+        + Aggiungi mappatura
       </button>
 
       {/* Nota se vuoto */}
       {isEmpty && (
         <div className="pivot-mapping-builder__hint">
-          Nessun mapping: verrà creata una colonna per ogni valore unico
+          Nessuna mappatura: verrà creata una colonna per ogni valore unico
         </div>
       )}
     </div>

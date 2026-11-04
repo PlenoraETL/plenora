@@ -41,7 +41,7 @@ describe('StepPreview', () => {
     state.nodes = [{ id: 'step-1', type: 'transform', selected: true, data: { title: 'Escludi periodi', transform_op: 'filter' } }];
     previewProjectMock.mockResolvedValueOnce({ success: true, columns: [], rows: [], total_count: 0 });
     render(<StepPreview projectId="p1" />);
-    fireEvent.click(screen.getByRole('button', { name: '▶ Anteprima' }));
+    fireEvent.click(screen.getByRole('button', { name: '👁️ Anteprima' }));
     await waitFor(() => expect(previewProjectMock).toHaveBeenCalledWith('p1', 100, 'step-1'));
     expect(saveMock).not.toHaveBeenCalled();
   });
@@ -78,7 +78,7 @@ describe('StepPreview', () => {
       success: true, columns: [{ name: 'v', type: 'real' }], rows: [{ v: 58.333333333336 }], total_count: 1,
     });
     const { rerender } = render(<StepPreview projectId="p1" />);
-    fireEvent.click(screen.getByRole('button', { name: '▶ Anteprima' }));
+    fireEvent.click(screen.getByRole('button', { name: '👁️ Anteprima' }));
     expect(await screen.findByText('58,3333')).toBeTruthy();
     expect(screen.queryByText(/dati non aggiornati/)).toBeNull();
 

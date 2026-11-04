@@ -12,7 +12,7 @@ export { REST_METHODS };
 // `value` deve restare in REST_BATCH_MODE_VALUES; il contract test
 // FE cattura ogni divergenza.
 const REST_BATCH_MODES = [
-  { value: REST_BATCH_MODE_VALUES[0], label: 'Batch' },
+  { value: REST_BATCH_MODE_VALUES[0], label: 'A lotti' },
   { value: REST_BATCH_MODE_VALUES[1], label: 'Per riga' },
 ];
 
@@ -90,7 +90,7 @@ function RestDestinationSection({
           className="carica-node__section-header"
           onClick={onToggleMapping}
         >
-          <span>Body Mapping</span>
+          <span>Mappatura del corpo</span>
           <span className="carica-node__toggle">{showMapping ? '▼' : '▶'}</span>
         </div>
 
@@ -103,7 +103,7 @@ function RestDestinationSection({
             </div>
             {restBodyMapping.length === 0 ? (
               <div className="carica-node__hint">
-                Nessun mapping: il backend invia le righe con le colonne disponibili.
+                Nessuna mappatura: il server invia le righe con le colonne disponibili.
               </div>
             ) : (
               <div className="carica-node__mapping-list">
@@ -145,14 +145,14 @@ function RestDestinationSection({
           className="carica-node__section-header"
           onClick={onToggleAdvanced}
         >
-          <span>Headers e batch</span>
+          <span>Intestazioni HTTP e lotti</span>
           <span className="carica-node__toggle">{showAdvanced ? '▼' : '▶'}</span>
         </div>
 
         {showAdvanced && (
           <div className="carica-node__advanced">
             <div className="carica-node__advanced-row">
-              <label>Batch mode:</label>
+              <label>Invio:</label>
               <select
                 value={restBatchMode}
                 onChange={(e) => onUpdate('rest_batch_mode', e.target.value)}
@@ -164,7 +164,7 @@ function RestDestinationSection({
               </select>
             </div>
             <div className="carica-node__advanced-row">
-              <label>Batch size:</label>
+              <label>Righe per lotto:</label>
               <input
                 type="number"
                 value={restBatchSize}
@@ -174,7 +174,7 @@ function RestDestinationSection({
               />
             </div>
             <div className="carica-node__advanced-row">
-              <label>Timeout:</label>
+              <label>Attesa massima (s):</label>
               <input
                 type="number"
                 value={restTimeoutSeconds}
@@ -186,7 +186,7 @@ function RestDestinationSection({
             <div className="carica-node__rest-header-list">
               <div className="carica-node__mapping-actions">
                 <button type="button" onClick={handleAddRestHeader} className="carica-node__btn carica-node__btn--secondary">
-                  + Header
+                  + Intestazione
                 </button>
               </div>
               {restHeaders.map((header, idx) => (
@@ -195,7 +195,7 @@ function RestDestinationSection({
                     type="text"
                     value={header.name || ''}
                     onChange={(e) => handleRestHeaderChange(idx, 'name', e.target.value)}
-                    placeholder="Header"
+                    placeholder="Intestazione"
                     className="carica-node__mapping-input"
                   />
                   <input
@@ -211,7 +211,7 @@ function RestDestinationSection({
                       checked={!!header.secret}
                       onChange={(e) => handleRestHeaderChange(idx, 'secret', e.target.checked)}
                     />
-                    Secret
+                    Segreto
                   </label>
                   <button type="button" onClick={() => handleRemoveRestHeader(idx)} className="carica-node__mapping-remove">
                     ×

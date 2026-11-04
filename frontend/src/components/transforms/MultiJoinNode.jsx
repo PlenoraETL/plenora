@@ -12,6 +12,7 @@ import RunHistoryModal from '../modals/RunHistoryModal';
 import { nodeTitle } from '../canvas/nodeDescriptors';
 import { dataFlowEdges } from '../../utils/runtimeBindingEdges';
 import NodeHandle from '../canvas/NodeHandle';
+import { term } from '../../utils/glossary';
 
 const MultiJoinNode = memo(({ data, id }) => {
   const { getEdges, getNodes } = useReactFlow();
@@ -196,7 +197,7 @@ const MultiJoinNode = memo(({ data, id }) => {
             {sources.length === 2 ? (
               <>
                 <label className="multi-join-node__label">
-                  Colonne join:
+                  Colonne del Join:
                   <span className="multi-join-node__hint">
                     Puoi usare colonne con nomi diversi
                   </span>
@@ -270,8 +271,8 @@ const MultiJoinNode = memo(({ data, id }) => {
                   if (pairs.length === 0 || complete.length === 0) {
                     return (
                       <div className="multi-join-node__warning">
-                        ⚠️ Nessuna chiave di join configurata. Il
-                        backend usera' le colonne comuni in
+                        ⚠️ Nessuna chiave del Join configurata. Il
+                        server userà le colonne comuni in
                         automatico (rischio risultati inattesi se
                         gli alias cambiano).
                       </div>
@@ -285,7 +286,7 @@ const MultiJoinNode = memo(({ data, id }) => {
                 <label className="multi-join-node__label">
                   Colonne chiave (comuni): *
                   <span className="multi-join-node__hint">
-                    Seleziona le colonne per il join
+                    Seleziona le colonne per il Join
                   </span>
                 </label>
                 
@@ -331,7 +332,7 @@ const MultiJoinNode = memo(({ data, id }) => {
         {/* Tipo join */}
         {sources.length >= 2 && (joinKeys.length > 0 || (config.join_pairs || []).length > 0) && (
           <div className="multi-join-node__section">
-            <label className="multi-join-node__label">Tipo join:</label>
+            <label className="multi-join-node__label">Tipo di Join:</label>
             <select
               value={joinType}
               onChange={(e) => updateConfig('join_type', e.target.value)}
@@ -348,7 +349,7 @@ const MultiJoinNode = memo(({ data, id }) => {
         {outputPreview.length > 0 && (joinKeys.length > 0 || (config.join_pairs || []).length > 0) && (
           <div className="multi-join-node__section">
             <label className="multi-join-node__label">
-              Colonne output ({outputPreview.length}):
+              Colonne in uscita ({outputPreview.length}):
             </label>
             <div className="multi-join-node__output-preview">
               {outputPreview.slice(0, 8).map(col => (
@@ -368,7 +369,7 @@ const MultiJoinNode = memo(({ data, id }) => {
         {/* Messaggio validazione */}
         {sources.length >= 2 && sources.length === 2 && (config.join_pairs || []).length === 0 && (
           <div className="multi-join-node__validation">
-            ⚠️ Aggiungi almeno una coppia di colonne per il join
+            ⚠️ Aggiungi almeno una coppia di colonne per il Join
           </div>
         )}
         {sources.length > 2 && joinKeys.length === 0 && commonColumns.length > 0 && (
@@ -386,15 +387,15 @@ const MultiJoinNode = memo(({ data, id }) => {
         style={{ top: '50%' }}
       />
 
-      {/* Cronologia run */}
+      {/* Cronologia esecuzioni */}
       <div className="multi-join-node__footer">
         <button
           type="button"
           className="multi-join-node__history-btn"
           onClick={(e) => { e.stopPropagation(); setIsRunHistoryOpen(true); }} onMouseDown={(e) => e.stopPropagation()}
-          title="Cronologia esecuzioni"
+          title={term('run_history').description}
         >
-          🕐 Cronologia run
+          {term('run_history').icon} {term('run_history').name}
         </button>
       </div>
       <RunHistoryModal

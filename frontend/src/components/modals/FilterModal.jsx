@@ -15,6 +15,7 @@ import {
   isParameterBindingEdge,
 } from '../../utils/runtimeBindingEdges';
 import './FilterModal.css';
+import { termName } from '../../utils/glossary';
 
 /**
  * Modal per configurare filtri WHERE su una tabella
@@ -298,7 +299,7 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
                       <option value="">Valore fisso</option>
                       {scalarInputs.map(inputNode => (
                         <option key={inputNode.id} value={inputNode.id}>
-                          Input runtime: {inputNode.data?.label || inputNode.data?.input_key}
+                          {termName('runtime_input')}: {inputNode.data?.label || inputNode.data?.input_key}
                         </option>
                       ))}
                     </select>
@@ -309,7 +310,7 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
                     disabled={Boolean(bindingSelections[index])}
                     onChange={(e) => updateFilter(index, 'value', e.target.value)}
                     placeholder={bindingSelections[index]
-                      ? 'Valore fornito a runtime'
+                      ? "Valore fornito all'esecuzione"
                       : getValuePlaceholder(colType, filter.operator)}
                   />
                   {filter.operator === 'LIKE' && (
@@ -352,7 +353,7 @@ function FilterModal({ isOpen, onClose, nodeId, filters, columns, tableName, onS
       {/* Preview SQL */}
       {localFilters.some(f => f.column) && (
         <div className="filter-modal__preview">
-          <div className="filter-modal__preview-label">Preview SQL:</div>
+          <div className="filter-modal__preview-label">{termName('preview')} SQL:</div>
           <div className="filter-modal__preview-sql">
             <span className="filter-modal__sql-keyword">WHERE </span>
             {localFilters

@@ -18,15 +18,15 @@ import { mapCompareErrorReason } from '../../src/components/modals/RunHistoryMod
 describe('mapCompareErrorReason', () => {
   it('reason="metadata_only_no_rows" -> messaggio specifico (default)', () => {
     const msg = mapCompareErrorReason('metadata_only_no_rows', null);
-    expect(msg).toMatch(/metadata_only/);
-    expect(msg).toMatch(/Diff riga-per-riga/i);
+    expect(msg).toMatch(/solo i metadati/);
+    expect(msg).toMatch(/Confronto riga per riga/i);
     expect(msg).not.toMatch(/^Errore durante il confronto$/);
   });
 
   it('reason="persistence_mode_mismatch" -> messaggio specifico (default)', () => {
     const msg = mapCompareErrorReason('persistence_mode_mismatch', null);
-    expect(msg).toMatch(/persistence_mode/);
-    expect(msg).toMatch(/full_pg vs preview_only/i);
+    expect(msg).toMatch(/in modi diversi/);
+    expect(msg).toMatch(/stessa modalità/i);
     expect(msg).not.toMatch(/^Errore durante il confronto$/);
   });
 
@@ -46,11 +46,11 @@ describe('mapCompareErrorReason', () => {
 
   it('beMessage stringa vuota e\' trattato come assente -> default per reason', () => {
     const msg = mapCompareErrorReason('persistence_mode_mismatch', '');
-    expect(msg).toMatch(/persistence_mode/);
+    expect(msg).toMatch(/in modi diversi/);
   });
 
   it('beMessage non stringa (es. obj) e\' ignorato', () => {
     const msg = mapCompareErrorReason('metadata_only_no_rows', { foo: 'bar' });
-    expect(msg).toMatch(/metadata_only/);
+    expect(msg).toMatch(/solo i metadati/);
   });
 });

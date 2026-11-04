@@ -126,7 +126,7 @@ export function useSchemaInference(projectId) {
    * Valida una connessione tra due nodi
    */
   const validateConnection = useCallback(async (sourceNodeId, targetNodeId, config = null) => {
-    if (!projectId) return { valid: false, error: 'No project ID' };
+    if (!projectId) return { valid: false, error: 'Progetto non indicato' };
     
     try {
       return await validateProjectConnection(projectId, {

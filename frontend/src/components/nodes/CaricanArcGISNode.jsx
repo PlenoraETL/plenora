@@ -91,17 +91,17 @@ const CaricanArcGISNode = memo(({ data, id }) => {
 
   const arcgisOperations = isMultiLayerUpstream
     ? [
-        { value: 'create_service', label: 'Crea Servizio (N layer)', desc: 'Crea un Feature Service con tutti i layer del bundle' },
-        { value: 'add', label: '+ Add Features', desc: 'Aggiunge le features di ogni layer al servizio esistente (match per nome)' },
-        { value: 'upsert', label: 'Upsert Features', desc: 'Aggiorna/inserisce per chiave (dal bundle) su ogni layer' },
-        { value: 'update', label: 'Update Features', desc: 'Aggiorna per chiave (dal bundle) su ogni layer' },
+        { value: 'create_service', label: 'Crea servizio (N layer)', desc: 'Crea un Feature Service con tutti i layer del pacchetto' },
+        { value: 'add', label: '+ Aggiungi elementi', desc: 'Aggiunge gli elementi di ogni layer al servizio esistente (corrispondenza per nome)' },
+        { value: 'upsert', label: 'Aggiorna o inserisci elementi', desc: 'Aggiorna o inserisce per chiave (dal pacchetto) su ogni layer' },
+        { value: 'update', label: 'Aggiorna elementi', desc: 'Aggiorna per chiave (dal pacchetto) su ogni layer' },
       ]
     : [
-        { value: 'add', label: '+ Add Features', desc: 'Aggiungi features al layer esistente' },
-        { value: 'update', label: 'Update Features', desc: 'Aggiorna features esistenti per colonna chiave' },
-        { value: 'upsert', label: 'Upsert Features', desc: 'Aggiorna se esiste, inserisci se nuovo' },
-        { value: 'delete', label: 'Delete Features', desc: 'Elimina features per colonna chiave' },
-        { value: 'create_service', label: 'Crea Servizio', desc: 'Crea nuovo Feature Service + carica dati' },
+        { value: 'add', label: '+ Aggiungi elementi', desc: 'Aggiunge elementi al layer esistente' },
+        { value: 'update', label: 'Aggiorna elementi', desc: 'Aggiorna gli elementi esistenti per colonna chiave' },
+        { value: 'upsert', label: 'Aggiorna o inserisci elementi', desc: 'Aggiorna se esiste, inserisce se nuovo' },
+        { value: 'delete', label: 'Elimina elementi', desc: 'Elimina gli elementi per colonna chiave' },
+        { value: 'create_service', label: 'Crea servizio', desc: 'Crea un nuovo Feature Service e carica i dati' },
       ];
 
   useEffect(() => {
@@ -347,8 +347,8 @@ const CaricanArcGISNode = memo(({ data, id }) => {
           {/* Multi-layer (bundle IMDF): badge informativo */}
           {isMultiLayerUpstream && (
             <div className="carica-arcgis-node__hint" style={{ background: 'rgba(124,58,237,0.10)', border: '1px solid rgba(124,58,237,0.35)', borderRadius: 6, padding: '6px 8px', color: '#7C3AED' }}>
-              📦 Bundle multi-layer (IMDF): i layer, le chiavi di match e i renderer
-              arrivano dal bundle. Configura solo la destinazione.
+              📦 Pacchetto con più layer (IMDF): i layer, le chiavi di corrispondenza e
+              la simbologia arrivano dal pacchetto. Configura solo la destinazione.
             </div>
           )}
 
@@ -396,7 +396,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
                 type="number"
                 value={arcgisSourceSrid}
                 onChange={(e) => handleUpdate('source_srid', e.target.value === '' ? null : parseInt(e.target.value, 10))}
-                placeholder="4326 (default)"
+                placeholder="4326 (predefinito)"
                 className="carica-arcgis-node__input"
               />
               <div className="carica-arcgis-node__hint">
@@ -447,8 +447,8 @@ const CaricanArcGISNode = memo(({ data, id }) => {
               )}
               <div className="carica-arcgis-node__hint">
                 {isMultiLayerUpstream
-                  ? 'Verra creato un Feature Service con tutti i layer del bundle (nomi, schema, chiavi e renderer dal bundle)'
-                  : 'Verra creato un nuovo Feature Service con schema derivato dai dati della pipeline'}
+                  ? 'Verrà creato un Feature Service con tutti i layer del pacchetto (nomi, schema, chiavi e simbologia dal pacchetto)'
+                  : 'Verrà creato un nuovo Feature Service con lo schema dei dati del flusso'}
               </div>
             </>
           )}
@@ -478,7 +478,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
               {/* Multi-layer: nessuna selezione layer singola — match per nome dal bundle */}
               {isMultiLayerUpstream && arcgisServiceUrl && (
                 <div className="carica-arcgis-node__hint">
-                  Tutti i layer del bundle verranno scritti sul servizio, matchati per nome.
+                  Tutti i layer del pacchetto verranno scritti sul servizio, abbinati per nome.
                 </div>
               )}
 
@@ -496,7 +496,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
                     </option>
                     {arcgisLayers.map((lyr, idx) => (
                       <option key={idx} value={lyr.url}>
-                        {lyr.name} ({lyr.geometry_type || 'Table'})
+                        {lyr.name} ({lyr.geometry_type || 'Tabella'})
                       </option>
                     ))}
                   </select>
@@ -506,10 +506,10 @@ const CaricanArcGISNode = memo(({ data, id }) => {
               {/* Schema info layer */}
               {arcgisLayerUrl && arcgisLayerSchema && (
                 <div className="carica-arcgis-node__schema-info">
-                  <span>{arcgisLayerSchema.geometry_type || 'Table'}</span>
+                  <span>{arcgisLayerSchema.geometry_type || 'Tabella'}</span>
                   <span>{arcgisLayerSchema.fields?.length || 0} campi</span>
                   {arcgisLayerSchema.feature_count != null && (
-                    <span>{arcgisLayerSchema.feature_count.toLocaleString()} features</span>
+                    <span>{arcgisLayerSchema.feature_count.toLocaleString()} elementi</span>
                   )}
                 </div>
               )}
@@ -517,7 +517,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
               {/* Colonna match per update/upsert/delete */}
               {['update', 'upsert', 'delete'].includes(arcgisOperation) && arcgisLayerUrl && (
                 <div className="carica-arcgis-node__section">
-                  <label className="carica-arcgis-node__label">Colonna Match (chiave update)</label>
+                  <label className="carica-arcgis-node__label">Colonna di corrispondenza (chiave di aggiornamento)</label>
                   <select
                     value={arcgisMatchColumn}
                     onChange={(e) => handleUpdate('arcgis_match_column', e.target.value)}
@@ -529,7 +529,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
                     })}
                   </select>
                   <div className="carica-arcgis-node__hint">
-                    Il sistema cerca le features sul layer con lo stesso valore di questa colonna e ne aggiorna i dati
+                    Il sistema cerca sul layer gli elementi con lo stesso valore di questa colonna e ne aggiorna i dati
                   </div>
                 </div>
               )}
@@ -549,7 +549,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
             <div className="carica-arcgis-node__section">
               <div className="carica-arcgis-node__section-header"
                 onClick={() => setShowMapping(!showMapping)}>
-                <span>Mapping Colonne</span>
+                <span>Mappatura delle colonne</span>
                 <span className="carica-arcgis-node__toggle">{showMapping ? '▼' : '▶'}</span>
               </div>
 
@@ -558,7 +558,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
                   <div className="carica-arcgis-node__mapping-actions">
                     <button type="button" onClick={autoMapArcgis}
                       className="carica-arcgis-node__btn carica-arcgis-node__btn--secondary">
-                      Auto-mapping
+                      Mappatura automatica
                     </button>
                     <button type="button" onClick={handleAddMapping}
                       className="carica-arcgis-node__btn carica-arcgis-node__btn--secondary">
@@ -569,10 +569,10 @@ const CaricanArcGISNode = memo(({ data, id }) => {
                   {columnMappings.length === 0 ? (
                     <div className="carica-arcgis-node__hint">
                       {arcgisOperation === 'create_service'
-                        ? 'Nessun mapping — tutte le colonne verranno usate per creare lo schema'
+                        ? 'Nessuna mappatura: tutte le colonne verranno usate per creare lo schema'
                         : arcgisOperation === 'update'
-                          ? 'Nessun mapping — aggiornera tutte le colonne presenti nell\'input'
-                          : 'Nessun mapping definito. Usa "Auto-mapping" o aggiungi manualmente.'
+                          ? 'Nessuna mappatura: aggiornerà tutte le colonne presenti in ingresso'
+                          : 'Nessuna mappatura definita. Usa «Mappatura automatica» o aggiungi a mano.'
                       }
                     </div>
                   ) : (
@@ -677,7 +677,7 @@ const CaricanArcGISNode = memo(({ data, id }) => {
               <span>{executeResult.success ? 'OK' : 'Errore'}</span>
               <span>{executeResult.message || (executeResult.success ? 'Completato!' : 'Errore')}</span>
               {executeResult.count != null && (
-                <span className="carica-arcgis-node__result-count">{executeResult.count} features</span>
+                <span className="carica-arcgis-node__result-count">{executeResult.count} elementi</span>
               )}
               {executeResult.service_url && (
                 <span className="carica-arcgis-node__result-url" title={executeResult.service_url}>

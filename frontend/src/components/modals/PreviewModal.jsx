@@ -384,7 +384,7 @@ const MapTab = memo(({ rows, columns, active }) => {
       <div className="pm-map-top">
         <div className="pm-map-chip">
           <span className="pm-map-chip-dot" />
-          {featureCount > 0 ? `${featureCount} features` : rows.length + ' righe'}{geomType ? ` · ${geomType}` : ''}
+          {featureCount > 0 ? `${featureCount} elementi` : rows.length + ' righe'}{geomType ? ` · ${geomType}` : ''}
         </div>
 
         {colorCols.length > 0 && (
@@ -409,7 +409,7 @@ const MapTab = memo(({ rows, columns, active }) => {
             className={`pm-basemap-btn${basemap === b ? ' active' : ''}`}
             onClick={() => handleBasemap(b)}
           >
-            {b === 'dark' ? 'Dark' : b === 'osm' ? 'OSM' : 'Satellite'}
+            {b === 'dark' ? 'Scura' : b === 'osm' ? 'OSM' : 'Satellite'}
           </button>
         ))}
       </div>
@@ -418,7 +418,7 @@ const MapTab = memo(({ rows, columns, active }) => {
       <div className="pm-map-controls">
         <button type="button" className="pm-map-ctrl-btn" onClick={() => leafletMap.current?.zoomIn()}>+</button>
         <button type="button" className="pm-map-ctrl-btn" onClick={() => leafletMap.current?.zoomOut()}>−</button>
-        <button type="button" className="pm-map-ctrl-btn" title="Fit extent" onClick={fitBounds}>⊡</button>
+        <button type="button" className="pm-map-ctrl-btn" title="Adatta alla mappa" onClick={fitBounds}>⊡</button>
       </div>
     </div>
   );

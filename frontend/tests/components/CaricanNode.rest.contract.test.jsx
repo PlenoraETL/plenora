@@ -86,10 +86,10 @@ describe('CaricanNode REST destination controls', () => {
     expect(screen.getByDisplayValue('PATCH')).toBeInTheDocument();
     expect(screen.queryByText(/Connessione Database/i)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText(/Body Mapping/i));
+    fireEvent.click(screen.getByText(/Mappatura del corpo/i));
     expect(screen.getByDisplayValue('payload.city')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText(/Headers e batch/i));
+    fireEvent.click(screen.getByText(/Intestazioni HTTP e lotti/i));
     expect(screen.getByDisplayValue('25')).toBeInTheDocument();
     expect(screen.getByDisplayValue('45')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Authorization')).toBeInTheDocument();

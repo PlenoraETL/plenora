@@ -2,7 +2,7 @@
  * ValidationStatusBadge.jsx - Badge toolbar post-validazione.
  *
  * Legge `lastValidationSummary` dallo store. Dopo una validation run:
- *  - nessun errore/warning: mostra "Canvas OK" (dimmed).
+ *  - nessun errore/warning: mostra "Canvas valido" (dimmed).
  *  - errori/warning: mostra conteggi ("2 errori - 1 avviso").
  *  - click: ri-esegue validazione e apre il modal (via `onValidate`).
  *
@@ -32,14 +32,14 @@ export default function ValidationStatusBadge() {
         onClick={handleClick}
         title="Ultima validazione: nessun problema"
       >
-        Canvas OK
+        Canvas valido
       </button>
     );
   }
 
   const parts = [];
-  if (errorCount > 0) parts.push(`${errorCount} error${errorCount > 1 ? 'i' : 'e'}`);
-  if (warningCount > 0) parts.push(`${warningCount} avvis${warningCount > 1 ? 'i' : 'o'}`);
+  if (errorCount > 0) parts.push(`${errorCount} ${errorCount > 1 ? 'errori' : 'errore'}`);
+  if (warningCount > 0) parts.push(`${warningCount} ${warningCount > 1 ? 'avvisi' : 'avviso'}`);
 
   return (
     <button

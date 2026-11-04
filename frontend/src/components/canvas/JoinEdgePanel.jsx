@@ -117,7 +117,7 @@ export default function JoinEdgePanel({ edge, sourceNode, targetNode, disabled =
       </div>
 
       <div className="ppanel__field">
-        <label className="ppanel__label" htmlFor={`${edge.id}-type`}>Tipo join</label>
+        <label className="ppanel__label" htmlFor={`${edge.id}-type`}>Tipo di Join</label>
         <select id={`${edge.id}-type`} className="ppanel__input" value={draft.join_type} disabled={disabled}
           onChange={e => set({ join_type: e.target.value })}>
           {JOIN_TYPES.map(t => <option key={t.value} value={t.value}>{t.label} — {t.description}</option>)}
@@ -127,7 +127,7 @@ export default function JoinEdgePanel({ edge, sourceNode, targetNode, disabled =
       {draft.mode === 'standard' && (
         <>
           <div className="ppanel__field">
-            <span className="ppanel__label">Colonne di join ({sourceName} = {targetName})</span>
+            <span className="ppanel__label">Colonne del Join ({sourceName} = {targetName})</span>
             {draft.conditions.map((c, i) => (
               // eslint-disable-next-line react/no-array-index-key
               <div key={i} className="ppanel__card">
@@ -140,7 +140,7 @@ export default function JoinEdgePanel({ edge, sourceNode, targetNode, disabled =
                 </div>
                 <div className="ppanel__row">
                   <span aria-hidden="true">=</span>
-                  <FuncSelect label={`Funzione target ${i + 1}`} value={c.target_func} disabled={disabled}
+                  <FuncSelect label={`Funzione di destinazione ${i + 1}`} value={c.target_func} disabled={disabled}
                     onChange={v => setRow('conditions', i, { target_func: v })} />
                   <ColumnSelect field={FIELD['condition.target_column']} index={i} value={c.target_column} sides={sides}
                     disabled={disabled} onChange={v => setRow('conditions', i, { target_column: v })} />

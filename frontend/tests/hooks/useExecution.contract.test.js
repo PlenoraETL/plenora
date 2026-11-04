@@ -302,7 +302,7 @@ describe('useExecution — polling callback effects', () => {
     expect(result.current.result?.message).toMatch(/boom/);
   });
 
-  it('callback con status=revoked -> result success=false + messaggio "annullato"', async () => {
+  it('callback con status=revoked -> result success=false + messaggio "annullata"', async () => {
     executeProjectQueryMock.mockResolvedValue({ async: true, task_id: 'tp3' });
     const { result } = renderHook(() => useExecution('proj-1'));
     await act(async () => { await result.current.handleExecute({}); });
@@ -312,7 +312,7 @@ describe('useExecution — polling callback effects', () => {
     act(() => { done = onStatus({ status: 'revoked' }); });
     expect(done).toBe(true);
     await waitFor(() => { expect(result.current.isExecuting).toBe(false); });
-    expect(result.current.result?.message).toMatch(/annullato/i);
+    expect(result.current.result?.message).toMatch(/annullata/i);
   });
 
   it('callback con status=pending/progress -> done=false (continua il polling)', async () => {

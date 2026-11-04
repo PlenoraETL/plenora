@@ -23,6 +23,7 @@ import { PREVIEW_ROW_LIMIT, formatPreviewValue } from '../../utils/previewFormat
 import { canvasContentKey } from '../../utils/canvasContentKey';
 import { nodeTitle } from './nodeDescriptors';
 import './StepPreview.css';
+import { term } from '../../utils/glossary';
 
 const HEIGHT_OPEN = 240;
 const HEIGHT_COLLAPSED = 38;
@@ -126,14 +127,14 @@ export default function StepPreview({ projectId }) {
         >
           {status === 'loading'
             ? 'Caricamento…'
-            : `${unsaved ? 'Salva e ' : ''}${shownFor === node.id ? (unsaved ? 'aggiorna' : '↻ Aggiorna') : (unsaved ? 'mostra anteprima' : '▶ Anteprima')}`}
+            : `${unsaved ? 'Salva e ' : ''}${shownFor === node.id ? (unsaved ? 'aggiorna' : '↻ Aggiorna') : (unsaved ? 'mostra anteprima' : `${term('preview').icon} ${term('preview').name}`)}`}
         </button>
       </header>
       {!collapsed && (
         <div className="step-preview__body">
           {saveError && <div className="step-preview__msg step-preview__msg--error">{saveError}</div>}
           {!saveError && status === 'idle' && (
-            <div className="step-preview__msg">Premi «Anteprima» per vedere i dati in questo punto della pipeline.</div>
+            <div className="step-preview__msg">Premi «{term('preview').name}» per vedere i dati in questo punto del flusso.</div>
           )}
           {status === 'loading' && <div className="step-preview__msg">Calcolo dell&apos;anteprima…</div>}
           {status === 'error' && <div className="step-preview__msg step-preview__msg--error">{error}</div>}

@@ -211,7 +211,7 @@ const startMainPolling = useCallback((taskIdToWatch) => {
         return true;
       } else if (data.status === 'revoked') {
         stopExecuting();
-        setResult({ success: false, message: 'Task annullato dall\'utente' });
+        setResult({ success: false, message: "Esecuzione annullata dall'utente" });
         return true;
       }
       return false;
@@ -242,7 +242,7 @@ const handleExecute = useCallback(async (executeOptions = {}) => {
 
       if (response.async && response.task_id) {
         setTaskId(response.task_id);
-        setProgressMessage(response.message || 'Task avviato...');
+        setProgressMessage(response.message || 'Esecuzione avviata...');
         startMainPolling(response.task_id);
       } else {
         stopExecuting();

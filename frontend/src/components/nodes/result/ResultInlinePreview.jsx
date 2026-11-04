@@ -12,6 +12,7 @@
 import React from 'react';
 import { isGeometryType } from '../../../utils/columnUtils';
 import { formatNumber } from '../../../utils/previewFormat';
+import { term } from '../../../utils/glossary';
 
 const MAX_ROWS = 5;
 const MAX_COLS = 6;
@@ -52,7 +53,7 @@ export default function ResultInlinePreview({ state, onExpand, onRefresh }) {
   return (
     <div className="result-node__preview-inline nodrag nowheel">
       <div className="result-node__preview-inline-head">
-        <span className="result-node__preview-inline-title">👁️ Anteprima</span>
+        <span className="result-node__preview-inline-title">{term('preview').icon} {term('preview').name}</span>
         {countLabel && <span className="result-node__preview-inline-count">{countLabel}</span>}
         <div className="result-node__preview-inline-actions">
           {onRefresh && (

@@ -28,7 +28,7 @@ function ConflictModal({
         tabIndex={-1}
       >
         <div className="carica-conflict-modal__header">
-          <span id="ccm-title">🔍 Report Conflitti — {schemaName}.{tableName}</span>
+          <span id="ccm-title">🔍 Rapporto dei conflitti — {schemaName}.{tableName}</span>
           <button className="carica-conflict-modal__close" onClick={onClose} aria-label="Chiudi">✕</button>
         </div>
         <div className="carica-conflict-modal__body">
@@ -52,7 +52,7 @@ function ConflictModal({
                   <div className="carica-conflict-modal__details-title">Dettaglio conflitti (max 100):</div>
                   <table className="carica-conflict-modal__table">
                     <thead>
-                      <tr><th>Riga</th><th>Valori match</th><th>Tipo</th></tr>
+                      <tr><th>Riga</th><th>Valori di corrispondenza</th><th>Tipo</th></tr>
                     </thead>
                     <tbody>
                       {report.details.slice(0, 20).map((d, i) => (
@@ -70,7 +70,7 @@ function ConflictModal({
                 </div>
               )}
               <div className="carica-conflict-modal__hint">
-                Policy conflitti attiva: <strong>{policy}</strong>
+                Regola sui conflitti attiva: <strong>{policy}</strong>
               </div>
             </>
           ) : null}

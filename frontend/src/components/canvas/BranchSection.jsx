@@ -93,7 +93,7 @@ export default function BranchSection({ node, branchActions = {} }) {
             ? 'Aggiungi un Output, poi collega i rami.'
             : !derived.anyReaching
               ? "Nessun passo arriva ancora all'Output: collega prima il ramo principale all'Output."
-              : "I passi che arrivano all'Output sono tutti a monte di questo ramo: collegalo trascinando dalla sua uscita all'Output o a un'unione."}
+              : "I passi che arrivano all'Output sono tutti a monte di questo ramo: collegalo trascinando dalla sua uscita all'Output o a un Multi-Join."}
         </div>
       );
     } else {

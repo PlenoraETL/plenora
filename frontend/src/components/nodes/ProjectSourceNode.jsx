@@ -89,7 +89,7 @@ const ProjectSourceNode = ({ id, data }) => {
           })
           .filter(col => col.id && col.name);
       } else {
-        setError('Contratto output mancante: esegui prima il progetto sorgente.');
+        setError('Colonne in uscita non ancora note: esegui prima il progetto sorgente.');
         updateNodeData(id, { columns: [] }, { derived: true });
       }
       
@@ -213,7 +213,7 @@ const ProjectSourceNode = ({ id, data }) => {
           <>
             <div className="project-source-node__columns-header">
               <span>Colonne ({visibleCount}/{totalCount}):</span>
-              <span className="project-source-node__columns-hint">click per escludere</span>
+              <span className="project-source-node__columns-hint">clic per escludere</span>
             </div>
             
             {visibleColumns.map((col, idx) => {

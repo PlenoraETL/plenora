@@ -24,6 +24,7 @@ export function matchScore(item, groupLabel, q) {
   if (label.startsWith(q)) return 90;
   if (label.split(/[\s()/_-]+/).some(w => w.startsWith(q))) return 80;
   if (label.includes(q)) return 70;
+  if (norm(item.aka).includes(q)) return 60;
   if (norm(item.id).includes(q)) return 50;
   if (norm(item.desc).includes(q)) return 30;
   if (norm(groupLabel).includes(q)) return 10;
@@ -93,7 +94,7 @@ export default function NodePalette({ open, context, groups = [], onPick, onClos
             value={query}
             onChange={e => { setQuery(e.target.value); setActive(0); }}
             onKeyDown={onKeyDown}
-            placeholder="Cosa vuoi fare? es. filtra, rinomina, join, buffer…"
+            placeholder="Cosa vuoi fare? es. filtra, rinomina, Join, raggruppa…"
             aria-label="Cerca un'operazione"
           />
         </div>

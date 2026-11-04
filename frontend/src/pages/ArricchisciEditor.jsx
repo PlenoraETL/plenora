@@ -63,6 +63,7 @@ import '../components/nodes/StaticValuesNode.css';
 import '../components/modals/EnrichmentConfirmModal.css';
 import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
+import { addFirstMessage, flowEdgeLabel, menuEntry, onlyOneMessage, paletteEntry, term, termName } from '../utils/glossary';
 
 /**
  * Costruisce una mappa nodeId → titolo per il raggruppamento colonne in
@@ -432,7 +433,7 @@ const ArricchisciEditorContent = () => {
   const handleAddStaticValuesNode = useCallback(() => {
     addNodes({ id: `static_${Date.now()}`, type: 'staticValues',
       position: { x: 100, y: 200 },
-      data: { label: 'Valori Statici', fields: [] } });
+      data: { label: termName('static_values'), fields: [] } });
   }, [addNodes]);
 
   const handleAddProjectInputNode = useCallback(() => {
@@ -443,7 +444,7 @@ const ArricchisciEditorContent = () => {
   }, [addNodes, nodesRef]);
 
   const handleAddResultNode = useCallback(() => {
-    if (nodesRef.current.some(n => n.type === 'result')) { toast.warning('Puoi avere solo un nodo risultato per progetto'); return; }
+    if (nodesRef.current.some(n => n.type === 'result')) { toast.warning(onlyOneMessage('output')); return; }
     addNodes({ id: `result_${Date.now()}`, type: 'result',
       position: { x: 600, y: 200 },
       data: { isArricchisci: true, fileName: 'output', format: 'csv', availableColumns: [],
@@ -453,8 +454,8 @@ const ArricchisciEditorContent = () => {
 
   const handleAddCaricanNode = useCallback(() => {
     const currentNodes = nodesRef.current;
-    if (!currentNodes.some(n => n.type === 'result')) { toast.warning('Aggiungi prima un nodo Output'); return; }
-    if (currentNodes.some(n => n.type === 'carica'))  { toast.warning('Puoi avere solo un nodo CARICA per progetto'); return; }
+    if (!currentNodes.some(n => n.type === 'result')) { toast.warning(addFirstMessage('output')); return; }
+    if (currentNodes.some(n => n.type === 'carica'))  { toast.warning(onlyOneMessage('load_db')); return; }
     const resultNode = currentNodes.find(n => n.type === 'result');
     const newNode = { id: `carica_${Date.now()}`, type: 'carica',
       position: { x: resultNode.position.x + 400, y: resultNode.position.y },
@@ -470,8 +471,8 @@ const ArricchisciEditorContent = () => {
 
   const handleAddCaricanArcGISNode = useCallback(() => {
     const currentNodes = nodesRef.current;
-    if (!currentNodes.some(n => n.type === 'result')) { toast.warning('Aggiungi prima un nodo Output'); return; }
-    if (currentNodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis')) { toast.warning('Puoi avere solo un nodo CARICA ArcGIS per progetto'); return; }
+    if (!currentNodes.some(n => n.type === 'result')) { toast.warning(addFirstMessage('output')); return; }
+    if (currentNodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis')) { toast.warning(onlyOneMessage('load_arcgis')); return; }
     const resultNode = currentNodes.find(n => n.type === 'result');
     const newNode = {
       id: `carica_arcgis_${Date.now()}`, type: 'carica_arcgis',
@@ -482,27 +483,28 @@ const ArricchisciEditorContent = () => {
     };
     addNodes(newNode);
     addEdges({ id: `edge_result_carica_arcgis_${Date.now()}`, source: resultNode.id, target: newNode.id,
-      label: 'Carica ArcGIS', animated: true, style: { stroke: '#2DD4BF', strokeWidth: 2 }, data: { join_type: 'carica_arcgis' } });
+      label: flowEdgeLabel('carica_arcgis'), animated: true, style: { stroke: '#2DD4BF', strokeWidth: 2 }, data: { join_type: 'carica_arcgis' } });
   }, [addNodes, addEdges]);
 
   const palette = useMemo(() => ({
     groups: [
       { label: 'Arricchisci', items: [
-        { id: 'manual', kind: 'connector', label: 'API manuale', icon: '✏️', desc: 'connettore configurato a mano' },
-        { id: 'openapi', kind: 'connector', label: 'API OpenAPI', icon: '📋', desc: 'da uno schema importato' },
-        { id: 'rest_file', kind: 'connector', label: 'Processore File', icon: '📦', desc: 'REST file-in / file-out' },
+        // Nomi, icone e descrizioni dal glossario; `id` e' la finestra da aprire.
+        paletteEntry('connector_manual', { id: 'manual', kind: 'connector' }),
+        paletteEntry('connector_openapi', { id: 'openapi', kind: 'connector' }),
+        paletteEntry('connector_rest_file', { id: 'rest_file', kind: 'connector' }),
       ] },
       { label: 'Uscite', items: [
-        { id: 'result', kind: 'result', label: 'Output', icon: '📁', desc: 'file finale' },
-        { id: 'carica', kind: 'carica', label: 'Carica su database', icon: '💾', desc: "dopo l'Output" },
-        { id: 'carica_arcgis', kind: 'carica_arcgis', label: 'Carica su ArcGIS', icon: '🌐', desc: "dopo l'Output" },
+        paletteEntry('output', { id: 'result', kind: 'result' }),
+        paletteEntry('load_db', { id: 'carica', kind: 'carica' }),
+        paletteEntry('load_arcgis', { id: 'carica_arcgis', kind: 'carica_arcgis' }),
       ] },
     ],
     onPick: (item, afterId) => {
       if (item.kind === 'connector') { paletteAfterRef.current = afterId; modals.open(item.id); return; }
       if (item.kind === 'carica') { handleAddCaricanNode(); return; }
       if (item.kind === 'carica_arcgis') { handleAddCaricanArcGISNode(); return; }
-      if (nodesRef.current.some(n => n.type === 'result')) { toast.warning('Puoi avere solo un nodo risultato per progetto'); return; }
+      if (nodesRef.current.some(n => n.type === 'result')) { toast.warning(onlyOneMessage('output')); return; }
       placeAfter({ id: `result_${Date.now()}`, type: 'result',
         position: { x: 600, y: 200 },
         data: { isArricchisci: true, fileName: 'output', format: 'csv', availableColumns: [],
@@ -574,20 +576,21 @@ const ArricchisciEditorContent = () => {
     statusExtra: <ValidationStatusBadge />,
     // Sola lettura: nessuna azione che modifica (Versioni crea e ripristina).
     menuItems: isReadOnly ? [] : [
-      { key: 'template', icon: '🍪', label: 'Arricchimento da template', onClick: () => modals.open('template') },
-      { key: 'manual', icon: '✏️', label: 'API manuale', onClick: () => modals.open('manual') },
-      { key: 'openapi', icon: '📋', label: 'API OpenAPI', onClick: () => modals.open('openapi') },
-      { key: 'rest_file', icon: '📦', label: 'Processore file', onClick: () => modals.open('rest_file') },
-      { key: 'datasource', icon: '📁', label: 'Data Source', onClick: () => modals.open('datasource') },
+      // Nome, icona e descrizione di ogni voce dal glossario (regola 10).
+      menuEntry('connector_template', { onClick: () => modals.open('template') }),
+      menuEntry('connector_manual', { onClick: () => modals.open('manual') }),
+      menuEntry('connector_openapi', { onClick: () => modals.open('openapi') }),
+      menuEntry('connector_rest_file', { onClick: () => modals.open('rest_file') }),
+      menuEntry('datasource', { onClick: () => modals.open('datasource') }),
       { key: 'div1', divider: true },
-      { key: 'input', icon: '⌨', label: 'Aggiungi input runtime', onClick: handleAddProjectInputNode, title: 'Un valore chiesto quando il progetto viene eseguito' },
-      { key: 'static', icon: '📝', label: 'Valori statici', onClick: handleAddStaticValuesNode },
+      menuEntry('runtime_input', { onClick: handleAddProjectInputNode }),
+      menuEntry('static_values', { onClick: handleAddStaticValuesNode }),
       { key: 'div2', divider: true },
-      { key: 'output', icon: '📁', label: 'Output', onClick: handleAddResultNode, disabled: hasResultNode },
-      { key: 'carica', icon: '⬆', label: 'Carica su database', onClick: handleAddCaricanNode, disabled: !hasResultNode || hasCaricanNode },
-      { key: 'carica-arcgis', icon: '🌐', label: 'Carica su ArcGIS', onClick: handleAddCaricanArcGISNode, disabled: !hasResultNode || hasCaricanArcGISNode },
+      menuEntry('output', { onClick: handleAddResultNode, disabled: hasResultNode }),
+      menuEntry('load_db', { onClick: handleAddCaricanNode, disabled: !hasResultNode || hasCaricanNode }),
+      menuEntry('load_arcgis', { onClick: handleAddCaricanArcGISNode, disabled: !hasResultNode || hasCaricanArcGISNode }),
       { key: 'div3', divider: true },
-      { key: 'versions', icon: '🕘', label: 'Versioni', onClick: () => setShowVersions(true) },
+      menuEntry('versions', { onClick: () => setShowVersions(true) }),
     ],
   };
 
@@ -611,7 +614,7 @@ const ArricchisciEditorContent = () => {
       {showVersions && (
         <CanvasVersionsModal isOpen onClose={() => setShowVersions(false)} projectId={projectId} />
       )}
-      <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title="🔗 Esegui Arricchimento" projectType="arricchisci" progress={execution.progress} progressMessage={execution.progressMessage} taskStatus={execution.taskStatus} onCancel={execution.cancelTask} caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user} inputDefinitions={runtimeInputDefinitions} />
+      <ExecutionModal isOpen={execution.showModal} onClose={() => execution.closeModal()} isExecuting={execution.isExecuting} result={execution.result} onDownload={execution.downloadTaskResult} title={`${term('run').icon} Esecuzione dell'arricchimento`} projectType="arricchisci" progress={execution.progress} progressMessage={execution.progressMessage} taskStatus={execution.taskStatus} onCancel={execution.cancelTask} caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling} awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user} inputDefinitions={runtimeInputDefinitions} />
       <PreviewModal isOpen={preview.showModal} onClose={preview.closeModal} onRefresh={limit => preview.handlePreview(limit)}
         data={(() => {
           if (!preview.data?.columns) return preview.data;
@@ -644,12 +647,12 @@ const ArricchisciEditorContent = () => {
         })()}
         loading={preview.loading} error={preview.error}
         permissionRevoked={preview.permissionRevoked}
-        title="Anteprima Arricchimento" projectType="arricchisci" />
-      <ConnectionSelectorModal isOpen={modals.isOpen('template')} onClose={() => modals.close('template')} onSelect={conn => handleSelectConnection(conn, 'template')} category="template" title="Seleziona Template API" icon="🍪" emptyMessage="Nessun template API configurato" emptyHint="Crea una connessione da template in Gestione API" createLink="/external-connectors" />
-      <ConnectionSelectorModal isOpen={modals.isOpen('manual')} onClose={() => modals.close('manual')} onSelect={conn => handleSelectConnection(conn, 'manual')} category="manual" title="Seleziona API Manuale" icon="✏️" emptyMessage="Nessuna API manuale configurata" emptyHint="Crea una nuova connessione API in Gestione API" createLink="/external-connectors" />
-      <ConnectionSelectorModal isOpen={modals.isOpen('openapi')} onClose={() => modals.close('openapi')} onSelect={conn => handleSelectConnection(conn, 'openapi')} category="openapi" title="Seleziona API OpenAPI" icon="📋" emptyMessage="Nessuna API OpenAPI importata" emptyHint="Importa uno schema OpenAPI in Gestione API" createLink="/external-connectors" />
-      <ConnectionSelectorModal isOpen={modals.isOpen('rest_file')} onClose={() => modals.close('rest_file')} onSelect={conn => handleSelectConnection(conn, 'rest_file')} category="rest_file" title="Seleziona Processore File" icon="📦" emptyMessage="Nessun Processore File configurato" emptyHint="Configura un connettore REST file-in/file-out in Gestione API" createLink="/external-connectors" />
-      <ConnectionSelectorModal isOpen={modals.isOpen('datasource')} onClose={() => modals.close('datasource')} onSelect={conn => handleSelectConnection(conn, 'datasource')} category="datasource" title="Seleziona Data Source" icon="📁" emptyMessage="Nessun Data Source configurato" emptyHint="Configura un Data Source nella pagina Data Source" createLink="/datasources" />
+        title={`${term('preview').name} dell'arricchimento`} projectType="arricchisci" />
+      <ConnectionSelectorModal isOpen={modals.isOpen('template')} onClose={() => modals.close('template')} onSelect={conn => handleSelectConnection(conn, 'template')} category="template" title="Seleziona un modello di API" icon={term('connector_template').icon} emptyMessage="Nessun modello di API configurato" emptyHint="Crea una connessione da un modello nella pagina API Esterne" createLink="/external-connectors" />
+      <ConnectionSelectorModal isOpen={modals.isOpen('manual')} onClose={() => modals.close('manual')} onSelect={conn => handleSelectConnection(conn, 'manual')} category="manual" title="Seleziona un'API manuale" icon={term('connector_manual').icon} emptyMessage="Nessuna API manuale configurata" emptyHint="Crea una nuova connessione API nella pagina API Esterne" createLink="/external-connectors" />
+      <ConnectionSelectorModal isOpen={modals.isOpen('openapi')} onClose={() => modals.close('openapi')} onSelect={conn => handleSelectConnection(conn, 'openapi')} category="openapi" title="Seleziona un'API OpenAPI" icon={term('connector_openapi').icon} emptyMessage="Nessuna API OpenAPI importata" emptyHint="Importa uno schema OpenAPI nella pagina API Esterne" createLink="/external-connectors" />
+      <ConnectionSelectorModal isOpen={modals.isOpen('rest_file')} onClose={() => modals.close('rest_file')} onSelect={conn => handleSelectConnection(conn, 'rest_file')} category="rest_file" title="Seleziona un processore file" icon={term('connector_rest_file').icon} emptyMessage="Nessun processore file configurato" emptyHint="Configura un servizio REST che riceve e restituisce file nella pagina API Esterne" createLink="/external-connectors" />
+      <ConnectionSelectorModal isOpen={modals.isOpen('datasource')} onClose={() => modals.close('datasource')} onSelect={conn => handleSelectConnection(conn, 'datasource')} category="datasource" title="Seleziona un Data Source" icon={term('datasource').icon} emptyMessage="Nessun Data Source configurato" emptyHint="Configura un Data Source nella pagina Data Source" createLink="/datasources" />
       <EnrichmentConfirmModal isOpen={showConfirmModal} onClose={handleCloseConfirmModal} onConfirm={handleConfirmExecution} validation={enrichmentValidation.validation} estimation={enrichmentValidation.estimation} isValidating={enrichmentValidation.isValidating} isEstimating={enrichmentValidation.isEstimating} formatTime={enrichmentValidation.formatTime} />
       </Suspense>
     </ModalErrorBoundary>

@@ -3,6 +3,7 @@ import { Position } from '@xyflow/react';
 import useCanvasStore from '../../store/useCanvasStore';
 import { acceptsInputKind } from '../../utils/runtimeInputKinds';
 import { getTransformRegistry } from '../../api/transforms';
+import { normalizeRegistry } from '../../utils/transformRegistry';
 import { listConnectionSets } from '../../api';
 import {
   getNodeBindableTargets,
@@ -11,6 +12,7 @@ import {
 import './ProjectInputNode.css';
 import NodeHandle from '../canvas/NodeHandle';
 import { nodeTitle } from '../canvas/nodeDescriptors';
+import { termName } from '../../utils/glossary';
 
 const INPUT_TYPES = [
   ['file', 'File tabellare'],
@@ -21,7 +23,7 @@ const INPUT_TYPES = [
   ['date', 'Data'],
   ['datetime', 'Data e ora'],
   ['select', 'Scelta'],
-  ['connection', 'Connection Set'],
+  ['connection', 'Set di connessioni'],
 ];
 
 const normalizeKey = value => String(value || '')
@@ -40,8 +42,9 @@ const loadRegistry = () => {
   if (registryCache) return Promise.resolve(registryCache);
   if (!registryPromise) {
     registryPromise = getTransformRegistry().then(value => {
-      registryCache = value;
-      return value;
+      // Stessa normalizzazione della cache condivisa (nomi del glossario).
+      registryCache = normalizeRegistry(value);
+      return registryCache;
     }).finally(() => { registryPromise = null; });
   }
   return registryPromise;
@@ -306,7 +309,7 @@ function ProjectInputNode({ id, data }) {
             {bindingEdges.length === 0 && (
               <p className="pin__binding-hint pin__binding-hint--warning">
                 Trascina il collegamento sul nodo da configurare oppure usa
-                “Input runtime” accanto a un suo parametro.
+                «{termName('runtime_input')}» accanto a un suo parametro.
               </p>
             )}
             {bindingEdges.map(edge => {
@@ -334,7 +337,7 @@ function ProjectInputNode({ id, data }) {
                     >
                       <option value="">Seleziona il parametro…</option>
                       {currentField && !options.some(item => item.value === currentField) && (
-                        <option value={currentField}>{currentField} (legacy)</option>
+                        <option value={currentField}>{currentField} (vecchio formato)</option>
                       )}
                       {options.map(option => (
                         <option key={option.value} value={option.value}>{option.label}</option>
@@ -348,12 +351,12 @@ function ProjectInputNode({ id, data }) {
                   )}
                   {awaitingRegistry && registryStatus === 'error' && (
                     <p className="pin__binding-hint pin__binding-hint--error">
-                      Impossibile caricare il registry dei parametri.
+                      Impossibile caricare l'elenco dei parametri.
                     </p>
                   )}
                   {targetNode && !awaitingRegistry && options.length === 0 && (
                     <p className="pin__binding-hint pin__binding-hint--error">
-                      Il nodo collegato non espone parametri runtime sicuri.
+                      Il passo collegato non ha parametri collegabili a un input runtime.
                     </p>
                   )}
                   {!awaitingRegistry && !currentField && options.length > 0 && (

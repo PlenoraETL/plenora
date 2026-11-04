@@ -50,6 +50,7 @@ import '../components/panels/FeatureServicePanel.css';
 import { useAuth } from '../context/AuthContext';
 import { ModalErrorBoundary } from '../components/common/ErrorBoundary';
 import { useHexCanvas } from '../utils/hexCanvas';
+import { addFirstMessage, flowEdgeLabel, menuEntry, onlyOneMessage, paletteEntry, term } from '../utils/glossary';
 
 const nodeTypes = {
   tableNode: TableNode, resultNode: ResultNode, staticValues: StaticValuesNode,
@@ -219,7 +220,7 @@ function EstraiEditor() {
   // ManipolaEditor/ArricchisciEditor gia' usavano `nodesRef.current`
   // per il check di esistenza; allineiamo EstraiEditor.
   const handleAddResultNode = useCallback(() => {
-    if (nodesRef.current.some(n => n.type === 'resultNode')) { toast.warning('Puoi avere solo un nodo risultato per progetto'); return; }
+    if (nodesRef.current.some(n => n.type === 'resultNode')) { toast.warning(onlyOneMessage('output')); return; }
     addNodes({
       id: `result_${Date.now()}`, type: 'resultNode', position: getViewportCenter(reactFlowInstance),
       data: { fileName: 'output', format: 'csv', distinct: false, limit: null,
@@ -231,8 +232,8 @@ function EstraiEditor() {
 
   const handleAddCaricanNode = useCallback(() => {
     const currentNodes = nodesRef.current;
-    if (!currentNodes.some(n => n.type === 'resultNode')) { toast.warning('Aggiungi prima un nodo Output'); return; }
-    if (currentNodes.some(n => n.type === 'carica'))      { toast.warning('Puoi avere solo un nodo CARICA DB per progetto'); return; }
+    if (!currentNodes.some(n => n.type === 'resultNode')) { toast.warning(addFirstMessage('output')); return; }
+    if (currentNodes.some(n => n.type === 'carica'))      { toast.warning(onlyOneMessage('load_db')); return; }
     const resultNode = currentNodes.find(n => n.type === 'resultNode');
     const newNode = {
       id: `carica_${Date.now()}`, type: 'carica',
@@ -244,13 +245,13 @@ function EstraiEditor() {
     };
     addNodes(newNode);
     addEdges({ id: `edge_result_carica_${Date.now()}`, source: resultNode.id, target: newNode.id,
-      label: 'Carica DB', animated: true, style: { stroke: '#7c3aed', strokeWidth: 2 }, data: { join_type: 'carica' } });
+      label: flowEdgeLabel('carica'), animated: true, style: { stroke: '#7c3aed', strokeWidth: 2 }, data: { join_type: 'carica' } });
   }, [addNodes, addEdges, toast]);
 
   const handleAddCaricanArcGISNode = useCallback(() => {
     const currentNodes = nodesRef.current;
-    if (!currentNodes.some(n => n.type === 'resultNode')) { toast.warning('Aggiungi prima un nodo Output'); return; }
-    if (currentNodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis')) { toast.warning('Puoi avere solo un nodo CARICA ArcGIS per progetto'); return; }
+    if (!currentNodes.some(n => n.type === 'resultNode')) { toast.warning(addFirstMessage('output')); return; }
+    if (currentNodes.some(n => n.type === 'carica_arcgis' || n.type === 'caricaArcgis')) { toast.warning(onlyOneMessage('load_arcgis')); return; }
     const resultNode = currentNodes.find(n => n.type === 'resultNode');
     const newNode = {
       id: `carica_arcgis_${Date.now()}`, type: 'carica_arcgis',
@@ -261,7 +262,7 @@ function EstraiEditor() {
     };
     addNodes(newNode);
     addEdges({ id: `edge_result_carica_arcgis_${Date.now()}`, source: resultNode.id, target: newNode.id,
-      label: 'Carica ArcGIS', animated: true, style: { stroke: '#2DD4BF', strokeWidth: 2 }, data: { join_type: 'carica_arcgis' } });
+      label: flowEdgeLabel('carica_arcgis'), animated: true, style: { stroke: '#2DD4BF', strokeWidth: 2 }, data: { join_type: 'carica_arcgis' } });
   }, [addNodes, addEdges, toast]);
 
   // ESTRAI accetta solo sorgenti SQL/ArcGIS; Data Source resta in MANIPOLA.
@@ -312,16 +313,16 @@ function EstraiEditor() {
   const palette = useMemo(() => ({
     groups: [
       { label: 'Tabelle', items: Object.keys(catalog || {}).sort().map(t => ({
-        id: `table:${t}`, kind: 'table', name: t, label: t, icon: '🗂️',
+        id: `table:${t}`, kind: 'table', name: t, label: t, icon: term('table').icon,
         desc: `${(catalog[t] || []).length} col`,
       })), limit: 40 },
       { label: 'Viste', items: Object.keys(views || {}).sort().map(v => ({
-        id: `view:${v}`, kind: 'view', name: v, label: v, icon: '👁',
+        id: `view:${v}`, kind: 'view', name: v, label: v, icon: term('view').icon,
         desc: `${(views[v] || []).length} col`,
       })), limit: 40 },
       { label: 'Uscite', items: [
-        { id: 'carica', kind: 'carica', label: 'Carica su database', icon: '💾', desc: "dopo l'Output" },
-        { id: 'carica_arcgis', kind: 'carica_arcgis', label: 'Carica su ArcGIS', icon: '🌐', desc: "dopo l'Output" },
+        paletteEntry('load_db', { id: 'carica', kind: 'carica' }),
+        paletteEntry('load_arcgis', { id: 'carica_arcgis', kind: 'carica_arcgis' }),
       ] },
     ],
     onPick: (item, afterId) => {
@@ -427,17 +428,18 @@ function EstraiEditor() {
       </span>
     ) : null,
     menuItems: [
-      { key: 'connections', icon: '🔌', label: 'Connessioni', onClick: () => { if (confirmNavigation()) navigate('/connections'); } },
+      // Nome, icona e descrizione di ogni voce dal glossario (regola 10).
+      menuEntry('connections', { onClick: () => { if (confirmNavigation()) navigate('/connections'); } }),
       ...(isReadOnly ? [] : [
         { key: 'div0', divider: true },
-        { key: 'input', icon: '⌨', label: 'Aggiungi input runtime', onClick: handleAddProjectInputNode, title: 'Un parametro chiesto quando il progetto viene eseguito' },
-        { key: 'note', icon: '💬', label: 'Nota', onClick: handleAddCommentNode },
+        menuEntry('runtime_input', { onClick: handleAddProjectInputNode }),
+        menuEntry('note', { onClick: handleAddCommentNode }),
         { key: 'div1', divider: true },
-        { key: 'output', icon: '📁', label: 'Output', onClick: handleAddResultNode, disabled: hasResultNode },
-        { key: 'carica', icon: '⬆', label: 'Carica su database', onClick: handleAddCaricanNode, disabled: !hasResultNode || hasCaricanNode },
-        { key: 'carica-arcgis', icon: '🌐', label: 'Carica su ArcGIS', onClick: handleAddCaricanArcGISNode, disabled: !hasResultNode || hasCaricanArcGISNode },
+        menuEntry('output', { onClick: handleAddResultNode, disabled: hasResultNode }),
+        menuEntry('load_db', { onClick: handleAddCaricanNode, disabled: !hasResultNode || hasCaricanNode }),
+        menuEntry('load_arcgis', { onClick: handleAddCaricanArcGISNode, disabled: !hasResultNode || hasCaricanArcGISNode }),
         { key: 'div2', divider: true },
-        { key: 'versions', icon: '🕘', label: 'Versioni', onClick: () => setShowVersions(true) },
+        menuEntry('versions', { onClick: () => setShowVersions(true) }),
       ]),
     ],
   };
@@ -486,7 +488,7 @@ function EstraiEditor() {
                             <div
                               key={t}
                               className="estrai-sidebar__table-item"
-                              title="Click per aggiungere al centro · trascina per posizionare"
+                              title="Clic per aggiungere al centro · trascina per posizionare"
                               draggable
                               onClick={() => addTableAtCenter(t, false)}
                               onDragStart={e => {
@@ -548,7 +550,7 @@ function EstraiEditor() {
                                   <div
                                     key={`view_${v}`}
                                     className="estrai-sidebar__table-item estrai-sidebar__table-item--view"
-                                    title="Click per aggiungere al centro · trascina per posizionare"
+                                    title="Clic per aggiungere al centro · trascina per posizionare"
                                     draggable
                                     onClick={() => addTableAtCenter(v, true)}
                                     onDragStart={e => {
@@ -598,7 +600,7 @@ function EstraiEditor() {
               type="button"
               className="estrai-sidebar__logout"
               onClick={() => { if (confirmNavigation()) { logout(); navigate('/login'); } }}
-              title="Logout"
+              title="Esci"
             >
               ⏻
             </button>
@@ -624,7 +626,7 @@ function EstraiEditor() {
           isOpen={execution.showModal} onClose={execution.closeModal}
           isExecuting={execution.isExecuting} result={execution.result}
           onDownload={execution.downloadTaskResult}
-          title="▶ Esecuzione Query" projectType="estrai"
+          title={`${term('run').icon} Esecuzione della query`} projectType="estrai"
           caricaTasks={execution.caricaTasks} caricaPolling={execution.caricaPolling}
           awaitingLaunch={execution.awaitingLaunch} onLaunch={execution.launch} user={user}
           inputDefinitions={runtimeInputDefinitions}
@@ -660,7 +662,7 @@ function EstraiEditor() {
         })()}
         loading={preview.loading} error={preview.error}
         permissionRevoked={preview.permissionRevoked}
-        title="Anteprima Query SQL" projectType="estrai"
+        title={`${term('preview').name} della query SQL`} projectType="estrai"
       />
       </Suspense>
     </ModalErrorBoundary>

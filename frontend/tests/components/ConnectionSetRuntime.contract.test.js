@@ -10,7 +10,7 @@ const read = relative => readFileSync(
 describe('Connection Set runtime contract', () => {
   it('authors a project-level connection selector without a node handle', () => {
     const source = read('src/components/nodes/ProjectInputNode.jsx');
-    expect(source).toContain("['connection', 'Connection Set']");
+    expect(source).toContain("['connection', 'Set di connessioni']");
     expect(source).toContain('connection_set_id');
     expect(source).toContain("kind !== 'connection'");
     expect(source).toContain('seleziona la connessione dell’intero progetto Estrai');
@@ -27,10 +27,10 @@ describe('Connection Set runtime contract', () => {
 
   it('binds Estrai filter values through parameter-binding edges', () => {
     const source = read('src/components/modals/FilterModal.jsx');
-    expect(source).toContain('Input runtime:');
+    expect(source).toContain("{termName('runtime_input')}:");
     expect(source).toContain('createParameterBindingEdge');
     expect(source).toContain('filters.${index}.value');
-    expect(source).toContain('Valore fornito a runtime');
+    expect(source).toContain("Valore fornito all'esecuzione");
   });
 
   it('keeps connection credentials behind connection ids', () => {

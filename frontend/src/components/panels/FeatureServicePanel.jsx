@@ -452,14 +452,14 @@ function FeatureServicePanel({ onLayerReady, layersInCanvas = new Set(), lockedC
                 onChange={e => setNewConnForm(f => ({ ...f, auth_type: e.target.value }))}
               >
                 <option value="public">Pubblico (nessuna)</option>
-                <option value="token">Token (username/password)</option>
+                <option value="token">Token (nome utente e password)</option>
               </select>
             </div>
 
             {newConnForm.auth_type === 'token' && (
               <>
                 <div className="fs-panel__form-group">
-                  <label>Username</label>
+                  <label>Nome utente</label>
                   <input
                     type="text"
                     value={newConnForm.username}

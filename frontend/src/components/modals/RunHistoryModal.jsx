@@ -15,6 +15,7 @@ import { useParams } from 'react-router-dom';
 import ModalWrapper from '../common/ModalWrapper';
 import { listRuns, getNodeData, compareRunsL1, compareRunsL2, pinRun } from '../../api/runs';
 import './RunHistoryModal.css';
+import { term } from '../../utils/glossary';
 
 /**
  * Mappa un errore di /compare/l2 al messaggio user-facing in base al
@@ -31,11 +32,11 @@ export function mapCompareErrorReason(reason, beMessage) {
   const safeBe = typeof beMessage === 'string' && beMessage ? beMessage : null;
   if (reason === 'metadata_only_no_rows') {
     return safeBe
-      || 'Diff riga-per-riga non disponibile: almeno una delle due run usa persistence_mode=metadata_only. Per change-detection L1: usa il confronto hash.';
+      || "Confronto riga per riga non disponibile: almeno una delle due esecuzioni conserva solo i metadati. Per rilevare le modifiche usa il confronto per impronta.";
   }
   if (reason === 'persistence_mode_mismatch') {
     return safeBe
-      || 'Diff non disponibile: le due run hanno persistence_mode diversi (full_pg vs preview_only). Riallinea le run alla stessa mode oppure usa /compare/l1 per change-detection via hash.';
+      || "Confronto non disponibile: le due esecuzioni conservano i risultati in modi diversi. Usa due esecuzioni con la stessa modalità oppure il confronto per impronta.";
   }
   return safeBe || 'Errore durante il confronto';
 }
@@ -63,7 +64,7 @@ const formatRows = (n) => {
 const StatusBadge = ({ status }) => {
   const map = {
     completed: { label: 'OK', cls: 'rh-badge--ok' },
-    failed:    { label: 'FAIL', cls: 'rh-badge--fail' },
+    failed:    { label: 'ERRORE', cls: 'rh-badge--fail' },
     running:   { label: '...', cls: 'rh-badge--running' },
   };
   const { label, cls } = map[status] || { label: status, cls: '' };
@@ -107,7 +108,7 @@ const loadRuns = useCallback(async () => {
         setSelectedA(data[0]);
       }
     } catch (e) {
-      setRunsError('Errore caricamento run');
+      setRunsError('Errore nel caricamento delle esecuzioni');
     } finally {
       setRunsLoading(false);
     }
@@ -137,7 +138,7 @@ const [nodeDataError, setNodeDataError] = useState(null);
         // Prima: catch silenzioso → l'utente vedeva area dati vuota senza spiegazione.
         console.error('[RunHistoryModal] errore caricamento dati nodo:', err);
         setNodeData(null);
-        setNodeDataError(err?.message || 'Errore caricamento dati nodo');
+        setNodeDataError(err?.message || 'Errore nel caricamento dei dati del passo');
       })
       .finally(() => setNodeDataLoading(false));
   }, [selectedA, nodeId]);
@@ -214,7 +215,7 @@ const colKeys = nodeData?.rows?.length > 0
     <ModalWrapper
       isOpen={isOpen}
       onClose={onClose}
-      title={`Cronologia run — ${nodeLabel || nodeId}`}
+      title={`${term('run_history').name} — ${nodeLabel || nodeId}`}
       icon="🕐"
       size="xl"
       closeOnOverlay={true}
@@ -222,11 +223,11 @@ const colKeys = nodeData?.rows?.length > 0
       <div className="rh-layout">
 <div className="rh-sidebar">
           <div className="rh-sidebar__header">
-            <span className="rh-sidebar__count">{runs.length} run</span>
+            <span className="rh-sidebar__count">{runs.length} {runs.length === 1 ? 'esecuzione' : 'esecuzioni'}</span>
             <button
               className={`rh-compare-toggle ${compareMode ? 'rh-compare-toggle--active' : ''}`}
               onClick={handleToggleCompareMode}
-              title="Attiva modalità confronto — seleziona due run"
+              title="Attiva il confronto: seleziona due esecuzioni"
             >
               {compareMode ? '✕ Annulla' : '⇄ Confronta'}
             </button>
@@ -234,8 +235,8 @@ const colKeys = nodeData?.rows?.length > 0
 
           {compareMode && (
             <div className="rh-compare-hint">
-              {!selectedA && 'Seleziona la prima run'}
-              {selectedA && !selectedB && 'Seleziona la seconda run'}
+              {!selectedA && 'Seleziona la prima esecuzione'}
+              {selectedA && !selectedB && 'Seleziona la seconda esecuzione'}
               {selectedA && selectedB && 'Confronto in corso...'}
             </div>
           )}
@@ -260,7 +261,7 @@ const colKeys = nodeData?.rows?.length > 0
                     <button
                       className={`rh-pin-btn ${run.pinned ? 'rh-pin-btn--active' : ''}`}
                       onClick={(e) => handlePin(run, e)}
-                      title={run.pinned ? 'Spinna (includi in retention)' : 'Pinna (escludi da retention)'}
+                      title={run.pinned ? 'Sblocca (torna nella pulizia automatica)' : 'Fissa (esclusa dalla pulizia automatica)'}
                     >
                       📌
                     </button>
@@ -274,7 +275,7 @@ const colKeys = nodeData?.rows?.length > 0
               );
             })}
             {!runsLoading && runs.length === 0 && (
-              <div className="rh-empty">Nessuna run disponibile per questo canvas</div>
+              <div className="rh-empty">Nessuna esecuzione disponibile per questo canvas</div>
             )}
           </div>
         </div>
@@ -306,10 +307,10 @@ const colKeys = nodeData?.rows?.length > 0
           {activeTab === 'data' && (
             <div className="rh-data-area">
               {!selectedA && (
-                <div className="rh-placeholder">Seleziona una run dalla lista</div>
+                <div className="rh-placeholder">Seleziona un'esecuzione dalla lista</div>
               )}
               {selectedA && nodeDataLoading && (
-                <div className="rh-loading">Caricamento dati nodo...</div>
+                <div className="rh-loading">Caricamento dei dati del passo...</div>
               )}
               {selectedA && !nodeDataLoading && nodeDataError && (
                 <div className="rh-empty" style={{ color: 'var(--color-danger, #b91c1c)' }}>
@@ -317,7 +318,7 @@ const colKeys = nodeData?.rows?.length > 0
                 </div>
               )}
               {selectedA && !nodeDataLoading && !nodeData && !nodeDataError && (
-                <div className="rh-empty">Nessun dato disponibile per questo nodo</div>
+                <div className="rh-empty">Nessun dato disponibile per questo passo</div>
               )}
               {selectedA && nodeData && (
                 <>
@@ -368,13 +369,13 @@ const colKeys = nodeData?.rows?.length > 0
                   <div className="rh-l1">
                     <div className="rh-l1__cards">
                       <div className={`rh-l1-card ${compareL1.same_input ? 'rh-l1-card--same' : 'rh-l1-card--diff'}`}>
-                        <span className="rh-l1-card__label">Input</span>
+                        <span className="rh-l1-card__label">In ingresso</span>
                         <span className="rh-l1-card__value">
                           {compareL1.same_input ? '= Identico' : '≠ Cambiato'}
                         </span>
                       </div>
                       <div className={`rh-l1-card ${compareL1.same_output ? 'rh-l1-card--same' : 'rh-l1-card--diff'}`}>
-                        <span className="rh-l1-card__label">Output</span>
+                        <span className="rh-l1-card__label">In uscita</span>
                         <span className="rh-l1-card__value">
                           {compareL1.same_output ? '= Identico' : '≠ Cambiato'}
                         </span>
@@ -483,7 +484,7 @@ const colKeys = nodeData?.rows?.length > 0
               {!compareLoading && !compareL1 && !compareError && (
                 <div className="rh-placeholder">
                   {!selectedA || !selectedB
-                    ? 'Seleziona due run dalla sidebar per confrontarle'
+                    ? "Seleziona due esecuzioni dall'elenco per confrontarle"
                     : 'Avvio confronto...'}
                 </div>
               )}

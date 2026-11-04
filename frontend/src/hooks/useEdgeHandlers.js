@@ -26,6 +26,7 @@ import {
   isScalarProjectInputNode,
 } from '../utils/runtimeBindingEdges';
 import { isJoinEdge, newJoinEdge } from '../utils/estraiJoins';
+import { flowEdgeLabel } from '../utils/glossary';
 
 // Il nodo Carica ArcGIS esiste con due spellings (toolbar vs deserializer).
 const isCaricaArcgisType = (type) => type === 'caricaArcgis' || type === 'carica_arcgis';
@@ -34,9 +35,9 @@ const isCaricaTarget = (node) => node.type === 'carica' || isCaricaArcgisType(no
 
 // Archi verso Output e caricamenti: nessuna configurazione.
 const FLOW_LOOK = {
-  output: { label: 'output', style: { stroke: '#4CAF50', strokeWidth: 2 }, animated: true },
-  carica: { label: 'Carica DB', style: { stroke: '#7c3aed', strokeWidth: 2 }, animated: true },
-  carica_arcgis: { label: 'Carica ArcGIS', style: { stroke: '#2DD4BF', strokeWidth: 2 }, animated: true },
+  output: { label: flowEdgeLabel('output'), style: { stroke: '#4CAF50', strokeWidth: 2 }, animated: true },
+  carica: { label: flowEdgeLabel('carica'), style: { stroke: '#7c3aed', strokeWidth: 2 }, animated: true },
+  carica_arcgis: { label: flowEdgeLabel('carica_arcgis'), style: { stroke: '#2DD4BF', strokeWidth: 2 }, animated: true },
 };
 
 const samePair = (e, a, b) => (e.source === a && e.target === b) || (e.source === b && e.target === a);
