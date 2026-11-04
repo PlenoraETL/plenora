@@ -38,7 +38,10 @@ Le sigle B1.x, B2.x e B3.x rimandano alle classi della raccolta backend; F1.x e 
    - Il PUT del canvas rifiuta un salvataggio basato su una versione superata, e l'utente decide come procedere.
    - Tabella delle transizioni, con test in due schede.
 9. **Azioni dell'editor dichiarate.** Una tabella EDITOR_ACTIONS (nome, chi registra, chi consuma); un nome senza consumatore fa fallire il test. Il codice morto esce insieme ai suoi hook, modali, API e test.
-10. **Glossario unico** dei nomi visibili. Quali anglicismi restano lo decide l'utente.
+10. **Glossario unico** dei nomi visibili. Decisione dell'utente (04/11/2026):
+    - restano in inglese **Output**, **Join**, **Data Source** e **Multi-Join**, sempre scritti cosi';
+    - restano come sono i nomi tecnici SQL, API, REST, ArcGIS, CSV e GeoJSON;
+    - tutto il resto va in italiano (per esempio Preview -> Anteprima, run -> esecuzione).
 
 ## Fasi
 
@@ -50,6 +53,6 @@ Le sigle B1.x, B2.x e B3.x rimandano alle classi della raccolta backend; F1.x e 
 | F1 | Claude | Frontend indipendente: intestazione ed eliminazione del guscio (F2.e), titoli (F2.d), EDITOR_ACTIONS e codice morto (F2.f), Join di Estrai nel pannello (F2.b) | — |
 | F2 | Claude | Fonte unica delle colonne nei tre editor (F1.1-17), id fino all'Output, niente colonne derivate salvate | A1, A2 |
 | F3 | Claude | Finestra «Prima di avviare» unica (F2.a), «Riempi con i valori presenti» (F2.c), copia di sicurezza per scheda e conflitti di versione (F2.h), esiti di Valida | A3 |
-| G | Claude | Glossario (F2.g) | decisione dell'utente |
+| G | Claude | Glossario (F2.g), con i termini decisi dall'utente | F1 |
 
 Ogni fase passa per correzione, verifica, **un** giro di conferma incrociato (Codex rilegge Claude e viceversa) e commit. Collaudo dal vivo e pubblicazione finale alla fine.
