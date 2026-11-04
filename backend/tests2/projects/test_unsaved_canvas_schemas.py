@@ -52,6 +52,12 @@ def test_saved_canvas_parity_unsaved_changes_and_no_persistence(context):
     same = client.post("/projects/p1/schemas", json={"canvas": payload})
     assert same.status_code == 200
     assert same.json() == original.json()
+    for node_id in ("source", "result"):
+        state = same.json()["schema_states"][node_id]
+        assert {"names_status", "types_status", "order_status", "reason"} <= state.keys()
+        assert state["names_status"] == "certain"
+        assert all({"id", "name", "type", "source_name", "optional"} <= col.keys()
+                   for col in same.json()["schemas"][node_id])
     changed = deepcopy(payload)
     changed["nodes"][0]["columns"].append(
         {"name": "unsaved", "type": "int", "id": "col-unsaved"}
@@ -73,7 +79,7 @@ def test_empty_unsaved_canvas_does_not_fall_back_to_saved(context):
     authenticate(app)
     response = client.post("/projects/p1/schemas", json={"canvas": {"nodes": [], "edges": []}})
     assert response.status_code == 200
-    assert response.json() == {"schemas": {}}
+    assert response.json() == {"schemas": {}, "schema_states": {}}
     service.get_project_canvas.assert_not_called()
 
 
@@ -156,7 +162,7 @@ def test_rinomina_sorgente_stesse_colonne_del_put(context, monkeypatch):
     assert put.status_code == 200, put.text
     saved = service.update_canvas.call_args.args[1]
     assert [col.name for col in saved.nodes[0].columns] == ["rinominata"]
-    assert post.json()["schemas"] == SchemaInferenceService(service).infer_all_schemas("p1", saved)
+    assert post.json()["schemas"] == SchemaInferenceService(service).infer_schemas_response("p1", saved)["schemas"]
 
 
 

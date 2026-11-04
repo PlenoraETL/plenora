@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class OutputColumnType(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    logical: str = "string"
+    logical: Literal["string", "integer", "number", "boolean", "datetime", "geometry"] = "string"
     nullable: bool = True
 
 
@@ -24,6 +24,7 @@ class OutputColumn(BaseModel):
 
     id: str
     source_name: str
+    source_node: str | None = None
     physical_name: str
     display_name: str
     type: OutputColumnType = Field(default_factory=OutputColumnType)

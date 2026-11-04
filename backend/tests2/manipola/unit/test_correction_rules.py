@@ -97,7 +97,7 @@ def test_schema_errors_are_node_local_passthrough(bad, caplog, monkeypatch):
     app.dependency_overrides[routes.require_not_esecutore] = lambda: {}
     response = TestClient(app).get("/projects/p/schemas")
     assert response.status_code == 200, response.text
-    assert response.json()["schemas"]["n"] == result["n"]
+    assert response.json()["schemas"]["n"] == [{"optional": False, **col} for col in result["n"]]
 
 
 def test_registry_type_enumeration_converter_and_validator():

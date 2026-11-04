@@ -25,6 +25,7 @@ from app.core.projects import retention as project_retention
 from app.core.projects import service as project_service_module
 from app.core.results import pipeline_result as pipeline_result_module
 from app.utils.logger import get_logger
+from app.shared.contracts.payloads import JsonRows
 
 logger = get_logger("app.core.arricchisci.enrichment_run_mode")
 
@@ -78,13 +79,13 @@ class EnrichmentRunMode:
         self, *, project_id: str, task_id: str, final_df: Any,
         final_format: str, output_filename: str, final_filename: str,
         group_id: str,
-        source_names: Optional[Mapping[str, str]] = None,
+        source_names: Optional[Mapping[str, str]] = None, column_plan: Optional[JsonRows] = None,
     ) -> Tuple[Optional[str], Path]:
         """Persiste il DataFrame finale. Ritorna (result_id|None, saved_path).
 
-        ``source_names`` mappa physical_name → identita' stabile (es. il
-        ``path`` dell'output_mapping API): consente a build_output_contract
-        di riusare l'id colonna attraverso un rename del nome fisico.
+        ``column_plan`` trasporta gli id preparati sul canvas eseguito.
+        ``source_names`` resta accettato per compatibilità della firma;
+        non viene usato per ricostruire identità dopo l'esecuzione.
         """
         raise NotImplementedError
 
@@ -141,7 +142,7 @@ class StandardRunMode(EnrichmentRunMode):
 
     def persist_dataframe_result(
         self, *, project_id, task_id, final_df, final_format, output_filename, final_filename,
-        group_id, source_names=None,
+        group_id, source_names=None, column_plan: Optional[JsonRows] = None,
     ):
         # Arricchisci standard: typed pipeline-result boundary (DB) + output_contract.
         saved = pipeline_result_module.save_pipeline_result_outcome(
@@ -157,16 +158,13 @@ class StandardRunMode(EnrichmentRunMode):
 
         _project_service = project_service_module.ProjectService()
         dumped_contract = output_contract_module.persist_output_contract(
-            project_service=_project_service,
-            project_id=project_id,
-            result_columns=[
-                {
-                    "name": col,
-                    "source_name": (source_names or {}).get(col, col),
-                    "type": str(final_df[col].dtype),
-                }
-                for col in final_df.columns
-            ],
+            project_service=_project_service, project_id=project_id,
+            result_columns=output_contract_module.result_columns_from_plan(
+                project_id=project_id, columns=final_df.columns, dataframe=final_df,
+                plan=column_plan or [],
+                # Come EnrichExecutor: pubblicazione basata sul piano, senza
+                # riconoscimento del contenuto disponibile solo al worker.
+            ),
         )
         logger.info(
             f"[Task {task_id}] output_contract salvato: "
@@ -214,7 +212,7 @@ class EseguibileRunMode(EnrichmentRunMode):
 
     def persist_dataframe_result(
         self, *, project_id, task_id, final_df, final_format, output_filename, final_filename,
-        group_id, source_names=None,
+        group_id, source_names=None, column_plan: Optional[JsonRows] = None,
     ):
         # Eseguibile: output DataFrame → object storage (S3) via streaming chunks.
         # Niente DB result/output_contract. result_id resta None (il frontend

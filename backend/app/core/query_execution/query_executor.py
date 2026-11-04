@@ -13,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from app.core.dataframes.ports import FrameLike
+from app.core.dataframes.schema import TypeInferrer
 from app.core.dataframes.tabular import dataframe_from_rows
 from app.core.query_execution.query_engines import DefaultEngineFactory
 from app.core.query_execution.query_session import (
@@ -532,7 +533,11 @@ class QueryExecutor:
                 result_id=result_id,
                 storage_key=storage_key,
             )
-            return self._result_builder.to_dict(result)
+            payload = self._result_builder.to_dict(result)
+            if df is not None:
+                payload["column_types"] = [TypeInferrer.infer_column_type(df.iloc[:, index]) for index in range(len(columns))]
+                payload["column_dtypes"] = [str(df.iloc[:, index].dtype) for index in range(len(columns))]
+            return payload
 
         except Exception as e:
             self._logger.error(f"[GESTITO] Errore esecuzione query: {str(e)}")

@@ -101,6 +101,7 @@ def _pairs(schema: list[ColumnSchema]) -> list[tuple[str, str, bool]]:
 
 def test_node_dispatch_registry_contains_incrementally_migrated_types():
     assert _parse_node_dispatch_registry() == {
+        "comment", "carica", "carica_arcgis",
         "source",
         "file_source",
         "datasource_node",
@@ -456,7 +457,6 @@ def test_api_enrich_node_registry_handler_preserves_api_schema():
 
     assert _pairs(via_registry) == _pairs(direct)
     assert [col.source_node for col in via_registry] == [
-        api_node.id,
         api_node.id,
         api_node.id,
     ]

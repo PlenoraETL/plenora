@@ -801,7 +801,30 @@ class SchemaInferenceRequest(BaseModel):
         return canvas
 
 
-@router.post("/{project_id}/schemas")
+class SchemaColumnResponse(BaseModel):
+    """Colonna prevista, con identità e presenza indipendenti dal tipo."""
+    id: str
+    name: str
+    type: str
+    source_name: str
+    source_node: str | None = None
+    is_calculated: bool = False
+    optional: bool = False
+
+
+class SchemaStateResponse(BaseModel):
+    names_status: str
+    types_status: str
+    order_status: str
+    reason: str = ""
+
+
+class SchemasResponse(BaseModel):
+    schemas: dict[str, list[SchemaColumnResponse]]
+    schema_states: dict[str, SchemaStateResponse]
+
+
+@router.post("/{project_id}/schemas", response_model=SchemasResponse)
 def infer_project_schemas(
     project_id: str,
     body: SchemaInferenceRequest,
@@ -812,7 +835,7 @@ def infer_project_schemas(
     return _infer_project_schemas(project_id, current_user, canvas=canvas)
 
 
-@router.get("/{project_id}/schemas")
+@router.get("/{project_id}/schemas", response_model=SchemasResponse)
 def get_all_schemas(
     project_id: str,
     current_user: CurrentUser = Depends(require_not_esecutore),
@@ -837,12 +860,7 @@ def _infer_project_schemas(
     if canvas is not None:
         canvas = _prepare_canvas_for_owner(project_id, canvas, metadata, current_user, for_save=False)
     try:
-        schemas = (
-            _schema_service.infer_all_schemas(project_id)
-            if canvas is None
-            else _schema_service.infer_all_schemas(project_id, canvas=canvas)
-        )
-        return {"schemas": schemas}
+        return _schema_service.infer_schemas_response(project_id, canvas=canvas)
     except Exception:
         raise_typed_http(error_codes.INTERNAL_ERROR, status_code=500, message="Errore interno del server")
 

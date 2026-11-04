@@ -4,6 +4,10 @@ Task Celery per arricchimento dati asincrono.
 Runs background execution while preserving backend runtime contracts.
 """
 
+from app.core.projects.schema_inference import SchemaInferenceService
+from app.core.projects.canvas_models import CanvasState
+from app.shared.execution.api_mapping import mapping_destination
+
 import csv as csv_mod
 import json as json_mod
 import time
@@ -445,6 +449,18 @@ def execute_enrichment_task(
         
         update_task_progress(self, 10, "API caricate, inizio elaborazione...", task_id=task_id)
 
+        # Congela gli id prima delle chiamate API sul canvas effettivamente eseguito.
+        column_plan = []
+        try:
+            typed_canvas = CanvasState.model_validate(canvas)
+            inferred = SchemaInferenceService(
+                project_service_module.ProjectService(), api_configs=api_connections,
+            ).infer_all_schemas(project_id, typed_canvas)
+            output_node = next((n for n in typed_canvas.nodes if n.type == "result"), None)
+            column_plan = inferred.get(output_node.id, []) if output_node else []
+        except Exception as exc:
+            logger.warning("Piano identita non disponibile prima dell'arricchimento: %s", exc)
+
         execution_order = canvas_orchestrator_module.get_execution_order(nodes, edges)
         node_results = {}
         
@@ -528,8 +544,8 @@ def execute_enrichment_task(
             for _m in (api_config or {}).get("output_mapping") or []:
                 if not isinstance(_m, dict):
                     continue
-                _col = _m.get("column") or _m.get("target_column") or _m.get("name")
-                _path = _m.get("path")
+                _col = mapping_destination(_m, phase="explicit") or _m.get("target_column") or _m.get("name")
+                _path = mapping_destination(_m, phase="source")
                 if _col and _path:
                     source_names_by_column[str(_col)] = str(_path)
             if not api_config:
@@ -1018,6 +1034,7 @@ def execute_enrichment_task(
             final_filename=final_filename,
             group_id=_group_id,
             source_names=source_names_by_column,
+            column_plan=column_plan,
         )
 
         update_task_progress(

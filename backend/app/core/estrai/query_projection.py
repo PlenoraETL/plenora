@@ -14,6 +14,45 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+def _declared_column_type(column: object) -> str | None:
+    """Il default del modello non dimostra il tipo della sorgente reale."""
+    fields = getattr(column, "model_fields_set", None)
+    if fields is not None and "type" not in fields:
+        return None
+    return getattr(column, "type", None)
+
+
+def _calculated_output_name(expression: str, provider: str = "") -> str | None:
+    """Riconosce un solo elemento SQL con alias, senza indovinare espressioni libere."""
+    depth = 0
+    quote = None
+    index = 0
+    while index < len(expression):
+        char = expression[index]
+        if quote:
+            if char == quote:
+                if index + 1 < len(expression) and expression[index + 1] == quote:
+                    index += 1
+                else:
+                    quote = None
+        elif char in "'\"`[":
+            quote = "]" if char == "[" else char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        elif char == "," and depth == 0:
+            return None
+        index += 1
+    match = re.search(r'\s+AS\s+([A-Za-z_][A-Za-z0-9_]*|"(?:[^"]|"")+"|\[[^\]]+\]|`[^`]+`)\s*$', expression, re.I)
+    if not match:
+        return None
+    alias = match.group(1)
+    if alias[0] in '"[`':
+        return alias[1:-1].replace('""', '"')
+    return alias.lower() if provider in {"postgres", "postgresql"} else alias
+
+
 class QueryProjectionRenderer:
     """Builds projection-oriented clauses while reusing QueryGenerator helpers."""
 
@@ -23,11 +62,18 @@ class QueryProjectionRenderer:
         self._safe_identifier: Callable[[str, str], str] = generator._safe_identifier
         self._prossimo_nome_param: Callable[[], str] = generator._prossimo_nome_param
 
+    def _output_name(self, name: str) -> str:
+        """PostgreSQL restituisce in minuscolo gli identificatori non quotati."""
+        quoted = self._safe_identifier(name).startswith('"')
+        return name.lower() if self.db_type in {"postgres", "postgresql"} and not quoted else name
+
     def generate_select(
         self,
         table_nodes: List[Node],
         result_node: Node,
         group_by_config: JsonObject = None,
+        *,
+        column_metadata: list | None = None,
     ) -> str:
         """
         Genera la clausola SELECT con colonne visibili, alias e colonne calcolate.
@@ -35,7 +81,7 @@ class QueryProjectionRenderer:
         Se GROUP BY e' attivo, delega a generate_select_with_groupby.
         """
         if group_by_config and group_by_config.get("enabled"):
-            return self.generate_select_with_groupby(table_nodes, group_by_config)
+            return self.generate_select_with_groupby(table_nodes, group_by_config, column_metadata=column_metadata)
 
         columns = []
 
@@ -62,6 +108,10 @@ class QueryProjectionRenderer:
                     columns.append(f"{table_alias}.{col_name_sql} AS {col_alias_sql}")
                 else:
                     columns.append(f"{table_alias}.{col_name_sql}")
+                if column_metadata is not None:
+                    column_metadata.append({"name": self._output_name(col_alias or col_name), "type": _declared_column_type(col),
+                                            "id": getattr(col, "id", None), "source_name": col_name,
+                                            "source_node": node.id})
 
             calculated_columns = getattr(node, "calculated_columns", None) or []
             for calc_col in calculated_columns:
@@ -106,6 +156,12 @@ class QueryProjectionRenderer:
                         continue
 
                     columns.append(sql_expr)
+                    if column_metadata is not None:
+                        # Il SQL manuale può dichiarare un alias diverso dal nome nel canvas.
+                        name = _calculated_output_name(sql_expr, self.db_type)
+                        column_metadata.append({"name": name, "type": calc_col.get("output_type"),
+                                                "source_name": calc_col.get("name"),
+                                                "source_node": node.id, "is_calculated": True})
                 except Exception as e:
                     raise ValueError(
                         f"Errore colonna calcolata '{calc_col.get('name', '?')}': {e}"
@@ -120,6 +176,8 @@ class QueryProjectionRenderer:
         self,
         table_nodes: List[Node],
         group_by_config: JsonObject,
+        *,
+        column_metadata: list | None = None,
     ) -> str:
         """Genera SELECT per query con GROUP BY."""
         columns = []
@@ -139,6 +197,14 @@ class QueryProjectionRenderer:
         for col_name in group_columns:
             col_ref, _ = _resolve_col(col_name, "Nome colonna GROUP BY")
             columns.append(col_ref)
+            if column_metadata is not None:
+                real_name = col_name.split("__", 1)[1] if table_map.get(col_name) and "__" in col_name else col_name
+                source = next((col for node in reversed(table_nodes)
+                               if (node.alias or self._get_node_table_name(node)) == table_map.get(col_name)
+                               for col in node.columns if col.name == real_name), None)
+                column_metadata.append({"name": self._output_name(real_name), "type": _declared_column_type(source),
+                                        "source_name": real_name, "id": getattr(source, "id", None),
+                                        "source_node": next((node.id for node in table_nodes if (node.alias or self._get_node_table_name(node)) == table_map.get(col_name)), None)})
 
         valid_agg_functions = {"COUNT", "SUM", "AVG", "MIN", "MAX", "FIRST", "LAST"}
 
@@ -163,6 +229,9 @@ class QueryProjectionRenderer:
             else:
                 col_ref, _ = _resolve_col(col, "Nome colonna aggregazione")
                 columns.append(f"{func}({col_ref}) AS {alias_sql}")
+            if column_metadata is not None:
+                column_metadata.append({"name": self._output_name(alias), "type": "int" if func == "COUNT" else None,
+                                        "source_name": f"{func}({col})", "is_calculated": True})
 
         if not columns:
             raise ValueError("Nessuna colonna per GROUP BY")

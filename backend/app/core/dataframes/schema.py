@@ -19,6 +19,15 @@ from app.shared.execution.column_info import ColumnInfo
 
 _logger = logging.getLogger(__name__)
 
+
+def record_column_names(labels: Iterable[str | None]) -> list[str]:
+    """Etichette dei record, inclusa la coercizione pandas None/nan."""
+    labels = list(labels)
+    row = dict.fromkeys(labels)
+    normalized = dict(zip(row, map(str, pd.DataFrame([row]).columns)))
+    return [normalized[label] for label in labels]
+
+
 _LOGICAL_TYPE_COMPATIBLE_DTYPES: dict[str, tuple[str, ...]] = {
     "string": ("object", "string", "category"),
     "integer": (
@@ -281,3 +290,34 @@ __all__ = [
     "empty_dataframe_from_column_metadata",
     "series_to_canvas_type",
 ]
+
+
+def resolve_column_type(
+    *, runtime_dtype: Any = None, declared: Optional[str] = None,
+    inferred: Optional[str] = None, series: Any = None,
+) -> str:
+    """Specific runtime dtype > declaration > content recognition > string."""
+    if series is not None:
+        runtime_dtype = series.dtype
+        inferred = TypeInferrer.infer_column_type(series)
+    dtype = str(runtime_dtype if runtime_dtype is not None else "").lower()
+    if "int" in dtype:
+        return "int"
+    if "float" in dtype:
+        return "real"
+    if "bool" in dtype:
+        return "bool"
+    if "datetime" in dtype:
+        return "date"
+    if dtype == "geometry":
+        return "geometry"
+    # object/str non provano un tipo logico. Una dichiarazione resta utile
+    # sui null, ma non puo trasformare contenuto testuale reale incompatibile.
+    if series is not None and inferred in {"str", "string"}:
+        values = series.dropna()
+        if not values.empty and all(isinstance(value, str) for value in values):
+            return "str"
+    for candidate in (declared, inferred):
+        if candidate and str(candidate).lower() not in {"object", "unknown", "none"}:
+            return candidate
+    return "str"

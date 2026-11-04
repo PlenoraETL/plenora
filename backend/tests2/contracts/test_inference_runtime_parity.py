@@ -303,7 +303,8 @@ def test_project_input_file_keeps_extra_columns(monkeypatch):
 def test_unknown_node_and_downstream_are_indeterminate():
     canvas = canvas_of([{"id": "s", "type": "comment"}, {"id": "r", "type": "result"}],
                        [{"id": "e", "source": "s", "target": "r"}])
-    assert infer_canvas(canvas, "s").status == "indeterminate"
+    canvas.nodes[0].type = "tipo_futuro"
+    assert infer_canvas(canvas, "s").names_status == "indeterminate"
     assert infer_canvas(canvas, "r").status == "indeterminate"
 
 

@@ -1,5 +1,7 @@
 """Parser configurabile per risposte API con strutture JSON annidate."""
 
+from app.shared.execution.api_mapping import mapping_destination
+
 import csv
 import io
 import json
@@ -280,8 +282,8 @@ class ResponseParser:
         riga = {}
 
         for mapping in self.mappings:
-            colonna = mapping.get("column", "")
-            path = mapping.get("path", "")
+            colonna = mapping_destination(mapping, phase="explicit", default="")
+            path = mapping_destination(mapping, phase="source", default="")
             default = mapping.get("default")
 
             if not colonna or not path:
@@ -470,8 +472,8 @@ class ResponseParser:
         for elemento in elementi:
             riga = {}
             for mapping in self.mappings:
-                colonna = mapping.get("column", "")
-                path = mapping.get("path", "")
+                colonna = mapping_destination(mapping, phase="explicit", default="")
+                path = mapping_destination(mapping, phase="source", default="")
                 default = mapping.get("default")
 
                 valore = self._naviga_path(elemento, path)

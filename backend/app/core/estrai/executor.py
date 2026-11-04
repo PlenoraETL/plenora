@@ -4,6 +4,7 @@ Executor del modulo ESTRAI — esecuzione e preview di query SQL e ArcGIS Featur
 Keeps this module's responsibility explicit and isolated from adjacent code.
 """
 
+from app.core.projects.schema_inference import SchemaInferenceService
 import time as _time
 import re
 from dataclasses import dataclass
@@ -855,48 +856,28 @@ class EstraiExecutor:
 
     # SALVATAGGIO TIPI COLONNE
 
-    def _salva_tipi_colonne_da_canvas(self, project_id: str, canvas: CanvasState, res: Dict):
+    def _salva_tipi_colonne_da_canvas(self, project_id: str, canvas: CanvasState, execution_result: Dict):
         """Salva l'output_contract del progetto.
 
-        Usa ricerca case-insensitive per gestire differenze di naming tra
-        canvas e output (es. Oracle restituisce nomi UPPERCASE).
+        Trasporta gli id del piano ordinato, verificando la corrispondenza
+        con le colonne effettive gi? normalizzate dal provider.
 
         L'output_contract e' il boundary pubblico tra progetti. Il canvas
         resta stato editor.
         """
-        canvas_type_map = self._build_canvas_type_map(canvas)
-        result_columns_by_physical = {}
-        result_node = next((n for n in canvas.nodes if n.type == "result"), None)
-        for canvas_col in (getattr(result_node, "columns", None) or []):
-            physical_name = getattr(canvas_col, "alias", None) or getattr(canvas_col, "name", None)
-            if physical_name:
-                result_columns_by_physical[str(physical_name)] = canvas_col
-        # Fallback: i source/transform node portano il mapping alias->nome DB.
-        # Senza questo, quando il result node non ha colonne esplicite, una
-        # colonna aliasata cadeva sul ramo `{"name": col}` con source_name =
-        # alias (es. "age_public"), incoerente con il path update_canvas che
-        # risolve al nome DB ("age"). L'incoerenza faceva mintare un id nuovo
-        # a ogni rename dell'alias (rompendo la stabilita' id cross-progetto).
-        # Il result node, se presente, ha precedenza (mappa gia' popolata sopra).
-        for node in canvas.nodes:
-            if node.type == "result":
-                continue
-            for canvas_col in (getattr(node, "columns", None) or []):
-                physical_name = getattr(canvas_col, "alias", None) or getattr(canvas_col, "name", None)
-                if physical_name and str(physical_name) not in result_columns_by_physical:
-                    result_columns_by_physical[str(physical_name)] = canvas_col
 
-        col_names = res.get("columns", [])
-        result_columns = []
-        for col in col_names:
-            canvas_col = result_columns_by_physical.get(str(col))
-            if canvas_col is not None:
-                result_columns.append(canvas_col)
-                continue
-            col_type = lookup_canvas_column_type(col, canvas_type_map) or 'str'
-            result_columns.append({"name": col, "type": col_type})
+        schemas = SchemaInferenceService(self.project_service).infer_all_schemas(project_id, canvas)
+        result_node = next((node for node in canvas.nodes if node.type == "result"), None)
+        declared_types = self._build_canvas_type_map(canvas)
+        result_columns = output_contract_module.result_columns_from_plan(
+            project_id=project_id, columns=execution_result.get("columns", []),
+            plan=schemas.get(result_node.id, []) if result_node else [],
+            types=[lookup_canvas_column_type(str(name), declared_types) for name in execution_result.get("columns", [])],
+            inferred_types=execution_result.get("column_types"),
+            dtypes=execution_result.get("column_dtypes"),
+        )
 
-        res["output_contract"] = output_contract_module.persist_output_contract(
+        execution_result["output_contract"] = output_contract_module.persist_output_contract(
             project_service=self.project_service,
             project_id=project_id,
             result_columns=result_columns,

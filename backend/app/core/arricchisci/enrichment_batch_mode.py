@@ -6,6 +6,8 @@ Mixin BATCH_MODE — esecuzione API per
 
 from __future__ import annotations
 
+from app.shared.execution.api_mapping import mapping_destination
+
 import time
 from typing import Any, List, Optional, Tuple
 
@@ -75,7 +77,7 @@ class EnrichmentBatchModeMixin:
 
         # Prepara colonne output
         for mapping in self.output_mapping:
-            col_name = mapping.get("column", mapping.get("path"))
+            col_name = mapping_destination(mapping, phase="columns")
             if col_name not in result_df.columns:
                 result_df[col_name] = None
 
@@ -525,8 +527,8 @@ class EnrichmentBatchModeMixin:
             else:
                 result = {}
                 for mapping in self.output_mapping:
-                    path = mapping.get("path", "")
-                    col_name = mapping.get("column", path)
+                    path = mapping_destination(mapping, phase="source", default="")
+                    col_name = mapping_destination(mapping, phase="columns", default="")
                     # Per batch, il path è relativo all'elemento (senza [0
                     clean_path = path.lstrip("[0].")
                     result[col_name] = self._extract_json_value(item, clean_path)

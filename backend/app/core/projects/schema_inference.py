@@ -1,4 +1,9 @@
 """Inferenza degli schemi sul grafo del canvas progetto."""
+from app.core.estrai.query_projection import QueryProjectionRenderer
+from app.core.estrai.query_generator import QueryGenerator
+from app.core.arricchisci.enrichment_service import resolve_enrichment_output_mapping, generator_mapping_column_names
+from app.shared.execution.api_mapping import mapping_destination
+from app.core.arricchisci.canvas_orchestrator import _merge_node_data
 from app.shared.execution.node_fields import node_field
 from app.shared.execution.result_grouping import result_group_plan
 from app.shared.execution.schema_column_plans import aggregation_output_type, type_family
@@ -17,7 +22,7 @@ from app.core.projects.project_context_loader import (
     load_project_source_schema_context,
 )
 from app.core.projects.schema_transform_handlers import TransformSchemaHandlers
-from app.core.projects.canvas_models import CanvasState
+from app.core.projects.canvas_models import CanvasState, Node
 from app.core.projects.types import (
     EdgesByTarget,
     JsonObject,
@@ -29,6 +34,7 @@ from app.core.manipola.transform_ordering import incoming_edge_sort_key_for_node
 from app.shared.execution.config_column_refs import resolve_config_column_refs
 from app.shared.execution.output_column_refs import resolve_output_column_refs, unique_column_names
 from app.shared.execution.schema_types import ColumnSchema, InferredSchema
+from app.core.projects import schema_execution_sources
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -53,8 +59,9 @@ class _NodeSchemaContext:
 class SchemaInferenceService:
     """Inferisce gli schemi delle colonne attraverso il grafo dei nodi."""
     
-    def __init__(self, project_service):
+    def __init__(self, project_service: Any, *, api_configs: Optional[dict[str, dict]] = None) -> None:
         self.project_service = project_service
+        self.api_configs = api_configs
         self._transform_handlers = TransformSchemaHandlers(ColumnSchema)
 
         self._schema_cache: Dict[str, List[ColumnSchema]] = {}
@@ -62,6 +69,10 @@ class SchemaInferenceService:
         self._status_cache: Dict[str, Tuple[str, str]] = {}
         self._types_status_cache: Dict[str, Tuple[str, str]] = {}
         self._order_status_cache: Dict[str, str] = {}
+        self._project_types = {}
+        self._canvas_edges = []
+        self._independent_outputs = set()
+        self._sql_providers = {}
     
     def _new_call(self) -> "SchemaInferenceService":
         """Isola le cache per chiamata, conservando servizi e configurazione."""
@@ -70,7 +81,39 @@ class SchemaInferenceService:
         call._status_cache = {}
         call._types_status_cache = {}
         call._order_status_cache = {}
+        call._project_types = {}
+        call._canvas_edges = []
+        call._independent_outputs = set()
+        call._sql_providers = {}
         return call
+
+    def infer_schemas_response(self, project_id: str, canvas: Optional[CanvasState] = None) -> JsonObject:
+        """Colonne e stati provengono dalla medesima chiamata isolata."""
+        call = self._new_call()
+        schemas = call._infer_all_schemas(project_id, canvas)
+        states = {}
+        for node_id, columns in schemas.items():
+            names, reason = call._status_cache.get(node_id, ("certain", ""))
+            types, types_reason = call._types_status_cache.get(node_id, (names, reason))
+            order = call._order_status_cache.get(node_id, names)
+            states[node_id] = {"names_status": names, "types_status": types,
+                               "order_status": order, "reason": reason or types_reason}
+            for col in columns:
+                col.setdefault("optional", False)
+                col["name"] = str(col["name"])
+                col["source_name"] = str(col.get("source_name", col["name"]))
+        return {"schemas": schemas, "schema_states": states}
+
+    def _project_type(self, context: _NodeSchemaContext) -> str:
+        if context.project_id not in self._project_types:
+            loader = getattr(self.project_service, "get_project_metadata", None)
+            metadata = loader(context.project_id) if loader else None
+            kind = getattr(metadata, "project_type", None)
+            if kind not in ("estrai", "arricchisci", "manipola"):
+                kinds = {node.type for node in context.nodes_by_id.values()}
+                kind = "arricchisci" if "api_enrich" in kinds else "estrai" if "source" in kinds else "manipola"
+            self._project_types[context.project_id] = kind
+        return self._project_types[context.project_id]
 
     def infer_all_schemas(
         self, project_id: str, canvas: Optional[CanvasState] = None,
@@ -104,13 +147,11 @@ class SchemaInferenceService:
         result = {}
         for node in canvas.nodes:
             schema = self._infer_node_schema(
-                node=node,
-                nodes_by_id=nodes_by_id,
-                edges_by_target=edges_by_target,
-                project_id=project_id
+                node=node, nodes_by_id=nodes_by_id,
+                edges_by_target=edges_by_target, project_id=project_id,
             )
             result[node.id] = [col.to_dict() for col in schema]
-        
+
         logger.info(f"Schema inferito per {len(result)} nodi")
         return result
     
@@ -160,6 +201,27 @@ class SchemaInferenceService:
                               names_status=status, types_status=types_status, order_status=order_status)
 
     def _infer_node_schema(
+        self, node: Any, nodes_by_id: dict, edges_by_target: dict, project_id: str,
+    ) -> List[ColumnSchema]:
+        """Un solo boundary locale protegge handler, identita e serializzazione."""
+        try:
+            schema = self._infer_node_schema_unchecked(node, nodes_by_id, edges_by_target, project_id)
+            # La stessa serializzazione usata da tutti gli endpoint deve riuscire qui.
+            for column in schema:
+                column.to_dict()
+            return schema
+        except Exception as exc:
+            # Boundary per nodo: anche un handler/plugin guasto non interrompe la mappa.
+            logger.warning("Schema issue for node %s: %s", node.id, exc)
+            inputs = self._get_input_schemas(node.id, nodes_by_id, edges_by_target, project_id)
+            schema = inputs[0] if inputs else []
+            self._status_cache[node.id] = ("indeterminate", str(exc))
+            self._types_status_cache[node.id] = ("indeterminate", str(exc))
+            self._order_status_cache[node.id] = "indeterminate"
+            self._schema_cache[node.id] = schema
+            return schema
+
+    def _infer_node_schema_unchecked(
         self,
         node,
         nodes_by_id: dict,
@@ -183,27 +245,20 @@ class SchemaInferenceService:
         )
         node_type_handler = self._build_node_type_handlers().get(node.type)
         if node_type_handler is not None:
-            try:
-                schema = node_type_handler(context)
-            except Exception as exc:
-                # Node boundary: arbitrary handler failures must not abort the project.
-                # Log the issue and retain the first input as an indeterminate schema.
-                logger.warning("Schema issue for node %s: %s", node.id, exc)
-                inputs = self._get_input_schemas(node.id, nodes_by_id, edges_by_target, project_id)
-                schema = inputs[0] if inputs else []
-                self._status_cache[node.id] = ("indeterminate", str(exc))
+            schema = node_type_handler(context)
         else:
             self._status_cache[node.id] = ("indeterminate", f"Tipo nodo non gestito: {node.type}")
 
-        self._record_node_status(node, context)
+        status_edges = self._status_edges(context)
+        self._record_node_status(node, replace(context, edges_by_target=status_edges))
         if any(self._order_status_cache.get(edge.source) == "indeterminate"
-               for edge in context.edges_by_target.get(node.id, [])):
+               for edge in status_edges.get(node.id, [])):
             self._order_status_cache[node.id] = "indeterminate"
         inherited_types = [self._types_status_cache.get(edge.source, self._status_cache.get(edge.source, ("certain", "")))
-                           for edge in context.edges_by_target.get(node.id, [])]
+                           for edge in status_edges.get(node.id, [])]
         if any(state[0] == "indeterminate" for state in inherited_types):
             self._types_status_cache[node.id] = ("indeterminate", "Tipi a monte incerti")
-        schema = [replace(col, id=col.id or _stable_column_id(node.id, col.name),
+        schema = [replace(col, id=getattr(col, "id", None) or _stable_column_id(node.id, col.name),
                           source_name=col.source_name if col.source_name is not None else col.name)
                   for col in schema]
         counts = {}
@@ -233,6 +288,15 @@ class SchemaInferenceService:
         return [replace(col, id=_stable_column_id(col.id, col.name))
                 if col.id and col.id in origins and col.name not in origins[col.id] else col
                 for col in schema]
+
+    def _status_edges(self, context: _NodeSchemaContext) -> EdgesByTarget:
+        """L'incertezza segue gli stessi ingressi consumati dal nodo."""
+        edges = context.edges_by_target
+        if context.node.id in self._independent_outputs or context.node.type in self.NON_COLUMN_TYPES:
+            return {**edges, context.node.id: []}
+        if context.node.type == "api_enrich" or (context.node.type == "result" and self._project_type(context) == "arricchisci"):
+            return {**edges, context.node.id: edges.get(context.node.id, [])[:1]}
+        return edges
 
     def _record_node_status(self, node, context: _NodeSchemaContext) -> None:
         """Propaga soltanto l'incertezza dei nomi, indipendente dai tipi."""
@@ -279,9 +343,18 @@ class SchemaInferenceService:
             "transform": self._infer_transform_node_schema,
             "api_enrich": self._infer_api_enrich_node_schema,
             "result": self._infer_result_node_schema,
+            "comment": lambda context: [],
+            "carica": lambda context: [],
+            "carica_arcgis": lambda context: [],
         }
         # NODE-DISPATCH-REGISTRY:end
         return handlers
+
+    # Le chiavi visuali dei tre editor sono tradotte prima del canvas backend.
+    NON_COLUMN_TYPES = frozenset({"comment", "carica", "carica_arcgis"})
+    EDITOR_NODE_ALIASES = {"tableNode": "source", "resultNode": "result",
+                           "featureLayerNode": "feature_source", "datasourceNode": "datasource_node",
+                           "caricaArcgis": "carica_arcgis"}
 
     def _infer_static_node_schema(self, context: _NodeSchemaContext) -> List[ColumnSchema]:
         """I valori statici sono configurazione: usa il caricatore effettivo."""
@@ -348,7 +421,16 @@ class SchemaInferenceService:
         self,
         context: _NodeSchemaContext,
     ) -> List[ColumnSchema]:
-        return self._infer_source_schema(context.node)
+        if not isinstance(getattr(context.node, "table_name", None), str) or not context.node.table_name:
+            return self._infer_source_schema(context.node)
+        rows = []
+        QueryProjectionRenderer(QueryGenerator(self._sql_provider(context))).generate_select([context.node], context.node, column_metadata=rows)
+        if any(not row["name"] for row in rows):
+            self._status_cache[context.node.id] = ("indeterminate", "SQL manuale senza alias: nome dipendente dal database")
+        if any(not row.get("type") for row in rows):
+            self._types_status_cache[context.node.id] = ("indeterminate", "Tipo SQL non dichiarato")
+        return [ColumnSchema(**{**row, "type": row.get("type") or "str",
+                                "id": row.get("id") or _stable_column_id(row.get("source_node") or context.node.id, row.get("source_name") or row["name"])}) for row in rows if row["name"]]
 
     def _infer_file_source_node_schema(
         self,
@@ -362,7 +444,13 @@ class SchemaInferenceService:
     ) -> List[ColumnSchema]:
         # feature_source (ArcGIS feature layer) porta colonne dichiarate sul
         # nodo nella stessa forma di file_source → riusa l'estrazione (no-drift).
-        return self._infer_file_source_schema(context.node)
+        node = context.node
+        columns = node.columns or (node.data or {}).get("columns", [])
+        return [ColumnSchema(name=col.name, type=col.type,
+                             id=getattr(col, "id", None) or _stable_column_id(node.id, col.name),
+                             source_name=col.name, source_node=node.id)
+                for col in [c if hasattr(c, "name") else SimpleNamespace(**c) for c in columns]
+                if getattr(col, "visible", True)]
 
     def _infer_project_source_node_schema(
         self,
@@ -414,19 +502,58 @@ class SchemaInferenceService:
         self,
         context: _NodeSchemaContext,
     ) -> List[ColumnSchema]:
-        input_schemas = self._get_input_schemas(
-            context.node.id,
-            context.nodes_by_id,
-            context.edges_by_target,
-            context.project_id,
-        )
+        input_schemas = self._first_input_schema(context)
         return self._infer_api_enrich_schema(context.node, input_schemas)
+
+    def _first_input_schema(self, context: _NodeSchemaContext) -> List[List[ColumnSchema]]:
+        """Arricchisci usa il primo arco nel canvas, senza ordinamento per handle."""
+        edges = context.edges_by_target.get(context.node.id, [])
+        if not edges:
+            return []
+        source = context.nodes_by_id.get(edges[0].source)
+        return [self._infer_node_schema(source, context.nodes_by_id, context.edges_by_target,
+                                        context.project_id)] if source else []
+
+    def _sql_provider(self, context: _NodeSchemaContext) -> str:
+        if context.project_id in self._sql_providers:
+            return self._sql_providers[context.project_id]
+        loader = getattr(self.project_service, "get_project_metadata", None)
+        metadata = loader(context.project_id) if loader else None
+        candidate = getattr(metadata, "default_connection_id", None)
+        connection_id = candidate if isinstance(candidate, str) else None
+        try:
+            provider = schema_execution_sources.load_sql_provider(connection_id) if connection_id else "postgres"
+        except Exception:
+            provider = "unknown"
+            self._status_cache[context.node.id] = ("indeterminate", "Provider non leggibile: normalizzazione dei nomi incerta")
+        self._sql_providers[context.project_id] = provider
+        return provider
+
+    def _infer_sql_result(self, context: _NodeSchemaContext) -> List[ColumnSchema]:
+        nodes = list(context.nodes_by_id.values())
+        edges = self._canvas_edges or [edge for group in context.edges_by_target.values() for edge in group]
+        provider = self._sql_provider(context)
+        rows = schema_execution_sources.sql_projection(nodes, edges, context.node, provider)
+        self._independent_outputs.add(context.node.id)
+        self._status_cache[context.node.id] = (("indeterminate", "SQL manuale senza alias: nome dipendente dal database")
+                                                   if any(not row["name"] for row in rows) else
+                                                   (("indeterminate", "Provider non leggibile") if provider == "unknown" else ("certain", "")))
+        self._order_status_cache[context.node.id] = "certain"
+        if any(not row.get("type") for row in rows):
+            self._types_status_cache[context.node.id] = ("indeterminate", "Tipo di espressioni SQL o aggregazioni non verificato dal database")
+        else:
+            self._types_status_cache[context.node.id] = ("certain", "")
+        return [ColumnSchema(**{**row, "type": row.get("type") or "str",
+                                "id": row.get("id") or _stable_column_id(row.get("source_node") or context.node.id, row.get("source_name") or row["name"])}) for row in rows if row["name"]]
 
     def _infer_result_node_schema(
         self,
         context: _NodeSchemaContext,
     ) -> List[ColumnSchema]:
-        input_schemas = self._get_input_schemas(
+        kind = self._project_type(context)
+        if kind == "estrai" and any(node.type == "source" and isinstance(getattr(node, "table_name", None), str) and node.table_name for node in context.nodes_by_id.values()):
+            return self._infer_sql_result(context)
+        input_schemas = self._first_input_schema(context) if kind == "arricchisci" else self._get_input_schemas(
             context.node.id,
             context.nodes_by_id,
             context.edges_by_target,
@@ -437,10 +564,11 @@ class SchemaInferenceService:
             schema = input_schemas[0]
             if columns is not None and columns != []:
                 by_name = {col.name: col for col in schema}
-                columns = resolve_output_column_refs(columns, unique_column_names([col.to_dict() for col in schema]))
+                references = (node_field(context.node, "inputColumns") or []) if kind == "arricchisci" else [col.to_dict() for col in schema]
+                columns = resolve_output_column_refs(columns, unique_column_names(references))
                 plan = select_column_plan([col.name for col in schema], columns, skip_missing=True)
                 schema = [replace(by_name[name], name=label) for name, label in plan]
-            groups, aggregations = result_group_plan(context.node, [col.name for col in schema])
+            groups, aggregations = result_group_plan(context.node, [col.name for col in schema]) if kind == "manipola" else ([], [])
             if groups or aggregations:
                 by_name = {col.name: col for col in schema}
                 grouped = {name: by_name[name] for name in groups if name in by_name}
@@ -725,36 +853,63 @@ class SchemaInferenceService:
             optional=col.optional,
         ) for col in base_schema]
 
-        # output_mapping is canonical; tolerate historical frontend aliases and
-        # frontend flat serialization.
-        data = _node_config(node, ("output_mapping",))
-        output_mapping = data.get("output_mapping", []) or []
-        existing = {col.name for col in result}
-        for mapping in output_mapping:
-            if not isinstance(mapping, dict):
+
+        raw_node = node.model_dump(exclude_unset=True) if isinstance(node, Node) else {
+            "output_mapping": node_field(node, "output_mapping"), "data": node.data or {},
+        }
+        node_data = _merge_node_data(raw_node)
+        api_id = node_field(node, "api_id")
+        api_config = (self.api_configs.get(api_id) if self.api_configs is not None
+                      else schema_execution_sources.load_api_schema_config(api_id)) if isinstance(api_id, str) and api_id else None
+        if not api_config:
+            self._status_cache[node.id] = ("indeterminate", "Configurazione API corrente non disponibile")
+            api_config = {}
+        generator = api_config.get("api_type") == "generator" or not input_schemas
+        mapping = (api_config.get("output_mapping") or []) if generator else resolve_enrichment_output_mapping(node_data, api_config)
+        if generator:
+            result = []
+            self._independent_outputs.add(node.id)
+        dynamic = not mapping or api_config.get("connection_type") == "rest_file" or (
+            generator and bool(api_config.get("response_config") or api_config.get("response_preset") or node_field(node, "execute_if")))
+        if dynamic:
+            self._status_cache[node.id] = ("indeterminate", "Colonne determinate dalla risposta API")
+            self._order_status_cache[node.id] = "indeterminate"
+        elif generator and api_config:
+            self._status_cache[node.id] = ("certain", "")
+            self._order_status_cache[node.id] = "certain"
+        self._types_status_cache[node.id] = ("indeterminate", "Tipi dipendenti dai valori restituiti dall'API")
+        if not generator:
+            # Il runtime prealloca column-if-present prima di applicare le risposte.
+            for item in mapping:
+                destination = mapping_destination(item, phase="columns")
+                name = "nan" if destination is None else destination
+                if not any(col.name == name for col in result):
+                    source = mapping_destination(item, phase="source") or name
+                    result.append(ColumnSchema(name=name, type=item.get("type") or "str",
+                        id=_stable_column_id(node.id, source, "preallocated") if not destination else _stable_column_id(node.id, source),
+                        source_name=source, source_node=node.id, is_calculated=True))
+        existing = {col.name: index for index, col in enumerate(result)}
+        generator_names = generator_mapping_column_names(mapping) if generator else []
+        for mapping_index, item in enumerate(mapping):
+            destination = mapping_destination(item, phase="columns")
+            name = generator_names[mapping_index] if generator else mapping_destination(item)
+            if not destination:
+                self._status_cache[node.id] = ("indeterminate", "Il runtime include destinazioni API vuote o nulle")
+                self._order_status_cache[node.id] = "indeterminate"
+            if not name and not generator:
+                self._status_cache[node.id] = ("indeterminate", "Destinazione API vuota o non risolvibile")
                 continue
-            name = (
-                mapping.get("column")
-                or mapping.get("target_column")
-                or mapping.get("name")
-            )
-            if not name or name in existing:
+            if name in existing:
+                # La risposta sovrascrive anche colonne dell'ingresso: il tipo non e piu garantito.
+                result[existing[name]] = replace(result[existing[name]], type=item.get("type") or "str")
                 continue
-            # L'identita' stabile di una colonna API e' il `path` della
-            # risposta (es. "email", "response.items.records[*].age"), NON
-            # il nome fisico mappato: rinominare la colonna in output_mapping
-            # (path invariato) deve preservare l'id nel contract. source_name
-            # = path consente a build_output_contract di riusare l'id via
-            # source_name attraverso il rename. Fallback al nome per gli
-            # output_mapping storici senza `path`.
             result.append(ColumnSchema(
-                name=name,
-                type=mapping.get("type", "str"),
-                source_name=mapping.get("path") or name,
-                source_node=node.id,
-                is_calculated=True,
+                name=name, type=item.get("type") or "str",
+                id=_stable_column_id(node.id, mapping_destination(item, phase="source") or name),
+                source_name=mapping_destination(item, phase="source") or name, source_node=node.id,
+                is_calculated=True, optional=dynamic or bool(node_field(node, "execute_if")),
             ))
-            existing.add(name)
+            existing[name] = len(result) - 1
 
         return result
     
@@ -793,6 +948,7 @@ class SchemaInferenceService:
         """
         Raggruppa gli edge per nodo target.
         """
+        self._canvas_edges = list(edges)
         result = {}
         for edge in edges:
             if edge.target not in result:

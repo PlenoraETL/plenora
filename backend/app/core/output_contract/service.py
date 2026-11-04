@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, Optional
+from typing import Any, Optional, Iterable, Sequence
 
-from app.core.dataframes.schema import dtype_compatible_with_logical
-from app.core.dataframes.tabular import make_unique_column_names
+from app.core.dataframes.schema import dtype_compatible_with_logical, resolve_column_type
 from app.utils.logger import get_logger
 
 from .models import OutputColumn, OutputColumnType, OutputContract
@@ -31,7 +30,7 @@ def _logical_type(raw_type: Any) -> str:
         return "string"
     if value in {"int", "int8", "int16", "int32", "int64", "integer", "bigint", "smallint"}:
         return "integer"
-    if value in {"real", "float", "float16", "float32", "float64", "double", "decimal", "numeric"}:
+    if value in {"real", "float", "float16", "float32", "float64", "double", "decimal", "numeric", "number"}:
         return "number"
     if value in {"bool", "boolean"}:
         return "boolean"
@@ -39,7 +38,7 @@ def _logical_type(raw_type: Any) -> str:
         return "datetime"
     if value.startswith("geometry"):
         return "geometry"
-    return value
+    return "string"
 
 
 def _previous_columns(previous_contract: Any) -> ColumnPayloadRows:
@@ -53,8 +52,37 @@ def _previous_columns(previous_contract: Any) -> ColumnPayloadRows:
     return []
 
 
-def _new_column_id() -> str:
-    return f"col_{uuid.uuid4().hex}"
+def result_columns_from_plan(*, project_id: str, columns: Iterable[str], plan: list[Any],
+                             physical_names: Optional[Sequence[str]] = None,
+                             types: Optional[Sequence[str]] = None,
+                             dtypes: Optional[Sequence[str]] = None, dataframe: Any = None,
+                             inferred_types: Optional[Sequence[str]] = None) -> ColumnPayloadRows:
+    """Associa ogni colonna prodotta al piano, mantenendo le corrispondenze parziali."""
+    names = list(columns)
+    physical = list(physical_names) if physical_names is not None else names
+    normalized = [str(name) for name in physical]
+    remaining = list(plan)
+    result = []
+    for index, name in enumerate(names):
+        candidates = [col for col in remaining if str(_field(col, "name")) == str(name)]
+        if not candidates:
+            candidates = [col for col in remaining if str(_field(col, "source_name")) == str(name)]
+        matched = candidates[0] if len(candidates) == 1 else None
+        if matched is not None:
+            remaining.remove(matched)
+        result.append({
+            "id": _field(matched, "id") or f"col_{uuid.uuid5(uuid.NAMESPACE_URL, project_id + ':runtime:' + str(name)).hex}",
+            "source_name": _field(matched, "source_name") or str(name),
+            "source_node": _field(matched, "source_node"),
+            "name": normalized[index],
+            "type": resolve_column_type(
+                runtime_dtype=dtypes[index] if dtypes is not None else None,
+                series=dataframe.iloc[:, index] if dataframe is not None else None,
+                declared=(types[index] if types is not None else None) or _field(matched, "type"),
+                inferred=inferred_types[index] if inferred_types is not None else None,
+            ),
+        })
+    return result
 
 
 def build_output_contract(
@@ -63,11 +91,7 @@ def build_output_contract(
     result_columns: list[Any],
     previous_contract: Any = None,
 ) -> OutputContract:
-    """Build a public output contract from final result columns.
-
-    Identity preservation is intentionally based on ``source_name`` first:
-    alias/display changes must not create a new semantic column id.
-    """
+    """Riusa le identit? pubblicate per origine, anche con nuovi id sintetici."""
 
     previous = _previous_columns(previous_contract)
     previous_by_source: dict[str, list[dict[str, Any]]] = {}
@@ -79,15 +103,15 @@ def build_output_contract(
     prepared: list[tuple[Any, str, str]] = []
     for raw in result_columns or []:
         source_name = str(_field(raw, "source_name", None) or _field(raw, "name", "") or "")
-        if not source_name:
-            continue
-        alias = _field(raw, "alias", None)
-        physical_name = str(alias or _field(raw, "name", source_name) or source_name)
+        # Il nome fisico non e' un alias: anche None e la stringa vuota
+        # sono etichette effettive del DataFrame e vanno serializzate tali.
+        physical_name = str(raw.get("name", source_name) if isinstance(raw, dict)
+                            else getattr(raw, "name", source_name))
         prepared.append((raw, source_name, physical_name))
 
-    unique_physical_names, _renames = make_unique_column_names(
-        physical_name for _raw, _source_name, physical_name in prepared
-    )
+    unique_physical_names = [name for _, _, name in prepared]
+    current_origins = [(_field(item, "source_node"), source) for item, source, _ in prepared]
+    occurrences: dict[tuple, int] = {}
 
     built: list[OutputColumn] = []
     used_column_ids: set[str] = set()
@@ -96,28 +120,51 @@ def build_output_contract(
     ):
         display_name = physical_name
 
-        reused = None
-        source_bucket = previous_by_source.get(source_name) or []
-        if source_bucket:
-            reused = source_bucket.pop(0)
-        else:
-            physical_bucket = previous_by_physical.get(physical_name) or []
-            if physical_bucket:
-                reused = physical_bucket.pop(0)
-
-        column_id = (
-            (str(reused.get("id")) if reused and reused.get("id") else "")
-            or str(_field(raw, "id", "") or "")
-            or _new_column_id()
-        )
+        raw_id = str(_field(raw, "id", "") or "")
+        origin = (_field(raw, "source_node"), source_name)
+        occurrence = occurrences.get(origin, 0)
+        occurrences[origin] = occurrence + 1
+        candidates = [col for col in previous if origin[0] and
+                      (col.get("source_node"), col.get("source_name")) == origin]
+        reused = candidates[0] if len(candidates) == 1 and current_origins.count(origin) == 1 else None
+        if reused is None:
+            # Un'origine ripetuta non autorizza un rename. La coppia origine/
+            # nome fisico invariata e univoca conserva invece anche gli id legacy.
+            exact = [col for col in previous if
+                     (col.get("source_node"), col.get("source_name")) == origin
+                     and col.get("physical_name") == physical_name]
+            if len(exact) == 1 and unique_physical_names.count(physical_name) == 1:
+                reused = exact[0]
+        if reused is None:
+            candidates = previous_by_physical.get(physical_name, [])
+            if (len(candidates) == 1 and unique_physical_names.count(physical_name) == 1
+                    and not candidates[0].get("source_node")):
+                reused = candidates[0]
+        if reused is None:
+            candidates = previous_by_source.get(source_name, [])
+            if (len(candidates) == 1 and sum(source == source_name for _, source, _ in prepared) == 1
+                    and not candidates[0].get("source_node")
+                    and not previous_by_physical.get(physical_name)
+                    and candidates[0].get("physical_name") not in unique_physical_names):
+                reused = candidates[0]
+        conflicting_target = reused is not None and any(col.get("id") != reused.get("id") for col in previous_by_physical.get(physical_name, []))
+        if conflicting_target:
+            reused = None
+        if reused is not None and reused.get("id") in used_column_ids:
+            reused = None
+        # L'identita sintetica non consulta mai l'insieme degli id precedenti.
+        # L'occorrenza separa origini ambigue, senza dipendere dai vecchi id.
+        derived_id = f"col_{uuid.uuid5(uuid.NAMESPACE_URL, project_id + ':origin:' + str(origin) + ':' + str(occurrence)).hex}"
+        column_id = str(reused["id"]) if reused else (raw_id if raw_id and current_origins.count(origin) == 1 and not conflicting_target else derived_id)
         if column_id in used_column_ids:
-            column_id = _new_column_id()
+            column_id = derived_id
         used_column_ids.add(column_id)
 
         built.append(
             OutputColumn(
                 id=column_id,
                 source_name=source_name,
+                source_node=_field(raw, "source_node"),
                 physical_name=physical_name,
                 display_name=display_name,
                 type=OutputColumnType(logical=_logical_type(_field(raw, "type", "str"))),
@@ -183,9 +230,9 @@ def column_types_from_contract(contract: Any) -> ColumnTypeMap:
     for col in columns:
         if not isinstance(col, dict) or col.get("status", "active") != "active":
             continue
-        name = col.get("physical_name") or col.get("display_name") or col.get("source_name")
+        name = col.get("physical_name", col.get("display_name", col.get("source_name")))
         logical = ((col.get("type") or {}).get("logical") if isinstance(col.get("type"), dict) else None) or "string"
-        if name:
+        if name is not None:
             out[str(name)] = str(logical)
     return out
 
@@ -232,10 +279,8 @@ def node_columns_from_contract(
         if not col_id:
             continue
         physical_name = str(
-            col.get("physical_name") or col.get("display_name") or col.get("source_name") or ""
+            col.get("physical_name", col.get("display_name", col.get("source_name", "")))
         )
-        if not physical_name:
-            continue
         logical_type = (
             (col.get("type") or {}).get("logical")
             if isinstance(col.get("type"), dict)
@@ -308,7 +353,7 @@ def ensure_dataframe_matches_contract(
     visible_columns = [
         col
         for col in node_columns
-        if isinstance(col, dict) and col.get("visible", True) and col.get("name")
+        if isinstance(col, dict) and col.get("visible", True) and col.get("name") is not None
     ]
     visible_names = [str(col.get("name") or "") for col in visible_columns]
     missing_names = [name for name in visible_names if name not in available]
@@ -324,14 +369,14 @@ def ensure_dataframe_matches_contract(
     type_mismatches: list[str] = []
     for col in visible_columns:
         name = str(col.get("name") or "")
-        if name not in dataframe.columns:
-            continue
         logical = _logical_type(col.get("type"))
         if not logical:
             continue
-        dtype = dataframe[name].dtype
-        if not _dtype_compatible_with_logical(dtype, logical):
-            type_mismatches.append(f"{name}({dtype} != {logical})")
+        # Il confronto usa le etichette serializzate anche per None/nan;
+        # una selezione per nome restituirebbe un DataFrame per i duplicati.
+        for label, dtype in zip(dataframe.columns, dataframe.dtypes):
+            if str(label) == name and not _dtype_compatible_with_logical(dtype, logical):
+                type_mismatches.append(f"{name}({dtype} != {logical})")
 
     if type_mismatches:
         logger.warning(

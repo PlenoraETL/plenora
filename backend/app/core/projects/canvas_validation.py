@@ -12,11 +12,18 @@ ref cross-tenant (``find_inaccessible_canvas_refs``) resta al boundary del route
 
 from __future__ import annotations
 
+from sqlalchemy.exc import SQLAlchemyError
+from psycopg import Error as PsycopgError
+from app.utils.logger import get_logger
+
 from app.core.manipola.transform_ordering import incoming_edge_sort_key_for_nodes
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from app.core.projects.canvas_access import find_orphan_processing_nodes
 from app.core.projects.schema_inference import SchemaInferenceService
+from app.core.projects import schema_execution_sources
+from app.shared.execution.api_mapping import mapping_destination
+from app.core.arricchisci.enrichment_service import resolve_enrichment_output_mapping
 from app.shared.execution.graph import GraphCycleError, kahn_topological_order
 from app.shared.execution.schema_types import InferredSchema
 from app.shared.execution.validation_protocol import validator_for
@@ -523,6 +530,26 @@ def _validate_nodes(
             inputs_by_target.get(node.id, []), service, project_id,
         )
         out.extend(validator_for(node.type).validate_node(node, upstream=upstream))
+        if node.type == "api_enrich":
+            data = _node_config(node, ("api_id", "label", "api_name", "output_mapping"))
+            try:
+                api = schema_execution_sources.load_api_schema_config(data.get("api_id")) or {}
+            except (SQLAlchemyError, PsycopgError, OSError, ValueError, RuntimeError) as exc:
+                get_logger(__name__).warning(
+                    "[GESTITO] Lettura API opzionale fallita per nodo %s: %s",
+                    node.id, type(exc).__name__, exc_info=True,
+                )
+                continue
+            generator = api.get("api_type") == "generator" or not inputs_by_target.get(node.id)
+            mapping = (api.get("output_mapping") or data.get("output_mapping") or []) if generator else resolve_enrichment_output_mapping(data, api)
+            for item in mapping:
+                if "column" in item and mapping_destination(item, phase="explicit") in ("", None):
+                    path = mapping_destination(item, phase="source")
+                    label = data.get("label") or data.get("api_name") or node.id
+                    out.append(Issue(node_id=node.id, severity="warning",
+                        code="ARRICCHISCI_EMPTY_MAPPING_DESTINATION",
+                        message=f'Nodo "{label}": destinazione API vuota o nulla per il path "{path}".',
+                        suggestion=None))
     return out
 
 

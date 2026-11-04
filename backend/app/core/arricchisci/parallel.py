@@ -4,6 +4,8 @@ Logica di parallelizzazione e conditional execution per api_enrich nodes.
 Questo modulo contiene le funzioni helper utilizzate da:
 """
 
+from app.shared.execution.api_mapping import mapping_destination
+
 import threading as _threading
 
 import re
@@ -101,7 +103,7 @@ def _extract_consumed_columns(node_data: JsonObject) -> Set[str]:
 def _extract_produced_columns(node_data: JsonObject) -> Set[str]:
     """Estrae le colonne che un nodo api_enrich aggiunge al DataFrame."""
     om = CanvasNode(node_data).get_field("output_mapping") or []
-    return {m.get("column", "") for m in om if m.get("column")}
+    return {mapping_destination(m, phase="explicit", default="") for m in om if mapping_destination(m, phase="explicit")}
 
 
 def _node_may_explode_cardinality(
@@ -161,7 +163,7 @@ def _node_may_explode_cardinality(
             cfg = api_connections.get(api_id) or {}
             om = cfg.get("output_mapping") or []
     for m in om:
-        path = (m.get("path") or "")
+        path = (mapping_destination(m, phase="source") or "")
         if "[]" in path or "[*]" in path:
             return True
     return False

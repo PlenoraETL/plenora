@@ -6,6 +6,8 @@ Path di esecuzione sync: parallelo via ThreadPoolExecutor e sequenziale.
 
 from __future__ import annotations
 
+from app.shared.execution.api_mapping import mapping_destination
+
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -70,7 +72,7 @@ class EnrichmentExecutionEnginesMixin:
         errors: List[RowError] = []
 
         for mapping in self.output_mapping:
-            col_name = mapping.get("column", mapping.get("path"))
+            col_name = mapping_destination(mapping, phase="columns")
             if col_name not in result_df.columns:
                 result_df[col_name] = None
 

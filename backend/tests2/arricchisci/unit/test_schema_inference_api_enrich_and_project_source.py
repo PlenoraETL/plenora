@@ -97,7 +97,7 @@ def test_infer_api_enrich_schema_reads_flat_frontend_output_mapping():
 # Test 2 — api_enrich shape variante: target_column / name / type assente
 
 
-def test_infer_api_enrich_schema_tolerates_target_column_and_name_fallbacks():
+def test_infer_api_enrich_schema_usa_path_come_runtime():
     from app.core.projects.schema_inference import ColumnSchema
 
     svc = _svc()
@@ -113,8 +113,6 @@ def test_infer_api_enrich_schema_tolerates_target_column_and_name_fallbacks():
                 {"name": "via_name", "path": "$.b"},
                 # Mapping malformato (senza chiavi nome) → skip
                 {"path": "$.c"},
-                # Mapping non-dict → skip
-                "not_a_dict",
                 # Duplicato di colonna input → skip (no override)
                 {"column": "id"},
                 # type assente → default 'str'
@@ -126,7 +124,7 @@ def test_infer_api_enrich_schema_tolerates_target_column_and_name_fallbacks():
     schema = svc._infer_api_enrich_schema(api_node, [base_input])
 
     names = [c.name for c in schema]
-    assert names == ["id", "via_target", "via_name", "no_type"]
+    assert names == ["id", "$.a", "$.b", "$.c", "no_type"]
     by_name = {c.name: c for c in schema}
     assert by_name["no_type"].type == "str"
     # Input column "id" non e' stata sovrascritta

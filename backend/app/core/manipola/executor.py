@@ -44,12 +44,11 @@ from app.core.intermediate.snapshot import (
     record_final_snapshot,
 )
 from app.core.resources.exceptions import MemoryLimitExceededError
-from app.core.output_contract import persist_output_contract
+from app.core.output_contract import persist_output_contract, result_columns_from_plan
 from app.shared.resources.metadata import ResourceMetadata
 from .plugin_executor import get_executor
 from app.core.projects.schema_inference import SchemaInferenceService
 from app.shared.execution.join_preparation import normalize_key_list as _normalize_key_list, normalize_join_pairs as _normalize_join_pairs, multi_join_renames
-from app.core.manipola.types import JsonRows
 from .source_loading import load_file_sources
 from .datasource_node_loading import load_datasource_nodes
 from .canvas_schema_runtime import (
@@ -420,10 +419,10 @@ class ManipolaExecutor:
             or bool(execution_context.get("persist_contract", True))
         ):
             persisted_columns = save_result.get("output_columns")
-            result_columns = [
-                {"name": c, "type": str(current_df[c].dtype)}
-                for c in current_df.columns
-            ]
+            result_columns = result_columns_from_plan(
+                project_id=project_id, columns=current_df.columns, plan=[],
+                dataframe=current_df,
+            )
             try:
 
                 schema_service = SchemaInferenceService(self.project_service)
@@ -435,22 +434,15 @@ class ManipolaExecutor:
                     edges_by_target=edges_by_target,
                     project_id=project_id,
                 )
-                by_name = {col.name: col for col in result_node_schema}
                 physical_names = (
-                    persisted_columns
-                    if isinstance(persisted_columns, list)
-                    and len(persisted_columns) == len(current_df.columns)
-                    else list(current_df.columns)
+                    persisted_columns if isinstance(persisted_columns, list)
+                    and len(persisted_columns) == len(current_df.columns) else list(current_df.columns)
                 )
-                result_columns = [
-                    {
-                        "id": getattr(by_name.get(c), "id", None),
-                        "source_name": getattr(by_name.get(c), "source_name", None) or c,
-                        "name": physical_name,
-                        "type": str(current_df[c].dtype),
-                    }
-                    for c, physical_name in zip(current_df.columns, physical_names)
-                ]
+                result_columns = result_columns_from_plan(
+                    project_id=project_id, columns=current_df.columns, plan=result_node_schema,
+                    physical_names=physical_names,
+                    dataframe=current_df,
+                )
             except Exception as exc:
                 logger.warning(
                     f"output_contract: schema id non disponibili, uso colonne DataFrame: {exc}"

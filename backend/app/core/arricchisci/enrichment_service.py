@@ -4,6 +4,9 @@ Servizio di esecuzione arricchimento dati via API esterne.
 Keeps API enrichment behavior isolated from orchestration callers.
 """
 
+from app.shared.execution.api_mapping import mapping_destination
+from app.core.dataframes.schema import record_column_names
+
 import csv
 import io
 
@@ -326,6 +329,43 @@ def generate_error_report(
     return data
 
 
+def generator_mapping_column_names(mapping: list[JsonObject]) -> list[str]:
+    """Espone i nomi del mapping generator mediante il boundary DataFrame."""
+    return record_column_names(mapping_destination(item, phase="columns") for item in mapping)
+
+
+def resolve_enrichment_output_mapping(node_data: JsonObject, api_config: JsonObject) -> list:
+    """Risolve selezione, path correnti e destinazioni una sola volta per tutti i chiamanti."""
+    node_om = node_data.get("output_mapping")
+    api_om = api_config.get("output_mapping", [])
+    if node_om and api_om:
+        # Il nodo sceglie QUALI path includere (selezione/ordine utente), ma il
+        # nome colonna di ciascun path e' risolto dalla connessione CORRENTE
+        # (single source of truth): un rename lato connessione propaga ai
+        # progetti esistenti senza perdere la selezione del nodo (che potrebbe
+        # essere uno snapshot stale del mapping).
+        api_by_path = {
+            mapping_destination(m, phase='source'): m
+            for m in api_om
+            if isinstance(m, dict) and mapping_destination(m, phase='source')
+        }
+        raw_output_mapping = [
+            api_by_path.get(mapping_destination(m, phase='source'), m) if isinstance(m, dict) else m
+            for m in node_om
+        ]
+    else:
+        raw_output_mapping = node_om if node_om else api_om
+    seen_cols: set[str] = set()
+    deduped: list = []
+    for mapping in (raw_output_mapping or []):
+        col = mapping_destination(mapping)
+        if col and col not in seen_cols:
+            seen_cols.add(col)
+            deduped.append(mapping)
+
+    return deduped
+
+
 def build_enrichment_executor(
     node_data: JsonObject,
     api_config: JsonObject,
@@ -343,32 +383,7 @@ def build_enrichment_executor(
     `node_data` deve essere il merge dei campi root del nodo + il suo `data{}`
     (i campi del nodo canvas hanno priorita' sui default della connection).
     """
-    node_om = node_data.get("output_mapping")
-    api_om = api_config.get("output_mapping", [])
-    if node_om and api_om:
-        # Il nodo sceglie QUALI path includere (selezione/ordine utente), ma il
-        # nome colonna di ciascun path e' risolto dalla connessione CORRENTE
-        # (single source of truth): un rename lato connessione propaga ai
-        # progetti esistenti senza perdere la selezione del nodo (che potrebbe
-        # essere uno snapshot stale del mapping).
-        api_by_path = {
-            m.get("path"): m
-            for m in api_om
-            if isinstance(m, dict) and m.get("path")
-        }
-        raw_output_mapping = [
-            api_by_path.get(m.get("path"), m) if isinstance(m, dict) else m
-            for m in node_om
-        ]
-    else:
-        raw_output_mapping = node_om if node_om else api_om
-    seen_cols: set[str] = set()
-    deduped: list = []
-    for mapping in (raw_output_mapping or []):
-        col = mapping.get("column") or mapping.get("path")
-        if col and col not in seen_cols:
-            seen_cols.add(col)
-            deduped.append(mapping)
+    deduped = resolve_enrichment_output_mapping(node_data, api_config)
 
     api_cfg = {
         **api_config,

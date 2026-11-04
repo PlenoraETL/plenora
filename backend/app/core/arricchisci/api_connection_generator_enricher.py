@@ -6,6 +6,8 @@ Mixin API GENERATOR + API ENRICHER + JSON PATH UTIL per
 
 from __future__ import annotations
 
+from app.shared.execution.api_mapping import mapping_destination
+
 import re
 import time
 from typing import Any, Optional
@@ -390,7 +392,7 @@ class ApiConnectionGeneratorEnricherMixin:
         # `_extract_rows_from_response` (specializzato per gli array
         # generati dal wizard
         rc_mappings = response_config.get('mappings', []) if response_config else []
-        has_wildcard = any('[*]' in m.get('path', '') for m in rc_mappings)
+        has_wildcard = any('[*]' in mapping_destination(m, phase='source', default='') for m in rc_mappings)
         if response_config and rc_mappings and not has_wildcard:
             return ResponseParser(response_config).parse(data), data, resp
 
@@ -522,7 +524,7 @@ class ApiConnectionGeneratorEnricherMixin:
             columns = []
             seen = set()
             for mapping in output_mapping:
-                column = mapping.get("column") or mapping.get("path")
+                column = mapping_destination(mapping)
                 if column and column not in seen:
                     columns.append(column)
                     seen.add(column)
@@ -550,7 +552,7 @@ class ApiConnectionGeneratorEnricherMixin:
 
         # Path con wildcard `[*]` (es. `data[*].id`): estrai il root
         # array e itera con path relativo all'item
-        wildcard_paths = [m.get('path', '') for m in output_mapping if '[*]' in m.get('path', '')]
+        wildcard_paths = [mapping_destination(m, phase='source', default='') for m in output_mapping if '[*]' in mapping_destination(m, phase='source', default='')]
         if wildcard_paths:
             # Trova il prefisso comune prima di [*] (es. "data"
             first_path = wildcard_paths[0]
@@ -562,8 +564,8 @@ class ApiConnectionGeneratorEnricherMixin:
             for item in array_data:
                 row = {}
                 for m in output_mapping:
-                    path = m.get('path', '')
-                    col = m.get('column', path)
+                    path = mapping_destination(m, phase='source', default='')
+                    col = mapping_destination(m, phase='columns', default=path)
                     if '[*]' in path:
                         # path relativo all'item (dopo [*
                         rel = path.split('[*]', 1)[1].lstrip('.')
@@ -578,8 +580,8 @@ class ApiConnectionGeneratorEnricherMixin:
             for feature in data.get('features', []):
                 row = {}
                 for mapping in output_mapping:
-                    path = mapping.get('path', '')
-                    col_name = mapping.get('column', path)
+                    path = mapping_destination(mapping, phase='source', default='')
+                    col_name = mapping_destination(mapping, phase='columns', default=path)
                     if path.startswith('features['):
                         parts = path.split('.', 1)
                         path = parts[1] if len(parts) > 1 else ''
@@ -590,13 +592,13 @@ class ApiConnectionGeneratorEnricherMixin:
         # In questo caso produce UNA sola riga estraendo i valori dalla lista intera
         elif isinstance(data, list):
             all_absolute = output_mapping and all(
-                re.match(r'^\[\d+\]', m.get('path', '')) for m in output_mapping
+                re.match(r'^\[\d+\]', mapping_destination(m, phase='source', default='')) for m in output_mapping
             )
             if all_absolute:
                 row = {}
                 for m in output_mapping:
-                    col = m.get('column', m.get('path'))
-                    row[col] = self._extract_json_value(data, m.get('path', ''))
+                    col = mapping_destination(m, phase='columns')
+                    row[col] = self._extract_json_value(data, mapping_destination(m, phase='source', default=''))
                 rows.append(row)
             elif not output_mapping:
                 # No mapping: expose list items as rows.
@@ -604,7 +606,7 @@ class ApiConnectionGeneratorEnricherMixin:
                     rows.append(dict(item) if isinstance(item, dict) else {"value": item})
             else:
                 for item in data:
-                    row = {m.get('column', m.get('path')): self._extract_json_value(item, m.get('path', ''))
+                    row = {mapping_destination(m, phase='columns'): self._extract_json_value(item, mapping_destination(m, phase='source', default=''))
                            for m in output_mapping}
                     rows.append(row)
 
@@ -614,8 +616,8 @@ class ApiConnectionGeneratorEnricherMixin:
             for item in data['data']:
                 if output_mapping:
                     row = {
-                        m.get('column', m.get('path')): self._extract_json_value(
-                            item, m.get('path', ''),
+                        mapping_destination(m, phase='columns'): self._extract_json_value(
+                            item, mapping_destination(m, phase='source', default=''),
                         )
                         for m in output_mapping
                     }
@@ -626,7 +628,7 @@ class ApiConnectionGeneratorEnricherMixin:
 
         # Oggetto singolo
         elif isinstance(data, dict):
-            row = {m.get('column', m.get('path')): self._extract_json_value(data, m.get('path', ''))
+            row = {mapping_destination(m, phase='columns'): self._extract_json_value(data, mapping_destination(m, phase='source', default=''))
                    for m in output_mapping}
             rows.append(row)
 

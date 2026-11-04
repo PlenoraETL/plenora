@@ -4,7 +4,7 @@ Servizio gestione connessioni API esterne per arricchimento dati.
 Keeps API enrichment behavior isolated from orchestration callers.
 """
 
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from app.utils.logger import get_logger
 from app.core.arricchisci.types import JsonObject
@@ -115,7 +115,8 @@ class ApiConnectionService(
                           force_recalculate: bool = False, preview_limit: int = None,
                           run_id: str = None,
                           intermediate_mode_override: Optional[str] = None,
-                          execution_context: Optional[ArricchisciExecutionContext] = None) -> JsonObject:
+                          execution_context: Optional[ArricchisciExecutionContext] = None,
+                          finalizer: Optional[Callable[[Any, str, str, str], JsonObject]] = None) -> JsonObject:
         """Public service facade for canvas enrichment execution.
 
         The module-level orchestrator contains the execution algorithm;
@@ -135,6 +136,7 @@ class ApiConnectionService(
             run_id=run_id,
             intermediate_mode_override=intermediate_mode_override,
             execution_context=execution_context,
+            **({"finalizer": finalizer} if finalizer is not None else {}),
         )
 
 

@@ -6,6 +6,8 @@ Mixin RESPONSE_PROCESSING — elaborazione response API per
 
 from __future__ import annotations
 
+from app.shared.execution.api_mapping import mapping_destination
+
 import json
 from typing import Any, List
 
@@ -64,19 +66,19 @@ class EnrichmentResponseProcessingMixin:
         max_depth = 0
         normalized_mappings = []
         for mapping in self.output_mapping:
-            path = _norm(mapping.get("path", ""))
+            path = _norm(mapping_destination(mapping, phase='source', default=""))
             depth = path.count("[]")
             max_depth = max(max_depth, depth)
             normalized_mappings.append({
                 "path": path,
-                "column": mapping.get("column") or mapping.get("path", ""),
+                "column": mapping_destination(mapping) or "",
                 "depth": depth,
             })
 
         if max_depth == 0:
             result = {}
             for m in normalized_mappings:
-                result[m["column"]] = self._extract_json_value(data, m["path"])
+                result[mapping_destination(m, phase='columns')] = self._extract_json_value(data, mapping_destination(m, phase='source'))
 
             if result and all(v is None for v in result.values()):
                 # Tutti None è legittimo quando il punto non ha dati per questo
@@ -87,7 +89,7 @@ class EnrichmentResponseProcessingMixin:
                 # DEBUG level: e' un evento normale (punti fuori area di copertura
                 # e si ripete per ogni riga senza dati → rumore inutile a INFO
                 logger.debug(
-                    f"output_mapping ha prodotto tutti None per path={[m['path'] for m in normalized_mappings]}. "
+                    f"output_mapping ha prodotto tutti None per path={[mapping_destination(m, phase='source') for m in normalized_mappings]}. "
                     f"Risposta top-level keys: {list(data.keys()) if isinstance(data, dict) else type(data).__name__}"
                 )
             return [result]
@@ -114,7 +116,7 @@ class EnrichmentResponseProcessingMixin:
         if current_depth == max_depth:
             row = {}
             for m in mappings:
-                path = m["path"]
+                path = mapping_destination(m, phase='source')
                 depth = m["depth"]
                 if depth == 0:
                     suffix = path
@@ -123,14 +125,14 @@ class EnrichmentResponseProcessingMixin:
                     parts = path.split("[]", depth)
                     suffix = parts[-1].lstrip(".") if len(parts) > depth else ""
                     ctx = contexts[depth]
-                row[m["column"]] = self._extract_json_value(ctx, suffix) if suffix else ctx
+                row[mapping_destination(m, phase='columns')] = self._extract_json_value(ctx, suffix) if suffix else ctx
             rows.append(row)
             return
 
         next_base = None
         for m in mappings:
             if m["depth"] > current_depth:
-                parts = m["path"].split("[]", current_depth + 1)
+                parts = mapping_destination(m, phase='source').split("[]", current_depth + 1)
                 next_base = parts[current_depth].rstrip(".")
                 break
 

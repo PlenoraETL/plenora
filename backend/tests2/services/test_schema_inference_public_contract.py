@@ -174,8 +174,9 @@ def test_infer_node_schema_empty_for_result_without_input():
 def test_typed_certain_with_columns_matches_public_rows():
     svc = _svc_with_canvas(_chain_canvas())
     typed = svc.infer_node_schema_typed("proj", "r1")
-    assert typed.status == "certain"
-    assert typed.reason == ""
+    assert typed.names_status == "indeterminate"
+    assert typed.types_status == "indeterminate"
+    assert typed.reason
     assert typed.columns == svc.infer_node_schema("proj", "r1")
     assert [c["name"] for c in typed.columns] == ["id", "lat", "risk"]
 

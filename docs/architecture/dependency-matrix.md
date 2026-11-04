@@ -143,3 +143,20 @@ Quando un PR riduce coupling:
 
 Quando un PR introduce coupling intenzionale (raro): aggiungere la riga di
 motivazione nelle eccezioni PRIMA di rigenerare la baseline.
+
+
+## Dipendenze di inferenza (Blocco A, fase A2, 04/11/2026)
+
+Integrazione backend al documento generale `docs/architecture/dependency-matrix.md` del repository. Il perimetro A2 consente scritture soltanto in backend.
+
+Le seguenti dipendenze sono intenzionali e richieste dalla regola «l'esecuzione è la verità»:
+
+| Arco | Motivo |
+|---|---|
+| `projects -> estrai` | L'inferenza usa il renderer SELECT e la visita/ordinamento del grafo effettivi, evitando una seconda implementazione della proiezione. |
+| `projects -> query_execution` | Riutilizza la normalizzazione dei nomi restituiti dal provider e la disambiguazione dei duplicati. Non esegue query sul database sorgente. |
+| `projects -> connections` | Legge dal bridge DB il tipo della connessione corrente; non costruisce servizi, decifra credenziali o apre connessioni al database sorgente. |
+
+La lettura della configurazione API corrente riusa il bridge DB di Arricchisci, su un arco già esistente. Il contratto viene consumato tramite il suo boundary pubblico. Non sono aumentati i limiti per import locali, annotazioni mancanti o costruzioni dirette dei servizi.
+
+Baseline rigenerata con `python scripts/dependency_graph.py --write-baseline tests2/shared/config/core_dependency_baseline.json`. Il diff aggiunge questi tre archi; non aggiunge coppie di domini in ciclo. La rigenerazione riallinea anche conteggi storici già cambiati in HEAD e rimuove l'arco storico non più presente `orchestrator -> files`.

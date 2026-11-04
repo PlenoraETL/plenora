@@ -46,7 +46,7 @@ def test_output_contract_preserves_column_id_when_alias_changes():
     assert current.columns[0].type.logical == "integer"
 
 
-def test_output_contract_disambiguates_duplicate_join_columns():
+def test_output_contract_preserves_physical_duplicate_join_columns():
     contract = build_output_contract(
         project_id="extract-join",
         result_columns=[
@@ -60,8 +60,8 @@ def test_output_contract_disambiguates_duplicate_join_columns():
     assert [c.physical_name for c in contract.columns] == [
         "id",
         "name",
-        "id_2",
-        "name_2",
+        "id",
+        "name",
     ]
     assert len({c.id for c in contract.columns}) == 4
     assert [c.ordinal for c in contract.columns] == [0, 1, 2, 3]

@@ -4,6 +4,7 @@ Entry point per l'esecuzione di progetti ARRICCHISCI.
 Keeps API enrichment behavior isolated from orchestration callers.
 """
 
+from app.core.projects.schema_inference import SchemaInferenceService
 import time as _time
 from typing import Any, Mapping, Optional
 
@@ -15,7 +16,7 @@ from app.core.arricchisci.execution_context import ArricchisciExecutionContext
 from app.core.arricchisci.canvas_orchestrator import execute_canvas_enrichment
 from app.core.arricchisci.types import JsonObject
 from app.core.dataframes.tabular import dataframe_preview_records, non_null_head_values
-from app.core.output_contract import persist_output_contract
+from app.core.output_contract import persist_output_contract, result_columns_from_plan
 
 logger = get_logger(__name__)
 
@@ -88,6 +89,17 @@ class EnrichExecutor:
                 ),
             )
 
+        final_dataframe = None
+
+        def finalize_dataframe(
+            frame: Any, output_name: str, output_format: str, owner_project_id: str,
+        ) -> JsonObject:
+            nonlocal final_dataframe
+            final_dataframe = frame
+            return api_connection_service._save_and_build_dataframe_response(
+                frame, output_name, output_format, owner_project_id,
+            )
+
         result = api_connection_service.execute_enrichment(
             project_id=project_id,
             canvas=canvas_dict,
@@ -96,6 +108,7 @@ class EnrichExecutor:
             run_id=run_id,
             intermediate_mode_override=intermediate_mode_override,
             execution_context=typed_context,
+            finalizer=finalize_dataframe,
         )
 
         if result.get("success"):
@@ -136,23 +149,11 @@ class EnrichExecutor:
                     and len(output_columns) == len(result_names)
                     else result_names
                 )
-                # path = identita' stabile della colonna API. Carico l'output_mapping
-                # CORRENTE dalla connessione (il nodo nel canvas puo' essere stale
-                # dopo un rename lato connessione): mappa column -> path cosi'
-                # build_output_contract riusa l'id colonna attraverso il rename del
-                # nome fisico. Lo schema-inference da solo legge il nodo stale e
-                # mancherebbe il match.
-                source_name_by_column = self._api_source_names_by_column(canvas)
-                result_columns = [
-                    {
-                        "source_name": source_name_by_column.get(str(col), str(col)),
-                        "name": str(physical_name),
-                        "type": "str",
-                    }
-                    for col, physical_name in zip(result_names, physical_names)
-                ]
+                result_columns = result_columns_from_plan(
+                    project_id=project_id, columns=result_names, plan=[], physical_names=physical_names,
+                    dataframe=final_dataframe,
+                )
                 try:
-                    from app.core.projects.schema_inference import SchemaInferenceService
 
                     schema_service = SchemaInferenceService(self.project_service)
                     nodes_by_id = {n.id: n for n in canvas.nodes}
@@ -165,20 +166,10 @@ class EnrichExecutor:
                             edges_by_target=edges_by_target,
                             project_id=project_id,
                         )
-                        by_name = {col.name: col for col in result_schema}
-                        result_columns = [
-                            {
-                                "id": getattr(by_name.get(col), "id", None),
-                                "source_name": (
-                                    source_name_by_column.get(str(col))
-                                    or getattr(by_name.get(col), "source_name", None)
-                                    or col
-                                ),
-                                "name": physical_name,
-                                "type": "str",
-                            }
-                            for col, physical_name in zip(result_names, physical_names)
-                        ]
+                        result_columns = result_columns_from_plan(
+                            project_id=project_id, columns=result_names, plan=result_schema,
+                            physical_names=physical_names, dataframe=final_dataframe,
+                        )
                 except Exception as exc:
                     # WARNING con exc_info: livello non bloccante, ma traceback
                     # completo per bug SchemaInferenceService.
@@ -187,31 +178,30 @@ class EnrichExecutor:
                         f"{type(exc).__name__}: {exc}",
                         exc_info=True,
                     )
-                if result_columns:
-                    # Il blob di arricchimento e' GIA' stato salvato a monte
-                    # da `api_connector.execute_enrichment` (irreversibile a
-                    # questo punto). Se l'aggiornamento del contract fallisce
-                    # qui, il blob resta persistito ma il progetto continua
-                    # ad esporre l'output_contract precedente — situazione
-                    # ambigua ma preferibile a far crashare l'intero `execute`
-                    # (e perdere l'append_step di success). Log ERROR e segnale
-                    # esplicito in `res` indicano che il contract e' stale.
-                    try:
-                        persist_output_contract(
-                            project_service=self.project_service,
-                            project_id=project_id,
-                            result_columns=result_columns,
-                        )
-                    except Exception as contract_err:
-                        logger.error(
-                            f"[CRASH] update_project_output_contract fallito "
-                            f"post-arricchimento: blob persistito, contract "
-                            f"resta stale. Caller deve gestire drift: "
-                            f"{contract_err}",
-                            op="execute", project_id=project_id, exc_info=True,
-                        )
-                        res["contract_update_failed"] = True
-                        res["contract_update_error"] = str(contract_err)
+                # Il blob di arricchimento e' GIA' stato salvato a monte
+                # da `api_connector.execute_enrichment` (irreversibile a
+                # questo punto). Se l'aggiornamento del contract fallisce
+                # qui, il blob resta persistito ma il progetto continua
+                # ad esporre l'output_contract precedente — situazione
+                # ambigua ma preferibile a far crashare l'intero `execute`
+                # (e perdere l'append_step di success). Log ERROR e segnale
+                # esplicito in `res` indicano che il contract e' stale.
+                try:
+                    persist_output_contract(
+                        project_service=self.project_service,
+                        project_id=project_id,
+                        result_columns=result_columns,
+                    )
+                except Exception as contract_err:
+                    logger.error(
+                        f"[CRASH] update_project_output_contract fallito "
+                        f"post-arricchimento: blob persistito, contract "
+                        f"resta stale. Caller deve gestire drift: "
+                        f"{contract_err}",
+                        op="execute", project_id=project_id, exc_info=True,
+                    )
+                    res["contract_update_failed"] = True
+                    res["contract_update_error"] = str(contract_err)
         else:
             res = {
                 "success": False,
@@ -226,35 +216,6 @@ class EnrichExecutor:
             "error":       res.get("message") if not res.get("success") else None,
         })
         return res
-
-    def _api_source_names_by_column(self, canvas: CanvasState) -> Mapping[str, str]:
-        """Mappa physical column name -> path dell'output_mapping API (identita'
-        stabile), letto dalla connessione CORRENTE di ogni nodo api_enrich.
-
-        Il nodo nel canvas puo' avere un output_mapping stale dopo un rename
-        lato connessione; usiamo la connessione per riusare l'id colonna nel
-        contract attraverso il rename del nome fisico.
-        """
-        out = {}  # column -> api source name (costruito sotto)
-        for node in getattr(canvas, "nodes", None) or []:
-            if getattr(node, "type", None) != "api_enrich":
-                continue
-            data = getattr(node, "data", None) or {}
-            api_id = getattr(node, "api_id", None) or data.get("api_id")
-            if not api_id:
-                continue
-            try:
-                conn = api_connection_service.get_api_connection(api_id)
-            except Exception:
-                conn = None
-            for mapping in ((conn or {}).get("output_mapping") or []):
-                if not isinstance(mapping, dict):
-                    continue
-                column = mapping.get("column") or mapping.get("target_column") or mapping.get("name")
-                path = mapping.get("path")
-                if column and path:
-                    out[str(column)] = str(path)
-        return out
 
     def preview(
         self,

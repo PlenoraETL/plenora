@@ -5081,6 +5081,17 @@
             "default": [],
             "title": "Bindings"
           },
+          "branch_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Branch Of"
+          },
           "calculated_columns": {
             "anyOf": [
               {
@@ -6365,6 +6376,18 @@
               }
             ],
             "title": "Title"
+          },
+          "title_source": {
+            "anyOf": [
+              {
+                "const": "user",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title Source"
           },
           "transaction_mode": {
             "anyOf": [
@@ -8100,6 +8123,56 @@
         "title": "ScheduleUpdate",
         "type": "object"
       },
+      "SchemaColumnResponse": {
+        "description": "Colonna prevista, con identità e presenza indipendenti dal tipo.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_calculated": {
+            "default": false,
+            "title": "Is Calculated",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "optional": {
+            "default": false,
+            "title": "Optional",
+            "type": "boolean"
+          },
+          "source_name": {
+            "title": "Source Name",
+            "type": "string"
+          },
+          "source_node": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Node"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type",
+          "source_name"
+        ],
+        "title": "SchemaColumnResponse",
+        "type": "object"
+      },
       "SchemaInferenceRequest": {
         "properties": {
           "canvas": {
@@ -8110,6 +8183,61 @@
           "canvas"
         ],
         "title": "SchemaInferenceRequest",
+        "type": "object"
+      },
+      "SchemaStateResponse": {
+        "properties": {
+          "names_status": {
+            "title": "Names Status",
+            "type": "string"
+          },
+          "order_status": {
+            "title": "Order Status",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "types_status": {
+            "title": "Types Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "names_status",
+          "types_status",
+          "order_status"
+        ],
+        "title": "SchemaStateResponse",
+        "type": "object"
+      },
+      "SchemasResponse": {
+        "properties": {
+          "schema_states": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SchemaStateResponse"
+            },
+            "title": "Schema States",
+            "type": "object"
+          },
+          "schemas": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/SchemaColumnResponse"
+              },
+              "type": "array"
+            },
+            "title": "Schemas",
+            "type": "object"
+          }
+        },
+        "required": [
+          "schemas",
+          "schema_states"
+        ],
+        "title": "SchemasResponse",
         "type": "object"
       },
       "SetSharesRequest": {
@@ -15988,9 +16116,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get All Schemas Api Projects  Project Id  Schemas Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SchemasResponse"
                 }
               }
             },
@@ -16046,9 +16172,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Infer Project Schemas Api Projects  Project Id  Schemas Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SchemasResponse"
                 }
               }
             },
